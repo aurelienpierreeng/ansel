@@ -1221,6 +1221,102 @@ static void _remap_pixel_inverse_or_not(float *out, const float *bufptr, const f
 }
 
 typedef struct {
+  const dt_dev_pixelpipe_t *pipe;
+  const dt_dev_pixelpipe_iop_t *piece;
+  const dt_iop_lensfun_data_t *d;
+  const dt_iop_roi_t *roi_in;
+  const dt_iop_roi_t *tca_roi;
+  float *work_in;
+  int ch;
+  gboolean raw_monochrome;
+  int mask_display;
+  const struct dt_interpolation *interpolation;
+} _tca_remap_ctx_t;
+
+static int _apply_lensfun_tca_remap(const _tca_remap_ctx_t *ctx, float **work_out, gboolean *tca_applied)
+{
+  int tca_modflags = 0;
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
+  std::unique_ptr<lfModifier, _lens_test_tca_modifier_deleter_t> tca_modifier(
+      get_modifier(&tca_modflags,
+                   ctx->roi_in->scale * ctx->piece->buf_in.width,
+                   ctx->roi_in->scale * ctx->piece->buf_in.height,
+                   ctx->d, LF_MODIFY_TCA, FALSE));
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+  lfModifier *const tca_modifier_raw = tca_modifier.get();
+  if(!tca_modifier || !(tca_modflags & LF_MODIFY_TCA)) return 0;
+
+  const size_t tca_buf2size = (size_t)ctx->tca_roi->width * 2 * 3;
+  size_t tca_padded;
+  auto tca_buf2 = dt_pixelpipe_cache_alloc_perthread_float(tca_buf2size, &tca_padded);
+  auto tca_out = static_cast<float *>(dt_pixelpipe_cache_alloc_align_cache(
+      (size_t)ctx->tca_roi->width * ctx->tca_roi->height * ctx->ch * sizeof(float), ctx->pipe->type));
+#ifdef BUILD_TESTING
+  if(_lens_test_tca_allocation_failure == 1)
+  {
+    dt_pixelpipe_cache_free_align(tca_buf2);
+    tca_buf2 = NULL;
+  }
+  else if(_lens_test_tca_allocation_failure == 2)
+  {
+    dt_pixelpipe_cache_free_align(tca_out);
+    tca_out = NULL;
+  }
+#endif
+  if(IS_NULL_PTR(tca_buf2) || IS_NULL_PTR(tca_out))
+  {
+    dt_pixelpipe_cache_free_align(tca_out);
+    dt_pixelpipe_cache_free_align(tca_buf2);
+    return 0;
+  }
+
+  for(int y = 0; y < ctx->tca_roi->height; y++)
+    memcpy(tca_out + (size_t)y * ctx->tca_roi->width * ctx->ch,
+           ctx->work_in + ((size_t)(ctx->tca_roi->y - ctx->roi_in->y + y) * ctx->roi_in->width
+                           + ctx->tca_roi->x - ctx->roi_in->x) * ctx->ch,
+           (size_t)ctx->tca_roi->width * ctx->ch * sizeof(float));
+#ifdef BUILD_TESTING
+  _lens_test_normal_alpha_initialized = TRUE;
+  if(!(ctx->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) && ctx->ch == DT_PIXEL_SIMD_CHANNELS)
+    for(int y = 0; y < ctx->tca_roi->height; y++)
+      for(int x = 0; x < ctx->tca_roi->width; x++)
+        _lens_test_normal_alpha_initialized &= memcmp(tca_out + ((size_t)y * ctx->tca_roi->width + x) * ctx->ch + 3,
+                                                      ctx->work_in + ((size_t)(ctx->tca_roi->y - ctx->roi_in->y + y) * ctx->roi_in->width
+                                                                  + ctx->tca_roi->x - ctx->roi_in->x + x) * ctx->ch + 3,
+                                                      sizeof(float)) == 0;
+#endif
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  firstprivate(ctx, tca_modifier_raw, tca_buf2, tca_padded, tca_out)
+#endif
+  for(int y = 0; y < ctx->tca_roi->height; y++)
+  {
+    auto tca_buf2ptr = static_cast<float *>(dt_get_perthread(tca_buf2, tca_padded));
+    tca_modifier_raw->ApplySubpixelGeometryDistortion(ctx->tca_roi->x, ctx->tca_roi->y + y,
+                                                      ctx->tca_roi->width, 1, tca_buf2ptr);
+    float *dst = tca_out + (size_t)y * ctx->tca_roi->width * ctx->ch;
+    const _remap_ctx_t tca_remap = { ctx->ch, ctx->ch * ctx->roi_in->width, ctx->d->lensfun.do_nan_checks,
+                                      ctx->raw_monochrome, ctx->mask_display };
+    for(int x = 0; x < ctx->tca_roi->width; x++, tca_buf2ptr += 6)
+    {
+      _remap_pixel_inverse_or_not(dst + x * ctx->ch, tca_buf2ptr, ctx->work_in, tca_remap,
+                                  ctx->roi_in, ctx->interpolation);
+    }
+  }
+  dt_pixelpipe_cache_free_align(ctx->work_in);
+  *work_out = tca_out;
+  *tca_applied = TRUE;
+  _lens_test_trace_event("TCA-only remap");
+  return 1;
+}
+
+#ifdef BUILD_TESTING
+static_assert(std::is_same_v<decltype(&_apply_lensfun_tca_remap),
+                             int (*)(const _tca_remap_ctx_t *, float **, gboolean *)>,
+              "shared TCA-only remap");
+#endif
+
+typedef struct {
   gboolean emb_vig;
   gboolean emb_dist;
   gboolean emb_tca;
@@ -1371,79 +1467,13 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         dt_pixelpipe_cache_free_align(work_buf);
         return 1;
       }
-      int tca_modflags = 0;
-      dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-      std::unique_ptr<lfModifier, _lens_test_tca_modifier_deleter_t> tca_modifier(
-          get_modifier(&tca_modflags,
-                       roi_in->scale * piece->buf_in.width,
-                       roi_in->scale * piece->buf_in.height,
-                       d, LF_MODIFY_TCA, FALSE));
-      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
-      lfModifier *const tca_modifier_raw = tca_modifier.get();
-      if(tca_modifier && (tca_modflags & LF_MODIFY_TCA))
+      _tca_remap_ctx_t tca_ctx = { pipe, piece, d, roi_in, &tca_roi, work_buf,
+                                   ch, raw_monochrome, mask_display, interpolation };
+      float *work_out = nullptr;
+      if(_apply_lensfun_tca_remap(&tca_ctx, &work_out, &tca_applied))
       {
-        const size_t tca_buf2size = (size_t)tca_roi.width * 2 * 3;
-        size_t tca_padded;
-        auto tca_buf2 = dt_pixelpipe_cache_alloc_perthread_float(tca_buf2size, &tca_padded);
-        auto tca_out = static_cast<float *>(dt_pixelpipe_cache_alloc_align_cache(
-            (size_t)tca_roi.width * tca_roi.height * ch * sizeof(float), pipe->type));
-#ifdef BUILD_TESTING
-        if(_lens_test_tca_allocation_failure == 1)
-        {
-          dt_pixelpipe_cache_free_align(tca_buf2);
-          tca_buf2 = NULL;
-        }
-        else if(_lens_test_tca_allocation_failure == 2)
-        {
-          dt_pixelpipe_cache_free_align(tca_out);
-          tca_out = NULL;
-        }
-#endif
-        if(!IS_NULL_PTR(tca_buf2) && !IS_NULL_PTR(tca_out))
-        {
-          for(int y = 0; y < tca_roi.height; y++)
-            memcpy(tca_out + (size_t)y * tca_roi.width * ch,
-                   work_buf + ((size_t)(tca_roi.y - roi_in->y + y) * roi_in->width
-                               + tca_roi.x - roi_in->x) * ch,
-                   (size_t)tca_roi.width * ch * sizeof(float));
-#ifdef BUILD_TESTING
-          _lens_test_normal_alpha_initialized = TRUE;
-          if(!(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) && ch == DT_PIXEL_SIMD_CHANNELS)
-            for(int y = 0; y < tca_roi.height; y++)
-              for(int x = 0; x < tca_roi.width; x++)
-                _lens_test_normal_alpha_initialized &= memcmp(tca_out + ((size_t)y * tca_roi.width + x) * ch + 3,
-                                                              work_buf + ((size_t)(tca_roi.y - roi_in->y + y) * roi_in->width
-                                                                          + tca_roi.x - roi_in->x + x) * ch + 3,
-                                                              sizeof(float)) == 0;
-#endif
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  firstprivate(roi_in, tca_roi, ch, tca_modifier_raw, tca_buf2, tca_padded, tca_out, \
-               work_buf, d, raw_monochrome, mask_display, interpolation)
-#endif
-          for(int y = 0; y < tca_roi.height; y++)
-          {
-            auto tca_buf2ptr = static_cast<float *>(dt_get_perthread(tca_buf2, tca_padded));
-            tca_modifier_raw->ApplySubpixelGeometryDistortion(tca_roi.x, tca_roi.y + y,
-                                                              tca_roi.width, 1, tca_buf2ptr);
-            float *dst = tca_out + (size_t)y * tca_roi.width * ch;
-            const _remap_ctx_t tca_remap = { ch, ch * roi_in->width, d->lensfun.do_nan_checks,
-                                              raw_monochrome, mask_display };
-            for(int x = 0; x < tca_roi.width; x++, tca_buf2ptr += 6)
-            {
-              _remap_pixel_inverse_or_not(dst + x * ch, tca_buf2ptr, work_buf, tca_remap,
-                                          roi_in, interpolation);
-            }
-          }
-          dt_pixelpipe_cache_free_align(work_buf);
-          work_buf = tca_out;
-          embedded_roi_in = &tca_roi;
-          tca_out = NULL;
-          tca_applied = TRUE;
-          _lens_test_trace_event("TCA-only remap");
-        }
-        dt_pixelpipe_cache_free_align(tca_out);
-        dt_pixelpipe_cache_free_align(tca_buf2);
+        work_buf = work_out;
+        embedded_roi_in = &tca_roi;
       }
     }
 
