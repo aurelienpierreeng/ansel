@@ -579,17 +579,22 @@ typedef struct _tiff_blob_t
 {
   const uint8_t *data;
   tmsize_t size;
-  tmsize_t pos;
+  // Held as toff_t, libtiff's file-offset type, rather than tmsize_t: a seek past the end is
+  // legal (see _blob_seek) and must record the position asked for, which a corrupt offset in
+  // the file's own tags can put far beyond the blob. _blob_read() is what bounds it.
+  toff_t pos;
 } _tiff_blob_t;
 
 static tmsize_t _blob_read(thandle_t handle, void *buffer, tmsize_t size)
 {
   _tiff_blob_t *blob = (_tiff_blob_t *)handle;
-  if(size < 0 || blob->pos > blob->size) return 0;
-  const tmsize_t available = blob->size - blob->pos;
+  // At or past the end reads as empty rather than as an error -- this is the single place the
+  // extent of the data is enforced, so _blob_seek() does not have to refuse anything.
+  if(size <= 0 || blob->pos >= (toff_t)blob->size) return 0;
+  const tmsize_t available = (tmsize_t)((toff_t)blob->size - blob->pos);
   const tmsize_t n = (size < available) ? size : available;
-  memcpy(buffer, blob->data + blob->pos, (size_t)n);
-  blob->pos += n;
+  memcpy(buffer, blob->data + (size_t)blob->pos, (size_t)n);
+  blob->pos += (toff_t)n;
   return n;
 }
 
@@ -607,15 +612,18 @@ static toff_t _blob_seek(thandle_t handle, toff_t offset, int whence)
   switch(whence)
   {
     case SEEK_SET: base = 0; break;
-    case SEEK_CUR: base = (toff_t)blob->pos; break;
+    case SEEK_CUR: base = blob->pos; break;
     case SEEK_END: base = (toff_t)blob->size; break;
     default: return (toff_t)-1;
   }
   const toff_t target = base + offset;
-  // Seeking beyond the end is legal for a TIFF reader (it is how libtiff probes
-  // an offset before deciding to read it); reads there simply return nothing.
-  if(target > (toff_t)blob->size) return (toff_t)-1;
-  blob->pos = (tmsize_t)target;
+  if(target < base) return (toff_t)-1; // wrapped: the caller asked for something absurd
+
+  // Seeking beyond the end is legal and must succeed, exactly as lseek(2) does: libtiff probes
+  // an offset before deciding whether to read it, and expects the new position back rather than
+  // an error. Refusing here would turn a routine probe into a fatal read failure. The end of the
+  // data is enforced by _blob_read(), which returns 0 bytes from any position at or past it.
+  blob->pos = target;
   return target;
 }
 
@@ -702,13 +710,16 @@ gboolean dt_imageio_tiff_decode_blob(const uint8_t *const blob, const size_t buf
     goto done;
   }
 
-  // libtiff packs each pixel as one host-order uint32 (ABGR); unpack in place to
-  // the R, G, B, unused byte layout the callers expect. The uint32 is read
-  // before the bytes at that address are written, so the two views never race.
+  // libtiff packs each pixel as one host-order uint32 (ABGR); unpack in place to the R, G, B,
+  // unused byte layout the callers expect. Copied out through memcpy rather than read through a
+  // uint32_t* view of a uint8_t buffer: the compiler turns it into the same single load, and it
+  // keeps the loop from resting on an effective-type argument (the allocation has no declared
+  // type, so libtiff's write is what makes it uint32) that a reader would have to reconstruct.
   for(size_t i = 0; i < npixels; i++)
   {
-    const uint32_t px = ((const uint32_t *)pixels)[i];
     uint8_t *const dest = pixels + 4 * i;
+    uint32_t px;
+    memcpy(&px, dest, sizeof(px));
     dest[0] = (uint8_t)TIFFGetR(px);
     dest[1] = (uint8_t)TIFFGetG(px);
     dest[2] = (uint8_t)TIFFGetB(px);
