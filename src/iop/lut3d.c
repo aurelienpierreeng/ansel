@@ -111,8 +111,12 @@ typedef struct dt_iop_lut3d_params_t
 
 typedef struct dt_iop_lut3d_gui_data_t
 {
-  // Path of the .gmz edit the deprecation dialog was last shown for, so gui_update() -- which
-  // runs on every history change -- raises it once per affected image rather than repeatedly.
+  // Whether the deprecation dialog has been shown yet, and for which path, so gui_update() --
+  // which runs on every history change -- raises it once per affected LUT rather than repeatedly.
+  // The flag is separate from the path on purpose: an edit that carries keypoints inside the
+  // history has no filepath at all, and testing the path alone would compare "" against the
+  // zero-initialised buffer, match, and silently skip the warning for precisely the oldest edits.
+  gboolean gmz_warned;
   char gmz_warned_for[DT_IOP_LUT3D_MAX_PATHNAME];
   GtkWidget *hbox;
   GtkWidget *filepath;
@@ -1188,8 +1192,9 @@ void gui_update(dt_iop_module_t *self)
 
   _show_hide_colorspace(self);
 
-  if(_params_need_gmz(p) && strcmp(g->gmz_warned_for, p->filepath) != 0)
+  if(_params_need_gmz(p) && (!g->gmz_warned || strcmp(g->gmz_warned_for, p->filepath) != 0))
   {
+    g->gmz_warned = TRUE;
     g_strlcpy(g->gmz_warned_for, p->filepath, sizeof(g->gmz_warned_for));
     _warn_gmz_deprecated(p);
   }
