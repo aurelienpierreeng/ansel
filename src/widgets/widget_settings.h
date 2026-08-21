@@ -316,8 +316,11 @@ static inline gboolean dt_modifier_is(GdkModifierType state, const GdkModifierTy
   // widgets/accelerators.c for the same dedup on the accelerator-dispatch path). Mouse/scroll
   // events never carry GDK_META_MASK, so this is a no-op for the majority of this function's
   // callers; it only matters for the callers that read a real GdkEventKey.state directly.
+  /* Cast, not a compound assignment: this header is included from C++ translation units
+   * too (iop/lens.cc, iop/tonemap.cc, imageio/format/exr.cc, ...), and in C++ the operand
+   * `~GDK_META_MASK` is an int, which cannot be assigned back into an enum. */
   if((state & GDK_MOD2_MASK) && (state & GDK_META_MASK))
-    state &= ~GDK_META_MASK;
+    state = (GdkModifierType)(state & ~GDK_META_MASK);
 #endif
   return (state & modifiers) == dt_modifier_primary_mask(desired_modifier_mask);
 }
@@ -328,9 +331,9 @@ static inline gboolean dt_modifiers_include(GdkModifierType state, const GdkModi
   const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
   const GdkModifierType wanted = dt_modifier_primary_mask(desired_modifier_mask);
 #ifdef GDK_WINDOWING_QUARTZ
-  // See dt_modifier_is() just above.
+  // See dt_modifier_is() just above, cast included.
   if((state & GDK_MOD2_MASK) && (state & GDK_META_MASK))
-    state &= ~GDK_META_MASK;
+    state = (GdkModifierType)(state & ~GDK_META_MASK);
 #endif
   return (state & (modifiers & wanted)) == wanted;
 }
