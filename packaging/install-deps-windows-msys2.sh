@@ -43,7 +43,6 @@ MINGW_PACKAGES=(
   gcc-libs
   gettext
   gdb
-  gmic
   gtk3
   icu
   imath

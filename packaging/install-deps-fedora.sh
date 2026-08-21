@@ -47,7 +47,6 @@ DNF_PACKAGES=(
   gdb
   gettext
   git
-  gmic
   graphviz
   libgomp
   libgomp-devel

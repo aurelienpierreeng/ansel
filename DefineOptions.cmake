@@ -25,7 +25,6 @@ option(VALIDATE_APPDATA_FILE "Use appstream-util (if found) to validate the appd
 option(BUILD_MSYS2_INSTALL "Build an MSYS2 version of the install, aka for Windows platform, but without dependency installs." OFF)
 option(BUILD_NOISE_TOOLS "Build tools for generating noise profiles." OFF)
 option(BUILD_CURVE_TOOLS "Build tools for generating base and tone curves." OFF)
-option(USE_GMIC "Enable G'MIC image processing framework." ON)
 option(USE_ICU "Enable ICU - International Components for Unicode." ON)
 option(USE_SENTRY "Enable opt-in sentry.io crash reporting." ON)
 option(USE_TELEMETRY "Enable opt-in PostHog usage analytics." ON)

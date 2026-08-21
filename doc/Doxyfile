@@ -2385,7 +2385,6 @@ PREDEFINED             = HAVE_OPENCL \
                          HAVE_LIBSECRET \
                          HAVE_PRINT \
                          HAVE_MAP \
-                         HAVE_GMIC
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
 # tag can be used to specify a list of macro names that should be expanded. The

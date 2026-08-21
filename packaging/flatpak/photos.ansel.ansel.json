@@ -354,32 +354,6 @@
             ]
         },
         {
-            "name": "gmic",
-            "buildsystem": "cmake-ninja",
-            "config-opts": [
-                "-DBUILD_LIB_STATIC=OFF",
-                "-DBUILD_CLI=OFF",
-                "-DBUILD_MAN=OFF",
-                "-DBUILD_BASH_COMPLETION=OFF"
-            ],
-            "cleanup": [
-                "/lib/*.so"
-            ],
-            "sources": [
-                {
-                    "type": "archive",
-                    "url": "https://gmic.eu/files/source/gmic_3.6.6.tar.gz",
-                    "sha256": "f93d725d8fd98122483704ec07928c3275a4b9149e81328f4b07e7d6ceb4c919",
-                    "x-checker-data": {
-                        "type": "anitya",
-                        "project-id": 10217,
-                        "stable-only": true,
-                        "url-template": "https://gmic.eu/files/source/gmic_$version.tar.gz"
-                    }
-                }
-            ]
-        },
-        {
             "name": "perl",
             "no-autogen": true,
             "config-opts": [

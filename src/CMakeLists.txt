@@ -549,13 +549,6 @@ if(USE_MAC_INTEGRATION)
   endif()
 endif()
 
-if(USE_GMIC)
-  find_package(GMIC)
-  if(GMIC_FOUND)
-    add_definitions(-DHAVE_GMIC=1)
-    target_link_libraries(ansel_deps INTERFACE ${GMIC_LIBRARIES})
-  endif(GMIC_FOUND)
-endif(USE_GMIC)
 
 if(USE_ICU)
   find_package(ICU REQUIRED COMPONENTS uc i18n data)

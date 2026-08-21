@@ -37,7 +37,6 @@ HB_PACKAGES=(
   gettext
   git
   glib
-  gmic
   gtk-mac-integration
   gtk+3
   icu4c

@@ -391,7 +391,7 @@ Where the code was kept, and where it was replaced, is not uniform:
 
 | Ansel files | Shared with Darktable |
 | ----------- | --------------------: |
-| `math/svd.h`, `math/splines.cpp`, `math/homography.c`, `iop/lut3dgmic.cpp` | ~100 % |
+| `math/svd.h`, `math/splines.cpp`, `math/homography.c` | ~100 % |
 | `database/*_repository.c`, `develop/pixelpipe_cpu.c`, `iop/drawlayer/*`, `system/memory_arena.c` | < 10 % |
 
 That is the expected shape of responsible forking: the **mathematics is inherited
