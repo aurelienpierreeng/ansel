@@ -1612,6 +1612,18 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
 #endif
 
+#if(defined(HAVE_GRAPHICSMAGICK) || defined(HAVE_IMAGEMAGICK)) && defined(_OPENMP)
+  // *SIGH*, part two. GraphicsMagick's InitializeMagick() sizes its own thread pool from
+  // omp_get_num_procs() and publishes that by calling omp_set_num_threads() -- a PROCESS-wide
+  // side effect on a library-local decision. It runs after our own omp_set_num_threads() above,
+  // so it silently overrode `-t N` and the "CPU cores" preference for every parallel region
+  // entered from this thread afterwards. That is invisible in the GUI, where pixel work runs on
+  // control worker threads that set their own count in dt_control_work(), and total in ansel-cli,
+  // where the export pipeline runs on this very thread: `-t 1` still ran a full-width team.
+  // Re-assert ours last. Keep this call after EVERY library init that may do the same.
+  omp_set_num_threads(darktable.num_openmp_threads);
+#endif
+
   darktable.noiseprofile_parser = dt_noiseprofile_init(noiseprofiles_from_command);
 
   // The GUI must be initialized before the views, because the init()
