@@ -89,23 +89,31 @@
  * Shim forward declarations.
  *
  * The shim is the only externally-callable surface for these predicates
- * from a C test (the inline definitions in the header take C++ enum
- * classes, which a C compiler cannot spell). The signatures mirror
- * the C-friendly int variants in src/iop/lens_predicates.cc; the
- * shim is gated by #ifdef BUILD_TESTING, so the production build
- * does not export these symbols.
+ * from a C test (the definitions in src/iop/lens_predicates.cc take C++
+ * enum classes, which a C compiler cannot spell). The shim is gated by
+ * #ifdef BUILD_TESTING, so the production build does not export these
+ * symbols.
+ *
+ * The array extents below are the ones the implementation actually writes:
+ * tca_selector_entries() writes a FOURTH entry whenever the image carries
+ * embedded calibration. Understating them here is what previously let this
+ * file pass 3-element arrays to it and overflow them.
  * --------------------------------------------------------------------------- */
 
+#define SOURCE_MAX_ENTRIES 3
+#define TCA_MAX_ENTRIES    4
+
 int test_correction_source_selector_entries(gboolean has_embedded,
-                                           const char *out_labels[3],
-                                           int out_values[3]);
+                                            const char *out_labels[SOURCE_MAX_ENTRIES],
+                                            int out_values[SOURCE_MAX_ENTRIES]);
 int test_tca_selector_entries(gboolean has_embedded,
-                               const char *out_labels[3],
-                               int out_values[3]);
+                              const char *out_labels[TCA_MAX_ENTRIES],
+                              int out_values[TCA_MAX_ENTRIES]);
 gboolean test_tca_show_manual_sliders(int tca_method);
 int test_per_axis_modify_flags(int dist, int vig, int tca, gboolean monochrome);
 const char *test_corrections_status_string(int dist, int vig, int tca,
-                                            gboolean monochrome);
+                                           gboolean monochrome,
+                                           char *buf, size_t buflen);
 
 /* ---------------------------------------------------------------------------
  * correction_source_selector_entries (FR-13, FR-14, FR-18)
@@ -114,8 +122,8 @@ const char *test_corrections_status_string(int dist, int vig, int tca,
 static void test_correction_source_selector_entries_false_returns_2(void **state)
 {
   (void)state;
-  const char *labels[3] = { NULL, NULL, NULL };
-  int values[3] = { -1, -1, -1 };
+  const char *labels[SOURCE_MAX_ENTRIES] = { NULL, NULL, NULL };
+  int values[SOURCE_MAX_ENTRIES] = { -1, -1, -1 };
   TR_STEP("correction_source, has_embedded=FALSE -> 2 entries: [off, Lensfun]");
   int n = test_correction_source_selector_entries(FALSE, labels, values);
   assert_int_equal(n, 2);
@@ -128,8 +136,8 @@ static void test_correction_source_selector_entries_false_returns_2(void **state
 static void test_correction_source_selector_entries_true_returns_3_with_embedded(void **state)
 {
   (void)state;
-  const char *labels[3] = { NULL, NULL, NULL };
-  int values[3] = { -1, -1, -1 };
+  const char *labels[SOURCE_MAX_ENTRIES] = { NULL, NULL, NULL };
+  int values[SOURCE_MAX_ENTRIES] = { -1, -1, -1 };
   TR_STEP("correction_source, has_embedded=TRUE -> 3 entries: [off, embedded, Lensfun]");
   int n = test_correction_source_selector_entries(TRUE, labels, values);
   assert_int_equal(n, 3);
@@ -159,8 +167,8 @@ static void test_correction_source_selector_entries_null_safe(void **state)
 static void test_tca_selector_entries_false_returns_3_with_manual(void **state)
 {
   (void)state;
-  const char *labels[4] = { NULL, NULL, NULL, NULL };
-  int values[4] = { -1, -1, -1, -1 };
+  const char *labels[TCA_MAX_ENTRIES] = { NULL, NULL, NULL, NULL };
+  int values[TCA_MAX_ENTRIES] = { -1, -1, -1, -1 };
   TR_STEP("tca, has_embedded=FALSE -> 3 entries: [off, Lensfun, manual]");
   int n = test_tca_selector_entries(FALSE, labels, values);
   assert_int_equal(n, 3);
@@ -175,8 +183,8 @@ static void test_tca_selector_entries_false_returns_3_with_manual(void **state)
 static void test_tca_selector_entries_true_returns_3_with_manual(void **state)
 {
   (void)state;
-  const char *labels[4] = { NULL, NULL, NULL, NULL };
-  int values[4] = { -1, -1, -1, -1 };
+  const char *labels[TCA_MAX_ENTRIES] = { NULL, NULL, NULL, NULL };
+  int values[TCA_MAX_ENTRIES] = { -1, -1, -1, -1 };
   TR_STEP("tca, has_embedded=TRUE -> 4 entries: [off, embedded, Lensfun, manual] (FR-15: MANUAL always present)");
   int n = test_tca_selector_entries(TRUE, labels, values);
   assert_int_equal(n, 4);
@@ -413,19 +421,20 @@ static void test_per_axis_modify_flags_masked_to_LENSFUN_MODFLAG_MASK(void **sta
  * <s> is one of {off, embedded, Lensfun, manual}. Monochrome forces
  * TCA's <s> to "off" regardless of the user's selection (FR-24).
  *
- * The function returns a pointer to a static buffer; each test reads
- * the result before the next call to avoid aliasing.
+ * The function formats into a caller-supplied buffer and returns it, so two
+ * threads (or two tests) cannot alias one another's result.
  * --------------------------------------------------------------------------- */
 
 static void test_corrections_status_string_all_lensfun_DB_color(void **state)
 {
   (void)state;
+  char buf[128];
   TR_STEP("corrections_status_string(LF, LF, LF, color) == "
           "\"distortion: Lensfun, vignetting: Lensfun, TCA: Lensfun\"");
   const char *s = test_corrections_status_string(SOURCE_LENSFUN_DB,
                                                   SOURCE_LENSFUN_DB,
                                                   TCA_LENSFUN_DB,
-                                                  FALSE);
+                                                  FALSE, buf, sizeof(buf));
   assert_non_null(s);
   assert_string_equal(s, "distortion: Lensfun, vignetting: Lensfun, TCA: Lensfun");
 }
@@ -433,12 +442,13 @@ static void test_corrections_status_string_all_lensfun_DB_color(void **state)
 static void test_corrections_status_string_mixed(void **state)
 {
   (void)state;
+  char buf[128];
   TR_STEP("corrections_status_string(LF, EMB, MANUAL, color) == "
           "\"distortion: Lensfun, vignetting: embedded, TCA: manual\"");
   const char *s = test_corrections_status_string(SOURCE_LENSFUN_DB,
                                                   SOURCE_EMBEDDED,
                                                   TCA_MANUAL,
-                                                  FALSE);
+                                                  FALSE, buf, sizeof(buf));
   assert_non_null(s);
   assert_string_equal(s, "distortion: Lensfun, vignetting: embedded, TCA: manual");
 }
@@ -446,9 +456,10 @@ static void test_corrections_status_string_mixed(void **state)
 static void test_corrections_status_string_all_off(void **state)
 {
   (void)state;
+  char buf[128];
   TR_STEP("corrections_status_string(OFF, OFF, OFF, color) == "
           "\"distortion: off, vignetting: off, TCA: off\"");
-  const char *s = test_corrections_status_string(SOURCE_OFF, SOURCE_OFF, TCA_OFF, FALSE);
+  const char *s = test_corrections_status_string(SOURCE_OFF, SOURCE_OFF, TCA_OFF, FALSE, buf, sizeof(buf));
   assert_non_null(s);
   assert_string_equal(s, "distortion: off, vignetting: off, TCA: off");
 }
@@ -456,12 +467,13 @@ static void test_corrections_status_string_all_off(void **state)
 static void test_corrections_status_string_monochrome_tca_forced_off(void **state)
 {
   (void)state;
+  char buf[128];
   TR_STEP("corrections_status_string(LF, LF, LF, mono) ends with \"TCA: off\" "
           "even though the combobox selection is LENSFUN_DB (FR-24, EC-06)");
   const char *s = test_corrections_status_string(SOURCE_LENSFUN_DB,
                                                   SOURCE_LENSFUN_DB,
                                                   TCA_LENSFUN_DB,
-                                                  TRUE);
+                                                  TRUE, buf, sizeof(buf));
   assert_non_null(s);
   assert_string_equal(s, "distortion: Lensfun, vignetting: Lensfun, TCA: off");
 }
@@ -469,12 +481,13 @@ static void test_corrections_status_string_monochrome_tca_forced_off(void **stat
 static void test_corrections_status_string_all_embedded(void **state)
 {
   (void)state;
+  char buf[128];
   TR_STEP("corrections_status_string(EMB, EMB, OFF, color) == "
           "\"distortion: embedded, vignetting: embedded, TCA: off\"");
   const char *s = test_corrections_status_string(SOURCE_EMBEDDED,
                                                   SOURCE_EMBEDDED,
                                                   TCA_OFF,
-                                                  FALSE);
+                                                  FALSE, buf, sizeof(buf));
   assert_non_null(s);
   assert_string_equal(s, "distortion: embedded, vignetting: embedded, TCA: off");
 }
