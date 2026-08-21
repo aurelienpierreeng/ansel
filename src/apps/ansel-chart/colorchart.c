@@ -137,6 +137,13 @@ void checker_set_color(box_t *box, dt_colorspaces_color_profile_type_t color_spa
   }
 }
 
+/* box_t embeds 64-aligned members and is allocated with dt_calloc_align; on Windows that
+ * memory must go back through _aligned_free, which dt_free_gpointer (plain g_free) is not. */
+static void _free_box_gpointer(gpointer ptr)
+{
+  dt_free_align_ptr(ptr);
+}
+
 static void free_labels_list(gpointer data)
 {
   g_list_free_full((GList *)data, dt_free_gpointer);
@@ -175,7 +182,7 @@ chart_t *parse_cht(const char *filename)
   // data gathered from the CHT file
   unsigned int n_boxes;
   result->d_table = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
-  result->box_table = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
+  result->box_table = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, _free_box_gpointer);
   result->patch_sets = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, free_labels_list);
 
   float x_min = FLT_MAX, x_max = FLT_MIN, y_min = FLT_MAX, y_max = FLT_MIN;
@@ -345,7 +352,7 @@ chart_t *parse_cht(const char *filename)
               last_label = label;
 
               // store it
-              box_t *box = calloc(1, sizeof(box_t));
+              box_t *box = dt_calloc_align(sizeof(box_t)); // box_t is 64-aligned, see #1212
               box->p.x = x;
               box->p.y = y;
               box->w = w;

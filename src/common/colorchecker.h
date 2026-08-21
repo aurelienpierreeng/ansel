@@ -496,7 +496,7 @@ static inline void dt_colorchecker_patch_cleanup_list(void *_patch)
   // Free the name if it was allocated
   dt_free(patch->name);
 
-  dt_free(patch);
+  dt_free_align(patch); // paired with the dt_alloc_align in _dt_colorchecker_patch_init()
 }
 
 static inline dt_color_checker_t *dt_colorchecker_init()

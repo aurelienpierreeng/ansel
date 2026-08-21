@@ -222,7 +222,12 @@ dt_colorspaces_conversion_t *dt_colorspaces_prepare_conversion(const dt_colorspa
 {
   if(IS_NULL_PTR(from) || IS_NULL_PTR(to)) return NULL;
 
-  dt_colorspaces_conversion_t *conversion = calloc(1, sizeof(dt_colorspaces_conversion_t));
+  /* dt_calloc_align, NOT calloc: this struct embeds dt_colormatrix_t members, whose declared
+   * 64-byte alignment the compiler is entitled to rely on with aligned vector loads. A plain
+   * calloc returns 16-aligned storage, and on any block that lands 16-mod-32 the first wide
+   * access to a matrix member faults -- issues #1212/#1216: all three field backtraces show a
+   * VALID conversion at an address = 16 (mod 32), crashing in conversion_source_matrix(). */
+  dt_colorspaces_conversion_t *conversion = dt_calloc_align(sizeof(dt_colorspaces_conversion_t));
   if(IS_NULL_PTR(conversion)) return NULL;
   conversion->magic = DT_CONVERSION_MAGIC_LIVE;
 
@@ -522,7 +527,7 @@ void dt_colorspaces_free_conversion(dt_colorspaces_conversion_t **conversion)
 
   for(int k = 0; k < c->n_owned; k++) dt_colorspaces_cleanup_profile(c->owned[k]);
 
-  free(c);
+  dt_free_align(c); // paired with dt_calloc_align: on Windows this memory is _aligned_malloc'd
   *conversion = NULL;
 }
 

@@ -231,7 +231,8 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
 {
   entry->cost = sizeof(dt_image_t);
 
-  dt_image_t *img = (dt_image_t *)g_malloc(sizeof(dt_image_t));
+  // dt_alloc_align: dt_image_t embeds dt_aligned_pixel_t members (alignof 64); see #1212.
+  dt_image_t *img = (dt_image_t *)dt_alloc_align(sizeof(dt_image_t));
   entry->data = img;
   dt_image_init(img);
   _image_cache_reload_from_db(img, entry->key, DT_SV_CREATE); // emits the create event
@@ -250,7 +251,7 @@ void dt_image_cache_deallocate(void *data, dt_cache_entry_t *entry)
   img->embedded_profile = NULL;
   g_list_free_full(img->dng_gain_maps, dt_free_gpointer);
   img->dng_gain_maps = NULL;
-  dt_free(img);
+  dt_free_align(img);
 }
 
 void dt_image_cache_init(const gboolean verbose)

@@ -20,6 +20,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "system/mem_alloc.h"
 #include "common/film.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
@@ -701,7 +702,7 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
     dt_free(d->path_file);
     d->path_file = g_strdup(filename);
 
-    img = malloc(sizeof(dt_image_t));
+    img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
     dt_image_init(img);
     if(!(file_type & DT_IMAGE_HDR))
       valid_exif = dt_exif_read(img, filename);
@@ -788,7 +789,7 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
 
   dt_free(filename);
   dt_free(uri);
-  dt_free(img);
+  dt_free_align(img);
 }
 
 static void _update_directory(GtkWidget *file_chooser, dt_lib_import_t *d)
@@ -855,7 +856,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
     gboolean free_after = FALSE;
     if(IS_NULL_PTR(img))
     {
-      img = malloc(sizeof(dt_image_t));
+      img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
       dt_image_init(img);
 
       // Generate file I/O only if the pattern is using EXIF variables.
@@ -874,7 +875,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
 
     if(free_after)
     {
-      dt_free(img);
+      dt_free_align(img);
     }
 
     if(fake_path && fake_path[0] != 0)

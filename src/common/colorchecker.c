@@ -28,6 +28,7 @@
  * labeled as Dmin or GS0, and Dmax or GS23.
  */
 
+#include "system/mem_alloc.h"
 #include "colorchecker.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "file_location.h"
@@ -236,7 +237,9 @@ static void _dt_colorchecker_chart_spec_cleanup(dt_colorchecker_chart_spec_t *ch
 
 static dt_color_checker_patch *_dt_colorchecker_patch_init()
 {
-  dt_color_checker_patch *patch = (dt_color_checker_patch *)malloc(sizeof(dt_color_checker_patch));
+  // dt_alloc_align: dt_color_checker_patch is 64-aligned (its array sibling above already
+  // allocates aligned); dt_colorchecker_patch_cleanup_list() frees with dt_free_align.
+  dt_color_checker_patch *patch = (dt_color_checker_patch *)dt_alloc_align(sizeof(dt_color_checker_patch));
   if(IS_NULL_PTR(patch)) return NULL;
 
   patch->name = NULL;

@@ -13,6 +13,7 @@
     GNU General Public License for more details.
 */
 
+#include "system/mem_alloc.h"
 #include "common/folder_survey.h"
 #include "control/settings.h"
 #include <glib/gstdio.h>
@@ -624,7 +625,7 @@ char *dt_folder_survey_destination_preview()
     }
 
     char datetime_check[DT_DATETIME_LENGTH] = { 0 };
-    dt_image_t *img = malloc(sizeof(dt_image_t));
+    dt_image_t *img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
     if(dt_datetime_entry_to_exif(datetime_check, sizeof(datetime_check), date) && !IS_NULL_PTR(img))
     {
       dt_image_init(img);
@@ -678,7 +679,7 @@ char *dt_folder_survey_destination_preview()
       dt_free(example);
       dt_control_import_data_free(&data);
     }
-    dt_free(img);
+    dt_free_align(img);
   }
 
   dt_free(folder);
