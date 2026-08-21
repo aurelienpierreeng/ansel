@@ -1718,8 +1718,22 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
       return 1;
     }
 
-    // Get the largest mipmap
+    // The list is ordered smallest-first, so the last entry is the largest preview -- but not
+    // necessarily the cheapest one to decode. Several raw families (every DNG written by Adobe's
+    // converter, Phase One IIQ, Hasselblad 3FR) put an uncompressed TIFF at the top of the list
+    // and a JPEG below it; taking the largest unconditionally then costs a TIFF decode and a
+    // buffer many times the size, for a preview that gets scaled down immediately. Prefer the
+    // largest JPEG when there is one, and fall back to the largest of any type otherwise -- for
+    // most DNGs there is no JPEG at all, and those still go through the TIFF path.
     Exiv2::PreviewProperties selected = list.back();
+    for(auto it = list.rbegin(); it != list.rend(); ++it)
+    {
+      if(it->mimeType_ == "image/jpeg")
+      {
+        selected = *it;
+        break;
+      }
+    }
 
     // Get the selected preview image
     Exiv2::PreviewImage preview = loader.getPreviewImage(selected);
