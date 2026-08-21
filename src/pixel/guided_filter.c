@@ -43,6 +43,7 @@
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/logging.h"
+#include "caches/pixelpipe_cache.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "pixel/box_filters.h"
 #include "pixel/guided_filter.h"
@@ -768,7 +769,18 @@ int guided_filter_cl(int devid, cl_mem guide, cl_mem in, cl_mem out, const int w
   assert(ch >= 3);
   assert(w >= 1);
 
-  const gboolean fits = dt_opencl_image_fits_device(devid, width, height, sizeof(float), 18.0f, 0);
+  gboolean fits = dt_opencl_image_fits_device(devid, width, height, sizeof(float), 18.0f, 0);
+  if(!fits)
+  {
+    // What the device reports free is not what it can be made to have free: most of the
+    // "used" vRAM is the pixelpipe cache holding device copies nobody is reading right now.
+    // Reclaim the idle ones and ask again before writing off the GPU for this call -- the
+    // same flush-then-retry the pipeline itself does around its own per-module fit check.
+    // We are called from inside process_cl(), so the pipe already holds the device lock and
+    // this is the variant that expects the caller to hold it.
+    dt_dev_pixelpipe_cache_flush_clmem(devid);
+    fits = dt_opencl_image_fits_device(devid, width, height, sizeof(float), 18.0f, 0);
+  }
   if(!fits)
     dt_print(DT_DEBUG_OPENCL, "[guided filter] fall back to cpu implementation due to insufficient gpu memory\n");
 
