@@ -20,8 +20,8 @@
 #define DT_SYSTEM_CAPABILITIES_H
 
 /* Optional features detected at runtime, depending on the environment and the
- * compile options: OpenCL, libsecret, kwallet... Registered by whichever subsystem
- * discovers it can run (common/opencl.c, common/pwstorage/pwstorage.c). The backing
+ * compile options: OpenCL... Registered by whichever subsystem
+ * discovers it can run (common/opencl.c). The backing
  * list and its mutex belong to the orchestrator (darktable.c). */
 
 #ifdef __cplusplus

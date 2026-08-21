@@ -174,7 +174,7 @@ typedef struct darktable_t
   GList *iop_order_rules;
 
   // Keep track of optional features that may depend on environnement
-  // ond compiling options : OpenCL, libsecret, kwallet
+  // and compiling options : OpenCL
   GList *capabilities;
   JsonParser *noiseprofile_parser;
   struct dt_conf_t *conf;
@@ -186,7 +186,6 @@ typedef struct darktable_t
   struct dt_gui_gtk_t *gui;
   struct dt_bauhaus_t *bauhaus;
   const struct dt_database_t *db;
-  const struct dt_pwstorage_t *pwstorage;
   struct dt_collection_t *collection;
   struct dt_selection_t *selection;
   struct dt_points_t *points;

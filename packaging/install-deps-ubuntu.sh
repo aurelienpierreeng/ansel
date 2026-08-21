@@ -82,7 +82,6 @@ APT_PACKAGES=(
   libraw-dev
   librsvg2-dev
   libsaxon-java
-  libsecret-1-dev
   libsdl2-dev
   libsoup2.4-dev
   libsqlite3-dev

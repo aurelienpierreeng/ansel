@@ -136,7 +136,7 @@ void dt_metadata_set_list_id(const GList *img, const GList *metadata, const gboo
 /** Get metadata (named keys) for a specific image, or all selected for id == -1.
     For keys which return a string, the caller has to make sure that it
     is freed after usage. */
-GList *dt_metadata_get(int id, const char *key, uint32_t *count); // exif.cc, variables.c, facebook.c, flicker.c, gallery.c, googlephoto.c, latex.c, piwigo.c, watermark.c, metadata_view.c, libs/metadata.c, print_settings.c, lua/image.c
+GList *dt_metadata_get(int id, const char *key, uint32_t *count); // exif.cc, variables.c, gallery.c, watermark.c, metadata_view.c, libs/metadata.c, print_settings.c
 
 /** Get metadata (id keys) for a specific image. The caller has to free the list after usage. */
 GList *dt_metadata_get_list_id(int id); // libs/image.c

@@ -7,14 +7,6 @@ add_definitions(-include imageio/storage/imageio_storage_api.h)
 
 set(MODULES disk gallery)
 
-find_package(CURL 7.56)
-if(CURL_FOUND)
-  message(STATUS "Found recent CURL version to build piwigo.")
-  list(APPEND MODULES piwigo)
-else()
-  message(STATUS "Cannot found recent CURL version (>= 7.56) to build piwigo.")
-endif()
-
 foreach(module ${MODULES})
   add_library(${module} MODULE "${module}.c")
 endforeach(module)

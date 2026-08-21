@@ -72,7 +72,6 @@ DNF_PACKAGES=(
   libomp-devel
   libpng-devel
   libraw-devel
-  libsecret-devel
   libtiff-devel
   libwebp-devel
   libxkbcommon-devel

@@ -59,7 +59,6 @@ MINGW_PACKAGES=(
   libjpeg-turbo
   libjxl
   librsvg
-  libsecret
   libtiff
   libwebp
   libxml2

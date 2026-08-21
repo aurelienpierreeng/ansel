@@ -51,7 +51,6 @@ HB_PACKAGES=(
   libomp
   libraw
   librsvg
-  libsecret
   libsoup@2
   little-cms2
   llvm

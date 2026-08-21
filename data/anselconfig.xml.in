@@ -62,13 +62,6 @@
     <shortdescription>database location</shortdescription>
     <longdescription>filename relative to ~/.config/ansel or starting with a slash (needs a restart).</longdescription>
   </dtconfig>
-  <dtconfig>
-    <name>storage/piwigo/last_album</name>
-    <type>string</type>
-    <default></default>
-    <shortdescription></shortdescription>
-    <longdescription></longdescription>
-  </dtconfig>
   <dtconfig prefs="storage" section="database">
     <name>database/maintenance_check</name>
     <type>
@@ -2128,20 +2121,6 @@
     <default>92</default>
     <shortdescription/>
     <longdescription/>
-  </dtconfig>
-  <dtconfig prefs="security" section="other">
-    <name>plugins/pwstorage/pwstorage_backend</name>
-    <type>
-      <enum>
-        <option>auto</option>
-        <option>none</option>
-        <option capability="libsecret">libsecret</option>
-        <option capability="kwallet">kwallet</option>
-      </enum>
-    </type>
-    <default>auto</default>
-    <shortdescription>password storage backend to use</shortdescription>
-    <longdescription>the storage backend for password storage: auto, none, libsecret, kwallet</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/export/icctype</name>

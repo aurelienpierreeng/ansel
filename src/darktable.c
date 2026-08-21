@@ -118,7 +118,6 @@
 #include "metadata/exif.h"
 #include "history/history.h"
 #include "database/history_repository.h"
-#include "common/pwstorage/pwstorage.h"
 #include "common/selection.h"
 #include "gui/privacy_consent.h"
 #include "common/sentry.h"
@@ -270,7 +269,7 @@ static int usage(const char *argv0)
   printf("  --configdir <user config directory>\n");
   printf("  -d {all,cache,camctl,camsupport,colorprofile,control,demosaic,dev,gtk,history,imageio,import,\n");
   printf("      input,ioporder,lighttable,lua,masks,memory,nan,nocache_reuse,opencl,params,\n");
-  printf("      perf,pipe,pipecache,print,pwstorage,signal,sql,shortcuts,tiling,undo,verbose}\n");
+  printf("      perf,pipe,pipecache,print,signal,sql,shortcuts,tiling,undo,verbose}\n");
   printf("  --d-signal <signal> \n");
   printf("  --d-signal-act <all,raise,connect,disconnect");
   // clang-format on
@@ -665,11 +664,6 @@ struct dt_l10n_t *dt_l10n_get_global(void)
   return darktable.l10n;
 }
 
-const struct dt_pwstorage_t *dt_pwstorage_get_global(void)
-{
-  return darktable.pwstorage;
-}
-
 struct dt_dbus_t *dt_dbus_get_global(void)
 {
   return darktable.dbus;
@@ -1060,8 +1054,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           darktable.unmuted |= DT_DEBUG_PIPECACHE; // pipeline cache
         else if(!strcmp(argv[k + 1], "perf"))
           darktable.unmuted |= DT_DEBUG_PERF; // performance measurements
-        else if(!strcmp(argv[k + 1], "pwstorage"))
-          darktable.unmuted |= DT_DEBUG_PWSTORAGE; // pwstorage module
         else if(!strcmp(argv[k + 1], "opencl"))
           darktable.unmuted |= DT_DEBUG_OPENCL; // gpu accel via opencl
         else if(!strcmp(argv[k + 1], "sql"))
@@ -1576,9 +1568,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   /* capabilities set to NULL */
   darktable.capabilities = NULL;
 
-  // Initialize the password storage engine
-  darktable.pwstorage = dt_pwstorage_new();
-
   darktable.guides = dt_guides_init();
 
   // Re-assert our handlers once the third-party libraries above are up. This used to compensate
@@ -1962,7 +1951,6 @@ void dt_cleanup()
   dt_supervisor_cleanup();
 
   dt_opencl_cleanup();
-  dt_pwstorage_destroy(darktable.pwstorage);
 
   dt_guides_cleanup(darktable.guides);
 

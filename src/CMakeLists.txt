@@ -156,8 +156,6 @@ FILE(GLOB SOURCE_FILES
   "metadata/notify.c"
   "metadata/ratings.c"
   "metadata/tags.c"
-  "common/pwstorage/backend_kwallet.c"
-  "common/pwstorage/pwstorage.c"
   "common/opencl.c"
   "system/dynload.c"
   "common/dlopencl.c"
@@ -514,27 +512,6 @@ if(IsoCodes_FOUND)
 else(IsoCodes_FOUND)
   message(STATUS "no suitable iso-codes, there will be no language names in the preferences")
 endif(IsoCodes_FOUND)
-
-#
-# Detect compile of optional pwstorage backends
-#
-if(USE_LIBSECRET)
-  find_package(Libsecret)
-  if(Libsecret_FOUND)
-    if(Libsecret_VERSION VERSION_LESS "0.18")
-      message(STATUS "Found libsecret unsupported version ${Libsecret_VERSION}. Please upgrade to version 0.18 or newer.")
-      set(Libsecret_FOUND FALSE)
-    else()
-      target_link_libraries(ansel_deps INTERFACE Libsecret::Libsecret)
-      set(SOURCES ${SOURCES} "common/pwstorage/backend_libsecret.c")
-      add_definitions(-DHAVE_LIBSECRET=1)
-    endif()
-  endif(Libsecret_FOUND)
-endif()
-
-if(USE_KWALLET)
-  add_definitions(-DHAVE_KWALLET=1)
-endif(USE_KWALLET)
 
 if(USE_MAC_INTEGRATION)
   find_package(MacIntegration)

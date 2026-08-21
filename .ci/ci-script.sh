@@ -110,7 +110,6 @@ case "$TARGET" in
       -DUSE_OPENEXR=OFF \
       -DBUILD_PRINT=OFF \
       -DBUILD_RS_IDENTIFY=OFF \
-      -DUSE_LIBSECRET=OFF \
       -DUSE_SENTRY=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest
@@ -129,7 +128,6 @@ case "$TARGET" in
       -DUSE_OPENEXR=OFF \
       -DBUILD_PRINT=OFF \
       -DBUILD_RS_IDENTIFY=OFF \
-      -DUSE_LIBSECRET=OFF \
       -DUSE_SENTRY=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest
