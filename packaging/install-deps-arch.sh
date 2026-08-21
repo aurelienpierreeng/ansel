@@ -50,7 +50,6 @@ PACMAN_PACKAGES=(
   git
   gmic
   graphviz
-  graphicsmagick
   gdk-pixbuf2
   glib2
   gstreamer

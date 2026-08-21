@@ -279,19 +279,6 @@ void dt_osx_prepare_environment()
       }
     }
 
-#ifdef HAVE_IMAGEMAGICK7
-    {
-      g_setenv("MAGICK_HOME", res_path, TRUE);
-      gchar* im_config_path = g_build_filename(etc_path, "ImageMagick-7", NULL);
-      g_setenv("MAGICK_CONFIGURE_PATH", im_config_path, TRUE);
-      dt_free(im_config_path);
-      gchar* im_modules_path = g_build_filename(lib_path, "ImageMagick", "modules-Q16HDRI", NULL);
-      g_setenv("MAGICK_CODER_MODULE_PATH", im_modules_path, TRUE);
-      g_setenv("MAGICK_CODER_FILTER_PATH", im_modules_path, TRUE);
-      dt_free(im_modules_path);
-    }
-#endif
-
     _setup_ssl_trust(res_path); //uses GIO, so call after GIO_MODULE_DIR is set
     dt_free(etc_path);
     dt_free(lib_path);

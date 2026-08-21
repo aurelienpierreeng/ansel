@@ -38,7 +38,6 @@ HB_PACKAGES=(
   git
   glib
   gmic
-  graphicsmagick
   gtk-mac-integration
   gtk+3
   icu4c

@@ -75,7 +75,7 @@ EXPLICIT_ERROR = re.compile(r'error: #error\s+"?([^"\n]+)')
 # those branches, which were unverifiable regardless. HAVE_MAP alone accounted for 110
 # skipped files.
 UNBUILDABLE_FEATURES = ('HAVE_MAP', 'HAVE_GMIC', 'HAVE_LIBAVIF', 'HAVE_LIBHEIF',
-                        'HAVE_GRAPHICSMAGICK', 'HAVE_IMAGEMAGICK', 'HAVE_HTTP_SERVER',
+                        'HAVE_HTTP_SERVER',
                         'HAVE_SENTRY', 'HAVE_LIBRAW', 'HAVE_OPENJPEG', 'HAVE_WEBP',
                         'HAVE_OPENEXR', 'HAVE_ISO_CODES', 'HAVE_CMARK', 'HAVE_LIBSECRET',
                         'HAVE_OSMGPSMAP_110_OR_NEWER', 'HAVE_OSMGPSMAP_NEWER_THAN_110')

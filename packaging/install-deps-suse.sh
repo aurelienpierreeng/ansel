@@ -56,10 +56,8 @@ function tumbleweed_function
 	gettext-tools
 	git
 	gstreamer
-	GraphicsMagick
 	gnome-keyring-devel
 	graphviz
-	GraphicsMagick-devel
 	gdk-pixbuf-devel
 	gtk2-devel
 	gtk3-devel
@@ -153,10 +151,8 @@ function leap_function
 	gettext-tools
 	git
 	gstreamer
-	GraphicsMagick
 	gnome-keyring-devel
 	graphviz
-	GraphicsMagick-devel
 	gdk-pixbuf-devel
 	gtk2-devel
 	gtk3-devel

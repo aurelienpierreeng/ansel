@@ -111,9 +111,6 @@ dt_imageio_retval_t dt_imageio_open_standalone(dt_image_t *img, const char *file
  * buffer whose open failed.
  */
 void dt_imageio_close_standalone(dt_mipmap_buffer_t *buf);
-// tries to open the files not opened by the other routines using GraphicsMagick (if supported)
-dt_imageio_retval_t dt_imageio_open_exotic(dt_image_t *img, const char *filename,
-                                           dt_mipmap_buffer_t *buf);
 
 struct dt_imageio_module_format_t;
 struct dt_imageio_module_data_t;

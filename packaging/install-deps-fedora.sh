@@ -49,7 +49,6 @@ DNF_PACKAGES=(
   git
   gmic
   graphviz
-  GraphicsMagick-devel
   libgomp
   libgomp-devel
   gstreamer1-plugins-base-tools

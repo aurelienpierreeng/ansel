@@ -103,7 +103,6 @@ case "$TARGET" in
       -DUSE_OPENMP=OFF \
       -DUSE_OPENCL=OFF \
       -DUSE_NLS=OFF \
-      -DUSE_GRAPHICSMAGICK=OFF \
       -DUSE_OPENJPEG=OFF \
       -DUSE_WEBP=OFF \
       -DUSE_AVIF=OFF \
@@ -124,7 +123,6 @@ case "$TARGET" in
       -DUSE_OPENMP=OFF \
       -DUSE_OPENCL=OFF \
       -DUSE_NLS=OFF \
-      -DUSE_GRAPHICSMAGICK=OFF \
       -DUSE_OPENJPEG=OFF \
       -DUSE_WEBP=OFF \
       -DUSE_AVIF=OFF \
