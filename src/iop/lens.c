@@ -107,7 +107,6 @@
 #include "lensserious.h"    // side-by-side latch against lensfun, see feat/lensserious
 #include "lensserious_db.h" // ... and its calibration database, latched the same way
 
-extern "C" {
 
 /* The correction axes and the projection numbering.
  *
@@ -142,7 +141,7 @@ typedef enum dt_lens_type_t
   DT_LENS_FISHEYE_THOBY = 8,
 } dt_lens_type_t;
 
-static_assert((int)DT_LENS_RECTILINEAR == (int)LS_LENS_RECTILINEAR
+_Static_assert((int)DT_LENS_RECTILINEAR == (int)LS_LENS_RECTILINEAR
                   && (int)DT_LENS_FISHEYE == (int)LS_LENS_FISHEYE
                   && (int)DT_LENS_PANORAMIC == (int)LS_LENS_PANORAMIC
                   && (int)DT_LENS_EQUIRECTANGULAR == (int)LS_LENS_EQUIRECTANGULAR
@@ -244,28 +243,49 @@ typedef struct dt_iop_lensfun_global_data_t
  * it is open. A per-thread cache of the last answer serves that exactly, with no lock and
  * no unbounded growth, where a shared table would need a mutex back.
  * ------------------------------------------------------------------------------------ */
-namespace
+typedef struct _ls_tls_t
 {
-struct _ls_tls_t
+  ls_db_t *db;
+  gboolean tried;
+
+  char cam_key[512];
+  ls_camera_t cam;
+  gboolean cam_found;
+  gboolean cam_cached;
+
+  char lens_key[512];
+  long long lens_id;
+  gboolean lens_cached;
+} _ls_tls_t;
+
+/* Closed when the thread that opened it exits, which is the whole reason this is a GPrivate
+ * and not a plain __thread pointer: the handle has to be RELEASED, and nothing else in C
+ * runs code at thread exit. iop/drawlayer.c holds its per-thread scratch buffers the same
+ * way, for the same reason. */
+static void _ls_tls_free(gpointer data)
 {
-  ls_db_t *db = nullptr;
-  bool tried = false;
+  _ls_tls_t *tls = (_ls_tls_t *)data;
+  if(IS_NULL_PTR(tls)) return;
+  if(!IS_NULL_PTR(tls->db)) ls_db_close(tls->db);
+  dt_free(tls);
+}
 
-  char cam_key[512] = { 0 };
-  ls_camera_t cam = {};
-  bool cam_found = false;
-  bool cam_cached = false;
+static GPrivate _ls_tls_key = G_PRIVATE_INIT(_ls_tls_free);
 
-  char lens_key[512] = { 0 };
-  long long lens_id = -1;
-  bool lens_cached = false;
+/** @brief This thread's cache block, allocated on first use. NULL only if that allocation
+ *  failed, in which case every caller below degrades to "no database" rather than crashing. */
+static _ls_tls_t *_ls_tls_get(void)
+{
+  _ls_tls_t *tls = (_ls_tls_t *)g_private_get(&_ls_tls_key);
+  if(!IS_NULL_PTR(tls)) return tls;
 
-  ~_ls_tls_t()
-  {
-    if(db) ls_db_close(db);
-  }
-};
-thread_local _ls_tls_t _ls_tls;
+  tls = (_ls_tls_t *)g_malloc0(sizeof(_ls_tls_t));
+  if(IS_NULL_PTR(tls)) return NULL;
+  /* The only field whose zeroed value is not the right one: -1 is "no lens", 0 is a
+   * perfectly good row id. */
+  tls->lens_id = -1;
+  g_private_set(&_ls_tls_key, tls);
+  return tls;
 }
 
 /**
@@ -278,57 +298,63 @@ thread_local _ls_tls_t _ls_tls;
  */
 static ls_db_t *_ls_db(void)
 {
-  if(_ls_tls.tried) return _ls_tls.db;
-  _ls_tls.tried = true;
+  _ls_tls_t *tls = _ls_tls_get();
+  if(IS_NULL_PTR(tls)) return NULL;
+
+  if(tls->tried) return tls->db;
+  tls->tried = TRUE;
 
   char dir[PATH_MAX] = { 0 };
   char path[PATH_MAX] = { 0 };
 
   dt_loc_get_user_config_dir(dir, sizeof(dir));
   snprintf(path, sizeof(path), "%s/lenses.db", dir);
-  _ls_tls.db = ls_db_open(path);
+  tls->db = ls_db_open(path);
 
-  if(IS_NULL_PTR(_ls_tls.db))
+  if(IS_NULL_PTR(tls->db))
   {
     dt_loc_get_datadir(dir, sizeof(dir));
     snprintf(path, sizeof(path), "%s/lenses.db", dir);
-    _ls_tls.db = ls_db_open(path);
+    tls->db = ls_db_open(path);
   }
 
-  if(IS_NULL_PTR(_ls_tls.db))
+  if(IS_NULL_PTR(tls->db))
     dt_print(DT_DEBUG_ALWAYS,
              "[lens] no calibration database: looked for lenses.db in the config directory"
              " and in `%s'\n", dir);
   else
     dt_print(DT_DEBUG_PIPE, "[lens] opened `%s' (schema v%d)\n", path,
-             ls_db_schema_version(_ls_tls.db));
+             ls_db_schema_version(tls->db));
 
-  return _ls_tls.db;
+  return tls->db;
 }
 
 /** @brief The camera an EXIF maker/model names. @return TRUE when found. */
 static gboolean _ls_find_camera(const char *maker, const char *model, ls_camera_t *out)
 {
   if(IS_NULL_PTR(model) || !model[0]) return FALSE;
+  /* _ls_db() has already established that this thread has a cache block; it cannot have
+   * returned a database without one. */
+  _ls_tls_t *tls = _ls_tls_get();
   ls_db_t *db = _ls_db();
-  if(IS_NULL_PTR(db)) return FALSE;
+  if(IS_NULL_PTR(db) || IS_NULL_PTR(tls)) return FALSE;
 
   char key[512];
   snprintf(key, sizeof(key), "%s\x1f%s", maker ? maker : "", model);
-  if(_ls_tls.cam_cached && !strcmp(key, _ls_tls.cam_key))
+  if(tls->cam_cached && !strcmp(key, tls->cam_key))
   {
-    if(_ls_tls.cam_found) *out = _ls_tls.cam;
-    return _ls_tls.cam_found ? TRUE : FALSE;
+    if(tls->cam_found) *out = tls->cam;
+    return tls->cam_found ? TRUE : FALSE;
   }
 
   ls_camera_t cam;
   /* A miss is cached too: it costs a lookup to establish and it will not change. */
   const gboolean found = (ls_db_find_camera(db, maker, model, &cam) == 1) ? TRUE : FALSE;
 
-  g_strlcpy(_ls_tls.cam_key, key, sizeof(_ls_tls.cam_key));
-  _ls_tls.cam = cam;
-  _ls_tls.cam_found = (found == TRUE);
-  _ls_tls.cam_cached = true;
+  g_strlcpy(tls->cam_key, key, sizeof(tls->cam_key));
+  tls->cam = cam;
+  tls->cam_found = found;
+  tls->cam_cached = TRUE;
 
   if(found) *out = cam;
   return found;
@@ -345,20 +371,21 @@ static gboolean _ls_find_camera(const char *maker, const char *model, ls_camera_
 static long long _ls_find_lens(long long mount_id, float crop, const char *lens_name)
 {
   if(IS_NULL_PTR(lens_name) || !lens_name[0]) return -1;
+  _ls_tls_t *tls = _ls_tls_get();
   ls_db_t *db = _ls_db();
-  if(IS_NULL_PTR(db)) return -1;
+  if(IS_NULL_PTR(db) || IS_NULL_PTR(tls)) return -1;
 
   char key[512];
   snprintf(key, sizeof(key), "%lld\x1f%.4f\x1f%s", mount_id, (double)crop, lens_name);
-  if(_ls_tls.lens_cached && !strcmp(key, _ls_tls.lens_key)) return _ls_tls.lens_id;
+  if(tls->lens_cached && !strcmp(key, tls->lens_key)) return tls->lens_id;
 
   ls_db_match_t m[1];
   const long long id
       = (ls_db_match_lens(db, NULL, lens_name, mount_id, crop, m, 1) > 0) ? m[0].lens_id : -1;
 
-  g_strlcpy(_ls_tls.lens_key, key, sizeof(_ls_tls.lens_key));
-  _ls_tls.lens_id = id;
-  _ls_tls.lens_cached = true;
+  g_strlcpy(tls->lens_key, key, sizeof(tls->lens_key));
+  tls->lens_id = id;
+  tls->lens_cached = TRUE;
   return id;
 }
 
@@ -785,7 +812,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       /* Nothing moved, so there was no resampling loop to fold the falloff into. */
       if(have_vig)
       {
-        __OMP_PARALLEL_FOR_CPP__(firstprivate(modifier, ovoid, roi_out, ch))
+        __OMP_PARALLEL_FOR__(firstprivate(modifier, ovoid, roi_out, ch))
         for(int y = 0; y < roi_out->height; y++)
         {
           float *out = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
@@ -878,7 +905,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       /* Nothing moved, so there was no resampling loop to fold the falloff into. */
       if(have_vig)
       {
-        __OMP_PARALLEL_FOR_CPP__(firstprivate(modifier, ovoid, roi_in, ch))
+        __OMP_PARALLEL_FOR__(firstprivate(modifier, ovoid, roi_in, ch))
         for(int y = 0; y < roi_in->height; y++)
         {
           float *out = ((float *)ovoid) + (size_t)ch * roi_in->width * y;
@@ -1086,7 +1113,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   if(modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE))
   {
-    __OMP_PARALLEL_FOR_CPP__(firstprivate(points, points_count, modifier) if(points_count > 100))
+    __OMP_PARALLEL_FOR__(firstprivate(points, points_count, modifier) if(points_count > 100))
     for(size_t i = 0; i < points_count * 2; i += 2)
     {
       float DT_ALIGNED_ARRAY buf[6];
@@ -1119,7 +1146,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 
   if(modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE))
   {
-    __OMP_PARALLEL_FOR_CPP__(firstprivate(points_count, modifier, points) if(points_count > 100))
+    __OMP_PARALLEL_FOR__(firstprivate(points_count, modifier, points) if(points_count > 100))
     for(size_t i = 0; i < points_count * 2; i += 2)
     {
       float DT_ALIGNED_ARRAY buf[6];
@@ -1173,7 +1200,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   size_t padded_bufsize;
   float *const buf = dt_pixelpipe_cache_alloc_perthread_float(bufsize, &padded_bufsize);
   if(IS_NULL_PTR(buf)) return;
-  __OMP_PARALLEL_FOR_CPP__(firstprivate(buf, padded_bufsize, d, modifier, in, out, interpolation, roi_in, roi_out))
+  __OMP_PARALLEL_FOR__(firstprivate(buf, padded_bufsize, d, modifier, in, out, interpolation, roi_in, roi_out))
   for(int y = 0; y < roi_out->height; y++)
   {
     float *bufptr = (float*)dt_get_perthread(buf, padded_bufsize);
@@ -2825,7 +2852,6 @@ void gui_cleanup(struct dt_iop_module_t *self)
   IOP_GUI_FREE;
 }
 
-}
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

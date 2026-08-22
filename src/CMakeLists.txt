@@ -817,7 +817,7 @@ target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
 target_link_libraries(lib_ansel PRIVATE lensserious)
-# ... and the calibration reader. iop/lens.cc resolves a lens through it, so the symbols
+# ... and the calibration reader. iop/lens.c resolves a lens through it, so the symbols
 # have to be in lib_ansel: the plugin links the headers only (src/iop/CMakeLists.txt).
 if(TARGET lensserious_db)
   target_link_libraries(lib_ansel PRIVATE lensserious_db)
