@@ -38,19 +38,70 @@
 MAX_DELTA_E = 2.3
 MAX_AVG_DELTA_E = MAX_DELTA_E / 3.
 
-import colour
-import numpy
+# Exit codes, because the caller has to tell three different things apart and used to
+# guess:
+#   0  images match (max dE < 0.01)
+#   1  some drift, below both real thresholds
+#   2  a real difference (max dE > 2.3 or avg dE > 0.767)
+#   3  THIS COMPARATOR CANNOT RUN -- a missing dependency, not a verdict on the images
+#   4  the two images are different sizes, so there is nothing to compare pixel-wise
+#
+# 3 and 4 exist because the previous version had no way to say either. A missing
+# colour-science made every image report "likely a size mismatch" -- which was not true and
+# sent the reader looking at export dimensions -- and a colour-science too old to have
+# delta_E exited 0, reporting SUCCESS for a comparison that never happened.
+EXIT_UNAVAILABLE = 3
+EXIT_SIZE_MISMATCH = 4
+
 import sys
 
+try:
+    import colour
+    import numpy
+except ImportError as exc:
+    sys.stderr.write(
+        "deltae: cannot run -- %s\n"
+        "\n"
+        "This comparator needs colour-science (and numpy). Install it for the interpreter\n"
+        "that runs this script:\n"
+        "    pip3 install --user colour-science\n"
+        "or use your distribution's python3-colour-science package. If that would disturb\n"
+        "other packages, a throwaway virtualenv works and needs nothing system-wide:\n"
+        "    python3 -m venv /tmp/deltae-venv\n"
+        "    /tmp/deltae-venv/bin/pip install colour-science\n"
+        "    PATH=/tmp/deltae-venv/bin:$PATH tests/image_test.sh run\n"
+        % exc)
+    sys.exit(EXIT_UNAVAILABLE)
+
 if "delta_E" not in dir(colour):
-    print("  Unable to compute delta-E, please upgrade python3-colour-science")
-    exit(0)
+    # Used to exit(0): a comparator that cannot compare reported every image as passing.
+    sys.stderr.write("deltae: colour-science is too old to provide delta_E -- please upgrade\n")
+    sys.exit(EXIT_UNAVAILABLE)
+
+# Lets a caller establish ONCE, before testing anything, that the comparator works --
+# a setup problem reported per image reads as N regressions and buries its own cause.
+if len(sys.argv) > 1 and sys.argv[1] == "--check":
+    sys.exit(0)
+
+if len(sys.argv) < 3:
+    sys.stderr.write("usage: deltae <expected.png> <output.png>\n       deltae --check\n")
+    sys.exit(EXIT_UNAVAILABLE)
 
 expected = sys.argv[1]
 output = sys.argv[2]
 
 expected_rgb = colour.read_image(expected, method="Imageio")
 output_rgb = colour.read_image(output, method="Imageio")
+
+# Reported as its own thing, with the sizes, rather than left to a caller's guess.
+if expected_rgb.shape[:2] != output_rgb.shape[:2]:
+    sys.stderr.write(
+        "deltae: size mismatch -- expected %dx%d, got %dx%d.\n"
+        "Both sides must be exported at the same dimensions; the shared baseline is\n"
+        "always 1024x1024-capped (see image_test.sh BASELINE_WIDTH/HEIGHT).\n"
+        % (expected_rgb.shape[1], expected_rgb.shape[0],
+           output_rgb.shape[1], output_rgb.shape[0]))
+    sys.exit(EXIT_SIZE_MISMATCH)
 
 expected_lab = colour.XYZ_to_Lab(colour.sRGB_to_XYZ(expected_rgb,
                                                     chromatic_adaptation_transform="Bradford"))
