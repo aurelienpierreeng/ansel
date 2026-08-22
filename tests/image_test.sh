@@ -459,9 +459,15 @@ process_one() {
       printf '%s\n' "$deltae_out" > "$RESULTS_DIR/$rel.deltae.log"
       IFS=$'\t' read -r max_de avg_de pct_de <<< "$(extract_de_stats "$deltae_out")"
       if [ -z "$max_de" ]; then
-        # deltae crashed (e.g. size mismatch vs baseline) rather than computing a
-        # real dE -- never a silent PASS, --strict or not.
-        diffnote=" (delta-E comparison failed vs baseline, likely a size mismatch)"
+        # No numbers came back. Say WHY, from deltae's own exit code, instead of guessing:
+        # this used to claim "likely a size mismatch" for every failure, including the
+        # common one of colour-science not being installed, which sent the reader off to
+        # inspect export dimensions that were in fact identical. Never a silent PASS.
+        case "$deltae_rc" in
+          3) diffnote=" (delta-E comparator unavailable -- see $RESULTS_DIR/$rel.deltae.log)" ;;
+          4) diffnote=" ($(printf '%s\n' "$deltae_out" | sed -n 's/^deltae: \(size mismatch.*\)/\1/p' | head -1))" ;;
+          *) diffnote=" (delta-E comparison failed, exit $deltae_rc -- see $RESULTS_DIR/$rel.deltae.log)" ;;
+        esac
         verdict="DIFF"
       else
         # avg dE > 0.767 (2.3/3) is a population-wide problem -- never filtered
@@ -631,6 +637,20 @@ run_bank() {
   # sequential loop below warms the cache on its own first image for free.
   if [ "$OPENCL" = yes ] && [ "$COMMAND" != update-baseline ] && [ "$jobs" -gt 1 ]; then
     warm_opencl_cache "${raws[0]}"
+  fi
+
+  # Establish ONCE that the comparator can run, before exporting anything. A missing
+  # colour-science used to surface as every image reporting a delta-E failure, which reads
+  # as a fleet of regressions and hides the single line that says what is actually wrong --
+  # and costs a full export run to find out.
+  if [ -d "$BASELINE_DIR" ] && [ -x "$DELTAE_SCRIPT" ]; then
+    local check_out check_rc
+    check_out="$("$DELTAE_SCRIPT" --check 2>&1)"; check_rc=$?
+    if [ "$check_rc" -ne 0 ]; then
+      err "the delta-E comparator cannot run, so nothing would be checked against the baseline:"
+      printf '%s\n' "$check_out" >&2
+      return 1
+    fi
   fi
 
   log "Testing ${#raws[@]} raw file(s) from $BANK_DIR"
