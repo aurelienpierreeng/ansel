@@ -1,5 +1,10 @@
 add_subdirectory(external)
 
+# LensSerious: lens-correction math as data (git submodule). It IS the lens correction --
+# nothing here links liblensfun any more. Its importer still reads the upstream XML, but
+# only at build time, to produce data/lenses.db.
+add_subdirectory(external/LensSerious EXCLUDE_FROM_ALL)
+
 add_library(ansel_deps INTERFACE)
 
 include(CheckCCompilerFlag)
@@ -341,7 +346,6 @@ find_package(LCMS2 REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(PNG REQUIRED)
 find_package(TIFF REQUIRED)
-find_package(LensFun REQUIRED)
 find_package(Sqlite3 3.24 REQUIRED)
 find_package(Exiv2 0.27.4 REQUIRED)
 find_package(Pugixml 1.2 REQUIRED)
@@ -362,7 +366,6 @@ target_include_directories(ansel_deps INTERFACE
   PNG::PNG
   JPEG::JPEG
   TIFF::TIFF
-  LensFun::LensFun
   Sqlite3::Sqlite3
   Exiv2::Exiv2
   Pugixml::Pugixml
@@ -378,7 +381,6 @@ target_link_libraries(ansel_deps INTERFACE
   PNG::PNG
   JPEG::JPEG
   TIFF::TIFF
-  LensFun::LensFun
   Sqlite3::Sqlite3
   Exiv2::Exiv2
   Pugixml::Pugixml
@@ -814,6 +816,12 @@ endif()
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
+target_link_libraries(lib_ansel PRIVATE lensserious)
+# ... and the calibration reader. iop/lens.cc resolves a lens through it, so the symbols
+# have to be in lib_ansel: the plugin links the headers only (src/iop/CMakeLists.txt).
+if(TARGET lensserious_db)
+  target_link_libraries(lib_ansel PRIVATE lensserious_db)
+endif()
 
 if(USE_SENTRY)
   target_link_libraries(lib_ansel PRIVATE sentry)

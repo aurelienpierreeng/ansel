@@ -914,7 +914,11 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   dt_free(escapedkerneldir_md5);
   escapedkerneldir = NULL;
 
-  const char *clincludes[DT_OPENCL_MAX_INCLUDES] = { "rgb_norms.h", "noise_generator.h", "color_conversion.h", "colorspaces.cl", "colorspace.h", "common.h", NULL };
+  /* Every header a .cl may include, so a change to one invalidates the cached device
+   * binaries that were built from it -- an omission here does not fail, it silently keeps
+   * running yesterday's kernel. lensserious_eval.h is LensSerious's evaluator, installed
+   * beside the kernels by data/kernels/CMakeLists.txt. */
+  const char *clincludes[DT_OPENCL_MAX_INCLUDES] = { "rgb_norms.h", "noise_generator.h", "color_conversion.h", "colorspaces.cl", "colorspace.h", "common.h", "lensserious_eval.h", NULL };
   char *includemd5[DT_OPENCL_MAX_INCLUDES] = { NULL };
   dt_opencl_md5sum(clincludes, includemd5);
 

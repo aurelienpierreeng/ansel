@@ -23,3 +23,6 @@
 	url = https://github.com/aurelienpierreeng/ansel-test.git
 	update = none
 	active = false
+[submodule "src/external/LensSerious"]
+	path = src/external/LensSerious
+	url = https://github.com/aurelienpierreeng/LensSerious.git

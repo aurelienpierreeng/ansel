@@ -264,3 +264,69 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/anselrc DESTINATION ${CMAKE_INSTALL_DA
 # Install bash completion file. users/packagers can symlink that to /etc/bash_completion.d/
 #
 install(FILES ansel.bash DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
+
+# The lens calibration database (lenses.db).
+#
+# LensSerious reads calibrations from SQLite, not from XML: parsing the 8.4 MB upstream
+# database costs ~100 ms per process and is the single largest term in resolving a lens
+# (101.7 ms against 0.35 ms measured end to end). The conversion is done ONCE, here, at
+# build time -- which is why liblensfun is a BUILD dependency of this file and not a
+# runtime dependency of the application.
+#
+# The XML is FETCHED rather than taken from whatever the build machine has installed, for
+# two reasons. It is what upstream's own lensfun-update-data pulls, so a build carries the
+# current calibrations rather than the packager's snapshot. And it is what makes this work
+# at all on Windows: the msys2 runners have liblensfun but no data package, so importing
+# from "the system database" found nothing and failed the build.
+#
+# Falls back to the system database when the fetch is off or fails, and if neither can
+# produce a database the build still succeeds -- iop/lens.cc reports the database as
+# unavailable and the module disables itself, the same way rawdenoiseai does without its
+# model. Shipping no lens corrections is bad; failing a release build over a network hiccup
+# is worse.
+option(FETCH_LENS_DB "Download the lensfun XML at configure time to build lenses.db" ON)
+set(LENS_DB_URL "https://lensfun.github.io/db/version_1.tar.bz2")
+set(LENS_XML_DIR "${CMAKE_CURRENT_BINARY_DIR}/lensfun-xml")
+
+set(LENS_XML_SOURCE "")
+if(FETCH_LENS_DB)
+  file(DOWNLOAD "${LENS_DB_URL}" "${CMAKE_CURRENT_BINARY_DIR}/lensfun-db.tar.bz2"
+       TIMEOUT 120 STATUS _lens_dl)
+  list(GET _lens_dl 0 _lens_dl_code)
+  if(_lens_dl_code EQUAL 0)
+    file(REMOVE_RECURSE "${LENS_XML_DIR}")
+    file(MAKE_DIRECTORY "${LENS_XML_DIR}")
+    file(ARCHIVE_EXTRACT INPUT "${CMAKE_CURRENT_BINARY_DIR}/lensfun-db.tar.bz2"
+         DESTINATION "${LENS_XML_DIR}")
+    file(GLOB _lens_xml "${LENS_XML_DIR}/*.xml")
+    list(LENGTH _lens_xml _lens_xml_n)
+    if(_lens_xml_n GREATER 0)
+      set(LENS_XML_SOURCE "${LENS_XML_DIR}")
+      message(STATUS "Lens database: ${_lens_xml_n} XML files fetched from upstream")
+    endif()
+  endif()
+  if(NOT LENS_XML_SOURCE)
+    message(WARNING "Lens database: could not fetch ${LENS_DB_URL}; "
+                    "falling back to the system lensfun database")
+  endif()
+endif()
+
+if(TARGET import_lensfun_xml)
+  set(LENSES_DB "${CMAKE_CURRENT_BINARY_DIR}/lenses.db")
+  set(LENSES_SCHEMA "${CMAKE_SOURCE_DIR}/src/external/LensSerious/src/schema.sql")
+  # The importer writes to a temporary and renames, so a killed build cannot leave a
+  # half-written database that looks complete.
+  add_custom_command(
+    OUTPUT "${LENSES_DB}"
+    COMMAND $<TARGET_FILE:import_lensfun_xml> "${LENSES_SCHEMA}" "${LENSES_DB}"
+            ${LENS_XML_SOURCE}
+    DEPENDS import_lensfun_xml "${LENSES_SCHEMA}"
+    COMMENT "Converting the lensfun database to SQLite (lenses.db)"
+    VERBATIM)
+  add_custom_target(lenses_db ALL DEPENDS "${LENSES_DB}")
+  install(FILES "${LENSES_DB}" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel
+          COMPONENT DTApplication OPTIONAL)
+else()
+  message(WARNING "liblensfun not found: lenses.db will not be built, and the lens "
+                  "correction module will report no calibration data")
+endif()

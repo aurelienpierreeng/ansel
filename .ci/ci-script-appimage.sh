@@ -54,10 +54,8 @@ cmake .. -DCMAKE_INSTALL_PREFIX=/usr -G Ninja \
   -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib'
 cmake --build . --target install --parallel $(nproc)
 
-# Grab lensfun database. You should run `sudo lensfun-update-data` before making
-# AppImage, we did this in CI.
-mkdir -p ../AppDir/usr/share/lensfun
-cp -a /var/lib/lensfun-updates/* ../AppDir/usr/share/lensfun
+# No lensfun database to grab: lens calibrations are converted to SQLite at build time
+# (data/CMakeLists.txt) and lenses.db is installed with the rest of the data.
 
 # Deal with errors like:
 # Could not load a pixbuf ...

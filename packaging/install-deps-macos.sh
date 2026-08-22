@@ -45,7 +45,7 @@ HB_PACKAGES=(
   jpeg-turbo
   jpeg-xl
   json-glib
-  lensfun
+  lensfun            # build-time only: the XML->SQLite importer reads through it
   libavif
   libheif
   libomp

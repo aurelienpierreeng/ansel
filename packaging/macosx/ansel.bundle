@@ -28,7 +28,6 @@
   <translations name="ansel">${prefix:dt}/share/locale</translations>
   <data>${prefix:dt}/share/ansel</data>
   <data>${prefix}/share/glib-2.0/schemas/org.gtk.Settings.*.gschema.xml</data>
-  <data dest="${bundle}/Contents/Resources/share/lensfun">${project}/lensfun/updates</data>
   <data>${prefix:dt}/share/icons</data>
   <data dest="${bundle}/Contents/Resources/etc/gtk-3.0/settings.ini">${project}/settings.ini</data>
   <data>${prefix}/share/mime</data>
