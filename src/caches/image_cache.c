@@ -421,10 +421,9 @@ int dt_image_cache_seed(const dt_image_t *img)
   seeded.dng_gain_maps = NULL;
   seeded.cache_entry = NULL;
 
-  // dt_image_cache_deallocate() always frees entry->data with dt_free_align(), regardless of
-  // how it was allocated -- seeded entries must therefore be allocated aligned too, or eviction
-  // frees a g_malloc()'d block with _aligned_free() on Windows, corrupting the heap.
-  return dt_cache_seed(&cache->cache, (uint32_t)seeded.id, &seeded, sizeof(dt_image_t), sizeof(dt_image_t), TRUE);
+  // dt_image_cache_deallocate() frees entry->data with dt_free_align(); dt_cache_seed()
+  // allocates with dt_alloc_align() and no longer offers any other option.
+  return dt_cache_seed(&cache->cache, (uint32_t)seeded.id, &seeded, sizeof(dt_image_t), sizeof(dt_image_t));
 }
 
 // This callback must run before any other DT_SIGNAL_IMAGE_INFO_CHANGED handler.

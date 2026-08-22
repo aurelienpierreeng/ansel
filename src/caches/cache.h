@@ -112,9 +112,20 @@ void dt_cache_release_with_caller(dt_cache_t *cache, dt_cache_entry_t *entry, co
 int32_t dt_cache_contains(dt_cache_t *cache, const uint32_t key);
 // returns 0 on success, 1 if the key was not found.
 int32_t dt_cache_remove(dt_cache_t *cache, const uint32_t key);
-// seed a cache entry without running allocate callback. returns 0 on insert, 1 if already present, -1 on failure.
-int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_t data_size, size_t cost,
-                  gboolean aligned_alloc);
+// Seed a cache entry without running the allocate callback. Returns 0 on insert, 1 if
+// already present, -1 on failure.
+//
+// The payload is always allocated with dt_alloc_align(), and that is not an implementation
+// detail a caller may vary: an entry whose cache has no cleanup callback is freed by this
+// file with dt_free_align(), in four places, whatever it was allocated with. On Windows
+// those are _aligned_malloc and _aligned_free, so a payload allocated any other way is a
+// corrupted heap on eviction -- and on Linux both sides end at free(), so nothing local
+// ever reproduces it.
+//
+// This used to take an `aligned_alloc` flag choosing between dt_alloc_align() and
+// g_malloc(). Passing FALSE was heap corruption on Windows and always had been; the one
+// caller that did was fixed, and the parameter is gone so the next one cannot.
+int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_t data_size, size_t cost);
 // removes from the tip of the lru list, until the fill ratio of the hashtable
 // goes below the given parameter, in terms of the user defined cost measure.
 // will never lock and never fail, but sometimes not free memory (in case all
