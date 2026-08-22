@@ -965,7 +965,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   /* One kernel, in and out, in both directions.
    *
-   * The correction crosses as an ls_eval_t -- 112 bytes of coefficients passed by value --
+   * The correction crosses as an ls_eval_t -- 632 bytes of coefficients passed by value --
    * and each work-item evaluates its own source coordinates from it, so there is no
    * displacement map, no host buffer and no upload. Vignetting rides along inside the same
    * resampling pass rather than writing a whole intermediate image for the resampler to
