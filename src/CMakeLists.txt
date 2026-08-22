@@ -909,6 +909,13 @@ add_subdirectory(apps/ansel-cli)
 # have a command line utility to generate all the thumbnails
 add_subdirectory(apps/ansel-generate-cache)
 
+# have a command line utility to rebuild lenses.db from THIS machine's lensfun profiles --
+# the ones a package build could not have seen, because they only exist on the user's own
+# machine. Needs liblensfun, so it exists only where LensSerious found it.
+if(TARGET lensserious_import)
+  add_subdirectory(apps/ansel-lens-db-update)
+endif()
+
 # have a small test program that verifies your color management setup
 if(BUILD_CMSTEST)
   add_subdirectory(apps/ansel-cmstest)
