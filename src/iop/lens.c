@@ -854,7 +854,10 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
     *n = *d; // start with a fresh copy of default parameters
 
-    memcpy(n, o, sizeof(dt_iop_lensfun_params_t) - sizeof(int));
+    /* The whole OLD struct, sized from the old struct. It used to be sized as the new one
+     * minus an int, which is the same number only for as long as v5 has exactly one field
+     * more than v3 -- add a second and this reads off the end of the caller's buffer. */
+    memcpy(n, o, sizeof(*o));
 
     // one more parameter and changed parameters in case we autodetect
     n->modified = 1;
