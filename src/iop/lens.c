@@ -2730,6 +2730,34 @@ static void _lens_axis_source_changed(GtkWidget *widget, gpointer user_data)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
+/**
+ * @brief Build one axis's source combobox and pack it at the end of the module.
+ *
+ * @details Called in panel order, so the caller's sequence IS the layout: each axis's
+ * dependent controls are created straight after its combobox and land under it.
+ */
+static GtkWidget *_lens_add_axis_combobox(dt_iop_module_t *self, dt_iop_lensfun_gui_data_t *g,
+                                          const dt_lens_axis_t axis, const char *label,
+                                          const char *tooltip)
+{
+  GtkWidget *w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
+  g->axis_source[axis] = w;
+  dt_bauhaus_widget_set_label(w, label);
+  gtk_widget_set_tooltip_text(w, _(tooltip));
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), w, TRUE, TRUE, 0);
+
+  for(int row = 0; row < DT_LENS_SOURCE_LAST; row++)
+  {
+    const dt_lens_source_t source = _lens_axis_sources[axis][row];
+    if(source == DT_LENS_SOURCE_LAST) break;
+    dt_bauhaus_combobox_add(w, _(_lens_source_names[source]));
+  }
+  dt_bauhaus_combobox_set(w, _lens_source_row(axis, DT_LENS_SOURCE_LENSFUN));
+  g_signal_connect(G_OBJECT(w), "value-changed",
+                   G_CALLBACK(_lens_axis_source_changed), (gpointer)self);
+  return w;
+}
+
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
@@ -2925,42 +2953,30 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->lens_param_box, TRUE, TRUE, 0);
 
 
-  // selector for correction type (modflags): one or more out of distortion, TCA, vignetting
-  /* One combobox per axis, in place of the single "corrections" picker that used to offer
-   * the eight combinations of three on/off switches. Three independent controls say the
-   * same thing in three rows instead of eight, and they have somewhere to put WHERE each
-   * correction comes from -- which the combination list had no room for at all. */
-  static const struct { dt_lens_axis_t axis; const char *label; const char *tooltip; }
-  axis_ui[DT_LENS_AXIS_LAST] = {
-    { DT_LENS_AXIS_DISTORTION, N_("distortion"),
-      N_("correct the lens's geometric distortion, and where to take it from") },
-    { DT_LENS_AXIS_TCA, N_("chromatic aberrations"),
-      N_("correct lateral chromatic aberration, and where to take it from") },
-    { DT_LENS_AXIS_VIGNETTING, N_("vignetting"),
-      N_("correct the lens's light falloff, and where to take it from") },
-  };
+  /* The panel reads top to bottom as: what was detected, how much to rescale, then one
+   * section per correction axis. Each section is its source combobox followed by exactly
+   * the controls that source uses -- geometry under distortion, the manual coefficients
+   * under TCA -- so a control is never far from the thing that decides whether it applies.
+   *
+   * That is why these are written out one at a time rather than looped: the loop would have
+   * to put every axis's extra controls somewhere else, and "somewhere else" is how the old
+   * panel ended up with a TCA override checkbox three rows away from the TCA setting. */
 
-  for(int i = 0; i < DT_LENS_AXIS_LAST; i++)
-  {
-    const dt_lens_axis_t axis = axis_ui[i].axis;
-    GtkWidget *w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-    g->axis_source[axis] = w;
-    dt_bauhaus_widget_set_label(w, axis_ui[i].label);
-    gtk_widget_set_tooltip_text(w, _(axis_ui[i].tooltip));
-    gtk_box_pack_start(GTK_BOX(self->gui->widget), w, TRUE, TRUE, 0);
+  // 2. rescale
+  g->scale = dt_bauhaus_slider_from_params(self, N_("scale"));
+  dt_bauhaus_slider_set_digits(g->scale, 3);
+  dt_bauhaus_widget_set_quad_paint(g->scale, dtgtk_cairo_paint_refresh, 0, NULL);
+  g_signal_connect(G_OBJECT(g->scale), "quad-pressed", G_CALLBACK(autoscale_pressed), self);
+  gtk_widget_set_tooltip_text(g->scale, _("auto scale"));
 
-    for(int row = 0; row < DT_LENS_SOURCE_LAST; row++)
-    {
-      const dt_lens_source_t source = _lens_axis_sources[axis][row];
-      if(source == DT_LENS_SOURCE_LAST) break;
-      dt_bauhaus_combobox_add(w, _(_lens_source_names[source]));
-    }
-    dt_bauhaus_combobox_set(w, _lens_source_row(axis, DT_LENS_SOURCE_LENSFUN));
-    g_signal_connect(G_OBJECT(w), "value-changed",
-                     G_CALLBACK(_lens_axis_source_changed), (gpointer)self);
-  }
+  // 3. vignetting
+  _lens_add_axis_combobox(self, g, DT_LENS_AXIS_VIGNETTING, N_("vignetting"),
+                          N_("correct the lens's light falloff, and where to take it from"));
 
-  // target geometry
+  // 4. distortion, and the projection it can be corrected into
+  _lens_add_axis_combobox(self, g, DT_LENS_AXIS_DISTORTION, N_("distortion"),
+                          N_("correct the lens's geometric distortion, and where to take it from"));
+
   g->target_geom = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->target_geom, N_("geometry"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->target_geom, TRUE, TRUE, 0);
@@ -2976,22 +2992,16 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->target_geom), "value-changed", G_CALLBACK(target_geometry_changed),
                    (gpointer)self);
 
-  // scale
-  g->scale = dt_bauhaus_slider_from_params(self, N_("scale"));
-  dt_bauhaus_slider_set_digits(g->scale, 3);
-  dt_bauhaus_widget_set_quad_paint(g->scale, dtgtk_cairo_paint_refresh, 0, NULL);
-  g_signal_connect(G_OBJECT(g->scale), "quad-pressed", G_CALLBACK(autoscale_pressed), self);
-  gtk_widget_set_tooltip_text(g->scale, _("auto scale"));
+  // 5. chromatic aberrations, and the coefficients the manual source uses
+  _lens_add_axis_combobox(self, g, DT_LENS_AXIS_TCA, N_("chromatic aberrations"),
+                          N_("correct lateral chromatic aberration, and where to take it from"));
 
-  // reverse direction
-  g->reverse = dt_bauhaus_combobox_from_params(self, "inverse");
-  dt_bauhaus_combobox_add(g->reverse, _("correct"));
-  dt_bauhaus_combobox_add(g->reverse, _("distort"));
-  gtk_widget_set_tooltip_text(g->reverse, _("correct distortions or apply them"));
-
+  /* Still a param, so it is still bound to a widget -- but the combobox above says this
+   * now, and the widget is kept permanently hidden by _lens_gui_update_sensitivity().
+   * Binding it is what keeps the params<->widget machinery consistent; showing it is what
+   * would let two controls disagree about one state. */
   g->tca_override = dt_bauhaus_toggle_from_params(self, "tca_override");
 
-  // override linear tca (if not 1.0):
   g->tca_r = dt_bauhaus_slider_from_params(self, "tca_r");
   dt_bauhaus_slider_set_digits(g->tca_r, 5);
   gtk_widget_set_tooltip_text(g->tca_r, _("Transversal Chromatic Aberration red"));
@@ -2999,6 +3009,13 @@ void gui_init(struct dt_iop_module_t *self)
   g->tca_b = dt_bauhaus_slider_from_params(self, "tca_b");
   dt_bauhaus_slider_set_digits(g->tca_b, 5);
   gtk_widget_set_tooltip_text(g->tca_b, _("Transversal Chromatic Aberration blue"));
+
+  /* Last, because it is on its way out: it inverts every axis at once, nobody has been
+   * found who uses it, and it is kept only so existing edits that set it keep rendering. */
+  g->reverse = dt_bauhaus_combobox_from_params(self, "inverse");
+  dt_bauhaus_combobox_add(g->reverse, _("correct"));
+  dt_bauhaus_combobox_add(g->reverse, _("distort"));
+  gtk_widget_set_tooltip_text(g->reverse, _("correct distortions or apply them"));
 
   // message box to inform user what corrections have been done. this is useful as depending on lensfuns
   // profile only some of the lens flaws can be corrected
