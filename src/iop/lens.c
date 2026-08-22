@@ -106,7 +106,7 @@
 
 #include "lensserious.h"    // side-by-side latch against lensfun, see feat/lensserious
 #include "lensserious_db.h" // ... and its calibration database, latched the same way
-#include "iop/embedded_lens/embedded_lens.h"
+#include "metadata/embedded_lens/embedded_lens.h"
 
 
 /* The correction axes and the projection numbering.

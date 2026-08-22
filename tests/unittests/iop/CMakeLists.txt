@@ -1,12 +1,12 @@
 add_cmocka_mock_test(test_embedded_lens_vendors
                      SOURCES test_embedded_lens_vendors.c
-                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/embedded_lens.cc
-                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/embedded_lens_vendors.cc
-                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/sony.cc
-                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/fuji.cc
-                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/dng.cc
-                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/olympus.cc
-                     LINK_LIBRARIES lib_ansel cmocka
+                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/embedded_lens.c
+                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/embedded_lens_vendors.c
+                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/sony.c
+                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/fuji.c
+                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/dng.c
+                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/olympus.c
+                     LINK_LIBRARIES lib_ansel cmocka m
                      MOCKS )
 
 add_cmocka_mock_test(test_filmicrgb

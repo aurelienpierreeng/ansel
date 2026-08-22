@@ -3,7 +3,6 @@
 
 #include <math.h>
 
-extern "C" {
 
 gboolean _dng_has_data(const dt_image_correction_data_t *cd)
 {
@@ -26,21 +25,23 @@ gboolean _dng_has_ca(const dt_image_correction_data_t *cd)
   return cd->dng.warp_planes > 1;
 }
 
+/** @brief WarpRectilinear's radial part: kr0..kr3 evaluated at r^2, by Horner. */
+static double _dng_warp_radial(const double coeffs[6], const double r2)
+{
+  return coeffs[0] + r2 * (coeffs[1] + r2 * (coeffs[2] + r2 * coeffs[3]));
+}
+
 int _dng_populate(const dt_image_correction_data_t *cd,
                    const dt_embedded_lens_finetune_t *ft,
                    struct dt_embedded_lens_knots_t *knots,
                    const float *out_scale)
 {
   (void)out_scale;
-  const auto *const dng = &cd->dng;
+  const dt_image_correction_dng_t *const dng = &cd->dng;
   const int nc = LENS_MAXKNOTS;
-  const auto nplanes = (int)MIN(dng->warp_planes, (uint32_t)3);
+  const int nplanes = (int)MIN(dng->warp_planes, (uint32_t)3);
   const int canonical_plane = (dng->warp_planes > 1) ? 1 : 0;
   const gboolean apply_tca = dng->warp_planes > 1;
-
-  auto warp_radial = [](const double coeffs[6], double r2) {
-    return coeffs[0] + r2 * (coeffs[1] + r2 * (coeffs[2] + r2 * coeffs[3]));
-  };
 
   for(int i = 0; i < nc; i++)
   {
@@ -54,7 +55,7 @@ int _dng_populate(const dt_image_correction_data_t *cd,
       for(int c = 0; c < 3; c++)
       {
         const int plane = apply_tca ? MIN(c, nplanes - 1) : canonical_plane;
-        const double r_cor = warp_radial(dng->warp_coeffs[plane], r2);
+        const double r_cor = _dng_warp_radial(dng->warp_coeffs[plane], r2);
         knots->cor_rgb[c][i] = (float)(ft->distortion * (r_cor - 1.0) + 1.0);
       }
     }
@@ -81,4 +82,3 @@ int _dng_populate(const dt_image_correction_data_t *cd,
   return nc;
 }
 
-} // extern "C"

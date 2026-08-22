@@ -225,17 +225,7 @@ add_iop(diffuse "diffuse.c")
 add_iop(blurs "blurs.c")
 add_iop(initialscale "initialscale.c")
 add_iop(watermark "watermark.c")
-# The per-vendor decoders that turn a maker's own profile, as found in the raw file, into
-# the knot table the correction model consumes. C++ because that is what they were written
-# in; they expose a C interface and iop/lens.c stays C.
-add_iop(lens "lens.c"
-        "embedded_lens/embedded_lens.cc"
-        "embedded_lens/embedded_lens_vendors.cc"
-        "embedded_lens/sony.cc"
-        "embedded_lens/fuji.cc"
-        "embedded_lens/dng.cc"
-        "embedded_lens/olympus.cc"
-        DEFAULT_VISIBLE)
+add_iop(lens "lens.c" DEFAULT_VISIBLE)
 target_link_libraries(lens PRIVATE lensserious) # headers; symbols come via lib_ansel
 if(TARGET lensserious_db)
   target_link_libraries(lens PRIVATE lensserious_db) # ditto, for the calibration reader

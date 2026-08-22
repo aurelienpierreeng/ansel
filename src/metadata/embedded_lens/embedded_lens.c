@@ -1,7 +1,6 @@
 #include "embedded_lens.h"
 #include "embedded_lens_vendors.h"
 
-#include <initializer_list>
 #include <math.h>
 
 /**
@@ -15,13 +14,13 @@
  */
 static const struct dt_embedded_lens_vendor_t *_vendor_for(const dt_image_t *img)
 {
-  if(!img) return nullptr;
+  if(!img) return NULL;
 
   for(size_t i = 0; i < dt_embedded_lens_vendors_count; i++)
     if(dt_embedded_lens_vendors[i].id == img->exif_correction_type)
       return &dt_embedded_lens_vendors[i];
 
-  return nullptr;
+  return NULL;
 }
 
 int dt_embedded_lens_init_coeffs(const dt_image_t *img,
@@ -54,7 +53,7 @@ int dt_embedded_lens_init_coeffs(const dt_image_t *img,
   for(int i = 0; i < tested; i++)
   {
     const float x = srr + (1.0f - srr) * (float)i / (float)(tested - 1);
-    for(int c : {0, 1, 2})
+    for(int c = 0; c < 3; c++)
       scale = fmaxf(scale, dt_embedded_lens_linear_spline(knots->knots_dist, knots->cor_rgb[c], nc, x));
   }
   if(scale <= 1e-6f) scale = 1.0f;
@@ -62,7 +61,7 @@ int dt_embedded_lens_init_coeffs(const dt_image_t *img,
   for(int i = 0; i < nc; i++)
   {
     knots->knots_dist[i] *= scale;
-    for(int c : {0, 1, 2}) knots->cor_rgb[c][i] /= scale;
+    for(int c = 0; c < 3; c++) knots->cor_rgb[c][i] /= scale;
   }
 
   if(out_scale) *out_scale = scale;
