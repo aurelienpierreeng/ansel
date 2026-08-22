@@ -4,6 +4,15 @@
 FILE(GLOB DT_OPENCL_KERNELS "*.cl" "common.h")
 FILE(GLOB DT_OPENCL_EXTRA "programs.conf" "rgb_norms.h" "noise_generator.h" "color_conversion.h" "colorspace.h")
 
+# The lens kernels evaluate LensSerious's closed forms directly, from the very header
+# liblensserious compiles as C99 -- one source text for CPU and GPU (see
+# src/external/LensSerious/include/lensserious_eval.h). It has to sit beside the kernels
+# at run time: dt_opencl_init() passes exactly ONE -I to the driver, the installed kernel
+# directory, so an #include can reach nothing else.
+set(LENSSERIOUS_EVAL_HEADER "${CMAKE_SOURCE_DIR}/src/external/LensSerious/include/lensserious_eval.h")
+configure_file(${LENSSERIOUS_EVAL_HEADER} ${CMAKE_CURRENT_BINARY_DIR}/lensserious_eval.h COPYONLY)
+list(APPEND DT_OPENCL_EXTRA ${CMAKE_CURRENT_BINARY_DIR}/lensserious_eval.h)
+
 add_custom_target(testcompile_opencl_kernels ALL)
 
 macro(testcompile_opencl_kernel IN)
@@ -15,7 +24,7 @@ macro(testcompile_opencl_kernel IN)
 
   add_custom_command(
     OUTPUT  ${TOUCH}
-    COMMAND ${CLANG_OPENCL_COMPILER} -cc1 -cl-std=CL1.2 -isystem ${CLANG_OPENCL_INCLUDE_DIR} -D__IMAGE_SUPPORT__=1 -finclude-default-header -I${CMAKE_CURRENT_SOURCE_DIR} ${IN}
+    COMMAND ${CLANG_OPENCL_COMPILER} -cc1 -cl-std=CL1.2 -isystem ${CLANG_OPENCL_INCLUDE_DIR} -D__IMAGE_SUPPORT__=1 -finclude-default-header -I${CMAKE_CURRENT_SOURCE_DIR} -I${CMAKE_CURRENT_BINARY_DIR} ${IN}
     COMMAND ${CMAKE_COMMAND} -E touch ${TOUCH} # will be empty!
     DEPENDS ${IN}
     COMMENT "Test-compiling OpenCL program ${KERNAME}"

@@ -45,6 +45,8 @@ brew 'iso-codes'
 brew 'jpeg-turbo'
 brew 'jpeg-xl'
 brew 'json-glib'
+# BUILD-time only: LensSerious's importer reads the calibration XML through liblensfun and
+# converts it to SQLite at build time. Nothing links it at runtime.
 brew 'lensfun'
 brew 'libavif'
 brew 'libheif'

@@ -89,6 +89,7 @@ EOF
 
 execute 'Installing dependencies' bash "$(cygpath "${APPVEYOR_BUILD_FOLDER}")/packaging/install-deps-windows-msys2.sh"
 
-execute 'Updating lensfun databse' lensfun-update-data
+# No lensfun-update-data: the calibration XML is fetched at configure time and converted
+# to lenses.db, so nothing reads lensfun's database at runtime.
 
 execute 'Building Ansel' build_darktable

@@ -39,6 +39,10 @@
 #include "common.h"
 #include "rgb_norms.h"
 
+/* LensSerious's evaluators, the same source text liblensserious compiles as C99.
+ * Installed next to this file; see data/kernels/CMakeLists.txt. */
+#include "lensserious_eval.h"
+
 #include "diffuse.cl"
 
 int
@@ -1961,342 +1965,246 @@ clip_rotate_bicubic(read_only image2d_t in, write_only image2d_t out, const int 
 
 
 
-/* kernels for the lens plugin: bilinear interpolation */
+/* --- the lens plugin ------------------------------------------------------------------
+ *
+ * These kernels take an ls_eval_t by value -- ~80 bytes of coefficients -- and each
+ * work-item derives its own source coordinates from it in a handful of FMAs.
+ *
+ * What they replace read a displacement map the host had built and uploaded: six floats
+ * per output pixel, 549 MB of transfer for a 24 Mpx frame, on top of the ~278 ms lensfun
+ * spent producing it single-threaded on the CPU. There is no map here, no upload and no
+ * CPU pass.
+ *
+ * The evaluator is LensSerious's own header, compiled here as OpenCL C and into
+ * liblensserious as C99 -- one source text, so the GPU cannot drift from the CPU reference
+ * the parity harness measures.
+ */
+
+/* Clamp a source coordinate into the input buffer, in buffer-relative pixels. */
+static inline float2 _lens_clamp_src(const float sx, const float sy,
+                                     const int roi_in_x, const int roi_in_y,
+                                     const int iwidth, const int iheight)
+{
+  float rx = sx - (float)roi_in_x;
+  float ry = sy - (float)roi_in_y;
+  rx = (rx >= 0) ? rx : 0;
+  ry = (ry >= 0) ? ry : 0;
+  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
+  ry = (ry <= iheight - 1) ? ry : iheight - 1;
+  return (float2)(rx, ry);
+}
+
+/* @p ppi: six source coordinates, xr yr xg yg xb yb, in absolute pixels. */
+static inline float4 _lens_sample_bilinear(read_only image2d_t in, const float *ppi,
+                                           const int iwidth, const int iheight,
+                                           const int roi_in_x, const int roi_in_y)
+{
+  float4 pixel;
+  float2 r;
+
+  r = _lens_clamp_src(ppi[0], ppi[1], roi_in_x, roi_in_y, iwidth, iheight);
+  pixel.x = read_imagef(in, samplerf, r).x;
+
+  r = _lens_clamp_src(ppi[2], ppi[3], roi_in_x, roi_in_y, iwidth, iheight);
+  pixel.yw = read_imagef(in, samplerf, r).yw;
+
+  r = _lens_clamp_src(ppi[4], ppi[5], roi_in_x, roi_in_y, iwidth, iheight);
+  pixel.z = read_imagef(in, samplerf, r).z;
+
+  return pixel;
+}
+
+static inline float4 _lens_sample_bicubic(read_only image2d_t in, const float *ppi,
+                                          const int iwidth, const int iheight,
+                                          const int roi_in_x, const int roi_in_y)
+{
+  const int kwidth = 2;
+  float4 pixel = (float4)0.0f;
+
+  for(int c = 0; c < 3; c++)
+  {
+    const float2 r = _lens_clamp_src(ppi[2 * c], ppi[2 * c + 1],
+                                     roi_in_x, roi_in_y, iwidth, iheight);
+    const int tx = r.x;
+    const int ty = r.y;
+
+    float2 sum2 = (float2)0.0f;
+    float weight = 0.0f;
+    for(int jj = 1 - kwidth; jj <= kwidth; jj++)
+      for(int ii = 1 - kwidth; ii <= kwidth; ii++)
+      {
+        int i = tx + ii;
+        int j = ty + jj;
+        i = (i >= 0) ? i : 0;
+        j = (j >= 0) ? j : 0;
+        i = (i <= iwidth - 1) ? i : iwidth - 1;
+        j = (j <= iheight - 1) ? j : iheight - 1;
+
+        const float w = interpolation_func_bicubic((float)i - r.x)
+                      * interpolation_func_bicubic((float)j - r.y);
+        const float4 s = read_imagef(in, samplerc, (int2)(i, j));
+        /* Green carries alpha along with it, as it always has here: the green channel is
+         * the undistorted one, so the alpha it is sampled with is the geometrically
+         * correct one. */
+        sum2 += ((c == 0) ? (float2)(s.x, 0.0f)
+                          : ((c == 1) ? s.yw : (float2)(s.z, 0.0f))) * w;
+        weight += w;
+      }
+    sum2 /= weight;
+
+    if(c == 0) pixel.x = sum2.x;
+    else if(c == 1) pixel.yw = sum2;
+    else pixel.z = sum2.x;
+  }
+
+  return pixel;
+}
+
+static inline float4 _lens_sample_mitchell(read_only image2d_t in, const float *ppi,
+                                           const int iwidth, const int iheight,
+                                           const int roi_in_x, const int roi_in_y)
+{
+  const int kwidth = 2;
+  float4 pixel = (float4)0.0f;
+
+  for(int c = 0; c < 3; c++)
+  {
+    const float2 r = _lens_clamp_src(ppi[2 * c], ppi[2 * c + 1],
+                                     roi_in_x, roi_in_y, iwidth, iheight);
+    const int tx = r.x;
+    const int ty = r.y;
+
+    float2 sum2 = (float2)0.0f;
+    float weight = 0.0f;
+    for(int jj = 1 - kwidth; jj <= kwidth; jj++)
+      for(int ii = 1 - kwidth; ii <= kwidth; ii++)
+      {
+        int i = tx + ii;
+        int j = ty + jj;
+        i = (i >= 0) ? i : 0;
+        j = (j >= 0) ? j : 0;
+        i = (i <= iwidth - 1) ? i : iwidth - 1;
+        j = (j <= iheight - 1) ? j : iheight - 1;
+
+        const float w = interpolation_func_mitchell((float)i - r.x)
+                      * interpolation_func_mitchell((float)j - r.y);
+        const float4 s = read_imagef(in, samplerc, (int2)(i, j));
+        sum2 += ((c == 0) ? (float2)(s.x, 0.0f)
+                          : ((c == 1) ? s.yw : (float2)(s.z, 0.0f))) * w;
+        weight += w;
+      }
+    sum2 /= weight;
+
+    if(c == 0) pixel.x = sum2.x;
+    else if(c == 1) pixel.yw = sum2;
+    else pixel.z = sum2.x;
+  }
+
+  return pixel;
+}
+
+/* Copy this work-item's six map floats out of the uploaded buffer.
+ * @return false if any is not finite and the caller asked to check. */
+static inline bool _lens_read_map(global const float *pi, const int width,
+                                  const int x, const int y,
+                                  const int do_nan_checks, float *ppi)
+{
+  global const float *src = pi + mad24(y, 2 * 3 * width, 2 * 3 * x);
+  for(int i = 0; i < 6; i++) ppi[i] = src[i];
+
+  if(do_nan_checks)
+    for(int i = 0; i < 6; i++)
+      if(!isfinite(ppi[i])) return false;
+
+  return true;
+}
+
+static inline float4 _lens_finish(float4 pixel, const int monochrome)
+{
+  pixel = all(isfinite(pixel.xyz)) ? pixel : (float4)0.0f;
+  if(monochrome) pixel.x = pixel.z = pixel.y;
+  return pixel;
+}
+
+/* --- the correction, evaluated in the kernel ------------------------------------------ */
+
+/* @p roi_out_x, @p roi_out_y place this tile in the full output frame: ls_eval_map() works
+ * in absolute pixels, exactly as lfModifier::ApplySubpixelGeometryDistortion() does. */
+static inline bool _lens_eval_map(const ls_eval_t p,
+                                  const int roi_out_x, const int roi_out_y,
+                                  const int x, const int y,
+                                  const int do_nan_checks, float *ppi)
+{
+  ls_eval_map(&p, (float)(roi_out_x + x), (float)(roi_out_y + y), ppi);
+
+  if(do_nan_checks)
+    for(int i = 0; i < 6; i++)
+      if(!isfinite(ppi[i])) return false;
+
+  return true;
+}
+
 kernel void
 lens_distort_bilinear (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-               const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y, global float *pi,
+               const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y,
+               const int roi_out_x, const int roi_out_y, const ls_eval_t p,
                const int do_nan_checks, const int monochrome)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
-
   if(x >= width || y >= height) return;
 
-  float4 pixel;
-
-  float rx, ry;
-  const int piwidth = 2*3*width;
-  global float *ppi = pi + mad24(y, piwidth, 2*3*x);
-
-  if(do_nan_checks)
+  float ppi[6];
+  if(!_lens_eval_map(p, roi_out_x, roi_out_y, x, y, do_nan_checks, ppi))
   {
-    bool valid = true;
-
-    for(int i = 0; i < 6; i++) valid = valid && isfinite(ppi[i]);
-
-    if(!valid)
-    {
-      pixel = (float4)0.0f;
-      write_imagef (out, (int2)(x, y), pixel);
-      return;
-    }
+    write_imagef (out, (int2)(x, y), (float4)0.0f);
+    return;
   }
 
-  rx = ppi[0] - roi_in_x;
-  ry = ppi[1] - roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-  pixel.x = read_imagef(in, samplerf, (float2)(rx, ry)).x;
-
-  rx = ppi[2] - roi_in_x;
-  ry = ppi[3] - roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-  pixel.yw = read_imagef(in, samplerf, (float2)(rx, ry)).yw;
-
-  rx = ppi[4] - roi_in_x;
-  ry = ppi[5] - roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-  pixel.z = read_imagef(in, samplerf, (float2)(rx, ry)).z;
-
-  pixel = all(isfinite(pixel.xyz)) ? pixel : (float4)0.0f;
-
-  if(monochrome) pixel.x = pixel.z = pixel.y;
-  write_imagef (out, (int2)(x, y), pixel);
+  const float4 pixel = _lens_sample_bilinear(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
+  write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome));
 }
 
-/* kernels for the lens plugin: bicubic interpolation */
 kernel void
 lens_distort_bicubic (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-                      const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y, global float *pi,
-                      const int do_nan_checks, const int monochrome)
+               const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y,
+               const int roi_out_x, const int roi_out_y, const ls_eval_t p,
+               const int do_nan_checks, const int monochrome)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
-
-  const int kwidth = 2;
-
   if(x >= width || y >= height) return;
 
-  float4 pixel = (float4)0.0f;
-
-  float rx, ry;
-  int tx, ty;
-  float sum, weight;
-  float2 sum2;
-  const int piwidth = 2*3*width;
-  global float *ppi = pi + mad24(y, piwidth, 2*3*x);
-
-  if(do_nan_checks)
+  float ppi[6];
+  if(!_lens_eval_map(p, roi_out_x, roi_out_y, x, y, do_nan_checks, ppi))
   {
-    bool valid = true;
-
-    for(int i = 0; i < 6; i++) valid = valid && isfinite(ppi[i]);
-
-    if(!valid)
-    {
-      pixel = (float4)0.0f;
-      write_imagef (out, (int2)(x, y), pixel);
-      return;
-    }
+    write_imagef (out, (int2)(x, y), (float4)0.0f);
+    return;
   }
 
-
-  rx = ppi[0] - (float)roi_in_x;
-  ry = ppi[1] - (float)roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-
-  tx = rx;
-  ty = ry;
-
-  sum = 0.0f;
-  weight = 0.0f;
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    int i = tx + ii;
-    int j = ty + jj;
-    i = (i >= 0) ? i : 0;
-    j = (j >= 0) ? j : 0;
-    i = (i <= iwidth - 1) ? i : iwidth - 1;
-    j = (j <= iheight - 1) ? j : iheight - 1;
-
-    float wx = interpolation_func_bicubic((float)i - rx);
-    float wy = interpolation_func_bicubic((float)j - ry);
-    float w = wx * wy;
-
-    sum += read_imagef(in, samplerc, (int2)(i, j)).x * w;
-    weight += w;
-  }
-  pixel.x = sum/weight;
-
-
-  rx = ppi[2] - (float)roi_in_x;
-  ry = ppi[3] - (float)roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-
-  tx = rx;
-  ty = ry;
-
-  sum2 = (float2)0.0f;
-  weight = 0.0f;
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    int i = tx + ii;
-    int j = ty + jj;
-    i = (i >= 0) ? i : 0;
-    j = (j >= 0) ? j : 0;
-    i = (i <= iwidth - 1) ? i : iwidth - 1;
-    j = (j <= iheight - 1) ? j : iheight - 1;
-
-    float wx = interpolation_func_bicubic((float)i - rx);
-    float wy = interpolation_func_bicubic((float)j - ry);
-    float w = wx * wy;
-
-    sum2 += read_imagef(in, samplerc, (int2)(i, j)).yw * w;
-    weight += w;
-  }
-  pixel.yw = sum2/weight;
-
-
-  rx = ppi[4] - (float)roi_in_x;
-  ry = ppi[5] - (float)roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-
-  tx = rx;
-  ty = ry;
-
-  sum = 0.0f;
-  weight = 0.0f;
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    int i = tx + ii;
-    int j = ty + jj;
-    i = (i >= 0) ? i : 0;
-    j = (j >= 0) ? j : 0;
-    i = (i <= iwidth - 1) ? i : iwidth - 1;
-    j = (j <= iheight - 1) ? j : iheight - 1;
-
-    float wx = interpolation_func_bicubic((float)i - rx);
-    float wy = interpolation_func_bicubic((float)j - ry);
-    float w = wx * wy;
-
-    sum += read_imagef(in, samplerc, (int2)(i, j)).z * w;
-    weight += w;
-  }
-  pixel.z = sum/weight;
-
-  pixel = all(isfinite(pixel.xyz)) ? pixel : (float4)0.0f;
-  if(monochrome) pixel.x = pixel.z = pixel.y;
-
-  write_imagef (out, (int2)(x, y), pixel);
+  const float4 pixel = _lens_sample_bicubic(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
+  write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome));
 }
 
-
-/* kernels for the lens plugin: Mitchell-Netravali interpolation (halo-free cubic) */
 kernel void
 lens_distort_mitchell (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-                      const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y, global float *pi,
-                      const int do_nan_checks, const int monochrome)
+               const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y,
+               const int roi_out_x, const int roi_out_y, const ls_eval_t p,
+               const int do_nan_checks, const int monochrome)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
-
-  const int kwidth = 2;
-
   if(x >= width || y >= height) return;
 
-  float4 pixel = (float4)0.0f;
-
-  float rx, ry;
-  int tx, ty;
-  float sum, weight;
-  float2 sum2;
-  const int piwidth = 2*3*width;
-  global float *ppi = pi + mad24(y, piwidth, 2*3*x);
-
-  if(do_nan_checks)
+  float ppi[6];
+  if(!_lens_eval_map(p, roi_out_x, roi_out_y, x, y, do_nan_checks, ppi))
   {
-    bool valid = true;
-
-    for(int i = 0; i < 6; i++) valid = valid && isfinite(ppi[i]);
-
-    if(!valid)
-    {
-      pixel = (float4)0.0f;
-      write_imagef (out, (int2)(x, y), pixel);
-      return;
-    }
+    write_imagef (out, (int2)(x, y), (float4)0.0f);
+    return;
   }
 
-
-  rx = ppi[0] - (float)roi_in_x;
-  ry = ppi[1] - (float)roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-
-  tx = rx;
-  ty = ry;
-
-  sum = 0.0f;
-  weight = 0.0f;
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    int i = tx + ii;
-    int j = ty + jj;
-    i = (i >= 0) ? i : 0;
-    j = (j >= 0) ? j : 0;
-    i = (i <= iwidth - 1) ? i : iwidth - 1;
-    j = (j <= iheight - 1) ? j : iheight - 1;
-
-    float wx = interpolation_func_mitchell((float)i - rx);
-    float wy = interpolation_func_mitchell((float)j - ry);
-    float w = wx * wy;
-
-    sum += read_imagef(in, samplerc, (int2)(i, j)).x * w;
-    weight += w;
-  }
-  pixel.x = sum/weight;
-
-
-  rx = ppi[2] - (float)roi_in_x;
-  ry = ppi[3] - (float)roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-
-  tx = rx;
-  ty = ry;
-
-  sum2 = (float2)0.0f;
-  weight = 0.0f;
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    int i = tx + ii;
-    int j = ty + jj;
-    i = (i >= 0) ? i : 0;
-    j = (j >= 0) ? j : 0;
-    i = (i <= iwidth - 1) ? i : iwidth - 1;
-    j = (j <= iheight - 1) ? j : iheight - 1;
-
-    float wx = interpolation_func_mitchell((float)i - rx);
-    float wy = interpolation_func_mitchell((float)j - ry);
-    float w = wx * wy;
-
-    sum2 += read_imagef(in, samplerc, (int2)(i, j)).yw * w;
-    weight += w;
-  }
-  pixel.yw = sum2/weight;
-
-
-  rx = ppi[4] - (float)roi_in_x;
-  ry = ppi[5] - (float)roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-
-  tx = rx;
-  ty = ry;
-
-  sum = 0.0f;
-  weight = 0.0f;
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    int i = tx + ii;
-    int j = ty + jj;
-    i = (i >= 0) ? i : 0;
-    j = (j >= 0) ? j : 0;
-    i = (i <= iwidth - 1) ? i : iwidth - 1;
-    j = (j <= iheight - 1) ? j : iheight - 1;
-
-    float wx = interpolation_func_mitchell((float)i - rx);
-    float wy = interpolation_func_mitchell((float)j - ry);
-    float w = wx * wy;
-
-    sum += read_imagef(in, samplerc, (int2)(i, j)).z * w;
-    weight += w;
-  }
-  pixel.z = sum/weight;
-
-  pixel = all(isfinite(pixel.xyz)) ? pixel : (float4)0.0f;
-  if(monochrome) pixel.x = pixel.z = pixel.y;
-
-  write_imagef (out, (int2)(x, y), pixel);
+  const float4 pixel = _lens_sample_mitchell(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
+  write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome));
 }
 
 
@@ -2478,7 +2386,8 @@ ashift_mitchell(read_only image2d_t in, write_only image2d_t out, const int widt
 
 
 kernel void
-lens_vignette (read_only image2d_t in, write_only image2d_t out, const int width, const int height, global float4 *pi)
+lens_vignette (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
+                  const int roi_x, const int roi_y, const ls_eval_t p)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -2486,9 +2395,7 @@ lens_vignette (read_only image2d_t in, write_only image2d_t out, const int width
   if(x >= width || y >= height) return;
 
   float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
-  float4 scale = pi[mad24(y, width, x)]/(float4)0.5f;
-
-  pixel.xyz *= scale.xyz;
+  pixel.xyz *= ls_eval_vignette_factor(&p, (float)(roi_x + x), (float)(roi_y + y));
 
   write_imagef (out, (int2)(x, y), pixel);
 }

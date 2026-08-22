@@ -209,25 +209,6 @@ if (WIN32 AND NOT BUILD_MSYS2_INSTALL)
       COMPONENT DTApplication)
 
 
-  # Add lensfun libraries
-  if(LensFun_FOUND)
-    set(LENSFUN_DB_GLOBAL "${MINGW_PATH}/../share/lensfun/version_1")
-    set(LENSFUN_DB_UPDATES "${MINGW_PATH}/../var/lib/lensfun-updates/version_1")
-    set(LENSFUN_DB "${LENSFUN_DB_GLOBAL}")
-    if(EXISTS "${LENSFUN_DB_UPDATES}")
-      file(READ "${LENSFUN_DB_GLOBAL}/timestamp.txt" LENSFUN_TS)
-      file(READ "${LENSFUN_DB_UPDATES}/timestamp.txt" LENSFUN_TS_UPDATE)
-      if(LENSFUN_TS LESS LENSFUN_TS_UPDATE)
-        set(LENSFUN_DB "${LENSFUN_DB_UPDATES}")
-      endif()
-    endif()
-    message(STATUS "Installing lensfun database from ${LENSFUN_DB}")
-    install(DIRECTORY
-        "${LENSFUN_DB}"
-        DESTINATION share/lensfun/
-        COMPONENT DTApplication)
-  endif(LensFun_FOUND)
-
   # Add iso-codes
   if(IsoCodes_FOUND)
     install(FILES
