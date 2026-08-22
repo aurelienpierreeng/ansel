@@ -17,7 +17,7 @@
 */
 /*
  * cmocka unit tests for the embedded lens coefficient initializer
- * (iop/embedded_lens/embedded_lens.cc::dt_embedded_lens_init_coeffs).
+ * (metadata/embedded_lens/embedded_lens.cc::dt_embedded_lens_init_coeffs).
  *
  * The function maps each vendor's correction data (Sony, Fuji, DNG, Olympus)
  * stored in dt_image_t.exif_correction_data into a vendor-agnostic
@@ -44,7 +44,7 @@
 #include "../util/assert.h"
 #include "../util/tracing.h"
 
-#include "iop/embedded_lens/embedded_lens.h"
+#include "metadata/embedded_lens/embedded_lens.h"
 
 #define E 1e-6f
 #define IMAGE_W 6000

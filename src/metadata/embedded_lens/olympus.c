@@ -3,7 +3,6 @@
 
 #include <math.h>
 
-extern "C" {
 
 gboolean _olympus_has_data(const dt_image_correction_data_t *cd)
 {
@@ -32,7 +31,7 @@ int _olympus_populate(const dt_image_correction_data_t *cd,
                        const float *out_scale)
 {
   (void)out_scale;
-  const auto *const oly = &cd->olympus;
+  const dt_image_correction_olympus_t *const oly = &cd->olympus;
   const int nc = LENS_MAXKNOTS;
 
   float drs = 1.0f;
@@ -92,4 +91,3 @@ int _olympus_populate(const dt_image_correction_data_t *cd,
   return nc;
 }
 
-} // extern "C"

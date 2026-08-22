@@ -1,8 +1,6 @@
 #include "embedded_lens_vendors.h"
 
-#include <iterator>
 
-extern "C" {
   gboolean _sony_has_data(const dt_image_correction_data_t *cd);
   gboolean _sony_has_distortion(const dt_image_correction_data_t *cd);
   gboolean _sony_has_vignetting(const dt_image_correction_data_t *cd);
@@ -38,11 +36,10 @@ extern "C" {
                          const dt_embedded_lens_finetune_t *ft,
                          struct dt_embedded_lens_knots_t *knots,
                          const float *out_scale);
-}
 
 const struct dt_embedded_lens_vendor_t dt_embedded_lens_vendors[] = // NOSONAR
 {
-  { CORRECTION_TYPE_NONE, "none", nullptr, nullptr, nullptr, nullptr, nullptr },
+  { CORRECTION_TYPE_NONE, "none", NULL, NULL, NULL, NULL, NULL },
   { CORRECTION_TYPE_SONY, "sony",
     _sony_has_data, _sony_has_distortion, _sony_has_vignetting, _sony_has_ca,
     _sony_populate },
@@ -57,4 +54,5 @@ const struct dt_embedded_lens_vendor_t dt_embedded_lens_vendors[] = // NOSONAR
     _olympus_populate },
 };
 
-const size_t dt_embedded_lens_vendors_count = std::size(dt_embedded_lens_vendors);
+const size_t dt_embedded_lens_vendors_count
+    = sizeof(dt_embedded_lens_vendors) / sizeof(dt_embedded_lens_vendors[0]);

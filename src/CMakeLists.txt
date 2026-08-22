@@ -155,6 +155,16 @@ FILE(GLOB SOURCE_FILES
   "common/variables.c"
   "metadata/colorlabels.c"
   "metadata/exif.cc"
+  # The per-vendor decoders that turn a maker's own lens profile, as found in the raw file,
+  # into the knot table the correction model consumes. Metadata readers, so they live with
+  # the other metadata readers and inside lib_ansel -- iop/lens.c is one consumer of them,
+  # not their owner.
+  "metadata/embedded_lens/embedded_lens.c"
+  "metadata/embedded_lens/embedded_lens_vendors.c"
+  "metadata/embedded_lens/sony.c"
+  "metadata/embedded_lens/fuji.c"
+  "metadata/embedded_lens/dng.c"
+  "metadata/embedded_lens/olympus.c"
   "metadata/gpx.c"
   "metadata/map_locations.c"
   "metadata/metadata.c"

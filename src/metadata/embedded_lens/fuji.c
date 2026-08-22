@@ -2,9 +2,7 @@
 #include "embedded_lens_vendors.h"
 
 #include <math.h>
-#include <array>
 
-extern "C" {
 
 gboolean _fuji_has_data(const dt_image_correction_data_t *cd)
 {
@@ -47,13 +45,13 @@ int _fuji_populate(const dt_image_correction_data_t *cd,
                     const float *out_scale)
 {
   (void)out_scale;
-  const auto *const fuji = &cd->fuji;
+  const dt_image_correction_fuji_t *const fuji = &cd->fuji;
   const int ncsrc = fuji->nc;
 
-  std::array<float, LENS_MAXKNOTS> knots_in = {};
-  std::array<float, LENS_MAXKNOTS> cor_rgb_in;
-  std::array<float, LENS_MAXKNOTS> cor_ca_r_in;
-  std::array<float, LENS_MAXKNOTS> cor_ca_b_in;
+  float knots_in[LENS_MAXKNOTS] = { 0.f };
+  float cor_rgb_in[LENS_MAXKNOTS] = { 0.f };
+  float cor_ca_r_in[LENS_MAXKNOTS] = { 0.f };
+  float cor_ca_b_in[LENS_MAXKNOTS] = { 0.f };
 
   int j = 0;
   if(fuji->knots[0] > 0.0f)
@@ -90,7 +88,7 @@ int _fuji_populate(const dt_image_correction_data_t *cd,
   for(int i = 0; i < nc; i++)
   {
     const float rin = (float)i / (float)(nc - 1);
-    const float m = dt_embedded_lens_linear_spline(knots_in.data(), cor_rgb_in.data(), ncin, rin);
+    const float m = dt_embedded_lens_linear_spline(knots_in, cor_rgb_in, ncin, rin);
     const float r = (fabsf(m) > 1e-6f) ? rin / m : rin;
     knots->knots_dist[i] = r;
 
@@ -98,8 +96,8 @@ int _fuji_populate(const dt_image_correction_data_t *cd,
     knots->cor_rgb[1][i] = m;
     knots->cor_rgb[2][i] = m;
 
-    const float mcar = dt_embedded_lens_linear_spline(knots_in.data(), cor_ca_r_in.data(), ncin, rin);
-    const float mcab = dt_embedded_lens_linear_spline(knots_in.data(), cor_ca_b_in.data(), ncin, rin);
+    const float mcar = dt_embedded_lens_linear_spline(knots_in, cor_ca_r_in, ncin, rin);
+    const float mcab = dt_embedded_lens_linear_spline(knots_in, cor_ca_b_in, ncin, rin);
     knots->cor_rgb[0][i] *= mcar + 1.0f;
     knots->cor_rgb[2][i] *= mcab + 1.0f;
   }
@@ -107,4 +105,3 @@ int _fuji_populate(const dt_image_correction_data_t *cd,
   return nc;
 }
 
-} // extern "C"

@@ -3,7 +3,6 @@
 
 #include <math.h>
 
-extern "C" {
 
 gboolean _sony_has_data(const dt_image_correction_data_t *cd)
 {
@@ -46,11 +45,11 @@ int _sony_populate(const dt_image_correction_data_t *cd,
                     const float *out_scale)
 {
   (void)out_scale;
-  constexpr float SONY_DIST_SCALE = 1.0f / 16384.0f;
-  constexpr float SONY_CA_SCALE = 1.0f / 2097152.0f;
-  constexpr float SONY_VIG_SCALE = 1.0f / 8192.0f;
+  static const float SONY_DIST_SCALE = 1.0f / 16384.0f;
+  static const float SONY_CA_SCALE = 1.0f / 2097152.0f;
+  static const float SONY_VIG_SCALE = 1.0f / 8192.0f;
 
-  const auto *const sony = &cd->sony;
+  const dt_image_correction_sony_t *const sony = &cd->sony;
   const int nc = sony->nc;
 
   for(int i = 0; i < nc; i++)
@@ -74,4 +73,3 @@ int _sony_populate(const dt_image_correction_data_t *cd,
   return nc;
 }
 
-} // extern "C"
