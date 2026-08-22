@@ -118,37 +118,76 @@
  * The projection numbering is also, entry for entry, ls_lens_type_t's -- asserted below
  * rather than assumed, because the two now live in different repositories and nothing else
  * would notice one of them growing a member in the middle. */
+/**
+ * @brief What `modify_flags` holds, bit by bit.
+ *
+ * @details ONE 32-bit int, serialized into every user's history since Ansel began, now
+ * carrying two unrelated things. This comment and the accessors below are the only places
+ * that know how; nothing else in the file touches a bit of it.
+ *
+ * @verbatim
+ *   bit  31 30 │ 29 28 │ 27 26 │ 25 24 │ 23 ... 6 │  5   4   3   2   1   0
+ *        ──┬── │ ──┬── │ ──┬── │ ──┬── │ ──┬───── │  │   │   │   │   │   │
+ *          │   │   │   │   │   │   │   │   │      │  │   │   │   │   │   └ TCA
+ *          │   │   │   │   │   │   │   │   │      │  │   │   │   │   └──── VIGNETTING
+ *          │   │   │   │   │   │   │   │   │      │  │   │   │   └──────── (unused)
+ *          │   │   │   │   │   │   │   │   │      │  │   │   └──────────── DISTORTION
+ *          │   │   │   │   │   │   │   │   │      │  │   └──────────────── GEOMETRY
+ *          │   │   │   │   │   │   │   │   │      │  └──────────────────── SCALE
+ *          │   │   │   │   │   │   │   │   └ free for a future axis
+ *          │   │   │   │   │   │   └ TCA's source
+ *          │   │   │   │   └ DISTORTION's source
+ *          │   │   └ VIGNETTING's source
+ *          └ free; 31 is the SIGN BIT and must stay clear
+ * @endverbatim
+ *
+ * **Low half, bits 0..23 -- WHICH corrections run.** These five values are lensfun's own,
+ * and they must stay lensfun's: they are in every history and every preset ever saved.
+ * (Bit 2 is skipped because upstream skips it.) A future axis goes here too, and every mask
+ * below keeps working without being edited.
+ *
+ * **High half, bits 24..31 -- WHERE each correction comes from.** Two bits per axis, values
+ * from ::dt_lens_source_t. Ansel's own, growing down from the top so the two halves can
+ * each grow for a long time before meeting.
+ *
+ * **Zero means the lens database.** Every edit ever saved has the high half clear, so clear
+ * has to keep decoding to what those edits meant. The opposite polarity would behave
+ * identically right up until someone opened an old edit.
+ *
+ * Do not read or write any of this directly. `_lens_source_get()`, `_lens_source_set()` and
+ * the `_lens_*` predicates below are the interface, and they exist because the encoding has
+ * three traps in it: a shift whose width is not the axis's width, an axis whose enable bit
+ * is really three bits, and a legacy boolean that has to stay in step with one of the
+ * fields.
+ */
 typedef enum dt_lens_modify_t
 {
+  /* --- low half: lensfun's serialized axis numbering, unchangeable --- */
   DT_LENS_MODIFY_TCA        = 0x00000001,
   DT_LENS_MODIFY_VIGNETTING = 0x00000002,
   DT_LENS_MODIFY_DISTORTION = 0x00000008,
   DT_LENS_MODIFY_GEOMETRY   = 0x00000010,
   DT_LENS_MODIFY_SCALE      = 0x00000020,
 
-  /* --- the boundary ---------------------------------------------------------------
-   *
-   * Bits 0..23 are AXES and belong to the correction model. The five above are lensfun's
-   * own serialized numbering; anything added later -- by upstream, or by us -- goes here
-   * too, and every mask below keeps working without being edited.
-   *
-   * Bits 24..31 are ANSEL'S, and say things about an axis rather than naming one. Growing
-   * downwards from the top is what keeps the two apart: the axis space can extend upwards
-   * for a long time before it meets anything.
-   *
-   * This is the property the old `DT_LENS_MODIFY_ALL = ~0` had and an explicit list of the
-   * five bits threw away. ~0 meant "do not restrict", which stayed true for a flag nobody
-   * had written yet; a list means "these five", which quietly stops covering a sixth. The
-   * mask below says "do not restrict, except for the bits that are not axes at all", which
-   * is what every use of it actually wants. */
+  /* --- high half: how far up sits each axis's two-bit source field --- */
   DT_LENS_SOURCE_SHIFT_TCA        = 24,
   DT_LENS_SOURCE_SHIFT_DISTORTION = 26,
   DT_LENS_SOURCE_SHIFT_VIGNETTING = 28,
   DT_LENS_SOURCE_BITS             = 0x3,
-  /* Bits 30..31 are free. 31 is the sign bit of the `int` this is stored in, so a future
-   * field must start at 30 and stop there, or modify_flags goes negative and every shift
-   * of it becomes a question about the implementation. */
 } dt_lens_modify_t;
+
+/**
+ * @brief The three lensfun axes that always move together, as one flag.
+ *
+ * @details Distortion, projection and scaling are three bits because lensfun numbers them
+ * separately and that numbering is serialized. They are ONE correction: nothing has ever
+ * offered them apart -- reload_defaults() sets all three, the old GUI's mask preserved them
+ * untouched, and no code path clears one without the others -- and the profile a camera
+ * embeds in a raw file describes the lot with a single curve. So they are set, read and
+ * tested as a pack, and the DISTORTION bit is what says whether the pack is on.
+ */
+#define DT_LENS_MODIFY_DISTORTION_PACK \
+  (DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE)
 
 /** Everything Ansel stores in `modify_flags` that is not an axis. */
 #define DT_LENS_MODIFY_ANSEL_MASK 0xFF000000u
@@ -169,23 +208,15 @@ typedef enum dt_lens_modify_t
  * way that only shows up as a wrong correction on someone's photograph. */
 _Static_assert((DT_LENS_MODIFY_ALL_AXES & (int)DT_LENS_MODIFY_ANSEL_MASK) == 0,
                "the axis space and Ansel's own bits must not overlap");
-_Static_assert((DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_VIGNETTING | DT_LENS_MODIFY_DISTORTION
-                | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE)
+_Static_assert((DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_VIGNETTING | DT_LENS_MODIFY_DISTORTION_PACK)
                    == ((DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_VIGNETTING
-                        | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY
-                        | DT_LENS_MODIFY_SCALE)
-                       & DT_LENS_MODIFY_ALL_AXES),
+                        | DT_LENS_MODIFY_DISTORTION_PACK) & DT_LENS_MODIFY_ALL_AXES),
                "every correction axis must live in the axis half");
-_Static_assert(((DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_TCA)
-                | (DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_DISTORTION)
-                | (DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_VIGNETTING))
-                   == (int)(((unsigned)DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_TCA
-                             | (unsigned)DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_DISTORTION
-                             | (unsigned)DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_VIGNETTING)
-                            & DT_LENS_MODIFY_ANSEL_MASK),
-               "every source field must live in Ansel's half");
 _Static_assert((DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_VIGNETTING) > 0,
                "no source field may reach the sign bit of modify_flags");
+_Static_assert(DT_LENS_SOURCE_SHIFT_DISTORTION - DT_LENS_SOURCE_SHIFT_TCA >= 2
+                   && DT_LENS_SOURCE_SHIFT_VIGNETTING - DT_LENS_SOURCE_SHIFT_DISTORTION >= 2,
+               "the source fields must not overlap each other");
 
 /** @brief The correction axes, as an index rather than a bit -- so a caller can loop. */
 typedef enum dt_lens_axis_t
@@ -273,28 +304,47 @@ typedef struct dt_iop_lensfun_params_t
   int modified; // $DEFAULT: 0 did user changed anything from automatically detected?
 } dt_iop_lensfun_params_t;
 
-/* ------------------------------------------------------------------------------------
- * Axis sources: the ONE place that knows how a source is stored.
+/* ========================================================================================
+ * The modify_flags interface.
  *
- * Everything else -- the GUI, commit_params(), get_modifier() -- speaks dt_lens_source_t
- * and never touches a bit. That is the point: the encoding is constrained by history
- * (three enable bits that are lensfun's and are already in every saved edit, plus a
- * tca_override boolean that predates all of this), and the vocabulary should not be.
- * ------------------------------------------------------------------------------------ */
+ * Everything below this banner and above the next one is the only code in this file allowed
+ * to touch a bit of modify_flags. Everything else asks in terms of an axis and a source.
+ *
+ * That rule is not tidiness. The encoding has three traps, and each has already been walked
+ * into once: the source fields are two bits at a shift that is not the axis's bit position;
+ * the distortion "bit" is really three bits, so clearing the obvious one leaves projection
+ * and scaling running with their controls hidden; and manual TCA is ALSO recorded in a
+ * separate legacy boolean, so writing one without the other makes an edit mean two different
+ * things depending on which the reader trusts.
+ * ===================================================================================== */
 
-/** @brief The enable bit for one axis. */
-static inline int _lens_axis_bit(const dt_lens_axis_t axis)
+/**
+ * @brief The enable bits for one axis. Three of them for distortion; see the pack.
+ */
+static inline int _lens_axis_flags(const dt_lens_axis_t axis)
 {
   switch(axis)
   {
     case DT_LENS_AXIS_TCA:         return DT_LENS_MODIFY_TCA;
-    case DT_LENS_AXIS_DISTORTION:  return DT_LENS_MODIFY_DISTORTION;
+    case DT_LENS_AXIS_DISTORTION:  return DT_LENS_MODIFY_DISTORTION_PACK;
     case DT_LENS_AXIS_VIGNETTING:  return DT_LENS_MODIFY_VIGNETTING;
     default:                       return 0;
   }
 }
 
-/** @brief How far up `modify_flags` this axis's two source bits sit. */
+/**
+ * @brief The single bit that says whether an axis is on.
+ *
+ * @details Not the same as _lens_axis_flags() for distortion: the pack is three bits, and
+ * asking "is any of them set" would call an old edit's leftover GEOMETRY bit an enabled
+ * distortion correction. The DISTORTION bit alone is the answer; the other two ride with it.
+ */
+static inline int _lens_axis_presence_bit(const dt_lens_axis_t axis)
+{
+  return (axis == DT_LENS_AXIS_DISTORTION) ? DT_LENS_MODIFY_DISTORTION : _lens_axis_flags(axis);
+}
+
+/** @brief How far up modify_flags this axis's two source bits sit. */
 static inline int _lens_axis_shift(const dt_lens_axis_t axis)
 {
   switch(axis)
@@ -309,11 +359,10 @@ static inline int _lens_axis_shift(const dt_lens_axis_t axis)
 /**
  * @brief Whether @p source means anything on @p axis.
  *
- * @details MANUAL is TCA's alone: it is the only axis whose correction is two numbers a
- * user can reasonably type. Distortion and vignetting would need a whole polynomial.
- *
- * The GUI asks this to decide which rows to offer, and the read path asks it to decide
- * what an out-of-range stored value decodes to, so the two cannot drift apart.
+ * @details MANUAL is TCA's alone: it is the only axis whose correction is two numbers a user
+ * can reasonably type. The others would need a whole polynomial. The GUI asks this to decide
+ * which rows to offer and the read path asks it to decide what an out-of-range stored value
+ * decodes to, so the two cannot drift apart.
  */
 static inline gboolean _lens_source_applicable(const dt_lens_axis_t axis,
                                                const dt_lens_source_t source)
@@ -323,24 +372,26 @@ static inline gboolean _lens_source_applicable(const dt_lens_axis_t axis,
 }
 
 /**
- * @brief Where this axis takes its correction from.
+ * @brief Decode one axis's source out of a raw flag word.
  *
- * @details Reads the legacy `tca_override` as well, and that is deliberate rather than
- * tidy. An edit saved before the source bits existed says "manual TCA" only through that
- * boolean; decoding it here means such an edit opens as MANUAL rather than as LENSFUN with
- * a mysterious pair of sliders. Both are written on the way out, so they cannot disagree
- * afterwards.
+ * @param modify_flags the stored word.
+ * @param tca_override the legacy boolean that is the ONLY record of manual TCA in an edit
+ * saved before the source fields existed. Reading it here is what makes such an edit open as
+ * MANUAL rather than as a database correction with two mysterious sliders beside it.
+ *
+ * @details Takes the two fields rather than a params block because the pixel path holds them
+ * in ::dt_iop_lensfun_data_t, which is not a params block. One decode, two callers.
  */
 static dt_lens_source_t _lens_source_decode(const int modify_flags,
-                                           const gboolean tca_override,
-                                           const dt_lens_axis_t axis)
+                                            const gboolean tca_override,
+                                            const dt_lens_axis_t axis)
 {
-  if(!(modify_flags & _lens_axis_bit(axis))) return DT_LENS_SOURCE_OFF;
+  if(!(modify_flags & _lens_axis_presence_bit(axis))) return DT_LENS_SOURCE_OFF;
 
   dt_lens_source_t source
       = (dt_lens_source_t)((modify_flags >> _lens_axis_shift(axis)) & DT_LENS_SOURCE_BITS);
 
-  /* 0 is LENSFUN, which is what every edit written before this existed decodes to. */
+  /* Zero is the database, because that is what every edit written before this decoded to. */
   if(source == DT_LENS_SOURCE_OFF) source = DT_LENS_SOURCE_LENSFUN;
 
   if(axis == DT_LENS_AXIS_TCA && source == DT_LENS_SOURCE_LENSFUN && tca_override)
@@ -353,33 +404,43 @@ static dt_lens_source_t _lens_source_decode(const int modify_flags,
   return source;
 }
 
-/** @brief _lens_source_decode() for a params block. */
+/** @brief Where this axis takes its correction from. */
 static inline dt_lens_source_t _lens_source_get(const dt_iop_lensfun_params_t *p,
                                                 const dt_lens_axis_t axis)
 {
   return _lens_source_decode(p->modify_flags, p->tca_override, axis);
 }
 
-/** @brief Set where this axis takes its correction from, leaving every other axis alone. */
+/**
+ * @brief Point one axis at a source, leaving every other axis alone.
+ *
+ * @details Setting a source clears the others by construction -- they are one field, not
+ * three flags -- so there is no illegal combination to guard against and no invariant a
+ * caller can forget to restore.
+ *
+ * An inapplicable source is stored as OFF rather than silently corrected to something
+ * plausible: a caller asking for manual vignetting has a bug, and turning the axis off makes
+ * it visible instead of hiding it behind a database correction nobody asked for.
+ */
 static void _lens_source_set(dt_iop_lensfun_params_t *p, const dt_lens_axis_t axis,
                              dt_lens_source_t source)
 {
   if(!_lens_source_applicable(axis, source)) source = DT_LENS_SOURCE_OFF;
 
-  const int bit = _lens_axis_bit(axis);
-  const int shift = _lens_axis_shift(axis);
+  p->modify_flags &= ~(DT_LENS_SOURCE_BITS << _lens_axis_shift(axis));
 
-  p->modify_flags &= ~(DT_LENS_SOURCE_BITS << shift);
   if(source == DT_LENS_SOURCE_OFF)
   {
-    p->modify_flags &= ~bit;
-    /* The source bits stay cleared, so switching an axis off and on again comes back as
-     * LENSFUN rather than as whatever it was before. */
+    /* The whole pack for distortion: leaving GEOMETRY and SCALE set is what used to keep a
+     * projection change and a zoom running after their correction had been switched off. */
+    p->modify_flags &= ~_lens_axis_flags(axis);
+    /* The source bits stay cleared, so an axis switched off and on again comes back as the
+     * database rather than as whatever it was before. */
   }
   else
   {
-    p->modify_flags |= bit;
-    p->modify_flags |= ((int)source & DT_LENS_SOURCE_BITS) << shift;
+    p->modify_flags |= _lens_axis_flags(axis);
+    p->modify_flags |= ((int)source & DT_LENS_SOURCE_BITS) << _lens_axis_shift(axis);
   }
 
   /* Kept in step rather than left to rot: an older Ansel reading this edit sees only
@@ -387,6 +448,71 @@ static void _lens_source_set(dt_iop_lensfun_params_t *p, const dt_lens_axis_t ax
   if(axis == DT_LENS_AXIS_TCA)
     p->tca_override = (source == DT_LENS_SOURCE_MANUAL) ? TRUE : FALSE;
 }
+
+/** @brief Is this axis taking its correction from @p source? */
+static inline gboolean _lens_source_is(const dt_iop_lensfun_params_t *p,
+                                       const dt_lens_axis_t axis,
+                                       const dt_lens_source_t source)
+{
+  return _lens_source_get(p, axis) == source;
+}
+
+/** @brief Is this axis correcting at all, from wherever? */
+static inline gboolean _lens_axis_enabled(const dt_iop_lensfun_params_t *p,
+                                          const dt_lens_axis_t axis)
+{
+  return _lens_source_get(p, axis) != DT_LENS_SOURCE_OFF;
+}
+
+/**
+ * @brief Does this flag word describe anything that MOVES pixels?
+ *
+ * @details Vignetting is a gain and leaves geometry alone, so a mask that includes it would
+ * make distort_transform() claim it displaces points when it does not. Every caller wants
+ * this question and several used to spell out the same four-term test, which is how one of
+ * them came to be missing a term.
+ */
+static inline gboolean _lens_flags_move_pixels(const int modify_flags)
+{
+  return (modify_flags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION_PACK)) != 0;
+}
+
+/**
+ * @brief Is this source served by the LensSerious path, once the data has been prepared?
+ *
+ * @details MANUAL counts, and that is the whole trick of it. _lens_build_data() replaces the
+ * lens's own TCA calibration with a linear one built from the user's two coefficients, so by
+ * the time the library is asked there is nothing manual left to know about -- it is an
+ * ordinary lens with ordinary terms, and asking for LS_ENABLE_TCA is exactly right.
+ *
+ * EMBEDDED does not, yet: nothing has prepared anything, because the decoders that read a
+ * maker's profile out of a raw file are not in this tree. It is dropped rather than
+ * approximated, so the axis visibly does nothing instead of quietly doing the wrong thing.
+ */
+static inline gboolean _lens_source_is_library_served(const dt_lens_source_t source)
+{
+  return source == DT_LENS_SOURCE_LENSFUN || source == DT_LENS_SOURCE_MANUAL;
+}
+
+/** @brief Is this axis present in a flag word -- typically get_modifier()'s `done`? */
+static inline gboolean _lens_flags_have_axis(const int modify_flags, const dt_lens_axis_t axis)
+{
+  return (modify_flags & _lens_axis_presence_bit(axis)) != 0;
+}
+
+/**
+ * @brief Which axes may be attempted on this image.
+ *
+ * @details A monochrome sensor has no colour channels to misalign, so lateral chromatic
+ * aberration is not a correction that means anything there -- upstream refuses it and so do
+ * we. Everything else is unrestricted, including an axis nobody has defined yet.
+ */
+static inline int _lens_mask_for_mono(const gboolean monochrome)
+{
+  return monochrome ? (DT_LENS_MODIFY_ALL_AXES & ~DT_LENS_MODIFY_TCA) : DT_LENS_MODIFY_ALL_AXES;
+}
+
+/* ===================================================================================== */
 
 typedef struct dt_iop_lensfun_gui_data_t
 {
@@ -836,7 +962,10 @@ static int get_modifier(int *mods_done, int w, int h, const dt_iop_lensfun_data_
   for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
   {
     const dt_lens_source_t source = _lens_source_decode(d->modify_flags, d->tca_override, axis);
-    if(source != DT_LENS_SOURCE_LENSFUN) mods_todo &= ~_lens_axis_bit(axis);
+    /* The whole pack, so switching distortion to another source stops the projection change
+     * and the scaling with it -- they are one correction, and leaving them running was what
+     * kept geometry applying after its control had been hidden. */
+    if(!_lens_source_is_library_served(source)) mods_todo &= ~_lens_axis_flags(axis);
   }
 
   int want = 0;
@@ -910,7 +1039,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   }
 
   const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
-  const int used_lf_mask = (raw_monochrome) ? DT_LENS_MODIFY_ALL_AXES & ~DT_LENS_MODIFY_TCA : DT_LENS_MODIFY_ALL_AXES;
+  const int used_lf_mask = _lens_mask_for_mono(raw_monochrome);
 
   const float orig_w = roi_in->scale * piece->buf_in.width, orig_h = roi_in->scale * piece->buf_in.height;
 
@@ -939,13 +1068,13 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
    * own position in it. Reversing, it is being put back onto the frame being produced, so
    * it is evaluated at the destination. */
   ls_eval_t vp;
-  const gboolean have_vig = (modflags & DT_LENS_MODIFY_VIGNETTING)
+  const gboolean have_vig = _lens_flags_have_axis(modflags, DT_LENS_AXIS_VIGNETTING)
                             && ls_eval_from_modifier(&modifier, &vp);
 
   if(d->inverse)
   {
     // reverse direction (useful for renderings)
-    if(modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE))
+    if(_lens_flags_move_pixels(modflags))
     {
       // acquire temp memory for distorted pixel coords
       const size_t bufsize = (size_t)roi_out->width * 2 * 3;
@@ -1043,7 +1172,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
      * resample from it. The falloff is a per-source-pixel gain, so folding it into the
      * resampling loop below gives the same answer while reading the caller's own buffer. */
 
-    if(modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE))
+    if(_lens_flags_move_pixels(modflags))
     {
       // acquire temp memory for distorted pixel coords
       const size_t buf2size = (size_t)roi_out->width * 2 * 3;
@@ -1146,7 +1275,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_iop_lensfun_data_t *d = (dt_iop_lensfun_data_t *)piece->data;
 
   const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
-  const int used_lf_mask = (raw_monochrome) ? DT_LENS_MODIFY_ALL_AXES & ~DT_LENS_MODIFY_TCA : DT_LENS_MODIFY_ALL_AXES;
+  const int used_lf_mask = _lens_mask_for_mono(raw_monochrome);
 
   cl_int err = -999;
 
@@ -1218,9 +1347,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
    * distinguish them is gone. */
   have_eval = ls_eval_from_modifier(&modifier, &p) != 0;
   do_geom = have_eval
-      && (modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY
-                      | DT_LENS_MODIFY_SCALE)) != 0;
-  do_vig = have_eval && (modflags & DT_LENS_MODIFY_VIGNETTING) != 0;
+      && _lens_flags_move_pixels(modflags);
+  do_vig = have_eval && _lens_flags_have_axis(modflags, DT_LENS_AXIS_VIGNETTING) != 0;
 
   if(do_geom)
   {
@@ -1320,12 +1448,12 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const float orig_w = piece->buf_in.width, orig_h = piece->buf_in.height;
   int modflags;
 
-  const int used_lf_mask = (dt_image_is_monochrome(&self->dev->image_storage)) ? DT_LENS_MODIFY_ALL_AXES & ~DT_LENS_MODIFY_TCA : DT_LENS_MODIFY_ALL_AXES;
+  const int used_lf_mask = _lens_mask_for_mono(dt_image_is_monochrome(&self->dev->image_storage));
 
   ls_modifier_t modifier;
   get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, TRUE, &modifier);
 
-  if(modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE))
+  if(_lens_flags_move_pixels(modflags))
   {
     __OMP_PARALLEL_FOR__(firstprivate(points, points_count, modifier) if(points_count > 100))
     for(size_t i = 0; i < points_count * 2; i += 2)
@@ -1350,7 +1478,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 
   if(!d->ls_have || d->crop <= 0.0f) return 0;
 
-  const int used_lf_mask = (dt_image_is_monochrome(&self->dev->image_storage)) ? DT_LENS_MODIFY_ALL_AXES & ~DT_LENS_MODIFY_TCA : DT_LENS_MODIFY_ALL_AXES;
+  const int used_lf_mask = _lens_mask_for_mono(dt_image_is_monochrome(&self->dev->image_storage));
 
   const float orig_w = piece->buf_in.width, orig_h = piece->buf_in.height;
   int modflags;
@@ -1358,7 +1486,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE, &modifier);
 
 
-  if(modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE))
+  if(_lens_flags_move_pixels(modflags))
   {
     __OMP_PARALLEL_FOR__(firstprivate(points_count, modifier, points) if(points_count > 100))
     for(size_t i = 0; i < points_count * 2; i += 2)
@@ -1401,7 +1529,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
 
   dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
-  if(!(modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE)))
+  if(!_lens_flags_move_pixels(modflags))
   {
     dt_iop_image_copy_by_size(out, in, roi_out->width, roi_out->height, 1);
     return;
@@ -1465,7 +1593,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   ls_modifier_t modifier;
   get_modifier(&modflags, orig_w, orig_h, d, DT_LENS_MODIFY_ALL_AXES, FALSE, &modifier);
 
-  if(modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE))
+  if(_lens_flags_move_pixels(modflags))
   {
     const int xoff = roi_in->x;
     const int yoff = roi_in->y;
@@ -1657,8 +1785,7 @@ static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_
 /** @brief The lensfun modify mask this image allows: monochrome sensors get no TCA correction. */
 static int _lens_used_mask(dt_iop_module_t *self)
 {
-  return dt_image_is_monochrome(&self->dev->image_storage) ? (DT_LENS_MODIFY_ALL_AXES & ~DT_LENS_MODIFY_TCA)
-                                                           : DT_LENS_MODIFY_ALL_AXES;
+  return _lens_mask_for_mono(dt_image_is_monochrome(&self->dev->image_storage));
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
@@ -1717,7 +1844,7 @@ static int _lens_geometry_apply(const void *data, const dt_geometry_record_t *co
                    &modifier))
     return 0;
 
-  if(modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE))
+  if(_lens_flags_move_pixels(modflags))
   {
     for(size_t i = 0; i < points_count * 2; i += 2)
     {
@@ -2679,7 +2806,14 @@ static void _lens_gui_update_sensitivity(dt_iop_module_t *self)
   const dt_lens_source_t dist = _lens_source_get(p, DT_LENS_AXIS_DISTORTION);
   const dt_lens_source_t tca = _lens_source_get(p, DT_LENS_AXIS_TCA);
 
-  gtk_widget_set_visible(g->target_geom, dist == DT_LENS_SOURCE_LENSFUN);
+  /* Projection and scaling are the other two thirds of the distortion pack, so they appear
+   * exactly when that pack runs. Leaving the scale slider visible while it does nothing was
+   * the same defect as the hidden geometry combobox that kept applying -- a control and its
+   * effect disagreeing -- just the other way round. */
+  const gboolean pack_runs = (dist == DT_LENS_SOURCE_LENSFUN);
+  gtk_widget_set_visible(g->target_geom, pack_runs);
+  gtk_widget_set_visible(g->scale, pack_runs);
+
   gtk_widget_set_visible(g->tca_r, tca == DT_LENS_SOURCE_MANUAL);
   gtk_widget_set_visible(g->tca_b, tca == DT_LENS_SOURCE_MANUAL);
 
@@ -2697,7 +2831,7 @@ static void _lens_gui_update_sensitivity(dt_iop_module_t *self)
     const int lensfun_row = _lens_source_row(axis, DT_LENS_SOURCE_LENSFUN);
     if(lensfun_row >= 0)
       dt_bauhaus_combobox_entry_set_sensitive(g->axis_source[axis], lensfun_row,
-                                              (offers & _lens_axis_bit(axis)) != 0);
+                                              _lens_flags_have_axis(offers, axis));
 
     /* Hard FALSE, not a query, because there is nothing to query yet: the decoders that
      * read a maker's profile out of the raw file are not in the tree. The row exists so the
@@ -2909,8 +3043,7 @@ static int _lens_corrections_available(dt_iop_module_t *self,
   }
   if(roi.width <= 0 || roi.height <= 0) return 0;
 
-  const gboolean mono = dt_image_is_monochrome(&self->dev->image_storage);
-  const int mask = mono ? (DT_LENS_MODIFY_ALL_AXES & ~DT_LENS_MODIFY_TCA) : DT_LENS_MODIFY_ALL_AXES;
+  const int mask = _lens_mask_for_mono(dt_image_is_monochrome(&self->dev->image_storage));
   int modflags = 0;
   ls_modifier_t m;
   get_modifier(&modflags, roi.width, roi.height, &d, mask, FALSE, &m);
