@@ -63,6 +63,14 @@
                        // from the matching __APPLE__ block in main()
 #endif
 
+#ifdef _WIN32
+// This header DEFINES wmain(), which -municode makes the entry point on Windows, and which
+// forwards to main() with the arguments converted to UTF-8. Without it the linker finds no
+// entry it recognises, falls back to the GUI-subsystem C runtime, and fails on an undefined
+// wWinMain. Every other app in src/apps includes it the same way.
+#include "win/main_wrapper.h"   // conditional-ok: it defines the Windows entry point itself
+#endif
+
 static void usage(const char *progname)
 {
   fprintf(stderr,
