@@ -404,8 +404,7 @@ void dt_cache_release_with_caller(dt_cache_t *cache, dt_cache_entry_t *entry, co
   dt_pthread_rwlock_unlock(&entry->lock);
 }
 
-int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_t data_size, size_t cost,
-                  gboolean aligned_alloc)
+int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_t data_size, size_t cost)
 {
   if(IS_NULL_PTR(cache) || IS_NULL_PTR(data) || data_size == 0) return -1;
 
@@ -427,7 +426,9 @@ int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_
   entry->key = key;
   entry->_lock_demoting = 0;
 
-  entry->data = aligned_alloc ? dt_alloc_align(entry->data_size) : g_malloc(entry->data_size);
+  /* dt_alloc_align, always: this file frees entry->data with dt_free_align() wherever a
+   * cache has no cleanup callback, so the two have to be the same family. See cache.h. */
+  entry->data = dt_alloc_align(entry->data_size);
   if(IS_NULL_PTR(entry->data))
   {
     g_slice_free1(sizeof(*entry), entry);

@@ -1032,7 +1032,7 @@ void dt_cairo_sharpen_surface_rgb24(cairo_surface_t *surface)
       data[idx + 3] = copy[idx + 3];
     }
 
-  dt_free(copy);
+  dt_free_align(copy);   // paired with the dt_alloc_align above
   cairo_surface_mark_dirty(surface);
 }
 
