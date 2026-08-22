@@ -148,7 +148,11 @@ def generate_present(args, api_names):
     flags = [flag for flag in args.flags if flag]
     found = set()
     for source in args.sources:
-        body = own_code(preprocess(args.cc, flags, source), args.module_dir)
+        # A module's scanned sources are not uniformly one language (e.g. demosaic.c
+        # with demosaic/amaze.cc as an extra source), and -E must run through the
+        # compiler matching each file's own language -- see the comment on --cxx above.
+        compiler = args.cxx if source.endswith((".cc", ".cpp", ".cxx")) else args.cc
+        body = own_code(preprocess(compiler, flags, source), args.module_dir)
         found |= defined_entry_points(body, api_names)
 
     missing_required = [name for kind, name in args.api if kind == "REQUIRED" and name not in found]
@@ -256,7 +260,12 @@ def main():
     module_parser.add_argument("--api", required=True)
     module_parser.add_argument("--present", required=True)
     module_parser.add_argument("--fill", required=True)
+    # Both compilers, not just one: a module's sources aren't uniformly one language
+    # (e.g. demosaic.c with demosaic/amaze.cc as an extra source), and preprocessing a
+    # file with the compiler for the other language can silently resolve its standard
+    # library headers differently than the real build will -- see generate_present().
     module_parser.add_argument("--cc", required=True)
+    module_parser.add_argument("--cxx", required=True)
     module_parser.add_argument("--sources", nargs="+", required=True)
 
     registry_parser = sub.add_parser("registry", help="the table of every built module")
