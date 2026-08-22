@@ -2649,6 +2649,27 @@ static void target_geometry_changed(GtkWidget *widget, gpointer user_data)
  * module short: with three sources per axis the panel would otherwise grow a row for every
  * combination nobody selected.
  */
+/* Defined further down, next to the data they work on. */
+static int _lens_source_row(const dt_lens_axis_t axis, const dt_lens_source_t source);
+static int _lens_corrections_available(dt_iop_module_t *self,
+                                       const dt_iop_lensfun_params_t *const p);
+
+/**
+ * @brief Which axes the lens DATABASE could correct for this image, whatever is selected.
+ *
+ * @details _lens_corrections_available() answers what WILL run, because get_modifier() now
+ * drops any axis pointed at another source -- which is what the "corrections done" label
+ * wants and exactly not what greying a row wants. Asking with every axis forced to the
+ * database separates the two questions: capability here, selection there.
+ */
+static int _lens_database_offers(dt_iop_module_t *self, const dt_iop_lensfun_params_t *p)
+{
+  dt_iop_lensfun_params_t probe = *p;
+  for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
+    _lens_source_set(&probe, axis, DT_LENS_SOURCE_LENSFUN);
+  return _lens_corrections_available(self, &probe);
+}
+
 static void _lens_gui_update_sensitivity(dt_iop_module_t *self)
 {
   const dt_iop_lensfun_params_t *p = (const dt_iop_lensfun_params_t *)self->params;
@@ -2665,6 +2686,27 @@ static void _lens_gui_update_sensitivity(dt_iop_module_t *self)
   /* The old standalone checkbox: the combobox says this now, and two controls for one
    * state is how they end up disagreeing. */
   gtk_widget_set_visible(g->tca_override, FALSE);
+
+  /* Offer only the sources that have something to offer for THIS image, so a row that
+   * would silently do nothing is visibly unavailable instead. Greying rather than removing:
+   * "this lens has no vignetting calibration" is information, and it used to be discoverable
+   * only after the fact, from the corrections-done label. */
+  const int offers = _lens_database_offers(self, p);
+  for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
+  {
+    const int lensfun_row = _lens_source_row(axis, DT_LENS_SOURCE_LENSFUN);
+    if(lensfun_row >= 0)
+      dt_bauhaus_combobox_entry_set_sensitive(g->axis_source[axis], lensfun_row,
+                                              (offers & _lens_axis_bit(axis)) != 0);
+
+    /* Hard FALSE, not a query, because there is nothing to query yet: the decoders that
+     * read a maker's profile out of the raw file are not in the tree. The row exists so the
+     * design is visible and the encoding is exercised; when the decoders land, this becomes
+     * a real "does this image carry a profile for this axis" and nothing else here changes. */
+    const int embedded_row = _lens_source_row(axis, DT_LENS_SOURCE_EMBEDDED);
+    if(embedded_row >= 0)
+      dt_bauhaus_combobox_entry_set_sensitive(g->axis_source[axis], embedded_row, FALSE);
+  }
 }
 
 /* What each source is called in the panel. Indexed by dt_lens_source_t, so the name and
