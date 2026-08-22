@@ -1,8 +1,6 @@
 #include "embedded_lens.h"
 #include "embedded_lens_vendors.h"
 
-#include <math.h>
-
 
 gboolean _olympus_has_data(const dt_image_correction_data_t *cd)
 {

@@ -1,7 +1,6 @@
 #include "embedded_lens.h"
 #include "embedded_lens_vendors.h"
 
-#include <math.h>
 
 
 gboolean _dng_has_data(const dt_image_correction_data_t *cd)
