@@ -12,6 +12,10 @@
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-cli</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-cltest</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-generate-cache</binary>
+  <!-- Rebuilds lenses.db from the profiles installed on the user's own machine. It is the
+       one binary here that links liblensfun, so listing it is also what pulls that dylib
+       into the bundle; the application itself does not link it and does not need it. -->
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-lens-db-update</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-rs-identify</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/libexec/ansel/tools/ansel-curve-tool</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/libexec/ansel/tools/ansel-noiseprofile</binary>

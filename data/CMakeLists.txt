@@ -326,6 +326,27 @@ if(TARGET import_lensfun_xml)
   add_custom_target(lenses_db ALL DEPENDS "${LENSES_DB}")
   install(FILES "${LENSES_DB}" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel
           COMPONENT DTApplication OPTIONAL)
+  # ansel-lens-db-update rebuilds this file on the user's machine and needs the schema to
+  # do it, so the schema is part of the installation rather than a build-tree artefact.
+  # Renamed on the way in: "schema.sql" says nothing in a directory shared with every other
+  # data file Ansel ships.
+  install(FILES "${LENSES_SCHEMA}" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel
+          RENAME lenses-schema.sql COMPONENT DTApplication)
+
+  # The calibrations themselves, as XML, beside the database built from them.
+  #
+  # ansel-lens-db-update loads these FIRST and then lets the machine's own lensfun profiles
+  # override them, which is what makes an update ADDITIVE: a user who calibrated one lens
+  # ends up with that lens on top of the fifteen hundred we ship, rather than a database
+  # containing only theirs. Doing the merge here, in lensfun's own loader, is why nothing
+  # has to upsert SQL rows or rebuild the corpus-wide token statistics by hand.
+  #
+  # About 5 MB. Only installed when the fetch succeeded -- with no baseline the tool still
+  # runs, it simply cannot be additive, and it says so.
+  if(LENS_XML_SOURCE)
+    install(DIRECTORY "${LENS_XML_SOURCE}/" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/lensfun-xml
+            COMPONENT DTApplication FILES_MATCHING PATTERN "*.xml")
+  endif()
 else()
   message(WARNING "liblensfun not found: lenses.db will not be built, and the lens "
                   "correction module will report no calibration data")
