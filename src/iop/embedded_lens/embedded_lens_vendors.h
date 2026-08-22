@@ -1,18 +1,19 @@
-#pragma once
+#ifndef DT_IOP_EMBEDDED_LENS_EMBEDDED_LENS_VENDORS_H
+#define DT_IOP_EMBEDDED_LENS_EMBEDDED_LENS_VENDORS_H
 
 #include "common/image.h"
 
 struct dt_embedded_lens_knots_t;
 
-struct dt_embedded_lens_finetune_t
+typedef struct dt_embedded_lens_finetune_t
 {
   float distortion;
   float vignette;
   float ca_red;
   float ca_blue;
-};
+} dt_embedded_lens_finetune_t;
 
-struct dt_embedded_lens_vendor_t
+typedef struct dt_embedded_lens_vendor_t
 {
   dt_image_correction_type_t id;
   const char *name;
@@ -26,7 +27,9 @@ struct dt_embedded_lens_vendor_t
                   const dt_embedded_lens_finetune_t *ft,
                   struct dt_embedded_lens_knots_t *knots,
                   const float *out_scale);
-};
+} dt_embedded_lens_vendor_t;
 
 extern const struct dt_embedded_lens_vendor_t dt_embedded_lens_vendors[]; // NOSONAR
 extern const size_t dt_embedded_lens_vendors_count;
+
+#endif // DT_IOP_EMBEDDED_LENS_EMBEDDED_LENS_VENDORS_H

@@ -797,10 +797,9 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
     pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList2"));
   if(pos != exifData.end())
   {
-    uint8_t *data = (uint8_t *)g_malloc(pos->size());
+    g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size()); // NOSONAR
     pos->copy(data, Exiv2::invalidByteOrder);
     dt_dng_opcode_process_opcode_list_2(data, pos->size(), img);
-    dt_free(data);
     has_opcodes = TRUE;
   }
   else
@@ -808,6 +807,215 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
     dt_vprint(DT_DEBUG_IMAGEIO, "DNG OpcodeList2 tag not found\n");
   }
   return has_opcodes;
+}
+
+gboolean dt_exif_lens_correction_available(void)
+{
+  return Exiv2::testVersion(0, 27, 4) ? TRUE : FALSE;
+}
+
+static void _check_lens_correction_dng(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator pos = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList3"));
+  if(pos == exifData.end()) pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList3"));
+  if(pos != exifData.end())
+  {
+    g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size()); // NOSONAR
+    pos->copy(data, Exiv2::invalidByteOrder);
+    dt_dng_opcode_process_opcode_list_3(data, pos->size(), img);
+    if(img->exif_correction_data.dng.has_warp || img->exif_correction_data.dng.has_vignette)
+      img->exif_correction_type = CORRECTION_TYPE_DNG;
+  }
+  else
+  {
+    dt_vprint(DT_DEBUG_IMAGEIO, "DNG OpcodeList3 tag not found\n");
+  }
+}
+
+static void _check_lens_correction_sony(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator posd;
+  Exiv2::ExifData::const_iterator posc;
+  Exiv2::ExifData::const_iterator posv;
+  if((dt_exif_read_exif_tag(exifData, &posd, "Exif.SubImage1.DistortionCorrParams")
+      && dt_exif_read_exif_tag(exifData, &posc, "Exif.SubImage1.ChromaticAberrationCorrParams")
+      && dt_exif_read_exif_tag(exifData, &posv, "Exif.SubImage1.VignettingCorrParams"))
+     || (dt_exif_read_exif_tag(exifData, &posd, "Exif.Image.0x7037")
+         && dt_exif_read_exif_tag(exifData, &posc, "Exif.Image.0x7035")
+         && dt_exif_read_exif_tag(exifData, &posv, "Exif.Image.0x7032")))
+  {
+    const int nc = posd->toLong(0);
+    if(nc <= 16 && 2 * nc == posc->toLong(0) && nc == posv->toLong(0)
+       && (int)posd->count() >= nc + 1
+       && (int)posc->count() >= 2 * nc + 1
+       && (int)posv->count() >= nc + 1)
+    {
+      img->exif_correction_data.sony.nc = nc;
+      for(int i = 0; i < nc; i++)
+      {
+        img->exif_correction_data.sony.distortion[i] = posd->toLong(i + 1);
+        img->exif_correction_data.sony.ca_r[i] = posc->toLong(i + 1);
+        img->exif_correction_data.sony.ca_b[i] = posc->toLong(nc + i + 1);
+        img->exif_correction_data.sony.vignetting[i] = posv->toLong(i + 1);
+      }
+      img->exif_correction_type = CORRECTION_TYPE_SONY;
+    }
+  }
+}
+
+static bool _read_fuji_9coef(Exiv2::ExifData::const_iterator posd, Exiv2::ExifData::const_iterator posc,
+                             Exiv2::ExifData::const_iterator posv, dt_image_correction_fuji_t *f)
+{
+  f->nc = 9;
+  for(int i = 0; i < 9; i++)
+  {
+    const float kd = posd->toFloat(i + 1);
+    const float kc = posc->toFloat(i + 1);
+    const float kv = posv->toFloat(i + 1);
+    if(kd != kc || kd != kv) return false;
+    f->knots[i] = kd;
+    f->distortion[i] = posd->toFloat(i + 10);
+    f->ca_r[i] = posc->toFloat(i + 10);
+    f->ca_b[i] = posc->toFloat(i + 19);
+    f->vignetting[i] = posv->toFloat(i + 10);
+  }
+  return true;
+}
+
+static bool _read_fuji_11coef(Exiv2::ExifData::const_iterator posd, Exiv2::ExifData::const_iterator posc,
+                               Exiv2::ExifData::const_iterator posv, dt_image_correction_fuji_t *f)
+{
+  f->nc = 11;
+  for(int i = 0; i < 11; i++)
+  {
+    const float kd = posd->toFloat(i + 1);
+    const float kc = (i != 0) ? posc->toFloat(i) : 0.0f;
+    const float kv = posv->toFloat(i + 1);
+    if(kd != kc || kd != kv) return false;
+    f->knots[i] = kd;
+    f->distortion[i] = posd->toFloat(i + 12);
+    if(i == 0)
+    {
+      f->ca_r[i] = 0.0f;
+      f->ca_b[i] = 0.0f;
+    }
+    else
+    {
+      f->ca_r[i] = posc->toFloat(i + 10);
+      f->ca_b[i] = posc->toFloat(i + 20);
+    }
+    f->vignetting[i] = posv->toFloat(i + 12);
+  }
+  return true;
+}
+static void _check_lens_correction_fuji(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator posd;
+  Exiv2::ExifData::const_iterator posc;
+  Exiv2::ExifData::const_iterator posv;
+  Exiv2::ExifData::const_iterator posm;
+  if(!dt_exif_read_exif_tag(exifData, &posd, "Exif.Fujifilm.GeometricDistortionParams")
+     || !dt_exif_read_exif_tag(exifData, &posc, "Exif.Fujifilm.ChromaticAberrationParams")
+     || !dt_exif_read_exif_tag(exifData, &posv, "Exif.Fujifilm.VignettingParams"))
+    return;
+
+  if(posd->count() == 19 && posc->count() == 29 && posv->count() == 19)
+  {
+    if(!_read_fuji_9coef(posd, posc, posv, &img->exif_correction_data.fuji))
+    {
+      img->exif_correction_type = CORRECTION_TYPE_NONE;
+      return;
+    }
+    img->exif_correction_type = CORRECTION_TYPE_FUJI;
+  }
+  else if(posd->count() == 23 && posc->count() == 31 && posv->count() == 23)
+  {
+    if(!_read_fuji_11coef(posd, posc, posv, &img->exif_correction_data.fuji))
+    {
+      img->exif_correction_type = CORRECTION_TYPE_NONE;
+      return;
+    }
+    img->exif_correction_type = CORRECTION_TYPE_FUJI;
+  }
+  else
+  {
+    return;
+  }
+
+  if(dt_exif_read_exif_tag(exifData, &posm, "Exif.Fujifilm.CropMode")
+     && (posm->toLong() == 2 || posm->toLong() == 4))
+    img->exif_correction_data.fuji.cropf = 1.25f;
+  else
+    img->exif_correction_data.fuji.cropf = 1.0f;
+}
+
+static void _check_lens_correction_olympus(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator posip;
+
+  if(dt_exif_read_exif_tag(exifData, &posip, "Exif.OlympusIp.0x150a") && posip->count() == 4)
+  {
+    for(int i = 0; i < 4; i++)
+    {
+      const float kd = posip->toFloat(i);
+      img->exif_correction_data.olympus.dist[i] = kd;
+      if(kd != 0.0f && i < 3)
+      {
+        img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
+        img->exif_correction_data.olympus.has_dist = TRUE;
+      }
+    }
+  }
+
+  if(dt_exif_read_exif_tag(exifData, &posip, "Exif.OlympusIp.0x150c") && posip->count() == 6)
+  {
+    for(int i = 0; i < 6; i++)
+    {
+      const float kc = posip->toFloat(i);
+      img->exif_correction_data.olympus.ca[i] = kc;
+      if(kc != 0.0f)
+      {
+        img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
+        img->exif_correction_data.olympus.has_ca = TRUE;
+      }
+    }
+  }
+}
+
+static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  img->exif_correction_type = CORRECTION_TYPE_NONE;
+  memset(&img->exif_correction_data, 0, sizeof(img->exif_correction_data));
+
+  if(!Exiv2::testVersion(0, 27, 4)) return;
+
+  /* First match wins, and the order is a decision rather than an accident.
+   *
+   * These used to run unconditionally, so when two vendors' tags were both present the LAST
+   * one to match silently won -- a priority nobody had chosen. It is reachable: a Sony raw
+   * converted to DNG carries the converter's OpcodeList3 and the original maker notes side
+   * by side.
+   *
+   * DNG goes first because in that file the opcodes are the authoritative description. The
+   * converter may have cropped or rotated relative to the sensor the maker notes describe,
+   * and the opcodes account for what the DNG actually contains; the maker notes describe a
+   * frame that no longer exists. For a camera that shoots DNG natively there is nothing to
+   * choose between anyway, since only the opcodes are there. */
+  _check_lens_correction_dng(exifData, img);
+  if(img->exif_correction_type == CORRECTION_TYPE_NONE)
+    _check_lens_correction_sony(exifData, img);
+  if(img->exif_correction_type == CORRECTION_TYPE_NONE)
+    _check_lens_correction_fuji(exifData, img);
+  if(img->exif_correction_type == CORRECTION_TYPE_NONE)
+    _check_lens_correction_olympus(exifData, img);
+
+  /* Says which maker answered, or that none did. Worth logging rather than inferring from
+   * the absence of a correction: "this camera embeds nothing" and "we failed to read what
+   * it embedded" look identical in the picture and completely different here. */
+  static const char *const names[] = { "none", "Sony", "Fujifilm", "DNG opcodes", "Olympus" };
+  const int t = (int)img->exif_correction_type;
+  dt_vprint(DT_DEBUG_IMAGEIO, "[exif] embedded lens correction: %s\n",
+            (t >= 0 && t < (int)(sizeof(names) / sizeof(*names))) ? names[t] : "unknown");
 }
 
 void dt_exif_read_usercrop(dt_image_t *img, const char *filename)
@@ -846,7 +1054,13 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
     {
       _check_usercrop(exifData, img);
       _check_dng_opcodes(exifData, img);
-      // _check_lens_correction_data(exifData, img);
+      /* Yes, _exif_decode_exif_data() also calls this, and no, it is not redundant. That
+       * one may be handed an EXIF BLOB -- dt_exif_read_from_blob() -- and a blob routinely
+       * arrives without the maker notes these readers need. This call opens the file, so it
+       * is the one that can see them. Dropping it would leave every blob-fed path with no
+       * embedded correction at all, which is a silent loss of a feature rather than a
+       * visible failure. */
+      _check_lens_correction_data(exifData, img);
     }
     return;
   }
@@ -1103,6 +1317,8 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     {
       img->flags |= DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
     }
+
+    _check_lens_correction_data(exifData, img);
 
     /*
      * Get the focus distance in meters.

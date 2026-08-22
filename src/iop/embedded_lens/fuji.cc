@@ -13,6 +13,9 @@ gboolean _fuji_has_data(const dt_image_correction_data_t *cd)
 
 gboolean _fuji_has_distortion(const dt_image_correction_data_t *cd)
 {
+  /* nc bounds the tables below; _fuji_has_data owns that check. */
+  if(!_fuji_has_data(cd)) return FALSE;
+
   for(int i = 0; i < cd->fuji.nc; i++)
     if(cd->fuji.distortion[i] != 0.0f) return TRUE;
   return FALSE;
@@ -20,6 +23,9 @@ gboolean _fuji_has_distortion(const dt_image_correction_data_t *cd)
 
 gboolean _fuji_has_vignetting(const dt_image_correction_data_t *cd)
 {
+  /* nc bounds the tables below; _fuji_has_data owns that check. */
+  if(!_fuji_has_data(cd)) return FALSE;
+
   for(int i = 0; i < cd->fuji.nc; i++)
     if(cd->fuji.vignetting[i] != 0.0f) return TRUE;
   return FALSE;
@@ -27,6 +33,9 @@ gboolean _fuji_has_vignetting(const dt_image_correction_data_t *cd)
 
 gboolean _fuji_has_ca(const dt_image_correction_data_t *cd)
 {
+  /* nc bounds the tables below; _fuji_has_data owns that check. */
+  if(!_fuji_has_data(cd)) return FALSE;
+
   for(int i = 0; i < cd->fuji.nc; i++)
     if(cd->fuji.ca_r[i] != 0.0f || cd->fuji.ca_b[i] != 0.0f) return TRUE;
   return FALSE;

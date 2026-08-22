@@ -4,24 +4,41 @@
 #include <initializer_list>
 #include <math.h>
 
+/**
+ * @brief The vendor handling this image, or NULL if none does.
+ *
+ * @details Looked up BY ID, not by index. The table's row order happening to match
+ * dt_image_correction_type_t is not something the compiler checks, and the four public
+ * predicates below reach this table on every render and every GUI refresh -- indexing it
+ * with an out-of-range or reordered type would call a garbage function pointer rather
+ * than fail visibly. A five-element scan costs nothing at these call rates.
+ */
+static const struct dt_embedded_lens_vendor_t *_vendor_for(const dt_image_t *img)
+{
+  if(!img) return nullptr;
+
+  for(size_t i = 0; i < dt_embedded_lens_vendors_count; i++)
+    if(dt_embedded_lens_vendors[i].id == img->exif_correction_type)
+      return &dt_embedded_lens_vendors[i];
+
+  return nullptr;
+}
+
 int dt_embedded_lens_init_coeffs(const dt_image_t *img,
                                   const struct dt_embedded_lens_finetune_t *ft,
                                   struct dt_embedded_lens_knots_t *knots,
                                   float *out_scale)
 {
   if(out_scale) *out_scale = 1.0f;
+  if(!img || !ft || !knots) return 0;
 
   const dt_image_correction_data_t *const cd = &img->exif_correction_data;
   int nc = 0;
 
-  if(img->exif_correction_type < dt_embedded_lens_vendors_count)
+  const struct dt_embedded_lens_vendor_t *const v = _vendor_for(img);
+  if(v && v->has_data && v->has_data(cd) && v->populate)
   {
-    const struct dt_embedded_lens_vendor_t *const v =
-        &dt_embedded_lens_vendors[img->exif_correction_type];
-    if(v->has_data && v->has_data(cd))
-    {
-      nc = v->populate(cd, ft, knots, out_scale);
-    }
+    nc = v->populate(cd, ft, knots, out_scale);
   }
 
   if(nc <= 0) return 0;
@@ -54,28 +71,24 @@ int dt_embedded_lens_init_coeffs(const dt_image_t *img,
 
 gboolean dt_embedded_lens_has_data(const dt_image_t *img)
 {
-  const struct dt_embedded_lens_vendor_t *const v =
-      &dt_embedded_lens_vendors[img->exif_correction_type];
-  return v->has_data && v->has_data(&img->exif_correction_data);
+  const struct dt_embedded_lens_vendor_t *const v = _vendor_for(img);
+  return v && v->has_data && v->has_data(&img->exif_correction_data);
 }
 
 gboolean dt_embedded_lens_has_distortion(const dt_image_t *img)
 {
-  const struct dt_embedded_lens_vendor_t *const v =
-      &dt_embedded_lens_vendors[img->exif_correction_type];
-  return v->has_distortion && v->has_distortion(&img->exif_correction_data);
+  const struct dt_embedded_lens_vendor_t *const v = _vendor_for(img);
+  return v && v->has_distortion && v->has_distortion(&img->exif_correction_data);
 }
 
 gboolean dt_embedded_lens_has_vignetting(const dt_image_t *img)
 {
-  const struct dt_embedded_lens_vendor_t *const v =
-      &dt_embedded_lens_vendors[img->exif_correction_type];
-  return v->has_vignetting && v->has_vignetting(&img->exif_correction_data);
+  const struct dt_embedded_lens_vendor_t *const v = _vendor_for(img);
+  return v && v->has_vignetting && v->has_vignetting(&img->exif_correction_data);
 }
 
 gboolean dt_embedded_lens_has_ca(const dt_image_t *img)
 {
-  const struct dt_embedded_lens_vendor_t *const v =
-      &dt_embedded_lens_vendors[img->exif_correction_type];
-  return v->has_ca && v->has_ca(&img->exif_correction_data);
+  const struct dt_embedded_lens_vendor_t *const v = _vendor_for(img);
+  return v && v->has_ca && v->has_ca(&img->exif_correction_data);
 }
