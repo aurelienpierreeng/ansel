@@ -618,7 +618,9 @@ typedef struct history_entry_t
   double iop_order; // kept for compatibility with xmp version < 4
 
   // sanity checking
-  gboolean have_operation, have_params, have_modversion;
+  gboolean have_operation;
+  gboolean have_params;
+  gboolean have_modversion;
 } history_entry_t;
 
 // used for a hash table that maps mask_id to the mask data
