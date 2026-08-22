@@ -25,7 +25,7 @@ Setup (Fedora):
 Usage:
   python3 tools/mingw_syntax_check.py                    # every .c/.cc under src/
   python3 tools/mingw_syntax_check.py --changed master   # only what a branch touched
-  python3 tools/mingw_syntax_check.py src/iop/lens.cc    # specific files
+  python3 tools/mingw_syntax_check.py src/iop/lens.c    # specific files
   python3 tools/mingw_syntax_check.py --jobs 8
 """
 import concurrent.futures

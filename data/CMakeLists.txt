@@ -280,7 +280,7 @@ install(FILES ansel.bash DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONEN
 # from "the system database" found nothing and failed the build.
 #
 # Falls back to the system database when the fetch is off or fails, and if neither can
-# produce a database the build still succeeds -- iop/lens.cc reports the database as
+# produce a database the build still succeeds -- iop/lens.c reports the database as
 # unavailable and the module disables itself, the same way rawdenoiseai does without its
 # model. Shipping no lens corrections is bad; failing a release build over a network hiccup
 # is worse.

@@ -225,7 +225,7 @@ add_iop(diffuse "diffuse.c")
 add_iop(blurs "blurs.c")
 add_iop(initialscale "initialscale.c")
 add_iop(watermark "watermark.c")
-add_iop(lens "lens.cc" DEFAULT_VISIBLE)
+add_iop(lens "lens.c" DEFAULT_VISIBLE)
 target_link_libraries(lens PRIVATE lensserious) # headers; symbols come via lib_ansel
 if(TARGET lensserious_db)
   target_link_libraries(lens PRIVATE lensserious_db) # ditto, for the calibration reader
