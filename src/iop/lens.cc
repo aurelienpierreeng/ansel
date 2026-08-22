@@ -688,6 +688,19 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   const struct dt_interpolation *const interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
 
+  /* Vignetting is folded into the resampling loops below rather than run as a pass of its
+   * own over a whole copy of the frame. ls_eval_vignette_factor() answers 1 when vignetting
+   * is not enabled, so the loops need no second branch for it.
+   *
+   * Which FRAME the falloff lives in depends on the direction. Correcting, it belongs to
+   * the source, so each channel takes the factor at ITS OWN source coordinate -- exactly
+   * what the two-pass did, which darkened the input and then let each channel sample its
+   * own position in it. Reversing, it is being put back onto the frame being produced, so
+   * it is evaluated at the destination. */
+  ls_eval_t vp;
+  const gboolean have_vig = (modflags & DT_LENS_MODIFY_VIGNETTING)
+                            && ls_eval_from_modifier(&modifier, &vp);
+
   if(d->inverse)
   {
     // reverse direction (useful for renderings)
@@ -702,7 +715,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none)  \
-  firstprivate(roi_out, roi_in, padded_bufsize, modifier, ch, d, buf, ovoid, ivoid, ch_width, interpolation, raw_monochrome, mask_display)
+  firstprivate(roi_out, roi_in, padded_bufsize, modifier, ch, d, buf, ovoid, ivoid, ch_width, interpolation, raw_monochrome, mask_display, have_vig, vp)
 #endif
       for(int y = 0; y < roi_out->height; y++)
       {
@@ -729,6 +742,13 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
                                                        roi_in->height, ch, ch_width);
           }
 
+          if(have_vig)
+          {
+            /* Reversing: the falloff belongs to the frame being produced. */
+            const float v = ls_eval_vignette_factor(&vp, (float)(roi_out->x + x),
+                                                    (float)(roi_out->y + y));
+            for(int c = 0; c < 3; c++) pixel[c] *= v;
+          }
           if(raw_monochrome) pixel[0] = pixel[2] = pixel[1];
 
           if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
@@ -761,45 +781,26 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     else
     {
       dt_iop_image_copy_by_size((float*)ovoid, (float*)ivoid, roi_out->width, roi_out->height, ch);
-    }
 
-    if(modflags & DT_LENS_MODIFY_VIGNETTING)
-    {
-      __OMP_PARALLEL_FOR_CPP__(firstprivate(modifier, ovoid, roi_out, ch))
-      for(int y = 0; y < roi_out->height; y++)
+      /* Nothing moved, so there was no resampling loop to fold the falloff into. */
+      if(have_vig)
       {
-        /* Colour correction: vignetting */
-        // actually this way row stride does not matter.
-        float *out = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
-        ls_modifier_apply_vignetting(&modifier, roi_out->x, roi_out->y + y, roi_out->width, 1, out,
-                                     (int)((ch * roi_out->width) * sizeof(float)));
+        __OMP_PARALLEL_FOR_CPP__(firstprivate(modifier, ovoid, roi_out, ch))
+        for(int y = 0; y < roi_out->height; y++)
+        {
+          float *out = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
+          ls_modifier_apply_vignetting(&modifier, roi_out->x, roi_out->y + y, roi_out->width, 1,
+                                       out, (int)((ch * roi_out->width) * sizeof(float)));
+        }
       }
-      
     }
   }
   else // correct distortions:
   {
-    // acquire temp memory for image buffer
-    const size_t bufsize = (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
-    void *buf = dt_pixelpipe_cache_alloc_align_cache(
-        bufsize,
-        pipe->type);
-    if(IS_NULL_PTR(buf)) return 1;
-    memcpy(buf, ivoid, bufsize);
-
-    if(modflags & DT_LENS_MODIFY_VIGNETTING)
-    {
-      __OMP_PARALLEL_FOR_CPP__(firstprivate(buf, roi_in, ch, modifier))
-      for(int y = 0; y < roi_in->height; y++)
-      {
-        /* Colour correction: vignetting */
-        // actually this way row stride does not matter.
-        float *bufptr = ((float *)buf) + (size_t)ch * roi_in->width * y;
-        ls_modifier_apply_vignetting(&modifier, roi_in->x, roi_in->y + y, roi_in->width, 1, bufptr,
-                                     (int)((ch * roi_in->width) * sizeof(float)));
-      }
-      
-    }
+    /* No copy of the input, and no separate vignetting pass over it. This used to
+     * duplicate the whole frame -- 387 MB for a 24 Mpx RGBA buffer -- darken the copy, and
+     * resample from it. The falloff is a per-source-pixel gain, so folding it into the
+     * resampling loop below gives the same answer while reading the caller's own buffer. */
 
     if(modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE))
     {
@@ -807,16 +808,12 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       const size_t buf2size = (size_t)roi_out->width * 2 * 3;
       size_t padded_buf2size;
       float *const buf2 = dt_pixelpipe_cache_alloc_perthread_float(buf2size, &padded_buf2size);
-      if(IS_NULL_PTR(buf2))
-      {
-        dt_pixelpipe_cache_free_align(buf);
-        return 1;
-      }
+      if(IS_NULL_PTR(buf2)) return 1;
 
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none)  \
-  firstprivate(roi_out, roi_in, ovoid, ch, padded_buf2size, modifier, mask_display, raw_monochrome, interpolation, ch_width, buf, d, buf2)
+  firstprivate(roi_out, roi_in, ovoid, ivoid, ch, padded_buf2size, modifier, mask_display, raw_monochrome, interpolation, ch_width, d, buf2, have_vig, vp)
 #endif
       for(int y = 0; y < roi_out->height; y++)
       {
@@ -835,11 +832,16 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
               continue;
             }
 
-            float *bufptr = ((float *)buf) + c;
+            const float *bufptr = ((const float *)ivoid) + c;
             const float pi0 = fmaxf(fminf(buf2ptr[c * 2] - roi_in->x, roi_in->width - 1.0f), 0.0f);
             const float pi1 = fmaxf(fminf(buf2ptr[c * 2 + 1] - roi_in->y, roi_in->height - 1.0f), 0.0f);
             pixel[c] = dt_interpolation_compute_sample(interpolation, bufptr, pi0, pi1, roi_in->width,
                                                        roi_in->height, ch, ch_width);
+            /* Correcting: the falloff belongs to the source, so each channel takes it at
+             * its own source coordinate -- which is what sampling an already-darkened input
+             * amounted to. */
+            if(have_vig)
+              pixel[c] *= ls_eval_vignette_factor(&vp, buf2ptr[c * 2], buf2ptr[c * 2 + 1]);
           }
           if(raw_monochrome) pixel[0] = pixel[2] = pixel[1];
           if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
@@ -851,7 +853,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
             else
             {
               // take green channel distortion also for alpha channel
-              float *bufptr = ((float *)buf) + 3;
+              const float *bufptr = ((const float *)ivoid) + 3;
               const float pi0 = fmaxf(fminf(buf2ptr[2] - roi_in->x, roi_in->width - 1.0f), 0.0f);
               const float pi1 = fmaxf(fminf(buf2ptr[3] - roi_in->y, roi_in->height - 1.0f), 0.0f);
               pixel[3] = dt_interpolation_compute_sample(interpolation, bufptr, pi0, pi1, roi_in->width,
@@ -871,9 +873,20 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     }
     else
     {
-      memcpy(ovoid, buf, bufsize);
+      dt_iop_image_copy_by_size((float *)ovoid, (float *)ivoid, roi_out->width, roi_out->height, ch);
+
+      /* Nothing moved, so there was no resampling loop to fold the falloff into. */
+      if(have_vig)
+      {
+        __OMP_PARALLEL_FOR_CPP__(firstprivate(modifier, ovoid, roi_in, ch))
+        for(int y = 0; y < roi_in->height; y++)
+        {
+          float *out = ((float *)ovoid) + (size_t)ch * roi_in->width * y;
+          ls_modifier_apply_vignetting(&modifier, roi_in->x, roi_in->y + y, roi_in->width, 1, out,
+                                       (int)((ch * roi_in->width) * sizeof(float)));
+        }
+      }
     }
-    dt_pixelpipe_cache_free_align(buf);
   }
 
   /* No GUI state is written here. Which corrections apply is a property of the
@@ -894,7 +907,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
   const int used_lf_mask = (raw_monochrome) ? DT_LENS_MODIFY_ALL & ~DT_LENS_MODIFY_TCA : DT_LENS_MODIFY_ALL;
 
-  cl_mem dev_tmp = NULL;
   cl_int err = -999;
 
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)self->global_data;
@@ -912,13 +924,10 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const int roi_in_y = roi_in->y;
   const int roi_out_x = roi_out->x;
   const int roi_out_y = roi_out->y;
-  const int width = MAX(iwidth, owidth);
-  const int height = MAX(iheight, oheight);
 
   const float orig_w = roi_in->scale * piece->buf_in.width, orig_h = roi_in->scale * piece->buf_in.height;
 
   size_t origin[] = { 0, 0, 0 };
-  size_t iregion[] = { (size_t)iwidth, (size_t)iheight, 1 };
   size_t oregion[] = { (size_t)owidth, (size_t)oheight, 1 };
   size_t isizes[] = { (size_t)ROUNDUPDWD(iwidth, devid), (size_t)ROUNDUPDHT(iheight, devid), 1 };
   size_t osizes[] = { (size_t)ROUNDUPDWD(owidth, devid), (size_t)ROUNDUPDHT(oheight, devid), 1 };
@@ -951,130 +960,76 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       return FALSE;
   }
 
-  /* One intermediate image between the two stages, and nothing else. The host-side map
-   * buffer and its device counterpart are gone with the CPU pass that filled them. */
-  dev_tmp = (cl_mem)dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE, &modifier);
 
-  /* Everything is evaluated in the kernel, in both directions.
+  /* One kernel, in and out, in both directions.
    *
-   * There is no displacement map here and no host buffer: an ls_eval_t is ~80 bytes of
-   * coefficients passed as a kernel argument, and each work-item evaluates its own source
-   * coordinates from it. What this replaces built six floats per output pixel on the CPU
-   * -- single-threaded, because liblensfun's callbacks were -- and uploaded them: 549 MB
-   * for a 24 Mpx frame, plus the pass that produced it. Measured end to end, 558 ms became
-   * 3.4 ms.
+   * The correction crosses as an ls_eval_t -- 112 bytes of coefficients passed by value --
+   * and each work-item evaluates its own source coordinates from it, so there is no
+   * displacement map, no host buffer and no upload. Vignetting rides along inside the same
+   * resampling pass rather than writing a whole intermediate image for the resampler to
+   * read back.
    *
-   * The direction is inside the block. ls_eval_map() reads p.reverse and composes the
-   * chain accordingly -- scale/projection/distortion for the correction direction,
-   * undistortion/projection/scale for the reverse -- so both branches below run the same
-   * kernels and differ only in WHICH ROI each stage covers and in what order vignetting
-   * and geometry are applied. */
+   * The direction lives in the block: ls_eval_map() reads p.reverse and composes the chain
+   * accordingly, and _lens_devignette() places the falloff in the frame that direction puts
+   * it in. So both directions are the same launch, which is why the branch that used to
+   * distinguish them is gone. */
   have_eval = ls_eval_from_modifier(&modifier, &p) != 0;
   do_geom = have_eval
       && (modflags & (DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY
                       | DT_LENS_MODIFY_SCALE)) != 0;
   do_vig = have_eval && (modflags & DT_LENS_MODIFY_VIGNETTING) != 0;
 
-  if(d->inverse)
+  if(do_geom)
   {
-    // reverse direction (useful for renderings)
-    if(do_geom)
-    {
-      dt_opencl_set_kernel_arg(devid, ldkernel, 0, sizeof(cl_mem), (void *)&dev_in);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 1, sizeof(cl_mem), (void *)&dev_tmp);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 2, sizeof(int), (void *)&owidth);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 3, sizeof(int), (void *)&oheight);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 4, sizeof(int), (void *)&iwidth);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 5, sizeof(int), (void *)&iheight);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 6, sizeof(int), (void *)&roi_in_x);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 7, sizeof(int), (void *)&roi_in_y);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 8, sizeof(int), (void *)&roi_out_x);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 9, sizeof(int), (void *)&roi_out_y);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 10, sizeof(ls_eval_t), (void *)&p);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 11, sizeof(int), (void *)&(d->do_nan_checks));
-      dt_opencl_set_kernel_arg(devid, ldkernel, 12, sizeof(int), (void *)&(raw_monochrome));
-      err = dt_opencl_enqueue_kernel_2d(devid, ldkernel, osizes);
-      if(err != CL_SUCCESS) goto error;
-    }
-    else
-    {
-      err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_tmp, origin, origin, oregion);
-      if(err != CL_SUCCESS) goto error;
-    }
-
-    if(do_vig)
-    {
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 0, sizeof(cl_mem), (void *)&dev_tmp);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 1, sizeof(cl_mem), (void *)&dev_out);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 2, sizeof(int), (void *)&owidth);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 3, sizeof(int), (void *)&oheight);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 4, sizeof(int), (void *)&roi_out_x);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 5, sizeof(int), (void *)&roi_out_y);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 6, sizeof(ls_eval_t), (void *)&p);
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_lens_vignette, osizes);
-      if(err != CL_SUCCESS) goto error;
-    }
-    else
-    {
-      err = dt_opencl_enqueue_copy_image(devid, dev_tmp, dev_out, origin, origin, oregion);
-      if(err != CL_SUCCESS) goto error;
-    }
+    /* Vignetting, if any, is applied inside this pass -- the kernel reads it out of p. */
+    dt_opencl_set_kernel_arg(devid, ldkernel, 0, sizeof(cl_mem), (void *)&dev_in);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 1, sizeof(cl_mem), (void *)&dev_out);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 2, sizeof(int), (void *)&owidth);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 3, sizeof(int), (void *)&oheight);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 4, sizeof(int), (void *)&iwidth);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 5, sizeof(int), (void *)&iheight);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 6, sizeof(int), (void *)&roi_in_x);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 7, sizeof(int), (void *)&roi_in_y);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 8, sizeof(int), (void *)&roi_out_x);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 9, sizeof(int), (void *)&roi_out_y);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 10, sizeof(ls_eval_t), (void *)&p);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 11, sizeof(int), (void *)&(d->do_nan_checks));
+    dt_opencl_set_kernel_arg(devid, ldkernel, 12, sizeof(int), (void *)&(raw_monochrome));
+    err = dt_opencl_enqueue_kernel_2d(devid, ldkernel, osizes);
+    if(err != CL_SUCCESS) goto error;
   }
-  else // correct distortions:
+  else if(do_vig)
   {
-    /* Vignetting first, over the INPUT roi: it is a per-pixel gain on the source, so it
-     * has to be applied before the geometry moves those pixels. */
-    if(do_vig)
-    {
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 0, sizeof(cl_mem), (void *)&dev_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 1, sizeof(cl_mem), (void *)&dev_tmp);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 2, sizeof(int), (void *)&iwidth);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 3, sizeof(int), (void *)&iheight);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 4, sizeof(int), (void *)&roi_in_x);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 5, sizeof(int), (void *)&roi_in_y);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 6, sizeof(ls_eval_t), (void *)&p);
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_lens_vignette, isizes);
-      if(err != CL_SUCCESS) goto error;
-    }
-    else
-    {
-      err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_tmp, origin, origin, iregion);
-      if(err != CL_SUCCESS) goto error;
-    }
-
-    if(do_geom)
-    {
-      dt_opencl_set_kernel_arg(devid, ldkernel, 0, sizeof(cl_mem), (void *)&dev_tmp);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 1, sizeof(cl_mem), (void *)&dev_out);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 2, sizeof(int), (void *)&owidth);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 3, sizeof(int), (void *)&oheight);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 4, sizeof(int), (void *)&iwidth);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 5, sizeof(int), (void *)&iheight);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 6, sizeof(int), (void *)&roi_in_x);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 7, sizeof(int), (void *)&roi_in_y);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 8, sizeof(int), (void *)&roi_out_x);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 9, sizeof(int), (void *)&roi_out_y);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 10, sizeof(ls_eval_t), (void *)&p);
-      dt_opencl_set_kernel_arg(devid, ldkernel, 11, sizeof(int), (void *)&(d->do_nan_checks));
-      dt_opencl_set_kernel_arg(devid, ldkernel, 12, sizeof(int), (void *)&(raw_monochrome));
-      err = dt_opencl_enqueue_kernel_2d(devid, ldkernel, osizes);
-      if(err != CL_SUCCESS) goto error;
-    }
-    else
-    {
-      err = dt_opencl_enqueue_copy_image(devid, dev_tmp, dev_out, origin, origin, oregion);
-      if(err != CL_SUCCESS) goto error;
-    }
+    /* Nothing moves, so there is nothing to resample: a dedicated pass costs one fetch per
+     * pixel where the fused one would cost the resampler's full tap count for an identity
+     * map. Which frame the falloff belongs to is the same question as above, and with no
+     * geometry in play the two coincide. */
+    const int vx = d->inverse ? roi_out_x : roi_in_x;
+    const int vy = d->inverse ? roi_out_y : roi_in_y;
+    const int vw = d->inverse ? owidth : iwidth;
+    const int vh = d->inverse ? oheight : iheight;
+    dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 0, sizeof(cl_mem), (void *)&dev_in);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 1, sizeof(cl_mem), (void *)&dev_out);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 2, sizeof(int), (void *)&vw);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 3, sizeof(int), (void *)&vh);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 4, sizeof(int), (void *)&vx);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 5, sizeof(int), (void *)&vy);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 6, sizeof(ls_eval_t), (void *)&p);
+    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_lens_vignette,
+                                      d->inverse ? osizes : isizes);
+    if(err != CL_SUCCESS) goto error;
+  }
+  else
+  {
+    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
+    if(err != CL_SUCCESS) goto error;
   }
 
-  dt_opencl_release_mem_object(dev_tmp);
   return TRUE;
 
 error:
-  dt_opencl_release_mem_object(dev_tmp);
   dt_print(DT_DEBUG_OPENCL, "[opencl_lens] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }
@@ -1082,16 +1037,18 @@ error:
 
 void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
-  /* CPU: in + out + one full copy of the input.
+  /* CPU: in + out, and nothing else of image size.
    *
-   * process() copies the input aside before applying vignetting in place, and that copy is
-   * the only whole-image temporary it makes. The displacement map is NOT one: it is built a
-   * row at a time into a per-thread buffer of width*6 floats, so it grows with the frame's
-   * WIDTH and the thread count, not with its area -- ~2 MB for a 6000 px frame on 16
-   * threads, against ~384 MB for one 24 Mpx RGBA buffer. Counting it here would reserve
-   * memory nothing allocates.
+   * The whole-frame copy process() used to make -- to darken before resampling from it --
+   * is gone with the separate vignetting pass: the falloff is folded into the resampling
+   * loop, which now reads the caller's own input buffer. The displacement map is not a
+   * whole-image temporary either: it is built a row at a time into a per-thread buffer of
+   * width*6 floats, so it grows with the frame's WIDTH and the thread count rather than
+   * its area -- ~2 MB for a 6000 px frame on 16 threads, against ~384 MB for one 24 Mpx
+   * RGBA buffer. Counting it here would reserve memory nothing allocates.
    *
-   * GPU: in + out + one intermediate image, and nothing else at all.
+   * GPU: in + out, and nothing else at all -- one kernel reads the input and writes the
+   * output, with vignetting folded into the same pass.
    *
    * Both figures used to be 4.5, meaning in + out + tmp + a six-float-per-pixel map buffer
    * (1.5x an RGBA one) that had to be built on the host and uploaded. The GPU path no
@@ -1102,10 +1059,10 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
    * factor_cl and maxbuf_cl have to be set explicitly: dt_develop_tiling_t defaults them to
    * the CPU figures (develop/tiling.c), so a module that sets only `factor` silently
    * describes its GPU path with its CPU path's appetite. */
-  tiling->factor = 3.0f;    // in + out + the input copy
-  tiling->maxbuf = 1.0f;    // the largest single temporary is that copy
-  tiling->factor_cl = 3.0f; // in + out + dev_tmp
-  tiling->maxbuf_cl = 1.0f; // dev_tmp, one image
+  tiling->factor = 2.0f;    // in + out
+  tiling->maxbuf = 1.0f;
+  tiling->factor_cl = 2.0f; // in + out; no intermediate at all
+  tiling->maxbuf_cl = 1.0f;
   tiling->overhead = 0;
   tiling->overlap = 4;
   tiling->xalign = 1;

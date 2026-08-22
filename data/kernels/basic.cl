@@ -2144,6 +2144,37 @@ static inline bool _lens_eval_map(const ls_eval_t p,
   return true;
 }
 
+/* Vignetting, folded into the resampling pass.
+ *
+ * It used to be a kernel of its own writing a whole intermediate image that the resampler
+ * then read back: 387 MB of VRAM and a full round trip through it, for a per-pixel gain.
+ *
+ * Which FRAME the falloff lives in depends on the direction, and that is the whole subtlety
+ * here. Correcting, the lens's falloff is a property of the source, so each channel takes
+ * the factor at ITS OWN source coordinate -- which is exactly what the two-pass did, since
+ * it darkened the input and then let each channel sample its own position in it. Reversing,
+ * the falloff is being put back onto the frame being produced, so it is evaluated at the
+ * destination instead.
+ *
+ * ls_eval_vignette_factor() returns 1 when vignetting is not enabled, so the caller's
+ * branch is only an optimisation -- and a uniform one, constant across the whole frame. */
+static inline float4 _lens_devignette(float4 pixel, const ls_eval_t p, const float *ppi,
+                                      const int roi_out_x, const int roi_out_y,
+                                      const int x, const int y)
+{
+  if(p.reverse)
+  {
+    const float v = ls_eval_vignette_factor(&p, (float)(roi_out_x + x), (float)(roi_out_y + y));
+    pixel.xyz *= v;
+    return pixel;
+  }
+
+  pixel.x *= ls_eval_vignette_factor(&p, ppi[0], ppi[1]);
+  pixel.y *= ls_eval_vignette_factor(&p, ppi[2], ppi[3]);
+  pixel.z *= ls_eval_vignette_factor(&p, ppi[4], ppi[5]);
+  return pixel;
+}
+
 kernel void
 lens_distort_bilinear (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
                const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y,
@@ -2161,7 +2192,9 @@ lens_distort_bilinear (read_only image2d_t in, write_only image2d_t out, const i
     return;
   }
 
-  const float4 pixel = _lens_sample_bilinear(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
+  float4 pixel = _lens_sample_bilinear(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
+  if(p.enabled & LS_EVAL_ENABLE_VIGNETTING)
+    pixel = _lens_devignette(pixel, p, ppi, roi_out_x, roi_out_y, x, y);
   write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome));
 }
 
@@ -2182,7 +2215,9 @@ lens_distort_bicubic (read_only image2d_t in, write_only image2d_t out, const in
     return;
   }
 
-  const float4 pixel = _lens_sample_bicubic(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
+  float4 pixel = _lens_sample_bicubic(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
+  if(p.enabled & LS_EVAL_ENABLE_VIGNETTING)
+    pixel = _lens_devignette(pixel, p, ppi, roi_out_x, roi_out_y, x, y);
   write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome));
 }
 
@@ -2203,7 +2238,9 @@ lens_distort_mitchell (read_only image2d_t in, write_only image2d_t out, const i
     return;
   }
 
-  const float4 pixel = _lens_sample_mitchell(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
+  float4 pixel = _lens_sample_mitchell(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
+  if(p.enabled & LS_EVAL_ENABLE_VIGNETTING)
+    pixel = _lens_devignette(pixel, p, ppi, roi_out_x, roi_out_y, x, y);
   write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome));
 }
 
