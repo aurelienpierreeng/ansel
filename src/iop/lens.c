@@ -126,28 +126,66 @@ typedef enum dt_lens_modify_t
   DT_LENS_MODIFY_GEOMETRY   = 0x00000010,
   DT_LENS_MODIFY_SCALE      = 0x00000020,
 
-  /* Every correction axis, and NOTHING else. It used to be ~0, which was the same thing
-   * only for as long as no other bit existed in this word -- and one does now, because
-   * bits 6 and up say WHERE an axis takes its data from (see dt_lens_source_t). Every use
-   * of this is an AND-mask meaning "do not restrict which axes may run", so listing the
-   * axes says that, where ~0 said "and whatever else happens to be in there". */
-  DT_LENS_MODIFY_ALL_AXES   = DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_VIGNETTING
-                              | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY
-                              | DT_LENS_MODIFY_SCALE,
-
-  /* Where each axis gets its correction from, two bits apiece. Bit 2 is skipped rather
-   * than filled: the five values above are lensfun's own serialized numbering and these
-   * are ours, so the gap marks the boundary instead of hiding it.
+  /* --- the boundary ---------------------------------------------------------------
    *
-   * ZERO MEANS LENSFUN, and that is the whole reason this is shippable without bumping the
-   * params version. Every edit ever saved has these bits clear, and clear has to keep
-   * meaning what those edits meant. Inverting the polarity would work identically until
-   * someone opened an old edit. */
-  DT_LENS_SOURCE_SHIFT_TCA        = 6,
-  DT_LENS_SOURCE_SHIFT_DISTORTION = 8,
-  DT_LENS_SOURCE_SHIFT_VIGNETTING = 10,
+   * Bits 0..23 are AXES and belong to the correction model. The five above are lensfun's
+   * own serialized numbering; anything added later -- by upstream, or by us -- goes here
+   * too, and every mask below keeps working without being edited.
+   *
+   * Bits 24..31 are ANSEL'S, and say things about an axis rather than naming one. Growing
+   * downwards from the top is what keeps the two apart: the axis space can extend upwards
+   * for a long time before it meets anything.
+   *
+   * This is the property the old `DT_LENS_MODIFY_ALL = ~0` had and an explicit list of the
+   * five bits threw away. ~0 meant "do not restrict", which stayed true for a flag nobody
+   * had written yet; a list means "these five", which quietly stops covering a sixth. The
+   * mask below says "do not restrict, except for the bits that are not axes at all", which
+   * is what every use of it actually wants. */
+  DT_LENS_SOURCE_SHIFT_TCA        = 24,
+  DT_LENS_SOURCE_SHIFT_DISTORTION = 26,
+  DT_LENS_SOURCE_SHIFT_VIGNETTING = 28,
   DT_LENS_SOURCE_BITS             = 0x3,
+  /* Bits 30..31 are free. 31 is the sign bit of the `int` this is stored in, so a future
+   * field must start at 30 and stop there, or modify_flags goes negative and every shift
+   * of it becomes a question about the implementation. */
 } dt_lens_modify_t;
+
+/** Everything Ansel stores in `modify_flags` that is not an axis. */
+#define DT_LENS_MODIFY_ANSEL_MASK 0xFF000000u
+
+/**
+ * Every correction axis -- the ones that exist and the ones that do not yet.
+ *
+ * A macro rather than another `dt_lens_modify_t` member for a reason that would otherwise
+ * bite silently: 0xFF000000 does not fit in a signed int, so an enumerator of that value
+ * makes the whole enumeration's underlying type implementation-defined, and with it the
+ * type of every constant beside it.
+ */
+#define DT_LENS_MODIFY_ALL_AXES ((int)~DT_LENS_MODIFY_ANSEL_MASK)
+
+/* The boundary, checked rather than described. Each of these is a way the two halves could
+ * come to overlap -- a sixth axis assigned too high, a source field assigned too low, a
+ * field running into the sign bit -- and each would corrupt the other half's meaning in a
+ * way that only shows up as a wrong correction on someone's photograph. */
+_Static_assert((DT_LENS_MODIFY_ALL_AXES & (int)DT_LENS_MODIFY_ANSEL_MASK) == 0,
+               "the axis space and Ansel's own bits must not overlap");
+_Static_assert((DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_VIGNETTING | DT_LENS_MODIFY_DISTORTION
+                | DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE)
+                   == ((DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_VIGNETTING
+                        | DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY
+                        | DT_LENS_MODIFY_SCALE)
+                       & DT_LENS_MODIFY_ALL_AXES),
+               "every correction axis must live in the axis half");
+_Static_assert(((DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_TCA)
+                | (DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_DISTORTION)
+                | (DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_VIGNETTING))
+                   == (int)(((unsigned)DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_TCA
+                             | (unsigned)DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_DISTORTION
+                             | (unsigned)DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_VIGNETTING)
+                            & DT_LENS_MODIFY_ANSEL_MASK),
+               "every source field must live in Ansel's half");
+_Static_assert((DT_LENS_SOURCE_BITS << DT_LENS_SOURCE_SHIFT_VIGNETTING) > 0,
+               "no source field may reach the sign bit of modify_flags");
 
 /** @brief The correction axes, as an index rather than a bit -- so a caller can loop. */
 typedef enum dt_lens_axis_t
@@ -161,10 +199,15 @@ typedef enum dt_lens_axis_t
 /**
  * @brief Where one axis takes its correction from. The same vocabulary for all three.
  *
- * @details OFF is stored as the axis's own enable bit being clear, and the rest in the two
- * source bits above. Splitting it that way is not elegance, it is compatibility: the enable
- * bits are lensfun's and are already in everyone's history, so they keep their meaning and
- * the new information goes beside them.
+ * @details OFF is stored as the axis's own enable bit being clear, and the rest in that
+ * axis's two source bits at the top of the word. Splitting it across the two halves is not
+ * elegance, it is compatibility: the enable bits are lensfun's and are already in
+ * everyone's history, so they keep their meaning and the new information goes somewhere
+ * that was empty in every edit ever saved.
+ *
+ * ZERO THEREFORE MEANS LENSFUN, and that is what makes this shippable without bumping the
+ * params version. The opposite polarity would behave identically until someone opened an
+ * old edit.
  *
  * Not every value is legal on every axis -- only TCA can be MANUAL, because only TCA has
  * coefficients a user can type. _lens_source_applicable() is the one place that knows which,
