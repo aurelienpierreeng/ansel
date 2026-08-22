@@ -1,3 +1,14 @@
+add_cmocka_mock_test(test_embedded_lens_vendors
+                     SOURCES test_embedded_lens_vendors.c
+                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/embedded_lens.cc
+                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/embedded_lens_vendors.cc
+                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/sony.cc
+                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/fuji.cc
+                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/dng.cc
+                             ${CMAKE_SOURCE_DIR}/src/iop/embedded_lens/olympus.cc
+                     LINK_LIBRARIES lib_ansel cmocka
+                     MOCKS )
+
 add_cmocka_mock_test(test_filmicrgb
                      SOURCES test_filmicrgb.c ../util/testimg.c
                      COMPILE_OPTIONS -Wno-error=deprecated-declarations # cmocka >= 2 deprecates check_expected et al.

@@ -12,6 +12,9 @@ gboolean _sony_has_data(const dt_image_correction_data_t *cd)
 
 gboolean _sony_has_distortion(const dt_image_correction_data_t *cd)
 {
+  /* nc bounds the tables below; _sony_has_data owns that check. */
+  if(!_sony_has_data(cd)) return FALSE;
+
   for(int i = 0; i < cd->sony.nc; i++)
     if(cd->sony.distortion[i] != 0) return TRUE;
   return FALSE;
@@ -19,6 +22,9 @@ gboolean _sony_has_distortion(const dt_image_correction_data_t *cd)
 
 gboolean _sony_has_vignetting(const dt_image_correction_data_t *cd)
 {
+  /* nc bounds the tables below; _sony_has_data owns that check. */
+  if(!_sony_has_data(cd)) return FALSE;
+
   for(int i = 0; i < cd->sony.nc; i++)
     if(cd->sony.vignetting[i] != 0) return TRUE;
   return FALSE;
@@ -26,6 +32,9 @@ gboolean _sony_has_vignetting(const dt_image_correction_data_t *cd)
 
 gboolean _sony_has_ca(const dt_image_correction_data_t *cd)
 {
+  /* nc bounds the tables below; _sony_has_data owns that check. */
+  if(!_sony_has_data(cd)) return FALSE;
+
   for(int i = 0; i < cd->sony.nc; i++)
     if(cd->sony.ca_r[i] != 0 || cd->sony.ca_b[i] != 0) return TRUE;
   return FALSE;

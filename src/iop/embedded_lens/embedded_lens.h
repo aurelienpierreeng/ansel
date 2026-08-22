@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DT_IOP_EMBEDDED_LENS_EMBEDDED_LENS_H
+#define DT_IOP_EMBEDDED_LENS_EMBEDDED_LENS_H
 
 #include "common/image.h"
 #include "embedded_lens_vendors.h"
@@ -52,3 +53,5 @@ gboolean dt_embedded_lens_has_ca(const dt_image_t *img);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_IOP_EMBEDDED_LENS_EMBEDDED_LENS_H
