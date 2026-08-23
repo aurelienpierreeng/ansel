@@ -69,6 +69,7 @@ struct dt_colorspaces_color_profile_t;
 
 #include "common/paths.h"
 #include "pixel/format.h"
+#include "lensserious_vendor.h"
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <inttypes.h>
@@ -251,79 +252,11 @@ typedef enum dt_image_usercrop_status_t
 } dt_image_usercrop_status_t;
 
 /* Lens-correction data embedded in a raw file's own metadata (maker notes / DNG
- * OpcodeList), as opposed to a Lensfun database lookup. 5 values, in upstream
- * darktable's image.h order. NONE == 0 so a zero-initialised dt_image_t is safe. */
-// NOSONAR — integral array index for vtable; conversion to enum class would force
-// static_cast<int>() at 7 sites and would break the C99 designated initializer
-// (which is itself rewritten as positional in embedded_lens_vendors.cc per FR-16).
-typedef enum dt_image_correction_type_t // NOSONAR
-{
-  CORRECTION_TYPE_NONE = 0,
-  CORRECTION_TYPE_SONY,
-  CORRECTION_TYPE_FUJI,
-  CORRECTION_TYPE_DNG,
-  CORRECTION_TYPE_OLYMPUS
-} dt_image_correction_type_t;
-
-/* Sony maker-note distortion/CA/vignetting tables. Declared per upstream image.h
- * layout (field names/sizes) so dt_image_correction_data_t's size and aliasing
- * match. */
-typedef struct dt_image_correction_sony_t
-{
-  int nc;
-  short distortion[16];
-  short ca_r[16];
-  short ca_b[16];
-  short vignetting[16];
-} dt_image_correction_sony_t;
-
-/* Fuji maker-note distortion/CA/vignetting tables. Declared per upstream image.h
- * layout. */
-typedef struct dt_image_correction_fuji_t
-{
-  int nc;
-  float cropf;
-  float knots[11];
-  float distortion[11];
-  float ca_r[11];
-  float ca_b[11];
-  float vignetting[11];
-} dt_image_correction_fuji_t;
-
-/* DNG OpcodeList3 payload. WarpRectilinear (opcode id 1): warp_planes==1 encodes
- * distortion only; warp_planes>1 (typically 3) encodes per-channel
- * radial+tangential polynomials, i.e. TCA. VignetteRadial (opcode id 3): a
- * single radial vignetting polynomial. */
-typedef struct dt_image_correction_dng_t
-{
-  gboolean has_warp;        // TRUE if a WarpRectilinear (id 1) entry was parsed
-  gboolean has_vignette;    // TRUE if a VignetteRadial (id 3) entry was parsed
-  uint32_t warp_planes;     // 1..3
-  double warp_coeffs[3][6]; // [plane][kr0,kr1,kr2,kr3,kt0,kt1] radial+tangential polynomial
-  double warp_cx;  // normalized optical centre [0..1]
-  double warp_cy;
-  double vig_coeffs[5];     // k0..k4 radial vignette polynomial
-  double vig_cx;    // normalized optical centre [0..1]
-  double vig_cy;
-} dt_image_correction_dng_t;
-
-/* Olympus maker-note distortion/CA tables. Declared per upstream image.h layout. */
-typedef struct dt_image_correction_olympus_t
-{
-  gboolean has_dist;
-  float dist[4];
-  gboolean has_ca;
-  float ca[6];
-} dt_image_correction_olympus_t;
-
-/* 4 members, in upstream order. */
-typedef union dt_image_correction_data_t
-{
-  dt_image_correction_sony_t sony;
-  dt_image_correction_fuji_t fuji;
-  dt_image_correction_dng_t dng;
-  dt_image_correction_olympus_t olympus;
-} dt_image_correction_data_t;
+ * OpcodeList3), as opposed to a lens-database lookup. The per-vendor layouts and their
+ * decoding belong to LensSerious (lensserious_vendor.h) -- extraction fills the struct
+ * with the values exiv2 decoded, and iop/lens.c resolves it with ls_vendor_resolve()
+ * without knowing which maker wrote it. LS_VENDOR_NONE == 0, so a zero-initialised
+ * dt_image_t safely means "no data". */
 
 typedef enum dt_image_loader_t
 {
@@ -513,8 +446,7 @@ typedef struct dt_image_t
   /* Lens correction embedded in the file's own metadata (DNG OpcodeList3, maker
    * notes), as opposed to a Lensfun database lookup. Transient: re-derived on
    * every decode, never persisted, excluded from _image_cache_self_hash(). */
-  dt_image_correction_type_t exif_correction_type;
-  dt_image_correction_data_t exif_correction_data;
+  ls_vendor_data_t exif_correction;
 
   /* Color labels */
   int color_labels;

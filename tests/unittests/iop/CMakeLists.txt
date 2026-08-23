@@ -1,13 +1,6 @@
-add_cmocka_mock_test(test_embedded_lens_vendors
-                     SOURCES test_embedded_lens_vendors.c
-                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/embedded_lens.c
-                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/embedded_lens_vendors.c
-                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/sony.c
-                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/fuji.c
-                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/dng.c
-                             ${CMAKE_SOURCE_DIR}/src/metadata/embedded_lens/olympus.c
-                     LINK_LIBRARIES lib_ansel cmocka m
-                     MOCKS )
+# The vendor-decoder test moved to LensSerious (tests/vendor.c) with the decoders
+# themselves; the library carries its own tests, and Ansel runs them via the submodule's
+# ctest when it needs to.
 
 add_cmocka_mock_test(test_filmicrgb
                      SOURCES test_filmicrgb.c ../util/testimg.c

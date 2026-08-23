@@ -4,6 +4,11 @@ add_subdirectory(external)
 # nothing here links liblensfun any more. Its importer still reads the upstream XML, but
 # only at build time, to produce data/lenses.db.
 add_subdirectory(external/LensSerious EXCLUDE_FROM_ALL)
+# Its include directory is global, like ${CMAKE_CURRENT_SOURCE_DIR} below, because
+# common/image.h embeds ls_vendor_data_t by value and image.h reaches nearly every target
+# here -- widgets, the imageio backends, the IOPs. Placed BEFORE any add_subdirectory so
+# all of them inherit it. Headers only; the symbols come through lib_ansel's link.
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/LensSerious/include)
 
 add_library(ansel_deps INTERFACE)
 
@@ -155,16 +160,11 @@ FILE(GLOB SOURCE_FILES
   "common/variables.c"
   "metadata/colorlabels.c"
   "metadata/exif.cc"
-  # The per-vendor decoders that turn a maker's own lens profile, as found in the raw file,
-  # into the knot table the correction model consumes. Metadata readers, so they live with
-  # the other metadata readers and inside lib_ansel -- iop/lens.c is one consumer of them,
-  # not their owner.
-  "metadata/embedded_lens/embedded_lens.c"
-  "metadata/embedded_lens/embedded_lens_vendors.c"
-  "metadata/embedded_lens/sony.c"
-  "metadata/embedded_lens/fuji.c"
-  "metadata/embedded_lens/dng.c"
-  "metadata/embedded_lens/olympus.c"
+  # The per-vendor decoders that used to live in metadata/embedded_lens are LensSerious's
+  # now (lensserious_vendor, GPL target): the conversion is correction knowledge, not
+  # metadata knowledge. exif.cc still owns the extraction -- it fills ls_vendor_data_t
+  # with the values exiv2 decoded, and hands the one byte-blob format (DNG OpcodeList3)
+  # to the library's own parser.
   "metadata/gpx.c"
   "metadata/map_locations.c"
   "metadata/metadata.c"
@@ -826,7 +826,14 @@ endif()
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
-target_link_libraries(lib_ansel PRIVATE lensserious)
+# PUBLIC, because common/image.h embeds ls_vendor_data_t by value: every consumer of
+# lib_ansel's headers needs LensSerious's include directory too, and the interface says
+# so instead of each target rediscovering it.
+target_link_libraries(lib_ansel PUBLIC lensserious)
+# The vendor decoders (GPL, separate target -- see LensSerious's CMakeLists). image.h
+# only needs the header, which the include dir above supplies; the symbols are used by
+# metadata/exif.cc and iop/lens.c, both of which land in lib_ansel or link it.
+target_link_libraries(lib_ansel PUBLIC lensserious_vendor)
 # ... and the calibration reader. iop/lens.c resolves a lens through it, so the symbols
 # have to be in lib_ansel: the plugin links the headers only (src/iop/CMakeLists.txt).
 if(TARGET lensserious_db)
