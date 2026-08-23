@@ -1,5 +1,5 @@
-#ifndef DT_IOP_EMBEDDED_LENS_EMBEDDED_LENS_VENDORS_H
-#define DT_IOP_EMBEDDED_LENS_EMBEDDED_LENS_VENDORS_H
+#ifndef DT_METADATA_EMBEDDED_LENS_EMBEDDED_LENS_VENDORS_H
+#define DT_METADATA_EMBEDDED_LENS_EMBEDDED_LENS_VENDORS_H
 
 #include "common/image.h"
 
@@ -32,4 +32,4 @@ typedef struct dt_embedded_lens_vendor_t
 extern const struct dt_embedded_lens_vendor_t dt_embedded_lens_vendors[]; // NOSONAR
 extern const size_t dt_embedded_lens_vendors_count;
 
-#endif // DT_IOP_EMBEDDED_LENS_EMBEDDED_LENS_VENDORS_H
+#endif // DT_METADATA_EMBEDDED_LENS_EMBEDDED_LENS_VENDORS_H

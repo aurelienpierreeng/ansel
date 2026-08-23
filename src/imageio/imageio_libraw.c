@@ -303,7 +303,12 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
   if(libraw_err != LIBRAW_SUCCESS) goto error;
   img->dsc.filters = raw->idata.filters;
 
-  dt_exif_img_check_additional_tags(img, filename);
+  /* Deliberately NOT calling dt_exif_img_check_additional_tags() here, unlike the rawspeed
+   * path. It costs a second full Exiv2 open + parse on EVERY decode -- darkroom entry, each
+   * mipmap regeneration, each export -- and can find nothing on a libraw-decoded file
+   * today: this path serves Canon CR3, while every tag that function reads is a DNG tag
+   * (DefaultUserCrop, opcode lists) or a Sony/Fuji/Olympus maker note. The day a Canon
+   * correction decoder lands, add the call back WITH that decoder. */
 
   // For CR3, we only have Bayer data and a single channel
   img->dsc.channels = 1;

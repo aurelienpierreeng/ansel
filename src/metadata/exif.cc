@@ -809,11 +809,6 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
   return has_opcodes;
 }
 
-gboolean dt_exif_lens_correction_available(void)
-{
-  return Exiv2::testVersion(0, 27, 4) ? TRUE : FALSE;
-}
-
 static void _check_lens_correction_dng(Exiv2::ExifData &exifData, dt_image_t *img)
 {
   Exiv2::ExifData::const_iterator pos = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList3"));

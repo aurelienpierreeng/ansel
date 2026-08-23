@@ -486,9 +486,8 @@ static inline gboolean _lens_flags_move_pixels(const int modify_flags)
  * the time the library is asked there is nothing manual left to know about -- it is an
  * ordinary lens with ordinary terms, and asking for LS_ENABLE_TCA is exactly right.
  *
- * EMBEDDED does not, yet: nothing has prepared anything, because the decoders that read a
- * maker's profile out of a raw file are not in this tree. It is dropped rather than
- * approximated, so the axis visibly does nothing instead of quietly doing the wrong thing.
+ * EMBEDDED counts too, since commit_params resolves the maker's table into the pipe data
+ * the same way; OFF is the only source with nothing behind it.
  */
 static inline gboolean _lens_source_is_library_served(const dt_lens_source_t source)
 {
@@ -514,7 +513,34 @@ static inline int _lens_mask_for_mono(const gboolean monochrome)
   return monochrome ? (DT_LENS_MODIFY_ALL_AXES & ~DT_LENS_MODIFY_TCA) : DT_LENS_MODIFY_ALL_AXES;
 }
 
+
 /* ===================================================================================== */
+
+/**
+ * @brief Does THIS image carry a maker's profile for this axis?
+ *
+ * @details Asked per axis rather than per file: the makers do not all write the same set.
+ * Sony and Fujifilm publish distortion, lateral CA and vignetting; Olympus publishes the
+ * first two and no falloff; a DNG carries whichever opcodes its writer chose to emit.
+ *
+ * Distortion and chromatic aberration answer from the same table -- one radial curve per
+ * channel IS the two of them together, which is why the vendor formats do not separate them
+ * either.
+ */
+static gboolean _lens_image_embeds(dt_iop_module_t *self, const dt_lens_axis_t axis)
+{
+  if(IS_NULL_PTR(self->dev)) return FALSE;
+  const dt_image_t *img = &self->dev->image_storage;
+  if(!dt_embedded_lens_has_data(img)) return FALSE;
+
+  switch(axis)
+  {
+    case DT_LENS_AXIS_DISTORTION:  return dt_embedded_lens_has_distortion(img);
+    case DT_LENS_AXIS_TCA:         return dt_embedded_lens_has_ca(img);
+    case DT_LENS_AXIS_VIGNETTING:  return dt_embedded_lens_has_vignetting(img);
+    default:                       return FALSE;
+  }
+}
 
 typedef struct dt_iop_lensfun_gui_data_t
 {
@@ -528,13 +554,21 @@ typedef struct dt_iop_lensfun_gui_data_t
   GtkMenu *lens_menu;
   /** One source combobox per axis, indexed by dt_lens_axis_t. */
   GtkWidget *axis_source[DT_LENS_AXIS_LAST];
-  GtkWidget *target_geom, *reverse, *tca_override, *tca_r, *tca_b, *scale;
+  /** What each combobox currently OFFERS, rebuilt per image: row -> source, and how many.
+   *  A source with nothing behind it for this image is not in here, because it is not in
+   *  the widget either -- displayed means available. */
+  dt_lens_source_t axis_row[DT_LENS_AXIS_LAST][DT_LENS_SOURCE_LAST];
+  int axis_rows[DT_LENS_AXIS_LAST];
+  GtkWidget *target_geom, *reverse, *tca_r, *tca_b, *scale;
   GtkWidget *find_lens_button;
   GtkWidget *find_camera_button;
-  GtkLabel *message;
-  int corrections_done;
-  gboolean trouble;
 } dt_iop_lensfun_gui_data_t;
+
+/* Defined with the widgets they act on, at the bottom of the GUI section. Declared here
+ * because every setter that changes what the database can match -- the camera, the lens --
+ * has to say so, and those sit above them. */
+static void _lens_rebuild_axis_rows(dt_iop_module_t *self);
+static void _lens_gui_update_sensitivity(dt_iop_module_t *self);
 
 typedef struct dt_iop_lensfun_global_data_t
 {
@@ -741,6 +775,23 @@ typedef struct dt_iop_lensfun_data_t
   /** What the maker's own autoscale says removes the borders this profile leaves. */
   float knots_scale;
 } dt_iop_lensfun_data_t;
+
+/**
+ * @brief Does this pipe data hold ANY resolvable correction source?
+ *
+ * @details One predicate for every entry point, because the duplicated inline test already
+ * drifted once inside a single diff: get_modifier() learned that a maker's embedded profile
+ * needs no database lens and no crop factor, while process(), process_cl(), the three
+ * distort_*() callbacks, modify_roi_in() and the geometry record kept the old
+ * database-only bail-out -- so a body absent from the database but carrying its own profile
+ * (the exact case the embedded path exists for) copied its input and returned before
+ * get_modifier() was ever consulted, and would have desynced masks from pixels the day only
+ * some of the seven were patched.
+ */
+static inline gboolean _lens_data_available(const dt_iop_lensfun_data_t *d)
+{
+  return d->knots_have || (d->ls_have && d->crop > 0.f);
+}
 
 
 const char *name()
@@ -964,19 +1015,14 @@ static int get_modifier(int *mods_done, int w, int h, const dt_iop_lensfun_data_
    * body and lens, and it arrived in the file. Refusing it for want of a database lens is
    * how the embedded path would have been unreachable on exactly the bodies that carry
    * one and are not calibrated upstream. */
-  if(!d->knots_have && (!d->ls_have || d->crop <= 0.f)) return 0;
+  if(!_lens_data_available(d)) return 0;
 
   int mods_todo = d->modify_flags & mods_filter;
 
-  /* This function builds a LENSFUN correction, so an axis pointed at another source has no
-   * business here -- it is served elsewhere or not at all. Filtering by source at the one
-   * place that decides what to ask the database for means the rest of the module never has
-   * to re-derive it, and an axis can change source without a single pixel path noticing.
-   *
-   * Only OFF and LENSFUN are reachable today: EMBEDDED needs the decoders that are still
-   * on their way in, and the GUI will not offer a source whose data does not exist. The
-   * filtering is written now anyway, because the alternative is a module that silently
-   * corrects with the database the moment a source it does not implement is selected. */
+  /* Drop any axis whose source this build cannot serve, so an unknown source from some
+   * future Ansel visibly does nothing rather than silently correcting from the database.
+   * Filtering here, at the one place that decides what to ask a resolver for, means the
+   * rest of the module never re-derives it. */
   for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
   {
     const dt_lens_source_t source = _lens_source_decode(d->modify_flags, d->tca_override, axis);
@@ -1012,8 +1058,75 @@ static int get_modifier(int *mods_done, int w, int h, const dt_iop_lensfun_data_
   {
     /* The maker measured the lens as it shipped, so there is no projection change to make
      * and the scale to use is the one their own profile asks for. */
-    got = ls_modifier_init_knots(mod, &d->ls_knots, w, h, d->knots_scale,
-                                 want & ~LS_ENABLE_GEOMETRY, reverse);
+    /* The maker's own autoscale AND the user's slider, composed. The profile ships the
+     * factor that just clears the borders it leaves; the slider is what the user wants on
+     * top of that, and passing only the first left the slider inert in this mode -- a
+     * control that moves and changes nothing. */
+    const float knots_scale = d->knots_scale * ((d->scale > 0.f) ? d->scale : 1.f);
+
+    /* Ask the table for chromatic aberration only if that axis actually chose it. The
+     * maker's curve carries distortion and CA together, so asking for both when CA was set
+     * to the database or to typed values would apply the maker's aberration on top of the
+     * other one -- over-correcting the fringing by exactly the maker's amount, with the
+     * panel showing a source the pixels never used. Asked for distortion alone, the table
+     * hands back pure geometry and the chosen TCA model runs after it. */
+    int knot_want = want & ~LS_ENABLE_GEOMETRY;
+    if(_lens_source_decode(d->modify_flags, d->tca_override, DT_LENS_AXIS_TCA)
+       != DT_LENS_SOURCE_EMBEDDED)
+      knot_want &= ~LS_ENABLE_TCA;
+
+    got = ls_modifier_init_knots(mod, &d->ls_knots, w, h, knots_scale, knot_want, reverse);
+
+    /* TCA from somewhere else rides on the table's geometry. ls_modifier_init_knots() only
+     * fills the knot tables, so the polynomial the database resolved -- or the linear one
+     * _lens_build_data() synthesised from the user's two numbers -- has to be put in.
+     *
+     * ONLY THIS DIRECTION. The reverse -- a database distortion wearing the maker's
+     * aberration -- is not implemented and is not an oversight:
+     *
+     *   - physically it is two calibrations of the same lens applied to each other. The
+     *     maker measured their aberration as a departure from THEIR geometry, so it is only
+     *     the right departure when that geometry is the one in force;
+     *   - mechanically the table has no separate aberration to lift out. Distortion and CA
+     *     are one per-channel curve; green is the geometry and the other two are defined
+     *     relative to it, so "the CA alone" would be the ratio knot_c[c]/knot_c[1] resampled
+     *     onto the database's radius axis -- which is a different normalization again (half
+     *     short side against half diagonal), needing the radius conversion factor that
+     *     ls_modifier_set_projection() documents.
+     *
+     * If it is ever wanted: add LS_EVAL_TCA_KNOTS carrying those ratios plus that factor,
+     * and expect to answer the physical objection first. _lens_rebuild_axis_row() withdraws
+     * the row meanwhile, so the combination cannot be selected and then quietly ignored. */
+    if((want & LS_ENABLE_TCA) && !(knot_want & LS_ENABLE_TCA) && d->ls_have)
+    {
+      ls_modifier_t tca_mod;
+      if(ls_modifier_init(&tca_mod, &d->ls_lens, d->crop, w, h, d->focal, d->aperture,
+                          d->distance, 1.f, (int)d->target_geom, LS_ENABLE_TCA, reverse)
+         & LS_ENABLE_TCA)
+      {
+        mod->tca = tca_mod.tca;
+        mod->enabled |= LS_ENABLE_TCA;
+        got |= LS_ENABLE_TCA;
+      }
+    }
+
+    /* The projection, put back on top of the maker's table.
+     *
+     * The table cannot supply it -- it describes the lens in the projection it shipped
+     * with -- but the database entry matched alongside knows the lens's type, and that is
+     * all the stage needs besides a focal. Without this, asking for a fisheye to be
+     * rectilinear did nothing whenever distortion came from the file, which is the one
+     * case where the two sources visibly disagreed about what the module could do.
+     *
+     * The crop here is the SHOOTING camera's, unlike the database path's: this modifier
+     * normalizes radius against the half diagonal of the frame in hand, so that is the
+     * sensor its projection focal has to be expressed against. */
+    if((want & LS_ENABLE_GEOMETRY) && d->ls_have && d->crop > 0.f && d->focal > 0.f)
+    {
+      if(ls_modifier_set_projection(mod, (int)d->ls_lens.type, (int)d->target_geom,
+                                    d->focal, d->crop))
+        got |= LS_ENABLE_GEOMETRY;
+    }
   }
   else
     got = ls_modifier_init(mod, &d->ls_lens, d->crop, w, h, d->focal, d->aperture,
@@ -1045,14 +1158,33 @@ static int get_modifier(int *mods_done, int w, int h, const dt_iop_lensfun_data_
     const dt_lens_source_t vig_source
         = _lens_source_decode(d->modify_flags, d->tca_override, DT_LENS_AXIS_VIGNETTING);
     const gboolean vig_embedded = (vig_source == DT_LENS_SOURCE_EMBEDDED) && d->knots_have;
+    const gboolean vig_wanted = (mods_todo & DT_LENS_MODIFY_VIGNETTING) != 0;
 
-    if(vig_embedded == geom_embedded)
-      *vig_mod = *mod;   /* same resolver: one modifier answers for both */
+    if(!vig_wanted || vig_embedded == geom_embedded)
+    {
+      /* Same resolver, or nothing asked for: the main modifier's own state answers. When
+       * the axis is off, `want` never carried vignetting, so this copy carries none either
+       * -- resolving one here anyway was the bug: the GPU path grafts whatever this block
+       * holds into its single eval block and the fused kernels apply what is enabled there,
+       * so a falloff nobody asked for came back through the graft with the axis OFF. */
+      *vig_mod = *mod;
+    }
     else if(vig_embedded)
       ls_modifier_init_knots(vig_mod, &d->ls_knots, w, h, 1.f, LS_ENABLE_VIGNETTING, reverse);
     else
       ls_modifier_init(vig_mod, &d->ls_lens, d->crop, w, h, d->focal, d->aperture,
                        d->distance, 1.f, (int)d->target_geom, LS_ENABLE_VIGNETTING, reverse);
+
+    /* The truth about vignetting now lives in vig_mod, whichever resolver produced it, so
+     * the reported axis must be read from THERE. Reading it from the main modifier is how
+     * the flagship hybrid silently lost its falloff: an Olympus table has no vignetting
+     * knots, so the main (knots) resolver reported the axis not-done, the database
+     * vignetting sat correctly resolved in vig_mod -- and every caller gates the falloff
+     * on the done bit, so it was never applied. */
+    if(vig_wanted && (vig_mod->enabled & LS_ENABLE_VIGNETTING))
+      done |= DT_LENS_MODIFY_VIGNETTING;
+    else
+      done &= ~DT_LENS_MODIFY_VIGNETTING;
   }
 
   if(mods_done) *mods_done = done;
@@ -1096,7 +1228,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const int mask_display = pipe->mask_display;
 
 
-  if(!d->ls_have || d->crop <= 0.0f)
+  if(!_lens_data_available(d))
   {
     dt_iop_image_copy_by_size((float*)ovoid, (float*)ivoid, roi_out->width, roi_out->height, ch);
     return 0;
@@ -1376,7 +1508,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
    * initialisation. Resolved once below, after get_modifier() has settled modflags. */
   const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
 
-  if(!d->ls_have || d->crop <= 0.0f)
+  if(!_lens_data_available(d))
   {
     err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
     if(err != CL_SUCCESS) goto error;
@@ -1524,7 +1656,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                       float *const __restrict points, size_t points_count)
 {
   dt_iop_lensfun_data_t *d = (dt_iop_lensfun_data_t *)piece->data;
-  if(!d->ls_have || d->crop <= 0.0f) return 0;
+  if(!_lens_data_available(d)) return 0;
 
   const float orig_w = piece->buf_in.width, orig_h = piece->buf_in.height;
   int modflags;
@@ -1557,7 +1689,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 {
   dt_iop_lensfun_data_t *d = (dt_iop_lensfun_data_t *)piece->data;
 
-  if(!d->ls_have || d->crop <= 0.0f) return 0;
+  if(!_lens_data_available(d)) return 0;
 
   const int used_lf_mask = _lens_mask_for_mono(dt_image_is_monochrome(&self->dev->image_storage));
 
@@ -1593,7 +1725,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   (void)pipe;
   const dt_iop_lensfun_data_t *const d = (dt_iop_lensfun_data_t *)piece->data;
 
-  if(!d->ls_have || d->crop <= 0.0f)
+  if(!_lens_data_available(d))
   {
     dt_iop_image_copy_by_size(out, in, roi_out->width, roi_out->height, 1);
     return;
@@ -1666,7 +1798,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   *roi_in = *roi_out;
   // inverse transform with given params
 
-  if(!d->ls_have || d->crop <= 0.0f) return;
+  if(!_lens_data_available(d)) return;
 
   const float orig_w = roi_in->scale * piece->buf_in.width;
   const float orig_h = roi_in->scale * piece->buf_in.height;
@@ -1980,7 +2112,7 @@ static int _lens_geometry_apply(const void *data, const dt_geometry_record_t *co
   const dt_iop_lens_geometry_t *const g = (const dt_iop_lens_geometry_t *)data;
   const dt_iop_lensfun_data_t *const d = &g->data;
 
-  if(!d->ls_have || d->crop <= 0.0f) return 0;
+  if(!_lens_data_available(d)) return 0;
   if(record->in.width <= 0 || record->in.height <= 0) return 0;
 
   int modflags = 0;
@@ -2093,6 +2225,24 @@ void reload_defaults(dt_iop_module_t *module)
   d->scale = 1.0;
   d->modify_flags = DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_VIGNETTING | DT_LENS_MODIFY_DISTORTION |
                     DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE;
+
+  /* Prefer what the camera measured about its own lens, per axis, whenever the file carries
+   * it. The maker had the actual body and the actual lens on a bench; the database has a
+   * community measurement of that model. Where both exist the maker's is the better default,
+   * and where only one exists this picks the one that works.
+   *
+   * Per axis, because the makers do not all write the same set: an Olympus body publishes
+   * distortion and lateral CA and no falloff, so that axis correctly keeps the database.
+   *
+   * Scale stays 1: the embedded resolver applies the profile's own autoscale, which already
+   * clears the borders it leaves. Anything else here would be a second, arbitrary zoom on
+   * top of a factor the maker chose. */
+  for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
+  {
+    if(!_lens_source_applicable(axis, DT_LENS_SOURCE_EMBEDDED)) continue;
+    if(_lens_image_embeds(module, axis))
+      _lens_source_set(d, axis, DT_LENS_SOURCE_EMBEDDED);
+  }
   // if we did not find focus_distance in EXIF, lets default to 1000
   d->distance = img->exif_focus_distance == 0.0f ? 1000.0f : img->exif_focus_distance;
   d->target_geom = DT_LENS_RECTILINEAR;
@@ -2169,7 +2319,6 @@ void reload_defaults(dt_iop_module_t *module)
     module->workflow_enabled = dt_image_needs_rawprepare(img);
   }
 
-  // The corrections-done message reset lives in gui_update() now (GUI thread, live widget);
   // reload_defaults() stays params-only and never touches gui_data.
 }
 
@@ -2353,6 +2502,14 @@ static void camera_menu_select(GtkMenuItem *menuitem, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   camera_set(self, (long long)GPOINTER_TO_INT(
                        g_object_get_data(G_OBJECT(menuitem), "lens-camera-id")));
+
+  /* The camera decides the mount and the crop factor, and the database is searched for a
+   * lens ON that mount -- so a lens that matched the old camera may not match the new one,
+   * and the other way round. Every other caller of camera_set() runs a lens_set() straight
+   * afterwards and gets the rebuild from there; this one does not, so it asks itself. */
+  _lens_rebuild_axis_rows(self);
+  _lens_gui_update_sensitivity(self);
+
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
   p->modified = 1;
@@ -2574,42 +2731,21 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
                                             l_model, sizeof(l_model)) > 0);
   if(have) ls_db_lens_range(db, lens_id, &min_focal, &max_focal, &min_ap, &max_ap);
 
+  /* Which sources exist is a property of the lens, so it is re-decided HERE and not only
+   * when the image is loaded: picking a different lens from the menu is exactly the moment
+   * a database profile appears or disappears. Without this the panel kept whatever rows the
+   * image arrived with, and choosing a lens the database does know left every axis still
+   * offering nothing. */
   if(!have)
   {
-    /* "The database has no lens" is no longer a reason to disable the axis pickers: the
-     * file may carry the maker's own profile, which needs no database entry at all. The
-     * pickers stay live and _lens_gui_update_sensitivity() closes the rows that have
-     * nothing behind them -- which, with no database lens, is the database row. */
-    const gboolean embeds = dt_embedded_lens_has_data(&self->dev->image_storage);
-    for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
-      gtk_widget_set_sensitive(GTK_WIDGET(g->axis_source[axis]), embeds);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->target_geom), FALSE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->scale), FALSE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->reverse), FALSE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->tca_r), FALSE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->tca_b), FALSE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->message), FALSE);
-
-    /* Not in trouble if the file brought its own correction: nothing is missing then. */
-    g->trouble = !embeds;
+    /* Nothing is disabled on this path. Availability is expressed by which ROWS a picker
+     * holds, never by whether the picker is sensitive -- greying the whole widget withdrew
+     * the two sources that need no database entry at all, the file's own embedded profile
+     * and hand-typed TCA coefficients, which is precisely what a lens the database has
+     * never heard of is left with. */
+    _lens_rebuild_axis_rows(self);
+    _lens_gui_update_sensitivity(self);
     return;
-  }
-  else
-  {
-    // no longer in trouble
-    /* Whole-module availability, for now. Once an axis can be fed from the file's own
-     * embedded profile, "the database has no lens" stops being a reason to disable the
-     * axis pickers -- it will be a reason to disable one ROW of each. */
-    for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
-      gtk_widget_set_sensitive(GTK_WIDGET(g->axis_source[axis]), TRUE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->target_geom), TRUE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->scale), TRUE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->reverse), TRUE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->tca_r), TRUE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->tca_b), TRUE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->message), TRUE);
-
-    g->trouble = FALSE;
   }
 
   maker = l_maker[0] ? l_maker : NULL;
@@ -2740,6 +2876,11 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
   g->cbe[2] = w;
 
   gtk_widget_show_all(g->lens_param_box);
+
+  /* Last, because the rows depend on p->lens, which this function has just rewritten to the
+   * database's own spelling. */
+  _lens_rebuild_axis_rows(self);
+  _lens_gui_update_sensitivity(self);
 }
 
 static void lens_menu_select(GtkMenuItem *menuitem, gpointer user_data)
@@ -2925,7 +3066,8 @@ static void target_geometry_changed(GtkWidget *widget, gpointer user_data)
  * combination nobody selected.
  */
 /* Defined further down, next to the data they work on. */
-static int _lens_source_row(const dt_lens_axis_t axis, const dt_lens_source_t source);
+static int _lens_source_row(const dt_iop_lensfun_gui_data_t *g, const dt_lens_axis_t axis,
+                            const dt_lens_source_t source);
 static int _lens_corrections_available(dt_iop_module_t *self,
                                        const dt_iop_lensfun_params_t *const p);
 
@@ -2945,30 +3087,23 @@ static int _lens_database_offers(dt_iop_module_t *self, const dt_iop_lensfun_par
   return _lens_corrections_available(self, &probe);
 }
 
-/**
- * @brief Does THIS image carry a maker's profile for this axis?
- *
- * @details Asked per axis rather than per file: the makers do not all write the same set.
- * Sony and Fujifilm publish distortion, lateral CA and vignetting; Olympus publishes the
- * first two and no falloff; a DNG carries whichever opcodes its writer chose to emit.
- *
- * Distortion and chromatic aberration answer from the same table -- one radial curve per
- * channel IS the two of them together, which is why the vendor formats do not separate them
- * either.
- */
-static gboolean _lens_image_embeds(dt_iop_module_t *self, const dt_lens_axis_t axis)
-{
-  if(IS_NULL_PTR(self->dev)) return FALSE;
-  const dt_image_t *img = &self->dev->image_storage;
-  if(!dt_embedded_lens_has_data(img)) return FALSE;
 
-  switch(axis)
-  {
-    case DT_LENS_AXIS_DISTORTION:  return dt_embedded_lens_has_distortion(img);
-    case DT_LENS_AXIS_TCA:         return dt_embedded_lens_has_ca(img);
-    case DT_LENS_AXIS_VIGNETTING:  return dt_embedded_lens_has_vignetting(img);
-    default:                       return FALSE;
-  }
+/**
+ * @brief The source the panel is SHOWING for this axis.
+ *
+ * @details The stored one when this image can supply it, and OFF when it cannot.
+ * _lens_rebuild_axis_row() drops the rows an image has nothing behind and falls back to OFF
+ * when the stored source is one of them -- deliberately WITHOUT rewriting the params, so
+ * merely opening an image never edits its history. The dependent controls therefore have to
+ * follow the widget rather than the params: reading p directly is how the scale slider, or
+ * the manual coefficients, could sit under a picker reading "no correction".
+ */
+static dt_lens_source_t _lens_source_displayed(const dt_iop_lensfun_gui_data_t *g,
+                                               const dt_iop_lensfun_params_t *p,
+                                               const dt_lens_axis_t axis)
+{
+  const dt_lens_source_t source = _lens_source_get(p, axis);
+  return (_lens_source_row(g, axis, source) >= 0) ? source : DT_LENS_SOURCE_OFF;
 }
 
 static void _lens_gui_update_sensitivity(dt_iop_module_t *self)
@@ -2977,53 +3112,43 @@ static void _lens_gui_update_sensitivity(dt_iop_module_t *self)
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g)) return;
 
-  const dt_lens_source_t dist = _lens_source_get(p, DT_LENS_AXIS_DISTORTION);
-  const dt_lens_source_t tca = _lens_source_get(p, DT_LENS_AXIS_TCA);
+  const dt_lens_source_t dist = _lens_source_displayed(g, p, DT_LENS_AXIS_DISTORTION);
+  const dt_lens_source_t tca = _lens_source_displayed(g, p, DT_LENS_AXIS_TCA);
 
   /* Projection and scaling are the other two thirds of the distortion pack, so they appear
    * exactly when that pack runs. Leaving the scale slider visible while it does nothing was
    * the same defect as the hidden geometry combobox that kept applying -- a control and its
    * effect disagreeing -- just the other way round. */
-  const gboolean pack_runs = (dist == DT_LENS_SOURCE_LENSFUN);
-  gtk_widget_set_visible(g->target_geom, pack_runs);
-  gtk_widget_set_visible(g->scale, pack_runs);
+  /* Scaling belongs to the pack, so it shows whenever the pack runs -- from either source.
+   * Projection does not: changing the lens's projection is a property of the database's
+   * model, and a maker's profile describes the lens in the projection it shipped with. */
+  gtk_widget_set_visible(g->scale, dist != DT_LENS_SOURCE_OFF);
+  gtk_widget_set_visible(g->target_geom, dist == DT_LENS_SOURCE_LENSFUN);
 
   gtk_widget_set_visible(g->tca_r, tca == DT_LENS_SOURCE_MANUAL);
   gtk_widget_set_visible(g->tca_b, tca == DT_LENS_SOURCE_MANUAL);
 
-  /* The old standalone checkbox: the combobox says this now, and two controls for one
-   * state is how they end up disagreeing. */
-  gtk_widget_set_visible(g->tca_override, FALSE);
+  /* Soft deprecation of the distort/correct mode: shown only to an edit that already uses
+   * it, so nobody loses a setting they made, and offered to nobody else. The module is
+   * called lens correction; deliberately ADDING a lens's flaws is not something anyone has
+   * been found to want, and the row cost more panel than the feature was worth. */
+  gtk_widget_set_visible(g->reverse, p->inverse != 0);
 
-  /* Offer only the sources that have something to offer for THIS image, so a row that
-   * would silently do nothing is visibly unavailable instead. Greying rather than removing:
-   * "this lens has no vignetting calibration" is information, and it used to be discoverable
-   * only after the fact, from the corrections-done label. */
-  const int offers = _lens_database_offers(self, p);
-  for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
-  {
-    const int lensfun_row = _lens_source_row(axis, DT_LENS_SOURCE_LENSFUN);
-    if(lensfun_row >= 0)
-      dt_bauhaus_combobox_entry_set_sensitive(g->axis_source[axis], lensfun_row,
-                                              _lens_flags_have_axis(offers, axis));
-
-    /* Per axis, because a maker's profile is not all-or-nothing: an Olympus body writes
-     * distortion and lateral CA and no falloff, so its vignetting row must stay closed
-     * while the other two open. */
-    const int embedded_row = _lens_source_row(axis, DT_LENS_SOURCE_EMBEDDED);
-    if(embedded_row >= 0)
-      dt_bauhaus_combobox_entry_set_sensitive(g->axis_source[axis], embedded_row,
-                                              _lens_image_embeds(self, axis));
-  }
+  /* Which sources this image can actually offer is decided in _lens_rebuild_axis_rows(),
+   * which runs from gui_update() and from every setter that changes what the database can
+   * match: a source with nothing behind it gets no row at all. Greying was not enough --
+   * bauhaus honours entry sensitivity when the list is scrolled but not when a row is
+   * clicked, so a greyed row was still selectable and still did nothing. Nor is greying the
+   * whole picker: OFF and manual TCA are available to every image, database or not. */
 }
 
 /* What each source is called in the panel. Indexed by dt_lens_source_t, so the name and
  * the value cannot drift apart the way two parallel lists would. */
 static const char *const _lens_source_names[DT_LENS_SOURCE_LAST] = {
-  [DT_LENS_SOURCE_OFF]      = N_("off"),
-  [DT_LENS_SOURCE_LENSFUN]  = N_("lens database"),
-  [DT_LENS_SOURCE_EMBEDDED] = N_("embedded in the file"),
-  [DT_LENS_SOURCE_MANUAL]   = N_("manual"),
+  [DT_LENS_SOURCE_OFF]      = N_("no correction"),
+  [DT_LENS_SOURCE_LENSFUN]  = N_("database correction"),
+  [DT_LENS_SOURCE_EMBEDDED] = N_("embedded correction"),
+  [DT_LENS_SOURCE_MANUAL]   = N_("manual correction"),
 };
 
 /* Which sources one axis's combobox offers, in the order they appear. OFF is always first
@@ -3038,16 +3163,113 @@ static const dt_lens_source_t _lens_axis_sources[DT_LENS_AXIS_LAST][DT_LENS_SOUR
                                 DT_LENS_SOURCE_EMBEDDED, DT_LENS_SOURCE_LAST },
 };
 
-/** @brief The combobox row a source sits on, or -1 if this axis does not offer it. */
-static int _lens_source_row(const dt_lens_axis_t axis, const dt_lens_source_t source)
+/**
+ * @brief The row a source sits on in THIS image's combobox, or -1 if it is not offered.
+ *
+ * @details Against what the widget currently holds, not against the catalogue: the rows are
+ * rebuilt per image, so a source the file cannot supply has no row at all and its index
+ * would otherwise point at whatever moved up into its place.
+ */
+static int _lens_source_row(const dt_iop_lensfun_gui_data_t *g, const dt_lens_axis_t axis,
+                            const dt_lens_source_t source)
 {
-  for(int i = 0; i < DT_LENS_SOURCE_LAST; i++)
-  {
-    if(_lens_axis_sources[axis][i] == DT_LENS_SOURCE_LAST) break;
-    if(_lens_axis_sources[axis][i] == source) return i;
-  }
+  for(int i = 0; i < g->axis_rows[axis]; i++)
+    if(g->axis_row[axis][i] == source) return i;
   return -1;
 }
+
+/**
+ * @brief Rebuild each axis's combobox to hold exactly the sources THIS image can supply.
+ *
+ * @details Displayed means available. A source with nothing behind it gets no row, rather
+ * than a greyed one: bauhaus honours entry sensitivity when the list is scrolled but not
+ * when a row is clicked, so a greyed row stayed selectable and then silently did nothing --
+ * which is the same class of bug as the fallback that used to be silent.
+ *
+ * Rebuilt per image because availability is a property of the image: whether the database
+ * matched a lens, and whether the file carries a maker's profile for that axis. It does NOT
+ * depend on the current params, so this runs from gui_update() and not from the change
+ * callback, which would otherwise rebuild the widget it is being called by.
+ *
+ * OFF is always offered -- refusing to correct is always possible -- and it is always first,
+ * so the list has a fixed anchor whatever else appears.
+ */
+static void _lens_rebuild_axis_row(dt_iop_module_t *self, const dt_lens_axis_t axis)
+{
+  const dt_iop_lensfun_params_t *p = (const dt_iop_lensfun_params_t *)self->params;
+  dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
+  if(IS_NULL_PTR(g)) return;
+
+  const int offers = _lens_database_offers(self, p);
+
+  /* A monochrome sensor has no colour channels to shift against each other, so lateral CA
+   * is not a correction that exists for this image at all -- _lens_mask_for_mono() already
+   * withdraws it from every pipe. Offering it here would be a row that renders nothing,
+   * which is the one thing the per-image row list exists to prevent. */
+  const gboolean mono = !IS_NULL_PTR(self->dev)
+                        && dt_image_is_monochrome(&self->dev->image_storage);
+
+  {
+    GtkWidget *w = g->axis_source[axis];
+    int n = 0;
+
+    /* Filling a combobox is a programmatic update, and _lens_axis_source_changed() must not
+     * mistake it for the user picking a row: it commits to history. Two callers are already
+     * outside gui_update()'s own freeze -- the distortion handler rebuilding the TCA row,
+     * and lens_set() rebuilding everything when the lens changes -- so the freeze belongs
+     * here, where the widget is actually written, rather than at each call site. */
+    dt_gui_widget_freeze();
+
+    dt_bauhaus_combobox_clear(w);
+    for(int i = 0; i < DT_LENS_SOURCE_LAST; i++)
+    {
+      const dt_lens_source_t src = _lens_axis_sources[axis][i];
+      if(src == DT_LENS_SOURCE_LAST) break;
+
+      gboolean have;
+      switch(src)
+      {
+        case DT_LENS_SOURCE_OFF:      have = TRUE; break;
+        case DT_LENS_SOURCE_LENSFUN:  have = _lens_flags_have_axis(offers, axis); break;
+        case DT_LENS_SOURCE_EMBEDDED:
+          have = _lens_image_embeds(self, axis);
+          /* A maker's aberration is measured against their OWN geometry, so it is offered
+           * only when the geometry is theirs too. Stacking it on a database distortion
+           * would be two calibrations of one lens applied to each other -- and the
+           * evaluator cannot express it either: the table's CA lives in the same curve as
+           * its distortion. The other direction is fine and supported: the table's geometry
+           * happily wears a database or hand-typed aberration. */
+          if(axis == DT_LENS_AXIS_TCA
+             && !_lens_source_is(p, DT_LENS_AXIS_DISTORTION, DT_LENS_SOURCE_EMBEDDED))
+            have = FALSE;
+          break;
+        case DT_LENS_SOURCE_MANUAL:   have = (axis == DT_LENS_AXIS_TCA); break;
+        default:                      have = FALSE; break;
+      }
+      if(mono && axis == DT_LENS_AXIS_TCA && src != DT_LENS_SOURCE_OFF) have = FALSE;
+      if(!have) continue;
+
+      dt_bauhaus_combobox_add(w, _(_lens_source_names[src]));
+      g->axis_row[axis][n++] = src;
+    }
+    g->axis_rows[axis] = n;
+
+    /* Show what the params say, or fall back to OFF -- which is row 0 and always there.
+     * A stored source this image cannot supply has no row to select, and the correction
+     * would not have run either; commit_params has already said so. */
+    int row = _lens_source_row(g, axis, _lens_source_get(p, axis));
+    if(row < 0) row = 0;
+    dt_bauhaus_combobox_set(w, row);
+  }
+}
+
+/** @brief Every axis, for a fresh image. */
+static void _lens_rebuild_axis_rows(dt_iop_module_t *self)
+{
+  for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
+    _lens_rebuild_axis_row(self, axis);
+}
+
 
 /** @brief Which axis a combobox belongs to, by widget identity. */
 static dt_lens_axis_t _lens_axis_of_widget(const dt_iop_lensfun_gui_data_t *g,
@@ -3068,14 +3290,21 @@ static void _lens_axis_source_changed(GtkWidget *widget, gpointer user_data)
   const dt_lens_axis_t axis = _lens_axis_of_widget(g, widget);
   if(axis == DT_LENS_AXIS_LAST) return;
 
+  /* Against what the widget currently holds, not the catalogue: rows the image cannot
+   * supply are absent, so a catalogue index would name the wrong source. */
   const int row = dt_bauhaus_combobox_get(widget);
-  if(row < 0 || row >= DT_LENS_SOURCE_LAST) return;
+  if(row < 0 || row >= g->axis_rows[axis]) return;
 
-  const dt_lens_source_t source = _lens_axis_sources[axis][row];
-  if(source == DT_LENS_SOURCE_LAST) return;
+  const dt_lens_source_t source = g->axis_row[axis][row];
 
   _lens_source_set(p, axis, source);
   p->modified = 1;
+
+  /* Distortion decides whether the maker's aberration may be offered, so its rows move when
+   * distortion does. Rebuilding a DIFFERENT axis's widget from this handler is safe;
+   * rebuilding the one being handled would not be. */
+  if(axis == DT_LENS_AXIS_DISTORTION) _lens_rebuild_axis_row(self, DT_LENS_AXIS_TCA);
+
   _lens_gui_update_sensitivity(self);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
@@ -3096,13 +3325,8 @@ static GtkWidget *_lens_add_axis_combobox(dt_iop_module_t *self, dt_iop_lensfun_
   gtk_widget_set_tooltip_text(w, _(tooltip));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), w, TRUE, TRUE, 0);
 
-  for(int row = 0; row < DT_LENS_SOURCE_LAST; row++)
-  {
-    const dt_lens_source_t source = _lens_axis_sources[axis][row];
-    if(source == DT_LENS_SOURCE_LAST) break;
-    dt_bauhaus_combobox_add(w, _(_lens_source_names[source]));
-  }
-  dt_bauhaus_combobox_set(w, _lens_source_row(axis, DT_LENS_SOURCE_LENSFUN));
+  /* Left empty: the rows depend on the image, and gui_update() fills them. */
+  g->axis_rows[axis] = 0;
   g_signal_connect(G_OBJECT(w), "value-changed",
                    G_CALLBACK(_lens_axis_source_changed), (gpointer)self);
   return w;
@@ -3111,17 +3335,12 @@ static GtkWidget *_lens_add_axis_combobox(dt_iop_module_t *self, dt_iop_lensfun_
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
-  dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
-  const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
-  gtk_widget_set_visible(g->tca_override, !raw_monochrome);
-  // update gui to show/hide tca sliders if tca_override was changed
-  if(IS_NULL_PTR(w) || w == g->tca_override)
-  {
-    // show tca sliders only iff tca_overwrite is set
-    gtk_widget_set_visible(g->tca_r, p->tca_override && !raw_monochrome);
-    gtk_widget_set_visible(g->tca_b, p->tca_override && !raw_monochrome);
-  }
 
+  /* Which controls are visible is decided in ONE place, _lens_gui_update_sensitivity(), out
+   * of the sources the pickers are actually showing. It used to be decided here as well,
+   * out of p->tca_override and the monochrome flag, and the two could disagree: this runs
+   * LAST out of gui_update() and so had the final word, putting the manual coefficient
+   * sliders back on screen for an image whose TCA picker was not offering manual at all. */
   if(w)
   {
     // user did modify something with some widget
@@ -3133,29 +3352,22 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 static float get_autoscale(dt_iop_module_t *self, dt_iop_lensfun_params_t *p)
 {
   float scale = 1.0f;
-  if(p->lens[0] == '\0') return scale;
 
-  ls_camera_t cam;
-  const gboolean have_cam = p->camera[0] && _ls_find_camera(NULL, p->camera, &cam);
-  const long long lens_id = _ls_find_lens(have_cam ? cam.mount_id : 0,
-                                          have_cam ? cam.crop_factor : 0.f, p->lens);
-  ls_db_t *db = _ls_db();
-  if(lens_id < 0 || IS_NULL_PTR(db)) return scale;
-
-  /* A throwaway correction state, resolved at scale 1 so the search measures the
-   * correction itself rather than a scaling already applied to it. */
+  /* Built by THE constructor, not by hand. The hand-rolled version resolved only the
+   * database lens, so with distortion taking the maker's embedded profile this measured a
+   * correction the pipe was not applying -- and the result was then multiplied ON TOP of
+   * the profile's own autoscale by get_modifier(), giving a doubled zoom. It also returned
+   * 1.0 outright when no database lens matched, which is precisely the body an embedded
+   * profile exists to serve. */
   dt_iop_lensfun_data_t d;
   memset(&d, 0, sizeof(d));
-  if(ls_db_lens_by_id(db, lens_id, &d.ls_lens) != 1) return scale;
-  d.ls_have = TRUE;
-  d.modify_flags = p->modify_flags;
-  d.inverse = p->inverse;
+  _lens_build_data(self, p, &d);
+  if(!_lens_data_available(&d)) return scale;
+
+  /* Measure the correction itself, not a scaling already applied to it. For the embedded
+   * resolver this leaves the profile's own autoscale in place and asks what is still needed
+   * on top of it -- which is what get_modifier() then composes. */
   d.scale = 1.0f;
-  d.crop = p->crop;
-  d.focal = p->focal;
-  d.aperture = p->aperture;
-  d.distance = p->distance;
-  d.target_geom = p->target_geom;
 
   const dt_image_t *img = &(self->dev->image_storage);
   // FIXME: get those from rawprepare IOP somehow !!!
@@ -3203,7 +3415,7 @@ static int _lens_corrections_available(dt_iop_module_t *self,
   dt_iop_lensfun_data_t d;
   memset(&d, 0, sizeof(d));
   _lens_build_data(self, p, &d);
-  if(!d.ls_have || d.crop <= 0.f) return 0;
+  if(!_lens_data_available(&d)) return 0;
 
   /* The frame the correction is expressed over. Only its aspect matters to which axes
    * resolve, so the full image is a fine stand-in when the pipe has not published one. */
@@ -3224,41 +3436,6 @@ static int _lens_corrections_available(dt_iop_module_t *self,
   return modflags & LENSFUN_MODFLAG_MASK;
 }
 
-static void corrections_done(gpointer instance, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
-  if(dt_gui_widgets_suppressed()) return;
-
-  const int corrections_done
-      = _lens_corrections_available(self, (const dt_iop_lensfun_params_t *)self->params);
-  g->corrections_done = corrections_done;
-
-  /* Named one by one rather than looked up as a combination. There used to be a list of
-   * the eight combinations of three switches to match against; with a source per axis the
-   * combinations are no longer eight, and naming what actually ran says more anyway. */
-  char message[256] = "";
-  if(self->enabled)
-  {
-    static const struct { int bit; const char *name; } axes[] = {
-      { DT_LENS_MODIFY_DISTORTION, N_("distortion") },
-      { DT_LENS_MODIFY_TCA,        N_("chromatic aberrations") },
-      { DT_LENS_MODIFY_VIGNETTING, N_("vignetting") },
-    };
-    for(size_t i = 0; i < sizeof(axes) / sizeof(*axes); i++)
-    {
-      if(!(corrections_done & axes[i].bit)) continue;
-      if(message[0]) g_strlcat(message, ", ", sizeof(message));
-      g_strlcat(message, _(axes[i].name), sizeof(message));
-    }
-    if(!message[0]) g_strlcpy(message, _("none"), sizeof(message));
-  }
-
-  dt_gui_freeze_begin();
-  gtk_label_set_text(g->message, message);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->message), message);
-  dt_gui_freeze_end();
-}
 
 void gui_init(struct dt_iop_module_t *self)
 {
@@ -3268,7 +3445,6 @@ void gui_init(struct dt_iop_module_t *self)
   g->camera_menu = NULL;
   g->lens_menu = NULL;
 
-  g->corrections_done = -1;
 
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_widget_set_name(self->gui->widget, "lens-module");
@@ -3311,18 +3487,11 @@ void gui_init(struct dt_iop_module_t *self)
    * to put every axis's extra controls somewhere else, and "somewhere else" is how the old
    * panel ended up with a TCA override checkbox three rows away from the TCA setting. */
 
-  // 2. rescale
-  g->scale = dt_bauhaus_slider_from_params(self, N_("scale"));
-  dt_bauhaus_slider_set_digits(g->scale, 3);
-  dt_bauhaus_widget_set_quad_paint(g->scale, dtgtk_cairo_paint_refresh, 0, NULL);
-  g_signal_connect(G_OBJECT(g->scale), "quad-pressed", G_CALLBACK(autoscale_pressed), self);
-  gtk_widget_set_tooltip_text(g->scale, _("auto scale"));
-
-  // 3. vignetting
+  // 2. vignetting
   _lens_add_axis_combobox(self, g, DT_LENS_AXIS_VIGNETTING, N_("vignetting"),
                           N_("correct the lens's light falloff, and where to take it from"));
 
-  // 4. distortion, and the projection it can be corrected into
+  // 3. distortion, with the projection and the scaling that go with it
   _lens_add_axis_combobox(self, g, DT_LENS_AXIS_DISTORTION, N_("distortion"),
                           N_("correct the lens's geometric distortion, and where to take it from"));
 
@@ -3341,15 +3510,25 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->target_geom), "value-changed", G_CALLBACK(target_geometry_changed),
                    (gpointer)self);
 
-  // 5. chromatic aberrations, and the coefficients the manual source uses
+  /* Scaling closes the distortion section rather than opening the module. It is the third
+   * of the pack -- distortion, projection, scale -- and it only ever runs when that pack
+   * runs, so putting it at the top left the user reading a control whose effect lived four
+   * rows further down, under a different heading. */
+  g->scale = dt_bauhaus_slider_from_params(self, N_("scale"));
+  dt_bauhaus_slider_set_digits(g->scale, 3);
+  dt_bauhaus_widget_set_quad_paint(g->scale, dtgtk_cairo_paint_refresh, 0, NULL);
+  g_signal_connect(G_OBJECT(g->scale), "quad-pressed", G_CALLBACK(autoscale_pressed), self);
+  gtk_widget_set_tooltip_text(g->scale, _("auto scale"));
+
+  // 4. chromatic aberrations, and the coefficients the manual source uses
   _lens_add_axis_combobox(self, g, DT_LENS_AXIS_TCA, N_("chromatic aberrations"),
                           N_("correct lateral chromatic aberration, and where to take it from"));
 
-  /* Still a param, so it is still bound to a widget -- but the combobox above says this
-   * now, and the widget is kept permanently hidden by _lens_gui_update_sensitivity().
-   * Binding it is what keeps the params<->widget machinery consistent; showing it is what
-   * would let two controls disagree about one state. */
-  g->tca_override = dt_bauhaus_toggle_from_params(self, "tca_override");
+  /* p->tca_override has NO widget. It survives only as storage -- _lens_source_set()
+   * writes it whenever TCA is set to manual, so an edit saved by this version is still read
+   * correctly by one that predates the per-axis sources. The checkbox it used to drive is
+   * gone: "TCA = manual correction" is a row of the combobox above, and one state behind two
+   * controls is one state they can disagree about. */
 
   g->tca_r = dt_bauhaus_slider_from_params(self, "tca_r");
   dt_bauhaus_slider_set_digits(g->tca_r, 5);
@@ -3366,21 +3545,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->reverse, _("distort"));
   gtk_widget_set_tooltip_text(g->reverse, _("correct distortions or apply them"));
 
-  // message box to inform user what corrections have been done. this is useful as depending on lensfuns
-  // profile only some of the lens flaws can be corrected
-  GtkBox *hbox1 = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
-  GtkWidget *label = gtk_label_new(_("corrections done: "));
-  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
-  gtk_widget_set_tooltip_text(label, _("which corrections have actually been done"));
-  gtk_box_pack_start(GTK_BOX(hbox1), label, FALSE, FALSE, 0);
-  g->message = GTK_LABEL(gtk_label_new("")); // This gets filled in by process
-  gtk_label_set_ellipsize(GTK_LABEL(g->message), PANGO_ELLIPSIZE_MIDDLE);
-  gtk_box_pack_start(GTK_BOX(hbox1), GTK_WIDGET(g->message), FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(hbox1), TRUE, TRUE, 0);
 
-  /* add signal handler for preview pipe finish to update message on corrections done */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-                            G_CALLBACK(corrections_done), self);
 }
 
 void gui_update(struct dt_iop_module_t *self)
@@ -3405,16 +3570,11 @@ void gui_update(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->camera_model, "");
   gtk_widget_set_tooltip_text(g->lens_model, "");
 
-  for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
-  {
-    const int row = _lens_source_row(axis, _lens_source_get(p, axis));
-    if(row >= 0) dt_bauhaus_combobox_set(g->axis_source[axis], row);
-  }
+  _lens_rebuild_axis_rows(self);
   _lens_gui_update_sensitivity(self);
 
   dt_bauhaus_combobox_set(g->target_geom, p->target_geom - DT_LENS_UNKNOWN - 1);
   dt_bauhaus_combobox_set(g->reverse, p->inverse);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->tca_override), p->tca_override);
   g->camera_id = -1;
   if(p->camera[0])
   {
@@ -3439,30 +3599,13 @@ void gui_update(struct dt_iop_module_t *self)
     lens_set(self, -1);
   }
 
-  // Default to blank: safe fallback if the piece isn't ready yet (e.g. very first call for this
-  // image, before any pipe sync happened).
-  dt_iop_gui_enter_critical_section(self);
-  g->corrections_done = -1;
-  dt_iop_gui_leave_critical_section(self);
-  gtk_label_set_text(g->message, "");
 
-  /* Which corrections are available depends on the camera, the lens and the params, and on
-   * nothing else -- not on process() having run, and not on the geometry chain having been
-   * published. Both of those were consulted here, and both could be absent at exactly the
-   * moment the label is first shown, leaving it blank until some unrelated event forced
-   * another pipe run. */
-  g->corrections_done = _lens_corrections_available(self, p);
-
-  /* One code path builds this text, so the label cannot say one thing here and another
-   * after the next pipe run. */
-  corrections_done(NULL, self);
 
   gui_changed(self, NULL, NULL);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(corrections_done), self);
 
   IOP_GUI_FREE;
 }
