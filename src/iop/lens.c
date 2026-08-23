@@ -1947,6 +1947,13 @@ static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_
    * forget. */
   long long mount_id = 0;
   float camera_crop = 0.f;
+
+  /* The image's own crop factor, which reload_defaults() takes from EXIF and the camera
+   * picker overwrites. Seeded unconditionally because piece->data is REUSED across commits:
+   * assigning it only inside the lookup below left a piece whose previous params resolved a
+   * camera still carrying that camera's crop when the current ones do not resolve one. */
+  d->crop = p->crop;
+
   if(p->camera[0])
   {
     ls_camera_t camera;
