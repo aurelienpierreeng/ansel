@@ -731,7 +731,32 @@ static gboolean _ls_find_camera(const char *maker, const char *model, ls_camera_
  * @details The name comes from EXIF or from what the user typed, so this is the fuzzy
  * matcher, not a lookup.
  */
-static long long _ls_find_lens(long long mount_id, float crop, const char *lens_name)
+/**
+ * @brief The database lens best matching this name, at this focal length.
+ *
+ * @details @p focal is not a preference, it is a REFUSAL: a lens whose range cannot contain
+ * the focal the picture was taken at did not take the picture, whatever its name scores.
+ *
+ * That matters because a name is often not an identifier. 197 entries in the catalogue are
+ * called "fixed lens" and 195 more "festes objektiv" -- one per compact body, the model
+ * being the only thing that tells them apart. When the camera resolves, the mount does that
+ * work. When it does not, the matcher is handed a name shared by hundreds of different
+ * optics and every one of them scores identically: on a Ricoh GR II (18.3 mm, APS-C) the
+ * five tied candidates included the GR Digital's 5.9 mm lens on a 4.8x crop sensor, and the
+ * arbitrary pick among equals took it. Its distortion polynomial, applied to a frame it was
+ * never measured on, visibly bent the image instead of straightening it.
+ *
+ * The library's own tie-breaks cannot help here: it weighs crop factor, but the crop passed
+ * is the CAMERA's and is 0 when no camera resolved, so the tie-break is inert in exactly
+ * the case that needs it. Focal range it never sees -- ls_db_match_lens() takes no focal.
+ * Filtering here keeps that API unchanged; pushing the test into the matcher, where it
+ * could also inform the score, is the better long-term home for it.
+ *
+ * Every one of the 1562 catalogue entries carries a usable range, so nothing is filtered
+ * out for want of data.
+ */
+static long long _ls_find_lens(long long mount_id, float crop, float focal,
+                               const char *lens_name)
 {
   if(IS_NULL_PTR(lens_name) || !lens_name[0]) return -1;
   _ls_tls_t *tls = _ls_tls_get();
@@ -739,12 +764,30 @@ static long long _ls_find_lens(long long mount_id, float crop, const char *lens_
   if(IS_NULL_PTR(db) || IS_NULL_PTR(tls)) return -1;
 
   char key[512];
-  snprintf(key, sizeof(key), "%lld\x1f%.4f\x1f%s", mount_id, (double)crop, lens_name);
+  snprintf(key, sizeof(key), "%lld\x1f%.4f\x1f%.4f\x1f%s", mount_id, (double)crop,
+           (double)focal, lens_name);
   if(tls->lens_cached && !strcmp(key, tls->lens_key)) return tls->lens_id;
 
-  ls_db_match_t m[1];
-  const long long id
-      = (ls_db_match_lens(db, NULL, lens_name, mount_id, crop, m, 1) > 0) ? m[0].lens_id : -1;
+  /* Several candidates rather than one, because the best-scoring name may be a lens this
+   * picture cannot have come through, and the next one down may be exactly right. */
+  ls_db_match_t m[8];
+  const int n = ls_db_match_lens(db, NULL, lens_name, mount_id, crop, m,
+                                 (int)(sizeof(m) / sizeof(*m)));
+  long long id = -1;
+  for(int i = 0; i < n; i++)
+  {
+    ls_lens_t cand;
+    if(ls_db_lens_by_id(db, m[i].lens_id, &cand) != 1) continue;
+
+    /* A hair of tolerance: EXIF focals are rounded, and a prime's range is a single value
+     * it must still match. Ranges are ordered by the importer. */
+    if(focal > 0.f
+       && (focal < cand.min_focal - 0.05f || focal > cand.max_focal + 0.05f))
+      continue;
+
+    id = m[i].lens_id;
+    break;
+  }
 
   g_strlcpy(tls->lens_key, key, sizeof(tls->lens_key));
   tls->lens_id = id;
@@ -1966,14 +2009,37 @@ static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_
     }
   }
 
-  if(p->lens[0])
+  /* No camera, no database lens -- and that is a correctness rule, not caution.
+   *
+   * The mount is what makes a lens name mean one lens. Without it the search runs over the
+   * whole catalogue, where hundreds of unrelated optics share the names "fixed lens" and
+   * "festes objektiv", tie on score, and are separated by nothing at all. Correcting from
+   * an arbitrary pick among those is how a Ricoh GR II came to be corrected with a 5.9 mm
+   * compact's distortion.
+   *
+   * It also restores the panel's own invariant. gui_update() shows a lens only when a
+   * camera resolved, so this was the one path where the pipeline corrected from something
+   * the panel could not name and the user could not check or override. The recovery is the
+   * picker: choose the body by hand, the mount is known, and the correct lens resolves and
+   * is shown. */
+  if(p->lens[0] && mount_id > 0)
   {
-    const long long lens_id = _ls_find_lens(mount_id, camera_crop, p->lens);
+    const long long lens_id = _ls_find_lens(mount_id, camera_crop, p->focal, p->lens);
     ls_db_t *db = _ls_db();
     if(lens_id >= 0 && !IS_NULL_PTR(db) && ls_db_lens_by_id(db, lens_id, &d->ls_lens) == 1)
     {
       d->ls_have = TRUE;
     }
+  }
+  else if(p->lens[0])
+  {
+    /* DT_DEBUG_PIPE, not ALWAYS: nobody chose this, so it is a default declining to guess
+     * rather than a request that could not be honoured -- and this runs from the GUI's
+     * availability query too, not only at commit. The panel already says it, by showing
+     * neither a camera nor a lens. */
+    dt_print(DT_DEBUG_PIPE,
+             "[lens] `%s' is not a camera this database knows, so `%s' cannot be resolved to"
+             " one lens; correcting from the database is declined\n", p->camera, p->lens);
   }
 
   /* Typed coefficients are a SOURCE of their own, not an edit applied to a database row.
@@ -2303,7 +2369,7 @@ void reload_defaults(dt_iop_module_t *module)
     ls_db_mount_name(db, cam.mount_id, mount, sizeof(mount));
     const gboolean fixed_lens = (mount[0] != '\0') && islower((unsigned char)mount[0]);
 
-    long long lens_id = _ls_find_lens(cam.mount_id, cam.crop_factor, d->lens);
+    long long lens_id = _ls_find_lens(cam.mount_id, cam.crop_factor, d->focal, d->lens);
 
     if(lens_id < 0 && fixed_lens)
     {
