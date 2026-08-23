@@ -106,7 +106,7 @@
 
 #include "lensserious.h"    // side-by-side latch against lensfun, see feat/lensserious
 #include "lensserious_db.h" // ... and its calibration database, latched the same way
-#include "metadata/embedded_lens/embedded_lens.h"
+#include "lensserious_vendor.h"
 
 
 /* The correction axes and the projection numbering.
@@ -534,14 +534,13 @@ static inline int _lens_mask_for_mono(const gboolean monochrome)
 static gboolean _lens_image_embeds(dt_iop_module_t *self, const dt_lens_axis_t axis)
 {
   if(IS_NULL_PTR(self->dev)) return FALSE;
-  const dt_image_t *img = &self->dev->image_storage;
-  if(!dt_embedded_lens_has_data(img)) return FALSE;
+  const int axes = ls_vendor_axes(&self->dev->image_storage.exif_correction);
 
   switch(axis)
   {
-    case DT_LENS_AXIS_DISTORTION:  return dt_embedded_lens_has_distortion(img);
-    case DT_LENS_AXIS_TCA:         return dt_embedded_lens_has_ca(img);
-    case DT_LENS_AXIS_VIGNETTING:  return dt_embedded_lens_has_vignetting(img);
+    case DT_LENS_AXIS_DISTORTION:  return (axes & LS_ENABLE_DISTORTION) != 0;
+    case DT_LENS_AXIS_TCA:         return (axes & LS_ENABLE_TCA) != 0;
+    case DT_LENS_AXIS_VIGNETTING:  return (axes & LS_ENABLE_VIGNETTING) != 0;
     default:                       return FALSE;
   }
 }
@@ -2033,9 +2032,13 @@ static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_
   /* The maker's own profile, if any axis asked for it and the file carries one.
    *
    * Resolved HERE, at commit, for the same reason the database lens is: the pixel path gets
-   * values and does no lookups. dt_embedded_lens_init_coeffs() normalises whichever vendor
-   * format the file holds -- Sony, Fuji, Olympus or a DNG opcode list -- into one knot
-   * table, and the two tables differ only in how they name their fields. */
+   * values and does no lookups. ls_vendor_resolve() normalises whichever vendor format the
+   * file holds -- Sony, Fuji, Olympus or a DNG opcode list -- straight into the knot table
+   * the evaluators consume; past that call nothing here knows which maker wrote it.
+   *
+   * The finetune is NULL: "as the maker measured", which is the library's documented
+   * meaning for it. The per-class strength blends the vendor GUIs offer are not exposed by
+   * this module. */
   d->knots_have = FALSE;
   d->knots_scale = 1.f;
   {
@@ -2043,51 +2046,28 @@ static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_
     for(dt_lens_axis_t axis = 0; axis < DT_LENS_AXIS_LAST; axis++)
       if(_lens_source_is(p, axis, DT_LENS_SOURCE_EMBEDDED)) wants_embedded = TRUE;
 
-    if(wants_embedded && !dt_embedded_lens_has_data(&self->dev->image_storage))
+    if(wants_embedded)
     {
-      dt_print(DT_DEBUG_ALWAYS,
-               "[lens] an axis asks for the embedded profile but this file carries none;"
-               " correcting from the database instead\n");
-    }
-    else if(wants_embedded)
-    {
-      dt_embedded_lens_knots_t k;
-      memset(&k, 0, sizeof(k));
+      const dt_image_t *const img = &self->dev->image_storage;
       float scale = 1.f;
+      const int got = ls_vendor_resolve(&img->exif_correction, NULL,
+                                        img->p_width, img->p_height, &d->ls_knots, &scale);
 
-      /* Full strength on every axis. These are the per-class blends the vendor GUI offers
-       * (0 = no correction, 1 = the maker's own), and this module does not expose them, so
-       * it asks for exactly what the maker measured.
-       *
-       * NOT NULL: dt_embedded_lens_init_coeffs() rejects a NULL finetune outright and
-       * returns 0, which is indistinguishable from "this file has no profile" and is
-       * exactly how the embedded source came to look identical to the database -- it was
-       * never resolved, and the fallback below said nothing. */
-      const dt_embedded_lens_finetune_t ft = { 1.f, 1.f, 1.f, 1.f };
-
-      const int nc = dt_embedded_lens_init_coeffs(&self->dev->image_storage, &ft, &k, &scale);
-      if(nc <= 0)
-      {
+      /* The two failure reports stay distinct, because they mean different things to the
+       * person reading them: "this camera embeds nothing" is a fact about the hardware,
+       * "we failed to read what it embedded" is a bug to report. Both then correct from
+       * the database, and both say so -- a user who picked a source and got another one
+       * is entitled to know. Once, at commit; not per pipe per frame. */
+      if(got == 0)
+        dt_print(DT_DEBUG_ALWAYS,
+                 "[lens] an axis asks for the embedded profile but this file carries none;"
+                 " correcting from the database instead\n");
+      else if(got < 0)
         dt_print(DT_DEBUG_ALWAYS,
                  "[lens] this file's embedded profile could not be decoded;"
                  " correcting from the database instead\n");
-      }
       else
       {
-        memset(&d->ls_knots, 0, sizeof(d->ls_knots));
-        const int n = (nc > LS_MAX_KNOTS) ? LS_MAX_KNOTS : nc;
-
-        /* Field for field, not a cast: the two structs agree on shape today and a cast
-         * would keep compiling on the day one of them stops. */
-        d->ls_knots.n = n;
-        d->ls_knots.vn = dt_embedded_lens_has_vignetting(&self->dev->image_storage) ? n : 0;
-        for(int i = 0; i < n; i++)
-        {
-          d->ls_knots.radius[i] = k.knots_dist[i];
-          d->ls_knots.vig_radius[i] = k.knots_vig[i];
-          d->ls_knots.vig[i] = k.vig[i];
-          for(int c = 0; c < 3; c++) d->ls_knots.cor_rgb[c][i] = k.cor_rgb[c][i];
-        }
         d->knots_scale = (scale > 0.f) ? scale : 1.f;
         d->knots_have = TRUE;
       }

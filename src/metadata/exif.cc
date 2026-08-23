@@ -817,9 +817,10 @@ static void _check_lens_correction_dng(Exiv2::ExifData &exifData, dt_image_t *im
   {
     g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size()); // NOSONAR
     pos->copy(data, Exiv2::invalidByteOrder);
-    dt_dng_opcode_process_opcode_list_3(data, pos->size(), img);
-    if(img->exif_correction_data.dng.has_warp || img->exif_correction_data.dng.has_vignette)
-      img->exif_correction_type = CORRECTION_TYPE_DNG;
+    /* The blob's format is correction knowledge, so LensSerious parses it -- this file
+     * only lifts the bytes out of the tag. See lensserious_vendor.h. */
+    if(ls_vendor_parse_dng_opcodelist3(data, pos->size(), &img->exif_correction.u.dng) > 0)
+      img->exif_correction.type = LS_VENDOR_DNG;
   }
   else
   {
@@ -845,21 +846,21 @@ static void _check_lens_correction_sony(Exiv2::ExifData &exifData, dt_image_t *i
        && (int)posc->count() >= 2 * nc + 1
        && (int)posv->count() >= nc + 1)
     {
-      img->exif_correction_data.sony.nc = nc;
+      img->exif_correction.u.sony.nc = nc;
       for(int i = 0; i < nc; i++)
       {
-        img->exif_correction_data.sony.distortion[i] = posd->toLong(i + 1);
-        img->exif_correction_data.sony.ca_r[i] = posc->toLong(i + 1);
-        img->exif_correction_data.sony.ca_b[i] = posc->toLong(nc + i + 1);
-        img->exif_correction_data.sony.vignetting[i] = posv->toLong(i + 1);
+        img->exif_correction.u.sony.distortion[i] = posd->toLong(i + 1);
+        img->exif_correction.u.sony.ca_r[i] = posc->toLong(i + 1);
+        img->exif_correction.u.sony.ca_b[i] = posc->toLong(nc + i + 1);
+        img->exif_correction.u.sony.vignetting[i] = posv->toLong(i + 1);
       }
-      img->exif_correction_type = CORRECTION_TYPE_SONY;
+      img->exif_correction.type = LS_VENDOR_SONY;
     }
   }
 }
 
 static bool _read_fuji_9coef(Exiv2::ExifData::const_iterator posd, Exiv2::ExifData::const_iterator posc,
-                             Exiv2::ExifData::const_iterator posv, dt_image_correction_fuji_t *f)
+                             Exiv2::ExifData::const_iterator posv, ls_vendor_fuji_t *f)
 {
   f->nc = 9;
   for(int i = 0; i < 9; i++)
@@ -878,7 +879,7 @@ static bool _read_fuji_9coef(Exiv2::ExifData::const_iterator posd, Exiv2::ExifDa
 }
 
 static bool _read_fuji_11coef(Exiv2::ExifData::const_iterator posd, Exiv2::ExifData::const_iterator posc,
-                               Exiv2::ExifData::const_iterator posv, dt_image_correction_fuji_t *f)
+                               Exiv2::ExifData::const_iterator posv, ls_vendor_fuji_t *f)
 {
   f->nc = 11;
   for(int i = 0; i < 11; i++)
@@ -916,21 +917,21 @@ static void _check_lens_correction_fuji(Exiv2::ExifData &exifData, dt_image_t *i
 
   if(posd->count() == 19 && posc->count() == 29 && posv->count() == 19)
   {
-    if(!_read_fuji_9coef(posd, posc, posv, &img->exif_correction_data.fuji))
+    if(!_read_fuji_9coef(posd, posc, posv, &img->exif_correction.u.fuji))
     {
-      img->exif_correction_type = CORRECTION_TYPE_NONE;
+      img->exif_correction.type = LS_VENDOR_NONE;
       return;
     }
-    img->exif_correction_type = CORRECTION_TYPE_FUJI;
+    img->exif_correction.type = LS_VENDOR_FUJI;
   }
   else if(posd->count() == 23 && posc->count() == 31 && posv->count() == 23)
   {
-    if(!_read_fuji_11coef(posd, posc, posv, &img->exif_correction_data.fuji))
+    if(!_read_fuji_11coef(posd, posc, posv, &img->exif_correction.u.fuji))
     {
-      img->exif_correction_type = CORRECTION_TYPE_NONE;
+      img->exif_correction.type = LS_VENDOR_NONE;
       return;
     }
-    img->exif_correction_type = CORRECTION_TYPE_FUJI;
+    img->exif_correction.type = LS_VENDOR_FUJI;
   }
   else
   {
@@ -939,9 +940,9 @@ static void _check_lens_correction_fuji(Exiv2::ExifData &exifData, dt_image_t *i
 
   if(dt_exif_read_exif_tag(exifData, &posm, "Exif.Fujifilm.CropMode")
      && (posm->toLong() == 2 || posm->toLong() == 4))
-    img->exif_correction_data.fuji.cropf = 1.25f;
+    img->exif_correction.u.fuji.cropf = 1.25f;
   else
-    img->exif_correction_data.fuji.cropf = 1.0f;
+    img->exif_correction.u.fuji.cropf = 1.0f;
 }
 
 static void _check_lens_correction_olympus(Exiv2::ExifData &exifData, dt_image_t *img)
@@ -953,11 +954,11 @@ static void _check_lens_correction_olympus(Exiv2::ExifData &exifData, dt_image_t
     for(int i = 0; i < 4; i++)
     {
       const float kd = posip->toFloat(i);
-      img->exif_correction_data.olympus.dist[i] = kd;
+      img->exif_correction.u.olympus.dist[i] = kd;
       if(kd != 0.0f && i < 3)
       {
-        img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
-        img->exif_correction_data.olympus.has_dist = TRUE;
+        img->exif_correction.type = LS_VENDOR_OLYMPUS;
+        img->exif_correction.u.olympus.has_dist = TRUE;
       }
     }
   }
@@ -967,11 +968,11 @@ static void _check_lens_correction_olympus(Exiv2::ExifData &exifData, dt_image_t
     for(int i = 0; i < 6; i++)
     {
       const float kc = posip->toFloat(i);
-      img->exif_correction_data.olympus.ca[i] = kc;
+      img->exif_correction.u.olympus.ca[i] = kc;
       if(kc != 0.0f)
       {
-        img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
-        img->exif_correction_data.olympus.has_ca = TRUE;
+        img->exif_correction.type = LS_VENDOR_OLYMPUS;
+        img->exif_correction.u.olympus.has_ca = TRUE;
       }
     }
   }
@@ -979,8 +980,8 @@ static void _check_lens_correction_olympus(Exiv2::ExifData &exifData, dt_image_t
 
 static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *img)
 {
-  img->exif_correction_type = CORRECTION_TYPE_NONE;
-  memset(&img->exif_correction_data, 0, sizeof(img->exif_correction_data));
+  img->exif_correction.type = LS_VENDOR_NONE;
+  memset(&img->exif_correction, 0, sizeof(img->exif_correction));
 
   if(!Exiv2::testVersion(0, 27, 4)) return;
 
@@ -997,18 +998,18 @@ static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *i
    * frame that no longer exists. For a camera that shoots DNG natively there is nothing to
    * choose between anyway, since only the opcodes are there. */
   _check_lens_correction_dng(exifData, img);
-  if(img->exif_correction_type == CORRECTION_TYPE_NONE)
+  if(img->exif_correction.type == LS_VENDOR_NONE)
     _check_lens_correction_sony(exifData, img);
-  if(img->exif_correction_type == CORRECTION_TYPE_NONE)
+  if(img->exif_correction.type == LS_VENDOR_NONE)
     _check_lens_correction_fuji(exifData, img);
-  if(img->exif_correction_type == CORRECTION_TYPE_NONE)
+  if(img->exif_correction.type == LS_VENDOR_NONE)
     _check_lens_correction_olympus(exifData, img);
 
   /* Says which maker answered, or that none did. Worth logging rather than inferring from
    * the absence of a correction: "this camera embeds nothing" and "we failed to read what
    * it embedded" look identical in the picture and completely different here. */
   static const char *const names[] = { "none", "Sony", "Fujifilm", "DNG opcodes", "Olympus" };
-  const int t = (int)img->exif_correction_type;
+  const int t = (int)img->exif_correction.type;
   dt_vprint(DT_DEBUG_IMAGEIO, "[exif] embedded lens correction: %s\n",
             (t >= 0 && t < (int)(sizeof(names) / sizeof(*names))) ? names[t] : "unknown");
 }
