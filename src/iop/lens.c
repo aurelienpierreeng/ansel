@@ -2464,7 +2464,34 @@ static void ptr_array_insert_index(GPtrArray *array, const void *item, int index
 /* -- camera -- */
 
 /**
- * @brief Show a camera in the GUI and write it into the params.
+ * @brief Write the camera the user picked into the params. USER INTERACTION ONLY.
+ *
+ * @details Split out of camera_set(), which refreshes the view and nothing else.
+ * gui_update() calls that one on every panel refresh, and it used to write p->camera and
+ * p->crop as it went -- so merely opening the module rewrote the edit, replacing the stored
+ * camera string with the database's own spelling of the same body and the stored crop with
+ * that row's crop factor, with nothing but whatever committed history next deciding whether
+ * it stuck. Parameters change on user interaction and in reload_defaults(). Nowhere else.
+ */
+static void _lens_params_set_camera(dt_iop_module_t *self, const long long camera_id)
+{
+  dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
+
+  ls_db_t *db = _ls_db();
+  char maker[128] = "", model[256] = "", variant[128] = "";
+  ls_camera_t cam;
+  if(camera_id < 0 || IS_NULL_PTR(db)
+     || ls_db_camera_name(db, camera_id, maker, sizeof(maker), model, sizeof(model),
+                          variant, sizeof(variant)) != 1
+     || ls_db_camera_by_id(db, camera_id, &cam) != 1)
+    return;
+
+  g_strlcpy(p->camera, model, sizeof(p->camera));
+  p->crop = cam.crop_factor;
+}
+
+/**
+ * @brief Show a camera in the panel. VIEW ONLY -- writes no parameter.
  * @param camera_id the database id, or < 0 to clear the widget.
  *
  * @details It takes an ID rather than a pointer because a camera is no longer a durable
@@ -2474,7 +2501,6 @@ static void ptr_array_insert_index(GPtrArray *array, const void *item, int index
 static void camera_set(dt_iop_module_t *self, long long camera_id)
 {
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
-  dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
 
   ls_db_t *db = _ls_db();
   char maker[128] = "", model[256] = "", variant[128] = "";
@@ -2490,8 +2516,6 @@ static void camera_set(dt_iop_module_t *self, long long camera_id)
     return;
   }
 
-  g_strlcpy(p->camera, model, sizeof(p->camera));
-  p->crop = cam.crop_factor;
   g->camera_id = camera_id;
 
   gchar *fm = maker[0] ? g_strdup_printf("%s, %s", maker, model) : g_strdup(model);
@@ -2519,19 +2543,30 @@ static void camera_set(dt_iop_module_t *self, long long camera_id)
 static void camera_menu_select(GtkMenuItem *menuitem, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  camera_set(self, (long long)GPOINTER_TO_INT(
-                       g_object_get_data(G_OBJECT(menuitem), "lens-camera-id")));
 
-  /* The camera decides the mount and the crop factor, and the database is searched for a
-   * lens ON that mount -- so a lens that matched the old camera may not match the new one,
-   * and the other way round. Every other caller of camera_set() runs a lens_set() straight
-   * afterwards and gets the rebuild from there; this one does not, so it asks itself. */
-  _lens_rebuild_axis_rows(self);
-  _lens_gui_update_sensitivity(self);
-
+  /* First, and for the whole handler: a suppressed callback is a programmatic widget
+   * update, and this one writes parameters and commits history. */
   if(dt_gui_widgets_suppressed()) return;
+
+  const long long camera_id =
+      (long long)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menuitem), "lens-camera-id"));
+
   dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
+  _lens_params_set_camera(self, camera_id);
   p->modified = 1;
+
+  /* View second, because it reads the parameters just written. The camera decides the mount
+   * and the crop factor, and a lens is matched against those -- so a lens that matched the
+   * old camera may not match the new one, and the other way round. Every other caller of
+   * camera_set() runs a lens_set() straight afterwards and gets the rebuild from there;
+   * this one does not, so it asks itself. */
+  {
+    dt_gui_widget_freeze();
+    camera_set(self, camera_id);
+    _lens_rebuild_axis_rows(self);
+    _lens_gui_update_sensitivity(self);
+  }
+
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -2724,10 +2759,35 @@ static const char *_lens_type_name(int type)
   }
 }
 
+/**
+ * @brief Write the lens the user picked into the params. USER INTERACTION ONLY.
+ *
+ * @details The counterpart of _lens_params_set_camera(), for the same reason: lens_set()
+ * refreshes the view and is called from gui_update(), so it cannot be the thing that writes
+ * p->lens.
+ */
+static void _lens_params_set_lens(dt_iop_module_t *self, const long long lens_id)
+{
+  dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
+
+  ls_db_t *db = _ls_db();
+  char l_maker[128] = "", l_model[256] = "";
+  if(lens_id < 0 || IS_NULL_PTR(db)
+     || ls_db_lens_name(db, lens_id, l_maker, sizeof(l_maker), l_model, sizeof(l_model)) <= 0)
+    return;
+
+  g_strlcpy(p->lens, l_model, sizeof(p->lens));
+}
+
+/** @brief Show a lens in the panel, and offer the sources it makes available. VIEW ONLY --
+ *  writes no parameter. */
 static void lens_set(dt_iop_module_t *self, long long lens_id)
 {
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
-  dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
+  /* const, and effective: this reads the focal length, aperture and distance to seed the
+   * editable comboboxes, and shows what is in force rather than what is stored. */
+  const dt_iop_lensfun_params_t *const p = _lens_effective_params(
+      self, (const dt_iop_lensfun_params_t *)self->params);
 
   gchar *fm;
   const char *maker, *model;
@@ -2769,8 +2829,6 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
 
   maker = l_maker[0] ? l_maker : NULL;
   model = l_model[0] ? l_model : NULL;
-
-  g_strlcpy(p->lens, l_model, sizeof(p->lens));
 
   if(model)
   {
@@ -2896,8 +2954,8 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
 
   gtk_widget_show_all(g->lens_param_box);
 
-  /* Last, because the rows depend on p->lens, which this function has just rewritten to the
-   * database's own spelling. */
+  /* Last, because the rows are read out of the params, which a caller acting on user input
+   * has already written through _lens_params_set_lens(). */
   _lens_rebuild_axis_rows(self);
   _lens_gui_update_sensitivity(self);
 }
@@ -2905,14 +2963,29 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
 static void lens_menu_select(GtkMenuItem *menuitem, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+
+  if(dt_gui_widgets_suppressed()) return;
+
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
-  lens_set(self, (long long)GPOINTER_TO_INT(
-                     g_object_get_data(G_OBJECT(menuitem), "lens-id")));
-  if(dt_gui_widgets_suppressed()) return;
+  const long long lens_id =
+      (long long)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menuitem), "lens-id"));
+
+  /* Parameters first: both the autoscale below and the row rebuild inside lens_set() ask
+   * the database what THIS lens offers, and they read it out of the params. */
+  _lens_params_set_lens(self, lens_id);
   p->modified = 1;
-  const float scale = get_autoscale(self, p);
-  dt_bauhaus_slider_set(g->scale, scale);
+  p->scale = get_autoscale(self, p);
+
+  {
+    /* Widget writes, not user input. Without the freeze dt_bauhaus_slider_set() emits
+     * value-changed, whose default callback writes the field again and commits a SECOND
+     * history item for the one lens the user picked. */
+    dt_gui_widget_freeze();
+    lens_set(self, lens_id);
+    dt_bauhaus_slider_set(g->scale, p->scale);
+  }
+
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -3127,7 +3200,8 @@ static dt_lens_source_t _lens_source_displayed(const dt_iop_lensfun_gui_data_t *
 
 static void _lens_gui_update_sensitivity(dt_iop_module_t *self)
 {
-  const dt_iop_lensfun_params_t *p = (const dt_iop_lensfun_params_t *)self->params;
+  const dt_iop_lensfun_params_t *p = _lens_effective_params(
+      self, (const dt_iop_lensfun_params_t *)self->params);
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g)) return;
 
@@ -3215,7 +3289,8 @@ static int _lens_source_row(const dt_iop_lensfun_gui_data_t *g, const dt_lens_ax
  */
 static void _lens_rebuild_axis_row(dt_iop_module_t *self, const dt_lens_axis_t axis)
 {
-  const dt_iop_lensfun_params_t *p = (const dt_iop_lensfun_params_t *)self->params;
+  const dt_iop_lensfun_params_t *p = _lens_effective_params(
+      self, (const dt_iop_lensfun_params_t *)self->params);
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g)) return;
 
@@ -3571,16 +3646,15 @@ void gui_update(struct dt_iop_module_t *self)
 {
   // let gui elements reflect params
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
-  dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
 
-  if(p->modified == 0)
-  {
-    /*
-     * user did not modify anything in gui after autodetection - let's
-     * use current default_params as params - for presets and mass-export
-     */
-    memcpy(self->params, self->default_params, sizeof(dt_iop_lensfun_params_t));
-  }
+  /* What is actually IN FORCE, which for an edit saved with modified == 0 is default_params
+   * rather than params -- see _lens_effective_params(). The view shows that; it does not
+   * write it back. This function used to memcpy default_params over self->params right
+   * here, which mutated an edit from a panel refresh, and did not even reach the widgets it
+   * was meant to fix: dt_iop_gui_update() runs dt_bauhaus_update_module() out of
+   * self->params BEFORE calling this, so the copy only ever showed up one refresh late. */
+  const dt_iop_lensfun_params_t *const p = _lens_effective_params(
+      self, (const dt_iop_lensfun_params_t *)self->params);
 
   // these are the wrong (untranslated) strings in general but that's ok, they will be overwritten further
   // down
@@ -3592,8 +3666,15 @@ void gui_update(struct dt_iop_module_t *self)
   _lens_rebuild_axis_rows(self);
   _lens_gui_update_sensitivity(self);
 
+  /* dt_bauhaus_update_module() has already synced these from self->params. Re-set them from
+   * the effective params so a modified == 0 edit shows what it renders rather than what it
+   * stores; for every other edit the two are the same object and this is a no-op. */
   dt_bauhaus_combobox_set(g->target_geom, p->target_geom - DT_LENS_UNKNOWN - 1);
   dt_bauhaus_combobox_set(g->reverse, p->inverse);
+  dt_bauhaus_slider_set(g->scale, p->scale);
+  dt_bauhaus_slider_set(g->tca_r, p->tca_r);
+  dt_bauhaus_slider_set(g->tca_b, p->tca_b);
+
   g->camera_id = -1;
   if(p->camera[0])
   {
