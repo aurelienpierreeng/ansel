@@ -216,7 +216,14 @@ void dt_ui_panel_show(dt_ui_t *ui, const dt_ui_panel_t p, gboolean show, gboolea
 gboolean dt_ui_panel_visible(dt_ui_t *ui, const dt_ui_panel_t p)
 {
   g_return_val_if_fail(GTK_IS_WIDGET(ui->panels[p]), FALSE);
-  return gtk_widget_get_visible(ui->panels[p]);
+  // gtk_widget_get_visible() only reflects this widget's own visible flag. For the bottom
+  // (filmstrip) panel, dt_thumbtable_show()/_hide() (called unconditionally from every view's
+  // enter()/leave(), bypassing dt_ui_panel_show()) only ever touch ui->panels[DT_UI_PANEL_BOTTOM]
+  // itself, never its wrapping GtkOverlay ("over" in _ui_init_panel_bottom()) that dt_ui_panel_show()
+  // shows/hides together with it. That can leave the panel's own flag TRUE while its ancestor stays
+  // hidden -- genuinely invisible on screen. gtk_widget_is_visible() walks the ancestor chain, so it
+  // reports actual on-screen visibility instead.
+  return gtk_widget_is_visible(ui->panels[p]);
 }
 
 
