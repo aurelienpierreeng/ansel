@@ -302,7 +302,11 @@ typedef struct dt_iop_lensfun_params_t
   gboolean tca_override; // $DEFAULT: FALSE $DESCRIPTION: "TCA overwrite"
   float tca_r; // $MIN: 0.99 $MAX: 1.01 $DEFAULT: 1.0 $DESCRIPTION: "TCA red"
   float tca_b; // $MIN: 0.99 $MAX: 1.01 $DEFAULT: 1.0 $DESCRIPTION: "TCA blue"
-  int modified; // $DEFAULT: 0 did user changed anything from automatically detected?
+  /** Whether this edit's correction is described by ITS OWN parameters (1) or deferred to
+   *  whatever reload_defaults() computes at render time (0).
+   *
+   *  Defaults to 1, and the 0 case is legacy only. See _lens_effective_params(). */
+  int modified; // $DEFAULT: 1
 } dt_iop_lensfun_params_t;
 
 /* ========================================================================================
@@ -1898,11 +1902,22 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
 /**
  * @brief Which parameters are actually in force.
  *
- * @details p->modified == 0 means "auto": the user never touched the GUI after autodetection,
- * and the parameters that describe the correction are the module's DEFAULTS, filled in by
- * reload_defaults() from the image's EXIF -- not the ones in history. A record built from
- * history alone would describe a correction the pipe is not applying, on exactly the images
- * where lens correction is automatic, which is most of them.
+ * @details p->modified == 0 means an edit whose correction was never written down: the
+ * parameters in force are the module's DEFAULTS, recomputed by reload_defaults() from the
+ * image's EXIF and whatever the calibration database happens to say TODAY -- not the ones in
+ * history.
+ *
+ * That is not a feature, it is a defect with a long tail. An image corrected on "auto" when
+ * its lens had no vignetting calibration silently GAINS vignetting the day the database
+ * learns one: same file, same history, different picture, and no way for the user to see it
+ * coming or pin it down. Adding a second source made it worse still, since the same edit
+ * would move to the maker's profile the day the reader for it shipped.
+ *
+ * So new edits no longer take this path: `modified` defaults to 1 and reload_defaults()
+ * sets it, which writes the decision into history where it can be reproduced. This function
+ * exists for the edits already saved with 0, which must keep rendering the way they always
+ * have -- migrating them would change pictures the user never asked to change, which is the
+ * very complaint.
  */
 static const dt_iop_lensfun_params_t *_lens_effective_params(dt_iop_module_t *self,
                                                              const dt_iop_lensfun_params_t *const p)
@@ -2225,6 +2240,10 @@ void reload_defaults(dt_iop_module_t *module)
   d->scale = 1.0;
   d->modify_flags = DT_LENS_MODIFY_TCA | DT_LENS_MODIFY_VIGNETTING | DT_LENS_MODIFY_DISTORTION |
                     DT_LENS_MODIFY_GEOMETRY | DT_LENS_MODIFY_SCALE;
+
+  /* Everything decided here is now WRITTEN DOWN, rather than recomputed whenever the image
+   * is opened. See _lens_effective_params() for what the alternative cost. */
+  d->modified = 1;
 
   /* Prefer what the camera measured about its own lens, per axis, whenever the file carries
    * it. The maker had the actual body and the actual lens on a bench; the database has a
