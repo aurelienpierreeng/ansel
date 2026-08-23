@@ -4513,6 +4513,15 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
   _blendop_sync_toggle_state(bd->raster_enable, bd->raster_inited, raster_enabled, bd->raster_content);
   _blendop_sync_toggle_state(bd->blendif_enable, bd->blendif_inited, blendif_enabled, bd->blendif_content);
 
+  // The Contours page has no enable/disable toggle of its own (unlike the three pages above),
+  // so unlike them it never gets its own explicit gtk_widget_set_sensitive() call and relies
+  // entirely on inherited state propagated from bd->blending_box. Give it the same explicit
+  // sync so its tab content doesn't get stuck rendering with a stale insensitive (dimmed) style.
+  // It refines whatever mask raster/drawn/parametric produces, so it has nothing to act on
+  // unless at least one of those three is actually enabled.
+  if(GTK_IS_WIDGET(bd->contours_content))
+    gtk_widget_set_sensitive(bd->contours_content, bottom_enabled);
+
   if(bd->blendif_inited && !IS_NULL_PTR(bd->channel))
   {
     /* The parametric page may have made the whole content insensitive before
