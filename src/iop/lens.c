@@ -563,8 +563,6 @@ typedef struct dt_iop_lensfun_gui_data_t
   dt_lens_source_t axis_row[DT_LENS_AXIS_LAST][DT_LENS_SOURCE_LAST];
   int axis_rows[DT_LENS_AXIS_LAST];
   GtkWidget *target_geom, *reverse, *tca_r, *tca_b, *scale;
-  GtkWidget *find_lens_button;
-  GtkWidget *find_camera_button;
 } dt_iop_lensfun_gui_data_t;
 
 /* Defined with the widgets they act on, at the bottom of the GUI section. Declared here
@@ -2759,33 +2757,6 @@ static void camera_menusearch_clicked(GtkWidget *button, gpointer user_data)
   dt_gui_menu_popup(GTK_MENU(g->camera_menu), button, GDK_GRAVITY_SOUTH, GDK_GRAVITY_NORTH);
 }
 
-static void camera_autosearch_clicked(GtkWidget *button, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
-  char model[200];
-  const gchar *txt = (const gchar *)((dt_iop_lensfun_params_t *)self->default_params)->camera;
-
-  (void)button;
-
-  if(txt[0] == '\0')
-  {
-    int n = 0;
-    long long *ids = _camera_all_ids(&n);
-    if(IS_NULL_PTR(ids)) return;
-    camera_menu_fill(self, ids, n);
-    dt_free_align(ids);
-  }
-  else
-  {
-    parse_model(txt, model, sizeof(model));
-    ls_camera_t cam;
-    if(!_ls_find_camera(NULL, model, &cam)) return;
-    camera_menu_fill(self, &cam.id, 1);
-  }
-
-  dt_gui_menu_popup(GTK_MENU(g->camera_menu), button, GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
-}
 
 /* -- end camera -- */
 
@@ -3196,24 +3167,6 @@ static void lens_menusearch_clicked(GtkWidget *button, gpointer user_data)
   dt_gui_menu_popup(GTK_MENU(g->lens_menu), button, GDK_GRAVITY_SOUTH, GDK_GRAVITY_NORTH);
 }
 
-static void lens_autosearch_clicked(GtkWidget *button, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
-  char model[200];
-  const gchar *txt = ((dt_iop_lensfun_params_t *)self->default_params)->lens;
-
-  (void)button;
-
-  parse_model(txt, model, sizeof(model));
-  int n = 0;
-  long long *ids = _lens_ids_for_camera(self, model[0] ? model : NULL, &n);
-  if(IS_NULL_PTR(ids)) return;
-  lens_menu_fill(self, ids, n);
-  dt_free_align(ids);
-
-  dt_gui_menu_popup(GTK_MENU(g->lens_menu), button, GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
-}
 
 /* -- end lens -- */
 
@@ -3629,16 +3582,22 @@ void gui_init(struct dt_iop_module_t *self)
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_widget_set_name(self->gui->widget, "lens-module");
 
+  /* One button per row, not two. Each row used to carry a second, unlabelled arrow that
+   * listed the Exif match instead of the whole catalogue -- for the camera, a menu of
+   * exactly one entry, the one reload_defaults() had already applied.
+   *
+   * Filtering these lists by Exif is useless by construction: they are opened precisely
+   * BECAUSE Exif matching failed. A lens with no CPU reports no lens at all, so there is
+   * nothing to filter on; a body absent from the database is chosen by picking a near
+   * relative deliberately -- a Mk I for a Mk II -- which an Exif filter would never
+   * suggest. Both cases want the full list, which is what the model button has always
+   * shown. */
+
   // camera selector
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->camera_model = dt_iop_button_new(self, N_("camera model"),
                                       G_CALLBACK(camera_menusearch_clicked), FALSE, 0, (GdkModifierType)0,
                                       NULL, 0, hbox);
-  g->find_camera_button = dt_iop_button_new(self, N_("find camera"),
-                                            G_CALLBACK(camera_autosearch_clicked), FALSE, 0, (GdkModifierType)0,
-                                            dtgtk_cairo_paint_solid_arrow, CPF_DIRECTION_DOWN, NULL);
-  dt_gui_add_class(g->find_camera_button, "dt_big_btn_canvas");
-  gtk_box_pack_start(GTK_BOX(hbox), g->find_camera_button, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, TRUE, TRUE, 0);
 
   // lens selector
@@ -3646,11 +3605,6 @@ void gui_init(struct dt_iop_module_t *self)
   g->lens_model = dt_iop_button_new(self, N_("lens model"),
                                     G_CALLBACK(lens_menusearch_clicked), FALSE, 0, (GdkModifierType)0,
                                     NULL, 0, hbox);
-  g->find_lens_button = dt_iop_button_new(self, N_("find lens"),
-                                          G_CALLBACK(lens_autosearch_clicked), FALSE, 0, (GdkModifierType)0,
-                                          dtgtk_cairo_paint_solid_arrow, CPF_DIRECTION_DOWN, NULL);
-  dt_gui_add_class(g->find_lens_button, "dt_big_btn_canvas");
-  gtk_box_pack_start(GTK_BOX(hbox), g->find_lens_button, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, TRUE, TRUE, 0);
 
   // lens properties
