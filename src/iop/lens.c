@@ -2126,12 +2126,12 @@ static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_
        * is entitled to know. Once, at commit; not per pipe per frame. */
       if(got == 0)
         dt_print(DT_DEBUG_ALWAYS,
-                 "[lens] an axis asks for the embedded profile but this file carries none;"
-                 " correcting from the database instead\n");
+                 "[lens] an axis asks for the vendor profile but this file carries none;"
+                 " correcting from the community profile instead\n");
       else if(got < 0)
         dt_print(DT_DEBUG_ALWAYS,
-                 "[lens] this file's embedded profile could not be decoded;"
-                 " correcting from the database instead\n");
+                 "[lens] this file's vendor profile could not be decoded;"
+                 " correcting from the community profile instead\n");
       else
       {
         d->knots_scale = (scale > 0.f) ? scale : 1.f;
@@ -3316,11 +3316,17 @@ static void _lens_gui_update_sensitivity(dt_iop_module_t *self)
 }
 
 /* What each source is called in the panel. Indexed by dt_lens_source_t, so the name and
- * the value cannot drift apart the way two parallel lists would. */
+ * the value cannot drift apart the way two parallel lists would.
+ *
+ * The two that ARE profiles say whose measurement they are, because that is the choice the
+ * user is actually making: the camera maker measured this body with this lens on a bench,
+ * while the database is a community measurement of that lens model. "Embedded" and
+ * "database" described where the numbers were stored, which is the one thing about them
+ * nobody needs to know. The other two are not profiles and do not pretend to be. */
 static const char *const _lens_source_names[DT_LENS_SOURCE_LAST] = {
   [DT_LENS_SOURCE_OFF]      = N_("no correction"),
-  [DT_LENS_SOURCE_LENSFUN]  = N_("database correction"),
-  [DT_LENS_SOURCE_EMBEDDED] = N_("embedded correction"),
+  [DT_LENS_SOURCE_LENSFUN]  = N_("community profile"),
+  [DT_LENS_SOURCE_EMBEDDED] = N_("vendor profile"),
   [DT_LENS_SOURCE_MANUAL]   = N_("manual correction"),
 };
 
