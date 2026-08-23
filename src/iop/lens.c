@@ -1974,22 +1974,49 @@ static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_
     if(lens_id >= 0 && !IS_NULL_PTR(db) && ls_db_lens_by_id(db, lens_id, &d->ls_lens) == 1)
     {
       d->ls_have = TRUE;
-
-      if(p->tca_override)
-      {
-        /* A manual override REPLACES the calibration rather than being added beside it.
-         * ls_lens_t is this module's own copy, so overwriting the array is both cheaper and
-         * clearer than upstream's remove-every-entry-then-add dance on a shared object --
-         * which is what the code here used to do, twice, under two different lensfun APIs.
-         * One entry at the shooting focal is exactly what the two sliders describe. */
-        d->ls_lens.n_tca = 1;
-        d->ls_lens.tca[0].model = LS_TCA_LINEAR;
-        d->ls_lens.tca[0].focal = p->focal;
-        d->ls_lens.tca[0].terms[0] = p->tca_r;
-        d->ls_lens.tca[0].terms[1] = p->tca_b;
-        for(int i = 2; i < 6; i++) d->ls_lens.tca[0].terms[i] = 0.f;
-      }
     }
+  }
+
+  /* Typed coefficients are a SOURCE of their own, not an edit applied to a database row.
+   *
+   * They used to be written inside the lookup above, over the calibration of a lens the
+   * database had just returned -- so on a body-and-lens pair the database does not know,
+   * d->ls_have stayed FALSE, _lens_data_available() answered no, and process(),
+   * process_cl(), the three distort_*() callbacks and modify_roi_in() all copied their
+   * input and returned. The two sliders moved and the pipeline never saw them, on exactly
+   * the images manual correction exists for.
+   *
+   * With a database lens the manual entry still REPLACES its aberration, which is what
+   * manual means, and the coefficients live in that lens's calibration frame. With none,
+   * the frame is a lens declared calibrated on THIS camera, so ls_modifier_init()'s
+   * calibration-crop / image-crop rescaling is 1 and the two numbers act directly.
+   * aspect_ratio is deliberately left at 0, which the library reads as its own 1.5 default
+   * -- the same normalisation a 3:2-calibrated database entry gives, so a coefficient does
+   * not change meaning on the day a profile for the lens appears.
+   *
+   * Writing it here rather than there also means it no longer depends on p->lens[0] being
+   * non-empty: an unnamed lens is not a reason to refuse numbers the user typed. */
+  if(_lens_source_is(p, DT_LENS_AXIS_TCA, DT_LENS_SOURCE_MANUAL))
+  {
+    if(!d->ls_have)
+    {
+      d->ls_lens.type = LS_LENS_RECTILINEAR;
+      d->ls_lens.crop_factor = d->crop;
+      d->ls_lens.min_focal = p->focal;
+      d->ls_lens.max_focal = p->focal;
+      d->ls_have = TRUE;
+    }
+
+    /* One entry at the shooting focal is exactly what the two sliders describe. ls_lens_t
+     * is this module's own copy, so overwriting the array is both cheaper and clearer than
+     * upstream's remove-every-entry-then-add dance on a shared object -- which is what the
+     * code here used to do, twice, under two different lensfun APIs. */
+    d->ls_lens.n_tca = 1;
+    d->ls_lens.tca[0].model = LS_TCA_LINEAR;
+    d->ls_lens.tca[0].focal = p->focal;
+    d->ls_lens.tca[0].terms[0] = p->tca_r;
+    d->ls_lens.tca[0].terms[1] = p->tca_b;
+    for(int i = 2; i < 6; i++) d->ls_lens.tca[0].terms[i] = 0.f;
   }
 
   d->modify_flags = p->modify_flags;
