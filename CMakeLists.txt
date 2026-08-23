@@ -160,6 +160,42 @@ if(NOT CMAKE_USE_PTHREADS_INIT)
   message(FATAL_ERROR "POSIX threads: not found")
 endif()
 
+# liblensfun, a BUILD-time requirement and not a runtime one.
+#
+# Nothing that renders a pixel links it: data/CMakeLists.txt converts upstream's XML into
+# the lenses.db that iop/lens.c reads, once, here. But without it that conversion cannot
+# run, no database is produced, and every lens correction silently stops working -- the
+# module reports "no calibration database" and disables itself.
+#
+# Checked HERE, before descending into any subdirectory, because this used to be a
+# message(WARNING) in data/CMakeLists.txt: `sh build.sh` printed it somewhere in the middle
+# of a long configure log, exited 0, built a complete-looking Ansel, and the first sign of
+# trouble was a user's export with no lens correction in it. A dependency whose absence
+# breaks a feature at run time has to stop the build, not annotate it.
+#
+# Probed with its own prefix and without IMPORTED_TARGET: src/external/LensSerious runs its
+# own pkg_check_modules(LENSFUN IMPORTED_TARGET lensfun), and creating PkgConfig::LENSFUN
+# twice is a configure error in itself.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LENSFUN_PROBE lensfun)
+if(NOT LENSFUN_PROBE_FOUND)
+  message(FATAL_ERROR
+          "liblensfun development files are required to build Ansel, and pkg-config cannot "
+          "find them.\n"
+          "  Debian/Ubuntu   apt install liblensfun-dev\n"
+          "  Fedora          dnf install lensfun-devel\n"
+          "  Arch            pacman -S lensfun\n"
+          "  openSUSE        zypper install lensfun-devel\n"
+          "  macOS           brew install lensfun\n"
+          "  msys2           pacman -S \${MINGW_PACKAGE_PREFIX}-lensfun\n"
+          "Or run the script for your distribution in packaging/, which installs this and "
+          "everything else Ansel needs.\n"
+          "Note that lensfun.pc has `Requires: glib-2.0', so a missing libglib2.0-dev makes "
+          "this check fail without ever mentioning lensfun itself.\n"
+          "It is needed only to BUILD: it converts upstream's calibration XML into the "
+          "lenses.db that ships with Ansel. Nothing in the pixel pipeline links it.")
+endif()
+
 include(ConfigureChecks.cmake)
 
 include(CheckCCompilerFlag)

@@ -348,6 +348,14 @@ if(TARGET import_lensfun_xml)
             COMPONENT DTApplication FILES_MATCHING PATTERN "*.xml")
   endif()
 else()
-  message(WARNING "liblensfun not found: lenses.db will not be built, and the lens "
-                  "correction module will report no calibration data")
+  # Unreachable in a healthy tree: the top-level CMakeLists.txt refuses to configure
+  # without liblensfun, so getting here means import_lensfun_xml went missing for the OTHER
+  # reason -- LensSerious builds it only when it also has SQLite (lensserious_db). Fatal
+  # either way, because a build that silently ships no lenses.db is what sent users
+  # chasing "no calibration database" at run time.
+  message(FATAL_ERROR
+          "the lensfun XML importer was not built, so lenses.db cannot be produced and the "
+          "lens correction module would have no calibration data. liblensfun is checked at "
+          "the top level, so the missing piece here is SQLite: install its development "
+          "package (libsqlite3-dev / sqlite-devel) and reconfigure.")
 endif()

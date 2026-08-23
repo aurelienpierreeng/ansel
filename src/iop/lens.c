@@ -657,6 +657,47 @@ static _ls_tls_t *_ls_tls_get(void)
  * rebuilding. A failed open is final for the thread: retrying per lookup would turn a
  * missing file into a slow one.
  */
+/**
+ * @brief Report one failed database path, in terms of what the reader should do about it.
+ *
+ * @details Silent for "there is nothing there", which is the ordinary case for the
+ * configuration directory: only a user who ran ansel-lens-db-update has a file there, and
+ * saying so on every start would be noise about a non-event.
+ */
+static void _lens_report_db_failure(const char *path, const ls_db_open_status_t status,
+                                    const int found_version)
+{
+  switch(status)
+  {
+    case LS_DB_OPEN_NO_FILE:
+      dt_print(DT_DEBUG_PIPE, "[lens] no `%s'\n", path);
+      break;
+
+    case LS_DB_OPEN_UNREADABLE:
+      dt_print(DT_DEBUG_ALWAYS,
+               "[lens] `%s' exists but could not be read; check its permissions, and that "
+               "it is not truncated\n", path);
+      break;
+
+    case LS_DB_OPEN_SCHEMA:
+      /* The one that actually happens, and the one the old message hid: a lenses.db left
+       * behind in a prefix by an earlier install. The build only installs the file when it
+       * produced one, so a rebuild that could not run the importer leaves the old file in
+       * place and the new binary refuses it. */
+      dt_print(DT_DEBUG_ALWAYS,
+               "[lens] `%s' is a lens database of schema v%d, and this Ansel reads v%d. It "
+               "is almost certainly left over from an older install: rebuild and reinstall "
+               "so the file is replaced, or delete it if it is a stale copy in your "
+               "configuration directory.\n",
+               path, found_version, ls_db_schema_required());
+      break;
+
+    case LS_DB_OPEN_OK:
+    default:
+      break;
+  }
+}
+
 static ls_db_t *_ls_db(void)
 {
   _ls_tls_t *tls = _ls_tls_get();
@@ -667,25 +708,46 @@ static ls_db_t *_ls_db(void)
 
   char dir[PATH_MAX] = { 0 };
   char path[PATH_MAX] = { 0 };
+  char config_path[PATH_MAX] = { 0 };
+  ls_db_open_status_t config_status = LS_DB_OPEN_NO_FILE;
+  int config_version = -1;
 
   dt_loc_get_user_config_dir(dir, sizeof(dir));
-  snprintf(path, sizeof(path), "%s/lenses.db", dir);
-  tls->db = ls_db_open(path);
+  snprintf(config_path, sizeof(config_path), "%s/lenses.db", dir);
+  tls->db = ls_db_open_status(config_path, &config_status, &config_version);
 
+  ls_db_open_status_t data_status = LS_DB_OPEN_NO_FILE;
+  int data_version = -1;
   if(IS_NULL_PTR(tls->db))
   {
     dt_loc_get_datadir(dir, sizeof(dir));
     snprintf(path, sizeof(path), "%s/lenses.db", dir);
-    tls->db = ls_db_open(path);
+    tls->db = ls_db_open_status(path, &data_status, &data_version);
   }
 
+  /* Say WHICH failure it was, per path. All three used to print "no calibration database",
+   * so a user whose file sat exactly where the message said it had looked was told to go
+   * find it again -- when what they actually had was a database from an older install,
+   * perfectly readable and built for a schema this Ansel does not read. */
   if(IS_NULL_PTR(tls->db))
+  {
+    _lens_report_db_failure(config_path, config_status, config_version);
+    _lens_report_db_failure(path, data_status, data_version);
     dt_print(DT_DEBUG_ALWAYS,
-             "[lens] no calibration database: looked for lenses.db in the config directory"
-             " and in `%s'\n", dir);
+             "[lens] no calibration database, so no lens correction is available.\n");
+  }
   else
-    dt_print(DT_DEBUG_PIPE, "[lens] opened `%s' (schema v%d)\n", path,
+  {
+    /* A config-directory database that exists and was refused is worth one line even when
+     * the shipped one saved the day: it is tried FIRST, so the user believes it is the one
+     * in use, and ansel-lens-db-update is what put it there. */
+    if(config_status != LS_DB_OPEN_OK && config_status != LS_DB_OPEN_NO_FILE)
+      _lens_report_db_failure(config_path, config_status, config_version);
+
+    dt_print(DT_DEBUG_PIPE, "[lens] opened `%s' (schema v%d)\n",
+             (config_status == LS_DB_OPEN_OK) ? config_path : path,
              ls_db_schema_version(tls->db));
+  }
 
   return tls->db;
 }
