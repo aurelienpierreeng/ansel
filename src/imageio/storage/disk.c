@@ -51,11 +51,13 @@
 #include "widgets/bauhaus.h"
 #include "common/global_mutexes.h"
 #include "common/image.h"
+#include "common/selection.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "common/utility.h"
 #include "common/variables.h"
 #include "common/conf.h"
+#include "control/signal.h"
 #include "control/user_message.h"
 #include "widgets/button.h"
 #include "widgets/paint.h"
@@ -84,6 +86,7 @@ typedef struct disk_t
 {
   GtkEntry *entry;
   GtkWidget *onsave_action;
+  GtkWidget *preview;
 } disk_t;
 
 // saved params
@@ -143,6 +146,11 @@ void *legacy_params(dt_imageio_module_storage_t *self, const void *const old_par
   return NULL;
 }
 
+// Same separator handling as import.c's own path-building pipeline (see dt_cleanup_separators()
+// in common/utility.c, used through _path_cleanup() in control/jobs/import_jobs.c): normalize to
+// the current OS's separator instead of literally escaping '\' into '\\', which is what used to
+// make the entry display a doubled backslash on Windows. dt_variables_expand() never treats '\'
+// as special, so there is nothing here for that escaping to have protected against.
 static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
 {
   disk_t *d = (disk_t *)self->gui_data;
@@ -160,24 +168,68 @@ static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
   {
     gchar *dir = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(filechooser));
     char *composed = g_build_filename(dir, "$(FILE_NAME)", NULL);
+    gchar *cleaned = dt_cleanup_separators(composed);
 
-    // composed can now contain '\': on Windows it's the path separator,
-    // on other platforms it can be part of a regular folder name.
-    // This would later clash with variable substitution, so we have to escape them
-    gchar *escaped = dt_util_str_replace(composed, "\\", "\\\\");
-
-    gtk_entry_set_text(GTK_ENTRY(d->entry), escaped); // the signal handler will write this to conf
-    gtk_editable_set_position(GTK_EDITABLE(d->entry), strlen(escaped));
+    gtk_entry_set_text(GTK_ENTRY(d->entry), cleaned); // the signal handler will write this to conf
+    gtk_editable_set_position(GTK_EDITABLE(d->entry), strlen(cleaned));
     dt_free(dir);
     dt_free(composed);
-    dt_free(escaped);
+    dt_free(cleaned);
   }
   g_object_unref(filechooser);
 }
 
+// Mirrors import.c's _set_test_path(): resolve the current path pattern against the first
+// selected image, so the user can see what the export will actually be named before running it.
+static void _update_preview(disk_t *d)
+{
+  const int32_t imgid = dt_selection_get_first_id(dt_selection_get_global());
+  const gchar *pattern = gtk_entry_get_text(d->entry);
+
+  if(imgid <= UNKNOWN_IMAGE || !pattern[0])
+  {
+    gtk_label_set_text(GTK_LABEL(d->preview), _("select an image to preview the export path"));
+    return;
+  }
+
+  char input_dir[PATH_MAX] = { 0 };
+  gboolean from_cache = FALSE;
+  dt_image_full_path(imgid, input_dir, sizeof(input_dir), &from_cache, __FUNCTION__);
+
+  dt_variables_params_t *vp;
+  dt_variables_params_init(&vp);
+  vp->filename = input_dir;
+  vp->jobcode = "export";
+  vp->imgid = imgid;
+  vp->sequence = 1;
+
+  gchar *fixed_path = dt_util_fix_path(pattern);
+  gchar *expanded = dt_variables_expand(vp, fixed_path, TRUE);
+  dt_free(fixed_path);
+
+  dt_imageio_module_format_t *mformat = dt_imageio_get_format();
+  dt_imageio_module_data_t *fdata = mformat ? mformat->get_params(mformat) : NULL;
+  gchar *full = g_strdup_printf("%s.%s", expanded, fdata ? mformat->extension(fdata) : "");
+  if(fdata) mformat->free_params(mformat, fdata);
+  dt_free(expanded);
+
+  gtk_label_set_text(GTK_LABEL(d->preview), full);
+  dt_free(full);
+
+  dt_variables_params_destroy(vp);
+}
+
 static void entry_changed_callback(GtkEntry *entry, gpointer user_data)
 {
+  dt_imageio_module_storage_t *self = (dt_imageio_module_storage_t *)user_data;
+  disk_t *d = (disk_t *)self->gui_data;
   dt_conf_set_string("plugins/imageio/storage/disk/file_directory", gtk_entry_get_text(entry));
+  _update_preview(d);
+}
+
+static void _selection_changed_callback(gpointer instance, dt_imageio_module_storage_t *self)
+{
+  _update_preview((disk_t *)self->gui_data);
 }
 
 static void onsave_action_toggle_callback(GtkWidget *widget, gpointer user_data)
@@ -229,10 +281,21 @@ void gui_init(dt_imageio_module_storage_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), d->onsave_action, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(d->onsave_action), "value-changed", G_CALLBACK(onsave_action_toggle_callback), self);
   dt_bauhaus_combobox_set(d->onsave_action, dt_conf_get_int("plugins/imageio/storage/disk/overwrite"));
+
+  d->preview = gtk_label_new("");
+  gtk_widget_set_halign(d->preview, GTK_ALIGN_START);
+  gtk_label_set_line_wrap(GTK_LABEL(d->preview), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(d->preview), 60);
+  gtk_box_pack_start(GTK_BOX(self->widget), d->preview, TRUE, TRUE, 0);
+  _update_preview(d);
+
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
+                            G_CALLBACK(_selection_changed_callback), self);
 }
 
 void gui_cleanup(dt_imageio_module_storage_t *self)
 {
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_selection_changed_callback), self);
   dt_free(self->gui_data);
 }
 
