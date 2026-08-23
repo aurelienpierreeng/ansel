@@ -48,6 +48,12 @@
 #                            real, widespread CPU/GPU divergence, not an edge-pixel blip)
 #   --strict-opencl         With --opencl, tighten that 5% share to 0%: any single pixel
 #                            over tolerance fails
+#   --force-opencl          With --opencl, also run the OpenCL leg when the CPU render
+#                            already DIFFed against the baseline (normally skipped, since
+#                            a CPU regression makes the CPU-vs-GPU comparison moot -- pass
+#                            this to still get that comparison in the same run). Has no
+#                            effect on CRASH/TIMEOUT/EMPTY, where there is no CPU output
+#                            to compare against.
 #   --keep                  Keep this run's outputs/logs even on full success
 #   --if-configured         Exit 0 silently instead of erroring when no bank is
 #                            configured (used by the pre-commit hook)
@@ -118,6 +124,7 @@ HEIGHT=1024
 LIMIT=0
 STRICT_CPU=no
 STRICT_OPENCL=no
+FORCE_OPENCL=no
 OPENCL=no
 KEEP=no
 QUIET=no
@@ -127,7 +134,7 @@ COMMAND=run
 log() { [ "$QUIET" = yes ] || echo "$*"; }
 err() { echo "$*" >&2; }
 
-usage() { sed -n '2,54p' "$0" | sed 's/^#$//; s/^# //'; }
+usage() { sed -n '2,61p' "$0" | sed 's/^#$//; s/^# //'; }
 
 if [ -t 1 ]; then
   C_GREEN=$'\033[32m'
@@ -175,6 +182,7 @@ while [ $# -gt 0 ]; do
     --strict) STRICT_CPU=yes; STRICT_OPENCL=yes; shift ;;
     --strict-cpu) STRICT_CPU=yes; shift ;;
     --strict-opencl) STRICT_OPENCL=yes; shift ;;
+    --force-opencl) FORCE_OPENCL=yes; shift ;;
     --opencl) OPENCL=yes; shift ;;
     --keep) KEEP=yes; shift ;;
     --if-configured) IF_CONFIGURED=yes; shift ;;
@@ -454,7 +462,8 @@ process_one() {
     local base="$BASELINE_DIR/$rel.png"
     if [ -f "$base" ] && [ -x "$DELTAE_SCRIPT" ]; then
       local deltae_out deltae_rc max_de avg_de pct_de
-      deltae_out="$("$DELTAE_SCRIPT" "$base" "$out" 2>&1)"
+      local diff_png="$RESULTS_DIR/$rel.diff.png"
+      deltae_out="$("$DELTAE_SCRIPT" "$base" "$out" "$diff_png" 2>&1)"
       deltae_rc=$?
       printf '%s\n' "$deltae_out" > "$RESULTS_DIR/$rel.deltae.log"
       IFS=$'\t' read -r max_de avg_de pct_de <<< "$(extract_de_stats "$deltae_out")"
@@ -513,12 +522,17 @@ process_one() {
         [ "$max_bad" = yes ] && { max_c="$C_RED"; max_r="$C_RESET"; }
         [ "$avg_bad" = yes ] && { avg_c="$C_RED"; avg_r="$C_RESET"; }
         diffnote=" [CPU vs baseline] avg dE=${avg_c}${avg_de:-n/a}${avg_r}, max dE=${max_c}${max_de}${max_r}, ${pct_de:-n/a}% px>(dE 2.3)"
+        if [ "$base_bad" = yes ] && [ -s "$diff_png" ]; then
+          diffnote+=", diff image: ${diff_png#"$RESULTS_DIR"/}"
+        else
+          rm -f "$diff_png"
+        fi
       fi
     fi
   fi
 
   local clnote=""
-  if [ "$OPENCL" = yes ] && [ "$verdict" = PASS ]; then
+  if [ "$OPENCL" = yes ] && { [ "$verdict" = PASS ] || { [ "$verdict" = DIFF ] && [ "$FORCE_OPENCL" = yes ]; }; }; then
     local cl_out="$RESULTS_DIR/$rel.cl.png"
     local cl_runlog="$RESULTS_DIR/$rel.cl.log"
     local cfg2 cache2
@@ -545,7 +559,8 @@ process_one() {
       clnote=" [opencl: unavailable/failed]"
     elif [ -x "$DELTAE_SCRIPT" ]; then
       local cl_deltae_out cl_max_de cl_avg_de cl_pct_de
-      cl_deltae_out="$("$DELTAE_SCRIPT" "$out" "$cl_out" 2>&1)"
+      local cl_diff_png="$RESULTS_DIR/$rel.cl.diff.png"
+      cl_deltae_out="$("$DELTAE_SCRIPT" "$out" "$cl_out" "$cl_diff_png" 2>&1)"
       printf '%s\n' "$cl_deltae_out" > "$RESULTS_DIR/$rel.cl.deltae.log"
       IFS=$'\t' read -r cl_max_de cl_avg_de cl_pct_de <<< "$(extract_de_stats "$cl_deltae_out")"
       # A high max dE with a handful of outlier pixels (edge/border effect) is not a real
@@ -562,6 +577,11 @@ process_one() {
       local cl_c="" cl_r=""
       [ "$cl_bad" = yes ] && { cl_c="$C_RED"; cl_r="$C_RESET"; }
       clnote="[opencl vs CPU]   avg dE=${cl_avg_de:-n/a}, max dE=${cl_max_de:-n/a}, ${cl_c}${cl_pct_de:-n/a}% px>(dE 2.3)${cl_r}"
+      if [ "$cl_bad" = yes ] && [ -s "$cl_diff_png" ]; then
+        clnote+=", diff image: ${cl_diff_png#"$RESULTS_DIR"/}"
+      else
+        rm -f "$cl_diff_png"
+      fi
     fi
   fi
 
@@ -572,7 +592,7 @@ process_one() {
   printf '%s\0' "$record"
 }
 export -f process_one
-export CLI_BIN WIDTH HEIGHT TIMEOUT THREADS RESULTS_DIR BASELINE_DIR STRICT_CPU STRICT_OPENCL OPENCL BANK_DIR COMMAND DELTAE_SCRIPT MAX_PCT_ABOVE_TOLERANCE C_RED C_RESET OPENCL_CACHE_DIR
+export CLI_BIN WIDTH HEIGHT TIMEOUT THREADS RESULTS_DIR BASELINE_DIR STRICT_CPU STRICT_OPENCL OPENCL FORCE_OPENCL BANK_DIR COMMAND DELTAE_SCRIPT MAX_PCT_ABOVE_TOLERANCE C_RED C_RESET OPENCL_CACHE_DIR
 
 # --- driver -----------------------------------------------------------
 
@@ -631,8 +651,8 @@ run_bank() {
   [ -z "$jobs" ] && jobs=1
 
   # process_one() never runs the OpenCL leg during update-baseline (verdict is "DONE"
-  # there, not "PASS", so its `[ "$OPENCL" = yes ] && [ "$verdict" = PASS ]` guard never
-  # passes) -- skip the warm-up too, or it'd compile-and-discard an export for nothing.
+  # there, never "PASS" or "DIFF", so its OpenCL trigger condition never passes) --
+  # skip the warm-up too, or it'd compile-and-discard an export for nothing.
   # Also pointless with jobs=1: there's no cross-process compile race to avoid, and the
   # sequential loop below warms the cache on its own first image for free.
   if [ "$OPENCL" = yes ] && [ "$COMMAND" != update-baseline ] && [ "$jobs" -gt 1 ]; then

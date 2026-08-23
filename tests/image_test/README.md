@@ -90,6 +90,12 @@ widespread CPU/GPU divergence rather than the odd edge/border pixel. A high max 
 low percentage is not by itself a failure. `--strict-opencl` tightens that 5% share to 0%:
 any single pixel over tolerance fails.
 
+By default, the OpenCL leg is skipped for a raw whose CPU render already `DIFF`ed against
+the baseline (see below) -- a known-bad CPU output makes the CPU-vs-GPU comparison moot.
+Pass `--force-opencl` alongside `--opencl` to run it anyway and get both comparisons in the
+same pass. It has no effect on `CRASH`/`TIMEOUT`/`EMPTY`, where there is no CPU output to
+compare the GPU render against in the first place.
+
 ## Regressions vs. a baseline
 
 ```sh
@@ -126,6 +132,13 @@ max dE as a real regression. The full distribution (`deltae`'s complete report: 
 and the percentage of pixels within N standard deviations) is saved to
 `tests/image_test/results/<relative-path>.deltae.log` (and `.cl.deltae.log` for `--opencl`)
 for every comparison, not just failures.
+
+When a raw actually fails with a `DIFF` verdict, a diagnostic PNG is written next to the log:
+`tests/image_test/results/<relative-path>.diff.png` (`.cl.diff.png` for an `--opencl` failure)
+-- every pixel above the 2.3 dE tolerance in red, over a dimmed grayscale of the output, so the
+affected area is easy to spot at a glance. Not written for a `PASS` (even one with a few
+outlier pixels reported above tolerance) or for a baseline size mismatch, where no pixel-wise
+comparison is possible.
 
 `update-baseline` only **adds missing entries** -- it never overwrites or deletes an existing
 one, and only runs `ansel-cli` on the raws that actually need a new entry (not the whole bank).

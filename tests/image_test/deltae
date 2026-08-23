@@ -89,6 +89,9 @@ if len(sys.argv) < 3:
 
 expected = sys.argv[1]
 output = sys.argv[2]
+# Optional: path to write a diagnostic PNG marking every pixel above MAX_DELTA_E in red,
+# over a dimmed grayscale of the output image. Written only if at least one pixel differs.
+diff_path = sys.argv[3] if len(sys.argv) > 3 else None
 
 expected_rgb = colour.read_image(expected, method="Imageio")
 output_rgb = colour.read_image(output, method="Imageio")
@@ -141,6 +144,15 @@ print("      ----------------------------------")
 
 count_above = numpy.sum(delta_E >= MAX_DELTA_E)
 print("      Pixels above tolerance   : %.2f %%" % (count_above / num_elem * 100.))
+
+if diff_path and count_above > 0:
+    diff_mask = delta_E >= MAX_DELTA_E
+    # Dimmed grayscale of the output as backdrop, so the red overlay stands out.
+    gray = numpy.mean(output_rgb[..., :3], axis=-1, keepdims=True)
+    diff_image = numpy.clip(numpy.repeat(gray, 3, axis=-1) * 0.4, 0.0, 1.0)
+    diff_image[diff_mask] = [1.0, 0.0, 0.0]
+    colour.write_image(diff_image, diff_path, bit_depth="uint8", method="Imageio")
+    print("      Diff image               : %s (%d px marked)" % (diff_path, int(count_above)))
 
 if(max_dE > MAX_DELTA_E or mean_dE > MAX_AVG_DELTA_E):
     exit(2)
