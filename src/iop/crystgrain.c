@@ -47,6 +47,11 @@ DT_MODULE_INTROSPECTION(9, dt_iop_crystgrain_params_t)
 
 #define DT_CRYSTGRAIN_LAYER_KERNELS 16
 
+// Smallest crystal radius, in current grid pixels, the rasterizer is asked to
+// resolve. Below that a crystal covers less than a millionth of a pixel and its
+// germ intensity would explode without any visible return.
+#define DT_CRYSTGRAIN_MIN_RADIUS 1e-3f
+
 typedef enum dt_iop_crystgrain_mode_t
 {
   DT_CRYSTGRAIN_MONO = 0, // $DESCRIPTION: "B&W"
@@ -103,10 +108,9 @@ typedef struct dt_iop_crystgrain_kernel_t
 typedef struct dt_iop_crystgrain_layer_kernel_t
 {
   dt_iop_crystgrain_kernel_t footprint;
-  float probability;
+  float intensity; // crystals per grid pixel, see _seed_intensity()
   float vertices;
   float rotation;
-  int width;
 } dt_iop_crystgrain_layer_kernel_t;
 
 typedef struct dt_iop_crystgrain_runtime_t
@@ -271,45 +275,139 @@ static inline int _reflect_index(int i, const int max)
 }
 
 /**
- * @brief Map the requested filling ratio to the Bernoulli probability used to
- * plant seeds.
+ * @brief Map the requested filling ratio to the germ intensity used to plant
+ * seeds, in crystals per grid pixel.
  *
- * @details In the simplified Bernoulli model, one binary crystal of area `A`
- * covers a destination pixel if any of the `A` source positions that would
- * hit that pixel spawns a seed. Assuming independent seed events, the
- * uncovered probability is `(1 - p)^A`, so matching a requested filling ratio
- * `f` amounts to solving `1 - f = (1 - p)^A`, that is
- * `p = 1 - (1 - f)^(1 / A)`. This keeps the expected covered surface stable
- * for the actual discrete grain area at every preview scale.
+ * @details The crystal population is a boolean (germ-grain) model: germs are
+ * a Poisson point process of intensity `lambda` germs per unit surface, and
+ * every germ grows one crystal of surface `A`. The probability that a given
+ * location is left uncovered is `exp(-lambda * A)`, so matching a requested
+ * filling ratio `f` amounts to solving `1 - f = exp(-lambda * A)`, that is
+ * `lambda = -ln(1 - f) / A`.
+ *
+ * We express that intensity per pixel of the *current* grid, so `A` is the
+ * crystal surface measured in current grid pixels. Note the invariant that
+ * makes the whole model scale-free: the germ mass reaching one pixel is
+ * `lambda * A = -ln(1 - f)`, independent of the crystal surface and therefore
+ * of the resolution the pipeline happens to run at.
+ *
+ * Unlike a per-pixel Bernoulli draw, this intensity is *not* capped at one
+ * crystal per pixel. Below 100% zoom a crystal eventually becomes smaller
+ * than one grid pixel and several of them land in the same pixel; that
+ * multiplicity is exactly what averages the grain out at low resolution, so
+ * it must be sampled, not truncated.
  */
-static inline float _seed_probability(const float filling, const float crystal_area)
+static inline float _seed_intensity(const float filling, const float crystal_area)
 {
   const float clamped_filling = CLAMPS(filling, 0.0f, 0.9999f);
-  if(crystal_area <= 1.0f) return clamped_filling;
-  return 1.0f - powf(1.0f - clamped_filling, 1.0f / crystal_area);
+  return -logf(1.0f - clamped_filling) / MAX(crystal_area, FLT_EPSILON);
 }
 
 /**
- * @brief Estimate the partial coverage of one pixel by one crystal boundary.
+ * @brief Draw one Poisson deviate of mean `mu`.
  *
- * @details The continuous grain radius lives in floating-point, but the raster
- * simulation ultimately writes on whole pixels. We therefore keep the exact
- * radius for the geometry and only quantize the support window. Pixels fully
- * inside the crystal get weight 1, fully outside get 0, and pixels crossed by
- * the boundary get a linear partial occlusion in a 1-pixel transition band.
+ * @details Small means use Knuth's product method, which costs `O(mu)` random
+ * draws. Large means (deep zoom-outs, where each grid pixel holds many
+ * sub-pixel crystals) switch to the gaussian approximation with a continuity
+ * correction, so the per-pixel cost stays `O(1)` no matter how far the image
+ * is downscaled. The switch sits at `mu = 12`, where the relative error of
+ * the gaussian approximation is already below the stochastic spread of the
+ * grain itself.
+ */
+static inline int _poisson_random(const uint64_t seed, const float mu)
+{
+  if(!(mu > 0.0f)) return 0;
+
+  if(mu < 12.0f)
+  {
+    const float target = expf(-mu);
+    float product = 1.0f;
+    int count = 0;
+
+    while(product > target && count < 64)
+    {
+      count++;
+      product *= _uniform_random(seed + (uint64_t)count * 0x9e3779b97f4a7c15ull);
+    }
+
+    return MAX(count - 1, 0);
+  }
+
+  const float deviate = mu + sqrtf(mu) * _gaussian_random(seed ^ 0xbf58476d1ce4e5b9ull,
+                                                          seed ^ 0x94d049bb133111ebull);
+  return MAX((int)floorf(deviate + 0.5f), 0);
+}
+
+/**
+ * @brief Analytic surface of one crystal, in current grid pixels squared.
+ *
+ * @details The polar envelope below draws a regular polygon of `vertices`
+ * sides whose circumradius is `radius_f`, so its surface is the textbook
+ * `n R^2 sin(2 pi / n) / 2`. We need that surface analytically — and not only
+ * as the sum of the rasterized weights — because it is the reference the
+ * rasterization gets normalized against, and because it stays exact when the
+ * whole crystal is smaller than one pixel.
+ */
+static inline float _polygon_area(const float radius_f, const float vertices)
+{
+  return 0.5f * vertices * radius_f * radius_f * sinf(2.0f * M_PI_F / vertices);
+}
+
+/**
+ * @brief Polar radius of one crystal boundary at angle `theta`.
+ */
+static inline float _polygon_radius(const float theta, const float radius_f, const float vertices,
+                                    const float rotation)
+{
+  const float envelope = cosf(M_PI_F / vertices)
+                          / cosf((2.0f * asinf(cosf(vertices * (theta + rotation))) + M_PI_F)
+                                / (2.0f * vertices));
+  return radius_f * envelope;
+}
+
+#define DT_CRYSTGRAIN_SUBSAMPLES 8
+
+/**
+ * @brief Estimate the surface of one pixel covered by one crystal.
+ *
+ * @details This is a box-filtered (area-exact) rasterization, not a
+ * signed-distance ramp: the returned weight is the fraction of the unit
+ * square centred on `(dx, dy)` that lies inside the crystal. That distinction
+ * is what makes the model survive downscaling. A ramp saturates at 0.5 for a
+ * crystal shrinking to a point, so a sub-pixel crystal would keep printing
+ * half a pixel worth of density and the grain would never average out; the
+ * true covered area goes to zero with the crystal surface, which is the
+ * behaviour a physical emulsion has when it is scanned at a lower resolution.
+ *
+ * Pixels entirely inside the inradius or entirely outside the circumradius
+ * are settled by two comparisons against the half-diagonal of the pixel
+ * square, so only the boundary band — `O(radius)` pixels out of `O(radius^2)`
+ * — pays for the subsampling.
  */
 static inline float _crystal_coverage(const int dx, const int dy, const float radius_f, const float vertices,
                                       const float rotation)
 {
-  const float local_radius = hypotf((float)dx, (float)dy);
-  float signed_distance = 0.0f;
-  const float theta = atan2f((float)dy, (float)dx);
-  const float envelope = cosf(M_PI_F / vertices)
-                          / cosf((2.0f * asinf(cosf(vertices * (theta + rotation))) + M_PI_F)
-                                / (2.0f * vertices));
-  const float polygon_radius = radius_f * envelope;
-  signed_distance = polygon_radius - local_radius;
-  return CLAMPS(signed_distance + 0.5f, 0.0f, 1.0f);
+  const float inradius = radius_f * cosf(M_PI_F / vertices);
+  const float distance = hypotf((float)dx, (float)dy);
+  const float half_diagonal = 0.70710678f; // half-diagonal of the unit pixel square
+
+  if(distance + half_diagonal <= inradius) return 1.0f;
+  if(distance - half_diagonal >= radius_f) return 0.0f;
+
+  int inside = 0;
+
+  for(int sy = 0; sy < DT_CRYSTGRAIN_SUBSAMPLES; sy++)
+  {
+    const float py = (float)dy - 0.5f + ((float)sy + 0.5f) / (float)DT_CRYSTGRAIN_SUBSAMPLES;
+    for(int sx = 0; sx < DT_CRYSTGRAIN_SUBSAMPLES; sx++)
+    {
+      const float px = (float)dx - 0.5f + ((float)sx + 0.5f) / (float)DT_CRYSTGRAIN_SUBSAMPLES;
+      const float sample_radius = hypotf(px, py);
+      if(sample_radius <= _polygon_radius(atan2f(py, px), radius_f, vertices, rotation)) inside++;
+    }
+  }
+
+  return (float)inside / (float)(DT_CRYSTGRAIN_SUBSAMPLES * DT_CRYSTGRAIN_SUBSAMPLES);
 }
 
 /**
@@ -318,8 +416,22 @@ static inline float _crystal_coverage(const int dx, const int dy, const float ra
  * @details Each bank entry keeps one crystal size, shape and orientation, then
  * the stochastic look comes from stacking many layers and randomly picking
  * between several bank entries at each seed position. The support window is
- * rasterized to integer pixels, but each tap stores a partial-coverage weight
- * so non-integer radii do not collapse to a binary edge.
+ * rasterized to integer pixels, but each tap stores the fraction of that pixel
+ * the crystal actually covers, so a crystal that no longer spans a whole pixel
+ * degrades into one tap of fractional weight instead of collapsing onto a
+ * binary 1-pixel dot.
+ *
+ * The rasterized weights are then rescaled so their sum matches the analytic
+ * crystal surface exactly. The subsampling quantum is `1 / 64` of a pixel, and
+ * that residual is not cosmetic: the seed intensity, the per-crystal capture
+ * cap and the flat-field exposure prediction are all expressed against this
+ * surface, so letting it drift with the rasterization would make the three of
+ * them disagree at the scales where the crystal is only a few subsamples wide.
+ * The weights are deliberately *not* clamped back to 1 afterwards — they are
+ * energy weights, and clamping would silently break that sum.
+ *
+ * `kernel->radius` is the tight support radius, so a sub-pixel crystal reports
+ * radius 0 and a single tap, which is the fast path the simulation keys on.
  */
 __DT_CLONE_TARGETS__
 static int _create_crystal_kernel(dt_iop_crystgrain_kernel_t *const kernel, const float radius_f,
@@ -327,25 +439,60 @@ static int _create_crystal_kernel(dt_iop_crystgrain_kernel_t *const kernel, cons
 {
   memset(kernel, 0, sizeof(*kernel));
 
-  const int radius = MAX((int)ceilf(radius_f + 0.5f), 1);
-  const int width = 2 * radius + 1;
-  int count = 0;
-  float area = 0.0f;
+  const float target_area = _polygon_area(radius_f, vertices);
+  if(!(target_area > 0.0f)) return 1;
 
-  for(int y = 0; y < width; y++)
+  const int window_radius = MAX((int)ceilf(radius_f + 0.5f), 1);
+  const int window_width = 2 * window_radius + 1;
+  float *const dense = malloc(sizeof(float) * (size_t)window_width * window_width);
+  if(IS_NULL_PTR(dense)) return 1;
+
+  float raster_area = 0.0f;
+  for(int y = 0; y < window_width; y++)
   {
-    for(int x = 0; x < width; x++)
+    for(int x = 0; x < window_width; x++)
     {
-      const float alpha = _crystal_coverage(x - radius, y - radius, radius_f, vertices, rotation);
-      if(alpha > FLT_EPSILON)
-      {
-        count++;
-        area += alpha;
-      }
+      const float alpha = _crystal_coverage(x - window_radius, y - window_radius, radius_f, vertices, rotation);
+      dense[(size_t)y * window_width + x] = alpha;
+      raster_area += alpha;
     }
   }
 
-  if(count <= 0 || area <= FLT_EPSILON) return 1;
+  if(raster_area <= FLT_EPSILON)
+  {
+    // The crystal is smaller than one subsample: keep it as one tap carrying
+    // its exact analytic surface rather than dropping it, so the germ
+    // statistics stay valid all the way down.
+    memset(dense, 0, sizeof(float) * (size_t)window_width * window_width);
+    dense[(size_t)window_radius * window_width + window_radius] = target_area;
+  }
+  else
+  {
+    const float gain = target_area / raster_area;
+    for(size_t k = 0; k < (size_t)window_width * window_width; k++) dense[k] *= gain;
+  }
+
+  int count = 0;
+  int radius = 0;
+  float area = 0.0f;
+  for(int y = 0; y < window_width; y++)
+  {
+    for(int x = 0; x < window_width; x++)
+    {
+      const float alpha = dense[(size_t)y * window_width + x];
+      if(alpha <= FLT_EPSILON) continue;
+
+      count++;
+      area += alpha;
+      radius = MAX(radius, MAX(abs(x - window_radius), abs(y - window_radius)));
+    }
+  }
+
+  if(count <= 0 || area <= FLT_EPSILON)
+  {
+    free(dense);
+    return 1;
+  }
 
   kernel->dx = malloc(sizeof(int) * count);
   kernel->dy = malloc(sizeof(int) * count);
@@ -356,6 +503,7 @@ static int _create_crystal_kernel(dt_iop_crystgrain_kernel_t *const kernel, cons
     free(kernel->dy);
     free(kernel->alpha);
     memset(kernel, 0, sizeof(*kernel));
+    free(dense);
     return 1;
   }
 
@@ -365,24 +513,23 @@ static int _create_crystal_kernel(dt_iop_crystgrain_kernel_t *const kernel, cons
   kernel->area = area;
 
   int k = 0;
-  for(int y = 0; y < width; y++)
+  for(int y = 0; y < window_width; y++)
   {
-    for(int x = 0; x < width; x++)
+    for(int x = 0; x < window_width; x++)
     {
-      const float alpha = _crystal_coverage(x - radius, y - radius, radius_f, vertices, rotation);
-      if(alpha > FLT_EPSILON)
-      {
-        kernel->dx[k] = x - radius;
-        kernel->dy[k] = y - radius;
-        kernel->alpha[k] = alpha;
-        k++;
-      }
+      const float alpha = dense[(size_t)y * window_width + x];
+      if(alpha <= FLT_EPSILON) continue;
+
+      kernel->dx[k] = x - window_radius;
+      kernel->dy[k] = y - window_radius;
+      kernel->alpha[k] = alpha;
+      k++;
     }
   }
 
+  free(dense);
   return 0;
 }
-
 /**
  * @brief Release one crystal kernel.
  */
@@ -403,11 +550,16 @@ static int _pick_layer_kernel(dt_iop_crystgrain_layer_kernel_t *const entry,
 {
   memset(entry, 0, sizeof(*entry));
 
-  // Let the grain follow the preview scaling below 100% so zoomed-out views
-  // stay visually coherent, but clamp at 100% to avoid inventing larger
-  // crystals when the user zooms in past the native image scale.
-  const float mean_size = MAX(rt->grain_size * rt->kernel_scale, 1.0f);
-  const float max_size = MAX(3.0f * mean_size, 1.0f);
+  // The size distribution is drawn in full-resolution pixels — the unit the
+  // slider is authored in — and only converted to the current grid at the very
+  // end, by one linear factor. Drawing it directly in grid pixels instead is
+  // what used to make the crystal population itself resolution-dependent: the
+  // old form subtracted one whole pixel from the size before halving it, and
+  // an affine map cannot commute with a scale change, so halving the preview
+  // scale shrank the crystals by more than half and eventually pinned them at
+  // the 1-pixel floor.
+  const float mean_size = MAX(rt->grain_size, 1.0f);
+  const float max_size = 3.0f * mean_size;
 
   for(int attempt = 0; attempt < 8; attempt++)
   {
@@ -417,25 +569,25 @@ static int _pick_layer_kernel(dt_iop_crystgrain_layer_kernel_t *const entry,
     const float rotation = 2.0f * M_PI_F * _uniform_random(seed + 101u + attempt * 43u);
     const float log_size = logf(mean_size) + rt->size_stddev * _gaussian_random(seed + 151u + attempt * 47u,
                                                                                  seed + 181u + attempt * 53u);
-    const float random_size = CLAMPS(expf(log_size), 1.0f, max_size);
-    const float radius_f = MAX(0.5f * (random_size - 1.0f), 0.5f);
+    const float random_size = CLAMPS(expf(log_size), 0.25f, max_size);
+    const float radius_f = MAX(0.5f * random_size * rt->kernel_scale, DT_CRYSTGRAIN_MIN_RADIUS);
 
     if(_create_crystal_kernel(&entry->footprint, radius_f, vertices, rotation) == 0)
     {
-      entry->probability = _seed_probability(rt->filling, entry->footprint.area);
+      entry->intensity = _seed_intensity(rt->filling, entry->footprint.area);
       entry->vertices = vertices;
       entry->rotation = rotation;
-      entry->width = 2 * entry->footprint.radius + 1;
       return 0;
     }
   }
 
-  if(_create_crystal_kernel(&entry->footprint, 0.5f, 4.0f, 0.0f) != 0) return 1;
+  if(_create_crystal_kernel(&entry->footprint, MAX(0.5f * mean_size * rt->kernel_scale, DT_CRYSTGRAIN_MIN_RADIUS),
+                            4.0f, 0.0f) != 0)
+    return 1;
 
-  entry->probability = _seed_probability(rt->filling, entry->footprint.area);
+  entry->intensity = _seed_intensity(rt->filling, entry->footprint.area);
   entry->vertices = 4.0f;
   entry->rotation = 0.0f;
-  entry->width = 1;
   return 0;
 }
 
@@ -444,13 +596,13 @@ static int _pick_layer_kernel(dt_iop_crystgrain_layer_kernel_t *const entry,
  *
  * @details The user-facing layer capture is expressed against the average
  * grain size control, not against the exact randomized footprint drawn for
- * each seed. We therefore normalize it by the area of a circle built from the
- * average grain radius at the current preview scale.
+ * each seed. We therefore normalize it by the area of a disc built from the
+ * average grain radius at the current preview scale. This is only the fallback
+ * used when no bank could be sampled.
  */
 static inline float _average_grain_surface(const dt_iop_crystgrain_runtime_t *const rt)
 {
-  const float mean_size = MAX(rt->grain_size * rt->kernel_scale, 1.0f);
-  const float mean_radius = MAX(0.5f * (mean_size - 1.0f), 0.5f);
+  const float mean_radius = MAX(0.5f * MAX(rt->grain_size, 1.0f) * rt->kernel_scale, DT_CRYSTGRAIN_MIN_RADIUS);
   return M_PI_F * mean_radius * mean_radius;
 }
 
@@ -533,23 +685,88 @@ static void _free_layer_kernel_bank(dt_iop_crystgrain_layer_kernel_t *const bank
 }
 
 /**
+ * @brief Deplete a flat light field with a continuous germ mass.
+ *
+ * @details Mean-field integration of the crystal stack over one layer. One
+ * pixel receives, from every germ whose footprint overlaps it, a share `alpha`
+ * of a flat tone `min(r, cap)`, where `cap` is the per-crystal capture ceiling
+ * and `r` the light still available. Summing those shares over the germ
+ * process, the total weight reaching a pixel is `intensity * area`, so the
+ * depletion obeys `dr/dt = -min(r, cap)` integrated over `t` in `[0, mass]`,
+ * `t` counting accumulated coverage weight rather than crystals.
+ *
+ * That ODE is piecewise-closed: `r` first falls linearly at rate `cap` while
+ * it is above the ceiling, then decays exponentially once the ceiling stops
+ * binding. Integrating instead of taking the first-order product is what keeps
+ * the prediction usable when a single pixel is swept by many sub-pixel
+ * crystals — the first-order form silently over-predicts there, and it is the
+ * exposure normalization that would drift with resolution.
+ */
+static inline float _flat_field_capture(const float remaining, const float cap, const float mass)
+{
+  if(!(cap > 0.0f) || !(mass > 0.0f) || !(remaining > 0.0f)) return 0.0f;
+
+  float light = remaining;
+  float weight = mass;
+
+  if(light > cap)
+  {
+    const float linear_weight = (light - cap) / cap;
+    if(weight <= linear_weight) return cap * weight;
+    light = cap;
+    weight -= linear_weight;
+  }
+
+  return remaining - light * expf(-weight);
+}
+
+/**
+ * @brief Deplete one pixel with `count` coincident crystals.
+ *
+ * @details Exact closed form of the recurrence `r <- r - alpha * min(r, cap)`
+ * iterated `count` times, which is what the simulation would do if it looped
+ * over each of the crystals a sub-pixel germ process dropped on that single
+ * pixel. Same two regimes as the continuous version above, but counted in
+ * whole crystals: `steps` iterations while the ceiling binds, then a geometric
+ * decay by `(1 - alpha)` per crystal.
+ *
+ * Evaluating it in closed form rather than looping is what bounds the cost:
+ * the crystal count per pixel grows as the square of the downscaling factor,
+ * so a thumbnail would otherwise pay the full-resolution grain count on a
+ * fraction of the pixels.
+ */
+static inline float _coincident_capture(const float remaining, const float cap, const float alpha, const int count)
+{
+  if(count <= 0 || !(cap > 0.0f) || !(alpha > 0.0f) || !(remaining > 0.0f)) return 0.0f;
+
+  float light = remaining;
+  int left = count;
+
+  if(light > cap)
+  {
+    const float exact_steps = (light - cap) / (alpha * cap);
+    const int steps = (exact_steps >= (float)left) ? left : (int)ceilf(exact_steps);
+    light -= (float)steps * alpha * cap;
+    left -= steps;
+  }
+
+  if(left > 0) light *= powf(1.0f - fminf(alpha, 1.0f), (float)left);
+
+  return fmaxf(remaining - light, 0.0f);
+}
+
+/**
  * @brief Predict the mean captured energy of one flat-field layer.
  *
  * @details The output normalization only needs the average exposure loss of
- * the stochastic crystal stack. For a unit flat field with remaining energy
- * `r`, one seed of kernel area `A` prints a flat tone
- * `c = min(r, A * layer_scale)`, because the unit input averages to `1` over
- * the whole crystal support and the layer sensitivity is expressed per grain
- * surface. One translated crystal contributes `c * alpha` to a destination
- * pixel, and the sum of all translated weights over the lattice equals `A`,
- * so the expected per-pixel capture of one bank entry is:
+ * the stochastic crystal stack, so we run the mean-field depletion above on a
+ * unit flat field, once per bank entry, and average the results.
  *
- * `E_i = p_i * A_i * min(r, A_i * layer_scale)`
- *
- * where `p_i` is the Bernoulli seed probability of that bank entry. Averaging
- * `E_i` over the precomputed kernel bank gives a mean-field prediction of the
- * layer capture that depends only on the grain statistics, not on the image
- * content.
+ * The germ mass one pixel receives from an entry is `intensity * area`, which
+ * by construction equals `-ln(1 - filling)` for every entry — the invariant
+ * that makes the model scale-free. The per-crystal ceiling `area * layer_scale`
+ * is what still differentiates the entries, since the layer sensitivity is
+ * expressed per unit of grain surface.
  */
 __DT_CLONE_TARGETS__
 static float _predict_layer_capture(const dt_iop_crystgrain_layer_kernel_t *const bank, const float layer_scale,
@@ -560,8 +777,7 @@ static float _predict_layer_capture(const dt_iop_crystgrain_layer_kernel_t *cons
   for(int i = 0; i < DT_CRYSTGRAIN_LAYER_KERNELS; i++)
   {
     const float area = bank[i].footprint.area;
-    const float captured = fminf(remaining_fraction, area * layer_scale);
-    capture += bank[i].probability * area * captured;
+    capture += _flat_field_capture(remaining_fraction, area * layer_scale, bank[i].intensity * area);
   }
 
   return MAX((float)(capture / DT_CRYSTGRAIN_LAYER_KERNELS), 0.0f);
@@ -646,56 +862,82 @@ static int _simulate_channel(const dt_iop_crystgrain_runtime_t *const rt, const 
         const dt_iop_crystgrain_kernel_t *const kernel = &entry->footprint;
         const int radius = kernel->radius;
         const int interior = (y >= radius && y < rt->height - radius && x >= radius && x < rt->width - radius);
-        float seed_energy = 0.0f;
-        float original_energy = 0.0f;
 
-        // The seed tests the light field that is still available after all
-        // previous grains and layers have already depleted their share.
-        if(_uniform_random(pixel_seed ^ 0xda942042e4dd58b5ull) >= entry->probability) continue;
+        // How many crystals the germ process actually dropped on this pixel.
+        // At and near 100% a crystal is wider than a pixel, the intensity is
+        // well below one and this behaves like the old Bernoulli draw. Zoomed
+        // out, several sub-pixel crystals share the same pixel, and sampling
+        // that count — instead of truncating it at one — is precisely what
+        // makes the grain average out with resolution the way a real emulsion
+        // does when it is scanned smaller.
+        const int crystals = _poisson_random(pixel_seed ^ 0xda942042e4dd58b5ull, entry->intensity);
+        if(crystals <= 0) continue;
 
-        // Like the OpenCL path, each pixel either exits immediately or sweeps
-        // only its own crystal footprint to print one flat tone into the
-        // reconstruction while depleting the remaining light field in place.
-        for(int tap = 0; tap < kernel->count; tap++)
+        if(kernel->count == 1 && kernel->dx[0] == 0 && kernel->dy[0] == 0)
         {
-          int xx = x + kernel->dx[tap];
-          int yy = y + kernel->dy[tap];
-          if(!interior)
-          {
-            xx = _reflect_index(xx, width);
-            yy = _reflect_index(yy, height);
-          }
+          // Sub-pixel regime: the whole crystal fits in its own pixel, so the
+          // coincident crystals only ever deplete that one pixel and the
+          // recurrence has a closed form.
+          const float alpha = kernel->alpha[0];
+          const float cap = image[index] * alpha * rt->layer_scale;
+          const float deposited = _coincident_capture(remaining[index], cap, alpha, crystals);
+          if(deposited <= 0.0f) continue;
 
-          const size_t dst = (size_t)yy * width + xx;
-          // A crystal prints one flat tone from the average of the current
-          // light field and of the immutable input over the whole grain
-          // surface, so no detail finer than the grain survives inside it.
-          seed_energy += remaining[dst] * kernel->alpha[tap];
-          original_energy += image[dst] * kernel->alpha[tap];
+          result[index] += deposited;
+          remaining[index] = fmaxf(remaining[index] - deposited, 0.0f);
+          continue;
         }
-        seed_energy /= kernel->area;
-        // The user layer scale now applies to the whole grain surface, so the
-        // per-pixel flat tone cap must scale with the grain area too.
-        original_energy *= rt->layer_scale;
-        seed_energy = fminf(seed_energy, original_energy);
-        if(seed_energy <= 0.0f) continue;
 
-        for(int tap = 0; tap < kernel->count; tap++)
+        // Each pixel sweeps only its own crystal footprint to print one flat
+        // tone into the reconstruction while depleting the remaining light
+        // field in place. Coincident crystals are printed one after the other,
+        // each seeing what the previous ones left behind.
+        for(int crystal = 0; crystal < crystals; crystal++)
         {
-          int xx = x + kernel->dx[tap];
-          int yy = y + kernel->dy[tap];
-          if(!interior)
-          {
-            xx = _reflect_index(xx, width);
-            yy = _reflect_index(yy, height);
-          }
+          float seed_energy = 0.0f;
+          float original_energy = 0.0f;
 
-          const size_t dst = (size_t)yy * width + xx;
-          // Write the flat crystal tone back to the output and subtract the
-          // same quantity from the light field that will feed deeper layers.
-          const float deposited = seed_energy * kernel->alpha[tap];
-          result[dst] += deposited;
-          remaining[dst] = fmaxf(remaining[dst] - deposited, 0.0f);
+          for(int tap = 0; tap < kernel->count; tap++)
+          {
+            int xx = x + kernel->dx[tap];
+            int yy = y + kernel->dy[tap];
+            if(!interior)
+            {
+              xx = _reflect_index(xx, width);
+              yy = _reflect_index(yy, height);
+            }
+
+            const size_t dst = (size_t)yy * width + xx;
+            // A crystal prints one flat tone from the average of the current
+            // light field and of the immutable input over the whole grain
+            // surface, so no detail finer than the grain survives inside it.
+            seed_energy += remaining[dst] * kernel->alpha[tap];
+            original_energy += image[dst] * kernel->alpha[tap];
+          }
+          seed_energy /= kernel->area;
+          // The user layer scale applies to the whole grain surface, so the
+          // per-pixel flat tone cap must scale with the grain area too.
+          original_energy *= rt->layer_scale;
+          seed_energy = fminf(seed_energy, original_energy);
+          if(seed_energy <= 0.0f) break;
+
+          for(int tap = 0; tap < kernel->count; tap++)
+          {
+            int xx = x + kernel->dx[tap];
+            int yy = y + kernel->dy[tap];
+            if(!interior)
+            {
+              xx = _reflect_index(xx, width);
+              yy = _reflect_index(yy, height);
+            }
+
+            const size_t dst = (size_t)yy * width + xx;
+            // Write the flat crystal tone back to the output and subtract the
+            // same quantity from the light field that will feed deeper layers.
+            const float deposited = seed_energy * kernel->alpha[tap];
+            result[dst] += deposited;
+            remaining[dst] = fmaxf(remaining[dst] - deposited, 0.0f);
+          }
         }
       }
     }
@@ -772,49 +1014,68 @@ static int _simulate_color(const dt_iop_crystgrain_runtime_t *const rt,
         const dt_iop_crystgrain_kernel_t *const kernel = &entry->footprint;
         const int radius = kernel->radius;
         const int interior = (y >= radius && y < height - radius && x >= radius && x < width - radius);
-        float seed_energy = 0.0f;
-        float original_energy = 0.0f;
 
-        if(_uniform_random(pixel_seed ^ 0xda942042e4dd58b5ull) >= entry->probability) continue;
+        // Same germ count as the monochrome path, drawn per spectral sub-stack.
+        const int crystals = _poisson_random(pixel_seed ^ 0xda942042e4dd58b5ull, entry->intensity);
+        if(crystals <= 0) continue;
 
-        for(int tap = 0; tap < kernel->count; tap++)
+        if(kernel->count == 1 && kernel->dx[0] == 0 && kernel->dy[0] == 0)
         {
-          int xx = x + kernel->dx[tap];
-          int yy = y + kernel->dy[tap];
-          if(!interior)
-          {
-            xx = _reflect_index(xx, width);
-            yy = _reflect_index(yy, height);
-          }
+          const float alpha = kernel->alpha[0];
+          const float cap = state->image[_rgb_index(index, c)] * alpha * rt->layer_scale;
+          const float deposited = _coincident_capture(state->remaining[_rgb_index(index, c)], cap, alpha, crystals);
+          if(deposited <= 0.0f) continue;
 
-          const size_t dst = (size_t)yy * width + xx;
-          // Each depth layer belongs to one spectral emulsion only, so it
-          // prints one flat tone from that channel and leaves the others to
-          // deeper layers.
-          seed_energy += state->remaining[_rgb_index(dst, c)] * kernel->alpha[tap];
-          original_energy += state->image[_rgb_index(dst, c)] * kernel->alpha[tap];
+          state->result[_rgb_index(index, c)] += deposited;
+          state->remaining[_rgb_index(index, c)]
+            = fmaxf(state->remaining[_rgb_index(index, c)] - deposited, 0.0f);
+          continue;
         }
 
-        seed_energy /= kernel->area;
-        original_energy *= rt->layer_scale;
-        const float captured = fminf(seed_energy, original_energy);
-        if(captured <= 0.0f) continue;
-
-        for(int tap = 0; tap < kernel->count; tap++)
+        for(int crystal = 0; crystal < crystals; crystal++)
         {
-          int xx = x + kernel->dx[tap];
-          int yy = y + kernel->dy[tap];
-          if(!interior)
+          float seed_energy = 0.0f;
+          float original_energy = 0.0f;
+
+          for(int tap = 0; tap < kernel->count; tap++)
           {
-            xx = _reflect_index(xx, width);
-            yy = _reflect_index(yy, height);
+            int xx = x + kernel->dx[tap];
+            int yy = y + kernel->dy[tap];
+            if(!interior)
+            {
+              xx = _reflect_index(xx, width);
+              yy = _reflect_index(yy, height);
+            }
+
+            const size_t dst = (size_t)yy * width + xx;
+            // Each depth layer belongs to one spectral emulsion only, so it
+            // prints one flat tone from that channel and leaves the others to
+            // deeper layers.
+            seed_energy += state->remaining[_rgb_index(dst, c)] * kernel->alpha[tap];
+            original_energy += state->image[_rgb_index(dst, c)] * kernel->alpha[tap];
           }
 
-          const size_t dst = (size_t)yy * width + xx;
-          const float deposited = captured * kernel->alpha[tap];
-          state->result[_rgb_index(dst, c)] += deposited;
-          state->remaining[_rgb_index(dst, c)]
-            = fmaxf(state->remaining[_rgb_index(dst, c)] - deposited, 0.0f);
+          seed_energy /= kernel->area;
+          original_energy *= rt->layer_scale;
+          const float captured = fminf(seed_energy, original_energy);
+          if(captured <= 0.0f) break;
+
+          for(int tap = 0; tap < kernel->count; tap++)
+          {
+            int xx = x + kernel->dx[tap];
+            int yy = y + kernel->dy[tap];
+            if(!interior)
+            {
+              xx = _reflect_index(xx, width);
+              yy = _reflect_index(yy, height);
+            }
+
+            const size_t dst = (size_t)yy * width + xx;
+            const float deposited = captured * kernel->alpha[tap];
+            state->result[_rgb_index(dst, c)] += deposited;
+            state->remaining[_rgb_index(dst, c)]
+              = fmaxf(state->remaining[_rgb_index(dst, c)] - deposited, 0.0f);
+          }
         }
       }
     }
@@ -961,6 +1222,76 @@ static void _finalize_color_grain_kernel(const float *const restrict in, float *
 #define DT_CRYSTGRAIN_REDUCESIZE 64
 
 /**
+ * @brief Upload one layer bank to the device.
+ *
+ * @details The device used to re-derive every tap's coverage analytically from
+ * `(radius, vertices, rotation)`, twice per crystal and once per tap. It now
+ * reads the very same weights the CPU path rasterizes, uploaded as one dense
+ * `(2 * radius + 1)^2` map per bank entry: cheaper in the inner loop, and it
+ * removes a standing CPU/GPU divergence — the two coverage functions had
+ * already drifted apart, the device one short-circuiting any crystal with 5
+ * vertices or more to a disc.
+ *
+ * `params` carries what the kernel still needs per entry: the germ intensity,
+ * the crystal surface, the support radius (0 for a sub-pixel crystal, which is
+ * the fast path) and the offset of its weight map.
+ */
+static cl_int _upload_layer_bank(const int devid, const dt_iop_crystgrain_layer_kernel_t *const bank,
+                                 cl_mem *const dev_params, cl_mem *const dev_alpha)
+{
+  float params[DT_CRYSTGRAIN_LAYER_KERNELS][4];
+  size_t total_taps = 0;
+
+  *dev_params = NULL;
+  *dev_alpha = NULL;
+
+  for(int i = 0; i < DT_CRYSTGRAIN_LAYER_KERNELS; i++)
+  {
+    const int radius = bank[i].footprint.radius;
+    const size_t stride = (size_t)(2 * radius + 1);
+    params[i][0] = bank[i].intensity;
+    params[i][1] = bank[i].footprint.area;
+    params[i][2] = (float)radius;
+    params[i][3] = (float)total_taps;
+    total_taps += stride * stride;
+  }
+
+  float *const alpha = calloc(total_taps, sizeof(float));
+  if(IS_NULL_PTR(alpha)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
+
+  for(int i = 0; i < DT_CRYSTGRAIN_LAYER_KERNELS; i++)
+  {
+    const dt_iop_crystgrain_kernel_t *const footprint = &bank[i].footprint;
+    const int radius = footprint->radius;
+    const size_t stride = (size_t)(2 * radius + 1);
+    const size_t offset = (size_t)params[i][3];
+
+    for(int tap = 0; tap < footprint->count; tap++)
+      alpha[offset + (size_t)(footprint->dy[tap] + radius) * stride + (size_t)(footprint->dx[tap] + radius)]
+        = footprint->alpha[tap];
+  }
+
+  *dev_params = dt_opencl_copy_host_to_device_constant(devid, sizeof(params), params);
+  *dev_alpha = dt_opencl_alloc_device_buffer(devid, sizeof(float) * total_taps);
+  cl_int err = (IS_NULL_PTR(*dev_params) || IS_NULL_PTR(*dev_alpha)) ? CL_MEM_OBJECT_ALLOCATION_FAILURE : CL_SUCCESS;
+
+  if(err == CL_SUCCESS)
+    err = dt_opencl_write_buffer_to_device(devid, alpha, *dev_alpha, 0, sizeof(float) * total_taps, TRUE);
+
+  free(alpha);
+
+  if(err != CL_SUCCESS)
+  {
+    dt_opencl_release_mem_object(*dev_params);
+    dt_opencl_release_mem_object(*dev_alpha);
+    *dev_params = NULL;
+    *dev_alpha = NULL;
+  }
+
+  return err;
+}
+
+/**
  * @brief Simulate one grain field entirely on the OpenCL device.
  *
  * @details The host precomputes a small bank of crystal geometries for the
@@ -992,8 +1323,8 @@ static int _simulate_channel_cl(const int devid, dt_iop_crystgrain_global_data_t
   for(int layer = 0; layer < rt->layers; layer++)
   {
     dt_iop_crystgrain_layer_kernel_t kernel_bank[DT_CRYSTGRAIN_LAYER_KERNELS];
-    float kernel_bank_cl[DT_CRYSTGRAIN_LAYER_KERNELS][4];
     cl_mem dev_kernel_bank = NULL;
+    cl_mem dev_kernel_alpha = NULL;
     const float layer_scale = rt->layer_scale;
     const int roi_x = rt->roi_x;
     const int roi_y = rt->roi_y;
@@ -1009,17 +1340,9 @@ static int _simulate_channel_cl(const int devid, dt_iop_crystgrain_global_data_t
                                 - _predict_layer_capture(kernel_bank, rt->layer_scale, predicted_remaining),
                                 0.0f);
 
-    for(int i = 0; i < DT_CRYSTGRAIN_LAYER_KERNELS; i++)
-    {
-      kernel_bank_cl[i][0] = kernel_bank[i].vertices;
-      kernel_bank_cl[i][1] = kernel_bank[i].rotation;
-      kernel_bank_cl[i][2] = kernel_bank[i].probability;
-      kernel_bank_cl[i][3] = kernel_bank[i].footprint.radius_f;
-    }
-
-    dev_kernel_bank = dt_opencl_copy_host_to_device_constant(devid, sizeof(kernel_bank_cl), kernel_bank_cl);
+    err = _upload_layer_bank(devid, kernel_bank, &dev_kernel_bank, &dev_kernel_alpha);
     _free_layer_kernel_bank(kernel_bank);
-    if(IS_NULL_PTR(dev_kernel_bank)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
+    if(err != CL_SUCCESS) return err;
 
     dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer, 0, sizeof(cl_mem), &dev_image);
     dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer, 1, sizeof(cl_mem), &dev_remaining);
@@ -1033,8 +1356,10 @@ static int _simulate_channel_cl(const int devid, dt_iop_crystgrain_global_data_t
     dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer, 9, sizeof(cl_ulong), &base_seed);
     dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer, 10, sizeof(int), &layer);
     dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer, 11, sizeof(float), &layer_scale);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer, 12, sizeof(cl_mem), &dev_kernel_alpha);
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_simulate_layer, sizes);
     dt_opencl_release_mem_object(dev_kernel_bank);
+    dt_opencl_release_mem_object(dev_kernel_alpha);
     if(err != CL_SUCCESS) return err;
   }
 
@@ -1087,7 +1412,9 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // The current processing grid may already be downsampled twice:
   // 1. by the ROI zoom factor used for the current preview/export,
   // 2. by the mipmap level chosen before the pipe even starts.
-  const float kernel_scale = MAX(1.0f / dt_dev_get_module_scale(pipe, roi_in), 1e-6f);
+  // Clamped at 1 so zooming past the native scale never invents larger
+  // crystals than the ones the slider describes.
+  const float kernel_scale = CLAMPS(1.0f / dt_dev_get_module_scale(pipe, roi_in), 1e-6f, 1.0f);
   cl_int err = CL_SUCCESS;
   float exposure[3] = { 1.0f, 1.0f, 1.0f };
 
@@ -1131,8 +1458,13 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     .kernel_scale = kernel_scale,
     .inv_scale = 1.0f / kernel_scale,
     .channel_correlation = d->channel_correlation,
+    // The seed is keyed on the image alone, deliberately not on the buffer
+    // size: crystal sizes are drawn in full-resolution pixels and seeds are
+    // addressed by full-resolution position, so keeping the seed free of the
+    // grid dimensions is what lets the same crystals land in the same places
+    // whatever resolution the pipeline runs at.
     .base_seed = ((uint64_t)_hash_string(pipe->dev->image_storage.filename) << 32)
-                 ^ ((uint64_t)width << 16) ^ (uint64_t)height
+                 ^ 0x9e3779b97f4a7c15ull
   };
   const float current_surface = _average_discrete_grain_surface(&rt);
   // Neutral layer capture is defined as 1/layers of the input energy for a
@@ -1223,8 +1555,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   for(int layer = 0; layer < rt.layers; layer++)
   {
     dt_iop_crystgrain_layer_kernel_t kernel_bank[DT_CRYSTGRAIN_LAYER_KERNELS];
-    float kernel_bank_cl[DT_CRYSTGRAIN_LAYER_KERNELS][4];
     cl_mem dev_kernel_bank = NULL;
+    cl_mem dev_kernel_alpha = NULL;
     const int active_channel = (layer < blue_layers) ? 2 : ((layer < blue_layers + green_layers) ? 1 : 0);
     const int sublayer = (active_channel == 2)
       ? layer
@@ -1239,27 +1571,17 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
               - _predict_layer_capture(kernel_bank, rt.layer_scale, predicted_remaining[active_channel]),
               0.0f);
 
-    for(int i = 0; i < DT_CRYSTGRAIN_LAYER_KERNELS; i++)
-    {
-      kernel_bank_cl[i][0] = kernel_bank[i].vertices;
-      kernel_bank_cl[i][1] = kernel_bank[i].rotation;
-      kernel_bank_cl[i][2] = kernel_bank[i].probability;
-      kernel_bank_cl[i][3] = kernel_bank[i].footprint.radius_f;
-    }
-
-    dev_kernel_bank = dt_opencl_copy_host_to_device_constant(devid, sizeof(kernel_bank_cl), kernel_bank_cl);
+    err = _upload_layer_bank(devid, kernel_bank, &dev_kernel_bank, &dev_kernel_alpha);
     _free_layer_kernel_bank(kernel_bank);
-    if(IS_NULL_PTR(dev_kernel_bank))
-    {
-      err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-      goto error;
-    }
+    if(err != CL_SUCCESS) goto error;
 
     dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer_color, 9, sizeof(cl_mem), &dev_kernel_bank);
     dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer_color, 11, sizeof(int), &sublayer);
     dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer_color, 12, sizeof(int), &active_channel);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer_color, 14, sizeof(cl_mem), &dev_kernel_alpha);
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_simulate_layer_color, sizes);
     dt_opencl_release_mem_object(dev_kernel_bank);
+    dt_opencl_release_mem_object(dev_kernel_alpha);
     if(err != CL_SUCCESS) goto error;
   }
 
@@ -1328,8 +1650,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   float *const restrict out = (float *const)ovoid;
   const int width = roi_out->width;
   const int height = roi_out->height;
-  // Grain size is authored in full-resolution output pixels at 100% zoom.
-  const float kernel_scale = MAX(1.0f / dt_dev_get_module_scale(pipe, roi_in), 1e-6f);
+  // Grain size is authored in full-resolution output pixels at 100% zoom, and
+  // clamped there — see the OpenCL path for the details.
+  const float kernel_scale = CLAMPS(1.0f / dt_dev_get_module_scale(pipe, roi_in), 1e-6f, 1.0f);
 
   if(width <= 0 || height <= 0 || d->layers <= 0 || d->filling <= 0.0f)
   {
@@ -1371,8 +1694,13 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     .kernel_scale = kernel_scale,
     .inv_scale = 1.0f / kernel_scale,
     .channel_correlation = d->channel_correlation,
+    // The seed is keyed on the image alone, deliberately not on the buffer
+    // size: crystal sizes are drawn in full-resolution pixels and seeds are
+    // addressed by full-resolution position, so keeping the seed free of the
+    // grid dimensions is what lets the same crystals land in the same places
+    // whatever resolution the pipeline runs at.
     .base_seed = ((uint64_t)_hash_string(pipe->dev->image_storage.filename) << 32)
-                 ^ ((uint64_t)width << 16) ^ (uint64_t)height
+                 ^ 0x9e3779b97f4a7c15ull
   };
   const float current_surface = _average_discrete_grain_surface(&rt);
   // Neutral layer capture is defined as 1/layers of the input energy for a
@@ -1469,7 +1797,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->grain_size = dt_bauhaus_slider_from_params(self, "grain_size");
   dt_bauhaus_slider_set_digits(g->grain_size, 0);
   dt_bauhaus_slider_set_format(g->grain_size, " px");
-  gtk_widget_set_tooltip_text(g->grain_size, _("average crystal footprint at 100% zoom, clamped so zooming in does not enlarge it further"));
+  gtk_widget_set_tooltip_text(g->grain_size, _("average crystal diameter, in full-resolution pixels. The same crystals are simulated at every preview and export resolution, so the rendered grain stays consistent across sizes"));
 
   g->layers = dt_bauhaus_slider_from_params(self, "layers");
   dt_bauhaus_slider_set_digits(g->layers, 0);

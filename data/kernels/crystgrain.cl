@@ -61,12 +61,58 @@ gaussian_random(const ulong seed_a, const ulong seed_b)
   return native_sqrt(-2.0f * native_log(u1)) * native_cos(2.0f * M_PI_F * u2);
 }
 
-static inline float
-seed_probability(const float filling, const float crystal_area)
+// How many crystals the germ process dropped on one pixel. Small means use
+// Knuth's product method; large ones -- a pixel of a deeply zoomed-out preview
+// holds many sub-pixel crystals -- switch to the gaussian approximation so the
+// per-pixel cost stays O(1) whatever the resolution. Mirrors _poisson_random()
+// in iop/crystgrain.c.
+static inline int
+poisson_random(const ulong seed, const float mu)
 {
-  const float clamped_filling = clamp(filling, 0.0f, 0.9999f);
-  if(crystal_area <= 1.0f) return clamped_filling;
-  return 1.0f - pow(1.0f - clamped_filling, 1.0f / crystal_area);
+  if(!(mu > 0.0f)) return 0;
+
+  if(mu < 12.0f)
+  {
+    const float target = native_exp(-mu);
+    float product = 1.0f;
+    int count = 0;
+
+    while(product > target && count < 64)
+    {
+      count++;
+      product *= uniform_random(seed + (ulong)count * 0x9e3779b97f4a7c15UL);
+    }
+
+    return max(count - 1, 0);
+  }
+
+  const float deviate = mu + native_sqrt(mu) * gaussian_random(seed ^ 0xbf58476d1ce4e5b9UL,
+                                                               seed ^ 0x94d049bb133111ebUL);
+  return max((int)floor(deviate + 0.5f), 0);
+}
+
+// Closed form of `r <- r - alpha * min(r, cap)` iterated `count` times, i.e.
+// what coincident sub-pixel crystals do to the one pixel they all share.
+// Mirrors _coincident_capture() in iop/crystgrain.c.
+static inline float
+coincident_capture(const float remaining, const float cap, const float alpha, const int count)
+{
+  if(count <= 0 || !(cap > 0.0f) || !(alpha > 0.0f) || !(remaining > 0.0f)) return 0.0f;
+
+  float light = remaining;
+  int left = count;
+
+  if(light > cap)
+  {
+    const float exact_steps = (light - cap) / (alpha * cap);
+    const int steps = (exact_steps >= (float)left) ? left : (int)ceil(exact_steps);
+    light -= (float)steps * alpha * cap;
+    left -= steps;
+  }
+
+  if(left > 0) light *= pow(1.0f - fmin(alpha, 1.0f), (float)left);
+
+  return fmax(remaining - light, 0.0f);
 }
 
 void
@@ -155,23 +201,14 @@ crystgrain_zero_rgb(global float *buffer, const int width, const int height)
   buffer[index + 3] = 0.0f;
 }
 
+// Coverage weights are rasterized once on the host, area-exact, and uploaded as
+// one dense (2 * radius + 1)^2 map per bank entry. Both paths therefore read
+// the very same weights, instead of each re-deriving its own approximation.
 static inline float
-crystgrain_kernel_coverage(const int dx, const int dy, const float radius_f,
-                           const float vertices, const float rotation)
+crystgrain_kernel_coverage(global const float *alpha, const int offset, const int radius,
+                           const int dx, const int dy)
 {
-  if(vertices >= 5.0f)
-  {
-    const float signed_distance = radius_f - hypot((float)dx, (float)dy);
-    return clamp(signed_distance + 0.5f, 0.0f, 1.0f);
-  }
-
-  const float r = hypot((float)dx, (float)dy);
-  const float theta = atan2((float)dy, (float)dx);
-  const float envelope = native_cos(M_PI_F / vertices)
-                         / native_cos((2.0f * asin(cos(vertices * (theta + rotation))) + M_PI_F)
-                                      / (2.0f * vertices));
-  const float signed_distance = radius_f * envelope - r;
-  return clamp(signed_distance + 0.5f, 0.0f, 1.0f);
+  return alpha[offset + mad24(dy + radius, 2 * radius + 1, dx + radius)];
 }
 
 kernel void
@@ -212,7 +249,8 @@ kernel void
 crystgrain_simulate_layer(global const float *image, global float *remaining, global float *result,
                           global const float4 *kernel_bank, const int width, const int height,
                           const int roi_x, const int roi_y, const float inv_scale,
-                          const ulong base_seed, const int layer_index, const float layer_scale)
+                          const ulong base_seed, const int layer_index, const float layer_scale,
+                          global const float *kernel_alpha)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -230,88 +268,107 @@ crystgrain_simulate_layer(global const float *image, global float *remaining, gl
                            ^ ((ulong)(layer_index + 1) * 0x9e3779b97f4a7c15UL);
   const uint kernel_index = splitmix32_u64(pixel_seed ^ 0x94d049bb133111ebUL) & (CRYSTGRAIN_LAYER_KERNELS - 1U);
   const float4 params = kernel_bank[kernel_index];
-  const float vertices = params.x;
-  const float rotation = params.y;
-  const float probability = params.z;
-  const float radius_f = fmax(params.w, 0.5f);
-  const int radius = max((int)ceil(radius_f + 0.5f), 1);
+  const float intensity = params.x;
+  const float area = params.y;
+  const int radius = (int)params.z;
+  const int offset = (int)params.w;
   const int interior = (x >= radius && x < width - radius && y >= radius && y < height - radius);
 
-  // Each work-item sweeps only its own neighbourhood. If the random draw says
-  // this pixel is not a seed, it exits immediately without touching the light
-  // field or the reconstruction.
-  if(uniform_random(pixel_seed ^ 0xda942042e4dd58b5UL) >= probability) return;
+  // How many crystals the germ process dropped on this pixel. Zoomed out, a
+  // crystal is smaller than a pixel and several of them share it; sampling
+  // that count instead of truncating it at one is what makes the grain average
+  // out with resolution.
+  const int crystals = poisson_random(pixel_seed ^ 0xda942042e4dd58b5UL, intensity);
+  if(crystals <= 0) return;
 
-  float sum_remaining = 0.0f;
-  float sum_original = 0.0f;
-  float total_weight = 0.0f;
-
-  // Print a flat tone inside the crystal by averaging both the current light
-  // field and the immutable input signal over the grain support.
-  for(int dy = -radius; dy <= radius; dy++)
+  if(radius == 0)
   {
-    for(int dx = -radius; dx <= radius; dx++)
-    {
-      const float coverage = crystgrain_kernel_coverage(dx, dy, radius_f, vertices, rotation);
-      if(coverage <= FLT_EPSILON) continue;
+    // Sub-pixel regime: the crystals only ever deplete their own pixel, and
+    // the recurrence has a closed form. No atomics needed either, since this
+    // work-item is the only one writing that pixel.
+    const float alpha = kernel_alpha[offset];
+    const float cap = image[index] * alpha * layer_scale;
+    const float deposited = coincident_capture(remaining[index], cap, alpha, crystals);
+    if(deposited <= 0.0f) return;
 
-      int xx, yy, dst;
-      if(interior)
-      {
-        xx = x + dx;
-        yy = y + dy;
-        dst = mad24(yy, width, xx);
-      }
-      else
-      {
-        xx = reflect_index(x + dx, width);
-        yy = reflect_index(y + dy, height);
-        dst = mad24(yy, width, xx);
-      }
-
-      sum_remaining += fmax(remaining[dst], 0.0f) * coverage;
-      sum_original += image[dst] * coverage;
-      total_weight += coverage;
-    }
+    atomic_add_f(result + index, deposited);
+    atomic_sub_clamp0_f(remaining + index, deposited);
+    return;
   }
 
-  if(total_weight <= FLT_EPSILON) return;
-
-  float seed_energy = sum_remaining / total_weight;
-  // The user layer scale applies to the whole grain surface, so the flat
-  // crystal tone cap scales with the grain area instead of staying normalized
-  // per covered pixel.
-  const float original_energy = sum_original * layer_scale;
-  seed_energy = fmin(seed_energy, original_energy);
-  if(seed_energy <= 0.0f) return;
-
-  // Atomically add the printed crystal to the output and subtract the same
-  // amount from the remaining light so concurrent seeds still update the same
-  // buffers in place within this single layer dispatch.
-  for(int dy = -radius; dy <= radius; dy++)
+  for(int crystal = 0; crystal < crystals; crystal++)
   {
-    for(int dx = -radius; dx <= radius; dx++)
+    float sum_remaining = 0.0f;
+    float sum_original = 0.0f;
+    float total_weight = 0.0f;
+
+    // Print a flat tone inside the crystal by averaging both the current light
+    // field and the immutable input signal over the grain support.
+    for(int dy = -radius; dy <= radius; dy++)
     {
-      const float coverage = crystgrain_kernel_coverage(dx, dy, radius_f, vertices, rotation);
-      if(coverage <= FLT_EPSILON) continue;
-
-      int xx, yy, dst;
-      if(interior)
+      for(int dx = -radius; dx <= radius; dx++)
       {
-        xx = x + dx;
-        yy = y + dy;
-        dst = mad24(yy, width, xx);
-      }
-      else
-      {
-        xx = reflect_index(x + dx, width);
-        yy = reflect_index(y + dy, height);
-        dst = mad24(yy, width, xx);
-      }
+        const float coverage = crystgrain_kernel_coverage(kernel_alpha, offset, radius, dx, dy);
+        if(coverage <= FLT_EPSILON) continue;
 
-      const float deposited = seed_energy * coverage;
-      atomic_add_f(result + dst, deposited);
-      atomic_sub_clamp0_f(remaining + dst, deposited);
+        int xx, yy, dst;
+        if(interior)
+        {
+          xx = x + dx;
+          yy = y + dy;
+          dst = mad24(yy, width, xx);
+        }
+        else
+        {
+          xx = reflect_index(x + dx, width);
+          yy = reflect_index(y + dy, height);
+          dst = mad24(yy, width, xx);
+        }
+
+        sum_remaining += fmax(remaining[dst], 0.0f) * coverage;
+        sum_original += image[dst] * coverage;
+        total_weight += coverage;
+      }
+    }
+
+    if(total_weight <= FLT_EPSILON) return;
+
+    float seed_energy = sum_remaining / area;
+    // The user layer scale applies to the whole grain surface, so the flat
+    // crystal tone cap scales with the grain area instead of staying normalized
+    // per covered pixel.
+    const float original_energy = sum_original * layer_scale;
+    seed_energy = fmin(seed_energy, original_energy);
+    if(seed_energy <= 0.0f) return;
+
+    // Atomically add the printed crystal to the output and subtract the same
+    // amount from the remaining light so concurrent seeds still update the same
+    // buffers in place within this single layer dispatch.
+    for(int dy = -radius; dy <= radius; dy++)
+    {
+      for(int dx = -radius; dx <= radius; dx++)
+      {
+        const float coverage = crystgrain_kernel_coverage(kernel_alpha, offset, radius, dx, dy);
+        if(coverage <= FLT_EPSILON) continue;
+
+        int xx, yy, dst;
+        if(interior)
+        {
+          xx = x + dx;
+          yy = y + dy;
+          dst = mad24(yy, width, xx);
+        }
+        else
+        {
+          xx = reflect_index(x + dx, width);
+          yy = reflect_index(y + dy, height);
+          dst = mad24(yy, width, xx);
+        }
+
+        const float deposited = seed_energy * coverage;
+        atomic_add_f(result + dst, deposited);
+        atomic_sub_clamp0_f(remaining + dst, deposited);
+      }
     }
   }
 }
@@ -321,7 +378,7 @@ crystgrain_simulate_layer_color(global const float *image_rgb, global float *rem
                                 const int width, const int height, const int roi_x, const int roi_y,
                                 const float inv_scale, const ulong base_seed, global const float4 *kernel_bank,
                                 const float layer_scale, const int sublayer, const int active_channel,
-                                const float channel_correlation)
+                                const float channel_correlation, global const float *kernel_alpha)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -351,82 +408,99 @@ crystgrain_simulate_layer_color(global const float *image_rgb, global float *rem
   const ulong pixel_seed = use_shared ? shared_seed : channel_seed;
   const uint kernel_index = splitmix32_u64(pixel_seed ^ 0x94d049bb133111ebUL) & (CRYSTGRAIN_LAYER_KERNELS - 1U);
   const float4 params = kernel_bank[kernel_index];
-  const float vertices = params.x;
-  const float rotation = params.y;
-  const float probability = params.z;
-  const float radius_f = fmax(params.w, 0.5f);
-  const int radius = max((int)ceil(radius_f + 0.5f), 1);
+  const float intensity = params.x;
+  const float area = params.y;
+  const int radius = (int)params.z;
+  const int offset = (int)params.w;
   const int interior = (x >= radius && x < width - radius && y >= radius && y < height - radius);
 
-  if(uniform_random(pixel_seed ^ 0xda942042e4dd58b5UL) >= probability) return;
+  // Same germ count as the monochrome path, drawn per spectral sub-stack.
+  const int crystals = poisson_random(pixel_seed ^ 0xda942042e4dd58b5UL, intensity);
+  if(crystals <= 0) return;
 
-  float seed_energy = 0.0f;
-  float original_energy = 0.0f;
-  float total_weight = 0.0f;
-
-  // One spectral sub-stack is active for this layer, so its crystals only
-  // capture one channel while deeper sub-stacks keep the remaining light for
-  // later.
-  for(int dy = -radius; dy <= radius; dy++)
+  if(radius == 0)
   {
-    for(int dx = -radius; dx <= radius; dx++)
-    {
-      const float coverage = crystgrain_kernel_coverage(dx, dy, radius_f, vertices, rotation);
-      if(coverage <= FLT_EPSILON) continue;
+    const int own_rgb = rgb_index + active_channel;
+    const float alpha = kernel_alpha[offset];
+    const float cap = image_rgb[own_rgb] * alpha * layer_scale;
+    const float deposited = coincident_capture(remaining_rgb[own_rgb], cap, alpha, crystals);
+    if(deposited <= 0.0f) return;
 
-      int xx, yy, dst;
-      if(interior)
-      {
-        xx = x + dx;
-        yy = y + dy;
-        dst = mad24(yy, width, xx);
-      }
-      else
-      {
-        xx = reflect_index(x + dx, width);
-        yy = reflect_index(y + dy, height);
-        dst = mad24(yy, width, xx);
-      }
-
-      const int dst_rgb = 4 * dst + active_channel;
-      seed_energy += remaining_rgb[dst_rgb] * coverage;
-      original_energy += image_rgb[dst_rgb] * coverage;
-      total_weight += coverage;
-    }
+    atomic_add_f(result_rgb + own_rgb, deposited);
+    atomic_sub_clamp0_f(remaining_rgb + own_rgb, deposited);
+    return;
   }
 
-  if(total_weight <= FLT_EPSILON) return;
-
-  seed_energy /= total_weight;
-  original_energy *= layer_scale;
-  const float captured = fmin(seed_energy, original_energy);
-  if(captured <= 0.0f) return;
-
-  for(int dy = -radius; dy <= radius; dy++)
+  for(int crystal = 0; crystal < crystals; crystal++)
   {
-    for(int dx = -radius; dx <= radius; dx++)
+    float seed_energy = 0.0f;
+    float original_energy = 0.0f;
+    float total_weight = 0.0f;
+
+    // One spectral sub-stack is active for this layer, so its crystals only
+    // capture one channel while deeper sub-stacks keep the remaining light for
+    // later.
+    for(int dy = -radius; dy <= radius; dy++)
     {
-      const float coverage = crystgrain_kernel_coverage(dx, dy, radius_f, vertices, rotation);
-      if(coverage <= FLT_EPSILON) continue;
-
-      int xx, yy, dst;
-      if(interior)
+      for(int dx = -radius; dx <= radius; dx++)
       {
-        xx = x + dx;
-        yy = y + dy;
-        dst = mad24(yy, width, xx);
-      }
-      else
-      {
-        xx = reflect_index(x + dx, width);
-        yy = reflect_index(y + dy, height);
-        dst = mad24(yy, width, xx);
-      }
+        const float coverage = crystgrain_kernel_coverage(kernel_alpha, offset, radius, dx, dy);
+        if(coverage <= FLT_EPSILON) continue;
 
-      const float deposited = captured * coverage;
-      const int dst_rgb = 4 * dst + active_channel;
-      atomic_add_f(result_rgb + dst_rgb, deposited);
-      atomic_sub_clamp0_f(remaining_rgb + dst_rgb, deposited);
+        int xx, yy, dst;
+        if(interior)
+        {
+          xx = x + dx;
+          yy = y + dy;
+          dst = mad24(yy, width, xx);
+        }
+        else
+        {
+          xx = reflect_index(x + dx, width);
+          yy = reflect_index(y + dy, height);
+          dst = mad24(yy, width, xx);
+        }
+
+        const int dst_rgb = 4 * dst + active_channel;
+        seed_energy += remaining_rgb[dst_rgb] * coverage;
+        original_energy += image_rgb[dst_rgb] * coverage;
+        total_weight += coverage;
+      }
+    }
+
+    if(total_weight <= FLT_EPSILON) return;
+
+    seed_energy /= area;
+    original_energy *= layer_scale;
+    const float captured = fmin(seed_energy, original_energy);
+    if(captured <= 0.0f) return;
+
+    for(int dy = -radius; dy <= radius; dy++)
+    {
+      for(int dx = -radius; dx <= radius; dx++)
+      {
+        const float coverage = crystgrain_kernel_coverage(kernel_alpha, offset, radius, dx, dy);
+        if(coverage <= FLT_EPSILON) continue;
+
+        int xx, yy, dst;
+        if(interior)
+        {
+          xx = x + dx;
+          yy = y + dy;
+          dst = mad24(yy, width, xx);
+        }
+        else
+        {
+          xx = reflect_index(x + dx, width);
+          yy = reflect_index(y + dy, height);
+          dst = mad24(yy, width, xx);
+        }
+
+        const float deposited = captured * coverage;
+        const int dst_rgb = 4 * dst + active_channel;
+        atomic_add_f(result_rgb + dst_rgb, deposited);
+        atomic_sub_clamp0_f(remaining_rgb + dst_rgb, deposited);
+      }
     }
   }
 }
