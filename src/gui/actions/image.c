@@ -31,19 +31,31 @@
 
 static gboolean rotate_counterclockwise_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_control_flip_images(1);
+  dt_control_flip_images(DT_IMAGE_TRANSFORM_ROTATE_CCW);
   return TRUE;
 }
 
 static gboolean rotate_clockwise_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_control_flip_images(0);
+  dt_control_flip_images(DT_IMAGE_TRANSFORM_ROTATE_CW);
+  return TRUE;
+}
+
+static gboolean flip_horizontally_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  dt_control_flip_images(DT_IMAGE_TRANSFORM_FLIP_HORIZONTALLY);
+  return TRUE;
+}
+
+static gboolean flip_vertically_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  dt_control_flip_images(DT_IMAGE_TRANSFORM_FLIP_VERTICALLY);
   return TRUE;
 }
 
 static gboolean reset_rotation_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_control_flip_images(2);
+  dt_control_flip_images(DT_IMAGE_TRANSFORM_RESET);
   return TRUE;
 }
 
@@ -202,8 +214,8 @@ static gboolean rating_reject_callback(GtkAccelGroup *group, GObject *accelerata
   return TRUE;
 }
 
-/* Rotation has a module in darkroom, don't support it there */
-gboolean _can_be_rotated()
+/* Orientation has a module in darkroom, don't support it there */
+gboolean _can_be_reoriented()
 {
   return has_active_images() && _is_lighttable();
 }
@@ -212,20 +224,30 @@ MAKE_ACCEL_WRAPPER(dt_control_refresh_exif)
 
 void append_image(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
-  /* Rotation */
-  add_top_submenu_entry(menus, lists, _("Rotate"), index);
+  /* Orientation: quarter turns and mirrors, all writing the same EXIF orientation */
+  add_top_submenu_entry(menus, lists, _("Rotate and flip"), index);
   GtkWidget *parent = get_last_widget(lists);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("90\302\260 counter-clockwise"), index, NULL,
-                         rotate_counterclockwise_callback, NULL, NULL, _can_be_rotated, 0, 0);
+                         rotate_counterclockwise_callback, NULL, NULL, _can_be_reoriented, 0, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("90\302\260 clockwise"), index, NULL,
-                         rotate_clockwise_callback, NULL, NULL, _can_be_rotated, 0, 0);
+                         rotate_clockwise_callback, NULL, NULL, _can_be_reoriented, 0, 0);
 
   add_sub_menu_separator(parent);
 
-  add_sub_sub_menu_entry(menus, parent, lists, _("Reset rotation"), index, NULL,
-                         reset_rotation_callback, NULL, NULL, _can_be_rotated, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Flip horizontally"), index, NULL,
+                         flip_horizontally_callback, NULL, NULL, _can_be_reoriented, 0, 0);
+
+  add_sub_sub_menu_entry(menus, parent, lists, _("Flip vertically"), index, NULL,
+                         flip_vertically_callback, NULL, NULL, _can_be_reoriented, 0, 0);
+
+  add_sub_menu_separator(parent);
+
+  /* Resets the mirrors as well as the rotation: it restores ORIENTATION_NULL, which hands the
+     image back to whatever its EXIF says. Hence "orientation" rather than "rotation". */
+  add_sub_sub_menu_entry(menus, parent, lists, _("Reset orientation"), index, NULL,
+                         reset_rotation_callback, NULL, NULL, _can_be_reoriented, 0, 0);
 
   /* Color labels */
   add_top_submenu_entry(menus, lists, _("Color labels"), index);

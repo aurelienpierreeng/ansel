@@ -230,6 +230,26 @@ typedef enum dt_image_orientation_t
   ORIENTATION_TRANSVERSE        = ORIENTATION_FLIP_Y | ORIENTATION_FLIP_X | ORIENTATION_SWAP_XY // 7
 } dt_image_orientation_t;
 
+/** @brief An orientation change the user asks for, in the coordinates they are looking at.
+ *
+ * dt_image_orientation_t describes where an image ENDED UP; this describes what to DO to it.
+ * The two are not interchangeable, because the same request composes differently depending on
+ * the orientation already in force: once ORIENTATION_SWAP_XY is set, the axis the user calls
+ * "horizontal" is the stored FLIP_Y bit, not FLIP_X.
+ *
+ * The numeric values are the ones dt_image_flip()'s `cw' argument used to carry, so callers
+ * that still pass 0, 1 or 2 keep working -- but nothing should: `cw' meant clockwise, and by
+ * the time it also meant counter-clockwise, reset, and two mirrors, the name was a lie.
+ */
+typedef enum dt_image_transform_t
+{
+  DT_IMAGE_TRANSFORM_ROTATE_CW           = 0, //!< quarter turn clockwise
+  DT_IMAGE_TRANSFORM_ROTATE_CCW          = 1, //!< quarter turn counter-clockwise
+  DT_IMAGE_TRANSFORM_RESET               = 2, //!< back to ORIENTATION_NULL, i.e. what EXIF says
+  DT_IMAGE_TRANSFORM_FLIP_HORIZONTALLY   = 3, //!< mirror left <-> right, as displayed
+  DT_IMAGE_TRANSFORM_FLIP_VERTICALLY     = 4  //!< mirror top <-> bottom, as displayed
+} dt_image_transform_t;
+
 /** Outcome of parsing the DNG `DefaultUserCrop` tag (51125 / 0xC7B5) for an image.
  *
  * `ABSENT` and `IDENTITY` are normal, silent conditions: the file simply declares no camera
@@ -594,8 +614,8 @@ int32_t dt_image_duplicate_no_reload(const int32_t imgid);
  *  new history to the DB. Pass refresh_filmstrip = FALSE from darkroom write paths: the filmstrip
  *  is best-effort and must not steal pipeline resources from the realtime main preview. */
 void dt_image_history_changed(const int32_t imgid, const gboolean refresh_filmstrip);
-/** flips the image, clock wise, if given flag. */
-void dt_image_flip(const int32_t imgid, const int32_t cw);
+/** @brief Apply an orientation change to one image, on top of the orientation it already has. */
+void dt_image_flip(const int32_t imgid, const dt_image_transform_t transform);
 void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t user_flip);
 dt_image_orientation_t dt_image_get_orientation(const int32_t imgid);
 /** set image location lon/lat/ele */

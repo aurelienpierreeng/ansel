@@ -39,6 +39,7 @@
 #define DT_CONTROL_JOBS_CONTROL_JOBS_H
 
 #include "colorprofiles/profile_types.h"
+#include "common/image.h"   // dt_image_transform_t
 #include "control/jobs.h"
 #include "common/variables.h"
 #include <inttypes.h>
@@ -70,7 +71,8 @@ void dt_control_save_xmps(const GList *imgids, const gboolean check_history);
 void dt_control_delete_images();
 void dt_control_delete_image(int32_t imgid);
 void dt_control_duplicate_images(gboolean virgin);
-void dt_control_flip_images(const int32_t cw);
+/** Apply an orientation change to every image acted on, as a background job. */
+void dt_control_flip_images(const dt_image_transform_t transform);
 void dt_control_monochrome_images(const int32_t mode);
 gboolean dt_control_remove_images();
 void dt_control_move_images();

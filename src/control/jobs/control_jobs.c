@@ -664,7 +664,7 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
 static int32_t dt_control_flip_images_job_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = dt_control_job_get_params(job);
-  const int cw = params->flag;
+  const dt_image_transform_t transform = (dt_image_transform_t)params->flag;
   GList *t = params->index;
   const guint total = g_list_length(t);
   double fraction = 0.0f;
@@ -677,7 +677,7 @@ static int32_t dt_control_flip_images_job_run(dt_job_t *job)
   while(t)
   {
     const int32_t imgid = GPOINTER_TO_INT(t->data);
-    dt_image_flip(imgid, cw);
+    dt_image_flip(imgid, transform);
     t = g_list_next(t);
     fraction += 1.0 / total;
     dt_control_job_set_progress(job, fraction);
@@ -1550,11 +1550,11 @@ void dt_control_duplicate_images(gboolean virgin)
                                                           N_("duplicate images"), 0, GINT_TO_POINTER(virgin), PROGRESS_SIMPLE, TRUE));
 }
 
-void dt_control_flip_images(const int32_t cw)
+void dt_control_flip_images(const dt_image_transform_t transform)
 {
   dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
-                     dt_control_generic_images_job_create(&dt_control_flip_images_job_run, N_("flip images"), cw,
-                                                          NULL, PROGRESS_SIMPLE, TRUE));
+                     dt_control_generic_images_job_create(&dt_control_flip_images_job_run, N_("flip images"),
+                                                          (int32_t)transform, NULL, PROGRESS_SIMPLE, TRUE));
 }
 
 void dt_control_monochrome_images(const int32_t mode)

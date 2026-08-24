@@ -1242,7 +1242,32 @@ dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
   return orientation;
 }
 
-void dt_image_flip(const int32_t imgid, const int32_t cw)
+/** @brief Toggle the stored bit that mirrors the image along the axis the USER calls horizontal.
+ *
+ * The stored bits act on sensor coordinates, before ORIENTATION_SWAP_XY transposes them, so once
+ * the image is transposed the user's horizontal axis is the sensor's vertical one. Conjugating
+ * the request by the swap is the whole of it, and it is the same conditional the quarter-turns
+ * below already use -- a quarter turn counter-clockwise IS a horizontal mirror followed by a
+ * transpose, which is why they share it.
+ */
+static dt_image_orientation_t _orientation_mirror_horizontally(dt_image_orientation_t orientation)
+{
+  if(orientation & ORIENTATION_SWAP_XY)
+    return orientation ^ ORIENTATION_FLIP_Y;
+  else
+    return orientation ^ ORIENTATION_FLIP_X;
+}
+
+/** @brief The same, along the axis the user calls vertical. */
+static dt_image_orientation_t _orientation_mirror_vertically(dt_image_orientation_t orientation)
+{
+  if(orientation & ORIENTATION_SWAP_XY)
+    return orientation ^ ORIENTATION_FLIP_X;
+  else
+    return orientation ^ ORIENTATION_FLIP_Y;
+}
+
+void dt_image_flip(const int32_t imgid, const dt_image_transform_t transform)
 {
   // this is light table only:
   const dt_view_t *cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
@@ -1254,23 +1279,32 @@ void dt_image_flip(const int32_t imgid, const int32_t cw)
 
   dt_image_orientation_t orientation = dt_image_get_orientation(imgid);
 
-  if(cw == 1)
+  switch(transform)
   {
-    if(orientation & ORIENTATION_SWAP_XY)
-      orientation ^= ORIENTATION_FLIP_Y;
-    else
-      orientation ^= ORIENTATION_FLIP_X;
-  }
-  else
-  {
-    if(orientation & ORIENTATION_SWAP_XY)
-      orientation ^= ORIENTATION_FLIP_X;
-    else
-      orientation ^= ORIENTATION_FLIP_Y;
-  }
-  orientation ^= ORIENTATION_SWAP_XY;
+    case DT_IMAGE_TRANSFORM_ROTATE_CCW:
+      // mirror horizontally, then transpose
+      orientation = _orientation_mirror_horizontally(orientation) ^ ORIENTATION_SWAP_XY;
+      break;
 
-  if(cw == 2) orientation = ORIENTATION_NULL;
+    case DT_IMAGE_TRANSFORM_ROTATE_CW:
+      // mirror vertically, then transpose
+      orientation = _orientation_mirror_vertically(orientation) ^ ORIENTATION_SWAP_XY;
+      break;
+
+    case DT_IMAGE_TRANSFORM_FLIP_HORIZONTALLY:
+      orientation = _orientation_mirror_horizontally(orientation);
+      break;
+
+    case DT_IMAGE_TRANSFORM_FLIP_VERTICALLY:
+      orientation = _orientation_mirror_vertically(orientation);
+      break;
+
+    case DT_IMAGE_TRANSFORM_RESET:
+      // NULL, not NONE: hand the image back to whatever its EXIF says, rather than declaring it
+      // upright. The previous code computed a quarter turn first and then threw it away.
+      orientation = ORIENTATION_NULL;
+      break;
+  }
 
   // dt_image_set_flip() writes the new orientation history entry and notifies the caches/GUI
   // (mipmap invalidation + thumbnail refresh) via dt_image_history_changed().
