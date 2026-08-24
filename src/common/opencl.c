@@ -81,7 +81,7 @@
 
 #include <ctype.h>
 #include <errno.h>
-#include <libgen.h>
+#include <glib/gstdio.h>   // g_fopen, g_rename, g_unlink. conditional-ok: this whole file is inside #ifdef HAVE_OPENCL
 #include <sys/stat.h>
 #include <zlib.h>
 
@@ -2143,27 +2143,43 @@ int dt_opencl_build_program(const int dev, const int prog, const char *binname, 
           snprintf(link_dest, sizeof(link_dest), "%s" G_DIR_SEPARATOR_S "%s", cachedir, md5sum);
           FILE *f = g_fopen(link_dest, "wb");
           if(IS_NULL_PTR(f)) goto ret;
-          size_t bytes_written = fwrite(binaries[i], sizeof(char), binary_sizes[i], f);
-          if(bytes_written != binary_sizes[i]) goto ret;
+          const size_t bytes_written = fwrite(binaries[i], sizeof(char), binary_sizes[i], f);
           fclose(f);
+          if(bytes_written != binary_sizes[i]) goto ret;
 
-          // create link (e.g. basic.cl.bin -> f1430102c53867c162bb60af6c163328)
-          char cwd[DT_PATH_MAX] = { 0 };
-          if(!getcwd(cwd, sizeof(cwd))) goto ret;
-          if(chdir(cachedir) != 0) goto ret;
-          char dup[DT_PATH_MAX] = { 0 };
-          g_strlcpy(dup, binname, sizeof(dup));
-          char *bname = basename(dup);
+          /* Name the binary after the program (e.g. basic.cl.bin), pointing at the
+           * md5sum-named file we just wrote.
+           *
+           * This used to chdir() into cachedir so it could name the link by its basename
+           * alone, and chdir() back afterwards. Two things were wrong with that. The
+           * working directory is process-global state, and this runs on whichever thread
+           * is building kernels while the rest of the application is live; and the
+           * restoring chdir() sat AFTER two `goto ret' paths, so any failure in between
+           * left the whole process parked in the kernel cache directory for the rest of
+           * the session. Neither is needed: only the LINK path has to be absolute, while
+           * the symlink target stays relative -- which is what the chdir was buying. */
+          gchar *bname = g_path_get_basename(binname);
+          char link_name[DT_PATH_MAX] = { 0 };
+          snprintf(link_name, sizeof(link_name), "%s" G_DIR_SEPARATOR_S "%s", cachedir, bname);
 #if defined(_WIN32)
-          //CreateSymbolicLink in Windows requires admin privileges, which we don't want/need
-          //store has using a simple filerename
-          char finalfilename[DT_PATH_MAX] = { 0 };
-          snprintf(finalfilename, sizeof(finalfilename), "%s" G_DIR_SEPARATOR_S "%s.%s", cachedir, bname, md5sum);
-          rename(link_dest, finalfilename);
+          /* CreateSymbolicLink() needs admin privileges on Windows, which we neither
+           * want nor need, so the cached binary is simply renamed into place. */
+          char final_name[DT_PATH_MAX] = { 0 };
+          snprintf(final_name, sizeof(final_name), "%s.%s", link_name, md5sum);
+          const int link_failed = (g_rename(link_dest, final_name) != 0);
 #else
-          if(symlink(md5sum, bname) != 0) goto ret;
+          /* Relative target, absolute link path: the link keeps working if the cache
+           * directory is ever moved, and we never touch the working directory. */
+          g_unlink(link_name);
+          const int link_failed = (symlink(md5sum, link_name) != 0);
 #endif //!defined(_WIN32)
-          if(chdir(cwd) != 0) goto ret;
+          g_free(bname);
+          if(link_failed)
+          {
+            dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] could not name the cached binary `%s': %s\n",
+                     link_name, strerror(errno));
+            goto ret;
+          }
         }
 
     ret:
