@@ -53,8 +53,9 @@ int main(int argc, char *argv[])
   // runtime's own message advises.
   g_setenv("KMP_DUPLICATE_LIB_OK", "TRUE", TRUE);
 
-  // on Windows we have a hard time showing stuff printed to stdout/stderr to the user.
-  // because of that we write it to a log file.
+  // ansel.exe is linked as a GUI-subsystem binary, so it has no console of its own and
+  // anything printed to stdout/stderr would go nowhere. We write it to a log file
+  // instead -- unless the caller already arranged somewhere for it to go.
   char datetime[DT_DATETIME_EXIF_LENGTH];
   dt_datetime_now_to_exif(datetime);
 
@@ -83,27 +84,31 @@ int main(int argc, char *argv[])
 
     g_mkdir_with_parents(logdir, 0700);
 
-    g_freopen(logfile, "a", stdout);
-    dup2(fileno(stdout), fileno(stderr));
+    /* If this fails, freopen() has already closed stdout and fileno() answers -1; handing
+     * that to dup2() reaches the CRT's invalid-parameter handler, which ends the process
+     * before the first window is ever drawn. A log file we could not open is not worth
+     * dying for, so stop redirecting and carry on. */
+    redirect_output = (g_freopen(logfile, "a", stdout) != NULL);
 
-    // We don't need the console window anymore, free it
-    // This ensures that only darktable's main window will be visible
-    FreeConsole();
+    if(redirect_output)
+    {
+      dup2(fileno(stdout), fileno(stderr));
+
+      // don't buffer stdout/stderr. we have basically two options: unbuffered or line buffered.
+      // unbuffered keeps the order in which things are printed but concurrent threads printing can lead to intermangled output. ugly.
+      // line buffered should keep lines together but in my tests the order of things no longer matches. ugly and potentially confusing.
+      // thus we are doing the thing that is just ugly (in rare cases) but at least not confusing.
+      setvbuf(stdout, NULL, _IONBF, 0);
+      setvbuf(stderr, NULL, _IONBF, 0);
+
+      printf("========================================\n");
+      printf("version: %s\n", darktable_package_string);
+      printf("start: %s\n", datetime);
+      printf("\n");
+    }
 
     dt_free(logdir);
     dt_free(logfile);
-
-    // don't buffer stdout/stderr. we have basically two options: unbuffered or line buffered.
-    // unbuffered keeps the order in which things are printed but concurrent threads printing can lead to intermangled output. ugly.
-    // line buffered should keep lines together but in my tests the order of things no longer matches. ugly and potentially confusing.
-    // thus we are doing the thing that is just ugly (in rare cases) but at least not confusing.
-    setvbuf(stdout, NULL, _IONBF, 0);
-    setvbuf(stderr, NULL, _IONBF, 0);
-
-    printf("========================================\n");
-    printf("version: %s\n", darktable_package_string);
-    printf("start: %s\n", datetime);
-    printf("\n");
   }
 
   // make sure GTK client side decoration is disabled, otherwise windows resizing issues can be observed
