@@ -166,7 +166,7 @@ void dt_widget_set_scroll_reversed(gboolean reverse_x, gboolean reverse_y)
   _reverse_y = reverse_y;
 }
 
-static inline gboolean _on_gui_thread(void)
+gboolean dt_widget_on_gui_thread(void)
 {
   return _gui_thread_set && pthread_equal(_gui_thread, pthread_self());
 }
@@ -201,7 +201,7 @@ void dt_gui_freeze_begin_(const char *file, int line)
   // reload_defaults during thumbnail/export, which has no widgets to suppress) must not touch
   // the shared depth, or concurrent non-atomic ++/-- drift it and break suppression for the
   // GUI thread. For them this is a deliberate no-op.
-  if(!_on_gui_thread()) return;
+  if(!dt_widget_on_gui_thread()) return;
   // MAX(.,0) heals any pre-existing negative drift so the depth is always genuinely suppressing.
   _widget_suppress_depth = MAX(_widget_suppress_depth, 0) + 1;
   (void)file;
@@ -210,7 +210,7 @@ void dt_gui_freeze_begin_(const char *file, int line)
 
 void dt_gui_freeze_end_(const char *file, int line)
 {
-  if(!_on_gui_thread()) return;
+  if(!dt_widget_on_gui_thread()) return;
   if(_widget_suppress_depth <= 0)
   {
     // A bare end with nothing to match: an unbalanced freeze bracket exists. Surface it (with

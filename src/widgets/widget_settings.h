@@ -71,6 +71,16 @@ gboolean dt_gui_widgets_suppressed(void);
  *  non-atomic ++/-- would drift the depth and break suppression for the GUI thread.
  *  Until this is called, freezing is inert. */
 void dt_widget_set_gui_thread(pthread_t thread);
+
+/** @brief Is the calling thread the one that owns widget state?
+ *
+ * FALSE before dt_widget_set_gui_thread() has run, and in every headless process, which is
+ * the safe answer for both users: a caller that must reach GTK defers instead of calling it,
+ * and a caller that merely wants to skip work skips it.
+ *
+ * GTK is not thread-safe and nothing in it says so at the call site, so anything reached from
+ * a job, a pipeline callback or an import worker has to ask before touching a widget. */
+gboolean dt_widget_on_gui_thread(void);
 void dt_gui_freeze_begin_(const char *file, int line);
 void dt_gui_freeze_end_(const char *file, int line);
 void dt_gui_freeze_reset(void); // hard-reset depth to 0 (GUI init only)

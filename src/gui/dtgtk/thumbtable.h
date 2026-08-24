@@ -290,6 +290,11 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
 // call this when the history of an image is changed and mipmap cache needs updating.
 // reinit = TRUE will force-flush the existing thumbnail. imgid = -1 applies on all thumbnails in thumbtable.
 void dt_thumbtable_refresh_thumbnail_real(dt_thumbtable_t *table, int32_t imgid, gboolean reinit);
+/** @warning GUI THREAD ONLY. This ends in gtk_widget_queue_draw() on the thumbnail widgets,
+  * which edits the toplevel's invalidation region -- calling it from a job, a pipeline
+  * callback or an import worker corrupts structures the GUI thread is reading (Sentry
+  * 142561119). Off-thread callers go through dt_thumbnail_notify_image_changed(), which
+  * marshals onto the main loop. dt_widget_on_gui_thread() answers the question. */
 #define dt_thumbtable_refresh_thumbnail(table, imgid, reinit) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_LIGHTTABLE, dt_thumbtable_refresh_thumbnail_real, (table), (imgid), (reinit))
 
 // Copy cached thumbnail metadata by image id. Returns TRUE on success.
