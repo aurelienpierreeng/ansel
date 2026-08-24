@@ -43,7 +43,13 @@ endif(UNIX)
 # Set package peoperties for Windows
 if(WIN32)
   set(CPACK_GENERATOR "NSIS")
-  set(CPACK_PACKAGE_EXECUTABLES "ansel" "ansel")
+  # Second element is the shortcut's label, and it is what the Start menu shows (#124).
+  # The first is the executable's base name and must stay as it is spelled on disk.
+  set(CPACK_PACKAGE_EXECUTABLES "ansel" "Ansel")
+  # Deliberately NOT capitalised: this is $INSTDIR's last component and the uninstall
+  # registry key, so changing it moves the install and orphans every existing one --
+  # including the uninstaller that ENABLE_UNINSTALL_BEFORE_INSTALL looks for. #124 is
+  # about what the user READS; this is what the machine matches on.
   set(CPACK_PACKAGE_INSTALL_DIRECTORY "${CMAKE_PROJECT_NAME}")
   # There is a bug in NSIS that does not handle full unix paths properly. Make
   # sure there is at least one set of four (4) backlasshes.
@@ -52,6 +58,11 @@ if(WIN32)
   SET(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/data/pixmaps/dt_logo_128x128.ico")
   SET(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\${CMAKE_PROJECT_NAME}.exe")
   SET(CPACK_NSIS_DISPLAY_NAME "Ansel")
+  # Names the installer window, its page headers, and -- because the template defines no
+  # MUI_STARTMENUPAGE_DEFAULTFOLDER, so MUI falls back to Name -- the Start menu FOLDER.
+  # Left to CPack it derives from CPACK_PACKAGE_INSTALL_DIRECTORY, which is the install
+  # directory's name and is deliberately still lowercase.
+  SET(CPACK_NSIS_PACKAGE_NAME "Ansel")
   SET(CPACK_NSIS_HELP_LINK "https://ansel.photos/en/doc/install")
   SET(CPACK_NSIS_URL_INFO_ABOUT "https://ansel.photos")
   SET(CPACK_NSIS_MODIFY_PATH OFF)
