@@ -1387,6 +1387,7 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
   // per-channel soft floor kept after as the degenerate-estimate safety net. At gate 0 (equal
   // clips, the approved unit-WB behavior) the per-channel path runs verbatim.
   const float floor_gate = ctx->floor_gate;
+
   HL_PFOR()
   for(size_t i = 0; i < region_pixels; i++)
   {
@@ -1402,25 +1403,55 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
           const float target = clip_floor_c + 0.5f * (delta + sqrtf(delta * delta + weight * weight));
           lift = fmaxf(lift, fminf(target / e, 8.f));
         }
+    // Both candidates, for every channel (valid channels are identical in each), so the decision
+    // below can compare them as COLOURS instead of channel by channel.
+    float per_chan_v[3], joint_v[3];
+    for(int c = 0; c < 3; c++)
+    {
+      per_chan_v[c] = joint_v[c] = estimate[i * 4 + c];
+      if(valid[i * 4 + c] >= 0.5f) continue;
+      const float clip_floor_c = clip0[i * 4 + c];             // c0, the saturated reading
+      const float weight = 0.02f * fmaxf(clip_floor_c, 1e-6f); // transition width = 2% of c0
+      const float delta = estimate[i * 4 + c] - clip_floor_c;  // e - c0
+      // c0 + 1/2 ( (e-c0) + sqrt((e-c0)^2 + width^2) ): the rounded lower bound at c0
+      per_chan_v[c] = clip_floor_c + 0.5f * (delta + sqrtf(delta * delta + weight * weight));
+      const float lifted = fmaxf(estimate[i * 4 + c], 1e-6f) * lift;
+      const float delta_joint = lifted - clip_floor_c;
+      joint_v[c]
+          = clip_floor_c + 0.5f * (delta_joint + sqrtf(delta_joint * delta_joint + weight * weight));
+    }
+    if(floor_gate <= 1e-6f)
+    {
+      for(int c = 0; c < 3; c++)
+        if(valid[i * 4 + c] < 0.5f) estimate[i * 4 + c] = per_chan_v[c]; // bit-exact approved path
+      continue;
+    }
+
+    // WHAT THE JOINT FORM IS WORTH, PER PIXEL. The per-channel floor clamps each clipped channel at
+    // its own c0: that SUPPRESSES the fit's noise (the output is pinned to a measured constant) and
+    // meets the surround at exactly the level neighbouring valid pixels sit at. The joint form keeps
+    // the fit -- and with it the fit's noise. Measured cost: +56% grain on MAC25640, +58% on
+    // PK1_3540, i.e. the same penalty on both. The BENEFIT is what differs: on MAC the joint form
+    // moves G/((R+B)/2) 0.300 -> 0.635 (2.1x, the magenta rescue it exists for); on PK1's blown sky
+    // 0.755 -> 0.773 (2.3%) -- the same noise bought for nothing, which is what prints as a flat,
+    // grainy core badly blended into its surround. So pay the noise only in proportion to the
+    // chromaticity actually rescued: L1 distance between the two candidates' shares, ramped over one
+    // just-noticeable hue step. Where the two agree the per-channel floor is kept verbatim, so this
+    // cannot regress a scene the joint form was not changing anyway.
+    float sum_p = 0.f, sum_j = 0.f;
+    for(int c = 0; c < 3; c++)
+    {
+      sum_p += per_chan_v[c];
+      sum_j += joint_v[c];
+    }
+    sum_p = fmaxf(sum_p, 1e-9f);
+    sum_j = fmaxf(sum_j, 1e-9f);
+    float chroma_gain = 0.f;
+    for(int c = 0; c < 3; c++) chroma_gain += fabsf(joint_v[c] / sum_j - per_chan_v[c] / sum_p);
+    const float w = floor_gate * _hl_floor_worth(chroma_gain);
     for(int c = 0; c < 3; c++)
       if(valid[i * 4 + c] < 0.5f)
-      {
-        const float clip_floor_c = clip0[i * 4 + c];             // c0, the saturated reading
-        const float weight = 0.02f * fmaxf(clip_floor_c, 1e-6f); // transition width = 2% of c0
-        const float delta = estimate[i * 4 + c] - clip_floor_c;  // e - c0
-        // c0 + 1/2 ( (e-c0) + sqrt((e-c0)^2 + width^2) ): the rounded lower bound at c0
-        const float per_chan = clip_floor_c + 0.5f * (delta + sqrtf(delta * delta + weight * weight));
-        if(floor_gate <= 1e-6f)
-        {
-          estimate[i * 4 + c] = per_chan; // bit-exact approved path
-          continue;
-        }
-        const float lifted = fmaxf(estimate[i * 4 + c], 1e-6f) * lift;
-        const float delta_joint = lifted - clip_floor_c;
-        const float joint
-            = clip_floor_c + 0.5f * (delta_joint + sqrtf(delta_joint * delta_joint + weight * weight));
-        estimate[i * 4 + c] = floor_gate * joint + (1.f - floor_gate) * per_chan;
-      }
+        estimate[i * 4 + c] = per_chan_v[c] + w * (joint_v[c] - per_chan_v[c]);
   }
 
   // Step 6 dome gate (article §"The algorithm" step 6): hand the dome-blend weight to the

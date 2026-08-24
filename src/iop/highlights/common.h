@@ -207,6 +207,31 @@ typedef struct
 // below the scale of any silhouette it has to stop.
 #define CF_EDGE_GUIDE_SIGMA 3.f
 
+// L1 share distance at which the joint floor's chromaticity rescue is worth its noise cost in full
+// (one just-noticeable hue step -- the same scale as the cgrad content gate's tolerance). Below it
+// the per-channel floor is kept: it clamps the fit's noise and meets the surround at the clip level.
+#define CF_JOINT_TAU 0.10f
+
+
+
+
+// How much the joint floor's chromaticity rescue is WORTH at this pixel, in [0,1]. The joint form
+// keeps the fit (and the fit's scatter with it); the per-channel floor clamps each clipped channel
+// at its own c0, which suppresses that scatter and meets the surround at the level the neighbouring
+// measured pixels sit at. Measured cost of keeping the fit: +56% grain on MAC25640, +58% on
+// PK1_3540 -- the same penalty on both. What differs is the benefit: MAC's clipped subsets are
+// badly floor-imprinted and the joint form moves G/((R+B)/2) 0.300 -> 0.635 (2.1x, the magenta
+// rescue it exists for), while PK1's blown sky moves 0.755 -> 0.773 (2.3%) -- the same noise bought
+// for almost nothing, which prints as a flat, grainy core. So pay the noise in proportion to the
+// chromaticity actually rescued: the L1 distance between the two candidates' shares, ramped over
+// one just-noticeable hue step. Where they agree the per-channel floor is kept verbatim, so a scene
+// the joint form was not changing cannot regress.
+static inline float _hl_floor_worth(const float chroma_gain)
+{
+  const float t = CLAMP(chroma_gain / CF_JOINT_TAU, 0.f, 1.f);
+  return t * t * (3.f - 2.f * t);
+}
+
 // A 1-clip channel whose model predicted below its own saturation level comes out pinned AT the
 // floor, carrying the floor's chroma instead of the material's. This is the lift, relative to
 // clip0, by which such a pixel is considered to have been reconstructed on its own merits: at 1.0

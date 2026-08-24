@@ -223,19 +223,42 @@ void _selfdome(_hl_region_ctx_t *const ctx)
             const float e = fmaxf(estimate[i * 4 + c], 1e-6f);
             lift = fmaxf(lift, fminf(fmaxf(e, clip0[i * 4 + c]) / e, 8.f));
           }
+      // Both candidates for every channel, so the decision below compares them as COLOURS. Same
+      // criterion as the coefficient field's floor (see _cf_reconstruct): the joint form keeps the
+      // fit and its noise, the per-channel floor clamps both -- so pay the noise only in proportion
+      // to the chromaticity actually rescued. Measured on this site: it is the DOMINANT contributor
+      // on a large blown sky (PK1_3540's G went 11.89 -> 14.39 here with the gate open, 10.79 ->
+      // 10.75 with it shut), while MAC25640's magenta rescue needs it in full.
+      float per_chan_v[3], joint_v[3];
       for(int c = 0; c < 3; c++)
-        if(valid[i * 4 + c] < 0.5f)
+      {
+        per_chan_v[c] = joint_v[c] = estimate[i * 4 + c];
+        if(valid[i * 4 + c] >= 0.5f) continue;
+        per_chan_v[c] = fmaxf(estimate[i * 4 + c], clip0[i * 4 + c]);
+        joint_v[c] = fmaxf(fmaxf(estimate[i * 4 + c], 1e-6f) * lift, clip0[i * 4 + c]);
+      }
+      if(floor_gate <= 1e-6f)
+      {
+        for(int c = 0; c < 3; c++)
+          if(valid[i * 4 + c] < 0.5f) estimate[i * 4 + c] = per_chan_v[c]; // bit-exact approved path
+      }
+      else
+      {
+        float sum_p = 0.f, sum_j = 0.f;
+        for(int c = 0; c < 3; c++)
         {
-          const float per_chan = fmaxf(estimate[i * 4 + c], clip0[i * 4 + c]);
-          if(floor_gate <= 1e-6f)
-          {
-            estimate[i * 4 + c] = per_chan; // bit-exact approved path
-            continue;
-          }
-          const float joint
-              = fmaxf(fmaxf(estimate[i * 4 + c], 1e-6f) * lift, clip0[i * 4 + c]);
-          estimate[i * 4 + c] = floor_gate * joint + (1.f - floor_gate) * per_chan;
+          sum_p += per_chan_v[c];
+          sum_j += joint_v[c];
         }
+        sum_p = fmaxf(sum_p, 1e-9f);
+        sum_j = fmaxf(sum_j, 1e-9f);
+        float chroma_gain = 0.f;
+        for(int c = 0; c < 3; c++) chroma_gain += fabsf(joint_v[c] / sum_j - per_chan_v[c] / sum_p);
+        const float w = floor_gate * _hl_floor_worth(chroma_gain);
+        for(int c = 0; c < 3; c++)
+          if(valid[i * 4 + c] < 0.5f)
+            estimate[i * 4 + c] = per_chan_v[c] + w * (joint_v[c] - per_chan_v[c]);
+      }
     }
   }
 }
@@ -816,6 +839,8 @@ cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_me
     dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), &region_w);
     dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_h);
     dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &floor_gate);
+    const float joint_tau = CF_JOINT_TAU;
+    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &joint_tau);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size);
     if(cl_err != CL_SUCCESS) goto out;
   }
@@ -1050,6 +1075,8 @@ cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_me
     dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), &region_w);
     dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_h);
     dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &floor_gate);
+    const float joint_tau = CF_JOINT_TAU;
+    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &joint_tau);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size);
   }
 

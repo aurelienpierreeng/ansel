@@ -587,6 +587,8 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
     dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), &region_w);
     dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_h);
     dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &floor_gate);
+    const float joint_tau = CF_JOINT_TAU;
+    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &joint_tau);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, work_size);
     if(cl_err != CL_SUCCESS) goto out;
   }

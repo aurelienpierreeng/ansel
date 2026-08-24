@@ -1067,9 +1067,18 @@ hl_hf_damp(global float *estimate, global const float *valid, global const float
 // Step-5 floor in coefficient_field.c): per-channel at gate 0 (approved unit-WB behavior), one
 // scalar lift of the clipped subset at gate 1 (real-camera WB'd clips, where the per-channel
 // imprint is the inverse-WB magenta).
+// How much the joint floor's chromaticity rescue is worth at this pixel, in [0,1]. Mirrors the CPU
+// _hl_floor_worth (highlights/common.h) -- any change here must be mirrored there. CF_JOINT_TAU
+// arrives as an argument rather than a #define so the two cannot drift apart silently.
+static float hl_floor_worth(const float chroma_gain, const float joint_tau)
+{
+  const float t = clamp(chroma_gain / joint_tau, 0.f, 1.f);
+  return t * t * (3.f - 2.f * t);
+}
+
 kernel void
 hl_soft_floor(global float *estimate, global const float *valid, global const float *clip0,
-              const int width, const int height, const float floor_gate)
+              const int width, const int height, const float floor_gate, const float joint_tau)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -1087,24 +1096,41 @@ hl_soft_floor(global float *estimate, global const float *valid, global const fl
         const float target = clip_level + 0.5f * (diff + sqrt(diff * diff + soft_width * soft_width));
         lift = fmax(lift, fmin(target / e, 8.f));
       }
+  // both candidates for every channel, so the decision below compares them as COLOURS
+  float per_chan_v[3], joint_v[3];
+  for(int c = 0; c < 3; c++)
+  {
+    per_chan_v[c] = joint_v[c] = estimate[i * 4 + c];
+    if(valid[i * 4 + c] >= 0.5f) continue;
+    const float clip_level = clip0[i * 4 + c];                // c0, the saturated reading
+    const float soft_width = 0.02f * fmax(clip_level, 1e-6f); // transition width = 2% of c0
+    const float diff = estimate[i * 4 + c] - clip_level;      // e - c0
+    per_chan_v[c] = clip_level + 0.5f * (diff + sqrt(diff * diff + soft_width * soft_width));
+    const float lifted = fmax(estimate[i * 4 + c], 1e-6f) * lift;
+    const float diff_joint = lifted - clip_level;
+    joint_v[c]
+        = clip_level + 0.5f * (diff_joint + sqrt(diff_joint * diff_joint + soft_width * soft_width));
+  }
+  if(floor_gate <= 1e-6f)
+  {
+    for(int c = 0; c < 3; c++)
+      if(valid[i * 4 + c] < 0.5f) estimate[i * 4 + c] = per_chan_v[c]; // bit-exact approved path
+    return;
+  }
+  float sum_p = 0.f, sum_j = 0.f;
+  for(int c = 0; c < 3; c++)
+  {
+    sum_p += per_chan_v[c];
+    sum_j += joint_v[c];
+  }
+  sum_p = fmax(sum_p, 1e-9f);
+  sum_j = fmax(sum_j, 1e-9f);
+  float chroma_gain = 0.f;
+  for(int c = 0; c < 3; c++) chroma_gain += fabs(joint_v[c] / sum_j - per_chan_v[c] / sum_p);
+  const float w = floor_gate * hl_floor_worth(chroma_gain, joint_tau);
   for(int c = 0; c < 3; c++)
     if(valid[i * 4 + c] < 0.5f)
-    {
-      const float clip_level = clip0[i * 4 + c];               // c0, the saturated reading
-      const float soft_width = 0.02f * fmax(clip_level, 1e-6f); // transition width = 2% of c0
-      const float diff = estimate[i * 4 + c] - clip_level;     // e - c0
-      const float per_chan = clip_level + 0.5f * (diff + sqrt(diff * diff + soft_width * soft_width));
-      if(floor_gate <= 1e-6f)
-      {
-        estimate[i * 4 + c] = per_chan; // bit-exact approved path
-        continue;
-      }
-      const float lifted = fmax(estimate[i * 4 + c], 1e-6f) * lift;
-      const float diff_joint = lifted - clip_level;
-      const float joint
-          = clip_level + 0.5f * (diff_joint + sqrt(diff_joint * diff_joint + soft_width * soft_width));
-      estimate[i * 4 + c] = floor_gate * joint + (1.f - floor_gate) * per_chan;
-    }
+      estimate[i * 4 + c] = per_chan_v[c] + w * (joint_v[c] - per_chan_v[c]);
 }
 
 // Hard saturation floor: clamp every clipped channel of est to at least its clip level
@@ -1112,7 +1138,7 @@ hl_soft_floor(global float *estimate, global const float *valid, global const fl
 // floor. JOINT form (see hl_soft_floor / the CPU Step-5 floor for the rationale).
 kernel void
 hl_hard_floor(global float *estimate, global const float *valid, global const float *clip0,
-              const int width, const int height, const float floor_gate)
+              const int width, const int height, const float floor_gate, const float joint_tau)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -1126,18 +1152,35 @@ hl_hard_floor(global float *estimate, global const float *valid, global const fl
         const float e = fmax(estimate[i * 4 + c], 1e-6f);
         lift = fmax(lift, fmin(fmax(e, clip0[i * 4 + c]) / e, 8.f));
       }
+  // both candidates for every channel (mirrors the CPU _selfdome floor)
+  float per_chan_v[3], joint_v[3];
+  for(int c = 0; c < 3; c++)
+  {
+    per_chan_v[c] = joint_v[c] = estimate[i * 4 + c];
+    if(valid[i * 4 + c] >= 0.5f) continue;
+    per_chan_v[c] = fmax(estimate[i * 4 + c], clip0[i * 4 + c]);
+    joint_v[c] = fmax(fmax(estimate[i * 4 + c], 1e-6f) * lift, clip0[i * 4 + c]);
+  }
+  if(floor_gate <= 1e-6f)
+  {
+    for(int c = 0; c < 3; c++)
+      if(valid[i * 4 + c] < 0.5f) estimate[i * 4 + c] = per_chan_v[c]; // bit-exact approved path
+    return;
+  }
+  float sum_p = 0.f, sum_j = 0.f;
+  for(int c = 0; c < 3; c++)
+  {
+    sum_p += per_chan_v[c];
+    sum_j += joint_v[c];
+  }
+  sum_p = fmax(sum_p, 1e-9f);
+  sum_j = fmax(sum_j, 1e-9f);
+  float chroma_gain = 0.f;
+  for(int c = 0; c < 3; c++) chroma_gain += fabs(joint_v[c] / sum_j - per_chan_v[c] / sum_p);
+  const float w = floor_gate * hl_floor_worth(chroma_gain, joint_tau);
   for(int c = 0; c < 3; c++)
     if(valid[i * 4 + c] < 0.5f)
-    {
-      const float per_chan = fmax(estimate[i * 4 + c], clip0[i * 4 + c]);
-      if(floor_gate <= 1e-6f)
-      {
-        estimate[i * 4 + c] = per_chan; // bit-exact approved path
-        continue;
-      }
-      const float joint = fmax(fmax(estimate[i * 4 + c], 1e-6f) * lift, clip0[i * 4 + c]);
-      estimate[i * 4 + c] = floor_gate * joint + (1.f - floor_gate) * per_chan;
-    }
+      estimate[i * 4 + c] = per_chan_v[c] + w * (joint_v[c] - per_chan_v[c]);
 }
 
 // Build the luminance-proxy plane (lsb = red + green + blue of est, a cheap brightness
