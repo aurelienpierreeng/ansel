@@ -193,7 +193,7 @@ static void _update_preview(disk_t *d)
     return;
   }
 
-  char input_dir[PATH_MAX] = { 0 };
+  char input_dir[DT_PATH_MAX] = { 0 };
   gboolean from_cache = FALSE;
   dt_image_full_path(imgid, input_dir, sizeof(input_dir), &from_cache, __FUNCTION__);
 
