@@ -306,6 +306,9 @@ if(WIN32)
   SET(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> -O coff <DEFINES> -i <SOURCE> -o <OBJECT>")
   set(RESOURCE_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/win/ansel.rc")
   configure_file("${CMAKE_CURRENT_SOURCE_DIR}/win/ansel.rc.in" "${CMAKE_CURRENT_BINARY_DIR}/win/ansel.rc")
+  # The .rc references the manifest by bare name, so it has to sit beside the generated
+  # .rc rather than beside its own source.
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/win/ansel.manifest" "${CMAKE_CURRENT_BINARY_DIR}/win/ansel.manifest" COPYONLY)
 endif(WIN32)
 
 set(SOURCES ${SOURCE_FILES} ${HEADER_FILES})

@@ -7,6 +7,11 @@
 
 IDI_ICON1               ICON    DISCARDABLE     "../../data/pixmaps/dt_logo_128x128.ico"
 
+/* CREATEPROCESS_MANIFEST_RESOURCE_ID (1), RT_MANIFEST (24). Spelled numerically
+   because those names come from <winuser.h>, which this .rc does not include, and
+   windres is perfectly happy with the numbers. See win/ansel.manifest. */
+1 24 "ansel.manifest"
+
 VS_VERSION_INFO VERSIONINFO
   FILEVERSION DT_VERSION
   PRODUCTVERSION DT_VERSION

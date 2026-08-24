@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+    Application manifest for ansel.exe, embedded by win/ansel.rc.in as RT_MANIFEST.
+
+    Ansel shipped without one at all, which is unusual enough to be a signal in itself:
+    an unsigned MinGW binary that declares no execution level, claims no OS, and asks
+    for nothing is exactly the shape of file Defender's heuristics dislike. Everything
+    in here is a declaration; none of it changes a code path.
+
+    Deliberately NOT declared, so the next reader knows these were considered rather
+    than forgotten:
+
+      dpiAware / dpiAwareness   GTK3's win32 backend decides its own scaling, and
+                                declaring per-monitor awareness changes what it is
+                                handed. That is a rendering change, and it wants
+                                testing on a real high-DPI Windows machine.
+      Common Controls 6         Would change which comctl32 backs the SetWindowSubclass
+                                call in gui/application.c. Buys appearance, not safety.
+      activeCodePage UTF-8      Would change what every narrow CRT and Win32 call in the
+                                process means by a char. We reach the filesystem through
+                                glib's wide wrappers, so the gain is small and the blast
+                                radius is the whole application.
+
+    (Note for editors: XML comments may not contain a double hyphen, which is why the
+    prose here reads differently from the rest of this tree.)
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+
+  <!-- Identity of the manifest, not of the product: the version a user sees comes from
+       the VS_VERSION_INFO block in ansel.rc.in. Nothing binds against this. -->
+  <assemblyIdentity type="win32" name="photos.ansel.Ansel" version="1.0.0.0"
+                    processorArchitecture="*"/>
+
+  <!-- Ansel is a photo editor. It never needs administrator rights, and saying so stops
+       Windows guessing an execution level from the file name, and stops us being offered
+       an elevation prompt we would only have to decline. -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <!-- Without this list, Windows runs the process in compatibility mode for the newest
+       OS it does not think we know about, and version queries answer 6.2 forever. -->
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/> <!-- Vista -->
+      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/> <!-- 7 -->
+      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/> <!-- 8 -->
+      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/> <!-- 8.1 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/> <!-- 10 and 11 -->
+    </application>
+  </compatibility>
+
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <!-- Lifts the 260-character MAX_PATH ceiling on the wide Win32 calls glib makes
+           for us, on Windows 10 1607 and later where the machine also has
+           LongPathsEnabled set. Our own buffers became DT_PATH_MAX (4096) in the paths
+           commit; this is the other half of that, and a no-op where unsupported. -->
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+    </windowsSettings>
+  </application>
+
+</assembly>
