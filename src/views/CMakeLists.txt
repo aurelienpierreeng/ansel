@@ -1,6 +1,7 @@
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/..)
 
 include(manage-symbol-visibility)
+include(module-manifest)
 
 add_definitions(-include common/module_api.h)
 add_definitions(-include views/view_api.h)
@@ -37,3 +38,8 @@ foreach(module ${MODULES})
 
   install(TARGETS ${module} DESTINATION ${CMAKE_INSTALL_LIBDIR}/ansel/views COMPONENT DTApplication)
 endforeach(module)
+
+# The set of modules Ansel may load from that directory, written down so it does not
+# have to trust whatever shared objects happen to be sitting there. See
+# cmake/module-manifest.cmake.
+ansel_write_module_manifest("${CMAKE_INSTALL_LIBDIR}/ansel/views" ${MODULES})

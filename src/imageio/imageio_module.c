@@ -35,6 +35,7 @@
 */
 
 #include "common/module_versioning.h"
+#include "common/module.h"
 #include "imageio/imageio_module.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
@@ -125,36 +126,32 @@ static int dt_imageio_load_modules_format(dt_imageio_t *iio)
   iio->plugins_format = NULL;
   GList *res = NULL;
   dt_imageio_module_format_t *module;
-  char moduledir[DT_PATH_MAX] = { 0 }, plugin_name[256];
-  const gchar *d_name;
-  dt_loc_get_moduledir(moduledir, sizeof(moduledir));
-  g_strlcat(moduledir, "/plugins/imageio/format", sizeof(moduledir));
-  GDir *dir = g_dir_open(moduledir, 0, NULL);
-  if(IS_NULL_PTR(dir)) return 1;
-  const int name_offset = strlen(SHARED_MODULE_PREFIX),
-            name_end = strlen(SHARED_MODULE_PREFIX) + strlen(SHARED_MODULE_SUFFIX);
-  while((d_name = g_dir_read_name(dir)))
+  char moduledir[DT_PATH_MAX] = { 0 };
+
+  gchar **plugin_names = dt_module_read_manifest("/plugins/imageio/format", moduledir);
+  if(IS_NULL_PTR(plugin_names)) return 1;
+
+  for(gchar **name = plugin_names; !IS_NULL_PTR(*name); name++)
   {
-    // get lib*.so
-    if(!g_str_has_prefix(d_name, SHARED_MODULE_PREFIX)) continue;
-    if(!g_str_has_suffix(d_name, SHARED_MODULE_SUFFIX)) continue;
-    g_strlcpy(plugin_name, d_name + name_offset, strlen(d_name) - name_end + 1);
+    const char *plugin_name = *name;
     module = (dt_imageio_module_format_t *)malloc(sizeof(dt_imageio_module_format_t));
-    gchar *libname = g_module_build_path(moduledir, (const gchar *)plugin_name);
+    gchar *libname = g_module_build_path(moduledir, plugin_name);
     if(dt_imageio_load_module_format(module, libname, plugin_name))
     {
+      dt_free(libname);
       dt_free(module);
       continue;
     }
+    dt_free(libname);
     module->gui_data = NULL;
     if(dt_gui_get_global()) dt_gui_freeze_begin();
     module->gui_init(module);
     if(dt_gui_get_global()) dt_gui_freeze_end();
     if(module->widget) g_object_ref_sink(module->widget);
-    dt_free(libname);
     res = g_list_insert_sorted(res, module, dt_imageio_sort_modules_format);
   }
-  g_dir_close(dir);
+  g_strfreev(plugin_names);
+
   iio->plugins_format = res;
   return 0;
 }
@@ -206,34 +203,30 @@ static int dt_imageio_load_modules_storage(dt_imageio_t *iio)
 {
   iio->plugins_storage = NULL;
   dt_imageio_module_storage_t *module;
-  char moduledir[DT_PATH_MAX] = { 0 }, plugin_name[256];
-  const gchar *d_name;
-  dt_loc_get_moduledir(moduledir, sizeof(moduledir));
-  g_strlcat(moduledir, "/plugins/imageio/storage", sizeof(moduledir));
-  GDir *dir = g_dir_open(moduledir, 0, NULL);
-  if(IS_NULL_PTR(dir)) return 1;
-  const int name_offset = strlen(SHARED_MODULE_PREFIX),
-            name_end = strlen(SHARED_MODULE_PREFIX) + strlen(SHARED_MODULE_SUFFIX);
-  while((d_name = g_dir_read_name(dir)))
+  char moduledir[DT_PATH_MAX] = { 0 };
+
+  gchar **plugin_names = dt_module_read_manifest("/plugins/imageio/storage", moduledir);
+  if(IS_NULL_PTR(plugin_names)) return 1;
+
+  for(gchar **name = plugin_names; !IS_NULL_PTR(*name); name++)
   {
-    // get lib*.so
-    if(!g_str_has_prefix(d_name, SHARED_MODULE_PREFIX)) continue;
-    if(!g_str_has_suffix(d_name, SHARED_MODULE_SUFFIX)) continue;
-    g_strlcpy(plugin_name, d_name + name_offset, strlen(d_name) - name_end + 1);
+    const char *plugin_name = *name;
     module = (dt_imageio_module_storage_t *)malloc(sizeof(dt_imageio_module_storage_t));
-    gchar *libname = g_module_build_path(moduledir, (const gchar *)plugin_name);
+    gchar *libname = g_module_build_path(moduledir, plugin_name);
     if(dt_imageio_load_module_storage(module, libname, plugin_name))
     {
+      dt_free(libname);
       dt_free(module);
       continue;
     }
+    dt_free(libname);
     module->gui_data = NULL;
     module->gui_init(module);
     if(module->widget) g_object_ref_sink(module->widget);
-    dt_free(libname);
     dt_imageio_insert_storage(module);
   }
-  g_dir_close(dir);
+  g_strfreev(plugin_names);
+
   return 0;
 }
 
