@@ -43,9 +43,27 @@ endif(UNIX)
 # Set package peoperties for Windows
 if(WIN32)
   set(CPACK_GENERATOR "NSIS")
-  # Second element is the shortcut's label, and it is what the Start menu shows (#124).
-  # The first is the executable's base name and must stay as it is spelled on disk.
-  set(CPACK_PACKAGE_EXECUTABLES "ansel" "Ansel")
+  # NOT CPACK_PACKAGE_EXECUTABLES. The shortcut CPack generates from it is created with
+  # no working directory, so it inherits $OUTDIR -- which the template last set to
+  # $INSTDIR, one level above where every DLL and every module actually lives. Launching
+  # Ansel from the Start menu and launching it from a shell in bin/ then differ in the
+  # one piece of process state neither of them states out loud, and a user chasing a
+  # start-up failure ends up comparing two things that were never the same.
+  #
+  # Written out by hand instead, so the working directory is part of the shortcut. The
+  # label is capitalised for #124. CreateShortCut takes $OUTDIR as the working
+  # directory, so SetOutPath immediately before it is the whole mechanism; it is put
+  # back afterwards because the template's later sections rely on it.
+  # Cleared, not overridden: an empty string is still a one-element list to CPack.
+  unset(CPACK_PACKAGE_EXECUTABLES)
+  SET(CPACK_NSIS_CREATE_ICONS_EXTRA "
+      SetOutPath '$INSTDIR\\\\bin'
+      CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\Ansel.lnk' '$INSTDIR\\\\bin\\\\ansel.exe'
+      SetOutPath '$INSTDIR'
+   ")
+  SET(CPACK_NSIS_DELETE_ICONS_EXTRA "
+      Delete '$SMPROGRAMS\\\\$MUI_TEMP\\\\Ansel.lnk'
+   ")
   # Deliberately NOT capitalised: this is $INSTDIR's last component and the uninstall
   # registry key, so changing it moves the install and orphans every existing one --
   # including the uninstaller that ENABLE_UNINSTALL_BEFORE_INSTALL looks for. #124 is
@@ -103,7 +121,9 @@ if(WIN32)
   # register dt in the Windows registry. this is needed for GIMP to find dt.
   SET(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
       WriteRegStr HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\ansel.exe' '' '$INSTDIR\\\\bin\\\\ansel.exe'
+      WriteRegStr HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\ansel.exe' 'Path' '$INSTDIR\\\\bin'
       WriteRegStr HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\ansel-cli.exe' '' '$INSTDIR\\\\bin\\\\ansel-cli.exe'
+      WriteRegStr HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\ansel-cli.exe' 'Path' '$INSTDIR\\\\bin'
       WriteRegStr HKLM 'SOFTWARE\\\\Classes\\\\Applications\\\\ansel.exe\\\\shell\\\\open\\\\command' '' '\\\"$INSTDIR\\\\bin\\\\ansel.exe\\\" \\\"%1\\\"'
    ")
   SET(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
