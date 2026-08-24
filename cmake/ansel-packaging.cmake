@@ -86,35 +86,6 @@ if(WIN32)
   SET(CPACK_NSIS_MODIFY_PATH OFF)
   SET(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 
-  # An upgrade must not leave the previous version's files behind.
-  #
-  # ENABLE_UNINSTALL_BEFORE_INSTALL above runs the old uninstaller first, which is the
-  # polite path -- but it only removes what that uninstaller recorded, and it does
-  # nothing at all when the previous installation is damaged, was interrupted, or has
-  # lost its uninstaller. What survives then is a mixed tree: today's libansel.dll
-  # beside a plugin from a build whose struct layouts have since moved. Ansel used to
-  # load whatever shared objects it found in its module directories, and the only gate
-  # was DT_MODULE_VERSION, a hand-bumped constant that does not move when a struct grows
-  # a member -- so such a plugin was accepted, and then read a layout that no longer
-  # existed. The manifests (see cmake/module-manifest.cmake) stop it being LOADED; this
-  # stops it being LEFT THERE.
-  #
-  # Only the three directories we own, and only when the target really is an Ansel
-  # install: NSIS lets the user pick the directory, and RMDir /r on a hand-typed
-  # "C:\\Program Files" would be a catastrophe rather than a cleanup. The second test
-  # exists because the first one cannot be relied on -- a damaged install is exactly the
-  # case where ansel.exe may be the file that went missing.
-  SET(CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS "
-      IfFileExists '$INSTDIR\\\\bin\\\\ansel.exe' AnselWipePrevious 0
-      IfFileExists '$INSTDIR\\\\lib\\\\ansel\\\\*.*' AnselWipePrevious 0
-      Goto AnselWipeDone
-      AnselWipePrevious:
-        DetailPrint 'Removing the previous installation from $INSTDIR'
-        RMDir /r '$INSTDIR\\\\bin'
-        RMDir /r '$INSTDIR\\\\lib'
-        RMDir /r '$INSTDIR\\\\share'
-      AnselWipeDone:
-   ")
 
   set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 
@@ -126,10 +97,31 @@ if(WIN32)
       WriteRegStr HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\ansel-cli.exe' 'Path' '$INSTDIR\\\\bin'
       WriteRegStr HKLM 'SOFTWARE\\\\Classes\\\\Applications\\\\ansel.exe\\\\shell\\\\open\\\\command' '' '\\\"$INSTDIR\\\\bin\\\\ansel.exe\\\" \\\"%1\\\"'
    ")
+  # An upgrade must not leave the previous version's files behind, and the uninstaller is the
+  # only place in the NSIS script where "before the new files land" is true by construction:
+  # .onInit runs the OLD uninstaller to completion, before any section, whenever
+  # ENABLE_UNINSTALL_BEFORE_INSTALL is on. Removing our three directories wholesale here
+  # covers what CPack's generated per-file Delete list does not -- a module a later build
+  # stopped shipping, which the loader would otherwise still find (see
+  # cmake/module-manifest.cmake for what such a leftover does).
+  #
+  # It must NOT be done from the install side. CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS reads as
+  # if it ran first, and does not: in the CPack template the component sections
+  # (@CPACK_NSIS_COMPONENT_SECTIONS@) are emitted BEFORE Section "-Core installation", which
+  # is where that hook lives, so with components -- and Ansel has three -- every file is
+  # already extracted by the time it runs. "PREINSTALL" means before CPACK_NSIS_FULL_INSTALL,
+  # which is empty in component mode. A wipe there deletes the installation it was meant to
+  # protect, silently, and the installer still reports success.
+  #
+  # Nothing under $INSTDIR is user data: the library, the config and the caches all live under
+  # %LOCALAPPDATA% and are untouched.
   SET(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
       DeleteRegKey HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\ansel.exe'
       DeleteRegKey HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\ansel-cli.exe'
       DeleteRegKey HKLM 'SOFTWARE\\\\Classes\\\\Applications\\\\ansel.exe'
+      RMDir /r '$INSTDIR\\\\bin'
+      RMDir /r '$INSTDIR\\\\lib'
+      RMDir /r '$INSTDIR\\\\share'
   ")
 
   # also associate dt with all the supported image file types
