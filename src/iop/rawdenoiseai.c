@@ -56,6 +56,7 @@
 #include "config.h"
 #endif
 #include "widgets/bauhaus.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
@@ -237,8 +238,8 @@ static dt_nn_model_t *_get_model(dt_iop_rawdenoiseai_global_data_t *gd, dt_iop_r
     char name[64];
     snprintf(name, sizeof(name), "denoise-%s-%s-%s.anselnn", _size_tag[sz], _scale_tag[sc], _version_tag[ver]);
 
-    char dir[PATH_MAX] = { 0 };
-    char path[PATH_MAX] = { 0 };
+    char dir[DT_PATH_MAX] = { 0 };
+    char path[DT_PATH_MAX] = { 0 };
     char err[256] = "";
     dt_loc_get_user_config_dir(dir, sizeof(dir));
     snprintf(path, sizeof(path), "%s/%s", dir, name);
@@ -272,8 +273,8 @@ static dt_nn_model_t *_get_custom_model(dt_iop_rawdenoiseai_global_data_t *gd, c
   dt_nn_model_t *m = NULL;
   if(!g_hash_table_lookup_extended(gd->custom, base, NULL, (gpointer *)&m))
   {
-    char dir[PATH_MAX] = { 0 };
-    char path[PATH_MAX] = { 0 };
+    char dir[DT_PATH_MAX] = { 0 };
+    char path[DT_PATH_MAX] = { 0 };
     char err[256] = "";
     dt_loc_get_user_config_dir(dir, sizeof(dir));
     snprintf(path, sizeof(path), "%s/%s", dir, base);
@@ -293,7 +294,7 @@ static dt_nn_model_t *_get_custom_model(dt_iop_rawdenoiseai_global_data_t *gd, c
  * size/variant combos). Caller frees with g_list_free_full(l, g_free). */
 static GList *_list_custom_models(void)
 {
-  char dir[PATH_MAX] = { 0 };
+  char dir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(dir, sizeof(dir));
   GDir *d = g_dir_open(dir, 0, NULL);
   if(!d) return NULL;

@@ -251,12 +251,12 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 {
   dt_imageio_gallery_t *d = (dt_imageio_gallery_t *)sdata;
 
-  char filename[PATH_MAX] = { 0 };
-  char dirname[PATH_MAX] = { 0 };
+  char filename[DT_PATH_MAX] = { 0 };
+  char dirname[DT_PATH_MAX] = { 0 };
   gboolean from_cache = FALSE;
   dt_image_full_path(imgid,  dirname,  sizeof(dirname),  &from_cache, __FUNCTION__);
 
-  char tmp_dir[PATH_MAX] = { 0 };
+  char tmp_dir[DT_PATH_MAX] = { 0 };
 
   // set variable values to expand them afterwards in darktable variables
   dt_variables_set_max_width_height(d->vp, fdata->max_width, fdata->max_height);
@@ -335,7 +335,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     }
   }
 
-  char relfilename[PATH_MAX] = { 0 }, relthumbfilename[PATH_MAX] = { 0 };
+  char relfilename[DT_PATH_MAX] = { 0 }, relthumbfilename[DT_PATH_MAX] = { 0 };
   c = filename + strlen(filename);
   for(; c > filename && *c != '/'; c--)
     ;
@@ -349,7 +349,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
   if(c <= relthumbfilename) c = relthumbfilename + strlen(relthumbfilename);
   sprintf(c, "-thumb.%s", ext);
 
-  char subfilename[PATH_MAX] = { 0 }, relsubfilename[PATH_MAX] = { 0 };
+  char subfilename[DT_PATH_MAX] = { 0 }, relsubfilename[DT_PATH_MAX] = { 0 };
   g_strlcpy(subfilename, d->cached_dirname, sizeof(subfilename));
   char *sc = subfilename + strlen(subfilename);
   sprintf(sc, "/img_%d.html", num);
@@ -442,7 +442,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *dd)
 {
   dt_imageio_gallery_t *d = (dt_imageio_gallery_t *)dd;
-  char filename[PATH_MAX] = { 0 };
+  char filename[DT_PATH_MAX] = { 0 };
   g_strlcpy(filename, d->cached_dirname, sizeof(filename));
   char *c = filename + strlen(filename);
 

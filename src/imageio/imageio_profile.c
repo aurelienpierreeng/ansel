@@ -60,6 +60,7 @@
  */
 
 #include "imageio/imageio_profile.h"
+#include "common/paths.h"   // DT_PATH_MAX
 
 #include "colorprofiles/colorspaces.h"
 #include "common/image.h"
@@ -100,7 +101,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   if(!IS_NULL_PTR(output)) *output = NULL;
 
   // Fetch filename for extension retrieval
-  char filename[PATH_MAX] = { 0 };
+  char filename[DT_PATH_MAX] = { 0 };
   gboolean from_cache = TRUE;
   dt_image_full_path(imgid,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
 

@@ -66,6 +66,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/global_mutexes.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/utility.h"
 #include "system/macros.h"
 #include "common/module_versioning.h"
@@ -706,9 +707,9 @@ static ls_db_t *_ls_db(void)
   if(tls->tried) return tls->db;
   tls->tried = TRUE;
 
-  char dir[PATH_MAX] = { 0 };
-  char path[PATH_MAX] = { 0 };
-  char config_path[PATH_MAX] = { 0 };
+  char dir[DT_PATH_MAX] = { 0 };
+  char path[DT_PATH_MAX] = { 0 };
+  char config_path[DT_PATH_MAX] = { 0 };
   ls_db_open_status_t config_status = LS_DB_OPEN_NO_FILE;
   int config_version = -1;
 

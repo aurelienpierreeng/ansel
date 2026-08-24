@@ -106,6 +106,7 @@
 #endif
 
 #include "common/collection.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "gui/common/database_gui.h"
 #include "colorprofiles/colorspaces.h"
 #include "metadata/colorlabels.h"
@@ -1291,7 +1292,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     dt_print_mem_usage();
   }
 
-  char sharedir[PATH_MAX] = { 0 };
+  char sharedir[DT_PATH_MAX] = { 0 };
   dt_loc_get_sharedir(sharedir, sizeof(sharedir));
 
   // we have to have our share dir in XDG_DATA_DIRS,
@@ -1341,7 +1342,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   }
 
   setlocale(LC_ALL, "");
-  char localedir[PATH_MAX] = { 0 };
+  char localedir[DT_PATH_MAX] = { 0 };
   dt_loc_get_localedir(localedir, sizeof(localedir));
   bindtextdomain(GETTEXT_PACKAGE, localedir);
   bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");
@@ -1358,9 +1359,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   // thread-safe init:
   dt_exif_init();
-  char datadir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(datadir, sizeof(datadir));
-  char anselrc[PATH_MAX] = { 0 };
+  char anselrc[DT_PATH_MAX] = { 0 };
   dt_concat_path_file(anselrc, datadir, "anselrc");
 
   // initialize the config backend. this needs to be done first...
@@ -2641,11 +2642,11 @@ void dt_print_mem_usage()
 #endif
 }
 
-void dt_concat_path_file(char destination[PATH_MAX], const char path[PATH_MAX], const char *const file)
+void dt_concat_path_file(char destination[DT_PATH_MAX], const char path[DT_PATH_MAX], const char *const file)
 {
-  g_strlcpy(destination, path, sizeof(char) * PATH_MAX);
-  g_strlcat(destination, G_DIR_SEPARATOR_S, sizeof(char) * PATH_MAX);
-  g_strlcat(destination, file, sizeof(char) * PATH_MAX);  
+  g_strlcpy(destination, path, sizeof(char) * DT_PATH_MAX);
+  g_strlcat(destination, G_DIR_SEPARATOR_S, sizeof(char) * DT_PATH_MAX);
+  g_strlcat(destination, file, sizeof(char) * DT_PATH_MAX);  
 }
 
 // clang-format off

@@ -70,6 +70,7 @@
 */
 
 #include "common/collection.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "control/settings.h"
 #include "database/collection_query.h"
 #include "metadata/colorlabels.h"
@@ -975,7 +976,7 @@ void dt_collection_notify_imported(const int32_t imgid, const gchar *known_image
   // before the import loop starts: the user can change which folder is browsed while a long
   // import is still running, and a stale snapshot would keep comparing against wherever they
   // were looking when the job began, silently going quiet on the folder they navigated to.
-  gchar browsed_folder[PATH_MAX] = { 0 };
+  gchar browsed_folder[DT_PATH_MAX] = { 0 };
   gboolean browsed_folder_recursive = FALSE;
   const gboolean has_browsed_folder
       = dt_collection_get_browsed_folder(browsed_folder, sizeof(browsed_folder), &browsed_folder_recursive);
@@ -983,7 +984,7 @@ void dt_collection_notify_imported(const int32_t imgid, const gchar *known_image
   // Unknown scope (not browsing a single folder/film-roll): can't tell whether imgid is
   // relevant, so always do the real thing -- same as before this function existed.
   gboolean image_in_browsed_folder = TRUE;
-  gchar image_folder_buf[PATH_MAX] = { 0 };
+  gchar image_folder_buf[DT_PATH_MAX] = { 0 };
   if(has_browsed_folder)
   {
     const gchar *image_folder = known_image_folder;
@@ -1054,7 +1055,7 @@ void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgi
     // for a recursive import spanning several sub-folders (the sub-folder that ends up used
     // depended on file-chooser/last-browsed-directory state left over from a previous, unrelated
     // import, not on anything about this one).
-    gchar dir[PATH_MAX] = { 0 };
+    gchar dir[DT_PATH_MAX] = { 0 };
     dt_get_dirname_from_imgid(dir, imgid);
     if(!dt_util_dir_exist(dir)) dir[0] = 0;
 

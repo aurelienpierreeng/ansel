@@ -49,6 +49,7 @@
 */
 
 #include "widgets/bauhaus.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/global_mutexes.h"
 #include "common/image.h"
 #include "common/selection.h"
@@ -318,8 +319,8 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 {
   dt_imageio_disk_t *d = (dt_imageio_disk_t *)sdata;
 
-  char filename[PATH_MAX] = { 0 };
-  char input_dir[PATH_MAX] = { 0 };
+  char filename[DT_PATH_MAX] = { 0 };
+  char input_dir[DT_PATH_MAX] = { 0 };
   char pattern[DT_MAX_PATH_FOR_PARAMS];
   g_strlcpy(pattern, d->filename, sizeof(pattern));
   gboolean from_cache = FALSE;

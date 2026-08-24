@@ -532,7 +532,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
       return TRUE;
   }
 
-  char path[PATH_MAX] = { 0 };
+  char path[DT_PATH_MAX] = { 0 };
   const gboolean have_sidecar_path = dt_drawlayer_io_sidecar_path(pipe->dev->image_storage.id, path, sizeof(path));
   const gboolean have_sidecar = have_sidecar_path && g_file_test(path, G_FILE_TEST_EXISTS);
   dt_drawlayer_io_layer_info_t info = { 0 };
@@ -1912,7 +1912,7 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
     layer_height = geometry.raw_height;
   }
 
-  char path[PATH_MAX] = { 0 };
+  char path[DT_PATH_MAX] = { 0 };
   if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
   {
     _layerio_append_error(errors, _("failed to resolve drawlayer sidecar path"));
@@ -2026,7 +2026,7 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
     _layerio_append_error(errors, _("failed to write drawing layer sidecar"));
   else
   {
-    char path[PATH_MAX] = { 0 };
+    char path[DT_PATH_MAX] = { 0 };
     if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
       _layerio_append_error(errors, _("failed to resolve drawlayer sidecar path"));
     else if(!g_file_test(path, G_FILE_TEST_EXISTS))
@@ -2079,7 +2079,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
   _sanitize_requested_layer_name(requested_name, new_name, sizeof(new_name));
   if(new_name[0] == '\0') return FALSE;
 
-  char path[PATH_MAX] = { 0 };
+  char path[DT_PATH_MAX] = { 0 };
   if(dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path))
      && dt_drawlayer_io_layer_name_exists(path, new_name, -1))
   {
@@ -2224,7 +2224,7 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   int layer_height = 0;
   if(!_resolve_layer_geometry(self, self->dev->pipe, piece, &layer_width, &layer_height, NULL, NULL)) return FALSE;
 
-  char sidecar_path[PATH_MAX] = { 0 };
+  char sidecar_path[DT_PATH_MAX] = { 0 };
   if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, sidecar_path, sizeof(sidecar_path))) return FALSE;
 
   drawlayer_dir_info_t current_info = { 0 };

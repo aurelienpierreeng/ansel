@@ -51,6 +51,7 @@
 */
 
 #include "colorprofiles/colorspaces.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "colorprofiles/iop_profile.h"   // dt_colorspaces_invalidate_display_profile_memo()
 
 #include <stddef.h>   // offsetof(), for the startup self-test
@@ -1767,8 +1768,8 @@ static GList *load_profile_from_dir(const char *subdir)
 {
   GList *temp_profiles = NULL;
   const gchar *d_name;
-  char datadir[PATH_MAX] = { 0 };
-  char confdir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
+  char confdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
   dt_loc_get_datadir(datadir, sizeof(datadir));
   char *lang = getenv("LANG");

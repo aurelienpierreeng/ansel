@@ -48,6 +48,7 @@
  */
 
 #include "common/file_location.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "whereami.h"
 #include "lensserious_import.h"
 
@@ -179,7 +180,7 @@ int main(int argc, char *argv[])
   dt_loc_init_user_config_dir(configdir);
   free(application_directory);
 
-  char schema_path[PATH_MAX] = { 0 };
+  char schema_path[DT_PATH_MAX] = { 0 };
   if(schema_override)
     g_strlcpy(schema_path, schema_override, sizeof(schema_path));
   else
@@ -195,7 +196,7 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  char out_path[PATH_MAX] = { 0 };
+  char out_path[DT_PATH_MAX] = { 0 };
   if(out_override)
     g_strlcpy(out_path, out_override, sizeof(out_path));
   else
@@ -204,7 +205,7 @@ int main(int argc, char *argv[])
   /* The calibrations Ansel shipped, loaded first so everything below merely overrides
    * them. This is what makes the update additive rather than a replacement -- see
    * ls_import_run(). */
-  char base_dir[PATH_MAX] = { 0 };
+  char base_dir[DT_PATH_MAX] = { 0 };
   const char *base = NULL;
   if(!no_baseline)
   {
@@ -235,7 +236,7 @@ int main(int argc, char *argv[])
    * user wrote themselves. That file is not wrong, but installing it WOULD be: iop/lens.c
    * prefers the configuration directory and never falls back once it opens something, so
    * a three-lens database would silently replace the fifteen hundred that shipped. */
-  char staged_path[PATH_MAX] = { 0 };
+  char staged_path[DT_PATH_MAX] = { 0 };
   snprintf(staged_path, sizeof(staged_path), "%s.incoming", out_path);
 
   const int rc = ls_import_run(schema_path, staged_path, base, xml_dir);

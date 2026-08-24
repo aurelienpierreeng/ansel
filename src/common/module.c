@@ -22,6 +22,7 @@
  */
 
 #include "system/macros.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "system/mem_alloc.h"
 #include <stdlib.h>
 #include <string.h>
@@ -39,7 +40,7 @@ GList *dt_module_load_modules(const char *subdir, size_t module_size,
                               gint (*sort_modules)(gconstpointer a, gconstpointer b))
 {
   GList *plugin_list = NULL;
-  char moduledir[PATH_MAX] = { 0 };
+  char moduledir[DT_PATH_MAX] = { 0 };
   const gchar *dir_name;
   dt_loc_get_moduledir(moduledir, sizeof(moduledir));
   g_strlcat(moduledir, subdir, sizeof(moduledir));

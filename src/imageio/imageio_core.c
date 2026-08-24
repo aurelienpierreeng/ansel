@@ -953,7 +953,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   if(!ignore_exif)
   {
     gboolean from_cache = TRUE;
-    char pathname[PATH_MAX] = { 0 };
+    char pathname[DT_PATH_MAX] = { 0 };
     dt_image_full_path(imgid,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
     // find output color profile for this image:
     int sRGB = (icc_type == DT_COLORSPACE_SRGB);

@@ -40,6 +40,7 @@
 */
 
 #include "common/collection.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/act_on.h"
 #include "database/image_repository.h"
 #include "metadata/gpx.h"
@@ -2766,7 +2767,7 @@ static void _view_map_dnd_get_callback(GtkWidget *widget, GdkDragContext *contex
       if(lib->selected_images)
       {
         const int32_t imgid = GPOINTER_TO_INT(lib->selected_images->data);
-        gchar pathname[PATH_MAX] = { 0 };
+        gchar pathname[DT_PATH_MAX] = { 0 };
         gboolean from_cache = TRUE;
         dt_image_full_path(imgid,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
         gchar *uri = g_strdup_printf("file://%s", pathname); // TODO: should we add the host?

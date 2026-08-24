@@ -364,11 +364,11 @@ typedef struct dt_image_t
   gboolean camera_missing_sample;
 
   char filename[DT_MAX_FILENAME_LEN];
-  char fullpath[PATH_MAX];
-  char local_copy_path[PATH_MAX];
-  char local_copy_legacy_path[PATH_MAX];
-  char folder[PATH_MAX];
-  char filmroll[PATH_MAX];
+  char fullpath[DT_PATH_MAX];
+  char local_copy_path[DT_PATH_MAX];
+  char local_copy_legacy_path[DT_PATH_MAX];
+  char folder[DT_PATH_MAX];
+  char filmroll[DT_PATH_MAX];
   char datetime[200];
 
   // common stuff

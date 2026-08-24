@@ -87,6 +87,7 @@
 #endif
 
 #include <errno.h>
+#include "common/paths.h"   // DT_PATH_MAX
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <time.h>
@@ -2197,7 +2198,7 @@ char *dt_exif_xmp_read_string(const int32_t imgid)
     // all other exiv2 work. Recursive mutex, so nested helpers re-lock harmlessly.
     Lock lock;
 
-    char input_filename[PATH_MAX] = { 0 };
+    char input_filename[DT_PATH_MAX] = { 0 };
     gboolean from_cache = FALSE;
     dt_image_full_path(imgid,  input_filename,  sizeof(input_filename),  &from_cache, __FUNCTION__);
 
@@ -2330,7 +2331,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
     // harmlessly.
     Lock lock;
 
-    char input_filename[PATH_MAX] = { 0 };
+    char input_filename[DT_PATH_MAX] = { 0 };
     gboolean from_cache = TRUE;
     dt_image_full_path(imgid,  input_filename,  sizeof(input_filename),  &from_cache, __FUNCTION__);
 

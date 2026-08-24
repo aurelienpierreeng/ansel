@@ -47,6 +47,7 @@
 */
 
 #include "caches/mipmap_cache.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "system/sys_resources.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
@@ -115,7 +116,7 @@ typedef struct dt_mipmap_cache_t
   dt_mipmap_cache_one_t mip_thumbs;
   dt_mipmap_cache_one_t mip_f;
   dt_mipmap_cache_one_t mip_full;
-  char cachedir[PATH_MAX]; // cached sha1sum filename for faster access
+  char cachedir[DT_PATH_MAX]; // cached sha1sum filename for faster access
 } dt_mipmap_cache_t;
 
 
@@ -268,16 +269,16 @@ static inline dt_mipmap_size_t get_size(const uint32_t key)
   return (dt_mipmap_size_t)(key >> 28);
 }
 
-void dt_mipmap_get_cache_dir(char path[PATH_MAX], dt_mipmap_size_t mip)
+void dt_mipmap_get_cache_dir(char path[DT_PATH_MAX], dt_mipmap_size_t mip)
 {
   dt_mipmap_cache_t *cache = _mipmap_cache;
-  g_snprintf(path, sizeof(char) * PATH_MAX, "%s.d" G_DIR_SEPARATOR_S "%d",
+  g_snprintf(path, sizeof(char) * DT_PATH_MAX, "%s.d" G_DIR_SEPARATOR_S "%d",
              cache->cachedir, (int)mip);
 }
 
-void dt_mipmap_get_cache_filename(char path[PATH_MAX], dt_mipmap_size_t mip, const int32_t imgid)
+void dt_mipmap_get_cache_filename(char path[DT_PATH_MAX], dt_mipmap_size_t mip, const int32_t imgid)
 {
-  gchar cache_path[PATH_MAX];
+  gchar cache_path[DT_PATH_MAX];
   dt_mipmap_get_cache_dir(cache_path, mip);
 
   gchar *file = g_strdup_printf("%u.jpg", imgid);
@@ -291,7 +292,7 @@ static int dt_mipmap_cache_get_filename(gchar *mipmapfilename, size_t size)
   char *abspath = NULL;
 
   // Directory
-  char cachedir[PATH_MAX] = { 0 };
+  char cachedir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
 
   // Build the mipmap filename fram hashing the path of the library DB
@@ -343,13 +344,13 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
                                   gboolean *is_jpg_input, gboolean *use_embedded_jpg, gboolean *write_to_disk)
 {
   // Get file name
-  char _filename[PATH_MAX] = { 0 };
+  char _filename[DT_PATH_MAX] = { 0 };
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(filename || ext || input_exists || is_jpg_input)
   {
     const dt_image_path_source_t source = dt_image_choose_input_path(img, _filename, sizeof(_filename), FALSE);
     if(source == DT_IMAGE_PATH_NONE) _filename[0] = '\0';
-    if(filename) strncpy(filename, _filename, PATH_MAX);
+    if(filename) strncpy(filename, _filename, DT_PATH_MAX);
     if(input_exists) *input_exists = (source != DT_IMAGE_PATH_NONE);
   }
 
@@ -611,7 +612,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
   if(cache->cachedir[0] && write_to_disk && mip < DT_MIPMAP_F)
   {
     // try and load from disk, if successful set flag
-    char filename[PATH_MAX] = {0};
+    char filename[DT_PATH_MAX] = {0};
     dt_mipmap_get_cache_filename(filename, mip, get_imgid(entry->key));
 
     gboolean io_error = FALSE;
@@ -711,7 +712,7 @@ static void dt_mipmap_cache_unlink_ondisk_thumbnail(void *data, int32_t imgid, d
   // if(_settings_get().disk_backend)
   if(cache->cachedir[0])
   {
-    char filename[PATH_MAX] = { 0 };
+    char filename[DT_PATH_MAX] = { 0 };
     dt_mipmap_get_cache_filename(filename, mip, imgid);
     g_unlink(filename);
     _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was deleted from disk cache\n", imgid, mip);
@@ -742,13 +743,13 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
       if(cache->cachedir[0] && write_to_disk && mip < DT_MIPMAP_F)
       {
         // serialize to disk
-        gchar cache_path[PATH_MAX];
+        gchar cache_path[DT_PATH_MAX];
         dt_mipmap_get_cache_dir(cache_path, mip);
         const int mkd = g_mkdir_with_parents(cache_path, 0750);
 
         if(!mkd)
         {
-          char filename[PATH_MAX] = {0};
+          char filename[DT_PATH_MAX] = {0};
           dt_mipmap_get_cache_filename(filename, mip, get_imgid(entry->key));
           // Don't write existing files as both performance and quality (lossy jpg) suffer
           // FIXME: actually, yes, we write existing files too. See FIXME above.
@@ -1072,7 +1073,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
     if(_get_image_copy(imgid, &buffered_image)) return;
 
     // Get the input file path, possibly from our local cache of copied images
-    char filename[PATH_MAX] = { 0 };
+    char filename[DT_PATH_MAX] = { 0 };
     dt_image_path_source_t source = dt_image_choose_input_path(&buffered_image, filename, sizeof(filename), FALSE);
     if(source == DT_IMAGE_PATH_NONE) return;
 
@@ -1355,7 +1356,7 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   const uint32_t wd = *width, ht = *height;
 
   /* do not even try to process file if it isn't available */
-  char filename[PATH_MAX] = { 0 };
+  char filename[DT_PATH_MAX] = { 0 };
   dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
   {
     const dt_image_t *img = dt_image_cache_get(imgid, 'r');
@@ -1504,14 +1505,14 @@ static int _find_sidecar_jpg(const char *filename, const char *ext, char *sideca
   for(int i = 0; i < 4; i++)
   {
     // Damage control. Should never happen.
-    if(filename_len + strlen(exts[i]) >= PATH_MAX)
+    if(filename_len + strlen(exts[i]) >= DT_PATH_MAX)
       continue;
 
     // Construct the sidecar filename
-    const size_t str_copy = g_snprintf(sidecar, PATH_MAX, "%.*s%s", (int)filename_len, filename, exts[i]);
+    const size_t str_copy = g_snprintf(sidecar, DT_PATH_MAX, "%.*s%s", (int)filename_len, filename, exts[i]);
 
     // Check if the filename was too long or if the copy failed.
-    if (str_copy == 0 || str_copy >= PATH_MAX)
+    if (str_copy == 0 || str_copy >= DT_PATH_MAX)
       continue;
 
     if(g_file_test(sidecar, G_FILE_TEST_EXISTS))
@@ -1530,7 +1531,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
   *iscale = 1.0f;
   const uint32_t wd = *width, ht = *height;
 
-  char filename[PATH_MAX] = { 0 };
+  char filename[DT_PATH_MAX] = { 0 };
   char ext[6] = { 0 };
   gboolean input_exists, is_jpg_input, use_embedded_jpg;
   const int embedded_jpg_mode = _settings_get().embedded_jpg;
@@ -1589,7 +1590,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
 
   if(res && use_embedded_jpg)
   {
-    char sidecar_filename[PATH_MAX] = { 0 };
+    char sidecar_filename[DT_PATH_MAX] = { 0 };
 
     if(is_jpg_input)
     {
@@ -1691,8 +1692,8 @@ void dt_mipmap_cache_copy_thumbnails(const uint32_t dst_imgid, const uint32_t sr
     for(dt_mipmap_size_t mip = DT_MIPMAP_0; mip < DT_MIPMAP_F; mip++)
     {
       // try and load from disk, if successful set flag
-      char srcpath[PATH_MAX] = {0};
-      char dstpath[PATH_MAX] = {0};
+      char srcpath[DT_PATH_MAX] = {0};
+      char dstpath[DT_PATH_MAX] = {0};
       dt_mipmap_get_cache_filename(srcpath, mip, src_imgid);
       dt_mipmap_get_cache_filename(dstpath, mip, dst_imgid);
       GFile *src = g_file_new_for_path(srcpath);

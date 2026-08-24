@@ -34,6 +34,8 @@
 #include <errno.h>
 #include <glib.h>
 
+#include "system/macros.h"   // IS_NULL_PTR
+
 #ifdef _WIN32
 #include <fileapi.h>
 #endif
@@ -47,49 +49,50 @@
 static inline gchar *g_realpath(const char *path)
 {
 #ifndef _WIN32
-#ifndef PATH_MAX
-#define PATH_MAX 4096
-#endif
-  char buffer[PATH_MAX] = { 0 };
+  /* POSIX.1-2008: a NULL second argument makes realpath() allocate a buffer of exactly
+   * the size it needs. The alternative form wants a caller buffer of at least the system
+   * PATH_MAX, which is the one place in this tree that genuinely needs that macro -- so
+   * this form removes the last reason to name it. */
+  char *resolved = realpath(path, NULL);
 
-  char* res = realpath(path, buffer);
-
-  if(res)
-  {
-    return g_strdup(buffer);
-  }
-  else
+  if(IS_NULL_PTR(resolved))
   {
     fprintf(stderr, "path lookup '%s' fails with: '%s'\n", path, strerror(errno));
     exit(EXIT_FAILURE);
   }
+
+  gchar *result = g_strdup(resolved);
+  free(resolved);
+  return result;
 #else
-  char *buffer;
-  char dummy;
-  int rc, len;
+  /* GetFullPathNameA caps at MAX_PATH and mangles any path the active ANSI code page
+   * cannot spell, which is most user names outside us-ascii. The wide entry point has
+   * neither problem; glib owns the UTF-8 <-> UTF-16 conversion. */
+  wchar_t *wpath = g_utf8_to_utf16(path, -1, NULL, NULL, NULL);
+  if(IS_NULL_PTR(wpath)) return g_strdup(path);
 
-  rc = GetFullPathNameA(path, 1, &dummy, NULL);
-
-  if(rc == 0)
+  /* Called with a zero-length buffer, it returns the length it wants, terminator
+   * included. Anything else is a failure we answer by handing the input back. */
+  const DWORD needed = GetFullPathNameW(wpath, 0, NULL, NULL);
+  if(needed == 0)
   {
-    /* Weird failure, so just return the input path as such */
+    g_free(wpath);
     return g_strdup(path);
   }
 
-  len = rc + 1;
-  buffer = g_malloc(len);
+  wchar_t *wbuffer = g_new(wchar_t, needed);
+  const DWORD written = GetFullPathNameW(wpath, needed, wbuffer, NULL);
+  g_free(wpath);
 
-  rc = GetFullPathNameA(path, len, buffer, NULL);
-
-  if(rc == 0 || rc > len)
+  if(written == 0 || written >= needed)
   {
-    /* Weird failure again */
-    g_free(buffer);
-    buffer = NULL;
+    g_free(wbuffer);
     return g_strdup(path);
   }
 
-  return buffer;
+  gchar *result = g_utf16_to_utf8(wbuffer, -1, NULL, NULL, NULL);
+  g_free(wbuffer);
+  return IS_NULL_PTR(result) ? g_strdup(path) : result;
 #endif
 }
 

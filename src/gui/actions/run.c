@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/actions/menu.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "control/control.h"
 #include "control/crawler.h"
 #include "database/database.h"
@@ -84,7 +85,7 @@ static int32_t preload_image_cache(dt_job_t *job)
     // than recomputing a pipe from scratch.
     for(int k = max_mipmap_size; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
     {
-      char filename[PATH_MAX] = { 0 };
+      char filename[DT_PATH_MAX] = { 0 };
       dt_mipmap_get_cache_filename(filename, k, imgid);
 
       // if a valid thumbnail file is already on disc - do nothing

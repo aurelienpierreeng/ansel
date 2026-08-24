@@ -21,6 +21,7 @@
 */
 
 #include "system/mem_alloc.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/film.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
@@ -513,7 +514,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
 
 void _dt_check_basedir()
 {
-  gchar basedir[PATH_MAX] = { 0 };
+  gchar basedir[DT_PATH_MAX] = { 0 };
   g_strlcpy(basedir, dt_conf_get_string_const("session/base_directory_pattern"), sizeof(basedir));
 
   if(*basedir == 0 && dt_get_user_pictures_dir(dt_loc_get_home_dir(NULL), basedir, sizeof(basedir)))

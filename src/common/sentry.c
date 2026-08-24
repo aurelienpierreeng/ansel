@@ -24,6 +24,7 @@
 #endif
 
 #include "common/sentry.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/times.h"
 
 #include <glib/gstdio.h> // for g_unlink
@@ -548,7 +549,7 @@ void dt_sentry_init(const gboolean have_gui)
   sentry_options_set_dsn(options, SENTRY_DSN);
 
   // Keep the crash database next to our other runtime caches.
-  char cachedir[PATH_MAX] = { 0 };
+  char cachedir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
   char *db_path = g_build_filename(cachedir, "sentry-native", NULL);
   sentry_options_set_database_path(options, db_path);

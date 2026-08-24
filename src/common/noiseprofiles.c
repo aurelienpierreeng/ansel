@@ -44,11 +44,11 @@ static gboolean dt_noiseprofile_verify(JsonParser *parser);
 JsonParser *dt_noiseprofile_init(const char *alternative)
 {
   GError *error = NULL;
-  char filename[PATH_MAX] = { 0 };
+  char filename[DT_PATH_MAX] = { 0 };
 
   if(IS_NULL_PTR(alternative))
   {
-    char dir[PATH_MAX] = { 0 };
+    char dir[DT_PATH_MAX] = { 0 };
 
     dt_loc_get_user_config_dir(dir, sizeof(dir));
     dt_concat_path_file(filename, dir, "noiseprofiles.json");

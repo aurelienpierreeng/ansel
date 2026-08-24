@@ -50,6 +50,7 @@
  */
 
 #include "darktable.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/xmp_sidecar.h"
 #include "common/film.h"
 #include "common/file_location.h"
@@ -203,7 +204,7 @@ int main(int argc, char *arg[])
 
   // get valid locale dir
   dt_loc_init(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-  char localedir[PATH_MAX] = { 0 };
+  char localedir[DT_PATH_MAX] = { 0 };
   dt_loc_get_localedir(localedir, sizeof(localedir));
   bindtextdomain(GETTEXT_PACKAGE, localedir);
 

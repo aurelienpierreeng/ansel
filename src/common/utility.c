@@ -49,6 +49,7 @@
 */
 
 #include <locale.h>
+#include "common/paths.h"   // DT_PATH_MAX
 
 #include <glib/gstdio.h>
 #include "system/macros.h"
@@ -467,7 +468,7 @@ static cairo_surface_t *_util_get_svg_img(gchar *logo, const float size)
 {
   GError *error = NULL;
   cairo_surface_t *surface = NULL;
-  char datadir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
 
   dt_loc_get_datadir(datadir, sizeof(datadir));
   char *dtlogo = g_build_filename(datadir, "pixmaps", logo, NULL);
@@ -942,7 +943,7 @@ END:
 
 void dt_copy_resource_file(const char *src, const char *dst)
 {
-  char share[PATH_MAX] = { 0 };
+  char share[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(share, sizeof(share));
   gchar *sourcefile = g_build_filename(share, src, NULL);
   dt_copy_file(sourcefile, dst);

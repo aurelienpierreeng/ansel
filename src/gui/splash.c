@@ -124,7 +124,7 @@ static void _splash_add_css(const char *data)
 
 static gchar *_splash_build_data_path(const char *subpath)
 {
-  char datadir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   return g_build_filename(datadir, "pixmaps", "splash", subpath, NULL);
 }
@@ -338,7 +338,7 @@ static gboolean _splash_slide_advance(gpointer user_data)
 
 static void _splash_load_authors(void)
 {
-  char datadir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   gchar *path = g_build_filename(datadir, "AUTHORS", NULL);
   gchar *content = NULL;
@@ -446,8 +446,8 @@ static gboolean _splash_logo_set_from_path(GtkWidget *logo, const char *path, in
 
 static GtkWidget *_splash_create_logo(int target_size, int scale_factor, gchar **out_path)
 {
-  char datadir[PATH_MAX] = { 0 };
-  char sharedir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
+  char sharedir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_sharedir(sharedir, sizeof(sharedir));
 

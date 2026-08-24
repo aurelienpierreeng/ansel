@@ -53,6 +53,7 @@
 */
 
 #include "common/collection.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/act_on.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
@@ -605,7 +606,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
       continue;
     }
 
-    char text[PATH_MAX] = {0};
+    char text[DT_PATH_MAX] = {0};
 
     switch(md)
     {

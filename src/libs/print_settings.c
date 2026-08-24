@@ -38,6 +38,7 @@
 */
 
 #include "widgets/draw.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "widgets/accelerators.h"
 #include "control/control.h"
 #include "common/conf.h"
@@ -165,7 +166,7 @@ typedef struct dt_lib_print_job_t
   dt_images_box imgs;
   uint16_t *buf; // ??? should be removed
   dt_pdf_page_t *pdf_page;
-  char pdf_filename[PATH_MAX];
+  char pdf_filename[DT_PATH_MAX];
 } dt_lib_print_job_t;
 
 typedef struct dt_lib_export_profile_t
@@ -2131,8 +2132,8 @@ void gui_init(dt_lib_module_t *self)
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   dt_gui_add_help_link(self->widget, dt_get_help_url("print_overview"));
 
-  char datadir[PATH_MAX] = { 0 };
-  char confdir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
+  char confdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
   dt_loc_get_datadir(datadir, sizeof(datadir));
   char *system_profile_dir = g_build_filename(datadir, "color", "out", NULL);

@@ -58,6 +58,7 @@
 */
 
 #include "widgets/bauhaus.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "database/preset_repository.h"
 #include "common/act_on.h"
 #include "control/jobs/control_jobs.h"
@@ -1221,8 +1222,8 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add profile combo
 
-  char datadir[PATH_MAX] = { 0 };
-  char confdir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
+  char confdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
   dt_loc_get_datadir(datadir, sizeof(datadir));
 

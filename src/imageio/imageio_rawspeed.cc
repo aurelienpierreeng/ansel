@@ -48,6 +48,7 @@
 #endif
 
 #include "RawSpeed-API.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "io/FileIOException.h"
 #include "metadata/CameraMetadataException.h"
 #include "parsers/RawParserException.h"
@@ -95,7 +96,7 @@ static void dt_rawspeed_load_meta()
     dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
     if(IS_NULL_PTR(meta))
     {
-      char datadir[PATH_MAX] = { 0 }, camfile[PATH_MAX] = { 0 };
+      char datadir[DT_PATH_MAX] = { 0 }, camfile[DT_PATH_MAX] = { 0 };
       dt_loc_get_datadir(datadir, sizeof(datadir));
       dt_concat_path_file(camfile, datadir, "rawspeed/cameras.xml");
       // never cleaned up (only when dt closes)
@@ -191,7 +192,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
   if(!img->exif_inited)
     (void)dt_exif_read(img, filename);
 
-  char filen[PATH_MAX] = { 0 };
+  char filen[DT_PATH_MAX] = { 0 };
   snprintf(filen, sizeof(filen), "%s", filename);
   FileReader f(filen);
 

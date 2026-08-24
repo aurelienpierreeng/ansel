@@ -48,6 +48,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "widgets/bauhaus.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "database/image_repository.h"
 #include "common/variables.h"
 #include "metadata/colorlabels.h"
@@ -139,7 +140,7 @@ gboolean dt_get_user_pictures_dir(const gchar *homedir, gchar *picdir, size_t pi
   if(IS_NULL_PTR(homedir) || picdir_size == 0 || IS_NULL_PTR(picdir))
     return 0;
 
-  gchar dir[PATH_MAX] = { 0 };
+  gchar dir[DT_PATH_MAX] = { 0 };
   const gchar *special_pictures_dir = g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
   if(IS_NULL_PTR(special_pictures_dir))
     g_snprintf(dir, sizeof(dir), "%s" G_DIR_SEPARATOR_S "Pictures", homedir);
@@ -161,7 +162,7 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
 
   params->data->homedir = dt_loc_get_home_dir(NULL);
 
-  gchar picture_folder[PATH_MAX] = { 0 };
+  gchar picture_folder[DT_PATH_MAX] = { 0 };
   dt_get_user_pictures_dir(params->data->homedir, picture_folder, sizeof(picture_folder));
   params->data->pictures_folder = g_strdup(picture_folder);
 

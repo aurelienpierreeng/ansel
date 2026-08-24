@@ -68,6 +68,7 @@
 #include "config.h"
 #endif
 #include "widgets/bauhaus.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/imagebuf.h"
 #include "develop/iop_profile.h"
 #include "colorprofiles/colormatrices.c"
@@ -1136,8 +1137,8 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->image_profiles = NULL;
 
-  char datadir[PATH_MAX] = { 0 };
-  char confdir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
+  char confdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
 

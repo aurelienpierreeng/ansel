@@ -31,9 +31,10 @@
 */
 
 #include <glib.h>    // for g_mkdir_with_parents, _
+#include "common/paths.h"   // DT_PATH_MAX
 #include <gtk/gtk.h> // for gtk_init_check
 #include <libintl.h> // for bind_textdomain_codeset, etc
-#include <limits.h>  // for PATH_MAX
+#include <limits.h>  // for DT_PATH_MAX
 #include <stddef.h>  // for size_t
 #include <stdint.h>  // for uint32_t
 #include <stdio.h>   // for fprintf, stderr, snprintf, NULL, etc
@@ -77,7 +78,7 @@ static void _generate_one(const int32_t imgid, const char *imgfilename, void *us
 
   for(int k = ctx->max_mip; k >= ctx->min_mip && k >= 0; k--)
   {
-    char filename[PATH_MAX] = { 0 };
+    char filename[DT_PATH_MAX] = { 0 };
     dt_mipmap_get_cache_filename(filename, k, imgid);
 
     // if a valid thumbnail file is already on disc - do nothing
@@ -99,7 +100,7 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
   fprintf(stderr, _("creating cache directories\n"));
   for(dt_mipmap_size_t k = min_mip; k <= max_mip; k++)
   {
-    char dirname[PATH_MAX] = { 0 };
+    char dirname[DT_PATH_MAX] = { 0 };
     dt_mipmap_get_cache_dir(dirname, k);
 
     fprintf(stderr, _("creating cache directory '%s'\n"), dirname);
@@ -158,7 +159,7 @@ int main(int argc, char *arg[])
 
   // get valid locale dir
   dt_loc_init(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-  char localedir[PATH_MAX] = { 0 };
+  char localedir[DT_PATH_MAX] = { 0 };
   dt_loc_get_localedir(localedir, sizeof(localedir));
   bindtextdomain(GETTEXT_PACKAGE, localedir);
 

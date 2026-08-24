@@ -51,6 +51,7 @@
 #ifdef HAVE_OPENCL
 
 #include "common/opencl.h"
+#include "common/paths.h"   // DT_PATH_MAX. conditional-ok: this whole file is inside #ifdef HAVE_OPENCL
 #include "common/startup_progress.h"
 #include "common/utility.h"   // dt_util_str_replace, used under __APPLE__ only
 #include "system/capabilities.h"
@@ -550,17 +551,17 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   cl_bool little_endian = 0;
   cl_platform_id platform_id = 0;
 
-  char *dtcache = calloc(PATH_MAX, sizeof(char));
-  char *cachedir = calloc(PATH_MAX, sizeof(char));
+  char *dtcache = calloc(DT_PATH_MAX, sizeof(char));
+  char *cachedir = calloc(DT_PATH_MAX, sizeof(char));
   char *devname = calloc(DT_OPENCL_CBUFFSIZE, sizeof(char));
   char *drvversion = calloc(DT_OPENCL_CBUFFSIZE, sizeof(char));
   char *platform_name = calloc(DT_OPENCL_CBUFFSIZE, sizeof(char));
   char *platform_vendor = calloc(DT_OPENCL_CBUFFSIZE, sizeof(char));
 
-  char kerneldir[PATH_MAX] = { 0 };
-  char *filename = calloc(PATH_MAX, sizeof(char));
-  char *confentry = calloc(PATH_MAX, sizeof(char));
-  char *binname = calloc(PATH_MAX, sizeof(char));
+  char kerneldir[DT_PATH_MAX] = { 0 };
+  char *filename = calloc(DT_PATH_MAX, sizeof(char));
+  char *confentry = calloc(DT_PATH_MAX, sizeof(char));
+  char *binname = calloc(DT_PATH_MAX, sizeof(char));
   dt_print_nts(DT_DEBUG_OPENCL, "\n[dt_opencl_device_init]\n");
 
   // test GPU availability, vendor, memory, image support etc:
@@ -830,7 +831,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   dt_print_nts(DT_DEBUG_OPENCL, "   KERNEL SOURCE DIRECTORY:  %s\n", kerneldir);
 
   double tstart, tend, tdiff;
-  dt_loc_get_user_cache_dir(dtcache, PATH_MAX * sizeof(char));
+  dt_loc_get_user_cache_dir(dtcache, DT_PATH_MAX * sizeof(char));
 
   int len = MIN(strlen(infostr),1024 * sizeof(char));;
   int j = 0;
@@ -844,7 +845,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   for(int i = 0; i < len; i++)
     if(isalnum(driverversion[i])) drvversion[j++] = driverversion[i];
   drvversion[j] = 0;
-  snprintf(cachedir, PATH_MAX * sizeof(char), "%s" G_DIR_SEPARATOR_S "cached_kernels_for_%s_%s", dtcache, devname, drvversion);
+  snprintf(cachedir, DT_PATH_MAX * sizeof(char), "%s" G_DIR_SEPARATOR_S "cached_kernels_for_%s_%s", dtcache, devname, drvversion);
 
   dt_print_nts(DT_DEBUG_OPENCL, "   KERNEL BUILD DIRECTORY:   %s\n", cachedir);
 
@@ -937,7 +938,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
     while(!feof(f))
     {
       int prog = -1;
-      gchar *confline_pattern = g_strdup_printf("%%%" G_GSIZE_FORMAT "[^\n]\n", PATH_MAX * sizeof(char) - 1);
+      gchar *confline_pattern = g_strdup_printf("%%%" G_GSIZE_FORMAT "[^\n]\n", DT_PATH_MAX * sizeof(char) - 1);
       int rd = fscanf(f, confline_pattern, confentry);
       dt_free(confline_pattern);
       if(rd != 1) continue;
@@ -1821,8 +1822,8 @@ static FILE *fopen_stat(const char *filename, struct stat *st)
 
 void dt_opencl_md5sum(const char **files, char **md5sums)
 {
-  char kerneldir[PATH_MAX] = { 0 };
-  char filename[PATH_MAX] = { 0 };
+  char kerneldir[DT_PATH_MAX] = { 0 };
+  char filename[DT_PATH_MAX] = { 0 };
   dt_loc_get_kerneldir(kerneldir, sizeof(kerneldir));
 
   for(int n = 0; n < DT_OPENCL_MAX_INCLUDES; n++, files++, md5sums++)
@@ -1943,13 +1944,13 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
 
   file[filesize] = '\0';
 
-  char linkedfile[PATH_MAX] = { 0 };
+  char linkedfile[DT_PATH_MAX] = { 0 };
   ssize_t linkedfile_len = 0;
 
 #if defined(_WIN32)
   // No symlinks on Windows
   // Have to figure out the name using the filename + md5sum
-  char dup[PATH_MAX] = { 0 };
+  char dup[DT_PATH_MAX] = { 0 };
   snprintf(dup, sizeof(dup), "%s.%s", binname, md5sum);
   FILE *cached = fopen_stat(dup, &cachedstat);
   g_strlcpy(linkedfile, md5sum, sizeof(linkedfile));
@@ -2009,7 +2010,7 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
 #if !defined(_WIN32)
     if(linkedfile_len > 0)
     {
-      char link_dest[PATH_MAX] = { 0 };
+      char link_dest[DT_PATH_MAX] = { 0 };
       dt_concat_path_file(link_dest, cachedir, linkedfile);
       g_unlink(link_dest);
     }
@@ -2138,7 +2139,7 @@ int dt_opencl_build_program(const int dev, const int prog, const char *binname, 
         if(cl->dev[dev].devid == devices[i])
         {
           // save opencl compiled binary as md5sum-named file
-          char link_dest[PATH_MAX] = { 0 };
+          char link_dest[DT_PATH_MAX] = { 0 };
           snprintf(link_dest, sizeof(link_dest), "%s" G_DIR_SEPARATOR_S "%s", cachedir, md5sum);
           FILE *f = g_fopen(link_dest, "wb");
           if(IS_NULL_PTR(f)) goto ret;
@@ -2147,16 +2148,16 @@ int dt_opencl_build_program(const int dev, const int prog, const char *binname, 
           fclose(f);
 
           // create link (e.g. basic.cl.bin -> f1430102c53867c162bb60af6c163328)
-          char cwd[PATH_MAX] = { 0 };
+          char cwd[DT_PATH_MAX] = { 0 };
           if(!getcwd(cwd, sizeof(cwd))) goto ret;
           if(chdir(cachedir) != 0) goto ret;
-          char dup[PATH_MAX] = { 0 };
+          char dup[DT_PATH_MAX] = { 0 };
           g_strlcpy(dup, binname, sizeof(dup));
           char *bname = basename(dup);
 #if defined(_WIN32)
           //CreateSymbolicLink in Windows requires admin privileges, which we don't want/need
           //store has using a simple filerename
-          char finalfilename[PATH_MAX] = { 0 };
+          char finalfilename[DT_PATH_MAX] = { 0 };
           snprintf(finalfilename, sizeof(finalfilename), "%s" G_DIR_SEPARATOR_S "%s.%s", cachedir, bname, md5sum);
           rename(link_dest, finalfilename);
 #else

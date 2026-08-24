@@ -14,6 +14,7 @@
 */
 
 #include "views/dev_toolbox.h"
+#include "common/paths.h"   // DT_PATH_MAX
 
 #include "widgets/bauhaus.h"
 #include "colorprofiles/colorspaces.h"
@@ -492,8 +493,8 @@ static void _build_softproof_gamut_popover(dt_develop_t *dev)
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(dev->profile.floating_window), vbox);
 
-  char datadir[PATH_MAX] = { 0 };
-  char confdir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
+  char confdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
   dt_loc_get_datadir(datadir, sizeof(datadir));
 

@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "system/mem_alloc.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/conf.h"
 #include "import_jobs.h"
 #include "common/collection.h"
@@ -183,9 +184,9 @@ void dt_import_duplicate_get_dest_name(char *xmp_dest_name, const char *dest_fil
   const size_t name_len = safe_strlen(norm_dest_file) - safe_strlen(ext);
 
   if(counter == 0)
-    g_snprintf(xmp_dest_name, PATH_MAX, "%s.xmp", norm_dest_file);
+    g_snprintf(xmp_dest_name, DT_PATH_MAX, "%s.xmp", norm_dest_file);
   else
-    g_snprintf(xmp_dest_name, PATH_MAX, "%.*s_%.2d%s.xmp", (int)name_len, norm_dest_file, counter, ext);
+    g_snprintf(xmp_dest_name, DT_PATH_MAX, "%.*s_%.2d%s.xmp", (int)name_len, norm_dest_file, counter, ext);
 
   dt_print(DT_DEBUG_IMPORT, "[Import] XMP destination name: %s\n", xmp_dest_name);
 
@@ -209,7 +210,7 @@ int _import_copy_xmp(const char *const filename, gchar *dest_file_path)
     for(GList *current_xmp = xmp_files; current_xmp; current_xmp = g_list_next(current_xmp))
     {
       char *xmp_source = g_strdup((char*) current_xmp->data);
-      gchar xmp_dest_name[PATH_MAX] = { 0 };
+      gchar xmp_dest_name[DT_PATH_MAX] = { 0 };
       dt_import_duplicate_get_dest_name(xmp_dest_name, dest_file_path, xmp_cntr);
 
       // folder already created and writable, just copy.
@@ -390,7 +391,7 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const int ind
 {
   const char *filename = (const char*) img->data;
 
-  gchar img_path_to_db[PATH_MAX] = { 0 };
+  gchar img_path_to_db[DT_PATH_MAX] = { 0 };
   gboolean process_error = FALSE;
   int copy_status = 0;
   int32_t imgid = UNKNOWN_IMAGE;

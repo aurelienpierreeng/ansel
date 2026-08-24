@@ -30,6 +30,7 @@
 
 /** this is the view for the print module.  */
 #include "common/cups_print.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/printing.h"
 #include "caches/image_cache.h"
 #include "common/module_versioning.h"
@@ -454,7 +455,7 @@ int try_enter(dt_view_t *self)
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   // get image and check if it has been deleted from disk first!
 
-  char imgfilename[PATH_MAX] = { 0 };
+  char imgfilename[DT_PATH_MAX] = { 0 };
   gboolean from_cache = TRUE;
   dt_image_full_path(img->id,  imgfilename,  sizeof(imgfilename),  &from_cache, __FUNCTION__);
   if(!g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR))

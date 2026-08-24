@@ -72,6 +72,7 @@
 */
 
 #include "common/image.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/image_notify.h"
 #include "common/thumbnail_notify.h"
 #include "common/act_on.h"
@@ -625,7 +626,7 @@ gboolean dt_image_safe_remove(const int32_t imgid)
   if(!dt_image_get_xmp_mode()) return TRUE;
 
   // check whether the original file is accessible
-  char pathname[PATH_MAX] = { 0 };
+  char pathname[DT_PATH_MAX] = { 0 };
   gboolean from_cache = TRUE;
 
   dt_image_full_path(imgid,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
@@ -742,7 +743,7 @@ void dt_image_local_copy_paths_from_fullpath(const char *fullpath, int32_t imgid
   char *md5_filename = g_compute_checksum_for_string(G_CHECKSUM_MD5, fullpath, strlen(fullpath));
   if(IS_NULL_PTR(md5_filename)) return;
 
-  char cachedir[PATH_MAX] = { 0 };
+  char cachedir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
 
   const char *c = fullpath + strlen(fullpath);
@@ -1120,7 +1121,7 @@ gboolean dt_image_resolve_usercrop(const int32_t imgid, dt_boundingbox_t box)
 
   if(imgid < 1 || !dt_image_cache_is_ready()) return FALSE;
 
-  char filename[PATH_MAX] = { 0 };
+  char filename[DT_PATH_MAX] = { 0 };
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(img)) return FALSE;
 
@@ -1388,7 +1389,7 @@ GList* dt_image_find_xmps(const char* filename)
   if(IS_NULL_PTR(ext)) ext = filename;
   const size_t ext_offset = ext - filename;
 
-  gchar pattern[PATH_MAX] = { 0 };
+  gchar pattern[DT_PATH_MAX] = { 0 };
   GList* files = NULL;
 
   // check for file.ext.xmp
@@ -1439,7 +1440,7 @@ GList* dt_image_find_xmps(const char* filename)
 int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboolean clear_selection)
 {
   int count_xmps_processed = 0;
-  gchar pattern[PATH_MAX] = { 0 };
+  gchar pattern[DT_PATH_MAX] = { 0 };
 
   GList *files = dt_image_find_xmps(filename);
 
@@ -1645,7 +1646,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
 
   // read dttags and exif for database queries!
   (void)dt_exif_read(img, normalized_filename);
-  char dtfilename[PATH_MAX] = { 0 };
+  char dtfilename[DT_PATH_MAX] = { 0 };
   g_strlcpy(dtfilename, normalized_filename, sizeof(dtfilename));
   // dt_image_path_append_version(id, dtfilename, sizeof(dtfilename));
   g_strlcat(dtfilename, ".xmp", sizeof(dtfilename));
@@ -1850,16 +1851,16 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
 {
   // TODO: several places where string truncation could occur unnoticed
   int32_t result = -1;
-  gchar oldimg[PATH_MAX] = { 0 };
-  gchar newimg[PATH_MAX] = { 0 };
+  gchar oldimg[DT_PATH_MAX] = { 0 };
+  gchar newimg[DT_PATH_MAX] = { 0 };
   gboolean from_cache = FALSE;
   dt_image_full_path(imgid,  oldimg,  sizeof(oldimg),  &from_cache, __FUNCTION__);
   gchar *newdir = NULL;
 
   newdir = dt_film_repository_get_folder(filmid);
 
-  gchar copysrcpath[PATH_MAX] = { 0 };
-  gchar copydestpath[PATH_MAX] = { 0 };
+  gchar copysrcpath[DT_PATH_MAX] = { 0 };
+  gchar copydestpath[DT_PATH_MAX] = { 0 };
   GFile *old = NULL, *new = NULL;
   if(newdir)
   {
@@ -1914,7 +1915,7 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
       for(GList *l = dup_list; l; l = g_list_next(l))
       {
         const int32_t id = GPOINTER_TO_INT(l->data);
-        gchar oldxmp[PATH_MAX] = { 0 }, newxmp[PATH_MAX] = { 0 };
+        gchar oldxmp[DT_PATH_MAX] = { 0 }, newxmp[DT_PATH_MAX] = { 0 };
         g_strlcpy(oldxmp, oldimg, sizeof(oldxmp));
         g_strlcpy(newxmp, newimg, sizeof(newxmp));
         dt_image_path_append_version(id, oldxmp, sizeof(oldxmp));
@@ -2034,7 +2035,7 @@ int32_t dt_image_move(const int32_t imgid, const int32_t filmid)
 int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gchar *newname)
 {
   int32_t newid = -1;
-  gchar srcpath[PATH_MAX] = { 0 };
+  gchar srcpath[DT_PATH_MAX] = { 0 };
   gchar *newdir = NULL;
   gboolean from_cache = FALSE;
   gchar *oldFilename = NULL;
@@ -2127,18 +2128,18 @@ int32_t dt_image_copy(const int32_t imgid, const int32_t filmid)
 
 int dt_image_local_copy_set(const int32_t imgid)
 {
-  gchar srcpath[PATH_MAX] = { 0 };
-  gchar destpath[PATH_MAX] = { 0 };
+  gchar srcpath[DT_PATH_MAX] = { 0 };
+  gchar destpath[DT_PATH_MAX] = { 0 };
   dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
-  char local_copy_path[PATH_MAX] = { 0 };
-  char local_copy_legacy_path[PATH_MAX] = { 0 };
+  char local_copy_path[DT_PATH_MAX] = { 0 };
+  char local_copy_legacy_path[DT_PATH_MAX] = { 0 };
   dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(img)
   {
-    g_strlcpy(srcpath, img->fullpath, PATH_MAX);
+    g_strlcpy(srcpath, img->fullpath, DT_PATH_MAX);
     g_strlcpy(local_copy_path, img->local_copy_path, sizeof(local_copy_path));
     g_strlcpy(local_copy_legacy_path, img->local_copy_legacy_path, sizeof(local_copy_legacy_path));
-    char existing[PATH_MAX] = { 0 };
+    char existing[DT_PATH_MAX] = { 0 };
     source = dt_image_choose_input_path(img, existing, sizeof(existing), TRUE);
     if(source == DT_IMAGE_PATH_LOCAL_COPY || source == DT_IMAGE_PATH_LOCAL_COPY_LEGACY)
       g_strlcpy(destpath, existing, sizeof(destpath));
@@ -2197,9 +2198,9 @@ static int _nb_other_local_copy_for(const int32_t imgid)
 
 int dt_image_local_copy_reset(const int32_t imgid)
 {
-  gchar destpath[PATH_MAX] = { 0 };
-  gchar locppath[PATH_MAX] = { 0 };
-  gchar cachedir[PATH_MAX] = { 0 };
+  gchar destpath[DT_PATH_MAX] = { 0 };
+  gchar locppath[DT_PATH_MAX] = { 0 };
+  gchar cachedir[DT_PATH_MAX] = { 0 };
 
   // check that a local copy exists, otherwise there is nothing to do
   dt_image_t *imgr = dt_image_cache_get(imgid, 'r');
@@ -2310,14 +2311,14 @@ static dt_image_write_sidecar_result_t _write_sidecar_file_from_image_locked(con
 {
   if(IS_NULL_PTR(img) || img->id <= 0) return DT_IMAGE_WRITE_SIDECAR_DISABLED;
 
-  char imgpath[PATH_MAX] = { 0 };
+  char imgpath[DT_PATH_MAX] = { 0 };
   if(dt_image_choose_input_path(img, imgpath, sizeof(imgpath), FALSE) == DT_IMAGE_PATH_NONE)
   {
     dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d no source path available\n", img->id);
     return DT_IMAGE_WRITE_SIDECAR_NO_SOURCE_PATH;
   }
 
-  char filename[PATH_MAX] = { 0 };
+  char filename[DT_PATH_MAX] = { 0 };
   g_strlcpy(filename, imgpath, sizeof(filename));
   dt_image_path_append_version(img->id, filename, sizeof(filename));
   g_strlcat(filename, ".xmp", sizeof(filename));
@@ -2413,7 +2414,7 @@ void dt_image_local_copy_synch()
   {
     const int32_t imgid = GPOINTER_TO_INT(l->data);
     gboolean from_cache = FALSE;
-    char filename[PATH_MAX] = { 0 };
+    char filename[DT_PATH_MAX] = { 0 };
     dt_image_full_path(imgid,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
 
     if(g_file_test(filename, G_FILE_TEST_EXISTS))
@@ -2561,7 +2562,7 @@ char *dt_image_get_audio_path_from_path(const char *image_path)
 char *dt_image_get_audio_path(const int32_t imgid)
 {
   gboolean from_cache = FALSE;
-  char image_path[PATH_MAX] = { 0 };
+  char image_path[DT_PATH_MAX] = { 0 };
   dt_image_full_path(imgid,  image_path,  sizeof(image_path),  &from_cache, __FUNCTION__);
 
   return dt_image_get_audio_path_from_path(image_path);
@@ -2680,7 +2681,7 @@ static void _move_text_sidecar_if_present(const char *src_image_path, const char
 
 char *dt_image_get_text_path(const int32_t imgid)
 {
-  char image_path[PATH_MAX] = { 0 };
+  char image_path[DT_PATH_MAX] = { 0 };
 
   gboolean from_cache = FALSE;
   dt_image_full_path(imgid,  image_path,  sizeof(image_path),  &from_cache, __FUNCTION__);
@@ -2752,11 +2753,11 @@ void dt_image_check_camera_missing_sample(const struct dt_image_t *img)
 
 void dt_get_dirname_from_imgid(gchar *dir, const int32_t imgid)
 {
-  gchar path[PATH_MAX] = { 0 };
+  gchar path[DT_PATH_MAX] = { 0 };
   gboolean from_cache = FALSE;
   dt_image_full_path(imgid, path, sizeof(path), &from_cache, __FUNCTION__);
   gchar *folder = g_path_get_dirname(path);
-  g_strlcpy(dir, folder, PATH_MAX); // callers all provide a PATH_MAX-sized dir buffer
+  g_strlcpy(dir, folder, DT_PATH_MAX); // callers all provide a DT_PATH_MAX-sized dir buffer
   dt_free(folder);
 }
 

@@ -20,6 +20,7 @@
 #define DT_IOP_DRAWLAYER_IO_H
 
 #include <glib.h>
+#include "common/paths.h"   // DT_PATH_MAX
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -64,7 +65,7 @@ typedef struct dt_drawlayer_io_background_job_params_t
   int dst_x;
   int dst_y;
   int insert_after_order;
-  char sidecar_path[PATH_MAX];
+  char sidecar_path[DT_PATH_MAX];
   char work_profile[DT_DRAWLAYER_IO_PROFILE_SIZE];
   char requested_bg_name[DT_DRAWLAYER_IO_NAME_SIZE];
   char filter[64];

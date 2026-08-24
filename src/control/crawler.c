@@ -32,6 +32,7 @@
 */
 
 #include <glib.h>
+#include "common/paths.h"   // DT_PATH_MAX
 #include <glib/gstdio.h>
 #include <stdio.h>
 #include <string.h>
@@ -139,11 +140,11 @@ static void _crawl_image(const int32_t id,
   }
 
   // construct the xmp filename for this image
-  gchar xmp_path[PATH_MAX] = { 0 };
+  gchar xmp_path[DT_PATH_MAX] = { 0 };
   g_strlcpy(xmp_path, image_path, sizeof(xmp_path));
   dt_image_path_append_version_no_db(version, xmp_path, sizeof(xmp_path));
   size_t len = strlen(xmp_path);
-  if(len + 4 >= PATH_MAX) return;
+  if(len + 4 >= DT_PATH_MAX) return;
   xmp_path[len++] = '.';
   xmp_path[len++] = 'x';
   xmp_path[len++] = 'm';

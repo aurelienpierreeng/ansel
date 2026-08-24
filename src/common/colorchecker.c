@@ -29,6 +29,7 @@
  */
 
 #include "system/mem_alloc.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "colorchecker.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "file_location.h"
@@ -1554,7 +1555,7 @@ int dt_colorchecker_find_builtin(GList **colorcheckers_label)
 int dt_colorchecker_find_CGATS_reference_files(GList **ref_colorcheckers_files)
 {
   int nb = 0;
-  char confdir[PATH_MAX] = { 0 };
+  char confdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
   gchar *user_it8_dir = g_build_filename(confdir, "color", "checker", NULL);
 
@@ -1587,7 +1588,7 @@ int dt_colorchecker_find_CGATS_reference_files(GList **ref_colorcheckers_files)
 int dt_colorchecker_find_cht_files(GList **chts)
 {
   int nb = 0;
-  char confdir[PATH_MAX] = { 0 };
+  char confdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
   gchar *user_it8_dir = g_build_filename(confdir, "color", "checker", NULL);
 

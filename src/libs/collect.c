@@ -2027,7 +2027,7 @@ static int32_t _prerender_job(dt_job_t *job)
     const int32_t imgid = GPOINTER_TO_INT(l->data);
     for(int k = max; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
     {
-      char filename[PATH_MAX] = { 0 };
+      char filename[DT_PATH_MAX] = { 0 };
       dt_mipmap_get_cache_filename(filename, k, imgid);
       if(!dt_util_test_image_file(filename)) // skip thumbnails already on disc
       {

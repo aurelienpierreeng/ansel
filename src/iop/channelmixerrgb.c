@@ -47,6 +47,7 @@
 #include "config.h"
 #endif
 #include "widgets/bauhaus.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "widgets/collapsible_section.h"
 #include "system/macros.h"
 #include "system/openmp.h"
@@ -5523,7 +5524,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gchar *tip_files_loc = NULL;
   {
-    char confdir[PATH_MAX] = { 0 };
+    char confdir[DT_PATH_MAX] = { 0 };
     dt_loc_get_user_config_dir(confdir, sizeof(confdir));
     
     gchar *user_CGATS_dir = g_build_filename(confdir, "color", "checker", NULL);

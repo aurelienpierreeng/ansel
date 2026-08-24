@@ -30,6 +30,7 @@
 #define DT_CACHES_MIPMAP_CACHE_H
 
 #include "system/atomic.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "caches/cache.h"
 #include "colorprofiles/profile_types.h"
 #include "common/image.h"
@@ -228,10 +229,10 @@ void dt_mipmap_cache_swap_at_size(const int32_t imgid,
 void dt_mipmap_cache_copy_thumbnails(const uint32_t dst_imgid, const uint32_t src_imgid);
 
 // get the full path of a cached thumbnail
-void dt_mipmap_get_cache_filename(char path[PATH_MAX], dt_mipmap_size_t mip, const int32_t imgid);
+void dt_mipmap_get_cache_filename(char path[DT_PATH_MAX], dt_mipmap_size_t mip, const int32_t imgid);
 
 // get just the dir
-void dt_mipmap_get_cache_dir(char path[PATH_MAX], dt_mipmap_size_t mip);
+void dt_mipmap_get_cache_dir(char path[DT_PATH_MAX], dt_mipmap_size_t mip);
 
 
 #ifdef __cplusplus

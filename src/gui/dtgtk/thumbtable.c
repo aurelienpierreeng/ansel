@@ -41,6 +41,7 @@
 /** a class to manage a table of thumbnail for lighttable and filmstrip.  */
 
 #include "common/image_extensions.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "database/collection_query.h"
 #include "common/act_on.h"
 #include "control/settings.h"
@@ -1265,7 +1266,7 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
       GList *l = table->drag_list;
       if(g_list_is_singleton(l))
       {
-        gchar pathname[PATH_MAX] = { 0 };
+        gchar pathname[DT_PATH_MAX] = { 0 };
         gboolean from_cache = TRUE;
         const int id = GPOINTER_TO_INT(l->data);
         dt_image_full_path(id,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
@@ -1280,7 +1281,7 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
         for(; l; l = g_list_next(l))
         {
           const int id = GPOINTER_TO_INT(l->data);
-          gchar pathname[PATH_MAX] = { 0 };
+          gchar pathname[DT_PATH_MAX] = { 0 };
           gboolean from_cache = TRUE;
           dt_image_full_path(id,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
           gchar *uri = g_strdup_printf("file://%s", pathname); // TODO: should we add the host?

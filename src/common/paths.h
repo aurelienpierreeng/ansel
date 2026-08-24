@@ -34,16 +34,27 @@ extern "C" {
 /** define for max path/filename length */
 #define DT_MAX_FILENAME_LEN 256
 
-#ifndef PATH_MAX
-/*
- * from /usr/include/linux/limits.h (Linux 3.16.5)
- * Some systems might not define it (e.g. Hurd)
+/**
+ * @brief Buffer size for a filesystem path anywhere in Ansel.
  *
- * We do NOT depend on any specific value of this env variable.
- * If you want constant value across all systems, use DT_MAX_PATH_FOR_PARAMS!
+ * This is deliberately NOT the system PATH_MAX. That macro is not a constant across the
+ * platforms we ship: 4096 on Linux, 1024 on macOS, and 260 on Windows -- mingw's
+ * <limits.h> defines it unconditionally, and redefines it to 512 under _POSIX_, so it
+ * even overrides a value we set first.
+ *
+ * What used to live here was `#ifndef PATH_MAX / #define PATH_MAX 4096`, which is dead
+ * code on all three platforms, because all three define it. The visible consequence was
+ * that every `char buf[PATH_MAX]` in the tree -- including the five path members of
+ * dt_image_t -- was a 4096-byte buffer when built on Linux and a 260-byte one when built
+ * on Windows, where paths under %LOCALAPPDATA% get close to that and were silently
+ * truncated by the g_strlcpy/snprintf that fill them.
+ *
+ * Sizing our own buffers is our decision, so we make it once, here, for every platform.
+ * Note this does not by itself let Windows OPEN a path longer than its own MAX_PATH --
+ * that needs a long-path-aware manifest -- it only stops us truncating before the OS is
+ * ever asked.
  */
-#define PATH_MAX 4096
-#endif
+#define DT_PATH_MAX 4096
 
 /*
  * ONLY TO BE USED FOR PARAMS!!! (e.g. dt_imageio_disk_t)
@@ -61,7 +72,7 @@ extern "C" {
  * @param variable 
  * @param string 
  */
-void dt_concat_path_file(char destination[PATH_MAX], const char path[PATH_MAX], const char *const file);
+void dt_concat_path_file(char destination[DT_PATH_MAX], const char path[DT_PATH_MAX], const char *const file);
 
 #ifdef __cplusplus
 }

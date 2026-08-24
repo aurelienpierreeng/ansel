@@ -26,6 +26,7 @@
  */
 
 #include "system/macros.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "system/mem_alloc.h"
 #include "common/l10n.h"
 #include "common/file_location.h"
@@ -142,7 +143,7 @@ static void get_language_names(GList *languages)
 #endif
 
 #if defined(_WIN32) && !defined(MSYS2_INSTALL)
-  char datadir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   filename = g_build_filename(datadir, "..",  "iso-codes", "json", "iso_639-2.json", NULL);
 #else
@@ -163,14 +164,14 @@ static void get_language_names(GList *languages)
 
 #if defined(_WIN32) && !defined(MSYS2_INSTALL)
   // on windows we are shipping the translations of iso-codes along ours
-  char localedir[PATH_MAX] = { 0 };
+  char localedir[DT_PATH_MAX] = { 0 };
   dt_loc_get_localedir(localedir, sizeof(localedir));
   bindtextdomain("iso_639-2", localedir);
 #else
 #ifdef __APPLE__
   if(res_path)
   {
-    char localedir[PATH_MAX] = { 0 };
+    char localedir[DT_PATH_MAX] = { 0 };
     dt_loc_get_localedir(localedir, sizeof(localedir));
     bindtextdomain("iso_639-2", localedir);
   }
@@ -354,7 +355,7 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
 
     const gchar * const * default_languages = g_get_language_names();
 
-    char localedir[PATH_MAX] = { 0 };
+    char localedir[DT_PATH_MAX] = { 0 };
     dt_loc_get_localedir(localedir, sizeof(localedir));
     GDir *dir = g_dir_open(localedir, 0, NULL);
     if(dir)

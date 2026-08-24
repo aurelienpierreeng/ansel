@@ -72,6 +72,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "darktable.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "metadata/colorlabels.h"   // DT_COLORLABELS_*
 #include "gui/screen_metrics.h"
 #include "widgets/widget_settings.h"
@@ -1055,7 +1056,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   g_setenv("LIBOVERLAY_SCROLLBAR", "0", 0);
 
   // unset gtk rc from kde:
-  char path[PATH_MAX] = { 0 }, datadir[PATH_MAX] = { 0 }, sharedir[PATH_MAX] = { 0 }, configdir[PATH_MAX] = { 0 };
+  char path[DT_PATH_MAX] = { 0 }, datadir[DT_PATH_MAX] = { 0 }, sharedir[DT_PATH_MAX] = { 0 }, configdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_sharedir(sharedir, sizeof(sharedir));
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
@@ -1779,7 +1780,7 @@ void dt_gui_add_help_link(GtkWidget *widget, char *link)
 // load a CSS theme
 void dt_gui_load_theme(const char *theme)
 {
-  char theme_css[PATH_MAX] = { 0 };
+  char theme_css[DT_PATH_MAX] = { 0 };
   g_snprintf(theme_css, sizeof(theme_css), "%s.css", theme);
 
   if(!dt_conf_key_exists("use_system_font"))
@@ -1802,7 +1803,7 @@ void dt_gui_load_theme(const char *theme)
   }
 
   gchar *path, *usercsspath;
-  char datadir[PATH_MAX] = { 0 }, configdir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 }, configdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
 

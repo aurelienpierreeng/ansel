@@ -28,6 +28,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "system/macros.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/xmp_sidecar.h"
@@ -52,7 +53,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
 {
   int status = 1;
   gboolean from_cache = TRUE;
-  char sourcefile[PATH_MAX];
+  char sourcefile[DT_PATH_MAX];
   char *targetfile = NULL;
   char *xmpfile = NULL;
 

@@ -24,6 +24,7 @@
 */
 
 #include "common/dbus.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "darktable.h"
 #include "control/control.h"
 #include "common/file_location.h"
@@ -71,13 +72,13 @@ static GVariant *_handle_get_property(GDBusConnection *connection, const gchar *
   ret = NULL;
   if(!g_strcmp0(property_name, "DataDir"))
   {
-    gchar datadir[PATH_MAX] = { 0 };
+    gchar datadir[DT_PATH_MAX] = { 0 };
     dt_loc_get_datadir(datadir, sizeof(datadir));
     ret = g_variant_new_string(datadir);
   }
   else if(!g_strcmp0(property_name, "ConfigDir"))
   {
-    gchar configdir[PATH_MAX] = { 0 };
+    gchar configdir[DT_PATH_MAX] = { 0 };
     dt_loc_get_user_config_dir(configdir, sizeof(configdir));
     ret = g_variant_new_string(configdir);
   }

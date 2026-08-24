@@ -45,6 +45,7 @@
 #endif
 
 #include "math/calculator.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "darktable.h"
 #include "common/file_location.h"
 #include "math/math.h"
@@ -856,7 +857,7 @@ gchar* dt_conf_expand_default_dir(const char *dir)
   gchar *path = NULL;
   if(g_str_has_prefix(dir, CONFIG_DIR))
   {
-    gchar configdir[PATH_MAX] = { 0 };
+    gchar configdir[DT_PATH_MAX] = { 0 };
     dt_loc_get_user_config_dir(configdir, sizeof(configdir));
     path = g_strdup_printf("%s%s", configdir, dir + strlen(CONFIG_DIR));
   }

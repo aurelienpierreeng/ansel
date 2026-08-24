@@ -17,6 +17,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/conf.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/act_on.h"
 #include "common/history_actions.h"
 #include "gui/common/history_actions_gui.h"
@@ -305,7 +306,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
     const dt_image_t *img = dt_image_cache_get(imgid, 'r');
     if(img && img->film_id != -1)
     {
-      char pathname[PATH_MAX] = { 0 };
+      char pathname[DT_PATH_MAX] = { 0 };
       dt_image_film_roll_directory(img, pathname, sizeof(pathname));
       gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), pathname);
     }

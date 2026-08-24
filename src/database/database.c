@@ -57,6 +57,7 @@
 #endif
 
 #include "system/atomic.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "system/dtpthread.h"
 #include "common/image.h"
 #include "database/database.h"
@@ -3124,8 +3125,8 @@ start:
 
   /* lets construct the db filename  */
   gchar *dbname = NULL;
-  gchar dbfilename_library[PATH_MAX] = { 0 };
-  gchar datadir[PATH_MAX] = { 0 };
+  gchar dbfilename_library[DT_PATH_MAX] = { 0 };
+  gchar datadir[DT_PATH_MAX] = { 0 };
 
   dt_loc_get_user_config_dir(datadir, sizeof(datadir));
 
@@ -3152,7 +3153,7 @@ start:
   }
 
   /* we also need a 2nd db with permanent data like presets, styles and tags */
-  char dbfilename_data[PATH_MAX] = { 0 };
+  char dbfilename_data[DT_PATH_MAX] = { 0 };
   if(load_data)
     dt_concat_path_file(dbfilename_data, datadir, "data.db");
   else
@@ -3767,7 +3768,7 @@ const gchar *dt_database_get_path(void)
  * so this run opens the file that now exists. */
 static gchar *_database_migrate_to_xdg_structure(const char *configured_db)
 {
-  gchar dbfilename[PATH_MAX] = { 0 };
+  gchar dbfilename[DT_PATH_MAX] = { 0 };
 
   /* The destination must be the directory _database_init() resolves a relative library
    * name against -- the user config dir -- because the name this returns is exactly such a
@@ -3775,7 +3776,7 @@ static gchar *_database_migrate_to_xdg_structure(const char *configured_db)
    * user's directory; today that is the read-only <prefix>/share/ansel, where the rename
    * fails on a system install (EACCES, or EXDEV across mounts) and would land the file
    * where the open path never looks on any install where it could succeed. */
-  gchar configdir[PATH_MAX] = { 0 };
+  gchar configdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
 
   if(configured_db && configured_db[0] != '/')
@@ -3784,7 +3785,7 @@ static gchar *_database_migrate_to_xdg_structure(const char *configured_db)
     snprintf(dbfilename, sizeof(dbfilename), "%s/%s", homedir, configured_db);
     if(g_file_test(dbfilename, G_FILE_TEST_EXISTS))
     {
-      char destdbname[PATH_MAX] = { 0 };
+      char destdbname[DT_PATH_MAX] = { 0 };
       dt_concat_path_file(destdbname, configdir, "library.db");
       if(!g_file_test(destdbname, G_FILE_TEST_EXISTS))
       {
@@ -3813,7 +3814,7 @@ static void _database_delete_mipmaps_files()
   /* This migration is intended to be run only from 0.9.x to new cache in 1.0 */
 
   // Directory
-  char cachedir[PATH_MAX] = { 0 }, mipmapfilename[PATH_MAX] = { 0 };
+  char cachedir[DT_PATH_MAX] = { 0 }, mipmapfilename[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
   dt_concat_path_file(mipmapfilename, cachedir, "mipmaps");
 

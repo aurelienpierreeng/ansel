@@ -39,6 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "control/control.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "widgets/widget_settings.h"
 #include "common/act_on.h"
 #include "control/settings.h"
@@ -1099,7 +1100,7 @@ static GList *_lib_geotagging_get_timezones(void)
       if(!g_file_test(zone_tab, G_FILE_TEST_IS_REGULAR))
       {
         dt_free(zone_tab);
-        char datadir[PATH_MAX] = { 0 };
+        char datadir[DT_PATH_MAX] = { 0 };
         dt_loc_get_datadir(datadir, sizeof(datadir));
         zone_tab = g_build_filename(datadir, "zone.tab", NULL);
         if(!g_file_test(zone_tab, G_FILE_TEST_IS_REGULAR))

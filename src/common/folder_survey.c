@@ -14,6 +14,7 @@
 */
 
 #include "system/mem_alloc.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/folder_survey.h"
 #include "control/settings.h"
 #include <glib/gstdio.h>
@@ -772,7 +773,7 @@ void dt_folder_survey_init()
 
   dt_pthread_mutex_init(&_folder_survey.lock, NULL);
   _folder_survey.files = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
-  char config_dir[PATH_MAX] = { 0 };
+  char config_dir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(config_dir, sizeof(config_dir));
   _folder_survey.state_path = g_build_filename(config_dir, DT_FOLDER_SURVEY_STATE_FILE, NULL);
   _folder_survey.initialized = TRUE;

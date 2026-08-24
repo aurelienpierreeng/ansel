@@ -57,6 +57,7 @@
 */
 
 #include "common/global_mutexes.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "system/macros.h"
 #include "common/module_versioning.h"
 #include "system/mem_alloc.h"
@@ -482,7 +483,7 @@ static gchar *_watermark_get_svgdoc(dt_iop_module_t *self, dt_iop_watermark_data
     dt_variables_params_t *params;
     dt_variables_params_init(&params);
     gboolean from_cache = FALSE;
-    char image_path[PATH_MAX] = { 0 };
+    char image_path[DT_PATH_MAX] = { 0 };
     dt_image_full_path(image->id,  image_path,  sizeof(image_path),  &from_cache, __FUNCTION__);
     params->filename = image_path;
     params->jobcode = "infos";
@@ -509,8 +510,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int ch = 4;
   const float angle = (M_PI / 180) * (-data->rotate);
 
-  gchar configdir[PATH_MAX] = { 0 };
-  gchar datadir[PATH_MAX] = { 0 };
+  gchar configdir[DT_PATH_MAX] = { 0 };
+  gchar datadir[DT_PATH_MAX] = { 0 };
   gchar *filename;
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
@@ -959,8 +960,8 @@ static void refresh_watermarks(dt_iop_module_t *self)
   g->watermarks_filenames = NULL;
 
   // check watermarkdir and update combo with entries...
-  gchar configdir[PATH_MAX] = { 0 };
-  gchar datadir[PATH_MAX] = { 0 };
+  gchar configdir[DT_PATH_MAX] = { 0 };
+  gchar datadir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
 
@@ -1128,8 +1129,8 @@ void gui_init(struct dt_iop_module_t *self)
   int line = 0;
 
   // Add the marker combobox
-  gchar configdir[PATH_MAX] = { 0 };
-  gchar datadir[PATH_MAX] = { 0 };
+  gchar configdir[DT_PATH_MAX] = { 0 };
+  gchar datadir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
 

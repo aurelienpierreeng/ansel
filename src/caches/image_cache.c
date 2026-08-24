@@ -489,7 +489,7 @@ void dt_image_cache_write_release(dt_image_t *img, dt_image_cache_write_mode_t m
 
   // Recompute full/local copy paths (and derived folder/filmroll/datetime) from possibly updated filename.
   // Avoid SQL here; rely on the cached folder/fullpath, or leave fields empty if they can't be rebuilt.
-  char folder[PATH_MAX] = { 0 };
+  char folder[DT_PATH_MAX] = { 0 };
   if(img->folder[0])
   {
     g_strlcpy(folder, img->folder, sizeof(folder));

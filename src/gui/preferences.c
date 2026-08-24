@@ -53,6 +53,7 @@
 */
 
 #include <gdk/gdkkeysyms.h>
+#include "common/paths.h"   // DT_PATH_MAX
 #include <strings.h>
 
 #include "widgets/bauhaus.h"
@@ -190,8 +191,8 @@ static void load_themes(void)
   dt_gui_set_themes(NULL);
 
   // check themes dirs
-  gchar configdir[PATH_MAX] = { 0 };
-  gchar datadir[PATH_MAX] = { 0 };
+  gchar configdir[DT_PATH_MAX] = { 0 };
+  gchar datadir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
 
@@ -254,7 +255,7 @@ static void use_sys_font_callback(GtkWidget *widget, gpointer user_data)
 static void save_usercss(GtkTextBuffer *buffer)
 {
   //get file locations
-  char usercsspath[PATH_MAX] = { 0 }, configdir[PATH_MAX] = { 0 };
+  char usercsspath[DT_PATH_MAX] = { 0 }, configdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
   g_snprintf(usercsspath, sizeof(usercsspath), "%s/user.css", configdir);
 
@@ -498,7 +499,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   gtk_widget_set_tooltip_text(tw->save_button, _("click to save and apply the CSS tweaks entered in this editor"));
 
   //set textarea text from file or default
-  char usercsspath[PATH_MAX] = { 0 }, configdir[PATH_MAX] = { 0 };
+  char usercsspath[DT_PATH_MAX] = { 0 }, configdir[DT_PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
   g_snprintf(usercsspath, sizeof(usercsspath), "%s/user.css", configdir);
 

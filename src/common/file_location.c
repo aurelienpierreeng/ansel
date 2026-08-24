@@ -54,6 +54,7 @@
 #endif
 
 #include "common/grealpath.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "darktable.h"
 #include "file_location.h"
 #include "whereami.h"
@@ -154,7 +155,7 @@ gchar *dt_loc_init_generic(const char *absolute_value, const char *application_d
     {
       // default_value is relative.
       // combine basename (application_directory) and relative path (default_value).
-      gchar complete_path[PATH_MAX] = { 0 };
+      gchar complete_path[DT_PATH_MAX] = { 0 };
 #if defined(__APPLE__)
       char *bundle_path = dt_osx_get_bundle_res_path();
       if(bundle_path)

@@ -78,6 +78,7 @@
 */
 
 #include "control/jobs/control_jobs.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "control/signal.h"
 #include "database/film_repository.h"
 #include "database/image_repository.h"
@@ -573,7 +574,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
 
   // output hdr as digital negative with exif data.
   uint8_t *exif = NULL;
-  char pathname[PATH_MAX] = { 0 };
+  char pathname[DT_PATH_MAX] = { 0 };
   gboolean from_cache = TRUE;
   dt_image_full_path(d.first_imgid,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
 
@@ -1023,7 +1024,7 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
   {
     enum _dt_delete_status delete_status = _DT_DELETE_STATUS_UNKNOWN;
     const int32_t imgid = GPOINTER_TO_INT(t->data);
-    char filename[PATH_MAX] = { 0 };
+    char filename[DT_PATH_MAX] = { 0 };
     gboolean from_cache = FALSE;
     dt_image_full_path(imgid,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
 
@@ -1269,7 +1270,7 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
     if(imgid >= 0)
     {
       gboolean from_cache = TRUE;
-      char sourcefile[PATH_MAX];
+      char sourcefile[DT_PATH_MAX];
       dt_image_full_path(imgid,  sourcefile,  sizeof(sourcefile),  &from_cache, __FUNCTION__);
 
       dt_image_t *img = dt_image_cache_get(imgid, 'w');
@@ -1404,7 +1405,7 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
     const dt_image_t *image = dt_image_cache_get((int32_t)imgid, 'r');
     if(image)
     {
-      char imgfilename[PATH_MAX] = { 0 };
+      char imgfilename[DT_PATH_MAX] = { 0 };
       gboolean from_cache = TRUE;
       dt_image_full_path(image->id,  imgfilename,  sizeof(imgfilename),  &from_cache, __FUNCTION__);
       if(!g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR))

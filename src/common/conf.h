@@ -46,6 +46,7 @@
 #endif
 
 #include "system/dtpthread.h"
+#include "common/paths.h"   // DT_PATH_MAX
 
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -80,7 +81,7 @@ typedef struct dt_confgen_value_t
 typedef struct dt_conf_t
 {
   dt_pthread_mutex_t mutex;
-  char filename[PATH_MAX];
+  char filename[DT_PATH_MAX];
   GHashTable *table;
   GHashTable *x_confgen;
   GHashTable *override_entries;

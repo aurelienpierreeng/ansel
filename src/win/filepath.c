@@ -30,7 +30,7 @@
 GList* win_image_find_duplicates(const char* filename)
 {
   // find all duplicates of an image
-  gchar pattern[PATH_MAX] = { 0 };
+  gchar pattern[DT_PATH_MAX] = { 0 };
   GList* files = NULL;
   gchar *imgpath = g_path_get_dirname(filename);
   // Windows only accepts generic wildcards for filename

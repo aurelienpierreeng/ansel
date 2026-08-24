@@ -442,7 +442,7 @@ void dt_print_file(const int32_t imgid, const char *filename, const char *job_ti
   if (pinfo->printer.is_turboprint)
   {
     const char *tp_intent_name[] = { "perception_0", "colorimetric-relative_1", "saturation_1", "colorimetric-absolute_1" };
-    char tmpfile[PATH_MAX] = { 0 };
+    char tmpfile[DT_PATH_MAX] = { 0 };
 
     dt_loc_get_tmp_dir(tmpfile, sizeof(tmpfile));
     g_strlcat(tmpfile, "/dt_cups_opts_XXXXXX", sizeof(tmpfile));

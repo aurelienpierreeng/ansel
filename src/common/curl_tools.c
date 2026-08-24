@@ -28,6 +28,7 @@
 */
 
 #include "system/mem_alloc.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/curl_tools.h"
 #include "common/file_location.h"
 
@@ -35,7 +36,7 @@ void dt_curl_init(CURL *curl, gboolean verbose)
 {
   curl_easy_reset(curl);
 
-  char datadir[PATH_MAX] = { 0 };
+  char datadir[DT_PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
   gchar *crtfilename = g_build_filename(datadir, "..", "curl", "curl-ca-bundle.crt", NULL);
   if(g_file_test(crtfilename, G_FILE_TEST_EXISTS)) curl_easy_setopt(curl, CURLOPT_CAINFO, crtfilename);

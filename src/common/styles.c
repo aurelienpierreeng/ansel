@@ -921,7 +921,7 @@ static void _write_item(void *user_data, const int num, const int multi_priority
 
 void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolean overwrite)
 {
-  char stylesdir[PATH_MAX] = { 0 };
+  char stylesdir[DT_PATH_MAX] = { 0 };
   if(IS_NULL_PTR(filedir))
   {
     dt_loc_get_user_config_dir(stylesdir, sizeof(stylesdir));
@@ -931,7 +931,7 @@ void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolea
   }
 
   int rc = 0;
-  char stylename[PATH_MAX];
+  char stylename[DT_PATH_MAX];
 
   // generate filename based on name of style
   // convert all characters to underscore which are not allowed in filenames

@@ -19,6 +19,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "system/macros.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "common/conf.h"
 #include "control/jobs/control_jobs.h"
 #include "system/mem_alloc.h"
@@ -234,7 +235,7 @@ static gchar *_export_list_build(GList *imgids, const int mode, const gboolean o
     const int32_t imgid = GPOINTER_TO_INT(l->data);
     if(mode == DT_EXPORT_LIST_FILENAMES)
     {
-      char path[PATH_MAX] = { 0 };
+      char path[DT_PATH_MAX] = { 0 };
       gboolean from_cache = FALSE;
       dt_image_full_path(imgid, path, sizeof(path), &from_cache, __FUNCTION__);
       if(one_per_line)

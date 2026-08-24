@@ -58,7 +58,7 @@ static void _populate_layer_list(dt_iop_module_t *self)
     return;
   }
 
-  char path[PATH_MAX] = { 0 };
+  char path[DT_PATH_MAX] = { 0 };
   char **names = NULL;
   int count = 0;
   if(dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
@@ -232,7 +232,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   gboolean ok = TRUE;
   gboolean cache_loaded = FALSE;
   gboolean file_exists = FALSE;
-  char path[PATH_MAX] = { 0 };
+  char path[DT_PATH_MAX] = { 0 };
 
   if(!created)
   {
@@ -365,7 +365,7 @@ gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
   if(!_layer_name_non_empty(g->process.cache_layer_name)) return FALSE;
   if(dt_drawlayer_worker_any_active(g->stroke.worker)) _wait_worker_idle(self, g->stroke.worker);
 
-  char path[PATH_MAX] = { 0 };
+  char path[DT_PATH_MAX] = { 0 };
   const int32_t flush_imgid = (g->process.cache_imgid > 0) ? g->process.cache_imgid : self->dev->image_storage.id;
   if(flush_imgid <= 0) return TRUE;
   if(!dt_drawlayer_io_sidecar_path(flush_imgid, path, sizeof(path))) return FALSE;

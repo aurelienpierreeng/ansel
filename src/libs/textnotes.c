@@ -1766,7 +1766,7 @@ static gboolean _set_image_paths(dt_lib_textnotes_t *d, const int32_t imgid)
   d->image_dir = NULL;
 
   gboolean from_cache = FALSE;
-  char image_path[PATH_MAX] = { 0 };
+  char image_path[DT_PATH_MAX] = { 0 };
   dt_image_full_path(imgid, image_path, sizeof(image_path), &from_cache, __FUNCTION__);
   if(image_path[0] == '\0' || !g_file_test(image_path, G_FILE_TEST_EXISTS))
   {
