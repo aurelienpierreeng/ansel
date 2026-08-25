@@ -162,8 +162,13 @@ if(USE_BUNDLED_EXIV2)
   set(_EXIV2_MODULE_PATH_SAVE "${CMAKE_MODULE_PATH}")
   set(_EXIV2_TESTING_SAVE "${BUILD_TESTING}")
 
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+  # -w silences Exiv2's warnings; -Wno-error keeps Ansel's -Werror off code we do not own.
+  # -Wno-register is separate because it is neither: C++17 REMOVED the register keyword, so
+  # Clang rejects it outright rather than warning, and neither -w nor -Wno-error reaches a
+  # hard error. The Adobe XMP SDK vendored in Exiv2's xmpsdk/ still uses it (MD5.cpp), which
+  # is why every Clang and AppleClang job failed here and every GCC one did not.
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -Wno-error")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -Wno-error -Wno-register")
 
   # Exiv2 0.27.x asks for cmake_minimum_required(VERSION 3.7.2). Nothing in its build
   # depends on the policies that predates; this only stops CMake 4 from refusing the
@@ -191,7 +196,16 @@ if(USE_BUNDLED_EXIV2)
   # nothing else has spoken. Spell it out rather than depend on that ordering.
   set(CMAKE_CXX_STANDARD 17)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  set(CMAKE_CXX_EXTENSIONS OFF)
+
+  # Extensions ON, unlike Ansel's own code, and NOT a copy-paste slip. The Adobe XMP SDK
+  # vendored in xmpsdk/ selects its platform in XMP_Environment.h on `#if defined WIN32` --
+  # the unprefixed spelling, which GCC and Clang define only in GNU mode. Under -std=c++17
+  # a MinGW build therefore falls through to UNIX_ENV and XMPUtils.cpp reaches for
+  # localtime_r/gmtime_r, which MinGW does not have. Exiv2's own CMake never touches
+  # CXX_EXTENSIONS, so this is what it is built with everywhere else. Verified:
+  #   x86_64-w64-mingw32-g++ -std=c++17   -dM -E - | grep WIN32   ->   _WIN32 only
+  #   x86_64-w64-mingw32-g++ -std=gnu++17 -dM -E - | grep WIN32   ->   _WIN32 and WIN32
+  set(CMAKE_CXX_EXTENSIONS ON)
 
   # Exiv2's findDependencies.cmake appends ${CMAKE_SOURCE_DIR}/cmake to CMAKE_MODULE_PATH
   # to reach its own finders -- which is ANSEL's root cmake directory once Exiv2 is a
