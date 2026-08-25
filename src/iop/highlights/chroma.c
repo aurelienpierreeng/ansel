@@ -745,6 +745,7 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
                                 const int box_x_lo, const int box_y_lo, const int box_x_hi, const int box_y_hi,
                                 const dt_dev_pixelpipe_t *pipe)
 {
+  cl_mem gnorm_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float)); // gradient-mean normaliser, device-resident
   // the pyramid levels run reaction-free; the "inpaint a flat color" pull is applied by the
   // direct solve and the full-resolution polish only, like the CPU twin
   const float no_react = 0.f;
@@ -830,14 +831,20 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
       cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, sizes, local);
       if(cl_err == CL_SUCCESS)
       {
-        float partial_sums[256];
-        cl_err = dt_opencl_read_buffer_from_device(devid, partial_sums, grad_partials, 0, sizeof(float) * n_groups,
-                                                   CL_TRUE);
-        if(cl_err == CL_SUCCESS)
         {
-          double grad_sum = 0.0;
-          for(int group = 0; group < n_groups; group++) grad_sum += (double)partial_sums[group];
-          const float grad_mean = fmaxf((float)(grad_sum / (double)coarse_pixels), 1e-9f);
+          // fold the gradient sum into the normaliser ON DEVICE (hl_reduce_finalize mode 2:
+          // scale x sum, floored) -- hl_aniso_tensor reads the scalar, nothing crosses the bus
+          const int gfin = global_data->kernel_hl_reduce_finalize;
+          const int gstride = 1, gmode = 2;
+          const float gscale = 1.f / (float)coarse_pixels;
+          size_t gone[3] = { 1, 1, 1 };
+          dt_opencl_set_kernel_arg(devid, gfin, 0, sizeof(cl_mem), &grad_partials);
+          dt_opencl_set_kernel_arg(devid, gfin, 1, sizeof(cl_mem), &gnorm_dev);
+          dt_opencl_set_kernel_arg(devid, gfin, 2, sizeof(int), &n_groups);
+          dt_opencl_set_kernel_arg(devid, gfin, 3, sizeof(int), &gstride);
+          dt_opencl_set_kernel_arg(devid, gfin, 4, sizeof(int), &gmode);
+          dt_opencl_set_kernel_arg(devid, gfin, 5, sizeof(float), &gscale);
+          cl_err = dt_opencl_enqueue_kernel_2d(devid, gfin, gone);
           const int kernel_tensor = global_data->kernel_hl_aniso_tensor;
           dt_opencl_set_kernel_arg(devid, kernel_tensor, 0, sizeof(cl_mem), &grad_x);
           dt_opencl_set_kernel_arg(devid, kernel_tensor, 1, sizeof(cl_mem), &grad_y);
@@ -846,7 +853,7 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
           dt_opencl_set_kernel_arg(devid, kernel_tensor, 4, sizeof(cl_mem), &tensor_yy);
           dt_opencl_set_kernel_arg(devid, kernel_tensor, 5, sizeof(int), &coarse_w);
           dt_opencl_set_kernel_arg(devid, kernel_tensor, 6, sizeof(int), &coarse_h);
-          dt_opencl_set_kernel_arg(devid, kernel_tensor, 7, sizeof(float), &grad_mean);
+          dt_opencl_set_kernel_arg(devid, kernel_tensor, 7, sizeof(cl_mem), &gnorm_dev);
           cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel_tensor, size_coarse);
         }
       }
@@ -980,12 +987,14 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
     dt_opencl_release_mem_object(diffuse_b);
     dt_opencl_release_mem_object(grad_partials);
   }
+  dt_opencl_release_mem_object(gnorm_dev);
   return cl_err;
 }
 
 cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem clip0,
                        const int region_w, const int region_h, const float radius, const float floor_gate, const float solid_color, const dt_dev_pixelpipe_t *pipe)
 {
+  cl_mem gnorm_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float)); // gradient-mean normaliser, device-resident
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   const size_t region_pixels = (size_t)region_w * region_h;
   cl_int cl_err = DT_OPENCL_DEFAULT_ERROR;
@@ -1165,11 +1174,20 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
     if(cl_err != CL_SUCCESS) goto out;
 
     float psum[256];
-    cl_err = dt_opencl_read_buffer_from_device(devid, psum, partials, 0, sizeof(float) * n_groups, CL_TRUE);
-    if(cl_err != CL_SUCCESS) goto out;
-    double gsum = 0.0;
-    for(int group_index = 0; group_index < n_groups; group_index++) gsum += (double)psum[group_index];
-    const float gnorm = fmaxf((float)(gsum / (double)region_pixels), 1e-9f);
+    {
+      const int gfin = global_data->kernel_hl_reduce_finalize;
+      const int gstride = 1, gmode = 2;
+      const float gscale = 1.f / (float)region_pixels;
+      size_t gone[3] = { 1, 1, 1 };
+      dt_opencl_set_kernel_arg(devid, gfin, 0, sizeof(cl_mem), &partials);
+      dt_opencl_set_kernel_arg(devid, gfin, 1, sizeof(cl_mem), &gnorm_dev);
+      dt_opencl_set_kernel_arg(devid, gfin, 2, sizeof(int), &n_groups);
+      dt_opencl_set_kernel_arg(devid, gfin, 3, sizeof(int), &gstride);
+      dt_opencl_set_kernel_arg(devid, gfin, 4, sizeof(int), &gmode);
+      dt_opencl_set_kernel_arg(devid, gfin, 5, sizeof(float), &gscale);
+      cl_err = dt_opencl_enqueue_kernel_2d(devid, gfin, gone);
+      if(cl_err != CL_SUCCESS) goto out;
+    }
 
     const int kernel_tensor = global_data->kernel_hl_aniso_tensor;
     dt_opencl_set_kernel_arg(devid, kernel_tensor, 0, sizeof(cl_mem), &tensor_xx);
@@ -1179,7 +1197,7 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
     dt_opencl_set_kernel_arg(devid, kernel_tensor, 4, sizeof(cl_mem), &tensor_yy);
     dt_opencl_set_kernel_arg(devid, kernel_tensor, 5, sizeof(int), &region_w);
     dt_opencl_set_kernel_arg(devid, kernel_tensor, 6, sizeof(int), &region_h);
-    dt_opencl_set_kernel_arg(devid, kernel_tensor, 7, sizeof(float), &gnorm);
+    dt_opencl_set_kernel_arg(devid, kernel_tensor, 7, sizeof(cl_mem), &gnorm_dev);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel_tensor, size);
     if(cl_err != CL_SUCCESS) goto out;
   }
@@ -1412,12 +1430,19 @@ reassemble:;
       if(cl_err == CL_SUCCESS)
       {
         float partial_sums[256];
-        cl_err = dt_opencl_read_buffer_from_device(devid, partial_sums, ppart, 0, sizeof(float) * 256, CL_TRUE);
-        if(cl_err == CL_SUCCESS)
         {
-          double gsum = 0.0;
-          for(int group_index = 0; group_index < 256; group_index++) gsum += (double)partial_sums[group_index];
-          const float gnorm = fmaxf((float)(gsum / (double)region_pixels), 1e-9f);
+          const int gfin = global_data->kernel_hl_reduce_finalize;
+          const int gstride = 1, gmode = 2, gn = 256;
+          const float gscale = 1.f / (float)region_pixels;
+          size_t gone[3] = { 1, 1, 1 };
+          dt_opencl_set_kernel_arg(devid, gfin, 0, sizeof(cl_mem), &ppart);
+          dt_opencl_set_kernel_arg(devid, gfin, 1, sizeof(cl_mem), &gnorm_dev);
+          dt_opencl_set_kernel_arg(devid, gfin, 2, sizeof(int), &gn);
+          dt_opencl_set_kernel_arg(devid, gfin, 3, sizeof(int), &gstride);
+          dt_opencl_set_kernel_arg(devid, gfin, 4, sizeof(int), &gmode);
+          dt_opencl_set_kernel_arg(devid, gfin, 5, sizeof(float), &gscale);
+          cl_err = dt_opencl_enqueue_kernel_2d(devid, gfin, gone);
+          if(cl_err != CL_SUCCESS) goto out;
           const int kernel_tensor = global_data->kernel_hl_aniso_tensor;
           dt_opencl_set_kernel_arg(devid, kernel_tensor, 0, sizeof(cl_mem), &scratch1);
           dt_opencl_set_kernel_arg(devid, kernel_tensor, 1, sizeof(cl_mem), &grad_y);
@@ -1426,7 +1451,7 @@ reassemble:;
           dt_opencl_set_kernel_arg(devid, kernel_tensor, 4, sizeof(cl_mem), &tensor_yy);
           dt_opencl_set_kernel_arg(devid, kernel_tensor, 5, sizeof(int), &region_w);
           dt_opencl_set_kernel_arg(devid, kernel_tensor, 6, sizeof(int), &region_h);
-          dt_opencl_set_kernel_arg(devid, kernel_tensor, 7, sizeof(float), &gnorm);
+          dt_opencl_set_kernel_arg(devid, kernel_tensor, 7, sizeof(cl_mem), &gnorm_dev);
           cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel_tensor, size);
         }
       }
@@ -1559,6 +1584,7 @@ reassemble:;
   }
 
 out:
+  dt_opencl_release_mem_object(gnorm_dev);
   dt_opencl_release_mem_object(valid_packed);
   dt_opencl_release_mem_object(luminance);
   dt_opencl_release_mem_object(ratios);

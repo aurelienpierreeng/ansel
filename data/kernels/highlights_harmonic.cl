@@ -1736,8 +1736,9 @@ hl_grad_reduce(global const float *blur, global float *grad_x, global float *gra
 kernel void
 hl_aniso_tensor(global const float *grad_x, global const float *grad_y,
                 global float *tensor_xx, global float *tensor_xy, global float *tensor_yy,
-                const int width, const int height, const float gnorm)
+                const int width, const int height, global const float *gnorm_buf)
 {
+  const float gnorm = gnorm_buf[0]; // gradient-mean normaliser, device-resident
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
@@ -1991,7 +1992,11 @@ hl_reduce_finalize(global const float *partial, global float *result, const int 
     a += (double)partial[g * stride + 0];
     if(stride > 1) b += (double)partial[g * stride + 1];
   }
-  result[0] = (mode == 0) ? (float)a : ((b > 0.0) ? (float)(scale * a / b) : 0.f);
+  // mode 0: plain sum of lane 0. mode 1: scale x mean of lane 0 over lane 1, 0 when the count is 0.
+  // mode 2: scale x sum of lane 0, floored at 1e-9 (the gradient-mean normaliser: scale = 1/N).
+  result[0] = (mode == 0)   ? (float)a
+              : (mode == 2) ? fmax((float)(scale * a), 1e-9f)
+                            : ((b > 0.0) ? (float)(scale * a / b) : 0.f);
 }
 
 // Reduction: per-workgroup partial sums of {luminance, count} over any-clip pixels; the stage-2
