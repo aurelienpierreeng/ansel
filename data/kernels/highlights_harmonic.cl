@@ -24,6 +24,29 @@
 
 #include "common.h"
 
+// Double precision: where it is available, and what happens where it is not.
+//
+// Four stage-2 reduction finalizers below accumulate their partials in double, to match the
+// host arithmetic they replaced bit for bit. cl_khr_fp64 is an OPTIONAL OpenCL extension and
+// Apple's implementation does not have it, so naming `double` unguarded does not merely make
+// those four kernels unavailable -- it fails the build of THIS ENTIRE PROGRAM, taking the
+// sixty-odd single-precision kernels in it down as well. That is what the file header above
+// means by "must not require the fp64 extension on every device", and it is what silently
+// happened when these finalizers arrived.
+//
+// So they are compiled only where the extension exists. Where it does not, dt_opencl_create_kernel()
+// returns -1 for each of them and the host stages that use them bail out to their CPU twins --
+// the same arrangement highlights_sparse.cl and the PDE/aniso solvers already use. See
+// _region_guided_filter_cl(), _selfdome_stage_cl(), _chromaticity_gradient_stage_cl() and
+// _aniso_pyramid_cl().
+#if defined(cl_khr_fp64)
+#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+#define HL_HARMONIC_FP64 1
+#elif defined(cl_amd_fp64)
+#pragma OPENCL EXTENSION cl_amd_fp64 : enable
+#define HL_HARMONIC_FP64 1
+#endif
+
 // ===== harmonic-fill kernels (highlights harmonic transposition) ============================
 // "Harmonic fill" = repeatedly replace every hole pixel by the average of its four neighbours
 // (Jacobi relaxation) until the surface is smooth -- like letting heat diffuse from the
@@ -1122,6 +1145,7 @@ hl_region_benefit(global const float *estimate, global const float *valid, globa
     for(int k = 0; k < 6; k++) partial[get_group_id(0) * 6 + k] = scratch[k];
 }
 
+#ifdef HL_HARMONIC_FP64
 // Stage 2: one thread folds the partials into region_worth. Mirrors the CPU _hl_region_worth
 // (highlights/common.h) -- the LO/HI thresholds arrive as arguments so the two cannot drift.
 kernel void
@@ -1141,6 +1165,7 @@ hl_region_worth_finalize(global const float *partial, global float *worth, const
   const float t = clamp((benefit - lo) / (hi - lo), 0.f, 1.f);
   worth[0] = t * t * (3.f - 2.f * t);
 }
+#endif // HL_HARMONIC_FP64
 
 static float hl_floor_worth(const float chroma_gain, const float joint_tau)
 {
@@ -1917,6 +1942,7 @@ hl_vote_reduce(read_only image2d_t gate_src, read_only image2d_t gate_msk, globa
   }
 }
 
+#ifdef HL_HARMONIC_FP64
 // Stage-2 for the chromaticity mean: fold hl_cmean_reduce's float4 partials into the region's
 // mean chromaticity, published as {cmean.r, cmean.g, cmean.b, count} in device memory. Mirrors the
 // host arithmetic it replaces exactly (sum/count in double, zero when the count is zero).
@@ -1998,6 +2024,7 @@ hl_reduce_finalize(global const float *partial, global float *result, const int 
               : (mode == 2) ? fmax((float)(scale * a), 1e-9f)
                             : ((b > 0.0) ? (float)(scale * a / b) : 0.f);
 }
+#endif // HL_HARMONIC_FP64
 
 // Reduction: per-workgroup partial sums of {luminance, count} over any-clip pixels; the stage-2
 // finalizer below turns them into the plateau luminance that gates the anchors, on the device.

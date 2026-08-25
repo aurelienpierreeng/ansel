@@ -745,12 +745,18 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
                                 const int box_x_lo, const int box_y_lo, const int box_x_hi, const int box_y_hi,
                                 const dt_dev_pixelpipe_t *pipe)
 {
+  dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
+  cl_int cl_err = CL_SUCCESS;
+
+  // The stage-2 reduction finalizers this needs are compiled only where the fp64 extension
+  // is (data/kernels/highlights_harmonic.cl). Without them the caller falls back to the CPU
+  // twin, the same way the sparse solver and the PDE/aniso stages already do.
+  if(global_data->kernel_hl_reduce_finalize < 0) return DT_OPENCL_DEFAULT_ERROR; // no fp64 device
+
   cl_mem gnorm_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float)); // gradient-mean normaliser, device-resident
   // the pyramid levels run reaction-free; the "inpaint a flat color" pull is applied by the
   // direct solve and the full-resolution polish only, like the CPU twin
   const float no_react = 0.f;
-  dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
-  cl_int cl_err = CL_SUCCESS;
 
   int n_levels = 1;
   while(((int)radius >> (n_levels - 1)) > 8 && n_levels < 7) n_levels++;
