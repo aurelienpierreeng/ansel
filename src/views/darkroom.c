@@ -102,6 +102,7 @@
 #include "control/jobs.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
+#include "develop/dev_history_gui.h"
 #include "develop/imageop.h"
 #include "develop/supervisor.h"
 #include "develop/masks.h"
@@ -1587,6 +1588,12 @@ static void _darkroom_autoset_popover_refresh(gpointer instance, gpointer user_d
 void gui_init(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
+
+  // Register the GTK-driving handlers for history commits and undo restores (the inverted
+  // dependency dev_history.c exposes). Done here, not in dt_init(): the call sites
+  // NULL-check, so a GUI-less process runs with the slots empty instead of registering
+  // callbacks that must never fire.
+  dt_dev_history_gui_init();
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_preview_pipe_finished), self);
