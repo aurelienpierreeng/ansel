@@ -666,8 +666,10 @@ static _ls_tls_t *_ls_tls_get(void)
  * saying so on every start would be noise about a non-event.
  */
 static void _lens_report_db_failure(const char *path, const ls_db_open_status_t status,
-                                    const int found_version)
+                                    const int found_version, const char *detail)
 {
+  const char *reason = (!IS_NULL_PTR(detail) && detail[0]) ? detail : "no further detail";
+
   switch(status)
   {
     case LS_DB_OPEN_NO_FILE:
@@ -675,9 +677,13 @@ static void _lens_report_db_failure(const char *path, const ls_db_open_status_t 
       break;
 
     case LS_DB_OPEN_UNREADABLE:
+      /* Printed with whatever refused it, because it is not always the file: the path goes
+       * through a URI conversion before SQLite sees it, and on Windows a readable file got
+       * lost in there while "check its permissions" sent its owner looking at permissions
+       * that were fine. The detail says which of the two happened. */
       dt_print(DT_DEBUG_ALWAYS,
-               "[lens] `%s' exists but could not be read; check its permissions, and that "
-               "it is not truncated\n", path);
+               "[lens] `%s' exists but could not be read: %s. Check its permissions, and "
+               "that it is not truncated\n", path, reason);
       break;
 
     case LS_DB_OPEN_SCHEMA:
@@ -712,18 +718,22 @@ static ls_db_t *_ls_db(void)
   char config_path[DT_PATH_MAX] = { 0 };
   ls_db_open_status_t config_status = LS_DB_OPEN_NO_FILE;
   int config_version = -1;
+  char config_detail[256] = { 0 };
 
   dt_loc_get_user_config_dir(dir, sizeof(dir));
   snprintf(config_path, sizeof(config_path), "%s/lenses.db", dir);
-  tls->db = ls_db_open_status(config_path, &config_status, &config_version);
+  tls->db = ls_db_open_diagnostic(config_path, &config_status, &config_version, config_detail,
+                                  sizeof(config_detail));
 
   ls_db_open_status_t data_status = LS_DB_OPEN_NO_FILE;
   int data_version = -1;
+  char data_detail[256] = { 0 };
   if(IS_NULL_PTR(tls->db))
   {
     dt_loc_get_datadir(dir, sizeof(dir));
     snprintf(path, sizeof(path), "%s/lenses.db", dir);
-    tls->db = ls_db_open_status(path, &data_status, &data_version);
+    tls->db = ls_db_open_diagnostic(path, &data_status, &data_version, data_detail,
+                                    sizeof(data_detail));
   }
 
   /* Say WHICH failure it was, per path. All three used to print "no calibration database",
@@ -732,8 +742,8 @@ static ls_db_t *_ls_db(void)
    * perfectly readable and built for a schema this Ansel does not read. */
   if(IS_NULL_PTR(tls->db))
   {
-    _lens_report_db_failure(config_path, config_status, config_version);
-    _lens_report_db_failure(path, data_status, data_version);
+    _lens_report_db_failure(config_path, config_status, config_version, config_detail);
+    _lens_report_db_failure(path, data_status, data_version, data_detail);
     dt_print(DT_DEBUG_ALWAYS,
              "[lens] no calibration database, so no lens correction is available.\n");
   }
@@ -743,7 +753,7 @@ static ls_db_t *_ls_db(void)
      * the shipped one saved the day: it is tried FIRST, so the user believes it is the one
      * in use, and ansel-lens-db-update is what put it there. */
     if(config_status != LS_DB_OPEN_OK && config_status != LS_DB_OPEN_NO_FILE)
-      _lens_report_db_failure(config_path, config_status, config_version);
+      _lens_report_db_failure(config_path, config_status, config_version, config_detail);
 
     dt_print(DT_DEBUG_PIPE, "[lens] opened `%s' (schema v%d)\n",
              (config_status == LS_DB_OPEN_OK) ? config_path : path,
