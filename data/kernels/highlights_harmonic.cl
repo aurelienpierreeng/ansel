@@ -1307,15 +1307,17 @@ hl_ratio_plane(global const float *estimate, global const float *luminance, glob
 // biased toward the fence band's chromaticity; the flat mean lifts it toward the true surround.
 // Only enqueued when the clip-asymmetry gate is open (beta > 0).
 kernel void
-hl_ratio_cmean_blend(global float *ratio, global const uchar *hole,
-                     const int width, const int height, const float cmeanc, const float beta)
+hl_ratio_cmean_blend(global float *ratio, global const uchar *hole, global const float *cmean,
+                     global const float *refine, const int width, const int height, const int c)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
+  const float beta = refine[1]; // ratio_beta, device-resident: the launch is unconditional and the
+  if(beta <= 0.f) return;       // kernel no-ops, so no host round-trip decides whether to run
   const int i = y * width + x;
   if(!hole[i]) return;
-  ratio[i] = (1.f - beta) * fmax(ratio[i], 0.f) + beta * cmeanc;
+  ratio[i] = (1.f - beta) * fmax(ratio[i], 0.f) + beta * cmean[c];
 }
 
 kernel void
@@ -1365,8 +1367,9 @@ hl_dome_blend(global float *estimate, global const float *valid, global const fl
               global const float *clip_depth, global const float *dome_lum,
               global const float *ratio0, global const float *ratio1, global const float *ratio2,
               global const uchar *hole, const int width, const int height,
-              const float cf_sigma, const float epsilon, const float floor_gate)
+              const float cf_sigma, const float epsilon, global const float *refine)
 {
+  const float floor_gate = refine[0]; // refine_gate, device-resident
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
@@ -1536,16 +1539,17 @@ hl_ring_vote(global const float *estimate, global const float *valid, global flo
 // construction) while the obstacle/floor now enforces the surround chromaticity. Only enqueued
 // when the gate is open (untouched clip0 = approved behavior on equal clips).
 kernel void
-hl_clip0_rehue(global float *clip0, global const uchar *hole, const int width, const int height,
-               const float cmean0, const float cmean1, const float cmean2, const float gate)
+hl_clip0_rehue(global float *clip0, global const uchar *hole, global const float *cmean,
+               global const float *refine, const int width, const int height)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
+  const float gate = refine[0]; // rehue_gate, device-resident: unconditional launch, kernel no-ops
+  if(gate <= 1e-6f) return;
   const int i = y * width + x;
   if(!hole[i]) return;
   const float lsat = clip0[i * 4 + 0] + clip0[i * 4 + 1] + clip0[i * 4 + 2];
-  const float cmean[3] = { cmean0, cmean1, cmean2 };
   for(int c = 0; c < 3; c++)
     clip0[i * 4 + c] = gate * (lsat * cmean[c]) + (1.f - gate) * clip0[i * 4 + c];
 }
@@ -1910,6 +1914,67 @@ hl_vote_reduce(read_only image2d_t gate_src, read_only image2d_t gate_msk, globa
     partial[get_group_id(0) * 2 + 0] = scratch[0];
     partial[get_group_id(0) * 2 + 1] = scratch[1];
   }
+}
+
+// Stage-2 for the chromaticity mean: fold hl_cmean_reduce's float4 partials into the region's
+// mean chromaticity, published as {cmean.r, cmean.g, cmean.b, count} in device memory. Mirrors the
+// host arithmetic it replaces exactly (sum/count in double, zero when the count is zero).
+__kernel void
+hl_cmean_finalize(global const float *partial, global float *cmean, const int n_groups)
+{
+  if(get_global_id(0) != 0) return;
+  double a0 = 0.0, a1 = 0.0, a2 = 0.0, a3 = 0.0;
+  for(int g = 0; g < n_groups; g++)
+  {
+    a0 += partial[g * 4 + 0]; a1 += partial[g * 4 + 1];
+    a2 += partial[g * 4 + 2]; a3 += partial[g * 4 + 3];
+  }
+  cmean[3] = (float)a3;
+  if(a3 > 0.0)
+  {
+    cmean[0] = (float)(a0 / a3); cmean[1] = (float)(a1 / a3); cmean[2] = (float)(a2 / a3);
+  }
+  else
+  {
+    cmean[0] = 0.f; cmean[1] = 0.f; cmean[2] = 0.f;
+  }
+}
+
+// Stage-2 for the trusted-ring vote: fold hl_ring_vote's stride-8 partials {share_sum[3], count,
+// share_sq[3]} into refine_gate = floor_gate x exp(-(t/5)^2), t = bias / max(dispersion, 0.02).
+// Publishes {refine_gate, ratio_beta = 0.5 x refine_gate} so both consumers read device memory.
+// Mirror of the CPU _hl_ring_flat_mean_vote tail -- any change here must be mirrored there.
+__kernel void
+hl_ring_vote_finalize(global const float *partial, global const float *cmean, global float *out,
+                      const int n_groups, const float floor_gate)
+{
+  if(get_global_id(0) != 0) return;
+  double ss[3] = { 0.0, 0.0, 0.0 }, sq[3] = { 0.0, 0.0, 0.0 }, cnt = 0.0;
+  for(int g = 0; g < n_groups; g++)
+  {
+    for(int c = 0; c < 3; c++)
+    {
+      ss[c] += partial[g * 8 + c];
+      sq[c] += partial[g * 8 + 4 + c];
+    }
+    cnt += partial[g * 8 + 3];
+  }
+  float ring_vote = 0.f;
+  const float csum = fmax(cmean[0] + cmean[1] + cmean[2], 1e-9f);
+  if(cnt > 0.0)
+  {
+    float bias = 0.f, dispersion = 0.f;
+    for(int c = 0; c < 3; c++)
+    {
+      const double mean = ss[c] / cnt;
+      bias += fabs((float)mean - cmean[c] / csum);
+      dispersion += sqrt(fmax((float)(sq[c] / cnt - mean * mean), 0.f));
+    }
+    const float arg = (bias / fmax(dispersion, 0.02f)) / 5.f;
+    ring_vote = exp(-arg * arg);
+  }
+  out[0] = floor_gate * ring_vote;   // refine_gate
+  out[1] = 0.5f * out[0];            // ratio_beta
 }
 
 // Stage-2 of a two-stage reduction: sum `n_groups` stride-`stride` partials and publish ONE scalar

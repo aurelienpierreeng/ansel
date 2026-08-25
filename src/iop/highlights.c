@@ -958,6 +958,8 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_hl_clip0_rehue = dt_opencl_create_kernel(harmonic_program, "hl_clip0_rehue");
   gd->kernel_hl_ring_vote = dt_opencl_create_kernel(harmonic_program, "hl_ring_vote");
   gd->kernel_hl_cgrad_plateau = dt_opencl_create_kernel(harmonic_program, "hl_cgrad_plateau");
+  gd->kernel_hl_cmean_finalize = dt_opencl_create_kernel(harmonic_program, "hl_cmean_finalize");
+  gd->kernel_hl_ring_vote_finalize = dt_opencl_create_kernel(harmonic_program, "hl_ring_vote_finalize");
   gd->kernel_hl_region_benefit = dt_opencl_create_kernel(harmonic_program, "hl_region_benefit");
   gd->kernel_hl_region_worth_finalize = dt_opencl_create_kernel(harmonic_program, "hl_region_worth_finalize");
   gd->kernel_hl_reduce_finalize = dt_opencl_create_kernel(harmonic_program, "hl_reduce_finalize");
@@ -1096,6 +1098,8 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_hl_clip0_rehue);
   dt_opencl_free_kernel(gd->kernel_hl_ring_vote);
   dt_opencl_free_kernel(gd->kernel_hl_cgrad_plateau);
+  dt_opencl_free_kernel(gd->kernel_hl_cmean_finalize);
+  dt_opencl_free_kernel(gd->kernel_hl_ring_vote_finalize);
   dt_opencl_free_kernel(gd->kernel_hl_region_benefit);
   dt_opencl_free_kernel(gd->kernel_hl_region_worth_finalize);
   dt_opencl_free_kernel(gd->kernel_hl_reduce_finalize);
