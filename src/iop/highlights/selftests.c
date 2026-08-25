@@ -1345,6 +1345,9 @@ void _selfdome_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_pi
     cl_mem dbsc = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
     cl_mem dclip = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
     cl_mem ddep = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
+    cl_mem dworth = dt_opencl_alloc_device_buffer(devid, sizeof(float));
+    const float worth_one = 1.f;
+    if(dworth) dt_opencl_write_buffer_to_device(devid, (void *)&worth_one, dworth, 0, sizeof(float), CL_TRUE);
     float max_diff = -1.f;
     if(dest && dvld && dbsc && dclip && ddep
        && dt_opencl_write_buffer_to_device(devid, estimate_gpu, dest, 0, sizeof(float) * region_pixels * 4, CL_TRUE)
@@ -1358,7 +1361,7 @@ void _selfdome_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_pi
               == CL_SUCCESS
        && dt_opencl_write_buffer_to_device(devid, depth, ddep, 0, sizeof(float) * region_pixels, CL_TRUE)
               == CL_SUCCESS
-       && _selfdome_stage_cl(devid, gd_void, dest, dvld, dbsc, dclip, ddep, region_w, region_h, cf_sigma,
+       && _selfdome_stage_cl(devid, gd_void, dest, dvld, dbsc, dclip, ddep, dworth, region_w, region_h, cf_sigma,
                              reg_radius, downsample_shared, 0.f /* gate 0: replicas are ungated */, pipe)
               == CL_SUCCESS
        && dt_opencl_read_buffer_from_device(devid, estimate_gpu, dest, 0, sizeof(float) * region_pixels * 4,
@@ -1376,6 +1379,7 @@ void _selfdome_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_pi
     dt_opencl_release_mem_object(dbsc);
     dt_opencl_release_mem_object(dclip);
     dt_opencl_release_mem_object(ddep);
+    dt_opencl_release_mem_object(dworth);
     fprintf(stderr, "[hl dome-cl selftest] %dx%d two-disc ds=%d max|gpu-cpu|=%.3e\n", region_w, region_h,
             downsample_shared, max_diff);
   }
@@ -1829,6 +1833,19 @@ void _chromaticity_gradient_stage_cl_selftest(const int devid, void *gd_void, co
       for(int k = 0; k < 4; k++) clip0[i * 4 + k] = 0.6f;
       if(rclip)
         for(int c = 0; c < 3; c++) estimate[i * 4 + c] = fmaxf(estimate[i * 4 + c], 0.62f);
+      // The 1-clip-R annulus (95 <= dist < 120) carries BOTH populations, as a real rim does:
+      //   95 <= dist < 107 : FLOOR-AUTHORED (R pinned exactly AT clip0) -- pass 2's repair band and
+      //                      what the reprojection ramp admits.
+      //   107 <= dist < 120: lifted (0.62) -- the content gate's VOTERS.
+      // Both halves are load-bearing: authoring the whole annulus leaves the gate zero voters (the
+      // reprojection silently does nothing), authoring none of it leaves pass 2 an empty set. Both
+      // failure modes were measured before this split existed.
+      if(rclip && !gclip && dist < 107.f)
+      {
+        estimate[i * 4 + 0] = clip0[i * 4 + 0];   // at its floor: 1-clip and NOT lifted by the fit
+        estimate[i * 4 + 1] = lum * 0.33f;        // G, B stay measured (they never clipped here)
+        estimate[i * 4 + 2] = lum * (0.42f - 0.2f * t);
+      }
     }
   memcpy(estimate_gpu, estimate, region_pixels * 4 * sizeof(float));
 
@@ -1855,7 +1872,17 @@ void _chromaticity_gradient_stage_cl_selftest(const int devid, void *gd_void, co
     ctx.cg_residual = gate_res;
     ctx.cg_dir = gate_dir;
     ctx.hole = hole;
-    _chromaticity_gradient(&ctx);
+    // The GPU leg below runs with floor_gate = 1, scale = 1 and a zeroed clip_depth to exercise
+    // pass 2. The CPU twin reads all three from the context, so they MUST match or the two legs
+    // never compare the same configuration: a zero floor_gate disables every WB'd-clips branch, a
+    // zero scale blows the a3 collar up to ~24e6 px (it divides), and a NULL clip_depth is
+    // dereferenced by the collar test (measured: SIGSEGV).
+    float *const cpu_depth = dt_calloc_align_float(region_pixels);
+    ctx.clip_depth = cpu_depth;
+    ctx.scale = 1.f;
+    ctx.floor_gate = 1.f;
+    if(cpu_depth) _chromaticity_gradient(&ctx);
+    dt_free_align(cpu_depth);
   }
 
   // ---- GPU ----
