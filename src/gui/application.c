@@ -82,6 +82,7 @@
 #include "common/file_location.h"
 #include "common/utility.h"
 #include "gui/guides.h"
+#include "gui/import.h"
 #include "widgets/expander.h"
 
 #include "common/collection.h"
@@ -1100,6 +1101,13 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_collection_init_global();
   dt_selection_init_global();
   dt_guides_init(); // darkroom overlay registry: same argument, nothing to overlay without a GUI
+
+  // GUI-side handler for backend import events (an inverted dependency): registered here
+  // rather than in dt_init() -- the handler drives GTK widgets, and the registration site
+  // in import_jobs.c NULL-checks before calling, so a GUI-less process simply runs with
+  // the slot empty. dt_dev_history_gui_init() is its darkroom sibling and registers from
+  // views/darkroom.c gui_init(), the layer entitled to see develop/.
+  dt_gui_import_init_handlers();
 
   dt_pthread_mutex_init(&gui->mutex, NULL);
 
