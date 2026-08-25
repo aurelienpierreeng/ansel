@@ -1173,7 +1173,6 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
     cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, sizes, local);
     if(cl_err != CL_SUCCESS) goto out;
 
-    float psum[256];
     {
       const int gfin = global_data->kernel_hl_reduce_finalize;
       const int gstride = 1, gmode = 2;
@@ -1429,7 +1428,6 @@ reassemble:;
       cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, sizes, local);
       if(cl_err == CL_SUCCESS)
       {
-        float partial_sums[256];
         {
           const int gfin = global_data->kernel_hl_reduce_finalize;
           const int gstride = 1, gmode = 2, gn = 256;

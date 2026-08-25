@@ -493,7 +493,6 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
   // CG scalar state (rr, rr_new, rr_init, alpha, beta, active) -- device-resident for the
   // whole solve: the iteration reads and writes it without ever touching the host
   cl_mem cg_state = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 6);
-  double partial_sums[256];
   if(!temp1 || !temp2 || !residual || !search_dir || !matvec || !partials) goto out;
 
 #define CG_EMBED(src_, keep_)                                                                                     \
@@ -563,7 +562,6 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
   for(int iteration = 0; iteration < maxiter; iteration++)
   {
     CG_EMBED(search_dir, 1);
-    double p_dot_matvec;
     {
       const int kernel = global_data->kernel_hl_cg_ap;
       dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &matvec);

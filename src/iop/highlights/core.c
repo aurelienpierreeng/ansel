@@ -886,7 +886,6 @@ cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_me
     }
     size_t sizes[3] = { (size_t)n_groups * local_size, 1, 1 };
     size_t local[3] = { local_size, 1, 1 };
-    float partial_host[8 * 256];
 
     // blown-zone plateau -> bright-valid gate for the refinements' surround mean: the
     // whole-window mean is contaminated by dark, unrelated content (the cgrad anchors learned
