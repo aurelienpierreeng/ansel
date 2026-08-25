@@ -45,14 +45,10 @@ typedef struct dt_guides_t
   gboolean support_flip;
 } dt_guides_t;
 
-/** The registered guide overlays. dt_guides_get_list() is read-only; the `_ref` form
- * returns the address of the list head and exists because registration appends to it —
- * only darktable.c's owner and gui/guides.c's registration path may use it. */
-GList *dt_guides_get_list(void);
-GList **dt_guides_get_list_ref(void);
-
-GList *dt_guides_init();
-void dt_guides_cleanup(GList *guides);
+/** Register the built-in guide overlays. Called by the GUI bootstrap; the list itself is
+ * module-private to gui/guides.c -- every reader lives there. */
+void dt_guides_init(void);
+void dt_guides_cleanup(void);
 
 void dt_guides_add_guide(const char *name, dt_guides_draw_callback draw, dt_guides_widget_callback widget, void *user_data, GDestroyNotify free);
 

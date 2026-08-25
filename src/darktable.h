@@ -226,7 +226,6 @@ typedef struct darktable_t
   char *configdir;
   char *cachedir;
   char *kerneldir;
-  GList *guides;
   double start_wtime;
   GList *themes;
   int32_t unmuted_signal_dbg_acts;
