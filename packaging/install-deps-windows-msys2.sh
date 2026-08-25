@@ -38,7 +38,7 @@ MINGW_PACKAGES=(
   curl
   dbus-glib
   drmingw
-  exiv2
+  expat
   flickcurl
   gcc-libs
   gettext

@@ -209,7 +209,8 @@ mkdir -p "$dtResourcesDir"/share/applications
 mkdir -p "$dtResourcesDir"/etc/gtk-3.0
 mkdir -p "$dtResourcesDir"/fonts
 
-# exiv2 expects the localization files in '../share/locale'
+# Several bundled libraries look for their localization files in '../share/locale',
+# relative to the executable rather than to the bundle root.
 ln -s "Resources/share" "$dtWorkingDir"/Contents/share
 
 # Add basic elements
@@ -250,7 +251,7 @@ for dtSharedObj in $dtSharedObjDirs; do
 done
 
 # Add homebrew translations
-dtTranslations="gtk30 gtk30-properties gtk-mac-integration iso_639-2 exiv2"
+dtTranslations="gtk30 gtk30-properties gtk-mac-integration iso_639-2"
 for dtTranslation in $dtTranslations; do
     install_translations "$dtTranslation"
 done

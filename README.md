@@ -63,6 +63,24 @@ Go and support these projects so they can have more man-hours put on fixing thos
   - >= 20 for full OpenMP support,
 - XCode >= 15.2
 
+## Third-party libraries
+
+Most dependencies come from your distribution; `packaging/install-deps-*.sh` installs them.
+
+**Exiv2 is the exception: Ansel builds its own**, from the `src/external/exiv2` submodule,
+statically linked. Metadata handling is version- and build-option-sensitive enough that
+leaving it to packagers made the Windows, Linux and macOS builds behave differently on the
+same photo — see [`doc/exiv2.md`](doc/exiv2.md) and
+[issue #474](https://github.com/aurelienpierreeng/ansel/issues/474). You need `expat` and
+`zlib` for it; you no longer need `libexiv2-dev`.
+
+`-DUSE_BUNDLED_EXIV2=OFF` links the system Exiv2 instead, for packagers who must. That build
+**requires an Exiv2 compiled with `-DEXIV2_ENABLE_BMFF=ON`** (ISOBMFF), and the configure will
+refuse to proceed without it. ISOBMFF is what reads Canon CR3, AVIF and HEIF metadata; CR3 is
+among the most common file types in our telemetry, and several distributions still disable it
+over long-settled patent worries. A build that cannot open its users' raw files is not a build
+we can ship, so this is an error rather than a warning.
+
 
 ## Useful links
 

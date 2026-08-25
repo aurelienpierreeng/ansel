@@ -67,7 +67,7 @@ function tumbleweed_function
 	lensfun-devel
 	libavif-devel
 	libcurl-devel
-	libexiv2-devel
+	libexpat-devel
 	libexif-devel
 	libheif-devel
 	libheif1
@@ -161,7 +161,7 @@ function leap_function
 	lensfun-devel
 	libavif-devel
 	libcurl-devel
-	libexiv2-devel
+	libexpat-devel
 	libexif-devel
 	libheif-devel
 	libicu-devel

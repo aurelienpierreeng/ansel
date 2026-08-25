@@ -53,7 +53,7 @@ APT_PACKAGES=(
   libcurl4-gnutls-dev
   libdbus-glib-1-dev
   libde265-dev
-  libexiv2-dev
+  libexpat1-dev
   libexif-dev
   libfuse2
   libgdk-pixbuf2.0-dev

@@ -21,3 +21,6 @@
 [submodule "src/external/LensSerious"]
 	path = src/external/LensSerious
 	url = https://github.com/aurelienpierreeng/LensSerious.git
+[submodule "src/external/exiv2"]
+	path = src/external/exiv2
+	url = https://github.com/Exiv2/exiv2.git

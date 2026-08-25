@@ -98,14 +98,6 @@
 
 #include <exiv2/exiv2.hpp>
 
-#if defined(_WIN32) && defined(EXV_UNICODE_PATH)
-  #define WIDEN(s) pugi::as_wide(s)
-#else
-  #define WIDEN(s) (s)
-#endif
-
-#include <pugixml.hpp>
-
 #include "metadata/exif.h"
 #include "metadata/exif_internal.h"
 
@@ -132,6 +124,28 @@ using namespace std;
 
 // persistent list of exiv2 tags. set up in dt_init()
 static GList *exiv2_taglist = NULL;
+
+#if defined(_WIN32) && defined(EXV_UNICODE_PATH)
+std::wstring dt_exiv2_widen_path(const char *utf8_path)
+{
+  if(IS_NULL_PTR(utf8_path)) return std::wstring();
+
+  glong utf16_length = 0;
+  gunichar2 *utf16_path = g_utf8_to_utf16(utf8_path, -1, NULL, &utf16_length, NULL);
+
+  if(IS_NULL_PTR(utf16_path))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[exiv2] path is not valid UTF-8, cannot convert it for Windows: `%s'\n", utf8_path);
+    return std::wstring();
+  }
+
+  // gunichar2 and wchar_t are both 16 bits wide on Windows, and both hold UTF-16 here.
+  std::wstring wide_path(reinterpret_cast<const wchar_t *>(utf16_path), (size_t)utf16_length);
+  dt_free(utf16_path);
+  return wide_path;
+}
+#endif
 
 static const char *_get_exiv2_type(const int type)
 {
@@ -2396,12 +2410,12 @@ void dt_exif_init()
   // preface the exiv2 messages with "[exiv2] "
   Exiv2::LogMsg::setHandler(&dt_exif_log_handler);
 
-  // enable isobmff support if exiv2 was built with it
-  // the enableBMFF function is deprecated from exiv2 0.28.0
+  // ISOBMFF (CR3, AVIF, HEIF) is a build requirement -- src/CMakeLists.txt fails the
+  // configure if the Exiv2 we link was not built with it -- so there is nothing to test
+  // for here. On 0.27.x the support still has to be switched on at runtime; enableBMFF()
+  // was removed in 0.28.0, where it is always on.
   #if !EXIV2_TEST_VERSION(0,28,0)
-  #ifdef HAVE_LIBEXIV2_WITH_ISOBMFF
   Exiv2::enableBMFF();
-  #endif
   #endif
 
   // XmpParser init/term are required on older exiv2, but are deprecated no-ops from 0.28+.

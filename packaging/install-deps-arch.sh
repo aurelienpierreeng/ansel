@@ -43,7 +43,7 @@ PACMAN_PACKAGES=(
   desktop-file-utils
   doxygen
   gcc-libs
-  exiv2
+  expat
   fuse2
   gdb
   gettext

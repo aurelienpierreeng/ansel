@@ -138,3 +138,195 @@ if(USE_SENTRY)
   set(CMAKE_C_FLAGS "${_SENTRY_C_FLAGS_SAVE}")
   set(CMAKE_CXX_FLAGS "${_SENTRY_CXX_FLAGS_SAVE}")
 endif()
+
+#
+# Exiv2 (metadata). Vendored as a git submodule and linked statically into lib_ansel.
+#
+# Ansel does not merely link Exiv2, it inherits its behaviour: which version is built
+# decides what metadata an image is seen to have -- lens identity, makernote coverage,
+# XMP round-tripping -- and which options it was built with decides whether CR3, AVIF
+# and HEIF carry any metadata at all. Leaving that to three packagers produced three
+# different products, which is what issue #474 turned out to be. doc/exiv2.md is the
+# full account, including what has to be true before the pin can move to 0.28.x.
+#
+if(USE_BUNDLED_EXIV2)
+  set(EXIV2_PATH "${CMAKE_CURRENT_SOURCE_DIR}/exiv2")
+
+  if(NOT(EXISTS "${EXIV2_PATH}" AND IS_DIRECTORY "${EXIV2_PATH}" AND EXISTS "${EXIV2_PATH}/CMakeLists.txt"))
+    message(FATAL_ERROR "Exiv2 submodule not found. You probably want to run:\n$ git submodule update --init src/external/exiv2\nOr configure with -DUSE_BUNDLED_EXIV2=OFF to link the system library instead.")
+  endif()
+
+  set(_EXIV2_C_FLAGS_SAVE "${CMAKE_C_FLAGS}")
+  set(_EXIV2_CXX_FLAGS_SAVE "${CMAKE_CXX_FLAGS}")
+  set(_EXIV2_SHARED_SAVE "${BUILD_SHARED_LIBS}")
+  set(_EXIV2_MODULE_PATH_SAVE "${CMAKE_MODULE_PATH}")
+  set(_EXIV2_TESTING_SAVE "${BUILD_TESTING}")
+
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+
+  # Exiv2 0.27.x asks for cmake_minimum_required(VERSION 3.7.2). Nothing in its build
+  # depends on the policies that predates; this only stops CMake 4 from refusing the
+  # line outright. Older CMake ignores the variable.
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
+
+  # ...and because it asks for 3.7.2, every policy introduced later is left unset in its
+  # subtree, which costs us two things.
+  #
+  # CMP0069 (3.9): unset, INTERPROCEDURAL_OPTIMIZATION is silently dropped, so a Release
+  # build would link non-LTO Exiv2 objects into an otherwise LTO'd lib_ansel and say so
+  # three times in the configure log.
+  #
+  # CMP0077 (3.13): unset, Exiv2's own option() calls OVERRIDE the normal variables set
+  # below rather than defer to them -- which would quietly hand us a shared libexiv2 and
+  # Exiv2's default option set instead of ours, on a cache that does not already carry
+  # those entries.
+  set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+  set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+
+  # Exiv2's public headers typedef Image::AutoPtr to std::auto_ptr or std::unique_ptr
+  # depending on __cplusplus, so the library and every consumer of it MUST agree on the
+  # standard. Ansel compiles at C++17, but src/CMakeLists.txt says so further down the
+  # file than this directory is added from, and Exiv2 defaults itself to C++98 when
+  # nothing else has spoken. Spell it out rather than depend on that ordering.
+  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CXX_EXTENSIONS OFF)
+
+  # Exiv2's findDependencies.cmake appends ${CMAKE_SOURCE_DIR}/cmake to CMAKE_MODULE_PATH
+  # to reach its own finders -- which is ANSEL's root cmake directory once Exiv2 is a
+  # subdirectory rather than the top-level project. Its FindIconv.cmake is then never
+  # found, CMake's builtin one answers instead and sets Iconv_FOUND where Exiv2 reads
+  # ICONV_FOUND, and the build silently ends up with EXV_HAVE_ICONV off: no charset
+  # conversion for Exif.Photo.UserComment or Nikon UNICODE comments. Put its own module
+  # directory first so its own finder wins.
+  set(CMAKE_MODULE_PATH "${EXIV2_PATH}/cmake" ${CMAKE_MODULE_PATH})
+
+  # Exiv2 includes CTest, which turns BUILD_TESTING on.
+  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+
+  # Static, so that nothing else in the process can supply a second libexiv2 and so that
+  # no shared object needs shipping alongside the binary. CMP0077, forced NEW above, is
+  # what makes this normal variable win over Exiv2's own option().
+  set(BUILD_SHARED_LIBS OFF)
+
+  # Options Ansel actually depends on.
+  set(EXIV2_ENABLE_XMP           ON  CACHE BOOL "" FORCE)  # the whole XMP sidecar layer
+  set(EXIV2_ENABLE_PNG           ON  CACHE BOOL "" FORCE)  # PNG metadata (needs zlib)
+  set(EXIV2_ENABLE_BMFF          ON  CACHE BOOL "" FORCE)  # CR3, AVIF, HEIF -- REQUIRED, see src/CMakeLists.txt
+  set(EXIV2_ENABLE_LENSDATA      ON  CACHE BOOL "" FORCE)  # Nikon lens tables
+  set(EXIV2_ENABLE_PRINTUCS2     ON  CACHE BOOL "" FORCE)  # UCS-2 tag values
+
+  # On Windows this is what defines EXV_UNICODE_PATH, which is the only reason a path
+  # holding a single non-ASCII character can be opened at all. See doc/exiv2.md.
+  if(WIN32)
+    set(EXIV2_ENABLE_WIN_UNICODE ON  CACHE BOOL "" FORCE)
+  else()
+    set(EXIV2_ENABLE_WIN_UNICODE OFF CACHE BOOL "" FORCE)
+  endif()
+
+  # Native language support is off deliberately, and it is not simply a matter of
+  # flipping this. Exiv2's po/CMakeLists.txt calls GETTEXT_CREATE_TRANSLATIONS(), which
+  # runs `msgmerge --update` against the .po files IN THE SOURCE TREE -- so every build
+  # would leave the submodule dirty. What it buys is the translation of the tag values
+  # Exiv2::Metadatum::print() returns; doc/exiv2.md records what it would take to get
+  # that back without the write.
+  set(EXIV2_ENABLE_NLS           OFF CACHE BOOL "" FORCE)
+
+  # Ansel reads metadata from files, never over the network, and decodes video with
+  # nothing. Off here is also what keeps libcurl and libssh out of Exiv2's link line.
+  set(EXIV2_ENABLE_VIDEO         OFF CACHE BOOL "" FORCE)
+  set(EXIV2_ENABLE_WEBREADY      OFF CACHE BOOL "" FORCE)
+  set(EXIV2_ENABLE_CURL          OFF CACHE BOOL "" FORCE)
+  set(EXIV2_ENABLE_SSH           OFF CACHE BOOL "" FORCE)
+
+  set(EXIV2_BUILD_SAMPLES        OFF CACHE BOOL "" FORCE)
+  set(EXIV2_BUILD_EXIV2_COMMAND  OFF CACHE BOOL "" FORCE)
+  set(EXIV2_BUILD_UNIT_TESTS     OFF CACHE BOOL "" FORCE)
+  set(EXIV2_BUILD_FUZZ_TESTS     OFF CACHE BOOL "" FORCE)
+  set(EXIV2_BUILD_DOC            OFF CACHE BOOL "" FORCE)
+  set(EXIV2_TEAM_PACKAGING       OFF CACHE BOOL "" FORCE)
+
+  # Exiv2's mainSetup.cmake defines an `uninstall` target unless one already exists, and
+  # overwrites ${CMAKE_BINARY_DIR}/cmake_uninstall.cmake on the way. Ansel's root
+  # CMakeLists.txt creates that target before it descends into src/ precisely so this
+  # guard fires; if you ever move it back below add_subdirectory(src), the build dies on
+  # a duplicate target here.
+  if(NOT TARGET uninstall)
+    message(FATAL_ERROR "Ansel's `uninstall` target must be created before add_subdirectory(src), or the bundled Exiv2 will create its own and collide with it.")
+  endif()
+
+  # Exiv2 installs its static archive, its public headers, its pkg-config file, its
+  # CMake export set and its man page. Ansel links the archive into lib_ansel and ships
+  # no Exiv2 development files, so none of that belongs in our install tree -- nor,
+  # downstream of it, in the AppImage or the Windows installer. Shadowing install() is
+  # the only lever a sub-project offers: the real command stays reachable as _install(),
+  # and ANSEL_SUPPRESS_INSTALL is a directory variable, so it is set here and is invisible
+  # to every other directory in the tree.
+  macro(install)
+    if(NOT ANSEL_SUPPRESS_INSTALL)
+      _install(${ARGV})
+    endif()
+  endmacro()
+  set(ANSEL_SUPPRESS_INSTALL TRUE)
+
+  add_subdirectory(exiv2)
+
+  set(ANSEL_SUPPRESS_INSTALL FALSE)
+
+  # Exiv2 writes exv_conf.h and exiv2lib_export.h to ${CMAKE_BINARY_DIR} -- which is the
+  # top of OUR build tree, since it is a subdirectory here and not the top-level project.
+  # Copy them somewhere named, so what we hand consumers is a directory that holds those
+  # two headers and nothing else.
+  set(EXIV2_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/exiv2-generated")
+  file(COPY "${CMAKE_BINARY_DIR}/exv_conf.h" "${CMAKE_BINARY_DIR}/exiv2lib_export.h"
+       DESTINATION "${EXIV2_GENERATED_INCLUDE_DIR}")
+
+  # Exiv2 puts include/exiv2 itself on its PUBLIC include path so its own sources can say
+  # #include "basicio.hpp". Consumers must not inherit that: it would leave Exiv2's
+  # config.h one -I away from every Ansel translation unit that writes #include "config.h"
+  # and means its own. Ansel only ever includes <exiv2/...>, so the interface needs
+  # include/ and the generated-header directory, and nothing else.
+  #
+  # SYSTEM, i.e. -isystem rather than -I, because we do not own these headers and Ansel
+  # builds with -Werror. Exiv2 0.27's public headers name std::auto_ptr, which C++17
+  # deprecates, so a Debug build of any translation unit including <exiv2/exiv2.hpp> fails
+  # on two dozen -Wdeprecated-declarations errors that nothing on our side can fix. This
+  # is precisely what -isystem is for.
+  #
+  # WIN32_LEAN_AND_MEAN is dropped from the interface for a different reason: Exiv2 marks
+  # it PUBLIC, rwlock.hpp is a public header that includes <windows.h>, and Ansel's Windows
+  # build has always compiled against that header with the full windows.h. Presenting the
+  # bundled build with the same surface as the system one keeps this change about paths.
+  set_target_properties(exiv2lib PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES
+      "$<BUILD_INTERFACE:${EXIV2_PATH}/include>;$<BUILD_INTERFACE:${EXIV2_GENERATED_INCLUDE_DIR}>"
+    INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
+      "$<BUILD_INTERFACE:${EXIV2_PATH}/include>;$<BUILD_INTERFACE:${EXIV2_GENERATED_INCLUDE_DIR}>"
+    INTERFACE_COMPILE_DEFINITIONS
+      "")
+
+  # generate_export_header() names the static escape hatch exiv2lib_STATIC and defines it
+  # on Exiv2's own compilation only. Without it on our side too, EXIV2API expands to
+  # __declspec(dllimport) on Windows and every symbol fails to link.
+  target_compile_definitions(exiv2lib PUBLIC exiv2lib_STATIC)
+
+  add_library(Exiv2::Exiv2 ALIAS exiv2lib)
+
+  # What the rest of the tree reads instead of the variables FindExiv2.cmake would set.
+  # project(exiv2 VERSION ...) writes the version into Exiv2's own directory scope, which
+  # the parent cannot see, so ask that directory for it rather than restate the pin here.
+  # Exiv2_EXV_CONF_H is what src/CMakeLists.txt probes for EXV_ENABLE_BMFF: the header we
+  # actually generated, not one guessed from an include prefix.
+  get_directory_property(_exiv2_version DIRECTORY "${EXIV2_PATH}" DEFINITION PROJECT_VERSION)
+  set(Exiv2_VERSION "${_exiv2_version}" CACHE INTERNAL "")
+  set(Exiv2_EXV_CONF_H "${EXIV2_GENERATED_INCLUDE_DIR}/exv_conf.h" CACHE INTERNAL "")
+
+  set(BUILD_TESTING "${_EXIV2_TESTING_SAVE}" CACHE BOOL "" FORCE)
+  set(CMAKE_MODULE_PATH "${_EXIV2_MODULE_PATH_SAVE}")
+  set(BUILD_SHARED_LIBS "${_EXIV2_SHARED_SAVE}")
+  set(CMAKE_C_FLAGS "${_EXIV2_C_FLAGS_SAVE}")
+  set(CMAKE_CXX_FLAGS "${_EXIV2_CXX_FLAGS_SAVE}")
+
+  message(STATUS "Using bundled Exiv2 ${Exiv2_VERSION} (static, ISOBMFF on)")
+endif()

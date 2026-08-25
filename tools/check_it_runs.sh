@@ -66,3 +66,41 @@ fi
 
 [ -s "${WORK}/output.png" ] || { echo "FAILED: exited 0 but wrote no output."; exit 1; }
 echo "OK: exported $(stat -c%s "${WORK}/output.png") bytes and exited cleanly."
+
+# Same again, from a path that is not ASCII.
+#
+# On Windows a path is not just bytes: the narrow CRT reads it in the process ANSI code page,
+# so anything above 0x7F has to reach each library through its wide API. Exiv2 lost that API
+# in 0.28 and Windows users lost all EXIF below any folder with an accent in its name -- twice,
+# in 2025 and again in 2026, both times found months later by a user with a screenshot
+# (issue #474, and doc/exiv2.md). On Linux and macOS this always passes; it is here so that
+# anyone running this under MSYS2 gets the answer, and so the invariant is written down.
+PROBE="${WORK}/Épreuve — тест"
+mkdir -p "${PROBE}"
+cp "${REPO_ROOT}/data/pixmaps/256x256/ansel.png" "${PROBE}/ansel.png"
+
+"${CLI}" \
+  --width 512 --height 512 \
+  --apply-custom-presets false \
+  "${PROBE}/ansel.png" \
+  "${PROBE}/output.png" \
+  --core --disable-opencl \
+  --configdir "${WORK}/config2" --library "${WORK}/config2/library.db" \
+  --conf host_memory_limit=8192 --conf worker_threads=4 -t 4 \
+  > "${WORK}/log-unicode" 2>&1
+status=$?
+
+if grep -q "Failed to open the data source" "${WORK}/log-unicode"; then
+  echo
+  grep -m3 "Failed to open the data source" "${WORK}/log-unicode"
+  echo "FAILED: exiv2 could not open a non-ASCII path. See doc/exiv2.md."
+  exit 1
+fi
+
+if [ ${status} -ne 0 ] || [ ! -s "${PROBE}/output.png" ]; then
+  echo
+  tail -25 "${WORK}/log-unicode"
+  echo "FAILED: export from a non-ASCII path (exit ${status})."
+  exit 1
+fi
+echo "OK: exported from a non-ASCII path too."
