@@ -315,6 +315,31 @@ jobs:
                  --conf plugins/lighttable/export/force_lcms2=FALSE \
                  --conf plugins/lighttable/export/iccintent=0
 
+      # Windows is the one platform where a path is not just bytes: the narrow CRT reads it
+      # in the process ANSI code page, so anything above 0x7F has to reach every library
+      # through its wide API. Exiv2 lost that API in 0.28 and Windows users lost all EXIF
+      # below any folder with an accent in its name -- twice, in 2025 and again in 2026,
+      # both times found months later by a user with a screenshot (issue #474). This is
+      # what would have caught it the day it landed.
+      - name: Check non-ASCII paths (issue #474)
+        run: |
+          set -e
+          probe="$(cygpath ${SRC_DIR})/Épreuve — тест"
+          mkdir -p "${probe}"
+          cp "$(cygpath ${SRC_DIR})/data/pixmaps/256x256/ansel.png" "${probe}/ansel.png"
+          $(cygpath ${INSTALL_PREFIX})/bin/ansel-cli.exe \
+                 --width 512 --height 512 \
+                 --apply-custom-presets false \
+                 "${probe}/ansel.png" \
+                 "${probe}/out.png" \
+                 --core --disable-opencl --conf host_memory_limit=8192 \
+                 --conf worker_threads=4 -t 4 2>&1 | tee unicode-path.log
+          if grep -q "Failed to open the data source" unicode-path.log; then
+            echo "::error::exiv2 could not open a non-ASCII path -- see doc/exiv2.md"
+            exit 1
+          fi
+          test -s "${probe}/out.png"
+
   macOS:
     name: macOS.${{ matrix.compiler.compiler }}.${{ matrix.build.xcode }}.${{ matrix.target }}.${{ matrix.btype }}.${{ matrix.generator }}
     runs-on: ${{ matrix.build.os }}

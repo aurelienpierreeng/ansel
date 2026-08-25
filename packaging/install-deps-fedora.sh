@@ -42,7 +42,7 @@ DNF_PACKAGES=(
   dbus-glib-devel
   desktop-file-utils
   doxygen
-  exiv2-devel
+  expat-devel
   fuse
   gdb
   gettext

@@ -791,6 +791,22 @@ endif()
 # materials under the default component and not under 'Unspecified'
 set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME DTApplication)
 
+# uninstall target
+#
+# Declared HERE, above add_subdirectory(src), rather than at the bottom of this file
+# where it used to sit: the bundled Exiv2 (src/external/CMakeLists.txt) creates an
+# `uninstall` target of its own unless one already exists, and overwrites
+# ${CMAKE_BINARY_DIR}/cmake_uninstall.cmake on its way past. Getting there first is what
+# keeps that guard shut. src/external/CMakeLists.txt asserts the target exists, so moving
+# this back down fails the configure rather than producing a mystery duplicate target.
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+  IMMEDIATE @ONLY)
+
+add_custom_target(uninstall
+                  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+
 # lets continue into build directories
 # this file needs to be included first as it gets amended in src/ in build dir
 include(data/supported_extensions.cmake)
@@ -806,15 +822,6 @@ add_subdirectory(tools)
 add_subdirectory(packaging)
 
 include(cmake/ansel-packaging.cmake)
-
-# uninstall target
-configure_file(
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
-  IMMEDIATE @ONLY)
-
-add_custom_target(uninstall
-                  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 
 # NOTE: Sentry debug-information (symbol) upload is intentionally NOT wired into
 # the build. It is handled out-of-band by tools/sentry-upload-symbols.sh, invoked

@@ -33,7 +33,7 @@ BuildRequires:  gtk2-devel
 BuildRequires:  intltool
 BuildRequires:  lensfun-devel
 BuildRequires:  libcurl-devel
-BuildRequires:  libexiv2-devel
+BuildRequires:  libexpat-devel
 BuildRequires:  libglade2-devel
 BuildRequires:  libjpeg-devel
 BuildRequires:  liblcms2-devel

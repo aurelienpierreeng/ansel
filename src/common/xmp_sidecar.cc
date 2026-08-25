@@ -102,12 +102,6 @@
 
 #include <exiv2/exiv2.hpp>
 
-#if defined(_WIN32) && defined(EXV_UNICODE_PATH)
-  #define WIDEN(s) pugi::as_wide(s)
-#else
-  #define WIDEN(s) (s)
-#endif
-
 #include <pugixml.hpp>
 
 #include "common/xmp_sidecar.h"
@@ -188,6 +182,32 @@ const char *dt_xmp_keys[]
         "Xmp.xmpMM.DerivedFrom" };
 
 static const guint dt_xmp_keys_n = G_N_ELEMENTS(dt_xmp_keys); // the number of XmpBag XmpSeq keys that dt uses
+
+/** @brief Read an XMP packet off disk into @p packet, FALSE if the file cannot be read.
+ *
+ * @details `Exiv2::readFile()` would do this, but only through exiv2's own path handling --
+ * which is exactly the capability 0.28 dropped on Windows (see WIDEN() in
+ * `metadata/exif_internal.h`). These are small sidecar files and Ansel already has a reader
+ * that goes through `g_fopen()`, so there is no reason to route them back out through exiv2
+ * and depend on something it may not be able to do. It also drops the 0.27-vs-0.28 fork over
+ * DataBuf's members that each of those call sites carried.
+ */
+static bool _read_xmp_packet(const char *filename, std::string &packet)
+{
+  size_t length = 0;
+  errno = 0;
+  char *content = dt_read_file(filename, &length);
+
+  if(IS_NULL_PTR(content))
+  {
+    fprintf(stderr, "cannot read xmp file '%s': '%s'\n", filename, strerror(errno));
+    return false;
+  }
+
+  packet.assign(content, length);
+  dt_free(content);
+  return true;
+}
 
 // function to remove known dt keys and subtrees from xmpdata, so not to append them twice
 // this should work because dt first reads all known keys
@@ -2208,16 +2228,13 @@ char *dt_exif_xmp_read_string(const int32_t imgid)
     {
       std::string xmpPacket;
 
-      Exiv2::DataBuf buf = Exiv2::readFile(WIDEN(input_filename));
-#if EXIV2_TEST_VERSION(0,28,0)
-      xmpPacket.assign(buf.c_str(), buf.size());
-#else
-      xmpPacket.assign(reinterpret_cast<char *>(buf.pData_), buf.size_);
-#endif
-      Exiv2::XmpParser::decode(xmpData, xmpPacket);
-      // because XmpSeq or XmpBag are added to the list, we first have
-      // to remove these so that we don't end up with a string of duplicates
-      dt_remove_known_keys(xmpData);
+      if(_read_xmp_packet(input_filename, xmpPacket))
+      {
+        Exiv2::XmpParser::decode(xmpData, xmpPacket);
+        // because XmpSeq or XmpBag are added to the list, we first have
+        // to remove these so that we don't end up with a string of duplicates
+        dt_remove_known_keys(xmpData);
+      }
     }
 
     // now add whatever we have in the sidecar XMP. this overwrites stuff from the source image
@@ -2228,16 +2245,13 @@ char *dt_exif_xmp_read_string(const int32_t imgid)
       Exiv2::XmpData sidecarXmpData;
       std::string xmpPacket;
 
-      Exiv2::DataBuf buf = Exiv2::readFile(WIDEN(input_filename));
-#if EXIV2_TEST_VERSION(0,28,0)
-      xmpPacket.assign(buf.c_str(), buf.size());
-#else
-      xmpPacket.assign(reinterpret_cast<char *>(buf.pData_), buf.size_);
-#endif
-      Exiv2::XmpParser::decode(sidecarXmpData, xmpPacket);
+      if(_read_xmp_packet(input_filename, xmpPacket))
+      {
+        Exiv2::XmpParser::decode(sidecarXmpData, xmpPacket);
 
-      for(Exiv2::XmpData::const_iterator it = sidecarXmpData.begin(); it != sidecarXmpData.end(); ++it)
-        xmpData.add(*it);
+        for(Exiv2::XmpData::const_iterator it = sidecarXmpData.begin(); it != sidecarXmpData.end(); ++it)
+          xmpData.add(*it);
+      }
     }
 
     dt_remove_known_keys(xmpData); // is this needed?
@@ -2367,16 +2381,13 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
       Exiv2::XmpData sidecarXmpData;
       std::string xmpPacket;
 
-      Exiv2::DataBuf buf = Exiv2::readFile(WIDEN(input_filename));
-#if EXIV2_TEST_VERSION(0,28,0)
-      xmpPacket.assign(buf.c_str(), buf.size());
-#else
-      xmpPacket.assign(reinterpret_cast<char *>(buf.pData_), buf.size_);
-#endif
-      Exiv2::XmpParser::decode(sidecarXmpData, xmpPacket);
+      if(_read_xmp_packet(input_filename, xmpPacket))
+      {
+        Exiv2::XmpParser::decode(sidecarXmpData, xmpPacket);
 
-      for(Exiv2::XmpData::const_iterator it = sidecarXmpData.begin(); it != sidecarXmpData.end(); ++it)
-        xmpData.add(*it);
+        for(Exiv2::XmpData::const_iterator it = sidecarXmpData.begin(); it != sidecarXmpData.end(); ++it)
+          xmpData.add(*it);
+      }
     }
 
     dt_remove_known_keys(xmpData); // is this needed?
@@ -2616,7 +2627,16 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
         }
 
         checksum_old = g_compute_checksum_for_data(G_CHECKSUM_MD5, content, end);
+
+        // The packet the parser wants is the same bytes we just hashed, so decode those
+        // rather than read the file a second time.
+        xmpPacket.assign((const char *)content, end);
         dt_free(content);
+
+        Exiv2::XmpParser::decode(xmpData, xmpPacket);
+        // because XmpSeq or XmpBag are added to the list, we first have
+        // to remove these so that we don't end up with a string of duplicates
+        dt_remove_known_keys(xmpData);
       }
       else
       {
@@ -2624,17 +2644,6 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
         dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE, _("cannot read xmp file '%s': '%s'"),
                            filename, strerror(errno));
       }
-
-      Exiv2::DataBuf buf = Exiv2::readFile(WIDEN(filename));
-#if EXIV2_TEST_VERSION(0,28,0)
-      xmpPacket.assign(buf.c_str(), buf.size());
-#else
-      xmpPacket.assign(reinterpret_cast<char *>(buf.pData_), buf.size_);
-#endif
-      Exiv2::XmpParser::decode(xmpData, xmpPacket);
-      // because XmpSeq or XmpBag are added to the list, we first have
-      // to remove these so that we don't end up with a string of duplicates
-      dt_remove_known_keys(xmpData);
     }
 
     // initialize xmp data:

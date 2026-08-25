@@ -2,8 +2,13 @@ find_package(OpenMP)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/modules")
 find_library(M_LIBRARY m)
-find_package(Exiv2 REQUIRED)
-include_directories(${Exiv2_INCLUDE_DIR})
+
+# src/external/CMakeLists.txt already defines Exiv2::Exiv2 when the submodule is used,
+# and tools/ is descended into after src/, so the alias is visible here. Only reach for
+# the system library when Ansel itself is not linking the bundled one.
+if(NOT TARGET Exiv2::Exiv2)
+  find_package(Exiv2 REQUIRED)
+endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND Exiv2_VERSION VERSION_GREATER_EQUAL "0.28.0")
     set(CMAKE_CXX_STANDARD 17)
@@ -16,7 +21,7 @@ if(OPENMP_FOUND)
         include_directories(${OpenMP_CXX_INCLUDE_DIRS})
     endif()
 endif()
-target_link_libraries(ansel-curve-tool ${Exiv2_LIBRARY} ${OpenMP_CXX_LIBRARIES} m)
+target_link_libraries(ansel-curve-tool Exiv2::Exiv2 ${OpenMP_CXX_LIBRARIES} m)
 
 configure_file(README.cmake.md README.md)
 

@@ -39,6 +39,45 @@
 #include <exiv2/exiv2.hpp>
 #include <string>
 
+/* Windows path handling for exiv2.
+ *
+ * Every path in Ansel is UTF-8: that is what GLib hands us, what the database stores, and
+ * what the film-roll scanner produces. On Windows the narrow CRT reads a `const char *`
+ * path in the process ANSI code page instead -- CP-1252, CP-850, whatever the machine is
+ * set to -- so a path holding a single byte above 0x7F simply does not resolve. Every
+ * library Ansel hands a path to therefore gets a wide one: `libraw_open_wfile()` in
+ * `imageio/imageio_libraw.c`, `TIFFOpenW()` in `imageio/imageio_tiff.c`, `g_fopen()` (which
+ * is `_wfopen()` underneath) in the XMP sidecar writer. exiv2 is the same case, and
+ * WIDEN() is where it happens.
+ *
+ * exiv2 0.28.0 deleted the wide overloads, and this is where that showed: WIDEN() quietly
+ * became the identity, everything still compiled, and Windows users lost all EXIF for any
+ * image below a folder with an accent in its name (issue #474, and darktable #15478 and
+ * #19572 for the same bug in the same place). So a build that cannot widen is now a build
+ * error rather than a silent runtime data loss. `-DUSE_BUNDLED_EXIV2=ON` -- the default --
+ * is what supplies the capability; see `doc/exiv2.md`.
+ */
+#if defined(_WIN32) && !defined(EXV_UNICODE_PATH) && !defined(ANSEL_ALLOW_NARROW_EXIV2_PATHS)
+#error "This exiv2 was built without EXV_UNICODE_PATH (EXIV2_ENABLE_WIN_UNICODE), so there is no way to give it a Windows path holding a non-ASCII character: EXIF reads, thumbnail extraction and XMP sidecar writes would all fail at runtime, silently, for those images. Configure with -DUSE_BUNDLED_EXIV2=ON (the default) and see doc/exiv2.md. Define ANSEL_ALLOW_NARROW_EXIV2_PATHS to build anyway and accept that."
+#endif
+
+#if defined(_WIN32) && defined(EXV_UNICODE_PATH)
+
+/** @brief Convert one of Ansel's UTF-8 paths to the UTF-16 exiv2 wants on Windows.
+ *
+ * @details Empty when @p utf8_path is not valid UTF-8, which exiv2 reports as a missing
+ * file; the reason is logged, because that means something upstream already went wrong. */
+std::wstring dt_exiv2_widen_path(const char *utf8_path);
+
+#define WIDEN(s) dt_exiv2_widen_path(s)
+
+#else
+
+/* Everywhere else a path is bytes, and those bytes are already UTF-8. */
+#define WIDEN(s) (s)
+
+#endif
+
 /**
  * @brief RAII guard over the process-wide exiv2 lock.
  *

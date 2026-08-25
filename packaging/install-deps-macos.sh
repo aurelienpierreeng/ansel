@@ -33,7 +33,7 @@ HB_PACKAGES=(
   cmocka
   curl
   desktop-file-utils
-  exiv2
+  expat
   gettext
   git
   glib

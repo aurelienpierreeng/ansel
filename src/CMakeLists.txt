@@ -360,7 +360,13 @@ find_package(JPEG REQUIRED)
 find_package(PNG REQUIRED)
 find_package(TIFF REQUIRED)
 find_package(Sqlite3 3.24 REQUIRED)
-find_package(Exiv2 0.27.4 REQUIRED)
+# Exiv2 is normally the bundled submodule, already configured by external/CMakeLists.txt
+# above, which defines the Exiv2::Exiv2 target itself. -DUSE_BUNDLED_EXIV2=OFF is the
+# packager's switch back to whatever the distribution ships; see doc/exiv2.md for what
+# that changes.
+if(NOT USE_BUNDLED_EXIV2)
+  find_package(Exiv2 0.27.4 REQUIRED)
+endif()
 find_package(Pugixml 1.2 REQUIRED)
 
 # CMake provides a `FindCURL.cmake` module, which will set `CURL_LIBRARIES`, 
@@ -494,22 +500,49 @@ if(USE_HEIF)
   endif()
 endif()
 
-# Optionally enable ISOBMFF support in Exiv2
-if(USE_ISOBMFF)
-  # exiv2 >= 0.27.4 provides optional support for ISOBMFF files.
-  # This must be manually enabled during exiv2 build and can be checked with
-  # the EXV_ENABLE_BMFF symbol.
-  check_symbol_exists(EXV_ENABLE_BMFF
-    "${Exiv2_INCLUDE_DIRS}/exiv2/exv_conf.h"
-    HAVE_EXV_ENABLE_BMFF)
-  if(HAVE_EXV_ENABLE_BMFF)
-    add_definitions(-DHAVE_LIBEXIV2_WITH_ISOBMFF=1)
-    set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} cr3 CACHE INTERNAL "")
-    message(STATUS "Found Exiv2 ${Exiv2_VERSION} with ISOBMFF support (CR3, AVIF, HEIF)")
+# ISOBMFF support in Exiv2 is REQUIRED, not optional.
+#
+# It is what lets Exiv2 read CR3, AVIF and HEIF, and Canon CR3 alone is among the most
+# common file types in Ansel's telemetry. Some distributions -- Fedora among them -- still
+# build Exiv2 with EXIV2_ENABLE_BMFF=OFF out of long-settled patent worries. An Ansel
+# linked against such a build starts fine and then simply cannot open the user's raws, and
+# nobody reading that screen concludes their distribution disabled a flag in a metadata
+# library: they file a bug against Ansel. So this is a configure-time error rather than a
+# silently degraded build.
+#
+# Exiv2 records the answer as the EXV_ENABLE_BMFF symbol in its generated exv_conf.h.
+if(USE_BUNDLED_EXIV2)
+  set(_exv_conf_h "${Exiv2_EXV_CONF_H}")
+else()
+  set(_exv_conf_h "${Exiv2_INCLUDE_DIRS}/exiv2/exv_conf.h")
+endif()
+
+# check_symbol_exists() caches its answer, and the header it answers about changes when
+# USE_BUNDLED_EXIV2 is flipped in an existing build directory. A cached "yes" from the
+# bundled build would then vouch for a system Exiv2 that has no BMFF at all -- exactly the
+# silent-wrongness this check exists to prevent. One tiny compile per configure is cheaper
+# than that.
+unset(HAVE_EXV_ENABLE_BMFF CACHE)
+check_symbol_exists(EXV_ENABLE_BMFF "${_exv_conf_h}" HAVE_EXV_ENABLE_BMFF)
+
+if(NOT HAVE_EXV_ENABLE_BMFF)
+  if(USE_BUNDLED_EXIV2)
+    # We asked for EXIV2_ENABLE_BMFF ourselves a few directories up, so a miss here means
+    # the bundled build itself is wrong, not that somebody chose badly.
+    message(FATAL_ERROR
+      "Bundled Exiv2 was configured with EXIV2_ENABLE_BMFF=ON but ${_exv_conf_h} does not define EXV_ENABLE_BMFF. The bundled build is misconfigured.")
   else()
-    message(STATUS "Found Exiv2 ${Exiv2_VERSION}, but was not compiled with ISOBMFF support (CR3, AVIF, HEIF)")
+    message(FATAL_ERROR
+      "The system Exiv2 (${Exiv2_VERSION}) was built without ISOBMFF support, so it cannot read CR3, AVIF or HEIF.\n"
+      "Ansel requires it. Either rebuild Exiv2 with -DEXIV2_ENABLE_BMFF=ON, or -- far easier -- configure Ansel with -DUSE_BUNDLED_EXIV2=ON (the default) and let it build its own.\n"
+      "See doc/exiv2.md.")
   endif()
 endif()
+
+set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} cr3 CACHE INTERNAL "")
+message(STATUS "Found Exiv2 ${Exiv2_VERSION} with ISOBMFF support (CR3, AVIF, HEIF)")
+
+unset(_exv_conf_h)
 
 if(USE_OPENJPEG)
   find_package(OpenJPEG)
