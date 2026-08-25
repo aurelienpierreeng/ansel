@@ -544,16 +544,6 @@ void dt_dev_set_global(struct dt_develop_t *dev)
   darktable.develop = dev;
 }
 
-GList *dt_guides_get_list(void)
-{
-  return darktable.guides;
-}
-
-GList **dt_guides_get_list_ref(void)
-{
-  return &darktable.guides;
-}
-
 GList *dt_gui_get_themes(void)
 {
   return darktable.themes;
@@ -1620,7 +1610,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   /* capabilities set to NULL */
   darktable.capabilities = NULL;
 
-  darktable.guides = dt_guides_init();
 
   // Re-assert our handlers once the third-party libraries above are up. This used to compensate
   // for GraphicsMagick's InitializeMagick(), which stole all of them; that library is gone, but
@@ -2008,7 +1997,7 @@ void dt_cleanup()
 
   dt_opencl_cleanup();
 
-  dt_guides_cleanup(darktable.guides);
+  dt_guides_cleanup(); // module-private list: a no-op when the GUI never registered any
 
   if(perform_maintenance)
   {

@@ -40,6 +40,18 @@
 #include "develop/develop.h"
 #include "widgets/widget_style.h"
 
+/* The registered guide overlays. Module-private: every reader and the registration path
+ * live in this file, so the list no longer sits on darktable_t behind a pair of accessors
+ * whose only consumers were... this file. Populated by dt_guides_init() from the GUI
+ * bootstrap; a GUI-less process never calls it and never carries the list. */
+static GList *_guides = NULL;
+
+static GList *dt_guides_get_list(void)
+{
+  return _guides;
+}
+
+
 #define DEFAULT_GUIDE_NAME "rules of thirds"
 
 static const char *_guide_names[]
@@ -574,12 +586,12 @@ static void _guides_add_guide(GList **list, const char *name,
 
 void dt_guides_add_guide(const char *name, dt_guides_draw_callback draw, dt_guides_widget_callback widget, void *user_data, GDestroyNotify free)
 {
-  _guides_add_guide(dt_guides_get_list_ref(), name, draw, widget, user_data, free, TRUE);
+  _guides_add_guide(&_guides, name, draw, widget, user_data, free, TRUE);
 
   dt_bauhaus_combobox_add(dt_view_manager_get_global()->guides, _(name));
 }
 
-GList *dt_guides_init()
+void dt_guides_init(void)
 {
   GList *guides = NULL;
 
@@ -595,7 +607,7 @@ GList *dt_guides_init()
   _guides_add_guide(&guides, *names++, _guides_draw_golden_mean, NULL, GINT_TO_POINTER(GOLDEN_SPIRAL_SECTION), NULL, TRUE);
   _guides_add_guide(&guides, *names++, _guides_draw_golden_mean, NULL, GINT_TO_POINTER(GOLDEN_ALL), NULL, TRUE);
 
-  return guides;
+  _guides = guides;
 }
 
 static void _settings_update_visibility(_guides_settings_t *gw)
@@ -843,10 +855,10 @@ static void free_guide(void *data)
   dt_free(guide);
 }
 
-void dt_guides_cleanup(GList *guides)
+void dt_guides_cleanup(void)
 {
-  g_list_free_full(guides, free_guide);
-  guides = NULL;
+  g_list_free_full(_guides, free_guide);
+  _guides = NULL;
 }
 
 void dt_guides_update_popover_values()

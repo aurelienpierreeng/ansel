@@ -1099,6 +1099,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // Created before any widget below, so everything the GUI builds can already read them.
   dt_collection_init_global();
   dt_selection_init_global();
+  dt_guides_init(); // darkroom overlay registry: same argument, nothing to overlay without a GUI
 
   dt_pthread_mutex_init(&gui->mutex, NULL);
 
