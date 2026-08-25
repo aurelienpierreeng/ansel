@@ -1544,8 +1544,11 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // init darktable tags table
   dt_set_darktable_tags();
 
-  // Initialize the signal system
-  darktable.signals = dt_control_signal_init();
+  // The signal system exists to tell GUI widgets about backend events -- every raise is
+  // already dead in a GUI-less process (dt_control_signal_raise() bails when the control
+  // system is not running, and only the GUI starts it), so only the GUI gets the machinery.
+  // The connect/raise surface treats a NULL system as "not in this process" and no-ops.
+  darktable.signals = init_gui ? dt_control_signal_init() : NULL;
 
   /* src/metadata reports that the tag vocabulary changed; turning that into the GTK signal
    * its consumers already listen for is ours. Installed HERE, not with the other handlers
