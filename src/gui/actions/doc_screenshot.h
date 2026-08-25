@@ -19,7 +19,7 @@
 #ifndef DT_GUI_ACTIONS_DOC_SCREENSHOT_H
 #define DT_GUI_ACTIONS_DOC_SCREENSHOT_H
 
-#include <glib.h>
+#include <gtk/gtk.h>
 
 /** @file doc_screenshot.h
  *
@@ -56,5 +56,31 @@ void dt_gui_doc_screenshot_set_directory(const char *path);
  * window down to a single slider, with a check box on every row, a destination folder and a
  * capture button. */
 void dt_gui_doc_screenshot_window_show(void);
+
+/* Where the module inventories come from.
+ *
+ * The panel lists tool modules and darkroom modules by name, which are `dt_lib_module_t`
+ * and `dt_iop_module_t` -- and those live two and three layers ABOVE gui/. Reading them
+ * from here inverted the dependency graph four times over (tools/check_layering.sh), so the
+ * panel no longer knows what a module is: it asks for (widget, name) pairs and whoever
+ * knows how to produce them hands them over.
+ *
+ * src/darktable.c is where they are supplied from. That is not a fallback: the orchestrator
+ * is the one place that sits above every module by construction, so it is the only place
+ * that may legally see both lists. */
+
+/** Hand the panel one capture target. Call it from a source callback, once per widget;
+ * @p name is copied. A NULL @p widget is ignored, so a source can pass a module's optional
+ * container without testing it first. */
+void dt_gui_doc_screenshot_add_target(void *inventory, GtkWidget *widget, const char *name);
+
+/** Collect one section's worth of targets by calling dt_gui_doc_screenshot_add_target()
+ * with the @p inventory handed in. Called every time the panel refreshes, so it reads the
+ * live module lists rather than a snapshot taken at registration time. */
+typedef void (*dt_gui_doc_screenshot_source_t)(void *inventory);
+
+/** Register a named section of the panel's tree and the callback that fills it. The order of
+ * registration is the order the sections appear in. @p section is copied. */
+void dt_gui_doc_screenshot_register_source(const char *section, dt_gui_doc_screenshot_source_t source);
 
 #endif // DT_GUI_ACTIONS_DOC_SCREENSHOT_H

@@ -163,7 +163,9 @@
 #include "control/jobs/film_jobs.h"
 #include "control/signal.h"
 #include "develop/dev_pixelpipe.h"
+#include "develop/develop.h"      // dt_dev_get_global(), dev->iop
 #include "develop/imageop.h"
+#include "develop/imageop_gui.h"  // module->gui->expander
 #include "develop/supervisor.h"
 
 #include "gui/application.h"
@@ -859,6 +861,47 @@ static void _preferences_changed(gpointer instance, gpointer user_data)
 /* Same "read at startup, re-read on change, never anywhere else" lifecycle as the mipmap cache
  * settings above, for the "write_sidecar_files" preference: dt_image_get_xmp_mode() is on the
  * per-image hot path and reads a cache instead of conf directly. */
+/* Module inventories for the documentation capture panel (gui/actions/doc_screenshot.h).
+ *
+ * They live HERE, and that is deliberate. The panel lists tool modules and darkroom modules,
+ * which are dt_lib_module_t and dt_iop_module_t -- two and three layers above gui/, where the
+ * panel is. Reading them from there inverted the include graph four times over. The
+ * orchestrator is the one place that sits above every module by construction, so it is the
+ * only place that may legally see both lists; the panel asks for (widget, name) pairs and
+ * these hand them over.
+ *
+ * Called on every refresh of the panel, so they read the live lists rather than a snapshot.
+ */
+static void _doc_screenshot_lib_modules(void *inventory)
+{
+  // Tool modules of every view: the ones belonging to the view we are not in are unmapped,
+  // so they show up greyed out instead of disappearing from the inventory.
+  for(GList *item = dt_lib_get_global()->plugins; item; item = g_list_next(item))
+  {
+    dt_lib_module_t *module = (dt_lib_module_t *)item->data;
+    GtkWidget *target = IS_NULL_PTR(module->expander) ? module->widget : module->expander;
+    dt_gui_doc_screenshot_add_target(inventory, target, module->common_fields.name);
+  }
+}
+
+static void _doc_screenshot_iop_modules(void *inventory)
+{
+  // This list is only populated while an image is open in darkroom.
+  for(GList *item = dt_dev_get_global()->iop; item; item = g_list_next(item))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)item->data;
+    if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->expander)) continue;
+
+    // Several instances of the same module share a name: keep them apart in the tree, and
+    // therefore in the file names too.
+    gchar *label = (module->multi_name[0] != '\0')
+                       ? g_strdup_printf("%s (%s)", module->common_fields.name, module->multi_name)
+                       : g_strdup(module->common_fields.name);
+    dt_gui_doc_screenshot_add_target(inventory, module->gui->expander, label);
+    dt_free(label);
+  }
+}
+
 static void _xmp_mode_preferences_changed(gpointer instance, gpointer user_data)
 {
   (void)instance;
@@ -1252,6 +1295,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           argv[k] = NULL;
         }
         dt_gui_doc_screenshot_enable();
+        dt_gui_doc_screenshot_register_source(_("Tool modules"), _doc_screenshot_lib_modules);
+        dt_gui_doc_screenshot_register_source(_("Darkroom modules"), _doc_screenshot_iop_modules);
       }
       else if(!strcmp(argv[k], "--debug"))
       {
