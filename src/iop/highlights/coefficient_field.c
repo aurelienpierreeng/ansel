@@ -1431,9 +1431,13 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
                           + fabsf(sj2 / tj - sp2 / tp);
     region_worth = _hl_region_worth(benefit);
     ctx->region_worth = region_worth; // every floor site in this region reuses the same decision
+    // %llu and a cast below, not %zu: dt_print() carries __attribute__((format(printf))),
+    // which MinGW maps to ms_printf, and that does not implement the C99 length modifier.
+    // Plain fprintf() gets gnu_printf via __USE_MINGW_ANSI_STDIO and does accept %zu, which
+    // is why the ones in selftests.c are fine. Same reasoning as develop/pixelpipe_hb.c.
     if(getenv("HL_REGION_W"))
-      dt_print(DT_DEBUG_ALWAYS, "[hl regionw] px=%zu benefit=%.6f region_worth=%.4f\n", region_pixels,
-               benefit, region_worth);
+      dt_print(DT_DEBUG_ALWAYS, "[hl regionw] px=%llu benefit=%.6f region_worth=%.4f\n",
+               (unsigned long long)region_pixels, benefit, region_worth);
   }
 
   HL_PFOR()
