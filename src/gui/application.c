@@ -84,6 +84,8 @@
 #include "gui/guides.h"
 #include "widgets/expander.h"
 
+#include "common/collection.h"
+#include "common/selection.h"
 #include "gui/application.h"
 #include "common/thumbnail_notify.h"
 #include "gui/common/film_gui.h"
@@ -1089,6 +1091,14 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
 {
   /* lets zero mem */
   memset(gui, 0, sizeof(dt_gui_gtk_t));
+
+  // The collection and the selection are lighttable state -- which images the grid shows,
+  // which of them are picked -- so the GUI creates them, not dt_init(): a GUI-less process
+  // (ansel-cli) must not pay for the user's collection query and selection reload just to
+  // export one file. Both modules treat "never created" as a no-op at their own boundary.
+  // Created before any widget below, so everything the GUI builds can already read them.
+  dt_collection_init_global();
+  dt_selection_init_global();
 
   dt_pthread_mutex_init(&gui->mutex, NULL);
 

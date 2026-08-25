@@ -34,7 +34,8 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
-// The one collection. dt_collection_new() has a single call site (darktable.c), so there is no
+// The one collection. dt_collection_new() has a single call site (dt_collection_init_global(),
+// reached from the GUI bootstrap only), so there is no
 // handle to pass around -- an argument no caller chooses is not a parameter.
 //
 // The composed SQL never leaves this file. Callers describe what they want with

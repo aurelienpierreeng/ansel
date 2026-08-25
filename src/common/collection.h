@@ -217,8 +217,15 @@ typedef struct dt_collection_t
 const char *dt_collection_name(dt_collection_properties_t prop);
 
 /** instantiates a collection context */
-// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the module itself; long-term the handle should be carried on the job/view context (Strategy C).
+// NULL in a GUI-less process (ansel-cli): the collection is lighttable query state, created by
+// dt_gui_gtk_init() through dt_collection_init_global(). Every public function here accepts a
+// NULL collection and degrades to a no-op / neutral result, so shared code paths need no guard.
 dt_collection_t *dt_collection_get_global(void);
+/** creates the application-wide collection. Called by the GUI bootstrap only. */
+void dt_collection_init_global(void);
+/** frees the application-wide collection. */
+void dt_collection_cleanup_global(void);
 
 dt_collection_t *dt_collection_new();
 /** frees a collection context. */

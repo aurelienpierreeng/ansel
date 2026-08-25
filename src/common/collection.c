@@ -121,6 +121,36 @@ static int _resolve_iop_order_name(const char *text)
  *  strings, so the array can be handed over and borrowed. */
 static const char *_order_names[DT_IOP_ORDER_LAST];
 
+/* The application-wide collection.
+ *
+ * Owned HERE, not by darktable_t, and created by the GUI bootstrap (dt_gui_gtk_init())
+ * rather than by dt_init(): the collection is the lighttable's query state, and ansel-cli
+ * has no lighttable. Instantiating it in dt_init() made every CLI run pay for the user's
+ * collection query against their whole library before exporting a single pixel.
+ *
+ * In a GUI-less process the accessor therefore returns NULL, and every public entry point
+ * of this module treats a NULL collection as "the module is not up": a query update is a
+ * no-op, a count is 0. The guard lives at this module boundary ONCE, so callers shared
+ * between GUI and CLI (film import, image removal) stay free of if(darktable.gui) tests.
+ */
+static dt_collection_t *_collection_global = NULL;
+
+dt_collection_t *dt_collection_get_global(void)
+{
+  return _collection_global;
+}
+
+void dt_collection_init_global(void)
+{
+  if(IS_NULL_PTR(_collection_global)) _collection_global = dt_collection_new();
+}
+
+void dt_collection_cleanup_global(void)
+{
+  dt_collection_free(_collection_global);
+  _collection_global = NULL;
+}
+
 dt_collection_t *dt_collection_new()
 {
   dt_collection_t *collection = g_malloc0(sizeof(dt_collection_t));
@@ -137,6 +167,7 @@ dt_collection_t *dt_collection_new()
 
 void dt_collection_free(const dt_collection_t *collection)
 {
+  if(IS_NULL_PTR(collection)) return;
   dt_free(collection->params.text_filter);
   for(int i = 0; i < collection->n_rules; i++)
   {
@@ -153,6 +184,7 @@ void dt_collection_free(const dt_collection_t *collection)
 
 const dt_collection_params_t *dt_collection_params(const dt_collection_t *collection)
 {
+  if(IS_NULL_PTR(collection)) return NULL;
   return &collection->params;
 }
 
@@ -165,6 +197,7 @@ const dt_collection_params_t *dt_collection_params(const dt_collection_t *collec
 
 int dt_collection_update(const dt_collection_t *collection)
 {
+  if(IS_NULL_PTR(collection)) return 0;
   /* store flags to conf */
   if(collection == dt_collection_get_global())
   {
@@ -241,6 +274,7 @@ uint32_t dt_collection_get_count(const dt_collection_t *collection)
 
 void dt_collection_reset(const dt_collection_t *collection)
 {
+  if(IS_NULL_PTR(collection)) return;
   dt_collection_params_t *params = (dt_collection_params_t *)&collection->params;
 
   /* setup defaults */
@@ -262,22 +296,26 @@ void dt_collection_reset(const dt_collection_t *collection)
 
 dt_collection_filter_flag_t dt_collection_get_filter_flags(const dt_collection_t *collection)
 {
+  if(IS_NULL_PTR(collection)) return COLLECTION_FILTER_ALL;
   return collection->params.filter_flags;
 }
 
 void dt_collection_set_filter_flags(const dt_collection_t *collection, dt_collection_filter_flag_t flags)
 {
+  if(IS_NULL_PTR(collection)) return;
   dt_collection_params_t *params = (dt_collection_params_t *)&collection->params;
   params->filter_flags = flags;
 }
 
 char *dt_collection_get_text_filter(const dt_collection_t *collection)
 {
+  if(IS_NULL_PTR(collection)) return NULL;
   return collection->params.text_filter;
 }
 
 void dt_collection_set_text_filter(const dt_collection_t *collection, char *text_filter)
 {
+  if(IS_NULL_PTR(collection)) { dt_free(text_filter); return; } // takes ownership even when down
   dt_collection_params_t *params = (dt_collection_params_t *)&collection->params;
   dt_free(params->text_filter);
   params->text_filter = text_filter;
@@ -285,11 +323,13 @@ void dt_collection_set_text_filter(const dt_collection_t *collection, char *text
 
 dt_collection_query_flags_t dt_collection_get_query_flags(const dt_collection_t *collection)
 {
+  if(IS_NULL_PTR(collection)) return COLLECTION_QUERY_FULL;
   return collection->params.query_flags;
 }
 
 void dt_collection_set_query_flags(const dt_collection_t *collection, dt_collection_query_flags_t flags)
 {
+  if(IS_NULL_PTR(collection)) return;
   dt_collection_params_t *params = (dt_collection_params_t *)&collection->params;
   params->query_flags = flags;
 }
@@ -297,6 +337,7 @@ void dt_collection_set_query_flags(const dt_collection_t *collection, dt_collect
 void dt_collection_set_rules(const dt_collection_t *collection, const dt_collection_rule_t *rules,
                              const int n_rules)
 {
+  if(IS_NULL_PTR(collection)) return;
   dt_collection_t *c = (dt_collection_t *)collection;
 
   for(int i = 0; i < c->n_rules; i++)
@@ -319,11 +360,13 @@ void dt_collection_set_rules(const dt_collection_t *collection, const dt_collect
 
 void dt_collection_set_tag_id(dt_collection_t *collection, const uint32_t tagid)
 {
+  if(IS_NULL_PTR(collection)) return;
   collection->tagid = tagid;
 }
 
 void dt_collection_set_sort(const dt_collection_t *collection, dt_collection_sort_t sort, gboolean reverse)
 {
+  if(IS_NULL_PTR(collection)) return;
   dt_collection_params_t *params = (dt_collection_params_t *)&collection->params;
 
   if(sort != DT_COLLECTION_SORT_NONE)
@@ -334,11 +377,13 @@ void dt_collection_set_sort(const dt_collection_t *collection, dt_collection_sor
 
 dt_collection_sort_t dt_collection_get_sort_field(const dt_collection_t *collection)
 {
+  if(IS_NULL_PTR(collection)) return DT_COLLECTION_SORT_NONE;
   return collection->params.sort;
 }
 
 gboolean dt_collection_get_sort_descending(const dt_collection_t *collection)
 {
+  if(IS_NULL_PTR(collection)) return FALSE;
   return collection->params.descending;
 }
 
@@ -792,6 +837,9 @@ void dt_collection_set_recents_handler(dt_collection_recents_handler_t handler)
 void dt_collection_update_query(const dt_collection_t *collection, dt_collection_change_t query_change,
                                 dt_collection_properties_t changed_property, GList *list)
 {
+  // Import and removal paths shared with ansel-cli land here; without a GUI there is no
+  // collection to re-query and nobody listening. The one guard that keeps them CLI-clean.
+  if(IS_NULL_PTR(collection)) return;
   int next = -1;
   if(list)
   {
@@ -863,6 +911,7 @@ gboolean dt_collection_hint_message_internal(void *message)
 
 void dt_collection_hint_message(const dt_collection_t *collection)
 {
+  if(IS_NULL_PTR(collection)) return;
   /* collection hinting */
   gchar *message;
 
@@ -1032,6 +1081,7 @@ void dt_collection_notify_imported(const int32_t imgid, const gchar *known_image
 void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid, gboolean open_single_image,
                                  gboolean set_mouse_over)
 {
+  if(IS_NULL_PTR(collection)) return;
   const dt_view_t *current_atelier = dt_view_manager_get_current_view(dt_view_manager_get_global());
 
   // Without a real image there is nothing to switch to or open.
