@@ -368,6 +368,7 @@ static void _print_trace (const char* op)
 
 void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t signal, ...)
 {
+  if(IS_NULL_PTR(ctlsig)) return; // no signal system in this process (GUI-less)
   // ignore all signals on shutdown
   if(!dt_control_running()) return;
 
@@ -464,6 +465,7 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
 void dt_control_signal_connect(const dt_control_signal_t *ctlsig, dt_signal_t signal, GCallback cb,
                                gpointer user_data)
 {
+  if(IS_NULL_PTR(ctlsig)) return;
   if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_CONNECT && dt_get_signal_debug(signal))
   {
     dt_print(DT_DEBUG_SIGNAL, "[signal] connected: %s\n", _signal_description[signal].name);
@@ -474,6 +476,7 @@ void dt_control_signal_connect(const dt_control_signal_t *ctlsig, dt_signal_t si
 
 void dt_control_signal_disconnect(const struct dt_control_signal_t *ctlsig, GCallback cb, gpointer user_data)
 {
+  if(IS_NULL_PTR(ctlsig)) return;
   if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_DISCONNECT)
   {
     dt_print(DT_DEBUG_SIGNAL, "[signal] disconnected\n");
@@ -500,11 +503,13 @@ void dt_control_signal_disconnect_all(const struct dt_control_signal_t *ctlsig, 
 
 void dt_control_signal_block_by_func(const struct dt_control_signal_t *ctlsig, GCallback cb, gpointer user_data)
 {
+  if(IS_NULL_PTR(ctlsig)) return;
   g_signal_handlers_block_by_func(G_OBJECT(ctlsig->sink), cb, user_data);
 }
 
 void dt_control_signal_unblock_by_func(const struct dt_control_signal_t *ctlsig, GCallback cb, gpointer user_data)
 {
+  if(IS_NULL_PTR(ctlsig)) return;
   g_signal_handlers_unblock_by_func(G_OBJECT(ctlsig->sink), cb, user_data);
 }
 
