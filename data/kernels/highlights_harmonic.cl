@@ -2781,13 +2781,14 @@ hl_cg_r0(global float *residual, global const float *laplacian_term, global cons
 // (beta is computed on the host from the partial dot-product sums).
 kernel void
 hl_cg_beta(global float *search_dir, global const float *residual, global const uchar *hole,
-           const int width, const int height, const float beta)
+           const int width, const int height, global const float *cg_state)
 {
+  if(cg_state[5] < 0.5f) return; // HL_CG_ACTIVE: converged/stalled -> no-op
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
   const int i = y * width + x;
-  if(hole[i]) search_dir[i] = residual[i] + beta * search_dir[i];
+  if(hole[i]) search_dir[i] = residual[i] + cg_state[4] /* HL_CG_BETA */ * search_dir[i];
 }
 
 // Copy with a clamp at zero (the diffused chroma ratios are stored non-negative).

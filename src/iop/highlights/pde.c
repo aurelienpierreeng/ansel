@@ -490,6 +490,9 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
   cl_mem search_dir = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem matvec = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem partials = dt_opencl_alloc_device_buffer(devid, sizeof(double) * n_groups);
+  // CG scalar state (rr, rr_new, rr_init, alpha, beta, active) -- device-resident for the
+  // whole solve: the iteration reads and writes it without ever touching the host
+  cl_mem cg_state = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 6);
   double partial_sums[256];
   if(!temp1 || !temp2 || !residual || !search_dir || !matvec || !partials) goto out;
 
@@ -532,7 +535,6 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
 
   // r <- b - A u; p = r; rr
   CG_EMBED(solution, 1);
-  double residual_norm;
   {
     const int kernel = global_data->kernel_hl_cg_r1;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &residual);
@@ -546,18 +548,16 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
     dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(double) * local_size, NULL);
     cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, work_size_1d, local_size_1d);
     if(cl_err != CL_SUCCESS) goto out;
-    cl_err
-        = dt_opencl_read_buffer_from_device(devid, partial_sums, partials, 0, sizeof(double) * n_groups, CL_TRUE);
+    const int ffold = global_data->kernel_hl_cg_fold;
+    const int slot_rr = 0, do_init = 1;
+    size_t cg_one[3] = { 1, 1, 1 };
+    dt_opencl_set_kernel_arg(devid, ffold, 0, sizeof(cl_mem), &partials);
+    dt_opencl_set_kernel_arg(devid, ffold, 1, sizeof(cl_mem), &cg_state);
+    dt_opencl_set_kernel_arg(devid, ffold, 2, sizeof(int), &n_groups);
+    dt_opencl_set_kernel_arg(devid, ffold, 3, sizeof(int), &slot_rr);
+    dt_opencl_set_kernel_arg(devid, ffold, 4, sizeof(int), &do_init);
+    cl_err = dt_opencl_enqueue_kernel_2d(devid, ffold, cg_one);
     if(cl_err != CL_SUCCESS) goto out;
-    residual_norm = 0.0;
-    for(int group_index = 0; group_index < n_groups; group_index++) residual_norm += partial_sums[group_index];
-  }
-
-  const double residual_norm_init = residual_norm;
-  if(residual_norm_init < 1e-20)
-  {
-    cl_err = CL_SUCCESS;
-    goto out;
   }
 
   for(int iteration = 0; iteration < maxiter; iteration++)
@@ -576,16 +576,15 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
       dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(double) * local_size, NULL);
       cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, work_size_1d, local_size_1d);
       if(cl_err != CL_SUCCESS) goto out;
-      cl_err = dt_opencl_read_buffer_from_device(devid, partial_sums, partials, 0, sizeof(double) * n_groups,
-                                                 CL_TRUE);
+      const int astep = global_data->kernel_hl_cg_alpha_step;
+      size_t cg_one[3] = { 1, 1, 1 };
+      dt_opencl_set_kernel_arg(devid, astep, 0, sizeof(cl_mem), &partials);
+      dt_opencl_set_kernel_arg(devid, astep, 1, sizeof(cl_mem), &cg_state);
+      dt_opencl_set_kernel_arg(devid, astep, 2, sizeof(int), &n_groups);
+      cl_err = dt_opencl_enqueue_kernel_2d(devid, astep, cg_one);
       if(cl_err != CL_SUCCESS) goto out;
-      p_dot_matvec = 0.0;
-      for(int group_index = 0; group_index < n_groups; group_index++) p_dot_matvec += partial_sums[group_index];
     }
 
-    if(p_dot_matvec <= 1e-30) break;
-    const float alpha = (float)(residual_norm / p_dot_matvec);
-    double residual_norm_new;
     {
       const int kernel = global_data->kernel_hl_cg_update;
       dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &solution);
@@ -595,20 +594,29 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
       dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), &hole);
       dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(cl_mem), &partials);
       dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), &unknown_count);
-      dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float), &alpha);
+      dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(cl_mem), &cg_state);
       dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(double) * local_size, NULL);
       cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, work_size_1d, local_size_1d);
       if(cl_err != CL_SUCCESS) goto out;
-      cl_err = dt_opencl_read_buffer_from_device(devid, partial_sums, partials, 0, sizeof(double) * n_groups,
-                                                 CL_TRUE);
+      const int ffold = global_data->kernel_hl_cg_fold;
+      const int slot_new = 1, no_init = 0;
+      size_t cg_one[3] = { 1, 1, 1 };
+      dt_opencl_set_kernel_arg(devid, ffold, 0, sizeof(cl_mem), &partials);
+      dt_opencl_set_kernel_arg(devid, ffold, 1, sizeof(cl_mem), &cg_state);
+      dt_opencl_set_kernel_arg(devid, ffold, 2, sizeof(int), &n_groups);
+      dt_opencl_set_kernel_arg(devid, ffold, 3, sizeof(int), &slot_new);
+      dt_opencl_set_kernel_arg(devid, ffold, 4, sizeof(int), &no_init);
+      cl_err = dt_opencl_enqueue_kernel_2d(devid, ffold, cg_one);
       if(cl_err != CL_SUCCESS) goto out;
-      residual_norm_new = 0.0;
-      for(int group_index = 0; group_index < n_groups; group_index++)
-        residual_norm_new += partial_sums[group_index];
-    }
 
-    if(residual_norm_new < 1e-4 * residual_norm_init) break;
-    const float beta = (float)(residual_norm_new / residual_norm);
+      // beta + the convergence test, on device. The loop no longer breaks: once the state's
+      // active flag clears, every update kernel no-ops, so the remaining iterations are launches
+      // over an early-out rather than a host round-trip per iteration.
+      const int bstep = global_data->kernel_hl_cg_beta_step;
+      dt_opencl_set_kernel_arg(devid, bstep, 0, sizeof(cl_mem), &cg_state);
+      cl_err = dt_opencl_enqueue_kernel_2d(devid, bstep, cg_one);
+      if(cl_err != CL_SUCCESS) goto out;
+    }
     {
       const int kernel = global_data->kernel_hl_cg_beta;
       dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &search_dir);
@@ -616,16 +624,17 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
       dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &hole);
       dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), &region_w);
       dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_h);
-      dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &beta);
+      dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(cl_mem), &cg_state);
       cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, work_size);
       if(cl_err != CL_SUCCESS) goto out;
     }
-    residual_norm = residual_norm_new;
+    // rr <- rr_new happens inside hl_cg_beta_step, on device
   }
   cl_err = CL_SUCCESS;
 
 #undef CG_EMBED
 out:
+  dt_opencl_release_mem_object(cg_state);
   dt_opencl_release_mem_object(temp1);
   dt_opencl_release_mem_object(temp2);
   dt_opencl_release_mem_object(residual);

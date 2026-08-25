@@ -600,6 +600,9 @@ typedef struct dt_iop_highlights_global_data_t
   int kernel_hl_clip0_rehue;
   int kernel_hl_ring_vote;
   int kernel_hl_cgrad_plateau;
+  int kernel_hl_cg_fold;
+  int kernel_hl_cg_alpha_step;
+  int kernel_hl_cg_beta_step;
   int kernel_hl_cmean_finalize;
   int kernel_hl_ring_vote_finalize;
   int kernel_hl_region_benefit;

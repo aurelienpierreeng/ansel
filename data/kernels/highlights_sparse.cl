@@ -306,6 +306,63 @@ hl_aniso_scatter(global const double *rhs, global const int *pgrid, global float
 // Maths bridge: the operator is A = dscalar*I + (-Delta) (the same screened-Poisson E_chrominance
 // SPD matrix the direct solver factors); this forms the initial residual r = b - A u and search
 // direction p = r, and accumulates ||r||^2 (the CG numerator / convergence measure).
+// CG scalar state, device-resident. Layout: [0] rr, [1] rr_new, [2] rr_init, [3] alpha,
+// [4] beta, [5] active (1 while iterating, 0 once converged or stalled). The host used to read
+// the reduction partials back THREE TIMES PER ITERATION and decide `break` itself; every fold and
+// both break tests now happen here, and the update kernels no-op on state[5], so an iteration
+// after convergence costs a launch and a scalar read instead of a blocking bus round-trip.
+#define HL_CG_RR 0
+#define HL_CG_RRNEW 1
+#define HL_CG_RRINIT 2
+#define HL_CG_ALPHA 3
+#define HL_CG_BETA 4
+#define HL_CG_ACTIVE 5
+
+// fold the r.r partials into state[slot]; with init != 0 also seed rr_init and the active flag
+kernel void
+hl_cg_fold(global const double *partial, global float *state, const int n_groups, const int slot,
+           const int init)
+{
+  if(get_global_id(0) != 0) return;
+  double acc = 0.0;
+  for(int g = 0; g < n_groups; g++) acc += partial[g];
+  state[slot] = (float)acc;
+  if(init)
+  {
+    state[HL_CG_RRINIT] = (float)acc;
+    state[HL_CG_ACTIVE] = (acc < 1e-20) ? 0.f : 1.f; // an already-solved system never iterates
+  }
+}
+
+// alpha = rr / p.Ap, with the p.Ap <= 1e-30 stall test folded in (the host's second `break`)
+kernel void
+hl_cg_alpha_step(global const double *partial, global float *state, const int n_groups)
+{
+  if(get_global_id(0) != 0) return;
+  if(state[HL_CG_ACTIVE] < 0.5f) { state[HL_CG_ALPHA] = 0.f; return; }
+  double pap = 0.0;
+  for(int g = 0; g < n_groups; g++) pap += partial[g];
+  if(pap <= 1e-30) { state[HL_CG_ACTIVE] = 0.f; state[HL_CG_ALPHA] = 0.f; return; }
+  state[HL_CG_ALPHA] = (float)((double)state[HL_CG_RR] / pap);
+}
+
+// beta = rr_new / rr, with the convergence test folded in (the host's first `break`)
+kernel void
+hl_cg_beta_step(global float *state)
+{
+  if(get_global_id(0) != 0) return;
+  if(state[HL_CG_ACTIVE] < 0.5f) { state[HL_CG_BETA] = 0.f; return; }
+  const float rr_new = state[HL_CG_RRNEW];
+  if(rr_new < 1e-4f * state[HL_CG_RRINIT])
+  {
+    state[HL_CG_ACTIVE] = 0.f;
+    state[HL_CG_BETA] = 0.f;
+    return;
+  }
+  state[HL_CG_BETA] = rr_new / fmax(state[HL_CG_RR], 1e-30f);
+  state[HL_CG_RR] = rr_new;
+}
+
 kernel void
 hl_cg_r1(global float *residual, global float *search_dir, global const float *solution, global const float *laplacian_term,
          global const uchar *hole, global double *partial, const int dimension, const float dscalar,
@@ -367,9 +424,10 @@ hl_cg_ap(global float *matvec, global const float *search_dir, global const floa
 // the new r*r for the convergence check (finished on the CPU). Hole pixels only.
 kernel void
 hl_cg_update(global float *solution, global float *residual, global const float *search_dir, global const float *matvec,
-             global const uchar *hole, global double *partial, const int dimension, const float alpha,
+             global const uchar *hole, global double *partial, const int dimension, global const float *cg_state,
              local double *scratch)
 {
+  if(cg_state[HL_CG_ACTIVE] < 0.5f) return; // converged/stalled: this iteration is a no-op
   const int global_id = get_global_id(0);
   const int global_size = get_global_size(0);
   const int local_id = get_local_id(0);
@@ -378,8 +436,8 @@ hl_cg_update(global float *solution, global float *residual, global const float 
   for(int i = global_id; i < dimension; i += global_size)
   {
     if(!hole[i]) continue;
-    solution[i] += alpha * search_dir[i];        // u <- u + alpha*p   (alpha = ||r||^2 / p.Ap)
-    residual[i] -= alpha * matvec[i];            // r <- r - alpha*ap
+    solution[i] += cg_state[HL_CG_ALPHA] * search_dir[i];        // u <- u + cg_state[HL_CG_ALPHA]*p   (cg_state[HL_CG_ALPHA] = ||r||^2 / p.Ap)
+    residual[i] -= cg_state[HL_CG_ALPHA] * matvec[i];            // r <- r - cg_state[HL_CG_ALPHA]*ap
     accum += (double)residual[i] * residual[i];  // += r_i^2  -> new ||r||^2 for the convergence test
   }
   scratch[local_id] = accum;

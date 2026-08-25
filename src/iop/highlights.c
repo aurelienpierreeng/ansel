@@ -909,6 +909,9 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_sparse_chol_final_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_final_level");
   gd->kernel_sparse_chol_fwd_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_fwd_level");
   gd->kernel_sparse_chol_bwd_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_bwd_level");
+  gd->kernel_hl_cg_fold = dt_opencl_create_kernel(sparse_program, "hl_cg_fold");
+  gd->kernel_hl_cg_alpha_step = dt_opencl_create_kernel(sparse_program, "hl_cg_alpha_step");
+  gd->kernel_hl_cg_beta_step = dt_opencl_create_kernel(sparse_program, "hl_cg_beta_step");
   gd->kernel_hl_pde_rhs = dt_opencl_create_kernel(sparse_program, "hl_pde_rhs");
   gd->kernel_hl_pde_scatter = dt_opencl_create_kernel(sparse_program, "hl_pde_scatter");
   gd->kernel_hl_aniso_rhs = dt_opencl_create_kernel(sparse_program, "hl_aniso_rhs");
@@ -1098,6 +1101,9 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_hl_clip0_rehue);
   dt_opencl_free_kernel(gd->kernel_hl_ring_vote);
   dt_opencl_free_kernel(gd->kernel_hl_cgrad_plateau);
+  dt_opencl_free_kernel(gd->kernel_hl_cg_fold);
+  dt_opencl_free_kernel(gd->kernel_hl_cg_alpha_step);
+  dt_opencl_free_kernel(gd->kernel_hl_cg_beta_step);
   dt_opencl_free_kernel(gd->kernel_hl_cmean_finalize);
   dt_opencl_free_kernel(gd->kernel_hl_ring_vote_finalize);
   dt_opencl_free_kernel(gd->kernel_hl_region_benefit);
