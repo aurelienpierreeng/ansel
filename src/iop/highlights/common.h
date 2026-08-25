@@ -215,6 +215,33 @@ typedef struct
 
 
 
+// A REGION-level decision, not a per-pixel one. Both floors are legitimate whole treatments, but
+// they cannot be mixed spatially: the per-channel floor clamps each clipped channel at its own c0,
+// which on WB'd clips imprints the inverse-WB chromaticity -- magenta. So wherever the per-channel
+// side dominates a spatial blend it PAINTS that magenta, and a joint core ringed by a per-channel
+// annulus reads as the worst of both (observed directly: shrinking the yellow core by depth and
+// handing the surround back to per-channel produced magenta spots around it, worse than either
+// endpoint). The choice must therefore be uniform across a blown zone -- blown zones are separated
+// by measured pixels, so a different choice per zone prints no seam.
+//
+// The statistic: what the joint form buys the region AS A WHOLE, i.e. the L1 distance between the
+// two candidates' AGGREGATE chromaticity over the region's clipped pixels, measured BEFORE the floor
+// runs (measuring it after the floor gives a different, far less separable quantity -- 3x instead of
+// the 14x below, which is how the first version of these thresholds came out inert).
+// Measured pre-floor: PK1_3540's blown sky 0.0033 -- the joint form buys it almost nothing and its
+// scatter is a bad trade. MAC25640's lamps 0.045 / 0.048 / 0.089 / 0.288 -- badly floor-imprinted,
+// the rescue is the whole point. Two of MAC's smaller regions sit at 0.0042 and 0.0019, i.e. inside
+// PK1's range: they lose the rescue, which is the price of deciding per region rather than per pixel
+// (a per-pixel or per-depth blend cannot be used at all -- see above).
+#define CF_REGION_LO 0.005f // at or below: the region gains too little to pay the scatter
+#define CF_REGION_HI 0.015f // at or above: the region needs the rescue in full
+
+static inline float _hl_region_worth(const float region_benefit)
+{
+  const float t = CLAMP((region_benefit - CF_REGION_LO) / (CF_REGION_HI - CF_REGION_LO), 0.f, 1.f);
+  return t * t * (3.f - 2.f * t);
+}
+
 // How much the joint floor's chromaticity rescue is WORTH at this pixel, in [0,1]. The joint form
 // keeps the fit (and the fit's scatter with it); the per-channel floor clamps each clipped channel
 // at its own c0, which suppresses that scatter and meets the surround at the level the neighbouring
@@ -438,6 +465,10 @@ typedef struct _hl_region_ctx_t
   float floor_gate; // clip-asymmetry gate g in [0,1]: 0 = per-channel floors (unit-WB clips, the
                     // approved behavior, bit-exact), 1 = joint chromaticity-preserving floors +
                     // surround-chroma refinements (real-camera WB'd clips). See _hl_floor_gate().
+  float region_worth; // ONE decision per blown zone: does this region need the joint floor's
+                      // chromaticity rescue enough to pay its scatter? Computed once in
+                      // _cf_reconstruct's first pass and reused by every floor site, because the two
+                      // floors cannot be mixed spatially -- see _hl_region_worth().
   // group-A padded-window buffers (live for the whole region)
   float *estimate, *prev_scale, *valid, *blur_in;
   float *plane1, *plane2, *plane3;
@@ -569,6 +600,8 @@ typedef struct dt_iop_highlights_global_data_t
   int kernel_hl_clip0_rehue;
   int kernel_hl_ring_vote;
   int kernel_hl_cgrad_plateau;
+  int kernel_hl_region_benefit;
+  int kernel_hl_region_worth_finalize;
   int kernel_hl_cgrad_guard;
   int kernel_hl_cgrad_anchor;
   int kernel_hl_cgrad_share;

@@ -254,7 +254,7 @@ void _selfdome(_hl_region_ctx_t *const ctx)
         sum_j = fmaxf(sum_j, 1e-9f);
         float chroma_gain = 0.f;
         for(int c = 0; c < 3; c++) chroma_gain += fabsf(joint_v[c] / sum_j - per_chan_v[c] / sum_p);
-        const float w = floor_gate * _hl_floor_worth(chroma_gain);
+        const float w = floor_gate * ctx->region_worth * _hl_floor_worth(chroma_gain);
         for(int c = 0; c < 3; c++)
           if(valid[i * 4 + c] < 0.5f)
             estimate[i * 4 + c] = per_chan_v[c] + w * (joint_v[c] - per_chan_v[c]);
@@ -600,24 +600,25 @@ void _chromaticity_gradient(_hl_region_ctx_t *const ctx)
   {
     const int n_clip = (valid[i * 4 + 0] < 0.5f) + (valid[i * 4 + 1] < 0.5f) + (valid[i * 4 + 2] < 0.5f);
     float weight_src = 0.f, mask_src = 0.f;
-    // floor-authored 1-clip pixels are NOT evidence: the fit landed at/below the pixel's own
-    // saturation floor (measured on the flare-veiled sunrise: 92.5% of the 1-clip zone, mean fit
-    // lift +0.9%), so their chromaticity is the floor's, not the solver's -- the ring votes only
-    // on 1-clip pixels whose fit genuinely spoke, and the authored ones get reprojected below.
-    int floor_authored = 0;
-    if(n_clip == 1 && ctx->floor_gate > 1e-6f) // WB'd clips only: at unit WB the floor imprint is
-    {                                          // neutral ~ truth (approved bench behavior)
-      const int cc = (valid[i * 4 + 0] < 0.5f) ? 0 : ((valid[i * 4 + 1] < 0.5f) ? 1 : 2);
-      floor_authored = estimate[i * 4 + cc] <= 1.03f * fmaxf(clip0[i * 4 + cc], 1e-9f);
-    }
-    if(n_clip == 1 && !floor_authored)
+    // The gate validates the field against the pixel's MEASURED channels, never against the
+    // solver. The old form compared field shares to the 1-clip SOLVER's shares -- but a
+    // fence-contaminated solver and a self-coloured emitter produce the SAME disagreement, so that
+    // vote cannot tell who is wrong (measured on PK1_3540: vote 0.195, the correct field voted
+    // down by the very solver it exists to correct). At a 1-clip pixel TWO channels are measured,
+    // and the ratio between them is data: a self-coloured emitter's skirt carries the emitter's
+    // measured ratio and disagrees with the surround-extended field, a genuine sky agrees. With
+    // the solver out of the jury the floor-authored exclusion is unnecessary -- a floored pixel's
+    // measured channels are untainted, so it may vote. Measured: PK1 vote 0.195 -> 0.335 (ring
+    // reprojection engages), magentasun 0.3316 -> 0.3294 RMSE with SSIM 0.929 -> 0.941 (the
+    // protected case improves), occluded pays +3.9% -- the accepted trade of this change.
+    if(n_clip == 1)
     {
-      const float lum = fmaxf(estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2], epsilon);
-      const float share_sum = fmaxf(plane2[i * 4 + 0] + plane2[i * 4 + 1] + plane2[i * 4 + 2], epsilon);
-      float err = 0.f;
-      for(int c = 0; c < 3; c++)
-        err += fabsf(plane2[i * 4 + c] / share_sum - estimate[i * 4 + c] / lum);
-      const float t = err / gate_tau;
+      const int cc = (valid[i * 4 + 0] < 0.5f) ? 0 : ((valid[i * 4 + 1] < 0.5f) ? 1 : 2);
+      const int m1 = (cc == 0) ? 1 : 0, m2 = (cc == 2) ? 1 : 2;
+      const float msum = estimate[i * 4 + m1] + estimate[i * 4 + m2];
+      const float meas = estimate[i * 4 + m1] / fmaxf(msum, epsilon);
+      const float fld = plane2[i * 4 + m1] / fmaxf(plane2[i * 4 + m1] + plane2[i * 4 + m2], epsilon);
+      const float t = (meas - fld) / (0.5f * gate_tau); // 2-channel share: half the 3-channel scale
       weight_src = expf(-t * t);
       mask_src = 1.f;
     }
@@ -807,9 +808,9 @@ void _chromaticity_gradient(_hl_region_ctx_t *const ctx)
 
 #if defined(HAVE_OPENCL) && DT_HL_SPARSE_SOLVE
 cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem model_quality,
-                          cl_mem clip0, cl_mem depth, const int region_w, const int region_h, const float cf_sigma,
-                          const float reg_radius, const int ds_shared, const float floor_gate,
-                          const dt_dev_pixelpipe_t *pipe)
+                          cl_mem clip0, cl_mem depth, cl_mem region_worth, const int region_w, const int region_h,
+                          const float cf_sigma, const float reg_radius, const int ds_shared,
+                          const float floor_gate, const dt_dev_pixelpipe_t *pipe)
 {
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   const size_t region_pixels = (size_t)region_w * region_h;
@@ -836,11 +837,12 @@ cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_me
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &estimate);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &valid);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &clip0);
-    dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), &region_w);
-    dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_h);
-    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &floor_gate);
+    dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &region_worth);
+    dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_w);
+    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), &region_h);
+    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &floor_gate);
     const float joint_tau = CF_JOINT_TAU;
-    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &joint_tau);
+    dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float), &joint_tau);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size);
     if(cl_err != CL_SUCCESS) goto out;
   }
@@ -1072,11 +1074,12 @@ cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_me
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &estimate);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &valid);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &clip0);
-    dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), &region_w);
-    dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_h);
-    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &floor_gate);
+    dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &region_worth);
+    dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_w);
+    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), &region_h);
+    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &floor_gate);
     const float joint_tau = CF_JOINT_TAU;
-    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &joint_tau);
+    dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float), &joint_tau);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size);
   }
 
@@ -1655,14 +1658,12 @@ cl_int _chromaticity_gradient_stage_cl(const int devid, void *gd_void, cl_mem es
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &estimate);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &valid);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &shares);
-    dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &clip0);
-    dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), &gate_src);
-    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(cl_mem), &gate_msk);
-    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), &region_w);
-    dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(int), &region_h);
-    dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(float), &epsilon);
-    dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(float), &gate_tau);
-    dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(float), &floor_gate);
+    dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &gate_src);
+    dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), &gate_msk);
+    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), &region_w);
+    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), &region_h);
+    dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float), &epsilon);
+    dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(float), &gate_tau);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size);
     if(cl_err != CL_SUCCESS) goto out;
     const float gate_sigma = CLAMP(reg_radius / 4.f, 8.f, 96.f);

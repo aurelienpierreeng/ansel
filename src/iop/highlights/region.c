@@ -428,6 +428,7 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
   cl_mem valid = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
   cl_mem clip0 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
   cl_mem model_quality = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
+  cl_mem region_worth_dev = NULL; // one floor verdict per region, device-resident (never read back)
   cl_mem clip_depth = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem lsb0 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels); // pre-ladder luminance
   cl_mem partials = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 8 * 256);
@@ -545,6 +546,50 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
   if(cl_err == CL_SUCCESS) dt_opencl_finish(devid);
   if(cl_err != CL_SUCCESS) goto out;
 
+  // ONE floor decision per region, on the fitted estimates (mirror of _cf_reconstruct pass 1):
+  // reduce both floor candidates' aggregate chromaticity on the DEVICE into a scalar every floor
+  // kernel reads -- the two floors cannot be mixed spatially, so they share the same verdict.
+  region_worth_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float));
+  if(!region_worth_dev)
+  {
+    cl_err = DT_OPENCL_DEFAULT_ERROR;
+    goto out;
+  }
+  {
+    const int local_size = 64, n_groups = 256;
+    const int pixel_count = (int)region_pixels;
+    cl_mem bpart = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 6 * n_groups);
+    if(!bpart)
+    {
+      cl_err = DT_OPENCL_DEFAULT_ERROR;
+      goto out;
+    }
+    size_t sizes[3] = { (size_t)n_groups * local_size, 1, 1 };
+    size_t local[3] = { local_size, 1, 1 };
+    int kernel = global_data->kernel_hl_region_benefit;
+    dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &estimate);
+    dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &valid);
+    dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &clip0);
+    dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &bpart);
+    dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &pixel_count);
+    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float) * 6 * local_size, NULL);
+    cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, sizes, local);
+    if(cl_err == CL_SUCCESS)
+    {
+      kernel = global_data->kernel_hl_region_worth_finalize;
+      const float lo = CF_REGION_LO, hi = CF_REGION_HI;
+      dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &bpart);
+      dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &region_worth_dev);
+      dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &n_groups);
+      dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(float), &lo);
+      dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(float), &hi);
+      size_t one[3] = { 1, 1, 1 };
+      cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, one);
+    }
+    dt_opencl_release_mem_object(bpart);
+    if(cl_err != CL_SUCCESS) goto out;
+  }
+
   // gated self-dome: the soft floor is unconditional (production applies it right after the
   // HF hybrid); the dome + blend + hard floor only run where a clipped channel with a
   // surviving guide sits on a weak colour-line
@@ -574,8 +619,9 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
 
   if(need_self)
   {
-    cl_err = _selfdome_stage_cl(devid, gd_void, estimate, valid, model_quality, clip0, clip_depth, region_w,
-                                region_h, cf_sigma, region->radius, ds_shared, floor_gate, pipe);
+    cl_err = _selfdome_stage_cl(devid, gd_void, estimate, valid, model_quality, clip0, clip_depth,
+                                region_worth_dev, region_w, region_h, cf_sigma, region->radius, ds_shared,
+                                floor_gate, pipe);
     if(cl_err != CL_SUCCESS) goto out;
   }
   else
@@ -584,11 +630,12 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &estimate);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &valid);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &clip0);
-    dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), &region_w);
-    dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_h);
-    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &floor_gate);
+    dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &region_worth_dev);
+    dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_w);
+    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), &region_h);
+    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &floor_gate);
     const float joint_tau = CF_JOINT_TAU;
-    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &joint_tau);
+    dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float), &joint_tau);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, work_size);
     if(cl_err != CL_SUCCESS) goto out;
   }
@@ -634,6 +681,7 @@ out:
   dt_opencl_release_mem_object(clip0);
   dt_opencl_release_mem_object(model_quality);
   dt_opencl_release_mem_object(clip_depth);
+  dt_opencl_release_mem_object(region_worth_dev);
   dt_opencl_release_mem_object(lsb0);
   dt_opencl_release_mem_object(partials);
   dt_opencl_release_mem_object(steer);

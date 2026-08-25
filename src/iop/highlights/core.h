@@ -66,7 +66,7 @@ void _chromaticity_gradient(_hl_region_ctx_t *const ctx);
 // (hl_dome_blend), then a hard clip-floor re-assert. The hue coupling (dome_c = L_dome * r_c) is what
 // stops three per-channel domes drifting the hue -- the failure that kept the per-channel ancestor off.
 cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem model_quality,
-                          cl_mem clip0, cl_mem depth, const int region_w, const int region_h, const float cf_sigma,
+                          cl_mem clip0, cl_mem depth, cl_mem region_worth, const int region_w, const int region_h, const float cf_sigma,
                           const float reg_radius, const int ds_shared, const float floor_gate,
                           const dt_dev_pixelpipe_t *pipe);
 

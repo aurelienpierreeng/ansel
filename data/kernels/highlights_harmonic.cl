@@ -1070,6 +1070,78 @@ hl_hf_damp(global float *estimate, global const float *valid, global const float
 // How much the joint floor's chromaticity rescue is worth at this pixel, in [0,1]. Mirrors the CPU
 // _hl_floor_worth (highlights/common.h) -- any change here must be mirrored there. CF_JOINT_TAU
 // arrives as an argument rather than a #define so the two cannot drift apart silently.
+// Region-level worth of the joint floor, stage 1: per-workgroup partial sums of BOTH floor
+// candidates' per-channel totals over the clipped pixels, replicating the CPU _cf_reconstruct
+// pass 1 (soft-floor candidate math) exactly. Stage 2 (hl_region_worth_finalize) turns the
+// partials into ONE scalar the floor kernels read -- nothing crosses the bus.
+kernel void
+hl_region_benefit(global const float *estimate, global const float *valid, global const float *clip0,
+                  global float *partial, const int n_pixels, local float *scratch)
+{
+  const int gid = get_global_id(0), gsz = get_global_size(0);
+  const int lid = get_local_id(0), lsz = get_local_size(0);
+  float acc[6] = { 0.f, 0.f, 0.f, 0.f, 0.f, 0.f };
+  for(int i = gid; i < n_pixels; i += gsz)
+  {
+    const int nc = (valid[i * 4 + 0] < 0.5f) + (valid[i * 4 + 1] < 0.5f) + (valid[i * 4 + 2] < 0.5f);
+    if(nc == 0) continue;
+    float lift = 1.f;
+    for(int c = 0; c < 3; c++)
+      if(valid[i * 4 + c] < 0.5f)
+      {
+        const float e = fmax(estimate[i * 4 + c], 1e-6f);
+        const float c0 = clip0[i * 4 + c];
+        const float d = e - c0, wd = 0.02f * fmax(c0, 1e-6f);
+        const float tgt = c0 + 0.5f * (d + sqrt(d * d + wd * wd));
+        lift = fmax(lift, fmin(tgt / e, 8.f));
+      }
+    for(int c = 0; c < 3; c++)
+    {
+      float pc = estimate[i * 4 + c], jt = estimate[i * 4 + c];
+      if(valid[i * 4 + c] < 0.5f)
+      {
+        const float c0 = clip0[i * 4 + c], wd = 0.02f * fmax(c0, 1e-6f);
+        const float d = estimate[i * 4 + c] - c0;
+        pc = c0 + 0.5f * (d + sqrt(d * d + wd * wd));
+        const float lf = fmax(estimate[i * 4 + c], 1e-6f) * lift, dj = lf - c0;
+        jt = c0 + 0.5f * (dj + sqrt(dj * dj + wd * wd));
+      }
+      acc[c] += pc;
+      acc[3 + c] += jt;
+    }
+  }
+  for(int k = 0; k < 6; k++) scratch[lid * 6 + k] = acc[k];
+  barrier(CLK_LOCAL_MEM_FENCE);
+  for(int off = lsz / 2; off > 0; off /= 2)
+  {
+    if(lid < off)
+      for(int k = 0; k < 6; k++) scratch[lid * 6 + k] += scratch[(lid + off) * 6 + k];
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+  if(lid == 0)
+    for(int k = 0; k < 6; k++) partial[get_group_id(0) * 6 + k] = scratch[k];
+}
+
+// Stage 2: one thread folds the partials into region_worth. Mirrors the CPU _hl_region_worth
+// (highlights/common.h) -- the LO/HI thresholds arrive as arguments so the two cannot drift.
+kernel void
+hl_region_worth_finalize(global const float *partial, global float *worth, const int n_groups,
+                         const float lo, const float hi)
+{
+  if(get_global_id(0) != 0) return;
+  double sp0 = 0.0, sp1 = 0.0, sp2 = 0.0, sj0 = 0.0, sj1 = 0.0, sj2 = 0.0;
+  for(int g = 0; g < n_groups; g++)
+  {
+    sp0 += partial[g * 6 + 0]; sp1 += partial[g * 6 + 1]; sp2 += partial[g * 6 + 2];
+    sj0 += partial[g * 6 + 3]; sj1 += partial[g * 6 + 4]; sj2 += partial[g * 6 + 5];
+  }
+  const float tp = fmax((float)(sp0 + sp1 + sp2), 1e-9f), tj = fmax((float)(sj0 + sj1 + sj2), 1e-9f);
+  const float benefit = fabs((float)sj0 / tj - (float)sp0 / tp) + fabs((float)sj1 / tj - (float)sp1 / tp)
+                        + fabs((float)sj2 / tj - (float)sp2 / tp);
+  const float t = clamp((benefit - lo) / (hi - lo), 0.f, 1.f);
+  worth[0] = t * t * (3.f - 2.f * t);
+}
+
 static float hl_floor_worth(const float chroma_gain, const float joint_tau)
 {
   const float t = clamp(chroma_gain / joint_tau, 0.f, 1.f);
@@ -1078,7 +1150,8 @@ static float hl_floor_worth(const float chroma_gain, const float joint_tau)
 
 kernel void
 hl_soft_floor(global float *estimate, global const float *valid, global const float *clip0,
-              const int width, const int height, const float floor_gate, const float joint_tau)
+              global const float *region_worth, const int width, const int height, const float floor_gate,
+              const float joint_tau)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -1127,7 +1200,7 @@ hl_soft_floor(global float *estimate, global const float *valid, global const fl
   sum_j = fmax(sum_j, 1e-9f);
   float chroma_gain = 0.f;
   for(int c = 0; c < 3; c++) chroma_gain += fabs(joint_v[c] / sum_j - per_chan_v[c] / sum_p);
-  const float w = floor_gate * hl_floor_worth(chroma_gain, joint_tau);
+  const float w = floor_gate * region_worth[0] * hl_floor_worth(chroma_gain, joint_tau);
   for(int c = 0; c < 3; c++)
     if(valid[i * 4 + c] < 0.5f)
       estimate[i * 4 + c] = per_chan_v[c] + w * (joint_v[c] - per_chan_v[c]);
@@ -1138,7 +1211,8 @@ hl_soft_floor(global float *estimate, global const float *valid, global const fl
 // floor. JOINT form (see hl_soft_floor / the CPU Step-5 floor for the rationale).
 kernel void
 hl_hard_floor(global float *estimate, global const float *valid, global const float *clip0,
-              const int width, const int height, const float floor_gate, const float joint_tau)
+              global const float *region_worth, const int width, const int height, const float floor_gate,
+              const float joint_tau)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -1177,7 +1251,7 @@ hl_hard_floor(global float *estimate, global const float *valid, global const fl
   sum_j = fmax(sum_j, 1e-9f);
   float chroma_gain = 0.f;
   for(int c = 0; c < 3; c++) chroma_gain += fabs(joint_v[c] / sum_j - per_chan_v[c] / sum_p);
-  const float w = floor_gate * hl_floor_worth(chroma_gain, joint_tau);
+  const float w = floor_gate * region_worth[0] * hl_floor_worth(chroma_gain, joint_tau);
   for(int c = 0; c < 3; c++)
     if(valid[i * 4 + c] < 0.5f)
       estimate[i * 4 + c] = per_chan_v[c] + w * (joint_v[c] - per_chan_v[c]);
@@ -1886,31 +1960,25 @@ hl_cgrad_store(global const float *field, global float *shares, const int width,
 // skies) or the blown object is self-coloured and keeps the solver (coloured emitters).
 kernel void
 hl_cgrad_gate(global const float *estimate, global const float *valid, global const float *shares,
-              global const float *clip0, write_only image2d_t gate_src, write_only image2d_t gate_msk,
-              const int width, const int height, const float epsilon, const float gate_tau,
-              const float floor_gate)
+              write_only image2d_t gate_src, write_only image2d_t gate_msk,
+              const int width, const int height, const float epsilon, const float gate_tau)
 {
   const int x = get_global_id(0), y = get_global_id(1);
   if(x >= width || y >= height) return;
   const int i = y * width + x;
   const int n_clip = (valid[i * 4 + 0] < 0.5f) + (valid[i * 4 + 1] < 0.5f) + (valid[i * 4 + 2] < 0.5f);
   float weight_src = 0.f, mask_src = 0.f;
-  // floor-authored 1-clip pixels are not evidence (see the CPU stage): ring votes only where the
-  // fit genuinely spoke
-  int floor_authored = 0;
-  if(n_clip == 1 && floor_gate > 1e-6f) // WB'd clips only (see the CPU stage)
+  // The field is validated against the pixel's MEASURED channels, never against the solver -- see
+  // the CPU stage for the rationale and measurements. Mirror of _chromaticity_gradient's gate;
+  // any change here must be mirrored there and re-validated with HL_CGRADCL_TEST.
+  if(n_clip == 1)
   {
     const int cc = (valid[i * 4 + 0] < 0.5f) ? 0 : ((valid[i * 4 + 1] < 0.5f) ? 1 : 2);
-    floor_authored = estimate[i * 4 + cc] <= 1.03f * fmax(clip0[i * 4 + cc], 1e-9f);
-  }
-  if(n_clip == 1 && !floor_authored)
-  {
-    const float lum = fmax(estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2], epsilon);
-    const float share_sum = fmax(shares[i * 4 + 0] + shares[i * 4 + 1] + shares[i * 4 + 2], epsilon);
-    float err = 0.f;
-    for(int c = 0; c < 3; c++)
-      err += fabs(shares[i * 4 + c] / share_sum - estimate[i * 4 + c] / lum);
-    const float t = err / gate_tau;
+    const int m1 = (cc == 0) ? 1 : 0, m2 = (cc == 2) ? 1 : 2;
+    const float msum = estimate[i * 4 + m1] + estimate[i * 4 + m2];
+    const float meas = estimate[i * 4 + m1] / fmax(msum, epsilon);
+    const float fld = shares[i * 4 + m1] / fmax(shares[i * 4 + m1] + shares[i * 4 + m2], epsilon);
+    const float t = (meas - fld) / (0.5f * gate_tau); // 2-channel share: half the 3-channel scale
     weight_src = exp(-t * t);
     mask_src = 1.f;
   }

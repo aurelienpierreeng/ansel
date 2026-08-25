@@ -1388,6 +1388,54 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
   // clips, the approved unit-WB behavior) the per-channel path runs verbatim.
   const float floor_gate = ctx->floor_gate;
 
+  // Pass 1: what does the joint form buy this REGION as a whole? (see _hl_region_worth) The choice
+  // is uniform across the zone because a spatial blend between the two floors prints magenta
+  // wherever the per-channel side dominates.
+  float region_worth = 1.f;
+  ctx->region_worth = 1.f;
+  if(floor_gate > 1e-6f)
+  {
+    float sp0 = 0.f, sp1 = 0.f, sp2 = 0.f, sj0 = 0.f, sj1 = 0.f, sj2 = 0.f;
+    HL_PFOR(reduction(+ : sp0, sp1, sp2, sj0, sj1, sj2))
+    for(size_t i = 0; i < region_pixels; i++)
+    {
+      const int n_clip
+          = (valid[i * 4 + 0] < 0.5f) + (valid[i * 4 + 1] < 0.5f) + (valid[i * 4 + 2] < 0.5f);
+      if(n_clip == 0) continue;
+      float lift = 1.f;
+      for(int c = 0; c < 3; c++)
+        if(valid[i * 4 + c] < 0.5f)
+        {
+          const float e = fmaxf(estimate[i * 4 + c], 1e-6f);
+          const float c0 = clip0[i * 4 + c];
+          const float dd = e - c0, wd = 0.02f * fmaxf(c0, 1e-6f);
+          const float tgt = c0 + 0.5f * (dd + sqrtf(dd * dd + wd * wd));
+          lift = fmaxf(lift, fminf(tgt / e, 8.f));
+        }
+      float pc[3], jt[3];
+      for(int c = 0; c < 3; c++)
+      {
+        pc[c] = jt[c] = estimate[i * 4 + c];
+        if(valid[i * 4 + c] >= 0.5f) continue;
+        const float c0 = clip0[i * 4 + c], wd = 0.02f * fmaxf(c0, 1e-6f);
+        const float dd = estimate[i * 4 + c] - c0;
+        pc[c] = c0 + 0.5f * (dd + sqrtf(dd * dd + wd * wd));
+        const float lf = fmaxf(estimate[i * 4 + c], 1e-6f) * lift, dj = lf - c0;
+        jt[c] = c0 + 0.5f * (dj + sqrtf(dj * dj + wd * wd));
+      }
+      sp0 += pc[0]; sp1 += pc[1]; sp2 += pc[2];
+      sj0 += jt[0]; sj1 += jt[1]; sj2 += jt[2];
+    }
+    const float tp = fmaxf(sp0 + sp1 + sp2, 1e-9f), tj = fmaxf(sj0 + sj1 + sj2, 1e-9f);
+    const float benefit = fabsf(sj0 / tj - sp0 / tp) + fabsf(sj1 / tj - sp1 / tp)
+                          + fabsf(sj2 / tj - sp2 / tp);
+    region_worth = _hl_region_worth(benefit);
+    ctx->region_worth = region_worth; // every floor site in this region reuses the same decision
+    if(getenv("HL_REGION_W"))
+      dt_print(DT_DEBUG_ALWAYS, "[hl regionw] px=%zu benefit=%.6f region_worth=%.4f\n", region_pixels,
+               benefit, region_worth);
+  }
+
   HL_PFOR()
   for(size_t i = 0; i < region_pixels; i++)
   {
@@ -1448,7 +1496,9 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
     sum_j = fmaxf(sum_j, 1e-9f);
     float chroma_gain = 0.f;
     for(int c = 0; c < 3; c++) chroma_gain += fabsf(joint_v[c] / sum_j - per_chan_v[c] / sum_p);
-    const float w = floor_gate * _hl_floor_worth(chroma_gain);
+    // per-pixel gain still modulates WITHIN the region's uniform decision: where the two
+    // candidates agree the per-channel floor is kept verbatim, which prints nothing either way.
+    const float w = floor_gate * region_worth * _hl_floor_worth(chroma_gain);
     for(int c = 0; c < 3; c++)
       if(valid[i * 4 + c] < 0.5f)
         estimate[i * 4 + c] = per_chan_v[c] + w * (joint_v[c] - per_chan_v[c]);
