@@ -20,12 +20,8 @@
 
 #include "common/conf.h"          // dt_conf_get_string(), dt_conf_set_string()
 #include "common/l10n.h"          // dt_l10n_get_global(), dt_l10n_get_current_code()
-#include "develop/develop.h"      // dt_dev_get_global(), dev->iop
-#include "develop/imageop.h"      // dt_iop_module_t
-#include "develop/imageop_gui.h"  // dt_iop_module_gui_t, module->gui->expander
 #include "gui/application.h"      // dt_gui_get_ui(), dt_gui_main_window()
 #include "gui/window_manager.h"   // dt_ui_t, dt_ui_center_base(), DT_UI_PANEL_*
-#include "libs/lib.h"             // dt_lib_get_global(), dt_lib_module_t
 #include "system/macros.h"        // IS_NULL_PTR
 #include "system/mem_alloc.h"     // dt_free
 #include "widgets/bauhaus.h"      // DT_IS_BAUHAUS_WIDGET(), dt_bauhaus_widget_get_label()
@@ -508,6 +504,37 @@ static void _append_row(GtkTreeIter *parent, GtkWidget *target, const char *labe
 }
 
 
+/* Registered module inventories. Filled from src/darktable.c -- see the header for why the
+ * panel cannot look the modules up itself. Sections appear in registration order. */
+typedef struct _doc_source_t
+{
+  gchar *section;
+  dt_gui_doc_screenshot_source_t fill;
+} _doc_source_t;
+
+static GList *_sources = NULL; // _doc_source_t*, owned here, alive for the process
+
+void dt_gui_doc_screenshot_register_source(const char *section, dt_gui_doc_screenshot_source_t source)
+{
+  if(IS_NULL_PTR(section) || IS_NULL_PTR(source)) return;
+
+  _doc_source_t *entry = (_doc_source_t *)g_malloc0(sizeof(_doc_source_t));
+  entry->section = g_strdup(section);
+  entry->fill = source;
+  _sources = g_list_append(_sources, entry);
+}
+
+/** The sink a source calls back into, once per widget. @p inventory is the section iterator
+ * handed to the source; the name is copied into the widget-to-name table the capture and the
+ * file naming both read. */
+void dt_gui_doc_screenshot_add_target(void *inventory, GtkWidget *widget, const char *name)
+{
+  if(IS_NULL_PTR(inventory) || IS_NULL_PTR(widget) || IS_NULL_PTR(name)) return;
+
+  g_hash_table_insert(_g.names, widget, g_strdup(name));
+  _append_row((GtkTreeIter *)inventory, widget, NULL, 0);
+}
+
 /** Append a top-level grouping row. It captures nothing: it is a way in, not a target. */
 static void _append_section(const char *title, GtkTreeIter *section)
 {
@@ -684,33 +711,15 @@ static void _populate(GtkWidget *widget, gpointer user_data)
   dt_ui_t *const ui = dt_gui_get_ui();
   GtkTreeIter section;
 
-  // Tool modules of every view: the ones belonging to the view we are not in are unmapped,
-  // so they show up greyed out instead of disappearing from the inventory.
-  _append_section(_("Tool modules"), &section);
-  for(GList *item = dt_lib_get_global()->plugins; item; item = g_list_next(item))
+  // Module inventories, in registration order. The panel does not know what a module is --
+  // see dt_gui_doc_screenshot_register_source() and its callers in src/darktable.c. The
+  // sections are appended even when a source yields nothing, so the inventory reads the same
+  // whichever view is current: the darkroom list is only populated while an image is open.
+  for(GList *item = _sources; item; item = g_list_next(item))
   {
-    dt_lib_module_t *module = (dt_lib_module_t *)item->data;
-    GtkWidget *target = IS_NULL_PTR(module->expander) ? module->widget : module->expander;
-    if(IS_NULL_PTR(target) || IS_NULL_PTR(module->common_fields.name)) continue;
-
-    g_hash_table_insert(_g.names, target, g_strdup(module->common_fields.name));
-    _append_row(&section, target, NULL, 0);
-  }
-
-  // Darkroom modules: this list is only populated while an image is open in darkroom.
-  _append_section(_("Darkroom modules"), &section);
-  for(GList *item = dt_dev_get_global()->iop; item; item = g_list_next(item))
-  {
-    dt_iop_module_t *module = (dt_iop_module_t *)item->data;
-    if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->expander)) continue;
-
-    // Several instances of the same module share a name: keep them apart in the tree, and
-    // therefore in the file names too.
-    gchar *label = (module->multi_name[0] != '\0')
-                       ? g_strdup_printf("%s (%s)", module->common_fields.name, module->multi_name)
-                       : g_strdup(module->common_fields.name);
-    g_hash_table_insert(_g.names, module->gui->expander, label); // the table owns it now
-    _append_row(&section, module->gui->expander, NULL, 0);
+    const _doc_source_t *const src = (const _doc_source_t *)item->data;
+    _append_section(src->section, &section);
+    src->fill(&section);
   }
 
   // Named before use, so drilling down into the window finds them under these names too.
