@@ -39,9 +39,30 @@
 const dt_noiseprofile_t dt_noiseprofile_generic = {N_("generic poissonian"), "", "", 0, {0.0001f, 0.0001f, 0.0001}, {0.0f, 0.0f, 0.0f}};
 static GMutex _noiseprofiles_parser_mutex;
 
+/* The parsed noiseprofiles.json, module-owned and LAZY.
+ *
+ * Parsing and verifying the JSON costs ~60 ms -- measured as the single largest item of
+ * dt_init(), over half of a warm ansel-cli startup -- and its only consumer is
+ * dt_noiseprofile_get_matching(), which the denoise IOPs call when a module actually needs
+ * a profile for an image. So the file is read on the first such call, under the same mutex
+ * that already serializes every walk of the parser tree, and a process that never opens a
+ * denoise module (every plain CLI export) never reads it at all.
+ *
+ * _parser_tried keeps a missing or invalid file from being re-parsed on every lookup:
+ * one attempt, then the NULL answer is as final as a parsed tree. */
+static JsonParser *_noiseprofiles_parser = NULL;
+static gboolean _noiseprofiles_tried = FALSE;
+static char *_noiseprofiles_alternative = NULL; // --noiseprofiles override, owned here
+
+void dt_noiseprofile_set_path(const char *alternative)
+{
+  dt_free(_noiseprofiles_alternative);
+  _noiseprofiles_alternative = g_strdup(alternative);
+}
+
 static gboolean dt_noiseprofile_verify(JsonParser *parser);
 
-JsonParser *dt_noiseprofile_init(const char *alternative)
+static JsonParser *_noiseprofile_load(const char *alternative)
 {
   GError *error = NULL;
   char filename[DT_PATH_MAX] = { 0 };
@@ -234,21 +255,44 @@ end:
 }
 #undef _ERROR
 
+// Callers hold _noiseprofiles_parser_mutex.
+static JsonParser *_get_parser_locked(void)
+{
+  if(!_noiseprofiles_tried)
+  {
+    _noiseprofiles_tried = TRUE;
+    _noiseprofiles_parser = _noiseprofile_load(_noiseprofiles_alternative);
+  }
+  return _noiseprofiles_parser;
+}
+
+void dt_noiseprofile_cleanup(void)
+{
+  g_mutex_lock(&_noiseprofiles_parser_mutex);
+  if(_noiseprofiles_parser) g_object_unref(_noiseprofiles_parser);
+  _noiseprofiles_parser = NULL;
+  _noiseprofiles_tried = FALSE;
+  dt_free(_noiseprofiles_alternative);
+  g_mutex_unlock(&_noiseprofiles_parser_mutex);
+}
+
 GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
 {
-  JsonParser *parser = dt_noiseprofile_get_parser_global();
   JsonReader *reader = NULL;
   GList *result = NULL;
   gboolean parser_locked = FALSE;
 
   if(IS_NULL_PTR(cimg)) goto end;
   if(cimg->camera_maker[0] == '\0' || cimg->camera_model[0] == '\0') goto end;
-  if(IS_NULL_PTR(parser)) goto end;
 
   // Json-glib parser/tree access is shared process-wide and not re-entrant.
-  // Serialize lookup while creating and walking readers from the global parser.
+  // Serialize lookup while creating and walking readers from the global parser --
+  // including the lazy first parse itself.
   g_mutex_lock(&_noiseprofiles_parser_mutex);
   parser_locked = TRUE;
+
+  JsonParser *parser = _get_parser_locked();
+  if(IS_NULL_PTR(parser)) goto end;
 
   JsonNode *root = json_parser_get_root(parser);
   if(IS_NULL_PTR(root)) goto end;
