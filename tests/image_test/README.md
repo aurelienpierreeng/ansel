@@ -8,37 +8,39 @@ few DNGs) and it validates that each one still exports.
 
 Run results are **not** part of this repository (see `.gitignore` in this directory) -- but
 the raws, and the shared regression baseline, live in a **shared team bank**: the private
-submodule at `tests/image_test/samples/` (https://github.com/aurelienpierreeng/ansel-test,
-raws via Git LFS, baseline PNGs committed directly since they're small).
+repo https://github.com/aurelienpierreeng/ansel-test (raws via Git LFS, baseline PNGs
+committed directly since they're small), which team members clone into
+`tests/image_test/samples/`.
 
-## Setup (once)
-
-```sh
-git submodule update --init --checkout tests/image_test/samples
-```
-
-That's it -- `tests/image_test.sh` uses this shared bank automatically once it's checked out
-(needs `git-lfs` installed: `sudo apt install git-lfs && git lfs install`, once per machine).
-
-This submodule is registered with `update = none` and `active = false` in `.gitmodules`, so
-it's opt-in: a plain `git submodule update --init --recursive` (the common blanket setup
-command, also used by CI) or `git clone --recurse-submodules`/`git pull --recurse-submodules`
-skips it silently instead of trying to pull this private repo. Fetching it always requires the
-explicit `--checkout` invocation above.
-
-Once you've opted in this way, it stays checked out, and a later plain `git pull
---recurse-submodules` *will* fast-forward it to whatever commit the superproject has pinned
--- that's intentional, it's how you pick up shared baseline updates. To sync it right away
-instead of waiting for your next pull, run the same command as initial setup minus `--init`
-(already registered, so not needed, but harmless to keep):
+## Setup (once, team members only)
 
 ```sh
-git submodule update --checkout tests/image_test/samples
+git clone https://github.com/aurelienpierreeng/ansel-test.git tests/image_test/samples
 ```
 
-If you want your local checkout to stop tracking it even after opting in, override it
-per-machine with `git config submodule.tests/image_test/samples.active false` (not committed
--- this only applies to your own clone).
+That's it -- `tests/image_test.sh` picks the bank up automatically from that path (needs
+`git-lfs` installed: `sudo apt install git-lfs && git lfs install`, once per machine). To
+refresh it later, `git -C tests/image_test/samples pull`.
+
+### Why a plain clone and not a submodule
+
+It used to be a submodule, and that was a mistake: the bank is **private** while `ansel` is
+public, so every outside contributor's clone carried a submodule they cannot fetch. Git has
+no committable way out of that. Two knobs look like one and are not:
+
+- `update = none` **in `.gitmodules`** does work, and covers `git submodule update` in every
+  form (`--init`, `--force`, `--remote`) as well as `git clone --recurse-submodules` -- which
+  is what CI uses through `actions/checkout`.
+- `git pull --recurse-submodules` ignores `update` entirely. It honours only
+  `submodule.<name>.active`, and git reads that key **exclusively from the repository config**,
+  never from `.gitmodules` -- so it cannot be committed. Worse, `git submodule update --init`
+  (with no path argument) silently resets it back to `true`, undoing any local opt-out.
+
+So a private submodule always leaves at least one command that fails with `Authentication
+failed` for everyone without access, and nothing in the repository can prevent it. Keeping the
+bank as an ordinary gitignored clone removes the failure mode outright, at the cost of the
+pinned commit: the bank is now whatever you last pulled, so pull it before trusting a baseline
+comparison.
 
 To use your own raws instead (or on top of it), point at any local folder:
 
@@ -48,7 +50,7 @@ tests/image_test.sh --bank /path/to/your/raw/folder      # or one-off, via $ANSE
 ```
 
 An explicit `--bank`/`configure`/`$ANSEL_IMAGE_TEST` always takes priority over the shared
-submodule bank.
+team bank.
 
 Raws are found recursively by extension (cr2, cr3, nef, arw, raf, rw2, dng, ...). Drop a
 `<file>.xmp` sidecar next to a raw (same convention as darkroom/`ansel-cli`) to exercise a
@@ -61,7 +63,7 @@ to share with the team (your own shots, or samples licensed for it -- no persona
 that aren't meant to be redistributed). See its own README for the contribution steps
 (`git lfs track` any new extension before committing it, `<Make>/<Model>/` layout). GitHub's
 free LFS quota is 10 GiB storage + 10 GiB bandwidth/month pooled on the owning account, and
-every `git submodule update` a teammate runs spends bandwidth against it -- keep the bank
+every clone or pull a teammate runs spends bandwidth against it -- keep the bank
 reasonably sized, and don't wire it into CI (this is a local/dev-only tool by design).
 
 ## Usage
@@ -105,8 +107,9 @@ tests/image_test.sh --strict-cpu      # zero-tolerance: fail on any drift, even 
 ```
 
 When using the shared team bank, the baseline lives at `tests/image_test/samples/baseline/`
--- committed in the `ansel-test` submodule and visually reviewed before being pushed, so
-every dev compares against the exact same reference. `update-baseline` always exports at a
+-- committed in the `ansel-test` repo and visually reviewed before being pushed, so every dev
+compares against the exact same reference (pull the bank first: nothing pins it to a commit
+from this side any more). `update-baseline` always exports at a
 fixed **1024x1024** for this baseline (`--width`/`--height` are ignored, with a warning) --
 comparing at any other size is a guaranteed size-mismatch failure, not a real regression, so
 don't override them for a `run` you intend to compare against it either. A personal/local bank

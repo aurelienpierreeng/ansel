@@ -1,3 +1,7 @@
+# Shared team bank: a plain clone of the private ansel-test repo, not a submodule --
+# see README.md. Private, so it must never be a submodule of the public superproject:
+# git would try to fetch it for everyone and fail on authentication.
+samples/
 bank_path.conf
 results/
 baseline/

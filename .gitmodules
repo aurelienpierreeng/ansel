@@ -18,11 +18,6 @@
 [submodule "src/external/sentry-native"]
 	path = src/external/sentry-native
 	url = https://github.com/getsentry/sentry-native.git
-[submodule "tests/image_test/samples"]
-	path = tests/image_test/samples
-	url = https://github.com/aurelienpierreeng/ansel-test.git
-	update = none
-	active = false
 [submodule "src/external/LensSerious"]
 	path = src/external/LensSerious
 	url = https://github.com/aurelienpierreeng/LensSerious.git

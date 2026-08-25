@@ -71,7 +71,7 @@ if [ -n "$repo_root" ]; then
   fi
 
   # Quick image test smoke test (tests/image_test.sh): local only, uses the shared
-  # team bank (git submodule at tests/image_test/samples) if it's checked out, a
+  # team bank (a gitignored clone at tests/image_test/samples) if it's present, a
   # personal bank (tests/image_test.sh configure <dir> / $ANSEL_IMAGE_TEST) otherwise.
   # No-ops instantly if neither is available. --strict fails on any delta-E vs baseline,
   # not just dE > 2.3. --keep leaves tests/image_test/results/ (per-image logs, including
