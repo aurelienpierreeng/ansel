@@ -48,6 +48,12 @@ struct dt_l10n_t *dt_l10n_get_global(void);
 
 const char *dt_l10n_get_current_lang(dt_l10n_t *l10n);
 
+/** ISO code of the language the GUI currently runs in -- "fr" for fr_FR, "de" for de_AT --
+ * or "C" when running untranslated. This is the machine-readable half of the pair:
+ * dt_l10n_get_current_lang() returns the human-readable name shown in preferences
+ * ("Francais (fr_FR)"), which is not usable as a file name suffix or a URL segment. */
+const char *dt_l10n_get_current_code(dt_l10n_t *l10n);
+
 const char *dt_l10n_get_name(const dt_l10n_language_t *language);
 
 #endif // DT_COMMON_L10N_H

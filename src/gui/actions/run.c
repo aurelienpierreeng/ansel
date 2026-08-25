@@ -26,6 +26,7 @@
 #include "control/jobs.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
+#include "gui/actions/doc_screenshot.h"
 #include "gui/application.h"
 #include "gui/dtgtk/thumbnail.h"
 #include "gui/dtgtk/thumbtable.h"
@@ -202,6 +203,12 @@ static gboolean clear_image_cache(GtkAccelGroup *group, GObject *acceleratable, 
   return TRUE;
 }
 
+static gboolean doc_screenshot_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  dt_gui_doc_screenshot_window_show();
+  return TRUE;
+}
+
 MAKE_ACCEL_WRAPPER(dt_control_write_sidecar_files)
 MAKE_ACCEL_WRAPPER(dt_image_local_copy_synch)
 
@@ -235,4 +242,12 @@ void append_run(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_sub_menu_entry(menus, lists, _("Synchronize developments from database to XMP"), index, NULL, GET_ACCEL_WRAPPER(dt_control_write_sidecar_files), NULL, NULL, has_active_images, 0, 0);
   add_menu_separator(menus[index]);
   add_sub_menu_entry(menus, lists, _("Resynchronize local copies with distant XMP"), index, NULL, GET_ACCEL_WRAPPER(dt_image_local_copy_synch), NULL, NULL, NULL, 0, 0);
+
+  // Documentation mode: the capture panel is only offered when the application was started
+  // with --doc, so a regular user never sees an entry that only serves the manual.
+  if(dt_gui_doc_screenshot_enabled())
+  {
+    add_menu_separator(menus[index]);
+    add_sub_menu_entry(menus, lists, _("Capture widget screenshots..."), index, NULL, doc_screenshot_callback, NULL, NULL, NULL, 0, 0);
+  }
 }

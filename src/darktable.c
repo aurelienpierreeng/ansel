@@ -167,6 +167,7 @@
 #include "develop/supervisor.h"
 
 #include "gui/application.h"
+#include "gui/actions/doc_screenshot.h"
 #include "develop/gui_throttle.h"
 #include "gui/guides.h"
 #include "gui/presets.h"
@@ -282,6 +283,7 @@ static int usage(const char *argv0)
 #ifdef HAVE_OPENCL
   printf("  --disable-opencl\n");
 #endif
+  printf("  --doc [documentation directory]\n");
   printf("  -h, --help");
 #ifdef _WIN32
   printf(", /?");
@@ -1234,6 +1236,22 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
         exclude_opencl = TRUE;
 #endif
         argv[k] = NULL;
+      }
+      else if(!strcmp(argv[k], "--doc"))
+      {
+        // Documentation mode: unlocks the widget-screenshot panel in the "Run" menu. Both
+        // the flag and the directory belong to that module, the only thing that reads them
+        // back. The optional directory is the root of the documentation tree to write into.
+        //
+        // It is consumed only when it really is an existing directory, so that
+        // `ansel --doc IMG_1234.RAW` still opens the raw file rather than swallowing it.
+        argv[k] = NULL;
+        if(argc > k + 1 && !IS_NULL_PTR(argv[k + 1]) && g_file_test(argv[k + 1], G_FILE_TEST_IS_DIR))
+        {
+          dt_gui_doc_screenshot_set_directory(argv[++k]);
+          argv[k] = NULL;
+        }
+        dt_gui_doc_screenshot_enable();
       }
       else if(!strcmp(argv[k], "--debug"))
       {

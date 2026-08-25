@@ -460,6 +460,18 @@ const char *dt_l10n_get_current_lang(dt_l10n_t *l10n)
 }
 
 
+const char *dt_l10n_get_current_code(dt_l10n_t *l10n)
+{
+  // The list is only built in GUI mode (dt_l10n_init(init_list)); headless callers get the
+  // untranslated default rather than a walk off the end of an empty list.
+  const dt_l10n_language_t *language
+      = (const dt_l10n_language_t *)g_list_nth_data(l10n->languages, l10n->selected);
+  if(IS_NULL_PTR(language)) return "C";
+
+  return language->base_code ? language->base_code : language->code;
+}
+
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
