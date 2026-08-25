@@ -1454,8 +1454,8 @@ hl_core_floor(global float *dome_lum, global const uchar *hole, global const flo
 // flat-colour solver target).
 kernel void
 hl_cmean_reduce(global const float *estimate, global const float *valid, global const float *luminance,
-                global float4 *partial, const int n_pixels, const float epsilon, const float lum_min,
-                local float4 *scratch)
+                global float4 *partial, const int n_pixels, const float epsilon,
+                global const float *lum_min_buf, local float4 *scratch)
 {
   const int global_id = get_global_id(0);
   const int global_size = get_global_size(0);
@@ -1465,7 +1465,7 @@ hl_cmean_reduce(global const float *estimate, global const float *valid, global 
   float4 accum = (float4)(0.f);
   for(int i = global_id; i < n_pixels; i += global_size)
     if(valid[i * 4 + 0] >= 0.5f && valid[i * 4 + 1] >= 0.5f && valid[i * 4 + 2] >= 0.5f
-       && luminance[i] >= lum_min)
+       && luminance[i] >= lum_min_buf[0])
     {
       const float inv_lum = 1.f / fmax(luminance[i], epsilon);
       accum += (float4)(estimate[i * 4 + 0] * inv_lum, estimate[i * 4 + 1] * inv_lum, estimate[i * 4 + 2] * inv_lum, 1.f);
@@ -1867,8 +1867,70 @@ hl_aniso_reassemble(global float *estimate, global const float *valid_anchor, gl
 // hue trend and is smooth across occluders by construction. Mirrors the CPU _chromaticity_gradient
 // (core.c) -- any change here must be mirrored there and re-validated with HL_CGRADCL_TEST.
 
-// Reduction: per-workgroup partial sums of {luminance, count} over any-clip pixels -- the host
-// turns them into the plateau luminance that gates the anchors.
+// Publish a host-known constant into a device scalar buffer. The value travels as a kernel
+// ARGUMENT (part of the command packet), not as a memory copy, so the GPU path stays transfer-free.
+__kernel void
+hl_set_scalar(global float *out, const float value)
+{
+  if(get_global_id(0) != 0) return;
+  out[0] = value;
+}
+
+// Region-level ring vote, on the device: per-workgroup {weight, mass} partials over the two gate
+// planes. Paired with hl_reduce_finalize (stride 2, mode 1, scale 1) this replaces reading both
+// full planes back to the host just to divide two sums.
+__kernel void
+hl_vote_reduce(read_only image2d_t gate_src, read_only image2d_t gate_msk, global float *partial,
+               const int width, const int height, local float *scratch)
+{
+  const int gid = get_global_id(0), gsz = get_global_size(0);
+  const int lid = get_local_id(0), lsz = get_local_size(0);
+  const int n = width * height;
+  float wsum = 0.f, msum = 0.f;
+  for(int i = gid; i < n; i += gsz)
+  {
+    const int2 p = (int2)(i % width, i / width);
+    wsum += read_imagef(gate_src, sampleri, p).x;
+    msum += read_imagef(gate_msk, sampleri, p).x;
+  }
+  scratch[lid * 2 + 0] = wsum;
+  scratch[lid * 2 + 1] = msum;
+  barrier(CLK_LOCAL_MEM_FENCE);
+  for(int off = lsz / 2; off > 0; off /= 2)
+  {
+    if(lid < off)
+    {
+      scratch[lid * 2 + 0] += scratch[(lid + off) * 2 + 0];
+      scratch[lid * 2 + 1] += scratch[(lid + off) * 2 + 1];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+  if(lid == 0)
+  {
+    partial[get_group_id(0) * 2 + 0] = scratch[0];
+    partial[get_group_id(0) * 2 + 1] = scratch[1];
+  }
+}
+
+// Stage-2 of a two-stage reduction: sum `n_groups` stride-`stride` partials and publish ONE scalar
+// to device memory, so the value never crosses the bus. `mode` 0 = plain sum of lane 0; 1 = mean of
+// lane 0 over lane 1 (sum/count) scaled by `scale`, 0 when the count is 0.
+__kernel void
+hl_reduce_finalize(global const float *partial, global float *result, const int n_groups,
+                   const int stride, const int mode, const float scale)
+{
+  if(get_global_id(0) != 0) return;
+  double a = 0.0, b = 0.0;
+  for(int g = 0; g < n_groups; g++)
+  {
+    a += (double)partial[g * stride + 0];
+    if(stride > 1) b += (double)partial[g * stride + 1];
+  }
+  result[0] = (mode == 0) ? (float)a : ((b > 0.0) ? (float)(scale * a / b) : 0.f);
+}
+
+// Reduction: per-workgroup partial sums of {luminance, count} over any-clip pixels; the stage-2
+// finalizer below turns them into the plateau luminance that gates the anchors, on the device.
 kernel void
 hl_cgrad_plateau(global const float *estimate, global const float *valid, global float *partial,
                const int n_pixels, local float *scratch)
@@ -1995,8 +2057,8 @@ hl_cgrad_gate(global const float *estimate, global const float *valid, global co
 kernel void
 hl_cgrad_reproject(global float *estimate, global const float *valid, global const float *clip0,
              global const float *shares, read_only image2d_t gate_wgt, read_only image2d_t gate_nrm,
-             const int width, const int height, const float epsilon, const float gate_vote,
-             const float authored_ramp, const float floor_gate)
+             const int width, const int height, const float epsilon,
+             global const float *gate_vote_buf, const float authored_ramp, const float floor_gate)
 {
   const int x = get_global_id(0), y = get_global_id(1);
   if(x >= width || y >= height) return;
@@ -2024,7 +2086,7 @@ hl_cgrad_reproject(global float *estimate, global const float *valid, global con
 
   // diffused agreement weight, shrunk toward the region-level ring vote as local evidence thins
   const float gate_lambda = 0.05f;
-  const float gate_w = clamp((read_imagef(gate_wgt, sampleri, (int2)(x, y)).x + gate_lambda * gate_vote)
+  const float gate_w = clamp((read_imagef(gate_wgt, sampleri, (int2)(x, y)).x + gate_lambda * gate_vote_buf[0])
                                  / (read_imagef(gate_nrm, sampleri, (int2)(x, y)).x + gate_lambda),
                              0.f, 1.f);
   if(gate_w <= 1e-4f) return;

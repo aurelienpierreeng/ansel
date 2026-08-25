@@ -1067,7 +1067,27 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
     // cmean reduction with lum_min = 0 -- estimate/max(luminance, epsilon) IS the ratios plane
     const int local_size = 64, n_groups = 256;
     const int n_pixels = (int)region_pixels;
-    const float lum_min = 0.f;
+    // lum_min = 0 published into a device scalar (hl_cmean_reduce now takes it by pointer);
+    // the constant rides in the kernel argument, nothing is copied.
+    cl_mem lum_min_zero = dt_opencl_alloc_device_buffer(devid, sizeof(float));
+    if(!lum_min_zero)
+    {
+      cl_err = DT_OPENCL_DEFAULT_ERROR;
+      goto out;
+    }
+    {
+      const int setk = global_data->kernel_hl_set_scalar;
+      const float zero = 0.f;
+      dt_opencl_set_kernel_arg(devid, setk, 0, sizeof(cl_mem), &lum_min_zero);
+      dt_opencl_set_kernel_arg(devid, setk, 1, sizeof(float), &zero);
+      size_t one[3] = { 1, 1, 1 };
+      cl_err = dt_opencl_enqueue_kernel_2d(devid, setk, one);
+      if(cl_err != CL_SUCCESS)
+      {
+        dt_opencl_release_mem_object(lum_min_zero);
+        goto out;
+      }
+    }
     cl_mem target_partials = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * n_groups);
     if(!target_partials)
     {
@@ -1083,7 +1103,7 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
     dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &target_partials);
     dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &n_pixels);
     dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &epsilon);
-    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &lum_min);
+    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(cl_mem), &lum_min_zero);
     dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float) * 4 * local_size, NULL);
     cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, sizes, local);
     float partial_host[4 * 256];
@@ -1091,6 +1111,7 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
       cl_err = dt_opencl_read_buffer_from_device(devid, partial_host, target_partials, 0,
                                                  sizeof(float) * 4 * n_groups, CL_TRUE);
     dt_opencl_release_mem_object(target_partials);
+    dt_opencl_release_mem_object(lum_min_zero);
     if(cl_err != CL_SUCCESS) goto out;
     double accum[4] = { 0.0, 0.0, 0.0, 0.0 };
     for(int group = 0; group < n_groups; group++)

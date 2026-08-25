@@ -602,6 +602,9 @@ typedef struct dt_iop_highlights_global_data_t
   int kernel_hl_cgrad_plateau;
   int kernel_hl_region_benefit;
   int kernel_hl_region_worth_finalize;
+  int kernel_hl_reduce_finalize;
+  int kernel_hl_set_scalar;
+  int kernel_hl_vote_reduce;
   int kernel_hl_cgrad_guard;
   int kernel_hl_cgrad_anchor;
   int kernel_hl_cgrad_share;
