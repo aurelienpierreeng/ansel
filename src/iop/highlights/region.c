@@ -424,6 +424,11 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
   size_t work_size[3] = { ROUNDUPDWD(region_w, devid), ROUNDUPDHT(region_h, devid), 1 };
   dt_gaussian_cl_t *cf_gaussian = NULL;
 
+  // The stage-2 reduction finalizers this needs are compiled only where the fp64 extension
+  // is (data/kernels/highlights_harmonic.cl). Without them the caller falls back to the CPU
+  // twin, the same way the sparse solver and the PDE/aniso stages already do.
+  if(global_data->kernel_hl_region_worth_finalize < 0) return cl_err; // no fp64 device
+
   cl_mem estimate = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
   cl_mem valid = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
   cl_mem clip0 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
