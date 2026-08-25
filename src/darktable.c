@@ -654,11 +654,6 @@ struct dt_dbus_t *dt_dbus_get_global(void)
   return darktable.dbus;
 }
 
-JsonParser *dt_noiseprofile_get_parser_global(void)
-{
-  return darktable.noiseprofile_parser;
-}
-
 struct dt_bauhaus_t *dt_bauhaus_get_global(void)
 {
   return darktable.bauhaus;
@@ -1636,7 +1631,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   omp_set_num_threads(darktable.num_openmp_threads);
 #endif
 
-  darktable.noiseprofile_parser = dt_noiseprofile_init(noiseprofiles_from_command);
+  // noiseprofiles.json is parsed lazily by common/noiseprofiles.c on first lookup;
+  // only the --noiseprofiles override needs to reach it now.
+  if(noiseprofiles_from_command) dt_noiseprofile_set_path(noiseprofiles_from_command);
 
   // The GUI must be initialized before the views, because the init()
   // functions of the views depend on darktable.control->accels_* to register
@@ -2033,11 +2030,7 @@ void dt_cleanup()
     dt_bauhaus_cleanup(darktable.bauhaus);
   }
 
-  if (darktable.noiseprofile_parser)
-  {
-    g_object_unref(darktable.noiseprofile_parser);
-    darktable.noiseprofile_parser = NULL;
-  }
+  dt_noiseprofile_cleanup();
 
   if(init_gui)
   {

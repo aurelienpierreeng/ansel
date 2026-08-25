@@ -108,7 +108,6 @@
 #include "control/signal.h"     // DT_SIGNAL_COUNT sizes the unmuted_signal_dbg array
 
 #include <glib.h>
-#include <json-glib/json-glib.h>
 #include <stdint.h>
 
 /* win/win.h (windows.h/psapi + the #undef of the legacy `near`/`grp2`/`interface`
@@ -117,10 +116,16 @@
  * a MinGW-only breakage, far from its cause. Nothing to do here any more. */
 
 #ifndef _RELEASE
-/* poison.h #pragma-poisons malloc/fopen/... so they cannot be used unqualified. It
- * MUST come after every system header that legitimately declares them -- glib/gstdio.h
- * is included here for exactly that reason, not for the benefit of consumers. */
+/* poison.h #pragma-poisons malloc/fopen/unlink/... so they cannot be used unqualified.
+ * It MUST come after every system header that legitimately declares them --
+ * glib/gstdio.h and unistd.h are included here for exactly that reason, not for the
+ * benefit of consumers. (unistd.h used to arrive by accident through json-glib, whose
+ * include left with the noiseprofiles parser; the poison on unlink then fired inside
+ * any consumer including unistd.h after this header.) */
 #include <glib/gstdio.h>
+#ifndef _WIN32
+#include <unistd.h> // conditional-ok: exists only to land BEFORE poison.h, which is itself conditional on !_RELEASE; nothing outside this block uses it
+#endif
 #include "common/poison.h"
 #endif
 
@@ -176,7 +181,6 @@ typedef struct darktable_t
   // Keep track of optional features that may depend on environnement
   // and compiling options : OpenCL
   GList *capabilities;
-  JsonParser *noiseprofile_parser;
   struct dt_conf_t *conf;
   struct dt_develop_t *develop;
   struct dt_lib_t *lib;
