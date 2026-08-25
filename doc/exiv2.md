@@ -206,8 +206,27 @@ each commented at the site:
 - It installs its archive, headers, pkg-config file, CMake export set and man page. `install()` is
   shadowed for the duration so none of that reaches Ansel's install tree — nor, downstream,
   the AppImage or the Windows installer.
-- It asks for `cmake_minimum_required(VERSION 3.7.2)`, so `CMAKE_POLICY_VERSION_MINIMUM` and
-  `CMAKE_POLICY_DEFAULT_CMP0069` are set around it.
+- It asks for `cmake_minimum_required(VERSION 3.7.2)`, so `CMAKE_POLICY_VERSION_MINIMUM`,
+  `CMAKE_POLICY_DEFAULT_CMP0069` and `CMAKE_POLICY_DEFAULT_CMP0077` are set around it. The last
+  matters most: left OLD, Exiv2's own `option()` calls override the variables we set, and we
+  quietly get a shared library and Exiv2's default option set instead of ours.
+- Three things about the dialect it is compiled in, each of which cost a CI round:
+  - **`-Wno-register`.** C++17 *removed* the `register` keyword. Clang rejects `xmpsdk/src/MD5.cpp`
+    outright where GCC only warns, and neither `-w` nor `-Wno-error` reaches a hard error.
+  - **`CXX_EXTENSIONS ON`**, unlike Ansel's own code. `xmpsdk/include/XMP_Environment.h` picks its
+    platform on `#if defined WIN32` — the unprefixed spelling, which GCC and Clang define only in
+    GNU mode. Under `-std=c++17` a MinGW build falls through to `UNIX_ENV` and `XMPUtils.cpp`
+    reaches for `localtime_r`/`gmtime_r`, which MinGW does not have.
+  - **`_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR`**, on Exiv2's own compilation *and* on the interface.
+    `Image::AutoPtr` **is** `std::auto_ptr<Image>` at every language standard — `config.h`'s
+    `using auto_ptr = std::unique_ptr<T>` sits in the global namespace while all 59 uses write the
+    `std::` qualification. libstdc++ keeps `std::auto_ptr` as deprecated in C++17; libc++ deletes
+    it, so on macOS neither Exiv2 nor `metadata/exif.cc` compiles without it. The macro also
+    restores `unique_ptr`'s converting constructor from `auto_ptr`, which every
+    `std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(...))` in our tree depends on.
+- Its public headers are given to consumers with `INTERFACE_SYSTEM_INCLUDE_DIRECTORIES` (`-isystem`),
+  because Ansel builds with `-Werror` and those `std::auto_ptr` uses are deprecation warnings we
+  cannot fix from here.
 - Its headers typedef `Image::AutoPtr` to `std::auto_ptr` or `std::unique_ptr` depending on
   `__cplusplus`, so the library and every consumer **must** agree on the C++ standard. The block
   sets `CMAKE_CXX_STANDARD 17` explicitly, because `src/CMakeLists.txt` says so further down the

@@ -167,8 +167,22 @@ if(USE_BUNDLED_EXIV2)
   # Clang rejects it outright rather than warning, and neither -w nor -Wno-error reaches a
   # hard error. The Adobe XMP SDK vendored in Exiv2's xmpsdk/ still uses it (MD5.cpp), which
   # is why every Clang and AppleClang job failed here and every GCC one did not.
+  #
+  # ANSEL_EXIV2_AUTO_PTR is the other half of the same story, and it has to reach Exiv2's
+  # three targets AND everything that includes its headers, so it is a flag here and an
+  # INTERFACE definition below. C++17 removed std::auto_ptr; libstdc++ keeps it as
+  # deprecated, libc++ genuinely deletes it, and Exiv2 0.27's public headers name it 59
+  # times -- Image::AutoPtr IS std::auto_ptr<Image>, at every language standard, because
+  # config.h's `using auto_ptr = std::unique_ptr<T>` sits in the global namespace and the
+  # headers all write the std:: qualification. So on macOS neither Exiv2 nor Ansel's own
+  # exif.cc compiles without asking libc++ for it back. The macro also restores
+  # unique_ptr's converting constructor from auto_ptr, which is what our
+  #   std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(...))
+  # call sites rely on. It is a libc++ spelling and a harmless no-op on libstdc++.
+  set(ANSEL_EXIV2_AUTO_PTR _LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR)
+
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -Wno-error")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -Wno-error -Wno-register")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -Wno-error -Wno-register -D${ANSEL_EXIV2_AUTO_PTR}")
 
   # Exiv2 0.27.x asks for cmake_minimum_required(VERSION 3.7.2). Nothing in its build
   # depends on the policies that predates; this only stops CMake 4 from refusing the
@@ -324,6 +338,10 @@ if(USE_BUNDLED_EXIV2)
   # on Exiv2's own compilation only. Without it on our side too, EXIV2API expands to
   # __declspec(dllimport) on Windows and every symbol fails to link.
   target_compile_definitions(exiv2lib PUBLIC exiv2lib_STATIC)
+
+  # And the consumers' half of the std::auto_ptr story explained above: every Ansel
+  # translation unit that includes <exiv2/exiv2.hpp> needs it too, not just Exiv2's own.
+  target_compile_definitions(exiv2lib INTERFACE ${ANSEL_EXIV2_AUTO_PTR})
 
   add_library(Exiv2::Exiv2 ALIAS exiv2lib)
 
