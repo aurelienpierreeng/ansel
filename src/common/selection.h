@@ -74,8 +74,15 @@ struct dt_selection_t;
 struct dt_selection_t *dt_selection_new();
 void dt_selection_free(struct dt_selection_t *selection);
 
-// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the module itself; long-term the handle should be carried on the job/view context (Strategy C).
+// NULL in a GUI-less process (ansel-cli): the selection is lighttable state, created by
+// dt_gui_gtk_init() through dt_selection_init_global(). Every public function here accepts a
+// NULL selection and degrades to a no-op / neutral result, so shared code paths need no guard.
 struct dt_selection_t *dt_selection_get_global(void);
+/** creates the application-wide selection. Called by the GUI bootstrap only. */
+void dt_selection_init_global(void);
+/** frees the application-wide selection. */
+void dt_selection_cleanup_global(void);
 
 /** Get the first imgid of a selection */
 int32_t dt_selection_get_first_id(struct dt_selection_t *selection);

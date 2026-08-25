@@ -629,19 +629,9 @@ dt_pthread_mutex_t *dt_readfile_mutex(void)
 
 
 
-struct dt_selection_t *dt_selection_get_global(void)
-{
-  return darktable.selection;
-}
-
 struct dt_undo_t *dt_undo_get_global(void)
 {
   return darktable.undo;
-}
-
-struct dt_collection_t *dt_collection_get_global(void)
-{
-  return darktable.collection;
 }
 
 struct dt_control_signal_t *dt_control_signal_get_global(void)
@@ -1623,11 +1613,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     dt_film_set_folder_status();
   }
 
-  // initialize collection query
-  darktable.collection = dt_collection_new();
-
-  /* initialize selection */
-  darktable.selection = dt_selection_new();
+  // The collection and selection are lighttable state: dt_gui_gtk_init() creates them.
+  // A GUI-less process (ansel-cli) runs without either -- their modules' public entry
+  // points treat "not created" as a no-op, so shared code needs no guards.
 
   /* capabilities set to NULL */
   darktable.capabilities = NULL;
@@ -1987,8 +1975,8 @@ void dt_cleanup()
   dt_tags_cleanup();
   dt_styles_cleanup();
 
-  dt_collection_free(darktable.collection);
-  dt_selection_free(darktable.selection);
+  dt_collection_cleanup_global(); // no-ops in a GUI-less process: never created there
+  dt_selection_cleanup_global();
 
   // Mipmap cleanup may still consult the image cache for paths.
   dt_mipmap_cache_cleanup();

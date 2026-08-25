@@ -186,8 +186,6 @@ typedef struct darktable_t
   struct dt_gui_gtk_t *gui;
   struct dt_bauhaus_t *bauhaus;
   const struct dt_database_t *db;
-  struct dt_collection_t *collection;
-  struct dt_selection_t *selection;
   struct dt_points_t *points;
   struct dt_imageio_t *imageio;
   struct dt_dbus_t *dbus;

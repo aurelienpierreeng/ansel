@@ -66,6 +66,33 @@ typedef struct dt_selection_t
 
 
 // Signal the GUI that selection got changed and trigger a selected images counter update
+
+/* The application-wide selection.
+ *
+ * Owned HERE, not by darktable_t, and created by the GUI bootstrap (dt_gui_gtk_init()):
+ * a selection is a lighttable concept, and ansel-cli has none -- instantiating it in
+ * dt_init() made every CLI run reload the user's selection from the database for nothing.
+ * In a GUI-less process the accessor returns NULL, and every public entry point below
+ * treats that as "the module is not up" and degrades to a no-op / neutral result, so the
+ * code paths shared with the CLI (tag attach, image removal) need no if(darktable.gui). */
+static dt_selection_t *_selection_global = NULL;
+
+struct dt_selection_t *dt_selection_get_global(void)
+{
+  return _selection_global;
+}
+
+void dt_selection_init_global(void)
+{
+  if(IS_NULL_PTR(_selection_global)) _selection_global = dt_selection_new();
+}
+
+void dt_selection_cleanup_global(void)
+{
+  dt_selection_free(_selection_global);
+  _selection_global = NULL;
+}
+
 static void _update_gui()
 {
   dt_collection_hint_message(dt_collection_get_global());
@@ -75,6 +102,7 @@ static void _update_gui()
 
 int32_t dt_selection_get_first_id(struct dt_selection_t *selection)
 {
+  if(IS_NULL_PTR(selection)) return -1;
   return selection->last_single_id;
 }
 
@@ -113,6 +141,7 @@ static GList *_selection_database_to_glist(dt_selection_t *selection)
 
  void dt_selection_reload_from_database_real(dt_selection_t *selection)
 {
+  if(IS_NULL_PTR(selection)) return;
   _reset_ids_list(selection);
   selection->ids = _selection_database_to_glist(selection);
   selection->length = g_list_length(selection->ids);
@@ -155,6 +184,7 @@ static void _add_id_link(dt_selection_t *selection, int32_t imgid)
 
 GList *dt_selection_get_list(struct dt_selection_t *selection)
 {
+  if(IS_NULL_PTR(selection)) return NULL;
   if(IS_NULL_PTR(selection->ids)) return NULL;
 
   return g_list_copy(selection->ids);
@@ -183,6 +213,7 @@ static void _selection_deselect(dt_selection_t *selection, int32_t imgid)
 
 void dt_selection_push(dt_selection_t *selection)
 {
+  if(IS_NULL_PTR(selection)) return;
   // Backup current selection
   if(!selection->stacked)
   {
@@ -198,6 +229,7 @@ void dt_selection_push(dt_selection_t *selection)
 
 void dt_selection_pop(dt_selection_t *selection)
 {
+  if(IS_NULL_PTR(selection)) return;
   // Restore current selection
   if(selection->stacked)
   {
@@ -227,6 +259,7 @@ dt_selection_t *dt_selection_new()
 
 void dt_selection_free(dt_selection_t *selection)
 {
+  if(IS_NULL_PTR(selection)) return;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_selection_update_collection),
                                      (gpointer)selection);
   g_list_free(selection->ids);
@@ -237,6 +270,7 @@ void dt_selection_free(dt_selection_t *selection)
 
 void dt_selection_clear(dt_selection_t *selection)
 {
+  if(IS_NULL_PTR(selection)) return;
   dt_selection_repository_clear();
   _reset_ids_list(selection);
   _update_gui();
@@ -244,6 +278,7 @@ void dt_selection_clear(dt_selection_t *selection)
 
 void dt_selection_select(dt_selection_t *selection, int32_t imgid)
 {
+  if(IS_NULL_PTR(selection)) return;
   if(imgid == UNKNOWN_IMAGE) return;
   _selection_select(selection, imgid);
   _add_id_link(selection, imgid);
@@ -252,6 +287,7 @@ void dt_selection_select(dt_selection_t *selection, int32_t imgid)
 
 void dt_selection_deselect(dt_selection_t *selection, int32_t imgid)
 {
+  if(IS_NULL_PTR(selection)) return;
   if(imgid == UNKNOWN_IMAGE) return;
   _selection_deselect(selection, imgid);
   _remove_id_link(selection, imgid);
@@ -260,6 +296,7 @@ void dt_selection_deselect(dt_selection_t *selection, int32_t imgid)
 
 void dt_selection_select_single(dt_selection_t *selection, int32_t imgid)
 {
+  if(IS_NULL_PTR(selection)) return;
   if(imgid == UNKNOWN_IMAGE) return;
   dt_selection_clear(selection);
   dt_selection_select(selection, imgid);
@@ -267,6 +304,7 @@ void dt_selection_select_single(dt_selection_t *selection, int32_t imgid)
 
 void dt_selection_toggle(dt_selection_t *selection, int32_t imgid)
 {
+  if(IS_NULL_PTR(selection)) return;
   if(imgid == UNKNOWN_IMAGE) return;
 
   if(g_list_find(selection->ids, GINT_TO_POINTER(imgid)))
@@ -291,6 +329,7 @@ static int32_t _list_iterate(struct dt_selection_t *selection, GList **list, int
 
 void dt_selection_select_list(struct dt_selection_t *selection, const GList *const l)
 {
+  if(IS_NULL_PTR(selection)) return;
   if(IS_NULL_PTR(l)) return;
   GList *list = (GList *)l;
 
@@ -314,6 +353,7 @@ void dt_selection_select_list(struct dt_selection_t *selection, const GList *con
 
 void dt_selection_deselect_list(struct dt_selection_t *selection, const GList *const l)
 {
+  if(IS_NULL_PTR(selection)) return;
   if(IS_NULL_PTR(l)) return;
   GList *list = (GList *)l;
 
@@ -336,6 +376,7 @@ void dt_selection_deselect_list(struct dt_selection_t *selection, const GList *c
 
 gchar *dt_selection_ids_to_string(struct dt_selection_t *selection)
 {
+  if(IS_NULL_PTR(selection)) return NULL;
   // There is no selection even after init, abort
   if(IS_NULL_PTR(selection->ids)) return NULL;
 
@@ -362,6 +403,7 @@ gchar *dt_selection_ids_to_string(struct dt_selection_t *selection)
 
 gboolean dt_selection_is_id_selected(struct dt_selection_t *selection, int32_t imgid)
 {
+  if(IS_NULL_PTR(selection)) return FALSE;
   if(IS_NULL_PTR(selection) || !selection->ids) return FALSE;
   return (g_list_find(selection->ids, GINT_TO_POINTER(imgid)) != NULL);
 }
