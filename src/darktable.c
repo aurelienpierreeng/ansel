@@ -562,16 +562,19 @@ void dt_gui_set_themes(GList *themes)
  *
  * A private lock also keeps this independent of dt_control_t's lifetime, which is freed at
  * darktable.c's teardown while this string is not. */
-/* Statically initialised on purpose, and correct in the _DEBUG build too, where
- * dt_pthread_mutex_t carries ~1.8 kB of instrumentation after the pthread_mutex_t. A
- * brace-enclosed initialiser with fewer initialisers than members zero-fills the remainder
- * (C11 6.7.9p21), and this object has static storage duration anyway, so it lives in .bss --
- * measured: 0 of the 1864 trailing bytes non-zero before first use. That is the same state
- * dt_pthread_mutex_init() leaves (it memsets), minus only the `name' field, which
- * dt_pthread_mutex_lock() snprintf()s over before the one place it reads it.
+/* Static rather than initialised in dt_init() because this string is written from worker
+ * threads: a lock that is valid from program start has no window in which it is not.
  *
- * Static rather than initialised in dt_init() because this string is written from worker
- * threads: a lock that is valid from program start has no window in which it is not. */
+ * dt_pthread_mutex_t now wraps exactly one pthread_mutex_t -- the ~1.8 kB of _DEBUG
+ * instrumentation that used to trail it is gone -- so this initialiser is complete rather
+ * than relying on C11 6.7.9p21 zero-fill for the remainder.
+ *
+ * One consequence: this is one of the two locks in the tree that are NOT recursive.
+ * PTHREAD_MUTEX_INITIALIZER takes no attribute, and there is no portable static recursive
+ * initialiser (glibc hides PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP behind _GNU_SOURCE,
+ * mingw spells it without the _NP, neither is visible here). It guards a strdup and a
+ * pointer swap, calls nothing that could re-enter, and giving up the from-program-start
+ * validity to gain recursion would be the worse trade. See system/dtpthread.h. */
 static dt_pthread_mutex_t _main_message_lock = { PTHREAD_MUTEX_INITIALIZER };
 
 char *dt_get_main_message_copy(void)
