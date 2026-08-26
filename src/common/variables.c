@@ -364,12 +364,6 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     result = g_date_time_format(params->data->time, "%f");
     result[3] = '\0';
   }
-  // for watermark backward compatibility
-  else if(_has_prefix(variable, "DATE"))
-  {
-    dt_datetime_gdatetime_to_exif(exif_datetime, params->data->show_msec ? DT_DATETIME_LENGTH : DT_DATETIME_EXIF_LENGTH, params->data->time);
-    result = g_strdup(exif_datetime);
-  }
   else if(_has_prefix(variable, "IMPORT.DATE") || _has_prefix(variable, "DATE.IMPORT"))
   {
     result = _variables_get_iso_timestamp(params->data->import_timestamp);
@@ -385,6 +379,14 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   else if(_has_prefix(variable, "PRINT.DATE") || _has_prefix(variable, "DATE.PRINT"))
   {
     result = _variables_get_iso_timestamp(params->data->print_timestamp);
+  }
+  // for watermark backward compatibility.
+  // MUST stay after every DATE.* branch above: _has_prefix() is a plain prefix test, so
+  // this one also matches "DATE.IMPORT", "DATE.CHANGE", "DATE.EXPORT" and "DATE.PRINT".
+  else if(_has_prefix(variable, "DATE"))
+  {
+    dt_datetime_gdatetime_to_exif(exif_datetime, params->data->show_msec ? DT_DATETIME_LENGTH : DT_DATETIME_EXIF_LENGTH, params->data->time);
+    result = g_strdup(exif_datetime);
   }
 
   else if(_has_prefix(variable, "EXIF.YEAR.SHORT") || _has_prefix(variable, "EXIF.DATE.SHORT_YEAR"))
