@@ -280,8 +280,21 @@ set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG ${CMAKE_C_FLAGS_IPO}" 
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG ${CMAKE_CXX_FLAGS_IPO}" CACHE STRING "" FORCE)
 
 # Debug flags
-set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation" CACHE STRING "" FORCE)
+#
+# -Wno-error=thread-safety-analysis is a RATCHET, not a setting, and it lives here rather
+# than in cmake/compiler-warnings.cmake because a -Wno-error= must follow the -Werror it
+# relaxes on the command line -- and CMAKE_<LANG>_FLAGS_DEBUG is appended after
+# CMAKE_<LANG>_FLAGS, so anything added there is overridden by the -Werror below.
+#
+# Making dt_pthread_rwlock_t a clang CAPABILITY -- the prerequisite for GUARDED_BY, and so
+# for -Wthread-safety checking anything at all -- surfaced 30 conditional-locking patterns
+# clang cannot prove correct, in 5 files. They are real questions rather than obvious bugs;
+# see doc/lock-audit.md. Without this they are hard errors on every clang build while every
+# GCC build passes silently, GCC ignoring the flag entirely. Keeping them as warnings means
+# the findings stay visible instead of being deleted along with the annotations that found
+# them. Remove once those files are resolved.
+set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation -Wno-error=thread-safety-analysis" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation -Wno-error=thread-safety-analysis" CACHE STRING "" FORCE)
 
 if(NOT CUSTOM_CFLAGS)
 

@@ -234,7 +234,12 @@ typedef struct dt_develop_t
    * history" -- enforced instead of described.
    *
    * A function that legitimately runs with the lock already held by its caller says so with
-   * REQUIRES(history_mutex) rather than being exempted. */
+   * REQUIRES(history_mutex) rather than being exempted -- but on its DEFINITION, not its
+   * declaration. dev_history.h only forward-declares dt_develop_t, and an attribute naming
+   * dev->history_mutex needs the complete type; completing it there would mean including
+   * this header, which includes dev_history.h back. The cycle is not worth the annotation,
+   * and little is lost: GUARDED_BY on the fields below is what actually checks every access,
+   * in every translation unit, whether or not the enclosing function declares a contract. */
   dt_pthread_rwlock_t history_mutex;
 
   // We don't always apply the full history to modules,

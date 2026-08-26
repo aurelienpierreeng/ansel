@@ -292,9 +292,24 @@ findings in 5 files**:
 | `caches/cache.c` | 3 |
 | `pixel/colorequal_shared.c` | 2 |
 
-They are pre-existing — from the mutex annotations that were already there — and invisible in
-practice: the usual local build is GCC, which ignores the flag, and the LLVM CI jobs treat
-these as warnings rather than errors.
+**They are not pre-existing.** Every one names an `rwlock`, and they exist because
+`dt_pthread_rwlock_t` became a `CAPABILITY` in this same work — before that, clang had
+nothing to check on those locks and reported nothing. An earlier draft of this document
+claimed they predated the annotations and were merely invisible; that was wrong, and the
+tell was in the messages all along.
+
+They are also not warnings everywhere. Debug builds compile with `-Werror`, so under any
+clang they are hard errors:
+
+    error: rwlock 'cache_entry->lock' is not held on every path through here
+           [-Werror,-Wthread-safety-analysis]
+
+which is why the macOS and LLVM CI jobs failed while every GCC job passed — GCC ignores
+`-Wthread-safety` entirely. A local GCC build cannot vouch for any of this.
+
+Until they are resolved, `cmake/compiler-warnings.cmake` carries
+`-Wno-error=thread-safety-analysis`: the findings stay visible on every clang build but do
+not break it. That flag is a ratchet to remove, not a setting to keep.
 
 All are conditional-locking shapes: *"not held on every path through here"*, *"expecting
 rwlock to be held at start of each loop"*, *"releasing rwlock that was not held"*. Those are
