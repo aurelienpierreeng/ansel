@@ -33,7 +33,6 @@
 #ifndef DT_METADATA_EXIF_INTERNAL_H
 #define DT_METADATA_EXIF_INTERNAL_H
 
-#include "common/global_mutexes.h"
 #include "common/image.h"
 
 #include <exiv2/exiv2.hpp>
@@ -78,26 +77,24 @@ std::wstring dt_exiv2_widen_path(const char *utf8_path);
 
 #endif
 
-/**
- * @brief RAII guard over the process-wide exiv2 lock.
+/** @brief Read an image's metadata.
  *
- * @details exiv2's readMetadata() is not thread safe in 0.26, and it throws, so the unlock
- * has to survive an exception -- hence a destructor rather than a matched pair of calls.
- * FIXME: check again once we rely on 0.27.
+ * @details Kept as a macro so the ~20 call sites need no edit, and named for what it no
+ * longer needs: this used to take a process-wide mutex, because exiv2 was believed not to
+ * be thread-safe. It is, for this call. Verified against the pinned exiv2 0.27.7 source and
+ * its own README: the Exif and IPTC code is reentrant, and the XMP path runs through the
+ * bundled toolkit, whose public entry points serialize themselves on a global sXMPCoreLock
+ * (XMP_ENTER_WRAPPER). The only entry points exiv2 documents as unsafe are
+ * XmpParser::initialize() and XmpProperties::registerNs()/unregisterNs(), and Ansel calls
+ * those exclusively from dt_exif_init() and dt_exif_cleanup() -- before any thread is
+ * created and after they have all stopped, which is exactly the discipline exiv2 asks for.
  *
- * The mutex itself is reached through dt_exiv2_threadsafe_mutex() rather than named
- * directly, so this header needs no `darktable.h` -- which it could not have anyway.
+ * Per-image serialization, where it is genuinely needed, lives one layer up:
+ * dt_image_write_sidecar_file() takes the image cache entry for writing, which guards this
+ * image's database rows and its sidecar together. See doc/lock-audit.md.
  */
-class Lock
-{
-public:
-  Lock() { dt_pthread_mutex_lock(dt_exiv2_threadsafe_mutex()); }
-  ~Lock() { dt_pthread_mutex_unlock(dt_exiv2_threadsafe_mutex()); }
-};
-
 #define read_metadata_threadsafe(image)                       \
 {                                                             \
-  Lock exiv2_lock;                                            \
   image->readMetadata();                                      \
 }
 
