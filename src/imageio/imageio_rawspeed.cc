@@ -200,9 +200,11 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
   {
     dt_rawspeed_load_meta();
 
-    dt_pthread_mutex_lock(dt_readfile_mutex());
+    // Unserialized on purpose. FileReader::readFile() reads through a local FILE* into a
+    // locally allocated vector and touches no shared mutable state; rawspeed's exception
+    // formatter uses a thread_local buffer (HAVE_CXX_THREAD_LOCAL, set in our generated
+    // rawspeedconfig.h). Verified against the pinned submodule -- see doc/lock-audit.md.
     auto [storage, storageBuf] = f.readFile();
-    dt_pthread_mutex_unlock(dt_readfile_mutex());
 
     RawParser t(storageBuf);
     std::unique_ptr<RawDecoder> d = t.getDecoder(meta);

@@ -202,13 +202,6 @@ typedef struct darktable_t
   // Protect appending/removing GList links to the darktable.capabilities list
   dt_pthread_mutex_t capabilities_threadsafe;
 
-  // Exiv2 readMetadata() was not thread-safe prior to 0.27
-  // FIXME: Is it now ?
-  dt_pthread_mutex_t exiv2_threadsafe;
-
-  // RawSpeed readFile() method is apparently not thread-safe
-  dt_pthread_mutex_t readFile_mutex;
-
   // Prevent concurrent export/thumbnail pipelines from runnnig at the same time
   // It brings no additional performance since the CPU is our bottleneck,
   // and CPU pixel code is already multi-threaded internally through OpenMP
