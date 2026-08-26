@@ -1288,16 +1288,16 @@ cl_int _joint_core_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_
         cl_err = dt_opencl_enqueue_kernel_2d(devid, fin, one);
         if(cl_err != CL_SUCCESS) goto out;
 
-        const int kernel = global_data->kernel_hl_cmean_reduce;
-        dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &estimate);
-        dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &valid);
-        dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &luminance);
-        dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &partial_sums);
-        dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &n_pixels);
-        dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &epsilon);
-        dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(cl_mem), &lum_min_dev2);
-        dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float) * 4 * local_size, NULL);
-        cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, sizes, local);
+        const int cmean_kernel = global_data->kernel_hl_cmean_reduce;
+        dt_opencl_set_kernel_arg(devid, cmean_kernel, 0, sizeof(cl_mem), &estimate);
+        dt_opencl_set_kernel_arg(devid, cmean_kernel, 1, sizeof(cl_mem), &valid);
+        dt_opencl_set_kernel_arg(devid, cmean_kernel, 2, sizeof(cl_mem), &luminance);
+        dt_opencl_set_kernel_arg(devid, cmean_kernel, 3, sizeof(cl_mem), &partial_sums);
+        dt_opencl_set_kernel_arg(devid, cmean_kernel, 4, sizeof(int), &n_pixels);
+        dt_opencl_set_kernel_arg(devid, cmean_kernel, 5, sizeof(float), &epsilon);
+        dt_opencl_set_kernel_arg(devid, cmean_kernel, 6, sizeof(cl_mem), &lum_min_dev2);
+        dt_opencl_set_kernel_arg(devid, cmean_kernel, 7, sizeof(float) * 4 * local_size, NULL);
+        cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, cmean_kernel, sizes, local);
         if(cl_err != CL_SUCCESS) goto out;
 
         const int cfin = global_data->kernel_hl_cmean_finalize;
