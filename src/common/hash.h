@@ -22,6 +22,8 @@
  * caches). Pure and dependency-free on purpose: low-level compute units include this
  * instead of darktable.h. */
 
+#include "system/macros.h"  // DT_FALLTHROUGH
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -80,13 +82,13 @@ static inline uint64_t dt_hash(uint64_t hash, const char *str, size_t size)
   uint64_t b = (uint64_t)size << 56;
   switch(size & 7)
   {
-    case 7: b |= (uint64_t)in[i + 6] << 48; /* fall through */
-    case 6: b |= (uint64_t)in[i + 5] << 40; /* fall through */
-    case 5: b |= (uint64_t)in[i + 4] << 32; /* fall through */
-    case 4: b |= (uint64_t)in[i + 3] << 24; /* fall through */
-    case 3: b |= (uint64_t)in[i + 2] << 16; /* fall through */
-    case 2: b |= (uint64_t)in[i + 1] << 8;  /* fall through */
-    case 1: b |= (uint64_t)in[i + 0];       /* fall through */
+    case 7: b |= (uint64_t)in[i + 6] << 48; DT_FALLTHROUGH;
+    case 6: b |= (uint64_t)in[i + 5] << 40; DT_FALLTHROUGH;
+    case 5: b |= (uint64_t)in[i + 4] << 32; DT_FALLTHROUGH;
+    case 4: b |= (uint64_t)in[i + 3] << 24; DT_FALLTHROUGH;
+    case 3: b |= (uint64_t)in[i + 2] << 16; DT_FALLTHROUGH;
+    case 2: b |= (uint64_t)in[i + 1] << 8;  DT_FALLTHROUGH;
+    case 1: b |= (uint64_t)in[i + 0];       DT_FALLTHROUGH;
     case 0: break;
   }
   v3 ^= b;
