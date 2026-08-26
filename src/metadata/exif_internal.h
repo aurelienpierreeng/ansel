@@ -77,26 +77,15 @@ std::wstring dt_exiv2_widen_path(const char *utf8_path);
 
 #endif
 
-/** @brief Read an image's metadata.
+/* There used to be a read_metadata_threadsafe() macro here, wrapping readMetadata() in a
+ * process-wide lock. The lock is gone -- exiv2 0.27.7's Exif and IPTC code is reentrant and
+ * its XMP path serializes itself, so the only entry points that are not thread-safe are
+ * XmpParser::initialize() and XmpProperties::registerNs(), which Ansel calls exclusively
+ * from dt_exif_init() before any thread exists. See doc/lock-audit.md.
  *
- * @details Kept as a macro so the ~20 call sites need no edit, and named for what it no
- * longer needs: this used to take a process-wide mutex, because exiv2 was believed not to
- * be thread-safe. It is, for this call. Verified against the pinned exiv2 0.27.7 source and
- * its own README: the Exif and IPTC code is reentrant, and the XMP path runs through the
- * bundled toolkit, whose public entry points serialize themselves on a global sXMPCoreLock
- * (XMP_ENTER_WRAPPER). The only entry points exiv2 documents as unsafe are
- * XmpParser::initialize() and XmpProperties::registerNs()/unregisterNs(), and Ansel calls
- * those exclusively from dt_exif_init() and dt_exif_cleanup() -- before any thread is
- * created and after they have all stopped, which is exactly the discipline exiv2 asks for.
- *
- * Per-image serialization, where it is genuinely needed, lives one layer up:
- * dt_image_write_sidecar_file() takes the image cache entry for writing, which guards this
- * image's database rows and its sidecar together. See doc/lock-audit.md.
- */
-#define read_metadata_threadsafe(image)                       \
-{                                                             \
-  image->readMetadata();                                      \
-}
+ * The macro is gone with it rather than left as a no-op: a wrapper called "threadsafe" that
+ * does nothing is worse than no wrapper, because it reads like a guarantee. Call
+ * image->readMetadata() directly. */
 
 /** @brief Strip the given EXIF keys from @p exif, ignoring any that are absent. */
 void dt_remove_exif_keys(Exiv2::ExifData &exif, const char *keys[], unsigned int n_keys);
