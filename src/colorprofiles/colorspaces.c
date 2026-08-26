@@ -2255,13 +2255,19 @@ static gboolean _colorspaces_is_base_name(const char *profile)
 
 static const char *_colorspaces_get_base_name(const char *profile)
 {
-  const char* f = profile + strlen(profile);
-  for (; f >= profile; f--)
+  // Walk backwards from the last character, never past the first one. The previous form
+  // started at the NUL and decremented while `f >= profile`, so a name with NO separator
+  // ran the loop one final time at f == profile and left with f == profile - 1: forming
+  // that pointer is undefined behaviour (only one-past-the-END is legal), and the "base
+  // name" it returned carried one byte of whatever preceded the string. Which is exactly
+  // the case this function exists to serve -- old iops that stored a bare basename.
+  for(const char *f = profile + strlen(profile); f > profile;)
   {
+    f--;
     if(*f == '/' || *f == '\\')
-      return ++f;   // path separator found - return the filename only, without the leading separator
+      return f + 1; // path separator found - return the filename only, without the leading separator
   }
-  return f;         // no separator found - consider profile_name to be a "base" one
+  return profile;   // no separator found - consider profile_name to be a "base" one
 }
 
 gboolean dt_colorspaces_is_profile_equal(const char *fullname, const char *filename)
