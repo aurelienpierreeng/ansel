@@ -116,10 +116,25 @@ GList *dt_dev_load_modules(dt_develop_t *dev)
     iop = g_list_next(iop);
   }
 
+  /* Give every base module a distinct `instance`.
+   *
+   * `instance` identifies a module FAMILY: a base module and every extra instance
+   * duplicated from it share one value, and dt_dev_module_duplicate() scans dev->iop for
+   * `mod->instance == base->instance` to find the next free multi_priority and multi_name.
+   * With every module left at the calloc'd 0, that scan matches every module of every
+   * operation, so duplicating `retouch` picked up the numbering of an unrelated `exposure`
+   * copy and produced retouch "2" with no "1" -- issue #1265.
+   *
+   * Runtime-only: the database and XMP store multi_priority and multi_name, never this, so
+   * the numbering does not have to be stable across sessions -- only distinct within a dev.
+   *
+   * 214cc1cc8e removed this line while tidying dt_develop_t and left the loop empty; the
+   * counter it uses stayed on the struct, unread, which is why nothing complained. */
   GList *it = res;
   while(it)
   {
     module = (dt_iop_module_t *)it->data;
+    module->instance = dev->iop_instance++;
     it = g_list_next(it);
   }
   return res;
