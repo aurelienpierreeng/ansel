@@ -257,7 +257,12 @@ typedef struct dt_iop_module_t
 
   /** string identifying this operation. */
   dt_dev_operation_t op;
-  /** used to identify this module in the history stack. */
+  /** Identifies the FAMILY this module belongs to: a module and every extra instance
+   * duplicated from it share one value, and it is what the history stack matches on.
+   * Assigned once per base module at load time from dt_develop_t::iop_instance.
+   * Distinct from multi_priority, which orders the members WITHIN a family. Two different
+   * base modules sharing this value collide in history -- see dt_dev_module_duplicate(),
+   * which derives the next multi_priority by scanning for `mod->instance == base->instance`. */
   int32_t instance;
   /** order of the module on the pipe. the pipe will be sorted by iop_order. */
   int iop_order;
@@ -313,7 +318,18 @@ typedef struct dt_iop_module_t
   gboolean default_enabled;
 
   gboolean workflow_enabled;
-  /** parameters for the operation. will be replaced by history revert. */
+  /** Live parameters for the operation, and the module's defaults.
+   *
+   * @warning These belong to the GUI THREAD and are NOT thread-safe. The pixel pipeline
+   * must never read or write them: the only thread-safe interface between the pipeline and
+   * a module is HISTORY, guarded by dev->history_mutex. Pipeline code commits from the
+   * history snapshot (hist->params), never from here -- see dt_iop_commit_params(). To push
+   * live, uncommitted state to the pipe, either write it through history under that mutex
+   * or use dt_dev_transient_params_{set,clear,get,active}() in develop/dev_history.h.
+   *
+   * Both blocks are @ref params_size bytes and are owned by the module; they are allocated
+   * by dt_iop_load_module_by_so() and released by dt_iop_cleanup_module(). Replaced
+   * wholesale on a history revert, so a pointer INTO them does not survive one. */
   dt_iop_params_t *params, *default_params;
   /** size of individual params struct. */
   int32_t params_size;
@@ -336,6 +352,9 @@ typedef struct dt_iop_module_t
       /** if this module generates a mask, is it used later on? needed to decide if the mask should be stored.
           maps dt_iop_module_t* -> id
       */
+      /** Owned by this module and freed by dt_iop_cleanup_module(). Keys are borrowed
+       * dt_iop_module_t pointers into dev->iop, so an entry outliving its consumer
+       * dangles -- consumers must remove themselves. */
       GHashTable *users;
       /** the masks this module has to offer. maps id -> name.
        * So for there is only one mask per module and its id is always 0.
@@ -350,11 +369,21 @@ typedef struct dt_iop_module_t
   } raster_mask;
 
 
-  /** the corresponding SO object */
+  /** The shared object this instance was created from: the dlopen()ed plugin's function
+   * table and its process-wide global data. BORROWED -- owned by the module-so list, shared
+   * by every instance of this operation, and outliving all of them. Never free it through
+   * an instance. */
   dt_iop_module_so_t *so;
 
-  /** multi-instances things */
+  /** Position of this instance within its @ref instance family. 0 is the base module;
+   * duplicates get increasing values. Several places treat `multi_priority == 0` as "this
+   * is the base module" -- e.g. libs/modulegroups.c shows an extra instance only once it is
+   * in history, while the base is always shown. */
   int multi_priority; // user may change this
+
+  /** User-visible suffix distinguishing instances of one family, empty for the default
+   * name. Fixed-size, not a pointer: nothing to free, and it is written with g_strlcpy().
+   * Cleared when the rename entry loses focus while empty. */
   char multi_name[128]; // user may change this name
 
 
@@ -418,7 +447,21 @@ gboolean dt_iop_is_visible(dt_iop_module_t *module);
 /** enter/leave a GUI critical section by acquiring gui->gui_lock. Implemented in
  * imageop_gui.c; tolerate headless callers (no GUI, no GUI data to protect), so
  * common/iop-autoset.c and friends can call them without seeing the gui struct. */
+/**
+ * @brief Take the module's GUI lock, serialising access to its dt_iop_gui_data_t.
+ *
+ * @warning A NO-OP when module->gui is NULL, which is every headless module -- export,
+ * thumbnail generation, ansel-cli. It therefore protects GUI data only; it must not be used
+ * to serialise anything a non-GUI pipe also touches, because there it locks nothing and
+ * silently provides no mutual exclusion at all.
+ *
+ * Must be paired with dt_iop_gui_leave_critical_section() on every path. The pair uses the
+ * BAD_ lock variants because the acquire and release routinely sit in different functions,
+ * which the thread-safety analyser cannot model.
+ */
 void dt_iop_gui_enter_critical_section(dt_iop_module_t *const module);
+
+/** @brief Release what dt_iop_gui_enter_critical_section() took. Also a no-op headless. */
 void dt_iop_gui_leave_critical_section(dt_iop_module_t *const module);
 
 /** widget-identity helpers for gui/ callers that must not see the gui struct through this
@@ -440,6 +483,22 @@ void dt_iop_gui_set_expanded(dt_iop_module_t *module, gboolean expanded, gboolea
 /** refresh iop according to set expanded state */
 void dt_iop_gui_update_expanded(dt_iop_module_t *module);
 /* duplicate module and return new instance */
+/**
+ * @brief Create another instance of @p base, insert it into dev->iop and give it a GUI.
+ *
+ * @param base the module to duplicate.
+ * @param copy_params TRUE to carry over @p base's current parameters and blending.
+ *
+ * @return the new module, or NULL when loading it failed (dt_iop_load_module()); there is
+ * no cap on instances per family. **Borrowed**: owned by dev->iop, never freed by the
+ * caller.
+ *
+ * @note Commits the new instance to history and FLUSHES the pending-commit queue before
+ * returning, because the panel decides whether to show an extra instance from a g_idle that
+ * runs on the next main-loop turn and reads whether it is in history -- see the comment at
+ * the flush. Any future path that creates an instance owes history the same synchronous
+ * commit.
+ */
 dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_params);
 
 void dt_iop_gui_update_header(dt_iop_module_t *module);
@@ -460,6 +519,18 @@ void dt_iop_gui_update_header(dt_iop_module_t *module);
   dt_print(DT_DEBUG_PIPE, "[iop-fmt] %-14s " fmt "\n", (module)->op, ##__VA_ARGS__)
 
 /** commits params and updates piece hash. */
+/**
+ * @brief Copy @p params into the pipeline piece, so the next render uses them.
+ *
+ * @warning Pass the HISTORY SNAPSHOT's params (hist->params), never module->params, from
+ * anything running on the pipeline thread. dt_iop_module_t::params is GUI-thread state and
+ * reading it from the pipeline is a data race -- history is the only thread-safe interface
+ * between the two. This is the single most commonly broken rule in this header.
+ *
+ * @param module the module whose commit_params() callback is invoked.
+ * @param params the parameter block to commit; copied, not retained.
+ * @param piece the pipeline piece to configure. Must already be initialised for this pipe.
+ */
 void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
                           struct dt_develop_blend_params_t *blendop_params, struct dt_dev_pixelpipe_t *pipe,
                           struct dt_dev_pixelpipe_iop_t *piece);
@@ -478,6 +549,18 @@ GtkWidget *dt_iop_gui_get_pluginui(dt_iop_module_t *module);
  * which is handled when the parent panel changes size, which happens when
  * uncollapsing the module. So dt_iop_request_focus() needs to be called
  * before expanding modules (dt_iop_set_expanded) for auto-scroll to work properly.
+ */
+/**
+ * @brief Move darkroom focus to @p module, or clear it with NULL.
+ *
+ * @details Not a passive setter. It calls the outgoing module's gui_focus(FALSE) and the
+ * incoming one's gui_focus(TRUE) -- which modules use to enter and leave edit modes -- asks
+ * the panel to scroll the module into view, and triggers a module-visibility refresh that
+ * runs later, on the GTK main loop. Callers that change other state in the same callback
+ * should assume that refresh observes whatever is committed by the time control returns,
+ * not what is true at the moment of this call.
+ *
+ * No-op when the module already has focus, or while widgets are suppressed.
  */
 void dt_iop_request_focus(dt_iop_module_t *module);
 /** allocate and load default settings from introspection. */
