@@ -80,7 +80,11 @@ static gboolean _ext_in_list(const char *ext, const char *const *list)
 {
   if(IS_NULL_PTR(ext)) return FALSE;
   for(; *list; list++)
-    if(!g_ascii_strncasecmp(ext, *list, strlen(*list)))
+    // Whole-string compare. This was g_ascii_strncasecmp(ext, *list, strlen(*list)), which
+    // only looks at the first strlen(*list) characters and so matched any extension that
+    // merely STARTS WITH a known one: "foo.nefarious" was routed as a raw because it begins
+    // with "nef".
+    if(!g_ascii_strcasecmp(ext, *list))
       return TRUE;
   return FALSE;
 }
