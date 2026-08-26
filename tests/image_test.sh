@@ -134,6 +134,12 @@ COMMAND=run
 log() { [ "$QUIET" = yes ] || echo "$*"; }
 err() { echo "$*" >&2; }
 
+# Every option below that takes a value reads $2, and `set -u` turns a missing one into
+# bash's own "unbound variable" naming a line number -- which says neither which option
+# was wrong nor that it wanted a value. Call as `need_arg "$@"` from the case branch, so
+# the remaining arguments are counted without expanding $2 first.
+need_arg() { [ $# -ge 2 ] || { err "option $1 needs a value"; usage; exit 2; }; }
+
 usage() { sed -n '2,61p' "$0" | sed 's/^#$//; s/^# //'; }
 
 if [ -t 1 ]; then
@@ -170,15 +176,15 @@ fi
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --bank) BANK_DIR="$2"; shift 2 ;;
-    --cli) CLI_BIN="$2"; shift 2 ;;
-    --baseline) BASELINE_DIR="$2"; BASELINE_DIR_SET=yes; shift 2 ;;
-    --jobs) JOBS="$2"; shift 2 ;;
-    --threads) THREADS="$2"; shift 2 ;;
-    --timeout) TIMEOUT="$2"; shift 2 ;;
-    --width) WIDTH="$2"; shift 2 ;;
-    --height) HEIGHT="$2"; shift 2 ;;
-    --limit) LIMIT="$2"; shift 2 ;;
+    --bank) need_arg "$@"; BANK_DIR="$2"; shift 2 ;;
+    --cli) need_arg "$@"; CLI_BIN="$2"; shift 2 ;;
+    --baseline) need_arg "$@"; BASELINE_DIR="$2"; BASELINE_DIR_SET=yes; shift 2 ;;
+    --jobs) need_arg "$@"; JOBS="$2"; shift 2 ;;
+    --threads) need_arg "$@"; THREADS="$2"; shift 2 ;;
+    --timeout) need_arg "$@"; TIMEOUT="$2"; shift 2 ;;
+    --width) need_arg "$@"; WIDTH="$2"; shift 2 ;;
+    --height) need_arg "$@"; HEIGHT="$2"; shift 2 ;;
+    --limit) need_arg "$@"; LIMIT="$2"; shift 2 ;;
     --strict) STRICT_CPU=yes; STRICT_OPENCL=yes; shift ;;
     --strict-cpu) STRICT_CPU=yes; shift ;;
     --strict-opencl) STRICT_OPENCL=yes; shift ;;
