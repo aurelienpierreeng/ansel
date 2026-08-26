@@ -330,14 +330,21 @@ static char *_variables_get_iso_timestamp(const GTimeSpan gts)
   g_date_time_unref(gdt);
   return result;
 }
-
-static char *_get_base_value(dt_variables_params_t *params, char **variable)
+/** @brief Expand the current time, and the import/change/export/print timestamps.
+ *
+ * @details One link of the ordered chain _get_base_value() walks; see the contract
+ * documented there. Branch order inside this function is load-bearing for the same
+ * reason it is across the chain.
+ *
+ * @param params expansion context.
+ * @param variable in/out: on a match, advanced past the name that was consumed.
+ * @param out written ONLY on a match, with a newly-allocated string the caller owns.
+ * @return TRUE if the variable was recognised and consumed, FALSE to try the next link.
+ */
+static gboolean _expand_datetime_now(dt_variables_params_t *params, char **variable, char **out)
 {
-  char *result = NULL;
-  gboolean escape = TRUE;
-
   char exif_datetime[DT_DATETIME_LENGTH];
-  GDateTime *datetime = params->data->have_exif_dt ? params->data->datetime : params->data->time;
+  char *result = NULL;
 
   if(_has_prefix(variable, "YEAR.SHORT") || _has_prefix(variable, "SHORT_YEAR") || _has_prefix(variable, "DATE.SHORT_YEAR"))
     result = g_date_time_format(params->data->time, "%y");
@@ -389,7 +396,30 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     result = g_strdup(exif_datetime);
   }
 
-  else if(_has_prefix(variable, "EXIF.YEAR.SHORT") || _has_prefix(variable, "EXIF.DATE.SHORT_YEAR"))
+  else return FALSE;
+
+  *out = result;
+  return TRUE;
+}
+
+/** @brief Expand the capture time read from EXIF.
+ *
+ * @details One link of the ordered chain _get_base_value() walks; see the contract
+ * documented there. Branch order inside this function is load-bearing for the same
+ * reason it is across the chain.
+ *
+ * @param params expansion context.
+ * @param variable in/out: on a match, advanced past the name that was consumed.
+ * @param out written ONLY on a match, with a newly-allocated string the caller owns.
+ * @return TRUE if the variable was recognised and consumed, FALSE to try the next link.
+ */
+static gboolean _expand_exif_datetime(dt_variables_params_t *params, char **variable, char **out)
+{
+  char exif_datetime[DT_DATETIME_LENGTH];
+  GDateTime *datetime = params->data->have_exif_dt ? params->data->datetime : params->data->time;
+  char *result = NULL;
+
+  if(_has_prefix(variable, "EXIF.YEAR.SHORT") || _has_prefix(variable, "EXIF.DATE.SHORT_YEAR"))
     result = g_date_time_format(datetime, "%y");
   else if(_has_prefix(variable, "EXIF.YEAR") || _has_prefix(variable, "EXIF_YEAR") || _has_prefix(variable, "EXIF.DATE.LONG_YEAR"))
     result = g_date_time_format(datetime, "%Y");
@@ -420,7 +450,28 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     dt_datetime_gdatetime_to_exif(exif_datetime, params->data->show_msec ? DT_DATETIME_LENGTH : DT_DATETIME_EXIF_LENGTH, datetime);
     result = g_strdup(exif_datetime);
   }
-  else if(_has_prefix(variable, "EXIF.ISO") || _has_prefix(variable, "EXIF_ISO"))
+  else return FALSE;
+
+  *out = result;
+  return TRUE;
+}
+
+/** @brief Expand EXIF exposure settings, GPS position and camera identity.
+ *
+ * @details One link of the ordered chain _get_base_value() walks; see the contract
+ * documented there. Branch order inside this function is load-bearing for the same
+ * reason it is across the chain.
+ *
+ * @param params expansion context.
+ * @param variable in/out: on a match, advanced past the name that was consumed.
+ * @param out written ONLY on a match, with a newly-allocated string the caller owns.
+ * @return TRUE if the variable was recognised and consumed, FALSE to try the next link.
+ */
+static gboolean _expand_exif_and_gps(dt_variables_params_t *params, char **variable, char **out)
+{
+  char *result = NULL;
+
+  if(_has_prefix(variable, "EXIF.ISO") || _has_prefix(variable, "EXIF_ISO"))
     result = g_strdup_printf("%d", params->data->exif_iso);
   else if(_has_prefix(variable, "NL") && g_strcmp0(params->jobcode, "infos") == 0)
     result = g_strdup_printf("\n");
@@ -470,7 +521,28 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     result = g_strdup(params->data->camera_alias);
   else if(_has_prefix(variable, "EXIF.LENS") || _has_prefix(variable, "LENS"))
     result = g_strdup(params->data->exif_lens);
-  else if(_has_prefix(variable, "ID") || _has_prefix(variable, "IMAGE.ID"))
+  else return FALSE;
+
+  *out = result;
+  return TRUE;
+}
+
+/** @brief Expand image id, duplicate version, job code and film roll.
+ *
+ * @details One link of the ordered chain _get_base_value() walks; see the contract
+ * documented there. Branch order inside this function is load-bearing for the same
+ * reason it is across the chain.
+ *
+ * @param params expansion context.
+ * @param variable in/out: on a match, advanced past the name that was consumed.
+ * @param out written ONLY on a match, with a newly-allocated string the caller owns.
+ * @return TRUE if the variable was recognised and consumed, FALSE to try the next link.
+ */
+static gboolean _expand_image_and_version(dt_variables_params_t *params, char **variable, char **out)
+{
+  char *result = NULL;
+
+  if(_has_prefix(variable, "ID") || _has_prefix(variable, "IMAGE.ID"))
     result = g_strdup_printf("%d", params->imgid);
   else if(_has_prefix(variable, "IMAGE.EXIF"))
   {
@@ -517,7 +589,28 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
       dt_free(dirname);
     }
   }
-  else if(_has_prefix(variable, "FILE.DIRECTORY") || _has_prefix(variable, "FILE_DIRECTORY"))
+  else return FALSE;
+
+  *out = result;
+  return TRUE;
+}
+
+/** @brief Expand the source file's path, name and mtime, plus the user's folders.
+ *
+ * @details One link of the ordered chain _get_base_value() walks; see the contract
+ * documented there. Branch order inside this function is load-bearing for the same
+ * reason it is across the chain.
+ *
+ * @param params expansion context.
+ * @param variable in/out: on a match, advanced past the name that was consumed.
+ * @param out written ONLY on a match, with a newly-allocated string the caller owns.
+ * @return TRUE if the variable was recognised and consumed, FALSE to try the next link.
+ */
+static gboolean _expand_file_and_folder(dt_variables_params_t *params, char **variable, char **out)
+{
+  char *result = NULL;
+
+  if(_has_prefix(variable, "FILE.DIRECTORY") || _has_prefix(variable, "FILE_DIRECTORY"))
   {
     // undocumented : backward compatibility
     if(params->filename)
@@ -595,7 +688,29 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     result = g_strdup(g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP)); // undocumented : backward compatibility
   else if(_has_prefix(variable, "DESKTOP"))
     result = g_strdup(g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP));
-  else if(_has_prefix(variable, "STARS"))
+  else return FALSE;
+
+  *out = result;
+  return TRUE;
+}
+
+/** @brief Expand star rating, colour labels and the Dublin Core fields.
+ *
+ * @details One link of the ordered chain _get_base_value() walks; see the contract
+ * documented there. Branch order inside this function is load-bearing for the same
+ * reason it is across the chain.
+ *
+ * @param params expansion context.
+ * @param variable in/out: on a match, advanced past the name that was consumed.
+ * @param out written ONLY on a match, with a newly-allocated string the caller owns.
+ * @param escape cleared when the produced text must not be markup-escaped.
+ * @return TRUE if the variable was recognised and consumed, FALSE to try the next link.
+ */
+static gboolean _expand_rating_and_metadata(dt_variables_params_t *params, char **variable, char **out, gboolean *escape)
+{
+  char *result = NULL;
+
+  if(_has_prefix(variable, "STARS"))
     result = g_strdup_printf("%d", params->data->stars);
   else if(_has_prefix(variable, "RATING.ICONS") || _has_prefix(variable, "RATING_ICONS") || _has_prefix(variable, "Xmp.xmp.Rating"))
   {
@@ -628,7 +743,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
            _has_prefix(variable, "LABELS.COLORICONS") || _has_prefix(variable, "LABELS_COLORICONS"))
           && g_strcmp0(params->jobcode, "infos") == 0)
   {
-    escape = FALSE;
+    *escape = FALSE;
     GList *res = dt_metadata_get(params->imgid, "Xmp.darktable.colorlabels", NULL);
     for(GList *res_iter = res; res_iter; res_iter = g_list_next(res_iter))
     {
@@ -718,7 +833,28 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     else
       result = g_strdup(_("no"));
   }
-  else if(_has_prefix(variable, "WIDTH.MAX") || _has_prefix(variable, "MAX_WIDTH"))
+  else return FALSE;
+
+  *out = result;
+  return TRUE;
+}
+
+/** @brief Expand image dimensions, category, tags and build identity.
+ *
+ * @details One link of the ordered chain _get_base_value() walks; see the contract
+ * documented there. Branch order inside this function is load-bearing for the same
+ * reason it is across the chain.
+ *
+ * @param params expansion context.
+ * @param variable in/out: on a match, advanced past the name that was consumed.
+ * @param out written ONLY on a match, with a newly-allocated string the caller owns.
+ * @return TRUE if the variable was recognised and consumed, FALSE to try the next link.
+ */
+static gboolean _expand_geometry_and_misc(dt_variables_params_t *params, char **variable, char **out)
+{
+  char *result = NULL;
+
+  if(_has_prefix(variable, "WIDTH.MAX") || _has_prefix(variable, "MAX_WIDTH"))
     result = g_strdup_printf("%d", params->data->max_width);
   else if(_has_prefix(variable, "WIDTH.SENSOR") || _has_prefix(variable, "SENSOR_WIDTH"))
     result = g_strdup_printf("%d", params->data->sensor_width);
@@ -795,7 +931,41 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   else if(_has_prefix(variable, "DARKTABLE.NAME") || _has_prefix(variable, "DARKTABLE_NAME")
        || _has_prefix(variable, "ANSEL.NAME"))
     result = g_strdup(PACKAGE_NAME);
-  else
+  else return FALSE;
+
+  *out = result;
+  return TRUE;
+}
+
+/** @brief Expand one $(VARIABLE) into its text.
+ *
+ * @details The chain below is ORDERED and that order is load-bearing: _has_prefix() is
+ * g_str_has_prefix() plus a side effect -- on a match it advances @p variable past the
+ * prefix -- and it does not require a word boundary. A shorter prefix tried earlier
+ * therefore swallows every longer one starting with it, silently. Adding a name means
+ * placing it BEFORE any prefix of itself, not merely somewhere in the right group.
+ *
+ * Split into one function per family only to keep each readable; the && short-circuit
+ * reproduces the single chain this used to be, link by link, in the same order.
+ *
+ * @param params expansion context.
+ * @param variable in/out: advanced past whatever was consumed, including the characters
+ * skipped when nothing matched.
+ * @return a newly-allocated string the caller owns and must free. NEVER NULL: an
+ * unrecognised variable yields "", and callers rely on that.
+ */
+static char *_get_base_value(dt_variables_params_t *params, char **variable)
+{
+  char *result = NULL;
+  gboolean escape = TRUE;
+
+  if(!_expand_datetime_now(params, variable, &result)
+     && !_expand_exif_datetime(params, variable, &result)
+     && !_expand_exif_and_gps(params, variable, &result)
+     && !_expand_image_and_version(params, variable, &result)
+     && !_expand_file_and_folder(params, variable, &result)
+     && !_expand_rating_and_metadata(params, variable, &result, &escape)
+     && !_expand_geometry_and_misc(params, variable, &result))
   {
     // go past what looks like an invalid variable. we only expect to see [a-zA-Z]* in a variable name.
     while(g_ascii_isalpha(**variable)) (*variable)++;
@@ -810,7 +980,6 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   }
   return result;
 }
-
 // bash style variable manipulation. all patterns are just simple string comparisons!
 // See here for bash examples and documentation:
 // http://www.tldp.org/LDP/abs/html/parameter-substitution.html
