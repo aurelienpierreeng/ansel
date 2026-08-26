@@ -32,13 +32,16 @@ int32_t dt_film_repository_find_by_folder(const char *folder)
 
   int32_t filmroll_id = -1;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+  // Hoisted out of the macro call: a preprocessing directive inside the argument list of a
+  // function-like macro is undefined behaviour (C11 6.10.3p11). GCC and Clang accept it,
+  // which is exactly why it survives until a toolchain bump.
 #ifdef _WIN32
-                              "SELECT id FROM main.film_rolls WHERE folder LIKE ?1",
+  // Windows paths are matched case-insensitively, which LIKE gives us and = does not.
+  const char *query = "SELECT id FROM main.film_rolls WHERE folder LIKE ?1";
 #else
-                              "SELECT id FROM main.film_rolls WHERE folder = ?1",
+  const char *query = "SELECT id FROM main.film_rolls WHERE folder = ?1";
 #endif
-                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, folder, -1, SQLITE_STATIC);
   if(sqlite3_step(stmt) == SQLITE_ROW) filmroll_id = sqlite3_column_int(stmt, 0);
   sqlite3_finalize(stmt);
