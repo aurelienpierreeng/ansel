@@ -23,6 +23,7 @@
 
 #include "common/color_vocabulary.h"
 #include "common/utility.h"
+#include "system/macros.h"
 
 #include <glib/gi18n.h>
 
@@ -184,22 +185,54 @@ skin_color_t get_skin_color(const size_t index)
   return skin[index];
 }
 
-const char *Lch_to_color_name(dt_aligned_pixel_t color)
+/** Hue sectors of 24 degrees, read at chroma 80-100. */
+#define LCH_HUE_SECTORS 15
+
+/** Lightness sectors of 20 %. */
+#define LCH_LIGHTNESS_SECTORS 5
+
+/* Colour names by [hue sector][lightness sector].
+ *
+ * Reference: https://chromatone.center/theory/color/models/perceptual/ -- ignored in places
+ * where it gets too lyrical, in favour of more down-to-earth names.
+ *
+ * Sectors 10 (240 deg) and 11 (264 deg) hold the same names on purpose: CIE Lab 1976 is
+ * poor in the blues, so the two were collapsed when this was a branch ladder. The
+ * duplication is kept explicit rather than special-cased, so the table reads as a plain
+ * grid and a future correction to either sector does not have to untangle a shared branch.
+ *
+ * N_() registers each name for translation; the lookup translates with _() at use.
+ */
+static const char *const _lch_color_names[LCH_HUE_SECTORS][LCH_LIGHTNESS_SECTORS] = {
+  { N_("deep purple"), N_("fuchsia"), N_("medium magenta"), N_("violet pink"), N_("plum violet") },  // 0°
+  { N_("dark red"), N_("red"), N_("crimson"), N_("salmon"), N_("pink") },  // 24°
+  { N_("maroon"), N_("dark orange red"), N_("orange red"), N_("coral"), N_("khaki") },  // 48°
+  { N_("brown"), N_("chocolate"), N_("dark gold"), N_("gold"), N_("sandy brown") },  // 72°
+  { N_("dark green"), N_("dark olive green"), N_("olive"), N_("khaki"), N_("beige") },  // 96°
+  { N_("dark green"), N_("forest green"), N_("olive drab"), N_("yellow green"), N_("pale green") },  // 120°
+  { N_("dark green"), N_("green"), N_("forest green"), N_("lime green"), N_("pale green") },  // 144°
+  { N_("dark sea green"), N_("sea green"), N_("teal"), N_("light sea green"), N_("turquoise") },  // 168°
+  { N_("dark slate gray"), N_("light slate gray"), N_("dark cyan"), N_("aqua"), N_("cyan") },  // 192°
+  { N_("navy blue"), N_("teal"), N_("dark cyan"), N_("deep sky blue"), N_("aquamarine blue") },  // 216°
+  { N_("dark blue"), N_("medium blue"), N_("azure blue"), N_("deep sky blue"), N_("aqua") },  // 240°
+  { N_("dark blue"), N_("medium blue"), N_("azure blue"), N_("deep sky blue"), N_("aqua") },  // 264°
+  { N_("dark blue"), N_("medium blue"), N_("blue"), N_("light sky blue"), N_("light blue") },  // 288°
+  { N_("indigo"), N_("dark violet"), N_("blue violet"), N_("violet"), N_("plum") },  // 312°
+  { N_("purple"), N_("dark magenta"), N_("magenta"), N_("violet"), N_("lavender") },  // 336°
+};
+
+char *Lch_to_color_name(dt_aligned_pixel_t color)
 {
   // color must be Lch derivated from CIE Lab 1976 turned into polar coordinates
 
   // First check if we have a gray (chromacity < epsilon)
-
-  if(color[1] < 2.0f)
-    return _("gray");
+  if(color[1] < 2.0f) return g_strdup(_("gray"));
 
   // Start with special cases : skin tones
-
   dt_aligned_pixel_t Lab;
   dt_LCH_2_Lab(color, Lab);
 
   gchar *out = NULL;
-  int is_skin = FALSE;
   gboolean matches[ETHNIE_END] = { FALSE };
 
   // Find a match against any body part and write the associated ethnicity
@@ -210,10 +243,10 @@ const char *Lch_to_color_name(dt_aligned_pixel_t color)
     range_t a = _compute_range(skin.a, 1.5f);
     range_t b = _compute_range(skin.b, 1.5f);
 
-    const int match = (Lab[0] > L.bottom && Lab[0] < L.top) && (Lab[1] > a.bottom && Lab[1] < a.top)
-      && (Lab[2] > b.bottom && Lab[2] < b.top);
+    const gboolean match = (Lab[0] > L.bottom && Lab[0] < L.top)
+                        && (Lab[1] > a.bottom && Lab[1] < a.top)
+                        && (Lab[2] > b.bottom && Lab[2] < b.top);
 
-    is_skin = is_skin || match;
     if(match) matches[skin.ethnicity] = TRUE;
   }
 
@@ -222,149 +255,19 @@ const char *Lch_to_color_name(dt_aligned_pixel_t color)
     if(matches[elem])
       out = dt_util_dstrcat(out, _("average %s skin tone\n"), _get_ethnicity_name(elem));
 
-  if(is_skin) return out;
+  if(!IS_NULL_PTR(out)) return out;
 
-  // Reference for color names : https://chromatone.center/theory/color/models/perceptual/
-  // Though we ignore them sometimes when they get too lyrical for some more down-to-earth names
-  // Color are read for chroma = [80 - 100].
-  const float h = color[2] * 360.f; // °
-  const float L = color[0];
-  //const float c = color[1];
+  const float h = color[2] * 360.f; // degrees
+  const float L = color[0];         // percent
 
-  // h in degrees - split into 15 hue sectors of 24°
-  const int step_h = (int)(h) / 24;
-
-  // L in % - split into 5 L sectors of 20 %
+  const int step_h = (int)h / 24;
   const int step_L = (int)(fminf(L, 100.f)) / 20;
 
-  if(step_h == 0)
-  {
-    // 0° - pinkish red
-    if(step_L == 0) return _("deep purple");    // L = 10 %
-    if(step_L == 1) return _("fuchsia");        // L = 30 %
-    if(step_L == 2) return _("medium magenta"); // L = 50 %
-    if(step_L == 3) return _("violet pink");    // L = 70 %
-    if(step_L == 4) return _("plum violet");    // L = 90 %
-  }
-  else if(step_h == 1)
-  {
-    // 24° - red
-    if(step_L == 0) return _("dark red");
-    if(step_L == 1) return _("red");
-    if(step_L == 2) return _("crimson");
-    if(step_L == 3) return _("salmon");
-    if(step_L == 4) return _("pink");
-  }
-  else if(step_h == 2)
-  {
-    // 48° - orangy red
-    if(step_L == 0) return _("maroon");
-    if(step_L == 1) return _("dark orange red");
-    if(step_L == 2) return _("orange red");
-    if(step_L == 3) return _("coral");
-    if(step_L == 4) return _("khaki");
-  }
-  else if(step_h == 3)
-  {
-    // 72° - orange
-    if(step_L == 0) return _("brown");
-    if(step_L == 1) return _("chocolate");
-    if(step_L == 2) return _("dark gold");
-    if(step_L == 3) return _("gold");
-    if(step_L == 4) return _("sandy brown");
-  }
-  else if(step_h == 4)
-  {
-    // 96° - yellow olive
-    if(step_L == 0) return _("dark green");
-    if(step_L == 1) return _("dark olive green");
-    if(step_L == 2) return _("olive");
-    if(step_L == 3) return _("khaki");
-    if(step_L == 4) return _("beige");
-  }
-  else if(step_h == 5)
-  {
-    // 120° - green
-    if(step_L == 0) return _("dark green");
-    if(step_L == 1) return _("forest green");
-    if(step_L == 2) return _("olive drab");
-    if(step_L == 3) return _("yellow green");
-    if(step_L == 4) return _("pale green");
-  }
-  else if(step_h == 6)
-  {
-    // 144° - blueish green
-    if(step_L == 0) return _("dark green");
-    if(step_L == 1) return _("green");
-    if(step_L == 2) return _("forest green");
-    if(step_L == 3) return _("lime green");
-    if(step_L == 4) return _("pale green");
-  }
-  else if(step_h == 7)
-  {
-    // 168° - greenish cyian
-    if(step_L == 0) return _("dark sea green");
-    if(step_L == 1) return _("sea green");
-    if(step_L == 2) return _("teal");
-    if(step_L == 3) return _("light sea green");
-    if(step_L == 4) return _("turquoise");
-  }
-  else if(step_h == 8)
-  {
-    // 192° - cyan
-    if(step_L == 0) return _("dark slate gray");
-    if(step_L == 1) return _("light slate gray");
-    if(step_L == 2) return _("dark cyan");
-    if(step_L == 3) return _("aqua");
-    if(step_L == 4) return _("cyan");
-  }
-  else if(step_h == 9)
-  {
-    // 216° - medium blue
-    if(step_L == 0) return _("navy blue");
-    if(step_L == 1) return _("teal");
-    if(step_L == 2) return _("dark cyan");
-    if(step_L == 3) return _("deep sky blue");
-    if(step_L == 4) return _("aquamarine blue");
-  }
-  else if(step_h == 10 || step_h == 11)
-  {
-    // 240° - blue and 264° - bluer than blue
-    // these are collapsed because CIE Lab 1976 sucks for blues
-    if(step_L == 0) return _("dark blue");
-    if(step_L == 1) return _("medium blue");
-    if(step_L == 2) return _("azure blue");
-    if(step_L == 3) return _("deep sky blue");
-    if(step_L == 4) return _("aqua");
-  }
-  else if(step_h == 12)
-  {
-    // 288° - more blue
-    if(step_L == 0) return _("dark blue");
-    if(step_L == 1) return _("medium blue");
-    if(step_L == 2) return _("blue");
-    if(step_L == 3) return _("light sky blue");
-    if(step_L == 4) return _("light blue");
-  }
-  else if(step_h == 13)
-  {
-    // 312° - violet
-    if(step_L == 0) return _("indigo");
-    if(step_L == 1) return _("dark violet");
-    if(step_L == 2) return _("blue violet");
-    if(step_L == 3) return _("violet");
-    if(step_L == 4) return _("plum");
-  }
-  else if(step_h == 14)
-  {
-    if(step_L == 0) return _("purple");
-    if(step_L == 1) return _("dark magenta");
-    if(step_L == 2) return _("magenta");
-    if(step_L == 3) return _("violet");
-    if(step_L == 4) return _("lavender");
-  }
+  // h == 360 exactly (and any out-of-domain hue) lands outside the table.
+  if(step_h < 0 || step_h >= LCH_HUE_SECTORS) return g_strdup(_("color not found"));
+  if(step_L < 0 || step_L >= LCH_LIGHTNESS_SECTORS) return g_strdup(_("color not found"));
 
-  return _("color not found");
+  return g_strdup(_(_lch_color_names[step_h][step_L]));
 }
 
 void get_skin_tones_range()

@@ -77,7 +77,28 @@ typedef struct skin_color_t
 #define SKINS 16
 
 // returns a color name for color
-const char *Lch_to_color_name(dt_aligned_pixel_t color);
+/**
+ * @brief Name the colour at @p color in plain language, e.g. "salmon" or "olive drab".
+ *
+ * @details Classifies by hue and lightness against a 15 x 5 grid of names, after two
+ * special cases: a chroma below 2.0 is "gray", and a colour falling inside the measured
+ * spread of any reference skin tone is named as such instead ("average Thai skin tone"),
+ * listing every ethnicity whose range it matches, one per line.
+ *
+ * @param color CIE Lab 1976 turned into polar coordinates (Lch), as produced by
+ * dt_Lab_2_LCH(): L in percent, chroma, and hue NORMALIZED to [0, 1] -- not degrees.
+ * Passing degrees puts every lookup out of the table's domain.
+ *
+ * @return a newly-allocated, translated, human-readable name. **The caller owns it and
+ * must g_free() it.** Never NULL: a colour outside the table's domain gives
+ * "color not found" rather than a NULL a "%s" would then read.
+ *
+ * @note Ownership used to depend on which branch answered -- the skin-tone path returned
+ * an allocated string while every other path returned a static literal, behind a
+ * `const char *` that told the caller neither. The one call site leaked whenever a skin
+ * tone matched. Allocating on every path is what makes the contract statable.
+ */
+char *Lch_to_color_name(dt_aligned_pixel_t color);
 
 // Parametric sweeping of Lch boundaries (in CIE Luv 1976) for all known skin tones +/- 2 std
 void get_skin_tones_range();
