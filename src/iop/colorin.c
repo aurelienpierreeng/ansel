@@ -1132,7 +1132,6 @@ static void update_profile_list(dt_iop_module_t *self)
 
 void gui_init(struct dt_iop_module_t *self)
 {
-  // pthread_mutex_lock(&darktable.plugin_threadsafe);
   dt_iop_colorin_gui_data_t *g = IOP_GUI_ALLOC(colorin);
 
   g->image_profiles = NULL;

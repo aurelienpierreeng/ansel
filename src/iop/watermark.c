@@ -95,6 +95,22 @@
 #include "widgets/container.h"
 #include "widgets/label.h"
 
+/* rsvg, and the cairo underneath it, are not thread safe -- notably around font handling.
+ * This module is the only place in the pixel path that drives them, so the lock lives here
+ * rather than in a process-wide "plugin" mutex shared with unrelated subsystems.
+ *
+ * Initialised through pthread_once rather than a static initialiser, so it gets the same
+ * recursive attribute every other lock in the tree gets from
+ * dt_pthread_mutex_init(..., NULL) -- a static PTHREAD_MUTEX_INITIALIZER cannot carry one.
+ * See doc/lock-audit.md. */
+static dt_pthread_mutex_t _rsvg_lock;
+static pthread_once_t _rsvg_lock_once = PTHREAD_ONCE_INIT;
+
+static void _rsvg_lock_init(void)
+{
+  dt_pthread_mutex_init(&_rsvg_lock, NULL);
+}
+
 DT_MODULE_INTROSPECTION(5, dt_iop_watermark_params_t)
 
 // gchar *checksum = g_compute_checksum_for_data(G_CHECKSUM_MD5,data,length);
@@ -590,8 +606,13 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     return 0;
   }
 
-  // rsvg (or some part of cairo which is used underneath) isn't thread safe, for example when handling fonts
-  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
+  // rsvg (or some part of cairo which is used underneath) isn't thread safe, for example when
+  // handling fonts. This lock belongs to this module: it is the only place in the pixel path
+  // that drives rsvg, and it used to share the process-wide "plugin" mutex with rawspeed's
+  // metadata init and the export filename allocator -- so a watermark render blocked an
+  // unrelated export from picking a filename. See doc/lock-audit.md.
+  pthread_once(&_rsvg_lock_once, _rsvg_lock_init);
+  dt_pthread_mutex_lock(&_rsvg_lock);
 
   RsvgHandle *svg = NULL;
   if(type == DT_WTM_SVG)
@@ -605,7 +626,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       cairo_surface_destroy(surface);
       dt_free(image);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+      dt_pthread_mutex_unlock(&_rsvg_lock);
       fprintf(stderr, "[watermark] error processing svg file: %s\n", error->message);
       g_error_free(error);
       return 0;
@@ -633,7 +654,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         cairo_surface_destroy(surface);
         dt_free(image);
         dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-        dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+        dt_pthread_mutex_unlock(&_rsvg_lock);
         return 0;
       }
       dimension.width = cairo_image_surface_get_width(surface_two);
@@ -744,7 +765,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       g_object_unref(svg);
       dt_free(image);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+      dt_pthread_mutex_unlock(&_rsvg_lock);
       return 1;
     }
     surface_two = cairo_image_surface_create_for_data(image_two, CAIRO_FORMAT_ARGB32, watermark_width,
@@ -758,7 +779,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       dt_free(image);
       dt_free(image_two);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+      dt_pthread_mutex_unlock(&_rsvg_lock);
       return 0;
     }
   }
@@ -829,7 +850,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   cairo_paint(cr);
 
   // no more non-thread safe rsvg usage
-  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+  dt_pthread_mutex_unlock(&_rsvg_lock);
 
   cairo_destroy(cr);
   cairo_destroy(cr_two);
