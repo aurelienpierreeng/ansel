@@ -291,11 +291,28 @@ if(USE_BUNDLED_EXIV2)
   # the only lever a sub-project offers: the real command stays reachable as _install(),
   # and ANSEL_SUPPRESS_INSTALL is a directory variable, so it is set here and is invisible
   # to every other directory in the tree.
-  macro(install)
+  #
+  # A FUNCTION, and never a macro. Overriding a command this way makes the override GLOBAL
+  # for the rest of the configure -- it outlives this directory and every install() in the
+  # tree goes through it, packaging/CMakeLists.txt included. In a macro, ${ARGV} is textual
+  # substitution: the argument is pasted into the body and then PARSED AGAIN, so every
+  # ${...} inside a string argument is expanded a second time and every backslash escape is
+  # eaten once more. install(CODE "<script>") is exactly the shape that destroys -- it
+  # carries \${...} deliberately, to be expanded at install time and not now.
+  #
+  # That is not hypothetical. It shipped: the Windows installer's third-party DLL collection
+  # (packaging/CMakeLists.txt) is an install(CODE) block, and the macro reduced it to a
+  # script whose ${filename}, ${FILES} and ${EXTRA_DEPS} were all empty and whose regex had
+  # lost its escapes. It copied nothing, the .exe went from 144 MB to 118 MB, and users got
+  # an application missing libcurl, libheif, libopenexr and exchndl.dll.
+  #
+  # In a function ARGV is a real variable; expanding it yields the argument VALUES, and
+  # CMake does not re-expand what a variable expansion produced. The forwarding is faithful.
+  function(install)
     if(NOT ANSEL_SUPPRESS_INSTALL)
       _install(${ARGV})
     endif()
-  endmacro()
+  endfunction()
   set(ANSEL_SUPPRESS_INSTALL TRUE)
 
   add_subdirectory(exiv2)

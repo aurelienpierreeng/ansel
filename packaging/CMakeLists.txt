@@ -49,6 +49,20 @@ IF(WIN32 AND NOT BUILD_MSYS2_INSTALL)
         list(REMOVE_DUPLICATES EXTRA_DEPS)
       endif()
 
+      # A Windows build ALWAYS needs third-party DLLs -- GTK alone is a dozen. An empty list
+      # here does not mean 'nothing to copy', it means this script did not run as written, and
+      # the only symptom otherwise is an installer that is quietly tens of megabytes lighter
+      # and an application that will not start on a machine without MSYS2. That shipped once
+      # already: a macro override of install() re-expanded this very block and emptied every
+      # \${...} in it (see src/external/CMakeLists.txt). Fail the install instead.
+      list(LENGTH EXTRA_DEPS _ansel_dep_count)
+      if(_ansel_dep_count LESS 10)
+        message(FATAL_ERROR
+          \"Windows dependency collection found only \${_ansel_dep_count} DLL(s) under ${DIRS}. \"
+          \"Expected dozens. The package would be missing its runtime libraries.\")
+      endif()
+      message(STATUS \"Bundling \${_ansel_dep_count} third-party DLLs\")
+
       # install(...) doesn't work in here, and file(INSTALL ...) doesn't put anything into installers,
       # so we have to go over the list of files and do it manually
       foreach(filename IN LISTS EXTRA_DEPS)
