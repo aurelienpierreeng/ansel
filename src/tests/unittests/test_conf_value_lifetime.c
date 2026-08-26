@@ -48,11 +48,11 @@
 #include <glib/gstdio.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdlib.h>  // calloc/free, used directly below
 // cmocka.h declares `extern jmp_buf global_expect_assert_env' at file scope without including
 // <setjmp.h> itself. Same suppression as test_pipe_cache_policy.c, and for the same reason.
 #include <setjmp.h>  // NOLINT(misc-include-cleaner)
 #include <stdint.h>
-#include <string.h>
 #include <cmocka.h>
 
 /** A key with no confgen declaration, so nothing clamps or sanitises what we store. */
