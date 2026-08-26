@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "external/ThreadSafetyAnalysis.h"  // REQUIRES / REQUIRES_SHARED on the declarations below
 #include "system/atomic.h"
 #include "history/history.h"
 #include "develop/history_merge.h"
@@ -277,7 +278,7 @@ int dt_dev_replace_history_on_image(struct dt_develop_t *dev_src, const int32_t 
  * @return TRUE if the pipeline topology may need to be updated (new module node).
  */
 gboolean dt_dev_add_history_item_ext(struct dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable,
-                                     gboolean force_new_item);
+                                     gboolean force_new_item) REQUIRES(dev->history_mutex);
 
 /**
  * @brief Thread-safe wrapper around dt_dev_add_history_item_ext().
@@ -439,7 +440,7 @@ void dt_dev_history_undo_end_record(struct dt_develop_t *dev);
  *
  * @param dev Develop context.
  */
-void dt_dev_history_undo_start_record_locked(struct dt_develop_t *dev);
+void dt_dev_history_undo_start_record_locked(struct dt_develop_t *dev) REQUIRES(dev->history_mutex);
 /**
  * @brief Finish an undo record with history_mutex already locked.
  *
@@ -447,7 +448,7 @@ void dt_dev_history_undo_start_record_locked(struct dt_develop_t *dev);
  *
  * @param dev Develop context.
  */
-void dt_dev_history_undo_end_record_locked(struct dt_develop_t *dev);
+void dt_dev_history_undo_end_record_locked(struct dt_develop_t *dev) REQUIRES(dev->history_mutex);
 /**
  * @brief Invalidate a module pointer inside undo snapshots.
  *
@@ -517,7 +518,7 @@ void dt_dev_invalidate_history_module(GList *list, struct dt_iop_module_t *modul
  * @param dev
  * @return uint64_t
  */
-uint64_t dt_dev_history_compute_hash(struct dt_develop_t *dev);
+uint64_t dt_dev_history_compute_hash(struct dt_develop_t *dev) REQUIRES_SHARED(dev->history_mutex);
 
 /**
  * @brief Get the current history end index (GUI perspective).

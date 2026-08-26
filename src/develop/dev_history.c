@@ -421,7 +421,7 @@ int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, c
  * @param module Module instance to match by op name.
  * @return First matching history item or NULL.
  */
-static dt_dev_history_item_t *_search_history_by_op(dt_develop_t *dev, const dt_iop_module_t *module)
+static dt_dev_history_item_t *_search_history_by_op(dt_develop_t *dev, const dt_iop_module_t *module) REQUIRES_SHARED(dev->history_mutex)
 {
   dt_dev_history_item_t *hist_mod = NULL;
   for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
@@ -717,7 +717,7 @@ void dt_dev_history_undo_start_record(dt_develop_t *dev)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
-void dt_dev_history_undo_start_record_locked(dt_develop_t *dev)
+void dt_dev_history_undo_start_record_locked(dt_develop_t *dev) REQUIRES(dev->history_mutex)
 {
   if(IS_NULL_PTR(dev)) return;
 
@@ -745,7 +745,7 @@ void dt_dev_history_undo_end_record(dt_develop_t *dev)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
-void dt_dev_history_undo_end_record_locked(dt_develop_t *dev)
+void dt_dev_history_undo_end_record_locked(dt_develop_t *dev) REQUIRES(dev->history_mutex)
 {
   if(IS_NULL_PTR(dev) || dev->undo_history_depth <= 0) return;
 
@@ -788,7 +788,7 @@ void dt_dev_history_undo_end_record_locked(dt_develop_t *dev)
  *
  * @param dev Develop context.
  */
-static void _remove_history_leaks(dt_develop_t *dev)
+static void _remove_history_leaks(dt_develop_t *dev) REQUIRES(dev->history_mutex)
 {
   GList *history = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev));
   while(history)
@@ -854,7 +854,7 @@ static void _remove_history_leaks(dt_develop_t *dev)
 }
 
 gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable,
-                                     gboolean force_new_item)
+                                     gboolean force_new_item) REQUIRES(dev->history_mutex)
 {
   // If this history item is the first for this module,
   // we need to notify the pipeline that its topology may change (aka insert a new node).
@@ -997,7 +997,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   return add_new_pipe_node;
 }
 
-uint64_t dt_dev_history_compute_hash(dt_develop_t *dev)
+uint64_t dt_dev_history_compute_hash(dt_develop_t *dev) REQUIRES_SHARED(dev->history_mutex)
 {
   uint64_t hash = 5381;
   for(GList *hist = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev) - 1);
