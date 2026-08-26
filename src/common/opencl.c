@@ -1814,6 +1814,7 @@ static FILE *fopen_stat(const char *filename, struct stat *st)
   if(fstat(fd, st) < 0)
   {
     dt_print(DT_DEBUG_OPENCL, "[opencl_fopen_stat] could not stat file `%s'!\n", filename);
+    fclose(f); // the open succeeded; only the stat failed, and the handle is still ours
     return NULL;
   }
   return f;
