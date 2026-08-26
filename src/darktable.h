@@ -196,9 +196,6 @@ typedef struct darktable_t
   struct dt_undo_t *undo;
   struct dt_l10n_t *l10n;
 
-  // Protects from concurrent writing at export time
-  dt_pthread_mutex_t plugin_threadsafe;
-
   // Protect appending/removing GList links to the darktable.capabilities list
   dt_pthread_mutex_t capabilities_threadsafe;
 

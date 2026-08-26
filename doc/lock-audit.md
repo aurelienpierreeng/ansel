@@ -128,40 +128,81 @@ this section is the first place to look, and the answer is more likely to be a r
 
 ## Kept, with findings
 
-### `plugin_threadsafe` — three unrelated concerns on one global lock
+### `plugin_threadsafe` — removed; it was four unrelated concerns on one global lock
 
-Named as though it serializes plugins. It has three consumers doing three different things:
+Named as though it serialized plugins. It had four consumers doing four different things,
+none of which is per-image — so the image cache entry lock, which is keyed on `imgid`,
+could not substitute for any of them:
 
-| Consumer | What it guards | Third-party safety? |
+| Consumer | What it guarded | Resolution |
 | --- | --- | --- |
-| `imageio/imageio_rawspeed.cc:96` | lazy init of the `CameraMetaData` singleton | no — a one-time init guard |
-| `imageio/storage/disk.c:333` | the export filename **sequence counter** | no — an Ansel invariant |
-| `iop/watermark.c:594` | *"rsvg (or some part of cairo…) isn't thread safe… when handling fonts"* | **yes** |
+| `imageio/imageio_rawspeed.cc` | one-time init of the `CameraMetaData` singleton | **lock deleted**, `std::call_once` |
+| `iop/watermark.c` | rsvg/cairo global font state | module-owned `_rsvg_lock` |
+| `imageio/storage/disk.c` | a shared expansion context + filename allocation | **shared state removed**; module-owned lock for what is left |
+| `iop/lens.c` | modifier construction | module-owned `_modifier_lock`, kept conservatively |
 
-Consequence: an export computing a filename blocks a watermark render, and both block
-camera-metadata initialisation. Only one of the three is a library-safety lock.
+**A correction worth recording**, because it was nearly missed: `global_mutexes.h` listed
+`iop/lens.cc` among its consumers, and that file no longer exists. It is tempting to read
+that as a stale reference to a dead consumer. It was not — the file was RENAMED to
+`iop/lens.c` in the LensSerious migration and still took the lock in four places. The header
+was under-listing a live consumer, not over-listing a dead one. A missing filename is not
+evidence of a missing caller; grep for the symbol, not the file.
 
-`global_mutexes.h` also still names `iop/lens.cc` as a consumer. That file no longer exists
-(replaced by LensSerious) and lens takes no such lock. **Corrected in this pass.**
-
-**Recommended follow-up:** split into three locks named for what they guard. Not done here
-— it is a behaviour change to export sequencing and deserves its own change.
-
-### The rawspeed singleton is a broken double-checked lock
+#### rawspeed: the lock was hiding a broken double-checked lock
 
 ```c
 static CameraMetaData *meta = NULL;
-if(IS_NULL_PTR(meta))            // unsynchronised read
+if(IS_NULL_PTR(meta))                                   // unsynchronised read
 {
   dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   if(IS_NULL_PTR(meta)) meta = new CameraMetaData(camfile);
-  ...
 ```
 
-`meta` is a plain pointer, not atomic. The outer read races the store; nothing orders the
-publication of the pointer against the construction of the object. Benign in practice on
-x86, undefined by the standard, and the kind of thing that changes behaviour under a new
-compiler. **Recommended follow-up:** `dt_atomic` or a `pthread_once`.
+`meta` is a plain pointer, not atomic: the outer read raced the store, and nothing ordered
+publication of the pointer against construction of the object. Now `std::call_once`, which
+needs no lock of ours, publishes correctly, and — unlike `pthread_once` — leaves the flag
+unset if the initialiser throws, so a corrupt `cameras.xml` is retried instead of latched
+as "done".
+
+#### disk.c: the shared state went away instead of being locked
+
+The genuine race was not the filename. It was this:
+
+```c
+d->vp->filename = input_dir;
+d->vp->jobcode  = "export";
+d->vp->imgid    = imgid;      // ONE struct, reused by every image in the export
+d->vp->sequence = num;
+gchar *result_filename = dt_variables_expand(d->vp, pattern, TRUE);
+```
+
+`d->vp` is allocated once in the storage module's params and shared by every `store()` call,
+which runs in parallel. Two threads exporting different images both wrote `->imgid` and then
+expanded — the lock was all that stopped a file being named from another image's variables.
+`store()` now builds its own context and destroys it on every exit path: no shared state, so
+nothing to serialize.
+
+What still needs a lock is the part that genuinely spans images — picking a filename no
+other thread has taken:
+
+```c
+while(g_file_test(filename, G_FILE_TEST_EXISTS))
+  snprintf(c, filename_free_space, "_%.2d.%s", seq, ext);
+```
+
+That is check-then-create *across* images, which no per-image lock can cover. It is now a
+module-owned lock, and it is still not airtight: another process can create the file between
+the test and the format writer opening it. **The airtight version claims the name with
+`O_CREAT|O_EXCL` and retries on `EEXIST`**, which requires the format writers to accept a
+descriptor rather than a path. That is the real fix and it is not done here.
+
+#### lens.c: kept, not deleted
+
+`get_modifier()` reads a `const` per-piece `d` and writes only caller-local outputs, and the
+LensSerious reader is documented lock-free with a thread-local handle — which together
+suggest this lock is vestigial from the lensfun era, when `lf_modifier_new()` touched a
+shared `lfDatabase`. That has not been demonstrated for every resolver path, so the lock
+stays, module-owned, until someone shows it can go.
 
 ### `pipeline_threadsafe`
 
