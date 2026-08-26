@@ -247,3 +247,73 @@ wrapper carries is:
 The `_DEBUG` arm — names, timings, contention tables — was deleted, because a second
 implementation nothing builds verifies nothing. `caches/cache.c` carries the epitaph of the
 previous attempt: *"the non-`_DEBUG` arm stopped compiling — and nobody found out."*
+
+## Machine-checked lock discipline
+
+`-Wthread-safety` has been enabled in `cmake/compiler-warnings.cmake` all along, and the
+mutex wrapper has carried `CAPABILITY`/`ACQUIRE`/`RELEASE` for as long. It was checking
+almost nothing, for one reason:
+
+    GUARDED_BY across the tree:  0
+
+`GUARDED_BY` is the annotation that does the work. Clang's analysis is **declarative** — you
+state that a field is guarded by a lock and it proves every access holds it — as opposed to
+symbolic execution guessing at lock state from control flow. With no data annotated it only
+verified that locks balance within a function, and never that any data was protected. The
+machinery was installed and wired to nothing.
+
+This also answers "can we do better than suppressing SonarCloud's pthread findings?".
+`c:S5486` and friends are symbolic-execution rules whose own documentation says they *assume
+non-recursive mutexes*; ours are recursive by design, so they cannot model this code and say
+so themselves. Clang's analysis has no such assumption — it is not counting acquisitions,
+it is checking a declared contract — and it runs on every LLVM build we already do.
+
+### Done
+
+`dt_pthread_rwlock_t` is a `CAPABILITY`, so the locks guarding the most concurrency-sensitive
+state can be named at all. `dev->history` and `dev->history_end` are `GUARDED_BY(history_mutex)`,
+and the functions that run with the lock held declare `REQUIRES`/`REQUIRES_SHARED` — including
+the ones whose names already claimed it (`_ext`, `_locked`) and enforced nothing.
+
+Measured: **20 findings in `dev_history.c` before, 0 after**, no suppressions, every one fixed
+by declaring an existing contract. Tree-wide, no history finding appears in any other file, so
+every consumer already accesses it correctly.
+
+### The backlog, measured
+
+A scan of all **499** non-vendored translation units with `-Wthread-safety` reports **30
+findings in 5 files**:
+
+| File | Findings |
+| --- | ---: |
+| `caches/pixelpipe_cache.c` | 12 |
+| `database/database.c` | 8 |
+| `gui/lut_viewer.c` | 5 |
+| `caches/cache.c` | 3 |
+| `pixel/colorequal_shared.c` | 2 |
+
+They are pre-existing — from the mutex annotations that were already there — and invisible in
+practice: the usual local build is GCC, which ignores the flag, and the LLVM CI jobs treat
+these as warnings rather than errors.
+
+All are conditional-locking shapes: *"not held on every path through here"*, *"expecting
+rwlock to be held at start of each loop"*, *"releasing rwlock that was not held"*. Those are
+**not automatically bugs** — they are patterns clang cannot prove — but each needs an
+individual answer to "is this conditional locking actually correct, or does some path release
+what it never took?", and they sit in the two subsystems least forgiving of a wrong answer.
+
+Reproduce with the compile database, stripping the GCC-only flags clang rejects
+(`-floop-nest-optimize`, `-ftree-loop-im`, `-fira-loop-pressure`,
+`-fvariable-expansion-in-unroller`, `-flto*`) — leave them in and every compile fails before
+analysis, which reports a very convincing zero.
+
+### Next annotations, by value
+
+- `dt_iop_module_t::params` — CLAUDE.md says it "belongs to the GUI thread and is NOT
+  thread-safe; the pipeline thread must never read or write it". `GUARDED_BY` would make a
+  violation a build error.
+- pixelpipe cache entries under `cache->lock`.
+- `dt_conf_t`'s tables under its mutex.
+- `ACQUIRED_BEFORE`/`ACQUIRED_AFTER` for documented lock ordering — this file records
+  "`xprofile_lock` OUTER, settings lock INNER" as prose; it is exactly a declarable order.
+- ThreadSanitizer in CI for the dynamic half, which no static analysis can cover.
