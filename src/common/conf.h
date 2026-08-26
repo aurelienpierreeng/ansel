@@ -105,8 +105,14 @@ typedef struct dt_conf_t
   GHashTable *table;
   /** Defaults, bounds and descriptions from the generated XML. Immutable after init. */
   GHashTable *x_confgen;
-  /** Keys forced on the command line; they win over @ref table on read. */
+  /** Keys forced on the command line; they win over @ref table on read. Written once by
+   * dt_conf_init() and read-only afterwards, so pointers into it are stable. */
   GHashTable *override_entries;
+  /** Values displaced by a later write, kept alive until dt_conf_cleanup().
+   * dt_conf_get_string_const() borrows pointers into @ref table and its readers hold them
+   * without the lock, so a replaced value cannot be freed at the moment it is replaced.
+   * Grows only when a key's value actually changes. */
+  GPtrArray *retired_values;
 } dt_conf_t;
 
 /**
@@ -166,21 +172,20 @@ int dt_conf_get_bool(const char *name);
 /**
  * @brief Borrow the stored string for @p name without copying it.
  *
- * @return a pointer straight INTO the live conf hash table. Do not free it.
+ * @return a pointer into the conf table. Do not free it. **Valid for the lifetime of the
+ * process**, and never NULL.
  *
- * @warning The lifetime is shorter than it looks, and shorter than this function's old
- * comment implied. It is not merely "until this thread next calls dt_conf_set_string()":
- * the lock is released before the pointer is returned, so ANY thread setting the same key
- * frees it -- g_hash_table_insert() destroys the value it replaces -- while the caller is
- * still holding it. Reading through it afterwards is a use-after-free, and the observed
- * symptom is a torn or garbage value rather than a crash.
+ * @warning It can go STALE. It is a snapshot: a later dt_conf_set_*() on the same key
+ * installs a new string and leaves this one behind, so a caller holding the pointer keeps
+ * reading the value as it was. Re-read the key when currency matters, or take a private
+ * copy with dt_conf_get_string() when the value must be carried somewhere.
  *
- * That is the exact mechanism behind a "write_sidecar_files silently flips to FALSE"
- * report: a key read from many threads, written from one. dt_conf_get_string() was given
- * a copy-under-lock to fix it; this variant was not.
- *
- * Safe only when the key cannot be written while the result is alive -- in practice, keys
- * touched from the GUI thread alone. When in doubt use dt_conf_get_string().
+ * @note This used to be a use-after-free rather than a staleness question: the value was
+ * freed the moment another thread replaced it, while the reader still held the pointer --
+ * the mechanism behind a "write_sidecar_files silently flips to FALSE" report.
+ * dt_conf_set_if_not_overridden() now retires displaced values instead of freeing them,
+ * which fixes every caller at once rather than asking 98 call sites to be audited
+ * individually.
  */
 const char *dt_conf_get_string_const(const char *name);
 
