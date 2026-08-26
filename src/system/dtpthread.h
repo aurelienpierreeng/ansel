@@ -72,9 +72,46 @@ typedef struct CAPABILITY("mutex") dt_pthread_mutex_t
 } CAPABILITY("mutex") dt_pthread_mutex_t;
 
 // *please* do use these;
+/** @brief Initialise a mutex. With @p mutexattr NULL -- which is how 54 of the 56 call
+ * sites in this tree spell it -- the mutex is RECURSIVE.
+ *
+ * @details A thread re-entering a lock it already holds cannot race itself: while it holds
+ * the lock no other thread is inside the critical section, so the data it protects is as
+ * safe at depth 2 as at depth 1. What a non-recursive mutex does in that situation is
+ * deadlock -- turning a harmless nesting into a frozen application, which is a worse
+ * outcome than the thing it is meant to prevent.
+ *
+ * The codebase had already reached that conclusion one lock at a time: darktable.c makes
+ * the exiv2 mutex recursive so "a public exif function can hold it across its whole
+ * critical section while inner helpers or re-entrant calls re-lock it without deadlocking."
+ * This makes it the default instead of a per-lock rediscovery.
+ *
+ * @param mutex the mutex to initialise.
+ * @param mutexattr NULL for the recursive default, or an explicit attribute to override it.
+ *
+ * @warning Recursion is NOT free of consequence, and there is exactly one place it bites:
+ * pthread_cond_wait() releases the mutex ONCE. A thread that waits while holding a
+ * recursive mutex at depth > 1 therefore never releases it and the wait cannot be signalled
+ * -- POSIX calls the combination undefined. At depth 1 it behaves exactly as before. The
+ * eight cond-wait sites in this tree all take their mutex once at the top of a wait loop;
+ * see dt_pthread_cond_wait() below, which repeats this where it would be noticed.
+ *
+ * @note Recursion also hides a real class of bug that a deadlock would have exposed: a
+ * function that breaks an invariant, then calls something that re-enters and reads the
+ * half-updated state. That trade is deliberate -- a rare, quiet correctness risk in place
+ * of a frequent, total hang.
+ */
 static inline int dt_pthread_mutex_init(dt_pthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr)
 {
-  return pthread_mutex_init(&mutex->mutex, mutexattr);
+  if(mutexattr) return pthread_mutex_init(&mutex->mutex, mutexattr);
+
+  pthread_mutexattr_t recursive;
+  int res = pthread_mutexattr_init(&recursive);
+  if(res) return res;
+  res = pthread_mutexattr_settype(&recursive, PTHREAD_MUTEX_RECURSIVE);
+  if(!res) res = pthread_mutex_init(&mutex->mutex, &recursive);
+  pthread_mutexattr_destroy(&recursive);
+  return res;
 };
 
 static inline int dt_pthread_mutex_lock(dt_pthread_mutex_t *mutex) ACQUIRE(mutex) NO_THREAD_SAFETY_ANALYSIS
@@ -97,6 +134,18 @@ static inline int dt_pthread_mutex_destroy(dt_pthread_mutex_t *mutex)
   return pthread_mutex_destroy(&mutex->mutex);
 };
 
+/** @brief Wait on @p cond, releasing @p mutex for the duration.
+ *
+ * @warning @p mutex must be held EXACTLY ONCE by the calling thread. Mutexes from
+ * dt_pthread_mutex_init(..., NULL) are recursive, and pthread_cond_wait() releases a mutex
+ * once regardless of how deep the caller holds it: waiting at depth > 1 leaves it held, so
+ * no other thread can take it to signal, and the wait never returns. POSIX calls this
+ * undefined; in practice it is a silent hang.
+ *
+ * Every wait in this tree takes its mutex at the top of a loop and waits at depth 1, which
+ * is the shape this is safe in. If you ever need to wait from inside a nested critical
+ * section, unwind to depth 1 first -- do not add a "recursive wait".
+ */
 static inline int dt_pthread_cond_wait(pthread_cond_t *cond, dt_pthread_mutex_t *mutex)
 {
   return pthread_cond_wait(cond, &mutex->mutex);
