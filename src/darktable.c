@@ -598,11 +598,6 @@ struct dt_view_manager_t *dt_view_manager_get_global(void)
   return darktable.view_manager;
 }
 
-dt_pthread_mutex_t *dt_plugin_threadsafe_mutex(void)
-{
-  return &darktable.plugin_threadsafe;
-}
-
 dt_pthread_mutex_t *dt_pipeline_threadsafe_mutex(void)
 {
   return &darktable.pipeline_threadsafe;
@@ -907,7 +902,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   darktable.main_message = NULL;
 
   // FIXME: move there into dt_database_t
-  dt_pthread_mutex_init(&(darktable.plugin_threadsafe), NULL);
   dt_pthread_mutex_init(&(darktable.capabilities_threadsafe), NULL);
   dt_pthread_mutex_init(&(darktable.pipeline_threadsafe), NULL);
 
@@ -2032,7 +2026,6 @@ void dt_cleanup()
 
   dt_capabilities_cleanup();
 
-  dt_pthread_mutex_destroy(&(darktable.plugin_threadsafe));
   dt_pthread_mutex_destroy(&(darktable.capabilities_threadsafe));
   dt_pthread_mutex_destroy(&(darktable.pipeline_threadsafe));
 

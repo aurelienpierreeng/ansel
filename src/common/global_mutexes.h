@@ -31,19 +31,16 @@
  * imageio/storage/disk.c, imageio/imageio_rawspeed.cc, ...) do not have to include
  * darktable.h, and therefore the whole application, to take a lock.
  *
- * Audited 2026-08-27; see doc/lock-audit.md for what each one protects, what was removed
- * and why, and the follow-ups this list still owes -- notably that dt_plugin_threadsafe_mutex()
- * is three unrelated concerns sharing one lock. */
+ * Audited 2026-08-27; see doc/lock-audit.md for what each one protects and what was
+ * removed. The list is deliberately short and getting shorter: a lock belongs to the module
+ * whose invariant it defends, not to the application struct. What remains here is
+ * process-wide because the thing it serializes genuinely is. */
 
 #include "system/dtpthread.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/** Serializes plugin calls that are not thread-safe, notably at export time when
- *  several pipelines would otherwise enter the same library concurrently. */
-dt_pthread_mutex_t *dt_plugin_threadsafe_mutex(void);
 
 /** Prevents concurrent export/thumbnail pipelines from running at the same time.
  *  This buys no throughput -- the CPU is the bottleneck and the pixel code is already
