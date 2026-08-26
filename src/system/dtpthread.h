@@ -152,13 +152,23 @@ static inline int dt_pthread_cond_wait(pthread_cond_t *cond, dt_pthread_mutex_t 
 };
 
 // Same-thread recursive write-lock tracking.
+/* Annotated as a clang CAPABILITY so -Wthread-safety can check it. The point of doing so is
+ * GUARDED_BY on the DATA these locks protect: clang's analysis is declarative -- it proves
+ * that every access to an annotated field happens while the named lock is held -- which is a
+ * different and stronger thing than symbolic execution guessing at lock state. It also does
+ * not care that our writers are recursive, because it is not counting.
+ *
+ * Each accessor carries NO_THREAD_SAFETY_ANALYSIS on its own body: the body deliberately
+ * acquires or releases without a matching partner, which is exactly what the attribute is
+ * for. The ACQUIRE/RELEASE annotation is what callers are checked against.
+ */
 // A thread that already holds the write lock cannot race itself: no other thread can be
 // touching the protected data while the write lock is held, so letting that same thread
 // re-enter (as reader or writer) is safe for data validity. Without this, glibc's default
 // PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP policy self-deadlocks such a thread as soon as
 // a second thread is queued waiting for the write lock (new readers, including from the
 // writer's own thread, are blocked once a writer is waiting).
-typedef struct dt_pthread_rwlock_t
+typedef struct CAPABILITY("rwlock") dt_pthread_rwlock_t
 {
   pthread_rwlock_t lock;
   pthread_t writer;
@@ -177,7 +187,7 @@ typedef struct dt_pthread_rwlock_t
   int active_reader_count;
   double oldest_active_reader_since;
   long oldest_active_reader_tid;
-} dt_pthread_rwlock_t;
+} CAPABILITY("rwlock") dt_pthread_rwlock_t;
 
 static inline int dt_pthread_rwlock_init(dt_pthread_rwlock_t *lock, const pthread_rwlockattr_t *attr)
 {
@@ -204,7 +214,7 @@ static inline int dt_pthread_rwlock_destroy(dt_pthread_rwlock_t *lock)
   return pthread_rwlock_destroy(&lock->lock);
 }
 
-static inline int dt_pthread_rwlock_unlock(dt_pthread_rwlock_t *rwlock)
+static inline int dt_pthread_rwlock_unlock(dt_pthread_rwlock_t *rwlock) RELEASE_GENERIC(rwlock) NO_THREAD_SAFETY_ANALYSIS
 {
   if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth > 1)
   {
@@ -254,7 +264,7 @@ static inline double _dt_pthread_rwlock_diag_now(void)
   return ts.tv_sec + ts.tv_nsec / 1e9;
 }
 
-static inline int dt_pthread_rwlock_rdlock(dt_pthread_rwlock_t *rwlock)
+static inline int dt_pthread_rwlock_rdlock(dt_pthread_rwlock_t *rwlock) ACQUIRE_SHARED(rwlock) NO_THREAD_SAFETY_ANALYSIS
 {
   if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1)
   {
@@ -286,7 +296,7 @@ static inline int dt_pthread_rwlock_rdlock(dt_pthread_rwlock_t *rwlock)
   return pthread_rwlock_rdlock(&rwlock->lock);
 }
 
-static inline int dt_pthread_rwlock_wrlock(dt_pthread_rwlock_t *rwlock)
+static inline int dt_pthread_rwlock_wrlock(dt_pthread_rwlock_t *rwlock) ACQUIRE(rwlock) NO_THREAD_SAFETY_ANALYSIS
 {
   if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1)
   {
@@ -326,7 +336,7 @@ static inline int dt_pthread_rwlock_wrlock(dt_pthread_rwlock_t *rwlock)
   return res;
 }
 
-static inline int dt_pthread_rwlock_tryrdlock(dt_pthread_rwlock_t *rwlock)
+static inline int dt_pthread_rwlock_tryrdlock(dt_pthread_rwlock_t *rwlock) TRY_ACQUIRE_SHARED(0, rwlock) NO_THREAD_SAFETY_ANALYSIS
 {
   // Keep try* locks honest as "is it locked by anyone?" probes: do NOT report success just
   // because the current thread already holds the write lock (see dt_pthread_rwlock_rdlock
@@ -335,7 +345,7 @@ static inline int dt_pthread_rwlock_tryrdlock(dt_pthread_rwlock_t *rwlock)
   return pthread_rwlock_tryrdlock(&rwlock->lock);
 }
 
-static inline int dt_pthread_rwlock_trywrlock(dt_pthread_rwlock_t *rwlock)
+static inline int dt_pthread_rwlock_trywrlock(dt_pthread_rwlock_t *rwlock) TRY_ACQUIRE(0, rwlock) NO_THREAD_SAFETY_ANALYSIS
 {
   if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1) return EBUSY;
   const int res = pthread_rwlock_trywrlock(&rwlock->lock);
