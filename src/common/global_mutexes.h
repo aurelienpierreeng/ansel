@@ -46,12 +46,6 @@ dt_pthread_mutex_t *dt_plugin_threadsafe_mutex(void);
  *  multi-threaded internally through OpenMP -- it bounds peak memory instead. */
 dt_pthread_mutex_t *dt_pipeline_threadsafe_mutex(void);
 
-/** Exiv2 readMetadata() was not thread-safe prior to 0.27. */
-dt_pthread_mutex_t *dt_exiv2_threadsafe_mutex(void);
-
-/** RawSpeed readFile() is apparently not thread-safe. */
-dt_pthread_mutex_t *dt_readfile_mutex(void);
-
 /** Serializes SQL transactions and image metadata/history reads and writes across all
  *  pipeline jobs and threads: sqlite refuses to start a transaction within a
  *  transaction, which is what "too many" concurrent writers produce. */

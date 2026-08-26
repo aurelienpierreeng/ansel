@@ -608,16 +608,6 @@ dt_pthread_mutex_t *dt_pipeline_threadsafe_mutex(void)
   return &darktable.pipeline_threadsafe;
 }
 
-dt_pthread_mutex_t *dt_exiv2_threadsafe_mutex(void)
-{
-  return &darktable.exiv2_threadsafe;
-}
-
-dt_pthread_mutex_t *dt_readfile_mutex(void)
-{
-  return &darktable.readFile_mutex;
-}
-
 
 
 struct dt_undo_t *dt_undo_get_global(void)
@@ -917,17 +907,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   darktable.main_message = NULL;
 
   // FIXME: move there into dt_database_t
-  pthread_mutexattr_t recursive_locking;
-  pthread_mutexattr_init(&recursive_locking);
-  pthread_mutexattr_settype(&recursive_locking, PTHREAD_MUTEX_RECURSIVE);
   dt_pthread_mutex_init(&(darktable.plugin_threadsafe), NULL);
   dt_pthread_mutex_init(&(darktable.capabilities_threadsafe), NULL);
-  // exiv2 and the Adobe XMP toolkit keep process-global state and are not thread-safe; this mutex
-  // serializes all exiv2 access (src/common/exif.cc). Make it recursive so a public exif function can
-  // hold it across its whole critical section while inner helpers (read_metadata_threadsafe) or
-  // re-entrant calls (e.g. variable expansion that reads metadata) re-lock it without deadlocking.
-  dt_pthread_mutex_init(&(darktable.exiv2_threadsafe), &recursive_locking);
-  dt_pthread_mutex_init(&(darktable.readFile_mutex), NULL);
   dt_pthread_mutex_init(&(darktable.pipeline_threadsafe), NULL);
 
   darktable.control = (dt_control_t *)calloc(1, sizeof(dt_control_t));
@@ -2053,8 +2034,6 @@ void dt_cleanup()
 
   dt_pthread_mutex_destroy(&(darktable.plugin_threadsafe));
   dt_pthread_mutex_destroy(&(darktable.capabilities_threadsafe));
-  dt_pthread_mutex_destroy(&(darktable.exiv2_threadsafe));
-  dt_pthread_mutex_destroy(&(darktable.readFile_mutex));
   dt_pthread_mutex_destroy(&(darktable.pipeline_threadsafe));
 
   dt_exif_cleanup();
