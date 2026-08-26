@@ -64,6 +64,7 @@
 #include "common/file_location.h"
 #include "pixel/illuminants.h"
 #include "common/imagebuf.h"
+#include "develop/dev_roi_request.h"
 #include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "control/control.h"
@@ -1369,9 +1370,86 @@ typedef struct {
   float exposure;
 } extraction_result_t;
 
+/**
+ * @brief The affine map taking chart bounding-box coordinates to the buffer process() was handed.
+ *
+ * @details g->box and both homographies are authored by the mouse handlers in PREVIEW-REQUEST
+ * pixels -- dt_dev_coordinates_image_norm_to_preview_abs(), which is also the grid
+ * gui_post_expose() draws the overlay in. The buffer this module is handed is NOT guaranteed to
+ * be that grid, and nothing used to check: with "rendering size = full resolution"
+ * (`darkroom/render_size` == 0) iop/finalscale.c's modify_roi_in() forces scale = 1.0 for
+ * everything upstream of iop_order 65, this module included, so the pipe runs at 1:1 while the
+ * box is still at natural_scale. Indexing the buffer with box coordinates then reads a shrunken
+ * corner of the frame and the solver is fitted against patches that were never on the chart --
+ * with the overlay still drawn perfectly over the chart, because it uses the other grid.
+ */
+typedef struct dt_iop_channelmixer_rgb_box_map_t
+{
+  float scale_x, scale_y;   // preview-request pixels -> buffer pixels
+  float offset_x, offset_y; // this buffer's origin, in buffer pixels
+} dt_iop_channelmixer_rgb_box_map_t;
+
+
+/**
+ * @brief Derive that map from the request this pipe was planned from.
+ *
+ * @details The pipe's LATCHED request, not the live one: this runs on the pipeline thread, and
+ * the mapping has to describe the frame this iteration actually produced.
+ */
+static inline dt_iop_channelmixer_rgb_box_map_t _box_map(const dt_dev_pixelpipe_t *const pipe,
+                                                         const dt_iop_roi_t *const roi)
+{
+  dt_iop_channelmixer_rgb_box_map_t map = { 1.f, 1.f, (float)roi->x, (float)roi->y };
+  const dt_dev_roi_request_t request = dt_dev_roi_request_of_pipe(pipe);
+
+  // Fall back to the identity -- i.e. the behaviour that is correct whenever the pipe does run
+  // at natural_scale -- rather than scaling by a number we have no reason to trust.
+  if(request.valid && request.preview_width > 0 && request.preview_height > 0)
+  {
+    map.scale_x = (float)roi->width / (float)request.preview_width;
+    map.scale_y = (float)roi->height / (float)request.preview_height;
+  }
+
+  return map;
+}
+
+
+/**
+ * @brief Compose the box->buffer map onto the chart homographies.
+ *
+ * @param[out] forward  ideal chart coordinates -> buffer pixels
+ * @param[out] backward buffer pixels -> ideal chart coordinates
+ */
+static inline void _map_homographies(const dt_iop_channelmixer_rgb_gui_data_t *const g,
+                                     const dt_iop_channelmixer_rgb_box_map_t *const map,
+                                     float forward[9], float backward[9])
+{
+  // apply_homography() divides rows 0 and 1 by row 2, so the translation belongs in the
+  // numerators, weighted by that same row -- it is not a plain matrix addition.
+  for(size_t c = 0; c < 3; c++)
+  {
+    forward[0 * 3 + c] = map->scale_x * g->homography[0 * 3 + c] - map->offset_x * g->homography[2 * 3 + c];
+    forward[1 * 3 + c] = map->scale_y * g->homography[1 * 3 + c] - map->offset_y * g->homography[2 * 3 + c];
+    forward[2 * 3 + c] = g->homography[2 * 3 + c];
+  }
+
+  // The backward map consumes buffer pixels, so it takes the INVERSE affine on its input.
+  for(size_t r = 0; r < 3; r++)
+  {
+    const float column_x = g->inverse_homography[r * 3 + 0] / map->scale_x;
+    const float column_y = g->inverse_homography[r * 3 + 1] / map->scale_y;
+    backward[r * 3 + 0] = column_x;
+    backward[r * 3 + 1] = column_y;
+    backward[r * 3 + 2] = g->inverse_homography[r * 3 + 2] + column_x * map->offset_x
+                                                           + column_y * map->offset_y;
+  }
+}
+
+
 __DT_CLONE_TARGETS__
 static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *const roi_in,
                             dt_iop_channelmixer_rgb_gui_data_t *g,
+                            const dt_iop_channelmixer_rgb_box_map_t *const box_map,
                             const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_CAM,
                             float *const restrict patches,
                             const gboolean normalize_exposure,
@@ -1381,6 +1459,18 @@ static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *
   const size_t height = roi_in->height;
   const float radius_x = g->checker->radius * hypotf(1.f, g->checker->ratio) * g->safety_margin;
   const float radius_y = radius_x / g->checker->ratio;
+
+  // The chart box is authored in preview-request pixels; this buffer may be a different grid.
+  // Both radii stay in ideal chart units, so only the two homographies need the mapping.
+  float homography[9];
+  float inverse_homography[9];
+  _map_homographies(g, box_map, homography, inverse_homography);
+
+  dt_print(DT_DEBUG_DEV,
+           "[channelmixerrgb] sampling %" G_GSIZE_FORMAT " patches over a %" G_GSIZE_FORMAT
+           "x%" G_GSIZE_FORMAT " buffer, box scaled by (%.5f, %.5f) offset (%.1f, %.1f)\n",
+           g->checker->patches, width, height, box_map->scale_x, box_map->scale_y,
+           box_map->offset_x, box_map->offset_y);
 
   if(IS_NULL_PTR(g->delta_E_in))
   {
@@ -1408,7 +1498,7 @@ static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *
     size_t y_min = height - 1;
     size_t y_max = 0;
     for(size_t c = 0; c < 4; c++) {
-      new_corners[c] = apply_homography(corners[c], g->homography);
+      new_corners[c] = apply_homography(corners[c], homography);
       x_min = fminf(new_corners[c].x, x_min);
       x_max = fmaxf(new_corners[c].x, x_max);
       y_min = fminf(new_corners[c].y, y_min);
@@ -1430,7 +1520,7 @@ static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *
       {
         // Check if this pixel lies inside the sampling area and sample if it does
         point_t current_point = { i + 0.5f, j + 0.5f };
-        current_point = apply_homography(current_point, g->inverse_homography);
+        current_point = apply_homography(current_point, inverse_homography);
         current_point.x -= center.x;
         current_point.y -= center.y;
 
@@ -1448,6 +1538,19 @@ static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *
           num_elem++;
         }
       }
+
+    if(num_elem == 0)
+    {
+      // Dividing by zero here hands the solver a NaN row, and it returns a matrix fitted on
+      // nothing at all -- silently, with a plausible-looking delta E report next to it.
+      dt_print(DT_DEBUG_ALWAYS,
+               "[channelmixerrgb] patch %" G_GSIZE_FORMAT " (%s) sampled no pixel: the chart box"
+               " does not lie on the %" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT " buffer."
+               " Refusing to profile.\n",
+               k, g->checker->values[k].name ? g->checker->values[k].name : "?", width, height);
+      dt_control_log(_("color calibration: the chart area does not lie on the image"));
+      return 1;
+    }
 
     for(size_t c = 0; c < 3; c++) patches[k * 4 + c] /= (float)num_elem;
 
@@ -1547,7 +1650,12 @@ static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *
       for(int c = 0; c < 3; c++)
       {
         variance += sqf(RGB_test[c] - mean_test);
-        covariance += (RGB_ref[c] - mean_ref) * (RGB_test[c] - mean_ref);
+        // Both factors are centred on their OWN mean. Using mean_ref for the test term too is
+        // algebraically the same covariance -- the surplus is (mean_test - mean_ref) times
+        // sum(RGB_ref - mean_ref), and that sum is zero over the very set mean_ref averages --
+        // but it computes it as a difference of two large numbers instead of a sum of small
+        // ones, and it reads as a typo every time anyone audits this.
+        covariance += (RGB_ref[c] - mean_ref) * (RGB_test[c] - mean_test);
       }
     }
     variance /= 3.f * g->checker->patches;
@@ -1574,6 +1682,7 @@ static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *
 __DT_CLONE_TARGETS__
 int extract_color_checker(const float *const restrict in, float *const restrict out,
                           const dt_iop_roi_t *const roi_in, dt_iop_channelmixer_rgb_gui_data_t *g,
+                          const dt_iop_channelmixer_rgb_box_map_t *const box_map,
                           const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_RGB,
                           const dt_colormatrix_t XYZ_to_CAM,
                           const dt_adaptation_t kind)
@@ -1584,7 +1693,7 @@ int extract_color_checker(const float *const restrict in, float *const restrict 
   dt_simd_memcpy(in, out, (size_t)roi_in->width * roi_in->height * 4);
 
   extraction_result_t extraction_result = { 0 };
-  if(_extract_patches(out, roi_in, g, RGB_to_XYZ, XYZ_to_CAM, patches, TRUE, &extraction_result))
+  if(_extract_patches(out, roi_in, g, box_map, RGB_to_XYZ, XYZ_to_CAM, patches, TRUE, &extraction_result))
   {
     dt_free_align(patches);
     return 1;
@@ -1878,12 +1987,13 @@ int extract_color_checker(const float *const restrict in, float *const restrict 
 
 int validate_color_checker(const float *const restrict in,
                            const dt_iop_roi_t *const roi_in, dt_iop_channelmixer_rgb_gui_data_t *g,
+                           const dt_iop_channelmixer_rgb_box_map_t *const box_map,
                            const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_RGB, const dt_colormatrix_t XYZ_to_CAM)
 {
   float *const restrict patches = dt_alloc_align_float(4 * g->checker->patches);
   if(IS_NULL_PTR(patches)) return 1;
   extraction_result_t extraction_result = { 0 };
-  if(_extract_patches(in, roi_in, g, RGB_to_XYZ, XYZ_to_CAM, patches, FALSE, &extraction_result))
+  if(_extract_patches(in, roi_in, g, box_map, RGB_to_XYZ, XYZ_to_CAM, patches, FALSE, &extraction_result))
   {
     dt_free_align(patches);
     return 1;
@@ -1956,7 +2066,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     if(g->run_profile && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
     {
       dt_iop_gui_enter_critical_section(self);
-      const int err = extract_color_checker(in, out, roi_in, g, RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM, data->adaptation);
+      const dt_iop_channelmixer_rgb_box_map_t box_map = _box_map(pipe, roi_in);
+      const int err = extract_color_checker(in, out, roi_in, g, &box_map,
+                                            RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM, data->adaptation);
       g->run_profile = FALSE;
       dt_iop_set_cache_bypass(self, FALSE);
       dt_iop_gui_leave_critical_section(self);
@@ -2069,7 +2181,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(self->dev->gui_attached && g)
     if(g->run_validation && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
     {
-      const int err = validate_color_checker(out, roi_out, g, RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM);
+      const dt_iop_channelmixer_rgb_box_map_t box_map = _box_map(pipe, roi_out);
+      const int err = validate_color_checker(out, roi_out, g, &box_map, RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM);
       g->run_validation = FALSE;
       if(err) return 1;
     }
@@ -3074,6 +3187,15 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
            pipe->type == DT_DEV_PIXELPIPE_FULL ) )
     {
       piece->process_cl_ready = 0;
+
+      // Same reason, and the one nobody wrote down: all three modes consume the WHOLE frame in a
+      // single call -- the two colour-checker paths address it with chart-box coordinates, and
+      // auto_detect_WB() averages it. Tiling calls process() once per tile with a tile-local
+      // roi_in, so the chart box would be applied to a fragment and whichever tile ran last would
+      // win. Whether that happens is a runtime memory decision
+      // (dt_tiling_piece_fits_host_memory(), which reads dt_get_available_mem() and the pixelpipe
+      // cache's largest free run), so it shows up on one machine and not another.
+      piece->process_tiling_ready = 0;
     }
   }
 }
