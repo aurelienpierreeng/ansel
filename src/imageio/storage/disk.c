@@ -311,6 +311,18 @@ void gui_reset(dt_imageio_module_storage_t *self)
   dt_conf_set_int("plugins/imageio/storage/disk/overwrite", dt_bauhaus_combobox_get(d->onsave_action));
 }
 
+/* Guards the choice of an output filename, which spans images: two threads exporting
+ * different images can otherwise settle on the same free name and one silently overwrites
+ * the other. Module-owned, and initialised through pthread_once so it is recursive like
+ * every other lock created with dt_pthread_mutex_init(..., NULL). */
+static dt_pthread_mutex_t _filename_lock;
+static pthread_once_t _filename_lock_once = PTHREAD_ONCE_INIT;
+
+static void _filename_lock_init(void)
+{
+  dt_pthread_mutex_init(&_filename_lock, NULL);
+}
+
 int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, const int32_t imgid,
           dt_imageio_module_format_t *format, dt_imageio_module_data_t *fdata, const int num, const int total,
           const gboolean high_quality, const gboolean export_masks,
@@ -325,12 +337,31 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
   g_strlcpy(pattern, d->filename, sizeof(pattern));
   gboolean from_cache = FALSE;
   dt_image_full_path(imgid,  input_dir,  sizeof(input_dir),  &from_cache, __FUNCTION__);
-  // set variable values to expand them afterwards in darktable variables
-  dt_variables_set_max_width_height(d->vp, fdata->max_width, fdata->max_height);
+
+  /* Private expansion context, per call.
+   *
+   * This used to write into d->vp -- ONE dt_variables_params_t owned by the storage module
+   * and reused by every image in the export. store() runs in parallel, so two threads
+   * exporting different images both assigned ->imgid/->sequence there and then expanded,
+   * and the lock around the whole block was what kept that from producing a filename built
+   * from another image's variables. A per-call context removes the shared state instead of
+   * serializing access to it, which is the actual fix: nothing to race, nothing to lock. */
+  dt_variables_params_t *vp = NULL;
+  dt_variables_params_init(&vp);
+  dt_variables_set_max_width_height(vp, fdata->max_width, fdata->max_height);
 
   gboolean fail = FALSE;
-  // we're potentially called in parallel. have sequence number synchronized:
-  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
+  /* Still serialized, but only for what genuinely spans images: choosing a filename nobody
+   * else has taken. That is a check-then-create across the whole export, which no per-image
+   * lock can cover. The lock is this module's own now, not a process-wide "plugin" mutex
+   * shared with the watermark renderer and rawspeed's metadata init.
+   *
+   * The mechanism is still not airtight -- another process can create the file between the
+   * g_file_test() below and the format writer opening it. The airtight version claims the
+   * name with O_CREAT|O_EXCL and retries on EEXIST, which needs the format writers to accept
+   * a descriptor instead of a path. Recorded in doc/lock-audit.md. */
+  pthread_once(&_filename_lock_once, _filename_lock_init);
+  dt_pthread_mutex_lock(&_filename_lock);
   {
 try_again:
     // avoid braindead export which is bound to overwrite at random:
@@ -343,12 +374,12 @@ try_again:
     g_strlcpy(pattern, fixed_path, sizeof(pattern));
     dt_free(fixed_path);
 
-    d->vp->filename = input_dir;
-    d->vp->jobcode = "export";
-    d->vp->imgid = imgid;
-    d->vp->sequence = num;
+    vp->filename = input_dir;
+    vp->jobcode = "export";
+    vp->imgid = imgid;
+    vp->sequence = num;
 
-    gchar *result_filename = dt_variables_expand(d->vp, pattern, TRUE);
+    gchar *result_filename = dt_variables_expand(vp, pattern, TRUE);
     g_strlcpy(filename, result_filename, sizeof(filename));
     dt_free(result_filename);
 
@@ -403,7 +434,8 @@ try_again:
     {
       if(g_file_test(filename, G_FILE_TEST_EXISTS))
       {
-        dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+        dt_pthread_mutex_unlock(&_filename_lock);
+        dt_variables_params_destroy(vp);
         fprintf(stderr, "[export_job] skipping `%s'\n", filename);
         dt_control_log(ngettext("%d/%d skipping `%s'", "%d/%d skipping `%s'", num),
                        num, total, filename);
@@ -411,7 +443,8 @@ try_again:
       }
     }
   } // end of critical block
-  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+  dt_pthread_mutex_unlock(&_filename_lock);
+  dt_variables_params_destroy(vp);
   if(fail) return 1;
 
   /* export image to file */
