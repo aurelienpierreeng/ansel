@@ -617,6 +617,27 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
     // we save the new instance creation
     dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
+
+    // ...and run it NOW, before returning to the main loop.
+    //
+    // dt_dev_add_history_item() only QUEUES: dev_history_gui.c holds the request behind the
+    // "Pipe recompute timeout" preference (processing/timeout, 200 ms by default) so that a
+    // slider drag does not commit once per step. Creating an instance is not a drag -- there
+    // is nothing to coalesce, and the delay is load-bearing here in a way it is not anywhere
+    // else, because two things read the module's state before the timeout fires:
+    //
+    //   - libs/modulegroups.c shows an extra instance only when it is in history
+    //     (`in_history || multi_priority == 0`), and its refresh is a g_idle queued by the
+    //     dt_iop_request_focus() above -- so it runs a few ms from now, long before 200 ms;
+    //   - that module deliberately does NOT listen to history changes (expander reparenting
+    //     stole keyboard focus from Bauhaus widgets), so nothing refreshes the panel again
+    //     when the commit finally lands.
+    //
+    // The new instance was therefore judged "not in history yet", hidden, and stayed hidden
+    // until an unrelated event queued another refresh -- clicking the base module's header,
+    // which is exactly what users reported doing to make their new copy appear (#1265).
+    // Measured with -d dev: idle at +100 ms saw in_history=0 enabled=0 -> HIDE.
+    dt_dev_history_flush_pending_commits(module->dev);
   }
 
   /* update ui to new parameters */
