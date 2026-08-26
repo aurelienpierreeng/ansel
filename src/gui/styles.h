@@ -25,6 +25,8 @@
 #ifndef DT_GUI_STYLES_H
 #define DT_GUI_STYLES_H
 
+#include <stdint.h>  // int32_t, in the declaration below
+
 /** shows a dialog for creating a new style */
 void dt_gui_styles_dialog_new(int32_t imgid);
 
