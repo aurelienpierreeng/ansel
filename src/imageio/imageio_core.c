@@ -407,20 +407,33 @@ int dt_imageio_is_hdr(const char *filename)
   return dt_image_ext_is_hdr(c + 1);
 }
 
-static gboolean _is_in_list(char *elem, char *list)
+/** @brief Is @p elem one of the comma-separated entries of @p list?
+ *
+ * @param elem the value to look for; NULL is never in any list.
+ * @param list a MUTABLE, comma-separated string. It is tokenised in place, so the caller's
+ * buffer is modified and must be a private copy.
+ * @return TRUE on a case-insensitive match of a WHOLE entry.
+ *
+ * @note Two things were wrong here and both are fixed. The comparison was
+ * `g_ascii_strncasecmp(list, elem, strlen(elem))`, which succeeds when the list entry
+ * merely STARTS WITH elem -- so "nef" matched an entry "nefarious", and a partial camera
+ * maker matched a longer one. And the tokeniser was strtok(), which keeps static state:
+ * this runs on worker threads during import, export and mipmap generation, so two of them
+ * tokenising at once corrupted each other and made "is this handled by LibRaw?" answer
+ * non-deterministically. strtok_r() keeps its state in the caller's frame.
+ */
+static gboolean _is_in_list(const char *elem, char *list)
 {
-  // Search if elem is contained in the coma-separated list string
-  gboolean success = FALSE;
-  if(elem && list)
+  if(IS_NULL_PTR(elem) || IS_NULL_PTR(list)) return FALSE;
+
+  char *saveptr = NULL;
+  for(char *entry = strtok_r(list, ",", &saveptr); !IS_NULL_PTR(entry);
+      entry = strtok_r(NULL, ",", &saveptr))
   {
-    while(!IS_NULL_PTR(list) && !success)
-    {
-      success = !g_ascii_strncasecmp(list, elem, strlen(elem));
-      list = strtok(NULL, ",");
-    }
+    if(!g_ascii_strcasecmp(entry, elem)) return TRUE;
   }
 
-  return success;
+  return FALSE;
 }
 
 gboolean dt_imageio_is_handled_by_libraw(dt_image_t *img, const char *filename)
@@ -428,14 +441,21 @@ gboolean dt_imageio_is_handled_by_libraw(dt_image_t *img, const char *filename)
   // Allow users to define some extensions, makers and models that should be handled by Libraw
   gboolean is_handled = FALSE;
 
-  char *ext = g_strrstr(filename, ".") + 1; // move the pointer after the extension dot
+  // g_strrstr() returns NULL when the name has no dot at all, and NULL + 1 is undefined
+  // behaviour before _is_in_list() ever gets to dereference it. An extensionless file in an
+  // imported folder is enough to reach this.
+  const char *dot = g_strrstr(filename, ".");
+  const char *ext = IS_NULL_PTR(dot) ? NULL : dot + 1;
+
   char *extensions = dt_conf_get_string("libraw/extensions");
   char *makers = dt_conf_get_string("libraw/makers");
   char *models = dt_conf_get_string("libraw/models");
 
-  is_handled |= _is_in_list(ext, strtok(extensions, ","));
-  is_handled |= _is_in_list(img->exif_maker, strtok(makers, ","));
-  is_handled |= _is_in_list(img->exif_model, strtok(models, ","));
+  // _is_in_list() tokenises its list argument in place; these are private copies from
+  // dt_conf_get_string(), so that is safe.
+  is_handled |= _is_in_list(ext, extensions);
+  is_handled |= _is_in_list(img->exif_maker, makers);
+  is_handled |= _is_in_list(img->exif_model, models);
 
   dt_free(extensions);
   dt_free(makers);
