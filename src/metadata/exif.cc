@@ -2058,11 +2058,6 @@ int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int
 {
   try
   {
-    // Serialize the whole exiv2 region (read + write): writeMetadata() below re-enters the
-    // non-thread-safe exiv2/XMP toolkit, so it must not run concurrently with other exiv2 work.
-    // The mutex is recursive, so the nested read_metadata_threadsafe() re-locks harmlessly.
-    Lock lock;
-
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
     if(!image.get()) return 1;
     read_metadata_threadsafe(image);
