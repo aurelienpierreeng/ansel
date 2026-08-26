@@ -39,11 +39,25 @@
 extern "C" {
 #endif
 
-/* Helper to force stack vectors to be aligned on DT_CACHELINE_BYTES blocks to enable AVX2 */
+/** @brief Promise the compiler that @p x is already cacheline-aligned, and return it.
+ *
+ * @warning This ASSERTS, it does not align: the compiler is free to emit aligned loads
+ * and stores on the strength of the promise. Applying it to a pointer that is not in
+ * fact aligned is undefined behaviour, and typically shows up as a SIGSEGV in vectorised
+ * code far from the allocation. Only use it on memory from dt_alloc_align() and friends,
+ * or on a stack object declared DT_ALIGNED_ARRAY. Use dt_check_sse_aligned() when the
+ * alignment is not known statically.
+ */
 #define DT_IS_ALIGNED(x) __builtin_assume_aligned(x, DT_CACHELINE_BYTES)
 
-// Configure the size of a CPU cacheline in bytes, floats, and pixels.  On most current architectures,
-// a cacheline contains 64 bytes, but Apple Silicon (M-series processors) uses 128-byte cache lines.
+/* Size of a CPU cacheline, in bytes, floats and 4-float pixels.
+ *
+ * These are COMPILE-TIME constants chosen per target, not the running machine's real
+ * cacheline: a binary built for x86-64 and run under emulation on Apple Silicon keeps 64.
+ * They set the alignment of every dt_alloc_align() buffer and of DT_ALIGNED_ARRAY, so a
+ * value smaller than the hardware's costs performance, and one larger costs memory --
+ * neither is a correctness problem, which is why the mismatch is easy to miss.
+ */
 #if defined(__APPLE__) && defined(__aarch64__)
   #define DT_CACHELINE_BYTES 128
   #define DT_CACHELINE_FLOATS 32
@@ -54,29 +68,57 @@ extern "C" {
   #define DT_CACHELINE_PIXELS 4
 #endif /* __APPLE__ && __aarch64__ */
 
-// Helper to force heap vectors to be aligned on 64 byte blocks to enable AVX2
-// If this is applied to a struct member and the struct is allocated on the heap, then it must be allocated
-// on a 64 byte boundary to avoid crashes or undefined behavior because of unaligned memory access.
+/** @brief Align an object on a cacheline boundary, so AVX2 can load it whole.
+ *
+ * @warning On a STRUCT MEMBER this attribute constrains the member's offset within the
+ * struct -- it cannot constrain where the struct itself lands. A struct carrying one of
+ * these must therefore be allocated by dt_alloc_align() (or live on the stack, where the
+ * compiler honours it); plain malloc()/g_malloc() guarantee far less alignment, and the
+ * member then straddles a cacheline. The result is a crash or silently wrong pixels in
+ * vectorised code, at the point of USE, with nothing wrong at the point of allocation.
+ */
 #define DT_ALIGNED_ARRAY __attribute__((aligned(DT_CACHELINE_BYTES)))
+
+/** @brief Align a 4-float pixel on 16 bytes, enough for SSE. Same struct-member caveat as
+ * DT_ALIGNED_ARRAY, with a weaker requirement that malloc() happens to meet on most
+ * platforms -- which is exactly why misuse survives testing here and not there. */
 #define DT_ALIGNED_PIXEL __attribute__((aligned(16)))
 
+/** @brief Is @p pointer aligned on a @p byte_count boundary? Pure test, no side effect. */
 static inline gboolean dt_is_aligned(const void *pointer, size_t byte_count)
 {
     return (uintptr_t)pointer % byte_count == 0;
 }
 
+/** @brief Round @p size UP to the next multiple of @p alignment.
+ *
+ * @param size byte count to round. Zero rounds to zero.
+ * @param alignment must be non-zero; zero divides by zero.
+ * @return the rounded size, always >= @p size.
+ */
 static inline size_t dt_round_size(const size_t size, const size_t alignment)
 {
   // Round the size of a buffer to the closest higher multiple
   return ((size % alignment) == 0) ? size : ((size - 1) / alignment + 1) * alignment;
 }
 
+/** @brief Round @p size up to the next multiple of 64.
+ *
+ * @note Hardcoded 64, NOT DT_CACHELINE_BYTES: on Apple Silicon a cacheline is 128, so this
+ * rounds to half a cacheline there. It is named for the SSE register width it was written
+ * for; do not substitute it for dt_round_size(size, DT_CACHELINE_BYTES).
+ */
 static inline size_t dt_round_size_sse(const size_t size)
 {
   // Round the size of a buffer to the closest 64 higher multiple
   return dt_round_size(size, 64);
 }
 
+/** @brief Platform back-end for dt_alloc_align(). Call dt_alloc_align() instead.
+ *
+ * @return cacheline-aligned memory of at least @p size bytes (rounded up), or NULL if the
+ * allocation failed. Must be released with dt_free_align().
+ */
 static inline void *dt_alloc_align_internal(size_t size)
 {
   const size_t alignment = DT_CACHELINE_BYTES;
@@ -92,8 +134,40 @@ static inline void *dt_alloc_align_internal(size_t size)
 #endif
 }
 
+/** @brief Allocate cacheline-aligned memory.
+ *
+ * @details The single entry point for buffers that vectorised code will touch. The
+ * returned block is aligned on DT_CACHELINE_BYTES and its usable size is @p size rounded
+ * UP to that boundary, so writing the rounded size is safe and reading it is defined.
+ *
+ * @param size requested byte count.
+ *
+ * @return the block, or **NULL when the allocation fails** -- which happens in practice on
+ * the pixel path, where buffers are hundreds of megabytes. Callers must check.
+ *
+ * @warning Release ONLY with dt_free_align(). On Windows this comes from _aligned_malloc()
+ * and passing it to free()/g_free()/dt_free() corrupts the heap; on POSIX the two paths
+ * happen to coincide, which is precisely why such a mismatch passes every Linux test and
+ * fails on Windows only.
+ *
+ * @see dt_calloc_align() for the zeroed variant, dt_alloc_align_float() for float counts.
+ */
 void *dt_alloc_align(size_t size);
 
+/** @brief g_free() @p ptr and set it to NULL, skipping both if it is already NULL.
+ *
+ * @param ptr an **lvalue** holding a pointer. It is assigned NULL, so a temporary, a cast
+ * expression or a function result does not compile -- deliberately: the whole point is
+ * that no caller is left holding a dangling copy.
+ *
+ * @warning Pairs with g_malloc()/g_strdup() and the rest of the GLib family, NOT with
+ * dt_alloc_align(). Use dt_free_align() for that.
+ *
+ * @warning Expands to a bare `if` with no `do { } while(0)` wrapper, so
+ * `if(c) dt_free(p); else ...` fails to compile with "else without a previous if". Brace
+ * the branch. It is a compile error rather than a silent misbinding, so it cannot reach
+ * runtime -- but it does force braces where none should be needed.
+ */
 #define dt_free(ptr)           \
   if(!IS_NULL_PTR(ptr))        \
   {                            \
@@ -101,12 +175,20 @@ void *dt_alloc_align(size_t size);
     *(void **)(&(ptr)) = NULL; \
   }
 
+/** @brief g_free() one pointer, with the signature GDestroyNotify wants.
+ *
+ * @param ptr taken BY VALUE, so unlike the dt_free() macro this cannot NULL the caller's
+ * variable -- the assignment in the body only clears the local copy and is dead. Use it
+ * where a GLib container needs a free function, not as a general-purpose free.
+ */
 static inline void dt_free_gpointer(gpointer ptr)
 {
   g_free(ptr);
   ptr = NULL;
 }
 
+/** @brief Platform back-end for dt_free_align(). Call dt_free_align() instead: this one
+ * takes the pointer by value and so cannot NULL the caller's variable. */
 #ifdef _WIN32
   static inline void dt_free_align_ptr(void *mem)
   {
@@ -119,6 +201,16 @@ static inline void dt_free_gpointer(gpointer ptr)
   }
 #endif
 
+/** @brief Release memory from dt_alloc_align() and set @p ptr to NULL.
+ *
+ * @param ptr an **lvalue**, for the same reason as dt_free(). NULL is accepted and ignored.
+ *
+ * @warning Must be used for -- and only for -- dt_alloc_align(), dt_calloc_align(),
+ * dt_alloc_align_float() and dt_calloc_align_float(). See dt_alloc_align() for what
+ * crossing the two families costs on Windows.
+ *
+ * @warning Same bare-`if` expansion as dt_free(): brace the branch in an if/else.
+ */
 #define dt_free_align(ptr)            \
   if(!IS_NULL_PTR(ptr))               \
   {                                   \
@@ -126,22 +218,36 @@ static inline void dt_free_gpointer(gpointer ptr)
     *(void **)(&(ptr)) = NULL;        \
   }
 
+/** @brief dt_alloc_align() followed by a zero fill.
+ * @return the zeroed block, or NULL on failure. Release with dt_free_align().
+ * @note Only the @p size bytes asked for are zeroed, not the padding dt_alloc_align()
+ * rounds the block up to. */
 static inline void* dt_calloc_align(size_t size)
 {
   void *buf = dt_alloc_align(size);
   if(buf) memset(buf, 0, size);
   return buf;
 }
+/** @brief Allocate @p pixels floats, cacheline-aligned and marked as such.
+ * @return the block, or NULL on failure. Release with dt_free_align().
+ * @warning @p pixels is a COUNT OF FLOATS, not a byte count, and the multiplication is not
+ * checked for overflow -- validate suspicious dimensions before calling. */
 static inline float *dt_alloc_align_float(size_t pixels)
 {
   return (float*)__builtin_assume_aligned(dt_alloc_align(pixels * sizeof(float)), DT_CACHELINE_BYTES);
 }
+/** @brief dt_alloc_align_float() followed by a zero fill.
+ * @return the zeroed block, or NULL on failure. Release with dt_free_align(). */
 static inline float *dt_calloc_align_float(size_t pixels)
 {
   float *const buf = (float*)dt_alloc_align(pixels * sizeof(float));
   if(buf) memset(buf, 0, pixels * sizeof(float));
   return (float*)__builtin_assume_aligned(buf, DT_CACHELINE_BYTES);
 }
+/** @brief Runtime-checked counterpart to DT_IS_ALIGNED().
+ * @return @p pointer marked aligned for the compiler when it really is cacheline-aligned,
+ * and **NULL when it is not** -- the return value is the test result, so ignoring it and
+ * using @p pointer anyway defeats the purpose. Does not allocate; ownership is unchanged. */
 static inline void * dt_check_sse_aligned(void * pointer)
 {
   if(dt_is_aligned(pointer, DT_CACHELINE_BYTES))
@@ -153,8 +259,13 @@ static inline void * dt_check_sse_aligned(void * pointer)
 /**
  * @brief Set the memory buffer to zero as a pack of unsigned char
  *
- * @param buffer void buffer
- * @param size size of the memory stride. NEEDS TO BE A MULTIPLE OF 8.
+ * @param buffer destination, at least @p size bytes. Not NULL-checked.
+ * @param size number of bytes to clear. The body writes one unsigned char at a time, so
+ * any size is handled; the "multiple of 8" this once required is no longer a constraint.
+ *
+ * @note The intent is a zero fill a compiler may not elide, as memset_s() guarantees in
+ * C11. A plain byte loop is not that guarantee -- an optimiser is allowed to recognise it
+ * and call memset() anyway -- so do not rely on this to scrub secrets.
  */
 static inline void memset_zero(void *const buffer, size_t size)
 {
