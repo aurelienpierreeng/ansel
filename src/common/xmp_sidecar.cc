@@ -275,7 +275,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
     if(!image.get()) return 1;
-    read_metadata_threadsafe(image);
+    image->readMetadata();
     Exiv2::ExifData &exifData = image->exifData();
 
     // get rid of thumbnails
@@ -1250,7 +1250,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     // read xmp sidecar
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(filename)));
     if(!image.get()) return 1;
-    read_metadata_threadsafe(image);
+    image->readMetadata();
     Exiv2::XmpData &xmpData = image->xmpData();
 
     Exiv2::XmpData::iterator pos;
@@ -2342,7 +2342,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
     // unfortunately it seems we have to read the metadata, to not erase the exif (which we just wrote).
     // will make export slightly slower, oh well.
     // img->clearXmpPacket();
-    read_metadata_threadsafe(img);
+    img->readMetadata();
 
     try
     {
@@ -2350,7 +2350,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
       std::unique_ptr<Exiv2::Image> input_image(Exiv2::ImageFactory::open(WIDEN(input_filename)));
       if(input_image.get() != 0)
       {
-        read_metadata_threadsafe(input_image);
+        input_image->readMetadata();
         img->setIptcData(input_image->iptcData());
         img->setXmpData(input_image->xmpData());
       }

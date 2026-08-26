@@ -1040,7 +1040,7 @@ void dt_exif_read_usercrop(dt_image_t *img, const char *filename)
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(filename)));
     if(!image.get()) return;
-    read_metadata_threadsafe(image);
+    image->readMetadata();
     Exiv2::ExifData &exifData = image->exifData();
     if(exifData.empty()) return;
     _check_usercrop(exifData, img);
@@ -1058,7 +1058,7 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(filename)));
     if(!image.get()) return;
-    read_metadata_threadsafe(image);
+    image->readMetadata();
     Exiv2::ExifData &exifData = image->exifData();
     if(!exifData.empty())
     {
@@ -1932,7 +1932,7 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
     if(!image.get()) return 1;
-    read_metadata_threadsafe(image);
+    image->readMetadata();
 
     // Get a list of preview images available in the image. The list is sorted
     // by the preview image pixel size, starting with the smallest preview.
@@ -2017,7 +2017,7 @@ int dt_exif_read(dt_image_t *img, const char *path)
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
     if(!image.get()) return 1;
-    read_metadata_threadsafe(image);
+    image->readMetadata();
     bool res = true;
 
     // EXIF metadata
@@ -2060,7 +2060,7 @@ int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
     if(!image.get()) return 1;
-    read_metadata_threadsafe(image);
+    image->readMetadata();
     Exiv2::ExifData &imgExifData = image->exifData();
     Exiv2::ExifData blobExifData;
     Exiv2::ExifParser::decode(blobExifData, blob, size);
@@ -2378,7 +2378,7 @@ void dt_exif_get_datetime_taken(const uint8_t *data, size_t size, char *datetime
   {
     Exiv2::ExifData::const_iterator pos;
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(data, size));
-    read_metadata_threadsafe(image);
+    image->readMetadata();
     Exiv2::ExifData &exifData = image->exifData();
 
     _find_datetime_taken(exifData, pos, datetime_taken);
