@@ -16,6 +16,7 @@ set(DATABASE_UNIT_TESTS
   # and splitting the list to say so would be more ceremony than it is worth.
   test_pipe_cache_policy
   test_backbuf_publish
+  test_conf_value_lifetime
 )
 
 foreach(test ${DATABASE_UNIT_TESTS})

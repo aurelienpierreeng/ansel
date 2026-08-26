@@ -119,22 +119,66 @@ static inline char *dt_conf_get_var(const char *name)
   return str;
 }
 
-/* set the value only if it hasn't been overridden from commandline
- * return 1 if key/value is still the one passed on commandline. */
+/** @brief Store @p str for @p name unless the command line pinned that key.
+ *
+ * @details This is the ONLY writer that can replace an existing value while the
+ * application is running -- the two inserts in _dt_conf_get_var_locked() only fire when the
+ * key is absent, and the two in dt_conf_init() run before any reader exists.
+ *
+ * That makes it the one place where dt_conf_get_string_const()'s borrowed pointer could be
+ * pulled out from under a reader. It used to be: g_hash_table_insert() destroys the value
+ * it replaces, and the table's value_destroy_func is a free. A reader that had taken the
+ * pointer and released the lock -- which dt_conf_get_var() does before returning -- was
+ * then reading freed memory. Rather than free the old value here, we RETIRE it: it is moved
+ * to darktable.conf->retired_values and released only at dt_conf_cleanup(). A stale read is
+ * possible where a use-after-free was; the pointer itself stays valid for the process
+ * lifetime.
+ *
+ * Retiring only happens when the value actually CHANGES. Writing a key back with the value
+ * it already holds -- which GUI state saving does constantly -- stores nothing and retires
+ * nothing, so the retired list grows with real edits and not with idle churn.
+ *
+ * @param name key to write.
+ * @param str the value. Ownership TRANSFERS to this function only when it returns 0.
+ * @return non-zero when the value was not stored -- either the command line pinned this key,
+ * or it already held exactly this value. **The caller still owns @p str and must free it.**
+ */
 static int dt_conf_set_if_not_overridden(const char *name, char *str)
 {
   dt_pthread_mutex_lock(&darktable.conf->mutex);
 
   char *over = (char *)g_hash_table_lookup(darktable.conf->override_entries, name);
-  const int is_overridden = (over && !strcmp(str, over));
-  if(!is_overridden)
+  int not_stored = (over && !strcmp(str, over));
+
+  if(!not_stored)
   {
-    g_hash_table_insert(darktable.conf->table, g_strdup(name), str);
+    const char *current = (const char *)g_hash_table_lookup(darktable.conf->table, name);
+    if(!IS_NULL_PTR(current) && !strcmp(current, str))
+    {
+      // Unchanged: storing it would retire a perfectly good string for nothing.
+      not_stored = 1;
+    }
+    else
+    {
+      // Take the old entry out WITHOUT running the destroy functions, so we decide what
+      // happens to each half: the key was never handed to anyone and is ours to free, the
+      // value may still be held by a reader and is retired instead.
+      gpointer old_key = NULL;
+      gpointer old_value = NULL;
+      if(g_hash_table_steal_extended(darktable.conf->table, name, &old_key, &old_value))
+      {
+        dt_free(old_key);
+        if(!IS_NULL_PTR(old_value))
+          g_ptr_array_add(darktable.conf->retired_values, old_value);
+      }
+
+      g_hash_table_insert(darktable.conf->table, g_strdup(name), str);
+    }
   }
 
   dt_pthread_mutex_unlock(&darktable.conf->mutex);
 
-  return is_overridden;
+  return not_stored;
 }
 
 void dt_conf_set_int(const char *name, int val)
@@ -497,6 +541,9 @@ void dt_conf_init(dt_conf_t *cf, const char *filename, GSList *override_entries)
   cf->x_confgen = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, _free_confgen_value);
 
   cf->table = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
+  // Values replaced by a later write live on here until shutdown, because
+  // dt_conf_get_string_const() may have handed one out. See dt_conf_set_if_not_overridden().
+  cf->retired_values = g_ptr_array_new_with_free_func(g_free);
   cf->override_entries = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
   dt_pthread_mutex_init(&darktable.conf->mutex, NULL);
 
@@ -905,6 +952,10 @@ void dt_conf_cleanup(dt_conf_t *cf)
   dt_conf_save(cf);
   g_hash_table_unref(cf->table);
   g_hash_table_unref(cf->override_entries);
+  // Released last: every string here was handed out by dt_conf_get_string_const() at some
+  // point, so it stays alive for as long as any of the conf state does.
+  g_ptr_array_unref(cf->retired_values);
+  cf->retired_values = NULL;
   g_hash_table_unref(cf->x_confgen);
   dt_pthread_mutex_destroy(&darktable.conf->mutex);
 }
