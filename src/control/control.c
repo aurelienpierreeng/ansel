@@ -121,95 +121,112 @@ void dt_control_init(dt_control_t *s)
   s->cursor.lock = FALSE;
 }
 
-// used for debugging, might remove later
-gchar *_get_cursor_name(dt_cursor_t cursor)
+/** @brief Human-readable name of a GDK cursor shape, for debug output.
+ *
+ * @details The returned string is a static literal owned by this table: it must NOT be
+ * freed, and it stays valid for the lifetime of the process. This used to g_strdup() its
+ * result from a 90-case switch, and neither of the two call sites freed it -- one of them
+ * could not, because it selected between the allocated name and a plain literal with a
+ * ternary. Static storage removes both the leak and the question.
+ *
+ * @param cursor the shape to name.
+ * @return the enum constant's spelling, never NULL. Unknown values -- GDK gained a shape,
+ * or the value is garbage -- give "GDK_CURSOR_UNKNOWN" rather than NULL, because every
+ * caller feeds this straight to a "%s" and passing NULL there is undefined behaviour.
+ */
+static const char *_get_cursor_name(dt_cursor_t cursor)
 {
-  gchar *shape_str = NULL;
-  switch(cursor)
+  static const struct
   {
-    case GDK_X_CURSOR: shape_str = g_strdup("GDK_X_CURSOR"); break;
-    case GDK_ARROW: shape_str = g_strdup("GDK_ARROW"); break;
-    case GDK_BASED_ARROW_DOWN: shape_str = g_strdup("GDK_BASED_ARROW_DOWN"); break;
-    case GDK_BASED_ARROW_UP: shape_str = g_strdup("GDK_BASED_ARROW_UP"); break;
-    case GDK_BOAT: shape_str = g_strdup("GDK_BOAT"); break;
-    case GDK_BOGOSITY: shape_str = g_strdup("GDK_BOGOSITY"); break;
-    case GDK_BOTTOM_LEFT_CORNER: shape_str = g_strdup("GDK_BOTTOM_LEFT_CORNER"); break;
-    case GDK_BOTTOM_RIGHT_CORNER: shape_str = g_strdup("GDK_BOTTOM_RIGHT_CORNER"); break;
-    case GDK_BOTTOM_SIDE: shape_str = g_strdup("GDK_BOTTOM_SIDE"); break;
-    case GDK_BOTTOM_TEE: shape_str = g_strdup("GDK_BOTTOM_TEE"); break;
-    case GDK_BOX_SPIRAL: shape_str = g_strdup("GDK_BOX_SPIRAL"); break;
-    case GDK_CENTER_PTR: shape_str = g_strdup("GDK_CENTER_PTR"); break;
-    case GDK_CIRCLE: shape_str = g_strdup("GDK_CIRCLE"); break;
-    case GDK_CLOCK: shape_str = g_strdup("GDK_CLOCK"); break;
-    case GDK_COFFEE_MUG: shape_str = g_strdup("GDK_COFFEE_MUG"); break;
-    case GDK_CROSS: shape_str = g_strdup("GDK_CROSS"); break;
-    case GDK_CROSS_REVERSE: shape_str = g_strdup("GDK_CROSS_REVERSE"); break;
-    case GDK_CROSSHAIR: shape_str = g_strdup("GDK_CROSSHAIR"); break;
-    case GDK_DIAMOND_CROSS: shape_str = g_strdup("GDK_DIAMOND_CROSS"); break;
-    case GDK_DOT: shape_str = g_strdup("GDK_DOT"); break;
-    case GDK_DOTBOX: shape_str = g_strdup("GDK_DOTBOX"); break;
-    case GDK_DOUBLE_ARROW: shape_str = g_strdup("GDK_DOUBLE_ARROW"); break;
-    case GDK_DRAFT_LARGE: shape_str = g_strdup("GDK_DRAFT_LARGE"); break;
-    case GDK_DRAFT_SMALL: shape_str = g_strdup("GDK_DRAFT_SMALL"); break;
-    case GDK_DRAPED_BOX: shape_str = g_strdup("GDK_DRAPED_BOX"); break;
-    case GDK_EXCHANGE: shape_str = g_strdup("GDK_EXCHANGE"); break;
-    case GDK_FLEUR: shape_str = g_strdup("GDK_FLEUR"); break;
-    case GDK_GOBBLER: shape_str = g_strdup("GDK_GOBBLER"); break;
-    case GDK_GUMBY: shape_str = g_strdup("GDK_GUMBY"); break;
-    case GDK_HAND1: shape_str = g_strdup("GDK_HAND1"); break;
-    case GDK_HAND2: shape_str = g_strdup("GDK_HAND2"); break;
-    case GDK_HEART: shape_str = g_strdup("GDK_HEART"); break;
-    case GDK_ICON: shape_str = g_strdup("GDK_ICON"); break;
-    case GDK_IRON_CROSS: shape_str = g_strdup("GDK_IRON_CROSS"); break;
-    case GDK_LEFT_PTR: shape_str = g_strdup("GDK_LEFT_PTR"); break;
-    case GDK_LEFT_SIDE: shape_str = g_strdup("GDK_LEFT_SIDE"); break;
-    case GDK_LEFT_TEE: shape_str = g_strdup("GDK_LEFT_TEE"); break;
-    case GDK_LEFTBUTTON: shape_str = g_strdup("GDK_LEFTBUTTON"); break;
-    case GDK_LL_ANGLE: shape_str = g_strdup("GDK_LL_ANGLE"); break;
-    case GDK_LR_ANGLE: shape_str = g_strdup("GDK_LR_ANGLE"); break;
-    case GDK_MAN: shape_str = g_strdup("GDK_MAN"); break;
-    case GDK_MIDDLEBUTTON: shape_str = g_strdup("GDK_MIDDLEBUTTON"); break;
-    case GDK_MOUSE: shape_str = g_strdup("GDK_MOUSE"); break;
-    case GDK_PENCIL: shape_str = g_strdup("GDK_PENCIL"); break;
-    case GDK_PIRATE: shape_str = g_strdup("GDK_PIRATE"); break;
-    case GDK_PLUS: shape_str = g_strdup("GDK_PLUS"); break;
-    case GDK_QUESTION_ARROW: shape_str = g_strdup("GDK_QUESTION_ARROW"); break;
-    case GDK_RIGHT_PTR: shape_str = g_strdup("GDK_RIGHT_PTR"); break;
-    case GDK_RIGHT_SIDE: shape_str = g_strdup("GDK_RIGHT_SIDE"); break;
-    case GDK_RIGHT_TEE: shape_str = g_strdup("GDK_RIGHT_TEE"); break;
-    case GDK_RIGHTBUTTON: shape_str = g_strdup("GDK_RIGHTBUTTON"); break;
-    case GDK_RTL_LOGO: shape_str = g_strdup("GDK_RTL_LOGO"); break;
-    case GDK_SAILBOAT: shape_str = g_strdup("GDK_SAILBOAT"); break;
-    case GDK_SB_DOWN_ARROW: shape_str = g_strdup("GDK_SB_DOWN_ARROW"); break;
-    case GDK_SB_H_DOUBLE_ARROW: shape_str = g_strdup("GDK_SB_H_DOUBLE_ARROW"); break;
-    case GDK_SB_LEFT_ARROW: shape_str = g_strdup("GDK_SB_LEFT_ARROW"); break;
-    case GDK_SB_RIGHT_ARROW: shape_str = g_strdup("GDK_SB_RIGHT_ARROW"); break;
-    case GDK_SB_UP_ARROW: shape_str = g_strdup("GDK_SB_UP_ARROW"); break;
-    case GDK_SB_V_DOUBLE_ARROW: shape_str = g_strdup("GDK_SB_V_DOUBLE_ARROW"); break;
-    case GDK_SHUTTLE: shape_str = g_strdup("GDK_SHUTTLE"); break;
-    case GDK_SIZING: shape_str = g_strdup("GDK_SIZING"); break;
-    case GDK_SPIDER: shape_str = g_strdup("GDK_SPIDER"); break;
-    case GDK_SPRAYCAN: shape_str = g_strdup("GDK_SPRAYCAN"); break;
-    case GDK_STAR: shape_str = g_strdup("GDK_STAR"); break;
-    case GDK_TARGET: shape_str = g_strdup("GDK_TARGET"); break;
-    case GDK_TCROSS: shape_str = g_strdup("GDK_TCROSS"); break;
-    case GDK_TOP_LEFT_ARROW: shape_str = g_strdup("GDK_TOP_LEFT_ARROW"); break;
-    case GDK_TOP_LEFT_CORNER: shape_str = g_strdup("GDK_TOP_LEFT_CORNER"); break;
-    case GDK_TOP_RIGHT_CORNER: shape_str = g_strdup("GDK_TOP_RIGHT_CORNER"); break;
-    case GDK_TOP_SIDE: shape_str = g_strdup("GDK_TOP_SIDE"); break;
-    case GDK_TOP_TEE: shape_str = g_strdup("GDK_TOP_TEE"); break;
-    case GDK_TREK: shape_str = g_strdup("GDK_TREK"); break;
-    case GDK_UL_ANGLE: shape_str = g_strdup("GDK_UL_ANGLE"); break;
-    case GDK_UMBRELLA: shape_str = g_strdup("GDK_UMBRELLA"); break;
-    case GDK_UR_ANGLE: shape_str = g_strdup("GDK_UR_ANGLE"); break;
-    case GDK_WATCH: shape_str = g_strdup("GDK_WATCH"); break;
-    case GDK_XTERM: shape_str = g_strdup("GDK_XTERM"); break;
-    case GDK_LAST_CURSOR: shape_str = g_strdup("GDK_LAST_CURSOR"); break;
-    case GDK_BLANK_CURSOR: shape_str = g_strdup("GDK_BLANK_CURSOR"); break;
-    case GDK_CURSOR_IS_PIXMAP: shape_str = g_strdup("GDK_CURSOR_IS_PIXMAP"); break;
-    default: break;
-  }
-  return shape_str;
+    dt_cursor_t shape;
+    const char *name;
+  } cursor_names[] = {
+  { GDK_X_CURSOR, "GDK_X_CURSOR" },
+  { GDK_ARROW, "GDK_ARROW" },
+  { GDK_BASED_ARROW_DOWN, "GDK_BASED_ARROW_DOWN" },
+  { GDK_BASED_ARROW_UP, "GDK_BASED_ARROW_UP" },
+  { GDK_BOAT, "GDK_BOAT" },
+  { GDK_BOGOSITY, "GDK_BOGOSITY" },
+  { GDK_BOTTOM_LEFT_CORNER, "GDK_BOTTOM_LEFT_CORNER" },
+  { GDK_BOTTOM_RIGHT_CORNER, "GDK_BOTTOM_RIGHT_CORNER" },
+  { GDK_BOTTOM_SIDE, "GDK_BOTTOM_SIDE" },
+  { GDK_BOTTOM_TEE, "GDK_BOTTOM_TEE" },
+  { GDK_BOX_SPIRAL, "GDK_BOX_SPIRAL" },
+  { GDK_CENTER_PTR, "GDK_CENTER_PTR" },
+  { GDK_CIRCLE, "GDK_CIRCLE" },
+  { GDK_CLOCK, "GDK_CLOCK" },
+  { GDK_COFFEE_MUG, "GDK_COFFEE_MUG" },
+  { GDK_CROSS, "GDK_CROSS" },
+  { GDK_CROSS_REVERSE, "GDK_CROSS_REVERSE" },
+  { GDK_CROSSHAIR, "GDK_CROSSHAIR" },
+  { GDK_DIAMOND_CROSS, "GDK_DIAMOND_CROSS" },
+  { GDK_DOT, "GDK_DOT" },
+  { GDK_DOTBOX, "GDK_DOTBOX" },
+  { GDK_DOUBLE_ARROW, "GDK_DOUBLE_ARROW" },
+  { GDK_DRAFT_LARGE, "GDK_DRAFT_LARGE" },
+  { GDK_DRAFT_SMALL, "GDK_DRAFT_SMALL" },
+  { GDK_DRAPED_BOX, "GDK_DRAPED_BOX" },
+  { GDK_EXCHANGE, "GDK_EXCHANGE" },
+  { GDK_FLEUR, "GDK_FLEUR" },
+  { GDK_GOBBLER, "GDK_GOBBLER" },
+  { GDK_GUMBY, "GDK_GUMBY" },
+  { GDK_HAND1, "GDK_HAND1" },
+  { GDK_HAND2, "GDK_HAND2" },
+  { GDK_HEART, "GDK_HEART" },
+  { GDK_ICON, "GDK_ICON" },
+  { GDK_IRON_CROSS, "GDK_IRON_CROSS" },
+  { GDK_LEFT_PTR, "GDK_LEFT_PTR" },
+  { GDK_LEFT_SIDE, "GDK_LEFT_SIDE" },
+  { GDK_LEFT_TEE, "GDK_LEFT_TEE" },
+  { GDK_LEFTBUTTON, "GDK_LEFTBUTTON" },
+  { GDK_LL_ANGLE, "GDK_LL_ANGLE" },
+  { GDK_LR_ANGLE, "GDK_LR_ANGLE" },
+  { GDK_MAN, "GDK_MAN" },
+  { GDK_MIDDLEBUTTON, "GDK_MIDDLEBUTTON" },
+  { GDK_MOUSE, "GDK_MOUSE" },
+  { GDK_PENCIL, "GDK_PENCIL" },
+  { GDK_PIRATE, "GDK_PIRATE" },
+  { GDK_PLUS, "GDK_PLUS" },
+  { GDK_QUESTION_ARROW, "GDK_QUESTION_ARROW" },
+  { GDK_RIGHT_PTR, "GDK_RIGHT_PTR" },
+  { GDK_RIGHT_SIDE, "GDK_RIGHT_SIDE" },
+  { GDK_RIGHT_TEE, "GDK_RIGHT_TEE" },
+  { GDK_RIGHTBUTTON, "GDK_RIGHTBUTTON" },
+  { GDK_RTL_LOGO, "GDK_RTL_LOGO" },
+  { GDK_SAILBOAT, "GDK_SAILBOAT" },
+  { GDK_SB_DOWN_ARROW, "GDK_SB_DOWN_ARROW" },
+  { GDK_SB_H_DOUBLE_ARROW, "GDK_SB_H_DOUBLE_ARROW" },
+  { GDK_SB_LEFT_ARROW, "GDK_SB_LEFT_ARROW" },
+  { GDK_SB_RIGHT_ARROW, "GDK_SB_RIGHT_ARROW" },
+  { GDK_SB_UP_ARROW, "GDK_SB_UP_ARROW" },
+  { GDK_SB_V_DOUBLE_ARROW, "GDK_SB_V_DOUBLE_ARROW" },
+  { GDK_SHUTTLE, "GDK_SHUTTLE" },
+  { GDK_SIZING, "GDK_SIZING" },
+  { GDK_SPIDER, "GDK_SPIDER" },
+  { GDK_SPRAYCAN, "GDK_SPRAYCAN" },
+  { GDK_STAR, "GDK_STAR" },
+  { GDK_TARGET, "GDK_TARGET" },
+  { GDK_TCROSS, "GDK_TCROSS" },
+  { GDK_TOP_LEFT_ARROW, "GDK_TOP_LEFT_ARROW" },
+  { GDK_TOP_LEFT_CORNER, "GDK_TOP_LEFT_CORNER" },
+  { GDK_TOP_RIGHT_CORNER, "GDK_TOP_RIGHT_CORNER" },
+  { GDK_TOP_SIDE, "GDK_TOP_SIDE" },
+  { GDK_TOP_TEE, "GDK_TOP_TEE" },
+  { GDK_TREK, "GDK_TREK" },
+  { GDK_UL_ANGLE, "GDK_UL_ANGLE" },
+  { GDK_UMBRELLA, "GDK_UMBRELLA" },
+  { GDK_UR_ANGLE, "GDK_UR_ANGLE" },
+  { GDK_WATCH, "GDK_WATCH" },
+  { GDK_XTERM, "GDK_XTERM" },
+  { GDK_LAST_CURSOR, "GDK_LAST_CURSOR" },
+  { GDK_BLANK_CURSOR, "GDK_BLANK_CURSOR" },
+  { GDK_CURSOR_IS_PIXMAP, "GDK_CURSOR_IS_PIXMAP" },
+  };
+
+  for(size_t i = 0; i < sizeof(cursor_names) / sizeof(cursor_names[0]); i++)
+    if(cursor_names[i].shape == cursor) return cursor_names[i].name;
+
+  return "GDK_CURSOR_UNKNOWN";
 }
 
 void dt_control_forbid_change_cursor()
