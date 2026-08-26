@@ -27,9 +27,13 @@
  * here, not a stepping stone: see doc/globals-migration.md, category "process-wide
  * buses".
  *
- * Declared here so that the modules which need them (iop/lens.cc, iop/watermark.c,
+ * Declared here so that the modules which need them (iop/watermark.c,
  * imageio/storage/disk.c, imageio/imageio_rawspeed.cc, ...) do not have to include
- * darktable.h, and therefore the whole application, to take a lock. */
+ * darktable.h, and therefore the whole application, to take a lock.
+ *
+ * Audited 2026-08-27; see doc/lock-audit.md for what each one protects, what was removed
+ * and why, and the follow-ups this list still owes -- notably that dt_plugin_threadsafe_mutex()
+ * is three unrelated concerns sharing one lock. */
 
 #include "system/dtpthread.h"
 
