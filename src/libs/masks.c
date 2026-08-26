@@ -2031,7 +2031,7 @@ void gui_init(dt_lib_module_t *self)
 
   // 2. Setup the non-modal popup window
   d->popup_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-  gtk_window_set_title(GTK_WINDOW(d->popup_window), _("Mask Manager Panel"));
+  gtk_window_set_title(GTK_WINDOW(d->popup_window), _("Shape Manager Panel"));
   gtk_window_set_type_hint(GTK_WINDOW(d->popup_window), GDK_WINDOW_TYPE_HINT_UTILITY);
   
   // NON-MODAL & NO FOCUS STEAL: Prevents window manager from stealing active focus when mapped/shown
@@ -2061,7 +2061,7 @@ void gui_init(dt_lib_module_t *self)
   // Create and pack the button to control the popup panel.
   // NOTE: it's added to the darkroom module toolbox, aka not here.
   d->popup_button = dtgtk_togglebutton_new(dtgtk_cairo_paint_masks_drawn, 0, NULL);
-  gtk_widget_set_tooltip_text(d->popup_button, _("Open mask manager..."));
+  gtk_widget_set_tooltip_text(d->popup_button, _("Open shape manager..."));
 
   /* module_toolbox may not be initialized yet when modules are being created.
    * Schedule adding the popup button via an idle callback so it runs after

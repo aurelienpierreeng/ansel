@@ -52,7 +52,7 @@ build/src/iop/introspection_liquify.c
 build/src/iop/introspection_lowlight.c
 build/src/iop/introspection_lowpass.c
 build/src/iop/introspection_lut3d.c
-build/src/iop/introspection_mask_manager.c
+build/src/iop/introspection_shape_manager.c
 build/src/iop/introspection_monochrome.c
 build/src/iop/introspection_negadoctor.c
 build/src/iop/introspection_nlmeans.c
@@ -257,7 +257,7 @@ src/iop/liquify.c
 src/iop/lowlight.c
 src/iop/lowpass.c
 src/iop/lut3d.c
-src/iop/mask_manager.c
+src/iop/shape_manager.c
 src/iop/monochrome.c
 src/iop/negadoctor.c
 src/iop/nlmeans.c

@@ -2455,7 +2455,7 @@
     <name>plugins/darkroom/masks/heightview</name>
     <type min="100" max="1000">int</type>
     <default>300</default>
-    <shortdescription>height of mask manager view window</shortdescription>
+    <shortdescription>height of shape manager view window</shortdescription>
     <longdescription>maximum height the masks view in darkroom will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
