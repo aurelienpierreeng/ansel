@@ -693,7 +693,11 @@ void dt_preset_repository_update_range(const char *operation, const int op_versi
                                        const dt_preset_range_t range,
                                        const double min, const double max)
 {
-  if(range < 0 || range >= DT_PRESET_RANGE_LAST) return;
+  // No `range < 0`: dt_preset_range_t has no negative enumerator, so the compiler gives it an
+  // unsigned type and clang rejects the comparison as always-false under -Werror. Nothing is
+  // lost -- a negative value cast into the enum arrives as a large positive one, which the
+  // upper bound catches.
+  if(range >= DT_PRESET_RANGE_LAST) return;
 
   sqlite3_stmt *stmt = NULL;
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _range_query[range],
@@ -712,7 +716,9 @@ void dt_preset_repository_update_range(const char *operation, const int op_versi
 void dt_preset_repository_update_flag(const char *operation, const int op_version, const char *name,
                                       const dt_preset_flag_t flag, const int value)
 {
-  if(flag < 0 || flag >= DT_PRESET_FLAG_LAST) return;
+  // Same as dt_preset_repository_update_range() above: the enum is unsigned, so the lower
+  // bound is dead and the upper bound catches a garbage value either way.
+  if(flag >= DT_PRESET_FLAG_LAST) return;
 
   sqlite3_stmt *stmt = NULL;
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _flag_query[flag],
