@@ -27,6 +27,9 @@ CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wvla)
 CHECK_C_COMPILER_FLAG_AND_ENABLE_IT(-Wold-style-declaration)
 
 CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wthread-safety)
+# The -Wno-error= that relaxes this under -Werror lives in the top-level CMakeLists.txt,
+# with the Debug flags: a -Wno-error= only works if it FOLLOWS the -Werror it relaxes.
+
 
 # since checking if defined(__GNUC__) is not enough to prevent Clang from using GCC-specific pragmas
 # (so Clang defines __GNUC__ ???) we need to disable the warnings about unknown pragmas
