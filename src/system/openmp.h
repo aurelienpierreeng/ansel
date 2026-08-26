@@ -37,7 +37,30 @@
 #endif
 #endif /* dt_omp_nontemporal */
 
+/** @brief Emit an `omp` pragma from a macro body. Implementation detail of the wrappers. */
 #define OMP_PRAGMA(x) _Pragma(#x)
+
+/* Every wrapper below injects TWO clauses the call site does not write, and both change
+ * what the loop means:
+ *
+ *   default(firstprivate) -- each thread gets its OWN COPY of every variable the body
+ *     mentions and that is not named in an explicit clause, initialised from the value on
+ *     entry. Reads see the right value, which is why this is convenient. WRITES DO NOT
+ *     ESCAPE: accumulating into an outer variable silently produces nothing, and the loop
+ *     still compiles and still gives the correct answer when OpenMP is disabled or the
+ *     thread count is 1 -- so it passes casual testing. Name such a variable in an explicit
+ *     shared()/reduction() clause. Pointers are copied as POINTERS, so writes THROUGH one
+ *     are shared as usual; it is the scalar accumulators that are the trap.
+ *
+ *   schedule(static) -- iterations are split into equal contiguous blocks up front, which
+ *     is right for uniform per-pixel work and wrong when cost varies by row or when a tile
+ *     may exit early. Pass an explicit schedule() for those.
+ *
+ * All of them expand to NOTHING when _OPENMP is undefined, so a body that relies on being
+ * parallel for correctness -- rather than merely for speed -- is silently serialised.
+ */
+
+/** @brief `omp parallel`, with default(firstprivate). @see the note above. */
 #define __OMP_PARALLEL__(...) OMP_PRAGMA(omp parallel default(firstprivate) __VA_ARGS__)
 #define __OMP_PARALLEL_FOR__(...) OMP_PRAGMA(omp parallel for default(firstprivate) schedule(static) __VA_ARGS__)
 #define __OMP_PARALLEL_FOR_SIMD__(...) OMP_PRAGMA(omp parallel for simd default(firstprivate) schedule(simd:static) __VA_ARGS__)
@@ -46,9 +69,16 @@
 #define __OMP_SIMD__(...) OMP_PRAGMA(omp simd __VA_ARGS__)
 #define __OMP_DECLARE_SIMD__(...) OMP_PRAGMA(omp declare simd __VA_ARGS__)
 
-// CLang 20 supports OpenMP 5.1 default(firstprivate) but only for C files.
-// C++ files still need to use default(none) until further notice.
-// Change that when baseline CLang is upgraded.
+/** @brief The C++ form of __OMP_PARALLEL_FOR__.
+ *
+ * @warning It injects `default(none)`, NOT `default(firstprivate)`: Clang supports the
+ * OpenMP 5.1 default only for C. The two are opposites in practice -- `none` requires EVERY
+ * variable to be listed in an explicit clause and refuses to compile otherwise, while
+ * `firstprivate` silently copies them. So moving a loop between a .c and a .cc file is not
+ * a copy-paste: the C version grows a compile error listing every unlisted variable, and
+ * the C++ version, pasted into C, loses that check and starts privatising accumulators
+ * silently. Revisit when the baseline Clang is raised.
+ */
 #define __OMP_PARALLEL_FOR_CPP__(...) OMP_PRAGMA(omp parallel for default(none) schedule(static) __VA_ARGS__)
 
 // TRUE while the caller runs inside a parallel region. Diagnostics belong outside one: a message
@@ -81,11 +111,21 @@
 extern "C" {
 #endif
 
-/** Number of OpenMP threads the application decided to use. DECLARED here so
+/** @brief Number of OpenMP threads the application decided to use.
+ *
+ * @details This is the APPLICATION's budget, not omp_get_max_threads(): it is seeded from
+ * that value and then overridden by the -t command-line option (clamped to 1..100), so the
+ * two disagree whenever the user asked for a specific count. Size
+ * per-thread buffers with this one, index them with dt_get_thread_num().
+ *
+ * Number of OpenMP threads the application decided to use. DECLARED here so
  * low-level compute code can size per-thread buffers without importing
  * darktable.h; BOUND by the orchestrator (darktable.c). */
 int dt_get_num_openmp_threads(void);
 
+/** @brief Index of the calling thread within its parallel region, 0 outside one.
+ * @return 0 always when built without OpenMP. Safe to use as an index into a per-thread
+ * array sized by dt_get_num_openmp_threads(). */
 static inline int dt_get_thread_num()
 {
 #ifdef _OPENMP
