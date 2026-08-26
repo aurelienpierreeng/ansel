@@ -58,6 +58,7 @@
 #define TYPE_USHORT16 RawImageType::UINT16
 
 #include <memory>
+#include <mutex>
 
 #define __STDC_LIMIT_MACROS
 
@@ -87,31 +88,29 @@ static dt_imageio_retval_t dt_imageio_open_rawspeed_sraw (dt_image_t *img,
                                                           const RawImage r,
                                                           dt_mipmap_buffer_t *buf);
 static CameraMetaData *meta = NULL;
+static std::once_flag meta_once;
 
+/** Load rawspeed's cameras.xml exactly once, whichever thread gets here first.
+ *
+ * This used to be a double-checked lock over the process-wide "plugin" mutex, and it was
+ * the textbook broken one: `meta` was read outside the lock and is a plain pointer, so the
+ * read raced the store and nothing ordered publication of the pointer against construction
+ * of the object. It also meant a one-time initialisation shared a lock with the watermark
+ * renderer and the export filename allocator, which have nothing to do with it.
+ *
+ * std::call_once is the mechanism this always wanted: no lock of our own, correct
+ * publication, and -- unlike pthread_once -- a throwing initialiser leaves the flag unset
+ * and propagates, so a corrupt cameras.xml is retried rather than latched as "done". The
+ * object is intentionally never freed; it lives until the process exits.
+ */
 static void dt_rawspeed_load_meta()
 {
-  /* Load rawspeed cameras.xml meta file once */
-  if(IS_NULL_PTR(meta))
-  {
-    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-    if(IS_NULL_PTR(meta))
-    {
-      char datadir[DT_PATH_MAX] = { 0 }, camfile[DT_PATH_MAX] = { 0 };
-      dt_loc_get_datadir(datadir, sizeof(datadir));
-      dt_concat_path_file(camfile, datadir, "rawspeed/cameras.xml");
-      // never cleaned up (only when dt closes)
-      try
-      {
-        meta = new CameraMetaData(camfile);
-      }
-      catch(...)
-      {
-        dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
-        throw;
-      }
-    }
-    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
-  }
+  std::call_once(meta_once, [] {
+    char datadir[DT_PATH_MAX] = { 0 }, camfile[DT_PATH_MAX] = { 0 };
+    dt_loc_get_datadir(datadir, sizeof(datadir));
+    dt_concat_path_file(camfile, datadir, "rawspeed/cameras.xml");
+    meta = new CameraMetaData(camfile);
+  });
 }
 
 gboolean dt_rawspeed_lookup_makermodel(const char *maker,
