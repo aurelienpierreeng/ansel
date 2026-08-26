@@ -878,7 +878,11 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     goto error;
   }
 
-  struct dt_pixel_cache_entry_t *cache_entry;
+  // Initialised because the failure path below tests it. It is currently reached only after
+  // dt_dev_pixelpipe_cache_ref_entry_by_hash() has written NULL into it on every early
+  // return -- a callee-side contract propping up a caller-side assumption, on a path whose
+  // failure mode is unreffing a garbage pointer.
+  struct dt_pixel_cache_entry_t *cache_entry = NULL;
   void *data = NULL;
   /* Atomically look up the final pipeline output and increment its refcount under the cache
    * mutex.  peek() + separate ref_count_entry() has a TOCTOU window: peek releases its
