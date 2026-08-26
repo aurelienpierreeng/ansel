@@ -104,6 +104,29 @@ extern "C" {
 
 /** @brief Mark a branch as impossible, naming it @p D in the message. @see
  * dt_unreachable_codepath() */
+/** @brief Mark a deliberate `switch` fall-through so compilers and analysers stop warning.
+ *
+ * @details Write it as a statement where the `break` would go:
+ * `case 7: b |= ...; DT_FALLTHROUGH;`
+ *
+ * The conventional "fall through" COMMENT is understood by GCC's -Wimplicit-fallthrough
+ * and by clang-tidy, but not by every analyser -- SonarCloud reports each one as `c:S128`
+ * ("switch case should end with an unconditional break"), which is 7 findings on one
+ * intentionally-unrolled loop in common/hash.h. The attribute is a token the parser sees,
+ * so it settles the question everywhere at once.
+ *
+ * Expands to nothing on a toolchain without the attribute, where the comment convention
+ * (or nothing at all) was the only option anyway.
+ */
+#if defined(__has_attribute)
+#if __has_attribute(fallthrough)
+#define DT_FALLTHROUGH __attribute__((fallthrough))
+#endif
+#endif
+#ifndef DT_FALLTHROUGH
+#define DT_FALLTHROUGH ((void)0)
+#endif
+
 #define dt_unreachable_codepath_with_desc(D)                                                                 \
   dt_unreachable_codepath_with_caller(D, __FILE__, __LINE__, __FUNCTION__)
 
