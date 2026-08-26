@@ -45,6 +45,14 @@
 #define RELEASE_SHARED(...)                                                    \
   THREAD_ANNOTATION_ATTRIBUTE__(release_shared_capability(__VA_ARGS__))
 
+// Added locally: upstream's example header gained release_generic_capability later than the
+// copy we vendored. A single unlock() that releases either a read or a write lock -- which
+// is what pthread_rwlock_unlock() is, and therefore what dt_pthread_rwlock_unlock() is --
+// cannot be described by RELEASE or RELEASE_SHARED alone; annotating it as either makes
+// clang report every use of the other kind.
+#define RELEASE_GENERIC(...)                                                   \
+  THREAD_ANNOTATION_ATTRIBUTE__(release_generic_capability(__VA_ARGS__))
+
 #define TRY_ACQUIRE(...)                                                       \
   THREAD_ANNOTATION_ATTRIBUTE__(try_acquire_capability(__VA_ARGS__))
 
