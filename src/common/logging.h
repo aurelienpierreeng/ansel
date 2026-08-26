@@ -29,6 +29,21 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Debug channels, selected at runtime with -d <channel>.
+ *
+ * @details These are MASK BITS, combined into the runtime mask dt_get_debug_flags()
+ * returns, with two exceptions worth knowing before adding one:
+ *
+ *   - DT_DEBUG_ALWAYS is 0, so it matches nothing under a bitwise AND. The dt_print()
+ *     family special-cases it by equality. A new channel must never be 0.
+ *   - bit 6 (1 << 6) is FREE -- the list jumps from 1 << 5 to 1 << 7. The values are not
+ *     contiguous and nothing may assume they are.
+ *
+ * Bit 31 cannot be spelled as an enumerator (1 << 31 does not fit an `int`), so
+ * DT_DEBUG_SUPERVISOR is a macro below. The mask is an int32_t and is now FULL: a new
+ * channel needs bit 6, or a wider mask.
+ */
 typedef enum dt_debug_thread_t
 {
   DT_DEBUG_ALWAYS        = 0,       // always print regardless of debug flags
@@ -77,10 +92,30 @@ typedef enum dt_debug_thread_t
  * the application struct. Test with `dt_get_debug_flags() & DT_DEBUG_XXX`. */
 int32_t dt_get_debug_flags(void);
 
+/**
+ * @brief Print to stdout when @p thread is enabled, prefixed with seconds since startup.
+ *
+ * @param thread the channel to gate on, or DT_DEBUG_ALWAYS to print unconditionally.
+ * @param msg printf format string; the call is format-checked at compile time.
+ *
+ * @note Flushes stdout on every call, so output survives a crash immediately after -- the
+ * reason to use this rather than a bare fprintf(stderr) when tracing a crash.
+ *
+ * @note Format strings are checked against the GNU conversions on every platform,
+ * Windows included: src/CMakeLists.txt builds with __USE_MINGW_ANSI_STDIO=1, which is what
+ * makes `%z` and friends work under MinGW rather than falling back to the MS runtime's
+ * narrower set. Dropping that definition would silently change what these format strings
+ * mean on Windows only.
+ */
 void dt_print(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));
-/* same as above but without time stamp : nts = no time stamp */
+
+/** @brief dt_print() without the timestamp prefix (nts = no time stamp). */
 void dt_print_nts(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));
-/* same as above but requires additional DT_DEBUG_VERBOSE flag to be true */
+
+/** @brief dt_print() that additionally requires DT_DEBUG_VERBOSE to be enabled, i.e. both
+ * `-d <channel>` and `-d verbose`.
+ * @note The `v` is for VERBOSE, not for va_list -- this is variadic like the others, not a
+ * vprintf()-style counterpart. */
 void dt_vprint(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));
 
 #ifdef __cplusplus
