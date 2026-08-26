@@ -38,16 +38,35 @@
 extern "C" {
 #endif
 
+/** @brief Stringify @p x WITHOUT expanding it first. Implementation detail of STR(). */
 #undef STR_HELPER
 #define STR_HELPER(x) #x
 
+/** @brief Stringify @p x after macro-expanding it, e.g. STR(__LINE__) gives "42".
+ * @note The indirection through STR_HELPER() is what forces the expansion; stringifying
+ * directly would yield "__LINE__". */
 #undef STR
 #define STR(x) STR_HELPER(x)
 
+/** @brief Stringify @p x WITHOUT expanding it first. Implementation detail of
+ * DT_STRINGIFY(). */
 #define DT_STRINGIFY_HELPER(x) #x
+
+/** @brief Expand-then-stringify, identical in behaviour to STR().
+ * @note Both spellings exist for historical reasons and neither is deprecated. STR() is
+ * #undef'd before definition because windows.h and some third-party headers define a name
+ * that short; DT_STRINGIFY() is the collision-proof spelling and is the safer default in
+ * new code. */
 #define DT_STRINGIFY(x) DT_STRINGIFY_HELPER(x)
 
-// When included by a C++ file, restrict qualifiers are not allowed
+/** @brief `restrict` in C, nothing in C++.
+ *
+ * @details `restrict` is not a C++ keyword, so a header shared with a .cc file cannot spell
+ * it directly. Where it survives (C), it is a PROMISE that the pointed-to memory is not
+ * reached through any other pointer for that object's lifetime; breaking the promise is
+ * undefined behaviour the compiler will happily optimise around, and the symptom is wrong
+ * pixels rather than a crash. Note the promise silently disappears in C++ translation
+ * units, so a bug it hides can behave differently in .c and .cc code. */
 #ifdef __cplusplus
 #define DT_RESTRICT
 #else
@@ -59,8 +78,20 @@ extern "C" {
  * too many things depending on what we compare. We force here a semantic NULL check
  * for pointers types that will fail for anything else than pointers,
  * and make the code more explicit about what is checked.
- * This will fail at compile time on function pointers and anything that is not a pointer.
+ * Rejected at COMPILE time: integers, floats, structs, and arrays -- an array's
+ * `__typeof__` cannot initialise a local, which is what stops `IS_NULL_PTR(some_array)`
+ * from quietly testing a never-NULL decayed address.
  *
+ * ACCEPTED, contrary to what this comment claimed for a long time: function pointers.
+ * __builtin_classify_type() reports them as pointers, so `IS_NULL_PTR(callback)` compiles
+ * and does the obvious, useful thing. Verified rather than assumed.
+ *
+ * @param p any pointer expression. Evaluated EXACTLY ONCE -- it is bound to a local first
+ * -- so `IS_NULL_PTR(*iter++)` is safe.
+ * @return TRUE when @p p is NULL.
+ *
+ * @note Uses a GNU statement expression and __typeof__, so this header requires GCC or
+ * Clang. That is already true of the whole tree, MinGW included.
  */
 #define IS_NULL_PTR(p)                                            \
   ({                                                              \
@@ -71,9 +102,32 @@ extern "C" {
     _tmp == NULL;                                                 \
   })
 
+/** @brief Mark a branch as impossible, naming it @p D in the message. @see
+ * dt_unreachable_codepath() */
 #define dt_unreachable_codepath_with_desc(D)                                                                 \
   dt_unreachable_codepath_with_caller(D, __FILE__, __LINE__, __FUNCTION__)
+
+/** @brief Mark a branch as impossible.
+ *
+ * @warning This is an ASSERTION OF FACT, not a guard. It ends in
+ * __builtin_unreachable(), which tells the optimiser the branch cannot be entered; if it
+ * ever is, the program has undefined behaviour and the printed message is no guarantee --
+ * the compiler may already have deleted the surrounding test. Use it only where the
+ * impossibility is structural. To HANDLE an unexpected value, return an error instead.
+ */
 #define dt_unreachable_codepath() dt_unreachable_codepath_with_caller("unreachable", __FILE__, __LINE__, __FUNCTION__)
+
+/** @brief Back-end of the dt_unreachable_codepath() macros; call those, so the call site
+ * is recorded automatically.
+ *
+ * @param description short label for the impossible branch.
+ * @param file,line,function the call site, supplied by the macros.
+ * @return never: the function does not come back.
+ *
+ * @note Writes to stderr WITHOUT a trailing newline, so the message runs into whatever is
+ * printed next -- and stderr is unbuffered, so it does survive a crash immediately after,
+ * which is the point.
+ */
 static inline void dt_unreachable_codepath_with_caller(const char *description, const char *file,
                                                        const int line, const char *function)
 {
