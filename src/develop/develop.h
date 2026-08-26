@@ -224,8 +224,17 @@ typedef struct dt_develop_t
   // by the iop through the copy their respective pixelpipe holds, for thread-safety.
   dt_image_t image_storage;
 
-  // Protect read & write to dev->history and dev->forms
-  // and other related stuff like history_end, hashes, etc.
+  /* Protect read & write to dev->history and dev->forms
+   * and other related stuff like history_end, hashes, etc.
+   *
+   * The fields below carry GUARDED_BY(history_mutex), which turns that sentence into
+   * something the compiler checks: clang's -Wthread-safety refuses any access to them that
+   * is not demonstrably under this lock. It is the same rule CLAUDE.md states in prose --
+   * "the ONLY thread-safe interface between the pixel pipeline and an IOP module is
+   * history" -- enforced instead of described.
+   *
+   * A function that legitimately runs with the lock already held by its caller says so with
+   * REQUIRES(history_mutex) rather than being exempted. */
   dt_pthread_rwlock_t history_mutex;
 
   // We don't always apply the full history to modules,
@@ -235,10 +244,10 @@ typedef struct dt_develop_t
   // (no IOP, no history entry, no item on the GList). 
   // So the index of the history
   // entry matching history_end is history_end - 1,
-  int32_t history_end;
+  int32_t history_end GUARDED_BY(history_mutex);
 
   // history stack
-  GList *history;
+  GList *history GUARDED_BY(history_mutex);
 
   // Set to 1 while a dt_dev_write_history() background job is queued or running for this
   // dev, 0 otherwise. Lets dt_dev_write_history() skip queuing a redundant full history+masks
