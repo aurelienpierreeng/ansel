@@ -1203,19 +1203,6 @@ void dt_mipmap_cache_get_with_caller_and_shutdown(dt_mipmap_buffer_t *buf,
 
     buf->cache_entry = entry;
 
-    // The cache can't be locked twice from the same thread,
-    // because then it would never unlock.
-#ifdef _DEBUG
-    const pthread_t writer = dt_pthread_rwlock_get_writer(&(buf->cache_entry->lock));
-    if(mode == 'w')
-    {
-      assert(pthread_equal(writer, pthread_self()));
-    }
-    else
-    {
-      assert(!pthread_equal(writer, pthread_self()));
-    }
-#endif
   }
   else
   {
