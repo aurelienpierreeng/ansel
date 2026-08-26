@@ -139,7 +139,7 @@ could not substitute for any of them:
 | `imageio/imageio_rawspeed.cc` | one-time init of the `CameraMetaData` singleton | **lock deleted**, `std::call_once` |
 | `iop/watermark.c` | rsvg/cairo global font state | module-owned `_rsvg_lock` |
 | `imageio/storage/disk.c` | a shared expansion context + filename allocation | **shared state removed**; module-owned lock for what is left |
-| `iop/lens.c` | modifier construction | module-owned `_modifier_lock`, kept conservatively |
+| `iop/lens.c` | modifier construction | **lock deleted** — LensSerious is stateless |
 
 **A correction worth recording**, because it was nearly missed: `global_mutexes.h` listed
 `iop/lens.cc` among its consumers, and that file no longer exists. It is tempting to read
@@ -196,13 +196,19 @@ the test and the format writer opening it. **The airtight version claims the nam
 `O_CREAT|O_EXCL` and retries on `EEXIST`**, which requires the format writers to accept a
 descriptor rather than a path. That is the real fix and it is not done here.
 
-#### lens.c: kept, not deleted
+#### lens.c: deleted
 
-`get_modifier()` reads a `const` per-piece `d` and writes only caller-local outputs, and the
-LensSerious reader is documented lock-free with a thread-local handle — which together
-suggest this lock is vestigial from the lensfun era, when `lf_modifier_new()` touched a
-shared `lfDatabase`. That has not been demonstrated for every resolver path, so the lock
-stays, module-owned, until someone shows it can go.
+The lock around `get_modifier()` was vestigial from the lensfun era, when
+`lf_modifier_new()` touched a shared `lfDatabase`. LensSerious, which replaced it, is
+stateless and thread-safe by design — confirmed by its author — so modifier construction
+serialises against nothing and needs no lock.
+
+Worth keeping as a method note: this audit initially kept that lock, on the grounds that
+`get_modifier()` *looked* safe (a `const` per-piece `d`, caller-local outputs, a reader
+documented lock-free with a thread-local handle) but had not been proven so across every
+resolver path. That was the right default for something read from the outside. It was also
+answerable in one sentence by the person who wrote the library — which is worth more than
+another hour of reading, and worth asking for before assuming.
 
 ### `pipeline_threadsafe`
 

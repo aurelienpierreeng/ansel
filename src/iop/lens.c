@@ -1122,24 +1122,6 @@ __DT_CLONE_TARGETS__
  * counterpart to the `delete modifier` this replaces and no way to leak one.
  * @return non-zero when at least one axis resolved.
  */
-/* Serialises modifier construction. Module-owned: it used to share the process-wide
- * "plugin" mutex, which meant resolving a lens blocked RawSpeed decoding a file and the
- * export filename allocator, none of which are related.
- *
- * Kept rather than deleted, conservatively. get_modifier() reads a const per-piece `d` and
- * writes only caller-local outputs, and the LensSerious reader is documented lock-free with
- * a thread-local handle (see _lens_reset_resolved() below), which together suggest this lock
- * is vestigial from the lensfun era -- lf_modifier_new() touched a shared lfDatabase. That
- * has not been proven for every resolver path, so the lock stays until it is.
- * See doc/lock-audit.md. */
-static dt_pthread_mutex_t _modifier_lock;
-static pthread_once_t _modifier_lock_once = PTHREAD_ONCE_INIT;
-
-static void _modifier_lock_init(void)
-{
-  dt_pthread_mutex_init(&_modifier_lock, NULL);
-}
-
 static int get_modifier(int *mods_done, int w, int h, const dt_iop_lensfun_data_t *d,
                         int mods_filter, gboolean force_inverse, ls_modifier_t *mod,
                         ls_modifier_t *vig_mod)
@@ -1374,9 +1356,6 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   const float orig_w = roi_in->scale * piece->buf_in.width, orig_h = roi_in->scale * piece->buf_in.height;
 
-  pthread_once(&_modifier_lock_once, _modifier_lock_init);
-  dt_pthread_mutex_lock(&_modifier_lock);
-
   int modflags;
   ls_modifier_t modifier;
   ls_modifier_t vig_modifier;
@@ -1386,8 +1365,6 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
            d->ls_lens.n_dist, d->ls_lens.n_tca, d->ls_lens.n_vig, (double)d->crop,
            (double)d->focal);
 
-
-  dt_pthread_mutex_unlock(&_modifier_lock);
 
   const struct dt_interpolation *const interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
 
@@ -1868,16 +1845,12 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   }
 
   const float orig_w = roi_in->scale * piece->buf_in.width, orig_h = roi_in->scale * piece->buf_in.height;
-  pthread_once(&_modifier_lock_once, _modifier_lock_init);
-  dt_pthread_mutex_lock(&_modifier_lock);
   int modflags;
   ls_modifier_t modifier;
   get_modifier(&modflags, orig_w, orig_h, d,
                /*DT_LENS_MODIFY_TCA |*/ DT_LENS_MODIFY_DISTORTION | DT_LENS_MODIFY_GEOMETRY
                    | DT_LENS_MODIFY_SCALE,
                FALSE, &modifier, NULL);
-
-  dt_pthread_mutex_unlock(&_modifier_lock);
 
   if(!_lens_flags_move_pixels(modflags))
   {
