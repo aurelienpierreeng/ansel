@@ -612,8 +612,26 @@ static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets t
 
     // Get the label data from the list
     const dt_colorchecker_label_t *label_data = (const dt_colorchecker_label_t*)g_list_nth_data(*colorchecker_label, target_type);
-    checker_type = COLOR_CHECKER_USER_REF;
-    cht_filename = label_data->path;
+    if(IS_NULL_PTR(label_data))
+    {
+      // g_list_nth_data() returns NULL past the end of the list, and target_type is an index
+      // that can outlive what it indexes: it comes from saved module params, while the list is
+      // rebuilt at runtime from the user's reference files. Delete or move one of those files
+      // and every later index shifts; the builtin prefix can shift too, since
+      // dt_colorchecker_find_builtin() skips any builtin with no patches.
+      //
+      // Falls through to the COLOR_CHECKER_LAST arm below, which reports and copies the
+      // default checker -- the same handling an unknown type already gets.
+      fprintf(stderr,
+              "dt_get_color_checker: no colorchecker label at index %i, falling back to the default\n",
+              target_type);
+      checker_type = COLOR_CHECKER_LAST;
+    }
+    else
+    {
+      checker_type = COLOR_CHECKER_USER_REF;
+      cht_filename = label_data->path;
+    }
   }
   else // it's a builtin colorchecker
     checker_type = target_type;
