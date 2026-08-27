@@ -2241,6 +2241,10 @@ void gui_update(dt_iop_module_t *self)
 {
   const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)self->params;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
+  // dt_iop_gui_data() returns NULL whenever module->gui is -- a hidden, not-yet-initialised
+  // or torn-down module. There is nothing to update in that case, and the memcpy below would
+  // write 1500 bytes through the NULL, which is what GCC reports as "a region of size 0".
+  if(IS_NULL_PTR(g)) return;
   memcpy(&g->gui_params, p, sizeof(dt_iop_colorequal_params_t));
   dt_bauhaus_slider_set(g->white_level, p->white_level);
   dt_bauhaus_slider_set(g->sigma_L, p->sigma_L);
