@@ -968,7 +968,27 @@ int dt_colorspaces_conversion_matrices_xyz(const float adobe_XYZ_to_CAM[4][3], f
  * @param mul receives the 4 default WB multipliers, or NULL if not wanted.
  * @return TRUE on success, FALSE when no usable matrix was available.
  */
-int dt_colorspaces_conversion_matrices_rgb(const float adobe_XYZ_to_CAM[4][3], double RGB_to_CAM[4][3], double CAM_to_RGB[3][4], const float *embedded_matrix, double mul[4]);
+/* RGB_to_CAM, CAM_to_RGB and mul are OPTIONAL -- the implementation guards each with a NULL
+ * check, and both in-tree callers pass NULL for the first two. They are therefore declared as
+ * pointers, NOT as double[4][3] / double[3][4] / double[4]. A declared array bound on a
+ * parameter is an access contract to GCC (-Wstringop-overflow reads it as "must point to at
+ * least this many elements"), so the array spelling asserts a minimum size that NULL cannot
+ * satisfy, and every call warned. Do not restore the array bounds. */
+/* adobe_XYZ_to_CAM is 12 consecutive floats, row-major, 4 rows of 3 -- pass &m[0][0].
+ *
+ * It is a FLAT pointer rather than float[4][3] on purpose. As a 2D array parameter it decays
+ * to pointer-to-row, and GCC then sizes the accessible region as a single row and reports
+ * every call as an overflow: "accessing 48 bytes in a region of size 12". The 48 is right and
+ * the 12 is not -- a _Static_assert on sizeof(((dt_image_t *)0)->adobe_XYZ_to_CAM) == 48
+ * compiles clean. Four other spellings were tried and none silenced it: pointer-to-row, the
+ * C99 [static 4][3] bound, a #pragma GCC diagnostic at the call site (the warning comes from
+ * the middle end, which ignores it), and __attribute__((noclone)).
+ *
+ * RGB_to_CAM, CAM_to_RGB and mul are OPTIONAL -- each is NULL-checked, and both in-tree
+ * callers pass NULL for the first two. They are pointers for the same reason: a declared
+ * array bound is an access contract GCC reads as "must point to at least this many
+ * elements", which NULL cannot satisfy. Do not restore array bounds to any of these. */
+int dt_colorspaces_conversion_matrices_rgb(const float *adobe_XYZ_to_CAM, double (*RGB_to_CAM)[3], double (*CAM_to_RGB)[4], const float *embedded_matrix, double *mul);
 
 /**
  * @brief Apply CYGM white-balance coefficients to an image already converted to RGB by

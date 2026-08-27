@@ -108,7 +108,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       double RGB_to_CAM[4][3];
 
       // Get and store the matrix to go from camera to RGB for 4Bayer images (used for spot WB)
-      if(!dt_colorspaces_conversion_matrices_rgb(self->dev->image_storage.adobe_XYZ_to_CAM,
+      if(!dt_colorspaces_conversion_matrices_rgb(&self->dev->image_storage.adobe_XYZ_to_CAM[0][0],
                                                  RGB_to_CAM, NULL,
                                                  self->dev->image_storage.d65_color_matrix, NULL))
       {
@@ -359,7 +359,7 @@ void gui_update(dt_iop_module_t *self)
     if(img->flags & DT_IMAGE_4BAYER)
     {
       // Get and store the matrix to go from camera to RGB for 4Bayer images (used for spot WB)
-      if(!dt_colorspaces_conversion_matrices_rgb(img->adobe_XYZ_to_CAM, g->RGB_to_CAM, g->CAM_to_RGB,
+      if(!dt_colorspaces_conversion_matrices_rgb(&img->adobe_XYZ_to_CAM[0][0], g->RGB_to_CAM, g->CAM_to_RGB,
                                                  img->d65_color_matrix, NULL))
       {
         const char *camera = img->camera_makermodel;
