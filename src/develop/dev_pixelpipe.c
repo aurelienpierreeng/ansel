@@ -1455,8 +1455,18 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
      *
      * Only for a module that actually draws a mask: the raw stages upstream cannot carry one,
      * and rehashing them would cost cache misses for pixels that cannot move. */
-    if((piece->module->blend_params->mask_mode & DEVELOP_MASK_SHAPE)
-       && piece->module->blend_params->mask_id > 0)
+    // From piece->blendop_data, NOT piece->module->blend_params. This function runs on the
+    // darkroom worker thread, and blend_params belongs to the GUI thread -- the rule this file
+    // states twice above ("never the live GUI module->params"). Reading it here dereferences a
+    // module the GUI can be tearing down or reallocating underneath us, which is Sentry
+    // 142904894: EXCEPTION_ACCESS_VIOLATION at this line, from resync_pipe_with_history() on
+    // the pipeline thread. blendop_data is the per-piece copy dt_iop_commit_params() writes
+    // from the history snapshot, which is what blend.c itself reads.
+    const dt_develop_blend_params_t *const blend_data
+        = (const dt_develop_blend_params_t *)piece->blendop_data;
+    if(!IS_NULL_PTR(blend_data)
+       && (blend_data->mask_mode & DEVELOP_MASK_SHAPE)
+       && blend_data->mask_id > 0)
       local_hash = dt_hash(local_hash, (const char *)&pipe->mask_rasterization_step, sizeof(int));
 
 /*
