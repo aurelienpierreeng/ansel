@@ -1088,6 +1088,22 @@ cleanup:
  * ------------------------------------------------------------------------- */
 
 static GList *_profile_info_memo = NULL;
+
+/* Entries evicted from the memo but NOT yet freed. dt_colorspaces_add_profile() hands out a
+ * pointer the caller keeps -- dt_dev_pixelpipe_t::output_profile_info caches one for the
+ * lifetime of a pipe, and GUI code reads it from callbacks that run long after the pipe did.
+ * Freeing an entry on eviction leaves every one of those pointers dangling, and the eviction
+ * is not a rare event: it happens whenever the monitor profile changes, i.e. on a window move
+ * between monitors, which is also exactly when things repaint.
+ *
+ * So an evicted entry is retired rather than freed, and released at shutdown. The cost is
+ * bounded by the number of profile changes in a session -- a handful of ~1.5 MB entries in a
+ * pathological one -- against a use-after-free in the pixel path (Sentry 141501108: SIGSEGV in
+ * _apply_trc() reading a freed profile's LUTs from a pipe-finished callback).
+ *
+ * This mirrors what dt_conf_get_string_const() does with replaced values, and for the same
+ * reason: the API hands out a borrowed pointer with no way to tell the borrower it expired. */
+static GList *_profile_info_retired = NULL;
 /* Raw pthread type, like this module's other locks: dt_pthread_mutex_t is a struct
  * wrapper in Debug builds, so a static PTHREAD_MUTEX_INITIALIZER would be initialising
  * a subobject -- which clang rejects under -Werror and gcc silently accepts. */
@@ -1101,6 +1117,14 @@ void dt_colorspaces_flush_profile_memo(void)
     dt_iop_order_iccprofile_info_t *entry = (dt_iop_order_iccprofile_info_t *)_profile_info_memo->data;
     dt_ioppr_cleanup_profile_info(&entry);
     _profile_info_memo = g_list_delete_link(_profile_info_memo, _profile_info_memo);
+  }
+  // Retired entries go the same way. This runs at teardown, when no consumer is left to hold
+  // one; releasing them earlier is what the retirement exists to avoid.
+  while(_profile_info_retired)
+  {
+    dt_iop_order_iccprofile_info_t *entry = (dt_iop_order_iccprofile_info_t *)_profile_info_retired->data;
+    dt_ioppr_cleanup_profile_info(&entry);
+    _profile_info_retired = g_list_delete_link(_profile_info_retired, _profile_info_retired);
   }
   pthread_mutex_unlock(&_profile_info_lock);
 }
@@ -1121,7 +1145,8 @@ void dt_colorspaces_invalidate_display_profile_memo(void)
     dt_iop_order_iccprofile_info_t *entry = (dt_iop_order_iccprofile_info_t *)l->data;
     if(entry && entry->type == DT_COLORSPACE_DISPLAY)
     {
-      dt_ioppr_cleanup_profile_info(&entry);
+      // Retired, not freed: consumers hold this pointer (see _profile_info_retired).
+      _profile_info_retired = g_list_prepend(_profile_info_retired, entry);
       _profile_info_memo = g_list_delete_link(_profile_info_memo, l);
     }
     l = next;
