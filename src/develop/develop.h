@@ -227,19 +227,24 @@ typedef struct dt_develop_t
   /* Protect read & write to dev->history and dev->forms
    * and other related stuff like history_end, hashes, etc.
    *
-   * The fields below carry GUARDED_BY(history_mutex), which turns that sentence into
-   * something the compiler checks: clang's -Wthread-safety refuses any access to them that
-   * is not demonstrably under this lock. It is the same rule CLAUDE.md states in prose --
-   * "the ONLY thread-safe interface between the pixel pipeline and an IOP module is
-   * history" -- enforced instead of described.
+   * The fields below CANNOT carry GUARDED_BY(history_mutex), much as they should.
+   * Referring to a sibling struct member from a thread-safety attribute is a C++ feature:
+   * in C it only started working in clang 19. clang 18 and older reject it outright with
+   * "use of undeclared identifier 'history_mutex'", which broke the build for anyone on a
+   * distro clang -- reported against master, verified here as clang-18 failing and clang-19
+   * accepting the identical code.
+   *
+   * It looked fine locally for the worse of two reasons: the -Wthread-safety probe in
+   * cmake/modules/ was silently failing, so no local clang build had the analysis on at all,
+   * and clang does not resolve the attribute's argument when the analysis is off.
    *
    * A function that legitimately runs with the lock already held by its caller says so with
    * REQUIRES(history_mutex) rather than being exempted -- but on its DEFINITION, not its
    * declaration. dev_history.h only forward-declares dt_develop_t, and an attribute naming
    * dev->history_mutex needs the complete type; completing it there would mean including
    * this header, which includes dev_history.h back. The cycle is not worth the annotation,
-   * and little is lost: GUARDED_BY on the fields below is what actually checks every access,
-   * in every translation unit, whether or not the enclosing function declares a contract. */
+   * and with GUARDED_BY unavailable in C before clang 19 (see above), those REQUIRES on the
+   * definitions are now the only machine-checked part of this rule. */
   dt_pthread_rwlock_t history_mutex;
 
   // We don't always apply the full history to modules,
@@ -249,10 +254,10 @@ typedef struct dt_develop_t
   // (no IOP, no history entry, no item on the GList). 
   // So the index of the history
   // entry matching history_end is history_end - 1,
-  int32_t history_end GUARDED_BY(history_mutex);
+  int32_t history_end;
 
   // history stack
-  GList *history GUARDED_BY(history_mutex);
+  GList *history;
 
   // Set to 1 while a dt_dev_write_history() background job is queued or running for this
   // dev, 0 otherwise. Lets dt_dev_write_history() skip queuing a redundant full history+masks
