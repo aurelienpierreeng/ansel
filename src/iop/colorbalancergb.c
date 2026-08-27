@@ -1369,6 +1369,8 @@ void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe
 
 void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  /* init_pipe() may have failed to allocate, and cleanup runs regardless. */
+  if(IS_NULL_PTR(piece->data)) return;
   dt_iop_colorbalancergb_data_t *d = (dt_iop_colorbalancergb_data_t *)(piece->data);
   dt_free_align(d->gamut_LUT);
   d->gamut_LUT = NULL;
