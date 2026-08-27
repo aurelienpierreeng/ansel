@@ -767,7 +767,12 @@ static gboolean _prepare_resampling_plan(const struct dt_interpolation *itor,
   blob = (char *)blob + indexreq;
   float *kernel = (float *)blob;
   blob = (char *)blob + kernelreq;
-  float *scratchpad = scratchreq ? (float *)blob : NULL;
+  // Not `scratchreq ? ... : NULL`, unlike meta below: scratchreq is rounded up from at least
+  // 4 floats of headroom, so it is unconditionally non-zero and the NULL case cannot happen.
+  // Spelling it as a maybe-NULL made three later uses read as possible NULL dereferences --
+  // to a static analyser and to anyone reading the code. metareq IS conditional (pmeta), so
+  // meta keeps its ternary.
+  float *scratchpad = (float *)blob;
   blob = (char *)blob + scratchreq;
   int *meta = metareq ? (int *)blob : NULL;
 //   blob = (char *)blob + metareq;
