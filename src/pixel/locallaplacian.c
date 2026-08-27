@@ -367,6 +367,25 @@ int local_laplacian_internal(
 
   // don't divide by 2 more often than we can:
   const int num_levels = MIN(max_levels, 31-__builtin_clz(MIN(wd,ht)));
+
+  /* Two levels are the minimum this can work with, and the guard above does not give that.
+   *
+   * 31-clz(x) is 1 for x of 2 or 3, so an input only 2 or 3 pixels on its short side yields
+   * num_levels == 1 and last_level == 0. The coarsest-level reduction below then reads
+   * padded[last_level-1], i.e. padded[-1] -- off the front of a stack array -- and hands
+   * whatever pointer lives there to gauss_reduce() as its input buffer.
+   *
+   * That is Sentry 137433784, and every number in its backtrace agrees: gauss_reduce was
+   * called with wd=5, ht=227, which is dl(w,-1) returning w unchanged (its loop body never
+   * runs for a negative level) with w = 2*max_supp + 3 = 5 and h = 2*max_supp + 225 = 227 for
+   * max_supp = 1<<0. So the image was three pixels wide, and the fault was the stencil
+   * dereferencing that garbage pointer -- not the index arithmetic, which is in bounds for
+   * those dimensions.
+   *
+   * Nothing is lost by declining: a 3-pixel-wide strip has no local contrast to enhance, and
+   * the caller already handles this returning 0 the same way it does for a 1-pixel input. */
+  if(num_levels < 2) return 0;
+
   int last_level = num_levels-1;
   if(b && b->mode == 2) // higher number here makes it less prone to aliasing and slower.
     last_level = num_levels > 4 ? 4 : num_levels-1;
