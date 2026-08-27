@@ -1725,6 +1725,11 @@ static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui, const dt_mask
 {
   char message[256] = "";
 
+  // Checked before use, not after: this function tests IS_NULL_PTR(mask_form) further down
+  // and its own dt_print writes `mask_form ? mask_form->type : -1`, so a NULL was always
+  // considered possible here -- but form_type read it unconditionally first.
+  if(IS_NULL_PTR(mask_form)) return FALSE;
+
   const int form_type = mask_form->type;
 
   int opacity_percent = 100;
@@ -2712,7 +2717,17 @@ static int _dt_masks_events_mouse_moved(dt_develop_t *dev, struct dt_iop_module_
 
   if(!IS_NULL_PTR(mask_gui))
   {
-    _set_hinter_message(mask_gui, mask_form);
+    // Re-read the visible form. dt_masks_cow_touch() above may have cloned it, spliced the
+    // clone into dev->forms in place of the original, re-pointed form_gui->form_visible at
+    // the clone and dropped the original's last reference -- freeing it. mask_form was
+    // captured BEFORE that call, so it can be dangling here; form_visible is the pointer the
+    // COW maintains.
+    //
+    // Sentry 143237622: SIGSEGV inside g_list_length() walking the freed points list, via
+    // _set_hinter_message() -> _polygon_set_hint_message(), on an ordinary darkroom
+    // mouse-move over a polygon.
+    mask_form = dt_masks_get_visible_form(dev);
+    if(!IS_NULL_PTR(mask_form)) _set_hinter_message(mask_gui, mask_form);
     _set_cursor_shape(mask_gui);
   }
   return result;
@@ -2736,6 +2751,13 @@ int dt_masks_events_button_released(dt_develop_t *dev, struct dt_iop_module_t *m
   dt_masks_form_t *dispatch_form
       = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
   dispatch_form = dt_masks_cow_touch(dev, dispatch_form);
+
+  // dt_masks_cow_touch() above may have cloned the visible form, spliced the clone into
+  // dev->forms in place of the original, re-pointed form_gui->form_visible at it and
+  // dropped the original's last reference -- freeing it. mask_form was captured before
+  // that call, so re-read what form_visible points at now rather than using a pointer
+  // that may already be dangling. Same defect as Sentry 143237622 in mouse_moved.
+  mask_form = dt_masks_get_visible_form(dev);
 
   int result = 0;
   if(!IS_NULL_PTR(dispatch_form) && dispatch_form->functions && dispatch_form->functions->button_released)
@@ -2792,6 +2814,13 @@ int dt_masks_events_button_pressed(dt_develop_t *dev, struct dt_iop_module_t *mo
   dt_masks_form_t *dispatch_form
       = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
   dispatch_form = dt_masks_cow_touch(dev, dispatch_form);
+
+  // dt_masks_cow_touch() above may have cloned the visible form, spliced the clone into
+  // dev->forms in place of the original, re-pointed form_gui->form_visible at it and
+  // dropped the original's last reference -- freeing it. mask_form was captured before
+  // that call, so re-read what form_visible points at now rather than using a pointer
+  // that may already be dangling. Same defect as Sentry 143237622 in mouse_moved.
+  mask_form = dt_masks_get_visible_form(dev);
   _dt_masks_events_update_hover(dispatch_form, mask_gui, form_index);
 
   gboolean return_val = FALSE;
@@ -2854,6 +2883,13 @@ int dt_masks_events_key_pressed(dt_develop_t *dev, struct dt_iop_module_t *modul
     dt_masks_form_t *dispatch_form
         = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
     dispatch_form = dt_masks_cow_touch(dev, dispatch_form);
+
+    // dt_masks_cow_touch() above may have cloned the visible form, spliced the clone into
+    // dev->forms in place of the original, re-pointed form_gui->form_visible at it and
+    // dropped the original's last reference -- freeing it. mask_form was captured before
+    // that call, so re-read what form_visible points at now rather than using a pointer
+    // that may already be dangling. Same defect as Sentry 143237622 in mouse_moved.
+    mask_form = dt_masks_get_visible_form(dev);
     if(dispatch_form && dispatch_form->functions && dispatch_form->functions->key_pressed)
       return_value = dispatch_form->functions->key_pressed(module, event, dispatch_form,
                                                            parent_id, mask_gui, form_index);
@@ -2924,6 +2960,13 @@ int dt_masks_events_mouse_scrolled(dt_develop_t *dev, struct dt_iop_module_t *mo
   dt_masks_form_t *dispatch_form
       = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
   dispatch_form = dt_masks_cow_touch(dev, dispatch_form);
+
+  // dt_masks_cow_touch() above may have cloned the visible form, spliced the clone into
+  // dev->forms in place of the original, re-pointed form_gui->form_visible at it and
+  // dropped the original's last reference -- freeing it. mask_form was captured before
+  // that call, so re-read what form_visible points at now rather than using a pointer
+  // that may already be dangling. Same defect as Sentry 143237622 in mouse_moved.
+  mask_form = dt_masks_get_visible_form(dev);
 
   if(!mask_gui->creation && !dt_masks_is_anything_selected(mask_gui))
     return 0;
