@@ -314,8 +314,20 @@ static inline _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_
       col_level_bwd[j] = neighbor_max + 1;
       if(col_level_bwd[j] > max_bwd) max_bwd = col_level_bwd[j];
     }
-    factor->nlev_bwd = max_bwd + 1;
-    factor->lev_off_bwd = calloc(factor->nlev_bwd + 1, sizeof(int));
+    // Through a local, and checked: max_bwd starts at 0 and only grows, so nlev_bwd is at
+    // least 1 -- but that invariant lives across a struct store, which GCC cannot follow, so
+    // it must assume the int could be negative and warns that the size_t conversion exceeds
+    // the maximum object size. Stating the bound here makes it checkable rather than assumed:
+    // if it were ever violated (dimension overflow) we fail instead of allocating nonsense.
+    const int nlev_bwd = max_bwd + 1;
+    if(nlev_bwd <= 0)
+    {
+      free(col_level_bwd);
+      free(level_rows);
+      goto fail;
+    }
+    factor->nlev_bwd = nlev_bwd;
+    factor->lev_off_bwd = calloc((size_t)nlev_bwd + 1, sizeof(int));
     if(!factor->lev_off_bwd)
     {
       free(col_level_bwd);
@@ -325,7 +337,7 @@ static inline _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_
     for(int j = 0; j < dimension; j++) factor->lev_off_bwd[col_level_bwd[j] + 1]++;
     for(int level = 0; level < factor->nlev_bwd; level++)
       factor->lev_off_bwd[level + 1] += factor->lev_off_bwd[level];
-    int *fill = calloc(factor->nlev_bwd, sizeof(int));
+    int *fill = calloc((size_t)nlev_bwd, sizeof(int));
     if(!fill)
     {
       free(col_level_bwd);
