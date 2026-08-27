@@ -596,7 +596,7 @@ static int _custom_wb_from_coeffs(struct dt_iop_module_t *self, const dt_aligned
   // predicts the bogus D65 that temperature.c will compute for the camera input matrix
   double bwb[4];
 
-  if(dt_colorspaces_conversion_matrices_rgb(self->dev->image_storage.adobe_XYZ_to_CAM,
+  if(dt_colorspaces_conversion_matrices_rgb(&self->dev->image_storage.adobe_XYZ_to_CAM[0][0],
                                             NULL, NULL,
                                             self->dev->image_storage.d65_color_matrix, bwb))
   {

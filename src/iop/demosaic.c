@@ -2288,7 +2288,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
     if(d->demosaicing_method != DT_IOP_DEMOSAIC_DOWNSAMPLE) piece->process_cl_ready = 0;
 
     // Get and store the matrix to go from camera to RGB for 4Bayer images
-    if(!dt_colorspaces_conversion_matrices_rgb(self->dev->image_storage.adobe_XYZ_to_CAM,
+    if(!dt_colorspaces_conversion_matrices_rgb(&self->dev->image_storage.adobe_XYZ_to_CAM[0][0],
                                                NULL, d->CAM_to_RGB,
                                                self->dev->image_storage.d65_color_matrix, NULL))
     {

@@ -1122,7 +1122,7 @@ static int calculate_bogus_daylight_wb(dt_iop_module_t *module, double bwb[4])
   }
 
   double mul[4];
-  if(dt_colorspaces_conversion_matrices_rgb(module->dev->image_storage.adobe_XYZ_to_CAM,
+  if(dt_colorspaces_conversion_matrices_rgb(&module->dev->image_storage.adobe_XYZ_to_CAM[0][0],
                                             NULL, NULL,
                                             module->dev->image_storage.d65_color_matrix, mul))
   {
