@@ -1210,6 +1210,11 @@ into one GUI-thread callback — leave the darkroom via the lighttable, publish 
 selection, then enter the darkroom — so nothing can run in between. Any other worker-thread code
 that needs a specific image opened must use it rather than setting those globals itself.
 
+The import job only asks for that when it imported exactly one image *and* at most one XMP
+(`index == 1 && xmps <= 1`): two or more sidecars mean the file produced several DB images
+(duplicates) and none of them is the obvious one to open. Zero is the ordinary no-sidecar case
+and still opens.
+
 ---
 
 ## GTK / UI
