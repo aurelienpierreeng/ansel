@@ -43,9 +43,11 @@ typedef enum dt_color_checker_targets
   COLOR_CHECKER_XRITE_24_2014 = 1,
   COLOR_CHECKER_SPYDER_24 = 2,
   COLOR_CHECKER_SPYDER_24_V2 = 3,
-  COLOR_CHECKER_SPYDER_48 = 4,
-  COLOR_CHECKER_SPYDER_48_V2 = 5,
-  COLOR_CHECKER_USER_REF = 6,
+  COLOR_CHECKER_SPYDER_PHOTO_24 = 4,
+  COLOR_CHECKER_SPYDER_48 = 5,
+  COLOR_CHECKER_SPYDER_48_V2 = 6,
+  COLOR_CHECKER_SPYDER_PHOTO_48 = 7,
+  COLOR_CHECKER_USER_REF = 8,
   COLOR_CHECKER_LAST
 } dt_color_checker_targets;
 
@@ -392,6 +394,128 @@ static dt_color_checker_t spyder_48_v2 = {  .name = "Datacolor SpyderCheckr 48 a
                                   .black = 29,
                                   .values = spyder_48_v2_patch };
 
+
+// One panel of the chart above, shot on its own: columns A..D here are the 48's columns
+// E..H, the right panel -- the full neutral ramp plus the saturated colors, which is the
+// half that carries the calibration. Same convention as above: the bounding box goes on the
+// four outer corners of the black panel, and the coordinates are normalized to it.
+
+static dt_color_checker_patch spyder_24_photo_patches[] = {
+                                        { "A1", {  93.14,   0.29,   1.91 }, { 0.166, 0.164 } },
+                                        { "A2", {  80.04,   0.30,   0.32 }, { 0.166, 0.299 } },
+                                        { "A3", {  66.83,   0.10,   0.03 }, { 0.166, 0.433 } },
+                                        { "A4", {  51.50,   0.77,  -0.42 }, { 0.166, 0.567 } },
+                                        { "A5", {  36.87,   1.07,  -0.03 }, { 0.166, 0.701 } },
+                                        { "A6", {  14.41,   0.45,   1.21 }, { 0.166, 0.835 } },
+                                        { "B1", {  49.21, -29.74, -28.15 }, { 0.389, 0.164 } },
+                                        { "B2", {  50.22,  48.19, -14.47 }, { 0.389, 0.299 } },
+                                        { "B3", {  81.87,   3.40,  81.35 }, { 0.389, 0.433 } },
+                                        { "B4", {  43.77,  51.98,  24.51 }, { 0.389, 0.567 } },
+                                        { "B5", {  54.47, -35.36,  33.08 }, { 0.389, 0.701 } },
+                                        { "B6", {  31.48,  12.72, -42.34 }, { 0.389, 0.835 } },
+                                        { "C1", {  61.60,  31.83,  55.23 }, { 0.611, 0.164 } },
+                                        { "C2", {  39.85,   6.59, -43.46 }, { 0.611, 0.299 } },
+                                        { "C3", {  50.75,  47.22,  13.05 }, { 0.611, 0.433 } },
+                                        { "C4", {  32.44,  22.62, -21.32 }, { 0.611, 0.567 } },
+                                        { "C5", {  70.22, -21.64,  58.34 }, { 0.611, 0.701 } },
+                                        { "C6", {  70.31,  18.33,  64.52 }, { 0.611, 0.835 } },
+                                        { "D1", {  70.31, -31.39,  -0.56 }, { 0.834, 0.164 } },
+                                        { "D2", {  56.10,   7.42, -25.07 }, { 0.834, 0.299 } },
+                                        { "D3", {  42.79, -14.00,  20.46 }, { 0.834, 0.433 } },
+                                        { "D4", {  50.34,  -7.34, -23.06 }, { 0.834, 0.567 } },
+                                        { "D5", {  65.88,  16.24,  16.82 }, { 0.834, 0.701 } },
+                                        { "D6", {  37.51,  14.65,  13.49 }, { 0.834, 0.835 } } };
+
+static dt_color_checker_t spyder_24_photo = {  .name = "Datacolor SpyderCheckr Photo 24 2022",
+                                  .author = "Datacolor",
+                                  .date = "2022",
+                                  .manufacturer = "DataColor",
+                                  .type = COLOR_CHECKER_SPYDER_PHOTO_24,
+                                  .ratio = 1.660f,
+                                  .radius = 0.047,
+                                  .patches = 24,
+                                  .size = { 4, 6 },
+                                  .middle_grey = 03,
+                                  .white = 00,
+                                  .black = 05,
+                                  .values = spyder_24_photo_patches };
+
+
+// Lab values from the "Photo 48" section of the "SpyderCheckr Default Measurements.txt"
+// reference file shipped with the Datacolor SpyderCheckr calibration software.
+// That file lists the patches row-major (A1, B1, ... H1, A2, ...), while this array is
+// column-major (A1 ... A6, B1 ...), so the values are transposed here.
+
+// This chart is a hinged case holding two identical black panels of 4 columns x 6 rows.
+// Columns A..D are the left panel, E..H the right one. Unlike the older SpyderCheckr, it
+// carries no printed registration dot, so the bounding box goes on the OUTER CORNERS OF THE
+// BLACK PANELS: top-left of the left panel, top-right of the right one, and so on. Patch
+// coordinates are normalized to that rectangle, hinge gap included.
+
+static dt_color_checker_patch spyder_48_photo_patches[] = {
+                                              { "A1", {  61.51,  32.31,  14.43 }, { 0.072, 0.164 } },
+                                              { "A2", {  74.71,   4.09,  47.99 }, { 0.072, 0.299 } },
+                                              { "A3", {  67.34, -25.92,  23.07 }, { 0.072, 0.433 } },
+                                              { "A4", {  61.13, -22.28, -21.58 }, { 0.072, 0.567 } },
+                                              { "A5", {  59.55,  -4.22, -29.44 }, { 0.072, 0.701 } },
+                                              { "A6", {  57.31,  33.77,  -7.32 }, { 0.072, 0.835 } },
+                                              { "B1", {  82.02,   2.79,   1.48 }, { 0.169, 0.164 } },
+                                              { "B2", {  81.67,  -3.30,   1.34 }, { 0.169, 0.299 } },
+                                              { "B3", {  81.53,   1.66,  -3.51 }, { 0.169, 0.433 } },
+                                              { "B4", {  29.74,   5.74,   3.05 }, { 0.169, 0.567 } },
+                                              { "B5", {  29.69,  -4.49,   2.82 }, { 0.169, 0.701 } },
+                                              { "B6", {  29.19,   2.76,  -4.28 }, { 0.169, 0.835 } },
+                                              { "C1", {  84.13,   7.62,  11.25 }, { 0.265, 0.164 } },
+                                              { "C2", {  74.20,   8.73,  24.67 }, { 0.265, 0.299 } },
+                                              { "C3", {  64.18,  13.06,  34.44 }, { 0.265, 0.433 } },
+                                              { "C4", {  45.98,  15.67,  23.86 }, { 0.265, 0.567 } },
+                                              { "C5", {  25.33,   5.05,   7.14 }, { 0.265, 0.701 } },
+                                              { "C6", {  22.04,   2.15,   0.69 }, { 0.265, 0.835 } },
+                                              { "D1", {  90.49,   0.26,   1.91 }, { 0.362, 0.164 } },
+                                              { "D2", {  86.98,   0.29,   0.56 }, { 0.362, 0.299 } },
+                                              { "D3", {  74.28,   0.13,   0.24 }, { 0.362, 0.433 } },
+                                              { "D4", {  59.81,   0.57,  -0.65 }, { 0.362, 0.567 } },
+                                              { "D5", {  43.95,   1.11,  -0.33 }, { 0.362, 0.701 } },
+                                              { "D6", {  29.49,   0.71,   0.07 }, { 0.362, 0.835 } },
+                                              { "E1", {  93.14,   0.29,   1.91 }, { 0.639, 0.164 } },
+                                              { "E2", {  80.04,   0.30,   0.32 }, { 0.639, 0.299 } },
+                                              { "E3", {  66.83,   0.10,   0.03 }, { 0.639, 0.433 } },
+                                              { "E4", {  51.50,   0.77,  -0.42 }, { 0.639, 0.567 } },
+                                              { "E5", {  36.87,   1.07,  -0.03 }, { 0.639, 0.701 } },
+                                              { "E6", {  14.41,   0.45,   1.21 }, { 0.639, 0.835 } },
+                                              { "F1", {  49.21, -29.74, -28.15 }, { 0.735, 0.164 } },
+                                              { "F2", {  50.22,  48.19, -14.47 }, { 0.735, 0.299 } },
+                                              { "F3", {  81.87,   3.40,  81.35 }, { 0.735, 0.433 } },
+                                              { "F4", {  43.77,  51.98,  24.51 }, { 0.735, 0.567 } },
+                                              { "F5", {  54.47, -35.36,  33.08 }, { 0.735, 0.701 } },
+                                              { "F6", {  31.48,  12.72, -42.34 }, { 0.735, 0.835 } },
+                                              { "G1", {  61.60,  31.83,  55.23 }, { 0.832, 0.164 } },
+                                              { "G2", {  39.85,   6.59, -43.46 }, { 0.832, 0.299 } },
+                                              { "G3", {  50.75,  47.22,  13.05 }, { 0.832, 0.433 } },
+                                              { "G4", {  32.44,  22.62, -21.32 }, { 0.832, 0.567 } },
+                                              { "G5", {  70.22, -21.64,  58.34 }, { 0.832, 0.701 } },
+                                              { "G6", {  70.31,  18.33,  64.52 }, { 0.832, 0.835 } },
+                                              { "H1", {  70.31, -31.39,  -0.56 }, { 0.928, 0.164 } },
+                                              { "H2", {  56.10,   7.42, -25.07 }, { 0.928, 0.299 } },
+                                              { "H3", {  42.79, -14.00,  20.46 }, { 0.928, 0.433 } },
+                                              { "H4", {  50.34,  -7.34, -23.06 }, { 0.928, 0.567 } },
+                                              { "H5", {  65.88,  16.24,  16.82 }, { 0.928, 0.701 } },
+                                              { "H6", {  37.51,  14.65,  13.49 }, { 0.928, 0.835 } } };
+
+static dt_color_checker_t spyder_48_photo = {  .name = "Datacolor SpyderCheckr Photo 48 2022",
+                                  .author = "Datacolor",
+                                  .date = "2022",
+                                  .manufacturer = "DataColor",
+                                  .type = COLOR_CHECKER_SPYDER_PHOTO_48,
+                                  .ratio = 0.719f,
+                                  .radius = 0.032,
+                                  .patches = 48,
+                                  .size = { 8, 6 },
+                                  .middle_grey = 27,
+                                  .white = 24,
+                                  .black = 29,
+                                  .values = spyder_48_photo_patches };
+
 typedef struct dt_colorchecker_label_t
 {
   gchar *name;
@@ -637,6 +761,12 @@ static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets t
       break;
     case COLOR_CHECKER_SPYDER_48_V2:
       dt_colorchecker_copy(checker_dest, &spyder_48_v2);
+      break;
+    case COLOR_CHECKER_SPYDER_PHOTO_24:
+      dt_colorchecker_copy(checker_dest, &spyder_24_photo);
+      break;
+    case COLOR_CHECKER_SPYDER_PHOTO_48:
+      dt_colorchecker_copy(checker_dest, &spyder_48_photo);
       break;
     case COLOR_CHECKER_USER_REF:
       if(color_filename)
