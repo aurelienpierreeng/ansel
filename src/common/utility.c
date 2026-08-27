@@ -919,26 +919,34 @@ char *dt_read_file(const char *const filename, size_t *filesize)
 
 void dt_copy_file(const char *const sourcefile, const char *dst)
 {
-  char *content = NULL;
+  // Copied in fixed-size chunks, not slurped whole. The previous version sized a single
+  // allocation from ftell() and read the entire file into it, which was wrong twice over:
+  //
+  //   - ftell() returns a SIGNED long and -1 on failure. Assigned to a size_t that becomes
+  //     SIZE_MAX, and g_malloc_n() aborts the process on a failed allocation -- it is not
+  //     the _try_ variant and does not return NULL for the caller's IS_NULL_PTR check.
+  //   - the largest caller is the "copy original file" export format
+  //     (imageio/format/copy.c), so "the whole file" is a raw: tens to hundreds of MB held
+  //     in RAM to copy bytes that were never needed all at once.
+  //
+  // A fixed buffer has neither problem and needs no size query at all.
   FILE *fin = g_fopen(sourcefile, "rb");
   FILE *fout = g_fopen(dst, "wb");
 
-  if(fin && fout)
+  if(!IS_NULL_PTR(fin) && !IS_NULL_PTR(fout))
   {
-    fseek(fin, 0, SEEK_END);
-    const size_t end = ftell(fin);
-    rewind(fin);
-    content = (char *)g_malloc_n(end, sizeof(char));
-    if(IS_NULL_PTR(content)) goto END;
-    if(fread(content, sizeof(char), end, fin) != end) goto END;
-    if(fwrite(content, sizeof(char), end, fout) != end) goto END;
+    char buffer[64 * 1024];
+    size_t bytes_read = fread(buffer, sizeof(char), sizeof(buffer), fin);
+
+    while(bytes_read > 0)
+    {
+      if(fwrite(buffer, sizeof(char), bytes_read, fout) != bytes_read) break;
+      bytes_read = fread(buffer, sizeof(char), sizeof(buffer), fin);
+    }
   }
 
-END:
   if(!IS_NULL_PTR(fout)) fclose(fout);
   if(!IS_NULL_PTR(fin)) fclose(fin);
-
-  dt_free(content);
 }
 
 void dt_copy_resource_file(const char *src, const char *dst)
