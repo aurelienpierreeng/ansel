@@ -57,6 +57,7 @@
 #include "widgets/bauhaus.h"
 #include "darktable.h"
 #include "common/logging.h"
+#include "common/selection.h"
 #include "control/control.h"
 #include "develop/develop.h"
 
@@ -720,12 +721,34 @@ void dt_ctl_switch_mode_to_by_view(const dt_view_t *view)
   g_main_context_invoke(NULL, _dt_ctl_switch_mode_to_by_view, (gpointer)view);
 }
 
-void dt_ctl_reload_view(const char *mode)
+static gboolean _dt_ctl_open_image_in_darkroom(gpointer user_data)
 {
+  const int32_t imgid = GPOINTER_TO_INT(user_data);
+  _dt_ctl_switch_mode_prepare();
+
+  // Round-trip through the lighttable, the same way the darkroom changes image from the
+  // filmstrip (_dev_change_image() in views/darkroom.c): everything is torn down and re-inited
+  // through the regular enter()/leave() path instead of a partial in-place reload. Skipped when
+  // the lighttable is already the current view -- there is no darkroom state to tear down then,
+  // and re-entering it would needlessly rebuild the grid and the whole panel layout.
   const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
-  if(current_view && g_strcmp0(current_view->module_name, "lighttable"))
-    dt_ctl_switch_mode_to("lighttable");
-  g_main_context_invoke(NULL, _dt_ctl_switch_mode_to, (gpointer)mode);
+  if(IS_NULL_PTR(current_view) || g_strcmp0(current_view->module_name, "lighttable"))
+    dt_view_manager_switch(darktable.view_manager, "lighttable");
+
+  // Publish the target AFTER leaving the darkroom, and from the GUI thread: the darkroom's
+  // leave() restores the selection to the image it was editing, and any pointer motion over the
+  // grid rewrites the mouse-over id. Both would silently overwrite a target published earlier
+  // from a worker thread, and the darkroom would re-open the previous image instead.
+  dt_control_set_mouse_over_id(imgid);
+  dt_selection_select_single(dt_selection_get_global(), imgid);
+
+  dt_view_manager_switch(darktable.view_manager, "darkroom");
+  return FALSE;
+}
+
+void dt_ctl_open_image_in_darkroom(const int32_t imgid)
+{
+  g_main_context_invoke(NULL, _dt_ctl_open_image_in_darkroom, GINT_TO_POINTER(imgid));
 }
 
 static gboolean _dt_ctl_log_message_timeout_callback(gpointer data)
