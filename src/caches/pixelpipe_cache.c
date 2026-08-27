@@ -2702,28 +2702,33 @@ int dt_dev_pixelpipe_cache_invalidate_hashes(const uint64_t *hashes,
 }
 
 
+// Find the age of the most recently used entry in the table.
+static void _cache_get_newest(gpointer key, gpointer value, gpointer user_data)
+{
+  dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)value;
+  int64_t *newest = (int64_t *)user_data;
+  const int64_t age = _pixel_cache_get_age(cache_entry);
+  if(age > *newest) *newest = age;
+}
+
+/* `user_data` is the age cutoff computed by dt_dev_pixelpipe_cache_flush_old(): entries last used
+ * before it are candidates for collection. */
 static gboolean _for_each_remove_old(gpointer key, gpointer value, gpointer user_data)
 {
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)value;
+  const int64_t cutoff = *(const int64_t *)user_data;
 
   // Returns 1 if the lock is captured by another thread
-  // 0 if WE capture the lock, and then need to release it
+  // 0 if WE capture the lock, and then need to release it
   gboolean locked = dt_pthread_rwlock_trywrlock(&cache_entry->lock);
   if(!locked) dt_pthread_rwlock_unlock(&cache_entry->lock);
   gboolean used = dt_atomic_get_int(&cache_entry->refcount) > 0;
 
-  // Time since the entry was LAST USED, in microseconds -- not since it was created.
-  const int64_t delta = g_get_monotonic_time() - _pixel_cache_get_age(cache_entry);
-
-  // 5 min in microseconds
-  const int64_t five_min = 5 * 60 * 1000 * 1000;
-
-  /* Two independent signals, and both must agree before an entry is dropped: `delta` is now
-   * genuinely "nobody has needed this in five minutes" (it used to be measured from creation,
-   * which said nothing about whether the entry was still being consumed), and `hits` is "it was
-   * never asynchronously reused either", so a cacheline that has repeatedly proven reusable
-   * across runs is kept for the next one. */
-  const gboolean too_old = (delta > five_min) && (cache_entry->hits < 4);
+  /* Two independent signals, and both must agree before an entry is dropped: it was last used
+   * before the cutoff, i.e. the cache has moved on from it, and `hits` says it was never
+   * asynchronously reused either, so a cacheline that has repeatedly proven reusable across runs
+   * is kept for the next one. */
+  const gboolean too_old = (_pixel_cache_get_age(cache_entry) < cutoff) && (cache_entry->hits < 4);
 
   return too_old && !used && !locked;
 }
@@ -2733,7 +2738,30 @@ static int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache)
   // Don't hang the GUI thread if the cache is locked by a pipeline.
   // Better luck next time.
   if(dt_pthread_mutex_trylock(&cache->lock)) return G_SOURCE_CONTINUE;
-  g_hash_table_foreach_remove(cache->entries, _for_each_remove_old, NULL);
+
+  /* Age entries against the cache's OWN most recent activity, not against wall-clock now.
+   *
+   * "Older than now - 5 min" measures how long the user has been away from the application, which
+   * is not what this sweep is about: leave the darkroom open over a coffee break and it wipes a
+   * perfectly warm working set the next interaction would have reused, paying a full recompute for
+   * a delay the cache had no say in. Anchoring on the newest cacheline instead makes the window
+   * relative to the PIPELINE's activity: "the cache has moved on by more than 10 minutes of work
+   * since this entry was last needed". An idle cache's newest entry ages alongside everything
+   * else, so the whole set stays inside the window and nothing is dropped -- the sweep only bites
+   * while something is actively producing newer cachelines, which is exactly when the memory is
+   * worth reclaiming.
+   *
+   * Both passes run under the same lock hold, so the cutoff describes the table it is applied to. */
+  int64_t newest = INT64_MIN;
+  g_hash_table_foreach(cache->entries, _cache_get_newest, &newest);
+  if(newest != INT64_MIN)
+  {
+    // 10 min in microseconds
+    const int64_t ten_min = 10 * 60 * 1000 * 1000;
+    int64_t cutoff = newest - ten_min;
+    g_hash_table_foreach_remove(cache->entries, _for_each_remove_old, &cutoff);
+  }
+
   dt_pthread_mutex_unlock(&cache->lock);
 
   // Hand free pages back to the OS while we're at it, but only when the system
