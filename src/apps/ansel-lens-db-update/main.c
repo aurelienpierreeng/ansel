@@ -236,8 +236,13 @@ int main(int argc, char *argv[])
    * user wrote themselves. That file is not wrong, but installing it WOULD be: iop/lens.c
    * prefers the configuration directory and never falls back once it opens something, so
    * a three-lens database would silently replace the fifteen hundred that shipped. */
+  // g_strlcpy/g_strlcat rather than snprintf("%s.incoming"): both truncate safely, but the
+  // format version makes GCC warn that out_path can fill the buffer with no room for the
+  // suffix. dt_concat_path_file() is not usable here -- it inserts a separator, and this is
+  // a suffix on the same name.
   char staged_path[DT_PATH_MAX] = { 0 };
-  snprintf(staged_path, sizeof(staged_path), "%s.incoming", out_path);
+  g_strlcpy(staged_path, out_path, sizeof(staged_path));
+  g_strlcat(staged_path, ".incoming", sizeof(staged_path));
 
   const int rc = ls_import_run(schema_path, staged_path, base, xml_dir);
   if(rc)
