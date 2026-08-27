@@ -416,6 +416,35 @@ public:
     }
     scaleFactor = scaleFactorTmp;
 
+    // A std::vector, not `new HashTable[nThreads]`. With a non-constant count GCC emits its
+    // own overflow check -- a call to operator new[](SIZE_MAX) raising
+    // std::bad_array_new_length -- and then reports that generated SIZE_MAX as an allocation
+    // exceeding PTRDIFF_MAX. That diagnostic is NOT disabled by -Wno-alloc-size-larger-than
+    // (tried, per-file, verified present on the compile line) nor by a #pragma, which the
+    // middle end ignores. The container's allocation does not take that shape.
+    //
+    // HashTable is default-constructible with copy construction and assignment deleted, and
+    // has no move constructor. That is fine here and must stay fine: vector's count
+    // constructor value-initialises in place and needs only DefaultInsertable. Do NOT add a
+    // push_back(), resize() or copy of this vector -- those need the element to be
+    // MoveInsertable, which it is not, and the failure would be a compile error rather than
+    // anything subtle.
+    // KNOWN WARNING, deliberately left standing. GCC reports
+    //   "argument 1 value '18446744073709551615' exceeds maximum object size" here.
+    // It is complaining about a branch IT generated: `new T[n]` with a non-constant n emits
+    // an overflow check calling operator new[](SIZE_MAX) to raise std::bad_array_new_length.
+    // The branch is unreachable -- nThreads is clamped to [1, 1024] in the initialiser list
+    // above -- and the arithmetic here is correct.
+    //
+    // It cannot be suppressed and should not be worked around. Measured, in this order:
+    //   - -Wno-alloc-size-larger-than, per-file, verified present on the compile line: no
+    //     effect. The diagnostic is the PTRDIFF_MAX form, which that option does not disable.
+    //   - #pragma GCC diagnostic around the statement: no effect, it is a middle-end warning.
+    //   - std::vector instead of new[]: compiles on GCC, breaks on clang. OpenMP regions here
+    //     use default(firstprivate), which copy-constructs every variable they touch, and
+    //     HashTable's copy constructor is deleted. A raw pointer copies trivially; a
+    //     container does not. That attempt turned CI red on all three clang jobs.
+    // Leave it alone.
     hashTables = new HashTable[nThreads];
   }
 
@@ -423,10 +452,10 @@ public:
 
   ~PermutohedralLattice()
   {
+    delete[] hashTables;
     delete[] scaleFactor;
     delete[] replay;
     delete[] canonical;
-    delete[] hashTables;
   }
 
   PermutohedralLattice &operator=(const PermutohedralLattice &) = delete;
