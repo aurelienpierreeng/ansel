@@ -372,7 +372,11 @@ public:
    *    vd_ : dimensionality of value vectors
    * nData_ : number of points in the input
    */
-  PermutohedralLattice(size_t nData_, int nThreads_ = 1) : nData(nData_), nThreads(nThreads_)
+  // nThreads is clamped to at least 1 rather than trusted: it is a signed int reaching
+  // `new HashTable[nThreads]` below, so a zero or negative value would convert to a huge
+  // size_t. GCC cannot prove the range and says so (-Walloc-size-larger-than), and it is
+  // right -- nothing in the signature stops a caller passing 0.
+  PermutohedralLattice(size_t nData_, int nThreads_ = 1) : nData(nData_), nThreads(nThreads_ > 0 ? (nThreads_ < 1024 ? nThreads_ : 1024) : 1)
   {
     // Allocate storage for various arrays
     float *scaleFactorTmp = new float[D];
