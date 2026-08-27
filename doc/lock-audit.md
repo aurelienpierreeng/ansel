@@ -250,17 +250,49 @@ previous attempt: *"the non-`_DEBUG` arm stopped compiling — and nobody found 
 
 ## Machine-checked lock discipline
 
-`-Wthread-safety` has been enabled in `cmake/compiler-warnings.cmake` all along, and the
-mutex wrapper has carried `CAPABILITY`/`ACQUIRE`/`RELEASE` for as long. It was checking
-almost nothing, for one reason:
+`cmake/compiler-warnings.cmake` has asked for `-Wthread-safety` all along, and the mutex
+wrapper has carried `CAPABILITY`/`ACQUIRE`/`RELEASE` for as long. It was checking nothing
+whatsoever, for two reasons — and the first one is the embarrassing one:
+
+**The flag never reached the compiler.** `CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wthread-safety)`
+built the probe's result variable out of the flag text and passed it as `-D`:
+
+    -DC_COMPILER_UNDERSTANDS_-Wthread-safety
+
+which is not a valid macro name, so the probe compile failed, the flag was recorded as
+unsupported, and it was dropped. Silently — a failed probe looks exactly like a compiler that
+lacks the flag. Every flag containing a character illegal in an identifier went the same way.
+Worse, clang does not resolve a thread-safety attribute's argument when the analysis is off,
+so annotations that could not possibly work still compiled clean locally. Fixed by sanitising
+the flag text into an identifier; the analysis then found real defects on its first run.
+
+**And there was no data annotated:**
 
     GUARDED_BY across the tree:  0
 
-`GUARDED_BY` is the annotation that does the work. Clang's analysis is **declarative** — you
-state that a field is guarded by a lock and it proves every access holds it — as opposed to
-symbolic execution guessing at lock state from control flow. With no data annotated it only
-verified that locks balance within a function, and never that any data was protected. The
-machinery was installed and wired to nothing.
+`GUARDED_BY` is the annotation that does the work — where it is available. Clang's analysis
+is **declarative**: you state that a field is guarded by a lock and it proves every access
+holds it, as opposed to symbolic execution guessing at lock state from control flow. With no
+data annotated it only verified that locks balance within a function, and never that any data
+was protected.
+
+**In C, `GUARDED_BY` is available only for file-scope locks.** Ours are per-instance —
+`history_mutex` lives in `dt_develop_t`, one per develop context — and for a lock that is a
+struct member the annotation cannot be satisfied by anything. In C++ a member's
+`guarded_by(mu)` implicitly means `this->mu`, so an access to `obj.field` requires `obj.mu`
+and a method's `REQUIRES(mu)` matches. C has no `this` and clang does not synthesise one: the
+requirement stays the bare identifier. Measured on clang 19, two files, one variable each:
+
+| Lock | Annotated function | Unannotated function |
+| --- | --- | --- |
+| file-scope | satisfied, no warning | warned — correct |
+| struct member | **warned** | warned |
+
+Clang states it outright — `requires holding rw 'm'`, unqualified, never `s->m`. Before
+clang 19 it was worse: the attribute was rejected at parse time with "use of undeclared
+identifier", which is how it reached master and broke the build for every distro clang.
+
+So the declarative half is off the table here, and what remains is the contract half.
 
 This also answers "can we do better than suppressing SonarCloud's pthread findings?".
 `c:S5486` and friends are symbolic-execution rules whose own documentation says they *assume
@@ -271,13 +303,29 @@ it is checking a declared contract — and it runs on every LLVM build we alread
 ### Done
 
 `dt_pthread_rwlock_t` is a `CAPABILITY`, so the locks guarding the most concurrency-sensitive
-state can be named at all. `dev->history` and `dev->history_end` are `GUARDED_BY(history_mutex)`,
-and the functions that run with the lock held declare `REQUIRES`/`REQUIRES_SHARED` — including
-the ones whose names already claimed it (`_ext`, `_locked`) and enforced nothing.
+state can be named at all. The functions that run with `history_mutex` held declare
+`REQUIRES`/`REQUIRES_SHARED` — including the ones whose names already claimed it (`_ext`,
+`_locked`) and enforced nothing. Clang then verifies the lock is held on every path into such
+a function and released on every path out.
 
-Measured: **20 findings in `dev_history.c` before, 0 after**, no suppressions, every one fixed
-by declaring an existing contract. Tree-wide, no history finding appears in any other file, so
-every consumer already accesses it correctly.
+That is weaker than guarding the fields, and it still found real defects — which is the
+argument for keeping it. `dev_history.c` went from **26 findings to 0**, and the fixes were
+not all bookkeeping:
+
+- `dt_dev_history_commit_item_now()` released the write lock and then walked `dev->history`
+  twice with nothing held, while the background write job can be walking and dropping
+  references on the same items. Reading `hist->forms` off an item that job is releasing is a
+  use-after-free, not a stale read.
+- `dt_dev_history_notify_change()` walked `dev->history` with no lock, from all eight of its
+  call sites — one of which unlocks on the line immediately above the call.
+
+Four contracts were also inverted: the function acquired the lock itself *and* demanded it
+from callers. Those annotations described something the code did not do, which is worse than
+no annotation, and they were caught the same way — by turning the analysis on and reading
+what it said rather than trusting the labels.
+
+The lesson for the rest of this backlog: an annotation is a claim to verify, not documentation
+to add. Four of twenty here were wrong on the first pass.
 
 ### The backlog, measured
 
@@ -291,6 +339,13 @@ findings in 5 files**:
 | `gui/lut_viewer.c` | 5 |
 | `caches/cache.c` | 3 |
 | `pixel/colorequal_shared.c` | 2 |
+
+`src/tests/unittests/test_dtpthread_recursive.c` is deliberately **not** in that table. Its
+four cases re-acquire a lock they already hold, which is the property under test and exactly
+what the analysis is built to reject — it models a lock as held or not held, so the second
+acquisition reads as "already held" and the matching release as "was not held". The bodies
+carry `NO_THREAD_SAFETY_ANALYSIS`. Left unexempted they contributed 8 findings that nobody
+could ever fix, which is precisely the noise that hides the ones that can be.
 
 **They are not pre-existing.** Every one names an `rwlock`, and they exist because
 `dt_pthread_rwlock_t` became a `CAPABILITY` in this same work — before that, clang had
@@ -307,9 +362,14 @@ clang they are hard errors:
 which is why the macOS and LLVM CI jobs failed while every GCC job passed — GCC ignores
 `-Wthread-safety` entirely. A local GCC build cannot vouch for any of this.
 
-Until they are resolved, `cmake/compiler-warnings.cmake` carries
+Until they are resolved, the Debug flags in `CMakeLists.txt` carry
 `-Wno-error=thread-safety-analysis`: the findings stay visible on every clang build but do
 not break it. That flag is a ratchet to remove, not a setting to keep.
+
+It is appended **only for clang**. GCC has no such warning, and `-Wno-error=` naming an option
+it does not know is a hard error there, not a no-op — adding it unguarded broke every GCC
+Debug build at once. It also has to be appended after `CMAKE_C_FLAGS`, since
+`CMAKE_C_FLAGS_DEBUG` lands later on the command line and a `-Werror` after it would win.
 
 All are conditional-locking shapes: *"not held on every path through here"*, *"expecting
 rwlock to be held at start of each loop"*, *"releasing rwlock that was not held"*. Those are
