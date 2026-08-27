@@ -452,7 +452,7 @@ static dt_dev_history_item_t *_search_history_by_op(dt_develop_t *dev, const dt_
 static dt_iop_module_t *_history_merge_resolve_dest_instance(dt_develop_t *dev_dest,
                                                              const dt_iop_module_t *mod_src,
                                                              gboolean *created,
-                                                             gboolean *reused_base)
+                                                             gboolean *reused_base) REQUIRES_SHARED(dev_dest->history_mutex)
 {
   *created = FALSE;
   *reused_base = FALSE;
@@ -482,6 +482,7 @@ static dt_iop_module_t *_history_merge_resolve_dest_instance(dt_develop_t *dev_d
 
 // dev_src is used only to copy masks, if no mask will be copied it can be null
 int dt_history_merge_module_into_history(dt_develop_t *dev_dest, dt_develop_t *dev_src, dt_iop_module_t *mod_src)
+  REQUIRES(dev_dest->history_mutex)
 {
   gboolean created = FALSE;
   gboolean reused_base = FALSE;
@@ -645,7 +646,10 @@ static void _history_undo_data_free(gpointer data)
  * @param action Undo/redo action.
  * @param imgs Unused.
  */
-static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t data, dt_undo_action_t action, GList **imgs)
+/* No REQUIRES: this is a dt_undo_t callback, so its signature is fixed and carries no
+ * dt_develop_t to name the lock on -- it reaches the dev through user_data. The lock is
+ * taken inside. NO_THREAD_SAFETY_ANALYSIS rather than a contract clang cannot express. */
+static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t data, dt_undo_action_t action, GList **imgs) NO_THREAD_SAFETY_ANALYSIS
 {
   if(type != DT_UNDO_HISTORY) return;
 
@@ -1046,19 +1050,27 @@ void dt_dev_history_commit_item_now(dt_develop_t *dev, dt_iop_module_t *module, 
   // resets; pipelines only read dev->proxy. (Bulk history loads go through pop_history_items_ext.)
   if(!IS_NULL_PTR(module) && !IS_NULL_PTR(module->commit_proxy)) module->commit_proxy(module);
 
-  // Figure out if the current history item includes masks/forms
-  GList *last_history = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev) - 1);
-  dt_dev_history_item_t *hist = NULL;
+  // Figure out if the current history item includes masks/forms.
+  // Read under the lock: the write lock was released above, so the background
+  // dt_dev_write_history() job can be walking (and dropping references on) this very list.
+  // Held only for the two list walks -- the image-cache update below stays outside it, so
+  // the history_mutex -> image_cache order used by the write job is not introduced here.
   gboolean has_forms = FALSE;
+  uint64_t history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
+  GList *last_history = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev) - 1);
   if(last_history)
   {
-    hist = (dt_dev_history_item_t *)last_history->data;
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)last_history->data;
     has_forms = (!IS_NULL_PTR(hist->forms));
   }
 
   // We don't update history hash in dt_dev_add_history_item_ext
   // because it can be called within loops, so that can be expensive.
-  dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
+  history_hash = dt_dev_history_compute_hash(dev);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+
+  dt_dev_set_history_hash(dev, history_hash);
   if(dev->image_storage.id > 0)
   {
     dt_image_t *cache_img = dt_image_cache_get(dev->image_storage.id, 'w');
@@ -1217,7 +1229,7 @@ void dt_dev_history_release_snapshot(GList *snapshot)
   g_list_free_full(snapshot, dt_dev_free_history_item);
 }
 
-void dt_dev_history_free_history(dt_develop_t *dev)
+void dt_dev_history_free_history(dt_develop_t *dev) REQUIRES(dev->history_mutex)
 {
   if(IS_NULL_PTR(dev->history)) return;
   // Canonical history is being cleared (image unload, compress rebuild, ...):
@@ -1331,7 +1343,7 @@ static inline void _history_to_module(const dt_dev_history_item_t *const hist, d
 }
 
 
-void dt_dev_pop_history_items_ext(dt_develop_t *dev)
+void dt_dev_pop_history_items_ext(dt_develop_t *dev) REQUIRES_SHARED(dev->history_mutex)
 {
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_pop_history_items_ext] loading history entries into modules...\n");
 
@@ -1463,7 +1475,14 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 
   if(dev->gui_attached)
   {
+    // Every caller reaches this from an unlocked context (the write job unlocks immediately
+    // before calling; the GUI and IOP call sites never hold it), so the walk of dev->history
+    // takes the read lock here rather than demanding it from callers. Released before
+    // dt_image_history_changed() below, which does mipmap and thumbnail work far too
+    // expensive to hold history_mutex across.
+    dt_pthread_rwlock_rdlock(&dev->history_mutex);
     const guint states = dt_dev_mask_history_overload(dev->history, 250);
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
     if(states > 250)
       dt_history_toast(_("Image #%i history is storing %d mask states. n"
                      "Consider compressing history and removing unused masks to keep reads/writes manageable."),
@@ -1518,7 +1537,7 @@ void dt_dev_history_cleanup(void)
 
 
 
-void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
+void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid) REQUIRES_SHARED(dev->history_mutex)
 {
   dt_image_t *cache_img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(cache_img)) return;
@@ -1684,7 +1703,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
  * @param module Module instance to consider.
  * @param is_inited TRUE if auto-presets were already applied.
  */
-static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, gboolean is_inited)
+static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, gboolean is_inited) REQUIRES(dev->history_mutex)
 {
   // Module already in history: don't prepend extra entries.
   //
@@ -1761,6 +1780,7 @@ static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, 
 // Returns TRUE if this is a freshly-inited history on which we just applied auto presets and defaults,
 // FALSE if we had an earlier history
 gboolean dt_dev_init_default_history(dt_develop_t *dev, const int32_t imgid, gboolean apply_auto_presets)
+  REQUIRES(dev->history_mutex)
 {
   const gboolean is_inited = (dev->image_storage.flags & DT_IMAGE_AUTO_PRESETS_APPLIED);
 
@@ -1789,6 +1809,10 @@ int dt_dev_replace_history_on_image(dt_develop_t *dev_src, const int32_t dest_im
 
   dt_dev_ensure_image_storage(dev_src, dest_imgid);
 
+  // Same shape as dt_dev_reload_history_items(): the whole rebuild runs under the write lock,
+  // released before dt_dev_write_history(), which takes the read lock itself.
+  dt_pthread_rwlock_wrlock(&dev_src->history_mutex);
+
   if(reload_defaults)
   {
     dt_dev_init_default_history(dev_src, dest_imgid, FALSE);
@@ -1796,6 +1820,8 @@ int dt_dev_replace_history_on_image(dt_develop_t *dev_src, const int32_t dest_im
   }
 
   dt_dev_pop_history_items_ext(dev_src);
+  dt_pthread_rwlock_unlock(&dev_src->history_mutex);
+
   dt_dev_write_history(dev_src, FALSE);
 
   return 0;
@@ -1997,7 +2023,7 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
                                       const int param_length, const gboolean enabled, const void *blendop_params,
                                       const int bl_length, const int blendop_version, const int multi_priority,
                                       const char *multi_name, const char *preset_name, int *legacy_params,
-                                      const gboolean presets)
+                                      const gboolean presets) REQUIRES(dev->history_mutex)
 {
   // Sanity checks
   const gboolean is_valid_id = (id == imgid);
@@ -2142,7 +2168,7 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
 }
 
 
-gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
+gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid) REQUIRES(dev->history_mutex)
 {
   if(imgid == UNKNOWN_IMAGE) return FALSE;
 
@@ -2358,7 +2384,7 @@ typedef gboolean (*dt_iop_module_filter_t)(dt_iop_module_t *module);
  * @param dev Develop context.
  * @param filter Predicate deciding whether a module should be added.
  */
-static void _dev_history_add_filtered(dt_develop_t *dev, dt_iop_module_filter_t filter)
+static void _dev_history_add_filtered(dt_develop_t *dev, dt_iop_module_filter_t filter) REQUIRES(dev->history_mutex)
 {
   for(GList *item = g_list_first(dev->iop); item; item = g_list_next(item))
   {
@@ -2503,7 +2529,7 @@ void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
-void dt_dev_history_compress_or_truncate(dt_develop_t *dev)
+void dt_dev_history_compress_or_truncate(dt_develop_t *dev) REQUIRES_SHARED(dev->history_mutex)
 {
   if(dt_dev_get_history_end_ext(dev) == g_list_length(dev->history))
     dt_dev_history_compress(dev);
