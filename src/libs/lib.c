@@ -922,6 +922,10 @@ gboolean dt_lib_gui_get_expanded(dt_lib_module_t *module)
   {
     char var[1024];
     const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
+    // Same check the identical block above already makes. There is no current view while the
+    // manager is switching between them, and this is called from the darkroom expose --
+    // Sentry 139067518: EXCEPTION_ACCESS_VIOLATION reading current_view->module_name here.
+    if(IS_NULL_PTR(current_view)) return true;
     snprintf(var, sizeof(var), "plugins/%s/%s/expanded", current_view->module_name, module->plugin_name);
     return dt_conf_get_bool(var);
   }
