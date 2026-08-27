@@ -3895,7 +3895,25 @@ void dt_masks_change_form_gui(dt_develop_t *dev, dt_masks_form_t *new_form)
 
     // Free only fully orphan temporary previews. Forms tracked in either list
     // are owned by develop and will be released by its teardown path.
-    if(!is_registered && !is_registered_for_cleanup) dt_masks_free_form(old_form);
+    //
+    // form_visible is cleared BEFORE the release, not after. old_form IS what it points at
+    // -- it came from dt_masks_get_visible_form(dev) at the top -- so releasing it first
+    // leaves the field holding freed memory until dt_masks_set_visible_form() below, and
+    // dt_masks_clear_form_gui() runs inside that window. Re-entering this function there
+    // reads the dangling form_visible as its own old_form, finds it in neither list because
+    // it is already gone, and releases it a second time (Sentry 140265757: SIGSEGV in
+    // dt_masks_change_form_gui, two frames of it, from the view-leave teardown path).
+    // The creation-exit path in this file already orders it this way.
+    //
+    // Released through unref rather than dt_masks_free_form(): forms are refcounted and
+    // free_form is the destructor unref calls at zero. Calling it directly frees the form
+    // even when a history snapshot still references it. An orphan preview holds the single
+    // reference it was created with, so this frees it exactly as before.
+    if(!is_registered && !is_registered_for_cleanup)
+    {
+      dt_masks_set_visible_form(dev, NULL);
+      dt_masks_form_unref(old_form);
+    }
   }
 
   dt_masks_clear_form_gui(dev);
