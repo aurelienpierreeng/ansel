@@ -947,7 +947,8 @@ void dt_collection_hint_message(const dt_collection_t *collection)
   g_idle_add(dt_collection_hint_message_internal, message);
 }
 
-static inline void _dt_collection_change_view_after_import(const dt_view_t *current_view, gboolean open_single_image)
+static inline void _dt_collection_change_view_after_import(const dt_view_t *current_view, gboolean open_single_image,
+                                                           const int32_t imgid)
 {
   // Studio Capture already shows every newly-imported image itself (see
   // _studio_image_imported_callback() in views/studio_capture.c), without leaving the atelier:
@@ -955,13 +956,13 @@ static inline void _dt_collection_change_view_after_import(const dt_view_t *curr
   // and kick the user out of a live shooting session.
   if(!g_strcmp0(current_view->module_name, "studio_capture")) return;
 
+  // Name the image to open explicitly. This runs on the import job's thread, so the mouse-over
+  // id and the selection set just above cannot be relied on to still designate imgid by the time
+  // the GUI thread performs the switch -- the darkroom's own leave() rewrites the selection, and
+  // any pointer motion rewrites the mouse-over id. dt_ctl_open_image_in_darkroom() publishes the
+  // target and switches views in one GUI-thread callback instead.
   if(open_single_image)
-  {
-    if(!g_strcmp0(current_view->module_name, "darkroom")) // if current view IS "darkroom".
-      dt_ctl_reload_view("darkroom");
-    else
-      dt_ctl_switch_mode_to("darkroom");
-  }
+    dt_ctl_open_image_in_darkroom(imgid);
   else if(g_strcmp0(current_view->module_name, "lighttable")) // if current view IS NOT "lighttable".
     dt_ctl_switch_mode_to("lighttable");
 }
@@ -1131,7 +1132,7 @@ void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgi
   // New images are untagged, that may need an update of the collection module for untagged count
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 
-  if(current_atelier) _dt_collection_change_view_after_import(current_atelier, open_single_image);
+  if(!IS_NULL_PTR(current_atelier)) _dt_collection_change_view_after_import(current_atelier, open_single_image, imgid);
 }
 
 // clang-format off

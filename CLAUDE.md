@@ -1191,6 +1191,25 @@ with a manual `gtk_drag_dest_set` reliably receives motion but does not deliver 
 models. DnD was removed entirely at the maintainer's request; do not re-add without a
 non-tree drop target or `tagging.c`-style full source+dest.
 
+### After an import: which image opens, and which folder the library shows
+
+`dt_collection_load_filmroll()` (`common/collection.c`) is what both import paths
+(`control/jobs/import_jobs.c`, `control/jobs/film_jobs.c`) call to make a freshly imported image
+visible. It runs on the **import job's thread**.
+
+**Opening a single imported image in the darkroom** goes through
+`dt_ctl_open_image_in_darkroom(imgid)` (`control/control.c`), never through a view switch alone.
+The darkroom's `try_enter()` picks its target from `dt_control_get_mouse_over_id()`, falling back
+on the selection, and both are volatile across the lighttable round-trip the switch performs: any
+pointer motion over the grid rewrites the mouse-over id, and the darkroom's own `leave()` calls
+`dt_selection_select_single(dt_view_active_images_get_first())`, i.e. restores the selection to
+the image it was editing. Publishing the target from the job thread and requesting the switch
+separately therefore re-opens the previous image about as often as the intended one, depending on
+where the pointer happens to sit. `dt_ctl_open_image_in_darkroom()` marshals the whole sequence
+into one GUI-thread callback — leave the darkroom via the lighttable, publish mouse-over id and
+selection, then enter the darkroom — so nothing can run in between. Any other worker-thread code
+that needs a specific image opened must use it rather than setting those globals itself.
+
 ---
 
 ## GTK / UI
