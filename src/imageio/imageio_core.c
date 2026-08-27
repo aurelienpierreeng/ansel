@@ -135,6 +135,11 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
   if(dt_exif_get_thumbnail(filename, &buf, &bufsize, &mime_type, th_width, th_height, MAX(width, height))) 
     goto error;
 
+  // dt_exif_get_thumbnail() sets mime_type with strdup(), which returns NULL under memory
+  // pressure while still reporting success -- it checks its buffer allocation but not this
+  // one. Everything below reads it: two strcmp() calls and a "%s" in the error path.
+  if(IS_NULL_PTR(mime_type)) goto error;
+
   if(strcmp(mime_type, "image/jpeg") == 0)
   {
     // Decompress the JPG into our own memory format
@@ -175,7 +180,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
     fprintf(
         stderr,
         "[dt_imageio_large_thumbnail] error: Not a supported thumbnail image format or broken thumbnail: %s\n",
-        mime_type);
+        IS_NULL_PTR(mime_type) ? "(none)" : mime_type);
     goto error;
   }
 
