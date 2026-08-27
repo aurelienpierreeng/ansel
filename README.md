@@ -1,5 +1,11 @@
 # Ansel
 
+[![CI](https://github.com/aurelienpierreeng/ansel/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/aurelienpierreeng/ansel/actions/workflows/ci.yml)
+[![Nightly Linux PKG](https://github.com/aurelienpierreeng/ansel/actions/workflows/lin-nightly.yml/badge.svg)](https://github.com/aurelienpierreeng/ansel/actions/workflows/lin-nightly.yml)
+[![Nightly Mac PKG](https://github.com/aurelienpierreeng/ansel/actions/workflows/mac-nightly.yml/badge.svg)](https://github.com/aurelienpierreeng/ansel/actions/workflows/mac-nightly.yml)
+[![Nightly Win PKG](https://github.com/aurelienpierreeng/ansel/actions/workflows/win-nightly.yml/badge.svg)](https://github.com/aurelienpierreeng/ansel/actions/workflows/win-nightly.yml)
+
+
 ![](./data/screenshots/ansel-0.1-lighttable.jpg)
 ![](./data/screenshots/ansel-0.1-darkroom.jpg)
 ![](./data/screenshots/ansel-0.1-import.jpg)
