@@ -1197,6 +1197,16 @@ non-tree drop target or `tagging.c`-style full source+dest.
 (`control/jobs/import_jobs.c`, `control/jobs/film_jobs.c`) call to make a freshly imported image
 visible. It runs on the **import job's thread**.
 
+**Following the imported image's folder** is the Collect module's persisted tab's business, and
+deliberately NOT the current atelier's: rule 0 gets overwritten with the imported image's folder,
+which is legitimate on the "Folders" tab and destructive on "Collections" and "Queries" where the
+rules belong to the user. The collection is global, so an import started from the darkroom must
+re-point it too, or the library still shows the previously browsed folder when the user goes back
+to the grid. Studio Capture has no Collect module UI and therefore no rules to protect, so it
+always follows. `_collection_folder_ui_inactive()` is a different predicate for a different
+question (which folder the import dialog considers "currently browsed") and does gate on the
+atelier; do not merge the two.
+
 **Opening a single imported image in the darkroom** goes through
 `dt_ctl_open_image_in_darkroom(imgid)` (`control/control.c`), never through a view switch alone.
 The darkroom's `try_enter()` picks its target from `dt_control_get_mouse_over_id()`, falling back

@@ -1089,14 +1089,22 @@ void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgi
   if(imgid == UNKNOWN_IMAGE)
     return;
 
-  // _collection_folder_ui_inactive() also gates on the atelier (only lighttable/Studio Capture
-  // have a folder-browsing grid worth re-pointing at the import). That gate must only cover the
-  // folder-following block below, not the mouse-over/selection/view-switch block that follows
-  // it: those are what actually opens the newly imported image, and must run for every atelier,
-  // darkroom included -- otherwise importing a single image while already in darkroom never
-  // opens it, since dt_control_set_mouse_over_id() below (which darkroom's try_enter() reads to
-  // pick the target image) never runs.
-  if(!_collection_folder_ui_inactive(current_atelier))
+  // May the folder-browsing rules be re-pointed at the imported image's folder? That is the
+  // Collect module's persisted tab's business, and deliberately NOT the current atelier's: rule 0
+  // gets overwritten with the imported image's folder, which is legitimate on "Folders" and
+  // destructive on "Collections" and "Queries" where the rules belong to the user. The collection
+  // is global, so an import started from the darkroom (or the map, or print) must re-point it
+  // just the same, or the imported image is nowhere to be found when the user gets back to the
+  // grid. Studio Capture has no Collect module UI, hence no such rules to protect.
+  //
+  // This gates the folder-following block only, never the mouse-over/selection/view-switch block
+  // that follows it: those are what actually makes the newly imported image the one on screen.
+  const gboolean is_studio_capture = !IS_NULL_PTR(current_atelier)
+                                     && !g_strcmp0(current_atelier->module_name, "studio_capture");
+  const gboolean follow_import_folder = is_studio_capture
+                                        || dt_conf_get_int("plugins/lighttable/collect/tab") == 0;
+
+  if(follow_import_folder)
   {
     // Always the folder actually containing imgid (the first successfully imported image), for
     // every case -- copy or in-place, List or Tree view. This used to special-case in-place
