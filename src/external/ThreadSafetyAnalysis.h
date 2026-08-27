@@ -19,6 +19,25 @@
 
 #define GUARDED_BY(x) THREAD_ANNOTATION_ATTRIBUTE__(guarded_by(x))
 
+// NOTE: do not add a GUARDED_BY variant for a lock that is a STRUCT MEMBER. It cannot work
+// in C, and the failure is silent rather than loud.
+//
+// In C++ a member's guarded_by(mu) implicitly means this->mu, so an access to obj.field
+// requires obj.mu and a method's REQUIRES(mu) satisfies it. C has no `this` and clang does
+// not synthesise one: the requirement stays the bare identifier, which no lock expression
+// can produce. Measured on clang 19 -- with a global lock, REQUIRES(g_lock) satisfies
+// GUARDED_BY(g_lock) and only the unannotated function is flagged; with a member lock,
+// REQUIRES(s->m) satisfies nothing and every access warns forever. Clang says as much:
+// "requires holding rw 'm'", unqualified.
+//
+// So GUARDED_BY is usable here only for file-scope locks. For per-instance locks, the
+// checking that does work is REQUIRES/REQUIRES_SHARED on functions, against the
+// ACQUIRE/RELEASE annotations on the lock wrappers -- that catches unbalanced and
+// unheld-on-some-path locking, which is most of what goes wrong.
+//
+// Older clang made this worse: before 19 it rejected the attribute outright with "use of
+// undeclared identifier", breaking the build rather than silently checking nothing.
+
 #define PT_GUARDED_BY(x) THREAD_ANNOTATION_ATTRIBUTE__(pt_guarded_by(x))
 
 #define ACQUIRED_BEFORE(...)                                                   \
