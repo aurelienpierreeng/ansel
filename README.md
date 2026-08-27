@@ -5,6 +5,9 @@
 [![Nightly Mac PKG](https://github.com/aurelienpierreeng/ansel/actions/workflows/mac-nightly.yml/badge.svg)](https://github.com/aurelienpierreeng/ansel/actions/workflows/mac-nightly.yml)
 [![Nightly Win PKG](https://github.com/aurelienpierreeng/ansel/actions/workflows/win-nightly.yml/badge.svg)](https://github.com/aurelienpierreeng/ansel/actions/workflows/win-nightly.yml)
 
+[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=aurelienpierreeng_ansel&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=aurelienpierreeng_ansel)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=aurelienpierreeng_ansel&metric=bugs)](https://sonarcloud.io/summary/new_code?id=aurelienpierreeng_ansel)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=aurelienpierreeng_ansel&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=aurelienpierreeng_ansel)
 
 ![](./data/screenshots/ansel-0.1-lighttable.jpg)
 ![](./data/screenshots/ansel-0.1-darkroom.jpg)
