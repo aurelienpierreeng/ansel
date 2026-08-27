@@ -1116,13 +1116,21 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
 
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
 {
+  // Write the outputs on EVERY path. Callers declare them uninitialized and read them straight
+  // back -- iop/crop.c's _aspect_apply() does `int iwd, iht; dt_dev_get_processed_size(...);
+  // if(iwd < iht)` -- so returning without writing hands them whatever was on the stack. Zero
+  // is not a meaningful size, but it is a deterministic one, and it is what those callers
+  // already behave sanely for; garbage is what they could not.
+  if(!IS_NULL_PTR(procw)) *procw = 0;
+  if(!IS_NULL_PTR(proch)) *proch = 0;
+
   if(IS_NULL_PTR(dev)) return;
   const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
   const int32_t processed_width = geometry.processed_width;
   const int32_t processed_height = geometry.processed_height;
-  *procw = processed_width;
-  *proch = processed_height;
- }
+  if(!IS_NULL_PTR(procw)) *procw = processed_width;
+  if(!IS_NULL_PTR(proch)) *proch = processed_height;
+}
 
 void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *points, size_t num_points)
 {
