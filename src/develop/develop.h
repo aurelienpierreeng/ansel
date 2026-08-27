@@ -227,24 +227,23 @@ typedef struct dt_develop_t
   /* Protect read & write to dev->history and dev->forms
    * and other related stuff like history_end, hashes, etc.
    *
-   * The fields below CANNOT carry GUARDED_BY(history_mutex), much as they should.
-   * Referring to a sibling struct member from a thread-safety attribute is a C++ feature:
-   * in C it only started working in clang 19. clang 18 and older reject it outright with
-   * "use of undeclared identifier 'history_mutex'", which broke the build for anyone on a
-   * distro clang -- reported against master, verified here as clang-18 failing and clang-19
-   * accepting the identical code.
+   * The fields below deliberately carry NO GUARDED_BY. It cannot work for a lock that is a
+   * struct member in C: clang never rebinds the member name to the accessed object, so the
+   * requirement stays an unresolved identifier that no REQUIRES can satisfy, and every
+   * access warns forever. Measured, not assumed -- see external/ThreadSafetyAnalysis.h.
    *
-   * It looked fine locally for the worse of two reasons: the -Wthread-safety probe in
-   * cmake/modules/ was silently failing, so no local clang build had the analysis on at all,
-   * and clang does not resolve the attribute's argument when the analysis is off.
+   * What DOES check is REQUIRES/REQUIRES_SHARED on the functions themselves, against the
+   * ACQUIRE/RELEASE annotations on the dt_pthread_rwlock_t wrappers: a function that runs
+   * with the lock already held by its caller declares it, and clang then verifies the lock
+   * is actually held on every path that reaches it, and released on every path out. That
+   * catches the unbalanced and unheld-on-some-path cases, which is most of what goes wrong
+   * here. It does not catch a stray dev->history read in a function that declares nothing --
+   * that gap is the price of the C limitation above, not an oversight.
    *
-   * A function that legitimately runs with the lock already held by its caller says so with
-   * REQUIRES(history_mutex) rather than being exempted -- but on its DEFINITION, not its
-   * declaration. dev_history.h only forward-declares dt_develop_t, and an attribute naming
-   * dev->history_mutex needs the complete type; completing it there would mean including
-   * this header, which includes dev_history.h back. The cycle is not worth the annotation,
-   * and with GUARDED_BY unavailable in C before clang 19 (see above), those REQUIRES on the
-   * definitions are now the only machine-checked part of this rule. */
+   * Put those contracts on the DEFINITION, not the declaration: dev_history.h only
+   * forward-declares dt_develop_t, and an attribute naming dev->history_mutex needs the
+   * complete type; completing it there would mean including this header, which includes
+   * dev_history.h back. The cycle is not worth the annotation. */
   dt_pthread_rwlock_t history_mutex;
 
   // We don't always apply the full history to modules,
