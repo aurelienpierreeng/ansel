@@ -49,6 +49,35 @@ void dt_sentry_shutdown(void);
 /** Whether sentry's crash handler has already captured a gdb backtrace for the
  * current crash. The local signal handler uses this to avoid running gdb twice.
  * Returns FALSE when built without sentry support. */
+/** @brief Handed the crash backtrace from inside the crash handler.
+ *
+ * @param backtrace NUL-terminated backtrace text, owned by the caller and valid only for the
+ *                  duration of the call.
+ * @param backtrace_len its length in bytes.
+ *
+ * @warning Runs in a signal handler, on a process that is already dying. Use only
+ * async-signal-safe calls: no allocation, no locks, no conf, nothing that can block or fault
+ * on a corrupted heap.
+ */
+typedef void (*dt_sentry_crash_observer_t)(const char *backtrace, size_t backtrace_len);
+
+/** @brief Register a function to be handed the backtrace when the process crashes.
+ *
+ * @details Sentry supplies the text and knows nothing about what any observer does with it;
+ * an observer decides for itself whether the crash concerns it. This module therefore carries
+ * no knowledge of GPUs, image formats or anything else that might want to look.
+ *
+ * The pairing is made by the caller that owns both ends -- see dt_init() in darktable.c --
+ * so neither this module nor an observer's module has to include the other.
+ *
+ * Register during startup, before a crash can occur. At most a handful are supported and
+ * extras are ignored, rather than growing a structure a signal handler must walk. Does NOT
+ * require dt_sentry_init() to have run.
+ *
+ * @param observer the callback; see the typedef for what it may safely do.
+ */
+void dt_sentry_add_crash_observer(dt_sentry_crash_observer_t observer);
+
 gboolean dt_sentry_backtrace_captured(void);
 
 /** Record that a module was used during this session, e.g. a view was entered,

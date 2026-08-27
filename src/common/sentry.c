@@ -70,6 +70,28 @@
 
 static gboolean _sentry_inited = FALSE;
 
+/* Observers handed the crash backtrace, from inside the crash handler.
+ *
+ * A fixed array: registration happens at startup, and a crash handler must not walk a
+ * structure another thread could be reallocating. Nothing here knows or cares what an
+ * observer is for -- see dt_sentry_add_crash_observer(). */
+#define DT_SENTRY_MAX_CRASH_OBSERVERS 4
+static dt_sentry_crash_observer_t _crash_observers[DT_SENTRY_MAX_CRASH_OBSERVERS] = { NULL };
+static int _crash_observer_count = 0;
+
+void dt_sentry_add_crash_observer(dt_sentry_crash_observer_t observer)
+{
+  if(IS_NULL_PTR(observer) || _crash_observer_count >= DT_SENTRY_MAX_CRASH_OBSERVERS) return;
+  _crash_observers[_crash_observer_count++] = observer;
+}
+
+/* Called from the crash handler: everything downstream must be async-signal-safe. */
+static void _sentry_notify_crash_observers(const char *backtrace, gsize backtrace_len)
+{
+  for(int i = 0; i < _crash_observer_count; i++)
+    if(_crash_observers[i]) _crash_observers[i](backtrace, backtrace_len);
+}
+
 // Set once sentry's on_crash hook has captured a gdb backtrace, so the local
 // signal handler can skip running gdb a second time for the same crash.
 static volatile sig_atomic_t _sentry_backtrace_captured = 0;
@@ -285,9 +307,14 @@ static sentry_value_t _sentry_on_crash(const sentry_ucontext_t *uctx, sentry_val
 {
   _sentry_stamp_session_length(event);
 
-#if defined(__linux__)
+  /* Declared outside the platform branches so the notification below has exactly one call
+   * site. It used to sit inside each branch, which left it unreferenced on any platform that
+   * captures no backtrace -- macOS is one -- and -Werror rightly rejected that. */
   gsize bt_len = 0;
-  char *bt = _sentry_capture_gdb_backtrace(&bt_len);
+  char *bt = NULL;
+
+#if defined(__linux__)
+  bt = _sentry_capture_gdb_backtrace(&bt_len);
   if(bt && bt_len > 0)
   {
     // Registered on the scope, this is picked up when the crash envelope is
@@ -298,10 +325,8 @@ static sentry_value_t _sentry_on_crash(const sentry_ucontext_t *uctx, sentry_val
     // gdb again for this same crash.
     _sentry_backtrace_captured = 1;
   }
-  g_free(bt);
 #elif defined(_WIN32)
-  gsize bt_len = 0;
-  char *bt = _sentry_capture_windows_backtrace(uctx, &bt_len);
+  bt = _sentry_capture_windows_backtrace(uctx, &bt_len);
   if(bt && bt_len > 0)
   {
     sentry_attach_bytes(bt, bt_len, "windows-backtrace.txt");
@@ -309,8 +334,15 @@ static sentry_value_t _sentry_on_crash(const sentry_ucontext_t *uctx, sentry_val
     // pop its own backtrace dialog for this same crash.
     _sentry_backtrace_captured = 1;
   }
-  g_free(bt);
 #endif
+
+  /* Observers get whatever was captured. On a platform with no capture path -- macOS today --
+   * bt stays NULL and nothing is notified, which is correct rather than merely tolerable: an
+   * observer's whole job is to read the backtrace, and there is none to read. Anything keyed
+   * on this (see dt_opencl_note_crash_backtrace) is therefore Linux and Windows only, which
+   * is where the crashes it answers were reported. */
+  if(bt && bt_len > 0) _sentry_notify_crash_observers(bt, bt_len);
+  g_free(bt);
 
   return event;
 }

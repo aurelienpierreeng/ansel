@@ -67,6 +67,7 @@
 #include "pixel/interpolation.h"
 #include "pixel/locallaplaciancl.h"
 #include "system/nvidia_gpus.h"
+#include <fcntl.h>   // O_WRONLY/O_CREAT/O_APPEND. conditional-ok: this whole file is inside #ifdef HAVE_OPENCL
 #include "system/opencl_drivers_blacklist.h"
 #include "common/conf.h"
 #include "develop/blend.h"
@@ -141,6 +142,10 @@ static inline void _opencl_splash_update_compile(const char *programname)
 }
 
 static const char *dt_opencl_get_vendor_by_id(unsigned int id);
+/** per-vendor GPU-driver crash streak; defined with the driver table further down, declared
+    here because the per-device setup above it consults them */
+static int _gpu_vendor_crash_streak(unsigned int vendor_id);
+static void _gpu_vendor_set_crash_streak(unsigned int vendor_id, int value);
 static char *_ascii_str_canonical(const char *in, char *out, int maxlen);
 /** parse a single token of priority string and store priorities in priority_list */
 static void dt_opencl_priority_parse(dt_opencl_t *cl, char *configstr, int *priority_list, int *mandatory);
@@ -729,6 +734,30 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   }
 
   cl->dev[dev].vendor = strdup(dt_opencl_get_vendor_by_id(vendor_id));
+  cl->dev[dev].vendor_id = vendor_id;
+
+  /* Skip this device if ITS driver is what keeps crashing.
+   *
+   * Per device, not globally: a machine with an Intel iGPU and an NVIDIA dGPU must keep the
+   * NVIDIA when Intel's compiler is the one faulting. The streak counts crashes whose
+   * backtrace named a runtime this vendor ships, so a device whose driver was never on a
+   * crashing stack is untouched however often something else fails.
+   *
+   * The device name and driver version go in the message because that is what a user needs to
+   * act on -- which card, which driver to update. */
+  const int vendor_crash_streak = _gpu_vendor_crash_streak(vendor_id);
+  if(vendor_crash_streak >= 2)
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[opencl_init] disabling device %d `%s' (%s, driver %s): the last %d crashes"
+             " happened inside this vendor's OpenCL driver. Re-enable it in preferences once"
+             " the driver is updated; other devices are unaffected.\n",
+             dev, infostr ? infostr : "?", cl->dev[dev].vendor,
+             driverversion ? driverversion : "?", vendor_crash_streak);
+    cl->dev[dev].disabled |= 1;
+    res = -1;
+    goto end;
+  }
 
   const gboolean is_blacklisted = dt_opencl_check_driver_blacklist(deviceversion);
 
@@ -1061,6 +1090,127 @@ end:
   return res;
 }
 
+/* GPU vendor OpenCL runtimes, by the name their module carries in a crash backtrace and the
+ * CL_DEVICE_VENDOR_ID of the devices they drive.
+ *
+ * The module name is deliberately the VENDOR RUNTIME, never the ICD loader (OpenCL.dll /
+ * libOpenCL.so): the loader is on the stack of every OpenCL crash, including ones that are
+ * entirely ours. The vendor id is what lets a crash in one vendor's driver disable only that
+ * vendor's devices -- a machine with an Intel iGPU and an NVIDIA dGPU must not lose the
+ * NVIDIA because Intel's compiler faulted. */
+typedef struct _gpu_driver_t
+{
+  const char *module;       // substring to look for in a backtrace
+  unsigned int vendor_id;   // CL_DEVICE_VENDOR_ID of the devices it drives
+  const char *conf_suffix;  // stable fragment of the per-vendor conf key
+} _gpu_driver_t;
+
+static const _gpu_driver_t _gpu_drivers[] = {
+  { "amdocl",           DT_OPENCL_VENDOR_AMD,    "amd" },     // Sentry 129862572, 141634558
+  { "libigdfcl",        DT_OPENCL_VENDOR_INTEL,  "intel" },   // Sentry 129978857
+  { "libigdrcl",        DT_OPENCL_VENDOR_INTEL,  "intel" },
+  { "intelocl",         DT_OPENCL_VENDOR_INTEL,  "intel" },
+  { "libnvidia-opencl", DT_OPENCL_VENDOR_NVIDIA, "nvidia" },
+  { "nvopencl",         DT_OPENCL_VENDOR_NVIDIA, "nvidia" },
+  { NULL, 0, NULL }
+};
+
+/* Per-vendor crash-streak conf key. NULL for a vendor we do not ship a rule for. */
+static const char *_gpu_vendor_conf_suffix(unsigned int vendor_id)
+{
+  for(int i = 0; _gpu_drivers[i].module; i++)
+    if(_gpu_drivers[i].vendor_id == vendor_id) return _gpu_drivers[i].conf_suffix;
+  return NULL;
+}
+
+static int _gpu_vendor_crash_streak(unsigned int vendor_id)
+{
+  const char *suffix = _gpu_vendor_conf_suffix(vendor_id);
+  if(IS_NULL_PTR(suffix)) return 0;
+  char key[128];
+  snprintf(key, sizeof(key), "opencl_driver_crash_streak_%s", suffix);
+  return dt_conf_get_int(key);
+}
+
+static void _gpu_vendor_set_crash_streak(unsigned int vendor_id, int value)
+{
+  const char *suffix = _gpu_vendor_conf_suffix(vendor_id);
+  if(IS_NULL_PTR(suffix)) return;
+  char key[128];
+  snprintf(key, sizeof(key), "opencl_driver_crash_streak_%s", suffix);
+  dt_conf_set_int(key, value);
+}
+
+/* Path of the driver-crash record. Built at init, because dt_opencl_note_crash_backtrace()
+ * runs in a crash handler and cannot allocate; empty until then, and that function no-ops
+ * while it is. */
+static char _driver_crash_marker[DT_PATH_MAX] = { 0 };
+
+static void _opencl_driver_crash_marker_path(char *buf, size_t buf_len)
+{
+  char cachedir[DT_PATH_MAX] = { 0 };
+  dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
+  char *marker = g_build_filename(cachedir, "gpu-driver-crash", NULL);
+  g_strlcpy(buf, marker, buf_len);
+  g_free(marker);
+}
+
+void dt_opencl_note_crash_backtrace(const char *backtrace, size_t backtrace_len)
+{
+  if(_driver_crash_marker[0] == '\0' || IS_NULL_PTR(backtrace) || backtrace_len == 0) return;
+
+  /* Record WHICH runtime, not just that one crashed: the next start disables only the devices
+   * that vendor drives. Writing the module's own compile-time string keeps this handler free
+   * of any formatting. */
+  const char *culprit = NULL;
+  for(int i = 0; _gpu_drivers[i].module && IS_NULL_PTR(culprit); i++)
+    if(strstr(backtrace, _gpu_drivers[i].module)) culprit = _gpu_drivers[i].module;
+
+  if(IS_NULL_PTR(culprit)) return;
+
+  /* open/write/close only: this runs on a dying process whose heap may be corrupt, so no
+   * allocation, no locks, no conf. One line per crash. */
+  const int fd = g_open(_driver_crash_marker, O_WRONLY | O_CREAT | O_APPEND, 0600);
+  if(fd < 0) return;
+  const ssize_t w1 = write(fd, culprit, strlen(culprit));
+  const ssize_t w2 = write(fd, "\n", 1);
+  (void)w1; (void)w2;
+  close(fd);
+}
+
+/* Fold the recorded driver crashes into the per-vendor streaks, consuming the record.
+ *
+ * Runs early in dt_opencl_init(), where allocation and conf are safe again. Each line names
+ * the runtime module that was on the crashing stack; it is mapped back to the vendor whose
+ * devices that module drives, so the streak that grows is that vendor's alone. */
+static void _opencl_fold_driver_crashes(void)
+{
+  if(_driver_crash_marker[0] == '\0') return;
+
+  gchar *contents = NULL;
+  gsize length = 0;
+  if(!g_file_get_contents(_driver_crash_marker, &contents, &length, NULL)) return;
+  g_unlink(_driver_crash_marker);
+
+  if(!IS_NULL_PTR(contents) && length > 0)
+  {
+    gchar **lines = g_strsplit(contents, "\n", -1);
+    for(int l = 0; lines[l]; l++)
+    {
+      if(lines[l][0] == '\0') continue;
+      for(int i = 0; _gpu_drivers[i].module; i++)
+      {
+        if(strcmp(lines[l], _gpu_drivers[i].module) != 0) continue;
+        const unsigned int vid = _gpu_drivers[i].vendor_id;
+        _gpu_vendor_set_crash_streak(vid, _gpu_vendor_crash_streak(vid) + 1);
+        break;
+      }
+    }
+    g_strfreev(lines);
+  }
+  g_free(contents);
+}
+
 void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statistics)
 {
   if(_opencl) return;
@@ -1075,6 +1225,27 @@ void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statisti
   cl->stopped = 0;
   cl->error_count = 0;
   cl->print_statistics = print_statistics;
+
+  /* NOTE: this block sits ABOVE the locale save below on purpose. It can return early, and a
+   * plain return past that point would skip the finally: block that restores the locale,
+   * leaving the whole session in "C" -- wrong number and date formatting everywhere, for
+   * exactly the users already suffering driver crashes. Jumping to finally: instead is not an
+   * option either: that label frees all_platforms, platform_name and friends, which are
+   * declared further down, so a goto from here would jump over their initialisers and free
+   * indeterminate pointers. Returning before anything needs unwinding avoids both. */
+  /* Fold in any crash that happened inside a GPU driver last time.
+   *
+   * A vendor OpenCL runtime that faults on its own thread is not something this code can fix
+   * -- the stack holds no frame of ours (Sentry 129862572: 169 crashes from 10 users entirely
+   * inside amdocl64.dll; 129978857: 37 from 17 users, Intel's compiler longjmp-ing out of a
+   * signal handler into glibc's fortify check). What it CAN do is stop walking into the same
+   * driver every launch: ~17 and ~2 crashes per user means the same wall every start.
+   *
+   * The decision is per DEVICE, further down, once each device's vendor is known -- a machine
+   * with an Intel iGPU and an NVIDIA dGPU must not lose the NVIDIA because Intel's compiler
+   * faulted. Nothing is disabled here. */
+  _opencl_driver_crash_marker_path(_driver_crash_marker, sizeof(_driver_crash_marker));
+  _opencl_fold_driver_crashes();
 
   // work-around to fix a bug in some AMD OpenCL compilers, which would fail parsing certain numerical
   // constants if locale is different from "C".
@@ -1093,6 +1264,7 @@ void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statisti
   cl->detected_devs = NULL;
 
   if(exclude_opencl) return;
+
 
   cl_platform_id *all_platforms = NULL;
   cl_uint *all_num_devices = NULL;
@@ -1356,6 +1528,13 @@ static void dt_opencl_cleanup_device(dt_opencl_t *cl, int i)
 
 void dt_opencl_cleanup(void)
 {
+  /* Clear the driver-crash streak only if OpenCL actually RAN and we still reached cleanup:
+   * that is the one thing showing the driver behaving. Surviving with OpenCL switched off
+   * proves nothing about it, and clearing on that would re-enable it next launch and crash
+   * again -- halving the crash rate instead of stopping it. */
+  if(_opencl && _opencl->enabled && dt_conf_get_int("opencl_driver_crash_streak") != 0)
+    dt_conf_set_int("opencl_driver_crash_streak", 0);
+
   dt_opencl_t *cl = _opencl;
   if(IS_NULL_PTR(cl)) return;
   if(cl->inited)

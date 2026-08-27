@@ -1823,6 +1823,17 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // sentry's handler sits on top and chains down into our gdb/drmingw fallback.
   dt_sentry_init(init_gui);
 
+#ifdef HAVE_OPENCL
+  /* Connect the crash reporter to the OpenCL module, which is the only place that knows
+   * whether a crash was its driver's doing. Wired here rather than inside either one so
+   * neither has to include the other: sentry supplies backtraces without knowing what a GPU
+   * is, and opencl judges them without knowing that sentry exists.
+   *
+   * Guarded because opencl.h declares nothing without HAVE_OPENCL -- a build with OpenCL
+   * compiled out has no such function to point at, and no GPU driver to blame either. */
+  dt_sentry_add_crash_observer(dt_opencl_note_crash_backtrace);
+#endif
+
   // Opt-in usage analytics (PostHog) - separate toggle from crash reporting.
   dt_telemetry_init(init_gui);
 
