@@ -293,8 +293,18 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG ${CMAKE_CXX_FLAGS_IP
 # GCC build passes silently, GCC ignoring the flag entirely. Keeping them as warnings means
 # the findings stay visible instead of being deleted along with the annotations that found
 # them. Remove once those files are resolved.
-set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation -Wno-error=thread-safety-analysis" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation -Wno-error=thread-safety-analysis" CACHE STRING "" FORCE)
+set(_ansel_debug_flags "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation")
+
+# Clang only. GCC has no thread-safety-analysis warning, and -Wno-error= naming an option it
+# does not know is a hard error there -- "cc1plus: error: '-Wno-error=thread-safety-analysis':
+# no option" -- not the silent no-op an unknown -Wno-* would be. Adding it unconditionally
+# breaks every GCC Debug build.
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+  string(APPEND _ansel_debug_flags " -Wno-error=thread-safety-analysis")
+endif()
+
+set(CMAKE_C_FLAGS_DEBUG "${_ansel_debug_flags}" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_DEBUG "${_ansel_debug_flags}" CACHE STRING "" FORCE)
 
 if(NOT CUSTOM_CFLAGS)
 
