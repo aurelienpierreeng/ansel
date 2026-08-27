@@ -1001,8 +1001,10 @@ static void update_profile_list(dt_iop_module_t *self)
   int pos = -1;
   // some file formats like jpeg can have an embedded color profile
   // currently we only support jpeg, j2k, tiff and png
+  // dt_image_cache_get() returns NULL for an id it cannot load, and this runs from
+  // reload_defaults() on a GUI reset -- Sentry 140151023: SIGSEGV on the very next line.
   const dt_image_t *cimg = dt_image_cache_get(self->dev->image_storage.id, 'r');
-  if(cimg->profile)
+  if(!IS_NULL_PTR(cimg) && cimg->profile)
   {
     dt_colorprofile_desc_t *prof = (dt_colorprofile_desc_t *)calloc(1, sizeof(dt_colorprofile_desc_t));
     g_strlcpy(prof->name, dt_colorspaces_get_name(DT_COLORSPACE_EMBEDDED_ICC, ""), sizeof(prof->name));
@@ -1010,7 +1012,7 @@ static void update_profile_list(dt_iop_module_t *self)
     g->image_profiles = g_list_append(g->image_profiles, prof);
       pos++;
   }
-  dt_image_cache_read_release(cimg);
+  if(!IS_NULL_PTR(cimg)) dt_image_cache_read_release(cimg);
   // use the matrix embedded in some DNGs and EXRs
   if(!isnan(self->dev->image_storage.d65_color_matrix[0]))
   {
