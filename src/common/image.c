@@ -1526,13 +1526,27 @@ int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboo
       // this has the xmp for the duplicate is read just below.
       newid = dt_image_repository_duplicate(id, version);
       const dt_image_t *img = dt_image_cache_get(id, 'r');
-      grpid = img->group_id;
-      dt_image_cache_read_release(img);
+      if(!IS_NULL_PTR(img))
+      {
+        grpid = img->group_id;
+        dt_image_cache_read_release(img);
+      }
     }
     // make sure newid is not selected
     if(clear_selection) dt_selection_clear(dt_selection_get_global());
 
-    dt_image_t *img = dt_image_cache_get(newid, 'w');
+    // dt_image_repository_duplicate() above returns -1 when it cannot create the duplicate,
+    // and dt_image_cache_get() returns NULL for an id it cannot load. Both were dereferenced
+    // unchecked, which is Sentry 140350855: SIGSEGV on `img->version = version` while
+    // importing a film roll whose sidecars name versions the duplicate could not be created
+    // for. Skipping this sidecar leaves the rest of the import to proceed.
+    dt_image_t *img = (newid > 0) ? dt_image_cache_get(newid, 'w') : NULL;
+    if(IS_NULL_PTR(img))
+    {
+      fprintf(stderr, "[dt_image_read_duplicates] could not load image %i for sidecar '%s', skipping it\n",
+              newid, xmpfilename);
+      continue;
+    }
     (void)dt_exif_xmp_read(img, xmpfilename, 0);
     img->version = version;
     dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
