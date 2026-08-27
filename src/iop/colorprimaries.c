@@ -837,6 +837,12 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
   dt_iop_colorprimaries_data_t *d = dt_calloc_align(sizeof(dt_iop_colorprimaries_data_t));
   piece->data = d;
   piece->data_size = sizeof(dt_iop_colorprimaries_data_t);
+  // Checked AFTER both piece->data and piece->data_size are set, deliberately.
+  // dt_iop_init_pipe() disables the node for us when it sees data_size > 0 with a NULL
+  // data -- returning before data_size is assigned skips that and leaves the node enabled
+  // with no storage. dt_calloc_align() returns NULL on failure and pipe nodes are built
+  // exactly when memory is tightest (Sentry 134134395 faulted in atrous's init_pipe).
+  if(IS_NULL_PTR(piece->data)) return;
   d->white_level = 1.f;
   d->interpolation = DT_LUT3D_INTERP_TETRAHEDRAL;
 }

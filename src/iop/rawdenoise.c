@@ -613,6 +613,12 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
 
   piece->data = (void *)d;
   piece->data_size = sizeof(dt_iop_rawdenoise_data_t);
+  // Checked AFTER both piece->data and piece->data_size are set, deliberately.
+  // dt_iop_init_pipe() disables the node for us when it sees data_size > 0 with a NULL
+  // data -- returning before data_size is assigned skips that and leaves the node enabled
+  // with no storage. dt_calloc_align() returns NULL on failure and pipe nodes are built
+  // exactly when memory is tightest (Sentry 134134395 faulted in atrous's init_pipe).
+  if(IS_NULL_PTR(piece->data)) return;
   for(int ch = 0; ch < DT_RAWDENOISE_NONE; ch++)
   {
     d->curve[ch] = dt_draw_curve_new(0.0, 1.0, CATMULL_ROM);
