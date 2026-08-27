@@ -187,10 +187,10 @@ whole project, pixel operations included:
 
 | Metric | Ansel Master | Darktable 4.0 | Darktable 5.6 |
 | ------ | -----------: | ------------: | ------------: |
-| Cyclomatic complexity | [62,793](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierreeng_ansel) | [51,579](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierre_darktable) | [61,715](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierreeng_darktable-5) |
-| Cognitive complexity | [77,495](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierreeng_ansel) | [68,417](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierre_darktable) | [81,587](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierreeng_darktable-5) |
-| Lines of code | [350,128](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierreeng_ansel) | [311,761](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierre_darktable) | [374,150](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierreeng_darktable-5) |
-| Ratio of comments | [14.5%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierreeng_ansel) | [11.3%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierre_darktable) | [11.5%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierreeng_darktable-5) |
+| Cyclomatic complexity | [62,406](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierreeng_ansel) | [51,579](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierre_darktable) | [61,715](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierreeng_darktable-5) |
+| Cognitive complexity | [76,707](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierreeng_ansel) | [68,417](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierre_darktable) | [81,587](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierreeng_darktable-5) |
+| Lines of code | [349,863](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierreeng_ansel) | [311,761](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierre_darktable) | [374,150](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierreeng_darktable-5) |
+| Ratio of comments | [14.6%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierreeng_ansel) | [11.3%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierre_darktable) | [11.5%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierreeng_darktable-5) |
 
 Those totals compare the two projects as a whole, which means they compare their
 **feature sets** as much as their engineering.
@@ -214,13 +214,13 @@ caches, the GUI framework, everything both projects need whatever their module s
 <!-- BEGIN GENERATED engine-metrics: aurelienpierreeng_ansel=Ansel Master, -=Darktable 3.8, aurelienpierre_darktable=Darktable 4.0, -=Darktable 5.0, aurelienpierreeng_darktable-5=Darktable 5.6, exclude=src/iop -->
 | Metric | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.0 | Darktable 5.6 |
 | ------ | -----------: | -----------: | -----------: | -----------: | -----------: |
-| Cyclomatic complexity | 41,702 | 35,244 | 37,156 | 38,016 | 44,059 |
-| Lines of code | 212,951 | 199,820 | 207,304 | 229,248 | 260,318 |
-| Comment lines | 56,788 | 28,736 | 31,877 | 34,431 | 40,879 |
-| Ratio of comments | 21.1 % | 12.6 % | 13.3 % | 13.1 % | 13.6 % |
-| Cognitive complexity | 47,619 | — | 46,536 | — | 57,120 |
-| Functions carrying documentation | 30.5 % | 21.5 % | 20.9 % | 20.1 % | 19.7 % |
-| Types, constants and macros carrying documentation | 6.2 % | 5.2 % | 4.9 % | 4.7 % | 4.9 % |
+| Cyclomatic complexity | 41,498 | 35,244 | 37,156 | 38,016 | 44,059 |
+| Lines of code | 212,602 | 199,820 | 207,304 | 229,248 | 260,318 |
+| Comment lines | 57,558 | 28,736 | 31,877 | 34,431 | 40,879 |
+| Ratio of comments | 21.3 % | 12.6 % | 13.3 % | 13.1 % | 13.6 % |
+| Cognitive complexity | 46,822 | — | 46,536 | — | 57,120 |
+| Functions carrying documentation | 29.6 % | 21.5 % | 20.9 % | 20.1 % | 19.7 % |
+| Types, constants and macros carrying documentation | 5.3 % | 5.2 % | 4.9 % | 4.7 % | 4.9 % |
 <!-- END GENERATED engine-metrics -->
 
 <sub>**Methodology.** Cyclomatic complexity, lines of code and comment ratio are measured
@@ -290,11 +290,11 @@ Per function, still excluding `src/iop`:
 <!-- BEGIN GENERATED engine-complexity: -=Ansel Master, -=Darktable 3.8, -=Darktable 4.0, -=Darktable 5.0, -=Darktable 5.6 -->
 | Engine only | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.0 | Darktable 5.6 |
 | ----------- | -----------: | -----------: | -----------: | -----------: | -----------: |
-| Functions | 8,466 | 7,242 | 7,484 | 7,759 | 8,691 |
-| Average complexity | 4.93 | 4.87 | 4.96 | 4.90 | 5.07 |
-| Worst single function | 229 | 194 | 210 | 252 | 249 |
-| Functions above 15 — awkward to test | 455 | 428 | 456 | 453 | 522 |
-| Functions above 50 — effectively untestable | 51 | 45 | 48 | 48 | 63 |
+| Functions | 8,453 | 7,242 | 7,484 | 7,759 | 8,691 |
+| Average complexity | 4.91 | 4.87 | 4.96 | 4.90 | 5.07 |
+| Worst single function | 163 | 194 | 210 | 252 | 249 |
+| Functions above 15 — awkward to test | 460 | 428 | 456 | 453 | 522 |
+| Functions above 50 — effectively untestable | 48 | 45 | 48 | 48 | 63 |
 <!-- END GENERATED engine-complexity -->
 
 The averages are close, and honestly so: Ansel's worst function is worse than Darktable
@@ -482,10 +482,10 @@ Let's see a comparison of Ansel vs. Dartable 4.0 and 5.0 complexity per file/fea
 | `src/develop/pixelpipe_hb.c` | Pixel pipeline processing backbone (refactored) | [334](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fdevelop%2Fpixelpipe_hb.c&view=list&id=aurelienpierreeng_ansel) / 1275 | - | - |
 | `src/develop/dev_pixelpipe.c` | Pipeline/development interface (refactored from `pixelpipe_hb.c`) | [349](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fdevelop%2Fdev_pixelpipe.c&view=list&id=aurelienpierreeng_ansel) / 1138 | - | - |
 | `src/develop/pixelpipe_cache.c` | Pixel pipeline image cache* | [572](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fcaches%2Fpixelpipe_cache.c&view=list&id=aurelienpierreeng_ansel) / 2205 | [55](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierre_darktable%3Asrc%2Fdevelop%2Fpixelpipe_cache.c&view=list&id=aurelienpierre_darktable) / 242 | [100](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_darktable-5%3Asrc%2Fdevelop%2Fpixelpipe_cache.c&view=list&id=aurelienpierreeng_darktable-5) / 377 |
-| `src/common/imageio.c` | Backend for export and thumbnail pipelines | [183](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fimageio%2Fimageio_core.c&view=list&id=aurelienpierreeng_ansel) / 789 | [218](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierre_darktable%3Asrc%2Fcommon%2Fimageio.c&view=list&id=aurelienpierre_darktable) / 1029 | [217](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_darktable-5%3Asrc%2Fimageio%2Fimageio.c&view=list&id=aurelienpierreeng_darktable-5) / 1400 |
+| `src/common/imageio.c` | Backend for export and thumbnail pipelines | [183](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fimageio%2Fimageio_core.c&view=list&id=aurelienpierreeng_ansel) / 788 | [218](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierre_darktable%3Asrc%2Fcommon%2Fimageio.c&view=list&id=aurelienpierre_darktable) / 1029 | [217](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_darktable-5%3Asrc%2Fimageio%2Fimageio.c&view=list&id=aurelienpierreeng_darktable-5) / 1400 |
 | `src/common/mipmap_cache.c` | Lighttable thumbnails cache | [226](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fcaches%2Fmipmap_cache.c&view=list&id=aurelienpierreeng_ansel) / 1221 | [193](https://sonarcloud.io/component_measures?metric=ncloc&selected=aurelienpierre_darktable%3Asrc%2Fcommon%2Fmipmap_cache.c&id=aurelienpierre_darktable) / 1048 | [232](https://sonarcloud.io/component_measures?metric=ncloc&selected=aurelienpierreeng_darktable-5%3Asrc%2Fcommon%2Fmipmap_cache.c&id=aurelienpierreeng_darktable-5) / 1393 |
 | `src/develop/develop.c` | Development history & pipeline backend (original) | - | [600](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierre_darktable%3Asrc%2Fdevelop%2Fdevelop.c&view=list&id=aurelienpierre_darktable) / 2426| [715](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_darktable-5%3Asrc%2Fdevelop%2Fdevelop.c&view=list&id=aurelienpierreeng_darktable-5) / 3101 |
-| `src/develop/develop.c` | Development pipeline backend (refactored) | [398](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fdevelop%2Fdevelop.c&view=list&id=aurelienpierreeng_ansel) / 1419 | - |  - |
+| `src/develop/develop.c` | Development pipeline backend (refactored) | [398](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fdevelop%2Fdevelop.c&view=list&id=aurelienpierreeng_ansel) / 1420 | - |  - |
 | `src/develop/dev_history.c` | Development history backend (refactored from `develop.c`) | [493](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fdevelop%2Fdev_history.c&view=list&id=aurelienpierreeng_ansel) / 1765 | - | - |
 | `src/develop/imageop.c` | Pixel processing module API | [307](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fdevelop%2Fimageop.c&view=list&id=aurelienpierreeng_ansel) / 1275 | [617](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierre_darktable%3Asrc%2Fdevelop%2Fimageop.c&view=list&id=aurelienpierre_darktable) / 2513 | [723](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_darktable-5%3Asrc%2Fdevelop%2Fimageop.c&view=list&id=aurelienpierreeng_darktable-5) / 3306 |
 | `src/control/jobs/control_jobs.c` | Background thread tasks | [271](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fcontrol%2Fjobs%2Fcontrol_jobs.c&view=list&id=aurelienpierreeng_ansel) / 1587 | [308](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierre_darktable%3Asrc%2Fcontrol%2Fjobs%2Fcontrol_jobs.c&view=list&id=aurelienpierre_darktable) / 1904 | [413](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_darktable-5%3Asrc%2Fcontrol%2Fjobs%2Fcontrol_jobs.c&view=list&id=aurelienpierreeng_darktable-5) / 2562 |
