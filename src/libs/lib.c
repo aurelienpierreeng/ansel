@@ -113,6 +113,11 @@ typedef struct dt_lib_presets_edit_dialog_t
 
 gboolean dt_lib_is_visible_in_view(dt_lib_module_t *module, const dt_view_t *view)
 {
+  // No view means nothing is visible in it. Callers in views/view.c guard before calling,
+  // but _toggle_expanded() passes dt_view_manager_get_current_view() straight through, and
+  // that is NULL mid-switch -- the loop below reads view->module_name.
+  if(IS_NULL_PTR(view)) return FALSE;
+
   if(!module->views)
   {
     fprintf(stderr, "module %s doesn't have views flags\n", module->name(module));
@@ -897,6 +902,11 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
   /* store expanded state of module */
   char var[1024];
   const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
+  // There is no current view while the view manager is switching between them, and the conf
+  // key is built from its name -- so with no view there is no key to write, and nothing to
+  // store. dt_lib_gui_get_expanded() below makes the same check on the reading side, where
+  // omitting it crashed (Sentry 139067518).
+  if(IS_NULL_PTR(current_view)) return;
   snprintf(var, sizeof(var), "plugins/%s/%s/expanded", current_view->module_name, module->plugin_name);
   dt_conf_set_bool(var, expanded);
 }
