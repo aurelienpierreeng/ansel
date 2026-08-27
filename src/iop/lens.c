@@ -721,7 +721,7 @@ static ls_db_t *_ls_db(void)
   char config_detail[256] = { 0 };
 
   dt_loc_get_user_config_dir(dir, sizeof(dir));
-  snprintf(config_path, sizeof(config_path), "%s/lenses.db", dir);
+  dt_concat_path_file(config_path, dir, "lenses.db");
   tls->db = ls_db_open_diagnostic(config_path, &config_status, &config_version, config_detail,
                                   sizeof(config_detail));
 
@@ -731,7 +731,7 @@ static ls_db_t *_ls_db(void)
   if(IS_NULL_PTR(tls->db))
   {
     dt_loc_get_datadir(dir, sizeof(dir));
-    snprintf(path, sizeof(path), "%s/lenses.db", dir);
+    dt_concat_path_file(path, dir, "lenses.db");
     tls->db = ls_db_open_diagnostic(path, &data_status, &data_version, data_detail,
                                     sizeof(data_detail));
   }
@@ -2666,7 +2666,10 @@ static void camera_set(dt_iop_module_t *self, long long camera_id)
   gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(g->camera_model))), fm);
   dt_free(fm);
 
-  char _variant[128];
+  // sizeof(variant) + 4, not 128: the format adds " (" and ")" around a string that can
+  // itself fill variant[], so an equal-sized buffer drops the closing parenthesis on a long
+  // camera variant. Derived from variant's size so it stays right if that changes.
+  char _variant[sizeof(variant) + 4];
   if(variant[0])
     snprintf(_variant, sizeof(_variant), " (%s)", variant);
   else

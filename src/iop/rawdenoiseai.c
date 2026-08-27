@@ -242,12 +242,12 @@ static dt_nn_model_t *_get_model(dt_iop_rawdenoiseai_global_data_t *gd, dt_iop_r
     char path[DT_PATH_MAX] = { 0 };
     char err[256] = "";
     dt_loc_get_user_config_dir(dir, sizeof(dir));
-    snprintf(path, sizeof(path), "%s/%s", dir, name);
+    dt_concat_path_file(path, dir, name);
     gd->models[ver][sz][sc] = dt_nn_model_load(path, err, sizeof(err));
     if(!gd->models[ver][sz][sc])
     {
       dt_loc_get_datadir(dir, sizeof(dir));
-      snprintf(path, sizeof(path), "%s/%s", dir, name);
+      dt_concat_path_file(path, dir, name);
       gd->models[ver][sz][sc] = dt_nn_model_load(path, err, sizeof(err));
     }
     if(gd->models[ver][sz][sc])
@@ -277,7 +277,7 @@ static dt_nn_model_t *_get_custom_model(dt_iop_rawdenoiseai_global_data_t *gd, c
     char path[DT_PATH_MAX] = { 0 };
     char err[256] = "";
     dt_loc_get_user_config_dir(dir, sizeof(dir));
-    snprintf(path, sizeof(path), "%s/%s", dir, base);
+    dt_concat_path_file(path, dir, base);
     m = dt_nn_model_load(path, err, sizeof(err));
     g_hash_table_insert(gd->custom, g_strdup(base), m);
     if(m)
