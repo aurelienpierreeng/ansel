@@ -134,9 +134,27 @@ if api_get "/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/events/${EVENT_ID}/attachm
     jq -r '.[] | "\(.id)\t\(.name)"' "$ATTACH_JSON" | while IFS=$'\t' read -r aid aname; do
       [ -n "$aid" ] || continue
       safe="$(printf '%s' "$aname" | tr -c 'A-Za-z0-9._-' '_')"
-      curl -fsS "${AUTH[@]}" \
-        "${API}/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/events/${EVENT_ID}/attachments/${aid}/?download" \
-        -o "${OUT_DIR}/${safe}" && err "    ${safe}"
+      dest="${OUT_DIR}/${safe}"
+      # -L is load-bearing: Sentry answers this endpoint with a 302 to blob storage. Without
+      # it curl writes the empty redirect body -- and -f does NOT make a 302 an error, so the
+      # command still exits 0 and the download looks like it worked. That is how every
+      # gdb-backtrace.txt landed here as a 0-byte file while the tool reported success, and
+      # why several crashes were written off as "no symbols" when a fully symbolised
+      # backtrace of every thread was sitting in the attachment.
+      if curl -fsSL "${AUTH[@]}" \
+           "${API}/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/events/${EVENT_ID}/attachments/${aid}/?download=1" \
+           -o "$dest"; then
+        size="$(wc -c < "$dest" 2>/dev/null || echo 0)"
+        if [ "${size:-0}" -gt 0 ]; then
+          err "    ${safe} (${size} bytes)"
+        else
+          err "    ${safe}: EMPTY -- download produced no data, removing"
+          rm -f "$dest"
+        fi
+      else
+        err "    ${safe}: download FAILED"
+        rm -f "$dest"
+      fi
     done
   else
     err "==> no attachments on this event"
