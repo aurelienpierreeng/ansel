@@ -1197,15 +1197,33 @@ non-tree drop target or `tagging.c`-style full source+dest.
 (`control/jobs/import_jobs.c`, `control/jobs/film_jobs.c`) call to make a freshly imported image
 visible. It runs on the **import job's thread**.
 
-**Following the imported image's folder** is the Collect module's persisted tab's business, and
-deliberately NOT the current atelier's: rule 0 gets overwritten with the imported image's folder,
-which is legitimate on the "Folders" tab and destructive on "Collections" and "Queries" where the
-rules belong to the user. The collection is global, so an import started from the darkroom must
-re-point it too, or the library still shows the previously browsed folder when the user goes back
-to the grid. Studio Capture has no Collect module UI and therefore no rules to protect, so it
-always follows. `_collection_folder_ui_inactive()` is a different predicate for a different
-question (which folder the import dialog considers "currently browsed") and does gate on the
-atelier; do not merge the two.
+**Whether the user is moved at all** is the caller's decision, expressed as a
+`dt_collection_import_view_t` policy (`common/collection.h`): `KEEP` (never move), `GRID`
+(lighttable), `IMAGE` (open that one image in the darkroom). Every **automatic** import passes
+`KEEP` — Studio Capture's folder survey (`data->folder_survey`, `common/folder_survey.c`) imports
+on its own schedule, in whatever view the user happens to be, and displays the capture itself
+from `DT_SIGNAL_IMAGE_IMPORT` without leaving its atelier. The policy has to come from what the
+import *is*, not from what is on screen when the job ends: the survey keeps running after the
+user leaves the Studio Capture atelier, so a capture landing mid-edit would otherwise throw them
+out of the darkroom (or into it).
+
+**Following the imported image's folder** asks two questions. Did the user ask for this import?
+An automatic one follows the folder in Studio Capture's own atelier, whose filmstrip tracks the
+shooting session, and nowhere else — the same reason `KEEP` does not switch views, applied to the
+collection. Then, may rule 0 be overwritten with a folder? That is the Collect module's persisted
+tab: legitimate on "Folders", destructive on "Collections" and "Queries" where the rules are the
+user's. That second question is deliberately NOT about the current atelier — the collection is
+global, so a manual import started from the darkroom must re-point it too, or the library still
+shows the previously browsed folder when the user goes back to the grid.
+`_collection_folder_ui_inactive()` is a different predicate for a different question (which
+folder the import dialog considers "currently browsed") and does gate on the atelier; do not
+merge the two.
+
+**The hovered image and the selection** follow the same rule: `dt_collection_load_filmroll()`
+points them at the imported image only for a user-requested import. Under `KEEP` it leaves both
+alone — Studio Capture sets them itself for the capture it displays (`_studio_set_image()`), and
+anywhere else adding an unrequested image to the selection also hands it to the next darkroom
+entry, whose `try_enter()` reads the mouse-over id first.
 
 **Opening a single imported image in the darkroom** goes through
 `dt_ctl_open_image_in_darkroom(imgid)` (`control/control.c`), never through a view switch alone.
@@ -1220,7 +1238,7 @@ into one GUI-thread callback — leave the darkroom via the lighttable, publish 
 selection, then enter the darkroom — so nothing can run in between. Any other worker-thread code
 that needs a specific image opened must use it rather than setting those globals itself.
 
-The import job only asks for that when it imported exactly one image *and* at most one XMP
+The import job only asks for `IMAGE` when it imported exactly one image *and* at most one XMP
 (`index == 1 && xmps <= 1`): two or more sidecars mean the file produced several DB images
 (duplicates) and none of them is the obvious one to open. Zero is the ordinary no-sidecar case
 and still opens.
