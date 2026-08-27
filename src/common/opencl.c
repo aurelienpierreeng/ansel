@@ -1975,6 +1975,14 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
         size_t cached_filesize = cachedstat.st_size;
 
         unsigned char *cached_content = (unsigned char *)malloc(cached_filesize + 1);
+        if(IS_NULL_PTR(cached_content))
+        {
+          dt_print(DT_DEBUG_OPENCL,
+                   "[opencl_load_program] could not allocate %zu bytes for cached binary '%s'!\n",
+                   cached_filesize + 1, binname);
+          fclose(cached);
+          return 0;
+        }
         rd = fread(cached_content, sizeof(char), cached_filesize, cached);
         if(rd != cached_filesize)
         {
