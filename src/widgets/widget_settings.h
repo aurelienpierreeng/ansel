@@ -153,7 +153,18 @@ void dt_widget_set_cursor(GdkCursorType cursor);
 void dt_widget_log(const char *format, ...) G_GNUC_PRINTF(1, 2);
 #define dt_widget_log_enabled() TRUE
 #else
-#define dt_widget_log(...) do { } while(0)
+/* Release compiles the call away, but its arguments must still count as USED. A variable
+ * computed only to be logged draws -Wunused-variable in Release only -- and the tempting fix
+ * is to delete the variable, which in two cases here would have deleted a call that must
+ * still run (_call_shortcut_cclosure() dispatches the shortcut; gtk_widget_activate()
+ * activates the widget). Referencing the arguments from an unreachable branch keeps them
+ * used, and gets Release the same format-string checking Debug has. Nothing inside is
+ * evaluated -- exactly what a compiled-away log did before. */
+static inline void G_GNUC_PRINTF(1, 2) dt_widget_log_discard(const char *format, ...)
+{
+  (void)format;
+}
+#define dt_widget_log(...) do { if(FALSE) dt_widget_log_discard(__VA_ARGS__); } while(0)
 #define dt_widget_log_enabled() FALSE
 #endif
 
