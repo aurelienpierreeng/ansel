@@ -142,7 +142,13 @@ typedef struct dt_pixel_cache_entry_t
   uint64_t serial;          // stable identity across rekeys, changes on fresh allocations
   void *data;               // buffer holding pixels... or anything else
   size_t size;              // size of the data buffer
-  int64_t age;              // timestamp of creation. Oldest entry will be the first freed if it's not locked
+  /* MRU timestamp, in `g_get_monotonic_time()` microseconds. Set when the entry is created AND
+   * refreshed on every hit, so the eviction sweeps age an entry by its LAST USE rather than by
+   * its creation -- otherwise a cacheline consumed on every frame looks like the oldest thing in
+   * the cache and gets evicted first. Written from paths that hold no cache lock (finalize, the
+   * OpenCL payload reuse under `cl_mem_lock` only) and read by the sweeps under `cache->lock`,
+   * hence atomic. Touched exclusively through `_pixel_cache_touch()` in pixelpipe_cache.c. */
+  dt_atomic_uint64 age;
   char *name;               // name of the cache entry, for debugging
   int id;                   // id of the pipeline owning this entry. Used when flushing, a pipe can only flush its own.
   uint64_t producer_node_key; // stable identity of the pipeline node that produced this output
@@ -154,7 +160,13 @@ typedef struct dt_pixel_cache_entry_t
   dt_pthread_rwlock_t lock; // read/write lock to avoid threads conflicts
   gboolean auto_destroy;    // TRUE for auto-destruction the next time it's used. Used for short-lived entries (transient states).
   gboolean external_alloc;  // TRUE for external buffers tracked in the cache
-  int hits;                 // number of times this entry was hit (utility score)
+  /* Number of ASYNCHRONOUS REUSES of this entry: how many times a lookup found content someone
+   * else had already published, in another run or another pipe. The intra-run producer->consumer
+   * handoff is NOT counted -- a module publishing its output with a reference reserved for the
+   * next module, which then reopens and releases it, is plain pipeline passthrough, not a reuse.
+   * Written only under `cache->lock`, alongside the cache-wide `hits`/`queries` rate. Distinct
+   * from `age`, which every use refreshes: see `_pixel_cache_touch()` in pixelpipe_cache.c. */
+  int hits;
   dt_dev_pixelpipe_cache_t *cache; // reference to parent cache object
   GList *cl_mem_list;       // reusable OpenCL pinned buffers tied to this entry
   dt_pthread_mutex_t cl_mem_lock;

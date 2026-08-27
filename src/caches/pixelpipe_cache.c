@@ -223,6 +223,29 @@ static int _memory_pressure_shedder(dt_dev_pixelpipe_cache_t *cache);
 static gboolean _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid);
 #endif
 
+/* Single writer of `cache_entry->age`, and the only way an entry's MRU timestamp moves. EVERY
+ * path that hands an entry over to a consumer must call this -- the intra-run producer->consumer
+ * handoff included, since that is still a use as far as eviction is concerned. An entry whose age
+ * is only ever set at creation is aged by the eviction sweeps as if it had never been read, so the
+ * cacheline the pipeline consumes on every frame becomes the first LRU victim.
+ *
+ * This deliberately does NOT touch `hits`. `age` answers "when was this last needed" and every
+ * use, reuse or passthrough, answers it. `hits` answers "has this ever been reused ASYNCHRONOUSLY"
+ * and passthrough does not: a module publishing its output with one reference reserved for the
+ * next module, which reopens it as its input and releases it, is the normal pipeline flow, not a
+ * cache win. Only the lookups that also count a `cache->queries`/`cache->hits` pair may bump it. */
+static inline void _pixel_cache_touch(dt_pixel_cache_entry_t *cache_entry)
+{
+  if(IS_NULL_PTR(cache_entry)) return;
+  dt_atomic_set_uint64(&cache_entry->age, (uint64_t)g_get_monotonic_time());
+}
+
+static inline int64_t _pixel_cache_get_age(dt_pixel_cache_entry_t *cache_entry)
+{
+  return (int64_t)dt_atomic_get_uint64(&cache_entry->age);
+}
+
+
 static dt_pixel_cache_entry_t *_cache_entry_for_host_ptr_locked(dt_dev_pixelpipe_cache_t *cache, void *host_ptr)
 {
   if(IS_NULL_PTR(cache) || IS_NULL_PTR(host_ptr)) return NULL;
@@ -247,6 +270,10 @@ dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(const uint64_t hash)
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return NULL;
   dt_pthread_mutex_lock(&cache->lock);
   dt_pixel_cache_entry_t *entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
+  /* Refresh recency only. `develop/pixelpipe_hb.c` reopens each module's INPUT cacheline through
+   * here on every recursion step: that is the producer->consumer handoff of one pipeline run, a
+   * use for eviction purposes but not an asynchronous reuse, so neither `hits` counter moves. */
+  _pixel_cache_touch(entry);
   dt_pthread_mutex_unlock(&cache->lock);
   return entry;
 }
@@ -269,6 +296,7 @@ dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry_by_data(void *data)
     dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)value;
     if(entry && entry->data == data)
     {
+      _pixel_cache_touch(entry);
       dt_pthread_mutex_unlock(&cache->lock);
       return entry;
     }
@@ -281,6 +309,7 @@ dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry_by_data(void *data)
     dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)value;
     if(entry && entry->data == data)
     {
+      _pixel_cache_touch(entry);
       dt_pthread_mutex_unlock(&cache->lock);
       return entry;
     }
@@ -306,7 +335,7 @@ static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char
            " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
            cache_entry->hash, cache_entry->serial,
            cache_entry->name ? cache_entry->name : "-", cache_entry->data,
-           _pixel_cache_get_size(cache_entry), cache_entry->age, cache_entry->hits,
+           _pixel_cache_get_size(cache_entry), _pixel_cache_get_age(cache_entry), cache_entry->hits,
            dt_atomic_get_int(&cache_entry->refcount), cache_entry->auto_destroy,
            cache_entry->external_alloc, cache_entry->id, _cache_debug_module_name(), message);
 }
@@ -314,7 +343,7 @@ static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char
 static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry, void **data,
                                             const char *message)
 {
-  cache_entry->age = g_get_monotonic_time(); // Update MRU timestamp
+  _pixel_cache_touch(cache_entry);
   if(data)
     *data = cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
   _pixel_cache_message(cache_entry, message, FALSE);
@@ -688,7 +717,8 @@ static void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
   // we might have more things decreasing refcount than increasing it.
   // It's no big deal though, as long as the (final output) backbuf
   // is checked for NULL and not reused if pipeline is DIRTY.
-  if(cache_entry->age < lru->max_age)
+  const int64_t age = _pixel_cache_get_age(cache_entry);
+  if(age < lru->max_age)
   {
     // Returns 1 if the lock is captured by another thread
     // 0 if WE capture the lock, and then need to release it
@@ -698,7 +728,7 @@ static void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
 
     if(!locked && !used)
     {
-      lru->max_age = cache_entry->age;
+      lru->max_age = age;
       lru->hash = cache_entry->hash;
       lru->cache_entry = cache_entry;
       _pixel_cache_message(cache_entry, "candidate for deletion", TRUE);
@@ -795,6 +825,8 @@ static void *_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_pt
       entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
       void *mem = c->mem;
       dt_free(c);
+      // Reusing the entry's vRAM payload is a use of the entry, host side read or not.
+      _pixel_cache_touch(entry);
       dt_pthread_mutex_unlock(&entry->cl_mem_lock);
       return mem;
     }
@@ -824,6 +856,7 @@ void *dt_dev_pixelpipe_cache_borrow_cl_payload(dt_pixel_cache_entry_t *entry, in
     {
       c->refs++;
       void *mem = c->mem;
+      _pixel_cache_touch(entry);
       dt_pthread_mutex_unlock(&entry->cl_mem_lock);
       return mem;
     }
@@ -1959,7 +1992,7 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(size_t size, int id,
   // from a different thread during cleanup paths).
   _non_thread_safe_cache_ref_count_entry(cache, TRUE, cache_entry);
   cache_entry->data = aligned;
-  cache_entry->age = g_get_monotonic_time();
+  _pixel_cache_touch(cache_entry);
   cache_entry->external_alloc = TRUE;
   dt_pthread_mutex_unlock(&cache->lock);
   return aligned;
@@ -2011,7 +2044,10 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
 
   // Metadata, easy to free in batch if need be
   cache_entry->size = rounded_size;
-  cache_entry->age = 0;
+  /* A fresh entry is the MOST recently used one, not the oldest: leaving `age` at 0 until the
+   * caller reaches _pixelpipe_cache_finalize_entry() makes it the unconditional LRU victim and
+   * gives _for_each_remove_old() a `delta` of the whole process uptime in between. */
+  dt_atomic_set_uint64(&cache_entry->age, (uint64_t)g_get_monotonic_time());
   cache_entry->hits = 0;
   cache_entry->hash = hash;
   cache_entry->serial = cache->next_serial++;
@@ -2393,6 +2429,13 @@ dt_dev_pixelpipe_cache_get_writable(const uint64_t hash,
 
   if(!IS_NULL_PTR(cache_entry))
   {
+    /* Another pipe already owns this exact hash: the caller consumes that cacheline instead of
+     * writing its own, so this is a genuine hit. `queries` was already counted above; count the
+     * hit and refresh the MRU too, or a cacheline shared between the preview and the full pipe
+     * ages as if only its original producer ever touched it. */
+    cache->hits++;
+    cache_entry->hits++;
+    _pixel_cache_touch(cache_entry);
     dt_pthread_mutex_unlock(&cache->lock);
     if(data) *data = NULL;
     if(entry) *entry = NULL;
@@ -2470,6 +2513,7 @@ static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_
       cache_entry->cl_mem_list = g_list_delete_link(cache_entry->cl_mem_list, l);
       *cl_mem_output = c->mem;
       dt_free(c);
+      _pixel_cache_touch(cache_entry);
       break;
     }
     l = next;
@@ -2495,6 +2539,7 @@ gboolean dt_dev_pixelpipe_cache_restore_host_payload(dt_pixel_cache_entry_t *cac
 
   if(dt_pixel_cache_entry_get_data(cache_entry) != NULL)
   {
+    _pixel_cache_touch(cache_entry);
     if(!IS_NULL_PTR(data)) *data = dt_pixel_cache_entry_get_data(cache_entry);
     return TRUE;
   }
@@ -2502,6 +2547,7 @@ gboolean dt_dev_pixelpipe_cache_restore_host_payload(dt_pixel_cache_entry_t *cac
   if(!_cache_entry_materialize_host_data(cache, preferred_devid, cache_entry))
     return FALSE;
 
+  _pixel_cache_touch(cache_entry);
   if(!IS_NULL_PTR(data)) *data = dt_pixel_cache_entry_get_data(cache_entry);
   return dt_pixel_cache_entry_get_data(cache_entry) != NULL;
 }
@@ -2666,13 +2712,18 @@ static gboolean _for_each_remove_old(gpointer key, gpointer value, gpointer user
   if(!locked) dt_pthread_rwlock_unlock(&cache_entry->lock);
   gboolean used = dt_atomic_get_int(&cache_entry->refcount) > 0;
 
-  // in microseconds
-  int64_t delta = g_get_monotonic_time() - cache_entry->age;
+  // Time since the entry was LAST USED, in microseconds -- not since it was created.
+  const int64_t delta = g_get_monotonic_time() - _pixel_cache_get_age(cache_entry);
 
   // 5 min in microseconds
-  const int64_t three_min = 5 * 60 * 1000 * 1000;
+  const int64_t five_min = 5 * 60 * 1000 * 1000;
 
-  gboolean too_old = (delta > three_min) && (cache_entry->hits < 4);
+  /* Two independent signals, and both must agree before an entry is dropped: `delta` is now
+   * genuinely "nobody has needed this in five minutes" (it used to be measured from creation,
+   * which said nothing about whether the entry was still being consumed), and `hits` is "it was
+   * never asynchronously reused either", so a cacheline that has repeatedly proven reusable
+   * across runs is kept for the next one. */
+  const gboolean too_old = (delta > five_min) && (cache_entry->hits < 4);
 
   return too_old && !used && !locked;
 }
@@ -2759,6 +2810,8 @@ void _non_thread_safe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, gbo
   if(lock)
   {
     dt_atomic_add_int(&cache_entry->refcount, 1);
+    // Pinning an entry is a use: refresh the MRU timestamp so it does not age while held.
+    _pixel_cache_touch(cache_entry);
     _pixel_cache_message(cache_entry, "ref count ++", TRUE);
   }
   else
