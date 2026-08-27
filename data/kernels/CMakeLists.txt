@@ -1,8 +1,13 @@
 #
 # install opencl kernel source files
 #
-FILE(GLOB DT_OPENCL_KERNELS "*.cl" "common.h")
-FILE(GLOB DT_OPENCL_EXTRA "programs.conf" "rgb_norms.h" "noise_generator.h" "color_conversion.h" "colorspace.h")
+# common.h belongs with the other kernel HEADERS below, not with the programs. It is
+# #included by 31 of the 34 .cl files, so its contents are already compiled 31 times over;
+# listing it here additionally test-compiled it as a translation unit of its own, which is
+# not how it is ever used and which warns "#pragma once in main file". Both lists install to
+# the same directory, so this changes what gets test-compiled and nothing else.
+FILE(GLOB DT_OPENCL_KERNELS "*.cl")
+FILE(GLOB DT_OPENCL_EXTRA "programs.conf" "common.h" "rgb_norms.h" "noise_generator.h" "color_conversion.h" "colorspace.h")
 
 # The lens kernels evaluate LensSerious's closed forms directly, from the very header
 # liblensserious compiles as C99 -- one source text for CPU and GPU (see
