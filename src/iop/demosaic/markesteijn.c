@@ -61,7 +61,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
 
   const int width = roi_out->width;
   const int height = roi_out->height;
-  const int ndir = 4 << (passes > 1);
+  const int ndir = (passes > 1) ? 8 : 4;  // only ever 4 or 8
 
   const size_t buffer_size = (size_t)TS * TS * (ndir * 4 + 3) * sizeof(float);
   size_t padded_buffer_size;
@@ -448,7 +448,12 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
       }
 
       /* Build homogeneity maps from the derivatives:                   */
-      memset_zero(homo, sizeof(uint8_t) * ndir * TS * TS);
+      // The cast is deliberate. ndir is 4 or 8 by construction, but this runs inside an
+      // OpenMP-outlined function where it arrives through the shared closure, so GCC can no
+      // longer see that range and must assume the int -> size_t conversion sign-extends a
+      // negative -- the astronomically large memset bound it reports. Going through unsigned
+      // states the invariant that holds here.
+      memset_zero(homo, sizeof(uint8_t) * (size_t)(unsigned)ndir * TS * TS);
       const int pad_homo = (passes == 1) ? 10 : 15;
       for(int row = pad_homo; row < mrow - pad_homo; row++)
         for(int col = pad_homo; col < mcol - pad_homo; col++)
@@ -1678,7 +1683,7 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
   int width = roi_in->width;
   int height = roi_in->height;
   const int passes = ((data->demosaicing_method & ~DEMOSAIC_DUAL) == DT_IOP_DEMOSAIC_MARKESTEIJN_3) ? 3 : 1;
-  const int ndir = 4 << (passes > 1);
+  const int ndir = (passes > 1) ? 8 : 4;  // only ever 4 or 8
   const int pad_tile = (passes == 1) ? 12 : 17;
 
   static const short orth[12] = { 1, 0, 0, 1, -1, 0, 0, -1, 1, 0, 0, 1 },
