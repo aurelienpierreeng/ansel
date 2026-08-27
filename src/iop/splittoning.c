@@ -206,7 +206,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     rgb2hsl(in+k, &h, &s, &l);
     if(l < data->balance - compress)
     {
-      dt_aligned_pixel_t mixrgb;
+      // Zero-initialised: hsl2rgb() writes lanes 0..2 only, while for_each_channel() below
+      // runs over all DT_PIXEL_SIMD_CHANNELS (4 here), so lane 3 would otherwise be read
+      // straight off the stack and mixed into out[k+3].
+      dt_aligned_pixel_t mixrgb = { 0.0f, 0.0f, 0.0f, 0.0f };
       hsl2rgb(mixrgb, data->shadow_hue, data->shadow_saturation, l);
 
       const float ra = CLIP((data->balance - compress - l) * 2.0f);
@@ -217,7 +220,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
     else if(l > data->balance + compress)
     {
-      dt_aligned_pixel_t mixrgb;
+      dt_aligned_pixel_t mixrgb = { 0.0f, 0.0f, 0.0f, 0.0f };  // see the shadow branch above
       hsl2rgb(mixrgb, data->highlight_hue, data->highlight_saturation, l);
 
       const float ra = CLIP((l - (data->balance + compress)) * 2.0f);
