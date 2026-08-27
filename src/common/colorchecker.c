@@ -661,6 +661,10 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
     const char letter = tokens[0][0];
     if(letter == 'F')
     {
+      // A CHT file describes exactly one frame, but nothing here parses a trusted file --
+      // releasing any previous one keeps a malformed input with several F lines from leaking
+      // all but the last. dt_free() on the NULL first pass is a no-op.
+      dt_free(F_box);
       F_box = _dt_cht_extract_F(tokens);
     }
 
