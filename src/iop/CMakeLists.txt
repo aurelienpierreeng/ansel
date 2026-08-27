@@ -201,21 +201,6 @@ add_iop(invert "invert.c")
 add_iop(vibrance "vibrance.c")
 add_iop(flip "flip.c" DEFAULT_VISIBLE)
 add_iop(finalscale "finalscale.c")
-# tonemap.cc and bilateral.cc are the two users of Permutohedral.h, whose lattice does
-# `new HashTable[nThreads]`. With a non-constant count GCC emits its own overflow check --
-# a call to operator new[](SIZE_MAX) that raises std::bad_array_new_length -- and then
-# -Walloc-size-larger-than reports that generated SIZE_MAX as an oversized allocation. The
-# warning is about a branch the compiler wrote, on a path that cannot be taken; nThreads is
-# clamped to [1, 1024] at construction, and clamping did not silence it for that reason.
-#
-# It is suppressed HERE, per source file, because the warning is emitted by the middle end:
-# a #pragma GCC diagnostic around the statement does not affect it (tried). Keep the scope
-# to these two files -- the flag is off nowhere else in the tree.
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set_source_files_properties(tonemap.cc bilateral.cc
-                              PROPERTIES COMPILE_OPTIONS "-Wno-alloc-size-larger-than")
-endif()
-
 add_iop(globaltonemap "globaltonemap.c")
 add_iop(bilat "bilat.c" DEFAULT_VISIBLE)
 add_iop(denoiseprofile "denoiseprofile.c" DEFAULT_VISIBLE)
