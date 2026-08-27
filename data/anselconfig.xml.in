@@ -2604,9 +2604,15 @@
   </dtconfig>
   <dtconfig>
     <name>darkroom/modules/channelmixerrgb/colorchecker</name>
-    <type>int</type>
-    <default>0</default>
-    <shortdescription>current colorchecker model used</shortdescription>
+    <type>string</type>
+    <default>Xrite ColorChecker 24 before 2014</default>
+    <shortdescription>name of the current colorchecker model used</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>darkroom/modules/channelmixerrgb/colorchecker_color</name>
+    <type>string</type>
+    <default></default>
+    <shortdescription>name of the CGATS reference values used with a user colorchecker</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>darkroom/modules/channelmixerrgb/optimization</name>

@@ -233,7 +233,6 @@ typedef struct dt_iop_channelmixer_rgb_gui_data_t
   dt_colormatrix_t mix;
 
   GList *colorcheckers;
-  int n_colorcheckers;
 
   GList *colorcheckers_all_color; // list of CGATS files
   GList *colorcheckers_color;    // list of CGATS files with the same number of patches as the current checker
@@ -2728,11 +2727,53 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   }
 }
 
-void color_list_visibility(dt_iop_module_t *self, const int checker_cmbbx_index)
+/**
+ * @brief Find the chart a combo box currently shows, in the label list backing that combo box.
+ *
+ * Charts are matched on the displayed name, never on a position: the list of available charts
+ * is rebuilt at runtime from the built-in ones and from the .cht files the user installed, so
+ * an index saved in a conf key means nothing on the next run -- delete a reference file, or add
+ * a built-in chart, and every later index shifts. The name is the only stable identity we have.
+ *
+ * @param combobox The combo box holding the chart names.
+ * @param labels The dt_colorchecker_label_t list the combo box was populated from.
+ * @return The matching label, or NULL if the combo box is empty or shows an unknown name.
+ */
+static const dt_colorchecker_label_t *_checker_label_from_combobox(GtkWidget *combobox, GList *labels)
+{
+  const char *name = dt_bauhaus_combobox_get_entry(combobox, dt_bauhaus_combobox_get(combobox));
+  if(IS_NULL_PTR(name)) return NULL;
+
+  for(GList *l = g_list_first(labels); l; l = g_list_next(l))
+  {
+    const dt_colorchecker_label_t *label = (const dt_colorchecker_label_t *)l->data;
+    if(!g_strcmp0(label->name, name)) return label;
+  }
+  return NULL;
+}
+
+/**
+ * @brief Rebuild g->checker from the charts currently selected in both combo boxes.
+ *
+ * @param g The module GUI data.
+ * @param checker_label The chart label, NULL to fall back on the default built-in chart.
+ * @param color_label The CGATS reference values label, NULL for a built-in chart.
+ */
+static void _set_checker_from_labels(dt_iop_channelmixer_rgb_gui_data_t *g,
+                                     const dt_colorchecker_label_t *checker_label,
+                                     const dt_colorchecker_label_t *color_label)
+{
+  dt_colorchecker_cleanup(g->checker);
+  g->checker = dt_get_color_checker(!IS_NULL_PTR(checker_label) ? checker_label->type : COLOR_CHECKER_XRITE_24_2000,
+                                    !IS_NULL_PTR(checker_label) ? checker_label->path : NULL,
+                                    !IS_NULL_PTR(color_label) ? color_label->path : NULL);
+}
+
+void color_list_visibility(dt_iop_module_t *self, const dt_colorchecker_label_t *checker_label)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
 
-  if(checker_cmbbx_index >= COLOR_CHECKER_USER_REF)
+  if(!IS_NULL_PTR(checker_label) && checker_label->type == COLOR_CHECKER_USER_REF)
     if(dt_bauhaus_combobox_get_entry(GTK_WIDGET(g->checkers_color_list), 0) != NULL)
     {
       gtk_widget_show(GTK_WIDGET(g->checkers_color_list));
@@ -2763,9 +2804,9 @@ void update_colorchecker_color_list(dt_iop_module_t *self)
   if(!g) return;
   if(!g->colorcheckers) return;
 
-  const int selected_checker = dt_conf_get_int("darkroom/modules/channelmixerrgb/colorchecker");
-  // early return
-  if(g->n_colorcheckers < COLOR_CHECKER_USER_REF || selected_checker < COLOR_CHECKER_USER_REF) return;
+  // the CGATS reference values only apply to a user chart described by a .cht file
+  const dt_colorchecker_label_t *checker_label = _checker_label_from_combobox(g->checkers_list, g->colorcheckers);
+  if(IS_NULL_PTR(checker_label) || checker_label->type != COLOR_CHECKER_USER_REF) return;
 
   // find all CGATS files if not already done
   if(!g->n_color)
@@ -2778,8 +2819,7 @@ void update_colorchecker_color_list(dt_iop_module_t *self)
   g_list_free(g->colorcheckers_color); // don't free_full because data pointers belong to g->colorcheckers_all_color
   g->colorcheckers_color = NULL;
 
-  const dt_colorchecker_label_t *checker_label = (const dt_colorchecker_label_t*)g_list_nth_data(g->colorcheckers, selected_checker);
-  const int checker_patch_nb = checker_label ? checker_label->patch_nb : 0;
+  const int checker_patch_nb = checker_label->patch_nb;
   
   if(checker_patch_nb > 0)
   {
@@ -2805,9 +2845,7 @@ void update_colorchecker_list(dt_iop_module_t *self)
 
   dt_colorchecker_label_list_cleanup(&(g->colorcheckers));
 
-  g->n_colorcheckers = 0;
-  int pos = dt_colorchecker_find(&(g->colorcheckers));
-  g->n_colorcheckers = pos;
+  dt_colorchecker_find(&(g->colorcheckers));
 
   // update the gui
   dt_bauhaus_combobox_clear(g->checkers_list);
@@ -2851,18 +2889,11 @@ static void checker_color_changed_callback(GtkWidget *widget, gpointer user_data
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
 
-  const int selected_cmbbx_index = dt_bauhaus_combobox_get(widget);
-  dt_conf_set_int("darkroom/modules/channelmixerrgb/colorchecker_color", selected_cmbbx_index);
+  const dt_colorchecker_label_t *color_label = _checker_label_from_combobox(widget, g->colorcheckers_color);
+  dt_conf_set_string("darkroom/modules/channelmixerrgb/colorchecker_color",
+                     !IS_NULL_PTR(color_label) ? color_label->name : "");
 
-  const int n_chkr = dt_bauhaus_combobox_get(g->checkers_list);
-  
-  const dt_colorchecker_label_t *color_label = (selected_cmbbx_index >= 0 && g->colorcheckers_color) ?
-           (const dt_colorchecker_label_t*)g_list_nth_data(g->colorcheckers_color, selected_cmbbx_index) : NULL;
-
-  const char *color_path = color_label ? color_label->path : NULL;
-
-  dt_colorchecker_cleanup(g->checker);
-  g->checker = dt_get_color_checker(n_chkr, &(g->colorcheckers), color_path);
+  _set_checker_from_labels(g, _checker_label_from_combobox(g->checkers_list, g->colorcheckers), color_label);
 
   dt_develop_t *dev = self->dev;
   const float wd = dt_dev_roi_request_preview_width(dev);
@@ -2883,19 +2914,15 @@ void checker_changed_callback(GtkWidget *widget, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
 
-  const int checker_cmbbx_index = dt_bauhaus_combobox_get(widget);
-  dt_conf_set_int("darkroom/modules/channelmixerrgb/colorchecker", checker_cmbbx_index);
+  const dt_colorchecker_label_t *checker_label = _checker_label_from_combobox(widget, g->colorcheckers);
+  dt_conf_set_string("darkroom/modules/channelmixerrgb/colorchecker",
+                     !IS_NULL_PTR(checker_label) ? checker_label->name : "");
   dt_gui_freeze_begin();
   update_colorchecker_color_list(self);
-  color_list_visibility(self, checker_cmbbx_index);
+  color_list_visibility(self, checker_label);
   dt_gui_freeze_end();
 
-  const int n_color = dt_bauhaus_combobox_get(g->checkers_color_list);
-  const dt_colorchecker_label_t *color_label = (n_color >= 0 && g->colorcheckers_color) ? (const dt_colorchecker_label_t*)g_list_nth_data(g->colorcheckers_color, n_color) : NULL;
-  const char *color_path = color_label ? color_label->path : NULL;
-
-  dt_colorchecker_cleanup(g->checker);
-  g->checker = dt_get_color_checker(checker_cmbbx_index, &(g->colorcheckers), color_path);
+  _set_checker_from_labels(g, checker_label, _checker_label_from_combobox(g->checkers_color_list, g->colorcheckers_color));
 
   dt_develop_t *dev = self->dev;
   const float wd = dt_dev_roi_request_preview_width(dev);
@@ -4012,22 +4039,29 @@ void gui_update(struct dt_iop_module_t *self)
 
   dt_iop_gui_enter_critical_section(self);
 
+  // Restore both selections by name: the chart list is rebuilt from scratch here, and the
+  // stored name has to survive a built-in chart being added or a .cht file appearing.
+  // The color list is filtered by the selected chart, so the chart combo box comes first.
   update_colorchecker_list(self);
+
+  gchar *selected_checker = dt_conf_get_string("darkroom/modules/channelmixerrgb/colorchecker");
+  if(!dt_bauhaus_combobox_set_from_text(g->checkers_list, selected_checker))
+    dt_bauhaus_combobox_set(g->checkers_list, 0);
+  dt_free(selected_checker);
+
+  const dt_colorchecker_label_t *checker_label = _checker_label_from_combobox(g->checkers_list, g->colorcheckers);
+
   update_colorchecker_color_list(self);
 
-  const int selected_checker = dt_conf_get_int("darkroom/modules/channelmixerrgb/colorchecker");
-  dt_bauhaus_combobox_set(g->checkers_list, selected_checker);
+  gchar *selected_color = dt_conf_get_string("darkroom/modules/channelmixerrgb/colorchecker_color");
+  if(!dt_bauhaus_combobox_set_from_text(g->checkers_color_list, selected_color))
+    dt_bauhaus_combobox_set(g->checkers_color_list, 0);
+  dt_free(selected_color);
 
-  const int selected_color = dt_conf_get_int("darkroom/modules/channelmixerrgb/colorchecker_color");
-  dt_bauhaus_combobox_set(g->checkers_color_list, selected_color);
+  _set_checker_from_labels(g, checker_label,
+                           _checker_label_from_combobox(g->checkers_color_list, g->colorcheckers_color));
 
-  const dt_colorchecker_label_t *label = ((selected_color >= 0) && g->colorcheckers_color) ? (const dt_colorchecker_label_t*)g_list_nth_data(g->colorcheckers_color, selected_color) : NULL;
-  const char *color_path = label ? label->path : NULL;
-
-  dt_colorchecker_cleanup(g->checker);
-  g->checker = dt_get_color_checker(selected_checker, &(g->colorcheckers), color_path);
-
-  color_list_visibility(self, selected_checker);
+  color_list_visibility(self, checker_label);
 
   const int j = dt_conf_get_int("darkroom/modules/channelmixerrgb/optimization");
   dt_bauhaus_combobox_set(g->optimize, j);

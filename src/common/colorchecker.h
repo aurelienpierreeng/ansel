@@ -596,48 +596,29 @@ int dt_colorchecker_find_builtin(GList **colorcheckers_label);
 void dt_colorchecker_copy(dt_color_checker_t *dest, const dt_color_checker_t *src);
 
 
-static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets target_type, GList **colorchecker_label, const char *color_filename)
+/**
+ * @brief Build a color checker of the given type.
+ *
+ * @param target_type The type of chart to build. It is the type carried by a
+ * dt_colorchecker_label_t, never a position in any list or combo box: an index means nothing
+ * outside the enumeration that produced it, and the set of available charts is rebuilt at
+ * runtime from the built-in ones and from the user's reference files. Resolving a chart is
+ * the caller's job, and it resolves it by name.
+ * @param cht_filename For COLOR_CHECKER_USER_REF, the .cht file describing the chart layout.
+ * Ignored for built-in charts.
+ * @param color_filename For COLOR_CHECKER_USER_REF, the CGATS file holding the reference
+ * values. Ignored for built-in charts.
+ * @return dt_color_checker_t* The new checker, to be freed by dt_colorchecker_cleanup().
+ */
+static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets target_type, const char *cht_filename, const char *color_filename)
 {
   // initialize the destination checker
   dt_color_checker_t *checker_dest = NULL;
   checker_dest = dt_colorchecker_init();
   if(!checker_dest) return NULL;
 
-  // check if the target type is a user reference and get the label data if available
-  dt_color_checker_targets checker_type = COLOR_CHECKER_LAST;
-  const char *cht_filename = NULL;
-  if(target_type >= COLOR_CHECKER_USER_REF && colorchecker_label)
-  {
-    dt_print(DT_DEBUG_VERBOSE, _("dt_get_color_checker: colorchecker type %i is a user reference.\n"), target_type);
-
-    // Get the label data from the list
-    const dt_colorchecker_label_t *label_data = (const dt_colorchecker_label_t*)g_list_nth_data(*colorchecker_label, target_type);
-    if(IS_NULL_PTR(label_data))
-    {
-      // g_list_nth_data() returns NULL past the end of the list, and target_type is an index
-      // that can outlive what it indexes: it comes from saved module params, while the list is
-      // rebuilt at runtime from the user's reference files. Delete or move one of those files
-      // and every later index shifts; the builtin prefix can shift too, since
-      // dt_colorchecker_find_builtin() skips any builtin with no patches.
-      //
-      // Falls through to the COLOR_CHECKER_LAST arm below, which reports and copies the
-      // default checker -- the same handling an unknown type already gets.
-      fprintf(stderr,
-              "dt_get_color_checker: no colorchecker label at index %i, falling back to the default\n",
-              target_type);
-      checker_type = COLOR_CHECKER_LAST;
-    }
-    else
-    {
-      checker_type = COLOR_CHECKER_USER_REF;
-      cht_filename = label_data->path;
-    }
-  }
-  else // it's a builtin colorchecker
-    checker_type = target_type;
-
   // Copy the color checker data from the predefined checkers or from reference file
-  switch(checker_type)
+  switch(target_type)
   {
     case COLOR_CHECKER_XRITE_24_2000:
       dt_colorchecker_copy(checker_dest, &xrite_24_2000);
