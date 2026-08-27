@@ -30,6 +30,7 @@
  * cannot block.
  */
 
+#include "external/ThreadSafetyAnalysis.h"
 #include "system/dtpthread.h"
 
 #include <pthread.h>
@@ -41,8 +42,18 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+/*
+ * These four exercise re-entrant locking on purpose, which is exactly the pattern clang's
+ * thread-safety analysis is built to reject: it models a lock as held or not held, so a
+ * second acquisition by the owner reads as "acquiring a lock that is already held" and the
+ * matching second release as "releasing a lock that was not held". The behaviour under test
+ * is real and deliberate (see dtpthread.h); the analysis simply has no way to express it.
+ * Exempting the test bodies keeps the tree's finding count honest -- these are not defects
+ * anyone can fix, and left in they would mask ones that are.
+ */
+
 /** The property, stated without risking a hang: the owner can take it again. */
-static void _a_null_attr_mutex_is_recursive(void **state)
+static void _a_null_attr_mutex_is_recursive(void **state) NO_THREAD_SAFETY_ANALYSIS
 {
   (void)state;
   dt_pthread_mutex_t mutex;
@@ -60,7 +71,7 @@ static void _a_null_attr_mutex_is_recursive(void **state)
 
 /** The same through the blocking entry point, which is what callers actually use.
  * Safe to run only because the test above already proved it cannot block. */
-static void _the_blocking_lock_also_re_enters(void **state)
+static void _the_blocking_lock_also_re_enters(void **state) NO_THREAD_SAFETY_ANALYSIS
 {
   (void)state;
   dt_pthread_mutex_t mutex;
@@ -76,7 +87,7 @@ static void _the_blocking_lock_also_re_enters(void **state)
 }
 
 /** An explicit attribute still wins: this is the override path, not a hardcoded policy. */
-static void _an_explicit_attribute_is_honoured(void **state)
+static void _an_explicit_attribute_is_honoured(void **state) NO_THREAD_SAFETY_ANALYSIS
 {
   (void)state;
   pthread_mutexattr_t errorcheck;
@@ -100,7 +111,7 @@ static void _an_explicit_attribute_is_honoured(void **state)
  * This is the deadlock fix rather than a convenience: glibc's default
  * PREFER_WRITER_NONRECURSIVE policy blocks a re-entering thread as soon as another writer
  * is queued, and dt_dev_pixelpipe_change() can re-enter while holding history_mutex. */
-static void _an_rwlock_writer_may_re_enter(void **state)
+static void _an_rwlock_writer_may_re_enter(void **state) NO_THREAD_SAFETY_ANALYSIS
 {
   (void)state;
   dt_pthread_rwlock_t lock;
