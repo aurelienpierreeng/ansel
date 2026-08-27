@@ -575,8 +575,11 @@ static int32_t _control_import_job_run(dt_job_t *job)
       dt_control_log(_("No image imported!"));
     fprintf(stderr, "No image imported!\n\n");
   }
-  // don't open picture in darkroom if more than 1 xmps (= duplicates) have been imported.
-  else if(index == 1 && xmps == 1)
+  // Don't open the picture in darkroom if more than 1 xmp (= duplicates) has been imported: the
+  // single file then stands for several images in the DB and none of them is the obvious one to
+  // open. Zero xmp is the ordinary case of a file with no sidecar (and of a library configured
+  // not to write any), still exactly one image: open it like any other single import.
+  else if(index == 1 && xmps <= 1)
   {
     if(data->folder_survey)
       dt_control_log(_("Capture: imported 1 image."));
