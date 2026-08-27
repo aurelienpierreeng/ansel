@@ -231,7 +231,14 @@ static inline float *ll_pad_input(
 #define LL_FILL(fallback) do {\
     float isx = ((i - max_supp) + b->roi->x)/b->roi->scale;\
     float isy = ((j - max_supp) + b->roi->y)/b->roi->scale;\
-    if(isx < 0 || isy >= b->buf->width\
+    /* isx against the WIDTH, isy against the HEIGHT. This read `isy >= b->buf->width`,
+       which never bounds-checked isx at all and tested isy twice. The comment above says
+       what the test is for -- "if not out of buf" -- so the intent is unambiguous. It is
+       not a memory-safety bug, because both coordinates are CLAMPed in the else branch,
+       but it picks the wrong branch: a pixel past the right edge sampled the preview with
+       px clamped to the last column instead of taking the hi-res fallback, and on a
+       portrait image every row below `width` took the fallback instead of the preview. */\
+    if(isx < 0 || isx >= b->buf->width\
     || isy < 0 || isy >= b->buf->height)\
       out[*wd2*j+i] = (fallback);\
     else\
