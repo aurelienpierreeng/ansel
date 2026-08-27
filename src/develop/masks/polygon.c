@@ -1270,7 +1270,16 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
     p1[1] = fminf(p1[1], y);
     p2[1] = fmaxf(p2[1], y);
 
-    if(!IS_NULL_PTR(border_size))
+    // Bounded by border_count, not by the loop's points_count. points/points_count and
+    // border/border_count are separate arrays with separate lengths -- the other border loops
+    // in this file spell it `i < border_count` -- so indexing border[] with an index only
+    // checked against points_count reads past its end whenever the border is the shorter of
+    // the two. That is Sentry 142390966: EXCEPTION_ACCESS_VIOLATION here, reached from the
+    // interaction slider (dt_masks_form_set_interaction_value -> _change_size). border can
+    // also be NULL outright when none was rasterised.
+    if(!IS_NULL_PTR(border_size)
+       && !IS_NULL_PTR(gui_points->border)
+       && i < gui_points->border_count)
     {
       // border
       const float fx = gui_points->border[i * 2];
