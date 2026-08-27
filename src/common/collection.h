@@ -264,12 +264,35 @@ void dt_collection_set_text_filter(const dt_collection_t *collection, char *text
 /** set the tagid of collection */
 void dt_collection_set_tag_id(dt_collection_t *collection, const uint32_t tagid);
 
-/** load a filmroll-based collection from an imgid. set_mouse_over controls whether
- * dt_control_set_mouse_over_id(imgid) is (re-)applied here: pass FALSE when the caller already
- * pointed mouse_over_id at imgid earlier and does not want it forced back onto imgid here,
- * clobbering whatever the user may be hovering by the time this runs. */
-void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid, gboolean open_single_image,
-                                 gboolean set_mouse_over);
+/** What an import is allowed to do to the view the user is currently looking at. */
+typedef enum dt_collection_import_view_t
+{
+  /** Never move the user. The policy of every AUTOMATIC import (Studio Capture's folder
+   * survey): the images arrive on their own schedule, so switching views on their arrival
+   * interrupts whatever the user was doing, in the darkroom or anywhere else. */
+  DT_COLLECTION_IMPORT_VIEW_KEEP = 0,
+  /** Show the imported images in the lighttable grid. */
+  DT_COLLECTION_IMPORT_VIEW_GRID,
+  /** Exactly one image was imported on the user's request: open it in the darkroom. */
+  DT_COLLECTION_IMPORT_VIEW_IMAGE
+} dt_collection_import_view_t;
+
+/** load a filmroll-based collection from an imgid, and make that image visible to the user as
+ * far as @p view_policy allows.
+ *
+ * @param collection the collection to re-point and re-query.
+ * @param imgid the imported image the library should follow. Typically the FIRST image of an
+ *              import job: its folder is the one the Collect module's rule 0 is pointed at.
+ * @param view_policy what this import may do to what the user is currently looking at. It also
+ *                    governs the folder-following, the hovered image and the selection: under
+ *                    DT_COLLECTION_IMPORT_VIEW_KEEP none of them is touched outside Studio
+ *                    Capture's own atelier, which tracks its captures itself.
+ * @param set_mouse_over whether dt_control_set_mouse_over_id(imgid) is (re-)applied here: pass
+ *                       FALSE when the caller already pointed mouse_over_id at imgid earlier and
+ *                       does not want it forced back onto imgid here, clobbering whatever the
+ *                       user may be hovering by the time this runs. Ignored under KEEP. */
+void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid,
+                                 dt_collection_import_view_t view_policy, gboolean set_mouse_over);
 
 /** If lighttable/Studio Capture is currently browsing a single folder or film-roll (Collect
  * module on the "Folders" tab), copy its path into folder (up to len bytes), set *recursive to

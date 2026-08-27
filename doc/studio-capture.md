@@ -219,6 +219,16 @@ keys pan at 100%, and Ctrl+/- toggles zoom the same as double-click since
 there is no continuous scale to step through). Every new import becomes the
 displayed image, so the view follows the shooting session.
 
+That following is this atelier's own doing, and only here. An automatic import
+carries the `DT_COLLECTION_IMPORT_VIEW_KEEP` policy
+(`dt_collection_load_filmroll()`, `common/collection.c`), which moves nothing:
+no view switch, no re-pointing of the collection onto the capture folder, no
+forced hover or selection. The survey keeps running after the user leaves this
+atelier — a capture landing while they browse or edit elsewhere must not drag
+them anywhere. Studio Capture is the one exception on the collection side, so
+its filmstrip still follows the session, and `_studio_set_image()` below is
+what keeps the selection and the hovered image on the displayed capture.
+
 Keyboard navigation must go through `d->zoom`/`pan_x`/`pan_y` — the same
 fields the mouse handlers use — never through `d->dev->roi`: that develop
 only feeds the Scopes module in the background (see below) and never reaches
