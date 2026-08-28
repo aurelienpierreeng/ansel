@@ -199,6 +199,7 @@
 
 #include "common/dbus.h"
 #include "common/utility.h"
+#include "common/times.h"   // dt_times_t, dt_get_times(), dt_get_wtime(), dt_show_times()
 
 #if defined(__SUNOS__)
 #include <sys/varargs.h>

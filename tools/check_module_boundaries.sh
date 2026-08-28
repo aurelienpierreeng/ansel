@@ -398,7 +398,7 @@ fi
 #                  reached as plain GLists. This is the count behind the bug that came back
 #                  four times, and it only reaches zero when resolving a shape is something
 #                  callers ask the module to do.
-masks_include_baseline=20
+masks_include_baseline=19
 masks_gui_include_baseline=11
 masks_member_baseline=94
 masks_write_baseline=26

@@ -32,6 +32,7 @@
 #define DT_DEVELOP_BLEND_GUI_H
 
 #include "develop/blend.h"
+#include "develop/masks_types.h"   // DEVELOP_MASKS_NB_SHAPES
 #include "develop/imageop.h"
 #include "gui/color_picker_proxy.h"
 #include "widgets/collapsible_section.h"

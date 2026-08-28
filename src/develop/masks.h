@@ -445,8 +445,6 @@ void dt_masks_cleanup_unused(dt_develop_t *dev);
 
 
 
-#define DEVELOP_MASKS_NB_SHAPES 5
-
 
 
 
