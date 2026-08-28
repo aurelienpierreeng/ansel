@@ -2140,6 +2140,25 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
   return 0;
 }
 
+/**
+ * @brief Index (exclusive) where the centerline's forward pass ends in a brush point array.
+ *
+ * @details `points' holds, in this order: three header points per node (ctrl1, node, ctrl2), then
+ * the centerline sampled FORWARD from the first node to the last, then the SAME centerline sampled
+ * backward. The border wraps around the whole stroke, so the line under it is walked there and
+ * back (see _brush_get_pts_border()); only the forward half is ever drawn.
+ *
+ * Half of the SAMPLES, not half of the array: the header belongs to neither pass, and counting it
+ * in leaves the forward half short by one and a half points per node -- which is the whole last
+ * segment, since the last node's own coordinate sits at the very end of that pass.
+ */
+static inline int _brush_centerline_end(const int points_count, const int node_count)
+{
+  const int first = node_count * 3;
+  if(points_count <= first) return points_count;
+  return first + (points_count - first) / 2;
+}
+
 static void _brush_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
 {
    // unused arg, keep compiler from complaining
@@ -2161,7 +2180,7 @@ static void _brush_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float
     cairo_move_to(cr, points[start_idx * 2], points[start_idx * 2 + 1]);
 
     // We don't want to draw the plain line twice, adapt the end index accordingly
-    const int end_idx = border ? points_count : 0.5 * points_count;
+    const int end_idx = border ? points_count : _brush_centerline_end(points_count, node_nb);
 
     /* One line_to per point sampled at RAW resolution is several per device pixel; emit at the
      * resolution the context can actually show. See dt_draw_min_emit_step(). */
@@ -2277,10 +2296,10 @@ static gboolean _brush_get_source_center(const dt_masks_form_gui_points_t *gui_p
   if(IS_NULL_PTR(gui_points) || IS_NULL_PTR(center_pt)) return FALSE;
 
   // Work on the exact centerline span that is actually drawn (non-border path):
-  // [node_count * 3, 0.5 * points_count)
+  // [node_count * 3, _brush_centerline_end())
   const int line_offset_pt = node_count * 3;
-  const int points_line_end = gui_points->points_count / 2; // exclusive
-  const int source_line_end = gui_points->source_count / 2; // exclusive
+  const int points_line_end = _brush_centerline_end(gui_points->points_count, node_count); // exclusive
+  const int source_line_end = _brush_centerline_end(gui_points->source_count, node_count); // exclusive
   const int line_end = MIN(points_line_end, source_line_end);
   const int line_count = line_end - line_offset_pt;
   if(line_count < 2) return FALSE;
@@ -2494,7 +2513,11 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     // cap on the outline shown here (the node-to-node centerline, not the painted falloff)
     // looked cut off square at its two open ends. Only the two true ends of the whole stroke,
     // not every node's own joint -- see dt_masks_draw_path_seg_by_seg().
-    dt_masks_draw_path_seg_by_seg(cr, mask_gui, index, gui_points->points, 0.5f * gui_points->points_count,
+    // The whole array, not the forward half: the walk stops itself on the last node (an open path
+    // has node_count - 1 segments), and it must be able to REACH that node. Handing it a count
+    // derived from the array length instead left it short of the last node on every brush, so the
+    // last segment was never stroked -- it stayed a pending path in the cairo context.
+    dt_masks_draw_path_seg_by_seg(cr, mask_gui, index, gui_points->points, gui_points->points_count,
                                   node_count, zoom_scale, TRUE);
   }
 

@@ -891,6 +891,38 @@ check the early-out paths there before adding another branch to it.
 
 ## Masks / forms history
 
+### A brush point array records the centerline twice, and only the forward half is drawn
+
+`gui_points->points` for a brush holds, in this order: three header points per node (`ctrl1`,
+node, `ctrl2`), then the centerline sampled **forward** from the first node to the last, then the
+**same** centerline sampled backward. The border wraps around the stroke, so the line under it is
+walked there and back (`_brush_get_pts_border()`); the backward half is never drawn.
+
+The forward half ends at `_brush_centerline_end()` — `node_count * 3 + (points_count - node_count
+* 3) / 2`, i.e. half of the **samples**. Half of the whole array is a different number: the header
+belongs to neither pass, so counting it in falls one and a half points per node short, and the
+last node's own coordinate sits at the very end of the forward pass. Everything that walks the
+drawn centerline (the outline stroking, the source shape, the clone link's midpoint) uses that
+helper.
+
+### A drawing pass must not leave a path in the cairo context
+
+Cairo keeps the current path across calls, so a leftover is painted by the next `cairo_stroke()`
+**anywhere**, in that stroke's own style. `dt_masks_draw_path_seg_by_seg()` strokes one segment per
+node and stops on a node boundary, so it ends with `cairo_new_path()`; the creation session's
+per-shape loop (`masks_gui.c`) does the same between shapes.
+
+The symptom shape is a piece of one shape adopting another shape's style, or appearing only when
+something else happens to be drawn: a leftover tail comes out dashed when the shape's own dashed
+border is stroked next, comes out highlighted when another shape is hovered, and is invisible when
+nothing is drawn after it. That is a path leak, not a style or selection bug.
+
+Which segments exist at all is decided by the caller's shape: an open path (a brush — the only
+caller asking for round ends, since only an open path has two true ends) has `node_count - 1`
+segments, a closed one has one more, and a shape still being created has no closing segment yet.
+The walk stops once it has stroked them all, so it must be handed a point count that lets it
+**reach** the last node.
+
 ### Brush masks rasterize as radial spokes — wedge holes across the stroke (OPEN)
 
 Reported 2026-08-08 on `_DSC9410.NEF` (sidecar alongside it): a 57-node brush leaves four
