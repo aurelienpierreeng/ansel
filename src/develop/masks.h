@@ -109,6 +109,7 @@ GList dev->forms
 #ifndef DT_DEVELOP_MASKS_H
 #define DT_DEVELOP_MASKS_H
 
+#include "develop/masks_types.h"   // the vocabulary: shape kinds, states, and the value types
 #include "system/atomic.h"
 #include "common/logging.h"
 #include "system/macros.h"
@@ -134,31 +135,7 @@ extern "C" {
 
 #define DEVELOP_MASKS_VERSION (6)
 
-/**forms types */
-typedef enum dt_masks_type_t
-{
-  DT_MASKS_NONE = 0, // keep first
-  DT_MASKS_CIRCLE = 1 << 0,
-  DT_MASKS_POLYGON = 1 << 1,
-  DT_MASKS_GROUP = 1 << 2,
-  DT_MASKS_CLONE = 1 << 3,
-  DT_MASKS_GRADIENT = 1 << 4,
-  DT_MASKS_ELLIPSE = 1 << 5,
-  DT_MASKS_BRUSH = 1 << 6,
-  DT_MASKS_NON_CLONE = 1 << 7,
 
-  DT_MASKS_ALL = DT_MASKS_CIRCLE | DT_MASKS_POLYGON | DT_MASKS_GROUP |
-                 DT_MASKS_GRADIENT | DT_MASKS_ELLIPSE | DT_MASKS_BRUSH,
-
-  DT_MASKS_IS_CLOSED_SHAPE = DT_MASKS_CIRCLE | DT_MASKS_ELLIPSE | DT_MASKS_POLYGON,
-  DT_MASKS_IS_OPEN_SHAPE   = DT_MASKS_ALL & ~DT_MASKS_IS_CLOSED_SHAPE,
-  
-  DT_MASKS_IS_RETOUCHE = DT_MASKS_CLONE | DT_MASKS_NON_CLONE,
-
-  DT_MASKS_IS_PATH_SHAPE   = DT_MASKS_POLYGON | DT_MASKS_BRUSH,
-  DT_MASKS_IS_PRIMITIVE_SHAPE = DT_MASKS_CIRCLE | DT_MASKS_ELLIPSE | DT_MASKS_GRADIENT
-
-} dt_masks_type_t;
 
 /**masts states */
 
@@ -172,20 +149,7 @@ typedef enum dt_masks_event_t
   DT_MASKS_EVENT_CHANGE = 5,
   DT_MASKS_EVENT_RESET  = 6
 } dt_masks_event_t;
-typedef enum dt_masks_state_t
-{
-  DT_MASKS_STATE_NONE = 0,
-  DT_MASKS_STATE_USE = 1 << 0,
-  DT_MASKS_STATE_SHOW = 1 << 1,
-  DT_MASKS_STATE_INVERSE = 1 << 2,
-  DT_MASKS_STATE_UNION = 1 << 3,
-  DT_MASKS_STATE_INTERSECTION = 1 << 4,
-  DT_MASKS_STATE_DIFFERENCE = 1 << 5,
-  DT_MASKS_STATE_EXCLUSION = 1 << 6,
-  DT_MASKS_STATE_NOOP = 1 << 7,
 
-  DT_MASKS_STATE_IS_COMBINE_OP = DT_MASKS_STATE_UNION | DT_MASKS_STATE_INTERSECTION | DT_MASKS_STATE_DIFFERENCE | DT_MASKS_STATE_EXCLUSION
-} dt_masks_state_t;
 
 typedef enum dt_masks_points_states_t
 {
@@ -199,19 +163,9 @@ typedef enum dt_masks_gradient_states_t
   DT_MASKS_GRADIENT_STATE_SIGMOIDAL = 2
 } dt_masks_gradient_states_t;
 
-typedef enum dt_masks_increment_t
-{
-  DT_MASKS_INCREMENT_ABSOLUTE = 0,
-  DT_MASKS_INCREMENT_SCALE = 1,
-  DT_MASKS_INCREMENT_OFFSET = 2
-} dt_masks_increment_t;
 
-typedef enum dt_masks_edit_mode_t
-{
-  DT_MASKS_EDIT_OFF = 0,
-  DT_MASKS_EDIT_FULL = 1,
-  DT_MASKS_EDIT_RESTRICTED = 2
-} dt_masks_edit_mode_t;
+
+
 
 typedef enum dt_masks_pressure_sensitivity_t
 {
@@ -287,34 +241,11 @@ typedef struct dt_masks_anchor_gradient_t
   dt_masks_gradient_states_t state;
 } dt_masks_anchor_gradient_t;
 
-/** structure used to store all forms's id for a group */
-typedef struct dt_masks_form_group_t
-{
-  int formid;
-  int parentid;
-  int state;
-  float opacity;
-} dt_masks_form_group_t;
 
 
 
-/*
-* Type of user interaction to map with internal properties of masks.
-* Those used to be deduced implicitly by each shape from Shift/Ctrl/Shift+Ctrl + mouse
-* scroll, which is a shitty design when using Wacom tablets. No shape reads key modifiers
-* any more: the wheel is resolved once, against the user's mapping, by
-* dt_masks_scroll_get_interaction() -- see masks_gui.h -- and every entry point
-* (mouse_scroll callback, context-menu sliders) names the property it acts on.
-*/
-typedef enum dt_masks_interaction_t
-{
-  DT_MASKS_INTERACTION_UNDEF = 0,    // no property: an unmapped wheel combination does nothing
-  DT_MASKS_INTERACTION_SIZE = 1,     // property of the form (shape), explicit
-  DT_MASKS_INTERACTION_HARDNESS = 2, // property of the form (shape), explicit
-  DT_MASKS_INTERACTION_OPACITY = 3,  // property of the group in which the form is included, explicit
-  DT_MASKS_INTERACTION_ROTATION = 4, // property of the form (shape), explicit
-  DT_MASKS_INTERACTION_LAST
-} dt_masks_interaction_t;
+
+
 
 /** structure used to define a form */
 typedef struct dt_masks_form_t
