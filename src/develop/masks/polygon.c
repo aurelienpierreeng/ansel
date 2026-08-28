@@ -3179,14 +3179,14 @@ static inline void _polygon_falloff_roi(float *buffer, int *p0, int *p1, int bw,
 
 // build a stamp which can be combined with other shapes in the same group
 // prerequisite: 'buffer' is all zeros
-static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                                  const dt_dev_pixelpipe_iop_t *const piece,
                                  dt_masks_form_t *const mask_form,
                                  const dt_iop_roi_t *roi, float *buffer,
                                  dt_iop_roi_t *touched)
 {
   dt_masks_touched_none(touched);
-  if(IS_NULL_PTR(module)) return 1;
+  if(IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   double start = 0.0;
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start = dt_get_wtime();
@@ -3223,13 +3223,13 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
   if(points_count <= 2)
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
-    return 0;
+    return DT_MASKS_RASTER_EMPTY;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -3324,7 +3324,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
-    return 0;
+    return DT_MASKS_RASTER_EMPTY;
   }
 
   // now get min/max values
@@ -3355,7 +3355,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
     {
       dt_pixelpipe_cache_free_align(points);
       dt_pixelpipe_cache_free_align(border);
-      return 1;
+      return DT_MASKS_RASTER_ERROR;
     }
     memcpy(cpoints, points, sizeof(float) * 2 * points_count);
 
@@ -3468,7 +3468,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
     {
       dt_pixelpipe_cache_free_align(points);
       dt_pixelpipe_cache_free_align(border);
-      return 1;
+      return DT_MASKS_RASTER_ERROR;
     }
 
     int dindex = 0;
@@ -3587,7 +3587,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
              mask_form->name,
              dt_get_wtime() - start);
 
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 static void _polygon_sanitize_config(dt_masks_type_t type)

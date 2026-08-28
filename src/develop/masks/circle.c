@@ -869,14 +869,14 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
 }
 
 
-static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
                                 const dt_dev_pixelpipe_iop_t *const restrict piece,
                                 dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
                                 float *const restrict buffer, dt_iop_roi_t *touched)
 {
   dt_masks_touched_none(touched);
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 1;
-  if(IS_NULL_PTR(module)) return 1;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
+  if(IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   double start1 = 0.0;
   double start2 = start1;
   
@@ -884,7 +884,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
 
   // we get the circle parameters
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
-  if(IS_NULL_PTR(circle)) return 1;
+  if(IS_NULL_PTR(circle)) return DT_MASKS_RASTER_EMPTY;
   const int wi = pipe->iwidth, hi = pipe->iheight;
   const float centerx = circle->center[0] * wi;
   const float centery = circle->center[1] * hi;
@@ -920,7 +920,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
   // we need many points as we do not know how the circle might get distorted in the pixelpipe
   const size_t circpts = dt_masks_roundup(MIN(360, 2 * M_PI * sqr_total), 8);
   float *const restrict circ = dt_pixelpipe_cache_alloc_align_float_cache(circpts * 2, 0);
-  if(IS_NULL_PTR(circ)) return 1;
+  if(IS_NULL_PTR(circ)) return DT_MASKS_RASTER_ERROR;
   __OMP_PARALLEL_FOR__(if(circpts/8 > 1000))
   for(int n = 0; n < circpts / 8; n++)
   {
@@ -955,7 +955,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
                                         circpts))
   {
     dt_pixelpipe_cache_free_align(circ);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1007,10 +1007,10 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
   // check if there is anything to do at all;
   // only if width and height of bounding box is 2 or greater the shape lies inside of roi and requires action
   if(bbw <= 1 || bbh <= 1)
-    return 0;
+    return DT_MASKS_RASTER_EMPTY;
 
   float *const restrict points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)bbw * bbh * 2, 0);
-  if(IS_NULL_PTR(points)) return 1;
+  if(IS_NULL_PTR(points)) return DT_MASKS_RASTER_ERROR;
 
   // we populate the grid points in module coordinates
   __OMP_PARALLEL_FOR__(collapse(2) if(bbw*bbh > 50000))
@@ -1033,7 +1033,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
                                         (size_t)bbw * bbh))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1117,7 +1117,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
              dt_get_wtime() - start1);
   }
 
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 static void _circle_sanitize_config(dt_masks_type_t type)

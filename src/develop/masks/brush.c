@@ -2987,13 +2987,13 @@ static inline void _brush_falloff_roi(float *buffer, const int *segment_start, c
  *
  * The buffer is assumed pre-zeroed. Points are scaled/shifted into ROI space before stamping.
  */
-static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *const piece,
                                dt_masks_form_t *const mask_form, const dt_iop_roi_t *roi, float *buffer,
                                dt_iop_roi_t *touched)
 {
   dt_masks_touched_none(touched);
-  if(IS_NULL_PTR(module)) return 1;
+  if(IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   double timer_start = 0.0;
   double timer_step_start = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) timer_start = timer_step_start = dt_get_wtime();
@@ -3018,7 +3018,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
     dt_pixelpipe_cache_free_align(payload);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -3035,7 +3035,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
     dt_pixelpipe_cache_free_align(payload);
-    return 0;
+    return DT_MASKS_RASTER_EMPTY;
   }
 
   // we shift and scale down brush and border
@@ -3074,7 +3074,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
     dt_pixelpipe_cache_free_align(payload);
-    return 0;
+    return DT_MASKS_RASTER_EMPTY;
   }
 
   // now we fill the falloff
@@ -3163,7 +3163,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
              dt_get_wtime() - timer_start);
   }
 
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 static void _brush_sanitize_config(dt_masks_type_t type)
