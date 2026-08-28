@@ -4,6 +4,9 @@
     "runtime-version": "49",
     "sdk": "org.gnome.Sdk",
     "command": "ansel",
+    "build-options": {
+        "libdir": "/app/lib"
+    },
     "rename-icon": "ansel",
     "copy-icon": true,
     "finish-args": [
