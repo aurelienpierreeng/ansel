@@ -69,6 +69,20 @@ void dt_masks_replace_current_forms(struct dt_develop_t *dev, GList *forms);
  *  Optionally reset dev->forms_changed. */
 GList *dt_masks_snapshot_current_forms(struct dt_develop_t *dev, gboolean reset_changed);
 
+/** Release every reference this dev holds on any form, and empty both lists.
+ *
+ *  dev->forms and dev->allforms are INDEPENDENT claims on possibly-shared objects
+ *  (dt_masks_append_form() and dt_masks_create_ext() each take their own reference), so both are
+ *  released and neither is unconditionally freed: a form referenced by both only reaches
+ *  refcount 0 once.
+ *
+ *  Takes dev->masks_mutex as writer itself -- do NOT wrap the call in one. That mistake is silent
+ *  rather than a deadlock, because dt_pthread_rwlock_t tracks same-thread recursive writers, so it
+ *  would leave a trap for the next reader rather than a failure.
+ *
+ *  Does not touch dev->form_gui: that is the GUI's object, torn down by dt_masks_gui_cleanup(). */
+void dt_masks_release_all_forms(struct dt_develop_t *dev);
+
 #ifdef __cplusplus
 }
 #endif

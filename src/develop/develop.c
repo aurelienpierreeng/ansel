@@ -308,15 +308,7 @@ void dt_dev_cleanup(dt_develop_t *dev)
     dev->color_picker.primary_sample = NULL;
   }
 
-  dt_pthread_rwlock_wrlock(&dev->masks_mutex);
-  // dev->forms and dev->allforms are independent claims on possibly-shared objects
-  // (dt_masks_append_form/dt_masks_create_ext each take their own reference): release both,
-  // do not unconditionally free -- a form referenced by both only reaches refcount 0 once.
-  g_list_free_full(dev->forms, (void (*)(void *))dt_masks_form_unref);
-  dev->forms = NULL;
-  g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_form_unref);
-  dev->allforms = NULL;
-  dt_pthread_rwlock_unlock(&dev->masks_mutex);
+  dt_masks_release_all_forms(dev);
 
   dt_pthread_rwlock_destroy(&dev->masks_mutex);
 

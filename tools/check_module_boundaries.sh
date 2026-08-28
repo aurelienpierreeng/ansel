@@ -398,12 +398,12 @@ fi
 #                  reached as plain GLists. This is the count behind the bug that came back
 #                  four times, and it only reaches zero when resolving a shape is something
 #                  callers ask the module to do.
-masks_include_baseline=24
+masks_include_baseline=23
 masks_gui_include_baseline=11
 masks_member_baseline=102
 masks_write_baseline=27
 masks_alloc_baseline=4
-masks_forms_baseline=88
+masks_forms_baseline=76
 
 # Members no other struct in the tree uses. Keep it that way: adding an ambiguous name here
 # buys a bigger number and loses the gate.

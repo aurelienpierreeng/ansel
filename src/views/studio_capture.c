@@ -35,7 +35,7 @@
 #include "develop/dev_history.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
-#include "develop/masks.h"
+#include "develop/masks/masks_history.h"   // dt_masks_release_all_forms()
 #include "caches/pixelpipe_cache.h"
 #include "develop/pixelpipe_hb.h"
 #include "gui/dtgtk/thumbtable.h"
@@ -357,15 +357,7 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
     dev->form_gui = NULL;
   }
 
-  dt_pthread_rwlock_wrlock(&dev->masks_mutex);
-  // dev->forms and dev->allforms are independent claims on possibly-shared objects:
-  // release both, do not unconditionally free -- a form referenced by both only
-  // reaches refcount 0 once (mirrors dt_dev_cleanup() in develop.c).
-  g_list_free_full(dev->forms, (void (*)(void *))dt_masks_form_unref);
-  dev->forms = NULL;
-  g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_form_unref);
-  dev->allforms = NULL;
-  dt_pthread_rwlock_unlock(&dev->masks_mutex);
+  dt_masks_release_all_forms(dev);
 
   dev->image_storage.id = -1;
 
