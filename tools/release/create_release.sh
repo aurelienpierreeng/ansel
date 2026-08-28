@@ -38,7 +38,7 @@ cd "$DT_SRC_DIR" || exit
 git shortlog -sne release-3.9.0..HEAD
 
 echo "are you sure these guys received proper credit in the about dialog?"
-echo "HINT: $ tools/generate-authors.sh release-3.1.0 HEAD > AUTHORS"
+echo "HINT: $ tools/release/generate-authors.sh release-3.9.0 HEAD > AUTHORS"
 read -r answer
 
 # prefix rc with ~, so debian thinks its less than

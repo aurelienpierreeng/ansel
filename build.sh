@@ -37,8 +37,9 @@
 
 set -e
 
-# setup local hooks
-[ -d .git ] && git config core.hooksPath .githooks
+# setup local hooks. -e, not -d: in a linked worktree (git worktree add) .git is a
+# FILE pointing at the real gitdir, so -d silently skipped the setup there.
+[ -e .git ] && git config core.hooksPath .githooks
 
 DT_SRC_DIR=$(dirname "$0")
 DT_SRC_DIR=$(cd "$DT_SRC_DIR" && pwd -P)

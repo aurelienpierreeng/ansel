@@ -50,26 +50,30 @@ if [ ${#errors[@]} -ne 0 ]; then
   exit 1
 fi
 
-# Regenerate AUTHORS in repo root before committing
+# AUTHORS is NOT regenerated here. The build already does it: CMakeLists.txt runs
+# tools/generate-authors.cmake at install time, which calls
+# tools/release/generate-authors.sh against live git history and writes
+# ${CMAKE_BINARY_DIR}/AUTHORS. The file checked in at the repo root is only the
+# fallback used when a build has no git or no shell (source tarballs), so it needs
+# refreshing when a release is cut -- create_release.sh prints the command -- and
+# not on every commit.
+#
+# Doing it per commit was wrong in four ways, all of them silent:
+#
+#   - it wrote its temporary file into $repo_root/.git, which is a FILE and not a
+#     directory in a linked worktree, so mktemp failed and every commit made from
+#     a `git worktree add` checkout was rejected outright;
+#   - it generated from release-3.9.0..HEAD, and at pre-commit time HEAD is the
+#     PREVIOUS commit, so the AUTHORS it staged never described the commit being
+#     made -- a new contributor's own first commit could not list them;
+#   - it `git add`ed a file the author had not staged, widening every commit with
+#     an unrelated change and making single-topic commits impossible to keep;
+#   - generate-authors.sh reads each submodule's contributors by cd-ing into the
+#     working tree, so a dirty or moved submodule silently changed the AUTHORS
+#     content -- two people committing the same change produced different files,
+#     which is how a contributor came to be dropped and re-added across commits.
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
 if [ -n "$repo_root" ]; then
-  gen_script="$repo_root/tools/release/generate-authors.sh"
-  if [ -x "$gen_script" ]; then
-    tmp_file=$(mktemp "${repo_root}/.git/authors.XXXXXX") || exit 1
-    if "$gen_script" release-3.9.0 HEAD > "$tmp_file"; then
-      if [ ! -f "$repo_root/AUTHORS" ] || ! cmp -s "$tmp_file" "$repo_root/AUTHORS"; then
-        mv "$tmp_file" "$repo_root/AUTHORS"
-        git add "$repo_root/AUTHORS"
-        echo "Updated AUTHORS"
-      else
-        rm -f "$tmp_file"
-      fi
-    else
-      echo "Warning: failed to regenerate AUTHORS" >&2
-      rm -f "$tmp_file"
-    fi
-  fi
-
   # Quick image test smoke test (tests/image_test.sh): local only, uses the shared
   # team bank (a gitignored clone at tests/image_test/samples) if it's present, a
   # personal bank (tests/image_test.sh configure <dir> / $ANSEL_IMAGE_TEST) otherwise.
