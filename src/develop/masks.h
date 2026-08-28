@@ -432,9 +432,12 @@ int dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *p
                       dt_masks_form_t *const form,
                       float **buffer, int *width, int *height, int *posx, int *posy);
 
+/** Rasterise `form` into the pre-zeroed ROI-sized `buffer`. `touched` (may be NULL) receives
+ * the buffer-relative rectangle enclosing every pixel written; empty when nothing was. */
 int dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                           const dt_dev_pixelpipe_iop_t *const piece,
-                          dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer);
+                          dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer,
+                          dt_iop_roi_t *touched);
 
 
 int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,

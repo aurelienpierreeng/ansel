@@ -44,6 +44,7 @@
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_functions.h"
+#include "develop/masks/masks_touched.h"
 #include "math/openmp_maths.h"
 #include "widgets/accelerators.h"
 
@@ -1395,8 +1396,10 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
 
 static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                                  const dt_dev_pixelpipe_iop_t *const piece,
-                                 dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
+                                 dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer,
+                               dt_iop_roi_t *touched)
 {
+  dt_masks_touched_none(touched);
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
 
   double start1 = 0.0;
@@ -1607,6 +1610,8 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   }
 
   dt_pixelpipe_cache_free_align(points);
+
+  dt_masks_touched_set(touched, bbxm * grid, bbym * grid, endx - 1, endy - 1, w, h);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {

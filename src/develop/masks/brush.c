@@ -48,6 +48,7 @@
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_functions.h"
+#include "develop/masks/masks_touched.h"
 #include "math/openmp_maths.h"
 #include "gui/actions/menu.h"
 #include "widgets/accelerators.h"
@@ -2970,8 +2971,10 @@ static inline void _brush_falloff_roi(float *buffer, const int *segment_start, c
  */
 static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *const piece,
-                               dt_masks_form_t *const mask_form, const dt_iop_roi_t *roi, float *buffer)
+                               dt_masks_form_t *const mask_form, const dt_iop_roi_t *roi, float *buffer,
+                               dt_iop_roi_t *touched)
 {
+  dt_masks_touched_none(touched);
   if(IS_NULL_PTR(module)) return 1;
   double timer_start = 0.0;
   double timer_step_start = 0.0;
@@ -3128,6 +3131,11 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
   dt_pixelpipe_cache_free_align(points);
   dt_pixelpipe_cache_free_align(border);
   dt_pixelpipe_cache_free_align(payload);
+
+  /* Every stamp lies between a centreline sample and its border sample, and writes one extra
+   * neighbour pixel in each direction to close rounding gaps -- hence the margin. */
+  dt_masks_touched_set(touched, (int)floorf(min_x) - 2, (int)floorf(min_y) - 2, (int)ceilf(max_x) + 2,
+                       (int)ceilf(max_y) + 2, roi_width, roi_height);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {

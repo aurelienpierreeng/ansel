@@ -43,6 +43,7 @@
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_functions.h"
+#include "develop/masks/masks_touched.h"
 
 /* Shape handlers receive widget-space coordinates, while normalized output-image
  * coordinates come from `gui->rel_pos` and absolute output-image
@@ -514,6 +515,22 @@ static void _combine_masks_union(float *const restrict dest, float *const restri
   }
 }
 
+/** Union bounded to `box' (buffer-relative): outside it the child is zero and max(dest, 0) is dest. */
+static void _combine_masks_union_box(float *const restrict dest, const float *const restrict newmask,
+                                     const int width, const dt_iop_roi_t *const box, const float opacity)
+{
+  for(int y = box->y; y < box->y + box->height; y++)
+  {
+    float *const restrict dest_row = dest + (size_t)y * width + box->x;
+    const float *const restrict src_row = newmask + (size_t)y * width + box->x;
+    for(int x = 0; x < box->width; x++)
+    {
+      const float mask = opacity * src_row[x];
+      dest_row[x] = MAX(dest_row[x], mask);
+    }
+  }
+}
+
 static void _combine_masks_intersect(float *const restrict dest, float *const restrict newmask, const size_t npixels,
                                      const float opacity, const int inverted)
 {
@@ -647,9 +664,10 @@ static uint64_t _group_prefix_hash(const dt_masks_form_t *const form, GList *mas
 static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *const restrict piece,
                                dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
-                               float *const restrict buffer)
+                               float *const restrict buffer, dt_iop_roi_t *touched)
 {
   double start = dt_get_wtime();
+  dt_masks_touched_none(touched);
   if(IS_NULL_PTR(form->points)) return 0;
   int nb_ok = 0;
 
@@ -706,12 +724,20 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
   if(shape_count > 1 && resume_from < shape_count - 1)
     publishable = dt_pixelpipe_cache_alloc_align_float_cache(npixels, 0);
 
+  if(resume_from == 0) memset(buffer, 0, npixels * sizeof(float));
+  gboolean bufs_zeroed = FALSE;
+  dt_iop_roi_t child_touched;
+  dt_masks_touched_none(&child_touched);
+  dt_iop_roi_t group_touched;
+  dt_masks_touched_none(&group_touched);
+  if(resume_from > 0) dt_masks_touched_full(&group_touched, width, height); // the prefix is opaque to us
+
   int i = 0;
   // and we get all masks
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
-    dt_masks_form_t *sel = dt_masks_get_from_id(module->dev, fpt->formid);
+    dt_masks_form_t *sel = dt_masks_get_from_id_ext(masks, fpt->formid);
 
     if(sel && i < resume_from)
     {
@@ -727,9 +753,16 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
       if(i == shape_count - 1 && !IS_NULL_PTR(publishable))
         memcpy(publishable, buffer, npixels * sizeof(float));
 
-      // ensure that we start with a zeroed buffer regardless of what was previously written into 'bufs'
-      memset(bufs, 0, npixels*sizeof(float));
-      const int err_child = dt_masks_get_mask_roi(module, pipe, piece, sel, roi, bufs);
+      /* `bufs' must be zero wherever the child will not write. Clearing only the PREVIOUS child's
+       * reported box keeps that invariant at the cost of that box, not of the whole ROI per shape. */
+      if(!bufs_zeroed)
+      {
+        memset(bufs, 0, npixels * sizeof(float));
+        bufs_zeroed = TRUE;
+      }
+      else
+        dt_masks_touched_clear(bufs, width, &child_touched);
+      const int err_child = dt_masks_get_mask_roi(module, pipe, piece, sel, roi, bufs, &child_touched);
       const float op = fpt->opacity;
       // Add a foolproof to ensure that the first shape is no-op
       const int no_op_state = fpt->state & ~(DT_MASKS_STATE_IS_COMBINE_OP) ;
@@ -744,9 +777,21 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
         // first see if we need to invert this shape
         const int inverted = (state & DT_MASKS_STATE_INVERSE);
 
+        /* Union and plain copy leave `buffer' untouched outside the child's box: max(dest,0) is
+         * dest, and the copy writes op * 0 = 0 over an already-zero buffer. Those two run over the
+         * box alone. Intersection/difference/exclusion rewrite the outside too, and an inverted
+         * child is non-zero outside its box, so those keep the full-ROI pass. */
+        const gboolean box_only = !inverted && !dt_masks_touched_is_empty(&child_touched)
+                                  && ((state & DT_MASKS_STATE_UNION)
+                                      || !(state & (DT_MASKS_STATE_INTERSECTION | DT_MASKS_STATE_DIFFERENCE
+                                                    | DT_MASKS_STATE_EXCLUSION)));
+
         if(state & DT_MASKS_STATE_UNION)
         {
-          _combine_masks_union(buffer, bufs, npixels, op, inverted);
+          if(box_only)
+            _combine_masks_union_box(buffer, bufs, width, &child_touched, op);
+          else
+            _combine_masks_union(buffer, bufs, npixels, op, inverted);
         }
         else if(state & DT_MASKS_STATE_INTERSECTION)
         {
@@ -760,7 +805,17 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
         {
           _combine_masks_exclusion(buffer, bufs, npixels, op, inverted);
         }
-        else // if we are here, this mean that we just have to copy the shape and null other parts
+        else if(box_only) // plain copy: op * child inside the box, zero everywhere else
+        {
+          if(i != 0) memset(buffer, 0, npixels * sizeof(float)); // a later copy discards the fold so far
+          for(int y = child_touched.y; y < child_touched.y + child_touched.height; y++)
+          {
+            float *const restrict dest_row = buffer + (size_t)y * width + child_touched.x;
+            const float *const restrict src_row = bufs + (size_t)y * width + child_touched.x;
+            for(int x = 0; x < child_touched.width; x++) dest_row[x] = op * src_row[x];
+          }
+        }
+        else
         {
           __OMP_PARALLEL_FOR_SIMD__(aligned(buffer, bufs : 64) if(npixels > 10000))
           for(int index = 0; index < npixels; index++)
@@ -768,6 +823,13 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
             buffer[index] = op * (inverted ? (1.0f - bufs[index]) : bufs[index]);
           }
         }
+
+        if(box_only && (state & DT_MASKS_STATE_UNION))
+          dt_masks_touched_union(&group_touched, &child_touched);
+        else if(box_only)
+          group_touched = child_touched; // the copy discarded everything outside this box
+        else
+          dt_masks_touched_full(&group_touched, width, height);
 
         if(dt_get_debug_flags() & DT_DEBUG_PERF)
           dt_print(DT_DEBUG_MASKS, "[masks %d] combine took %0.04f sec\n", nb_ok, dt_get_wtime() - start);
@@ -784,6 +846,8 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
 
   if(nb_ok == 0)
     memset(buffer, 0, npixels * sizeof(float));
+  else if(!IS_NULL_PTR(touched))
+    *touched = group_touched;
 
   /* Publish the fold WITHOUT the last shape, never the complete one.
    *
@@ -835,7 +899,7 @@ int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
   const double start = dt_get_wtime();
   if(IS_NULL_PTR(form)) return 0;
 
-  const int err = dt_masks_get_mask_roi(module, pipe, piece, form, roi, buffer);
+  const int err = dt_masks_get_mask_roi(module, pipe, piece, form, roi, buffer, NULL);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks] render all masks took %0.04f sec\n", dt_get_wtime() - start);
