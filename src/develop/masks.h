@@ -397,10 +397,11 @@ dt_masks_raster_result_t dt_masks_get_points_border(struct dt_develop_t *dev, dt
                                float **points, int *points_count,
                                float **border, int *border_count, int source, dt_iop_module_t *module);
 /** get the rectangle which include the form and his border */
-int dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+dt_masks_raster_result_t dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                      dt_dev_pixelpipe_iop_t *piece,
                       dt_masks_form_t *form,
                       int *width, int *height, int *posx, int *posy);
-int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
                              dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
                              int *width, int *height, int *posx, int *posy);
 
@@ -461,7 +462,7 @@ static inline void dt_masks_set_ctrl_points(float ctrl1[2], float ctrl2[2], cons
 
 
 /** get the transparency mask of the form and his border */
-int dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                       const dt_dev_pixelpipe_iop_t *const piece,
                       dt_masks_form_t *const form,
                       float **buffer, int *width, int *height, int *posx, int *posy);

@@ -402,7 +402,9 @@ static inline __attribute__((always_inline)) gboolean masks_form_is_in_roi(dt_io
   int fl, ft, fw, fh;
   dt_dev_pixelpipe_iop_t piece_copy = *piece;
 
-  if(dt_masks_get_area(self, (dt_dev_pixelpipe_t *)pipe, &piece_copy, form, &fw, &fh, &fl, &ft) != 0) return FALSE;
+  if(dt_masks_get_area(self, (dt_dev_pixelpipe_t *)pipe, &piece_copy, form, &fw, &fh, &fl, &ft)
+     != DT_MASKS_RASTER_OK)
+    return FALSE;
 
   // is the form outside of the roi?
   fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
@@ -455,7 +457,8 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
         // we get the area for the source
         int fl, ft, fw, fh;
 
-        if(dt_masks_get_source_area(self, processing_pipe, piece, form, &fw, &fh, &fl, &ft) != 0)
+        if(dt_masks_get_source_area(self, processing_pipe, piece, form, &fw, &fh, &fl, &ft)
+           != DT_MASKS_RASTER_OK)
         {
           continue;
         }
@@ -647,7 +650,9 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
         // we get the mask
         float *mask = NULL;
         int posx, posy, width, height;
-        if(dt_masks_get_mask(self, (dt_dev_pixelpipe_t *)pipe, piece, form, &mask, &width, &height, &posx, &posy) != 0)
+        if(dt_masks_get_mask(self, (dt_dev_pixelpipe_t *)pipe, piece, form, &mask, &width, &height, &posx,
+                             &posy)
+           != DT_MASKS_RASTER_OK)
         {
           return 1;
         }

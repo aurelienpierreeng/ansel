@@ -83,7 +83,10 @@ typedef struct dt_masks_functions_t
   dt_masks_raster_result_t (*get_points_border)(struct dt_develop_t *dev, struct dt_masks_form_t *form,
                            float **points, int *points_count,
                            float **border, int *border_count, int source, const dt_iop_module_t *const module);
-  int (*get_mask)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
+  /** Rasterise into a freshly allocated buffer covering the shape's own bounding box.
+   * Same three outcomes as get_mask_roi. On anything but OK the out-parameters are still
+   * written (NULL buffer, zero geometry): callers read them unconditionally. */
+  dt_masks_raster_result_t (*get_mask)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
                   const dt_dev_pixelpipe_iop_t *const piece,
                   struct dt_masks_form_t *const form,
                   float **buffer, int *width, int *height, int *posx, int *posy);
@@ -102,11 +105,13 @@ typedef struct dt_masks_functions_t
                       const dt_dev_pixelpipe_iop_t *const piece,
                       struct dt_masks_form_t *const form,
                       const dt_iop_roi_t *roi, float *buffer, dt_iop_roi_t *touched);
-  int (*get_area)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
+  /** The shape's bounding box. Same three outcomes; the out-parameters are always written. */
+  dt_masks_raster_result_t (*get_area)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
                   const dt_dev_pixelpipe_iop_t *const piece,
                   struct dt_masks_form_t *const form,
                   int *width, int *height, int *posx, int *posy);
-  int (*get_source_area)(dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
+  /** The clone source's bounding box. Same three outcomes; out-parameters always written. */
+  dt_masks_raster_result_t (*get_source_area)(dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
                          dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
                          int *width, int *height, int *posx, int *posy);
   gboolean (*get_gravity_center)(struct dt_develop_t *dev, const struct dt_masks_form_t *form, float center[2], float *area);

@@ -2524,19 +2524,23 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   return 0;
 }
 
-static int _polygon_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _polygon_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
                                    dt_dev_pixelpipe_iop_t *piece,
                                    dt_masks_form_t *mask_form, int *width, int *height, int *posx, int *posy)
 {
-  return _get_area(module, pipe, piece, mask_form, width, height, posx, posy, TRUE);
+  *width = *height = *posx = *posy = 0;
+  return dt_masks_raster_from_status(
+      _get_area(module, pipe, piece, mask_form, width, height, posx, posy, TRUE));
 }
 
-static int _polygon_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _polygon_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                              const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const mask_form,
                              int *width, int *height, int *posx, int *posy)
 {
-  return _get_area(module, pipe, piece, mask_form, width, height, posx, posy, FALSE);
+  *width = *height = *posx = *posy = 0;
+  return dt_masks_raster_from_status(
+      _get_area(module, pipe, piece, mask_form, width, height, posx, posy, FALSE));
 }
 
 /**
@@ -2567,12 +2571,14 @@ static int _polygon_get_area(const dt_iop_module_t *const module, dt_dev_pixelpi
   }
 }
 
-static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                              const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const mask_form,
                              float **buffer, int *width, int *height, int *posx, int *posy)
 {
-  if(IS_NULL_PTR(module)) return 1;
+  *buffer = NULL;
+  *width = *height = *posx = *posy = 0;
+  if(IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   double start = 0.0;
   double start2 = 0.0;
 
@@ -2590,7 +2596,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   {
     dt_pixelpipe_cache_free_align(point_buffer);
     dt_pixelpipe_cache_free_align(border_buffer);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -2631,7 +2637,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   {
     dt_pixelpipe_cache_free_align(point_buffer);
     dt_pixelpipe_cache_free_align(border_buffer);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   // we write all the point around the polygon into the buffer
@@ -2841,7 +2847,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon fill buffer took %0.04f sec\n", mask_form->name,
              dt_get_wtime() - start);
 
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 

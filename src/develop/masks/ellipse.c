@@ -1246,14 +1246,18 @@ static float *const _ellipse_points_to_transform(dt_develop_t *dev, const float 
   return points;
 }
 
-static int _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
                                     dt_dev_pixelpipe_iop_t *piece,
                                     dt_masks_form_t *form, int *width, int *height, int *posx, int *posy)
 {
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  /* Every early exit below must leave the out-parameters defined: callers read them
+   * whenever this reports anything but ERROR, and three of them used to report success
+   * for a shape with no geometry while writing none of these. */
+  *width = *height = *posx = *posy = 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   // we get the ellipse values
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
-  if(IS_NULL_PTR(ellipse)) return 0;
+  if(IS_NULL_PTR(ellipse)) return DT_MASKS_RASTER_EMPTY;
   const float wd = pipe->iwidth, ht = pipe->iheight;
   const int prop = ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL;
   const float total[2] = { (prop ? ellipse->radius[0] * (1.0f + ellipse->border) : ellipse->radius[0] + ellipse->border) * MIN(wd, ht),
@@ -1264,30 +1268,31 @@ static int _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t 
   float *const restrict points
     = _ellipse_points_to_transform(module->dev, form->source[0], form->source[1], total[0], total[1], ellipse->rotation, wd, ht, &point_count);
   if (IS_NULL_PTR(points))
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
 
   // and we transform them with all distorted modules
   if(!dt_dev_distort_transform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   // finally, find the extreme left/right and top/bottom points
   _bounding_box(points, point_count, width, height, posx, posy);
   dt_pixelpipe_cache_free_align(points);
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
-static int _ellipse_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _ellipse_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                              const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const form,
                              int *width, int *height, int *posx, int *posy)
 {
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  *width = *height = *posx = *posy = 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   // we get the ellipse values
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
-  if(IS_NULL_PTR(ellipse)) return 0;
+  if(IS_NULL_PTR(ellipse)) return DT_MASKS_RASTER_EMPTY;
   const float wd = pipe->iwidth, ht = pipe->iheight;
   const int prop = ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL;
   const float total[2] = { (prop ? ellipse->radius[0] * (1.0f + ellipse->border) : ellipse->radius[0] + ellipse->border) * MIN(wd, ht),
@@ -1298,32 +1303,35 @@ static int _ellipse_get_area(const dt_iop_module_t *const module, dt_dev_pixelpi
   float *const restrict points
     = _ellipse_points_to_transform(module->dev, ellipse->center[0], ellipse->center[1], total[0], total[1], ellipse->rotation, wd, ht, &point_count);
   if (IS_NULL_PTR(points))
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
 
   // and we transform them with all distorted modules
   if(!dt_dev_distort_transform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   // finally, find the extreme left/right and top/bottom points
   _bounding_box(points, point_count, width, height, posx, posy);
   dt_pixelpipe_cache_free_align(points);
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
-static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                              const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const form,
                              float **buffer, int *width, int *height, int *posx, int *posy)
 {
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  *buffer = NULL;
+  *width = *height = *posx = *posy = 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
   // we get the area
-  if(_ellipse_get_area(module, pipe, piece, form, width, height, posx, posy) != 0) return 1;
+  const dt_masks_raster_result_t area = _ellipse_get_area(module, pipe, piece, form, width, height, posx, posy);
+  if(area != DT_MASKS_RASTER_OK) return area;
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
@@ -1333,14 +1341,14 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
 
   // we get the ellipse values
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
-  if(IS_NULL_PTR(ellipse)) return 0;
+  if(IS_NULL_PTR(ellipse)) return DT_MASKS_RASTER_EMPTY;
   // we create a buffer of points with all points in the area
   int w = *width, h = *height;
   const int posx_ = *posx;
   const int posy_ = *posy;
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * w * h, 0);
   if(IS_NULL_PTR(points))
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   __OMP_PARALLEL_FOR__(collapse(2) if((size_t)w * h > 50000))
   for(int i = 0; i < h; i++)
     for(int j = 0; j < w; j++)
@@ -1359,7 +1367,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   if(!dt_dev_distort_backtransform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)w * h))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1374,7 +1382,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   if(IS_NULL_PTR(*buffer))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   // we populate the buffer
@@ -1412,7 +1420,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] ellipse fill took %0.04f sec\n", form->name, dt_get_wtime() - start2);
 
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 static dt_masks_raster_result_t _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
