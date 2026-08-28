@@ -303,10 +303,21 @@ zero callers, because they shipped ahead of their consumers.)
   `dt_masks_blur_9x9`, `dt_masks_calc_rawdetail_mask`, `dt_masks_calc_detail_mask` into
   `masks_detail.h`: pure pixel math, no form involvement. `iop/detailmask.c` and `iop/demosaic.c`
   name nothing else from `masks.h` and both drop it. Includers 22 → 20.
-- **PR 3 — `blend.h` stops being the masks module's delivery van.** Remove `masks.h` from
-  `blend.h:43`, the edge the gate's own comment calls worth more than the other twenty put together.
-  `blend.h` names zero masks symbols; the work is entirely a fan-out of explicit includes across its
-  33 includers, each confirmed against the symbols the file actually names, verified in
-  build-nofeatures.
+- **PR 3 — `blend.h` stops being the masks module's delivery van.** *(Done.)* Remove `masks.h`
+  from `blend.h:43`. `blend.h` names zero masks symbols, but it does declare functions taking
+  `dt_iop_module_t` and `dt_develop_t`, so it takes `develop/develop.h` directly instead — the
+  house rule that a header includes what its own declarations need. Three supply lines broke and
+  were fixed by naming what the file actually uses: `common/times.h` in `common/opencl.c` and
+  `darktable.c`, and `DEVELOP_MASKS_NB_SHAPES` — pure vocabulary — moved into `masks_types.h` so
+  `blend_gui.h` can take the light header. `masks_types.h` also gained the forward typedef of
+  `dt_masks_form_t`, so a file that only passes a form along needs the name and not the layout.
+
+  **Measured correction to this plan.** The claim that this edge is "worth more than the other
+  twenty put together" does not survive measurement: `masks.h`'s transitive fan-in is **50 before
+  and 50 after**. The files that reached it through `blend.h` reach it another way. What the change
+  actually achieves is that **only two headers still include `masks.h`** — `masks_gui.h`, which is
+  external-facing, and `masks/masks_functions.h`, which is module-private. So the reach will not
+  drop until the `masks_gui.h` edge is cut, and that — not `blend.h` — is the one carrying the
+  surface to the rest of the tree. Retarget the next header tranche accordingly.
 - **Then** the write API against `libs/masks.c` and `blend_gui.c` (the six COW holes), and finally
   the P2b per-shape geometry axis for `retouch.c` and `spots.c`.

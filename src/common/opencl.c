@@ -73,6 +73,7 @@
 #include "develop/blend.h"
 #include "develop/pixelpipe.h"
 #include "caches/pixelpipe_cache.h"
+#include "common/times.h"   // dt_get_wtime(). conditional-ok: this whole file is inside #ifdef HAVE_OPENCL
 
 #include <assert.h>
 #include <locale.h>

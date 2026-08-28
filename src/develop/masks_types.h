@@ -45,6 +45,18 @@ extern "C" {
  * because sizeof(form->name) stops being available once the struct is not in scope. */
 #define DT_MASKS_FORM_NAME_LEN 128
 
+/** The form itself, named but not defined here.
+ *
+ * A caller that only passes a form along, or hands it to develop/masks_group.h to be asked about,
+ * needs the name and not the layout -- which is the whole point of this header. develop/masks.h
+ * completes the type for the code that genuinely manipulates it; repeating the typedef is legal C11
+ * and is what lets both headers stand alone. */
+typedef struct dt_masks_form_t dt_masks_form_t;
+
+/** How many shape kinds a user can draw: circle, ellipse, polygon, brush, gradient. Vocabulary,
+ * not model -- the GUIs size their shape-button arrays with it. */
+#define DEVELOP_MASKS_NB_SHAPES 5
+
 /**forms types */
 typedef enum dt_masks_type_t
 {

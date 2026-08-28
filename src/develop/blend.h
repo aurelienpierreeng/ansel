@@ -40,7 +40,7 @@
 #include "develop/iop_profile.h"
 #include "history/history.h"   // dt_dev_operation_t (raster_mask_source)
 #include "common/opencl.h"
-#include "develop/masks.h"
+#include "develop/develop.h"   // dt_develop_t, and dt_iop_module_t/_so_t through imageop.h
 #include "develop/pixelpipe.h"
 
 #ifdef __cplusplus
