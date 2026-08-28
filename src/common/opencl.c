@@ -1526,15 +1526,34 @@ static void dt_opencl_cleanup_device(dt_opencl_t *cl, int i)
   dt_free(cl->dev[i].options_md5);
 }
 
+void dt_opencl_clear_driver_crash_streak(void)
+{
+  /* Clear the driver-crash streak only if OpenCL actually RAN and we still reached a clean
+   * shutdown: that is the one thing showing the driver behaving. Surviving with OpenCL
+   * switched off proves nothing about it, and clearing on that would re-enable it next launch
+   * and crash again -- halving the crash rate instead of stopping it.
+   *
+   * This touches conf, so it must run while conf is still alive -- i.e. BEFORE
+   * dt_conf_cleanup(), which is why it is not part of dt_opencl_cleanup(): that one runs after
+   * conf has been saved and freed, where a conf access is both a use-after-free and a write
+   * that can never be persisted. */
+  dt_opencl_t *cl = _opencl;
+  if(IS_NULL_PTR(cl) || !cl->inited || !cl->enabled || IS_NULL_PTR(cl->dev)) return;
+
+  /* The counters are per vendor (the same keys _gpu_vendor_crash_streak() gates a device on),
+   * and only a vendor whose device RAN is cleared: a device this session skipped because of
+   * its own streak has not shown anything. */
+  for(int i = 0; i < cl->num_devs; i++)
+  {
+    if(cl->dev[i].disabled) continue;
+    const unsigned int vendor_id = cl->dev[i].vendor_id;
+    if(_gpu_vendor_crash_streak(vendor_id) != 0)
+      _gpu_vendor_set_crash_streak(vendor_id, 0);
+  }
+}
+
 void dt_opencl_cleanup(void)
 {
-  /* Clear the driver-crash streak only if OpenCL actually RAN and we still reached cleanup:
-   * that is the one thing showing the driver behaving. Surviving with OpenCL switched off
-   * proves nothing about it, and clearing on that would re-enable it next launch and crash
-   * again -- halving the crash rate instead of stopping it. */
-  if(_opencl && _opencl->enabled && dt_conf_get_int("opencl_driver_crash_streak") != 0)
-    dt_conf_set_int("opencl_driver_crash_streak", 0);
-
   dt_opencl_t *cl = _opencl;
   if(IS_NULL_PTR(cl)) return;
   if(cl->inited)

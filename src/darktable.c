@@ -1959,6 +1959,8 @@ void dt_cleanup()
   dt_colorprofiles_cleanup();
   dt_conf_set_int("processing/gui_throttle_runtime_us", dt_gui_throttle_get_runtime_us());
   dt_gui_throttle_cleanup();
+  // Needs conf alive: a clean exit with OpenCL running is what clears the driver-crash streak.
+  dt_opencl_clear_driver_crash_streak();
   dt_conf_cleanup(darktable.conf);
   dt_free(darktable.conf);
   dt_points_cleanup(darktable.points);
