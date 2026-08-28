@@ -12,9 +12,16 @@ find_package(PkgConfig QUIET)
 if(LIBSOUP_FORCE_VERSION STREQUAL "2")
   message(STATUS "Forcing libsoup2 - HARD BLOCKING libsoup3")
 
-  set(ENV{PKG_CONFIG_PATH} "")
-  set(ENV{PKG_CONFIG_LIBDIR} "")
-
+  # Blocking libsoup3 is done by not probing for it (see the guard on the
+  # pkg_check_modules call below) and by pinning PC_LIBSOUP3_FOUND. It must NOT
+  # be done by emptying PKG_CONFIG_PATH / PKG_CONFIG_LIBDIR, which is what this
+  # used to do: set(ENV{...}) outlives this module, so every later
+  # pkg_check_modules in the project -- lensfun, osmgpsmap, colord, pugixml --
+  # loses sight of any prefix that is not pkg-config's compiled-in default. On a
+  # distribution that puts everything in /usr/lib/pkgconfig nothing appears to
+  # happen; in a Flatpak, where the dependencies this build needs live in
+  # /app/lib/pkgconfig and are reachable only through PKG_CONFIG_PATH, forcing
+  # libsoup2 silently disabled half the optional features instead.
   set(PC_LIBSOUP3_FOUND FALSE CACHE INTERNAL "Force libsoup2 - libsoup3 blocked")
 elseif(LIBSOUP_FORCE_VERSION STREQUAL "3")
   message(STATUS "Forcing libsoup3")
