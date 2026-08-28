@@ -296,21 +296,59 @@ teardown. Any other GUI-thread code that tears down darkroom pipe state must wai
 same way — `dev->exit`/`pipe->shutdown` alone do not guarantee the worker has stopped touching a
 pipe.
 
-### History items are refcounted; `history_mutex` resync contention is a known issue
+### History items are refcounted; the pipe resyncs against a snapshot, not under `history_mutex`
 
-`dt_dev_history_item_t` now carries a `refcount` and must be constructed exclusively through
+`dt_dev_history_item_t` carries a `refcount` and must be constructed exclusively through
 `dt_dev_history_item_create()` — never a bare `calloc` (mirrors the masks-forms rule below;
 `dt_dev_history_cow_touch()` clones a shared item before an in-place mutation, mirroring
 `dt_masks_cow_touch()`).
 
-`dt_dev_pixelpipe_change()` (worker thread, called from `dt_dev_darkroom_pipeline()`) holds
-`dev->history_mutex` as **reader** for the entire O(nodes × history) pipe resync — measured over
-200ms under mask-heavy history during active editing — which starves the GUI-thread writer
-(`dt_dev_add_history_item_ext()`) for the same duration on every edit (a scroll on exposure, a
-mask drag). Still open. See `doc/reorganisation.md` ("History item refcounting and the
-`history_mutex` contention") for the full diagnosis and status, and the named-rwlock diagnostic
-in `common/dtpthread.h` (`dt_pthread_rwlock_set_name()`, opt-in per lock, combine with
-`-d history`) to reproduce the measurement.
+That refcount exists for one consumer: `dt_dev_pixelpipe_change()` (worker thread, called from
+`dt_dev_darkroom_pipeline()`) used to hold `dev->history_mutex` as **reader** for the entire
+O(nodes × history) pipe resync — every module's `commit_params()` — measured at **204–227 ms**
+on the load-time resync of a 47-item mask-heavy history, with no user input at all. The GUI
+thread needs the *writer* side of that lock on every commit (each slider tick, and each
+throttled mask-drag commit that `views/darkroom.c`'s `_queue_delayed_history_commit()` fires
+mid-drag), and glibc's writer-preferring rwlock policy then blocks every **new reader** behind
+the queued writer too — so one slow resync stalled the whole application until it finished.
+That is discussion #1098's "the shape moves in steps": each step is one lock acquisition.
+
+Fixed by resyncing against a **snapshot**. `dt_dev_history_snapshot_take()` (`dev_history.h`)
+copies the list cells and takes one reference per item under the read lock — microseconds —
+and `change()` releases the lock before any `commit_params()` runs. The same load-time resync
+now logs `resynced from snapshot in 174 ms, lock-free` with **no lock hold above the 1 ms print
+threshold**; the compute cost is unchanged, only the lock is gone. The three other sync entry
+points (`dt_dev_pixelpipe_synch_all`/`synch_top`, used by export, snapshots and the focus
+overlay on throwaway devs) take their own brief snapshot the same way. The writer's COW gate is
+the other half of the contract: a snapshotted item has refcount > 1, so `cow_touch` clones it
+and the snapshot never sees a half-rewritten item. `src/tests/unittests/test_history_snapshot.c`
+pins that contract; `-d history` shows the hold times.
+
+**Three things about this design that are not obvious from the code:**
+
+- **Capture `history_end` and the hash inside the same brief lock as the list.**
+  `dt_dev_set_history_end_ext()` writes both together under the write lock. Reading the atomic
+  hash *after* releasing lets a commit land in between and mark the pipe as synced to history it
+  never resynced against — a missed recompute, silently. The snapshot struct carries all three.
+- **`pipe->last_history_item` must hold a reference and be exchanged atomically.** It is the
+  identity marker `synch_top` uses to bound an in-place top-entry rewrite to one node instead of
+  a full resync. `cow_touch` re-points it at the clone from the GUI thread while the worker
+  writes it outside the lock, so it is a genuine cross-thread slot: `dt_atomic_exch_ptr` keeps
+  every interleaving refcount-honest (each side releases exactly what it displaced), and the
+  held reference means a compare against a possibly-departed item can never hit a **recycled
+  address** — a hazard the old under-the-lock raw pointer already had in principle. Do not
+  "simplify" it back to a plain assignment; the worst case of a lost exchange race is one full
+  resync, never a leak or a double free.
+- **The async DB write job (`_dt_dev_write_history_job_run`) is the *second* long reader** of
+  this lock — it holds it across the whole history+masks rewrite and is instrumented the same
+  way. It has the same disease and would take the same cure; it was left as is because it does
+  not sit on the interactive path the way the pipe resync did.
+
+The named-rwlock diagnostic lives in `system/dtpthread.h` (`dt_pthread_rwlock_set_name()`,
+opt-in per lock, combine with `-d history`); `dev->history_mutex` is named in `dt_dev_init()`.
+Drawn-mask geometry editing still commits history through the throttle on every drag motion
+rather than through the transient-params channel the drawlayer brush uses — that is the remaining
+follow-up for #1098, and it is a GUI-side routing change, not a locking one.
 
 ### `_insert_default_modules` must check `dev->history` in memory, not the DB row for `dev->image_storage.id`
 

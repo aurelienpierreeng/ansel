@@ -18,6 +18,7 @@ set(DATABASE_UNIT_TESTS
   test_backbuf_publish
   test_conf_value_lifetime
   test_dtpthread_recursive
+  test_history_snapshot
 )
 
 foreach(test ${DATABASE_UNIT_TESTS})

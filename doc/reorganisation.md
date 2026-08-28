@@ -403,9 +403,31 @@ This is directly observable with the named-rwlock diagnostic added to `dt_pthrea
 (`common/dtpthread.h`: `dt_pthread_rwlock_set_name()` + wait-time logging, opt-in per lock —
 `dev->history_mutex` is named in `dt_dev_init()`) combined with `-d history`.
 
-**Status: open.** The refcounting/COW infrastructure above is a prerequisite for resyncing a
-pipe against a snapshot of `dev->history` instead of holding `history_mutex` for the whole
-resync, which is the direction to pursue to remove this stall.
+**Status: fixed.** `dt_dev_pixelpipe_change()` now resyncs against a
+`dt_dev_history_snapshot_t` (`dt_dev_history_snapshot_take()` / `_release()`, `dev_history.h`):
+the read lock is held only to copy the list cells, take one reference per item and capture
+`history_end` and the history hash — the three fields `dt_dev_set_history_end_ext()` writes
+together — and is released before any `commit_params()` runs. The writer's copy-on-write gate
+above is what makes that sound: an item a snapshot holds has refcount > 1, so
+`dt_dev_history_cow_touch()` clones it rather than mutating it under the reader.
+
+Measured on the load-time resync of `_DSC9410.NEF` (47 history items, mask group with a 57-node
+brush), `-d history`, same machine, same scratch config, before and after:
+
+| | lock held (preview pipe) | lock held (full pipe) | resync work |
+|---|---|---|---|
+| before | 204.66 ms | 226.75 ms | (inside the hold) |
+| after | < 1 ms (below the print threshold) | < 1 ms | 174.63 ms / 158.52 ms, lock-free |
+
+The compute cost is unchanged — the resync is as expensive as it was — but nothing waits on it
+any more. `pipe->last_history_item` became an atomic pointer the pipe holds a reference on,
+exchanged with `dt_atomic_exch_ptr()` (added to `system/atomic.h`), so the marker that
+`synch_top` bounds its work with stays valid across a copy-on-write clone landing from the GUI
+thread while the worker writes the slot outside the lock. `src/tests/unittests/test_history_snapshot.c`
+pins the snapshot/COW/refcount contract. See CLAUDE.md, "History items are refcounted; the pipe
+resyncs against a snapshot, not under `history_mutex`", for the three design constraints that are
+not obvious from the code, and for the second long reader of this lock (the async DB write job)
+that was deliberately left alone.
 
 ### Where the pipeline architecture could go
 

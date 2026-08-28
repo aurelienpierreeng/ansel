@@ -120,6 +120,43 @@ dt_dev_history_item_t *dt_dev_history_item_ref(dt_dev_history_item_t *item);
 dt_dev_history_item_t *dt_dev_history_cow_touch(struct dt_develop_t *dev, dt_dev_history_item_t *hist);
 
 /**
+ * @brief A reference-sharing snapshot of dev->history, for readers that outlive a lock.
+ *
+ * The pipe resync is O(nodes x history) and runs every module's commit_params(): tens of ms
+ * routinely, over 200 ms under mask-heavy history. Holding history_mutex as reader for all of
+ * it starves the GUI thread's writer for the same duration on every edit, and glibc's
+ * writer-preferring policy then blocks every NEW reader too, so one slow resync stalls the
+ * whole application on the next commit. A snapshot ends that: take the read lock, copy the
+ * list and reference each item, capture history_end and the hash that were written together
+ * with it, release the lock -- microseconds -- and resync against the snapshot instead.
+ *
+ * Nothing is deep-copied. dt_dev_history_cow_touch() is the writer's side of this contract:
+ * an item whose refcount is above 1 is cloned before it is mutated in place, so a snapshot
+ * never observes a half-rewritten item, and dt_history_duplicate() is not needed here.
+ *
+ * `history_end` and `history_hash` are captured under the same lock as the list because
+ * dt_dev_set_history_end_ext() writes them together: the three describe one committed state.
+ * Reading the hash after releasing the lock would let a commit land in between and mark the
+ * pipe as synced to history it never resynced against.
+ */
+typedef struct dt_dev_history_snapshot_t
+{
+  GList *items;          // dt_dev_history_item_t*, one reference each, same order as dev->history
+  int32_t history_end;   // dt_dev_get_history_end_ext() at snapshot time
+  uint64_t history_hash; // dt_dev_get_history_hash() at snapshot time
+} dt_dev_history_snapshot_t;
+
+/**
+ * @brief Take a snapshot of dev->history. Caller holds history_mutex (reader suffices).
+ */
+void dt_dev_history_snapshot_take(struct dt_develop_t *dev, dt_dev_history_snapshot_t *snapshot);
+
+/**
+ * @brief Release every reference a snapshot holds and reset it. Needs no lock.
+ */
+void dt_dev_history_snapshot_release(dt_dev_history_snapshot_t *snapshot);
+
+/**
  * @brief Fill/refresh a history item from explicit params and apply them to the module.
  *
  * This helper exists to share code between regular history edits and history merge logic.

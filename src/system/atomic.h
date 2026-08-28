@@ -52,6 +52,7 @@ static inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var) { return __atomi
 static inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return __atomic_fetch_add(var, incr, __ATOMIC_SEQ_CST); }
 static inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return __atomic_fetch_sub(var, decr, __ATOMIC_SEQ_CST); }
 static inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return __atomic_exchange_n(var, value, __ATOMIC_SEQ_CST); }
+static inline void *dt_atomic_exch_ptr(dt_atomic_ptr *var, void *value) { return __atomic_exchange_n(var, value, __ATOMIC_SEQ_CST); }
 static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 {
   return __atomic_compare_exchange_n(var, expected, value, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
@@ -76,6 +77,7 @@ static inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var) { return atomic_
 static inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return atomic_fetch_add(var,incr); }
 static inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return atomic_fetch_sub(var,decr); }
 static inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return atomic_exchange(var,value); }
+static inline void *dt_atomic_exch_ptr(dt_atomic_ptr *var, void *value) { return atomic_exchange(var,value); }
 static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 { return atomic_compare_exchange_strong(var,expected,value); }
 
@@ -103,6 +105,8 @@ static inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return __ato
 static inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return __atomic_fetch_sub(var,decr,__ATOMIC_SEQ_CST); }
 static inline int dt_atomic_exch_int(dt_atomic_int *var, int value)
 { int orig;  __atomic_exchange(var,&value,&orig,__ATOMIC_SEQ_CST); return orig; }
+static inline void *dt_atomic_exch_ptr(dt_atomic_ptr *var, void *value)
+{ void *orig;  __atomic_exchange(var,&value,&orig,__ATOMIC_SEQ_CST); return orig; }
 static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 { return __atomic_compare_exchange(var,expected,&value,0,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST); }
 
@@ -186,6 +190,15 @@ static inline int dt_atomic_exch_int(dt_atomic_int *var, int value)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   int origvalue = *var;
+  *var = value;
+  pthread_mutex_unlock(&dt_atom_mutex);
+  return origvalue;
+}
+
+static inline void *dt_atomic_exch_ptr(dt_atomic_ptr *var, void *value)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  void *origvalue = *var;
   *var = value;
   pthread_mutex_unlock(&dt_atom_mutex);
   return origvalue;

@@ -77,6 +77,7 @@
 #include "develop/masks.h"
 #include "develop/supervisor.h"
 #include "develop/gui_throttle.h"
+#include "system/atomic.h"
 
 
 #include <inttypes.h>
@@ -1208,14 +1209,28 @@ dt_dev_history_item_t *dt_dev_history_cow_touch(dt_develop_t *dev, dt_dev_histor
   dt_dev_history_item_t *clone = _dt_dev_history_item_duplicate_one(hist);
   node->data = clone;
 
-  // Raw pointer cache outside dev->history: each pipe's own last-synced-item marker (used by
-  // dt_dev_pixelpipe_synch_top to bound the resync range). dt_dev_pixelpipe_change() holds
-  // history_mutex for its whole resync, same as this splice, so a plain compare-and-assign is
-  // enough -- no concurrent access is possible.
+  // Each pipe's own last-synced-item marker (used by the synch_top path to bound the resync
+  // range) may name the item being cloned; re-point it at the clone so an in-place top-entry
+  // rewrite keeps its bounded resync instead of degrading to a full one.
+  //
+  // The pipe HOLDS A REFERENCE on that marker and the resync writes it OUTSIDE history_mutex
+  // (it runs against a snapshot), so this is a genuine cross-thread exchange, not a
+  // compare-and-assign under a shared lock. The atomic exchange keeps the refcount honest in
+  // every interleaving: this side takes a reference on the clone before publishing it, and
+  // releases exactly the reference it displaced. If the worker publishes its own item between
+  // the compare and the exchange, the slot ends up naming the clone, the worker's item is
+  // released here, and the worst case is one full resync next frame -- never a leak or a
+  // double release.
   dt_dev_pixelpipe_t *const pipes[] = { dev->pipe, dev->preview_pipe };
   for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
-    if(pipes[i] && pipes[i]->last_history_item == hist)
-      pipes[i]->last_history_item = clone;
+  {
+    if(IS_NULL_PTR(pipes[i])) continue;
+    if(dt_atomic_get_ptr(&pipes[i]->last_history_item) != hist) continue;
+    dt_dev_history_item_ref(clone);
+    dt_dev_history_item_t *displaced
+        = (dt_dev_history_item_t *)dt_atomic_exch_ptr(&pipes[i]->last_history_item, clone);
+    dt_dev_free_history_item(displaced);
+  }
 
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
@@ -1224,9 +1239,33 @@ dt_dev_history_item_t *dt_dev_history_cow_touch(dt_develop_t *dev, dt_dev_histor
   return clone;
 }
 
-void dt_dev_history_release_snapshot(GList *snapshot)
+void dt_dev_history_snapshot_take(dt_develop_t *dev, dt_dev_history_snapshot_t *snapshot)
+    REQUIRES_SHARED(dev->history_mutex)
 {
-  g_list_free_full(snapshot, dt_dev_free_history_item);
+  if(IS_NULL_PTR(snapshot)) return;
+  snapshot->items = NULL;
+  snapshot->history_end = 0;
+  snapshot->history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  if(IS_NULL_PTR(dev)) return;
+
+  // One reference per element, taken while the list cannot change under us. The copy is of
+  // the list cells only: the items are shared, and the writer's copy-on-write gate is what
+  // keeps them immutable for as long as this snapshot holds them.
+  snapshot->items = g_list_copy(dev->history);
+  for(GList *node = snapshot->items; node; node = g_list_next(node))
+    dt_dev_history_item_ref((dt_dev_history_item_t *)node->data);
+
+  snapshot->history_end = dt_dev_get_history_end_ext(dev);
+  snapshot->history_hash = dt_dev_get_history_hash(dev);
+}
+
+void dt_dev_history_snapshot_release(dt_dev_history_snapshot_t *snapshot)
+{
+  if(IS_NULL_PTR(snapshot)) return;
+  g_list_free_full(snapshot->items, dt_dev_free_history_item);
+  snapshot->items = NULL;
+  snapshot->history_end = 0;
+  snapshot->history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 }
 
 void dt_dev_history_free_history(dt_develop_t *dev) REQUIRES(dev->history_mutex)

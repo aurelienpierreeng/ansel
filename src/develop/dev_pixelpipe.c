@@ -28,6 +28,8 @@
 #include "common/paths.h"
 #include "gui/application.h"
 #include "system/dtpthread.h"
+#include "system/atomic.h"
+#include "develop/dev_history.h"
 #include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
@@ -39,7 +41,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
+static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, GList *history_list,
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label);
 // dt_dev_pixelpipe_propagate_formats() is the authoritative forward buffer-format pass; it is
@@ -229,7 +231,26 @@ static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t fla
  * This helper only replaces the history-tail replay. The rest of `dt_dev_pixelpipe_change()` still runs
  * afterwards so cache policy and ROI contracts remain sealed for the next processing pass.
  */
-static gboolean _sync_focused_in_place(dt_dev_pixelpipe_t *pipe)
+/* Record the history item a resync last synchronized to, holding a reference on it.
+ *
+ * The resync runs against a snapshot outside history_mutex, so by the time it writes this the
+ * item may already have been cloned out of dev->history by the GUI thread's copy-on-write.
+ * Two things follow. The reference keeps the item alive for as long as the pipe names it, so an
+ * identity compare on the pointer can never hit a recycled address. The atomic exchange is
+ * what makes the write safe against dt_dev_history_cow_touch() re-pointing the same slot at the
+ * clone from the GUI thread: whichever side loses the race still ends up releasing exactly the
+ * reference it took, never the other side's. */
+static void _pipe_set_last_history_item(dt_dev_pixelpipe_t *pipe, dt_dev_history_item_t *hist)
+{
+  if(!IS_NULL_PTR(hist)) dt_dev_history_item_ref(hist);
+  dt_dev_history_item_t *previous
+      = (dt_dev_history_item_t *)dt_atomic_exch_ptr(&pipe->last_history_item, hist);
+  dt_dev_free_history_item(previous);
+}
+
+/* `snap` is the caller's history snapshot (dt_dev_history_snapshot_take): this runs outside
+ * history_mutex and must not touch dev->history or dev->history_end directly. */
+static gboolean _sync_focused_in_place(dt_dev_pixelpipe_t *pipe, const dt_dev_history_snapshot_t *snap)
 {
   if(IS_NULL_PTR(pipe) || IS_NULL_PTR(pipe->dev) || IS_NULL_PTR(pipe->dev->gui_module)) return FALSE;
   dt_develop_t *dev = pipe->dev;
@@ -239,11 +260,11 @@ static gboolean _sync_focused_in_place(dt_dev_pixelpipe_t *pipe)
   const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
   if(!transient && !realtime) return FALSE;
 
-  const uint32_t history_end = dt_dev_get_history_end_ext(dev);
+  const uint32_t history_end = (uint32_t)snap->history_end;
   if(history_end == 0) return FALSE;
 
   // Enable/blend state comes from the focused module's history item (transient edits are params-only).
-  dt_dev_history_item_t *hist = dt_dev_history_get_last_item_by_module(dev->history, focus, history_end);
+  dt_dev_history_item_t *hist = dt_dev_history_get_last_item_by_module(snap->items, focus, history_end);
   if(IS_NULL_PTR(hist) || IS_NULL_PTR(hist->module) || IS_NULL_PTR(hist->params)) return FALSE;
 
   dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, focus);
@@ -279,11 +300,11 @@ static gboolean _sync_focused_in_place(dt_dev_pixelpipe_t *pipe)
   // Only advance the synch_top fence when the focused module is the newest history item (the realtime
   // drawlayer case, where each heartbeat appended a top item). For a transient edit of a non-top module
   // no history item changed, so the fence must stay where the last real history sync left it.
-  GList *last_item = g_list_nth(dev->history, history_end - 1);
+  GList *last_item = g_list_nth(snap->items, history_end - 1);
   if(last_item && (dt_dev_history_item_t *)last_item->data == hist)
   {
     pipe->last_history_hash = hist->hash;
-    pipe->last_history_item = hist;
+    _pipe_set_last_history_item(pipe, hist);
   }
   return TRUE;
 }
@@ -1231,8 +1252,11 @@ void dt_dev_pixelpipe_propagate_formats(dt_dev_pixelpipe_t *pipe)
   dt_free(pipe_name);
 }
 
-static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const uint32_t history_end,
-                                          const char *debug_label)
+/* `history_list` is the snapshot's list (dt_dev_history_snapshot_t::items), never dev->history:
+ * this runs OUTSIDE history_mutex, and the snapshot's references are what keep every item it
+ * walks alive and unmodified (see dt_dev_history_snapshot_take). */
+static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, GList *history_list,
+                                          const uint32_t history_end, const char *debug_label)
 {
   dt_iop_buffer_dsc_t upstream_dsc = pipe->dev->image_storage.dsc;
   const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
@@ -1254,7 +1278,7 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
     uint64_t history_param_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     gboolean found_history = FALSE;
 
-    for(GList *history = g_list_nth(dev->history, history_end - 1);
+    for(GList *history = g_list_nth(history_list, history_end - 1);
         history;
         history = g_list_previous(history))
     {
@@ -1295,11 +1319,11 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
   {
     GList *detailmask_node = _find_detailmask_node(pipe);
     if(detailmask_node)
-      _sync_pipe_nodes_from_history_from_node(pipe, history_end, detailmask_node, debug_label);
+      _sync_pipe_nodes_from_history_from_node(pipe, history_list, history_end, detailmask_node, debug_label);
   }
 }
 
-static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
+static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, GList *history_list,
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label)
 {
@@ -1333,7 +1357,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
     uint64_t history_param_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     gboolean found_history = FALSE;
 
-    for(GList *history = g_list_nth(pipe->dev->history, history_end - 1);
+    for(GList *history = g_list_nth(history_list, history_end - 1);
         history;
         history = g_list_previous(history))
     {
@@ -1374,7 +1398,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
   {
     GList *detailmask_node = _find_detailmask_node(pipe);
     if(detailmask_node && detailmask_node != start_node)
-      _sync_pipe_nodes_from_history_from_node(pipe, history_end, detailmask_node, debug_label);
+      _sync_pipe_nodes_from_history_from_node(pipe, history_list, history_end, detailmask_node, debug_label);
   }
 }
 
@@ -1573,52 +1597,81 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
  * @param dev
  * @param caller_func
  */
-void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, const char *caller_func)
+/* Resync every node against a history snapshot. Runs outside history_mutex: everything it reads
+ * is owned by `snap`, whose references keep the items alive and, through the writer's
+ * copy-on-write gate, unmodified. */
+static void _synch_all_snapshot(dt_dev_pixelpipe_t *pipe, const dt_dev_history_snapshot_t *snap,
+                                const char *caller_func)
 {
   gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch all modules with history for pipe %s called from %s\n", type, caller_func);
 
-  const uint32_t history_end = dt_dev_get_history_end_ext(pipe->dev);
-  _sync_pipe_nodes_from_history(pipe, pipe->dev, history_end, type);
+  const uint32_t history_end = (uint32_t)snap->history_end;
+  _sync_pipe_nodes_from_history(pipe, snap->items, history_end, type);
 
   // Keep track of the last history item to have been synced
-  GList *last_item = g_list_nth(pipe->dev->history, history_end - 1);
+  GList *last_item = g_list_nth(snap->items, history_end - 1);
   if(last_item)
   {
     dt_dev_history_item_t *last_hist = (dt_dev_history_item_t *)last_item->data;
     pipe->last_history_hash = last_hist->hash;
-    pipe->last_history_item = last_hist;
+    _pipe_set_last_history_item(pipe, last_hist);
   }
   else
   {
     pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    pipe->last_history_item = NULL;
+    _pipe_set_last_history_item(pipe, NULL);
   }
 
   dt_free(type);
 }
 
-void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe)
+/* Public entry: export, snapshots and the focus overlay drive a throwaway pipe through this
+ * without going through dt_dev_pixelpipe_change(), and none of them holds history_mutex. Take
+ * the snapshot here, under a read lock held only for the copy. A caller that DOES already hold
+ * the lock (as reader or writer) re-enters it on the same thread, which dt_pthread_rwlock_t
+ * permits (see dtpthread.h). */
+void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, const char *caller_func)
+{
+  dt_dev_history_snapshot_t snap;
+  dt_pthread_rwlock_rdlock(&pipe->dev->history_mutex);
+  dt_dev_history_snapshot_take(pipe->dev, &snap);
+  dt_pthread_rwlock_unlock(&pipe->dev->history_mutex);
+
+  _synch_all_snapshot(pipe, &snap, caller_func);
+
+  dt_dev_history_snapshot_release(&snap);
+}
+
+/* Resync only the nodes touched since the last sync, against a history snapshot. Runs outside
+ * history_mutex, same contract as _synch_all_snapshot(). */
+static void _synch_top_snapshot(dt_dev_pixelpipe_t *pipe, const dt_dev_history_snapshot_t *snap)
 {
   gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
 
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top modules with history for pipe %s\n", type);
 
-  const uint32_t history_end = dt_dev_get_history_end_ext(pipe->dev);
-  GList *last_item = g_list_nth(pipe->dev->history, history_end - 1);
+  const uint32_t history_end = (uint32_t)snap->history_end;
+  GList *last_item = g_list_nth(snap->items, history_end - 1);
   if(last_item)
   {
+    // The identity marker is read once: the GUI thread may re-point it at a clone (see
+    // dt_dev_history_cow_touch) while this walk runs, and the reference the pipe holds on it
+    // is what makes comparing against a possibly-departed item safe.
+    const dt_dev_history_item_t *last_synced
+        = (const dt_dev_history_item_t *)dt_atomic_get_ptr(&pipe->last_history_item);
+
     GList *first_item = NULL;
     for(GList *history = last_item; history; history = g_list_previous(history))
     {
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
       first_item = history;
 
-      if(hist->hash == pipe->last_history_hash || hist == pipe->last_history_item)
+      if(hist->hash == pipe->last_history_hash || hist == last_synced)
         break;
     }
 
-    GList *fence_item = g_list_nth(pipe->dev->history, history_end);
+    GList *fence_item = g_list_nth(snap->items, history_end);
     for(GList *history = first_item; history && history != fence_item; history = g_list_next(history))
     {
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
@@ -1630,23 +1683,35 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe)
         dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
         if(IS_NULL_PTR(piece) || piece->module != hist->module) continue;
 
-        _sync_pipe_nodes_from_history_from_node(pipe, history_end, nodes, type);
+        _sync_pipe_nodes_from_history_from_node(pipe, snap->items, history_end, nodes, type);
         break;
       }
     }
 
     dt_dev_history_item_t *last_hist = (dt_dev_history_item_t *)last_item->data;
     pipe->last_history_hash = last_hist->hash;
-    pipe->last_history_item = last_hist;
+    _pipe_set_last_history_item(pipe, last_hist);
   }
   else
   {
     dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top history module missing error for pipe %s\n", type);
     pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    pipe->last_history_item = NULL;
+    _pipe_set_last_history_item(pipe, NULL);
   }
 
   dt_free(type);
+}
+
+void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe)
+{
+  dt_dev_history_snapshot_t snap;
+  dt_pthread_rwlock_rdlock(&pipe->dev->history_mutex);
+  dt_dev_history_snapshot_take(pipe->dev, &snap);
+  dt_pthread_rwlock_unlock(&pipe->dev->history_mutex);
+
+  _synch_top_snapshot(pipe, &snap);
+
+  dt_dev_history_snapshot_release(&snap);
 }
 
 // Modules without history need to be resynced unconditionnally with their internal params
@@ -1707,11 +1772,29 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
   else
     _refresh_pipe_detail_mask_state(pipe);
 
+  // Snapshot history under the read lock, then resync against the snapshot with the lock
+  // RELEASED. The resync is O(nodes x history) and runs every module's commit_params() --
+  // tens of ms routinely, over 200 ms under mask-heavy history -- and it used to hold this
+  // lock for all of it. The GUI thread needs the writer side of the same lock on every
+  // commit (each slider tick, each throttled mask-drag commit), and glibc's writer-preferring
+  // policy then also blocks every NEW reader behind the queued writer: one slow resync stalled
+  // the whole application until it finished. The snapshot holds a reference on each item, and
+  // the writer's copy-on-write gate (dt_dev_history_cow_touch) clones a shared item before
+  // touching it, so what this resync reads can neither move nor change under it.
+  //
   // A call chain that already holds history_mutex as writer on this same thread can re-enter
-  // here (e.g. history-commit paths that resync a pipe while still holding the write lock). dt_pthread_rwlock_rdlock is same-thread-recursive for this exact case (see
-  // dtpthread.h), so this proceeds immediately instead of deadlocking or deferring the sync.
+  // here (e.g. history-commit paths that resync a pipe while still holding the write lock);
+  // dt_pthread_rwlock_rdlock is same-thread-recursive for exactly that (see dtpthread.h).
   const double _history_mutex_hold_start = dt_get_wtime();
+  dt_dev_history_snapshot_t snap;
   dt_pthread_rwlock_rdlock(&pipe->dev->history_mutex);
+  dt_dev_history_snapshot_take(pipe->dev, &snap);
+  dt_pthread_rwlock_unlock(&pipe->dev->history_mutex);
+  const double _history_mutex_hold_ms = (dt_get_wtime() - _history_mutex_hold_start) * 1000.0;
+  if(_history_mutex_hold_ms > 1.0)
+    dt_print(DT_DEBUG_HISTORY,
+             "[dt_dev_pixelpipe_change] tid %lu pipe %s held history_mutex for %.2f ms (status 0x%x)\n",
+             (unsigned long)pthread_self(), type, _history_mutex_hold_ms, (unsigned)status);
 
   // The realtime in-place path settles the format contract and the global hash itself (it must,
   // since that hash is cumulative over enabled nodes); the other paths defer it to the
@@ -1725,25 +1808,25 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
     if(pipe->nodes) dt_dev_pixelpipe_cleanup_nodes(pipe);
     dt_dev_pixelpipe_create_nodes(pipe);
     dt_dev_pixelpipe_sync_no_history(pipe);
-    dt_dev_pixelpipe_synch_all(pipe);
+    _synch_all_snapshot(pipe, &snap, __FUNCTION__);
   }
   else if(status & DT_DEV_PIPE_SYNCH)
   {
     // pipeline topology remains intact, only change all params.
     dt_dev_pixelpipe_sync_no_history(pipe);
-    dt_dev_pixelpipe_synch_all(pipe);
+    _synch_all_snapshot(pipe, &snap, __FUNCTION__);
   }
   else if(status & DT_DEV_PIPE_TOP_CHANGED)
   {
     // only top history item(s) changed, or a focused module published transient/realtime params
-    if(_sync_focused_in_place(pipe))
+    if(_sync_focused_in_place(pipe, &snap))
     {
       formats_propagated = TRUE;
     }
     else
     {
       dt_dev_pixelpipe_sync_no_history(pipe);
-      dt_dev_pixelpipe_synch_top(pipe);
+      _synch_top_snapshot(pipe, &snap);
     }
   }
   else // DT_DEV_PIPE_ZOOMED DT_DEV_PIPE_CACHE_REQUEST DT_DEV_PIPE_REENTRY
@@ -1751,13 +1834,16 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
     // Finalscale will need to self-enable/disable depending on zoom level
     dt_dev_pixelpipe_sync_no_history(pipe);
   }
-  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
-  const double _history_mutex_hold_ms = (dt_get_wtime() - _history_mutex_hold_start) * 1000.0;
-  if(_history_mutex_hold_ms > 1.0)
+  // The hash the SNAPSHOT carried, not the live one: a commit may have landed since the lock
+  // was released, and this pipe is synced to what it just resynced against, nothing newer. The
+  // worker loop compares this against the live hash and re-flags the pipe if they differ.
+  dt_dev_pixelpipe_set_history_hash(pipe, snap.history_hash);
+  dt_dev_history_snapshot_release(&snap);
+  const double _resync_ms = (dt_get_wtime() - _history_mutex_hold_start) * 1000.0;
+  if(_resync_ms > 1.0)
     dt_print(DT_DEBUG_HISTORY,
-             "[dt_dev_pixelpipe_change] tid %lu pipe %s held history_mutex for %.2f ms (status 0x%x)\n",
-             (unsigned long)pthread_self(), type, _history_mutex_hold_ms, (unsigned)status);
-  dt_pthread_rwlock_unlock(&pipe->dev->history_mutex);
+             "[dt_dev_pixelpipe_change] tid %lu pipe %s resynced from snapshot in %.2f ms, lock-free (status 0x%x)\n",
+             (unsigned long)pthread_self(), type, _resync_ms, (unsigned)status);
 
   // Re-establish the buffer-format contract of the whole chain once, after whichever sync path
   // (full, top-only or realtime-in-place) committed params. This is the single authoritative,
