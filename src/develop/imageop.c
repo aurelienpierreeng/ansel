@@ -64,7 +64,6 @@
 */
 
 #include "develop/imageop_gui.h"
-#include "develop/masks_gui.h"
 #include "darktable.h"
 #include "widgets/widget_settings.h"
 #include "common/conf.h"

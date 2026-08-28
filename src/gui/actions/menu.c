@@ -32,8 +32,6 @@
 #ifdef GDK_WINDOWING_QUARTZ
 #endif
 
-typedef struct dt_masks_form_gui_t dt_masks_form_gui_t;
-
 /** How to use:
  *  1. write callback functions returning a gboolean that will check the context to decide if
  *  the menu item should be insensitive, checked, active. These should only use the content of

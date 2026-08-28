@@ -52,6 +52,7 @@
 #include "caches/pixelpipe_cache_alloc.h"
 #include "develop/masks.h"
 #include "history/notify.h"
+#include "develop/blend_gui.h"   // dt_iop_gui_blend_masks_update()
 #include "develop/masks/masks_functions.h"
 #include "develop/masks/masks_touched.h"
 #include "develop/develop.h"
@@ -989,7 +990,7 @@ void dt_masks_form_delete(dt_develop_t *dev, struct dt_iop_module_t *module, dt_
     if(removed)
     if(removed && !IS_NULL_PTR(module))
     {
-      dt_masks_iop_update(module);
+      dt_iop_gui_blend_masks_update(module);
 
     }
     if(removed) dt_masks_form_update_gravity_center(dev, group_form);
@@ -1025,7 +1026,7 @@ void dt_masks_form_delete(dt_develop_t *dev, struct dt_iop_module_t *module, dt_
       if(form_id == iop_module->blend_params->mask_id)
       {
         iop_module->blend_params->mask_id = 0;
-        dt_masks_iop_update(iop_module);
+        dt_iop_gui_blend_masks_update(iop_module);
       }
       else
       {
@@ -1051,7 +1052,7 @@ void dt_masks_form_delete(dt_develop_t *dev, struct dt_iop_module_t *module, dt_
           }
           if(removed)
           {
-            dt_masks_iop_update(iop_module);
+            dt_iop_gui_blend_masks_update(iop_module);
 
             if(IS_NULL_PTR(iop_group->points)) dt_masks_form_delete(dev, iop_module, NULL, iop_group);
           }

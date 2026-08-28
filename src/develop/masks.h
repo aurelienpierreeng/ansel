@@ -393,9 +393,7 @@ static inline dt_masks_raster_result_t dt_masks_raster_from_status(const int sta
   return (status == 0) ? DT_MASKS_RASTER_OK : DT_MASKS_RASTER_ERROR;
 }
 
-dt_masks_raster_result_t dt_masks_get_points_border(struct dt_develop_t *dev, dt_masks_form_t *form,
-                               float **points, int *points_count,
-                               float **border, int *border_count, int source, dt_iop_module_t *module);
+
 /** get the rectangle which include the form and his border */
 dt_masks_raster_result_t dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
                       dt_dev_pixelpipe_iop_t *piece,
@@ -469,10 +467,7 @@ dt_masks_raster_result_t dt_masks_get_mask(const dt_iop_module_t *const module, 
 
 /** Rasterise `form` into the pre-zeroed ROI-sized `buffer`. `touched` (may be NULL) receives
  * the buffer-relative rectangle enclosing every pixel written; empty when nothing was. */
-dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
-                                               const dt_dev_pixelpipe_iop_t *const piece,
-                                               dt_masks_form_t *const form, const dt_iop_roi_t *roi,
-                                               float *buffer, dt_iop_roi_t *touched);
+
 
 
 dt_masks_raster_result_t dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
@@ -554,7 +549,7 @@ void dt_masks_cleanup_unused(dt_develop_t *dev);
 
 dt_masks_edit_mode_t dt_masks_get_edit_mode(struct dt_iop_module_t *module);
 void dt_masks_set_edit_mode(struct dt_iop_module_t *module, dt_masks_edit_mode_t value);
-void dt_masks_iop_update(struct dt_iop_module_t *module);
+
 void dt_masks_iop_use_same_as(struct dt_iop_module_t *module, struct dt_iop_module_t *src);
 /** Hash a group's full content (recursing into members). Children are resolved from the given
  * forms list — pass the same list the group came from (live dev->forms or a snapshot), so the

@@ -190,6 +190,15 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module);
 void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module);
 void dt_iop_gui_blending_reload_defaults(dt_iop_module_t *module);
 
+/** Refresh the blend GUI's mask widgets (shape combo, edit/polarity toggles, shape buttons and
+ * the mask list) from the module's current mask group.
+ *
+ * Declared here because this is where it lives and what it touches: dt_iop_gui_blend_data_t,
+ * which is the blend GUI's own. It spent years declared in develop/masks.h under a dt_masks_
+ * name while its body sat in blend_gui.c -- a masks symbol that the masks module did not
+ * implement and could not have, since every widget it drives is private to this one. */
+void dt_iop_gui_blend_masks_update(dt_iop_module_t *module);
+
 gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt_dev_pixelpipe_t *pipe,
                                   dt_dev_pixelpipe_iop_t *piece);
 

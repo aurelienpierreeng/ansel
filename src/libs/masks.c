@@ -333,7 +333,7 @@ static void _tree_add_exist(GtkButton *button, dt_masks_form_t *grp)
 
     // and we apply the change
 
-    dt_masks_iop_update(module);
+    dt_iop_gui_blend_masks_update(module);
     dt_dev_masks_selection_change(dev, NULL, grp->formid, TRUE);
   }
 }
@@ -500,7 +500,7 @@ static void _tree_inverse(GtkButton *button, dt_lib_module_t *self)
           if(pt->formid == id)
           {
             const int old_state = pt->state;
-            apply_operation(pt, DT_MASKS_STATE_INVERSE);
+            dt_masks_group_entry_apply_operation(pt, DT_MASKS_STATE_INVERSE);
             if(pt->state != old_state)
             {
               _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), pt->state, pt->opacity, model,
@@ -555,7 +555,7 @@ static void _tree_intersection(GtkButton *button, dt_lib_module_t *self)
           if(pt->formid == id)
           {
             const int old_state = pt->state;
-            apply_operation(pt, DT_MASKS_STATE_INTERSECTION);
+            dt_masks_group_entry_apply_operation(pt, DT_MASKS_STATE_INTERSECTION);
             if(pt->state != old_state)
             {
               _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), pt->state, pt->opacity, model,
@@ -610,7 +610,7 @@ static void _tree_difference(GtkButton *button, dt_lib_module_t *self)
           if(pt->formid == id)
           {
             const int old_state = pt->state;
-            apply_operation(pt, DT_MASKS_STATE_DIFFERENCE);
+            dt_masks_group_entry_apply_operation(pt, DT_MASKS_STATE_DIFFERENCE);
             if(pt->state != old_state)
             {
               _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), pt->state, pt->opacity, model,
@@ -665,7 +665,7 @@ static void _tree_exclusion(GtkButton *button, dt_lib_module_t *self)
           if(pt->formid == id)
           {
             const int old_state = pt->state;
-            apply_operation(pt, DT_MASKS_STATE_EXCLUSION);
+            dt_masks_group_entry_apply_operation(pt, DT_MASKS_STATE_EXCLUSION);
             if(pt->state != old_state)
             {
               _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), pt->state, pt->opacity, model,
@@ -720,7 +720,7 @@ static void _tree_union(GtkButton *button, dt_lib_module_t *self)
           if(pt->formid == id)
           {
             const int old_state = pt->state;
-            apply_operation(pt, DT_MASKS_STATE_UNION);
+            dt_masks_group_entry_apply_operation(pt, DT_MASKS_STATE_UNION);
             if(pt->state != old_state)
             {
               _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), pt->state, pt->opacity, model,
@@ -885,7 +885,7 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
     const int nid = dt_masks_form_duplicate_in_group(dt_dev_get_global(), grid, id);
     if(nid > 0)
     {
-      if(module) dt_masks_iop_update(module);
+      if(module) dt_iop_gui_blend_masks_update(module);
 
       dt_dev_masks_selection_change(dt_dev_get_global(), NULL, nid, TRUE);
 
