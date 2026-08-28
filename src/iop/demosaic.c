@@ -81,7 +81,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "develop/masks.h"
+#include "develop/masks_detail.h"
 #include "math/openmp_maths.h"
 #include "develop/tiling.h"
 

@@ -32,7 +32,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "develop/imageop.h"
-#include "develop/masks.h"
+#include "develop/masks_detail.h"
 #include "develop/pixelpipe.h"
 #include "iop/iop_api.h"
 #include <glib/gi18n.h>

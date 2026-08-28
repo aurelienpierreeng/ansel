@@ -535,13 +535,6 @@ void dt_masks_duplicate_points(const dt_masks_form_t *base, dt_masks_form_t *des
 
 
 
-/** detail mask support */
-void dt_masks_extend_border(float *const mask, const int width, const int height, const int border);
-void dt_masks_blur_9x9_coeff(float *coeffs, const float sigma);
-void dt_masks_blur_9x9(float *const src, float *const out, const int width, const int height, const float sigma);
-void dt_masks_calc_rawdetail_mask(float *const src, float *const out, float *const tmp, const int width,
-                                  const int height, const dt_aligned_pixel_t wb);
-void dt_masks_calc_detail_mask(float *const src, float *const out, float *const tmp, const int width, const int height, const float threshold, const gboolean detail);
 
 
 

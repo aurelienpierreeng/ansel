@@ -53,6 +53,7 @@
 #include "common/opencl.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
+#include "develop/masks_detail.h"
 #include "develop/pixelpipe_hb.h"
 #include "develop/supervisor.h"
 #include "develop/tiling.h"
