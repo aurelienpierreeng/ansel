@@ -228,7 +228,10 @@ dt_masks_raster_result_t dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixel
                       dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
                       int *area_width, int *area_height, int *area_pos_x, int *area_pos_y)
 {
-  *area_width = *area_height = *area_pos_x = *area_pos_y = 0;
+  *area_width = 0;
+  *area_height = 0;
+  *area_pos_x = 0;
+  *area_pos_y = 0;
   if(mask_form->functions && mask_form->functions->get_area)
     return mask_form->functions->get_area(module, pipe, piece, mask_form, area_width, area_height,
                                           area_pos_x, area_pos_y);
@@ -240,7 +243,10 @@ dt_masks_raster_result_t dt_masks_get_source_area(dt_iop_module_t *module, dt_de
                              int *area_width, int *area_height,
                              int *area_pos_x, int *area_pos_y)
 {
-  *area_width = *area_height = *area_pos_x = *area_pos_y = 0;
+  *area_width = 0;
+  *area_height = 0;
+  *area_pos_x = 0;
+  *area_pos_y = 0;
 
   // must be a clone form
   if(mask_form->type & DT_MASKS_CLONE)
@@ -1395,7 +1401,10 @@ dt_masks_raster_result_t dt_masks_get_mask(const dt_iop_module_t *const module, 
                       float **buffer, int *width, int *height, int *posx, int *posy)
 {
   *buffer = NULL;
-  *width = *height = *posx = *posy = 0;
+  *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
   /* A shape type with no rasteriser is a programming error, not an empty shape. */
   return (form->functions && form->functions->get_mask)
     ? form->functions->get_mask(module, pipe, piece, form, buffer, width, height, posx, posy)

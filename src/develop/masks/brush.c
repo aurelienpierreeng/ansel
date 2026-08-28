@@ -2749,7 +2749,10 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
-    *width = *height = *offset_x = *offset_y = 0;
+    *width = 0;
+  *height = 0;
+  *offset_x = 0;
+  *offset_y = 0;
     return 0;
   }
   _brush_bounding_box(points, border, node_count, points_count, width, height, offset_x, offset_y);
@@ -2763,7 +2766,10 @@ static dt_masks_raster_result_t _brush_get_source_area(dt_iop_module_t *module, 
                                   dt_dev_pixelpipe_iop_t *piece,
                                   dt_masks_form_t *mask_form, int *width, int *height, int *offset_x, int *offset_y)
 {
-  *width = *height = *offset_x = *offset_y = 0;
+  *width = 0;
+  *height = 0;
+  *offset_x = 0;
+  *offset_y = 0;
   return dt_masks_raster_from_status(
       _get_area(module, pipe, piece, mask_form, width, height, offset_x, offset_y, 1));
 }
@@ -2773,7 +2779,10 @@ static dt_masks_raster_result_t _brush_get_area(const dt_iop_module_t *const mod
                            dt_masks_form_t *const mask_form, int *width, int *height, int *offset_x,
                            int *offset_y)
 {
-  *width = *height = *offset_x = *offset_y = 0;
+  *width = 0;
+  *height = 0;
+  *offset_x = 0;
+  *offset_y = 0;
   return dt_masks_raster_from_status(
       _get_area(module, pipe, piece, mask_form, width, height, offset_x, offset_y, 0));
 }
@@ -2820,7 +2829,10 @@ static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const mod
                            float **buffer, int *width, int *height, int *offset_x, int *offset_y)
 {
   *buffer = NULL;
-  *width = *height = *offset_x = *offset_y = 0;
+  *width = 0;
+  *height = 0;
+  *offset_x = 0;
+  *offset_y = 0;
   if(IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   double timer_start = 0.0;
   double timer_step_start = 0.0;
@@ -2855,7 +2867,10 @@ static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const mod
     dt_pixelpipe_cache_free_align(border);
     dt_pixelpipe_cache_free_align(payload);
     *buffer = NULL;
-    *width = *height = *offset_x = *offset_y = 0;
+    *width = 0;
+  *height = 0;
+  *offset_x = 0;
+  *offset_y = 0;
     return DT_MASKS_RASTER_EMPTY;
   }
   const gboolean use_sparse = (pipe->mask_rasterization_step > 1);

@@ -1253,7 +1253,10 @@ static dt_masks_raster_result_t _ellipse_get_source_area(dt_iop_module_t *module
   /* Every early exit below must leave the out-parameters defined: callers read them
    * whenever this reports anything but ERROR, and three of them used to report success
    * for a shape with no geometry while writing none of these. */
-  *width = *height = *posx = *posy = 0;
+  *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   // we get the ellipse values
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
@@ -1288,7 +1291,10 @@ static dt_masks_raster_result_t _ellipse_get_area(const dt_iop_module_t *const m
                              dt_masks_form_t *const form,
                              int *width, int *height, int *posx, int *posy)
 {
-  *width = *height = *posx = *posy = 0;
+  *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   // we get the ellipse values
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
@@ -1324,7 +1330,10 @@ static dt_masks_raster_result_t _ellipse_get_mask(const dt_iop_module_t *const m
                              float **buffer, int *width, int *height, int *posx, int *posy)
 {
   *buffer = NULL;
-  *width = *height = *posx = *posy = 0;
+  *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();

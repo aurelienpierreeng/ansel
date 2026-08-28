@@ -1164,7 +1164,10 @@ static dt_masks_raster_result_t _gradient_get_area(const dt_iop_module_t *const 
                               dt_masks_form_t *const form,
                               int *width, int *height, int *posx, int *posy)
 {
-  *width = *height = *posx = *posy = 0;
+  *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
   const float wd = pipe->iwidth, ht = pipe->iheight;
 
   float points[8] = { 0.0f, 0.0f, wd, 0.0f, wd, ht, 0.0f, ht };
@@ -1208,7 +1211,10 @@ static dt_masks_raster_result_t _gradient_get_mask(const dt_iop_module_t *const 
                               float **buffer, int *width, int *height, int *posx, int *posy)
 {
   *buffer = NULL;
-  *width = *height = *posx = *posy = 0;
+  *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
