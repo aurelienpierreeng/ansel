@@ -352,16 +352,18 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
 
   // set_mouse_over = FALSE: already pointed at first_imgid as soon as it was known, above --
   // do not force it back here and clobber whatever the user may be hovering by now.
-  dt_collection_load_filmroll(dt_collection_get_global(), first_imgid, g_list_length(all_imgs) == 1, FALSE);
+  dt_collection_load_filmroll(dt_collection_get_global(), first_imgid,
+                              (g_list_length(all_imgs) == 1) ? DT_COLLECTION_IMPORT_VIEW_IMAGE
+                                                             : DT_COLLECTION_IMPORT_VIEW_GRID,
+                              FALSE);
 
   // dt_collection_load_filmroll() silently declines to switch/refresh the collection when it
-  // cannot switch folders -- e.g. the collect module is not on the "Folders" tab, or we are not
-  // in an atelier with a folder-browsing grid (see _collection_folder_ui_inactive() in
-  // common/collection.c). Without this, a recursive folder import (dt_film_import(), reached
-  // from CLI/D-Bus/macOS "open with" while Ansel is already running) never shows up in the
-  // lighttable grid or the Collect module until the user reloads the collection by hand -- the
-  // same issue #860 already fixed for control/jobs/import_jobs.c's import job, which this
-  // legacy, separate import path does not share code with.
+  // cannot switch folders -- e.g. the collect module is not on the "Folders" tab (see
+  // dt_collection_load_filmroll() in common/collection.c). Without this, a recursive
+  // folder import (dt_film_import(), reached from CLI/D-Bus/macOS "open with" while Ansel is
+  // already running) never shows up in the lighttable grid or the Collect module until the user
+  // reloads the collection by hand -- the same reason control/jobs/import_jobs.c's import job
+  // does it too, which this legacy, separate import path does not share code with.
   if(all_imgs)
     dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 

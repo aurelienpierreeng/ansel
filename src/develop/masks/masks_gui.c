@@ -3208,6 +3208,12 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
 
   const gboolean group_selected = (mask_gui->group_selected == form_index);
 
+  /* The last segment there is to draw. An OPEN path -- a brush, the only caller asking for round
+   * ends, since only an open path has two true ends -- has one segment fewer than it has nodes; a
+   * closed one also has the segment returning to node 0. A shape still being created has no
+   * closing segment either: the last one is the one the cursor is dragging. */
+  const int last_segment_index = (round_ends || mask_gui->creation) ? node_count - 2 : node_count - 1;
+
   /* Round only the OUTWARD side of the two true ends of the WHOLE path (e.g. a brush stroke), not
    * every segment's own two ends -- that would also round every interior node joint, which is a
    * line JOIN, not a cap, and looks like a bump at each node instead of the intended smooth stroke
@@ -3315,12 +3321,25 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
       show_segment_index = (show_segment_index + 1) % node_count;
       current_segment_index++;
 
+      /* Every segment has been stroked. What the array still holds past this node is not part of
+       * the outline: for a brush it is the same centerline recorded a second time in the opposite
+       * direction (the border wraps around the stroke, so the line under it is walked there and
+       * back -- see _brush_get_pts_border()), and for a shape being created it is the segment that
+       * will close it once it exists. Walking further only re-detects nodes in reverse order and
+       * strokes them again. */
+      if(current_segment_index > last_segment_index) break;
+
       // dt_draw_stroke_line() consumed the path; the next one starts here
       cairo_move_to(cr, coord_x, coord_y);
     }
-
-    if(mask_gui->creation && current_segment_index >= node_count - 1) break;
   }
+
+  /* Leave nothing behind. The walk above stops on a node boundary, so the points that follow it
+   * are still an un-stroked path in `cr', and cairo keeps a path across calls: the next stroke
+   * ANYWHERE picks it up and paints it in ITS own style -- this shape's own dashed border draws
+   * the leftover dashed, another shape's hover highlight draws it highlighted, and with nothing
+   * drawn after it at all it never appears. */
+  cairo_new_path(cr);
 }
 
 /**

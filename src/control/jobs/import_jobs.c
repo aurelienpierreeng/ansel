@@ -534,6 +534,17 @@ static int32_t _control_import_job_run(dt_job_t *job)
   int32_t imgid = UNKNOWN_IMAGE;
   gint64 last_collection_refresh = 0;
 
+  // What this import may do to the view the user is in, decided once from what the import IS. An
+  // automatic (folder survey) one never moves them: Studio Capture displays the capture itself,
+  // from DT_SIGNAL_IMAGE_IMPORT, and the survey outlives its atelier. A requested one shows the
+  // grid as images arrive, and opens the darkroom instead if it turns out to have imported one.
+  const dt_collection_import_view_t first_image_policy = data->folder_survey
+                                                         ? DT_COLLECTION_IMPORT_VIEW_KEEP
+                                                         : DT_COLLECTION_IMPORT_VIEW_GRID;
+  const dt_collection_import_view_t single_image_policy = data->folder_survey
+                                                          ? DT_COLLECTION_IMPORT_VIEW_KEEP
+                                                          : DT_COLLECTION_IMPORT_VIEW_IMAGE;
+
   for(GList *img = g_list_first(data->imgs); img; img = g_list_next(img))
   {
     dt_print(DT_DEBUG_IMPORT, "[Import] starting import of image #%i...\n", index);
@@ -552,7 +563,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
       // collection by hand (issue #860). So always run a collection update afterwards: it
       // re-runs the current query and makes newly-imported matching images appear.
       if(index == 0)
-        dt_collection_load_filmroll(dt_collection_get_global(), imgid, FALSE, TRUE);
+        dt_collection_load_filmroll(dt_collection_get_global(), imgid, first_image_policy, TRUE);
 
       // known_image_folder is NULL: in copy mode the image's final DB location can be a
       // completely different, pattern-generated folder from its original source path, which is
@@ -567,34 +578,34 @@ static int32_t _control_import_job_run(dt_job_t *job)
   if(index > 0)
     dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 
-  if(index == 0)
-  {
-    if(data->folder_survey)
-      dt_control_log(_("Capture: No image imported!"));
-    else
-      dt_control_log(_("No image imported!"));
-    fprintf(stderr, "No image imported!\n\n");
-  }
-  // don't open picture in darkroom if more than 1 xmps (= duplicates) have been imported.
-  else if(index == 1 && xmps == 1)
-  {
-    if(data->folder_survey)
-      dt_control_log(_("Capture: imported 1 image."));
-    dt_collection_load_filmroll(dt_collection_get_global(), imgid, TRUE, TRUE);
-  }
-  else
-  {
-    if(data->folder_survey)
-      dt_control_log(ngettext("Capture: imported %d image.",
-                              "Capture: imported %d images.", index), index);
-    else
-      dt_control_log(ngettext("Imported %d image", "Imported %d images", index), index);
-    fprintf(stdout, "%d files imported in database.\n\n", index);
-  }
-
   dt_conf_set_int("ui_last/nb_imported", index);
 
-  return index >= 1 ? 0 : 1;
+  if(index == 0)
+  {
+    dt_control_log(data->folder_survey ? _("Capture: No image imported!") : _("No image imported!"));
+    fprintf(stderr, "No image imported!\n\n");
+    return 1;
+  }
+
+  // Don't open the picture in darkroom if more than 1 xmp (= duplicates) has been imported: the
+  // single file then stands for several images in the DB and none of them is the obvious one to
+  // open. Zero xmp is the ordinary case of a file with no sidecar (and of a library configured
+  // not to write any), still exactly one image: open it like any other single import.
+  if(index == 1 && xmps <= 1)
+  {
+    // A requested single image opens in the darkroom, which is announcement enough -- only the
+    // survey, which stays where it is, says anything.
+    if(data->folder_survey) dt_control_log(_("Capture: imported 1 image."));
+    dt_collection_load_filmroll(dt_collection_get_global(), imgid, single_image_policy, TRUE);
+    return 0;
+  }
+
+  dt_control_log(data->folder_survey
+                 ? ngettext("Capture: imported %d image.", "Capture: imported %d images.", index)
+                 : ngettext("Imported %d image", "Imported %d images", index), index);
+  fprintf(stdout, "%d files imported in database.\n\n", index);
+
+  return 0;
 }
 
 void dt_control_import_data_free(dt_control_import_t *data)

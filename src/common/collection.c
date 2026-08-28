@@ -947,21 +947,30 @@ void dt_collection_hint_message(const dt_collection_t *collection)
   g_idle_add(dt_collection_hint_message_internal, message);
 }
 
-static inline void _dt_collection_change_view_after_import(const dt_view_t *current_view, gboolean open_single_image)
+static inline void _dt_collection_change_view_after_import(const dt_view_t *current_view,
+                                                           dt_collection_import_view_t view_policy,
+                                                           const int32_t imgid)
 {
+  // An automatic import moves nobody. This is the caller's decision, taken from what the import
+  // IS (Studio Capture's folder survey imports on its own schedule, in whatever view the user
+  // happens to be), not from what is on screen when the job ends -- the survey keeps running
+  // after the user leaves the Studio Capture atelier, so gating on the current view would let a
+  // capture landing while the user edits in the darkroom throw them out of it.
+  if(view_policy == DT_COLLECTION_IMPORT_VIEW_KEEP) return;
+
   // Studio Capture already shows every newly-imported image itself (see
   // _studio_image_imported_callback() in views/studio_capture.c), without leaving the atelier:
-  // forcing a switch to darkroom/lighttable here on every auto-imported capture would fight that
-  // and kick the user out of a live shooting session.
+  // forcing a switch to darkroom/lighttable here on a manual import started from its own panel
+  // would fight that and kick the user out of a live shooting session.
   if(!g_strcmp0(current_view->module_name, "studio_capture")) return;
 
-  if(open_single_image)
-  {
-    if(!g_strcmp0(current_view->module_name, "darkroom")) // if current view IS "darkroom".
-      dt_ctl_reload_view("darkroom");
-    else
-      dt_ctl_switch_mode_to("darkroom");
-  }
+  // Name the image to open explicitly. This runs on the import job's thread, so the mouse-over
+  // id and the selection set just above cannot be relied on to still designate imgid by the time
+  // the GUI thread performs the switch -- the darkroom's own leave() rewrites the selection, and
+  // any pointer motion rewrites the mouse-over id. dt_ctl_open_image_in_darkroom() publishes the
+  // target and switches views in one GUI-thread callback instead.
+  if(view_policy == DT_COLLECTION_IMPORT_VIEW_IMAGE)
+    dt_ctl_open_image_in_darkroom(imgid);
   else if(g_strcmp0(current_view->module_name, "lighttable")) // if current view IS NOT "lighttable".
     dt_ctl_switch_mode_to("lighttable");
 }
@@ -1078,8 +1087,8 @@ void dt_collection_notify_imported(const int32_t imgid, const gchar *known_image
                                 DT_COLLECTION_CHANGE_BACKGROUND_SYNC, DT_COLLECTION_PROP_UNDEF, NULL, -1);
 }
 
-void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid, gboolean open_single_image,
-                                 gboolean set_mouse_over)
+void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid,
+                                 dt_collection_import_view_t view_policy, gboolean set_mouse_over)
 {
   if(IS_NULL_PTR(collection)) return;
   const dt_view_t *current_atelier = dt_view_manager_get_current_view(dt_view_manager_get_global());
@@ -1088,14 +1097,30 @@ void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgi
   if(imgid == UNKNOWN_IMAGE)
     return;
 
-  // _collection_folder_ui_inactive() also gates on the atelier (only lighttable/Studio Capture
-  // have a folder-browsing grid worth re-pointing at the import). That gate must only cover the
-  // folder-following block below, not the mouse-over/selection/view-switch block that follows
-  // it: those are what actually opens the newly imported image, and must run for every atelier,
-  // darkroom included -- otherwise importing a single image while already in darkroom never
-  // opens it, since dt_control_set_mouse_over_id() below (which darkroom's try_enter() reads to
-  // pick the target image) never runs.
-  if(!_collection_folder_ui_inactive(current_atelier))
+  // May the folder-browsing rules be re-pointed at the imported image's folder? Two questions,
+  // and they gate this block only -- what comes after it (the hovered image, the selection, the
+  // view switch) answers to the import's own policy, not to which atelier is on screen.
+  //
+  // Does the user expect the library to move at all? Only if they asked for this import. An
+  // AUTOMATIC one (Studio Capture's folder survey) re-points the collection in Studio Capture's
+  // own atelier, whose filmstrip is meant to follow the shooting session -- but nowhere else: the
+  // survey outlives that atelier, and a capture landing while the user browses or edits elsewhere
+  // must not drag the library onto the capture folder. Same reasoning as
+  // DT_COLLECTION_IMPORT_VIEW_KEEP, applied to the collection instead of the view.
+  //
+  // Then, may rule 0 be overwritten with a folder? That is the Collect module's persisted tab,
+  // and it is deliberately NOT a question about the current atelier: the collection is global, so
+  // an import started from the darkroom (or the map, or print) must re-point it just the same, or
+  // the imported image is nowhere to be found when the user gets back to the grid. On
+  // "Collections" (tags) and "Queries" the rules belong to the user and overwriting one would
+  // destroy the query they built. Studio Capture has no Collect module UI, hence no such rules.
+  const gboolean is_studio_capture = !IS_NULL_PTR(current_atelier)
+                                     && !g_strcmp0(current_atelier->module_name, "studio_capture");
+  const gboolean follow_import_folder = is_studio_capture
+                                        || (view_policy != DT_COLLECTION_IMPORT_VIEW_KEEP
+                                            && dt_conf_get_int("plugins/lighttable/collect/tab") == 0);
+
+  if(follow_import_folder)
   {
     // Always the folder actually containing imgid (the first successfully imported image), for
     // every case -- copy or in-place, List or Tree view. This used to special-case in-place
@@ -1118,20 +1143,27 @@ void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgi
     dt_collection_update_query(collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_FILMROLL, NULL);
   }
 
-  // Necessary to directly open in darkroom if we want to. Skippable: a caller that already
-  // pointed mouse_over_id at imgid earlier (e.g. right when it was first known, before a long
-  // import job finishes) does not want it forced back here, possibly clobbering whatever the
-  // user is hovering by now.
-  if(set_mouse_over) dt_control_set_mouse_over_id(imgid);
+  // Hovered image and selection belong to the user as long as they did not ask for this import.
+  // Studio Capture points both at the capture it displays itself (_studio_set_image() in
+  // views/studio_capture.c); doing it here too would, anywhere else, add an image the user never
+  // asked for to their selection and hand it to the next darkroom entry -- try_enter() reads the
+  // mouse-over id first.
+  if(view_policy != DT_COLLECTION_IMPORT_VIEW_KEEP)
+  {
+    // Skippable: a caller that already pointed mouse_over_id at imgid earlier (e.g. right when it
+    // was first known, before a long import job finishes) does not want it forced back here,
+    // possibly clobbering whatever the user is hovering by now.
+    if(set_mouse_over) dt_control_set_mouse_over_id(imgid);
 
-  // To scroll the lighttable automatically to this image,
-  // it needs to be selected.
-  dt_selection_select(dt_selection_get_global(), imgid);
+    // To scroll the lighttable automatically to this image,
+    // it needs to be selected.
+    dt_selection_select(dt_selection_get_global(), imgid);
+  }
 
   // New images are untagged, that may need an update of the collection module for untagged count
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 
-  if(current_atelier) _dt_collection_change_view_after_import(current_atelier, open_single_image);
+  if(!IS_NULL_PTR(current_atelier)) _dt_collection_change_view_after_import(current_atelier, view_policy, imgid);
 }
 
 // clang-format off

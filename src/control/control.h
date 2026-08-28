@@ -169,7 +169,19 @@ void dt_control_queue_redraw_widget(GtkWidget *widget);
 
 void dt_ctl_switch_mode_to(const char *mode);
 void dt_ctl_switch_mode_to_by_view(const dt_view_t *view);
-void dt_ctl_reload_view(const char *mode);
+
+/** \brief open one specific image in the darkroom, from any view and any thread.
+ *
+ * The darkroom picks the image it opens from the mouse-over id, falling back on the selection.
+ * Both are volatile: a pointer motion rewrites the mouse-over id, and leaving the darkroom
+ * restores the selection to the image it was editing. A caller that knows which image it wants
+ * -- an import job, a background task -- must therefore not publish the target and request the
+ * view switch separately: it has to happen in one go on the GUI thread, which is what this does.
+ *
+ * @param imgid the image to open. The caller owns this contract: an id that names no image only
+ *              gets the darkroom to refuse the switch and log "No image to open".
+ */
+void dt_ctl_open_image_in_darkroom(const int32_t imgid);
 
 struct dt_control_t;
 
