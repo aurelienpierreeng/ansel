@@ -464,13 +464,15 @@ static int _ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radi
   return 0;
 }
 
-static int _ellipse_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *form, float **points,
+static dt_masks_raster_result_t _ellipse_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *form,
+                                      float **points,
                                       int *points_count, float **border, int *border_count, int source,
                                       const dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  // No geometry: an empty outline is the correct result here, not a failure. See the circle.
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
-  if(IS_NULL_PTR(ellipse)) return 0;
+  if(IS_NULL_PTR(ellipse)) return DT_MASKS_RASTER_EMPTY;
   float x = 0.0f, y = 0.0f, a = 0.0f, b = 0.0f;
   x = ellipse->center[0], y = ellipse->center[1];
   a = ellipse->radius[0], b = ellipse->radius[1];
@@ -478,22 +480,23 @@ static int _ellipse_get_points_border(dt_develop_t *dev, struct dt_masks_form_t 
   if(source)
   {
     float xs = form->source[0], ys = form->source[1];
-    return _ellipse_get_points_source(dev, x, y, xs, ys, a, b, ellipse->rotation, points, points_count, module);
+    return dt_masks_raster_from_status(
+        _ellipse_get_points_source(dev, x, y, xs, ys, a, b, ellipse->rotation, points, points_count, module));
   }
   else
   {
     if(_ellipse_get_points(dev, x, y, a, b, ellipse->rotation, points, points_count) != 0)
-      return 1;
+      return DT_MASKS_RASTER_ERROR;
     if(!IS_NULL_PTR(border))
     {
       const int prop = ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL;
-      return _ellipse_get_points(dev, x, y, (prop ? a * (1.0f + ellipse->border) : a + ellipse->border),
-                                 (prop ? b * (1.0f + ellipse->border) : b + ellipse->border), ellipse->rotation,
-                                 border, border_count);
+      return dt_masks_raster_from_status(
+          _ellipse_get_points(dev, x, y, (prop ? a * (1.0f + ellipse->border) : a + ellipse->border),
+                              (prop ? b * (1.0f + ellipse->border) : b + ellipse->border), ellipse->rotation,
+                              border, border_count));
     }
-    return 0;
+    return DT_MASKS_RASTER_OK;
   }
-  return 1;
 }
 
 /**

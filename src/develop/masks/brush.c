@@ -1239,17 +1239,19 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
   *distance = min_dist;
 }
 
-static int _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
+static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                     float **point_buffer, int *point_count,
                                     float **border_buffer, int *border_count,
                                     int use_source, const dt_iop_module_t *module)
 {
-  if(use_source && IS_NULL_PTR(module)) return 1;
+  // Asking for the source outline without a module is a programming error, not an empty shape.
+  if(use_source && IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   const double ioporder = (module) ? module->iop_order : 0.0f;
   const dt_masks_distort_t gui_dist = dt_masks_distort_for_gui(develop);
-  return _brush_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
-                               &gui_dist, point_buffer, point_count, border_buffer,
-                               border_count, NULL, NULL, use_source);
+  return dt_masks_raster_from_status(
+      _brush_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
+                            &gui_dist, point_buffer, point_count, border_buffer,
+                            border_count, NULL, NULL, use_source));
 }
 
 /** find relative position within a brush segment that is closest to the point given by coordinates x and y;
