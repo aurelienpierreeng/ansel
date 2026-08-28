@@ -101,6 +101,8 @@
 #include "control/control.h"
 #include "control/jobs.h"
 #include "develop/dev_pixelpipe.h"
+#include "develop/dev_history.h"
+#include "develop/pixelpipe_hb.h"
 #include "develop/develop.h"
 #include "develop/dev_history_gui.h"
 #include "develop/imageop.h"
@@ -2249,9 +2251,49 @@ void mouse_enter(dt_view_t *self)
 // cacheline (issue #1060 family: "the mask does nothing until you nudge a slider").
 static dt_iop_module_t *_pending_mask_commit_module = NULL;
 
+/* Re-render the mask's owner from the LIVE geometry, without writing history.
+ *
+ * A drawn shape's geometry lives in dev->forms, not in any module's params, and the pipe reads
+ * it fresh on every recompute (dt_dev_pixelpipe_process() re-snapshots pipe->forms). What the
+ * pipe does NOT do on its own is notice that the geometry moved: a piece is re-keyed only when
+ * its history item changes, so a drag used to be made visible by committing history on a
+ * throttle, mid-drag -- one history rewrite, one DB write job and one full synch_top per
+ * throttle tick, with the mask's owner re-hashed against the forms as a side effect.
+ *
+ * This is the drawlayer brush's route instead (see _publish_backend_progress() in
+ * iop/drawlayer/worker.c): publish the owner's params through the transient channel and flag
+ * the main pipe TOP_CHANGED. That routes the resync through _sync_focused_in_place(), which
+ * re-commits the ONE focused piece against the live dev->forms -- dt_iop_compute_blendop_hash()
+ * folds the group's geometry in -- so the piece re-keys from the moved shape and only it and
+ * its downstream recompute. The params published are the module's own, unchanged: it is the
+ * forms that moved, and the transient slot is only the ticket onto the focused-piece path.
+ *
+ * Flagged without the killswitch (dt_dev_pixelpipe_or_changed, not _change_pipe), as the
+ * drawlayer heartbeat does: a fast drag must not abort every in-flight render or none would
+ * ever finish. History is written once, when the interaction ends -- see the commit below,
+ * which clears this slot so the pipe goes back to rendering the committed state. */
+static void _publish_mask_edit_transient(dt_develop_t *dev)
+{
+  dt_iop_module_t *module = dev->gui_module;
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->params) || module->params_size <= 0) return;
+  dt_dev_transient_params_set(module, module->params, (size_t)module->params_size, NULL, 0);
+  dt_dev_pixelpipe_or_changed(dev->pipe, DT_DEV_PIPE_TOP_CHANGED);
+}
+
 static void _delayed_history_commit(gpointer data)
 {
   dt_develop_t *dev = (dt_develop_t *)data;
+
+  /* Not while a shape is still being dragged. The throttle fires about once per pipe render,
+   * which used to land a history commit -- and the resync it triggers -- in the middle of the
+   * drag; the transient publish above is what feeds the pipe meanwhile, so the commit can wait
+   * for the button to come up. Re-queueing re-arms the throttle; the pending module is left in
+   * place so the eventual commit still lands on the owner of the interaction. */
+  if(!IS_NULL_PTR(dev->form_gui) && dt_masks_gui_is_dragging(dev->form_gui))
+  {
+    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
+    return;
+  }
 
   dt_iop_module_t *module = _pending_mask_commit_module;
   _pending_mask_commit_module = NULL;
@@ -2259,6 +2301,12 @@ static void _delayed_history_commit(gpointer data)
   // it is still a live member of dev->iop, else fall back to the current focus.
   if(IS_NULL_PTR(module) || IS_NULL_PTR(g_list_find(dev->iop, module)))
     module = dev->gui_module;
+
+  // The interaction is over: drop the transient ticket so the pipe renders the committed
+  // history state again. Cleared BEFORE the commit, whose resync must come from history --
+  // and cleared even when nothing changed, so a no-op drag does not leave the slot occupied.
+  const gboolean was_transient = !IS_NULL_PTR(module) && dt_dev_transient_params_active(dev, module);
+  if(was_transient) dt_dev_transient_params_clear(module);
 
   // Figure out if an history item needs to be added
   // aka drawn masks have changed somehow. This is more expensive
@@ -2269,6 +2317,10 @@ static void _delayed_history_commit(gpointer data)
 
   if(dev->forms_changed)
     dt_dev_add_history_item(dev, module, FALSE, TRUE);
+  else if(was_transient)
+    // Nothing to commit, but the pipe was rendering from the transient slot: re-sync it from
+    // history so it does not keep a render keyed to a slot that no longer exists.
+    dt_dev_pixelpipe_update_history_main(dev);
 }
 
 // Queue the throttled mask-edit history commit, capturing its target module NOW. Every mask
@@ -2561,8 +2613,15 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   {
     // There is no shape dragging in creation mode, so no need to commit history.
     if(!dev->form_gui->creation)
+    {
+      // A shape being dragged is re-rendered live from the transient slot on every motion;
+      // hover motion changes no geometry and gets nothing. The history commit queued below
+      // defers itself until the drag ends (see _delayed_history_commit).
+      if(dt_masks_gui_is_dragging(dev->form_gui))
+        _publish_mask_edit_transient(dev);
       _queue_delayed_history_commit(dev);
-      
+    }
+
     handled = TRUE;
   }
 
@@ -2984,7 +3043,14 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
   {
     dt_control_queue_redraw_center();
     if(!dev->form_gui->creation)
+    {
+      // Every scroll step changes the shape (size, feather or opacity) and is rendered live
+      // from the transient slot at once; a burst of steps then lands ONE history commit when
+      // the throttle fires after the last one, which also clears the slot. Scrolling has no
+      // "release" the way a drag does, so the throttle is what marks the end of the burst.
+      _publish_mask_edit_transient(dev);
       _queue_delayed_history_commit(dev);
+    }
 
     return TRUE;
   }
