@@ -47,6 +47,7 @@
 #include "develop/masks/masks_distort.h"
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
+#include "develop/blend_gui.h"   // dt_iop_gui_blend_masks_update()
 #include "develop/masks/masks_functions.h"
 #include "develop/masks/masks_touched.h"
 #include "math/openmp_maths.h"
@@ -1975,7 +1976,7 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, double 
       mask_gui->guipoints_count = 0;
 
       dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
-      dt_masks_iop_update(module);
+      dt_iop_gui_blend_masks_update(module);
 
       dt_masks_change_form_gui(mask_gui->dev, NULL);
     }

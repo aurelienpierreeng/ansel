@@ -1747,7 +1747,7 @@ static void _blendop_masks_apply_and_commit(dt_iop_module_t *module)
   if(IS_NULL_PTR(module)) return;
   if(IS_NULL_PTR(module->dev)) return;
 
-  dt_masks_iop_update(module);
+  dt_iop_gui_blend_masks_update(module);
   dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   dt_iop_gui_update_header(module);
   dt_control_queue_redraw_center();
@@ -2088,7 +2088,7 @@ static void _blendop_masks_group_operation_callback(GtkWidget *menu_item, gpoint
   const int parentid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-parentid"));
   const dt_masks_state_t state = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-state"));
 
-  // apply_operation() below mutates the group_entry in place, memory owned by the parent
+  // dt_masks_group_entry_apply_operation() below mutates the group_entry in place, memory owned by the parent
   // group -- touch the parent before resolving the entry, or a shared parent's group_entry
   // gets mutated behind the back of a snapshot that still references it.
   dt_masks_form_t *parent_form = dt_masks_get_from_id(module->dev, parentid);
@@ -2108,7 +2108,7 @@ static void _blendop_masks_group_operation_callback(GtkWidget *menu_item, gpoint
   if(IS_NULL_PTR(group_entry)) return;
 
   const int old_state = group_entry->state;
-  apply_operation(group_entry, state);
+  dt_masks_group_entry_apply_operation(group_entry, state);
   if(group_entry->state == old_state) return;
 
   _blendop_masks_apply_and_commit(module);
@@ -3712,7 +3712,7 @@ void dt_iop_gui_init_contours(GtkBox *blendw, dt_iop_module_t *module)
   gtk_box_pack_start(blendw, bd->contrast_slider, FALSE, FALSE, 0);
 }
 
-void dt_masks_iop_update(dt_iop_module_t *module)
+void dt_iop_gui_blend_masks_update(dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = module->gui ? (dt_iop_gui_blend_data_t *)module->gui->blend_data : NULL;
   dt_develop_blend_params_t *bp = module->blend_params;
@@ -4645,7 +4645,7 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
       || _blendif_are_output_channels_used(module->blend_params, bd->csp);
 
   dt_iop_gui_update_blendif(module);
-  dt_masks_iop_update(module);
+  dt_iop_gui_blend_masks_update(module);
   dt_iop_gui_update_raster(module);
 
   /* sync page states from mask mode */

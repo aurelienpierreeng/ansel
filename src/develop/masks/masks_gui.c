@@ -655,7 +655,7 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
   dt_masks_form_group_t *form_op = (dt_masks_form_group_t *)g_object_get_data(G_OBJECT(menu), "op_form");
   if(IS_NULL_PTR(form_op)) return;
 
-  apply_operation(form_op, state_op);
+  dt_masks_group_entry_apply_operation(form_op, state_op);
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, form_op->formid, form_op->parentid, DT_MASKS_EVENT_UPDATE);
 }
@@ -2206,7 +2206,7 @@ gboolean dt_masks_form_exit_creation(dt_iop_module_t *module, dt_masks_form_gui_
         dt_dev_masks_selection_change(dev, creation_module, last_formid, FALSE);
       }
 
-      dt_masks_iop_update(creation_module);
+      dt_iop_gui_blend_masks_update(creation_module);
       dt_iop_gui_blend_data_t *blend_data
           = creation_module->gui ? (dt_iop_gui_blend_data_t *)creation_module->gui->blend_data : NULL;
       if(!IS_NULL_PTR(dev) && !IS_NULL_PTR(dev->form_gui))
@@ -2459,7 +2459,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *develop, dt_iop_module_t *mod
     
     // we update module gui
 
-    if(IS_NULL_PTR(mask_gui)) dt_masks_iop_update(module);
+    if(IS_NULL_PTR(mask_gui)) dt_iop_gui_blend_masks_update(module);
     dt_dev_add_history_item(develop, module, TRUE, TRUE);
   }
 
@@ -2501,7 +2501,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *develop, dt_iop_module_t *mod
     mask_gui->creation_closing_form = FALSE;
     dt_masks_soft_reset_form_gui(mask_gui);
     dt_masks_set_visible_form(develop, next_form);
-    if(!IS_NULL_PTR(module)) dt_masks_iop_update(module);
+    if(!IS_NULL_PTR(module)) dt_iop_gui_blend_masks_update(module);
   }
 }
 
@@ -4099,7 +4099,7 @@ static void _menu_no_masks(struct dt_iop_module_t *module)
 
   // and we update the iop
   dt_masks_set_edit_mode(module, DT_MASKS_EDIT_OFF);
-  dt_masks_iop_update(module);
+  dt_iop_gui_blend_masks_update(module);
 }
 
 static void _menu_add_shape(struct dt_iop_module_t *module, dt_masks_type_t type)
@@ -4125,7 +4125,7 @@ static void _menu_add_exist(dt_iop_module_t *module, int form_id)
   // we save the group
   // and we ensure that we are in edit mode
 
-  dt_masks_iop_update(module);
+  dt_iop_gui_blend_masks_update(module);
   dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
 }
 
@@ -4138,7 +4138,7 @@ void dt_masks_group_update_name(dt_iop_module_t *module)
 
   _set_group_name_from_module(module, group_form);
 
-  dt_masks_iop_update(module);
+  dt_iop_gui_blend_masks_update(module);
 }
 
 void dt_masks_iop_combo_populate(GtkWidget *widget, void *data)
@@ -4291,7 +4291,7 @@ void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module
       return;
   }
   // we update the combo line
-  dt_masks_iop_update(module);
+  dt_iop_gui_blend_masks_update(module);
   dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
 }
 
@@ -4872,7 +4872,7 @@ gboolean dt_masks_creation_mode_enter(dt_develop_t *dev, dt_iop_module_t *module
  *
  * Inverse toggles its flag, combine operations replace the combine bits.
  */
-void apply_operation(struct dt_masks_form_group_t *group_entry, const dt_masks_state_t apply_state)
+void dt_masks_group_entry_apply_operation(struct dt_masks_form_group_t *group_entry, const dt_masks_state_t apply_state)
 {
   if(IS_NULL_PTR(group_entry)) return;
 
