@@ -36,6 +36,7 @@
 #include "develop/geometry/geometry.h"   // dt_geometry_chain_generation()
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
+#include "develop/masks_group.h"
 #include "develop/masks/masks_functions.h"
 #include "widgets/bauhaus.h"
 #include "common/conf.h"
@@ -4394,25 +4395,6 @@ const char * _get_mask_plugin(dt_masks_form_t *mask_form)
     return "masks";
 }
 
-const char * _get_mask_type(dt_masks_form_t *mask_form)
-{
-  // warning: mask types or not int enum but bit flags ?!?
-  // that's a shitty design that prevents us from doing a clean switch case over the enum.
-  // why would we overlap mask types ?!?
-  if(mask_form->type & DT_MASKS_CIRCLE)
-    return "circle";
-  else if(mask_form->type & DT_MASKS_POLYGON)
-    return "polygon";
-  else if(mask_form->type & DT_MASKS_ELLIPSE)
-    return "ellipse";
-  else if(mask_form->type & DT_MASKS_GRADIENT)
-    return "gradient";
-  else if(mask_form->type & DT_MASKS_BRUSH)
-    return "brush";
-  else
-    return "unknown";
-}
-
 float dt_masks_apply_increment(float current, float amount, dt_masks_increment_t increment, int flow)
 {
   switch(increment)
@@ -4451,7 +4433,7 @@ float dt_masks_get_set_conf_value(dt_masks_form_t *mask_form, char *feature, flo
     config_key = g_strdup_printf("plugins/darkroom/%s_opacity", _get_mask_plugin(mask_form));
   else
     config_key = g_strdup_printf("plugins/darkroom/%s/%s/%s",
-                                 _get_mask_plugin(mask_form), _get_mask_type(mask_form), feature);
+                                 _get_mask_plugin(mask_form), dt_masks_type_name(mask_form->type), feature);
 
   if(!g_strcmp0(feature, "rotation")) flow = (flow > 1) ? (flow - 1) * 5 : flow;
 

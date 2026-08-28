@@ -53,6 +53,7 @@
 #include "develop/masks.h"
 #include "history/notify.h"
 #include "develop/blend_gui.h"   // dt_iop_gui_blend_masks_update()
+#include "develop/masks_group.h"
 #include "develop/masks/masks_functions.h"
 #include "develop/masks/masks_touched.h"
 #include "develop/develop.h"
@@ -1422,6 +1423,90 @@ dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const modu
   return (form->functions && form->functions->get_mask_roi)
     ? form->functions->get_mask_roi(module, pipe, piece, form, roi, buffer, touched)
     : DT_MASKS_RASTER_ERROR;
+}
+
+
+/* ==========================================================================================
+ * The read side of the group API (develop/masks_group.h).
+ *
+ * All three are thread-neutral by construction: they read only the object they are handed and
+ * take no lock. That is what lets the pipeline call them on a snapshot and the GUI call them on
+ * the live list with the same code.
+ * ========================================================================================== */
+
+gboolean dt_masks_form_get_info(const dt_masks_form_t *form, dt_masks_form_info_t *out)
+{
+  /* `out' is left untouched on FALSE so a caller may keep a default in it across a failed call --
+   * the dt_colorspaces_profile_at() convention. */
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(out)) return FALSE;
+
+  out->formid = form->formid;
+  out->type = form->type;
+  out->version = form->version;
+  out->is_group = (form->type & DT_MASKS_GROUP) != 0;
+  out->is_retouch = (form->type & DT_MASKS_IS_RETOUCHE) != 0;
+  /* Not recursive: the group's own rows, which is what compositing order is defined over. */
+  out->member_count = out->is_group ? g_list_length(form->points) : 0;
+  g_strlcpy(out->name, form->name, sizeof(out->name));
+  return TRUE;
+}
+
+guint dt_masks_group_copy_members(const dt_masks_form_t *group, dt_masks_member_t *out,
+                                  const guint out_max)
+{
+  /* Refusing anything that is not a group is what keeps the polymorphic ->points unreachable from
+   * outside: for a group it holds membership rows, for every other form it holds geometry nodes,
+   * and the only thing telling them apart is this bit. */
+  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return 0;
+
+  guint total = 0;
+  for(const GList *node = group->points; node; node = g_list_next(node), total++)
+  {
+    if(IS_NULL_PTR(out) || total >= out_max) continue;
+
+    dt_masks_member_t *const member = &out[total];
+    member->index = total;
+
+    /* A row that cannot be read STILL CONSUMES ITS INDEX. Position is the compositing order and
+     * the index into retouch's rt_forms[] and spots' clone_algo[], both persisted in the user's
+     * database, so dropping a row here would silently re-pair every later shape with the wrong
+     * algorithm. It comes back zeroed instead. */
+    const dt_masks_form_group_t *const entry = (const dt_masks_form_group_t *)node->data;
+    if(IS_NULL_PTR(entry))
+    {
+      member->formid = 0;
+      member->parentid = 0;
+      member->state = DT_MASKS_STATE_NONE;
+      member->opacity = 0.0f;
+      continue;
+    }
+
+    member->formid = entry->formid;
+    member->parentid = entry->parentid;
+    member->state = (dt_masks_state_t)entry->state;
+    member->opacity = entry->opacity;
+  }
+
+  /* The TOTAL, always -- a caller that passed a short buffer needs to know it was short, and a
+   * caller that passed NULL is asking for exactly this. */
+  return total;
+}
+
+const char *dt_masks_type_name(const dt_masks_type_t type)
+{
+  /* dt_masks_type_t is a bit field, not an enumeration of alternatives, so first match wins and
+   * this order is load-bearing. It is the order the conf-key builder has always used.
+   *
+   * These tokens are PERSISTED: they build plugins/darkroom/<plugin>/<type>/<feature>, declared in
+   * data/anselconfig.xml.in. "polygon" can never become "path" -- a key outside confgen reads 0,
+   * which would silently reset the user's hardness. */
+  if(type & DT_MASKS_CIRCLE) return "circle";
+  else if(type & DT_MASKS_POLYGON) return "polygon";
+  else if(type & DT_MASKS_ELLIPSE) return "ellipse";
+  else if(type & DT_MASKS_GRADIENT) return "gradient";
+  else if(type & DT_MASKS_BRUSH) return "brush";
+  else if(type & DT_MASKS_GROUP) return "group";
+  else return "unknown";
 }
 
 // clang-format off

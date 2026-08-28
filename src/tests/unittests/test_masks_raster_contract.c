@@ -39,6 +39,7 @@
 #include "develop/masks.h"
 #include "develop/masks/masks_functions.h"
 #include "develop/masks/masks_touched.h"
+#include "develop/masks_group.h"
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -205,6 +206,130 @@ static void _area_and_mask_always_write_their_out_parameters(void **state)
   }
 }
 
+
+/* ---------------------------------------------------------------------------------------
+ * The read side of the group API (develop/masks_group.h).
+ *
+ * These pin the contract rather than any implementation: what a caller is promised when it asks
+ * the module a question instead of reading its structs. The group fixture is built on the stack
+ * with its membership rows in a plain array, so the ORDER under test is unambiguous.
+ * ------------------------------------------------------------------------------------- */
+
+static void _form_info_describes_a_shape(void **state)
+{
+  (void)state;
+  dt_masks_form_t form = { 0 };
+  form.type = DT_MASKS_CIRCLE;
+  form.formid = 4242;
+  form.version = 6;
+  g_strlcpy(form.name, "circle #2", sizeof(form.name));
+
+  dt_masks_form_info_t info;
+  assert_true(dt_masks_form_get_info(&form, &info));
+  assert_int_equal(info.formid, 4242);
+  assert_int_equal(info.version, 6);
+  assert_false(info.is_group);
+  assert_false(info.is_retouch);
+  assert_int_equal(info.member_count, 0);   // not a group
+  assert_string_equal(info.name, "circle #2");
+
+  // A clone shape belongs to retouch, and the predicate for that was hand-written in eight files.
+  form.type = DT_MASKS_CIRCLE | DT_MASKS_CLONE;
+  assert_true(dt_masks_form_get_info(&form, &info));
+  assert_true(info.is_retouch);
+}
+
+static void _form_info_leaves_out_untouched_on_failure(void **state)
+{
+  (void)state;
+  dt_masks_form_info_t info;
+  info.formid = -999;   // a default the caller wants to survive a failed call
+  assert_false(dt_masks_form_get_info(NULL, &info));
+  assert_int_equal(info.formid, -999);
+}
+
+static void _copy_members_preserves_order_and_reports_the_total(void **state)
+{
+  (void)state;
+  dt_masks_form_group_t rows[3] = {
+    { .formid = 11, .parentid = 7, .state = DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION,        .opacity = 0.25f },
+    { .formid = 22, .parentid = 7, .state = DT_MASKS_STATE_USE | DT_MASKS_STATE_INTERSECTION, .opacity = 0.50f },
+    { .formid = 33, .parentid = 7, .state = DT_MASKS_STATE_USE | DT_MASKS_STATE_DIFFERENCE,   .opacity = 1.00f },
+  };
+  dt_masks_form_t group = { 0 };
+  group.type = DT_MASKS_GROUP;
+  for(int i = 0; i < 3; i++) group.points = g_list_append(group.points, &rows[i]);
+
+  dt_masks_form_info_t info;
+  assert_true(dt_masks_form_get_info(&group, &info));
+  assert_true(info.is_group);
+  assert_int_equal(info.member_count, 3);
+
+  // NULL storage asks for the count only.
+  assert_int_equal(dt_masks_group_copy_members(&group, NULL, 0), 3);
+
+  dt_masks_member_t members[3];
+  assert_int_equal(dt_masks_group_copy_members(&group, members, 3), 3);
+  for(guint i = 0; i < 3; i++)
+  {
+    // Order is the contract: it is the compositing order, the GTK row order, and the index into
+    // retouch's rt_forms[] and spots' clone_algo[] -- the last two persisted in the user's
+    // database. A filtering or reordering implementation passes every other test in this file.
+    assert_int_equal(members[i].index, i);
+    assert_int_equal(members[i].formid, rows[i].formid);
+    assert_int_equal(members[i].parentid, rows[i].parentid);
+    assert_int_equal((int)members[i].state, rows[i].state);
+  }
+  assert_true(members[0].opacity == rows[0].opacity);
+
+  // A short buffer still reports the total, and writes exactly what fits.
+  dt_masks_member_t two[2];
+  two[0].formid = two[1].formid = -1;
+  assert_int_equal(dt_masks_group_copy_members(&group, two, 2), 3);
+  assert_int_equal(two[0].formid, 11);
+  assert_int_equal(two[1].formid, 22);
+
+  g_list_free(group.points);
+}
+
+static void _copy_members_refuses_anything_that_is_not_a_group(void **state)
+{
+  (void)state;
+  // A shape's ->points holds geometry nodes, not membership rows -- the same field, a different
+  // element type, told apart only by this bit. Refusing here is what keeps that polymorphism
+  // unreachable from outside the module.
+  dt_masks_node_circle_t node = { 0 };
+  dt_masks_form_t shape = { 0 };
+  shape.type = DT_MASKS_CIRCLE;
+  shape.points = g_list_append(NULL, &node);
+
+  dt_masks_member_t members[4];
+  assert_int_equal(dt_masks_group_copy_members(&shape, members, 4), 0);
+  assert_int_equal(dt_masks_group_copy_members(NULL, members, 4), 0);
+
+  g_list_free(shape.points);
+}
+
+static void _type_tokens_are_the_persisted_conf_key_spellings(void **state)
+{
+  (void)state;
+  /* These strings build plugins/darkroom/<plugin>/<type>/<feature>, declared in
+   * data/anselconfig.xml.in. A shape reading a key that is not in confgen gets 0, so renaming a
+   * token here silently resets that setting for every existing user. In particular the polygon
+   * token is "polygon" and must never become "path" -- another part of the tree spells it that
+   * way in machine-readable JSON, and unifying on that spelling is the trap. */
+  assert_string_equal(dt_masks_type_name(DT_MASKS_CIRCLE), "circle");
+  assert_string_equal(dt_masks_type_name(DT_MASKS_ELLIPSE), "ellipse");
+  assert_string_equal(dt_masks_type_name(DT_MASKS_POLYGON), "polygon");
+  assert_string_equal(dt_masks_type_name(DT_MASKS_BRUSH), "brush");
+  assert_string_equal(dt_masks_type_name(DT_MASKS_GRADIENT), "gradient");
+  assert_string_equal(dt_masks_type_name(DT_MASKS_GROUP), "group");
+  assert_string_equal(dt_masks_type_name(DT_MASKS_NONE), "unknown");
+
+  // The type is a bit field, so a clone circle is still a circle for the conf key.
+  assert_string_equal(dt_masks_type_name(DT_MASKS_CIRCLE | DT_MASKS_CLONE), "circle");
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -213,6 +338,11 @@ int main(void)
     cmocka_unit_test(_a_shape_with_no_rasteriser_is_an_error),
     cmocka_unit_test(_an_unbuildable_outline_is_never_reported_as_built),
     cmocka_unit_test(_area_and_mask_always_write_their_out_parameters),
+    cmocka_unit_test(_form_info_describes_a_shape),
+    cmocka_unit_test(_form_info_leaves_out_untouched_on_failure),
+    cmocka_unit_test(_copy_members_preserves_order_and_reports_the_total),
+    cmocka_unit_test(_copy_members_refuses_anything_that_is_not_a_group),
+    cmocka_unit_test(_type_tokens_are_the_persisted_conf_key_spellings),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);
