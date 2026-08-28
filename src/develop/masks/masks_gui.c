@@ -2943,9 +2943,14 @@ static const char *const _scroll_conf_keys[DT_MASKS_SCROLL_MODIFIER_LAST]
 static const char *const _interaction_conf_values[DT_MASKS_INTERACTION_LAST]
     = { "none", "size", "hardness", "opacity", "rotation" };
 
+/* Both enums declare only non-negative enumerators, so a compiler is free to give them an
+ * unsigned underlying type -- clang does, and then `x < 0' is a tautology it rejects under
+ * -Weverything -Werror. Casting to unsigned instead of dropping the lower bound keeps the
+ * check honest either way: a negative value converts to a huge unsigned one and is caught by
+ * the upper bound, whatever signedness the compiler picked. */
 dt_masks_interaction_t dt_masks_scroll_mapping_get(dt_masks_scroll_modifier_t modifier)
 {
-  if(modifier < 0 || modifier >= DT_MASKS_SCROLL_MODIFIER_LAST) return DT_MASKS_INTERACTION_UNDEF;
+  if((unsigned int)modifier >= DT_MASKS_SCROLL_MODIFIER_LAST) return DT_MASKS_INTERACTION_UNDEF;
 
   const char *value = dt_conf_get_string_const(_scroll_conf_keys[modifier]);
   if(IS_NULL_PTR(value)) return DT_MASKS_INTERACTION_UNDEF;
@@ -2958,8 +2963,8 @@ dt_masks_interaction_t dt_masks_scroll_mapping_get(dt_masks_scroll_modifier_t mo
 
 void dt_masks_scroll_mapping_set(dt_masks_scroll_modifier_t modifier, dt_masks_interaction_t interaction)
 {
-  if(modifier < 0 || modifier >= DT_MASKS_SCROLL_MODIFIER_LAST) return;
-  if(interaction < 0 || interaction >= DT_MASKS_INTERACTION_LAST)
+  if((unsigned int)modifier >= DT_MASKS_SCROLL_MODIFIER_LAST) return;
+  if((unsigned int)interaction >= DT_MASKS_INTERACTION_LAST)
     interaction = DT_MASKS_INTERACTION_UNDEF;
 
   dt_conf_set_string(_scroll_conf_keys[modifier], _interaction_conf_values[interaction]);
