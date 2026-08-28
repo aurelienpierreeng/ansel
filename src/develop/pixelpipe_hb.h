@@ -480,7 +480,15 @@ typedef struct dt_dev_pixelpipe_t
   // pointer identity of the last synchronized history item.
   // This complements `last_history_hash` for in-place top-entry updates where
   // the same history node is reused and its hash changes.
-  gpointer last_history_item;
+  //
+  // The pipe HOLDS A REFERENCE on whatever this points at (dt_dev_history_item_ref), and
+  // it is exchanged atomically (_pipe_set_last_history_item / dt_dev_history_cow_touch).
+  // The resync runs against a snapshot outside history_mutex, so the item it last synced
+  // may since have left dev->history; the reference keeps it alive, which is what makes an
+  // identity compare on it safe -- a freed address could be reused by a NEW item and match.
+  // The exchange is what lets the worker (writing its last-synced item) and the GUI thread
+  // (cow_touch re-pointing it at a clone) race on the slot without leaking or double-freeing.
+  dt_atomic_ptr last_history_item;
 
   // hash of the whole history stack at the time of synchonization
   // between pipe and history. This is a local copy of 

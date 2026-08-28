@@ -65,6 +65,7 @@
 #include "control/signal.h"
 #include "develop/blend.h"
 #include "develop/dev_pixelpipe.h"
+#include "develop/dev_history.h"
 #include "pixel/format.h"
 #include "develop/imageop_math.h"
 #include "common/sentry.h"
@@ -547,6 +548,10 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
 
   // blocks while busy and sets shutdown bit:
   dt_dev_pixelpipe_cleanup_nodes(pipe);
+  // The pipe held a reference on the history item it last synced to (see the field's comment
+  // in pixelpipe_hb.h); drop it now that no resync can run on this pipe any more. Exchanged,
+  // not read-then-cleared, for the same reason every other write to that slot is.
+  dt_dev_free_history_item(dt_atomic_exch_ptr(&pipe->last_history_item, NULL));
   // so now it's safe to clean up cache:
   const uint64_t old_backbuf_hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
   if(old_backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
