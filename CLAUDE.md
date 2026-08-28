@@ -1162,6 +1162,33 @@ prematurely).
 
 ---
 
+### The masks module is being enclosed, and the ratchet counts the way out
+
+`src/develop/masks` is not a closed module yet: five files outside it (`develop/blend_gui.c`,
+`libs/masks.c`, `iop/retouch.c`, `iop/spots.c`, `develop/supervisor.c`) reach directly into
+`dt_masks_form_t` and friends, four places `malloc` a masks type by hand, and `->forms` is walked
+as a plain `GList` all over `develop/`. The audit behind that is issue #1299; the plan is to drain
+it phase by phase rather than in one break.
+
+**`tools/check_module_boundaries.sh` section 9 counts the remaining leaks, and the counts may only
+FALL.** Adding a new external struct access, a new includer of `masks.h`, a new hand-rolled
+allocation or a new raw `->forms` walk fails CI. So does *removing* one without lowering the
+baseline in the same commit — that is deliberate: it is what stops a phase from half-landing and
+the ground being quietly given back later.
+
+Two things about those counters a future editor should not "improve":
+
+- **The member list is curated to names no other struct in the tree uses** (`formid`,
+  `form_dragging`, `creation_formids`, …) and deliberately omits the ambiguous ones a masks form
+  shares with everything else (`points`, `type`, `name`, `state`, `opacity`). It therefore
+  undercounts — the full census found ~385 accesses by reading declarations, the gate reports 102
+  — and that is the right error for a gate. Widening it buys a bigger number and loses the
+  property that every match is real.
+- **One write match is a known false positive and stays counted**: `supervisor.c`'s own event
+  struct also has a `formid`, so `e->formid = form->formid` matches on the left while genuinely
+  reading a masks form on the right. It is stable, so it costs nothing; chasing it would mean
+  excluding the file, which would hide real writes appearing there later.
+
 ## IOP modules
 
 ### ashift: preview buffer and crop geometry
