@@ -971,6 +971,10 @@ static void _gradient_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const fl
   const float wd = geometry.raw_width;
   const float ht = geometry.raw_height;
 
+  /* Decimate each segment to device resolution, as the brush does; see dt_draw_min_emit_step().
+   * The last point of a segment is always emitted so an open guide line keeps its true end. */
+  const double min_step = dt_draw_min_emit_step(cr);
+  const double min_step2 = min_step * min_step;
   int i = 0;
   while(i < points_count)
   {
@@ -984,15 +988,21 @@ static void _gradient_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const fl
     }
 
     cairo_move_to(cr, px, py);
+    double last_x = px, last_y = py;
     i++;
 
     // continue the current segment until a non-normal or out-of-range point
     while(i < points_count)
     {
-      const float qx = points[i * 2];
-      const float qy = points[i * 2 + 1];
-      if(!isnormal(qx) || !_gradient_is_canonical(qx, qy, wd, ht)) break;
+      const double qx = points[i * 2];
+      const double qy = points[i * 2 + 1];
+      if(!isnormal((float)qx) || !_gradient_is_canonical((float)qx, (float)qy, wd, ht)) break;
+      const double dx = qx - last_x, dy = qy - last_y;
+      const gboolean is_last = (i + 1 >= points_count) || !isnormal(points[(i + 1) * 2])
+                               || !_gradient_is_canonical(points[(i + 1) * 2], points[(i + 1) * 2 + 1], wd, ht);
+      if(!is_last && (dx * dx + dy * dy) < min_step2) { i++; continue; }
       cairo_line_to(cr, qx, qy);
+      last_x = qx; last_y = qy;
       i++;
     }
   }

@@ -1002,13 +1002,19 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, double x,
 static void _ellipse_draw_shape(dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source)
 {
   // dev unused, kept for shape_draw_function_t signature
-  cairo_move_to(cr, points[10], points[11]);
+  /* Decimate to the device resolution, as the brush does; see dt_draw_min_emit_step(). */
+  const double min_step = dt_draw_min_emit_step(cr);
+  const double min_step2 = min_step * min_step;
+  double last_x = points[10], last_y = points[11];
+  cairo_move_to(cr, last_x, last_y);
   for(int t = 6; t < points_count; t++)
   {
-    const float x = points[t * 2];
-    const float y = points[t * 2 + 1];
-
+    const double x = points[t * 2];
+    const double y = points[t * 2 + 1];
+    const double dx = x - last_x, dy = y - last_y;
+    if((dx * dx + dy * dy) < min_step2) continue;
     cairo_line_to(cr, x, y);
+    last_x = x; last_y = y;
   }
   cairo_close_path(cr);
 }
