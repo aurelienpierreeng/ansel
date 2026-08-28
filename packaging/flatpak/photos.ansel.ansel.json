@@ -4,8 +4,6 @@
     "runtime-version": "49",
     "sdk": "org.gnome.Sdk",
     "command": "ansel",
-    "rename-desktop-file": "photos.ansel.app.desktop",
-    "rename-appdata-file": "photos.ansel.app.appdata.xml",
     "rename-icon": "ansel",
     "copy-icon": true,
     "finish-args": [
@@ -17,7 +15,6 @@
         "--talk-name=org.freedesktop.secrets",
         "--metadata=X-DConf=migrate-path=/org/ansel/Ansel/",
         "--system-talk-name=org.freedesktop.ColorManager",
-        "--own-name=org.darktable.service",
         "--talk-name=org.gtk.vfs.*",
         "--filesystem=xdg-run/gvfs",
         "--filesystem=xdg-run/gvfsd",
@@ -427,12 +424,7 @@
                     "type": "dir",
                     "path": "../.."
                 }
-            ],
-            "build-options": {
-                "build-args": [
-                    "--share=network"
-                ]
-            }
+            ]
         }
     ]
 }

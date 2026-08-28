@@ -16,67 +16,67 @@
 #   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 
 # Created: 2026-02-16
-# Requires: flatpak, flatpak-builder, and git installed on the host.
+# Requires: flatpak, flatpak-builder, git and jq installed on the host.
+#
+# Builds the Flatpak from the local working tree and produces two things in
+# ${BUILD_DIR}:
+#
+#   repo/                        an OSTree repository, ready to be served over
+#                                HTTP as a Flatpak remote (this is what gives
+#                                users `flatpak update`)
+#   Ansel-<version>-x86_64.flatpak   a single-file bundle, for one-off installs
+#
+# Signing the repository is opt-in: set GPG_KEY_ID (and optionally GPG_HOMEDIR)
+# and both the repo and the bundle are signed. An unsigned repo still works,
+# but every client has to add it with --no-gpg-verify.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd)
 
 LOCAL_MANIFEST=${LOCAL_MANIFEST:-"${SCRIPT_DIR}/photos.ansel.ansel.json"}
-APP_ID=${APP_ID:-"photos.ansel.app"}
-COMMAND=${COMMAND:-"ansel"}
-DESKTOP_FILE=${DESKTOP_FILE:-"${APP_ID}.desktop"}
-APPDATA_FILE=${APPDATA_FILE:-"${APP_ID}.appdata.xml"}
+
+# The app id is read from the manifest rather than hardcoded here. It has to
+# agree with the id in data/photos.ansel.ansel.appdata.xml.in and with the name
+# of the .desktop file data/CMakeLists.txt installs, and three independent
+# copies of it is how they drifted apart in the first place.
+APP_ID=${APP_ID:-"$(jq -r '.["app-id"]' "${LOCAL_MANIFEST}")"}
 SOURCE_DIR=${SOURCE_DIR:-"${ROOT_DIR}"}
+VERSION=${VERSION:-"$(sh "${ROOT_DIR}/tools/get_git_version_string.sh")"}
+BUNDLE_NAME=${BUNDLE_NAME:-"Ansel-${VERSION}-x86_64.flatpak"}
 
 BUILD_DIR=${BUILD_DIR:-"${ROOT_DIR}/build/flatpak"}
 MANIFEST_PATH=${MANIFEST_PATH:-"${BUILD_DIR}/${APP_ID}.json"}
+REPO_DIR=${REPO_DIR:-"${BUILD_DIR}/repo"}
 SHARED_MODULES_DIR=${SHARED_MODULES_DIR:-"${BUILD_DIR}/shared-modules"}
-FLATHUB_DARKTABLE_DIR=${FLATHUB_DARKTABLE_DIR:-"${BUILD_DIR}/org.darktable.Darktable"}
+
+GPG_KEY_ID=${GPG_KEY_ID:-""}
+GPG_HOMEDIR=${GPG_HOMEDIR:-""}
+
+if [[ -z "${APP_ID}" || "${APP_ID}" == "null" ]]; then
+  echo "ERROR: could not read app-id from ${LOCAL_MANIFEST}." >&2
+  exit 1
+fi
 
 mkdir -p "${BUILD_DIR}"
 
-TMP_DIR=$(mktemp -d)
-cleanup() {
-  rm -rf "${TMP_DIR}"
-}
-trap cleanup EXIT
-
-cp "${LOCAL_MANIFEST}" "${TMP_DIR}/manifest.json"
-
-jq --arg app_id "${APP_ID}" \
-   --arg command "${COMMAND}" \
-   --arg desktop "${DESKTOP_FILE}" \
-   --arg appdata "${APPDATA_FILE}" \
-   --arg source_dir "${SOURCE_DIR}" \
-   '
-   .["app-id"] = $app_id |
-   .command = $command |
-   (if has("rename-desktop-file") then .["rename-desktop-file"] = $desktop else . end) |
-   (if has("rename-appdata-file") then .["rename-appdata-file"] = $appdata else . end) |
-   (if has("rename-icon") then .["rename-icon"] = "ansel" else . end) |
-   def is_app_module:
-     (type == "object") and
-     ((has("name") and (.name | test("darktable|ansel"; "i"))) or
-      ([.sources[]? | .url? // empty] | any(test("darktable|ansel"; "i"))));
-   .modules |= (map(
-     if is_app_module then
-       .name = "ansel" |
-       .sources = [{"type":"dir","path":$source_dir}]
-     else
-       .
-     end
-   ))
-   ' "${TMP_DIR}/manifest.json" > "${MANIFEST_PATH}"
+# Point the app module at this working tree. Everything else in the manifest is
+# used verbatim.
+jq --arg source_dir "${SOURCE_DIR}" \
+   '.modules |= map(
+      if (type == "object") and (.name == "ansel") then
+        .sources = [{"type": "dir", "path": $source_dir}]
+      else
+        .
+      end
+    )' \
+   "${LOCAL_MANIFEST}" > "${MANIFEST_PATH}"
 
 if ! jq -e --arg source_dir "${SOURCE_DIR}" \
   'any(.modules[];
-      if type=="object" then
-        (.sources? | if type=="array" then any(.[]?; type=="object" and .type=="dir" and .path==$source_dir) else false end)
-      else
-        false
-      end
-    )' \
+       (type == "object")
+       and (.name == "ansel")
+       and ((.sources // []) | any(.type == "dir" and .path == $source_dir)))' \
   "${MANIFEST_PATH}" >/dev/null; then
   echo "ERROR: no local source module found after patching manifest." >&2
   exit 1
@@ -86,7 +86,26 @@ flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flath
 if [[ ! -d "${SHARED_MODULES_DIR}" ]]; then
   git clone --depth 1 https://github.com/flathub/shared-modules.git "${SHARED_MODULES_DIR}"
 fi
-flatpak-builder --user --force-clean --install-deps-from=flathub \
-  --repo="${BUILD_DIR}/repo" "${BUILD_DIR}/build" "${MANIFEST_PATH}"
 
-flatpak build-bundle "${BUILD_DIR}/repo" "${BUILD_DIR}/${APP_ID}.flatpak" "${APP_ID}"
+GPG_ARGS=()
+if [[ -n "${GPG_KEY_ID}" ]]; then
+  GPG_ARGS+=("--gpg-sign=${GPG_KEY_ID}")
+  if [[ -n "${GPG_HOMEDIR}" ]]; then
+    GPG_ARGS+=("--gpg-homedir=${GPG_HOMEDIR}")
+  fi
+fi
+
+flatpak-builder --user --force-clean --install-deps-from=flathub \
+  --repo="${REPO_DIR}" "${GPG_ARGS[@]}" \
+  "${BUILD_DIR}/build" "${MANIFEST_PATH}"
+
+# Generate the summary file clients need to see the app, and drop the objects
+# no ref points at any more so a repo republished every night does not grow
+# without bound.
+flatpak build-update-repo --prune "${GPG_ARGS[@]}" "${REPO_DIR}"
+
+flatpak build-bundle "${GPG_ARGS[@]}" \
+  "${REPO_DIR}" "${BUILD_DIR}/${BUNDLE_NAME}" "${APP_ID}"
+
+echo "Repository: ${REPO_DIR}"
+echo "Bundle:     ${BUILD_DIR}/${BUNDLE_NAME}"
