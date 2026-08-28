@@ -346,9 +346,39 @@ pins that contract; `-d history` shows the hold times.
 
 The named-rwlock diagnostic lives in `system/dtpthread.h` (`dt_pthread_rwlock_set_name()`,
 opt-in per lock, combine with `-d history`); `dev->history_mutex` is named in `dt_dev_init()`.
-Drawn-mask geometry editing still commits history through the throttle on every drag motion
-rather than through the transient-params channel the drawlayer brush uses — that is the remaining
-follow-up for #1098, and it is a GUI-side routing change, not a locking one.
+
+### Drawn-mask drags render from the transient slot; history is written once, on release
+
+The other half of #1098. `views/darkroom.c` used to make a mask drag visible by committing
+history on the GUI throttle — about once per pipe render, mid-drag: a history rewrite, a DB write
+job and a full `synch_top` per tick, with the shape's owner re-hashed against `dev->forms` only as
+a side effect. It now takes the drawlayer brush's route (`_publish_mask_edit_transient()`,
+mirroring `_publish_backend_progress()` in `iop/drawlayer/worker.c`): on every drag motion and
+every scroll step, publish the owner module's *own, unchanged* params through
+`dt_dev_transient_params_set()` and flag the main pipe `TOP_CHANGED`. That is only a ticket onto
+`_sync_focused_in_place()`, which re-commits the one focused piece against the **live**
+`dev->forms` — `dt_iop_compute_blendop_hash()` folds the group's geometry in, and
+`dt_dev_pixelpipe_process()` re-snapshots `pipe->forms` on every recompute — so the piece re-keys
+from the moved shape and only it and its downstream recompute. Nothing about the shape lives in
+params; the geometry is in `dev->forms`, which is why publishing unchanged params works.
+
+Three things a reviewer would otherwise "simplify" away:
+
+- **The throttled commit defers itself while `dt_masks_gui_is_dragging()`** by re-queueing, and
+  runs after the button comes up. It must not be suppressed outright: the release path only
+  *queues* the commit, it does not commit, so a suppressed callback would never write history.
+- **Flag with `dt_dev_pixelpipe_or_changed()`, not `_change_pipe()`.** The latter also raises the
+  killswitch; per-motion killswitches abort every in-flight render and a fast drag never gets a
+  frame. The drawlayer heartbeat makes the same choice for the same reason.
+- **Clear the transient slot before the commit, and even when nothing changed.** The commit's
+  resync must come from history, and a no-op drag must not leave the slot occupied. When the slot
+  was active but `forms_changed` is false, flag the main pipe once so it re-syncs from history
+  rather than keeping a render keyed to a slot that no longer exists.
+
+Scrolling (size / feather / opacity) has no release, so there the throttle marks the end of the
+burst: each step renders live, one commit lands after the last. The mask-manager path
+(`libs/masks.c`, no focused module) is unchanged and still commits directly; the focused-piece
+path needs `dev->gui_module` to be the shape's owner.
 
 ### `_insert_default_modules` must check `dev->history` in memory, not the DB row for `dev->image_storage.id`
 
