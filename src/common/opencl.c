@@ -142,10 +142,11 @@ static inline void _opencl_splash_update_compile(const char *programname)
 }
 
 static const char *dt_opencl_get_vendor_by_id(unsigned int id);
-/** per-vendor GPU-driver crash streak; defined with the driver table further down, declared
+/** per-runtime GPU-driver crash streak; defined with the runtime table further down, declared
     here because the per-device setup above it consults them */
-static int _gpu_vendor_crash_streak(unsigned int vendor_id);
-static void _gpu_vendor_set_crash_streak(unsigned int vendor_id, int value);
+static const char *_gpu_runtime_of_platform(const char *platform_name);
+static int _gpu_runtime_crash_streak(const char *runtime);
+static void _gpu_runtime_set_crash_streak(const char *runtime, int value);
 static char *_ascii_str_canonical(const char *in, char *out, int maxlen);
 /** parse a single token of priority string and store priorities in priority_list */
 static void dt_opencl_priority_parse(dt_opencl_t *cl, char *configstr, int *priority_list, int *mandatory);
@@ -512,6 +513,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   cl->dev[dev].used_global_mem = 0;
   cl->dev[dev].nvidia_sm_20 = 0;
   cl->dev[dev].vendor = NULL;
+  cl->dev[dev].runtime_id = NULL;
   cl->dev[dev].name = NULL;
   cl->dev[dev].cname = NULL;
   cl->dev[dev].options = NULL;
@@ -736,24 +738,33 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   cl->dev[dev].vendor = strdup(dt_opencl_get_vendor_by_id(vendor_id));
   cl->dev[dev].vendor_id = vendor_id;
 
-  /* Skip this device if ITS driver is what keeps crashing.
+  /* Which OpenCL runtime publishes this device. A string literal owned by the runtime table,
+   * so it outlives the device and is never freed; NULL for a platform we ship no rule for,
+   * which simply means no crash can ever be attributed to it. */
+  cl->dev[dev].runtime_id = _gpu_runtime_of_platform(platform_name);
+  dt_print_nts(DT_DEBUG_OPENCL, "   OPENCL RUNTIME:           %s\n",
+               cl->dev[dev].runtime_id ? cl->dev[dev].runtime_id : "unrecognised");
+
+  /* Skip this device if ITS runtime is what keeps crashing.
    *
-   * Per device, not globally: a machine with an Intel iGPU and an NVIDIA dGPU must keep the
-   * NVIDIA when Intel's compiler is the one faulting. The streak counts crashes whose
-   * backtrace named a runtime this vendor ships, so a device whose driver was never on a
+   * Per runtime, not per vendor: Mesa's Rusticl drives AMD and Intel cards alike, so keying on
+   * the hardware vendor could neither disable both nor tell a Rusticl panic apart from a fault
+   * in AMD's own amdocl on the same card. A machine with an Intel iGPU and an NVIDIA dGPU
+   * still keeps the NVIDIA when Intel's compiler is the one faulting -- those are different
+   * runtimes, which is exactly what the streak counts. A device whose runtime was never on a
    * crashing stack is untouched however often something else fails.
    *
    * The device name and driver version go in the message because that is what a user needs to
    * act on -- which card, which driver to update. */
-  const int vendor_crash_streak = _gpu_vendor_crash_streak(vendor_id);
-  if(vendor_crash_streak >= 2)
+  const int runtime_crash_streak = _gpu_runtime_crash_streak(cl->dev[dev].runtime_id);
+  if(runtime_crash_streak >= 2)
   {
     dt_print(DT_DEBUG_ALWAYS,
-             "[opencl_init] disabling device %d `%s' (%s, driver %s): the last %d crashes"
-             " happened inside this vendor's OpenCL driver. Re-enable it in preferences once"
-             " the driver is updated; other devices are unaffected.\n",
-             dev, infostr ? infostr : "?", cl->dev[dev].vendor,
-             driverversion ? driverversion : "?", vendor_crash_streak);
+             "[opencl_init] disabling device %d `%s' (%s runtime, driver %s): the last %d"
+             " crashes happened inside this OpenCL runtime. Re-enable it in preferences once"
+             " the driver is updated; devices on other runtimes are unaffected.\n",
+             dev, infostr ? infostr : "?", cl->dev[dev].runtime_id,
+             driverversion ? driverversion : "?", runtime_crash_streak);
     cl->dev[dev].disabled |= 1;
     res = -1;
     goto end;
@@ -1090,54 +1101,86 @@ end:
   return res;
 }
 
-/* GPU vendor OpenCL runtimes, by the name their module carries in a crash backtrace and the
- * CL_DEVICE_VENDOR_ID of the devices they drive.
+/* OpenCL runtimes, by the name their shared object carries in a crash backtrace and the
+ * CL_PLATFORM_NAME of the platform they publish.
  *
- * The module name is deliberately the VENDOR RUNTIME, never the ICD loader (OpenCL.dll /
+ * The module name is deliberately the RUNTIME's own object, never the ICD loader (OpenCL.dll /
  * libOpenCL.so): the loader is on the stack of every OpenCL crash, including ones that are
- * entirely ours. The vendor id is what lets a crash in one vendor's driver disable only that
- * vendor's devices -- a machine with an Intel iGPU and an NVIDIA dGPU must not lose the
- * NVIDIA because Intel's compiler faulted. */
-typedef struct _gpu_driver_t
+ * entirely ours.
+ *
+ * The key is the RUNTIME, not the hardware vendor. A runtime is what crashes, and a runtime is
+ * what a device can be moved off; the vendor is neither. Mesa's Rusticl is what forces the
+ * distinction (issue #1226): it drives AMD radeonsi and Intel iris cards alike, so a
+ * vendor-keyed streak could neither cover both nor tell a Rusticl panic apart from a fault in
+ * AMD's own amdocl on the very same card. A device belongs to exactly one platform and a
+ * platform is published by exactly one runtime, so CL_PLATFORM_NAME is the honest way back
+ * from a device to the thing that crashed.
+ *
+ * Rows may share a conf_suffix: one runtime can ship several objects, and either can be the one
+ * on the stack (Intel's compiler and its runtime proper are separate libraries). The suffix,
+ * not the row, is the identity; a platform lookup stops at the first row that matches.
+ *
+ * Platform matching is a case-insensitive substring test and it fails OPEN -- an unrecognised
+ * platform gets no streak and is never disabled, which is what every platform did before this
+ * table existed. That is the safe direction, but it means a runtime that renames its platform
+ * silently stops being covered, so each device logs the runtime it resolved to under
+ * `-d opencl` and a report tells us which string to add.
+ *
+ * The platform strings for rusticl, Intel, NVIDIA and Clover are sampled from clinfo; AMD's is
+ * the long-standing name of its APP platform under both the proprietary stack and ROCm, and is
+ * the one row here not read off a live machine. Nothing else publishes a platform name
+ * containing "AMD", so the short substring costs no precision and buys coverage if AMD ever
+ * decorates the rest of the string. */
+typedef struct _gpu_runtime_t
 {
-  const char *module;       // substring to look for in a backtrace
-  unsigned int vendor_id;   // CL_DEVICE_VENDOR_ID of the devices it drives
-  const char *conf_suffix;  // stable fragment of the per-vendor conf key
-} _gpu_driver_t;
+  const char *module;       // substring to look for in a crash backtrace
+  const char *platform;     // substring of the CL_PLATFORM_NAME it publishes
+  const char *conf_suffix;  // stable fragment of the per-runtime conf key
+} _gpu_runtime_t;
 
-static const _gpu_driver_t _gpu_drivers[] = {
-  { "amdocl",           DT_OPENCL_VENDOR_AMD,    "amd" },     // Sentry 129862572, 141634558
-  { "libigdfcl",        DT_OPENCL_VENDOR_INTEL,  "intel" },   // Sentry 129978857
-  { "libigdrcl",        DT_OPENCL_VENDOR_INTEL,  "intel" },
-  { "intelocl",         DT_OPENCL_VENDOR_INTEL,  "intel" },
-  { "libnvidia-opencl", DT_OPENCL_VENDOR_NVIDIA, "nvidia" },
-  { "nvopencl",         DT_OPENCL_VENDOR_NVIDIA, "nvidia" },
-  { NULL, 0, NULL }
+static const _gpu_runtime_t _gpu_runtimes[] = {
+  { "RusticlOpenCL",    "rusticl",         "rusticl" },  // issue #1226
+  { "libMesaOpenCL",    "Clover",          "clover" },   // Rusticl's predecessor, same exposure
+  { "amdocl",           "AMD",             "amd" },      // Sentry 129862572, 141634558
+  { "libigdfcl",        "Intel(R) OpenCL", "intel" },    // Sentry 129978857
+  { "libigdrcl",        "Intel(R) OpenCL", "intel" },
+  { "intelocl",         "Intel(R) OpenCL", "intel" },
+  { "libnvidia-opencl", "NVIDIA",          "nvidia" },
+  { "nvopencl",         "NVIDIA",          "nvidia" },
+  { NULL, NULL, NULL }
 };
 
-/* Per-vendor crash-streak conf key. NULL for a vendor we do not ship a rule for. */
-static const char *_gpu_vendor_conf_suffix(unsigned int vendor_id)
+/* The runtime publishing `platform_name`, as its conf-key suffix; NULL if we ship no rule for
+ * it. Case-insensitive, following dt_opencl_check_driver_blacklist(). */
+static const char *_gpu_runtime_of_platform(const char *platform_name)
 {
-  for(int i = 0; _gpu_drivers[i].module; i++)
-    if(_gpu_drivers[i].vendor_id == vendor_id) return _gpu_drivers[i].conf_suffix;
-  return NULL;
+  if(IS_NULL_PTR(platform_name)) return NULL;
+
+  gchar *haystack = g_ascii_strdown(platform_name, -1);
+  const char *runtime = NULL;
+  for(int i = 0; _gpu_runtimes[i].module && IS_NULL_PTR(runtime); i++)
+  {
+    gchar *needle = g_ascii_strdown(_gpu_runtimes[i].platform, -1);
+    if(strstr(haystack, needle)) runtime = _gpu_runtimes[i].conf_suffix;
+    g_free(needle);
+  }
+  g_free(haystack);
+  return runtime;
 }
 
-static int _gpu_vendor_crash_streak(unsigned int vendor_id)
+static int _gpu_runtime_crash_streak(const char *runtime)
 {
-  const char *suffix = _gpu_vendor_conf_suffix(vendor_id);
-  if(IS_NULL_PTR(suffix)) return 0;
+  if(IS_NULL_PTR(runtime)) return 0;
   char key[128];
-  snprintf(key, sizeof(key), "opencl_driver_crash_streak_%s", suffix);
+  snprintf(key, sizeof(key), "opencl_driver_crash_streak_%s", runtime);
   return dt_conf_get_int(key);
 }
 
-static void _gpu_vendor_set_crash_streak(unsigned int vendor_id, int value)
+static void _gpu_runtime_set_crash_streak(const char *runtime, int value)
 {
-  const char *suffix = _gpu_vendor_conf_suffix(vendor_id);
-  if(IS_NULL_PTR(suffix)) return;
+  if(IS_NULL_PTR(runtime)) return;
   char key[128];
-  snprintf(key, sizeof(key), "opencl_driver_crash_streak_%s", suffix);
+  snprintf(key, sizeof(key), "opencl_driver_crash_streak_%s", runtime);
   dt_conf_set_int(key, value);
 }
 
@@ -1160,11 +1203,12 @@ void dt_opencl_note_crash_backtrace(const char *backtrace, size_t backtrace_len)
   if(_driver_crash_marker[0] == '\0' || IS_NULL_PTR(backtrace) || backtrace_len == 0) return;
 
   /* Record WHICH runtime, not just that one crashed: the next start disables only the devices
-   * that vendor drives. Writing the module's own compile-time string keeps this handler free
-   * of any formatting. */
+   * that runtime publishes. Writing the module's own compile-time string keeps this handler
+   * free of any formatting -- the module is mapped back to its runtime at the next start, off
+   * the crash path. */
   const char *culprit = NULL;
-  for(int i = 0; _gpu_drivers[i].module && IS_NULL_PTR(culprit); i++)
-    if(strstr(backtrace, _gpu_drivers[i].module)) culprit = _gpu_drivers[i].module;
+  for(int i = 0; _gpu_runtimes[i].module && IS_NULL_PTR(culprit); i++)
+    if(strstr(backtrace, _gpu_runtimes[i].module)) culprit = _gpu_runtimes[i].module;
 
   if(IS_NULL_PTR(culprit)) return;
 
@@ -1181,8 +1225,9 @@ void dt_opencl_note_crash_backtrace(const char *backtrace, size_t backtrace_len)
 /* Fold the recorded driver crashes into the per-vendor streaks, consuming the record.
  *
  * Runs early in dt_opencl_init(), where allocation and conf are safe again. Each line names
- * the runtime module that was on the crashing stack; it is mapped back to the vendor whose
- * devices that module drives, so the streak that grows is that vendor's alone. */
+ * the module that was on the crashing stack; it is mapped back to the runtime that ships it,
+ * so the streak that grows is that runtime's alone. Lines written by an older build name the
+ * same modules, so a marker left across an upgrade still folds correctly. */
 static void _opencl_fold_driver_crashes(void)
 {
   if(_driver_crash_marker[0] == '\0') return;
@@ -1198,11 +1243,11 @@ static void _opencl_fold_driver_crashes(void)
     for(int l = 0; lines[l]; l++)
     {
       if(lines[l][0] == '\0') continue;
-      for(int i = 0; _gpu_drivers[i].module; i++)
+      for(int i = 0; _gpu_runtimes[i].module; i++)
       {
-        if(strcmp(lines[l], _gpu_drivers[i].module) != 0) continue;
-        const unsigned int vid = _gpu_drivers[i].vendor_id;
-        _gpu_vendor_set_crash_streak(vid, _gpu_vendor_crash_streak(vid) + 1);
+        if(strcmp(lines[l], _gpu_runtimes[i].module) != 0) continue;
+        const char *runtime = _gpu_runtimes[i].conf_suffix;
+        _gpu_runtime_set_crash_streak(runtime, _gpu_runtime_crash_streak(runtime) + 1);
         break;
       }
     }
@@ -1540,15 +1585,15 @@ void dt_opencl_clear_driver_crash_streak(void)
   dt_opencl_t *cl = _opencl;
   if(IS_NULL_PTR(cl) || !cl->inited || !cl->enabled || IS_NULL_PTR(cl->dev)) return;
 
-  /* The counters are per vendor (the same keys _gpu_vendor_crash_streak() gates a device on),
-   * and only a vendor whose device RAN is cleared: a device this session skipped because of
-   * its own streak has not shown anything. */
+  /* The counters are per runtime (the same keys _gpu_runtime_crash_streak() gates a device
+   * on), and only a runtime whose device RAN is cleared: a device this session skipped because
+   * of its own streak has not shown anything. */
   for(int i = 0; i < cl->num_devs; i++)
   {
     if(cl->dev[i].disabled) continue;
-    const unsigned int vendor_id = cl->dev[i].vendor_id;
-    if(_gpu_vendor_crash_streak(vendor_id) != 0)
-      _gpu_vendor_set_crash_streak(vendor_id, 0);
+    const char *runtime = cl->dev[i].runtime_id;
+    if(_gpu_runtime_crash_streak(runtime) != 0)
+      _gpu_runtime_set_crash_streak(runtime, 0);
   }
 }
 
