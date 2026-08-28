@@ -339,10 +339,21 @@ pins that contract; `-d history` shows the hold times.
   address** — a hazard the old under-the-lock raw pointer already had in principle. Do not
   "simplify" it back to a plain assignment; the worst case of a lost exchange race is one full
   resync, never a leak or a double free.
-- **The async DB write job (`_dt_dev_write_history_job_run`) is the *second* long reader** of
-  this lock — it holds it across the whole history+masks rewrite and is instrumented the same
-  way. It has the same disease and would take the same cure; it was left as is because it does
-  not sit on the interactive path the way the pipe resync did.
+- **The async DB write job (`_dt_dev_write_history_job_run`) was the *second* long reader** of
+  this lock, and it IS on the interactive path: it runs after every commit and held the read
+  lock across the whole history+masks rewrite (every row deleted and re-inserted), so the GUI
+  thread's *next* commit queued behind it — the wait `dt_dev_history_commit_item_now()` logs as
+  "blocked acquiring history_mutex". Same cure: `_history_write_state_take()` freezes the
+  snapshot **plus a deep copy of `dev->iop_order_list`** (the one other thing the rewrite reads
+  from `dev`) under a brief lock, and `_write_history_from_state()` writes lock-free. The trap
+  specific to this one: **`history_write_pending` must be cleared at snapshot time, under the
+  lock — not after the write.** `dt_dev_write_history()` skips queueing while that flag is set,
+  on the promise that the pending write will still pick the commit up; with a snapshot that is
+  true only for commits landing before the freeze. Clearing after the rewrite would silently
+  drop every commit made while the rewrite ran — the coalescing comment there spells out the
+  two cases. The seven other `dt_dev_write_history_ext()` callers hold the lock as writers
+  mid-commit and expect the write done on return; they keep that contract (state taken and
+  written under their lock) and were not touched.
 
 The named-rwlock diagnostic lives in `system/dtpthread.h` (`dt_pthread_rwlock_set_name()`,
 opt-in per lock, combine with `-d history`); `dev->history_mutex` is named in `dt_dev_init()`.
