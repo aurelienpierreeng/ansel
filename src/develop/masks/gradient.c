@@ -40,6 +40,7 @@
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_functions.h"
+#include "develop/masks/masks_touched.h"
 #include "math/openmp_maths.h"
 #include "widgets/accelerators.h"
 
@@ -1347,8 +1348,10 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
 
 static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                                   const dt_dev_pixelpipe_iop_t *const piece,
-                                  dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
+                                  dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer,
+                                  dt_iop_roi_t *touched)
 {
+  dt_masks_touched_none(touched);
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
@@ -1493,6 +1496,9 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   }
 
   dt_pixelpipe_cache_free_align(points);
+
+  // A gradient is non-zero over the whole ROI: there is no box smaller than the buffer.
+  dt_masks_touched_full(touched, w, h);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] gradient fill took %0.04f sec\n", form->name,

@@ -55,6 +55,7 @@
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_functions.h"
+#include "develop/masks/masks_touched.h"
 #include "math/openmp_maths.h"
 #include "gui/actions/menu.h"
 #include <assert.h>
@@ -3162,8 +3163,10 @@ static inline void _polygon_falloff_roi(float *buffer, int *p0, int *p1, int bw,
 static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                                  const dt_dev_pixelpipe_iop_t *const piece,
                                  dt_masks_form_t *const mask_form,
-                                 const dt_iop_roi_t *roi, float *buffer)
+                                 const dt_iop_roi_t *roi, float *buffer,
+                                 dt_iop_roi_t *touched)
 {
+  dt_masks_touched_none(touched);
   if(IS_NULL_PTR(module)) return 1;
   double start = 0.0;
   double start2 = 0.0;
@@ -3356,6 +3359,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
     {
       // roi lies completely within polygon
       for(size_t k = 0; k < (size_t)width * height; k++) buffer[k] = 1.0f;
+      dt_masks_touched_full(touched, width, height);
     }
     else
     {
@@ -3551,6 +3555,13 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
 
   dt_pixelpipe_cache_free_align(points);
   dt_pixelpipe_cache_free_align(border);
+
+  /* The raw bounding box already spans the border samples, so the feather falloff lies inside
+   * it too; the margin covers the one-pixel neighbour writes of the falloff stamps. The
+   * encircling case reported the full buffer above. */
+  if(!polygon_encircles_roi)
+    dt_masks_touched_set(touched, (int)floorf(xmin) - 2, (int)floorf(ymin) - 2, (int)ceilf(xmax) + 2,
+                         (int)ceilf(ymax) + 2, width, height);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon fill buffer took %0.04f sec\n",

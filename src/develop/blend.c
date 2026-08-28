@@ -567,7 +567,12 @@ static int _develop_blend_init_drawn_mask(const dt_develop_blend_params_t *const
                                           const size_t owidth,
                                           const size_t oheight)
 {
-  dt_masks_form_t *form = dt_masks_get_from_id(self->dev, params->mask_id);
+  /* Resolve through the pipe's refcounted forms snapshot, never the live dev->forms: this runs
+   * on the worker while the GUI thread moves the very shape being rendered (see the retouch
+   * rule in CLAUDE.md). The live list is only a fallback for a pipe that took no snapshot. */
+  dt_masks_form_t *form = (!IS_NULL_PTR(pipe) && !IS_NULL_PTR(pipe->forms))
+                              ? dt_masks_get_from_id_ext(pipe->forms, params->mask_id)
+                              : dt_masks_get_from_id(self->dev, params->mask_id);
 
   if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (params->mask_mode & DEVELOP_MASK_SHAPE))
   {
@@ -1249,6 +1254,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   float parameters[DEVELOP_BLENDIF_PARAMETER_ITEMS * DEVELOP_BLENDIF_SIZE] DT_ALIGNED_ARRAY;
   dt_develop_blendif_process_parameters(parameters, d);
 
+
   // copy blend parameters to constant device memory
   dev_blendif_params = dt_opencl_copy_host_to_device_constant(devid, sizeof(parameters), parameters);
   if(IS_NULL_PTR(dev_blendif_params)) goto error;
@@ -1354,7 +1360,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
       goto error;
     }
 
-    // the mask is now located in dev_mask_2, put it in dev_mask_1
+      // the mask is now located in dev_mask_2, put it in dev_mask_1
     _blend_process_cl_exchange(&dev_mask_1, &dev_mask_2);
 
     // post processing the mask (it will always be stored in dev_mask_1)
