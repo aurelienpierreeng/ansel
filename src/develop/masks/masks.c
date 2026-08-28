@@ -211,15 +211,16 @@ int dt_masks_form_duplicate_in_group(dt_develop_t *develop, int group_id, int fo
   return nid;
 }
 
-int dt_masks_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
+dt_masks_raster_result_t dt_masks_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                float **point_buffer, int *point_count,
                                float **border_buffer, int *border_count,
                                int source, dt_iop_module_t *module)
 {
+  /* A shape type with no outline builder is a programming error, not an empty outline. */
   if(mask_form->functions && mask_form->functions->get_points_border)
     return mask_form->functions->get_points_border(develop, mask_form, point_buffer, point_count,
                                                    border_buffer, border_count, source, module);
-  return 1;
+  return DT_MASKS_RASTER_ERROR;
 }
 
 int dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,

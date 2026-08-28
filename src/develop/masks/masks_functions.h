@@ -71,7 +71,17 @@ typedef struct dt_masks_functions_t
                        int *inside, int *inside_border, int *near_handle, int *inside_source, float *dist);
   int (*get_points)(struct dt_develop_t *dev, float x, float y, float radius_a, float radius_b, float rotation,
                     float **points, int *points_count);
-  int (*get_points_border)(struct dt_develop_t *dev, struct dt_masks_form_t *form, float **points, int *points_count,
+  /** Build the shape's outline (and, when `border' is given, its border outline).
+   *
+   * Returns OK when the outline was built, EMPTY when the shape has no geometry to build one
+   * from -- an outline that is legitimately empty, which the caller may cache like any other
+   * result -- and ERROR when the build itself failed and produced nothing cacheable. The
+   * distinction is load-bearing: the outline cache key covers the whole group, so caching a
+   * FAILURE hides the shape until the geometry next moves, while refusing to cache an
+   * legitimately EMPTY one rebuilds every shape of the group on every expose, forever.
+   */
+  dt_masks_raster_result_t (*get_points_border)(struct dt_develop_t *dev, struct dt_masks_form_t *form,
+                           float **points, int *points_count,
                            float **border, int *border_count, int source, const dt_iop_module_t *const module);
   int (*get_mask)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
                   const dt_dev_pixelpipe_iop_t *const piece,

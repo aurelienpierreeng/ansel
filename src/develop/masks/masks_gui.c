@@ -1848,26 +1848,33 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
 
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
-  const int border_status
+  const dt_masks_raster_result_t border_status
       = dt_masks_get_points_border(mask_gui->dev, mask_form, &gui_points->points, &gui_points->points_count,
                                    &gui_points->border, &gui_points->border_count, 0, NULL);
 
-  /* A shape that fails here leaves the cache key UNSET, so the next expose rebuilds the whole
-   * group again -- and the one after that, forever. An empty shape mid-creation is the obvious
-   * candidate and it is invisible in a log otherwise: say so. */
-  if(border_status != 0 && (dt_get_debug_flags() & DT_DEBUG_MASKS))
+  /* Only a genuine FAILURE may leave the cache key unset, and it must: the key covers the whole
+   * group, so one unstamped shape rebuilds every shape of the group on every later expose --
+   * forever, until the geometry moves.
+   *
+   * That is precisely why "this shape has no outline" and "building the outline broke" had to
+   * stop sharing one return value. A shape with no geometry HAS an outline -- the empty one --
+   * and caching it is correct; the drawing code already skips a NULL outline. A build that
+   * failed produced nothing to cache and must be retried. Three of the five shapes used to
+   * report the first case as success, so the cache was stamped over a NULL outline and the
+   * shape stayed invisible until the geometry next moved. */
+  if(border_status == DT_MASKS_RASTER_ERROR && (dt_get_debug_flags() & DT_DEBUG_MASKS))
     dt_print(DT_DEBUG_MASKS,
              "[masks] outline build FAILED for %s (index %d, %d nodes): the cache key stays unset,"
              " so every later expose rebuilds this whole group\n",
              mask_form->name, form_index, g_list_length(mask_form->points));
 
-  if(border_status == 0)
+  if(border_status != DT_MASKS_RASTER_ERROR)
   {
-    if(mask_form->type & DT_MASKS_CLONE)
+    if(border_status == DT_MASKS_RASTER_OK && (mask_form->type & DT_MASKS_CLONE))
     {
       if(dt_masks_get_points_border(mask_gui->dev, mask_form, &gui_points->source, &gui_points->source_count,
                                     NULL, NULL, TRUE, module)
-         != 0)
+         != DT_MASKS_RASTER_OK)
         return;
     }
     mask_gui->geometry_generation = dt_geometry_chain_generation(mask_gui->dev->geometry_chain);

@@ -681,33 +681,38 @@ static void _bounding_box(const float *const points, int num_points, int *width,
   *height = (ymax - ymin);
 }
 
-static int _circle_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *form, float **points,
+static dt_masks_raster_result_t _circle_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *form,
+                                     float **points,
                                      int *points_count, float **border, int *border_count, int source,
                                      const dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  /* No geometry to build an outline from: the outline is empty, which is a result, not a
+   * failure. Reporting success here (as this did) told the caller to cache a NULL outline as
+   * if it had been built. */
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
-  if(IS_NULL_PTR(circle)) return 0;
+  if(IS_NULL_PTR(circle)) return DT_MASKS_RASTER_EMPTY;
   float x = circle->center[0];
   float y = circle->center[1];
   if(source)
   {
     float xs = form->source[0];
     float ys = form->source[1];
-    return _circle_get_points_source(dev, x, y, xs, ys, circle->radius, circle->radius, 0.0f, points, points_count, module);
+    return dt_masks_raster_from_status(
+        _circle_get_points_source(dev, x, y, xs, ys, circle->radius, circle->radius, 0.0f, points, points_count, module));
   }
   else
   {
     if(form->functions->get_points(dev, x, y, circle->radius, circle->radius, 0, points, points_count) != 0)
-      return 1;
+      return DT_MASKS_RASTER_ERROR;
     if(!IS_NULL_PTR(border))
     {
       float outer_radius = circle->radius + circle->border;
-      return form->functions->get_points(dev, x, y, outer_radius, outer_radius, 0, border, border_count);
+      return dt_masks_raster_from_status(
+          form->functions->get_points(dev, x, y, outer_radius, outer_radius, 0, border, border_count));
     }
-    return 0;
+    return DT_MASKS_RASTER_OK;
   }
-  return 1;
 }
 
 static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
