@@ -426,8 +426,14 @@ exchanged with `dt_atomic_exch_ptr()` (added to `system/atomic.h`), so the marke
 thread while the worker writes the slot outside the lock. `src/tests/unittests/test_history_snapshot.c`
 pins the snapshot/COW/refcount contract. See CLAUDE.md, "History items are refcounted; the pipe
 resyncs against a snapshot, not under `history_mutex`", for the three design constraints that are
-not obvious from the code, and for the second long reader of this lock (the async DB write job)
-that was deliberately left alone.
+not obvious from the code.
+
+The second long reader of this lock, the async DB write job (`_dt_dev_write_history_job_run`),
+took the same cure: `_history_write_state_take()` freezes the snapshot plus a deep copy of
+`dev->iop_order_list` under a brief read lock, and `_write_history_from_state()` performs the full
+history+masks rewrite lock-free. Its one extra constraint is that the coalescing flag
+`history_write_pending` is cleared at snapshot time, under the lock, so a commit landing during
+the rewrite queues its own write instead of being silently dropped.
 
 ### Where the pipeline architecture could go
 
