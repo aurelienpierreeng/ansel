@@ -1576,34 +1576,76 @@ void dt_dev_history_cleanup(void)
 
 
 
-void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid) REQUIRES_SHARED(dev->history_mutex)
+/* Everything the DB rewrite needs, frozen at one moment under history_mutex, so the rewrite
+ * itself can run with the lock RELEASED. A dt_dev_history_snapshot_t carries the items,
+ * history_end and the hash; the iop-order list is the one other thing the rewrite reads from
+ * dev, and it is deep-copied because it is a plain GList of entries with no refcount. */
+typedef struct _history_write_state_t
+{
+  dt_dev_history_snapshot_t snapshot;
+  GList *iop_order_list;
+} _history_write_state_t;
+
+static void _history_write_state_take(dt_develop_t *dev, _history_write_state_t *state)
+    REQUIRES_SHARED(dev->history_mutex)
+{
+  // Re-derive the hash from the list and publish it, as the rewrite always has: the atomic
+  // is normally maintained by dt_dev_set_history_end_ext(), this is the belt to its braces.
+  dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
+  dt_dev_history_snapshot_take(dev, &state->snapshot);
+  state->iop_order_list = dt_ioppr_iop_order_copy_deep(dev->iop_order_list);
+}
+
+static void _history_write_state_release(_history_write_state_t *state)
+{
+  dt_dev_history_snapshot_release(&state->snapshot);
+  g_list_free_full(state->iop_order_list, dt_free_gpointer);
+  state->iop_order_list = NULL;
+}
+
+/* The rewrite proper. Needs NO lock: every item is kept alive by the snapshot's references and
+ * kept unmodified by the writer's copy-on-write gate, and the iop-order list is our own copy.
+ * dt_dev_write_history_item() reads h->module->op/params_size/version() through the item's
+ * module pointer, which is an iop instance that outlives every history item naming it. */
+static void _write_history_from_state(const _history_write_state_t *state, const int32_t imgid)
 {
   dt_image_t *cache_img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(cache_img)) return;
 
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_ext] writing history for image %i...\n", imgid);
 
-  dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
-
   _cleanup_history(imgid);
 
   // write history entries
   int i = 0;
-  for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
+  for(GList *history = g_list_first(state->snapshot.items); history; history = g_list_next(history))
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
     dt_dev_write_history_item(imgid, hist, i);
     i++;
   }
 
-  dt_history_repository_set_end(imgid, dt_dev_get_history_end_ext(dev));
+  dt_history_repository_set_end(imgid, state->snapshot.history_end);
 
-  // write the current iop-order-list for this image
-  dt_ioppr_write_iop_order_list(dev->iop_order_list, imgid);
+  // write the iop-order-list this history was captured with
+  dt_ioppr_write_iop_order_list(state->iop_order_list, imgid);
 
-  cache_img->history_hash = dt_dev_get_history_hash(dev);
+  cache_img->history_hash = state->snapshot.history_hash;
 
   dt_image_cache_write_release(cache_img, DT_IMAGE_CACHE_SAFE);
+}
+
+/* Callers of this one already hold history_mutex (most as writers, mid-commit) and expect the
+ * write to have happened when it returns, so the state is taken and written under their lock.
+ * The two paths that took the lock ONLY to write -- the async job and the sync fallback in
+ * dt_dev_write_history() -- do not come through here; they hold it just long enough to take the
+ * state. */
+void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid) REQUIRES_SHARED(dev->history_mutex)
+{
+  _history_write_state_t state;
+  _history_write_state_take(dev, &state);
+  _write_history_from_state(&state, imgid);
+  _history_write_state_release(&state);
 }
 
 // Schedule history write as a background job to avoid blocking the GUI.
@@ -1612,21 +1654,42 @@ static int _dt_dev_write_history_job_run(dt_job_t *job)
 {
   dt_develop_t *d = dt_control_job_get_params(job);
   if(IS_NULL_PTR(d)) return 1;
+  const int32_t imgid = d->image_storage.id;
+
+  // This job used to hold history_mutex as reader for the whole rewrite -- every row of
+  // history and masks_history deleted and re-inserted, tens to hundreds of ms -- and it runs
+  // after every commit, so the GUI thread's NEXT commit (which needs the writer side) queued
+  // behind it: the wait dt_dev_history_commit_item_now() logs as "blocked acquiring
+  // history_mutex". Same disease as the pipe resync, same cure: freeze the state under the
+  // lock, release, write from the frozen state.
+  _history_write_state_t state;
+  const double _lock_start = dt_get_wtime();
   dt_pthread_rwlock_rdlock(&d->history_mutex);
+  _history_write_state_take(d, &state);
+  // Clear the coalescing flag HERE, under the lock, at the moment the state is frozen -- not
+  // after the write. dt_dev_write_history() skips queueing while this flag is set, on the
+  // promise that the pending write will still pick the commit up. That promise now holds only
+  // for commits landing BEFORE this point: anything committed after the unlock is not in our
+  // snapshot, so it must find the flag clear and queue its own write. Clearing after the
+  // rewrite would silently drop every commit made while the rewrite ran.
+  dt_atomic_set_int(&d->history_write_pending, 0);
+  dt_pthread_rwlock_unlock(&d->history_mutex);
+  const double _lock_ms = (dt_get_wtime() - _lock_start) * 1000.0;
+  if(_lock_ms > 1.0)
+    dt_print(DT_DEBUG_HISTORY,
+             "[_dt_dev_write_history_job_run] tid %lu held history_mutex for %.2f ms to snapshot image %i\n",
+             (unsigned long)pthread_self(), _lock_ms, imgid);
+
   const double _write_start = dt_get_wtime();
-  dt_dev_write_history_ext(d, d->image_storage.id);
+  _write_history_from_state(&state, imgid);
   const double _write_ms = (dt_get_wtime() - _write_start) * 1000.0;
   if(_write_ms > 1.0)
     dt_print(DT_DEBUG_HISTORY,
-             "[_dt_dev_write_history_job_run] tid %lu full history+masks rewrite for image %i took %.2f ms\n",
-             (unsigned long)pthread_self(), d->image_storage.id, _write_ms);
-  // Clear before unlocking: dt_dev_add_history_item_real() always ends with a
-  // dt_dev_write_history() call after it releases its own write lock, and that call
-  // must never see history_write_pending still set from a write whose read already
-  // finished -- otherwise the commit it just made would silently never get queued.
-  dt_atomic_set_int(&d->history_write_pending, 0);
-  dt_pthread_rwlock_unlock(&d->history_mutex);
-  dt_dev_history_notify_change(d, d->image_storage.id);
+             "[_dt_dev_write_history_job_run] tid %lu full history+masks rewrite for image %i took %.2f ms, lock-free\n",
+             (unsigned long)pthread_self(), imgid, _write_ms);
+  _history_write_state_release(&state);
+
+  dt_dev_history_notify_change(d, imgid);
   return 0;
 }
 
@@ -1635,17 +1698,23 @@ void dt_dev_write_history(dt_develop_t *dev, gboolean async)
 {
   if(!async)
   {
+    // Same shape as the job: the lock is for freezing the state, not for writing it.
+    _history_write_state_t state;
     dt_pthread_rwlock_rdlock(&dev->history_mutex);
-    dt_dev_write_history_ext(dev, dev->image_storage.id);
+    _history_write_state_take(dev, &state);
     dt_pthread_rwlock_unlock(&dev->history_mutex);
+    _write_history_from_state(&state, dev->image_storage.id);
+    _history_write_state_release(&state);
     dt_dev_history_notify_change(dev, dev->image_storage.id);
     return;
   }
 
-  // Coalesce: a write already queued or running for this dev will read dev->history/
-  // dev->forms live when it (finally) runs, so it necessarily picks up whatever is
-  // committed by the time this call happens. Queuing another one would just repeat the
-  // exact same full history+masks_history rewrite for no additional freshness.
+  // Coalesce: a write already QUEUED for this dev has not frozen its state yet, so it will
+  // pick up this commit when it runs. A write already RUNNING froze its state when it took
+  // the lock and cleared this flag at that same moment (see _dt_dev_write_history_job_run),
+  // so a commit landing after that finds the flag clear and queues its own write here. Either
+  // way nothing is lost; queueing while the flag is set would only repeat a rewrite of state
+  // that is already on its way to disk.
   if(dt_atomic_exch_int(&dev->history_write_pending, 1) != 0) return;
 
   dt_job_t *job = dt_control_job_create(&_dt_dev_write_history_job_run, "write history %d",
