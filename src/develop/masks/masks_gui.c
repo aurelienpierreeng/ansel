@@ -1723,7 +1723,9 @@ static gboolean _dt_masks_events_flush_rebuild_if_needed(struct dt_iop_module_t 
  */
 static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui, const dt_masks_form_t *mask_form)
 {
-  char message[256] = "";
+  // Sized for the longest hint once translated: a truncated message would also cut a Pango
+  // markup tag in half, and dt_hinter_set_message() feeds the result to gtk_label_set_markup().
+  char message[512] = "";
 
   // Checked before use, not after: this function tests IS_NULL_PTR(mask_form) further down
   // and its own dt_print writes `mask_form ? mask_form->type : -1`, so a NULL was always
@@ -1731,8 +1733,6 @@ static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui, const dt_mask
   if(IS_NULL_PTR(mask_form)) return FALSE;
 
   const int form_type = mask_form->type;
-
-  int opacity_percent = 100;
 
   const dt_masks_form_t *selected_form = mask_form;
   int selected_form_id = 0;
@@ -1755,28 +1755,22 @@ static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui, const dt_mask
     dt_masks_form_group_t *selected_group_entry = dt_masks_form_get_selected_group_live(mask_form, mask_gui);
     if(!IS_NULL_PTR(selected_group_entry))
     {
-      opacity_percent
-          = dt_masks_form_get_interaction_value(mask_gui->dev, selected_group_entry, DT_MASKS_INTERACTION_OPACITY) * 100.f;
       selected_form = dt_masks_get_from_id(mask_gui->dev, selected_group_entry->formid);
       if(IS_NULL_PTR(selected_form)) return FALSE;
     }
   }
-  else
-  {
-    opacity_percent = (int)(dt_conf_get_float("plugins/darkroom/masks/opacity") * 100);
-  }
 
   if(selected_form->functions && selected_form->functions->set_hint_message)
   {
-    selected_form->functions->set_hint_message(mask_gui, selected_form, opacity_percent, message, sizeof(message));
+    selected_form->functions->set_hint_message(mask_gui, selected_form, message, sizeof(message));
   }
 
   dt_control_hinter_message(dt_control_get_global(), message);
   dt_print(DT_DEBUG_INPUT,
-           "[masks] hint end: sel=%p has_set_hint=%d opacity=%d msg_len=%" G_GSIZE_FORMAT " msg='%s'\n",
+           "[masks] hint end: sel=%p has_set_hint=%d msg_len=%" G_GSIZE_FORMAT " msg='%s'\n",
            (void *)selected_form,
            (selected_form && selected_form->functions && selected_form->functions->set_hint_message) ? 1 : 0,
-           opacity_percent, strlen(message), message);
+           strlen(message), message);
   return message[0] != '\0';
 }
 
@@ -2935,6 +2929,112 @@ int dt_masks_events_key_pressed(dt_develop_t *dev, struct dt_iop_module_t *modul
   return return_value;
 }
 
+/* One conf key per wheel row. The mapping is application-wide on purpose: which property the
+ * wheel edits is a user habit, not a property of a shape or of the module the mask belongs to. */
+static const char *const _scroll_conf_keys[DT_MASKS_SCROLL_MODIFIER_LAST]
+    = { "plugins/darkroom/masks/scroll/plain",
+        "plugins/darkroom/masks/scroll/shift",
+        "plugins/darkroom/masks/scroll/primary",
+        "plugins/darkroom/masks/scroll/primary_shift" };
+
+/* Written verbatim into the user's conf file, so these are a storage format: never translate
+ * them, never reorder them against dt_masks_interaction_t, and keep them in sync with the enum
+ * declared for these four keys in data/anselconfig.xml.in. */
+static const char *const _interaction_conf_values[DT_MASKS_INTERACTION_LAST]
+    = { "none", "size", "hardness", "opacity", "rotation" };
+
+dt_masks_interaction_t dt_masks_scroll_mapping_get(dt_masks_scroll_modifier_t modifier)
+{
+  if(modifier < 0 || modifier >= DT_MASKS_SCROLL_MODIFIER_LAST) return DT_MASKS_INTERACTION_UNDEF;
+
+  const char *value = dt_conf_get_string_const(_scroll_conf_keys[modifier]);
+  if(IS_NULL_PTR(value)) return DT_MASKS_INTERACTION_UNDEF;
+
+  for(int i = 0; i < DT_MASKS_INTERACTION_LAST; i++)
+    if(!strcmp(value, _interaction_conf_values[i])) return (dt_masks_interaction_t)i;
+
+  return DT_MASKS_INTERACTION_UNDEF;
+}
+
+void dt_masks_scroll_mapping_set(dt_masks_scroll_modifier_t modifier, dt_masks_interaction_t interaction)
+{
+  if(modifier < 0 || modifier >= DT_MASKS_SCROLL_MODIFIER_LAST) return;
+  if(interaction < 0 || interaction >= DT_MASKS_INTERACTION_LAST)
+    interaction = DT_MASKS_INTERACTION_UNDEF;
+
+  dt_conf_set_string(_scroll_conf_keys[modifier], _interaction_conf_values[interaction]);
+}
+
+const char *dt_masks_scroll_modifier_name(dt_masks_scroll_modifier_t modifier)
+{
+  switch(modifier)
+  {
+    case DT_MASKS_SCROLL_SHIFT:
+      return N_("Shift+Scroll");
+    case DT_MASKS_SCROLL_PRIMARY:
+      return N_("Ctrl+Scroll");
+    case DT_MASKS_SCROLL_PRIMARY_SHIFT:
+      return N_("Ctrl+Shift+Scroll");
+    case DT_MASKS_SCROLL_PLAIN:
+    default:
+      return N_("Scroll");
+  }
+}
+
+const char *dt_masks_interaction_name(dt_masks_interaction_t interaction)
+{
+  switch(interaction)
+  {
+    case DT_MASKS_INTERACTION_SIZE:
+      return N_("Size");
+    case DT_MASKS_INTERACTION_HARDNESS:
+      return N_("Hardness");
+    case DT_MASKS_INTERACTION_OPACITY:
+      return N_("Opacity");
+    case DT_MASKS_INTERACTION_ROTATION:
+      return N_("Rotation");
+    case DT_MASKS_INTERACTION_UNDEF:
+    default:
+      return N_("Nothing");
+  }
+}
+
+const char *dt_masks_interaction_alias_name(dt_masks_interaction_t interaction)
+{
+  switch(interaction)
+  {
+    case DT_MASKS_INTERACTION_SIZE:
+      return N_("Fade");
+    case DT_MASKS_INTERACTION_HARDNESS:
+      return N_("Curvature");
+    default:
+      // Opacity and rotation mean the same thing to every shape, and "nothing" is not a property.
+      return NULL;
+  }
+}
+
+dt_masks_interaction_t dt_masks_scroll_get_interaction(uint32_t key_state)
+{
+  const GdkModifierType state = (GdkModifierType)key_state;
+  dt_masks_scroll_modifier_t modifier;
+
+  // Most specific first: ctrl+shift also satisfies neither of the single-modifier tests, but
+  // reading it last would leave the combination unreachable if that ever stopped being true.
+  if(dt_modifier_is(state, GDK_SHIFT_MASK | DT_PRIMARY_MASK))
+    modifier = DT_MASKS_SCROLL_PRIMARY_SHIFT;
+  else if(dt_modifier_is(state, DT_PRIMARY_MASK))
+    modifier = DT_MASKS_SCROLL_PRIMARY;
+  else if(dt_modifier_is(state, GDK_SHIFT_MASK))
+    modifier = DT_MASKS_SCROLL_SHIFT;
+  else if(dt_modifier_is(state, 0))
+    modifier = DT_MASKS_SCROLL_PLAIN;
+  else
+    // A combination the mapping does not cover (alt+scroll, ...): not ours to interpret.
+    return DT_MASKS_INTERACTION_UNDEF;
+
+  return dt_masks_scroll_mapping_get(modifier);
+}
+
 int dt_masks_events_mouse_scrolled(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y,
                                    int scroll_up, uint32_t key_state, int scrolling_delta)
 {
@@ -2976,11 +3076,15 @@ int dt_masks_events_mouse_scrolled(dt_develop_t *dev, struct dt_iop_module_t *mo
   if(!mask_gui->creation && !_dt_masks_events_cursor_over_form(dispatch_form, mask_gui, form_index))
     return 0;
 
-  if(dispatch_form && dispatch_form->functions && dispatch_form->functions->mouse_scrolled)
+  // Resolved once, here: shapes act on a named property and never read key modifiers.
+  const dt_masks_interaction_t interaction = dt_masks_scroll_get_interaction(key_state);
+
+  if(dispatch_form && dispatch_form->functions && dispatch_form->functions->mouse_scrolled
+     && interaction != DT_MASKS_INTERACTION_UNDEF)
     result = dispatch_form->functions->mouse_scrolled(module, x, y,
                                                       scroll_increases ? 1 : 0, scroll_flow,
                                                       key_state, dispatch_form, parent_id, mask_gui, form_index,
-                                                      DT_MASKS_INTERACTION_UNDEF);
+                                                      interaction);
 
   if(!IS_NULL_PTR(mask_gui))
   {

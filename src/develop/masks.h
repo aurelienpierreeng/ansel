@@ -300,15 +300,15 @@ typedef struct dt_masks_form_group_t
 
 /*
 * Type of user interaction to map with internal properties of masks.
-* Those were initially handled implicitly by Shift/Ctrl/Shift+Ctrl + mouse scroll
-* at the scope of each mask type, which is a shitty design when using Wacom tablets.
-* This case is now covered by the DT_MASK_INTERACTION_UNDEF.
-* Otherwise, when calling the mouse_scroll callback from GUI, we set the case
-* explicitly, along with a value.
+* Those used to be deduced implicitly by each shape from Shift/Ctrl/Shift+Ctrl + mouse
+* scroll, which is a shitty design when using Wacom tablets. No shape reads key modifiers
+* any more: the wheel is resolved once, against the user's mapping, by
+* dt_masks_scroll_get_interaction() -- see masks_gui.h -- and every entry point
+* (mouse_scroll callback, context-menu sliders) names the property it acts on.
 */
 typedef enum dt_masks_interaction_t
 {
-  DT_MASKS_INTERACTION_UNDEF = 0,    // let it be deduced contextually from key modifiers, implicit
+  DT_MASKS_INTERACTION_UNDEF = 0,    // no property: an unmapped wheel combination does nothing
   DT_MASKS_INTERACTION_SIZE = 1,     // property of the form (shape), explicit
   DT_MASKS_INTERACTION_HARDNESS = 2, // property of the form (shape), explicit
   DT_MASKS_INTERACTION_OPACITY = 3,  // property of the group in which the form is included, explicit

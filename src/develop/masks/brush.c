@@ -1536,15 +1536,28 @@ static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, double w
   
   
   
+  /* `state` is the caller's raw key state, kept for the callback signature: the property to
+   * act on was already resolved from it by dt_masks_scroll_get_interaction(). A brush owns no
+   * rotation, so that mapping falls through and the wheel does nothing here. Size and hardness
+   * apply to the selected node when there is one, to every node otherwise -- that scoping is
+   * the selection's business (dt_masks_gui_change_affects_selected_node_or_all), not the
+   * wheel's. */
   if(mask_gui->creation)
   {
-    if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      return _init_hardness(mask_form, parentid, mask_gui, scroll_up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
-    else if(dt_modifier_is(state, DT_PRIMARY_MASK))
-      return _init_opacity(mask_form, parentid, mask_gui, scroll_up ? +0.02f : -0.02f,
-                           DT_MASKS_INCREMENT_OFFSET, flow);
-    else
-      return _init_size(mask_form, parentid, mask_gui, scroll_up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
+    switch(interaction)
+    {
+      case DT_MASKS_INTERACTION_HARDNESS:
+        return _init_hardness(mask_form, parentid, mask_gui, scroll_up ? 1.02f : 0.98f,
+                              DT_MASKS_INCREMENT_SCALE, flow);
+      case DT_MASKS_INTERACTION_OPACITY:
+        return _init_opacity(mask_form, parentid, mask_gui, scroll_up ? +0.02f : -0.02f,
+                             DT_MASKS_INCREMENT_OFFSET, flow);
+      case DT_MASKS_INTERACTION_SIZE:
+        return _init_size(mask_form, parentid, mask_gui, scroll_up ? 1.02f : 0.98f,
+                          DT_MASKS_INCREMENT_SCALE, flow);
+      default:
+        return 0;
+    }
   }
   else if(dt_masks_is_anything_selected(mask_gui) || mask_gui->node_hovered >= 0)
   {
@@ -1555,14 +1568,19 @@ static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, double w
       mask_gui->scrolly = mask_gui->pos[1];
     }
 
-    if(dt_modifier_is(state, DT_PRIMARY_MASK))
-      return dt_masks_form_change_opacity(mask_gui->dev, mask_form, parentid, scroll_up, flow);
-    else if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      return _change_hardness(mask_form, parentid, mask_gui, module, index, scroll_up ? -0.01f : 0.01f,
-                              DT_MASKS_INCREMENT_OFFSET, flow);
-    else // resize don't care where the mouse is inside a shape
-      return _change_size(mask_form, parentid, mask_gui, module, index, scroll_up ? 1.02f : 0.98f,
-                          DT_MASKS_INCREMENT_SCALE, flow);
+    switch(interaction)
+    {
+      case DT_MASKS_INTERACTION_OPACITY:
+        return dt_masks_form_change_opacity(mask_gui->dev, mask_form, parentid, scroll_up, flow);
+      case DT_MASKS_INTERACTION_HARDNESS:
+        return _change_hardness(mask_form, parentid, mask_gui, module, index, scroll_up ? -0.01f : 0.01f,
+                                DT_MASKS_INCREMENT_OFFSET, flow);
+      case DT_MASKS_INTERACTION_SIZE:
+        return _change_size(mask_form, parentid, mask_gui, module, index, scroll_up ? 1.02f : 0.98f,
+                            DT_MASKS_INCREMENT_SCALE, flow);
+      default:
+        return 0;
+    }
   }
   return 0;
 }
@@ -3160,15 +3178,33 @@ static void _brush_set_form_name(struct dt_masks_form_t *const mask_form, const 
 
 static void _brush_set_hint_message(const dt_masks_form_gui_t *const mask_gui,
                                     const dt_masks_form_t *const mask_form,
-                                    const int opacity, char *const restrict msgbuf,
-                                    const size_t msgbuf_len)
+                                    char *const restrict msgbuf, const size_t msgbuf_len)
 {
-  if(mask_gui->creation || mask_gui->form_selected)
-    g_snprintf(msgbuf, msgbuf_len,
-               _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
-                 "<b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
-  else if(mask_gui->border_selected)
-    g_strlcat(msgbuf, _("<b>Size</b>: scroll"), msgbuf_len);
+  // Ordered like the hit test in dt_masks_find_closest_handle_common(): the innermost target
+  // under the cursor is the one the next click will act on, so it is the one we describe.
+  // Only gestures that cannot be discovered any other way -- what the wheel does is the user's
+  // own mapping now (masks_gui.h), shown in the Drawn tab, so it is not repeated here.
+  if(mask_gui->creation)
+  {
+    if(dt_masks_form_is_clone(mask_form))
+      g_strlcat(msgbuf, _("<b>Set source</b>: Shift+Click"), msgbuf_len);
+  }
+  else if(mask_gui->source_selected)
+    g_strlcat(msgbuf, _("<b>Move source</b>: Drag"), msgbuf_len);
+  else if(mask_gui->handle_border_hovered >= 0)
+    g_strlcat(msgbuf, _("<b>Node size</b>: Drag"), msgbuf_len);
+  else if(mask_gui->handle_hovered >= 0)
+    g_strlcat(msgbuf, _("<b>Node curvature</b>: Drag"), msgbuf_len);
+  // The node operations below need the node to be selected, which the first click does.
+  else if(mask_gui->node_hovered >= 0 && mask_gui->node_selected)
+    g_strlcat(msgbuf, _("<b>Move node</b>: Drag, <b>Switch smooth/sharp</b>: Ctrl+Click\n"
+                        "<b>Delete node</b>: Right-click or Del"), msgbuf_len);
+  else if(mask_gui->node_hovered >= 0)
+    g_strlcat(msgbuf, _("<b>Move node</b>: Drag, <b>Delete node</b>: Right-click"), msgbuf_len);
+  else if(mask_gui->seg_hovered >= 0 || mask_gui->seg_selected)
+    g_strlcat(msgbuf, _("<b>Move segment</b>: Drag, <b>Add node</b>: Ctrl+Click"), msgbuf_len);
+  else if(mask_gui->form_selected || mask_gui->border_selected)
+    g_strlcat(msgbuf, _("<b>Move</b>: Drag"), msgbuf_len);
 }
 
 static void _brush_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)

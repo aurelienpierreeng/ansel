@@ -317,23 +317,36 @@ static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, double 
   
   
   
+  // `state` is the caller's raw key state, kept for the callback signature: the property to
+  // act on was already resolved from it by dt_masks_scroll_get_interaction(). A circle owns no
+  // rotation, so that mapping falls through and the wheel does nothing here.
   if(gui->creation)
   {
-    if(dt_modifier_is(state, DT_PRIMARY_MASK))
-      return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
-    else if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      return _init_hardness(form, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
-    else
-      return _init_size(form, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
+    switch(interaction)
+    {
+      case DT_MASKS_INTERACTION_OPACITY:
+        return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
+      case DT_MASKS_INTERACTION_HARDNESS:
+        return _init_hardness(form, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
+      case DT_MASKS_INTERACTION_SIZE:
+        return _init_size(form, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
+      default:
+        return 0;
+    }
   }
   else if(gui->form_selected)
   {
-    if(dt_modifier_is(state, DT_PRIMARY_MASK))
-      return dt_masks_form_change_opacity(gui->dev, form, parentid, up, flow);
-    else if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      return _change_hardness(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
-    else
-      return _change_size(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
+    switch(interaction)
+    {
+      case DT_MASKS_INTERACTION_OPACITY:
+        return dt_masks_form_change_opacity(gui->dev, form, parentid, up, flow);
+      case DT_MASKS_INTERACTION_HARDNESS:
+        return _change_hardness(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
+      case DT_MASKS_INTERACTION_SIZE:
+        return _change_size(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
+      default:
+        return 0;
+    }
   }
   return 0;
 }
@@ -1127,12 +1140,19 @@ static void _circle_set_form_name(struct dt_masks_form_t *const form, const size
 }
 
 static void _circle_set_hint_message(const dt_masks_form_gui_t *const gui, const dt_masks_form_t *const form,
-                                     const int opacity, char *const restrict msgbuf, const size_t msgbuf_len)
+                                     char *const restrict msgbuf, const size_t msgbuf_len)
 {
-  // circle has same controls on creation and on edit
-  g_snprintf(msgbuf, msgbuf_len,
-             _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
-               "<b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
+  // Only gestures that cannot be discovered any other way. What the wheel does is the user's
+  // own mapping now (masks_gui.h), shown in the Drawn tab, so it is not repeated here.
+  if(gui->creation)
+  {
+    if(dt_masks_form_is_clone(form))
+      g_strlcat(msgbuf, _("<b>Set source</b>: Shift+Click"), msgbuf_len);
+  }
+  else if(gui->source_selected)
+    g_strlcat(msgbuf, _("<b>Move source</b>: Drag"), msgbuf_len);
+  else if(gui->form_selected || gui->border_selected)
+    g_strlcat(msgbuf, _("<b>Move</b>: Drag"), msgbuf_len);
 }
 
 static void _circle_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)

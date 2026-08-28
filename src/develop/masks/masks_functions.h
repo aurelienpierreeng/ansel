@@ -63,7 +63,7 @@ typedef struct dt_masks_functions_t
   void (*sanitize_config)(dt_masks_type_t type_flags);
   void (*set_form_name)(struct dt_masks_form_t *const form, const size_t nb);
   void (*set_hint_message)(const struct dt_masks_form_gui_t *const gui, const struct dt_masks_form_t *const form,
-                           const int opacity, char *const __restrict__ msgbuf, const size_t msgbuf_len);
+                           char *const __restrict__ msgbuf, const size_t msgbuf_len);
   void (*duplicate_points)(struct dt_develop_t *const dev, struct dt_masks_form_t *base, struct dt_masks_form_t *dest);
   void (*initial_source_pos)(struct dt_develop_t *dev, const float iwd, const float iht, float *x, float *y);
   // input coordinates are in absolute output-image space, dist is squared in the same space

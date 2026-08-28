@@ -1779,16 +1779,27 @@ static int _polygon_events_mouse_scrolled(struct dt_iop_module_t *module, double
     return 0;
   }
 
+  /* `state` is the caller's raw key state, kept for the callback signature: the property to
+   * act on was already resolved from it by dt_masks_scroll_get_interaction(). A polygon owns
+   * no rotation, so that mapping falls through and the wheel does nothing here. Size and
+   * hardness apply to the selected node when there is one, to every node otherwise -- that
+   * scoping is the selection's business (dt_masks_gui_change_affects_selected_node_or_all),
+   * not the wheel's, which is why a selected node no longer forces hardness. */
   if(mask_gui->edit_mode == DT_MASKS_EDIT_FULL && dt_masks_is_anything_selected(mask_gui))
   {
-    if(dt_modifier_is(state, DT_PRIMARY_MASK))
-      return dt_masks_form_change_opacity(mask_gui->dev, mask_form, parent_id, up, flow);
-    if(dt_modifier_is(state, GDK_SHIFT_MASK) || mask_gui->node_selected)
-      return _change_hardness(mask_form, parent_id, mask_gui, module, form_index, up ? +0.01f : -0.01f,
-                              DT_MASKS_INCREMENT_OFFSET, flow);
-    else
-      return _change_size(mask_form, parent_id, mask_gui, module, form_index, up ? 1.02f : 0.98f,
-                          DT_MASKS_INCREMENT_SCALE, flow);
+    switch(interaction)
+    {
+      case DT_MASKS_INTERACTION_OPACITY:
+        return dt_masks_form_change_opacity(mask_gui->dev, mask_form, parent_id, up, flow);
+      case DT_MASKS_INTERACTION_HARDNESS:
+        return _change_hardness(mask_form, parent_id, mask_gui, module, form_index, up ? +0.01f : -0.01f,
+                                DT_MASKS_INCREMENT_OFFSET, flow);
+      case DT_MASKS_INTERACTION_SIZE:
+        return _change_size(mask_form, parent_id, mask_gui, module, form_index, up ? 1.02f : 0.98f,
+                            DT_MASKS_INCREMENT_SCALE, flow);
+      default:
+        return 0;
+    }
   }
   return 0;
 }
@@ -3594,29 +3605,35 @@ static void _polygon_set_form_name(struct dt_masks_form_t *const mask_form, cons
 
 static void _polygon_set_hint_message(const dt_masks_form_gui_t *const mask_gui,
                                       const dt_masks_form_t *const mask_form,
-                                      const int opacity, char *const restrict msgbuf,
-                                      const size_t msgbuf_len)
+                                      char *const restrict msgbuf, const size_t msgbuf_len)
 {
+  // Ordered like the hit test in dt_masks_find_closest_handle_common(): the innermost target
+  // under the cursor is the one the next click will act on, so it is the one we describe.
+  // Only gestures that cannot be discovered any other way -- what the wheel does is the user's
+  // own mapping now (masks_gui.h), shown in the Drawn tab, so it is not repeated here.
   const guint node_count = mask_form->points ? g_list_length(mask_form->points) : 0;
   if(mask_gui->creation && node_count < 4)
-    g_strlcat(msgbuf, _("<b>Add node</b>: click, <b>Add sharp node</b>:ctrl+click\n"
-                        "<b>Cancel</b>: right-click or Esc"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Add sharp node</b>: Ctrl+Click\n"
+                        "<b>Remove last node</b>: Backspace, <b>Cancel</b>: Esc"), msgbuf_len);
   else if(mask_gui->creation)
-    g_strlcat(msgbuf, _("<b>Add node</b>: click, <b>Add sharp node</b>:ctrl+click\n"
-                        "<b>Finish polygon</b>: Enter or click on first node"), msgbuf_len);
-  else if(mask_gui->handle_selected)
-    g_strlcat(msgbuf, _("<b>Node curvature</b>: drag\n<b>Reset curvature</b>: right-click"), msgbuf_len);
-  else if(mask_gui->node_selected)
-    g_strlcat(msgbuf, _("<b>NODE:</b> <b>Move</b>: drag, <b>Delete</b>: right-click or Del\n"
-                        "<b>Hardness</b>: scroll, <b>Switch smooth/sharp</b>: ctrl+click"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Add sharp node</b>: Ctrl+Click, <b>Close path</b>: Enter, or Click on the first node\n"
+                        "<b>Remove last node</b>: Backspace, <b>Cancel</b>: Esc"), msgbuf_len);
+  else if(mask_gui->source_selected)
+    g_strlcat(msgbuf, _("<b>Move source</b>: Drag"), msgbuf_len);
+  else if(mask_gui->handle_border_hovered >= 0)
+    g_strlcat(msgbuf, _("<b>Node hardness</b>: Drag"), msgbuf_len);
+  else if(mask_gui->handle_hovered >= 0)
+    g_strlcat(msgbuf, _("<b>Node curvature</b>: Drag"), msgbuf_len);
+  // The node operations below need the node to be selected, which the first click does.
+  else if(mask_gui->node_hovered >= 0 && mask_gui->node_selected)
+    g_strlcat(msgbuf, _("<b>Move node</b>: Drag, <b>Switch smooth/sharp</b>: Ctrl+Click\n"
+                        "<b>Delete node</b>: Right-click or Del"), msgbuf_len);
   else if(mask_gui->node_hovered >= 0)
-    g_strlcat(msgbuf, _("<b>Move node</b>: drag\n<b>Delete node</b>: right-click\n"
-                        "<b>Hardness</b>: scroll, <b>Switch smooth/sharp</b>: ctrl+click"), msgbuf_len);
-  else if(mask_gui->seg_selected)
-    g_strlcat(msgbuf, _("<b>Move segment</b>: drag\n<b>Add node</b>: ctrl+click"), msgbuf_len);
-  else if(mask_gui->form_selected)
-    g_snprintf(msgbuf, msgbuf_len, _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
-                                     "<b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
+    g_strlcat(msgbuf, _("<b>Move node</b>: Drag, <b>Delete node</b>: Right-click"), msgbuf_len);
+  else if(mask_gui->seg_hovered >= 0 || mask_gui->seg_selected)
+    g_strlcat(msgbuf, _("<b>Move segment</b>: Drag, <b>Add node</b>: Ctrl+Click"), msgbuf_len);
+  else if(mask_gui->form_selected || mask_gui->border_selected)
+    g_strlcat(msgbuf, _("<b>Move</b>: Drag"), msgbuf_len);
 }
 
 static void _polygon_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)

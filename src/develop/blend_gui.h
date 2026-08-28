@@ -163,6 +163,9 @@ typedef struct dt_iop_gui_blend_data_t
   GtkWidget *all_shapes_buttons;
   GtkWidget *lists_box;
   dt_gui_collapsible_section_t masks_cs;
+  // Mouse-wheel mapping grid: application-wide state (masks_gui.h), so this holds no value of
+  // its own -- it reads conf when shown and writes it when toggled.
+  dt_gui_collapsible_section_t scroll_cs;
 
 
   GtkWidget *raster_combo;

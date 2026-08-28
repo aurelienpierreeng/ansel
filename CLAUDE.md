@@ -1039,6 +1039,49 @@ reading and died on the first measurement.
 Reproduce: export with `--export_masks 1`; page 1 of the TIFF is the mask. Flood-fill from the
 border and anything left unset is a hole.
 
+### The mouse wheel edits the property the user mapped it to; shapes never read modifiers
+
+Which property the wheel edits is resolved **once**, by `dt_masks_events_mouse_scrolled()`
+(`masks_gui.c`), and handed to the shape through the `interaction` parameter
+`dt_masks_functions_t.mouse_scrolled` already carried. Each shape's handler is a `switch` on
+`dt_masks_interaction_t`: it acts on the property it is given, ignores one it does not own (a
+circle has no rotation), and `DT_MASKS_INTERACTION_UNDEF` means "this combination is unmapped,
+do nothing". **No shape may go back to reading `state`** — the key state stays in the signature
+only because the callback is shared.
+
+The mapping is one conf key per wheel/modifier combination
+(`plugins/darkroom/masks/scroll/{plain,shift,primary,primary_shift}`, enum values `none` |
+`size` | `hardness` | `opacity` | `rotation`, declared in `data/anselconfig.xml.in`) behind
+`dt_masks_scroll_mapping_get/set()` and `dt_masks_scroll_get_interaction()` (`masks_gui.h`).
+Those enum values are a storage format: never translate them, never reorder them against
+`dt_masks_interaction_t`. The mapping is **application-wide** — which property the wheel edits
+is a user habit, not a property of a shape or of the module owning the mask — and its defaults
+reproduce the historical modifier behaviour, so a user who never opens the panel sees no change.
+
+A gradient spells the two shared properties its own way: `SIZE` is the fade extent, `HARDNESS`
+the curvature. That is also how the context-menu sliders name them, and why
+`dt_masks_interaction_alias_name()` exists.
+
+Scope is the selection's business, not the wheel's: `dt_masks_gui_change_affects_selected_node_or_all()`
+already restricts a size/hardness change to the selected node. A shape must not additionally
+*substitute* a property based on selection state — the polygon used to force hardness on a plain
+wheel whenever a node was selected, which made the mapping unreachable for that shape.
+
+The GUI is the "Mouse wheel" collapsible section of the Drawn tab (`blend_gui.c`), one radio
+group per row. It holds no state of its own and re-reads conf on `map`: every module's blending
+panel shows the same application-wide mapping, so a panel that becomes visible must display what
+is stored, not what it was built with. A display refresh must never write conf back, or a stale
+panel becomes the authority.
+
+Consequence for the on-canvas hints (`set_hint_message`, per shape): they document **gestures
+only** — drag, ctrl+click, right-click, Del, Enter, Esc — never the wheel, which the panel now
+shows. Their branches follow the hit-test order of `dt_masks_find_closest_handle_common()`
+(border handle, curve handle, node, segment, then the shape), because the innermost target under
+the cursor is what the next click acts on. Two traps when editing them: a node's Del and
+ctrl+click only work once that node is *selected* (a mere hover gets the shorter message), and
+`dt_hinter_set_message()` joins `\n` into `, `, so each line must read as a clause of one
+sentence.
+
 ### Forms are refcounted, not deep-copied
 
 `dev->forms` (`dt_develop_t`) is the live, mutable `GList` of every mask shape and group
@@ -1388,6 +1431,26 @@ policy must be `GTK_POLICY_EXTERNAL` + `set_min_content_height(1)` +
 `last_h_scrollbar_height/last_v_scrollbar_width` to -1 so the next `size-allocate` always
 reconfigures (the table persists across view enter/leave; the guard would otherwise skip the
 reconfigure on same-size re-entry).
+
+### A rotated GtkLabel sizes the column it sits in
+
+A `GtkLabel` with `gtk_label_set_angle()` requests the width of its *slanted* bounding box, so a
+diagonal column title makes its whole column that wide — measured on the masks wheel-mapping
+grid: 102 px for "Hardness/Curvature" at 45° against 24 px for the radio button underneath it.
+Zeroing `column-spacing` does not help, because the spacing was never what separated the cells.
+
+Two things fix it, and both are needed. Give the grid `GTK_ALIGN_START`: handed more width than
+it needs (`gtk_box_pack_start(..., TRUE, TRUE, 0)` does exactly that), `GtkGrid` spreads the
+surplus over its columns and re-centres every title in a cell wider than itself. Then attach each
+title **spanning the columns to its right** — the direction it leans into, whose header space is
+free — so its width constrains that sum rather than one column, with one extra `hexpand` column
+at the end to absorb the last title's overhang. Measured: 24 px columns at any spacing, so the
+panel's usual gutter can stay.
+
+Verify this class of layout by measuring, not by looking: build the widget in a
+`gtk_offscreen_window_new()`, pump `gtk_events_pending()`/`gtk_main_iteration()`, and print
+`gtk_widget_get_allocation()` for the cells. It answers in seconds what several rebuild-and-look
+round trips do not.
 
 ### Modal dialogs must explicitly refocus their parent on close
 

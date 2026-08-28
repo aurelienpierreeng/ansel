@@ -3788,6 +3788,153 @@ void dt_masks_iop_update(dt_iop_module_t *module)
   dt_gui_freeze_end();
 }
 
+/* Mouse-wheel mapping grid.
+ *
+ * One radio group per row: a wheel/modifier combination edits exactly one mask property, or
+ * nothing at all. The mapping lives in conf and is read back by the shapes through
+ * dt_masks_scroll_get_interaction() (masks_gui.h); this grid only displays and writes it, and
+ * holds no state of its own. Hence the re-read on "map": every module's blending panel shows
+ * the same application-wide mapping and any of them can change it, so the grid that becomes
+ * visible must show what is stored, not what it was built with.
+ */
+#define BLENDOP_SCROLL_DATA_ROW "blendop-scroll-row"
+#define BLENDOP_SCROLL_DATA_INTERACTION "blendop-scroll-interaction"
+
+/* Property columns, in display order. DT_MASKS_INTERACTION_UNDEF ("nothing") is a column like
+ * the others -- it is how a row is unmapped -- and comes last, after what it opts out of. */
+static const dt_masks_interaction_t _blendop_scroll_columns[]
+    = { DT_MASKS_INTERACTION_SIZE, DT_MASKS_INTERACTION_HARDNESS, DT_MASKS_INTERACTION_OPACITY,
+        DT_MASKS_INTERACTION_ROTATION, DT_MASKS_INTERACTION_UNDEF };
+
+static void _blendop_masks_scroll_toggled(GtkToggleButton *button, gpointer user_data)
+{
+  // A radio group emits "toggled" twice per change, once for each side. Only the winner writes.
+  if(!gtk_toggle_button_get_active(button)) return;
+
+  const dt_masks_scroll_modifier_t modifier
+      = (dt_masks_scroll_modifier_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), BLENDOP_SCROLL_DATA_ROW));
+  const dt_masks_interaction_t interaction
+      = (dt_masks_interaction_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), BLENDOP_SCROLL_DATA_INTERACTION));
+
+  dt_masks_scroll_mapping_set(modifier, interaction);
+}
+
+static void _blendop_masks_scroll_sync(GtkWidget *grid, gpointer user_data)
+{
+  GList *children = gtk_container_get_children(GTK_CONTAINER(grid));
+  for(GList *child = children; child; child = g_list_next(child))
+  {
+    GtkWidget *cell = GTK_WIDGET(child->data);
+    if(!GTK_IS_RADIO_BUTTON(cell)) continue;
+
+    const dt_masks_scroll_modifier_t modifier
+        = (dt_masks_scroll_modifier_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(cell), BLENDOP_SCROLL_DATA_ROW));
+    const dt_masks_interaction_t interaction
+        = (dt_masks_interaction_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(cell), BLENDOP_SCROLL_DATA_INTERACTION));
+    const gboolean active = (dt_masks_scroll_mapping_get(modifier) == interaction);
+    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cell)) == active) continue;
+
+    // Writing conf back from a display refresh would turn a stale panel into the authority.
+    g_signal_handlers_block_by_func(cell, G_CALLBACK(_blendop_masks_scroll_toggled), NULL);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cell), active);
+    g_signal_handlers_unblock_by_func(cell, G_CALLBACK(_blendop_masks_scroll_toggled), NULL);
+  }
+  g_list_free(children);
+}
+
+static GtkWidget *_blendop_masks_create_scroll_grid(void)
+{
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  /* Natural width, not filled: handed more width than it needs, GtkGrid spreads the surplus
+   * over its columns, which pushes the cells apart and re-centres every rotated title over a
+   * cell wider than itself. What keeps the columns tight is this plus the spanning titles
+   * below -- not the column spacing, which is free to stay at the panel's usual gutter
+   * (measured: 24px columns either way, only the gutters change). */
+  gtk_widget_set_halign(grid, GTK_ALIGN_START);
+
+  for(size_t column = 0; column < G_N_ELEMENTS(_blendop_scroll_columns); column++)
+  {
+    const dt_masks_interaction_t interaction = _blendop_scroll_columns[column];
+    const char *alias = dt_masks_interaction_alias_name(interaction);
+    // Second word on its own line: rotated 90 degrees the lines stack sideways, so the column
+    // stays as tall as the longest single word instead of as tall as both of them.
+    gchar *title = alias ? g_strdup_printf("%s/%s", _(dt_masks_interaction_name(interaction)), _(alias))
+                         : g_strdup(_(dt_masks_interaction_name(interaction)));
+    GtkWidget *header = gtk_label_new(title);
+    dt_free(title);
+    gtk_label_set_angle(GTK_LABEL(header), 90.0 * 0.5);
+    gtk_label_set_justify(GTK_LABEL(header), GTK_JUSTIFY_LEFT);
+    // Anchor the rotated title to the bottom left of its cell, where the column it names
+    // starts, instead of letting it float in the middle of whatever width the cell ends up with.
+    gtk_label_set_xalign(GTK_LABEL(header), 0.0f);
+    gtk_label_set_yalign(GTK_LABEL(header), 1.0f);
+    gtk_widget_set_halign(header, GTK_ALIGN_START);
+    gtk_widget_set_valign(header, GTK_ALIGN_END);
+    /* Spanning, not one cell: a label rotated 45 degrees requests the width of its slanted
+     * bounding box (measured: 102px for "Hardness/Curvature" against 24px for a radio), and a
+     * single-cell title makes its whole column that wide. Letting each title span the columns
+     * to its right -- the direction it leans into, whose header space is free -- constrains the
+     * sum instead of one column, and every column falls back to the width of its radio. */
+    gtk_grid_attach(GTK_GRID(grid), header, (int)column + 1, 0,
+                    (int)(G_N_ELEMENTS(_blendop_scroll_columns) - column) + 1, 1);
+  }
+
+  /* The rightmost title has no column to lean into, so it would widen its own the same way.
+   * This trailing column exists only to absorb that overhang; it expands so the grid hands it
+   * whatever width the titles need, rather than spreading it over the real columns. */
+  GtkWidget *overhang = gtk_label_new("");
+  gtk_widget_set_hexpand(overhang, TRUE);
+  gtk_grid_attach(GTK_GRID(grid), overhang, (int)G_N_ELEMENTS(_blendop_scroll_columns) + 1, 0, 1, 1);
+
+  for(int row = 0; row < DT_MASKS_SCROLL_MODIFIER_LAST; row++)
+  {
+    const dt_masks_scroll_modifier_t modifier = (dt_masks_scroll_modifier_t)row;
+    GtkWidget *row_label = gtk_label_new(_(dt_masks_scroll_modifier_name(modifier)));
+    gtk_label_set_xalign(GTK_LABEL(row_label), 0.0f);
+    gtk_grid_attach(GTK_GRID(grid), row_label, 0, row + 1, 1, 1);
+
+    GtkWidget *group = NULL;
+    for(size_t column = 0; column < G_N_ELEMENTS(_blendop_scroll_columns); column++)
+    {
+      const dt_masks_interaction_t interaction = _blendop_scroll_columns[column];
+      GtkWidget *cell = gtk_radio_button_new_from_widget(GTK_RADIO_BUTTON(group));
+      if(IS_NULL_PTR(group)) group = cell;
+
+      g_object_set_data(G_OBJECT(cell), BLENDOP_SCROLL_DATA_ROW, GINT_TO_POINTER(modifier));
+      g_object_set_data(G_OBJECT(cell), BLENDOP_SCROLL_DATA_INTERACTION, GINT_TO_POINTER(interaction));
+
+      const char *alias = dt_masks_interaction_alias_name(interaction);
+      gchar *tooltip;
+      if(interaction == DT_MASKS_INTERACTION_UNDEF)
+        tooltip = g_strdup_printf(_("%s does nothing"), _(dt_masks_scroll_modifier_name(modifier)));
+      else if(alias)
+        tooltip = g_strdup_printf(_("%s edits the %s of the hovered shape, or its %s on a gradient"),
+                                  _(dt_masks_scroll_modifier_name(modifier)),
+                                  _(dt_masks_interaction_name(interaction)), _(alias));
+      else
+        tooltip = g_strdup_printf(_("%s edits the %s of the hovered shape"),
+                                  _(dt_masks_scroll_modifier_name(modifier)),
+                                  _(dt_masks_interaction_name(interaction)));
+      gtk_widget_set_tooltip_text(cell, tooltip);
+      dt_free(tooltip);
+
+      // State first, handler after: building the group already emits "toggled" for every cell
+      // it deactivates, and those must not be mistaken for the user picking something.
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cell),
+                                   dt_masks_scroll_mapping_get(modifier) == interaction);
+      g_signal_connect(cell, "toggled", G_CALLBACK(_blendop_masks_scroll_toggled), NULL);
+
+      gtk_grid_attach(GTK_GRID(grid), cell, (int)column + 1, row + 1, 1, 1);
+    }
+  }
+
+  g_signal_connect(grid, "map", G_CALLBACK(_blendop_masks_scroll_sync), NULL);
+
+  return grid;
+}
+
 void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
@@ -4002,6 +4149,18 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 
     GtkWidget *pressure_mapping = dt_bauhaus_combobox_from_conf(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), "pressure_sensitivity");
     gtk_box_pack_start(GTK_BOX(bd->masks_cs.container), pressure_mapping, TRUE, TRUE, 0);
+
+    dt_gui_new_collapsible_section
+      (&bd->scroll_cs,
+      "plugins/darkroom/masks/scroll_mapping",
+      _("Mouse wheel"),
+      GTK_BOX(bd->masks_box), GTK_PACK_END);
+    gtk_widget_set_tooltip_text(bd->scroll_cs.expander,
+                                _("Choose which property of the hovered shape each mouse wheel "
+                                  "combination edits. Shared by every mask of every module."));
+    // Natural size, not filled: the grid must not be handed width it would spread between its
+    // own columns (see _blendop_masks_create_scroll_grid).
+    gtk_box_pack_start(GTK_BOX(bd->scroll_cs.container), _blendop_masks_create_scroll_grid(), FALSE, FALSE, 0);
 
     bd->masks_inited = 1;
     _blendop_masks_refresh_lists(module);
@@ -5002,7 +5161,11 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
 
   gtk_widget_show_all(GTK_WIDGET(bd->blending_box));
   // show_all overrides the visibility the collapsible section set at init; re-apply config state.
-  if(bd->masks_inited) dt_gui_update_collapsible_section(&bd->masks_cs);
+  if(bd->masks_inited)
+  {
+    dt_gui_update_collapsible_section(&bd->masks_cs);
+    dt_gui_update_collapsible_section(&bd->scroll_cs);
+  }
   gtk_widget_set_sensitive(bd->blending_box, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
 
   g_signal_connect(G_OBJECT(bd->blending_notebook), "switch_page", G_CALLBACK(_blendop_blending_notebook_switch), bd);

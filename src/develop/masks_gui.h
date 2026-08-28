@@ -649,6 +649,56 @@ int dt_masks_group_index_from_formid(const dt_masks_form_t *group_form, int form
 dt_masks_form_group_t *dt_masks_form_get_selected_group(const struct dt_masks_form_t *form,
                                                         const struct dt_masks_form_gui_t *gui);
 
+/**
+ * Mouse-wheel mapping.
+ *
+ * Which mask property the wheel edits is the user's choice, not a rule baked into each shape:
+ * one row per wheel/modifier combination, each holding the property it acts on (or
+ * DT_MASKS_INTERACTION_UNDEF for "does nothing"). The mapping is application-wide -- it is a
+ * user habit, not a property of one shape or one module -- and persists in conf.
+ *
+ * Shapes never read key modifiers: dt_masks_events_mouse_scrolled() resolves the row once and
+ * hands the result to the shape's mouse_scrolled callback, which acts on the named property or
+ * ignores the event. A shape that does not own the property (rotating a circle) ignores it too.
+ */
+typedef enum dt_masks_scroll_modifier_t
+{
+  DT_MASKS_SCROLL_PLAIN = 0,        // wheel alone
+  DT_MASKS_SCROLL_SHIFT,            // shift + wheel
+  DT_MASKS_SCROLL_PRIMARY,          // ctrl + wheel (cmd on macOS)
+  DT_MASKS_SCROLL_PRIMARY_SHIFT,    // ctrl + shift + wheel
+  DT_MASKS_SCROLL_MODIFIER_LAST
+} dt_masks_scroll_modifier_t;
+
+/** Property mapped to `modifier`, or DT_MASKS_INTERACTION_UNDEF when that row is unmapped. */
+dt_masks_interaction_t dt_masks_scroll_mapping_get(dt_masks_scroll_modifier_t modifier);
+
+/** Map `interaction` (DT_MASKS_INTERACTION_UNDEF to unmap) to `modifier`, persisted in conf. */
+void dt_masks_scroll_mapping_set(dt_masks_scroll_modifier_t modifier, dt_masks_interaction_t interaction);
+
+/** Untranslated name of a wheel row / of a property, for GUI labels. Never NULL. */
+const char *dt_masks_scroll_modifier_name(dt_masks_scroll_modifier_t modifier);
+const char *dt_masks_interaction_name(dt_masks_interaction_t interaction);
+
+/**
+ * @brief The other word for a property, when a shape family spells it its own way.
+ *
+ * A gradient stores its fade extent in the SIZE slot and its curvature in the HARDNESS one --
+ * same property of the interaction API, different vocabulary in front of the user, which is
+ * also why the context menu renames those two sliders for gradients. Any UI naming a property
+ * generically must show both words, or the gradient's own vocabulary has no visible home.
+ *
+ * @return the untranslated second name, or NULL when the property has only one.
+ */
+const char *dt_masks_interaction_alias_name(dt_masks_interaction_t interaction);
+
+/**
+ * @brief Resolve a wheel event's key state into the property it edits.
+ * @return DT_MASKS_INTERACTION_UNDEF when this combination is unmapped, or when the key state
+ *         is not one of the four the mapping covers (a stray Alt, for instance).
+ */
+dt_masks_interaction_t dt_masks_scroll_get_interaction(uint32_t key_state);
+
 /** Returns TRUE if anything in the mask is selected at all, regardless of what it is. */
 gboolean dt_masks_is_anything_selected(const dt_masks_form_gui_t *mask_gui);
 

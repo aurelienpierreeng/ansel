@@ -935,6 +935,66 @@
     <longdescription>off - pressure reading ignored, hardness/opacity/brush size - pressure reading controls specified attribute, absolute/relative - pressure reading is taken directly as attribute value or multiplied with pre-defined setting.</longdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/darkroom/masks/scroll/plain</name>
+    <type>
+      <enum>
+        <option>none</option>
+        <option>size</option>
+        <option>hardness</option>
+        <option>opacity</option>
+        <option>rotation</option>
+      </enum>
+    </type>
+    <default>size</default>
+    <shortdescription>Mask property edited by the mouse wheel alone</shortdescription>
+    <longdescription>Which property of the hovered mask shape the mouse wheel edits for this modifier combination. Set from the mouse wheel section of a module's Drawn mask tab. none - this combination does nothing.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/scroll/shift</name>
+    <type>
+      <enum>
+        <option>none</option>
+        <option>size</option>
+        <option>hardness</option>
+        <option>opacity</option>
+        <option>rotation</option>
+      </enum>
+    </type>
+    <default>hardness</default>
+    <shortdescription>Mask property edited by shift + mouse wheel</shortdescription>
+    <longdescription>Which property of the hovered mask shape the mouse wheel edits for this modifier combination. Set from the mouse wheel section of a module's Drawn mask tab. none - this combination does nothing.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/scroll/primary</name>
+    <type>
+      <enum>
+        <option>none</option>
+        <option>size</option>
+        <option>hardness</option>
+        <option>opacity</option>
+        <option>rotation</option>
+      </enum>
+    </type>
+    <default>opacity</default>
+    <shortdescription>Mask property edited by ctrl + mouse wheel</shortdescription>
+    <longdescription>Which property of the hovered mask shape the mouse wheel edits for this modifier combination. Set from the mouse wheel section of a module's Drawn mask tab. none - this combination does nothing.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/scroll/primary_shift</name>
+    <type>
+      <enum>
+        <option>none</option>
+        <option>size</option>
+        <option>hardness</option>
+        <option>opacity</option>
+        <option>rotation</option>
+      </enum>
+    </type>
+    <default>rotation</default>
+    <shortdescription>Mask property edited by ctrl + shift + mouse wheel</shortdescription>
+    <longdescription>Which property of the hovered mask shape the mouse wheel edits for this modifier combination. Set from the mouse wheel section of a module's Drawn mask tab. none - this combination does nothing.</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>brush_smoothing</name>
     <type>
       <enum>
