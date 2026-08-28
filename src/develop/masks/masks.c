@@ -1394,15 +1394,17 @@ int dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *p
     : 1;
 }
 
-int dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
-                          const dt_dev_pixelpipe_iop_t *const piece,
-                          dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer,
-                          dt_iop_roi_t *touched)
+dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                                               const dt_dev_pixelpipe_iop_t *const piece,
+                                               dt_masks_form_t *const form, const dt_iop_roi_t *roi,
+                                               float *buffer, dt_iop_roi_t *touched)
 {
   dt_masks_touched_none(touched);
+  /* A shape type with no rasteriser is a programming error, not an empty shape: report ERROR so
+   * the fold refuses to publish a buffer nobody wrote. */
   return (form->functions && form->functions->get_mask_roi)
     ? form->functions->get_mask_roi(module, pipe, piece, form, roi, buffer, touched)
-    : 1;
+    : DT_MASKS_RASTER_ERROR;
 }
 
 // clang-format off

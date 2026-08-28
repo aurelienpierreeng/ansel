@@ -661,14 +661,14 @@ static uint64_t _group_prefix_hash(const dt_masks_form_t *const form, GList *mas
   return hash ? hash : 1;
 }
 
-static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *const restrict piece,
                                dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
                                float *const restrict buffer, dt_iop_roi_t *touched)
 {
   double start = dt_get_wtime();
   dt_masks_touched_none(touched);
-  if(IS_NULL_PTR(form->points)) return 0;
+  if(IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   int nb_ok = 0;
 
   const int width = roi->width;
@@ -715,8 +715,8 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
 
   // we need to allocate a zeroed temporary buffer for intermediate creation of individual shapes
   float *const restrict bufs = dt_pixelpipe_cache_alloc_align_float_cache(npixels, 0);
-  if(IS_NULL_PTR(bufs)) return 1;
-  int err = 0;
+  if(IS_NULL_PTR(bufs)) return DT_MASKS_RASTER_ERROR;
+  dt_masks_raster_result_t err = DT_MASKS_RASTER_OK;
 
   /* Somewhere to hold the fold minus its last shape. Only needed when there is something new to
    * publish; a failure to allocate simply means this render publishes nothing. */
@@ -762,17 +762,31 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
       }
       else
         dt_masks_touched_clear(bufs, width, &child_touched);
-      const int err_child = dt_masks_get_mask_roi(module, pipe, piece, sel, roi, bufs, &child_touched);
+      const dt_masks_raster_result_t child_result
+          = dt_masks_get_mask_roi(module, pipe, piece, sel, roi, bufs, &child_touched);
       const float op = fpt->opacity;
       // Add a foolproof to ensure that the first shape is no-op
       const int no_op_state = fpt->state & ~(DT_MASKS_STATE_IS_COMBINE_OP) ;
       const int state = (i == 0) ? no_op_state : fpt->state;
-      if(err_child != 0)
+      if(child_result == DT_MASKS_RASTER_ERROR)
       {
-        err = 1;
+        /* Undefined buffer: what this child left in `bufs' cannot be folded in, and the fold as
+         * a whole must not be published. */
+        err = DT_MASKS_RASTER_ERROR;
         break;
       }
-      if(err_child == 0)
+      /* EMPTY combines exactly like OK, because `bufs' is fully zeroed before every child (the
+       * first child memsets it, each later one clears the previous child's reported box), so a
+       * shape that drew nothing IS an all-zero child. That distinction matters: an EMPTY child
+       * must still be intersected with -- a brush lying outside this ROI genuinely has no
+       * coverage here, and skipping the combine would leave the previous fold standing where
+       * the mask should have gone to zero.
+       *
+       * What EMPTY changes is only that it is no longer an ERROR. A NULL points list used to
+       * abort the entire group for a circle and fold as zeros for an ellipse: the same
+       * degenerate data killed or spared the whole mask depending only on which shape carried
+       * it. Both now fold as zeros. */
+      else
       {
         // first see if we need to invert this shape
         const int inverted = (state & DT_MASKS_STATE_INVERSE);
@@ -865,7 +879,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
    *
    * Only on a complete, error-free fold: a prefix that describes fewer shapes than its key claims
    * is not a wrong-looking mask, it is a mask. */
-  if(!err && shape_count > 1 && nb_ok == shape_count && resume_from < shape_count - 1
+  if(err == DT_MASKS_RASTER_OK && shape_count > 1 && nb_ok == shape_count && resume_from < shape_count - 1
      && !IS_NULL_PTR(publishable))
   {
     const uint64_t prefix = _group_prefix_hash(form, masks, piece, roi, shape_count - 1);
@@ -892,14 +906,14 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
   return err;
 }
 
-int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                              const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
-                              const dt_iop_roi_t *roi, float *buffer)
+dt_masks_raster_result_t dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                                                   const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+                                                   const dt_iop_roi_t *roi, float *buffer)
 {
   const double start = dt_get_wtime();
-  if(IS_NULL_PTR(form)) return 0;
+  if(IS_NULL_PTR(form)) return DT_MASKS_RASTER_EMPTY;
 
-  const int err = dt_masks_get_mask_roi(module, pipe, piece, form, roi, buffer, NULL);
+  const dt_masks_raster_result_t err = dt_masks_get_mask_roi(module, pipe, piece, form, roi, buffer, NULL);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks] render all masks took %0.04f sec\n", dt_get_wtime() - start);

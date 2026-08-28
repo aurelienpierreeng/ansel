@@ -1412,13 +1412,13 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   return 0;
 }
 
-static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                                  const dt_dev_pixelpipe_iop_t *const piece,
                                  dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer,
                                dt_iop_roi_t *touched)
 {
   dt_masks_touched_none(touched);
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
 
   double start1 = 0.0;
   double start2 = start1;
@@ -1426,7 +1426,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
 
   // we get the ellipse parameters
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
-  if(IS_NULL_PTR(ellipse)) return 0;
+  if(IS_NULL_PTR(ellipse)) return DT_MASKS_RASTER_EMPTY;
   const int wi = pipe->iwidth, hi = pipe->iheight;
   const float center[2] = { ellipse->center[0] * wi, ellipse->center[1] * hi };
   const float radius[2] = { ellipse->radius[0] * MIN(wi, hi), ellipse->radius[1] * MIN(wi, hi) };
@@ -1466,7 +1466,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   const int l = (int)(M_PI * (ta + tb) * (1.0f + (3.0f * lambda * lambda) / (10.0f + sqrtf(4.0f - 3.0f * lambda * lambda))));
   const size_t ellpts = MIN(360, l);
   float *ell = dt_pixelpipe_cache_alloc_align_float_cache(ellpts * 2, 0);
-  if(IS_NULL_PTR(ell)) return 1;
+  if(IS_NULL_PTR(ell)) return DT_MASKS_RASTER_ERROR;
   __OMP_PARALLEL_FOR__(if(ellpts > 100))
   for(int n = 0; n < ellpts; n++)
   {
@@ -1488,7 +1488,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
                                     ellpts))
   {
     dt_pixelpipe_cache_free_align(ell);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1540,10 +1540,10 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   // check if there is anything to do at all;
   // only if width and height of bounding box is 2 or greater the shape lies inside of roi and requires action
   if(bbw <= 1 || bbh <= 1)
-    return 0;
+    return DT_MASKS_RASTER_EMPTY;
 
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * bbw * bbh, 0);
-  if(IS_NULL_PTR(points)) return 1;
+  if(IS_NULL_PTR(points)) return DT_MASKS_RASTER_ERROR;
 
   // we populate the grid points in module coordinates
   __OMP_PARALLEL_FOR__(collapse(2) if((size_t)bbw * bbh > 50000))
@@ -1566,7 +1566,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
                                         (size_t)bbw * bbh))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1637,7 +1637,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
     dt_print(DT_DEBUG_MASKS, "[masks %s] ellipse total render took %0.04f sec\n", form->name,
              dt_get_wtime() - start1);
   }
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 static void _ellipse_set_form_name(struct dt_masks_form_t *const form, const size_t nb)

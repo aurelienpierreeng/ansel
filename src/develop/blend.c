@@ -576,7 +576,10 @@ static int _develop_blend_init_drawn_mask(const dt_develop_blend_params_t *const
 
   if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (params->mask_mode & DEVELOP_MASK_SHAPE))
   {
-    if(dt_masks_group_render_roi(self, pipe, piece, form, roi_out, mask) != 0) return 1;
+    /* EMPTY is not a failure: the fold zeroes the buffer when no shape contributed, and a
+     * zero drawn mask is a legitimate state to blend with. Only ERROR leaves it undefined. */
+    if(dt_masks_group_render_roi(self, pipe, piece, form, roi_out, mask) == DT_MASKS_RASTER_ERROR)
+      return 1;
 
     if(params->mask_combine & DEVELOP_COMBINE_MASKS_POS)
       dt_iop_image_invert(mask, 1.0f, owidth, oheight, 1);

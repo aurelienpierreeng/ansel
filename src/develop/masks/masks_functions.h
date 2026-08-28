@@ -77,9 +77,18 @@ typedef struct dt_masks_functions_t
                   const dt_dev_pixelpipe_iop_t *const piece,
                   struct dt_masks_form_t *const form,
                   float **buffer, int *width, int *height, int *posx, int *posy);
-  /** Rasterise into a pre-zeroed ROI-sized buffer. `touched` (may be NULL) receives the
-   * buffer-relative rectangle enclosing every pixel written -- see masks_touched.h. */
-  int (*get_mask_roi)(const dt_iop_module_t *const fmodule, struct dt_dev_pixelpipe_t *pipe,
+  /** Rasterise into a pre-zeroed ROI-sized buffer.
+   *
+   * `touched` (may be NULL) receives the buffer-relative rectangle enclosing every pixel
+   * written -- see masks_touched.h.
+   *
+   * Returns OK when the buffer was written, EMPTY when the shape has nothing to draw here
+   * (degenerate geometry, or wholly outside `roi`) and the buffer was left untouched, ERROR
+   * when the shape could not be computed and the buffer's contents are undefined. EMPTY is
+   * NOT a failure: the group fold skips such a shape and keeps folding. Every implementation
+   * must agree on which is which -- see dt_masks_raster_result_t.
+   */
+  dt_masks_raster_result_t (*get_mask_roi)(const dt_iop_module_t *const fmodule, struct dt_dev_pixelpipe_t *pipe,
                       const dt_dev_pixelpipe_iop_t *const piece,
                       struct dt_masks_form_t *const form,
                       const dt_iop_roi_t *roi, float *buffer, dt_iop_roi_t *touched);

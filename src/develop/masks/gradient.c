@@ -1370,18 +1370,18 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
 }
 
 
-static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                                   const dt_dev_pixelpipe_iop_t *const piece,
                                   dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer,
                                   dt_iop_roi_t *touched)
 {
   dt_masks_touched_none(touched);
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
   // we get the gradient values
   const dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points->data);
-  if(IS_NULL_PTR(gradient)) return 0;
+  if(IS_NULL_PTR(gradient)) return DT_MASKS_RASTER_EMPTY;
 
   // we create a buffer of grid points for later interpolation. mainly in order to reduce memory footprint
   const int w = roi->width;
@@ -1394,7 +1394,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   const int gh = (h + grid - 1) / grid + 1;
 
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * gw * gh, 0);
-  if(IS_NULL_PTR(points)) return 1;
+  if(IS_NULL_PTR(points)) return DT_MASKS_RASTER_ERROR;
   __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
   for(int j = 0; j < gh; j++)
     for(int i = 0; i < gw; i++)
@@ -1417,7 +1417,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
                                         (size_t)gw * gh))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1448,7 +1448,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   if(IS_NULL_PTR(lut))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
   __OMP_PARALLEL_FOR_SIMD__(if(lutsize > 1000) aligned(lut : 64))
   for(int n = 0; n < lutsize; n++)
@@ -1528,7 +1528,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
     dt_print(DT_DEBUG_MASKS, "[masks %s] gradient fill took %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
 
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 static void _gradient_sanitize_config(dt_masks_type_t type)

@@ -426,6 +426,31 @@ static inline void dt_masks_set_ctrl_points(float ctrl1[2], float ctrl2[2], cons
 }
 
 
+/**
+ * @brief What a rasterisation attempt produced.
+ *
+ * @details The rasterisation family used to return a bare `int` on a "0 means success"
+ * convention that could not say the third thing that actually happens: a shape with nothing to
+ * draw. Callers therefore had to guess, and the shapes disagreed -- a NULL points list made a
+ * circle report failure (which aborted the whole group fold) and an ellipse report success
+ * (which rendered it as zeros). Same data, opposite outcomes, decided by which shape carried it.
+ *
+ * OK    -- the buffer was written; `touched`, where the callee takes one, describes what.
+ * EMPTY -- nothing to draw: degenerate geometry, or the shape lies entirely outside this ROI.
+ *          A legitimate outcome, NOT an error. The buffer is left as the caller supplied it.
+ * ERROR -- the shape could not be computed (allocation failure, a distortion transform that
+ *          did not converge). The buffer's contents are undefined and must not be published.
+ *
+ * OK is 0 so that a caller written against the old convention still reads a success as success;
+ * every other value is a non-success, which is the safe direction for anything not yet migrated.
+ */
+typedef enum dt_masks_raster_result_t
+{
+  DT_MASKS_RASTER_OK = 0,
+  DT_MASKS_RASTER_EMPTY,
+  DT_MASKS_RASTER_ERROR
+} dt_masks_raster_result_t;
+
 /** get the transparency mask of the form and his border */
 int dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                       const dt_dev_pixelpipe_iop_t *const piece,
@@ -434,15 +459,15 @@ int dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *p
 
 /** Rasterise `form` into the pre-zeroed ROI-sized `buffer`. `touched` (may be NULL) receives
  * the buffer-relative rectangle enclosing every pixel written; empty when nothing was. */
-int dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
-                          const dt_dev_pixelpipe_iop_t *const piece,
-                          dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer,
-                          dt_iop_roi_t *touched);
+dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                                               const dt_dev_pixelpipe_iop_t *const piece,
+                                               dt_masks_form_t *const form, const dt_iop_roi_t *roi,
+                                               float *buffer, dt_iop_roi_t *touched);
 
 
-int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                              const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
-                              const dt_iop_roi_t *roi, float *buffer);
+dt_masks_raster_result_t dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                                                   const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+                                                   const dt_iop_roi_t *roi, float *buffer);
 
 // returns current masks version
 int dt_masks_version(void);
