@@ -375,7 +375,7 @@ fi
 #                  in this tree uses (formid, form_dragging, creation_formids, ...) and leaves
 #                  out the ambiguous ones a masks form shares with half the codebase (points,
 #                  type, name, state, opacity). That undercounts -- the audit's full census
-#                  found ~385 by reading declarations, this finds 102 -- and undercounting is
+#                  found ~385 by reading declarations, this finds far fewer -- and undercounting is
 #                  the right error for a gate. A ratchet that moves when somebody renames an
 #                  unrelated `->state` is a ratchet that gets switched off. Every match this
 #                  does report is real: they land in exactly five files, and no other.
@@ -383,10 +383,10 @@ fi
 #   writes         The same members, assigned to. A write from outside is the sharper half:
 #                  it is a caller mutating a refcounted, copy-on-write object without going
 #                  through dt_masks_cow_touch(), which is how a snapshot ends up observing a
-#                  half-rewritten form. One of the 27 is a false positive and stays counted
-#                  because it is stable: supervisor.c's own event struct also has a `formid`
-#                  field, so `e->formid = form->formid` matches on the left as well as reading
-#                  a real one on the right.
+#                  half-rewritten form. Every remaining match is a real one: the single false
+#                  positive this count used to carry -- supervisor.c's own event struct, whose
+#                  `formid` field matched on the left of `e->formid = form->formid` -- is gone,
+#                  because that field was renamed when the file was converted.
 #
 #   allocations    malloc/calloc of a masks type outside the module: four places build a
 #                  group-membership entry or a circle node by hand and rely on the module's
@@ -398,10 +398,10 @@ fi
 #                  reached as plain GLists. This is the count behind the bug that came back
 #                  four times, and it only reaches zero when resolving a shape is something
 #                  callers ask the module to do.
-masks_include_baseline=23
+masks_include_baseline=22
 masks_gui_include_baseline=11
-masks_member_baseline=102
-masks_write_baseline=27
+masks_member_baseline=94
+masks_write_baseline=26
 masks_alloc_baseline=4
 masks_forms_baseline=76
 

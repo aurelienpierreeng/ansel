@@ -24,7 +24,8 @@
 #include "common/introspection.h"    // dt_introspection_field_t
 #include "develop/imageop.h"         // dt_iop_module_t (introspection accessors)
 #include "develop/blend.h"           // dt_develop_blend_params_t + name tables
-#include "develop/masks.h"           // dt_masks_form_t + group members
+#include "develop/masks_types.h"     // dt_masks_type_t, dt_masks_form_info_t, dt_masks_member_t
+#include "develop/masks_group.h"     // dt_masks_form_get_info(), dt_masks_group_copy_members()
 #include "caches/pixelpipe_cache.h" // DT_PIXELPIPE_CACHE_HASH_INVALID
 #include "develop/pixelpipe_hb.h"    // dt_pixelpipe_get_pipe_name
 
@@ -98,7 +99,7 @@ typedef struct dt_sv_entry_t
   char img_filename[128];
 
   // form facet
-  int formid;
+  int form_id;   // supervisor's own copy; NOT a masks member -- see the note in check_module_boundaries.sh
   int form_type;
   char form_name[64];
 
@@ -214,35 +215,30 @@ uint64_t dt_supervisor_form_key(const int formid)
   return _form_key(formid);
 }
 
-static const char *_form_type_name(const int type)
-{
-  if(type & DT_MASKS_CIRCLE)   return "circle";
-  if(type & DT_MASKS_ELLIPSE)  return "ellipse";
-  if(type & DT_MASKS_POLYGON)  return "path";
-  if(type & DT_MASKS_BRUSH)    return "brush";
-  if(type & DT_MASKS_GRADIENT) return "gradient";
-  if(type & DT_MASKS_GROUP)    return "group";
-  return "?";
-}
-
 // For a group form, the members (its `points` are group refs). Each member is an
 // object { id, hash } where hash is the member's form key, so the GUI can make it
 // a clickable link to the member form object.
 static JsonArray *_form_members_json(const dt_masks_form_t *form)
 {
-  if(!form || !(form->type & DT_MASKS_GROUP) || !form->points) return NULL;
+  dt_masks_form_info_t info;
+  if(!dt_masks_form_get_info(form, &info) || !info.is_group || info.member_count == 0) return NULL;
+
+  // Rows by value and in stored order -- which is the compositing order, so the array this
+  // emits is the one the GUI can read top to bottom.
+  dt_masks_member_t *members = g_new0(dt_masks_member_t, info.member_count);
+  const guint count = dt_masks_group_copy_members(form, members, info.member_count);
+
   JsonArray *a = json_array_new();
-  for(GList *p = form->points; p; p = g_list_next(p))
+  for(guint i = 0; i < count; i++)
   {
-    const dt_masks_form_group_t *g = (const dt_masks_form_group_t *)p->data;
-    if(!g) continue;
     JsonObject *o = json_object_new();
-    json_object_set_int_member(o, "id", g->formid);
+    json_object_set_int_member(o, "id", members[i].formid);
     char buf[32];
-    g_snprintf(buf, sizeof(buf), "0x%016" G_GINT64_MODIFIER "x", _form_key(g->formid));
+    g_snprintf(buf, sizeof(buf), "0x%016" G_GINT64_MODIFIER "x", _form_key(members[i].formid));
     json_object_set_string_member(o, "hash", buf);
     json_array_add_object_element(a, o);
   }
+  g_free(members);
   return a;
 }
 
@@ -254,14 +250,15 @@ static JsonArray *_forms_json(GList *forms)
   for(GList *f = forms; f; f = g_list_next(f))
   {
     const dt_masks_form_t *form = (const dt_masks_form_t *)f->data;
-    if(!form) continue;
+    dt_masks_form_info_t info;
+    if(!dt_masks_form_get_info(form, &info)) continue;
     JsonObject *o = json_object_new();
-    json_object_set_int_member(o, "id", form->formid);
+    json_object_set_int_member(o, "id", info.formid);
     char buf[32];
-    g_snprintf(buf, sizeof(buf), "0x%016" G_GINT64_MODIFIER "x", _form_key(form->formid));
+    g_snprintf(buf, sizeof(buf), "0x%016" G_GINT64_MODIFIER "x", _form_key(info.formid));
     json_object_set_string_member(o, "hash", buf); // clickable link to the form object
-    if(form->name[0]) json_object_set_string_member(o, "name", form->name);
-    json_object_set_string_member(o, "type", _form_type_name(form->type));
+    if(info.name[0]) json_object_set_string_member(o, "name", info.name);
+    json_object_set_string_member(o, "type", dt_masks_type_name(info.type));
     JsonArray *members = _form_members_json(form);
     if(members) json_object_set_array_member(o, "members", members);
     json_array_add_object_element(out, o);
@@ -1337,9 +1334,12 @@ void dt_supervisor_image(const dt_sv_op_t op, const int32_t imgid, const dt_imag
 
 void dt_supervisor_form(const dt_sv_op_t op, const dt_masks_form_t *form)
 {
-  if(!dt_supervisor_active() || !_sv.inited || !form) return;
+  if(!dt_supervisor_active() || !_sv.inited) return;
 
-  const uint64_t key = _form_key(form->formid);
+  dt_masks_form_info_t info;
+  if(!dt_masks_form_get_info(form, &info)) return;
+
+  const uint64_t key = _form_key(info.formid);
   // Build the group members outside the lock (read-only walk of form->points).
   JsonArray *members = _form_members_json(form);
 
@@ -1347,19 +1347,19 @@ void dt_supervisor_form(const dt_sv_op_t op, const dt_masks_form_t *form)
   gboolean created;
   dt_sv_entry_t *e = _entry_get_locked(key, &created);
   e->facets |= DT_SV_F_FORM;
-  e->formid = form->formid;
-  e->form_type = form->type;
-  if(form->name[0]) g_strlcpy(e->form_name, form->name, sizeof(e->form_name));
+  e->form_id = info.formid;
+  e->form_type = info.type;
+  if(info.name[0]) g_strlcpy(e->form_name, info.name, sizeof(e->form_name));
   // First sighting is a create regardless of the caller's intent (a form may be
   // seen first via a history snapshot rather than its allocation).
   const dt_sv_op_t eff_op = created ? DT_SV_CREATE : op;
   const gboolean resurrected = _touch_alive_locked(e, created, eff_op);
 
   JsonObject *root = _envelope(eff_op, "form", key, -1, -1, e->alive, resurrected);
-  json_object_set_int_member(root, "id", form->formid);
+  json_object_set_int_member(root, "id", info.formid);
   if(e->form_name[0]) json_object_set_string_member(root, "name", e->form_name);
-  json_object_set_string_member(root, "type", _form_type_name(form->type));
-  json_object_set_int_member(root, "version", form->version);
+  json_object_set_string_member(root, "type", dt_masks_type_name(info.type));
+  json_object_set_int_member(root, "version", info.version);
   if(members) json_object_set_array_member(root, "members", members);
   dt_pthread_mutex_unlock(&_sv.lock);
 
@@ -1402,7 +1402,7 @@ gchar *dt_supervisor_describe(const uint64_t hash)
 
   if(e->facets & DT_SV_F_FORM)
   {
-    g_string_append_printf(s, "form #%d %s", e->formid, _form_type_name(e->form_type));
+    g_string_append_printf(s, "form #%d %s", e->form_id, dt_masks_type_name((dt_masks_type_t)e->form_type));
     if(e->form_name[0]) g_string_append_printf(s, " (%s)", e->form_name);
   }
   else if(e->facets & DT_SV_F_IMAGE)
