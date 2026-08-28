@@ -205,9 +205,15 @@ typedef struct dt_opencl_device_t
   int maxeventslot;
   int nvidia_sm_20;
   const char *vendor;
-  /* Numeric CL_DEVICE_VENDOR_ID, kept alongside the name so a crash attributed to one
-   * vendor's driver can be matched back to the devices it actually ships. */
+  /* Numeric CL_DEVICE_VENDOR_ID, kept alongside the name for reporting. It is NOT what a
+   * crash is attributed to -- see `runtime_id' below. */
   unsigned int vendor_id;
+  /* The OpenCL runtime publishing this device, named by the conf-key suffix its crash streak
+   * is stored under ("rusticl", "amd", "intel", ...), resolved from CL_PLATFORM_NAME. NULL
+   * when the platform matches no rule we ship, in which case no crash can be attributed to
+   * this device. A string literal owned by the runtime table in opencl.c: never freed, and
+   * not to be freed alongside the strdup'd fields around it. */
+  const char *runtime_id;
   const char *name;
   const char *cname;
   const char *options;
