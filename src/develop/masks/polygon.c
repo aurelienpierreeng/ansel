@@ -2255,11 +2255,19 @@ static void _polygon_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const flo
   // Only draw if we have at least one valid point
   if(start_idx >= 0)
   {
-    cairo_move_to(cr, point_buffer[start_idx * 2], point_buffer[start_idx * 2 + 1]);
+    /* Decimate to device resolution, as the brush does; see dt_draw_min_emit_step(). */
+    const double min_step = dt_draw_min_emit_step(cr);
+    const double min_step2 = min_step * min_step;
+    double last_x = point_buffer[start_idx * 2], last_y = point_buffer[start_idx * 2 + 1];
+    cairo_move_to(cr, last_x, last_y);
     for(int point_index = start_idx + 1; point_index < point_count; point_index++)
     {
-      if(!isnan(point_buffer[point_index * 2]) && !isnan(point_buffer[point_index * 2 + 1]))
-        cairo_line_to(cr, point_buffer[point_index * 2], point_buffer[point_index * 2 + 1]);
+      const double x = point_buffer[point_index * 2], y = point_buffer[point_index * 2 + 1];
+      if(isnan(x) || isnan(y)) continue;
+      const double dx = x - last_x, dy = y - last_y;
+      if((dx * dx + dy * dy) < min_step2) continue;
+      cairo_line_to(cr, x, y);
+      last_x = x; last_y = y;
     }
   }
 }

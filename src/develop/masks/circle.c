@@ -466,9 +466,20 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, double x, 
 static void _circle_draw_shape(dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int coord_nb, const gboolean border, const gboolean source)
 {
    // unused arg, keep compiler from complaining
-  cairo_move_to(cr, points[coord_nb * 2 + 2], points[coord_nb * 2 + 3]);
+  /* One line_to per point sampled at RAW resolution is several per device pixel; emit at the
+   * resolution the context can actually show. See dt_draw_min_emit_step() (mirrors the brush). */
+  const double min_step = dt_draw_min_emit_step(cr);
+  const double min_step2 = min_step * min_step;
+  double last_x = points[coord_nb * 2 + 2], last_y = points[coord_nb * 2 + 3];
+  cairo_move_to(cr, last_x, last_y);
   for(int i = 2; i < points_count; i++)
-    cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
+  {
+    const double x = points[i * 2], y = points[i * 2 + 1];
+    const double dx = x - last_x, dy = y - last_y;
+    if((dx * dx + dy * dy) < min_step2) continue;
+    cairo_line_to(cr, x, y);
+    last_x = x; last_y = y;
+  }
   cairo_close_path(cr);
 }
 
