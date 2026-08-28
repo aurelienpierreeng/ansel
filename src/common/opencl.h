@@ -355,7 +355,12 @@ void dt_opencl_note_crash_backtrace(const char *backtrace, size_t backtrace_len)
 
 void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statistics);
 
-/** cleans up the opencl subsystem. */
+/** Clears the persisted driver-crash streak after a session in which OpenCL ran to a clean
+ * shutdown. Reads and writes conf: call it from the shutdown sequence BEFORE dt_conf_cleanup(),
+ * and before dt_opencl_cleanup(). */
+void dt_opencl_clear_driver_crash_streak(void);
+
+/** cleans up the opencl subsystem. Touches no conf: conf may already be gone. */
 void dt_opencl_cleanup(void);
 
 /** cleans up the i-th device in the cl->dev list */
@@ -708,6 +713,9 @@ static inline void dt_opencl_init(const gboolean exclude_opencl, const gboolean 
   /* There is no state to initialise in this build: the queries below are constants. */
   dt_conf_set_bool("opencl", FALSE);
   dt_print(DT_DEBUG_OPENCL, "[opencl_init] this version of darktable was built without opencl support\n");
+}
+static inline void dt_opencl_clear_driver_crash_streak(void)
+{
 }
 static inline void dt_opencl_cleanup(void)
 {
