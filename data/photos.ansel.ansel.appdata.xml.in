@@ -3,14 +3,29 @@
   <id>photos.ansel.ansel</id>
   <name>Ansel</name>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>GPL-3.0+</project_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="photos.ansel">
+    <name>Aurélien Pierre</name>
+  </developer>
+  <update_contact>aurelien.m.a.pierre_AT_gmail.com</update_contact>
   <_summary>Organize and develop images from digital cameras</_summary>
   <translation type="gettext">ansel</translation>
   <description>
     <_p>
-      Ansel manages your digital negatives in a database and lets you
-      view them through a lighttable. It also enables you to develop raw
-      images and enhance them in a darkroom.
+      Ansel manages your digital negatives in a database and lets you view
+      them through a lighttable. It also enables you to develop raw images
+      and enhance them in a darkroom.
+    </_p>
+    <_p>
+      Editing is non-destructive: your original files are never modified.
+      Every adjustment is recorded as a history stack, stored in the database
+      and in XMP sidecar files, and replayed when the image is displayed or
+      exported.
+    </_p>
+    <_p>
+      The processing pipeline is scene-referred and fully colour-managed, so
+      tonal and colour adjustments behave predictably from the raw file to the
+      exported image, and can be accelerated on the GPU through OpenCL.
     </_p>
   </description>
   <launchable type="desktop-id">photos.ansel.ansel.desktop</launchable>
@@ -20,9 +35,24 @@
       <_caption>Virtual light table, showing a collection</_caption>
     </screenshot>
   </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#ffdc9e</color>
+    <color type="primary" scheme_preference="dark">#5c4600</color>
+  </branding>
+  <categories>
+    <category>Graphics</category>
+    <category>Photography</category>
+  </categories>
   <content_rating type="oars-1.1" />
   <releases>
-    <release date="2022-12-15" version="0.0.0"/>
+    <release date="2026-08-28" version="0.0.0" type="development">
+      <description>
+        <_p>
+          Rolling development snapshot, built from the current state of the
+          master branch. There has not been a tagged stable release yet.
+        </_p>
+      </description>
+    </release>
   </releases>
   <provides>
     <binary>ansel</binary>
@@ -30,4 +60,6 @@
   <url type="homepage">https://ansel.photos/</url>
   <url type="bugtracker">https://github.com/aurelienpierreeng/ansel/issues</url>
   <url type="help">https://ansel.photos/en/support/</url>
+  <url type="vcs-browser">https://github.com/aurelienpierreeng/ansel</url>
+  <url type="contribute">https://ansel.photos/en/contribute/</url>
 </component>

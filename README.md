@@ -48,8 +48,12 @@ photographers actually own.
 ## Download and test
 
 The virtual `0.0.0` [pre-release](https://github.com/aurelienpierreeng/ansel/releases/tag/v0.0.0)
-contains nightly builds, with Linux `.Appimage`, Windows `.exe` and Mac OS `.dmg`, compiled automatically
-each night with the latest code, and containing all up-to-date dependencies.
+contains nightly builds, with Linux `.Appimage` and `.flatpak`, Windows `.exe` and Mac OS `.dmg`,
+compiled automatically each night with the latest code, and containing all up-to-date dependencies.
+
+The Flatpak bundle installs with `flatpak install --user Ansel-*.flatpak`. It is a single-file
+bundle, so it does not update itself; see [`packaging/flatpak/README.md`](packaging/flatpak/README.md)
+for building it yourself and for publishing an updatable Flatpak repository.
 
 Ansel is in alpha version. The GUI is susceptible to change and the application may crash under some circumstances.
 

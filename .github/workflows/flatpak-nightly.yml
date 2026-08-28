@@ -14,43 +14,94 @@
 #   You should have received a copy of the GNU General Public License
 #   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 
-
-
-
-
-
-
-
-
-
-name: flatpak-nightly
+name: Nightly Flatpak PKG
 
 on:
+  schedule:
+    # An hour after the AppImage nightly, so the two do not compete for runners.
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 jobs:
-  build-flatpak:
+  Flatpak:
+    if: github.repository == 'aurelienpierreeng/ansel' || github.event_name == 'workflow_dispatch'
+    name: Nightly Ansel Flatpak build
     runs-on: ubuntu-latest
+    env:
+      BRANCH: ${{ github.ref_name }}
     steps:
+      - name: Free disk space
+        run: |
+          # The GNOME SDK, the bundled dependencies and Ansel itself together
+          # need more room than a stock runner leaves free.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
       - name: Checkout ansel source
         uses: actions/checkout@v6
         with:
           ref: ${{ env.BRANCH }}
-          fetch-depth: 1
+          # get_git_version_string.sh needs the tags, and enough history to
+          # reach the last one, or the package is named "unknown-version".
+          fetch-depth: 5000
           fetch-tags: true
           submodules: true
+
       - name: Install Flatpak tools
         run: |
           sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder jq
 
       - name: Build Flatpak
-        env:
-          MANIFEST_URL: https://raw.githubusercontent.com/aurelienpierreeng/ansel/refs/heads/master/packaging/flatpak/photos.ansel.ansel.json
         run: packaging/flatpak/build-flatpak.sh
 
-      - name: Upload Flatpak artifact
+      - name: Package upload
+        if: ${{ success() }}
         uses: actions/upload-artifact@v6
         with:
-          name: flatpak
-          path: build/flatpak/photos.ansel.app.flatpak
+          name: ansel.stable.flatpak
+          path: build/flatpak/Ansel-*-x86_64.flatpak
+          retention-days: 90
+
+  upload_to_release:
+    runs-on: ubuntu-latest
+    env:
+      REPO: "https://github.com/aurelienpierreeng/ansel"
+      ROOM: "!SgRYbzspwqwwUgSQHC:matrix.org"
+      TAG: "v0.0.0"
+    needs: Flatpak
+    steps:
+      - name: Checkout ansel source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ansel.stable.flatpak
+
+      - name: Update nightly release
+        uses: aurelienpierreeng/tip@master
+        with:
+          tag: ${{ env.TAG }}
+          rm: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: Ansel-*.flatpak
+
+      - name: Install dependencies
+        run: |
+          python -m pip install simplematrixbotlib
+
+      - name: Notify Matrix
+        if: ${{ success() }}
+        run: |
+          FILENAME=$(tr '~' '.' <<< "$(find . -type f -iname "Ansel-*.flatpak")")
+          MESSAGE="New Flatpak [${FILENAME}](${{ env.REPO }}/releases/download/${{ env.TAG }}/${FILENAME}) built"
+          python .ci/matrix.py \
+          -m "$MESSAGE" \
+          -s ${{ secrets.MATRIX_SERVER }} \
+          -u ${{ secrets.MATRIX_USER }} \
+          -t ${{ secrets.MATRIX_ACCESS }} \
+          -r ${{ env.ROOM }}

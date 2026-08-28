@@ -86,7 +86,7 @@ endif(NOT WIN32)
 if(VALIDATE_APPDATA_FILE)
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
-    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/ansel.appdata.xml"
+    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml"
     COMMAND ${appstream_util_BIN} validate --nonet ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
     DEPENDS ${PO_FILES}
