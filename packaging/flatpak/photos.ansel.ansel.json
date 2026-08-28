@@ -347,8 +347,7 @@
             "config-opts": [
                 "-DCMAKE_BUILD_TYPE=Release",
                 "-DBINARY_PACKAGE_BUILD=1",
-                "-DTESTBUILD_OPENCL_PROGRAMS=OFF",
-                "-DLIBSOUP_FORCE_VERSION=2"
+                "-DTESTBUILD_OPENCL_PROGRAMS=OFF"
             ],
             "builddir": true,
             "sources": [

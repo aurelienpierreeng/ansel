@@ -31,23 +31,26 @@ It produces, in `build/flatpak/`:
 Useful environment variables: `SOURCE_DIR` (tree to build, defaults to the repository root),
 `BUILD_DIR`, `REPO_DIR`, `BUNDLE_NAME`, `VERSION`, and the signing pair below.
 
-## The app module pins libsoup 2, and must
+## libsoup: the manifest says nothing, and that is deliberate
 
-`-DLIBSOUP_FORCE_VERSION=2` in the app module's `config-opts` is not a preference. Ansel
-reaches libsoup twice over: `common/http_server.c` links it directly, and the map and
-geotagging panels link it through osm-gps-map. libsoup 2 and libsoup 3 refuse to coexist —
-each aborts the process on sight of the other's symbols, with
+There is no `-DLIBSOUP_FORCE_VERSION` in the app module's `config-opts`, and adding one back
+would be a regression. Ansel reaches libsoup twice over: `common/http_server.c` links it
+directly, and the map and geotagging panels link it through osm-gps-map. libsoup 2 and
+libsoup 3 abort on sight of each other —
 `libsoup3 symbols detected. Using libsoup2 and libsoup3 in the same process is not supported.`
 
-`cmake/modules/FindLibSoup.cmake` prefers libsoup 3 whenever its development files are
-present, and the GNOME SDK has them, while osm-gps-map 1.2.0 is libsoup-2-only. Left to
-itself the build therefore produced a `libansel.so` linked against libsoup 3 and a set of
-lighttable plugins linked against libsoup 2 — it compiled, exported and installed cleanly,
-and aborted the moment it loaded its first plugin.
+`cmake/modules/FindLibSoup.cmake` used to prefer libsoup 3 whenever its development files were
+present, which the GNOME SDK has and osm-gps-map 1.2.0 does not support. That produced a
+`libansel.so` on libsoup 3 and lighttable plugins on libsoup 2: it built, exported and
+installed cleanly, and aborted on the first plugin it loaded. It now asks osm-gps-map which
+libsoup it was built against and follows it, so the flatpak lands on libsoup 2 by itself.
+Watch for this line in the configure output:
 
-This is not specific to Flatpak. Any distribution build that has libsoup 3's development
-files installed alongside a libsoup-2 osm-gps-map produces the same binary; it goes unnoticed
-where libsoup 3's `.pc` file simply is not installed.
+    -- LibSoup: osm-gps-map is built against libsoup2, matching it
+
+The manifest is not where this belongs, because the hazard is not specific to Flatpak: any
+build with libsoup 3's `.pc` file installed next to a libsoup-2 osm-gps-map produced the same
+binary. It goes unnoticed wherever libsoup 3's development package simply is not installed.
 
 ## Signing
 
