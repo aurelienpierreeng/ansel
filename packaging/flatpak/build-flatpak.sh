@@ -46,9 +46,15 @@ VERSION=${VERSION:-"$(sh "${ROOT_DIR}/tools/get_git_version_string.sh")"}
 BUNDLE_NAME=${BUNDLE_NAME:-"Ansel-${VERSION}-x86_64.flatpak"}
 
 BUILD_DIR=${BUILD_DIR:-"${ROOT_DIR}/build/flatpak"}
-MANIFEST_PATH=${MANIFEST_PATH:-"${BUILD_DIR}/${APP_ID}.json"}
+# The manifest is built into a directory of its own, holding a copy of
+# everything that sits next to the original. flatpak-builder resolves every
+# relative path in a manifest -- an included module file, a "type": "file"
+# source, a script a module runs -- against the directory the manifest is in,
+# so a manifest generated somewhere else silently loses its companions.
+MANIFEST_DIR=${MANIFEST_DIR:-"${BUILD_DIR}/manifest"}
+MANIFEST_PATH=${MANIFEST_PATH:-"${MANIFEST_DIR}/${APP_ID}.json"}
 REPO_DIR=${REPO_DIR:-"${BUILD_DIR}/repo"}
-SHARED_MODULES_DIR=${SHARED_MODULES_DIR:-"${BUILD_DIR}/shared-modules"}
+SHARED_MODULES_DIR=${SHARED_MODULES_DIR:-"${MANIFEST_DIR}/shared-modules"}
 
 GPG_KEY_ID=${GPG_KEY_ID:-""}
 GPG_HOMEDIR=${GPG_HOMEDIR:-""}
@@ -58,7 +64,8 @@ if [[ -z "${APP_ID}" || "${APP_ID}" == "null" ]]; then
   exit 1
 fi
 
-mkdir -p "${BUILD_DIR}"
+mkdir -p "${MANIFEST_DIR}"
+cp -a "${SCRIPT_DIR}/." "${MANIFEST_DIR}/"
 
 # Point the app module at this working tree. Everything else in the manifest is
 # used verbatim.
