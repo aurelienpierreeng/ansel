@@ -78,12 +78,37 @@ Flathub is a separate step from the above, and the manifest is not submittable a
   tag; `v0.0.0` is a rolling nightly pointer, not a release.
 - **`<releases>` in the appdata** carries a single development entry for the same reason.
   Flathub wants a release entry matching the submitted version.
+- **The app module builds with `--share=network`.** Flathub forbids network access during a
+  build. Ansel needs it because `data/CMakeLists.txt` fetches
+  `https://lensfun.github.io/db/version_1.tar.bz2` at configure time, under `FETCH_LENS_DB`,
+  and converts it into the `lenses.db` that LensSerious reads — deliberately, so a build
+  carries the current calibrations rather than the packager's snapshot. A Flathub submission
+  would have to pass `-DFETCH_LENS_DB=OFF` and let the importer fall back to the database
+  liblensfun itself installs, pinning lens coverage to whatever the `lensfun` module ships.
+  That is a real trade, not a formality: it is the difference between shipping today's
+  calibrations and shipping the ones frozen into the manifest.
 - **`--filesystem=host` and `--device=all`** are flagged during Flathub review. Both are
   defensible for a photo editor that opens arbitrary directories and uses OpenCL, and
   darktable ships with the same, but expect to argue them.
 - **The screenshot** is from 2022 and no longer shows the current interface.
 
-Two former blockers are already gone: the app module no longer builds with `--share=network`
-(nothing in the build system downloads anything), and the manifest no longer requests
-`--own-name=org.darktable.service` — `dt_dbus_init()` is disabled in `src/darktable.c`, so
+One former blocker is already gone: the manifest no longer requests
+`--own-name=org.darktable.service`. `dt_dbus_init()` is disabled in `src/darktable.c`, so
 nothing ever owned that name, and a name not prefixed by the app id would have been rejected.
+
+## Inherited from darktable, and removed
+
+The manifest started as Flathub's darktable one, and carried three things Ansel has no use
+for. They are gone; do not restore them without a reason.
+
+- **`exiftool` and `perl`.** Nothing in Ansel calls exiftool — the only occurrence in the
+  tree is a documentation URL in a comment in `src/imageio/format/png.c`. `perl` existed
+  solely to build it. Between them they were the longest part of the build, and the
+  `exiftool` module was unbuildable anyway: it sourced an `exiftool-sources.json` that was
+  never vendored into this repository.
+- **The `lensfun` module's database refresh.** Its `post-install` pip-installed lxml and ran
+  a `lensfun_convert_db.py` (likewise never vendored here) over a git checkout of the lensfun
+  database, to give darktable current calibrations at run time. Ansel reads none of it:
+  nothing in the pixel pipeline links liblensfun, and the calibrations come from `lenses.db`,
+  built at configure time from the XML the previous section describes. The module is now
+  built purely for its headers and its `.pc` file.

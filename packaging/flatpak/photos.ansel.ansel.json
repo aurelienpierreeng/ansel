@@ -25,7 +25,6 @@
         "/bin/*lensfun*",
         "/bin/metacopy",
         "/bin/pathtest",
-        "/bin/gphoto2*",
         "/doc",
         "/lib/cmake",
         "/lib/pkgconfig",
@@ -59,35 +58,11 @@
                     }
                 }
             },
-            "cleanup": [
-                "/lib/python3.*"
-            ],
-            "post-install": [
-                "pip3 install --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} lxml --ignore-installed --no-build-isolation",
-                "python3 lensfun_convert_db.py $PWD lensfun-git/data/db",
-                "rm -rf /app/share/lensfun/version_1/*",
-                "tar xvf db/version_1.tar -C /app/share/lensfun/version_1"
-            ],
             "sources": [
                 {
                     "type": "archive",
                     "url": "https://github.com/lensfun/lensfun/archive/refs/tags/v0.3.4.tar.gz",
                     "sha256": "dafb39c08ef24a0e2abd00d05d7341b1bf1f0c38bfcd5a4c69cf5f0ecb6db112"
-                },
-                {
-                    "type": "file",
-                    "url": "https://files.pythonhosted.org/packages/72/14/60bf9ba4b5c6d001af3b93be17a442deea8b1ce0eab2911de839cb0dfd3f/lxml-5.0.2.tar.gz",
-                    "sha256": "6399703c40ba53e2c3b72fdb56cb908d2b83c08082ecf17de839b27e68d1e598"
-                },
-                {
-                    "type": "file",
-                    "path": "lensfun_convert_db.py"
-                },
-                {
-                    "type": "git",
-                    "dest": "lensfun-git",
-                    "url": "https://github.com/lensfun/lensfun.git",
-                    "commit": "9b46201746f466614efe573cbc5c3d292dd5633d"
                 }
             ]
         },
@@ -311,76 +286,6 @@
             ]
         },
         {
-            "name": "perl",
-            "no-autogen": true,
-            "config-opts": [
-                "-des",
-                "-Duseshrplib"
-            ],
-            "build-options": {
-                "cflags": "-fPIC",
-                "ldflags": "-fpic"
-            },
-            "cleanup": [
-                "/bin/corelist",
-                "/bin/cpan",
-                "/bin/enc*",
-                "/bin/h2*",
-                "/bin/instmodsh",
-                "/bin/json_pp",
-                "/bin/libnetcfg",
-                "/bin/perlbug",
-                "/bin/perldoc",
-                "/bin/perlivp",
-                "/bin/perlthanks",
-                "/bin/piconv",
-                "/bin/pl2pm",
-                "/bin/pod*",
-                "/bin/prove",
-                "/bin/ptar*",
-                "/bin/shasum",
-                "/bin/splain",
-                "/bin/streamzip",
-                "/bin/xsubpp",
-                "/bin/zipdetails",
-                "/man",
-                "*.h"
-            ],
-            "post-install": [
-                "find ${FLATPAK_DEST}/lib/perl5/ -name \\*.so -exec chmod u+w {} \\;"
-            ],
-            "sources": [
-                {
-                    "type": "archive",
-                    "url": "https://www.cpan.org/src/5.0/perl-5.42.0.tar.gz",
-                    "sha256": "e093ef184d7f9a1b9797e2465296f55510adb6dab8842b0c3ed53329663096dc"
-                },
-                {
-                    "type": "script",
-                    "dest-filename": "configure",
-                    "commands": [
-                        "exec ./configure.gnu $@"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "exiftool",
-            "buildsystem": "simple",
-            "build-commands": [
-                "perl-libs/install.sh"
-            ],
-            "post-install": [
-                "chmod -Rf u+w ${FLATPAK_DEST}/lib/perl5/site_perl"
-            ],
-            "sources": [
-                "exiftool-sources.json"
-            ],
-            "cleanup": [
-                "/man"
-            ]
-        },
-        {
             "name": "git",
             "cleanup": [
                 "/share/gitweb"
@@ -424,7 +329,12 @@
                     "type": "dir",
                     "path": "../.."
                 }
-            ]
+            ],
+            "build-options": {
+                "build-args": [
+                    "--share=network"
+                ]
+            }
         }
     ]
 }
