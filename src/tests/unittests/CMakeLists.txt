@@ -19,6 +19,7 @@ set(DATABASE_UNIT_TESTS
   test_conf_value_lifetime
   test_dtpthread_recursive
   test_history_snapshot
+  test_masks_raster_contract
 )
 
 foreach(test ${DATABASE_UNIT_TESTS})
