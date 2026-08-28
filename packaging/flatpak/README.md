@@ -31,6 +31,24 @@ It produces, in `build/flatpak/`:
 Useful environment variables: `SOURCE_DIR` (tree to build, defaults to the repository root),
 `BUILD_DIR`, `REPO_DIR`, `BUNDLE_NAME`, `VERSION`, and the signing pair below.
 
+## The app module pins libsoup 2, and must
+
+`-DLIBSOUP_FORCE_VERSION=2` in the app module's `config-opts` is not a preference. Ansel
+reaches libsoup twice over: `common/http_server.c` links it directly, and the map and
+geotagging panels link it through osm-gps-map. libsoup 2 and libsoup 3 refuse to coexist —
+each aborts the process on sight of the other's symbols, with
+`libsoup3 symbols detected. Using libsoup2 and libsoup3 in the same process is not supported.`
+
+`cmake/modules/FindLibSoup.cmake` prefers libsoup 3 whenever its development files are
+present, and the GNOME SDK has them, while osm-gps-map 1.2.0 is libsoup-2-only. Left to
+itself the build therefore produced a `libansel.so` linked against libsoup 3 and a set of
+lighttable plugins linked against libsoup 2 — it compiled, exported and installed cleanly,
+and aborted the moment it loaded its first plugin.
+
+This is not specific to Flatpak. Any distribution build that has libsoup 3's development
+files installed alongside a libsoup-2 osm-gps-map produces the same binary; it goes unnoticed
+where libsoup 3's `.pc` file simply is not installed.
+
 ## Signing
 
 Signing is opt-in and off by default:
