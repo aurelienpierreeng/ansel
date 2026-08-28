@@ -2528,7 +2528,10 @@ static dt_masks_raster_result_t _polygon_get_source_area(dt_iop_module_t *module
                                    dt_dev_pixelpipe_iop_t *piece,
                                    dt_masks_form_t *mask_form, int *width, int *height, int *posx, int *posy)
 {
-  *width = *height = *posx = *posy = 0;
+  *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
   return dt_masks_raster_from_status(
       _get_area(module, pipe, piece, mask_form, width, height, posx, posy, TRUE));
 }
@@ -2538,7 +2541,10 @@ static dt_masks_raster_result_t _polygon_get_area(const dt_iop_module_t *const m
                              dt_masks_form_t *const mask_form,
                              int *width, int *height, int *posx, int *posy)
 {
-  *width = *height = *posx = *posy = 0;
+  *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
   return dt_masks_raster_from_status(
       _get_area(module, pipe, piece, mask_form, width, height, posx, posy, FALSE));
 }
@@ -2577,7 +2583,10 @@ static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const m
                              float **buffer, int *width, int *height, int *posx, int *posy)
 {
   *buffer = NULL;
-  *width = *height = *posx = *posy = 0;
+  *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
   if(IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   double start = 0.0;
   double start2 = 0.0;

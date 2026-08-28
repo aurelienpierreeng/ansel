@@ -144,8 +144,10 @@ static void _an_unbuildable_outline_is_never_reported_as_built(void **state)
     if(IS_NULL_PTR(_shapes[i].functions->get_points_border)) continue; // group has none
 
     dt_masks_form_t form = _empty_form(&_shapes[i]);
-    float *points = NULL, *border = NULL;
-    int points_count = -1, border_count = -1;
+    float *points = NULL;
+    float *border = NULL;
+    int points_count = -1;
+    int border_count = -1;
 
     // The caller stamps the group-wide outline cache key on success. Reporting success here
     // with *points still NULL is what marked the cache current over an outline that had never
@@ -168,7 +170,10 @@ static void _area_and_mask_always_write_their_out_parameters(void **state)
     /* Poisoned on purpose: these are the callers' uninitialised stack. iop/spots.c reads
      * width/height straight after the call and iop/retouch.c sizes an allocation from them,
      * so "reported not-OK" is not enough -- the values have to be defined too. */
-    int width = -12345, height = -12345, posx = -12345, posy = -12345;
+    int width = -12345;
+    int height = -12345;
+    int posx = -12345;
+    int posy = -12345;
     float *buffer = (float *)(intptr_t)-1;
 
     if(_shapes[i].area_depends_on_geometry && !IS_NULL_PTR(form.functions->get_area))
@@ -182,7 +187,10 @@ static void _area_and_mask_always_write_their_out_parameters(void **state)
       assert_int_equal(posy, 0);
     }
 
-    width = height = posx = posy = -12345;
+    width = -12345;
+    height = -12345;
+    posx = -12345;
+    posy = -12345;
     if(!IS_NULL_PTR(form.functions->get_mask))
     {
       const dt_masks_raster_result_t mask

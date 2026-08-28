@@ -238,7 +238,10 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
                            float **buffer, int *width, int *height, int *posx, int *posy)
 {
   *buffer = NULL;
-  *width = *height = *posx = *posy = 0;
+  *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
 
   // we allocate buffers and values
   const guint nb = g_list_length(form->points);
@@ -306,7 +309,10 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
   if(nb_ok == 0)
   {
     *buffer = NULL;
-    *width = *height = *posx = *posy = 0;
+    *width = 0;
+  *height = 0;
+  *posx = 0;
+  *posy = 0;
     goto cleanup;
   }
 
