@@ -22,6 +22,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/* Declares what this file implements. This file is textually #included by masks.c rather than
+ * compiled on its own, so the include has to live HERE and not in the host: clang-tidy attributes
+ * a symbol's use to the file that names it, and an include placed in masks.c for detail.c's
+ * benefit reads as unused there. */
+#include "develop/masks_detail.h"
+
 /* How are "detail masks" implemented?
 
   The detail masks (DM) are used by the dual demosaicer and as a further refinement step for
