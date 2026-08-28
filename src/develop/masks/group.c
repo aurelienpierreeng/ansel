@@ -232,19 +232,17 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   return 0;
 }
 
-static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                            const dt_dev_pixelpipe_iop_t *const piece,
                            dt_masks_form_t *const form,
                            float **buffer, int *width, int *height, int *posx, int *posy)
 {
+  *buffer = NULL;
+  *width = *height = *posx = *posy = 0;
+
   // we allocate buffers and values
   const guint nb = g_list_length(form->points);
-  if(nb == 0)
-  {
-    *buffer = NULL;
-    *width = *height = *posx = *posy = 0;
-    return 0;
-  }
+  if(nb == 0) return DT_MASKS_RASTER_EMPTY;
   float **bufs = calloc(nb, sizeof(float *));
   int *w = malloc(sizeof(int) * nb);
   int *h = malloc(sizeof(int) * nb);
@@ -261,22 +259,30 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     dt_free(h);
     dt_free(w);
     dt_free(bufs);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   // and we get all masks
   int pos = 0;
   int nb_ok = 0;
-  int err = 0;
+  dt_masks_raster_result_t err = DT_MASKS_RASTER_OK;
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     dt_masks_form_t *sel = dt_masks_get_from_id(module->dev, fpt->formid);
     if(sel)
     {
-      if(dt_masks_get_mask(module, pipe, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos]) != 0)
+      /* EMPTY is folded in as a failure here, unlike in the ROI rasteriser: this legacy path
+       * keeps one slot per child in parallel malloc'd arrays, and skipping a slot would leave
+       * its `states'/`op' entries uninitialised for the combine below. Erroring out is still
+       * strictly better than what this did before -- a child reporting success with no buffer
+       * (which is what a degenerate circle or ellipse used to do) walked on into the combine
+       * with bufs[pos] NULL and w/h/px/py never written. Making the slots skippable belongs
+       * with the rest of this path's bookkeeping. */
+      if(dt_masks_get_mask(module, pipe, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos])
+         != DT_MASKS_RASTER_OK)
       {
-        err = 1;
+        err = DT_MASKS_RASTER_ERROR;
         break;
       }
       if(fpt->state & DT_MASKS_STATE_INVERSE)
@@ -284,7 +290,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
         const double start = dt_get_wtime();
         if(_inverse_mask(module, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos]) != 0)
         {
-          err = 1;
+          err = DT_MASKS_RASTER_ERROR;
           break;
         }
         if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -322,7 +328,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
   *buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)(r - l) * (b - t), 0);
   if(IS_NULL_PTR(*buffer))
   {
-    err = 1;
+    err = DT_MASKS_RASTER_ERROR;
     goto cleanup;
   }
 

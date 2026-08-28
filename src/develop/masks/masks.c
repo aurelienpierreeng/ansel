@@ -223,17 +223,18 @@ dt_masks_raster_result_t dt_masks_get_points_border(dt_develop_t *develop, dt_ma
   return DT_MASKS_RASTER_ERROR;
 }
 
-int dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
                       dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
                       int *area_width, int *area_height, int *area_pos_x, int *area_pos_y)
 {
+  *area_width = *area_height = *area_pos_x = *area_pos_y = 0;
   if(mask_form->functions && mask_form->functions->get_area)
     return mask_form->functions->get_area(module, pipe, piece, mask_form, area_width, area_height,
                                           area_pos_x, area_pos_y);
-  return 1;
+  return DT_MASKS_RASTER_ERROR;
 }
 
-int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
                              dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
                              int *area_width, int *area_height,
                              int *area_pos_x, int *area_pos_y)
@@ -247,7 +248,9 @@ int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
       return mask_form->functions->get_source_area(module, pipe, piece, mask_form, area_width, area_height,
                                                    area_pos_x, area_pos_y);
   }
-  return 1;
+
+  /* A form that is not a clone has no source area. That is an absence, not a failure. */
+  return DT_MASKS_RASTER_EMPTY;
 }
 
 int dt_masks_version(void)
@@ -1385,14 +1388,17 @@ void dt_masks_cleanup_unused(dt_develop_t *develop)
 /* The two rasterisation dispatchers. They were inline in masks.h, which forced the
  * per-shape function table to be public; a per-buffer call is not a per-pixel cost,
  * so the inline bought nothing and the table is private now. */
-int dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                       const dt_dev_pixelpipe_iop_t *const piece,
                       dt_masks_form_t *const form,
                       float **buffer, int *width, int *height, int *posx, int *posy)
 {
+  *buffer = NULL;
+  *width = *height = *posx = *posy = 0;
+  /* A shape type with no rasteriser is a programming error, not an empty shape. */
   return (form->functions && form->functions->get_mask)
     ? form->functions->get_mask(module, pipe, piece, form, buffer, width, height, posx, posy)
-    : 1;
+    : DT_MASKS_RASTER_ERROR;
 }
 
 dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,

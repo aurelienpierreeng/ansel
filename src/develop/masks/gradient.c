@@ -1159,18 +1159,19 @@ static dt_masks_raster_result_t _gradient_get_points_border(dt_develop_t *dev, d
   return DT_MASKS_RASTER_OK;
 }
 
-static int _gradient_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _gradient_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                               const dt_dev_pixelpipe_iop_t *const piece,
                               dt_masks_form_t *const form,
                               int *width, int *height, int *posx, int *posy)
 {
+  *width = *height = *posx = *posy = 0;
   const float wd = pipe->iwidth, ht = pipe->iheight;
 
   float points[8] = { 0.0f, 0.0f, wd, 0.0f, wd, ht, 0.0f, ht };
 
   // and we transform them with all distorted modules
   if(!dt_dev_distort_transform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 4))
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
 
   // now we search min and max
   float xmin = 0.0f, xmax = 0.0f, ymin = 0.0f, ymax = 0.0f;
@@ -1189,7 +1190,7 @@ static int _gradient_get_area(const dt_iop_module_t *const module, dt_dev_pixelp
   *posy = ymin;
   *width = (xmax - xmin);
   *height = (ymax - ymin);
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 // caller needs to make sure that input remains within bounds
@@ -1201,16 +1202,19 @@ static inline float dt_gradient_lookup(const float *lut, const float i)
   return lut[bin1] * f + lut[bin0] * (1.0f - f);
 }
 
-static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                               const dt_dev_pixelpipe_iop_t *const piece,
                               dt_masks_form_t *const form,
                               float **buffer, int *width, int *height, int *posx, int *posy)
 {
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  *buffer = NULL;
+  *width = *height = *posx = *posy = 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
   // we get the area
-  if(_gradient_get_area(module, pipe, piece, form, width, height, posx, posy) != 0) return 1;
+  const dt_masks_raster_result_t area = _gradient_get_area(module, pipe, piece, form, width, height, posx, posy);
+  if(area != DT_MASKS_RASTER_OK) return area;
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
@@ -1221,7 +1225,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
 
   // we get the gradient values
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
-  if(IS_NULL_PTR(gradient)) return 0;
+  if(IS_NULL_PTR(gradient)) return DT_MASKS_RASTER_EMPTY;
   // we create a buffer of grid points for later interpolation. mainly in order to reduce memory footprint
   const int w = *width;
   const int h = *height;
@@ -1232,7 +1236,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   const int gh = (h + grid - 1) / grid + 1;
 
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * gw * gh, 0);
-  if(IS_NULL_PTR(points)) return 1;
+  if(IS_NULL_PTR(points)) return DT_MASKS_RASTER_ERROR;
   __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
   for(int j = 0; j < gh; j++)
     for(int i = 0; i < gw; i++)
@@ -1252,7 +1256,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   if(!dt_dev_distort_backtransform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)gw * gh))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1283,7 +1287,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   if(IS_NULL_PTR(lut))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
   __OMP_PARALLEL_FOR_SIMD__(if(lutsize > 1000) aligned(lut : 64))
   for(int n = 0; n < lutsize; n++)
@@ -1322,7 +1326,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   if(IS_NULL_PTR(*buffer))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   const float inv_grid2 = 1.0f / (grid * grid);
@@ -1369,7 +1373,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
     dt_print(DT_DEBUG_MASKS, "[masks %s] gradient fill took %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
 
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 

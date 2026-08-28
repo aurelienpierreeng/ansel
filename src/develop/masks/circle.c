@@ -715,14 +715,18 @@ static dt_masks_raster_result_t _circle_get_points_border(dt_develop_t *dev, str
   }
 }
 
-static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
                                    dt_dev_pixelpipe_iop_t *piece,
                                    dt_masks_form_t *form, int *width, int *height, int *posx, int *posy)
 {
+  /* Every early exit below must leave the out-parameters defined: callers read them
+   * whenever this reports anything but ERROR, and three of them used to report success
+   * for a shape with no geometry while writing none of these. */
+  *width = *height = *posx = *posy = 0;
   // we get the circle values
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
-  if(IS_NULL_PTR(circle)) return 0;
+  if(IS_NULL_PTR(circle)) return DT_MASKS_RASTER_EMPTY;
   float wd = pipe->iwidth, ht = pipe->iheight;
 
   // compute the points we need to transform (center and circumference of circle)
@@ -731,29 +735,30 @@ static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *
   float *const restrict points =
     _points_to_transform(pipe->dev, form->source[0], form->source[1], outer_radius, wd, ht, &num_points);
   if(IS_NULL_PTR(points))
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
 
   // and transform them with all distorted modules
   if(!dt_dev_distort_transform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, num_points))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   _bounding_box(points, num_points, width, height, posx, posy);
   dt_pixelpipe_cache_free_align(points);
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
-static int _circle_get_area(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _circle_get_area(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
                             const dt_dev_pixelpipe_iop_t *const restrict piece,
                             dt_masks_form_t *const restrict form,
                             int *width, int *height, int *posx, int *posy)
 {
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  *width = *height = *posx = *posy = 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   // we get the circle values
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
-  if(IS_NULL_PTR(circle)) return 0;
+  if(IS_NULL_PTR(circle)) return DT_MASKS_RASTER_EMPTY;
   float wd = pipe->iwidth, ht = pipe->iheight;
 
   // compute the points we need to transform (center and circumference of circle)
@@ -762,30 +767,33 @@ static int _circle_get_area(const dt_iop_module_t *const restrict module, dt_dev
   float *const restrict points =
     _points_to_transform(pipe->dev, circle->center[0], circle->center[1], outer_radius, wd, ht, &num_points);
   if(IS_NULL_PTR(points))
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
 
   // and transform them with all distorted modules
   if(!dt_dev_distort_transform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, num_points))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   _bounding_box(points, num_points, width, height, posx, posy);
   dt_pixelpipe_cache_free_align(points);
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
-static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
                             const dt_dev_pixelpipe_iop_t *const restrict piece,
                             dt_masks_form_t *const restrict form,
                             float **buffer, int *width, int *height, int *posx, int *posy)
 {
+  *buffer = NULL;
+  *width = *height = *posx = *posy = 0;
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
   // we get the area
-  if(_circle_get_area(module, pipe, piece, form, width, height, posx, posy) != 0) return 1;
+  const dt_masks_raster_result_t area = _circle_get_area(module, pipe, piece, form, width, height, posx, posy);
+  if(area != DT_MASKS_RASTER_OK) return area;
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
@@ -800,7 +808,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
   const int w = *width, h = *height;
   float *const restrict points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)w * h * 2, 0);
   if(IS_NULL_PTR(points))
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
 
   const float pos_x = *posx;
   const float pos_y = *posy;
@@ -826,7 +834,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
   if(!dt_dev_distort_backtransform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)w * h))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -841,7 +849,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
   if(IS_NULL_PTR(*buffer))
   {
     dt_pixelpipe_cache_free_align(points);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   // we populate the buffer
@@ -870,7 +878,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle fill took %0.04f sec\n", form->name, dt_get_wtime() - start2);
 
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 

@@ -2758,19 +2758,23 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   return 0;
 }
 
-static int _brush_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _brush_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
                                   dt_dev_pixelpipe_iop_t *piece,
                                   dt_masks_form_t *mask_form, int *width, int *height, int *offset_x, int *offset_y)
 {
-  return _get_area(module, pipe, piece, mask_form, width, height, offset_x, offset_y, 1);
+  *width = *height = *offset_x = *offset_y = 0;
+  return dt_masks_raster_from_status(
+      _get_area(module, pipe, piece, mask_form, width, height, offset_x, offset_y, 1));
 }
 
-static int _brush_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _brush_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                            const dt_dev_pixelpipe_iop_t *const piece,
                            dt_masks_form_t *const mask_form, int *width, int *height, int *offset_x,
                            int *offset_y)
 {
-  return _get_area(module, pipe, piece, mask_form, width, height, offset_x, offset_y, 0);
+  *width = *height = *offset_x = *offset_y = 0;
+  return dt_masks_raster_from_status(
+      _get_area(module, pipe, piece, mask_form, width, height, offset_x, offset_y, 0));
 }
 
 /** we write a falloff segment */
@@ -2809,12 +2813,14 @@ static void _brush_falloff(float *const restrict buffer, int segment_start[2], i
  *
  * The buffer is returned zero-initialized and filled only in the falloff region.
  */
-static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                            const dt_dev_pixelpipe_iop_t *const piece,
                            dt_masks_form_t *const mask_form,
                            float **buffer, int *width, int *height, int *offset_x, int *offset_y)
 {
-  if(IS_NULL_PTR(module)) return 1;
+  *buffer = NULL;
+  *width = *height = *offset_x = *offset_y = 0;
+  if(IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   double timer_start = 0.0;
   double timer_step_start = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) timer_start = timer_step_start = dt_get_wtime();
@@ -2830,7 +2836,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
     dt_pixelpipe_cache_free_align(payload);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -2849,7 +2855,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     dt_pixelpipe_cache_free_align(payload);
     *buffer = NULL;
     *width = *height = *offset_x = *offset_y = 0;
-    return 0;
+    return DT_MASKS_RASTER_EMPTY;
   }
   const gboolean use_sparse = (pipe->mask_rasterization_step > 1);
   const int sparse_step = pipe->mask_rasterization_step;
@@ -2868,7 +2874,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
     dt_pixelpipe_cache_free_align(payload);
-    return 1;
+    return DT_MASKS_RASTER_ERROR;
   }
   memset(*buffer, 0, sizeof(float) * buffer_size);
 
@@ -2925,7 +2931,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush fill buffer took %0.04f sec\n", mask_form->name,
              dt_get_wtime() - timer_start);
 
-  return 0;
+  return DT_MASKS_RASTER_OK;
 }
 
 /** we write a falloff segment respecting limits of buffer */

@@ -824,7 +824,9 @@ static gboolean rt_masks_form_is_in_roi(dt_iop_module_t *self, const dt_dev_pixe
   int fl, ft, fw, fh;
   dt_dev_pixelpipe_iop_t piece_copy = *piece;
 
-  if(dt_masks_get_area(self, (dt_dev_pixelpipe_t *)pipe, &piece_copy, form, &fw, &fh, &fl, &ft) != 0) return FALSE;
+  if(dt_masks_get_area(self, (dt_dev_pixelpipe_t *)pipe, &piece_copy, form, &fw, &fh, &fl, &ft)
+     != DT_MASKS_RASTER_OK)
+    return FALSE;
 
   // is the form outside of the roi?
   fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
@@ -2593,7 +2595,7 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *
       // if the form is outside the roi, we just skip it
       // we get the area for the form
       int fl, ft, fw, fh;
-      if(dt_masks_get_area(self, pipe, piece, form, &fw, &fh, &fl, &ft) != 0)
+      if(dt_masks_get_area(self, pipe, piece, form, &fw, &fh, &fl, &ft) != DT_MASKS_RASTER_OK)
       {
         continue;
       }
@@ -2692,7 +2694,7 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, dt
       
       // we get the source area
       int fl, ft, fw, fh;
-      if(dt_masks_get_source_area(self, pipe, piece, form, &fw, &fh, &fl, &ft) != 0)
+      if(dt_masks_get_source_area(self, pipe, piece, form, &fw, &fh, &fl, &ft) != DT_MASKS_RASTER_OK)
       {
         continue;
       }
@@ -2777,7 +2779,8 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, dt_dev_pixe
 
       // get the source area
       int fl_src, ft_src, fw_src, fh_src;
-      if(dt_masks_get_source_area(self, pipe, piece, form, &fw_src, &fh_src, &fl_src, &ft_src) != 0)
+      if(dt_masks_get_source_area(self, pipe, piece, form, &fw_src, &fh_src, &fl_src, &ft_src)
+         != DT_MASKS_RASTER_OK)
       {
         continue;
       }
