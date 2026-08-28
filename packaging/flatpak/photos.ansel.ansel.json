@@ -26,6 +26,7 @@
     "cleanup": [
         "/include",
         "/bin/*lensfun*",
+        "/bin/cmark",
         "/bin/metacopy",
         "/bin/pathtest",
         "/doc",
@@ -314,6 +315,28 @@
                         "project-id": 5350,
                         "stable-only": true,
                         "url-template": "https://mirrors.edge.kernel.org/pub/software/scm/git/git-$version.tar.xz"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "cmark",
+            "buildsystem": "cmake-ninja",
+            "config-opts": [
+                "-DCMAKE_BUILD_TYPE=Release",
+                "-DBUILD_SHARED_LIBS=ON",
+                "-DBUILD_TESTING=OFF"
+            ],
+            "sources": [
+                {
+                    "type": "archive",
+                    "url": "https://github.com/commonmark/cmark/archive/refs/tags/0.31.1.tar.gz",
+                    "sha256": "3da93db5469c30588cfeb283d9d62edfc6ded9eb0edc10a4f5bbfb7d722ea802",
+                    "x-checker-data": {
+                        "type": "anitya",
+                        "project-id": 6218,
+                        "stable-only": true,
+                        "url-template": "https://github.com/commonmark/cmark/archive/refs/tags/$version.tar.gz"
                     }
                 }
             ]
