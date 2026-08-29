@@ -1,12 +1,11 @@
 # Flatpak packaging
 
-`photos.ansel.ansel.json` is the Flatpak manifest. `build-flatpak.sh` builds it from the
+`photos.ansel.Ansel.json` is the Flatpak manifest. `build-flatpak.sh` builds it from the
 local working tree.
 
-The app id is `photos.ansel.ansel`, and it is load-bearing in four places that must agree:
-the `app-id` key in the manifest, the `<id>` in `data/photos.ansel.ansel.appdata.xml.in`, the
-name of the `.desktop` file `data/CMakeLists.txt` installs, and the file name of the appdata
-itself. Because CMake already installs both files under that name, the manifest needs no
+The app id is `photos.ansel.Ansel` — see "The app id was decided" below for where it is
+load-bearing and why it is spelled that way. Because CMake installs the desktop and appdata
+files under that name already, the manifest needs no
 `rename-desktop-file` / `rename-appdata-file` — only `rename-icon`, since the icon is
 installed as `ansel`. The script reads the id back out of the manifest rather than keeping
 its own copy; three independent copies of it is how they drifted apart before.
@@ -113,21 +112,72 @@ So the blocker is not a release in the sense of a polished 1.0. It is **a tag**.
 pin a manifest to it, and what gets submitted stops being "software requiring daily updates"
 while remaining exactly the code the nightly ships.
 
-### What a submission still needs
+### What is left to do
 
-1. **A tag**, and a matching `<release>` in `data/photos.ansel.ansel.appdata.xml.in`.
-2. **A separate manifest**: `type: git` pinned to that tag and commit rather than the
-   `type: dir` this one uses, plus the payload sources below. The `type: dir` here is a
-   property of building a working tree, not something to fix.
-3. **The app id, decided once and for good.** `photos.ansel.ansel` is valid and maps to a
-   domain we control, but `appstreamcli` flags it informationally (`cid-maybe-not-rdns`) and
-   the convention would be `photos.ansel.Ansel`. It is the install path, the dconf path and
-   the user-visible identity — cheap to change now, painful afterwards.
-4. **An argument prepared for `--filesystem=host` and `--device=all`.** Both are flagged in
-   review. Both are defensible for a photo editor that opens arbitrary directories and uses
-   OpenCL, and darktable ships with the same, but expect to make the case.
-5. **A current screenshot.** The one in the appdata is from 2022 and shows an interface that
-   no longer exists.
+Exactly one thing, and it is not a packaging task.
+
+1. **Cut a tag**, and add a matching `<release>` to `data/photos.ansel.Ansel.appdata.xml.in`.
+   It does not have to be `1.0.0` — a beta version is a release as far as Flathub is
+   concerned. What it must not be is `v0.0.0`, which is a moving pointer.
+2. **Generate the manifest** and submit it:
+
+   ```sh
+   packaging/flatpak/make-flathub-manifest.py --tag v1.0.0 -o photos.ansel.Ansel.json
+   ```
+
+Everything else on the list is done, and the rest of this section records what was decided
+so nobody has to decide it twice.
+
+### The manifest is generated, not maintained
+
+`make-flathub-manifest.py` derives the Flathub manifest from the nightly one. The two differ
+in four places and nowhere else, which is why this is a generator rather than a second
+manifest to keep in sync: the app module builds a pinned git tag instead of the working
+directory, it drops `--share=network`, the payloads it used to fetch become hashed
+`type: file` sources, and it is told where they landed with the fetches switched off.
+
+The hashes are read from the manifests the fetches themselves read, so they are never
+hand-maintained, and the lens database directory is addressed by the schema version the
+pinned LensSerious reads. Run it again to refresh a submission; there is nothing to edit.
+
+### The app id was decided, and it is now final
+
+`photos.ansel.Ansel`. It was `photos.ansel.ansel`, which is valid but conventionally wrong —
+the last segment is the application name, in the application's own capitalisation. Changed
+here because it is the install path, the dconf path, the D-Bus-ish identity every desktop
+uses to tie a window to its launcher, and the one thing that cannot be changed after
+publishing without stranding everyone who installed the old id.
+
+It is load-bearing in five places that must agree, all updated together: the `app-id` key in
+the manifest, the `<id>` and `<launchable>` in the appdata, the names of the appdata and
+`.desktop` files `data/CMakeLists.txt` installs, and the `application://…desktop` string
+`src/control/progress.c` hands the desktop's progress API.
+
+`appstreamcli` still emits `cid-maybe-not-rdns` for it. That is a heuristic complaining that
+the second and third components look alike; the id genuinely is the reverse of `ansel.photos`
+plus the app name, so the note is informational and stays.
+
+### `--filesystem=host` and `--device=all`, and why
+
+Both are flagged during Flathub review. The case, so it does not have to be reconstructed
+under time pressure:
+
+**`--filesystem=host`.** Ansel is a photo library manager. It imports from wherever the
+photographs are — an external drive, a NAS mount, a card reader, a directory the user names
+in a dialog — and it writes XMP sidecars *next to the raw files it did not copy*, because
+that is the whole point of a non-destructive editor that leaves originals alone. A portal
+gives one directory at a time, chosen per session; a library that has to re-ask for every
+film roll on every launch is not a library. darktable ships `--filesystem=host` on Flathub
+for the same reason, and RawTherapee likewise.
+
+**`--device=all`.** OpenCL. Ansel's pixel pipeline offloads to the GPU, and OpenCL device
+enumeration needs the render nodes; `--device=dri` covers the common case, but not every ICD
+loader arrangement, and a photo editor that silently falls back to the CPU on some machines
+is a support burden rather than a feature. If a reviewer pushes back, `--device=dri` is the
+concession to offer, and it should be measured against a real GPU before it is agreed to.
+
+Neither is required for the app to *start*, which is worth saying out loud in the review
+thread: both degrade gracefully, and both are about not making the user fight the sandbox.
 
 ### The offline half, which is done
 
