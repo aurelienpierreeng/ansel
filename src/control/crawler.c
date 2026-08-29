@@ -420,21 +420,20 @@ static void sync_db_to_xmp(GtkTreeModel *model,
   dt_control_crawler_result_t entry = { 0 };
   _get_crawler_entry_from_model(model, iter, &entry);
 
-  // write the XMP and make sure it get the last modified timestamp of the db
-  const int error = dt_image_write_sidecar_file(entry.id);  // success = 0, fail = 1
-  _set_modification_time(entry.xmp_path, entry.timestamp_db);
+  const dt_image_write_sidecar_result_t result = dt_image_write_sidecar_file_forced(entry.id);
 
-  if(error)
+  if(result == DT_IMAGE_WRITE_SIDECAR_OK)
+  {
+    _set_modification_time(entry.xmp_path, entry.timestamp_db);
+    _append_row_to_remove(model, path, &gui->rows_to_remove);
+    _log_synchronization(gui, _("SUCCESS: %s synced DB \342\206\222 XMP"), entry.image_path);
+  }
+  else
   {
     _log_synchronization(gui, _("ERROR: %s NOT synced DB \342\206\222 XMP"), entry.image_path);
     _log_synchronization(gui,
                          _("ERROR: cannot write %s \nthe destination may be full,"
                            " offline or read-only."), entry.xmp_path);
-  }
-  else
-  {
-    _append_row_to_remove(model, path, &gui->rows_to_remove);
-    _log_synchronization(gui, _("SUCCESS: %s synced DB \342\206\222 XMP"), entry.image_path);
   }
 
   _free_crawler_result(&entry);
@@ -477,10 +476,10 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
   else if(entry.timestamp_xmp < entry.timestamp_db)
   {
     // write the XMP and make sure it get the last modified timestamp of the db
-    error = dt_image_write_sidecar_file(entry.id);
-    _set_modification_time(entry.xmp_path, entry.timestamp_db);
+    const dt_image_write_sidecar_result_t xres = dt_image_write_sidecar_file_forced(entry.id);
+    error = (xres != DT_IMAGE_WRITE_SIDECAR_OK) ? 1 : 0;
+    if(!error) _set_modification_time(entry.xmp_path, entry.timestamp_db);
 
-    fprintf(stdout, "%s synced DB (new) \342\206\222 XMP (old)\n", entry.image_path);
     if(error)
     {
       _log_synchronization
@@ -547,8 +546,9 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
   else if(entry.timestamp_xmp > entry.timestamp_db)
   {
     // WRITE DB in XMP
-    error = dt_image_write_sidecar_file(entry.id);
-    _set_modification_time(entry.xmp_path, entry.timestamp_db);
+    const dt_image_write_sidecar_result_t xres = dt_image_write_sidecar_file_forced(entry.id);
+    error = (xres != DT_IMAGE_WRITE_SIDECAR_OK) ? 1 : 0;
+    if(!error) _set_modification_time(entry.xmp_path, entry.timestamp_db);
     if(error)
     {
       _log_synchronization(gui,
