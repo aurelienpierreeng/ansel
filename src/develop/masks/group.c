@@ -265,8 +265,12 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
     return DT_MASKS_RASTER_ERROR;
   }
 
-  // and we get all masks
-  int pos = 0;
+  /* Slots are filled DENSELY: `nb_ok' is both the count of usable children and the index of the
+   * next one. A child that resolves to nothing -- an id that is gone, or a shape with no geometry
+   * -- simply does not take a slot. That matters because the bounding-box and copy loops below
+   * read every slot they iterate: indexing by list position instead left a hole whose px/py/w/h
+   * were never written (the arrays are malloc'd, not calloc'd), and one unresolved id was enough
+   * to drag the group's bounding box to garbage. */
   int nb_ok = 0;
   dt_masks_raster_result_t err = DT_MASKS_RASTER_OK;
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
@@ -275,23 +279,22 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
     dt_masks_form_t *sel = dt_masks_get_from_id(module->dev, fpt->formid);
     if(sel)
     {
-      /* EMPTY is folded in as a failure here, unlike in the ROI rasteriser: this legacy path
-       * keeps one slot per child in parallel malloc'd arrays, and skipping a slot would leave
-       * its `states'/`op' entries uninitialised for the combine below. Erroring out is still
-       * strictly better than what this did before -- a child reporting success with no buffer
-       * (which is what a degenerate circle or ellipse used to do) walked on into the combine
-       * with bufs[pos] NULL and w/h/px/py never written. Making the slots skippable belongs
-       * with the rest of this path's bookkeeping. */
-      if(dt_masks_get_mask(module, pipe, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos])
-         != DT_MASKS_RASTER_OK)
+      const dt_masks_raster_result_t child
+          = dt_masks_get_mask(module, pipe, piece, sel, &bufs[nb_ok], &w[nb_ok], &h[nb_ok],
+                              &px[nb_ok], &py[nb_ok]);
+      if(child == DT_MASKS_RASTER_ERROR)
       {
         err = DT_MASKS_RASTER_ERROR;
         break;
       }
+      /* A shape with nothing to draw contributes nothing and must NOT stop the fold: the other
+       * members of the group are still theirs to render. It takes no slot, so the loops below
+       * never see it. (dt_masks_get_mask() has already zeroed this slot's out-parameters.) */
+      if(child == DT_MASKS_RASTER_EMPTY) continue;
       if(fpt->state & DT_MASKS_STATE_INVERSE)
       {
         const double start = dt_get_wtime();
-        if(_inverse_mask(module, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos]) != 0)
+        if(_inverse_mask(module, piece, sel, &bufs[nb_ok], &w[nb_ok], &h[nb_ok], &px[nb_ok], &py[nb_ok]) != 0)
         {
           err = DT_MASKS_RASTER_ERROR;
           break;
@@ -299,11 +302,10 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
         if(dt_get_debug_flags() & DT_DEBUG_PERF)
           dt_print(DT_DEBUG_MASKS, "[masks %s] inverse took %0.04f sec\n", sel->name, dt_get_wtime() - start);
       }
-      op[pos] = fpt->opacity;
-      states[pos] = fpt->state;
+      op[nb_ok] = fpt->opacity;
+      states[nb_ok] = fpt->state;
       nb_ok++;
     }
-    pos++;
   }
   if(err) goto cleanup;
   if(nb_ok == 0)
@@ -318,7 +320,7 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
 
   // now we get the min, max, width, height of the final mask
   int l = INT_MAX, r = INT_MIN, t = INT_MAX, b = INT_MIN;
-  for(int i = 0; i < nb; i++)
+  for(int i = 0; i < nb_ok; i++)
   {
     l = MIN(l, px[i]);
     t = MIN(t, py[i]);
@@ -342,7 +344,7 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
   const int dst_w = r - l;
   const int dst_h = b - t;
   float *const dst = *buffer;
-  for(int i = 0; i < nb; i++)
+  for(int i = 0; i < nb_ok; i++)
   {
     const double start = dt_get_wtime();
     const int wi = w[i];

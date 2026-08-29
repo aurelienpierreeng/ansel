@@ -650,9 +650,13 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
         // we get the mask
         float *mask = NULL;
         int posx, posy, width, height;
+        /* Only a real failure aborts the module. A shape with nothing to draw (EMPTY) falls
+         * through to the zero-size check below and is skipped like any other empty shape --
+         * aborting here would silently drop every REMAINING shape in the group. The out
+         * parameters are guaranteed written on every outcome, so that check is safe to reach. */
         if(dt_masks_get_mask(self, (dt_dev_pixelpipe_t *)pipe, piece, form, &mask, &width, &height, &posx,
                              &posy)
-           != DT_MASKS_RASTER_OK)
+           == DT_MASKS_RASTER_ERROR)
         {
           return 1;
         }
