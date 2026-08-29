@@ -16,9 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifdef HAVE_CONFIG_H
 #include "config.h" // DT_BUILD_CHANNEL, darktable_last_commit_year
-#endif
 #include "common/updates.h"
 #include <string.h>
 #include "system/mem_alloc.h"
