@@ -2472,9 +2472,6 @@ void dt_image_synch_all_xmp(const gchar *pathname)
 
 void dt_image_local_copy_synch()
 {
-  // nothing to do if not creating .xmp
-  if(!dt_image_get_xmp_mode()) return;
-
   GList *imgs = NULL;
 
   GList *candidates = dt_image_repository_get_ids_with_flag(DT_IMAGE_LOCAL_COPY);
@@ -2495,7 +2492,7 @@ void dt_image_local_copy_synch()
   const int count = g_list_length(imgs);
   if(count > 0)
   {
-    dt_control_save_xmps(imgs, FALSE);
+    dt_control_save_xmps_forced(imgs);
     dt_control_log(ngettext("%d local copy has been synchronized",
                             "%d local copies have been synchronized", count),
                    count);

@@ -159,6 +159,7 @@ void dt_control_mouse_is_painting(gboolean state);
 void dt_control_write_sidecar_files();
 void dt_control_save_xmp(const int32_t imgid);
 void dt_control_save_xmps(const GList *imgids, const gboolean check_history);
+void dt_control_save_xmps_forced(const GList *imgids);
 void dt_control_delete_images();
 
 /** \brief threadsafe request of redraw of specific widget.
