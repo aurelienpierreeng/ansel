@@ -181,8 +181,6 @@ void _check_id(dt_develop_t *dev, dt_masks_form_t *mask_form);
 void _set_group_name_from_module(dt_iop_module_t *module, dt_masks_form_t *group_form);
 dt_masks_form_t *_group_create(dt_develop_t *develop, dt_iop_module_t *module, dt_masks_type_t group_type);
 dt_masks_form_t *_group_from_module(dt_develop_t *develop, dt_iop_module_t *module);
-float _change_opacity(dt_masks_form_group_t *form_group, float value,
-                             const dt_masks_increment_t increment, const int flow);
 int _find_in_group(dt_develop_t *dev, dt_masks_form_t *group_form, int form_id);
 
 #ifdef __cplusplus

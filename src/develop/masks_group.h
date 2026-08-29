@@ -135,6 +135,59 @@ const char *dt_masks_type_name(dt_masks_type_t type);
 dt_masks_result_t dt_masks_group_set_member_operation(struct dt_develop_t *dev, int group_id, int formid,
                                                       dt_masks_state_t operation, dt_masks_member_t *out);
 
+/**
+ * @brief Read one group member by identity.
+ *
+ * The pointer-free counterpart to dt_masks_group_copy_members() when only one row is wanted, and
+ * the read half of the read-modify-write a caller needs when it can only express a change as an
+ * increment on the current value.
+ *
+ * Deliberately does NOT copy-on-write. Touching a group on a plain read would clone a shared group
+ * every time the GUI asks what a shape's opacity is -- copy-on-write is a writer's obligation.
+ *
+ * @param out (may be NULL, though then the call only answers "does this row exist") receives the
+ *            row, including its index.
+ * @return OK, or NOT_FOUND for no such group, a form that is not a group, or no such member.
+ */
+dt_masks_result_t dt_masks_group_get_member(struct dt_develop_t *dev, int group_id, int formid,
+                                            dt_masks_member_t *out);
+
+/**
+ * @brief Which group references @p formid, searching every group in dev->forms depth-first.
+ *
+ * A shape's own dt_masks_form_t does not record who holds it, and the row's parentid records where
+ * it was AUTHORED, not where it currently lives -- so a caller holding only a shape id, as the
+ * mask-manager tree does when it lists shapes at top level, has to search. Returns the first
+ * holder found; a shape referenced by two groups has no single answer, and the caller wanting a
+ * specific one already knows which.
+ *
+ * @return the holding group's formid, or 0 for none (and for a NULL dev or a zero @p formid).
+ */
+int dt_masks_group_find_holder(struct dt_develop_t *dev, int formid);
+
+/**
+ * @brief Set a group member's opacity.
+ *
+ * Same id-keyed contract as dt_masks_group_set_member_operation() above, and it exists for a
+ * failure this codebase actually shipped. Opacity used to be written through a resolved
+ * dt_masks_form_group_t*, which CANNOT copy-on-write: it has the row but not the group that owns
+ * it, so every caller had to touch the group itself. Callers compensated by touching the parent
+ * once, when a context menu was built, and then mutating the row in place for the whole
+ * interaction -- but the opacity slider commits history on every step, and each commit
+ * re-snapshots dev->forms and shares the group again. The up-front touch was consumed by the first
+ * commit, so from the second step on, every drag rewrote the opacity inside history snapshots that
+ * were supposed to be frozen, and undo could not restore it. Taking ids instead of a row makes
+ * that arrangement unrepresentable.
+ *
+ * @param opacity clamped to [0;1]. NaN is INVALID rather than clamped -- see the implementation.
+ * @param out (may be NULL) receives the row AFTER the change, including the clamped opacity, so a
+ *            caller driving a slider can show what was actually stored.
+ * @return OK when the value changed, UNCHANGED when the row already held it (skip the history
+ *         commit), NOT_FOUND for no such group or member, INVALID for a NULL dev or a NaN.
+ */
+dt_masks_result_t dt_masks_group_set_member_opacity(struct dt_develop_t *dev, int group_id, int formid,
+                                                    float opacity, dt_masks_member_t *out);
+
 #ifdef __cplusplus
 }
 #endif

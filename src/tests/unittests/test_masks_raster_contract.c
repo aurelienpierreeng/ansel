@@ -361,6 +361,10 @@ static void _write_fixture_init(_write_fixture_t *f)
                                         .opacity = 1.0f };
   f->group.type = DT_MASKS_GROUP;
   f->group.formid = 7;
+  /* The vtable is what makes a group's membership rows copyable: dt_masks_dup_masks_form() sizes
+   * each ->points payload from functions->point_struct_size, and a form whose functions are NULL
+   * clones with an EMPTY membership list. Needed by the copy-on-write case below. */
+  f->group.functions = &dt_masks_functions_group;
   /* Sole owner: dt_masks_cow_touch() returns the form unchanged at refcount 1, without taking a
    * lock or walking dev->forms, so the setter runs end to end on a stack fixture. */
   dt_atomic_set_int(&f->group.refcount, 1);
@@ -452,6 +456,125 @@ static void _set_operation_rejects_what_it_cannot_do(void **state)
   _write_fixture_cleanup(&f);
 }
 
+
+/* ---------------------------------------------------------------------------------------
+ * dt_masks_group_get_member() / dt_masks_group_set_member_opacity().
+ * ------------------------------------------------------------------------------------- */
+
+static void _get_member_reads_a_row_by_identity(void **state)
+{
+  (void)state;
+  _write_fixture_t f;
+  _write_fixture_init(&f);
+
+  dt_masks_member_t m;
+  assert_int_equal(dt_masks_group_get_member(&f.dev, 7, 22, &m), DT_MASKS_OK);
+  assert_int_equal(m.formid, 22);
+  assert_int_equal(m.parentid, 7);
+  assert_int_equal(m.index, 1);
+  assert_true(m.opacity == 1.0f);
+
+  // NULL out is a legitimate existence probe -- the menu builders use it exactly that way
+  assert_int_equal(dt_masks_group_get_member(&f.dev, 7, 11, NULL), DT_MASKS_OK);
+
+  assert_int_equal(dt_masks_group_get_member(&f.dev, 999, 11, &m), DT_MASKS_NOT_FOUND);
+  assert_int_equal(dt_masks_group_get_member(&f.dev, 7, 999, &m), DT_MASKS_NOT_FOUND);
+  assert_int_equal(dt_masks_group_get_member(NULL, 7, 11, &m), DT_MASKS_INVALID);
+
+  _write_fixture_cleanup(&f);
+}
+
+static void _set_opacity_clamps_and_reports_what_it_stored(void **state)
+{
+  (void)state;
+  _write_fixture_t f;
+  _write_fixture_init(&f);
+
+  dt_masks_member_t m;
+  assert_int_equal(dt_masks_group_set_member_opacity(&f.dev, 7, 11, 0.25f, &m), DT_MASKS_OK);
+  assert_true(f.rows[0].opacity == 0.25f);
+  assert_true(m.opacity == 0.25f);
+
+  // out-of-range is clamped, and the caller is told the CLAMPED value -- a slider showing what it
+  // asked for rather than what was stored is how a control drifts away from its own model
+  assert_int_equal(dt_masks_group_set_member_opacity(&f.dev, 7, 11, 4.0f, &m), DT_MASKS_OK);
+  assert_true(f.rows[0].opacity == 1.0f);
+  assert_true(m.opacity == 1.0f);
+
+  assert_int_equal(dt_masks_group_set_member_opacity(&f.dev, 7, 11, -2.0f, &m), DT_MASKS_OK);
+  assert_true(f.rows[0].opacity == 0.0f);
+
+  // and re-setting the value it already holds is not a change: every shape's scrolled handler
+  // treats this as "handled" but must not push an undo step for it
+  assert_int_equal(dt_masks_group_set_member_opacity(&f.dev, 7, 11, 0.0f, &m), DT_MASKS_UNCHANGED);
+
+  assert_int_equal(dt_masks_group_set_member_opacity(&f.dev, 999, 11, 0.5f, NULL), DT_MASKS_NOT_FOUND);
+  assert_int_equal(dt_masks_group_set_member_opacity(&f.dev, 7, 999, 0.5f, NULL), DT_MASKS_NOT_FOUND);
+  assert_int_equal(dt_masks_group_set_member_opacity(NULL, 7, 11, 0.5f, NULL), DT_MASKS_INVALID);
+
+  _write_fixture_cleanup(&f);
+}
+
+static void _set_opacity_refuses_a_nan_rather_than_clamping_it(void **state)
+{
+  (void)state;
+  _write_fixture_t f;
+  _write_fixture_init(&f);
+
+  /* CLAMPF() is a pair of ordered comparisons and every comparison against NaN is false, so
+   * clamping a NaN yields the LOW bound: a NaN reaching this from a caller's own arithmetic would
+   * silently blank the shape instead of being reported. */
+  assert_int_equal(dt_masks_group_set_member_opacity(&f.dev, 7, 11, NAN, NULL), DT_MASKS_INVALID);
+  assert_true(f.rows[0].opacity == 0.5f);
+
+  _write_fixture_cleanup(&f);
+}
+
+static void _a_shared_group_is_cloned_before_its_opacity_changes(void **state)
+{
+  (void)state;
+  _write_fixture_t f;
+  _write_fixture_init(&f);
+
+  /* Refcount 2 is what a history commit leaves behind: the dev's live form list holds one
+   * reference and the frozen snapshot holds the other. It is the state an opacity slider is in from its SECOND step
+   * onward, because each step commits history -- which is exactly why writing through a row
+   * pointer resolved once, when the menu was built, could not stay correct. */
+  dt_atomic_set_int(&f.group.refcount, 2);
+
+  dt_masks_member_t m;
+  assert_int_equal(dt_masks_group_set_member_opacity(&f.dev, 7, 11, 0.25f, &m), DT_MASKS_OK);
+
+  // The snapshot still reads what it froze. This assertion IS the bug that motivated the API.
+  assert_true(f.rows[0].opacity == 0.5f);
+
+  // dev->forms carries the clone, and the clone carries the edit
+  dt_masks_form_t *const live = (dt_masks_form_t *)f.dev.forms->data;
+  assert_ptr_not_equal(live, &f.group);
+  assert_true(m.opacity == 0.25f);
+
+  dt_masks_member_t read_back;
+  assert_int_equal(dt_masks_group_get_member(&f.dev, 7, 11, &read_back), DT_MASKS_OK);
+  assert_true(read_back.opacity == 0.25f);
+
+  dt_masks_form_unref(live);
+  _write_fixture_cleanup(&f);
+}
+
+static void _find_holder_names_the_group_that_references_a_shape(void **state)
+{
+  (void)state;
+  _write_fixture_t f;
+  _write_fixture_init(&f);
+
+  assert_int_equal(dt_masks_group_find_holder(&f.dev, 22), 7);
+  assert_int_equal(dt_masks_group_find_holder(&f.dev, 999), 0);
+  assert_int_equal(dt_masks_group_find_holder(&f.dev, 0), 0);
+  assert_int_equal(dt_masks_group_find_holder(NULL, 22), 0);
+
+  _write_fixture_cleanup(&f);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -469,6 +592,11 @@ int main(void)
     cmocka_unit_test(_setting_the_state_it_already_has_is_unchanged),
     cmocka_unit_test(_inverse_toggles_and_leaves_the_operator_alone),
     cmocka_unit_test(_set_operation_rejects_what_it_cannot_do),
+    cmocka_unit_test(_get_member_reads_a_row_by_identity),
+    cmocka_unit_test(_set_opacity_clamps_and_reports_what_it_stored),
+    cmocka_unit_test(_set_opacity_refuses_a_nan_rather_than_clamping_it),
+    cmocka_unit_test(_a_shared_group_is_cloned_before_its_opacity_changes),
+    cmocka_unit_test(_find_holder_names_the_group_that_references_a_shape),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);

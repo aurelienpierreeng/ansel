@@ -69,6 +69,7 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"
+#include "develop/masks_group.h"
 #include "develop/masks_gui.h"
 #include "develop/tiling.h"
 #include "gui/actions/menu.h"
@@ -592,14 +593,22 @@ static void rt_load_shape_algo_in_gui(dt_iop_module_t *self, const int form_sele
 
 static void rt_masks_form_change_opacity(dt_iop_module_t *self, int formid, float opacity)
 {
-  dt_masks_form_group_t *grpt = rt_get_mask_point_group(self, formid);
-  if(!IS_NULL_PTR(grpt))
-  {
-    grpt->opacity = CLAMP(opacity, 0.05f, 1.0f);
-    dt_conf_set_float("plugins/darkroom/masks/opacity", grpt->opacity);
+  const dt_develop_blend_params_t *bp = self->blend_params;
+  if(IS_NULL_PTR(bp)) return;
 
-    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-  }
+  /* Retouch keeps a 5% floor of its own, applied BEFORE the call: a fully transparent clone or
+   * heal is indistinguishable from a deleted one in this module's list, so it never offers 0 the
+   * way a generic mask does. The API clamps to [0;1] and would accept it. */
+  dt_masks_member_t member = { 0 };
+  const dt_masks_result_t result = dt_masks_group_set_member_opacity(self->dev, bp->mask_id, formid,
+                                                                     CLAMP(opacity, 0.05f, 1.0f), &member);
+  if(result != DT_MASKS_OK && result != DT_MASKS_UNCHANGED) return;
+
+  dt_conf_set_float("plugins/darkroom/masks/opacity", member.opacity);
+
+  /* Only a real change earns a history step. Re-setting the opacity a shape already has used to
+   * push an undo entry that undid nothing. */
+  if(result == DT_MASKS_OK) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static float rt_masks_form_get_opacity(dt_iop_module_t *self, int formid)

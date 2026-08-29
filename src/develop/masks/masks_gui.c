@@ -265,7 +265,14 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
 
 typedef struct dt_masks_gui_interaction_slider_t
 {
-  dt_masks_form_group_t *form_group;
+  /* The row this slider drives, named by IDENTITY and never held as a pointer. A slider outlives
+   * many mutations of the group it points into: it commits history on every step, each commit
+   * re-snapshots dev->forms, and the next step's copy-on-write then clones the group -- so a
+   * cached dt_masks_form_group_t* would, from the second step on, address the abandoned copy
+   * while the snapshots it was supposed to leave frozen kept the edits. */
+  dt_develop_t *dev;
+  int group_id;
+  int formid;
   dt_masks_form_gui_t *gui;
   dt_iop_module_t *module;
   dt_masks_interaction_t interaction;
@@ -283,21 +290,20 @@ typedef struct dt_masks_gui_interaction_slider_t
 // waiting for the context menu to be closed.
 static void _masks_gui_interaction_commit(dt_masks_gui_interaction_slider_t *data)
 {
-  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group) || IS_NULL_PTR(data->gui)) return;
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->gui)) return;
 
   dt_dev_add_history_item(data->gui->dev, data->module, TRUE, TRUE);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED,
-                                data->form_group->formid, data->form_group->parentid,
-                                DT_MASKS_EVENT_UPDATE);
+                                data->formid, data->group_id, DT_MASKS_EVENT_UPDATE);
 }
 
 static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t *data, float value)
 {
-  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group)) return;
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->dev)) return;
 
   if(data->increment == DT_MASKS_INCREMENT_ABSOLUTE) // aka opacity
   {
-    dt_masks_form_set_interaction_value(data->form_group, data->interaction, value,
+    dt_masks_form_set_interaction_value(data->dev, data->group_id, data->formid, data->interaction, value,
                                         data->increment, 1, data->gui, data->module);
     data->last_value = value;
     _masks_gui_interaction_commit(data);
@@ -309,7 +315,7 @@ static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t
 
   // Slider value is a log2 scale factor in [-3;3], so apply the delta in log space.
   const float scale = exp2f(delta);
-  dt_masks_form_set_interaction_value(data->form_group, data->interaction, scale,
+  dt_masks_form_set_interaction_value(data->dev, data->group_id, data->formid, data->interaction, scale,
                                       DT_MASKS_INCREMENT_SCALE, 1.f, data->gui, data->module);
   data->last_value = value;
   _masks_gui_interaction_commit(data);
@@ -398,12 +404,13 @@ static gboolean _masks_gui_menu_item_forward_event(GtkWidget *widget, GdkEvent *
 static void _masks_gui_interaction_slider_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_masks_gui_interaction_slider_t *data = (dt_masks_gui_interaction_slider_t *)user_data;
-  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group)) return;
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->dev)) return;
 
   _masks_gui_interaction_apply_value(data, dt_bauhaus_slider_get(widget));
 }
 
-GtkWidget *dt_masks_gui_add_interaction_slider(GtkWidget *menu, const char *label, dt_masks_form_group_t *form_group,
+GtkWidget *dt_masks_gui_add_interaction_slider(GtkWidget *menu, const char *label, dt_develop_t *dev,
+                                               const int group_id, const int formid,
                                                dt_masks_interaction_t interaction, dt_masks_increment_t increment,
                                                float min, float max, float step, float value, int digits,
                                                const char *format, float factor,
@@ -433,7 +440,9 @@ GtkWidget *dt_masks_gui_add_interaction_slider(GtkWidget *menu, const char *labe
   gtk_widget_set_can_focus(slider, TRUE);
 
   dt_masks_gui_interaction_slider_t *data = g_malloc0(sizeof(dt_masks_gui_interaction_slider_t));
-  data->form_group = form_group;
+  data->dev = dev;
+  data->group_id = group_id;
+  data->formid = formid;
   data->gui = gui;
   data->module = module;
   data->interaction = interaction;
@@ -680,62 +689,67 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
 // Shared by the darkroom canvas context menu (dt_masks_create_menu) and the blend module's
 // own shape-list context menus (develop/blend_gui.c), so both offer the same shape parameters.
 void dt_masks_gui_populate_interaction_sliders(GtkWidget *menu, dt_develop_t *dev, dt_masks_form_t *form,
-                                               dt_masks_form_group_t *op_form,
+                                               const int group_id,
                                                dt_masks_form_gui_t *gui, dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(menu) || IS_NULL_PTR(form) || IS_NULL_PTR(op_form)) return;
+  if(IS_NULL_PTR(menu) || IS_NULL_PTR(form) || IS_NULL_PTR(dev)) return;
 
-  const float opacity = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_OPACITY);
+  /* The row has to exist -- opacity is read from it, and every slider writes back to it -- but
+   * asking by identity means no caller has to resolve one and hand it over, and none of them has
+   * to copy-on-write the group merely to open a menu. */
+  if(dt_masks_group_get_member(dev, group_id, form->formid, NULL) != DT_MASKS_OK) return;
+
+  const float opacity = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_OPACITY);
 
   if(form->type & DT_MASKS_GRADIENT)
   {
     // For gradients, DT_MASKS_INTERACTION_HARDNESS is the shape curvature and
     // DT_MASKS_INTERACTION_SIZE is the fade extent -- expose them under their actual names.
-    const float curvature = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_HARDNESS);
-    const float fade = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_SIZE);
-    float rotation = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_ROTATION);
+    const float curvature = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_HARDNESS);
+    const float fade = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_SIZE);
+    float rotation = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_ROTATION);
     if(!isfinite(rotation)) rotation = 0.0f;
     if(rotation > 180.0f) rotation -= 360.0f;
 
-    dt_masks_gui_add_interaction_slider(menu, _("Curvature"), op_form, DT_MASKS_INTERACTION_HARDNESS,
+    dt_masks_gui_add_interaction_slider(menu, _("Curvature"), dev, group_id, form->formid, DT_MASKS_INTERACTION_HARDNESS,
                                       DT_MASKS_INCREMENT_ABSOLUTE, -2.0f, 2.0f, 0.01f,
                                       isfinite(curvature) ? curvature : 0.0f, 3, "%", 50.0f,
                                       gui, module);
-    dt_masks_gui_add_interaction_slider(menu, _("Fade"), op_form, DT_MASKS_INTERACTION_SIZE,
+    dt_masks_gui_add_interaction_slider(menu, _("Fade"), dev, group_id, form->formid, DT_MASKS_INTERACTION_SIZE,
                                       DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.001f,
                                       isfinite(fade) ? fade : 1.0f, 3, "%", 100.0f,
                                       gui, module);
-    dt_masks_gui_add_interaction_slider(menu, _("Rotation"), op_form, DT_MASKS_INTERACTION_ROTATION,
+    dt_masks_gui_add_interaction_slider(menu, _("Rotation"), dev, group_id, form->formid, DT_MASKS_INTERACTION_ROTATION,
                                       DT_MASKS_INCREMENT_ABSOLUTE, -180.0f, 180.0f, 1.0f,
                                       rotation, 1, "\302\260", 1.0f,
                                       gui, module);
   }
   else
   {
-    const float hardness = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_HARDNESS);
+    const float hardness = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_HARDNESS);
 
-    dt_masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
+    dt_masks_gui_add_interaction_slider(menu, _("Size"), dev, group_id, form->formid, DT_MASKS_INTERACTION_SIZE,
                                       DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
                                       gui, module);
-    dt_masks_gui_add_interaction_slider(menu, _("Fading"), op_form, DT_MASKS_INTERACTION_HARDNESS,
+    dt_masks_gui_add_interaction_slider(menu, _("Fading"), dev, group_id, form->formid, DT_MASKS_INTERACTION_HARDNESS,
                                       DT_MASKS_INCREMENT_ABSOLUTE, 0.f, 1.0f, 0.01f,
                                       isfinite(hardness) ? hardness : 1.0f, 3, "%", 100.0f,
                                       gui, module);
 
     if(form->type & DT_MASKS_ELLIPSE)
     {
-      float rotation = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_ROTATION);
+      float rotation = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_ROTATION);
       if(!isfinite(rotation)) rotation = 0.0f;
       if(rotation > 180.0f) rotation -= 360.0f;
 
-      dt_masks_gui_add_interaction_slider(menu, _("Rotation"), op_form, DT_MASKS_INTERACTION_ROTATION,
+      dt_masks_gui_add_interaction_slider(menu, _("Rotation"), dev, group_id, form->formid, DT_MASKS_INTERACTION_ROTATION,
                                         DT_MASKS_INCREMENT_ABSOLUTE, -180.0f, 180.0f, 1.0f,
                                         rotation, 1, "\302\260", 1.0f,
                                         gui, module);
     }
   }
 
-  dt_masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
+  dt_masks_gui_add_interaction_slider(menu, _("Opacity"), dev, group_id, form->formid, DT_MASKS_INTERACTION_OPACITY,
                                     DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
                                     isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
                                     gui, module);
@@ -881,7 +895,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     // Common menu items
   if(!gui->creation && (gui->form_selected || gui->node_selected) && op_form)
   {
-    dt_masks_gui_populate_interaction_sliders(menu, gui->dev, form, op_form, gui, gui->dev->gui_module);
+    dt_masks_gui_populate_interaction_sliders(menu, gui->dev, form, grp->formid, gui, gui->dev->gui_module);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
   }
 
@@ -1378,58 +1392,6 @@ dt_masks_form_group_t *dt_masks_form_group_from_parentid(dt_develop_t *dev, int 
 // dt_masks_group_add_form guards against this interactively via _find_in_group, but a raw
 // DB/XMP load does not validate it) cannot stack-overflow the caller; the UI never nests
 // groups anywhere near this deep (see the `depth < 3` guards in libs/masks.c).
-static dt_masks_form_t *_masks_find_any_parent_group(dt_develop_t *dev, dt_masks_form_t *grp, int form_id,
-                                                      int max_depth)
-{
-  if(max_depth <= 0) return NULL;
-
-  if(IS_NULL_PTR(grp))
-  {
-    for(GList *forms = dev->forms; forms; forms = g_list_next(forms))
-    {
-      dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
-      if(form->type & DT_MASKS_GROUP)
-      {
-        dt_masks_form_t *found = _masks_find_any_parent_group(dev, form, form_id, max_depth - 1);
-        if(found) return found;
-      }
-    }
-    return NULL;
-  }
-
-  for(GList *points = grp->points; points; points = g_list_next(points))
-  {
-    dt_masks_form_group_t *point = (dt_masks_form_group_t *)points->data;
-    if(point->formid == form_id) return grp;
-    dt_masks_form_t *sub = dt_masks_get_from_id(dev, point->formid);
-    if(sub && (sub->type & DT_MASKS_GROUP))
-    {
-      dt_masks_form_t *found = _masks_find_any_parent_group(dev, sub, form_id, max_depth - 1);
-      if(found) return found;
-    }
-  }
-  return NULL;
-}
-
-/**
- * @brief Find any group that currently references `form_id`, searching every top-level group
- * in dev->forms and their nested subgroups (first match wins -- a shape used by more than one
- * module has no single "correct" answer). Touches the owning group for COW safety before
- * resolving the entry pointer, same rule as dt_masks_form_group_from_parentid's callers use
- * when they already know the parent.
- * @param out_parentid if non-NULL, receives the owning group's formid (0 if none found).
- */
-dt_masks_form_group_t *dt_masks_form_group_find_any(dt_develop_t *dev, int form_id, int *out_parentid)
-{
-  if(out_parentid) *out_parentid = 0;
-
-  dt_masks_form_t *grp = _masks_find_any_parent_group(dev, NULL, form_id, 32);
-  if(IS_NULL_PTR(grp)) return NULL;
-
-  grp = dt_masks_cow_touch(dev, grp);
-  if(out_parentid) *out_parentid = grp->formid;
-  return dt_masks_form_group_find_entry(grp, form_id, NULL);
-}
 
 /**
  * @brief Get the selected group entry from the GUI selection index.
@@ -4296,17 +4258,22 @@ void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module
   dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
 }
 
-float dt_masks_form_get_interaction_value(dt_develop_t *dev, dt_masks_form_group_t *form_group,
+float dt_masks_form_get_interaction_value(dt_develop_t *dev, const int group_id, const int formid,
                                           dt_masks_interaction_t interaction)
 {
-  if(IS_NULL_PTR(form_group)) return NAN;
+  if(IS_NULL_PTR(dev)) return NAN;
 
   if(interaction == DT_MASKS_INTERACTION_OPACITY)
   {
-    return form_group->opacity;
+    /* Opacity is a property of the MEMBERSHIP, not of the shape: the same shape referenced by two
+     * groups carries two opacities, which is why this one needs the group id and the others do
+     * not. */
+    dt_masks_member_t member = { 0 };
+    if(dt_masks_group_get_member(dev, group_id, formid, &member) != DT_MASKS_OK) return NAN;
+    return member.opacity;
   }
 
-  dt_masks_form_t *target_form = dt_masks_get_from_id(dev, form_group->formid);
+  dt_masks_form_t *target_form = dt_masks_get_from_id(dev, formid);
   if(IS_NULL_PTR(target_form) || IS_NULL_PTR(target_form->functions) || IS_NULL_PTR(target_form->functions->get_interaction_value)) return NAN;
 
   return target_form->functions->get_interaction_value(target_form, interaction);
@@ -4352,22 +4319,29 @@ int dt_masks_center_view_on_form(dt_develop_t *dev, const dt_masks_form_t *mask_
   return 0;
 }
 
-float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
+float dt_masks_form_set_interaction_value(dt_develop_t *dev, const int group_id, const int formid,
                                           dt_masks_interaction_t interaction,
                                           float value, dt_masks_increment_t increment, int flow,
                                           dt_masks_form_gui_t *mask_gui, dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(form_group)) return NAN;
+  if(IS_NULL_PTR(dev)) return NAN;
 
   if(interaction == DT_MASKS_INTERACTION_OPACITY)
   {
-    const float result = _change_opacity(form_group, value, increment, flow);
-    return result;
+    /* Read, apply the increment, write back -- all by identity. The write API owns the
+     * copy-on-write, so nothing here holds a row across the mutation. */
+    dt_masks_member_t member = { 0 };
+    if(dt_masks_group_get_member(dev, group_id, formid, &member) != DT_MASKS_OK) return NAN;
+
+    const float target = dt_masks_apply_increment(member.opacity, value, increment, flow);
+    const dt_masks_result_t result = dt_masks_group_set_member_opacity(dev, group_id, formid, target, &member);
+    if(result != DT_MASKS_OK && result != DT_MASKS_UNCHANGED) return NAN;
+
+    dt_toast_log(_("Opacity: %3.2f%%"), member.opacity * 100.f);
+    return member.opacity;
   }
 
-  dt_develop_t *dev = !IS_NULL_PTR(mask_gui) ? mask_gui->dev : (!IS_NULL_PTR(module) ? module->dev : NULL);
-  if(IS_NULL_PTR(dev)) return NAN;
-  dt_masks_form_t *target_form = dt_masks_get_from_id(dev, form_group->formid);
+  dt_masks_form_t *target_form = dt_masks_get_from_id(dev, formid);
   if(IS_NULL_PTR(target_form) || !target_form->functions
      || !target_form->functions->set_interaction_value) return NAN;
 
@@ -4899,36 +4873,30 @@ void dt_masks_set_edit_mode(struct dt_iop_module_t *module, dt_masks_edit_mode_t
   dt_control_queue_redraw_center();
 }
 
-float _change_opacity(dt_masks_form_group_t *form_group, float value,
-                             const dt_masks_increment_t increment, const int flow)
-{
-  if(IS_NULL_PTR(form_group)) return 0;
-
-  form_group->opacity = CLAMPF(dt_masks_apply_increment(form_group->opacity, value, increment, flow), 0.0f, 1.0f);
-  dt_toast_log(_("Opacity: %3.2f%%"), form_group->opacity * 100.f);
-  return form_group->opacity;
-}
-
 int dt_masks_form_change_opacity(dt_develop_t *dev, dt_masks_form_t *mask_form, int parent_id, int scroll_up,
                                  const int flow)
 {
   if(IS_NULL_PTR(mask_form)) return 0;
 
-  // dt_masks_form_set_interaction_value() below mutates the group_entry in place, which is
-  // memory owned by the parent group, not by mask_form -- touch the parent (not mask_form)
-  // before resolving the entry, or a shared parent's group_entry gets mutated behind the back
-  // of a snapshot that still references it.
-  dt_masks_form_t *parent_form = dt_masks_get_from_id(dev, parent_id);
-  if(IS_NULL_PTR(parent_form) || !(parent_form->type & DT_MASKS_GROUP)) return 0;
-  parent_form = dt_masks_cow_touch(dev, parent_form);
+  // Read, apply the increment, write back by identity. The write API owns the copy-on-write, so
+  // neither half of this holds a row pointer across the other -- which is what the previous
+  // touch-then-resolve-then-mutate-in-place version had to get right by hand.
+  dt_masks_member_t member = { 0 };
+  if(dt_masks_group_get_member(dev, parent_id, mask_form->formid, &member) != DT_MASKS_OK) return 0;
 
-  dt_masks_form_group_t *form_group = dt_masks_form_group_find_entry(parent_form, mask_form->formid, NULL);
-  if(IS_NULL_PTR(form_group)) return 0;
+  const float amount = scroll_up ? 0.02f : -0.02f;
+  const float target = dt_masks_apply_increment(member.opacity, amount, DT_MASKS_INCREMENT_OFFSET, flow);
 
-  float amount = scroll_up ? 0.02f : -0.02f;
-  const float changed = dt_masks_form_set_interaction_value(form_group, DT_MASKS_INTERACTION_OPACITY,
-                                                            amount, DT_MASKS_INCREMENT_OFFSET, flow, NULL, NULL);
-  return !isnan(changed);
+  const dt_masks_result_t result = dt_masks_group_set_member_opacity(dev, parent_id, mask_form->formid,
+                                                                     target, &member);
+  if(result != DT_MASKS_OK && result != DT_MASKS_UNCHANGED) return 0;
+
+  dt_toast_log(_("Opacity: %3.2f%%"), member.opacity * 100.f);
+
+  // UNCHANGED still counts as handled: this return value is what every shape's scrolled handler
+  // gives back to say it consumed the event, so reporting 0 once the opacity is already pinned at
+  // 0 or 1 would let that scroll step fall through and zoom the canvas instead.
+  return (result == DT_MASKS_OK || result == DT_MASKS_UNCHANGED);
 }
 
 // clang-format off

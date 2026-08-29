@@ -1451,6 +1451,67 @@ gboolean dt_masks_form_get_info(const dt_masks_form_t *form, dt_masks_form_info_
   return TRUE;
 }
 
+/* One place builds the value type callers see, so a row is never copied out field by field at
+ * three separate call sites -- each of which would have to be found again the day
+ * dt_masks_member_t grows a field. @p entry may be NULL: the member comes back zeroed but KEEPS
+ * its index, for the reason dt_masks_group_copy_members() spells out below. */
+static void _member_from_entry(dt_masks_member_t *const out, const dt_masks_form_group_t *const entry,
+                               const guint index)
+{
+  if(IS_NULL_PTR(out)) return;
+
+  out->index = index;
+
+  if(IS_NULL_PTR(entry))
+  {
+    out->formid = 0;
+    out->parentid = 0;
+    out->state = DT_MASKS_STATE_NONE;
+    out->opacity = 0.0f;
+    return;
+  }
+
+  out->formid = entry->formid;
+  out->parentid = entry->parentid;
+  out->state = (dt_masks_state_t)entry->state;
+  out->opacity = entry->opacity;
+}
+
+
+/* Resolve one membership row from (group, formid), the identity the whole write API is keyed on.
+ *
+ * @p touch says whether the caller is about to MUTATE the row, and the asymmetry is the point:
+ *  - a writer must touch FIRST and resolve from what the touch returned, because cloning a group
+ *    clones its membership blocks with it -- a row resolved before the touch belongs to the copy
+ *    that was just abandoned, and the mutation lands in memory nothing reads;
+ *  - a reader must NOT touch. Copy-on-write is for writers; touching on a read would clone a
+ *    shared group every time the GUI merely asks what a shape's opacity is.
+ */
+static dt_masks_form_group_t *_resolve_member(dt_develop_t *dev, const int group_id, const int formid,
+                                              const gboolean touch, guint *const out_index)
+{
+  if(!IS_NULL_PTR(out_index)) *out_index = 0;
+
+  dt_masks_form_t *group = dt_masks_get_from_id(dev, group_id);
+  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return NULL;
+
+  if(touch) group = dt_masks_cow_touch(dev, group);
+  if(IS_NULL_PTR(group)) return NULL;
+
+  guint index = 0;
+  for(GList *node = group->points; node; node = g_list_next(node), index++)
+  {
+    dt_masks_form_group_t *const entry = (dt_masks_form_group_t *)node->data;
+    if(IS_NULL_PTR(entry) || entry->formid != formid) continue;
+
+    if(!IS_NULL_PTR(out_index)) *out_index = index;
+    return entry;
+  }
+
+  return NULL;
+}
+
+
 guint dt_masks_group_copy_members(const dt_masks_form_t *group, dt_masks_member_t *out,
                                   const guint out_max)
 {
@@ -1464,27 +1525,11 @@ guint dt_masks_group_copy_members(const dt_masks_form_t *group, dt_masks_member_
   {
     if(IS_NULL_PTR(out) || total >= out_max) continue;
 
-    dt_masks_member_t *const member = &out[total];
-    member->index = total;
-
     /* A row that cannot be read STILL CONSUMES ITS INDEX. Position is the compositing order and
      * the index into retouch's rt_forms[] and spots' clone_algo[], both persisted in the user's
      * database, so dropping a row here would silently re-pair every later shape with the wrong
-     * algorithm. It comes back zeroed instead. */
-    const dt_masks_form_group_t *const entry = (const dt_masks_form_group_t *)node->data;
-    if(IS_NULL_PTR(entry))
-    {
-      member->formid = 0;
-      member->parentid = 0;
-      member->state = DT_MASKS_STATE_NONE;
-      member->opacity = 0.0f;
-      continue;
-    }
-
-    member->formid = entry->formid;
-    member->parentid = entry->parentid;
-    member->state = (dt_masks_state_t)entry->state;
-    member->opacity = entry->opacity;
+     * algorithm. _member_from_entry() zeroes it instead, index kept. */
+    _member_from_entry(&out[total], (const dt_masks_form_group_t *)node->data, total);
   }
 
   /* The TOTAL, always -- a caller that passed a short buffer needs to know it was short, and a
@@ -1518,39 +1563,101 @@ dt_masks_result_t dt_masks_group_set_member_operation(dt_develop_t *dev, const i
   if(operation != DT_MASKS_STATE_INVERSE && !(operation & DT_MASKS_STATE_IS_COMBINE_OP))
     return DT_MASKS_INVALID;
 
-  dt_masks_form_t *group = dt_masks_get_from_id(dev, group_id);
-  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return DT_MASKS_NOT_FOUND;
-
-  /* Touch FIRST, then resolve the row from what the touch returned. Cloning a group clones its
-   * membership blocks with it, so a row resolved before the touch belongs to the copy that was
-   * just abandoned -- the mutation would land in memory nothing reads. */
-  group = dt_masks_cow_touch(dev, group);
-  if(IS_NULL_PTR(group)) return DT_MASKS_NOT_FOUND;
-
   guint index = 0;
-  for(GList *node = group->points; node; node = g_list_next(node), index++)
+  dt_masks_form_group_t *const entry = _resolve_member(dev, group_id, formid, TRUE, &index);
+  if(IS_NULL_PTR(entry)) return DT_MASKS_NOT_FOUND;
+
+  const int before = entry->state;
+  if(operation == DT_MASKS_STATE_INVERSE)
+    entry->state ^= DT_MASKS_STATE_INVERSE;
+  else
+    entry->state = (entry->state & ~DT_MASKS_STATE_IS_COMBINE_OP) | operation;
+
+  _member_from_entry(out, entry, index);
+  return (entry->state == before) ? DT_MASKS_UNCHANGED : DT_MASKS_OK;
+}
+
+
+/* Depth-first walk for the group that references @p formid. @p grp NULL means "start from every
+ * top-level group in dev->forms". @p max_depth is a cycle brake, not a modelling limit: a group
+ * referencing an ancestor of itself would otherwise recurse forever, and nothing in the data model
+ * forbids one being written to XMP. */
+static dt_masks_form_t *_find_holder(dt_develop_t *dev, dt_masks_form_t *grp, const int formid,
+                                     const int max_depth)
+{
+  if(max_depth <= 0) return NULL;
+
+  if(IS_NULL_PTR(grp))
   {
-    dt_masks_form_group_t *const entry = (dt_masks_form_group_t *)node->data;
-    if(IS_NULL_PTR(entry) || entry->formid != formid) continue;
-
-    const int before = entry->state;
-    if(operation == DT_MASKS_STATE_INVERSE)
-      entry->state ^= DT_MASKS_STATE_INVERSE;
-    else
-      entry->state = (entry->state & ~DT_MASKS_STATE_IS_COMBINE_OP) | operation;
-
-    if(!IS_NULL_PTR(out))
+    for(GList *forms = dev->forms; forms; forms = g_list_next(forms))
     {
-      out->formid = entry->formid;
-      out->parentid = entry->parentid;
-      out->index = index;
-      out->state = (dt_masks_state_t)entry->state;
-      out->opacity = entry->opacity;
+      dt_masks_form_t *const form = (dt_masks_form_t *)forms->data;
+      if(IS_NULL_PTR(form) || !(form->type & DT_MASKS_GROUP)) continue;
+
+      dt_masks_form_t *const found = _find_holder(dev, form, formid, max_depth - 1);
+      if(!IS_NULL_PTR(found)) return found;
     }
-    return (entry->state == before) ? DT_MASKS_UNCHANGED : DT_MASKS_OK;
+    return NULL;
   }
 
-  return DT_MASKS_NOT_FOUND;
+  for(GList *points = grp->points; points; points = g_list_next(points))
+  {
+    const dt_masks_form_group_t *const point = (const dt_masks_form_group_t *)points->data;
+    if(IS_NULL_PTR(point)) continue;
+    if(point->formid == formid) return grp;
+
+    dt_masks_form_t *const sub = dt_masks_get_from_id(dev, point->formid);
+    if(IS_NULL_PTR(sub) || !(sub->type & DT_MASKS_GROUP)) continue;
+
+    dt_masks_form_t *const found = _find_holder(dev, sub, formid, max_depth - 1);
+    if(!IS_NULL_PTR(found)) return found;
+  }
+  return NULL;
+}
+
+
+int dt_masks_group_find_holder(dt_develop_t *dev, const int formid)
+{
+  if(IS_NULL_PTR(dev) || formid == 0) return 0;
+
+  const dt_masks_form_t *const grp = _find_holder(dev, NULL, formid, 32);
+  return IS_NULL_PTR(grp) ? 0 : grp->formid;
+}
+
+
+dt_masks_result_t dt_masks_group_get_member(dt_develop_t *dev, const int group_id, const int formid,
+                                            dt_masks_member_t *out)
+{
+  if(IS_NULL_PTR(dev)) return DT_MASKS_INVALID;
+
+  guint index = 0;
+  const dt_masks_form_group_t *const entry = _resolve_member(dev, group_id, formid, FALSE, &index);
+  if(IS_NULL_PTR(entry)) return DT_MASKS_NOT_FOUND;
+
+  _member_from_entry(out, entry, index);
+  return DT_MASKS_OK;
+}
+
+
+dt_masks_result_t dt_masks_group_set_member_opacity(dt_develop_t *dev, const int group_id, const int formid,
+                                                    const float opacity, dt_masks_member_t *out)
+{
+  if(IS_NULL_PTR(dev)) return DT_MASKS_INVALID;
+
+  /* Reject NaN rather than clamp it. CLAMPF() is written as a pair of ordered comparisons, and
+   * every comparison against NaN is false, so it would quietly return the LOW bound: a NaN
+   * arriving from a caller's own arithmetic would blank the shape instead of being reported. */
+  if(!isfinite(opacity)) return DT_MASKS_INVALID;
+
+  guint index = 0;
+  dt_masks_form_group_t *const entry = _resolve_member(dev, group_id, formid, TRUE, &index);
+  if(IS_NULL_PTR(entry)) return DT_MASKS_NOT_FOUND;
+
+  const float before = entry->opacity;
+  entry->opacity = CLAMPF(opacity, 0.0f, 1.0f);
+
+  _member_from_entry(out, entry, index);
+  return (entry->opacity == before) ? DT_MASKS_UNCHANGED : DT_MASKS_OK;
 }
 
 // clang-format off

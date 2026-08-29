@@ -398,12 +398,24 @@ fi
 #                  reached as plain GLists. This is the count behind the bug that came back
 #                  four times, and it only reaches zero when resolving a shape is something
 #                  callers ask the module to do.
+#
+#   rows           Files outside the module that name dt_masks_form_group_t at all -- the
+#                  group-membership row. A row cannot copy-on-write: it is memory owned by the
+#                  group, so whoever holds one must have touched the group first, and must not
+#                  keep holding it afterwards because the touch replaces it. Every caller that
+#                  resolves one is a caller that has to get both halves right by hand, and the
+#                  opacity sliders are the proof they do not: they touched once, when the menu
+#                  was built, then wrote through the row for the whole drag while committing
+#                  history at every step -- so from the second step on they edited the very
+#                  snapshots that were supposed to be frozen. The module's own interface headers
+#                  are excluded; naming the type there is the design, not the leak.
 masks_include_baseline=19
 masks_gui_include_baseline=11
 masks_member_baseline=88
 masks_write_baseline=26
 masks_alloc_baseline=4
 masks_forms_baseline=76
+masks_row_baseline=38
 
 # Members no other struct in the tree uses. Keep it that way: adding an ambiguous name here
 # buys a bigger number and loses the gate.
@@ -435,12 +447,21 @@ masks_alloc_now=$(grep -rnE '\b(malloc|calloc|g_malloc[0-9n]*|g_new[0-9]*)[[:spa
 masks_forms_now=$(grep -rnE '\->(forms|allforms)\b' src/ --include='*.c' --include='*.cc' 2>/dev/null \
                   | grep -v '^src/develop/masks/' | masks_strip | wc -l)
 
+# The module's own public headers declare the type; only its CONSUMERS are leakage.
+masks_own_headers='^src/develop/masks/|^src/develop/masks\.h|^src/develop/masks_types\.h'
+masks_own_headers="${masks_own_headers}|^src/develop/masks_group\.h|^src/develop/masks_gui\.h"
+masks_row_now=$(grep -rnE '\bdt_masks_form_group_t\b' \
+                src/ --include='*.c' --include='*.cc' --include='*.h' 2>/dev/null \
+                | grep -vE "${masks_own_headers}" | masks_strip | wc -l)
+
 echo "masks:         ${masks_include_now} include masks.h, ${masks_gui_include_now} include masks_gui.h" \
      "(baselines ${masks_include_baseline}, ${masks_gui_include_baseline}),"
 echo "               ${masks_member_now} external struct-member reads, ${masks_write_now} of them writes" \
      "(baselines ${masks_member_baseline}, ${masks_write_baseline}),"
 echo "               ${masks_alloc_now} external allocations, ${masks_forms_now} direct ->forms touches" \
-     "(baselines ${masks_alloc_baseline}, ${masks_forms_baseline})."
+     "(baselines ${masks_alloc_baseline}, ${masks_forms_baseline}),"
+echo "               ${masks_row_now} external mentions of a membership row" \
+     "(baseline ${masks_row_baseline})."
 
 masks_findings=0
 masks_check() { # name now baseline
@@ -460,6 +481,7 @@ masks_check "struct-member reads"  "${masks_member_now}"      "${masks_member_ba
 masks_check "struct-member writes" "${masks_write_now}"       "${masks_write_baseline}"
 masks_check "external allocations" "${masks_alloc_now}"       "${masks_alloc_baseline}"
 masks_check "direct ->forms"       "${masks_forms_now}"       "${masks_forms_baseline}"
+masks_check "membership rows named externally" "${masks_row_now}" "${masks_row_baseline}"
 findings=$((findings + masks_findings))
 
 

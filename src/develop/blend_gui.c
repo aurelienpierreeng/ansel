@@ -2280,21 +2280,15 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
   GtkWidget *menu = gtk_menu_new();
   gtk_style_context_add_class(gtk_widget_get_style_context(menu), "dt-masks-context-menu");
 
-  // Same shape-parameter sliders (size/fading/rotation/opacity) as the darkroom canvas's
-  // own shape context menu (dt_masks_create_menu). Touch the parent group before resolving
-  // the entry pointer, same rule as _blendop_masks_group_operation_callback: the sliders
-  // mutate this entry in place across the whole drag/scroll interaction.
-  dt_masks_form_t *parent_group = dt_masks_get_from_id(module->dev, parentid);
-  if(!IS_NULL_PTR(parent_group) && (parent_group->type & DT_MASKS_GROUP))
-    parent_group = dt_masks_cow_touch(module->dev, parent_group);
-  dt_masks_form_group_t *op_form = (!IS_NULL_PTR(parent_group) && (parent_group->type & DT_MASKS_GROUP))
-                                       ? dt_masks_form_group_find_entry(parent_group, formid, NULL)
-                                       : NULL;
+  // Same shape-parameter sliders (size/fading/rotation/opacity) as the darkroom canvas's own
+  // shape context menu (dt_masks_create_menu). The sliders name the row by identity and let the
+  // write API copy-on-write per step, so this no longer has to touch the parent group up front --
+  // which never worked anyway once a slider started committing history mid-drag.
   dt_masks_form_t *form = dt_masks_get_from_id(module->dev, formid);
 
-  if(!IS_NULL_PTR(op_form) && !IS_NULL_PTR(form))
+  if(!IS_NULL_PTR(form))
   {
-    dt_masks_gui_populate_interaction_sliders(menu, module->dev, form, op_form, module->dev->form_gui, module);
+    dt_masks_gui_populate_interaction_sliders(menu, module->dev, form, parentid, module->dev->form_gui, module);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
   }
 

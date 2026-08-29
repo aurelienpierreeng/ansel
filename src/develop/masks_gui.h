@@ -644,7 +644,7 @@ dt_masks_form_group_t *dt_masks_form_group_find_entry(dt_masks_form_t *group_for
  * already knowing which group (if any) it belongs to, e.g. a flat "all shapes" row.
  * @param out_parentid if non-NULL, receives the owning group's formid (0 if none found).
  */
-dt_masks_form_group_t *dt_masks_form_group_find_any(dt_develop_t *dev, int formid, int *out_parentid);
+
 int dt_masks_group_index_from_formid(const dt_masks_form_t *group_form, int formid);
 dt_masks_form_group_t *dt_masks_form_get_selected_group(const struct dt_masks_form_t *form,
                                                         const struct dt_masks_form_gui_t *gui);
@@ -715,7 +715,7 @@ gboolean dt_masks_is_anything_hovered(const dt_masks_form_gui_t *mask_gui);
  */
 dt_masks_form_group_t *dt_masks_form_get_selected_group_live(const struct dt_masks_form_t *form,
                                                              const struct dt_masks_form_gui_t *gui);
-float dt_masks_form_get_interaction_value(dt_develop_t *dev, dt_masks_form_group_t *form_group,
+float dt_masks_form_get_interaction_value(dt_develop_t *dev, int group_id, int formid,
                                           dt_masks_interaction_t interaction);
 gboolean dt_masks_form_get_gravity_center(dt_develop_t *dev, const struct dt_masks_form_t *form, float center[2], float *area);
 void dt_masks_form_update_gravity_center(dt_develop_t *dev, struct dt_masks_form_t *form);
@@ -724,7 +724,7 @@ void dt_masks_form_update_gravity_center(dt_develop_t *dev, struct dt_masks_form
  * hit-testing read site recomputes lazily on first actual use. */
 void dt_masks_form_invalidate_gravity_center(struct dt_masks_form_t *form);
 int dt_masks_center_view_on_form(struct dt_develop_t *dev, const struct dt_masks_form_t *form);
-float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
+float dt_masks_form_set_interaction_value(dt_develop_t *dev, int group_id, int formid,
                                           dt_masks_interaction_t interaction,
                                           float value, dt_masks_increment_t increment, int flow,
                                           struct dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
@@ -861,7 +861,8 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
  * canvas context menu (dt_masks_create_menu) and the blend module's own shape-list
  * context menus, so both stay in sync.
  */
-GtkWidget *dt_masks_gui_add_interaction_slider(GtkWidget *menu, const char *label, dt_masks_form_group_t *form_group,
+GtkWidget *dt_masks_gui_add_interaction_slider(GtkWidget *menu, const char *label, dt_develop_t *dev,
+                                               int group_id, int formid,
                                                dt_masks_interaction_t interaction, dt_masks_increment_t increment,
                                                float min, float max, float step, float value, int digits,
                                                const char *format, float factor,
@@ -875,7 +876,7 @@ GtkWidget *dt_masks_gui_add_interaction_slider(GtkWidget *menu, const char *labe
  * group's `points` list.
  */
 void dt_masks_gui_populate_interaction_sliders(GtkWidget *menu, dt_develop_t *dev, dt_masks_form_t *form,
-                                               dt_masks_form_group_t *op_form,
+                                               int group_id,
                                                dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
 
 int dt_masks_gui_confirm_delete_form_dialog(const char *form_name);

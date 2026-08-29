@@ -1087,26 +1087,14 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
   // just one nested under a group in the tree: _lib_masks_list_recurs also lists every shape
   // at top level regardless of group membership (TREE_GROUPID == 0 there), so when the tree
   // doesn't hand us the parent directly, look up whichever group actually references it.
-  // Touch the parent group before resolving the entry, same rule as elsewhere: the sliders
-  // mutate this entry in place across the whole drag/scroll interaction.
   if(nb == 1 && !IS_NULL_PTR(grp) && !(grp->type & DT_MASKS_GROUP))
   {
-    dt_masks_form_group_t *op_form = NULL;
-    if(from_group)
-    {
-      dt_masks_form_t *parent_group = dt_masks_get_from_id(dt_dev_get_global(), parentid);
-      if(!IS_NULL_PTR(parent_group) && (parent_group->type & DT_MASKS_GROUP))
-        parent_group = dt_masks_cow_touch(dt_dev_get_global(), parent_group);
-      op_form = dt_masks_form_group_find_entry(parent_group, grpid, NULL);
-    }
-    else
-    {
-      op_form = dt_masks_form_group_find_any(dt_dev_get_global(), grpid, NULL);
-    }
+    const int holding_group = from_group ? parentid
+                                         : dt_masks_group_find_holder(dt_dev_get_global(), grpid);
 
-    if(!IS_NULL_PTR(op_form))
+    if(holding_group != 0)
     {
-      dt_masks_gui_populate_interaction_sliders(GTK_WIDGET(menu), dt_dev_get_global(), grp, op_form,
+      dt_masks_gui_populate_interaction_sliders(GTK_WIDGET(menu), dt_dev_get_global(), grp, holding_group,
                                                 dt_dev_get_global()->form_gui, module);
       gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
     }
