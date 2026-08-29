@@ -115,6 +115,12 @@ jobs:
         env:
           TOKEN: ${{ secrets.NIGHTLY_PUBLISH_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # read-only: the stats snapshot lists releases
+          # Optional. The traffic API (clones per day) needs the "Administration: read"
+          # repository permission, which the workflow's own GITHUB_TOKEN does not carry
+          # -- the first run confirmed it, silently: a series with no traffic block. A
+          # fine-grained PAT with that one permission on this repository restores it;
+          # without one the snapshot is complete except for clones.
+          STATS_TOKEN: ${{ secrets.NIGHTLY_STATS_TOKEN }}
         run: |
           if [[ -z "${TOKEN}" ]]; then
             echo "::warning::NIGHTLY_PUBLISH_TOKEN is not set; manifest built but not published"
@@ -163,7 +169,10 @@ jobs:
           # step before the manifest was published (Sentry's review caught the
           # unguarded `append`). Whatever fails, publish() skips an empty file.
           : > download-stats.json
-          if python3 tools/download_stats.py snapshot > today.json 2>stats.err; then
+          if GITHUB_TOKEN="${STATS_TOKEN:-$GITHUB_TOKEN}" python3 tools/download_stats.py snapshot > today.json 2>stats.err; then
+            # A partial snapshot is still a success; say what was left out rather
+            # than letting a 403 on the traffic API vanish into a file nobody reads.
+            [[ -s stats.err ]] && echo "::notice::download stats: $(tr '\n' ' ' < stats.err)"
             curl -fsSL --max-time 30 -o series.json \
               "https://raw.githubusercontent.com/aurelienpierreeng/ansel-website/master/data/download-stats.json" \
               || echo '[]' > series.json
