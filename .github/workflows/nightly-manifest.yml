@@ -40,7 +40,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # to title and describe a freshly created monthly release
 
 concurrency:
   group: nightly-manifest
@@ -57,6 +57,26 @@ jobs:
         with:
           fetch-depth: 1
           submodules: false
+
+      # tip creates each month's release with the tag as its name and no body, and it
+      # preserves whatever body exists on later uploads. So the text is applied once, by
+      # the first run after the release appears, and never rewritten: the check is on
+      # an empty body, not on a date, so an edit made by hand on the release survives.
+      - name: Describe the monthly release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="nightly-$(date -u +%Y-%m)"
+          if ! gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" --json body -q .body >/dev/null 2>&1; then
+            echo "${tag}: no release yet"; exit 0
+          fi
+          if [[ -n "$(gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" --json body -q .body)" ]]; then
+            echo "${tag}: already described"; exit 0
+          fi
+          gh release edit "${tag}" --repo "${GITHUB_REPOSITORY}" \
+            --title "Nightly builds, $(LC_ALL=C date -u +%B\ %Y)" \
+            --notes-file packaging/nightly-release-notes.md
+          echo "${tag}: described"
 
       - name: Build the manifest
         env:
