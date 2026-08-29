@@ -287,14 +287,18 @@ static dt_job_t *dt_control_generic_image_job_create(dt_job_execute_callback exe
 
 static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
 {
-  if(!dt_image_get_xmp_mode()) return 0;
-
   dt_control_image_enumerator_t *params = dt_control_job_get_params(job);
+  const gboolean forced = (params->flag == 1);
+
+  if(!forced && !dt_image_get_xmp_mode()) return 0;
 
   for(GList *t = params->index; t; t = g_list_next(t))
   {
     const int32_t imgid = GPOINTER_TO_INT(t->data);
-    switch(dt_image_write_sidecar_file(imgid))
+    const dt_image_write_sidecar_result_t res =
+      forced ? dt_image_write_sidecar_file_forced(imgid)
+             : dt_image_write_sidecar_file(imgid);
+    switch(res)
     {
       case DT_IMAGE_WRITE_SIDECAR_OK:
         break;
@@ -321,7 +325,7 @@ void dt_control_write_sidecar_files()
 {
   GList *imgs = dt_act_on_get_images();
   if(IS_NULL_PTR(imgs)) return;
-  dt_control_save_xmps(imgs, FALSE);
+  dt_control_save_xmps_forced(imgs);
   g_list_free(imgs);
   imgs = NULL;
 }
@@ -1525,6 +1529,27 @@ void dt_control_save_xmps(const GList *imgids, const gboolean check_history)
 
   params->index = g_list_copy((GList *)imgids);
   params->flag = 0;
+
+  dt_control_job_set_params(job, params, dt_control_image_enumerator_cleanup);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG, job);
+}
+
+void dt_control_save_xmps_forced(const GList *imgids)
+{
+  if(IS_NULL_PTR(imgids)) return;
+
+  dt_job_t *job = dt_control_job_create(&dt_control_save_xmps_job_run, "save xmp");
+  if(IS_NULL_PTR(job)) return;
+
+  dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
+  if(IS_NULL_PTR(params))
+  {
+    dt_control_job_dispose(job);
+    return;
+  }
+
+  params->index = g_list_copy((GList *)imgids);
+  params->flag = 1;
 
   dt_control_job_set_params(job, params, dt_control_image_enumerator_cleanup);
   dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG, job);
