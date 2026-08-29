@@ -1177,6 +1177,44 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
     }
   }
 
+  // we check if we are near a segment of the centerline. This runs BEFORE the outline test:
+  // the outline wraps the whole stroke, so on a thin brush both are within cursor reach at
+  // once, and the segment is the one carrying an action (move it, Ctrl+Click to add a node)
+  // while the outline has none of its own.
+  if(gui_points->points && gui_points->points_count > 2 + corner_count * 3)
+  {
+    // Own accumulator: the source pass above walks a different outline, and its distances
+    // must not veto a segment hit on the form itself.
+    float min_dist_points = FLT_MAX;
+    int current_seg = 1;
+    for(int i = corner_count * 3; i < gui_points->points_count; i++)
+    {
+      // do we change of path segment ?
+      if(gui_points->points[i * 2 + 1] == gui_points->points[current_seg * 6 + 3]
+         && gui_points->points[i * 2] == gui_points->points[current_seg * 6 + 2])
+      {
+        current_seg = (current_seg + 1) % corner_count;
+      }
+      //distance from tested point to current form point
+      const float yy = gui_points->points[i * 2 + 1];
+      const float xx = gui_points->points[i * 2];
+
+      const float dx = point_x - xx;
+      const float dy = point_y - yy;
+      const float dd = (dx * dx) + (dy * dy);
+      if(dd < min_dist_points)
+      {
+        min_dist_points = dd;
+
+        if(current_seg > 0 && dd < radius2)
+        {
+          *near_handle = current_seg - 1;
+        }
+      }
+    }
+    min_dist = MIN(min_dist, min_dist_points);
+  }
+
  // we check if it's inside borders
   if(gui_points->border && gui_points->border_count > 2 + corner_count * 3)
   {
@@ -1203,38 +1241,12 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
       last_y = yy;
     }
 
-    *inside = *inside_border = (nearest != -1 || (crossings & 1));
-  }
-
-  // and we check if we are near_handle a segment
-  if(gui_points->points && gui_points->points_count > 2 + corner_count * 3)
-  {
-    int current_seg = 1;
-    for(int i = corner_count * 3; i < gui_points->points_count; i++)
-    {
-      // do we change of path segment ?
-      if(gui_points->points[i * 2 + 1] == gui_points->points[current_seg * 6 + 3]
-         && gui_points->points[i * 2] == gui_points->points[current_seg * 6 + 2])
-      {
-        current_seg = (current_seg + 1) % corner_count;
-      }
-      //distance from tested point to current form point
-      const float yy = gui_points->points[i * 2 + 1];
-      const float xx = gui_points->points[i * 2];
-
-      const float dx = point_x - xx;
-      const float dy = point_y - yy;
-      const float dd = (dx * dx) + (dy * dy);
-      if(dd < min_dist)
-      {
-        min_dist = dd;
-
-        if(current_seg > 0 && dd < radius2)
-        {
-          *near_handle = current_seg - 1;
-        }
-      }
-    }
+    // Being enclosed by the outline is what makes the stroke hoverable at all, but it is not
+    // a hit on the border itself: only proximity to the outline is, and only where no
+    // centerline segment is closer. Reporting the whole band as border made the segment
+    // unreachable, since the shared hit test answers on the border before the segment.
+    *inside = (nearest != -1 || (crossings & 1));
+    *inside_border = (nearest != -1) && (*near_handle < 0);
   }
 
   *distance = min_dist;
