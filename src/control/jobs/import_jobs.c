@@ -399,7 +399,7 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const int ind
   if(data->copy)
   {
     // Copy the file to destination folder, expanding variables internally
-    copy_status = _import_copy_file(filename, index, data, img_path_to_db, sizeof(img_path_to_db), discarded);
+    copy_status = _import_copy_file(filename, index + 1, data, img_path_to_db, sizeof(img_path_to_db), discarded);
     process_error = copy_status < 0;
   }
   else
