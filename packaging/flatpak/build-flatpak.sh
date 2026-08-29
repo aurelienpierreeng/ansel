@@ -34,10 +34,10 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd)
 
-LOCAL_MANIFEST=${LOCAL_MANIFEST:-"${SCRIPT_DIR}/photos.ansel.ansel.json"}
+LOCAL_MANIFEST=${LOCAL_MANIFEST:-"${SCRIPT_DIR}/photos.ansel.Ansel.json"}
 
 # The app id is read from the manifest rather than hardcoded here. It has to
-# agree with the id in data/photos.ansel.ansel.appdata.xml.in and with the name
+# agree with the id in data/photos.ansel.Ansel.appdata.xml.in and with the name
 # of the .desktop file data/CMakeLists.txt installs, and three independent
 # copies of it is how they drifted apart in the first place.
 APP_ID=${APP_ID:-"$(jq -r '.["app-id"]' "${LOCAL_MANIFEST}")"}

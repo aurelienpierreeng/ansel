@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>photos.ansel.ansel</id>
+  <id>photos.ansel.Ansel</id>
   <name>Ansel</name>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
@@ -28,11 +28,27 @@
       exported image, and can be accelerated on the GPU through OpenCL.
     </_p>
   </description>
-  <launchable type="desktop-id">photos.ansel.ansel.desktop</launchable>
+  <launchable type="desktop-id">photos.ansel.Ansel.desktop</launchable>
   <screenshots>
     <screenshot width="1920" height="1080" type="default">
-      <image>https://user-images.githubusercontent.com/45535283/148689197-e53dd75f-32f1-4297-9a0f-a9547fd4e7c7.jpg</image>
-      <_caption>Virtual light table, showing a collection</_caption>
+      <image>https://raw.githubusercontent.com/aurelienpierreeng/ansel/master/data/screenshots/ansel-0.1-lighttable.jpg</image>
+      <_caption>The lighttable, its filters and filmstrip</_caption>
+    </screenshot>
+    <screenshot width="1920" height="1080">
+      <image>https://raw.githubusercontent.com/aurelienpierreeng/ansel/master/data/screenshots/ansel-0.1-darkroom.jpg</image>
+      <_caption>The darkroom, editing a raw file</_caption>
+    </screenshot>
+    <screenshot width="1920" height="1080">
+      <image>https://raw.githubusercontent.com/aurelienpierreeng/ansel/master/data/screenshots/ansel-0.1-masks.jpg</image>
+      <_caption>Drawn and parametric masks on one module</_caption>
+    </screenshot>
+    <screenshot width="1920" height="1080">
+      <image>https://raw.githubusercontent.com/aurelienpierreeng/ansel/master/data/screenshots/ansel-0.1-import.jpg</image>
+      <_caption>Importing from a folder or a memory card</_caption>
+    </screenshot>
+    <screenshot width="1920" height="1080">
+      <image>https://raw.githubusercontent.com/aurelienpierreeng/ansel/master/data/screenshots/ansel-0.1-actions.jpg</image>
+      <_caption>The keyboard shortcut editor</_caption>
     </screenshot>
   </screenshots>
   <branding>

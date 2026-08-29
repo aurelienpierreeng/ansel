@@ -26,7 +26,7 @@
 #   
 #   
 # command line: put this file in path before darktable as: /usr/local/bin/darktable
-# desktop icon: edit /usr/share/applications/photos.ansel.ansel.desktop: Exec and TryExec pointing to /usr/local/bin/darktable
+# desktop icon: edit /usr/share/applications/photos.ansel.Ansel.desktop: Exec and TryExec pointing to /usr/local/bin/darktable
 # (ubuntu18.04, dt from git)
 
 #   

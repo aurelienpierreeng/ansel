@@ -585,9 +585,9 @@ if [ $DO_INSTALL ] ; then
 		$SUDO ln -sfn "$INSTALL_PREFIX"/bin/ansel-cli /usr/local/bin/ansel-cli
 	fi
 
-	if [ -f "$INSTALL_PREFIX/share/applications/photos.ansel.ansel.desktop" ]; then
+	if [ -f "$INSTALL_PREFIX/share/applications/photos.ansel.Ansel.desktop" ]; then
 		[ ! -d "/usr/share/applications/" ] && $SUDO mkdir -p /usr/share/applications/
-		$SUDO ln -sfn "$INSTALL_PREFIX"/share/applications/photos.ansel.ansel.desktop /usr/share/applications/ansel.desktop
+		$SUDO ln -sfn "$INSTALL_PREFIX"/share/applications/photos.ansel.Ansel.desktop /usr/share/applications/ansel.desktop
 	fi
 fi
 # update Lensfun
