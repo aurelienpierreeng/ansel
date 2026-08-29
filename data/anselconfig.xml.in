@@ -303,6 +303,25 @@
     <shortdescription>Share anonymous usage statistics</shortdescription>
     <longdescription>Separately from crash reports, share anonymous usage statistics (which modules/views/panels you use, the type of files you process, your OS and hardware) with the developers via PostHog (European Union) so they know what to prioritise. Data is anonymous; no images, file names or personal data are sent. Default off; you are asked once on first launch.</longdescription>
   </dtconfig>
+  <dtconfig prefs="storage" section="privacy">
+    <name>updates/enabled</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>Check for newer nightly builds</shortdescription>
+    <longdescription>Once a day, fetch a small file from ansel.photos listing the newest nightly build of each package format, and say so if a newer one exists for this installation. Only an HTTP request with the application's version in its User-Agent is made: no identifier, no usage data, and nothing to do with the crash-report or statistics toggles. Only nightly builds do this; self-builds and distribution packages never check.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>updates/last_check</name>
+    <type>int64</type>
+    <default>0</default>
+    <shortdescription>Unix time of the last nightly update check</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>updates/manifest_url</name>
+    <type>string</type>
+    <default>https://ansel.photos/nightly.json</default>
+    <shortdescription>Where the nightly update check reads the manifest of newest builds</shortdescription>
+  </dtconfig>
   <dtconfig>
     <name>history/paste_instances</name>
     <type>bool</type>

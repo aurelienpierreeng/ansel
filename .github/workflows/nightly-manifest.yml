@@ -1,0 +1,125 @@
+#   This file is part of the Ansel project.
+#   Copyright (C) 2026 Aurélien PIERRE.
+#   
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+
+# After every nightly, rewrite the one file that says what "latest" means, and push it
+# where its consumers read it: the website (download buttons and the in-app update
+# check both read ansel.photos/nightly.json), the Homebrew tap and the Scoop bucket.
+#
+# The per-OS workflows stay dumb -- they build and upload -- and this is the single
+# place that knows about downstream. It runs once per finished nightly rather than on
+# its own clock, so a build that lands late is not missed until tomorrow.
+#
+# Needs one secret: NIGHTLY_PUBLISH_TOKEN, a fine-grained PAT with contents:write on
+# ansel-website, homebrew-ansel and scoop-ansel. See doc/nightly-distribution.md.
+#
+# The Docker image is read from Docker Hub's public tags API, so it needs no secret.
+name: Nightly manifest
+
+on:
+  workflow_run:
+    workflows:
+      - "Nightly Linux PKG"
+      - "Nightly Mac PKG"
+      - "Nightly Win PKG"
+      - "Nightly Flatpak PKG"
+      - "Build and Push Docker Image"
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-manifest
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # A failed nightly still leaves last night's assets in place; the manifest is
+    # rebuilt from whatever is newest on the releases, so it is always worth running.
+    if: github.repository == 'aurelienpierreeng/ansel'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Build the manifest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 tools/nightly_manifest.py manifest > nightly.json
+          # A consumer whose formats are not all there yet (the first night of a month
+          # before every OS has finished, a failed runner) is skipped, not failed: the
+          # generator exits non-zero and leaves an empty file, and publish() below
+          # ignores empty files. The manifest itself always publishes.
+          python3 tools/nightly_manifest.py cask  nightly.json > ansel-nightly.rb   || : > ansel-nightly.rb
+          python3 tools/nightly_manifest.py scoop nightly.json > ansel-nightly.json || : > ansel-nightly.json
+          {
+            echo "### Newest build per format"
+            echo '```'
+            python3 -c 'import json;[print(f"{k:10s} {v[\"version\"]}  {v[\"uploaded\"]}") for k,v in json.load(open("nightly.json"))["formats"].items()]'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep a copy on this run
+        uses: actions/upload-artifact@v6
+        with:
+          name: nightly-manifest
+          path: |
+            nightly.json
+            ansel-nightly.rb
+            ansel-nightly.json
+          retention-days: 30
+
+      # One shallow clone, one file, one commit, per downstream repository. [skip ci]
+      # on the website because Hugo rebuilds on its own schedule anyway (*/4 h) and a
+      # data-only change is not worth a full build queue entry -- remove it if the
+      # download page must follow within minutes rather than hours.
+      - name: Publish downstream
+        env:
+          TOKEN: ${{ secrets.NIGHTLY_PUBLISH_TOKEN }}
+        run: |
+          if [[ -z "${TOKEN}" ]]; then
+            echo "::warning::NIGHTLY_PUBLISH_TOKEN is not set; manifest built but not published"
+            exit 0
+          fi
+          git config --global user.name  "ansel-nightly[bot]"
+          git config --global user.email "nightly@ansel.photos"
+          summary=$(python3 -c 'import json;d=json.load(open("nightly.json"))["formats"];print(", ".join(f"{k} {v[\"version\"]}" for k,v in d.items()))')
+
+          publish() {  # repo  src  dest  message
+            local repo=$1 src=$2 dest=$3 msg=$4 dir
+            if [[ ! -s "${src}" ]]; then echo "${repo}: nothing to publish (${src} empty)"; return 0; fi
+            dir=$(mktemp -d)
+            git clone -q --depth 1 "https://x-access-token:${TOKEN}@github.com/aurelienpierreeng/${repo}.git" "${dir}"
+            mkdir -p "$(dirname "${dir}/${dest}")"
+            cp "${src}" "${dir}/${dest}"
+            git -C "${dir}" add "${dest}"
+            if git -C "${dir}" diff --cached --quiet; then
+              echo "${repo}: unchanged"
+            else
+              git -C "${dir}" commit -q -m "${msg}"
+              git -C "${dir}" push -q origin HEAD
+              echo "${repo}: updated ${dest}"
+            fi
+            rm -rf "${dir}"
+          }
+
+          publish ansel-website  nightly.json        data/nightly.json               "nightly: ${summary} [skip ci]"
+          publish homebrew-ansel ansel-nightly.rb    Casks/ansel-nightly.rb          "ansel-nightly: ${summary}"
+          publish scoop-ansel    ansel-nightly.json  bucket/ansel-nightly.json       "ansel-nightly: ${summary}"

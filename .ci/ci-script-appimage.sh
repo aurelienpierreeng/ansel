@@ -81,7 +81,10 @@ chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
 export DEPLOY_GTK_VERSION="3"
 export LINUXDEPLOY_OUTPUT_VERSION=$(sh ../tools/get_git_version_string.sh)
 
-export LDAI_UPDATE_INFORMATION="gh-releases-zsync|aurelienpierreeng|ansel|v0.0.0|Ansel-*-x86_64.AppImage.zsync"
+# "latest-pre" (AppImageSpec) resolves to the newest pre-release at update time, which is
+# the current month's nightly-YYYY-MM now that releases rotate; a fixed tag would have
+# frozen every existing AppImage to the month it was built in.
+export LDAI_UPDATE_INFORMATION="gh-releases-zsync|aurelienpierreeng|ansel|latest-pre|Ansel-*-x86_64.AppImage.zsync"
 
 # Fix https://github.com/linuxdeploy/linuxdeploy/issues/272 on Fedora
 export NO_STRIP=true

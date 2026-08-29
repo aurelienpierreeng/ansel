@@ -348,6 +348,7 @@
             "config-opts": [
                 "-DCMAKE_BUILD_TYPE=Release",
                 "-DBINARY_PACKAGE_BUILD=1",
+                "-DBUILD_CHANNEL=nightly",
                 "-DTESTBUILD_OPENCL_PROGRAMS=OFF"
             ],
             "builddir": true,

@@ -16,6 +16,11 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#ifdef HAVE_CONFIG_H
+#include "config.h" // DT_BUILD_CHANNEL, darktable_last_commit_year
+#endif
+#include "common/updates.h"
+#include <string.h>
 #include "system/mem_alloc.h"
 #include "gui/application.h"
 #include "widgets/accelerators.h"
@@ -59,6 +64,17 @@ static gboolean show_about_dialog(GtkAccelGroup *group, GObject *acceleratable, 
   gtk_dialog_run(GTK_DIALOG(dialog));
   gtk_widget_destroy(dialog);
 
+  return TRUE;
+}
+
+// Nightly builds only: opens the download for this installation's format when the
+// daily check found a newer build, and the download page otherwise -- so the entry
+// is useful even before the check has run, or when it is switched off.
+static gboolean update_nightly_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  const char *url = dt_updates_get_download_url();
+  if(!url) url = "https://ansel.photos/en/download/";
+  gtk_show_uri_on_window(GTK_WINDOW(dt_gui_main_window()), url, GDK_CURRENT_TIME, NULL);
   return TRUE;
 }
 
@@ -231,6 +247,8 @@ static gboolean supervisor_callback(GtkAccelGroup *group, GObject *acceleratable
 void append_help(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
   add_sub_menu_entry(menus, lists, _("Online documentation"), index, NULL, open_doc_callback, NULL, NULL, NULL, 0, 0);
+  if(strcmp(DT_BUILD_CHANNEL, "nightly") == 0)
+    add_sub_menu_entry(menus, lists, _("Update to the latest nightly build"), index, NULL, update_nightly_callback, NULL, NULL, NULL, 0, 0);
   add_sub_menu_entry(menus, lists, _("Ask a question"), index, NULL, open_search_callback, NULL, NULL, NULL, 0, 0);
   add_sub_menu_entry(menus, lists, _("Join the support chat"), index, NULL, open_chat_callback, NULL, NULL, NULL, 0, 0);
   add_sub_menu_entry(menus, lists, _("Join the support forum"), index, NULL, open_forum_callback, NULL, NULL, NULL, 0, 0);

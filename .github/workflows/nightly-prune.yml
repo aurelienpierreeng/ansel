@@ -1,0 +1,67 @@
+#   This file is part of the Ansel project.
+#   Copyright (C) 2026 Aurélien PIERRE.
+#   
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+
+# Retention for the monthly nightly releases. Nightlies land in one pre-release per
+# month (nightly-YYYY-MM); this deletes the months older than the window, release and
+# tag together, and touches nothing else -- a real version tag never matches the
+# pattern. Runs on the first of the month, and by hand with a chosen window.
+name: Nightly prune
+
+on:
+  schedule:
+    - cron: "30 4 1 * *"
+  workflow_dispatch:
+    inputs:
+      months:
+        description: "Keep this many months of nightlies"
+        type: number
+        default: 24
+      dry_run:
+        description: "List what would be deleted, delete nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    if: github.repository == 'aurelienpierreeng/ansel'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      KEEP_MONTHS: ${{ inputs.months || 12 }}
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+    steps:
+      - name: Delete nightly releases older than the window
+        run: |
+          cutoff=$(date -u -d "-${KEEP_MONTHS} months" +%Y-%m)
+          echo "keeping nightly-${cutoff} and newer"
+          gh release list --repo "${GITHUB_REPOSITORY}" --limit 200 --json tagName -q '.[].tagName' \
+            | grep -E '^nightly-[0-9]{4}-[0-9]{2}$' | sort > tags.txt
+          while read -r tag; do
+            month=${tag#nightly-}
+            if [[ "${month}" < "${cutoff}" ]]; then
+              if [[ "${DRY_RUN}" == "true" ]]; then
+                echo "would delete ${tag}"
+              else
+                gh release delete "${tag}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes
+                echo "deleted ${tag}"
+              fi
+            fi
+          done < tags.txt
+          echo "### Retention: ${KEEP_MONTHS} months (cutoff ${cutoff})" >> "$GITHUB_STEP_SUMMARY"
+          { echo '```'; cat tags.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

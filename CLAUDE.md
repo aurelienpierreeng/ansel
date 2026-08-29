@@ -1591,6 +1591,16 @@ silently falls back to default instead of erroring.
 
 ---
 
+## Nightly distribution
+
+Nightlies land in one `nightly-YYYY-MM` pre-release per month (GitHub caps a *release* at
+1000 assets; five formats a night filled the old rolling `v0.0.0` in under a year).
+`tools/nightly_manifest.py` writes `nightly.json` — the newest build per format — after
+every nightly, and that file drives the website buttons, the in-app check
+(`src/common/updates.c`), the Homebrew cask and the Scoop manifest. The format keys in the
+script's `FORMATS` and in `dt_updates_runtime_format()` must agree. `doc/nightly-distribution.md`
+is the manual: secrets, retention, R2, signing costs, GHCR for later.
+
 ## Tools
 
 **Sentry crash issues:** `tools/sentry-fetch-issue.sh <issue-id|url>` pulls a Sentry issue's
