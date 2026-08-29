@@ -29,6 +29,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BRANCH: ${{ github.ref_name }}
+      # Mapped here because the `secrets` context is not available inside a step's
+      # `if:` -- the whole workflow failed to parse on master the first time it ran with
+      # `if: secrets.X != ''`. The `env` context is, so the optional steps test these.
+      FLATPAK_GPG_KEY: ${{ secrets.FLATPAK_GPG_KEY }}
+      FLATPAK_GPG_KEY_ID: ${{ secrets.FLATPAK_GPG_KEY_ID }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
     steps:
       - name: Free disk space
         run: |
@@ -68,10 +74,10 @@ jobs:
       # Signing is what lets a client add the repository without --no-gpg-verify.
       # Optional: with no key in the secrets the build is unsigned, exactly as before.
       - name: Import the repository signing key
-        if: ${{ secrets.FLATPAK_GPG_KEY != '' }}
+        if: ${{ env.FLATPAK_GPG_KEY != '' }}
         run: |
-          echo "${{ secrets.FLATPAK_GPG_KEY }}" | gpg --batch --import
-          echo "GPG_KEY_ID=${{ secrets.FLATPAK_GPG_KEY_ID }}" >> "$GITHUB_ENV"
+          printf '%s\n' "$FLATPAK_GPG_KEY" | gpg --batch --import
+          echo "GPG_KEY_ID=${FLATPAK_GPG_KEY_ID}" >> "$GITHUB_ENV"
 
       - name: Build Flatpak
         run: packaging/flatpak/build-flatpak.sh
@@ -81,13 +87,13 @@ jobs:
       # API (free tier: 10 GB, no egress charge; a pruned repo is a few hundred MB).
       # Optional: with no R2 secrets the step is skipped and only the bundle ships.
       - name: Publish the repository to R2
-        if: ${{ success() && secrets.R2_ACCOUNT_ID != '' }}
+        if: ${{ success() && env.R2_ACCOUNT_ID != '' }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
           AWS_EC2_METADATA_DISABLED: "true"
-          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_ENDPOINT: https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           REPO_URL: ${{ vars.FLATPAK_REPO_URL || 'https://flatpak.ansel.photos' }}
         run: |
