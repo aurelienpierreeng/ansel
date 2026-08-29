@@ -82,9 +82,9 @@ build/src/iop/introspection_vignette.c
 build/src/iop/introspection_watermark.c
 build/src/iop/introspection_zonesystem.c
 build/src/tools/darktable_authors.h
-build/data/photos.ansel.ansel.desktop.in
-data/photos.ansel.ansel.appdata.xml.in
-data/photos.ansel.ansel.desktop.in
+build/data/photos.ansel.Ansel.desktop.in
+data/photos.ansel.Ansel.appdata.xml.in
+data/photos.ansel.Ansel.desktop.in
 data/anselconfig.dtd
 data/anselconfig.xml.in
 src/widgets/bauhaus.c
