@@ -41,12 +41,14 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ env.BRANCH }}
-          fetch-depth: 1
+          # Full history: get_git_version_string.sh must reach the last version tag, or
+          # the version degrades to a bare hash. (An earlier edit put this only in a
+          # comment and left the key at 1; the first master run showed VERSION "b4597470".)
+          fetch-depth: 0
           fetch-tags: true
           submodules: true
       # The image is built from a context without .git (.dockerignore), so the version
       # string and commit hash are computed here, where git is, and passed in.
-      # fetch-depth: 0 because get_git_version_string.sh needs to reach the last tag.
       - name: Compute version
         run: |
           version=$(sh tools/get_git_version_string.sh)

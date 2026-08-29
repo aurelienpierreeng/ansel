@@ -274,11 +274,26 @@ def render_scoop(manifest):
     return json.dumps(doc, indent=4) + "\n"
 
 
+def render_summary(manifest):
+    """A table for the run summary, one line per format; says so when there is none."""
+    formats = manifest.get("formats", {})
+    if not formats:
+        return "(no nightly-* release carries any asset yet)\n"
+    return "".join(f"{k:10s} {v.get('version') or '?':32s} {v.get('uploaded') or ''}\n"
+                   for k, v in formats.items())
+
+
+def render_oneline(manifest):
+    """One line for a commit message: `appimage 0.0.0+4810.g..., exe 0.0.0+4810.g...`."""
+    formats = manifest.get("formats", {})
+    return ", ".join(f"{k} {v.get('version') or '?'}" for k, v in formats.items()) or "no builds"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("manifest"); m.add_argument("--no-hashes", action="store_true")
-    for name in ("cask", "scoop"):
+    for name in ("cask", "scoop", "summary", "oneline"):
         sub.add_parser(name).add_argument("manifest")
     args = ap.parse_args()
 
@@ -287,7 +302,8 @@ def main():
         json.dump(doc, sys.stdout, indent=1); sys.stdout.write("\n")
         return
     doc = json.load(open(args.manifest, encoding="utf-8"))
-    sys.stdout.write(render_cask(doc) if args.cmd == "cask" else render_scoop(doc))
+    render = {"cask": render_cask, "scoop": render_scoop, "summary": render_summary, "oneline": render_oneline}
+    sys.stdout.write(render[args.cmd](doc))
 
 
 if __name__ == "__main__":

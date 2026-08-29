@@ -72,7 +72,7 @@ jobs:
           {
             echo "### Newest build per format"
             echo '```'
-            python3 -c 'import json;[print(f"{k:10s} {v[\"version\"]}  {v[\"uploaded\"]}") for k,v in json.load(open("nightly.json"))["formats"].items()]'
+            python3 tools/nightly_manifest.py summary nightly.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -100,7 +100,7 @@ jobs:
           fi
           git config --global user.name  "ansel-nightly[bot]"
           git config --global user.email "nightly@ansel.photos"
-          summary=$(python3 -c 'import json;d=json.load(open("nightly.json"))["formats"];print(", ".join(f"{k} {v[\"version\"]}" for k,v in d.items()))')
+          summary=$(python3 tools/nightly_manifest.py oneline nightly.json)
 
           publish() {  # repo  src  dest  message
             local repo=$1 src=$2 dest=$3 msg=$4 dir
