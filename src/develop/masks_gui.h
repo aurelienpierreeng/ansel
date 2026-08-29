@@ -595,6 +595,27 @@ void dt_masks_group_ungroup(dt_develop_t *dev, dt_masks_form_t *dest_grp, dt_mas
 void dt_masks_group_update_name(dt_iop_module_t *module);
 dt_masks_form_group_t *dt_masks_group_add_form(dt_develop_t *dev, dt_masks_form_t *grp, dt_masks_form_t *form);
 
+/** Add a shape to a group with an EXPLICIT combination state and opacity, rather than the
+ * defaults dt_masks_group_add_form() applies (SHOW|USE|UNION at the configured opacity).
+ *
+ * This exists because three call sites wanted their own state and opacity and therefore built the
+ * membership row by hand -- malloc, four assignments, g_list_append -- which silently skipped both
+ * of the things the real adder does: the self-inclusion guard that stops a group containing
+ * itself, and the gravity-centre refresh the group needs before anything hit-tests it.
+ *
+ * Takes the group by pointer, not by id, because the callers legitimately build into a group that
+ * is not in dev->forms yet: it is created, filled, and only then published. Copy-on-write is the
+ * caller's business here for the same reason -- an unpublished group is referenced by nobody, and
+ * a published one must be touched before this is called, exactly as for dt_masks_group_add_form().
+ *
+ * @param parentid the row's AUTHORED origin, which is NOT always the group holding it: two
+ *        callers assemble a temporary group for an ungroup/regroup round trip and keep each row
+ *        pointing at the group it really came from. Pass grp->formid unless you mean otherwise.
+ * @return the new row, or NULL if the group is not a group or the add would nest it in itself. */
+dt_masks_form_group_t *dt_masks_group_add_form_with_state(dt_develop_t *dev, dt_masks_form_t *grp,
+                                                          dt_masks_form_t *form, int parentid,
+                                                          dt_masks_state_t state, float opacity);
+
 /** utils functions */
 int dt_masks_point_in_form_exact(const float *pts, int num_pts, const float *points, int points_start, int points_count);
 
