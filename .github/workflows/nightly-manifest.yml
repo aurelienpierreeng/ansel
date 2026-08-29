@@ -86,10 +86,11 @@ jobs:
             ansel-nightly.json
           retention-days: 30
 
-      # One shallow clone, one file, one commit, per downstream repository. [skip ci]
-      # on the website because Hugo rebuilds on its own schedule anyway (*/4 h) and a
-      # data-only change is not worth a full build queue entry -- remove it if the
-      # download page must follow within minutes rather than hours.
+      # One shallow clone, one file, one commit, per downstream repository. The website
+      # push deliberately does NOT carry [skip ci]: the data file is what the download
+      # buttons render from, so its commit is exactly the one that must rebuild the
+      # site. With [skip ci] the first real manifest sat unrendered until the next
+      # 4-hourly scheduled build, and the page kept showing the retired v0.0.0 assets.
       - name: Publish downstream
         env:
           TOKEN: ${{ secrets.NIGHTLY_PUBLISH_TOKEN }}
@@ -129,6 +130,6 @@ jobs:
             rm -rf "${dir}"
           }
 
-          publish ansel-website  nightly.json        data/nightly.json               "nightly: ${summary} [skip ci]"
+          publish ansel-website  nightly.json        data/nightly.json               "nightly: ${summary}"
           publish homebrew-ansel ansel-nightly.rb    Casks/ansel-nightly.rb          "ansel-nightly: ${summary}"
           publish scoop-ansel    ansel-nightly.json  bucket/ansel-nightly.json       "ansel-nightly: ${summary}"
