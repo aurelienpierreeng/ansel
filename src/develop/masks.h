@@ -84,7 +84,7 @@ GList dev->forms
   |        | dt_masks_form_t  --------------------> dt_masks_type_t type; const dt_masks_functions_t *functions;
   |              |                                   float source[2]; char name[128]; int formid; int version;
   |              { GList *points;
-  |                  | dt_masks_node_brush_t ----->  float node[2]; float pressure; float hardness; float size;
+  |                  | dt_masks_node_brush_t ----->  float node[2]; float pressure; float fading; float size;
   |                  |                                dt_masks_pressure_sensitivity_t pressure_sensitivity;
   |                  | dt_masks_node_brush_t -----> ...
   |                  |
@@ -170,8 +170,8 @@ typedef enum dt_masks_gradient_states_t
 typedef enum dt_masks_pressure_sensitivity_t
 {
   DT_MASKS_PRESSURE_OFF = 0,
-  DT_MASKS_PRESSURE_HARDNESS_REL = 1,
-  DT_MASKS_PRESSURE_HARDNESS_ABS = 2,
+  DT_MASKS_PRESSURE_FADING_REL = 1,
+  DT_MASKS_PRESSURE_FADING_ABS = 2,
   DT_MASKS_PRESSURE_OPACITY_REL = 3,
   DT_MASKS_PRESSURE_OPACITY_ABS = 4,
   DT_MASKS_PRESSURE_BRUSHSIZE_REL = 5
@@ -226,7 +226,7 @@ typedef struct dt_masks_node_brush_t
   float ctrl2[2];
   float border[2];
   float density;
-  float hardness;
+  float fading;
   dt_masks_points_states_t state;
 } dt_masks_node_brush_t;
 

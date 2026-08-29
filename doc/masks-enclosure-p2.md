@@ -236,7 +236,7 @@ assumptions — took for granted. They are the reason to read this document befo
    against retouch *and* spots together.
 4. **The type-token set feeds persisted conf keys.** `_get_mask_type()` feeds
    `dt_masks_get_set_conf_value()`, which builds `plugins/darkroom/<plugin>/<type>/<feature>` — keys
-   declared in `data/anselconfig.xml.in` as `.../polygon/hardness` etc. So the token is **polygon**,
+   declared in `data/anselconfig.xml.in` as `.../polygon/fading` etc. So the token is **polygon**,
    never supervisor's "path": adopting supervisor's spelling in a unified function would silently
    repoint every polygon shape at a non-confgen key defaulting to 0.
 5. **Two ratchet mechanics decide how the API is *consumed*.** Section 9 counts `->` only, so a

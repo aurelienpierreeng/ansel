@@ -49,8 +49,8 @@
 #include "widgets/accelerators.h"
 
 
-#define HARDNESS_MIN 0.0005f
-#define HARDNESS_MAX 1.0f
+#define FADING_MIN 0.0005f
+#define FADING_MAX 1.0f
 
 #define BORDER_MIN 0.00005f
 #define BORDER_MAX 0.5f
@@ -546,17 +546,17 @@ static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t 
                                              _ellipse_distance_cb, _ellipse_post_select_cb, NULL);
 }
 
-static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
+static int _init_fading(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  dt_masks_get_set_conf_value_with_toast(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX,
-                                         increment, flow, _("Hardness: %3.2f%%"), 100.0f);
+  dt_masks_get_set_conf_value_with_toast(form, "border", amount, FADING_MIN, FADING_MAX,
+                                         increment, flow, _("Fading: %3.2f%%"), 100.0f);
   return 1;
 }
 
 static int _init_size(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_radius_a = dt_masks_get_set_conf_value(form, "radius_a", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
-  float mask_radius_b = dt_masks_get_set_conf_value(form, "radius_b", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
+  float mask_radius_a = dt_masks_get_set_conf_value(form, "radius_a", amount, FADING_MIN, FADING_MAX, increment, flow);
+  float mask_radius_b = dt_masks_get_set_conf_value(form, "radius_b", amount, FADING_MIN, FADING_MAX, increment, flow);
   dt_toast_log(_("Size: %3.2f%%"), fmaxf(mask_radius_a, mask_radius_b) * 2.f * 100.f);
   return 1;
 }
@@ -585,7 +585,7 @@ static float _ellipse_get_interaction_value(const dt_masks_form_t *form, dt_mask
   {
     case DT_MASKS_INTERACTION_SIZE:
       return fmaxf(ellipse->radius[0], ellipse->radius[1]);
-    case DT_MASKS_INTERACTION_HARDNESS:
+    case DT_MASKS_INTERACTION_FADING:
       return ellipse->border;
     case DT_MASKS_INTERACTION_ROTATION:
       return ellipse->rotation;
@@ -605,8 +605,8 @@ static gboolean _ellipse_get_gravity_center(dt_develop_t *dev, const dt_masks_fo
   return TRUE;
 }
 
-static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
-                            int index, const float amount, const dt_masks_increment_t increment, const int flow);
+static int _change_fading(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
+                          int index, const float amount, const dt_masks_increment_t increment, const int flow);
 static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
                         int index, const float amount, const dt_masks_increment_t increment, const int flow);
 static int _change_rotation(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
@@ -627,8 +627,8 @@ static float _ellipse_set_interaction_value(dt_masks_form_t *form, dt_masks_inte
     case DT_MASKS_INTERACTION_SIZE:
       if(!_change_size(form, gui, module, index, value, increment, flow)) return NAN;
       return _ellipse_get_interaction_value(form, interaction);
-    case DT_MASKS_INTERACTION_HARDNESS:
-      if(!_change_hardness(form, gui, module, index, value, increment, flow)) return NAN;
+    case DT_MASKS_INTERACTION_FADING:
+      if(!_change_fading(form, gui, module, index, value, increment, flow)) return NAN;
       return _ellipse_get_interaction_value(form, interaction);
     case DT_MASKS_INTERACTION_ROTATION:
       if(!_change_rotation(form, gui, module, index, value, increment, flow)) return NAN;
@@ -638,16 +638,16 @@ static float _ellipse_set_interaction_value(dt_masks_form_t *form, dt_masks_inte
   }
 }
 
-static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
+static int _change_fading(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)(form->points)->data;
   if(IS_NULL_PTR(ellipse)) return 0;
 
   ellipse->border = CLAMPF(dt_masks_apply_increment(ellipse->border, amount, increment, flow),
-                           HARDNESS_MIN, HARDNESS_MAX);
+                           FADING_MIN, FADING_MAX);
 
-  _init_hardness(form, amount, increment, flow);
+  _init_fading(form, amount, increment, flow);
 
   // we recreate the form points
   dt_masks_gui_form_create(form, gui, index, module);
@@ -719,8 +719,8 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, double
         return _init_rotation(form, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
       case DT_MASKS_INTERACTION_OPACITY:
         return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
-      case DT_MASKS_INTERACTION_HARDNESS:
-        return _init_hardness(form, (up ? 1.03f : 0.97f), DT_MASKS_INCREMENT_SCALE, flow);
+      case DT_MASKS_INTERACTION_FADING:
+        return _init_fading(form, (up ? 1.03f : 0.97f), DT_MASKS_INCREMENT_SCALE, flow);
       case DT_MASKS_INTERACTION_SIZE:
         return _init_size(form, (up ? 1.03f : 0.97f), DT_MASKS_INCREMENT_SCALE, flow);
       default:
@@ -735,8 +735,8 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, double
         return _change_rotation(form, gui, module, index, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
       case DT_MASKS_INTERACTION_OPACITY:
         return dt_masks_form_change_opacity(gui->dev, form, parentid, up, flow);
-      case DT_MASKS_INTERACTION_HARDNESS:
-        return _change_hardness(form, gui, module, index, (up ? 1.02f : 0.98f), DT_MASKS_INCREMENT_SCALE, flow);
+      case DT_MASKS_INTERACTION_FADING:
+        return _change_fading(form, gui, module, index, (up ? 1.02f : 0.98f), DT_MASKS_INCREMENT_SCALE, flow);
       case DT_MASKS_INTERACTION_SIZE:
         return _change_size(form, gui, module, index, (up ? 1.02f : 0.98f), DT_MASKS_INCREMENT_SCALE, flow);
       default:
@@ -1702,7 +1702,7 @@ static void _ellipse_set_hint_message(const dt_masks_form_gui_t *const gui, cons
   else if(gui->border_selected)
     g_strlcat(msgbuf, _("<b>Rotate</b>: Drag"), msgbuf_len);
   else if(gui->form_selected)
-    g_strlcat(msgbuf, _("<b>Move</b>: Drag, <b>Hardness mode</b>: Shift+Click"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Move</b>: Drag, <b>Fading mode</b>: Shift+Click"), msgbuf_len);
 }
 
 static void _ellipse_sanitize_config(dt_masks_type_t type)

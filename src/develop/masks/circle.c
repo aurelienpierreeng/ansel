@@ -47,8 +47,8 @@
 #include "math/openmp_maths.h"
 #include "widgets/accelerators.h"
 
-#define HARDNESS_MIN 0.0005f
-#define HARDNESS_MAX 1.0f
+#define FADING_MIN 0.0005f
+#define FADING_MAX 1.0f
 
 #define BORDER_MIN 0.00005f
 #define BORDER_MAX 0.5f
@@ -184,17 +184,17 @@ static int _circle_get_creation_preview(dt_masks_form_t *form, dt_masks_form_gui
   return err;
 }
 
-static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
+static int _init_fading(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  dt_masks_get_set_conf_value_with_toast(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX,
-                                         increment, flow, _("Hardness: %3.2f%%"), 100.0f);
+  dt_masks_get_set_conf_value_with_toast(form, "border", amount, FADING_MIN, FADING_MAX,
+                                         increment, flow, _("Fading: %3.2f%%"), 100.0f);
   return 1;
 }
 
 static int _init_size(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
 
-  dt_masks_get_set_conf_value_with_toast(form, "size", amount, HARDNESS_MIN, HARDNESS_MAX,
+  dt_masks_get_set_conf_value_with_toast(form, "size", amount, FADING_MIN, FADING_MAX,
                                          increment, flow, _("Size: %3.2f%%"), 2.f * 100.f);
   return 1;
 }
@@ -216,7 +216,7 @@ static float _circle_get_interaction_value(const dt_masks_form_t *form, dt_masks
   {
     case DT_MASKS_INTERACTION_SIZE:
       return circle->radius;
-    case DT_MASKS_INTERACTION_HARDNESS:
+    case DT_MASKS_INTERACTION_FADING:
       return circle->border;
     default:
       return NAN;
@@ -234,8 +234,8 @@ static gboolean _circle_get_gravity_center(dt_develop_t *dev, const dt_masks_for
   return TRUE;
 }
 
-static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
-                            int index, const float amount, const dt_masks_increment_t increment, const int flow);
+static int _change_fading(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
+                          int index, const float amount, const dt_masks_increment_t increment, const int flow);
 static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
                         int index, const float amount, const dt_masks_increment_t increment, const int flow);
 
@@ -254,24 +254,24 @@ static float _circle_set_interaction_value(dt_masks_form_t *form, dt_masks_inter
     case DT_MASKS_INTERACTION_SIZE:
       if(!_change_size(form, gui, module, index, value, increment, flow)) return NAN;
       return _circle_get_interaction_value(form, interaction);
-    case DT_MASKS_INTERACTION_HARDNESS:
-      if(!_change_hardness(form, gui, module, index, value, increment, flow)) return NAN;
+    case DT_MASKS_INTERACTION_FADING:
+      if(!_change_fading(form, gui, module, index, value, increment, flow)) return NAN;
       return _circle_get_interaction_value(form, interaction);
     default:
       return NAN;
   }
 }
 
-static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
+static int _change_fading(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(form->points)->data;
   if(IS_NULL_PTR(circle)) return 0;
 
   circle->border = CLAMPF(dt_masks_apply_increment(circle->border, amount, increment, flow),
-                          HARDNESS_MIN, HARDNESS_MAX);
+                          FADING_MIN, FADING_MAX);
 
-  _init_hardness(form, amount, increment, flow);
+  _init_fading(form, amount, increment, flow);
 
   // we recreate the form points
   dt_masks_gui_form_create(form, gui, index, module);
@@ -326,8 +326,8 @@ static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, double 
     {
       case DT_MASKS_INTERACTION_OPACITY:
         return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
-      case DT_MASKS_INTERACTION_HARDNESS:
-        return _init_hardness(form, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
+      case DT_MASKS_INTERACTION_FADING:
+        return _init_fading(form, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
       case DT_MASKS_INTERACTION_SIZE:
         return _init_size(form, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
       default:
@@ -340,8 +340,8 @@ static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, double 
     {
       case DT_MASKS_INTERACTION_OPACITY:
         return dt_masks_form_change_opacity(gui->dev, form, parentid, up, flow);
-      case DT_MASKS_INTERACTION_HARDNESS:
-        return _change_hardness(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
+      case DT_MASKS_INTERACTION_FADING:
+        return _change_fading(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
       case DT_MASKS_INTERACTION_SIZE:
         return _change_size(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
       default:

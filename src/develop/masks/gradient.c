@@ -404,7 +404,7 @@ static float _gradient_get_interaction_value(const dt_masks_form_t *form, dt_mas
   {
     case DT_MASKS_INTERACTION_SIZE:
       return gradient->extent;
-    case DT_MASKS_INTERACTION_HARDNESS:
+    case DT_MASKS_INTERACTION_FADING:
       return gradient->curvature;
     case DT_MASKS_INTERACTION_ROTATION:
       return gradient->rotation;
@@ -446,7 +446,7 @@ static float _gradient_set_interaction_value(dt_masks_form_t *form, dt_masks_int
     case DT_MASKS_INTERACTION_SIZE:
       if(!_change_extent(form, gui, module, index, value, increment, flow)) return NAN;
       return _gradient_get_interaction_value(form, interaction);
-    case DT_MASKS_INTERACTION_HARDNESS:
+    case DT_MASKS_INTERACTION_FADING:
       if(!_change_curvature(form, gui, module, index, value, increment, flow)) return NAN;
       return _gradient_get_interaction_value(form, interaction);
     case DT_MASKS_INTERACTION_ROTATION:
@@ -535,7 +535,7 @@ static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, doubl
   
   /* `state` is the caller's raw key state, kept for the callback signature: the property to
    * act on was already resolved from it by dt_masks_scroll_get_interaction(). A gradient
-   * spells the two shared properties its own way -- SIZE is the fade extent, HARDNESS is the
+   * spells the two shared properties its own way -- SIZE is the fade extent, FADING is the
    * curvature -- which is also how the context menu names them (masks_gui.c). */
   if(gui->creation)
   {
@@ -545,7 +545,7 @@ static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, doubl
         return _init_rotation(form, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
       case DT_MASKS_INTERACTION_OPACITY:
         return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
-      case DT_MASKS_INTERACTION_HARDNESS:
+      case DT_MASKS_INTERACTION_FADING:
         return _init_curvature(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
       case DT_MASKS_INTERACTION_SIZE:
         return _init_extent(form, (up ? +1.02f : 0.98f), DT_MASKS_INCREMENT_SCALE, flow);
@@ -561,7 +561,7 @@ static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, doubl
         return _change_rotation(form, gui, module, index, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
       case DT_MASKS_INTERACTION_OPACITY:
         return dt_masks_form_change_opacity(gui->dev, form, parentid, up, flow);
-      case DT_MASKS_INTERACTION_HARDNESS:
+      case DT_MASKS_INTERACTION_FADING:
         return _change_curvature(form, gui, module, index, (up ? +0.02f : -0.02f), DT_MASKS_INCREMENT_OFFSET, flow);
       case DT_MASKS_INTERACTION_SIZE:
         return _change_extent(form, gui, module, index, (up ? 1.02f : 0.98f), DT_MASKS_INCREMENT_SCALE, flow);

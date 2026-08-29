@@ -101,7 +101,7 @@ guint dt_masks_group_copy_members(const struct dt_masks_form_t *group,
  * came from may be gone.
  *
  * THESE TOKENS ARE PERSISTED. They build the conf keys plugins/darkroom/<plugin>/<type>/<feature>
- * declared in data/anselconfig.xml.in (".../polygon/hardness" and friends), so the polygon token
+ * declared in data/anselconfig.xml.in (".../polygon/fading" and friends), so the polygon token
  * is "polygon" and can never become "path": a shape reading a key that is not in confgen gets 0,
  * which would silently reset the user's setting. dt_masks_type_t is a bit field, so first match
  * wins and the order below is load-bearing.
