@@ -40,6 +40,7 @@
 #include "develop/masks/masks_functions.h"
 #include "develop/masks/masks_touched.h"
 #include "develop/masks_group.h"
+#include "develop/develop.h"       // dt_develop_t, for the write-API fixture
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -330,6 +331,127 @@ static void _type_tokens_are_the_persisted_conf_key_spellings(void **state)
   assert_string_equal(dt_masks_type_name(DT_MASKS_CIRCLE | DT_MASKS_CLONE), "circle");
 }
 
+
+/* ---------------------------------------------------------------------------------------
+ * The write side: dt_masks_group_set_member_operation().
+ *
+ * The fixture is a one-group dev on the stack. dt_masks_cow_touch() returns immediately when a
+ * form's refcount is 1 -- no lock, no list walk -- so a freshly built form exercises the setter
+ * end to end without needing a live darkroom. That is also the case every caller hits when
+ * nothing else references the group.
+ * ------------------------------------------------------------------------------------- */
+
+typedef struct
+{
+  dt_develop_t dev;
+  dt_masks_form_t group;
+  dt_masks_form_group_t rows[2];
+} _write_fixture_t;
+
+static void _write_fixture_init(_write_fixture_t *f)
+{
+  memset(f, 0, sizeof(*f));
+  dt_pthread_rwlock_init(&f->dev.masks_mutex, NULL);
+
+  f->rows[0] = (dt_masks_form_group_t){ .formid = 11, .parentid = 7,
+                                        .state = DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION,
+                                        .opacity = 0.5f };
+  f->rows[1] = (dt_masks_form_group_t){ .formid = 22, .parentid = 7,
+                                        .state = DT_MASKS_STATE_USE | DT_MASKS_STATE_INTERSECTION,
+                                        .opacity = 1.0f };
+  f->group.type = DT_MASKS_GROUP;
+  f->group.formid = 7;
+  /* Sole owner: dt_masks_cow_touch() returns the form unchanged at refcount 1, without taking a
+   * lock or walking dev->forms, so the setter runs end to end on a stack fixture. */
+  dt_atomic_set_int(&f->group.refcount, 1);
+  for(int i = 0; i < 2; i++) f->group.points = g_list_append(f->group.points, &f->rows[i]);
+  f->dev.forms = g_list_append(NULL, &f->group);
+}
+
+static void _write_fixture_cleanup(_write_fixture_t *f)
+{
+  g_list_free(f->group.points);
+  g_list_free(f->dev.forms);
+  dt_pthread_rwlock_destroy(&f->dev.masks_mutex);
+}
+
+static void _set_operation_replaces_the_combine_op(void **state)
+{
+  (void)state;
+  _write_fixture_t f;
+  _write_fixture_init(&f);
+
+  dt_masks_member_t m;
+  assert_int_equal(dt_masks_group_set_member_operation(&f.dev, 7, 22, DT_MASKS_STATE_UNION, &m),
+                   DT_MASKS_OK);
+  // the OLD operator is gone, not merely joined by the new one
+  assert_int_equal(f.rows[1].state & DT_MASKS_STATE_INTERSECTION, 0);
+  assert_true((f.rows[1].state & DT_MASKS_STATE_UNION) != 0);
+  // and everything that is not a combine operator survives
+  assert_true((f.rows[1].state & DT_MASKS_STATE_USE) != 0);
+  // the caller gets the row back, index included, without ever holding a pointer into the group
+  assert_int_equal(m.formid, 22);
+  assert_int_equal(m.index, 1);
+  assert_true(m.opacity == 1.0f);
+
+  _write_fixture_cleanup(&f);
+}
+
+static void _setting_the_state_it_already_has_is_unchanged(void **state)
+{
+  (void)state;
+  _write_fixture_t f;
+  _write_fixture_init(&f);
+
+  // row 0 is already UNION. A caller must be able to tell "nothing happened" from "done", or a
+  // no-op click writes an undo step and a database row.
+  assert_int_equal(dt_masks_group_set_member_operation(&f.dev, 7, 11, DT_MASKS_STATE_UNION, NULL),
+                   DT_MASKS_UNCHANGED);
+
+  _write_fixture_cleanup(&f);
+}
+
+static void _inverse_toggles_and_leaves_the_operator_alone(void **state)
+{
+  (void)state;
+  _write_fixture_t f;
+  _write_fixture_init(&f);
+
+  const int before = f.rows[0].state;
+  assert_int_equal(dt_masks_group_set_member_operation(&f.dev, 7, 11, DT_MASKS_STATE_INVERSE, NULL),
+                   DT_MASKS_OK);
+  assert_true((f.rows[0].state & DT_MASKS_STATE_INVERSE) != 0);
+  assert_true((f.rows[0].state & DT_MASKS_STATE_UNION) != 0);   // operator untouched
+
+  // toggling back restores exactly the previous state -- it is a toggle, not a set
+  assert_int_equal(dt_masks_group_set_member_operation(&f.dev, 7, 11, DT_MASKS_STATE_INVERSE, NULL),
+                   DT_MASKS_OK);
+  assert_int_equal(f.rows[0].state, before);
+
+  _write_fixture_cleanup(&f);
+}
+
+static void _set_operation_rejects_what_it_cannot_do(void **state)
+{
+  (void)state;
+  _write_fixture_t f;
+  _write_fixture_init(&f);
+
+  assert_int_equal(dt_masks_group_set_member_operation(&f.dev, 999, 11, DT_MASKS_STATE_UNION, NULL),
+                   DT_MASKS_NOT_FOUND);                       // no such group
+  assert_int_equal(dt_masks_group_set_member_operation(&f.dev, 7, 999, DT_MASKS_STATE_UNION, NULL),
+                   DT_MASKS_NOT_FOUND);                       // no such member
+  assert_int_equal(dt_masks_group_set_member_operation(&f.dev, 7, 11, DT_MASKS_STATE_USE, NULL),
+                   DT_MASKS_INVALID);                         // not an operator at all
+  assert_int_equal(dt_masks_group_set_member_operation(NULL, 7, 11, DT_MASKS_STATE_UNION, NULL),
+                   DT_MASKS_INVALID);
+
+  // a refused call changes nothing
+  assert_int_equal(f.rows[0].state, DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION);
+
+  _write_fixture_cleanup(&f);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -343,6 +465,10 @@ int main(void)
     cmocka_unit_test(_copy_members_preserves_order_and_reports_the_total),
     cmocka_unit_test(_copy_members_refuses_anything_that_is_not_a_group),
     cmocka_unit_test(_type_tokens_are_the_persisted_conf_key_spellings),
+    cmocka_unit_test(_set_operation_replaces_the_combine_op),
+    cmocka_unit_test(_setting_the_state_it_already_has_is_unchanged),
+    cmocka_unit_test(_inverse_toggles_and_leaves_the_operator_alone),
+    cmocka_unit_test(_set_operation_rejects_what_it_cannot_do),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);
