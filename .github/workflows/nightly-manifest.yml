@@ -151,22 +151,30 @@ jobs:
             rm -rf "${dir}"
           }
 
+          publish ansel-website  nightly.json        data/nightly.json               "nightly: ${summary}"
+
           # Download statistics: one dated snapshot of every lifetime counter (GitHub
           # asset download_count, Docker Hub pull_count) appended to the series the
           # website already holds. Counters vanish with the assets the prune deletes;
-          # the series is what keeps the history. Best effort: a failure here must not
-          # stop the manifest from publishing.
+          # the series is what keeps the history.
+          #
+          # Strictly after the manifest publish, and every command guarded: this shell
+          # runs under `set -e`, so an unguarded failure here would have aborted the
+          # step before the manifest was published (Sentry's review caught the
+          # unguarded `append`). Whatever fails, publish() skips an empty file.
+          : > download-stats.json
           if python3 tools/download_stats.py snapshot > today.json 2>stats.err; then
             curl -fsSL --max-time 30 -o series.json \
               "https://raw.githubusercontent.com/aurelienpierreeng/ansel-website/master/data/download-stats.json" \
               || echo '[]' > series.json
-            python3 tools/download_stats.py append series.json today.json > download-stats.json
-            echo "download stats: $(python3 -c 'import json;print(len(json.load(open("download-stats.json"))))') day(s) on record"
+            if python3 tools/download_stats.py append series.json today.json > download-stats.json 2>stats.err; then
+              echo "download stats: $(python3 -c 'import json;print(len(json.load(open("download-stats.json"))))' 2>/dev/null || echo '?') day(s) on record"
+            else
+              echo "::warning::download stats append failed: $(cat stats.err)"; : > download-stats.json
+            fi
           else
-            echo "::warning::download stats snapshot failed: $(cat stats.err)"; : > download-stats.json
+            echo "::warning::download stats snapshot failed: $(cat stats.err)"
           fi
-
-          publish ansel-website  nightly.json        data/nightly.json               "nightly: ${summary}"
           publish ansel-website  download-stats.json data/download-stats.json        "download stats: $(date -u +%Y-%m-%d)"
           publish homebrew-ansel ansel-nightly.rb    Casks/ansel-nightly.rb          "ansel-nightly: ${summary}"
           publish scoop-ansel    ansel-nightly.json  bucket/ansel-nightly.json       "ansel-nightly: ${summary}"
