@@ -65,6 +65,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"
+#include "develop/masks_group.h"   // dt_masks_group_set_member_operation()
 #include "develop/masks_gui.h"
 #include "widgets/button.h"
 #include "widgets/gradientslider.h"
@@ -2088,28 +2089,11 @@ static void _blendop_masks_group_operation_callback(GtkWidget *menu_item, gpoint
   const int parentid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-parentid"));
   const dt_masks_state_t state = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-state"));
 
-  // dt_masks_group_entry_apply_operation() below mutates the group_entry in place, memory owned by the parent
-  // group -- touch the parent before resolving the entry, or a shared parent's group_entry
-  // gets mutated behind the back of a snapshot that still references it.
-  dt_masks_form_t *parent_form = dt_masks_get_from_id(module->dev, parentid);
-  if(IS_NULL_PTR(parent_form) || !(parent_form->type & DT_MASKS_GROUP)) return;
-  parent_form = dt_masks_cow_touch(module->dev, parent_form);
-
-  dt_masks_form_group_t *group_entry = NULL;
-  for(GList *group_node = parent_form->points; group_node; group_node = g_list_next(group_node))
-  {
-    dt_masks_form_group_t *entry = (dt_masks_form_group_t *)group_node->data;
-    if(entry && entry->formid == formid)
-    {
-      group_entry = entry;
-      break;
-    }
-  }
-  if(IS_NULL_PTR(group_entry)) return;
-
-  const int old_state = group_entry->state;
-  dt_masks_group_entry_apply_operation(group_entry, state);
-  if(group_entry->state == old_state) return;
+  /* The touch-then-resolve dance this used to spell out by hand -- and which every other caller
+   * of it got wrong -- now lives inside the module, where it cannot be omitted. UNCHANGED means
+   * the row already had this operator, so there is nothing to commit. */
+  if(dt_masks_group_set_member_operation(module->dev, parentid, formid, state, NULL) != DT_MASKS_OK)
+    return;
 
   _blendop_masks_apply_and_commit(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, formid, parentid,

@@ -111,6 +111,30 @@ guint dt_masks_group_copy_members(const struct dt_masks_form_t *group,
  */
 const char *dt_masks_type_name(dt_masks_type_t type);
 
+/**
+ * @brief Set a group member's combination operator, or toggle its inversion.
+ *
+ * Takes the live list, and owns the copy-on-write itself -- which is the entire reason this
+ * exists. A group is refcounted and shared with every history snapshot that references it, so a
+ * caller must touch the group before mutating a row. Doing that correctly ALSO means the caller
+ * may not resolve the row first: cloning a group clones its membership blocks too, so an entry
+ * pointer taken before the touch belongs to the abandoned copy and the mutation lands nowhere.
+ * An id-keyed signature is the only shape that cannot get this wrong, which is why it takes ids
+ * and hands the result back rather than letting anyone hold a row.
+ *
+ * @param operation DT_MASKS_STATE_INVERSE toggles inversion; any of UNION / INTERSECTION /
+ *                  DIFFERENCE / EXCLUSION replaces the combination operator. Anything else is
+ *                  INVALID.
+ * @param out (may be NULL) receives the row AFTER the change, including its index -- the caller
+ *            usually needs both to refresh its own view, and this is the only pointer-free way to
+ *            get them.
+ * @return OK when the row changed, UNCHANGED when it already held that state (the caller must
+ *         then skip its history commit, or every no-op click writes an undo step),
+ *         NOT_FOUND for no such group or no such member, INVALID for a bad operation.
+ */
+dt_masks_result_t dt_masks_group_set_member_operation(struct dt_develop_t *dev, int group_id, int formid,
+                                                      dt_masks_state_t operation, dt_masks_member_t *out);
+
 #ifdef __cplusplus
 }
 #endif
