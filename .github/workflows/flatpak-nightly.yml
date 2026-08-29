@@ -52,6 +52,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder jq
 
+      # flatpak-builder re-downloads every dependency tarball on every run, which is
+      # rude to the hosts and eventually gets refused: a run was turned away with
+      # `module colord: The requested URL returned error: 418` from freedesktop.org,
+      # while the same URL served a plain client 200 at the same moment. Keyed on the
+      # manifest, so changing a source's url or sha256 fetches it again.
+      - name: Cache downloaded sources
+        uses: actions/cache@v4
+        with:
+          path: .flatpak-builder/downloads
+          key: flatpak-downloads-${{ hashFiles('packaging/flatpak/photos.ansel.ansel.json') }}
+          restore-keys: |
+            flatpak-downloads-
+
       - name: Build Flatpak
         run: packaging/flatpak/build-flatpak.sh
 
