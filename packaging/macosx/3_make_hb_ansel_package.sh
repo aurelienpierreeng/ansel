@@ -299,7 +299,7 @@ sed -i -e "s#$homebrewHome/lib/gdk-pixbuf-2.0/2.10.0/loaders#@executable_path/..
 mv "$loadersCacheFile" "$dtResourcesDir"/etc/gtk-3.0/
 
 # Install homebrew dependencies of lib subdirectories
-dtLibFiles=$(find -E "$dtResourcesDir"/lib/*/* -regex '.*\.(so|dylib)')
+dtLibFiles=$(find -E "$dtResourcesDir"/lib/* -regex '.*\.(so|dylib)')
 for dtLibFile in $dtLibFiles; do
     install_dependencies "$dtLibFile"
 done
