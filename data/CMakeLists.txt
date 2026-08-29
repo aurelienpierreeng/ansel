@@ -136,12 +136,16 @@ install(FILES noiseprofiles.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel 
 # fetched at configure time from its models/ directory, verified against the
 # sha256 in its manifest.json. An upstream override changes the manifest hash,
 # so a stale cached file fails verification and is re-downloaded — nightly
-# builds always bundle the current models. -DFETCH_NN_MODELS=OFF for offline
-# builds: the rawdenoiseai module hides itself when its model is absent.
+# builds always bundle the current models.
 #
+# What is installed is whatever ends up in NN_MODELS_DIR, which is the fetch's
+# destination and is also settable: point it at models a packager placed there and
+# set -DFETCH_NN_MODELS=OFF to build with no network. The rawdenoiseai module hides
+# itself when its model is absent, so an empty directory costs a feature, not a build.
 option(FETCH_NN_MODELS "Download neural denoise models at configure time" ON)
 set(NN_MODELS_URL "https://raw.githubusercontent.com/aurelienpierreeng/ansel-denoise/master/models")
-set(NN_MODELS_DIR "${CMAKE_CURRENT_BINARY_DIR}/nn-models")
+set(NN_MODELS_DIR "${CMAKE_CURRENT_BINARY_DIR}/nn-models" CACHE PATH
+    "Directory holding the neural denoise models (*.anselnn)")
 if(FETCH_NN_MODELS)
   file(DOWNLOAD "${NN_MODELS_URL}/manifest.json" "${NN_MODELS_DIR}/manifest.json"
        TIMEOUT 30 STATUS _nn_status)
@@ -158,20 +162,26 @@ if(FETCH_NN_MODELS)
         file(DOWNLOAD "${NN_MODELS_URL}/${_nn_name}" "${NN_MODELS_DIR}/${_nn_name}"
              TIMEOUT 600 EXPECTED_HASH SHA256=${_nn_sha} STATUS _nn_dl)
         list(GET _nn_dl 0 _nn_dl_code)
-        if(_nn_dl_code EQUAL 0)
-          message(STATUS "Neural denoise model ready: ${_nn_name}")
-          install(FILES "${NN_MODELS_DIR}/${_nn_name}"
-                  DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
-        else()
-          message(WARNING "Could not fetch neural model ${_nn_name}: ${_nn_dl} — "
-                          "it will be missing from this build")
+        if(NOT _nn_dl_code EQUAL 0)
+          message(WARNING "Could not fetch neural model ${_nn_name}: ${_nn_dl}")
         endif()
       endforeach()
     endif()
   else()
     message(WARNING "Could not fetch neural models manifest (offline?): ${_nn_status} — "
-                    "neural denoise models will be missing from this build")
+                    "falling back to whatever is already in ${NN_MODELS_DIR}")
   endif()
+endif()
+
+file(GLOB NN_MODELS "${NN_MODELS_DIR}/*.anselnn")
+if(NN_MODELS)
+  list(LENGTH NN_MODELS _nn_installed)
+  message(STATUS "Neural denoise models: ${_nn_installed} from ${NN_MODELS_DIR}")
+  install(FILES ${NN_MODELS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel
+          COMPONENT DTApplication)
+else()
+  message(WARNING "Neural denoise models: none in ${NN_MODELS_DIR} — the neural raw "
+                  "denoiser will hide itself in this build")
 endif()
 # Local developer override: a model dropped in data/ wins over the fetched one
 # (same destination filename, installed last).
@@ -269,93 +279,109 @@ install(FILES ansel.bash DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONEN
 #
 # LensSerious reads calibrations from SQLite, not from XML: parsing the 8.4 MB upstream
 # database costs ~100 ms per process and is the single largest term in resolving a lens
-# (101.7 ms against 0.35 ms measured end to end). The conversion is done ONCE, here, at
-# build time -- which is why liblensfun is a BUILD dependency of this file and not a
-# runtime dependency of the application.
+# (101.7 ms against 0.35 ms measured end to end). The conversion is done ONCE -- but not
+# here any more.
 #
-# The XML is FETCHED rather than taken from whatever the build machine has installed, for
-# two reasons. It is what upstream's own lensfun-update-data pulls, so a build carries the
-# current calibrations rather than the packager's snapshot. And it is what makes this work
-# at all on Windows: the msys2 runners have liblensfun but no data package, so importing
-# from "the system database" found nothing and failed the build.
+# It used to happen at configure time: download lensfun's rolling version_1.tar.bz2 and run
+# the importer over whatever came back. That made liblensfun a build dependency of this
+# file, needed the network in the middle of a build, and pinned nothing -- the URL serves
+# whatever upstream regenerated last, and the download carried no EXPECTED_HASH, so two
+# builds of one commit could ship different calibrations and neither could say which. A
+# sandboxed build (Flatpak, and any offline distribution build) could not do it at all: the
+# only inputs such a build gets are the ones declared and hashed up front.
 #
-# Falls back to the system database when the fetch is off or fails, and if neither can
-# produce a database the build still succeeds -- iop/lens.c reports the database as
-# unavailable and the module disables itself, the same way rawdenoiseai does without its
-# model. Shipping no lens corrections is bad; failing a release build over a network hiccup
-# is worse.
-option(FETCH_LENS_DB "Download the lensfun XML at configure time to build lenses.db" ON)
-set(LENS_DB_URL "https://lensfun.github.io/db/version_1.tar.bz2")
-set(LENS_XML_DIR "${CMAKE_CURRENT_BINARY_DIR}/lensfun-xml")
+# LensSerious publishes the conversion instead, daily and with its hashes -- see its
+# .github/workflows/lens-db.yml. Two files are fetched, both named in a manifest:
+#
+#   lenses.db            what iop/lens.c reads.
+#   lensfun-xml.tar.xz   the calibrations it was built from, installed beside it because
+#                        ansel-lens-db-update starts from them. That is what makes an update
+#                        on the user's machine ADDITIVE: someone who calibrates one lens
+#                        ends up with that lens on top of the fifteen hundred we ship,
+#                        rather than a database containing only theirs.
+#
+# The manifest is addressed by the schema version the PINNED LensSerious reads, taken from
+# its own schema.sql rather than hardcoded here. ls_db_open() refuses a database whose
+# PRAGMA user_version it does not know, and LensSerious publishes each schema in its own
+# directory, so a submodule bump and a database bump stay independent instead of breaking
+# each other.
+#
+# LENS_DB_DIR is where the two files are expected. Point it at payloads a packager placed
+# there and set -DFETCH_LENS_DB=OFF to build with no network at all; that is the whole
+# offline story, and FETCH_NN_MODELS above has the same one.
+#
+# Failure is not fatal: iop/lens.c reports the database as unavailable and the module
+# disables itself, the same way rawdenoiseai does without its model. Shipping no lens
+# corrections is bad; failing a release build over a network hiccup is worse.
+option(FETCH_LENS_DB "Download the lens database at configure time" ON)
+set(LENS_DB_DIR "${CMAKE_CURRENT_BINARY_DIR}/lens-db" CACHE PATH
+    "Directory holding lenses.db and lensfun-xml.tar.xz")
+set(LENSES_SCHEMA "${CMAKE_SOURCE_DIR}/src/external/LensSerious/src/schema.sql")
 
-set(LENS_XML_SOURCE "")
-if(FETCH_LENS_DB)
-  file(DOWNLOAD "${LENS_DB_URL}" "${CMAKE_CURRENT_BINARY_DIR}/lensfun-db.tar.bz2"
-       TIMEOUT 120 STATUS _lens_dl)
-  list(GET _lens_dl 0 _lens_dl_code)
-  if(_lens_dl_code EQUAL 0)
-    file(REMOVE_RECURSE "${LENS_XML_DIR}")
-    file(MAKE_DIRECTORY "${LENS_XML_DIR}")
-    file(ARCHIVE_EXTRACT INPUT "${CMAKE_CURRENT_BINARY_DIR}/lensfun-db.tar.bz2"
-         DESTINATION "${LENS_XML_DIR}")
-    file(GLOB _lens_xml "${LENS_XML_DIR}/*.xml")
-    list(LENGTH _lens_xml _lens_xml_n)
-    if(_lens_xml_n GREATER 0)
-      set(LENS_XML_SOURCE "${LENS_XML_DIR}")
-      message(STATUS "Lens database: ${_lens_xml_n} XML files fetched from upstream")
+set(LENS_DB_SCHEMA "")
+file(READ "${LENSES_SCHEMA}" _lens_schema_sql)
+string(REGEX MATCH "PRAGMA[ \t]+user_version[ \t]*=[ \t]*([0-9]+)" _lens_schema_match "${_lens_schema_sql}")
+if(_lens_schema_match)
+  set(LENS_DB_SCHEMA "${CMAKE_MATCH_1}")
+endif()
+set(LENS_DB_URL "https://raw.githubusercontent.com/aurelienpierreeng/LensSerious/main/db/v${LENS_DB_SCHEMA}")
+
+if(NOT LENS_DB_SCHEMA)
+  message(WARNING "Lens database: no PRAGMA user_version in ${LENSES_SCHEMA}, so there is no "
+                  "way to tell which published database this build can read")
+elseif(FETCH_LENS_DB)
+  file(MAKE_DIRECTORY "${LENS_DB_DIR}")
+  file(DOWNLOAD "${LENS_DB_URL}/manifest.json" "${LENS_DB_DIR}/manifest.json"
+       TIMEOUT 30 STATUS _lens_status)
+  list(GET _lens_status 0 _lens_code)
+  if(_lens_code EQUAL 0)
+    file(READ "${LENS_DB_DIR}/manifest.json" _lens_manifest)
+    string(JSON _lens_files GET "${_lens_manifest}" files)
+    string(JSON _lens_count LENGTH "${_lens_files}")
+    if(_lens_count GREATER 0)
+      math(EXPR _lens_last "${_lens_count} - 1")
+      foreach(_lens_i RANGE ${_lens_last})
+        string(JSON _lens_name MEMBER "${_lens_files}" ${_lens_i})
+        string(JSON _lens_sha GET "${_lens_files}" "${_lens_name}" sha256)
+        file(DOWNLOAD "${LENS_DB_URL}/${_lens_name}" "${LENS_DB_DIR}/${_lens_name}"
+             TIMEOUT 600 EXPECTED_HASH SHA256=${_lens_sha} STATUS _lens_dl)
+        list(GET _lens_dl 0 _lens_dl_code)
+        if(NOT _lens_dl_code EQUAL 0)
+          message(WARNING "Could not fetch ${_lens_name}: ${_lens_dl}")
+        endif()
+      endforeach()
     endif()
-  endif()
-  if(NOT LENS_XML_SOURCE)
-    message(WARNING "Lens database: could not fetch ${LENS_DB_URL}; "
-                    "falling back to the system lensfun database")
+  else()
+    message(WARNING "Could not fetch the lens database manifest (offline?): ${_lens_status} — "
+                    "falling back to whatever is already in ${LENS_DB_DIR}")
   endif()
 endif()
 
-if(TARGET import_lensfun_xml)
-  set(LENSES_DB "${CMAKE_CURRENT_BINARY_DIR}/lenses.db")
-  set(LENSES_SCHEMA "${CMAKE_SOURCE_DIR}/src/external/LensSerious/src/schema.sql")
-  # The importer writes to a temporary and renames, so a killed build cannot leave a
-  # half-written database that looks complete.
-  add_custom_command(
-    OUTPUT "${LENSES_DB}"
-    COMMAND $<TARGET_FILE:import_lensfun_xml> "${LENSES_SCHEMA}" "${LENSES_DB}"
-            ${LENS_XML_SOURCE}
-    DEPENDS import_lensfun_xml "${LENSES_SCHEMA}"
-    COMMENT "Converting the lensfun database to SQLite (lenses.db)"
-    VERBATIM)
-  add_custom_target(lenses_db ALL DEPENDS "${LENSES_DB}")
-  install(FILES "${LENSES_DB}" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel
-          COMPONENT DTApplication OPTIONAL)
-  # ansel-lens-db-update rebuilds this file on the user's machine and needs the schema to
-  # do it, so the schema is part of the installation rather than a build-tree artefact.
-  # Renamed on the way in: "schema.sql" says nothing in a directory shared with every other
-  # data file Ansel ships.
-  install(FILES "${LENSES_SCHEMA}" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel
-          RENAME lenses-schema.sql COMPONENT DTApplication)
-
-  # The calibrations themselves, as XML, beside the database built from them.
-  #
-  # ansel-lens-db-update loads these FIRST and then lets the machine's own lensfun profiles
-  # override them, which is what makes an update ADDITIVE: a user who calibrated one lens
-  # ends up with that lens on top of the fifteen hundred we ship, rather than a database
-  # containing only theirs. Doing the merge here, in lensfun's own loader, is why nothing
-  # has to upsert SQL rows or rebuild the corpus-wide token statistics by hand.
-  #
-  # About 5 MB. Only installed when the fetch succeeded -- with no baseline the tool still
-  # runs, it simply cannot be additive, and it says so.
-  if(LENS_XML_SOURCE)
-    install(DIRECTORY "${LENS_XML_SOURCE}/" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/lensfun-xml
-            COMPONENT DTApplication FILES_MATCHING PATTERN "*.xml")
-  endif()
+if(EXISTS "${LENS_DB_DIR}/lenses.db")
+  install(FILES "${LENS_DB_DIR}/lenses.db" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel
+          COMPONENT DTApplication)
+  message(STATUS "Lens database: schema v${LENS_DB_SCHEMA}, from ${LENS_DB_DIR}")
 else()
-  # Unreachable in a healthy tree: the top-level CMakeLists.txt refuses to configure
-  # without liblensfun, so getting here means import_lensfun_xml went missing for the OTHER
-  # reason -- LensSerious builds it only when it also has SQLite (lensserious_db). Fatal
-  # either way, because a build that silently ships no lenses.db is what sent users
-  # chasing "no calibration database" at run time.
-  message(FATAL_ERROR
-          "the lensfun XML importer was not built, so lenses.db cannot be produced and the "
-          "lens correction module would have no calibration data. liblensfun is checked at "
-          "the top level, so the missing piece here is SQLite: install its development "
-          "package (libsqlite3-dev / sqlite-devel) and reconfigure.")
+  message(WARNING "Lens database: no lenses.db in ${LENS_DB_DIR} — lens corrections will be "
+                  "unavailable in this build")
 endif()
+
+# The calibrations themselves, as XML, beside the database built from them. About 5 MB
+# unpacked. Only installed when the archive is there -- with no baseline
+# ansel-lens-db-update still runs, it simply cannot be additive, and it says so.
+if(EXISTS "${LENS_DB_DIR}/lensfun-xml.tar.xz")
+  file(REMOVE_RECURSE "${LENS_DB_DIR}/lensfun-xml")
+  file(MAKE_DIRECTORY "${LENS_DB_DIR}/lensfun-xml")
+  file(ARCHIVE_EXTRACT INPUT "${LENS_DB_DIR}/lensfun-xml.tar.xz"
+       DESTINATION "${LENS_DB_DIR}/lensfun-xml")
+  install(DIRECTORY "${LENS_DB_DIR}/lensfun-xml/"
+          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/lensfun-xml
+          COMPONENT DTApplication FILES_MATCHING PATTERN "*.xml")
+endif()
+
+# ansel-lens-db-update rebuilds the database on the user's machine and needs the schema to
+# do it, so the schema is part of the installation rather than a build-tree artefact.
+# Renamed on the way in: "schema.sql" says nothing in a directory shared with every other
+# data file Ansel ships.
+install(FILES "${LENSES_SCHEMA}" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel
+        RENAME lenses-schema.sql COMPONENT DTApplication)

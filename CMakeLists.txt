@@ -160,18 +160,19 @@ if(NOT CMAKE_USE_PTHREADS_INIT)
   message(FATAL_ERROR "POSIX threads: not found")
 endif()
 
-# liblensfun, a BUILD-time requirement and not a runtime one.
+# liblensfun: optional, and neither a build nor a runtime requirement of the application.
 #
-# Nothing that renders a pixel links it: data/CMakeLists.txt converts upstream's XML into
-# the lenses.db that iop/lens.c reads, once, here. But without it that conversion cannot
-# run, no database is produced, and every lens correction silently stops working -- the
-# module reports "no calibration database" and disables itself.
+# It used to be a hard requirement, because data/CMakeLists.txt converted upstream's
+# calibration XML into lenses.db here, at configure time, and the importer needs lensfun to
+# read that XML. The conversion has moved to LensSerious' own CI, which publishes the
+# database with its hashes; a build fetches a pinned file and converts nothing. So nothing
+# in an ordinary build needs lensfun any more -- not the pixel pipeline, which never linked
+# it, and no longer the data either.
 #
-# Checked HERE, before descending into any subdirectory, because this used to be a
-# message(WARNING) in data/CMakeLists.txt: `sh build.sh` printed it somewhere in the middle
-# of a long configure log, exited 0, built a complete-looking Ansel, and the first sign of
-# trouble was a user's export with no lens correction in it. A dependency whose absence
-# breaks a feature at run time has to stop the build, not annotate it.
+# What still uses it is ansel-lens-db-update, the command that rebuilds the database on a
+# user's machine against THEIR lensfun profiles -- the ones a package build could not have
+# seen. src/CMakeLists.txt builds it only where LensSerious found lensfun, so its absence
+# costs that one command and nothing else.
 #
 # Probed with its own prefix and without IMPORTED_TARGET: src/external/LensSerious runs its
 # own pkg_check_modules(LENSFUN IMPORTED_TARGET lensfun), and creating PkgConfig::LENSFUN
@@ -179,21 +180,13 @@ endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LENSFUN_PROBE lensfun)
 if(NOT LENSFUN_PROBE_FOUND)
-  message(FATAL_ERROR
-          "liblensfun development files are required to build Ansel, and pkg-config cannot "
-          "find them.\n"
-          "  Debian/Ubuntu   apt install liblensfun-dev\n"
-          "  Fedora          dnf install lensfun-devel\n"
-          "  Arch            pacman -S lensfun\n"
-          "  openSUSE        zypper install lensfun-devel\n"
-          "  macOS           brew install lensfun\n"
-          "  msys2           pacman -S \${MINGW_PACKAGE_PREFIX}-lensfun\n"
-          "Or run the script for your distribution in packaging/, which installs this and "
-          "everything else Ansel needs.\n"
+  message(STATUS
+          "liblensfun not found: this build will not carry ansel-lens-db-update, so users "
+          "of it cannot fold their own lens profiles into the shipped database. The "
+          "database itself is unaffected -- it is fetched, not built here. Install "
+          "liblensfun-dev / lensfun-devel to get the command back.\n"
           "Note that lensfun.pc has `Requires: glib-2.0', so a missing libglib2.0-dev makes "
-          "this check fail without ever mentioning lensfun itself.\n"
-          "It is needed only to BUILD: it converts upstream's calibration XML into the "
-          "lenses.db that ships with Ansel. Nothing in the pixel pipeline links it.")
+          "this probe fail without ever mentioning lensfun itself.")
 endif()
 
 include(ConfigureChecks.cmake)

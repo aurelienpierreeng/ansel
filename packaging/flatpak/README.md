@@ -100,14 +100,31 @@ Flathub is a separate step from the above, and the manifest is not submittable a
 - **`<releases>` in the appdata** carries a single development entry for the same reason.
   Flathub wants a release entry matching the submitted version.
 - **The app module builds with `--share=network`.** Flathub forbids network access during a
-  build. Ansel needs it because `data/CMakeLists.txt` fetches
-  `https://lensfun.github.io/db/version_1.tar.bz2` at configure time, under `FETCH_LENS_DB`,
-  and converts it into the `lenses.db` that LensSerious reads — deliberately, so a build
-  carries the current calibrations rather than the packager's snapshot. A Flathub submission
-  would have to pass `-DFETCH_LENS_DB=OFF` and let the importer fall back to the database
-  liblensfun itself installs, pinning lens coverage to whatever the `lensfun` module ships.
-  That is a real trade, not a formality: it is the difference between shipping today's
-  calibrations and shipping the ones frozen into the manifest.
+  build, and this manifest keeps it on purpose: `data/CMakeLists.txt` fetches the neural
+  denoise models and the lens database at configure time, so a nightly always carries the
+  current ones. That is right for a nightly and wrong for Flathub, and it is no longer a
+  blocker — both fetches are now manifest-driven and hashed, and both have an offline
+  switch. A Flathub manifest declares the payloads as sources and points the build at them:
+
+  ```json
+  "sources": [
+      { "type": "file", "url": "https://raw.githubusercontent.com/aurelienpierreeng/LensSerious/main/db/v4/lenses.db",
+        "sha256": "...", "dest": "lens-db" },
+      { "type": "file", "url": ".../db/v4/lensfun-xml.tar.xz", "sha256": "...", "dest": "lens-db" },
+      { "type": "file", "url": ".../ansel-denoise/master/models/denoise-large-multi-v1.anselnn",
+        "sha256": "...", "dest": "nn-models" }
+  ],
+  "config-opts": [
+      "-DFETCH_LENS_DB=OFF",  "-DLENS_DB_DIR=/run/build/ansel/lens-db",
+      "-DFETCH_NN_MODELS=OFF", "-DNN_MODELS_DIR=/run/build/ansel/nn-models"
+  ]
+  ```
+
+  The hashes for both live in the manifests the fetches already read —
+  `db/v<schema>/manifest.json` in LensSerious and `models/manifest.json` in ansel-denoise —
+  so generating that source list is mechanical. The cost is that a Flathub build ships the
+  payloads pinned in its manifest until someone bumps them, rather than the current ones.
+
 - **`--filesystem=host` and `--device=all`** are flagged during Flathub review. Both are
   defensible for a photo editor that opens arbitrary directories and uses OpenCL, and
   darktable ships with the same, but expect to argue them.
