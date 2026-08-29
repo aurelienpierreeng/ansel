@@ -16,9 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
+#include "config.h" // DT_BUILD_CHANNEL, darktable_commit_hash, darktable_package_version
 
 #include "common/updates.h"
 
