@@ -90,49 +90,78 @@ republished every night does not accumulate objects no ref points at any more. G
 is not a viable host for this: a full repository runs to the better part of a gigabyte,
 against a 1 GB per-site limit.
 
-## What is still missing for a Flathub submission
+## Flathub
 
-Flathub is a separate step from the above, and the manifest is not submittable as it stands:
+Checked against Flathub's own requirements rather than assumed, because the rules tightened
+when `flatpak-builder-lint` became mandatory.
 
-- **The app module builds from `"type": "dir"`.** Flathub requires a reproducible source —
-  a `git` or `archive` source pinned to a tag and commit. That in turn wants a real version
-  tag; `v0.0.0` is a rolling nightly pointer, not a release.
-- **`<releases>` in the appdata** carries a single development entry for the same reason.
-  Flathub wants a release entry matching the submitted version.
-- **The app module builds with `--share=network`.** Flathub forbids network access during a
-  build, and this manifest keeps it on purpose: `data/CMakeLists.txt` fetches the neural
-  denoise models and the lens database at configure time, so a nightly always carries the
-  current ones. That is right for a nightly and wrong for Flathub, and it is no longer a
-  blocker — both fetches are now manifest-driven and hashed, and both have an offline
-  switch. A Flathub manifest declares the payloads as sources and points the build at them:
+**The nightly can never go there, on either repo.** Flathub's requirements say in as many
+words that "Nightly releases, development snapshots, or any software requiring daily updates
+must not be published to either repo" — stable *and* beta. The rolling `v0.0.0` tag is
+excluded by name, and no manifest work changes that. Whatever this directory produces every
+night belongs on our own repository; Flathub would be a second, slower channel beside it,
+never a replacement.
 
-  ```json
-  "sources": [
-      { "type": "file", "url": "https://raw.githubusercontent.com/aurelienpierreeng/LensSerious/main/db/v4/lenses.db",
-        "sha256": "...", "dest": "lens-db" },
-      { "type": "file", "url": ".../db/v4/lensfun-xml.tar.xz", "sha256": "...", "dest": "lens-db" },
-      { "type": "file", "url": ".../ansel-denoise/master/models/denoise-large-multi-v1.anselnn",
-        "sha256": "...", "dest": "nn-models" }
-  ],
-  "config-opts": [
-      "-DFETCH_LENS_DB=OFF",  "-DLENS_DB_DIR=/run/build/ansel/lens-db",
-      "-DFETCH_NN_MODELS=OFF", "-DNN_MODELS_DIR=/run/build/ansel/nn-models"
-  ]
-  ```
+**But a stable release is not the entry price.** Flathub's beta repo is for "releases that
+have some level of testing and are expected to mostly work for non-developer end-users",
+and an app may debut there with no stable version behind it: asked directly on their
+Discourse, a maintainer confirmed that a normal submission "will be merged to the beta
+branch directly". The other bar in the requirements — "sustained commit history and standard
+release practices such as tagged versions" — is met on the first half already.
 
-  The hashes for both live in the manifests the fetches already read —
-  `db/v<schema>/manifest.json` in LensSerious and `models/manifest.json` in ansel-denoise —
-  so generating that source list is mechanical. The cost is that a Flathub build ships the
-  payloads pinned in its manifest until someone bumps them, rather than the current ones.
+So the blocker is not a release in the sense of a polished 1.0. It is **a tag**. Cut one,
+pin a manifest to it, and what gets submitted stops being "software requiring daily updates"
+while remaining exactly the code the nightly ships.
 
-- **`--filesystem=host` and `--device=all`** are flagged during Flathub review. Both are
-  defensible for a photo editor that opens arbitrary directories and uses OpenCL, and
-  darktable ships with the same, but expect to argue them.
-- **The screenshot** is from 2022 and no longer shows the current interface.
+### What a submission still needs
 
-One former blocker is already gone: the manifest no longer requests
-`--own-name=org.darktable.service`. `dt_dbus_init()` is disabled in `src/darktable.c`, so
-nothing ever owned that name, and a name not prefixed by the app id would have been rejected.
+1. **A tag**, and a matching `<release>` in `data/photos.ansel.ansel.appdata.xml.in`.
+2. **A separate manifest**: `type: git` pinned to that tag and commit rather than the
+   `type: dir` this one uses, plus the payload sources below. The `type: dir` here is a
+   property of building a working tree, not something to fix.
+3. **The app id, decided once and for good.** `photos.ansel.ansel` is valid and maps to a
+   domain we control, but `appstreamcli` flags it informationally (`cid-maybe-not-rdns`) and
+   the convention would be `photos.ansel.Ansel`. It is the install path, the dconf path and
+   the user-visible identity — cheap to change now, painful afterwards.
+4. **An argument prepared for `--filesystem=host` and `--device=all`.** Both are flagged in
+   review. Both are defensible for a photo editor that opens arbitrary directories and uses
+   OpenCL, and darktable ships with the same, but expect to make the case.
+5. **A current screenshot.** The one in the appdata is from 2022 and shows an interface that
+   no longer exists.
+
+### The offline half, which is done
+
+Flathub's hard rule is that "There is no network access during the build process", and their
+documentation notes specifically that `--share=network` in build-args does *not* work as a
+workaround. That was the real blocker, and it is now a manifest exercise rather than a code
+change: both payloads Ansel fetches at configure time are hashed, published in a manifest,
+and switchable off.
+
+```json
+"sources": [
+    { "type": "file", "url": "https://raw.githubusercontent.com/aurelienpierreeng/LensSerious/main/db/v4/lenses.db",
+      "sha256": "...", "dest": "lens-db" },
+    { "type": "file", "url": ".../db/v4/lensfun-xml.tar.xz", "sha256": "...", "dest": "lens-db" },
+    { "type": "file", "url": ".../ansel-denoise/master/models/denoise-large-multi-v1.anselnn",
+      "sha256": "...", "dest": "nn-models" }
+],
+"config-opts": [
+    "-DFETCH_LENS_DB=OFF",   "-DLENS_DB_DIR=/run/build/ansel/lens-db",
+    "-DFETCH_NN_MODELS=OFF", "-DNN_MODELS_DIR=/run/build/ansel/nn-models"
+]
+```
+
+The hashes live in the manifests the fetches already read — `db/v<schema>/manifest.json` in
+LensSerious, `models/manifest.json` in ansel-denoise — so generating that source list is
+mechanical. The cost is that such a build ships the payloads pinned in its manifest until
+someone bumps them, rather than whatever is current; which is the correct trade for a
+release channel and the wrong one for a nightly, and is why THIS manifest keeps
+`--share=network` and fetches.
+
+Sources: [requirements](https://docs.flathub.org/docs/for-app-authors/requirements),
+[beta without a stable release](https://discourse.flathub.org/t/beta-without-a-stable-release/508),
+[how to use flathub-beta](https://discourse.flathub.org/t/how-to-use-flathub-beta/2111).
+
 
 ## Inherited from darktable, and removed
 
