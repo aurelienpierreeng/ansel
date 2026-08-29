@@ -93,13 +93,25 @@ jobs:
         run: |
           # objects/ first, summary last: a client that fetches the new summary must find
           # every object it names already there.
+          #
+          # Cache-Control is set per object because a custom domain puts Cloudflare's CDN
+          # in front of the bucket. OSTree objects are content-addressed, so they may be
+          # cached forever; everything else (summary, summary.sig, refs/, config, the
+          # .flatpakrepo) is what changes between nightlies and must never be served
+          # stale, or `flatpak update` sees yesterday's repository for as long as the
+          # edge keeps it. By default Cloudflare caches by file extension and these have
+          # none, but one "Cache Everything" rule on the zone would break that silently;
+          # the headers make it not matter.
           aws s3 sync build/flatpak/repo/objects "s3://${R2_BUCKET}/objects" \
-            --endpoint-url "${R2_ENDPOINT}" --only-show-errors
+            --endpoint-url "${R2_ENDPOINT}" --only-show-errors \
+            --cache-control "public, max-age=31536000, immutable"
           aws s3 sync build/flatpak/repo "s3://${R2_BUCKET}/" \
-            --endpoint-url "${R2_ENDPOINT}" --only-show-errors --exclude "objects/*" --delete
+            --endpoint-url "${R2_ENDPOINT}" --only-show-errors --exclude "objects/*" --delete \
+            --cache-control "no-cache"
           packaging/flatpak/make-flatpakrepo.sh "${REPO_URL}" > ansel.flatpakrepo
           aws s3 cp ansel.flatpakrepo "s3://${R2_BUCKET}/ansel.flatpakrepo" \
-            --endpoint-url "${R2_ENDPOINT}" --content-type "application/vnd.flatpak.repo" --only-show-errors
+            --endpoint-url "${R2_ENDPOINT}" --content-type "application/vnd.flatpak.repo" \
+            --cache-control "no-cache" --only-show-errors
           echo "Repository published: ${REPO_URL}/ansel.flatpakrepo" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Package upload
