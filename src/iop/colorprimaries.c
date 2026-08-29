@@ -795,6 +795,25 @@ static void _build_clut(dt_iop_colorprimaries_data_t *d, const dt_iop_colorprima
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
+  /* Nothing to prepare for a piece that will not run. dt_iop_commit_params() commits DISABLED
+   * modules too -- deliberately, because some of them self-enable there on runtime context. This
+   * one does not, and process()/process_cl() are the only readers of piece->data, so nothing
+   * downstream can observe what we skip.
+   *
+   * The return has to come BEFORE the profile lookup below, not merely before the LUT build.
+   * dt_colorspaces_add_profile() memoises, but the FIRST caller pays for it, and in the whole
+   * pipeline DT_COLORSPACE_HLG_REC2020 is asked for by nothing except this module and iop/colorequal.c.
+   * On an image that enables neither, that profile -- two matrices plus six eagerly built
+   * 65536-entry LUTs, tone-curve inversion included -- was being constructed for nobody.
+   *
+   * Returning rather than clearing also keeps a LUT that was already built: toggle the module off
+   * and on again and the memo survives; only a real parameter change rebuilds.
+   *
+   * piece->enabled is set from history immediately before every dt_iop_commit_params() call
+   * (dev_pixelpipe.c 288, 1288, 1367; pixelpipe_hb.c:700 at node creation), so it is settled here.
+   */
+  if(!piece->enabled) return;
+
   const dt_iop_colorprimaries_params_t *p = (const dt_iop_colorprimaries_params_t *)p1;
   dt_iop_colorprimaries_data_t *d = (dt_iop_colorprimaries_data_t *)piece->data;
   const dt_iop_order_iccprofile_info_t *lut_profile
