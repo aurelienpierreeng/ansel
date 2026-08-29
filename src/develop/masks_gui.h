@@ -704,7 +704,7 @@ const char *dt_masks_interaction_name(dt_masks_interaction_t interaction);
 /**
  * @brief The other word for a property, when a shape family spells it its own way.
  *
- * A gradient stores its fade extent in the SIZE slot and its curvature in the HARDNESS one --
+ * A gradient stores its fade extent in the SIZE slot and its curvature in the FADING one --
  * same property of the interaction API, different vocabulary in front of the user, which is
  * also why the context menu renames those two sliders for gradients. Any UI naming a property
  * generically must show both words, or the gradient's own vocabulary has no visible home.
@@ -755,7 +755,7 @@ float dt_masks_form_set_interaction_value(dt_develop_t *dev, int group_id, int f
  * or setting it in an absolute fashion, then save it to configuration.
  *
  * @param form the shape to change. We will read its type internally
- * @param feature the propertie to change: hardness, size, curvature (for gradients)
+ * @param feature the propertie to change: fading, size, curvature (for gradients)
  * @param new_value if increment is set to absolute, this is directly the updated value. if increment is offset, the updated value is old_value + new_value. if increment is scale, the updated value is old value * new_value.
  * @param v_min minimum acceptable value of the property for sanitization
  * @param v_max maximum acceptable value of the property for sanitization
@@ -878,7 +878,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
 
 /**
  * @brief Append a bauhaus-slider menu item to a mask context menu, bound to one shape
- * interaction (size, fading/hardness, rotation, opacity). Shared by the darkroom
+ * interaction (size, fading, rotation, opacity). Shared by the darkroom
  * canvas context menu (dt_masks_create_menu) and the blend module's own shape-list
  * context menus, so both stay in sync.
  */

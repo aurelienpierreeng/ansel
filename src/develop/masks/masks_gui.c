@@ -703,19 +703,19 @@ void dt_masks_gui_populate_interaction_sliders(GtkWidget *menu, dt_develop_t *de
 
   if(form->type & DT_MASKS_GRADIENT)
   {
-    // For gradients, DT_MASKS_INTERACTION_HARDNESS is the shape curvature and
-    // DT_MASKS_INTERACTION_SIZE is the fade extent -- expose them under their actual names.
-    const float curvature = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_HARDNESS);
+    // For gradients, DT_MASKS_INTERACTION_FADING is the shape curvature -- expose it
+    // under its actual name.
+    const float curvature = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_FADING);
     const float fade = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_SIZE);
     float rotation = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_ROTATION);
     if(!isfinite(rotation)) rotation = 0.0f;
     if(rotation > 180.0f) rotation -= 360.0f;
 
-    dt_masks_gui_add_interaction_slider(menu, _("Curvature"), dev, group_id, form->formid, DT_MASKS_INTERACTION_HARDNESS,
+    dt_masks_gui_add_interaction_slider(menu, _("Curvature"), dev, group_id, form->formid, DT_MASKS_INTERACTION_FADING,
                                       DT_MASKS_INCREMENT_ABSOLUTE, -2.0f, 2.0f, 0.01f,
                                       isfinite(curvature) ? curvature : 0.0f, 3, "%", 50.0f,
                                       gui, module);
-    dt_masks_gui_add_interaction_slider(menu, _("Fade"), dev, group_id, form->formid, DT_MASKS_INTERACTION_SIZE,
+    dt_masks_gui_add_interaction_slider(menu, _("Size"), dev, group_id, form->formid, DT_MASKS_INTERACTION_SIZE,
                                       DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.001f,
                                       isfinite(fade) ? fade : 1.0f, 3, "%", 100.0f,
                                       gui, module);
@@ -726,14 +726,14 @@ void dt_masks_gui_populate_interaction_sliders(GtkWidget *menu, dt_develop_t *de
   }
   else
   {
-    const float hardness = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_HARDNESS);
+    const float fading = dt_masks_form_get_interaction_value(dev, group_id, form->formid, DT_MASKS_INTERACTION_FADING);
 
     dt_masks_gui_add_interaction_slider(menu, _("Size"), dev, group_id, form->formid, DT_MASKS_INTERACTION_SIZE,
                                       DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
                                       gui, module);
-    dt_masks_gui_add_interaction_slider(menu, _("Fading"), dev, group_id, form->formid, DT_MASKS_INTERACTION_HARDNESS,
+    dt_masks_gui_add_interaction_slider(menu, _("Fading"), dev, group_id, form->formid, DT_MASKS_INTERACTION_FADING,
                                       DT_MASKS_INCREMENT_ABSOLUTE, 0.f, 1.0f, 0.01f,
-                                      isfinite(hardness) ? hardness : 1.0f, 3, "%", 100.0f,
+                                      isfinite(fading) ? fading : 1.0f, 3, "%", 100.0f,
                                       gui, module);
 
     if(form->type & DT_MASKS_ELLIPSE)
@@ -2505,7 +2505,7 @@ static void _set_cursor_shape(dt_masks_form_gui_t *mask_gui)
     dt_masks_form_t *creation_form = dt_masks_get_visible_form(mask_gui->dev);
     if(!IS_NULL_PTR(creation_form) && (creation_form->type & DT_MASKS_BRUSH))
     {
-      // The brush tool draws its own filled size/hardness preview circle at the cursor
+      // The brush tool draws its own filled size/fading preview circle at the cursor
       // position (_brush_events_post_expose) -- a system cursor on top of it is redundant.
       dt_control_set_cursor_visible(FALSE);
       return;
@@ -2911,7 +2911,7 @@ static const char *const _scroll_conf_keys[DT_MASKS_SCROLL_MODIFIER_LAST]
  * them, never reorder them against dt_masks_interaction_t, and keep them in sync with the enum
  * declared for these four keys in data/anselconfig.xml.in. */
 static const char *const _interaction_conf_values[DT_MASKS_INTERACTION_LAST]
-    = { "none", "size", "hardness", "opacity", "rotation" };
+    = { "none", "size", "fading", "opacity", "rotation" };
 
 /* Both enums declare only non-negative enumerators, so a compiler is free to give them an
  * unsigned underlying type -- clang does, and then `x < 0' is a tautology it rejects under
@@ -2962,8 +2962,8 @@ const char *dt_masks_interaction_name(dt_masks_interaction_t interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
       return N_("Size");
-    case DT_MASKS_INTERACTION_HARDNESS:
-      return N_("Hardness");
+    case DT_MASKS_INTERACTION_FADING:
+      return N_("Fading");
     case DT_MASKS_INTERACTION_OPACITY:
       return N_("Opacity");
     case DT_MASKS_INTERACTION_ROTATION:
@@ -2978,12 +2978,11 @@ const char *dt_masks_interaction_alias_name(dt_masks_interaction_t interaction)
 {
   switch(interaction)
   {
-    case DT_MASKS_INTERACTION_SIZE:
-      return N_("Fade");
-    case DT_MASKS_INTERACTION_HARDNESS:
+    case DT_MASKS_INTERACTION_FADING:
       return N_("Curvature");
     default:
-      // Opacity and rotation mean the same thing to every shape, and "nothing" is not a property.
+      // Size, opacity and rotation mean the same thing to every shape, and "nothing" is not
+      // a property.
       return NULL;
   }
 }

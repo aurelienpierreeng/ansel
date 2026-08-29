@@ -640,7 +640,7 @@ __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000)
  * What has to be in the key is everything the fold reads:
  *
  *   - each shape's own content, via dt_masks_form_get_own_hash() -- for a brush that is every
- *     node's position, border, hardness and density, which is exactly what its rasterisation is
+ *     node's position, border, fading and density, which is exactly what its rasterisation is
  *     a function of;
  *   - each membership's state and opacity, which decide the combine operator and its weight;
  *   - the ROI, which decides the pixels;

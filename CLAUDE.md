@@ -1073,20 +1073,22 @@ only because the callback is shared.
 
 The mapping is one conf key per wheel/modifier combination
 (`plugins/darkroom/masks/scroll/{plain,shift,primary,primary_shift}`, enum values `none` |
-`size` | `hardness` | `opacity` | `rotation`, declared in `data/anselconfig.xml.in`) behind
+`size` | `fading` | `opacity` | `rotation`, declared in `data/anselconfig.xml.in`) behind
 `dt_masks_scroll_mapping_get/set()` and `dt_masks_scroll_get_interaction()` (`masks_gui.h`).
 Those enum values are a storage format: never translate them, never reorder them against
 `dt_masks_interaction_t`. The mapping is **application-wide** — which property the wheel edits
 is a user habit, not a property of a shape or of the module owning the mask — and its defaults
 reproduce the historical modifier behaviour, so a user who never opens the panel sees no change.
 
-A gradient spells the two shared properties its own way: `SIZE` is the fade extent, `HARDNESS`
-the curvature. That is also how the context-menu sliders name them, and why
-`dt_masks_interaction_alias_name()` exists.
+A gradient spells one of the shared properties its own way: `FADING` is the curvature. `SIZE`
+is the fade extent but keeps the shared name, since it is the shape's size in the only sense a
+gradient has one. That is also how the context-menu sliders name them, and why
+`dt_masks_interaction_alias_name()` exists — it answers `NULL` for every property a gradient
+names like everyone else.
 
 Scope is the selection's business, not the wheel's: `dt_masks_gui_change_affects_selected_node_or_all()`
-already restricts a size/hardness change to the selected node. A shape must not additionally
-*substitute* a property based on selection state — the polygon used to force hardness on a plain
+already restricts a size/fading change to the selected node. A shape must not additionally
+*substitute* a property based on selection state — the polygon used to force fading on a plain
 wheel whenever a node was selected, which made the mapping unreachable for that shape.
 
 The GUI is the "Mouse wheel" collapsible section of the Drawn tab (`blend_gui.c`), one radio
@@ -1485,7 +1487,7 @@ reconfigure on same-size re-entry).
 
 A `GtkLabel` with `gtk_label_set_angle()` requests the width of its *slanted* bounding box, so a
 diagonal column title makes its whole column that wide — measured on the masks wheel-mapping
-grid: 102 px for "Hardness/Curvature" at 45° against 24 px for the radio button underneath it.
+grid: 102 px for "Fading/Curvature" at 45° against 24 px for the radio button underneath it.
 Zeroing `column-spacing` does not help, because the spacing was never what separated the cells.
 
 Two things fix it, and both are needed. Give the grid `GTK_ALIGN_START`: handed more width than

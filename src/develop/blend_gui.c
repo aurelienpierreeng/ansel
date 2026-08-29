@@ -3781,7 +3781,7 @@ void dt_iop_gui_blend_masks_update(dt_iop_module_t *module)
 /* Property columns, in display order. DT_MASKS_INTERACTION_UNDEF ("nothing") is a column like
  * the others -- it is how a row is unmapped -- and comes last, after what it opts out of. */
 static const dt_masks_interaction_t _blendop_scroll_columns[]
-    = { DT_MASKS_INTERACTION_SIZE, DT_MASKS_INTERACTION_HARDNESS, DT_MASKS_INTERACTION_OPACITY,
+    = { DT_MASKS_INTERACTION_SIZE, DT_MASKS_INTERACTION_FADING, DT_MASKS_INTERACTION_OPACITY,
         DT_MASKS_INTERACTION_ROTATION, DT_MASKS_INTERACTION_UNDEF };
 
 static void _blendop_masks_scroll_toggled(GtkToggleButton *button, gpointer user_data)
@@ -3851,7 +3851,7 @@ static GtkWidget *_blendop_masks_create_scroll_grid(void)
     gtk_widget_set_halign(header, GTK_ALIGN_START);
     gtk_widget_set_valign(header, GTK_ALIGN_END);
     /* Spanning, not one cell: a label rotated 45 degrees requests the width of its slanted
-     * bounding box (measured: 102px for "Hardness/Curvature" against 24px for a radio), and a
+     * bounding box (measured: 102px for "Fading/Curvature" against 24px for a radio), and a
      * single-cell title makes its whole column that wide. Letting each title span the columns
      * to its right -- the direction it leans into, whose header space is free -- constrains the
      * sum instead of one column, and every column falls back to the width of its radio. */

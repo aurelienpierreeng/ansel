@@ -60,8 +60,8 @@
 #include "gui/actions/menu.h"
 #include <assert.h>
 
-#define HARDNESS_MIN 0.0005f
-#define HARDNESS_MAX 1.0f
+#define FADING_MIN 0.0005f
+#define FADING_MAX 1.0f
 
 #define BORDER_MIN 0.00005f
 #define BORDER_MAX 0.5f
@@ -1328,20 +1328,20 @@ static float _polygon_get_interaction_value(const dt_masks_form_t *mask_form,
       if(size <= 0.0f) return NAN;
       return size;
     }
-    case DT_MASKS_INTERACTION_HARDNESS:
+    case DT_MASKS_INTERACTION_FADING:
     {
-      float hardness_sum = 0.0f;
-      int hardness_count = 0;
+      float fading_sum = 0.0f;
+      int fading_count = 0;
 
       for(const GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
       {
         const dt_masks_node_polygon_t *node = (const dt_masks_node_polygon_t *)point_node->data;
         if(IS_NULL_PTR(node)) continue;
-        hardness_sum += node->border[0] + node->border[1];
-        hardness_count += 2;
+        fading_sum += node->border[0] + node->border[1];
+        fading_count += 2;
       }
 
-      return hardness_count > 0 ? hardness_sum / (float)hardness_count : NAN;
+      return fading_count > 0 ? fading_sum / (float)fading_count : NAN;
     }
     default:
       return NAN;
@@ -1377,9 +1377,9 @@ static gboolean _polygon_get_gravity_center(dt_develop_t *dev, const dt_masks_fo
 static int _change_size(dt_masks_form_t *mask_form, int parent_id, dt_masks_form_gui_t *mask_gui,
                         struct dt_iop_module_t *module, int form_index, const float amount,
                         const dt_masks_increment_t increment, const int flow);
-static int _change_hardness(dt_masks_form_t *mask_form, int parent_id, dt_masks_form_gui_t *mask_gui,
-                            struct dt_iop_module_t *module, int form_index, const float amount,
-                            const dt_masks_increment_t increment, int flow);
+static int _change_fading(dt_masks_form_t *mask_form, int parent_id, dt_masks_form_gui_t *mask_gui,
+                          struct dt_iop_module_t *module, int form_index, const float amount,
+                          const dt_masks_increment_t increment, int flow);
 
 static float _polygon_set_interaction_value(dt_masks_form_t *mask_form,
                                             dt_masks_interaction_t interaction, float value,
@@ -1397,8 +1397,8 @@ static float _polygon_set_interaction_value(dt_masks_form_t *mask_form,
     case DT_MASKS_INTERACTION_SIZE:
       if(!_change_size(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
       return _polygon_get_interaction_value(mask_form, interaction);
-    case DT_MASKS_INTERACTION_HARDNESS:
-      if(!_change_hardness(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
+    case DT_MASKS_INTERACTION_FADING:
+      if(!_change_fading(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
       return _polygon_get_interaction_value(mask_form, interaction);
     default:
       return NAN;
@@ -1638,15 +1638,15 @@ static gboolean _polygon_form_gravity_center(const dt_masks_form_t *mask_form,
 }
 
 /**
- * @brief Initialize hardness from config and emit the toast with a size-normalized percentage.
+ * @brief Initialize fading from config and emit the toast with a size-normalized percentage.
  */
-static int _init_hardness(dt_masks_form_t *mask_form, const float amount,
-                          const dt_masks_increment_t increment, const int flow,
-                          const float mask_size, const float border_size)
+static int _init_fading(dt_masks_form_t *mask_form, const float amount,
+                        const dt_masks_increment_t increment, const int flow,
+                        const float mask_size, const float border_size)
 {
-  const float mask_hardness = dt_masks_get_set_conf_value(mask_form, "hardness", amount,
-                                                          HARDNESS_MIN, HARDNESS_MAX, increment, flow);
-  dt_toast_log(_("Hardness: %3.2f%%"), (border_size * mask_hardness) / mask_size * 100.0f);
+  const float mask_fading = dt_masks_get_set_conf_value(mask_form, "fading", amount,
+                                                        FADING_MIN, FADING_MAX, increment, flow);
+  dt_toast_log(_("Fading: %3.2f%%"), (border_size * mask_fading) / mask_size * 100.0f);
   return 1;
 }
 
@@ -1723,11 +1723,11 @@ static int _change_size(dt_masks_form_t *mask_form, int parent_id, dt_masks_form
 }
 
 /**
- * @brief Change polygon hardness for the active node scope or the full shape.
+ * @brief Change polygon fading for the active node scope or the full shape.
  */
-static int _change_hardness(dt_masks_form_t *mask_form, int parent_id, dt_masks_form_gui_t *mask_gui,
-                            struct dt_iop_module_t *module, int form_index, const float amount,
-                            const dt_masks_increment_t increment, int flow)
+static int _change_fading(dt_masks_form_t *mask_form, int parent_id, dt_masks_form_gui_t *mask_gui,
+                          struct dt_iop_module_t *module, int form_index, const float amount,
+                          const dt_masks_increment_t increment, int flow)
 {
   int node_index = 0;
   const float scale_amount = powf(amount, (float)flow);
@@ -1742,10 +1742,10 @@ static int _change_hardness(dt_masks_form_t *mask_form, int parent_id, dt_masks_
 
       node->border[0] = CLAMPF(dt_masks_apply_increment_precomputed(node->border[0], amount, scale_amount,
                                                                      offset_amount, increment),
-                               HARDNESS_MIN, HARDNESS_MAX);
+                               FADING_MIN, FADING_MAX);
       node->border[1] = CLAMPF(dt_masks_apply_increment_precomputed(node->border[1], amount, scale_amount,
                                                                      offset_amount, increment),
-                               HARDNESS_MIN, HARDNESS_MAX);
+                               FADING_MIN, FADING_MAX);
     }
   }
 
@@ -1753,7 +1753,7 @@ static int _change_hardness(dt_masks_form_t *mask_form, int parent_id, dt_masks_
   float border_size = 0.0f;
   _polygon_get_sizes(module, mask_form, mask_gui, form_index, &mask_size, &border_size);
 
-  _init_hardness(mask_form, amount, increment, flow, mask_size, border_size);
+  _init_fading(mask_form, amount, increment, flow, mask_size, border_size);
 
   // Rebuild the cached GUI geometry.
   dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
@@ -1762,7 +1762,7 @@ static int _change_hardness(dt_masks_form_t *mask_form, int parent_id, dt_masks_
 }
 
 /**
- * @brief Handle mouse wheel updates for polygon size/hardness/opacity.
+ * @brief Handle mouse wheel updates for polygon size/fading/opacity.
  */
 /* Shape handlers receive widget-space coordinates, while normalized output-image
  * coordinates come from `mask_gui->rel_pos` and absolute output-image
@@ -1784,18 +1784,18 @@ static int _polygon_events_mouse_scrolled(struct dt_iop_module_t *module, double
   /* `state` is the caller's raw key state, kept for the callback signature: the property to
    * act on was already resolved from it by dt_masks_scroll_get_interaction(). A polygon owns
    * no rotation, so that mapping falls through and the wheel does nothing here. Size and
-   * hardness apply to the selected node when there is one, to every node otherwise -- that
+   * fading apply to the selected node when there is one, to every node otherwise -- that
    * scoping is the selection's business (dt_masks_gui_change_affects_selected_node_or_all),
-   * not the wheel's, which is why a selected node no longer forces hardness. */
+   * not the wheel's, which is why a selected node no longer forces fading. */
   if(mask_gui->edit_mode == DT_MASKS_EDIT_FULL && dt_masks_is_anything_selected(mask_gui))
   {
     switch(interaction)
     {
       case DT_MASKS_INTERACTION_OPACITY:
         return dt_masks_form_change_opacity(mask_gui->dev, mask_form, parent_id, up, flow);
-      case DT_MASKS_INTERACTION_HARDNESS:
-        return _change_hardness(mask_form, parent_id, mask_gui, module, form_index, up ? +0.01f : -0.01f,
-                                DT_MASKS_INCREMENT_OFFSET, flow);
+      case DT_MASKS_INTERACTION_FADING:
+        return _change_fading(mask_form, parent_id, mask_gui, module, form_index, up ? +0.01f : -0.01f,
+                              DT_MASKS_INCREMENT_OFFSET, flow);
       case DT_MASKS_INTERACTION_SIZE:
         return _change_size(mask_form, parent_id, mask_gui, module, form_index, up ? 1.02f : 0.98f,
                             DT_MASKS_INCREMENT_SCALE, flow);
@@ -1858,7 +1858,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
 
       else // we create a node
       {
-        float masks_border = MIN(dt_conf_get_float("plugins/darkroom/masks/polygon/hardness"), HARDNESS_MAX);
+        float masks_border = MIN(dt_conf_get_float("plugins/darkroom/masks/polygon/fading"), FADING_MAX);
 
         int node_count = g_list_length(mask_form->points);
         // change the values
@@ -1868,7 +1868,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
         dt_masks_gui_cursor_to_raw_norm(mask_gui->dev, mask_gui, polygon_node->node);
 
         polygon_node->ctrl1[0] = polygon_node->ctrl1[1] = polygon_node->ctrl2[0] = polygon_node->ctrl2[1] = -1.0;
-        polygon_node->border[0] = polygon_node->border[1] = MAX(HARDNESS_MIN, masks_border);
+        polygon_node->border[0] = polygon_node->border[1] = MAX(FADING_MIN, masks_border);
         polygon_node->state = DT_MASKS_POINT_STATE_NORMAL;
   
         if(node_count == 0)
@@ -1878,7 +1878,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
           polygon_first_node->node[0] = polygon_node->node[0];
           polygon_first_node->node[1] = polygon_node->node[1];
           polygon_first_node->ctrl1[0] = polygon_first_node->ctrl1[1] = polygon_first_node->ctrl2[0] = polygon_first_node->ctrl2[1] = -1.0;
-          polygon_first_node->border[0] = polygon_first_node->border[1] = MAX(HARDNESS_MIN, masks_border);
+          polygon_first_node->border[0] = polygon_first_node->border[1] = MAX(FADING_MIN, masks_border);
           polygon_first_node->state = DT_MASKS_POINT_STATE_NORMAL;
           mask_form->points = g_list_append(mask_form->points, polygon_first_node);
 
@@ -3638,7 +3638,7 @@ static void _polygon_set_hint_message(const dt_masks_form_gui_t *const mask_gui,
   else if(mask_gui->source_selected)
     g_strlcat(msgbuf, _("<b>Move source</b>: Drag"), msgbuf_len);
   else if(mask_gui->handle_border_hovered >= 0)
-    g_strlcat(msgbuf, _("<b>Node hardness</b>: Drag"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Node fading</b>: Drag"), msgbuf_len);
   else if(mask_gui->handle_hovered >= 0)
     g_strlcat(msgbuf, _("<b>Node curvature</b>: Drag"), msgbuf_len);
   // The node operations below need the node to be selected, which the first click does.

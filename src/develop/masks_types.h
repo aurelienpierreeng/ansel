@@ -124,7 +124,7 @@ typedef enum dt_masks_interaction_t
 {
   DT_MASKS_INTERACTION_UNDEF = 0,    // no property: an unmapped wheel combination does nothing
   DT_MASKS_INTERACTION_SIZE = 1,     // property of the form (shape), explicit
-  DT_MASKS_INTERACTION_HARDNESS = 2, // property of the form (shape), explicit
+  DT_MASKS_INTERACTION_FADING = 2,   // property of the form (shape), explicit
   DT_MASKS_INTERACTION_OPACITY = 3,  // property of the group in which the form is included, explicit
   DT_MASKS_INTERACTION_ROTATION = 4, // property of the form (shape), explicit
   DT_MASKS_INTERACTION_LAST

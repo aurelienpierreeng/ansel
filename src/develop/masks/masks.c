@@ -1544,7 +1544,7 @@ const char *dt_masks_type_name(const dt_masks_type_t type)
    *
    * These tokens are PERSISTED: they build plugins/darkroom/<plugin>/<type>/<feature>, declared in
    * data/anselconfig.xml.in. "polygon" can never become "path" -- a key outside confgen reads 0,
-   * which would silently reset the user's hardness. */
+   * which would silently reset the user's fading. */
   if(type & DT_MASKS_CIRCLE) return "circle";
   else if(type & DT_MASKS_POLYGON) return "polygon";
   else if(type & DT_MASKS_ELLIPSE) return "ellipse";
