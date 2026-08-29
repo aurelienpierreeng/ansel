@@ -24,10 +24,8 @@
 
 #include "common/conf.h"
 #include "common/logging.h"
-#include "control/user_message.h"
 
 #include <curl/curl.h>
-#include <glib/gi18n.h>
 #include <json-glib/json-glib.h>
 #include <string.h>
 #include <time.h>
@@ -41,6 +39,7 @@
 
 static GThread *_worker = NULL;
 static gint _shutting_down = 0;
+static dt_updates_notify_fn _notify = NULL;
 static char *_download_url = NULL;
 static char *_available_version = NULL;
 
@@ -99,8 +98,7 @@ static gboolean _announce(gpointer data)
     _download_url = found->url;
     _available_version = found->version;
     found->url = found->version = NULL;
-    dt_control_log(_("A newer nightly build is available (%s).\nHelp ▸ Update to the latest nightly build"),
-                   _available_version);
+    if(_notify) _notify(_available_version, _download_url);
   }
   g_free(found->url);
   g_free(found->version);
@@ -200,8 +198,9 @@ static gpointer _updates_worker(gpointer data)
   return NULL;
 }
 
-void dt_updates_init(const gboolean have_gui)
+void dt_updates_init(const gboolean have_gui, dt_updates_notify_fn notify)
 {
+  _notify = notify;
   // Only a nightly knows what "newer" means; a self-build or a distribution package
   // is updated by whoever built it.
   if(!have_gui) return;

@@ -39,8 +39,15 @@
  * and no dependency on the analytics or crash-reporting modules.
  */
 
-/** Start the check if it is due. Returns immediately; the fetch runs on its own thread. */
-void dt_updates_init(const gboolean have_gui);
+/** Called on the GUI thread when a newer build was found: the version string and the
+ * download URL for the running format. Registered by the caller of dt_updates_init(),
+ * because telling the user is the upper layers' business -- this module sits in
+ * common/ and must not reach into control/ or gui/ for a toast. */
+typedef void (*dt_updates_notify_fn)(const char *version, const char *url);
+
+/** Start the check if it is due. Returns immediately; the fetch runs on its own thread.
+ * @p notify may be NULL, in which case a result is only queryable through the getters. */
+void dt_updates_init(const gboolean have_gui, dt_updates_notify_fn notify);
 
 /** Stop the worker. Bounded by the request timeout. */
 void dt_updates_shutdown(void);
