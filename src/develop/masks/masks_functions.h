@@ -157,6 +157,12 @@ dt_masks_raster_result_t dt_masks_get_points_border(struct dt_develop_t *dev, dt
                                float **points, int *points_count,
                                float **border, int *border_count, int source, dt_iop_module_t *module);
 
+/* The raw membership-state mutator. Module-private on purpose: it takes a row by pointer and
+ * cannot touch the group, so every external caller had to remember the copy-on-write dance and
+ * most did not. Outside code goes through dt_masks_group_set_member_operation(), which owns it. */
+void dt_masks_group_entry_apply_operation(struct dt_masks_form_group_t *pt,
+                                          const dt_masks_state_t apply_state);
+
 /** the shape-specific function tables */
 extern const dt_masks_functions_t dt_masks_functions_circle;
 extern const dt_masks_functions_t dt_masks_functions_ellipse;

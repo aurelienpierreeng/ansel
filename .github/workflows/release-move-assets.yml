@@ -1,0 +1,101 @@
+#   This file is part of the Ansel project.
+#   Copyright (C) 2026 Aurélien PIERRE.
+#   
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+
+# Maintenance, by hand only: move the assets created in one month from one release to
+# another -- first used to fold August 2026 from the retired rolling v0.0.0 into
+# nightly-2026-08, and kept for the day a nightly uploads to the wrong tag.
+#
+# GitHub has no move. Each asset streams through the runner: download, upload to the
+# target, verify the size on the target, and only then delete from the source. One
+# asset on disk at a time, so a month of nightlies (~22 GiB) never needs that much
+# space. Dry-run by default: it lists what would move and touches nothing.
+#
+# A workflow can only be dispatched if its file is on the default branch, which is
+# why this lives here rather than on a throwaway branch.
+name: Move release assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "source release tag"
+        default: v0.0.0
+      to:
+        description: "target release tag"
+        default: nightly-2026-08
+      month:
+        description: "move assets created in this month (YYYY-MM)"
+        default: "2026-08"
+      dry_run:
+        description: "list only, move nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  move:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FROM: ${{ inputs.from }}
+      TO: ${{ inputs.to }}
+      MONTH: ${{ inputs.month }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Move
+        run: |
+          set -uo pipefail
+          repo="$GITHUB_REPOSITORY"
+          gh api "repos/${repo}/releases/tags/${TO}" -q .id >/dev/null || { echo "::error::target ${TO} does not exist"; exit 1; }
+          gh api --paginate "repos/${repo}/releases/tags/${FROM}" \
+            -q ".assets[] | select(.created_at | startswith(\"${MONTH}\")) | [.name, .size] | @tsv" \
+            | sort > assets.tsv
+          total=$(wc -l < assets.tsv)
+          echo "${total} asset(s) created in ${MONTH} on ${FROM}"
+          { echo "### ${FROM} -> ${TO}, ${MONTH}: ${total} asset(s), dry_run=${DRY_RUN}"; echo '```'; cut -f1 assets.tsv; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          [[ "${DRY_RUN}" == "true" ]] && { echo "dry run, nothing moved"; exit 0; }
+
+          mkdir -p dl; moved=0; failed=0
+          while IFS=$'\t' read -r name size; do
+            echo "::group::${name} (${size} bytes)"
+            rm -f "dl/${name}"
+            if ! gh release download "${FROM}" --repo "${repo}" --pattern "${name}" --dir dl; then
+              echo "::error::download failed: ${name}"; failed=$((failed+1)); echo "::endgroup::"; continue
+            fi
+            local_size=$(stat -c %s "dl/${name}")
+            if [[ "${local_size}" != "${size}" ]]; then
+              echo "::error::downloaded size ${local_size} != ${size}: ${name}"; failed=$((failed+1)); rm -f "dl/${name}"; echo "::endgroup::"; continue
+            fi
+            if ! gh release upload "${TO}" --repo "${repo}" --clobber "dl/${name}"; then
+              echo "::error::upload failed: ${name}"; failed=$((failed+1)); rm -f "dl/${name}"; echo "::endgroup::"; continue
+            fi
+            remote_size=$(gh api "repos/${repo}/releases/tags/${TO}" -q ".assets[] | select(.name == \"${name}\") | .size")
+            if [[ "${remote_size}" != "${size}" ]]; then
+              echo "::error::target size ${remote_size} != ${size}, NOT deleting source: ${name}"; failed=$((failed+1)); rm -f "dl/${name}"; echo "::endgroup::"; continue
+            fi
+            if gh release delete-asset "${FROM}" "${name}" --repo "${repo}" --yes; then
+              moved=$((moved+1)); echo "moved ${name}"
+            else
+              echo "::error::copied but source delete failed (duplicate now exists): ${name}"; failed=$((failed+1))
+            fi
+            rm -f "dl/${name}"
+            echo "::endgroup::"
+          done < assets.tsv
+          echo "moved ${moved}, failed ${failed}, of ${total}"
+          echo "**moved ${moved}, failed ${failed}, of ${total}**" >> "$GITHUB_STEP_SUMMARY"
+          [[ "${failed}" -eq 0 ]]

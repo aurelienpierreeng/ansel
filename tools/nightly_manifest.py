@@ -66,6 +66,15 @@ FORMATS = {
 
 # Ansel-0.0.0+4802.gd5a317e072-x86_64.flatpak -> ("0.0.0+4802.gd5a317e072", "d5a317e072")
 VERSION_RE = re.compile(r"^[Aa]nsel-(?P<version>[0-9][^-]*?\.g(?P<hash>[0-9a-f]+))-")
+# The commit count after "+": monotonic by construction, which upload time is not --
+# an asset moved between releases, or re-uploaded, gets a fresh timestamp.
+COMMITS_RE = re.compile(r"\+(\d+)[.~]g")
+
+
+def build_rank(name, uploaded):
+    """Sort key for "newest": commit count first, upload time to break ties."""
+    m = COMMITS_RE.search(name)
+    return (int(m.group(1)) if m else -1, uploaded or "")
 # The same version string as a bare Docker tag: 0.0.0+4802.gd5a317e072 -- except that a
 # Docker tag cannot contain "+", so the workflow writes it as 0.0.0-4802.gd5a317e072.
 VERSION_TAG_RE = re.compile(r"^[0-9][^-]*-\d+\.g(?P<hash>[0-9a-f]+)$")
@@ -130,10 +139,13 @@ def build_manifest(token, with_hashes=True):
                 if TAG_RE.match(r["tag_name"]) and not r["draft"]]
     releases.sort(key=lambda r: r["tag_name"], reverse=True)
 
-    # Per format, the most recently UPLOADED matching asset, not the first one the API
-    # lists: a release holds a month of nightlies, and asset order is not date order.
-    # Releases are walked newest first, and a format found in a newer release is never
-    # displaced by an older one.
+    # Per format, the matching asset with the highest commit count (build_rank), not
+    # the first one the API lists -- a release holds a month of nightlies and asset
+    # order is not build order -- and not the most recently uploaded either: an asset
+    # moved from the retired rolling release into its month carries a fresh upload
+    # time, and would have outranked that night's genuinely newer build. Releases are
+    # walked newest first, and a format found in a newer release is never displaced
+    # by an older one.
     newest = {}
     for rel in releases:
         for a in rel["assets"]:
@@ -141,7 +153,8 @@ def build_manifest(token, with_hashes=True):
                 if not match(a["name"]):
                     continue
                 cur = newest.get(key)
-                if cur and (cur["release"] > rel["tag_name"] or cur["uploaded"] >= a["updated_at"]):
+                if cur and (cur["release"] > rel["tag_name"]
+                            or build_rank(cur["name"], cur["uploaded"]) >= build_rank(a["name"], a["updated_at"])):
                     continue
                 m = VERSION_RE.match(a["name"])
                 newest[key] = {
