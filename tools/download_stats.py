@@ -108,6 +108,19 @@ def snapshot(token):
             by_release[tag] += n
             assets += 1
 
+    # Repository clones, per day, from the traffic API: the closest thing to "downloads"
+    # for people who build from source. Only the last 14 days are exposed and the call
+    # needs write access to the repository, so it is best effort: a token without it
+    # (possibly the workflow's own GITHUB_TOKEN) yields a warning and no traffic block,
+    # and the snapshot is otherwise complete. The raw count is dominated by CI -- every
+    # workflow job clones -- so `uniques` (distinct cloners) is the figure to read.
+    traffic = None
+    try:
+        clones = get_json(f"{API}/repos/{REPO}/traffic/clones?per=day", token)
+        traffic = {c["timestamp"][:10]: {"clones": c["count"], "uniques": c["uniques"]} for c in clones.get("clones", [])}
+    except Exception as e:  # noqa: BLE001
+        print(f"traffic API unavailable ({e}); snapshot has no clone counts", file=sys.stderr)
+
     docker = None
     try:
         hub = get_json(f"{DOCKER_HUB}/{DOCKER_IMAGE}/")
@@ -125,12 +138,25 @@ def snapshot(token):
             "by_release": dict(sorted(by_release.items())),
         },
         "docker_hub": docker,
+        "traffic": traffic,
     }
 
 
 def append(series, snap):
-    """One entry per date, the newest snapshot for a date winning; sorted by date."""
+    """One entry per date, the newest snapshot for a date winning; sorted by date.
+
+    Clone traffic is a rolling 14-day window, so each snapshot's `traffic` is folded
+    into the series' own by-date map (`series[-1]["traffic_by_day"]` carries it forward):
+    a day seen in several snapshots keeps the last value, and days older than the
+    window survive because they were recorded when they were inside it."""
     entries = {s["date"]: s for s in series if isinstance(s, dict) and "date" in s}
+    by_day = {}
+    for s in series:
+        by_day.update(s.get("traffic_by_day") or {})
+        by_day.update(s.get("traffic") or {})
+    by_day.update(snap.get("traffic") or {})
+    snap = dict(snap)
+    snap["traffic_by_day"] = dict(sorted(by_day.items()))
     entries[snap["date"]] = snap
     return [entries[d] for d in sorted(entries)]
 
