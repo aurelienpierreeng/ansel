@@ -142,8 +142,13 @@ jobs:
     env:
       REPO: "https://github.com/aurelienpierreeng/ansel"
       ROOM: "!SgRYbzspwqwwUgSQHC:matrix.org"
-      TAG: "v0.0.0"
     steps:
+      # One pre-release per month instead of one for all time: GitHub caps a release at
+      # 1000 assets, and five formats a night filled the rolling v0.0.0 in under a year.
+      # Releases themselves, total size and bandwidth are unlimited, so rotating the tag
+      # is the whole fix. nightly-prune.yml deletes months older than the retention window.
+      - name: Compute the release tag
+        run: echo "TAG=nightly-$(date -u +%Y-%m)" >> "$GITHUB_ENV"
       - name: Checkout ansel source
         uses: actions/checkout@v6
         with:

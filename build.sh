@@ -175,6 +175,13 @@ parse_args()
 		--skip-lensfun)
 			SKIP_UPDATE_LENSFUN=1
 			;;
+		--cmake-option)
+			# Anything cmake accepts, verbatim -- for the options this script has no
+			# flag for (-DBUILD_CHANNEL=nightly, -DPROJECT_VERSION=..., ...).
+			# Repeatable. Appended in the order given, after this script's own.
+			CMAKE_EXTRA_OPTIONS="${CMAKE_EXTRA_OPTIONS} $2"
+			shift
+			;;
 		-h|--help)
 			PRINT_HELP=1
 			;;
@@ -198,6 +205,7 @@ $(basename $0) [OPTIONS]
 Options:
 Installation:
    --prefix         <string>  Install directory prefix
+   --cmake-option   <string>  Extra cmake option, verbatim (repeatable)
                               (default: $INSTALL_PREFIX_DEFAULT)
    --sudo                     Use sudo when doing the install
 
@@ -388,6 +396,7 @@ if [ $PRINT_HELP -ne 0 ] ; then
 fi
 
 CMAKE_MORE_OPTIONS=""
+CMAKE_EXTRA_OPTIONS="${CMAKE_EXTRA_OPTIONS:-}"
 for i in $FEATURES; do
 	eval cmake_boolean_option USE_$i \$FEAT_$i
 done
@@ -507,7 +516,7 @@ if [ $ADDRESS_SANITIZER -ne 0 ] ; then
 fi
 
 
-cmd_config="CXX=${CXX_COMPILER} CC=${CC_COMPILER} ${ASAN_FLAGS}cmake -G \"$BUILD_GENERATOR\" -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ${CMAKE_MORE_OPTIONS} \"$DT_SRC_DIR\""
+cmd_config="CXX=${CXX_COMPILER} CC=${CC_COMPILER} ${ASAN_FLAGS}cmake -G \"$BUILD_GENERATOR\" -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ${CMAKE_MORE_OPTIONS} ${CMAKE_EXTRA_OPTIONS} \"$DT_SRC_DIR\""
 cmd_build="cmake --build "$BUILD_DIR" -- -j$MAKE_TASKS"
 if [ "$TARGET" = "install" ]; then
 	# `cmake --install` only replays the generated install script: unlike

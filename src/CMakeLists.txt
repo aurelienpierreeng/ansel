@@ -153,6 +153,7 @@ FILE(GLOB SOURCE_FILES
   "gui/privacy_consent.c"
   "common/sentry.c"
   "common/telemetry.c"
+  "common/updates.c"
   "common/system_signal_handling.c"
   "common/startup_progress.c"
   "common/thumbnail_notify.c"

@@ -31,7 +31,7 @@ on:
     - cron: "0 5 * * *"
 
 permissions:
-  contents: read
+  contents: write   # the image is also attached to the monthly nightly release
 
 jobs:
   docker:
@@ -44,6 +44,17 @@ jobs:
           fetch-depth: 1
           fetch-tags: true
           submodules: true
+      # The image is built from a context without .git (.dockerignore), so the version
+      # string and commit hash are computed here, where git is, and passed in.
+      # fetch-depth: 0 because get_git_version_string.sh needs to reach the last tag.
+      - name: Compute version
+        run: |
+          version=$(sh tools/get_git_version_string.sh)
+          echo "ANSEL_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "ANSEL_COMMIT_HASH=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          # A Docker tag may not contain "+"; tools/nightly_manifest.py expects this
+          # exact substitution when it reads the tag back.
+          echo "ANSEL_DOCKER_TAG=${version//+/-}" >> "$GITHUB_ENV"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Log in to Docker Hub
@@ -57,4 +68,42 @@ jobs:
           context: .
           file: .ci/Dockerfile
           push: true
-          tags: aurelienpierre/ansel:current
+          build-args: |
+            ANSEL_VERSION=${{ env.ANSEL_VERSION }}
+            ANSEL_COMMIT_HASH=${{ env.ANSEL_COMMIT_HASH }}
+            ANSEL_BUILD_CHANNEL=nightly
+          tags: |
+            aurelienpierre/ansel:current
+            aurelienpierre/ansel:${{ env.ANSEL_DOCKER_TAG }}
+
+      # The same image, as a file on the monthly release next to the other formats, so
+      # the nightly manifest can link to it and a user without Docker Hub access (or
+      # who wants the exact build from a given night, months later) can
+      # `zstd -d < Ansel-*-docker.tar.zst | docker load`.
+      #
+      # A release asset must be under 2 GiB. The guard fails the step outright rather
+      # than let tip upload a file GitHub would reject after the transfer.
+      - name: Save the image for the release
+        run: |
+          command -v zstd >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q zstd; }
+          docker pull -q "aurelienpierre/ansel:${ANSEL_DOCKER_TAG}"
+          file="Ansel-${ANSEL_VERSION}-docker.tar.zst"
+          docker save "aurelienpierre/ansel:${ANSEL_DOCKER_TAG}" | zstd -T0 -19 -q -o "${file}"
+          size=$(stat -c %s "${file}")
+          echo "ANSEL_DOCKER_FILE=${file}" >> "$GITHUB_ENV"
+          echo "Image archive: ${file}, $((size / 1048576)) MiB" >> "$GITHUB_STEP_SUMMARY"
+          if (( size >= 2147483648 )); then
+            echo "::error::${file} is $((size / 1048576)) MiB, over GitHub's 2 GiB asset limit -- slim the image (multi-stage Dockerfile) before it can ship on the release"
+            exit 1
+          fi
+
+      - name: Compute the release tag
+        run: echo "TAG=nightly-$(date -u +%Y-%m)" >> "$GITHUB_ENV"
+
+      - name: Attach to the nightly release
+        uses: aurelienpierreeng/tip@master
+        with:
+          tag: ${{ env.TAG }}
+          rm: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: ${{ env.ANSEL_DOCKER_FILE }}

@@ -65,8 +65,42 @@ jobs:
           restore-keys: |
             flatpak-downloads-
 
+      # Signing is what lets a client add the repository without --no-gpg-verify.
+      # Optional: with no key in the secrets the build is unsigned, exactly as before.
+      - name: Import the repository signing key
+        if: ${{ secrets.FLATPAK_GPG_KEY != '' }}
+        run: |
+          echo "${{ secrets.FLATPAK_GPG_KEY }}" | gpg --batch --import
+          echo "GPG_KEY_ID=${{ secrets.FLATPAK_GPG_KEY_ID }}" >> "$GITHUB_ENV"
+
       - name: Build Flatpak
         run: packaging/flatpak/build-flatpak.sh
+
+      # The OSTree repository is what gives users `flatpak update`; the bundle on the
+      # release is a one-shot install. Published to a Cloudflare R2 bucket over the S3
+      # API (free tier: 10 GB, no egress charge; a pruned repo is a few hundred MB).
+      # Optional: with no R2 secrets the step is skipped and only the bundle ships.
+      - name: Publish the repository to R2
+        if: ${{ success() && secrets.R2_ACCOUNT_ID != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: "true"
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          REPO_URL: ${{ vars.FLATPAK_REPO_URL || 'https://flatpak.ansel.photos' }}
+        run: |
+          # objects/ first, summary last: a client that fetches the new summary must find
+          # every object it names already there.
+          aws s3 sync build/flatpak/repo/objects "s3://${R2_BUCKET}/objects" \
+            --endpoint-url "${R2_ENDPOINT}" --only-show-errors
+          aws s3 sync build/flatpak/repo "s3://${R2_BUCKET}/" \
+            --endpoint-url "${R2_ENDPOINT}" --only-show-errors --exclude "objects/*" --delete
+          packaging/flatpak/make-flatpakrepo.sh "${REPO_URL}" > ansel.flatpakrepo
+          aws s3 cp ansel.flatpakrepo "s3://${R2_BUCKET}/ansel.flatpakrepo" \
+            --endpoint-url "${R2_ENDPOINT}" --content-type "application/vnd.flatpak.repo" --only-show-errors
+          echo "Repository published: ${REPO_URL}/ansel.flatpakrepo" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Package upload
         if: ${{ success() }}
@@ -81,9 +115,11 @@ jobs:
     env:
       REPO: "https://github.com/aurelienpierreeng/ansel"
       ROOM: "!SgRYbzspwqwwUgSQHC:matrix.org"
-      TAG: "v0.0.0"
     needs: Flatpak
     steps:
+      # One pre-release per month; see lin-nightly.yml for why.
+      - name: Compute the release tag
+        run: echo "TAG=nightly-$(date -u +%Y-%m)" >> "$GITHUB_ENV"
       - name: Checkout ansel source
         uses: actions/checkout@v6
         with:

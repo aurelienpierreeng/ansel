@@ -22,9 +22,11 @@
 
 #include "gui/privacy_consent.h"
 #include <glib/gi18n.h>
+#include <string.h>
 #include "gui/application.h"
 
-#if defined(HAVE_SENTRY) || defined(HAVE_TELEMETRY)
+// The update check is always built, so the dialog always exists; crash reporting and
+// analytics add their lines to it when they are compiled in.
 
 #include "common/conf.h"
 #include "widgets/widget_settings.h"
@@ -43,9 +45,20 @@ void dt_privacy_ask_consent(const gboolean have_gui)
   // Already decided once: never ask again (toggles live in Preferences).
   if(dt_conf_key_exists(DT_PRIVACY_ASKED_KEY)) return;
 
-  // Without a GUI we cannot prompt; leave both features at their (off) defaults
-  // until the user is shown the dialog on a future GUI launch.
+  // Without a GUI we cannot prompt; leave the features at their defaults until the
+  // user is shown the dialog on a future GUI launch.
   if(!have_gui) return;
+
+  // Nothing to ask a self-build or a distribution package: the two data flows are
+  // compiled out and the update check is a nightly-only thing.
+  const gboolean is_nightly = strcmp(DT_BUILD_CHANNEL, "nightly") == 0;
+#if !defined(HAVE_SENTRY) && !defined(HAVE_TELEMETRY)
+  if(!is_nightly)
+  {
+    dt_conf_set_bool(DT_PRIVACY_ASKED_KEY, TRUE);
+    return;
+  }
+#endif
 
   GtkWidget *parent = (dt_gui_get_global() && dt_gui_get_ui()) ? dt_gui_main_window() : NULL;
 
@@ -83,6 +96,17 @@ void dt_privacy_ask_consent(const gboolean have_gui)
   gtk_box_pack_start(GTK_BOX(content), usage_check, FALSE, FALSE, 0);
 #endif
 
+  // Not a data flow -- an HTTP GET of a static file, once a day -- but it reaches a
+  // server, so it is a choice the user makes here rather than one made for them.
+  GtkWidget *updates_check = NULL;
+  if(is_nightly)
+  {
+    updates_check = gtk_check_button_new_with_label(
+        _("Check for newer nightly builds at startup (one small download from ansel.photos, once a day)"));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(updates_check), dt_conf_get_bool("updates/enabled"));
+    gtk_box_pack_start(GTK_BOX(content), updates_check, FALSE, FALSE, 0);
+  }
+
   GtkWidget *link = gtk_link_button_new_with_label(
       DT_PRIVACY_DOC_URL, _("Read what is collected, where it goes and why"));
   gtk_widget_set_halign(link, GTK_ALIGN_START);
@@ -99,20 +123,14 @@ void dt_privacy_ask_consent(const gboolean have_gui)
 #ifdef HAVE_TELEMETRY
   dt_conf_set_bool("telemetry/enabled", gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(usage_check)));
 #endif
+  if(updates_check)
+    dt_conf_set_bool("updates/enabled", gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(updates_check)));
 
   gtk_widget_destroy(dialog);
 
   // Record that the user has decided so the dialog never shows again.
   dt_conf_set_bool(DT_PRIVACY_ASKED_KEY, TRUE);
 }
-
-#else // neither crash reporting nor analytics built in
-
-void dt_privacy_ask_consent(const gboolean have_gui)
-{
-}
-
-#endif
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
