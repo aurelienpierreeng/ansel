@@ -4466,27 +4466,43 @@ float dt_masks_get_set_conf_value_with_toast(dt_masks_form_t *mask_form, const c
   return value;
 }
 
-dt_masks_form_group_t *dt_masks_group_add_form(dt_develop_t *dev, dt_masks_form_t *group_form, dt_masks_form_t *mask_form)
+dt_masks_form_group_t *dt_masks_group_add_form_with_state(dt_develop_t *dev, dt_masks_form_t *group_form,
+                                                          dt_masks_form_t *mask_form, const int parentid,
+                                                          const dt_masks_state_t state, const float opacity)
 {
-  // add a form to group and check for self inclusion
-
+  if(IS_NULL_PTR(group_form) || IS_NULL_PTR(mask_form)) return NULL;
   if(!(group_form->type & DT_MASKS_GROUP)) return NULL;
-  // either the form to add is not a group, so no risk
-  // or we go through all points of form to see if we find a ref to grp->formid
-  if(!(mask_form->type & DT_MASKS_GROUP) || _find_in_group(dev, mask_form, group_form->formid) == 0)
+
+  /* Either the form being added is not a group, so there is no risk, or we walk it looking for a
+   * reference back to this group. This is the guard the hand-rolled call sites skipped. */
+  if((mask_form->type & DT_MASKS_GROUP) && _find_in_group(dev, mask_form, group_form->formid) != 0)
   {
-    dt_masks_form_group_t *group_entry = malloc(sizeof(dt_masks_form_group_t));
-    group_entry->formid = mask_form->formid;
-    group_entry->parentid = group_form->formid;
-    group_entry->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION;
-    group_entry->opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
-    group_form->points = g_list_append(group_form->points, group_entry);
-    dt_masks_form_update_gravity_center(dev, group_form);
-    return group_entry;
+    dt_control_log(_("Masks can not contain themselves"));
+    return NULL;
   }
 
-  dt_control_log(_("Masks can not contain themselves"));
-  return NULL;
+  dt_masks_form_group_t *group_entry = malloc(sizeof(dt_masks_form_group_t));
+  if(IS_NULL_PTR(group_entry)) return NULL;
+
+  group_entry->formid = mask_form->formid;
+  group_entry->parentid = parentid;
+  group_entry->state = state;
+  group_entry->opacity = opacity;
+  group_form->points = g_list_append(group_form->points, group_entry);
+
+  /* The group's cached centre of gravity is now stale, and hit-testing reads it. The hand-rolled
+   * sites left it stale. */
+  dt_masks_form_update_gravity_center(dev, group_form);
+  return group_entry;
+}
+
+dt_masks_form_group_t *dt_masks_group_add_form(dt_develop_t *dev, dt_masks_form_t *group_form, dt_masks_form_t *mask_form)
+{
+  if(IS_NULL_PTR(mask_form)) return NULL;
+  if(IS_NULL_PTR(group_form)) return NULL;
+  return dt_masks_group_add_form_with_state(dev, group_form, mask_form, group_form->formid,
+                                            DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION,
+                                            dt_conf_get_float("plugins/darkroom/masks/opacity"));
 }
 
 void dt_masks_group_ungroup(dt_develop_t *dev, dt_masks_form_t *dest_group, dt_masks_form_t *group_form)

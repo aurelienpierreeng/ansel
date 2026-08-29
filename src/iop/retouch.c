@@ -682,12 +682,8 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
       dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
       if(IS_NULL_PTR(form)) continue;
       
-      dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)malloc(sizeof(dt_masks_form_group_t));
-      fpt->formid = formid;
-      fpt->parentid = grid;
-      fpt->state = DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION;
-      fpt->opacity = 1.0f;
-      grp->points = g_list_append(grp->points, fpt);
+      dt_masks_group_add_form_with_state(self->dev, grp, form, grid,
+                                         DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION, 1.0f);
     }
   }
 
