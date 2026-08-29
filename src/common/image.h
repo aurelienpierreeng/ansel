@@ -748,6 +748,10 @@ typedef enum dt_image_write_sidecar_result_t
   DT_IMAGE_WRITE_SIDECAR_IO_ERROR,       // the write to storage itself failed
 } dt_image_write_sidecar_result_t;
 dt_image_write_sidecar_result_t dt_image_write_sidecar_file(const int32_t imgid);
+/** write a sidecar for imgid unconditionally, bypassing the write_sidecar_files preference and
+ * the up-to-date timestamp check. Use only from explicit user-initiated sync commands
+ * (menu "Synchronize developments from database to XMP", crawler keep-db, local-copy resynch). */
+dt_image_write_sidecar_result_t dt_image_write_sidecar_file_forced(const int32_t imgid);
 void dt_image_synch_xmp(const int selected);
 void dt_image_synch_xmps(const GList *img);
 void dt_image_synch_all_xmp(const gchar *pathname);

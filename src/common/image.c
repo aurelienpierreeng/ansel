@@ -2355,7 +2355,8 @@ static gboolean _sidecar_is_up_to_date(const dt_image_t *img)
   return change_timestamp_unix <= write_timestamp;
 }
 
-static dt_image_write_sidecar_result_t _write_sidecar_file_from_image_locked(const dt_image_t *img)
+static dt_image_write_sidecar_result_t _write_sidecar_file_from_image_locked(const dt_image_t *img,
+                                                                               const gboolean force_write)
 {
   if(IS_NULL_PTR(img) || img->id <= 0) return DT_IMAGE_WRITE_SIDECAR_DISABLED;
 
@@ -2371,7 +2372,7 @@ static dt_image_write_sidecar_result_t _write_sidecar_file_from_image_locked(con
   dt_image_path_append_version(img->id, filename, sizeof(filename));
   g_strlcat(filename, ".xmp", sizeof(filename));
 
-  if(g_file_test(filename, G_FILE_TEST_EXISTS))
+  if(!force_write && g_file_test(filename, G_FILE_TEST_EXISTS))
   {
     if(_sidecar_is_up_to_date(img))
     {
@@ -2402,7 +2403,26 @@ dt_image_write_sidecar_result_t dt_image_write_sidecar_file(const int32_t imgid)
   }
   dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock acquired (write)\n", imgid);
 
-  const dt_image_write_sidecar_result_t res = _write_sidecar_file_from_image_locked(img);
+  const dt_image_write_sidecar_result_t res = _write_sidecar_file_from_image_locked(img, FALSE);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_MINIMAL);
+  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock released (write minimal)\n", imgid);
+  return res;
+}
+
+dt_image_write_sidecar_result_t dt_image_write_sidecar_file_forced(const int32_t imgid)
+{
+  if(imgid <= 0) return DT_IMAGE_WRITE_SIDECAR_DISABLED;
+
+  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d forced write start\n", imgid);
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(img))
+  {
+    dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock failed\n", imgid);
+    return DT_IMAGE_WRITE_SIDECAR_CACHE_BUSY;
+  }
+  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock acquired (write)\n", imgid);
+
+  const dt_image_write_sidecar_result_t res = _write_sidecar_file_from_image_locked(img, TRUE);
   dt_image_cache_write_release(img, DT_IMAGE_CACHE_MINIMAL);
   dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock released (write minimal)\n", imgid);
   return res;
