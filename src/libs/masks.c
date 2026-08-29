@@ -471,8 +471,15 @@ static void _add_masks_history_item(dt_lib_masks_t *lm)
 }
 
 
-static void _tree_inverse(GtkButton *button, dt_lib_module_t *self)
+/* One handler for all five operations. They differed by a single constant and were otherwise
+ * identical to the line, which is how five copies of a copy-on-write mistake got written; the
+ * operation now rides on the menu item, the way develop/blend_gui.c already carries "blend-state". */
+static void _tree_apply_operation(GtkWidget *menu_item, dt_lib_module_t *self)
 {
+  const dt_masks_state_t operation
+      = (dt_masks_state_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "masks-operation"));
+  if(operation == DT_MASKS_STATE_NONE) return;
+
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
 
   // now we go through all selected nodes
@@ -495,183 +502,7 @@ static void _tree_inverse(GtkButton *button, dt_lib_module_t *self)
        * could still be observing. UNCHANGED (the row already had this operator) deliberately does
        * not count as a change, so a no-op click writes no undo step. */
       dt_masks_member_t member;
-      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, DT_MASKS_STATE_INVERSE, &member)
-         == DT_MASKS_OK)
-      {
-        _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), member.state, member.opacity,
-                       model, &iter, (int)member.index);
-        change = 1;
-      }
-    }
-  }
-  g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
-  items = NULL;
-
-  if(change)
-  {
-    _add_masks_history_item(lm);
-
-    dt_control_queue_redraw_center();
-  }
-}
-
-static void _tree_intersection(GtkButton *button, dt_lib_module_t *self)
-{
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-
-  // now we go through all selected nodes
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
-  int change = 0;
-  GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
-  for(const GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
-  {
-    GtkTreePath *item = (GtkTreePath *)items_iter->data;
-    GtkTreeIter iter;
-    if(gtk_tree_model_get_iter(model, &iter, item))
-    {
-      int grid = -1;
-      int id = -1;
-      _lib_masks_get_values(model, &iter, NULL, &grid, &id);
-
-      /* The module owns the copy-on-write: it touches the group before resolving the row, which
-       * this loop did not do -- it mutated a refcounted membership block that a history snapshot
-       * could still be observing. UNCHANGED (the row already had this operator) deliberately does
-       * not count as a change, so a no-op click writes no undo step. */
-      dt_masks_member_t member;
-      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, DT_MASKS_STATE_INTERSECTION, &member)
-         == DT_MASKS_OK)
-      {
-        _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), member.state, member.opacity,
-                       model, &iter, (int)member.index);
-        change = 1;
-      }
-    }
-  }
-  g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
-  items = NULL;
-
-  if(change)
-  {
-    _add_masks_history_item(lm);
-
-    dt_control_queue_redraw_center();
-  }
-}
-
-static void _tree_difference(GtkButton *button, dt_lib_module_t *self)
-{
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-
-  // now we go through all selected nodes
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
-  int change = 0;
-  GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
-  for(const GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
-  {
-    GtkTreePath *item = (GtkTreePath *)items_iter->data;
-    GtkTreeIter iter;
-    if(gtk_tree_model_get_iter(model, &iter, item))
-    {
-      int grid = -1;
-      int id = -1;
-      _lib_masks_get_values(model, &iter, NULL, &grid, &id);
-
-      /* The module owns the copy-on-write: it touches the group before resolving the row, which
-       * this loop did not do -- it mutated a refcounted membership block that a history snapshot
-       * could still be observing. UNCHANGED (the row already had this operator) deliberately does
-       * not count as a change, so a no-op click writes no undo step. */
-      dt_masks_member_t member;
-      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, DT_MASKS_STATE_DIFFERENCE, &member)
-         == DT_MASKS_OK)
-      {
-        _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), member.state, member.opacity,
-                       model, &iter, (int)member.index);
-        change = 1;
-      }
-    }
-  }
-  g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
-  items = NULL;
-
-  if(change)
-  {
-    _add_masks_history_item(lm);
-
-    dt_control_queue_redraw_center();
-  }
-}
-
-static void _tree_exclusion(GtkButton *button, dt_lib_module_t *self)
-{
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-
-  // now we go through all selected nodes
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
-  int change = 0;
-  GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
-  for(const GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
-  {
-    GtkTreePath *item = (GtkTreePath *)items_iter->data;
-    GtkTreeIter iter;
-    if(gtk_tree_model_get_iter(model, &iter, item))
-    {
-      int grid = -1;
-      int id = -1;
-      _lib_masks_get_values(model, &iter, NULL, &grid, &id);
-
-      /* The module owns the copy-on-write: it touches the group before resolving the row, which
-       * this loop did not do -- it mutated a refcounted membership block that a history snapshot
-       * could still be observing. UNCHANGED (the row already had this operator) deliberately does
-       * not count as a change, so a no-op click writes no undo step. */
-      dt_masks_member_t member;
-      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, DT_MASKS_STATE_EXCLUSION, &member)
-         == DT_MASKS_OK)
-      {
-        _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), member.state, member.opacity,
-                       model, &iter, (int)member.index);
-        change = 1;
-      }
-    }
-  }
-  g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
-  items = NULL;
-
-  if(change)
-  {
-    _add_masks_history_item(lm);
-
-    dt_control_queue_redraw_center();
-  }
-}
-
-static void _tree_union(GtkButton *button, dt_lib_module_t *self)
-{
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-
-  // now we go through all selected nodes
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
-  int change = 0;
-  GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
-  for(const GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
-  {
-    GtkTreePath *item = (GtkTreePath *)items_iter->data;
-    GtkTreeIter iter;
-    if(gtk_tree_model_get_iter(model, &iter, item))
-    {
-      int grid = -1;
-      int id = -1;
-      _lib_masks_get_values(model, &iter, NULL, &grid, &id);
-
-      /* The module owns the copy-on-write: it touches the group before resolving the row, which
-       * this loop did not do -- it mutated a refcounted membership block that a history snapshot
-       * could still be observing. UNCHANGED (the row already had this operator) deliberately does
-       * not count as a change, so a no-op click writes no undo step. */
-      dt_masks_member_t member;
-      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, DT_MASKS_STATE_UNION, &member)
+      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, operation, &member)
          == DT_MASKS_OK)
       {
         _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), member.state, member.opacity,
@@ -1124,22 +955,27 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
     gtk_menu_shell_append(menu, item);
 
     item = gtk_menu_item_new_with_label(_("Invert shape"));
-    g_signal_connect(item, "activate", (GCallback)_tree_inverse, self);
+    g_object_set_data(G_OBJECT(item), "masks-operation", GINT_TO_POINTER(DT_MASKS_STATE_INVERSE));
+      g_signal_connect(item, "activate", (GCallback)_tree_apply_operation, self);
     gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
     if(nb == 1)
     {
       gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), gtk_separator_menu_item_new());
       item = gtk_menu_item_new_with_label(_("Union"));
-      g_signal_connect(item, "activate", (GCallback)_tree_union, self);
+      g_object_set_data(G_OBJECT(item), "masks-operation", GINT_TO_POINTER(DT_MASKS_STATE_UNION));
+      g_signal_connect(item, "activate", (GCallback)_tree_apply_operation, self);
       gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
       item = gtk_menu_item_new_with_label(_("Intersection"));
-      g_signal_connect(item, "activate", (GCallback)_tree_intersection, self);
+      g_object_set_data(G_OBJECT(item), "masks-operation", GINT_TO_POINTER(DT_MASKS_STATE_INTERSECTION));
+      g_signal_connect(item, "activate", (GCallback)_tree_apply_operation, self);
       gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
       item = gtk_menu_item_new_with_label(_("Difference"));
-      g_signal_connect(item, "activate", (GCallback)_tree_difference, self);
+      g_object_set_data(G_OBJECT(item), "masks-operation", GINT_TO_POINTER(DT_MASKS_STATE_DIFFERENCE));
+      g_signal_connect(item, "activate", (GCallback)_tree_apply_operation, self);
       gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
       item = gtk_menu_item_new_with_label(_("Exclusion"));
-      g_signal_connect(item, "activate", (GCallback)_tree_exclusion, self);
+      g_object_set_data(G_OBJECT(item), "masks-operation", GINT_TO_POINTER(DT_MASKS_STATE_EXCLUSION));
+      g_signal_connect(item, "activate", (GCallback)_tree_apply_operation, self);
       gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
     }
 
