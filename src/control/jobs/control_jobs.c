@@ -1503,9 +1503,9 @@ static dt_job_t *_control_gpx_apply_job_create(const gchar *filename, int32_t fi
 void dt_control_save_xmp(const int32_t imgid)
 {
   dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
-                     dt_control_generic_images_job_create(&dt_control_save_xmps_job_run,
-                                                          N_("save history to XMP"),
-                                                          0, NULL, PROGRESS_NONE, imgid));
+                     dt_control_generic_image_job_create(&dt_control_save_xmps_job_run,
+                                                         N_("save history to XMP"),
+                                                         0, NULL, PROGRESS_NONE, imgid));
 }
 
 void dt_control_save_xmps(const GList *imgids, const gboolean check_history)
