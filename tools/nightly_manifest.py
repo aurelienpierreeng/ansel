@@ -283,6 +283,16 @@ def render_summary(manifest):
                    for k, v in formats.items())
 
 
+def check(manifest):
+    """Exit status 0 when the manifest names at least one build, 1 when it is empty.
+
+    The workflow gates publishing on this: an empty manifest -- no nightly-* release
+    yet, or a GitHub API hiccup that returned nothing -- must never overwrite a good
+    file downstream. The first run on master did exactly that to the website's data
+    file before this existed."""
+    return 0 if manifest.get("formats") else 1
+
+
 def render_oneline(manifest):
     """One line for a commit message: `appimage 0.0.0+4810.g..., exe 0.0.0+4810.g...`."""
     formats = manifest.get("formats", {})
@@ -293,7 +303,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("manifest"); m.add_argument("--no-hashes", action="store_true")
-    for name in ("cask", "scoop", "summary", "oneline"):
+    for name in ("cask", "scoop", "summary", "oneline", "check"):
         sub.add_parser(name).add_argument("manifest")
     args = ap.parse_args()
 
@@ -302,6 +312,8 @@ def main():
         json.dump(doc, sys.stdout, indent=1); sys.stdout.write("\n")
         return
     doc = json.load(open(args.manifest, encoding="utf-8"))
+    if args.cmd == "check":
+        sys.exit(check(doc))
     render = {"cask": render_cask, "scoop": render_scoop, "summary": render_summary, "oneline": render_oneline}
     sys.stdout.write(render[args.cmd](doc))
 

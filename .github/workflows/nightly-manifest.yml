@@ -98,6 +98,15 @@ jobs:
             echo "::warning::NIGHTLY_PUBLISH_TOKEN is not set; manifest built but not published"
             exit 0
           fi
+          # An empty manifest is never published: it would replace a good file
+          # downstream with "no builds" -- which is what happened on the first run,
+          # before any nightly-* release existed. The website falls back to the API on
+          # an empty file, but nothing should have to.
+          if ! python3 tools/nightly_manifest.py check nightly.json; then
+            echo "::warning::manifest names no build; nothing published"
+            echo "Nothing published: the manifest is empty." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           git config --global user.name  "ansel-nightly[bot]"
           git config --global user.email "nightly@ansel.photos"
           summary=$(python3 tools/nightly_manifest.py oneline nightly.json)
