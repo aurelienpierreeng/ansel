@@ -30,7 +30,7 @@ Url=${url}/
 Homepage=https://ansel.photos/
 Comment=Nightly builds of Ansel, rebuilt every morning from the master branch
 Description=Nightly builds of Ansel, rebuilt every morning from the master branch. Not a stable release.
-Icon=https://ansel.photos/ansel.svg
+Icon=https://ansel.photos/logo.svg
 EOF
 if [[ -n "${key}" ]]; then
   echo "GPGKey=$(gpg --export "${key}" | base64 -w0)"
