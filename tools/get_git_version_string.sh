@@ -27,7 +27,12 @@
 #   
 #   
 #   
-VERSION="$(git describe --tags 2>/dev/null)"
+# --exclude: nightlies are hosted on one nightly-YYYY-MM pre-release per month, and that
+# tag sits on master. Without the exclusion `git describe --tags` would pick it the day
+# after it is created, and every build would be called nightly-2026-08+3~g... instead of
+# 0.0.0+4810~g... -- which is what the filename convention, the nightly manifest, the
+# Homebrew cask and the NSIS installer all parse. Version tags only.
+VERSION="$(git describe --tags --exclude 'nightly-*' 2>/dev/null)"
 
 if [ $? -eq 0 ] ;
 then

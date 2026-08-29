@@ -66,6 +66,15 @@ FORMATS = {
 
 # Ansel-0.0.0+4802.gd5a317e072-x86_64.flatpak -> ("0.0.0+4802.gd5a317e072", "d5a317e072")
 VERSION_RE = re.compile(r"^[Aa]nsel-(?P<version>[0-9][^-]*?\.g(?P<hash>[0-9a-f]+))-")
+# The commit count after "+": monotonic by construction, which upload time is not --
+# an asset moved between releases, or re-uploaded, gets a fresh timestamp.
+COMMITS_RE = re.compile(r"\+(\d+)[.~]g")
+
+
+def build_rank(name, uploaded):
+    """Sort key for "newest": commit count first, upload time to break ties."""
+    m = COMMITS_RE.search(name)
+    return (int(m.group(1)) if m else -1, uploaded or "")
 # The same version string as a bare Docker tag: 0.0.0+4802.gd5a317e072 -- except that a
 # Docker tag cannot contain "+", so the workflow writes it as 0.0.0-4802.gd5a317e072.
 VERSION_TAG_RE = re.compile(r"^[0-9][^-]*-\d+\.g(?P<hash>[0-9a-f]+)$")
@@ -130,10 +139,13 @@ def build_manifest(token, with_hashes=True):
                 if TAG_RE.match(r["tag_name"]) and not r["draft"]]
     releases.sort(key=lambda r: r["tag_name"], reverse=True)
 
-    # Per format, the most recently UPLOADED matching asset, not the first one the API
-    # lists: a release holds a month of nightlies, and asset order is not date order.
-    # Releases are walked newest first, and a format found in a newer release is never
-    # displaced by an older one.
+    # Per format, the matching asset with the highest commit count (build_rank), not
+    # the first one the API lists -- a release holds a month of nightlies and asset
+    # order is not build order -- and not the most recently uploaded either: an asset
+    # moved from the retired rolling release into its month carries a fresh upload
+    # time, and would have outranked that night's genuinely newer build. Releases are
+    # walked newest first, and a format found in a newer release is never displaced
+    # by an older one.
     newest = {}
     for rel in releases:
         for a in rel["assets"]:
@@ -141,7 +153,8 @@ def build_manifest(token, with_hashes=True):
                 if not match(a["name"]):
                     continue
                 cur = newest.get(key)
-                if cur and (cur["release"] > rel["tag_name"] or cur["uploaded"] >= a["updated_at"]):
+                if cur and (cur["release"] > rel["tag_name"]
+                            or build_rank(cur["name"], cur["uploaded"]) >= build_rank(a["name"], a["updated_at"])):
                     continue
                 m = VERSION_RE.match(a["name"])
                 newest[key] = {
@@ -274,11 +287,36 @@ def render_scoop(manifest):
     return json.dumps(doc, indent=4) + "\n"
 
 
+def render_summary(manifest):
+    """A table for the run summary, one line per format; says so when there is none."""
+    formats = manifest.get("formats", {})
+    if not formats:
+        return "(no nightly-* release carries any asset yet)\n"
+    return "".join(f"{k:10s} {v.get('version') or '?':32s} {v.get('uploaded') or ''}\n"
+                   for k, v in formats.items())
+
+
+def check(manifest):
+    """Exit status 0 when the manifest names at least one build, 1 when it is empty.
+
+    The workflow gates publishing on this: an empty manifest -- no nightly-* release
+    yet, or a GitHub API hiccup that returned nothing -- must never overwrite a good
+    file downstream. The first run on master did exactly that to the website's data
+    file before this existed."""
+    return 0 if manifest.get("formats") else 1
+
+
+def render_oneline(manifest):
+    """One line for a commit message: `appimage 0.0.0+4810.g..., exe 0.0.0+4810.g...`."""
+    formats = manifest.get("formats", {})
+    return ", ".join(f"{k} {v.get('version') or '?'}" for k, v in formats.items()) or "no builds"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("manifest"); m.add_argument("--no-hashes", action="store_true")
-    for name in ("cask", "scoop"):
+    for name in ("cask", "scoop", "summary", "oneline", "check"):
         sub.add_parser(name).add_argument("manifest")
     args = ap.parse_args()
 
@@ -287,7 +325,10 @@ def main():
         json.dump(doc, sys.stdout, indent=1); sys.stdout.write("\n")
         return
     doc = json.load(open(args.manifest, encoding="utf-8"))
-    sys.stdout.write(render_cask(doc) if args.cmd == "cask" else render_scoop(doc))
+    if args.cmd == "check":
+        sys.exit(check(doc))
+    render = {"cask": render_cask, "scoop": render_scoop, "summary": render_summary, "oneline": render_oneline}
+    sys.stdout.write(render[args.cmd](doc))
 
 
 if __name__ == "__main__":

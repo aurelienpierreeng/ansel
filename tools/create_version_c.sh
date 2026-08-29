@@ -49,6 +49,14 @@ fi
 # release. Unlike the abbreviated hash in the version string (whose length varies)
 # or the commit count (unavailable on shallow clones), `git rev-parse HEAD` returns
 # the same 40-char value on every clone type. Empty for source archives.
+# A build with no .git (the Docker image's context excludes it) gets "unknown-version"
+# from CMake's source-package branch. The host that started that build knows the real
+# string and hands it in as ANSEL_VERSION; it wins over the placeholder, never over a
+# real version. It is NOT passed as -DPROJECT_VERSION: project(VERSION ...) accepts only
+# dotted digits, and 0.0.0+4810~gabc is rejected at configure time.
+if [ "$NEW_VERSION" = "unknown-version" ] && [ -n "${ANSEL_VERSION:-}" ]; then
+  NEW_VERSION="$ANSEL_VERSION"
+fi
 # The commit hash may be handed in (ANSEL_COMMIT_HASH) by a build that has no .git
 # directory -- the Docker image's context excludes it -- and the git call must not be
 # fatal without one. Under `set -e` a failing command substitution in a plain assignment

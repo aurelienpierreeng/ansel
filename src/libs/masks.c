@@ -40,6 +40,7 @@
 */
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"
+#include "develop/masks_group.h"   // dt_masks_group_set_member_operation()
 #include "develop/masks_gui.h"
 #include "common/logging.h"
 #include "system/macros.h"
@@ -489,28 +490,17 @@ static void _tree_inverse(GtkButton *button, dt_lib_module_t *self)
       int id = -1;
       _lib_masks_get_values(model, &iter, NULL, &grid, &id);
 
-      dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), grid);
-      if(grp && (grp->type & DT_MASKS_GROUP))
+      /* The module owns the copy-on-write: it touches the group before resolving the row, which
+       * this loop did not do -- it mutated a refcounted membership block that a history snapshot
+       * could still be observing. UNCHANGED (the row already had this operator) deliberately does
+       * not count as a change, so a no-op click writes no undo step. */
+      dt_masks_member_t member;
+      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, DT_MASKS_STATE_INVERSE, &member)
+         == DT_MASKS_OK)
       {
-        int i = 0;
-        // we search the entry to inverse
-        for(const GList *pts = grp->points; pts; pts = g_list_next(pts))
-        {
-          dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
-          if(pt->formid == id)
-          {
-            const int old_state = pt->state;
-            dt_masks_group_entry_apply_operation(pt, DT_MASKS_STATE_INVERSE);
-            if(pt->state != old_state)
-            {
-              _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), pt->state, pt->opacity, model,
-                             &iter, i);
-              change = 1;
-            }
-            break;
-          }
-          i++;
-        }
+        _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), member.state, member.opacity,
+                       model, &iter, (int)member.index);
+        change = 1;
       }
     }
   }
@@ -544,28 +534,17 @@ static void _tree_intersection(GtkButton *button, dt_lib_module_t *self)
       int id = -1;
       _lib_masks_get_values(model, &iter, NULL, &grid, &id);
 
-      dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), grid);
-      if(grp && (grp->type & DT_MASKS_GROUP))
+      /* The module owns the copy-on-write: it touches the group before resolving the row, which
+       * this loop did not do -- it mutated a refcounted membership block that a history snapshot
+       * could still be observing. UNCHANGED (the row already had this operator) deliberately does
+       * not count as a change, so a no-op click writes no undo step. */
+      dt_masks_member_t member;
+      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, DT_MASKS_STATE_INTERSECTION, &member)
+         == DT_MASKS_OK)
       {
-        int i = 0;
-        // we search the entry to inverse
-        for(const GList *pts = grp->points; pts; pts = g_list_next(pts))
-        {
-          dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
-          if(pt->formid == id)
-          {
-            const int old_state = pt->state;
-            dt_masks_group_entry_apply_operation(pt, DT_MASKS_STATE_INTERSECTION);
-            if(pt->state != old_state)
-            {
-              _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), pt->state, pt->opacity, model,
-                             &iter, i);
-              change = 1;
-            }
-            break;
-          }
-          i++;
-        }
+        _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), member.state, member.opacity,
+                       model, &iter, (int)member.index);
+        change = 1;
       }
     }
   }
@@ -599,28 +578,17 @@ static void _tree_difference(GtkButton *button, dt_lib_module_t *self)
       int id = -1;
       _lib_masks_get_values(model, &iter, NULL, &grid, &id);
 
-      dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), grid);
-      if(grp && (grp->type & DT_MASKS_GROUP))
+      /* The module owns the copy-on-write: it touches the group before resolving the row, which
+       * this loop did not do -- it mutated a refcounted membership block that a history snapshot
+       * could still be observing. UNCHANGED (the row already had this operator) deliberately does
+       * not count as a change, so a no-op click writes no undo step. */
+      dt_masks_member_t member;
+      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, DT_MASKS_STATE_DIFFERENCE, &member)
+         == DT_MASKS_OK)
       {
-        int i = 0;
-        // we search the entry to inverse
-        for(const GList *pts = grp->points; pts; pts = g_list_next(pts))
-        {
-          dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
-          if(pt->formid == id)
-          {
-            const int old_state = pt->state;
-            dt_masks_group_entry_apply_operation(pt, DT_MASKS_STATE_DIFFERENCE);
-            if(pt->state != old_state)
-            {
-              _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), pt->state, pt->opacity, model,
-                             &iter, i);
-              change = 1;
-            }
-            break;
-          }
-          i++;
-        }
+        _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), member.state, member.opacity,
+                       model, &iter, (int)member.index);
+        change = 1;
       }
     }
   }
@@ -654,28 +622,17 @@ static void _tree_exclusion(GtkButton *button, dt_lib_module_t *self)
       int id = -1;
       _lib_masks_get_values(model, &iter, NULL, &grid, &id);
 
-      dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), grid);
-      if(grp && (grp->type & DT_MASKS_GROUP))
+      /* The module owns the copy-on-write: it touches the group before resolving the row, which
+       * this loop did not do -- it mutated a refcounted membership block that a history snapshot
+       * could still be observing. UNCHANGED (the row already had this operator) deliberately does
+       * not count as a change, so a no-op click writes no undo step. */
+      dt_masks_member_t member;
+      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, DT_MASKS_STATE_EXCLUSION, &member)
+         == DT_MASKS_OK)
       {
-        int i = 0;
-        // we search the entry to inverse
-        for(const GList *pts = grp->points; pts; pts = g_list_next(pts))
-        {
-          dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
-          if(pt->formid == id)
-          {
-            const int old_state = pt->state;
-            dt_masks_group_entry_apply_operation(pt, DT_MASKS_STATE_EXCLUSION);
-            if(pt->state != old_state)
-            {
-              _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), pt->state, pt->opacity, model,
-                             &iter, i);
-              change = 1;
-            }
-            break;
-          }
-          i++;
-        }
+        _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), member.state, member.opacity,
+                       model, &iter, (int)member.index);
+        change = 1;
       }
     }
   }
@@ -709,28 +666,17 @@ static void _tree_union(GtkButton *button, dt_lib_module_t *self)
       int id = -1;
       _lib_masks_get_values(model, &iter, NULL, &grid, &id);
 
-      dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), grid);
-      if(grp && (grp->type & DT_MASKS_GROUP))
+      /* The module owns the copy-on-write: it touches the group before resolving the row, which
+       * this loop did not do -- it mutated a refcounted membership block that a history snapshot
+       * could still be observing. UNCHANGED (the row already had this operator) deliberately does
+       * not count as a change, so a no-op click writes no undo step. */
+      dt_masks_member_t member;
+      if(dt_masks_group_set_member_operation(dt_dev_get_global(), grid, id, DT_MASKS_STATE_UNION, &member)
+         == DT_MASKS_OK)
       {
-        int i = 0;
-        // we search the entry to inverse
-        for(const GList *pts = grp->points; pts; pts = g_list_next(pts))
-        {
-          dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
-          if(pt->formid == id)
-          {
-            const int old_state = pt->state;
-            dt_masks_group_entry_apply_operation(pt, DT_MASKS_STATE_UNION);
-            if(pt->state != old_state)
-            {
-              _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), pt->state, pt->opacity, model,
-                             &iter, i);
-              change = 1;
-            }
-            break;
-          }
-          i++;
-        }
+        _set_iter_name(lm, dt_masks_get_from_id(dt_dev_get_global(), id), member.state, member.opacity,
+                       model, &iter, (int)member.index);
+        change = 1;
       }
     }
   }

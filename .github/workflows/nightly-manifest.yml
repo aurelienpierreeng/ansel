@@ -40,7 +40,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # to title and describe a freshly created monthly release
 
 concurrency:
   group: nightly-manifest
@@ -58,6 +58,26 @@ jobs:
           fetch-depth: 1
           submodules: false
 
+      # tip creates each month's release with the tag as its name and no body, and it
+      # preserves whatever body exists on later uploads. So the text is applied once, by
+      # the first run after the release appears, and never rewritten: the check is on
+      # an empty body, not on a date, so an edit made by hand on the release survives.
+      - name: Describe the monthly release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="nightly-$(date -u +%Y-%m)"
+          if ! gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" --json body -q .body >/dev/null 2>&1; then
+            echo "${tag}: no release yet"; exit 0
+          fi
+          if [[ -n "$(gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" --json body -q .body)" ]]; then
+            echo "${tag}: already described"; exit 0
+          fi
+          gh release edit "${tag}" --repo "${GITHUB_REPOSITORY}" \
+            --title "Nightly builds, $(LC_ALL=C date -u +%B\ %Y)" \
+            --notes-file packaging/nightly-release-notes.md
+          echo "${tag}: described"
+
       - name: Build the manifest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -72,7 +92,7 @@ jobs:
           {
             echo "### Newest build per format"
             echo '```'
-            python3 -c 'import json;[print(f"{k:10s} {v[\"version\"]}  {v[\"uploaded\"]}") for k,v in json.load(open("nightly.json"))["formats"].items()]'
+            python3 tools/nightly_manifest.py summary nightly.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -86,10 +106,11 @@ jobs:
             ansel-nightly.json
           retention-days: 30
 
-      # One shallow clone, one file, one commit, per downstream repository. [skip ci]
-      # on the website because Hugo rebuilds on its own schedule anyway (*/4 h) and a
-      # data-only change is not worth a full build queue entry -- remove it if the
-      # download page must follow within minutes rather than hours.
+      # One shallow clone, one file, one commit, per downstream repository. The website
+      # push deliberately does NOT carry [skip ci]: the data file is what the download
+      # buttons render from, so its commit is exactly the one that must rebuild the
+      # site. With [skip ci] the first real manifest sat unrendered until the next
+      # 4-hourly scheduled build, and the page kept showing the retired v0.0.0 assets.
       - name: Publish downstream
         env:
           TOKEN: ${{ secrets.NIGHTLY_PUBLISH_TOKEN }}
@@ -98,9 +119,18 @@ jobs:
             echo "::warning::NIGHTLY_PUBLISH_TOKEN is not set; manifest built but not published"
             exit 0
           fi
+          # An empty manifest is never published: it would replace a good file
+          # downstream with "no builds" -- which is what happened on the first run,
+          # before any nightly-* release existed. The website falls back to the API on
+          # an empty file, but nothing should have to.
+          if ! python3 tools/nightly_manifest.py check nightly.json; then
+            echo "::warning::manifest names no build; nothing published"
+            echo "Nothing published: the manifest is empty." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           git config --global user.name  "ansel-nightly[bot]"
           git config --global user.email "nightly@ansel.photos"
-          summary=$(python3 -c 'import json;d=json.load(open("nightly.json"))["formats"];print(", ".join(f"{k} {v[\"version\"]}" for k,v in d.items()))')
+          summary=$(python3 tools/nightly_manifest.py oneline nightly.json)
 
           publish() {  # repo  src  dest  message
             local repo=$1 src=$2 dest=$3 msg=$4 dir
@@ -120,6 +150,6 @@ jobs:
             rm -rf "${dir}"
           }
 
-          publish ansel-website  nightly.json        data/nightly.json               "nightly: ${summary} [skip ci]"
+          publish ansel-website  nightly.json        data/nightly.json               "nightly: ${summary}"
           publish homebrew-ansel ansel-nightly.rb    Casks/ansel-nightly.rb          "ansel-nightly: ${summary}"
           publish scoop-ansel    ansel-nightly.json  bucket/ansel-nightly.json       "ansel-nightly: ${summary}"

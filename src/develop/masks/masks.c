@@ -1509,6 +1509,50 @@ const char *dt_masks_type_name(const dt_masks_type_t type)
   else return "unknown";
 }
 
+
+dt_masks_result_t dt_masks_group_set_member_operation(dt_develop_t *dev, const int group_id,
+                                                      const int formid, const dt_masks_state_t operation,
+                                                      dt_masks_member_t *out)
+{
+  if(IS_NULL_PTR(dev)) return DT_MASKS_INVALID;
+  if(operation != DT_MASKS_STATE_INVERSE && !(operation & DT_MASKS_STATE_IS_COMBINE_OP))
+    return DT_MASKS_INVALID;
+
+  dt_masks_form_t *group = dt_masks_get_from_id(dev, group_id);
+  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return DT_MASKS_NOT_FOUND;
+
+  /* Touch FIRST, then resolve the row from what the touch returned. Cloning a group clones its
+   * membership blocks with it, so a row resolved before the touch belongs to the copy that was
+   * just abandoned -- the mutation would land in memory nothing reads. */
+  group = dt_masks_cow_touch(dev, group);
+  if(IS_NULL_PTR(group)) return DT_MASKS_NOT_FOUND;
+
+  guint index = 0;
+  for(GList *node = group->points; node; node = g_list_next(node), index++)
+  {
+    dt_masks_form_group_t *const entry = (dt_masks_form_group_t *)node->data;
+    if(IS_NULL_PTR(entry) || entry->formid != formid) continue;
+
+    const int before = entry->state;
+    if(operation == DT_MASKS_STATE_INVERSE)
+      entry->state ^= DT_MASKS_STATE_INVERSE;
+    else
+      entry->state = (entry->state & ~DT_MASKS_STATE_IS_COMBINE_OP) | operation;
+
+    if(!IS_NULL_PTR(out))
+    {
+      out->formid = entry->formid;
+      out->parentid = entry->parentid;
+      out->index = index;
+      out->state = (dt_masks_state_t)entry->state;
+      out->opacity = entry->opacity;
+    }
+    return (entry->state == before) ? DT_MASKS_UNCHANGED : DT_MASKS_OK;
+  }
+
+  return DT_MASKS_NOT_FOUND;
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

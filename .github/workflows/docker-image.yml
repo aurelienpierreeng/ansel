@@ -41,20 +41,27 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ env.BRANCH }}
-          fetch-depth: 1
+          # Full history: get_git_version_string.sh must reach the last version tag, or
+          # the version degrades to a bare hash. (An earlier edit put this only in a
+          # comment and left the key at 1; the first master run showed VERSION "b4597470".)
+          fetch-depth: 0
           fetch-tags: true
           submodules: true
       # The image is built from a context without .git (.dockerignore), so the version
       # string and commit hash are computed here, where git is, and passed in.
-      # fetch-depth: 0 because get_git_version_string.sh needs to reach the last tag.
       - name: Compute version
         run: |
           version=$(sh tools/get_git_version_string.sh)
           echo "ANSEL_VERSION=${version}" >> "$GITHUB_ENV"
           echo "ANSEL_COMMIT_HASH=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-          # A Docker tag may not contain "+"; tools/nightly_manifest.py expects this
-          # exact substitution when it reads the tag back.
-          echo "ANSEL_DOCKER_TAG=${version//+/-}" >> "$GITHUB_ENV"
+          # The git string is 0.0.0+4824~gc9a3f02e8b. Every other package writes it into
+          # its filename with "." for "~" (0.0.0+4824.gc9a3f02e8b), and that is what
+          # tools/nightly_manifest.py parses; the archive name follows suit. A Docker
+          # tag additionally forbids "+" (and "~" -- the first run died on it), so the
+          # tag is the filename form with "+" as "-". The manifest undoes exactly that.
+          file_version=${version//\~/.}
+          echo "ANSEL_FILE_VERSION=${file_version}" >> "$GITHUB_ENV"
+          echo "ANSEL_DOCKER_TAG=${file_version//+/-}" >> "$GITHUB_ENV"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Log in to Docker Hub
@@ -87,7 +94,7 @@ jobs:
         run: |
           command -v zstd >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q zstd; }
           docker pull -q "aurelienpierre/ansel:${ANSEL_DOCKER_TAG}"
-          file="Ansel-${ANSEL_VERSION}-docker.tar.zst"
+          file="Ansel-${ANSEL_FILE_VERSION}-docker.tar.zst"
           docker save "aurelienpierre/ansel:${ANSEL_DOCKER_TAG}" | zstd -T0 -19 -q -o "${file}"
           size=$(stat -c %s "${file}")
           echo "ANSEL_DOCKER_FILE=${file}" >> "$GITHUB_ENV"
