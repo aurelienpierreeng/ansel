@@ -873,6 +873,14 @@ static void _xmp_mode_preferences_changed(gpointer instance, gpointer user_data)
   dt_image_xmp_mode_refresh_from_conf();
 }
 
+
+// Nightly update check found a newer build (GUI thread). Help > Update to the latest
+// nightly build opens the same URL; here we only say so.
+static void _updates_notify(const char *version, const char *url)
+{
+  dt_control_log(_("A newer nightly build is available (%s).\nHelp ▸ Update to the latest nightly build"), version);
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();
@@ -1841,7 +1849,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   // Nightly builds: once a day, ask ansel.photos/nightly.json whether a newer build
   // exists for this format. Its own toggle (updates/enabled), no telemetry involved.
-  dt_updates_init(init_gui);
+  // The toast is ours to post: the module lives in common/ and does not know control/.
+  dt_updates_init(init_gui, _updates_notify);
 
   dt_print(DT_DEBUG_CONTROL, "[init] startup took %f seconds\n", dt_get_wtime() - start_wtime);
 
