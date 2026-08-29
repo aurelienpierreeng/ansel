@@ -306,15 +306,14 @@ static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
         // xmp writing is off, or the setting changed mid-batch: nothing was attempted, nothing to report
         break;
       case DT_IMAGE_WRITE_SIDECAR_CACHE_BUSY:
-        fprintf(stdout, "cannot write XMP file for image %i: the image cache entry is busy, try again.\n", imgid);
+        dt_control_log(_("cannot write XMP file for image %i: the image cache entry is busy, try again."), imgid);
         break;
       case DT_IMAGE_WRITE_SIDECAR_NO_SOURCE_PATH:
-        fprintf(stdout, "cannot write XMP file for image %i: the original file could not be found.\n", imgid);
+        dt_control_log(_("cannot write XMP file for image %i: the original file could not be found."), imgid);
         break;
       case DT_IMAGE_WRITE_SIDECAR_IO_ERROR:
-        fprintf(stdout,
-                "cannot write XMP file for image %i: the target storage may be unavailable or read-only.\n",
-                imgid);
+        dt_control_log(_("cannot write XMP file for image %i: the target storage may be unavailable or read-only."),
+                       imgid);
         break;
     }
   }
