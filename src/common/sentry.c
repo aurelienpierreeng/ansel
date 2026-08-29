@@ -532,7 +532,8 @@ static void _sentry_set_context(void)
   sentry_set_extra("build_cflags", sentry_value_new_string(DT_BUILD_C_FLAGS));
   sentry_set_tag("opencl", cl_enabled ? "yes" : "no");
 
-  // Distribution channel as a searchable tag (also set as the Sentry environment in
+  // Distribution channel as a searchable tag (the Sentry environment carries it too, with
+  // the platform appended -- see dt_sentry_init) so the channel alone stays queryable in
   // dt_sentry_init), so official nightly builds can be told apart from self-builds.
   sentry_set_tag("build_channel", DT_BUILD_CHANNEL);
 
@@ -563,6 +564,19 @@ static void _sentry_set_context(void)
   sentry_set_extra("total_session_seconds",
                    sentry_value_new_int64(dt_conf_get_int64(DT_SENTRY_TOTAL_SESSION_KEY)));
 }
+
+// One word for the platform, the same three the website's package tables use.
+static const char *_sentry_platform(void)
+{
+#if defined(_WIN32)
+  return "windows";
+#elif defined(__APPLE__)
+  return "macos";
+#else
+  return "linux";
+#endif
+}
+
 
 void dt_sentry_init(const gboolean have_gui)
 {
@@ -599,7 +613,16 @@ void dt_sentry_init(const gboolean have_gui)
   // Environment separates official nightly builds from local/self-builds in the
   // dashboard and release-health metrics. The compiler/optimization build type is
   // kept separately as the "build_type" extra.
-  sentry_options_set_environment(options, DT_BUILD_CHANNEL);
+  // The environment is the build channel AND the platform, "nightly-windows". Sentry's
+  // sessions API groups crash-free rates by project, release, environment and status
+  // and by nothing else -- no OS, no tag -- so the platform has to ride in here for the
+  // website to show a build's crash rate per package rather than one figure for the
+  // Windows installer, the AppImage and both dmgs alike. Channel first, platform last:
+  // a channel may itself contain hyphens ("package-fedora"), so readers split on the
+  // LAST one. Sessions recorded before this carry the bare channel.
+  char environment[128];
+  snprintf(environment, sizeof(environment), "%s-%s", DT_BUILD_CHANNEL, _sentry_platform());
+  sentry_options_set_environment(options, environment);
   sentry_options_set_debug(options, (dt_get_debug_flags() & DT_DEBUG_CONTROL) ? 1 : 0);
 
   // Stamp non-crash events with the session length...

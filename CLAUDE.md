@@ -1593,6 +1593,12 @@ silently falls back to default instead of erroring.
 
 ## Nightly distribution
 
+The Sentry **environment** is `<build channel>-<platform>` (`nightly-windows`,
+`self-build-linux`, `package-fedora-macos`): the sessions API groups crash-free rates by
+release and environment and by nothing else, so this is how the website shows a build's crash
+rate per package. Split on the LAST hyphen — a channel can contain hyphens. Sessions from before
+this carry the bare channel; readers must accept both.
+
 Nightlies land in one `nightly-YYYY-MM` pre-release per month (GitHub caps a *release* at
 1000 assets; five formats a night filled the old rolling `v0.0.0` in under a year).
 `tools/nightly_manifest.py` writes `nightly.json` — the newest build per format — after
