@@ -33,7 +33,6 @@
 #include "system/mem_alloc.h"
 
 #include <math.h>
-#include <string.h>
 
 float *dt_masks_debug_rasterise(dt_develop_t *dev, dt_masks_form_t *form, const int width, const int height)
 {
@@ -47,9 +46,8 @@ float *dt_masks_debug_rasterise(dt_develop_t *dev, dt_masks_form_t *form, const 
     return NULL;
   }
 
-  float *const buffer = dt_alloc_align_float((size_t)width * height);
+  float *const buffer = dt_calloc_align_float((size_t)width * height);
   if(IS_NULL_PTR(buffer)) return NULL;
-  memset(buffer, 0, sizeof(float) * (size_t)width * height);
 
   /* A pipe with no nodes: dt_dev_distort_transform_plus() then walks an empty list, so the
    * composition is the identity and the shape lands on raw coordinates. That is deliberate --
