@@ -91,21 +91,6 @@ static dt_masks_node_polygon_t *_polygon_node(const float x, const float y, cons
   return n;
 }
 
-/** Straight-segment control points: a node whose handles sit on the chords is a corner. */
-static void _brush_straight(GList **points, const float pts[][2], const int n, const float radius)
-{
-  for(int i = 0; i < n; i++)
-  {
-    const float px = pts[i][0], py = pts[i][1];
-    const int prev = (i == 0) ? 0 : i - 1;
-    const int next = (i == n - 1) ? n - 1 : i + 1;
-    const float c1x = px + (pts[prev][0] - px) * 0.25f, c1y = py + (pts[prev][1] - py) * 0.25f;
-    const float c2x = px + (pts[next][0] - px) * 0.25f, c2y = py + (pts[next][1] - py) * 0.25f;
-    *points = g_list_append(*points, _brush_node(px, py, c1x, c1y, c2x, c2y, radius));
-  }
-}
-
-
 /* ------------------------------------------------------------------------------------- */
 /* Geometry decoded verbatim from the XMP attached to issue #1313's follow-up (mask_id
  * 1788089411, "brush #1"). Node 8 is the cusp: both handles collapsed onto the node, arms
@@ -166,9 +151,22 @@ static void _brush_reference(const float table[][9], const int count, const int 
       const float t = (float)k / 2000.0f, u = 1.0f - t;
       const float bx = u*u*u*p0x + 3*u*u*t*p1x + 3*u*t*t*p2x + t*t*t*p3x;
       const float by = u*u*u*p0y + 3*u*u*t*p1y + 3*u*t*t*p2y + t*t*t*p3y;
-      /* the radius interpolates between the two nodes exactly as _brush_points_recurs does */
-      const float sm = t * t * (3.0f - 2.0f * t);
-      const float r = (table[seg][6] + (table[seg + 1][6] - table[seg][6]) * sm) * radius_scale;
+      /* The SMALLER of the two node radii, not the interpolated one.
+       *
+       * A disc union and a normal-offset stroke are not the same shape wherever the radius is
+       * changing. The implementation offsets the centreline along its normal by the local
+       * radius; the envelope of a growing disc family leans outward from that normal by
+       * asin(dr/ds), so across a fast radius transition the disc union genuinely covers more
+       * than the rasteriser owes. Asserting the interpolated radius there flagged 3552 px of
+       * crescents hugging the OUTSIDE of the widest bulge -- a real difference between two
+       * definitions, and not a defect under either of them.
+       *
+       * The smaller radius is what both definitions agree on, so that is the strongest claim
+       * this oracle can honestly make. It costs nothing where it matters: a cusp is a direction
+       * reversal, not a radius change, so the two nodes bracketing one have near-equal radii and
+       * the V hole is still caught at full strength (verified by re-running the corpus against
+       * master, which still fails this case). */
+      const float r = MIN(table[seg][6], table[seg + 1][6]) * radius_scale;
       /* Shrink by two pixels. A disc and a rasterised stroke never agree exactly along the
        * perimeter -- the stroke is stamped from discrete spokes and anti-aliased -- so the
        * outermost ring would report a one-pixel sliver on every well-behaved case and drown
@@ -341,9 +339,20 @@ static const float _brush_concave_tbl[5][9] = {
   { 0.20f, 0.70f, 0.28f, 0.68f, 0.16f, 0.70f, 0.045f, 1.0f, 0.66f },
 };
 
-static void _run_brush_case(dt_develop_t *dev, const float table[][9], const int count,
-                            const char *name, const char *dir, const int budget_px)
+/* Point the dev's geometry at a given frame size. The chain must be rebuilt afterwards or it
+ * stops being authoritative and every outline comes back empty, silently. */
+static void _set_frame(dt_develop_t *dev, const int w, const int h)
 {
+  dt_dev_geometry_set_raw_size(dev, w, h, TRUE);
+  dt_dev_geometry_set_processed_size(dev, w, h);
+  dt_geometry_chain_rebuild(dev);
+}
+
+static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const int count,
+                               const char *name, const char *dir, const int budget_px,
+                               const int img_w, const int img_h)
+{
+  _set_frame(dev, img_w, img_h);
   dt_masks_form_t form = { 0 };
   form.type = DT_MASKS_BRUSH;
   form.functions = &dt_masks_functions_brush;
@@ -352,7 +361,7 @@ static void _run_brush_case(dt_develop_t *dev, const float table[][9], const int
   g_strlcpy(form.name, name, sizeof(form.name));
   form.points = _brush_from_table(table, count);
 
-  float *mask = dt_masks_debug_rasterise(dev, &form, IMG_W, IMG_H);
+  float *mask = dt_masks_debug_rasterise(dev, &form, img_w, img_h);
   if(IS_NULL_PTR(mask))
   {
     printf("[FAIL] %-22s rasterisation returned nothing\n", name);
@@ -361,20 +370,20 @@ static void _run_brush_case(dt_develop_t *dev, const float table[][9], const int
     return;
   }
 
-  uint8_t *reference = (uint8_t *)malloc((size_t)IMG_W * IMG_H);
+  uint8_t *reference = (uint8_t *)malloc((size_t)img_w * img_h);
   int missing = 0, largest = 0, cx = -1, cy = -1;
   if(!IS_NULL_PTR(reference))
   {
-    _brush_reference(table, count, IMG_W, IMG_H, reference);
-    _missing_coverage(mask, reference, IMG_W, IMG_H, &missing, &largest, &cx, &cy);
+    _brush_reference(table, count, img_w, img_h, reference);
+    _missing_coverage(mask, reference, img_w, img_h, &missing, &largest, &cx, &cy);
   }
 
   char *alpha_path = g_strdup_printf("%s/%s-alpha.png", dir, name);
   char *over_path = g_strdup_printf("%s/%s-overlay.png", dir, name);
   const dt_masks_debug_request_t alpha_req
-      = { .width = IMG_W, .height = IMG_H, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = FALSE };
+      = { .width = img_w, .height = img_h, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = FALSE };
   const dt_masks_debug_request_t over_req
-      = { .width = IMG_W, .height = IMG_H, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = TRUE };
+      = { .width = img_w, .height = img_h, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = TRUE };
   dt_masks_debug_write_png(dev, &form, &alpha_req, alpha_path);
   dt_masks_debug_write_png(dev, &form, &over_req, over_path);
 
@@ -384,18 +393,18 @@ static void _run_brush_case(dt_develop_t *dev, const float table[][9], const int
   if(!IS_NULL_PTR(reference) && missing > 0)
   {
     char *miss_path = g_strdup_printf("%s/%s-missing.png", dir, name);
-    cairo_surface_t *surf = cairo_image_surface_create(CAIRO_FORMAT_RGB24, IMG_W, IMG_H);
+    cairo_surface_t *surf = cairo_image_surface_create(CAIRO_FORMAT_RGB24, img_w, img_h);
     if(cairo_surface_status(surf) == CAIRO_STATUS_SUCCESS)
     {
       cairo_surface_flush(surf);
       uint8_t *const px = cairo_image_surface_get_data(surf);
       const int stride = cairo_image_surface_get_stride(surf);
-      for(int y = 0; y < IMG_H; y++)
+      for(int y = 0; y < img_h; y++)
       {
         uint32_t *const row = (uint32_t *)(px + (size_t)y * stride);
-        for(int x = 0; x < IMG_W; x++)
+        for(int x = 0; x < img_w; x++)
         {
-          const size_t i = (size_t)y * IMG_W + x;
+          const size_t i = (size_t)y * img_w + x;
           const uint32_t g = (uint32_t)(CLAMPF(mask[i], 0.0f, 1.0f) * 200.0f + 0.5f);
           row[x] = (reference[i] && mask[i] <= 0.0f) ? 0x00FF2020u : ((g << 16) | (g << 8) | g);
         }
@@ -415,8 +424,8 @@ static void _run_brush_case(dt_develop_t *dev, const float table[][9], const int
   }
 
   const gboolean ok = (largest <= budget_px);
-  printf("[%s] %-22s missing coverage %6d px, largest run %5d px", ok ? "PASS" : "FAIL", name,
-         missing, largest);
+  printf("[%s] %-22s %5dx%-5d missing coverage %6d px, largest run %5d px", ok ? "PASS" : "FAIL",
+         name, img_w, img_h, missing, largest);
   if(largest > 0) printf(" around (%d,%d)", cx, cy);
   printf("  budget %d  -> %s\n", budget_px, alpha_path);
   if(!ok) failures++;
@@ -428,9 +437,16 @@ static void _run_brush_case(dt_develop_t *dev, const float table[][9], const int
   g_list_free_full(form.points, free);
 }
 
+static void _run_brush_case(dt_develop_t *dev, const float table[][9], const int count,
+                            const char *name, const char *dir, const int budget_px)
+{
+  _run_brush_case_at(dev, table, count, name, dir, budget_px, IMG_W, IMG_H);
+}
+
 static void _run_case(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const char *dir,
                       const int max_holes, const int max_hole_px)
 {
+  _set_frame(dev, IMG_W, IMG_H);
   float *mask = dt_masks_debug_rasterise(dev, form, IMG_W, IMG_H);
   if(IS_NULL_PTR(mask))
   {
@@ -530,7 +546,40 @@ int main(int argc, char *argv[])
    *    its radius toward the point of the cusp and leaves a V that is OPEN to the background --
    *    which is why it must be measured against the disc union and not by counting holes.
    *    Budget 0: any owed pixel the rasteriser does not deliver is the bug. */
-  _run_brush_case(&dev, _brush_1313, 11, "brush-1313-cusp", dir, 0);
+  /*    SWEEP THE FRAME SIZE, and that is not thoroughness for its own sake.
+   *
+   *    The defect this case exists for is a floating-point cancellation, so whether it appears
+   *    at all depends on the pixel COORDINATES the normalised nodes land on -- that is, on the
+   *    frame size. At the cusp the two products 3*p2 and 3*p3 are mathematically equal and
+   *    cancel; what survives is the rounding of the -p0*a + p1*b terms above them, which are
+   *    tiny but not zero because the recursion never samples t at exactly 1. When that residue
+   *    is zero the old code took its degenerate branch and came out round; when it is not, the
+   *    code normalised the residue and the border direction became noise, leaving the reported
+   *    V hole.
+   *
+   *    MEASURED, with the fix reverted: 14 of these 16 frames come out clean and two do not --
+   *    5000x3750 (3936 px missing at the cusp) and 2999x2251 (1358 px, the same place scaled).
+   *    The reporter's own 5198x3904 is among the clean ones. A corpus pinned to a single frame
+   *    size would therefore have passed this shape while the reported defect was live, which is
+   *    exactly what it did for a whole round of this investigation. Do not reduce this list to
+   *    one size; if it ever needs trimming, keep 5000x3750 and 2999x2251, which are the two
+   *    that actually detect. */
+  static const int frames[][2] = {
+    { 5198, 3904 },   // the reporter's own frame -- clean, which is the trap
+    { 5184, 3888 },
+    { 5000, 3750 },   // DETECTS
+    { 4321, 3241 },
+    { 4000, 3000 },
+    { 2999, 2251 },   // DETECTS
+    { 2137, 1603 },
+    { 1234,  987 },
+  };
+  for(int f = 0; f < (int)(sizeof(frames) / sizeof(*frames)); f++)
+  {
+    char *nm = g_strdup_printf("brush-1313-cusp-%dx%d", frames[f][0], frames[f][1]);
+    _run_brush_case_at(&dev, _brush_1313, 11, nm, dir, 0, frames[f][0], frames[f][1]);
+    g_free(nm);
+  }
 
   _run_brush_case(&dev, _brush_cusp_tbl,      3, "brush-cusp",      dir, 0);
   _run_brush_case(&dev, _brush_hairpin_tbl,   3, "brush-hairpin",   dir, 0);

@@ -232,15 +232,58 @@ static void _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p1_y,
   const float c = 3.0f * (2.0f * t * ti - t * t);
   const float d = 3.0f * sqf(t);
 
-  const float dx = -p0_x * a + p1_x * b + p2_x * c + p3_x * d;
-  const float dy = -p0_y * a + p1_y * b + p2_y * c + p3_y * d;
+  /* not const: a degenerate first-order term is replaced by the limit direction below */
+  float dx = -p0_x * a + p1_x * b + p2_x * c + p3_x * d;
+  float dy = -p0_y * a + p1_y * b + p2_y * c + p3_y * d;
 
-  // so we can have the resulting point
-  if(dx == 0 && dy == 0)
+  /* A vanishing derivative does NOT mean the tangent is undefined -- it means the first-order
+   * term is degenerate and the direction is given by the limit, i.e. by the first non-zero term.
+   * That is exactly how a CUSP is stored: both of the node's handles sit on the node itself, so
+   * the cubic's endpoint derivative 3*(p1 - p0) (or 3*(p3 - p2)) is zero there.
+   *
+   * Two separate defects lived in the three lines this replaces, and only the pair of them
+   * explains issue #1313's follow-up ("the brush loses its radius in the direction of the point
+   * of the cusp and so we have a sharp V hole").
+   *
+   * FIRST: the test was `== 0', and a vanishing derivative does not arrive as zero. These are
+   * image pixels, so at the reported cusp -- where p2 == p3 bit for bit -- 3*(p3 - p2) evaluates
+   * to 1.22e-4, because the products 3*1327.8497 are each rounded to float before the
+   * subtraction. So the guard never fired at all. Execution fell through and NORMALISED that
+   * residue: (1.22e-4, 0) normalises to (1, 0), and the border direction at the cusp became pure
+   * rounding noise pointing along +x. The tell, once you know it, is a border sample sitting
+   * exactly one radius due east of its node. The threshold below is therefore RELATIVE, scaled
+   * to the control polygon because that is what the derivative scales with -- a genuine tangent
+   * near the cusp is orders of magnitude larger (measured 1.06 at t = 0.999 against a 0.2 noise
+   * floor), so the two separate cleanly and no real direction can be swallowed.
+   *
+   * SECOND: even when it did fire, returning NaN was the wrong answer. Every consumer falls back
+   * to the previous border point, so the offset curve never rotated through the exterior angle
+   * at the tip, the two sides of the joint coincided -- the gap between them measured (0.0, 0.0)
+   * and the turn 0.0 degrees -- and the arc filler that exists to bridge exactly that wedge was
+   * never triggered. Since a brush mask is the union of centreline->border spokes, the wedge at
+   * the point of the cusp was simply never painted.
+   *
+   * For a cubic, if the first-order term vanishes the second-order one gives the limit
+   * direction: (p2 - p0) at the start, (p3 - p1) at the end. If that is degenerate too, the
+   * chord is the last honest answer. Only a curve collapsed to a single point has no direction
+   * at all, and that one still reports NaN, because there is genuinely nothing to offset. */
+  const float span = fmaxf(fmaxf(fabsf(p3_x - p0_x), fabsf(p3_y - p0_y)),
+                           fmaxf(fabsf(p2_x - p1_x), fabsf(p2_y - p1_y)));
+  const float degenerate = fmaxf(span, 1.0f) * 1e-3f;
+
+  if(fabsf(dx) < degenerate && fabsf(dy) < degenerate)
   {
-    *border_x = NAN;
-    *border_y = NAN;
-    return;
+    if(t < 0.5f) { dx = p2_x - p0_x; dy = p2_y - p0_y; }
+    else         { dx = p3_x - p1_x; dy = p3_y - p1_y; }
+
+    if(fabsf(dx) < degenerate && fabsf(dy) < degenerate) { dx = p3_x - p0_x; dy = p3_y - p0_y; }
+
+    if(dx == 0.0f && dy == 0.0f)
+    {
+      *border_x = NAN;
+      *border_y = NAN;
+      return;
+    }
   }
   const float l = 1.0f / sqrtf(dx * dx + dy * dy);
   *border_x = (*point_x) + radius * dy * l;
@@ -716,6 +759,24 @@ static inline int _brush_cyclic_cursor(int n, int nb)
 }
 
 
+/* Record, as an out-of-band span, the border samples a join arc is about to append: the
+ * DISPLAY outline excludes these spans (a node-centred arc reads as a self-intersecting circle
+ * on the dashed border -- the complaint that got the arcs disabled outright in 0b54897b50),
+ * while the rasteriser keeps every sample, because border coverage IS mask coverage. Pairs of
+ * (first, one-past-last) border indices; an empty pair is dropped at conversion. */
+static inline void _brush_record_skip_span_begin(dt_masks_dynbuf_t *dskips, dt_masks_dynbuf_t *dborder)
+{
+  if(IS_NULL_PTR(dskips) || IS_NULL_PTR(dborder)) return;
+  const float at = (float)(dt_masks_dynbuf_position(dborder) / 2);
+  dt_masks_dynbuf_add_2(dskips, at, at);
+}
+
+static inline void _brush_record_skip_span_end(dt_masks_dynbuf_t *dskips, dt_masks_dynbuf_t *dborder)
+{
+  if(IS_NULL_PTR(dskips) || IS_NULL_PTR(dborder)) return;
+  dt_masks_dynbuf_set(dskips, -1, (float)(dt_masks_dynbuf_position(dborder) / 2));
+}
+
 /** get all points of the brush and the border */
 /** this takes care of gaps and iop distortions */
 // Brush points are stored in a cyclic way because the border goes around the main line.
@@ -724,7 +785,8 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
                                  const double iop_order, const int transform_direction,
                                  const dt_masks_distort_t *const dist, float **point_buffer, int *point_count,
                                  float **border_buffer, int *border_count, float **payload_buffer,
-                                 int *payload_count, int use_source)
+                                 int *payload_count, dt_masks_skip_range_t **border_skips,
+                                 int *border_skip_count, int use_source)
 {
   *point_buffer = NULL;
   *point_count = 0;
@@ -732,6 +794,8 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   if(!IS_NULL_PTR(border_buffer)) *border_count = 0;
   if(payload_buffer) *payload_buffer = NULL;
   if(!IS_NULL_PTR(payload_buffer)) *payload_count = 0;
+  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
+  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
 
   if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
   double start2 = 0.0;
@@ -744,7 +808,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   // spread out and the radial spokes stamped from them leave gaps between each pair (#1116).
   const int pixel_threshold = dist->rasterization_step;
 
-  dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL;
+  dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL, *dskips = NULL;
 
   dpoints = dt_masks_dynbuf_init(1000000, "brush dpoints");
   if(IS_NULL_PTR(dpoints)) return 1;
@@ -770,6 +834,12 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     }
   }
 
+  if(!IS_NULL_PTR(dborder) && !IS_NULL_PTR(border_skips) && !IS_NULL_PTR(border_skip_count))
+  {
+    // an allocation failure here only loses the display exclusion, never the geometry
+    dskips = dt_masks_dynbuf_init(256, "brush dskips");
+  }
+
   // we store all points
   float dx = 0.0f, dy = 0.0f;
 
@@ -788,6 +858,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     dt_masks_dynbuf_free(dpoints);
     dt_masks_dynbuf_free(dborder);
     dt_masks_dynbuf_free(dpayload);
+    dt_masks_dynbuf_free(dskips);
     return 1;
   }
 
@@ -837,7 +908,6 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     const int k = _brush_cyclic_cursor(n, node_count);
     const int k1 = _brush_cyclic_cursor(n + 1, node_count);
     const int k2 = _brush_cyclic_cursor(n + 2, node_count);
-    const gboolean allow_border_gap_rounding = FALSE;
 
     dt_masks_node_brush_t *point1 = nodes[k];
     dt_masks_node_brush_t *point2 = nodes[k1];
@@ -913,8 +983,9 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
         float bmin[2] = { dt_masks_dynbuf_get(dborder, -2), dt_masks_dynbuf_get(dborder, -1) };
         float cmax[2] = { dt_masks_dynbuf_get(dpoints, -2), dt_masks_dynbuf_get(dpoints, -1) };
         float bmax[2] = { 2 * cmax[0] - bmin[0], 2 * cmax[1] - bmin[1] };
-        if(allow_border_gap_rounding)
-          _brush_points_recurs_border_gaps(cmax, bmin, NULL, bmax, dpoints, dborder, TRUE);
+        _brush_record_skip_span_begin(dskips, dborder);
+        _brush_points_recurs_border_gaps(cmax, bmin, NULL, bmax, dpoints, dborder, TRUE);
+        _brush_record_skip_span_end(dskips, dborder);
       }
 
       if(!IS_NULL_PTR(dpayload))
@@ -990,11 +1061,26 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
         _brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.0001, p3[4], cmin,
                              cmin + 1, bmax, bmax + 1);
       }
+      /* The border of the two segments meeting at this node ends on one side of the joint and
+       * restarts on the other; this arc bridges the wedge between them, centred on the node.
+       * Without it the rasteriser has no border samples across the joint, so the falloff paints
+       * no spokes there and the stroke loses its radius toward the node -- at a cusp (both
+       * control handles collapsed onto the node) that is a sharp V hole in the EXPORTED mask,
+       * reported as a follow-up of issue #1313 and confirmed fixed by restoring exactly this
+       * call.
+       *
+       * The arc was disabled by 0b54897b50 ("Path shapes: Add border handle per node",
+       * 2026-02) behind an always-FALSE flag, because the GUI's dashed border outline drew
+       * these arcs as self-intersecting circles at sharp joints. That traded a cosmetic GUI
+       * blemish for a correctness hole in every rendered mask -- the mask is the union of
+       * centreline->border spokes, so border coverage IS mask coverage. The cosmetic half is
+       * handled where it belongs: the arc span is recorded out-of-band and the DISPLAY border
+       * excludes it (see _brush_get_points_border()), while the rasteriser keeps every sample. */
       if(bmax[0] - rb[0] > 1 || bmax[0] - rb[0] < -1 || bmax[1] - rb[1] > 1 || bmax[1] - rb[1] < -1)
       {
-        // float bmin2[2] = {(*border)[posb-22],(*border)[posb-21]};
-        if(allow_border_gap_rounding)
-          _brush_points_recurs_border_gaps(rc, rb, NULL, bmax, dpoints, dborder, cw);
+        _brush_record_skip_span_begin(dskips, dborder);
+        _brush_points_recurs_border_gaps(rc, rb, NULL, bmax, dpoints, dborder, cw);
+        _brush_record_skip_span_end(dskips, dborder);
       }
     }
 
@@ -1022,6 +1108,38 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     *payload_count = dt_masks_dynbuf_position(dpayload) / 2;
     *payload_buffer = dt_masks_dynbuf_harvest(dpayload);
     dt_masks_dynbuf_free(dpayload);
+  }
+
+  if(!IS_NULL_PTR(dskips))
+  {
+    const int pair_count = dt_masks_dynbuf_position(dskips) / 2;
+    const float *pairs = dt_masks_dynbuf_buffer(dskips);
+    if(pair_count > 0)
+    {
+      dt_masks_skip_range_t *skips
+          = dt_pixelpipe_cache_alloc_align_cache(sizeof(dt_masks_skip_range_t) * pair_count, 0);
+      if(!IS_NULL_PTR(skips))
+      {
+        int count = 0;
+        for(int i = 0; i < pair_count; i++)
+        {
+          const int from = (int)pairs[i * 2];
+          const int to = (int)pairs[i * 2 + 1];
+          if(to <= from) continue;   // the arc appended nothing
+          skips[count].jump_from = from;
+          skips[count].resume_at = to;
+          count++;
+        }
+        if(count > 0)
+        {
+          *border_skips = skips;
+          *border_skip_count = count;
+        }
+        else
+          dt_pixelpipe_cache_free_align(skips);
+      }
+    }
+    dt_masks_dynbuf_free(dskips);
   }
   // printf("points %d, border %d, playload %d\n", *points_count, border ? *border_count : -1, payload ?
   // *payload_count : -1);
@@ -1265,10 +1383,35 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
   if(use_source && IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   const double ioporder = (module) ? module->iop_order : 0.0f;
   const dt_masks_distort_t gui_dist = dt_masks_distort_for_gui(develop);
-  return dt_masks_raster_from_status(
-      _brush_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
-                            &gui_dist, point_buffer, point_count, border_buffer,
-                            border_count, NULL, NULL, use_source));
+  const int status
+      = _brush_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
+                              &gui_dist, point_buffer, point_count, border_buffer,
+                              border_count, NULL, NULL, border_skips, border_skip_count, use_source);
+
+  /* This outline feeds the GUI only -- the rasterisers build their own from the pixel path. The
+   * join arcs the producer appended are geometry the MASK needs and the drawn border must not
+   * show: stroked, a node-centred arc reads as a self-intersecting circle at every sharp joint,
+   * which is what got the arcs deleted outright in 0b54897b50 (and the exported mask holed).
+   * The spans travel out-of-band; here their points are blanked to the drawer's existing
+   * bare-NaN "invisible point" marker, so the dashed outline skips them without any consumer
+   * learning a new contract. The spans themselves stay published in border_skips: they are the
+   * record of what was blanked, not an encoding to decode. */
+  if(status == 0 && !IS_NULL_PTR(border_buffer) && !IS_NULL_PTR(*border_buffer)
+     && !IS_NULL_PTR(border_skips) && !IS_NULL_PTR(*border_skips) && !IS_NULL_PTR(border_skip_count))
+  {
+    for(int i = 0; i < *border_skip_count; i++)
+    {
+      const int from = (*border_skips)[i].jump_from;
+      const int to = MIN((*border_skips)[i].resume_at, *border_count);
+      for(int j = MAX(from, 0); j < to; j++)
+      {
+        (*border_buffer)[j * 2] = NAN;
+        (*border_buffer)[j * 2 + 1] = NAN;
+      }
+    }
+  }
+
+  return dt_masks_raster_from_status(status);
 }
 
 /** find relative position within a brush segment that is closest to the point given by coordinates x and y;
@@ -2753,7 +2896,7 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   int points_count, border_count;
   const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
   if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
-                           &points, &points_count, &border, &border_count, NULL, NULL, include_source) != 0)
+                           &points, &points_count, &border, &border_count, NULL, NULL, NULL, NULL, include_source) != 0)
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
@@ -2860,7 +3003,7 @@ static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const mod
   const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
   if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
                            &points, &points_count,
-                               &border, &border_count, &payload, &payload_count, 0) != 0)
+                               &border, &border_count, &payload, &payload_count, NULL, NULL, 0) != 0)
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
@@ -3053,7 +3196,7 @@ static dt_masks_raster_result_t _brush_get_mask_roi(const dt_iop_module_t *const
 
   const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
   if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
-                           &points, &points_count, &border, &border_count, &payload, &payload_count, 0) != 0)
+                           &points, &points_count, &border, &border_count, &payload, &payload_count, NULL, NULL, 0) != 0)
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
