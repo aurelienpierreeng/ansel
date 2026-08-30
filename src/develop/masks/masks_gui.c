@@ -35,6 +35,7 @@
 #include "system/mem_alloc.h"
 #include "develop/geometry/geometry.h"   // dt_geometry_chain_generation()
 #include "develop/masks.h"
+#include "develop/masks_debug.h"
 #include "develop/masks_gui.h"
 #include "develop/masks_group.h"
 #include "develop/masks/masks_functions.h"
@@ -3804,8 +3805,15 @@ static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_mod
   }
 }
 
-void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
-                                 int32_t pointerx, int32_t pointery)
+void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr,
+                                 int32_t width, int32_t height, int32_t pointerx, int32_t pointery)
+{
+  dt_masks_events_post_expose_with(dev, module, cr, width, height, pointerx, pointery, NULL);
+}
+
+void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr,
+                                      int32_t width, int32_t height, int32_t pointerx, int32_t pointery,
+                                      const dt_masks_overlay_transform_t *transform)
 {
   const double post_expose_start = dt_get_wtime();
   dt_develop_t *develop = dev;
@@ -3820,7 +3828,7 @@ void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *modu
   dt_dev_get_processed_size(develop, &buffer_width, &buffer_height);
 
   if(buffer_width < 1.0 || buffer_height < 1.0) return;
-  const float zoom_scale = dt_dev_get_zoom_level(develop);
+  const float zoom_scale = IS_NULL_PTR(transform) ? dt_dev_get_zoom_level(develop) : (float)transform->scale;
 
   /* Draw into an isolated group, so that overlapping shapes composite once against the view
    * instead of once each.
@@ -3851,12 +3859,21 @@ void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *modu
   
   cairo_save(mask_draw);
 
-  // We rescale to input space
-  if(dt_dev_rescale_roi_to_input(develop, mask_draw, width, height))
+  // We rescale to input space -- from the viewport, or from the caller's own mapping when it
+  // supplied one (see dt_masks_overlay_transform_t: the viewport path needs GUI state).
+  if(IS_NULL_PTR(transform))
   {
-    cairo_restore(mask_draw);
-    cairo_pattern_destroy(cairo_pop_group(cr));   // discard: nothing was drawn
-    return;
+    if(dt_dev_rescale_roi_to_input(develop, mask_draw, width, height))
+    {
+      cairo_restore(mask_draw);
+      cairo_pattern_destroy(cairo_pop_group(cr));   // discard: nothing was drawn
+      return;
+    }
+  }
+  else
+  {
+    cairo_translate(mask_draw, transform->offset_x, transform->offset_y);
+    cairo_scale(mask_draw, transform->scale, transform->scale);
   }
 
   // We update the form if needed
@@ -4983,6 +5000,127 @@ int dt_masks_form_change_opacity(dt_develop_t *dev, dt_masks_form_t *mask_form, 
   // gives back to say it consumed the event, so reporting 0 once the opacity is already pinned at
   // 0 or 1 would let that scroll step fall through and zoom the canvas instead.
   return (result == DT_MASKS_OK || result == DT_MASKS_UNCHANGED);
+}
+
+
+
+/* ------------------------------------------------------------------------------------- */
+/* The headless half of the diagnostic renderer.
+ *
+ * It lives here, and not next to dt_masks_debug_rasterise() in masks_debug.c, for one reason:
+ * compositing the overlay needs cairo, and src/develop is kept free of every toolkit type by
+ * tools/check_module_boundaries.sh so the pixel and params engines stay portable. This file is
+ * already the GUI half of masks -- and it is where dt_masks_events_post_expose_with(), the one
+ * production drawing routine this calls, already lives. There is deliberately no second
+ * drawing path: what a regression test looks at is what the darkroom paints. */
+gboolean dt_masks_debug_write_png(dt_develop_t *dev, dt_masks_form_t *form,
+                                  const dt_masks_debug_request_t *request, const char *path)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(request) || IS_NULL_PTR(path)) return FALSE;
+  if(IS_NULL_PTR(form)) form = dt_masks_get_visible_form(dev);
+  if(IS_NULL_PTR(form)) return FALSE;
+
+  int32_t raw_width = 0;
+  int32_t raw_height = 0;
+  if(!dt_dev_geometry_get_raw_size(dev, &raw_width, &raw_height) || raw_width <= 0 || raw_height <= 0)
+    return FALSE;
+
+  int width = request->width > 0 ? request->width : raw_width;
+  int height = request->height > 0 ? request->height
+                                   : (int)lrint((double)width * raw_height / (double)raw_width);
+  if(width <= 0 || height <= 0) return FALSE;
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+  if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_destroy(surface);
+    return FALSE;
+  }
+  cairo_t *cr = cairo_create(surface);
+
+  if(request->backdrop != DT_MASKS_DEBUG_BACKDROP_TRANSPARENT)
+  {
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_paint(cr);
+  }
+
+  if(request->backdrop == DT_MASKS_DEBUG_BACKDROP_RASTER)
+  {
+    float *const mask = dt_masks_debug_rasterise(dev, form, width, height);
+    if(!IS_NULL_PTR(mask))
+    {
+      cairo_surface_t *grey = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+      if(cairo_surface_status(grey) == CAIRO_STATUS_SUCCESS)
+      {
+        cairo_surface_flush(grey);
+        uint8_t *const pixels = cairo_image_surface_get_data(grey);
+        const int stride = cairo_image_surface_get_stride(grey);
+        for(int y = 0; y < height; y++)
+        {
+          uint32_t *const row = (uint32_t *)(pixels + (size_t)y * stride);
+          for(int x = 0; x < width; x++)
+          {
+            const float v = mask[(size_t)y * width + x];
+            const uint32_t g = (uint32_t)(CLAMPF(v, 0.0f, 1.0f) * 255.0f + 0.5f);
+            row[x] = (g << 16) | (g << 8) | g;
+          }
+        }
+        cairo_surface_mark_dirty(grey);
+        cairo_set_source_surface(cr, grey, 0, 0);
+        cairo_paint(cr);
+      }
+      cairo_surface_destroy(grey);
+      dt_free_align(mask);
+    }
+  }
+
+  if(request->draw_overlay)
+  {
+    /* The overlay paints with the theme palette, which is filled from GTK at startup and is
+     * therefore all-zero -- fully transparent -- with no GUI. Drawing would "succeed" and
+     * produce an empty picture. Give every unset entry a visible fallback so a headless render
+     * shows the same geometry the darkroom would; the exact hues are the theme's business, and
+     * a diagnostic only needs to be legible. Production is untouched: with a GUI up, every
+     * entry already has a non-zero alpha and nothing here applies. */
+    GdkRGBA *const palette = dt_widget_colors();
+    if(!IS_NULL_PTR(palette))
+    {
+      for(int i = 0; i < DT_GUI_COLOR_LAST; i++)
+        if(palette[i].alpha <= 0.0) palette[i] = (GdkRGBA){ 1.0, 1.0, 1.0, 1.0 };
+    }
+
+    /* The overlay reads the visible form and the processed size off the dev, so both are
+     * published here rather than passed -- this is the same state the darkroom holds while it
+     * draws, which is the point: no second code path. */
+    if(IS_NULL_PTR(dev->form_gui))
+    {
+      dev->form_gui = (dt_masks_form_gui_t *)calloc(1, sizeof(dt_masks_form_gui_t));
+      if(!IS_NULL_PTR(dev->form_gui)) dt_masks_init_form_gui(dev, dev->form_gui);
+    }
+    if(!IS_NULL_PTR(dev->form_gui))
+    {
+      dev->form_gui->dev = dev;
+      dev->form_gui->form_visible = form;
+      dev->form_gui->formid = 0;   // force the outline cache to rebuild for this render
+      dt_dev_geometry_set_processed_size(dev, raw_width, raw_height);
+
+      const dt_masks_overlay_transform_t transform
+          = { .scale = (double)width / (double)raw_width, .offset_x = 0.0, .offset_y = 0.0 };
+      int pw = 0, ph = 0;
+      dt_dev_get_processed_size(dev, &pw, &ph);
+      dt_print(DT_DEBUG_ALWAYS, "[masks debug] overlay: visible=%p processed=%dx%d scale=%.4f\n",
+               (void *)dt_masks_get_visible_form(dev), pw, ph, transform.scale);
+      dt_masks_events_post_expose_with(dev, NULL, cr, width, height, -1, -1, &transform);
+    }
+  }
+
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+  const gboolean ok = (cairo_surface_write_to_png(surface, path) == CAIRO_STATUS_SUCCESS);
+  cairo_surface_destroy(surface);
+
+  if(!ok) dt_print(DT_DEBUG_ALWAYS, "[masks debug] could not write %s\n", path);
+  return ok;
 }
 
 // clang-format off

@@ -525,6 +525,31 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *gui, const 
                                    const int points_count, const int node_count, const float zoom_scale,
                                    const gboolean round_ends);
 
+/**
+ * @brief How the overlay maps image coordinates onto its cairo target.
+ *
+ * @details The darkroom passes NULL and the mapping comes from the viewport -- zoom, pan, and
+ * the GUI's device pixel ratio. None of that exists outside the GUI: dt_gui_get_global() is
+ * darktable.gui, which is NULL in ansel-cli and in the test binaries, so the viewport path
+ * would dereference it. A headless caller supplies its own mapping instead, which is also what
+ * a regression test wants -- a fixed, reproducible transform rather than whatever the window
+ * happened to be showing.
+ *
+ * This exists so the OVERLAY IS DRAWN BY THE SAME CODE in both cases. The alternative -- a
+ * second drawing path for diagnostics -- would be a fork that stops agreeing with the GUI
+ * exactly when it is needed to explain a GUI problem.
+ */
+typedef struct dt_masks_overlay_transform_t
+{
+  double scale;               /**< image pixels -> target pixels */
+  double offset_x, offset_y;  /**< target-space translation, applied before the scale */
+} dt_masks_overlay_transform_t;
+
+/** @brief Draw the mask overlay with an explicit mapping; @p transform NULL means the viewport's. */
+void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr,
+                                      int32_t width, int32_t height, int32_t pointerx, int32_t pointery,
+                                      const dt_masks_overlay_transform_t *transform);
+
 void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery);
 int dt_masks_events_mouse_leave(struct dt_iop_module_t *module);
