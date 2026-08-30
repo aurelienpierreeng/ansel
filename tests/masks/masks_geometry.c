@@ -79,16 +79,25 @@ static dt_masks_node_brush_t *_brush_node(const float x, const float y, const fl
   return n;
 }
 
-static dt_masks_node_polygon_t *_polygon_node(const float x, const float y, const float c1x, const float c1y,
-                                              const float c2x, const float c2y, const float radius)
+static dt_masks_node_polygon_t *_polygon_node_state(const float x, const float y, const float c1x, const float c1y,
+                                                    const float c2x, const float c2y, const float radius,
+                                                    const dt_masks_points_states_t state)
 {
   dt_masks_node_polygon_t *n = (dt_masks_node_polygon_t *)calloc(1, sizeof(dt_masks_node_polygon_t));
   n->node[0] = x;     n->node[1] = y;
   n->ctrl1[0] = c1x;  n->ctrl1[1] = c1y;
   n->ctrl2[0] = c2x;  n->ctrl2[1] = c2y;
   n->border[0] = n->border[1] = radius;
-  n->state = DT_MASKS_POINT_STATE_NORMAL;
+  /* the state is not decoration: a CUSP node has both handles on the node, which is where the
+   * curve loses its direction and where both reported defects live */
+  n->state = state;
   return n;
+}
+
+static dt_masks_node_polygon_t *_polygon_node(const float x, const float y, const float c1x, const float c1y,
+                                              const float c2x, const float c2y, const float radius)
+{
+  return _polygon_node_state(x, y, c1x, c1y, c2x, c2y, radius, DT_MASKS_POINT_STATE_NORMAL);
 }
 
 /* ------------------------------------------------------------------------------------- */
@@ -348,6 +357,31 @@ static void _set_frame(dt_develop_t *dev, const int w, const int h)
   dt_geometry_chain_rebuild(dev);
 }
 
+
+/* THE SECOND REPORTED SHAPE. Polygon #2 of the same sidecar, decoded verbatim like the brush
+ * above. Fifteen nodes; node 12 is a CUSP (both handles collapsed onto it, state 2) and nodes 0
+ * and 14 bracket the concavity where the outer border was reported self-intersecting. Kept as
+ * data for the same reason: the test needs no file, no database and no XMP reader to reproduce
+ * the exact shape a user reported, and a diff shows when the geometry itself is edited. */
+static const float _polygon_1788045925[15][8] = {
+  /* node.x, node.y, ctrl1.x, ctrl1.y, ctrl2.x, ctrl2.y, border, state */
+  { 0.109192476f, 0.048409186f, 0.102207638f, 0.045089375f, 0.116177313f, 0.051728997f, 0.021000000f, 1 },
+  { 0.141800687f, 0.053578191f, 0.133969516f, 0.053021252f, 0.149631873f, 0.054135136f, 0.021000000f, 1 },
+  { 0.156179547f, 0.051750816f, 0.152295023f, 0.049384728f, 0.160064086f, 0.054116912f, 0.021000000f, 1 },
+  { 0.165107980f, 0.067774758f, 0.159996808f, 0.066224061f, 0.170219168f, 0.069325462f, 0.021000000f, 1 },
+  { 0.186846718f, 0.061055038f, 0.181864932f, 0.064845644f, 0.191828534f, 0.057264429f, 0.021000000f, 1 },
+  { 0.194998786f, 0.045031108f, 0.191052154f, 0.047960225f, 0.198945418f, 0.042101998f, 0.021000000f, 1 },
+  { 0.210526481f, 0.043480407f, 0.206644550f, 0.040637448f, 0.214408413f, 0.046323366f, 0.021000000f, 1 },
+  { 0.218290374f, 0.062088847f, 0.215120122f, 0.055455282f, 0.221460640f, 0.068722412f, 0.021000000f, 1 },
+  { 0.229547918f, 0.083281785f, 0.225083694f, 0.080955729f, 0.234012157f, 0.085607842f, 0.021000000f, 1 },
+  { 0.245075703f, 0.076045178f, 0.241193786f, 0.074408330f, 0.248957604f, 0.077682026f, 0.021000000f, 1 },
+  { 0.252839506f, 0.093102910f, 0.253421843f, 0.087416999f, 0.252257198f, 0.098788828f, 0.021000000f, 1 },
+  { 0.241581917f, 0.110160641f, 0.254290909f, 0.109167710f, 0.228872970f, 0.111153573f, 0.021000000f, 1 },
+  { 0.176586017f, 0.099060528f, 0.176586017f, 0.099060528f, 0.176586017f, 0.099060528f, 0.021000000f, 2 },
+  { 0.099036753f, 0.105304882f, 0.111819178f, 0.116205104f, 0.086254336f, 0.094404668f, 0.021000000f, 1 },
+  { 0.099891551f, 0.033659276f, 0.098198950f, 0.043141894f, 0.101584166f, 0.024176663f, 0.021000000f, 1 },
+};
+
 static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const int count,
                                const char *name, const char *dir, const int budget_px,
                                const int img_w, const int img_h)
@@ -443,11 +477,11 @@ static void _run_brush_case(dt_develop_t *dev, const float table[][9], const int
   _run_brush_case_at(dev, table, count, name, dir, budget_px, IMG_W, IMG_H);
 }
 
-static void _run_case(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const char *dir,
-                      const int max_holes, const int max_hole_px)
+static void _run_case_at(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const char *dir,
+                         const int max_holes, const int max_hole_px, const int img_w, const int img_h)
 {
-  _set_frame(dev, IMG_W, IMG_H);
-  float *mask = dt_masks_debug_rasterise(dev, form, IMG_W, IMG_H);
+  _set_frame(dev, img_w, img_h);
+  float *mask = dt_masks_debug_rasterise(dev, form, img_w, img_h);
   if(IS_NULL_PTR(mask))
   {
     printf("[FAIL] %-22s rasterisation returned nothing\n", name);
@@ -457,25 +491,37 @@ static void _run_case(dt_develop_t *dev, dt_masks_form_t *form, const char *name
 
   double coverage = 0.0;
   int holes = 0, largest = 0;
-  _measure(mask, IMG_W, IMG_H, &coverage, &holes, &largest);
+  _measure(mask, img_w, img_h, &coverage, &holes, &largest);
   dt_free_align(mask);
 
   char *alpha_path = g_strdup_printf("%s/%s-alpha.png", dir, name);
   char *over_path = g_strdup_printf("%s/%s-overlay.png", dir, name);
   const dt_masks_debug_request_t alpha_req
-      = { .width = IMG_W, .height = IMG_H, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = FALSE };
+      = { .width = img_w, .height = img_h, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = FALSE };
   const dt_masks_debug_request_t over_req
-      = { .width = IMG_W, .height = IMG_H, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = TRUE };
+      = { .width = img_w, .height = img_h, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = TRUE };
   dt_masks_debug_write_png(dev, form, &alpha_req, alpha_path);
   dt_masks_debug_write_png(dev, form, &over_req, over_path);
 
+  if(holes > max_holes || largest > max_hole_px)
+  {
+    char *csv = g_strdup_printf("%s/%s-outline.csv", dir, name);
+    dt_masks_debug_write_outline_csv(dev, form, csv);
+    g_free(csv);
+  }
+
   const gboolean ok = (holes <= max_holes) && (largest <= max_hole_px);
-  printf("[%s] %-22s coverage %.4f  enclosed holes %d (largest %d px)  budget %d/%d  -> %s\n",
-         ok ? "PASS" : "FAIL", name, coverage, holes, largest, max_holes, max_hole_px, alpha_path);
+  printf("[%s] %-22s %5dx%-5d coverage %.4f  enclosed holes %d (largest %d px)  budget %d/%d  -> %s\n",
+         ok ? "PASS" : "FAIL", name, img_w, img_h, coverage, holes, largest, max_holes, max_hole_px, alpha_path);
   if(!ok) failures++;
 
   g_free(alpha_path);
   g_free(over_path);
+}
+static void _run_case(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const char *dir,
+                      const int max_holes, const int max_hole_px)
+{
+  _run_case_at(dev, form, name, dir, max_holes, max_hole_px, IMG_W, IMG_H);
 }
 
 /* ------------------------------------------------------------------------------------- */
@@ -586,6 +632,36 @@ int main(int argc, char *argv[])
   _run_brush_case(&dev, _brush_zigzag_tbl,    6, "brush-zigzag",    dir, 0);
   _run_brush_case(&dev, _brush_selfcross_tbl, 5, "brush-selfcross", dir, 0);
   _run_brush_case(&dev, _brush_concave_tbl,   5, "brush-concave",   dir, 0);
+
+  /* 3b. THE SECOND REPORTED SHAPE, polygon #2. Two defects were reported against it: the outer
+   *     border self-intersecting between nodes 0 and 14, where the outline runs into a
+   *     concavity, and a missing radial spoke in the feather at node 12, which is the shape's
+   *     one cusp. The second is a RASTER defect, so it is measured on the mask and not just
+   *     looked at. Frame-swept for the same reason the brush is: the geometry that decides both
+   *     is evaluated in pixels. */
+  {
+    static const int poly_frames[][2] = { { 5198, 3904 }, { 4000, 3000 }, { 2137, 1603 } };
+    for(int f = 0; f < (int)(sizeof(poly_frames) / sizeof(*poly_frames)); f++)
+    {
+      dt_masks_form_t form = { 0 };
+      form.type = DT_MASKS_POLYGON;
+      form.functions = &dt_masks_functions_polygon;
+      form.version = 6;
+      form.formid = 106;
+      g_strlcpy(form.name, "polygon #2", sizeof(form.name));
+      for(int i = 0; i < 15; i++)
+      {
+        const float *r = _polygon_1788045925[i];
+        form.points = g_list_append(form.points,
+                                    _polygon_node_state(r[0], r[1], r[2], r[3], r[4], r[5], r[6],
+                                                        (dt_masks_points_states_t)(int)r[7]));
+      }
+      char *nm = g_strdup_printf("polygon-1788045925-%dx%d", poly_frames[f][0], poly_frames[f][1]);
+      _run_case_at(&dev, &form, nm, dir, 0, 0, poly_frames[f][0], poly_frames[f][1]);
+      g_free(nm);
+      g_list_free_full(form.points, free);
+    }
+  }
 
   /* 4. A polygon whose concave runs are tighter than its feather: its offset curve
    *    self-intersects at every one of them, which is the geometry issue #1313 turned on --

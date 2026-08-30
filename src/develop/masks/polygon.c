@@ -114,15 +114,46 @@ static gboolean _polygon_border_get_XY(const float p0_x, const float p0_y, const
   const double c = 3.0 * (2.0 * t_ti - t_t);
   const double d = 3.0 * t_t;
 
-  const double dx = -p0_x * a + p1_x * b + p2_x * c + p3_x * d;
-  const double dy = -p0_y * a + p1_y * b + p2_y * c + p3_y * d;
+  /* not const: a degenerate first-order term is replaced by the limit direction below */
+  double dx = -p0_x * a + p1_x * b + p2_x * c + p3_x * d;
+  double dy = -p0_y * a + p1_y * b + p2_y * c + p3_y * d;
 
-  // so we can have the resulting point
-  /* A curve collapsed to a single point has no direction, so there is nothing to offset along
-   * and the honest answer is "none". This used to be written into the border coordinates as
-   * NaN, which every walker downstream then had to recognise and repair -- a sentinel inside a
-   * buffer that is supposed to hold geometry. It is a return value now. */
-  if(dx == 0 && dy == 0) return FALSE;
+  /* A vanishing derivative does not mean the tangent is undefined -- it means the first-order
+   * term is degenerate and the direction is the limit, given by the first non-zero term. That
+   * is exactly how a CUSP is stored: both of the node's handles sit on the node, so the cubic's
+   * endpoint derivative 3*(p3 - p2) is zero there.
+   *
+   * Giving up instead left the offset with no direction at that one sample, and the caller then
+   * held the previous border point. A polygon's feather is painted as radial spokes from each
+   * outline sample to its border sample, so a held border point means a spoke that goes nowhere:
+   * reported on polygon #2 of issue #1313's sidecar as "a radial spoke is missing in the
+   * feathering area" at node 12, and visible in the rasterised mask as a thin dark line cutting
+   * down through the feather band.
+   *
+   * This is the same defect the brush had at its own cusp, fixed the same way, and the
+   * comparison has to be RELATIVE for the same reason: these are image pixels, so the products
+   * either side of the cancellation are rounded before they are subtracted and what should be
+   * zero arrives as a small residue. The brush measured 1.22e-4 in float. Doubles here make it
+   * smaller, not absent, and normalising a residue yields a direction made of rounding noise --
+   * which is worse than giving up, because it looks like an answer. */
+  const double span = fmax(fmax(fabs((double)p3_x - p0_x), fabs((double)p3_y - p0_y)),
+                           fmax(fabs((double)p2_x - p1_x), fabs((double)p2_y - p1_y)));
+  const double degenerate = fmax(span, 1.0) * 1e-9;
+
+  if(fabs(dx) < degenerate && fabs(dy) < degenerate)
+  {
+    /* for a cubic, if the first-order term vanishes the second-order one gives the limit */
+    if(t < 0.5f) { dx = (double)p2_x - p0_x; dy = (double)p2_y - p0_y; }
+    else         { dx = (double)p3_x - p1_x; dy = (double)p3_y - p1_y; }
+
+    if(fabs(dx) < degenerate && fabs(dy) < degenerate)
+    {
+      dx = (double)p3_x - p0_x;
+      dy = (double)p3_y - p0_y;
+    }
+    /* only a curve collapsed to a single point has no direction at all */
+    if(dx == 0.0 && dy == 0.0) return FALSE;
+  }
 
   const double l = 1.0 / sqrt(dx * dx + dy * dy);
   *border_x = (*center_x) + radius * dy * l;
@@ -2775,9 +2806,38 @@ static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const m
       }
     }
 
-    // and we draw the falloff
+    /* BRIDGE A JUMP BETWEEN CONSECUTIVE SPOKES.
+     *
+     * The feather is the union of segments from each outline sample to its border sample, so it
+     * is only continuous while consecutive segments stay within a pixel of each other at BOTH
+     * ends. At a cut boundary they do not: the border side collapses to the cut's resume point,
+     * which is somewhere else entirely, and the fan opens in one step. Measured on polygon #2 of
+     * issue #1313's sidecar, at the sample before the cut at 23528: the outline end moves a
+     * fraction of a pixel while the border end jumps 4.57 px, and the wedge between the two
+     * segments is never stamped -- a thin dark radial line through the feather, reported as "a
+     * radial spoke is missing" at node 12. A second one, 2.80 px, sits before the cut at 6532.
+     *
+     * Subdividing until each step is at most a pixel closes it. This is not the same thing as
+     * the `sparse' interpolation above, which fills in for samples deliberately not visited
+     * when the outline is walked at reduced density; this fires on adjacent samples, where the
+     * geometry itself is discontinuous. */
     if(last0[0] != p0[0] || last0[1] != p0[1] || last1[0] != p1[0] || last1[1] != p1[1])
     {
+      if(last0[0] > -100 || last0[1] > -100)
+      {
+        const int jump0 = MAX(abs(p0[0] - last0[0]), abs(p0[1] - last0[1]));
+        const int jump1 = MAX(abs(p1[0] - last1[0]), abs(p1[1] - last1[1]));
+        const int steps = MIN(MAX(jump0, jump1), 64);   /* a bound: a jump this big is not a fan */
+        for(int k = 1; k < steps; k++)
+        {
+          const float t = (float)k / (float)steps;
+          int b0[2] = { (int)floorf(last0[0] + t * (p0[0] - last0[0]) + 0.5f),
+                        (int)floorf(last0[1] + t * (p0[1] - last0[1]) + 0.5f) };
+          int b1[2] = { (int)floorf(last1[0] + t * (p1[0] - last1[0]) + 0.5f),
+                        (int)floorf(last1[1] + t * (p1[1] - last1[1]) + 0.5f) };
+          _polygon_falloff(bufptr, b0, b1, *posx, *posy, *width);
+        }
+      }
       _polygon_falloff(bufptr, p0, p1, *posx, *posy, *width);
       last0[0] = p0[0];
       last0[1] = p0[1];
@@ -3437,7 +3497,9 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
   // deal with feather if it does not lie outside of roi
   if(!polygon_encircles_roi)
   {
-    const int dpoints_capacity = 4 * border_count * (sparse ? sparse_factor : 1);
+    /* the jump bridge below can add segments between two adjacent samples, so the buffer needs
+     * headroom beyond one segment per sample; it is bounded and the writes are capacity-checked */
+    const int dpoints_capacity = 4 * (border_count + 1024) * (sparse ? sparse_factor : 1);
     int *dpoints = dt_pixelpipe_cache_alloc_align_cache(sizeof(int) * dpoints_capacity, 0);
     if(IS_NULL_PTR(dpoints))
     {
@@ -3455,6 +3517,7 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
     int last0[2] = { -100, -100 };
     int last1[2] = { -100, -100 };
     int falloff_skip_cursor = 0;
+    gboolean have_last = FALSE;
     for(int i = corner_count * 3; i < border_count; i++)
     {
       p0[0] = floorf(points[i * 2] + 0.5f);
@@ -3495,14 +3558,49 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
         }
       }
 
-      // and we draw the falloff
+      /* BRIDGE A JUMP BETWEEN CONSECUTIVE SPOKES.
+       *
+       * The feather is the union of segments from each outline sample to its border sample, so
+       * it stays continuous only while consecutive segments are within a pixel of each other at
+       * BOTH ends. At a cut boundary they are not: the border side collapses to the cut's
+       * resume point, which is somewhere else, and the fan opens in a single step. Measured on
+       * polygon #2 of issue #1313's sidecar, at the sample before the cut at 23528 -- the
+       * outline end does not move at all while the border end jumps 5 px -- and the wedge
+       * between the two segments is never stamped. That is the thin dark radial line through
+       * the feather reported as "a radial spoke is missing" at node 12; a second, 3 px, sits
+       * before the cut at 6532.
+       *
+       * Subdividing until each step is at most a pixel closes it. This is NOT the `sparse'
+       * interpolation above: that one fills in for samples deliberately not visited when the
+       * outline is walked at reduced density, and skips itself precisely when the spoke is
+       * inside a cut -- which is the one case that needs bridging. This fires between adjacent
+       * samples, where the geometry itself is discontinuous. */
       if(last0[0] != p0[0] || last0[1] != p0[1] || last1[0] != p1[0] || last1[1] != p1[1])
       {
+        if(have_last)
+        {
+          const int jump = MAX(MAX(abs(p0[0] - last0[0]), abs(p0[1] - last0[1])),
+                               MAX(abs(p1[0] - last1[0]), abs(p1[1] - last1[1])));
+          /* a bound: past this the two samples are not a fan, they are unrelated geometry */
+          const int steps = MIN(jump, 64);
+          for(int k = 1; k < steps && dindex + 4 <= dpoints_capacity; k++)
+          {
+            const float t = (float)k / (float)steps;
+            dpoints[dindex] = (int)floorf(last0[0] + t * (p0[0] - last0[0]) + 0.5f);
+            dpoints[dindex + 1] = (int)floorf(last0[1] + t * (p0[1] - last0[1]) + 0.5f);
+            dpoints[dindex + 2] = (int)floorf(last1[0] + t * (p1[0] - last1[0]) + 0.5f);
+            dpoints[dindex + 3] = (int)floorf(last1[1] + t * (p1[1] - last1[1]) + 0.5f);
+            dindex += 4;
+          }
+        }
+
+        if(dindex + 4 > dpoints_capacity) break;
         dpoints[dindex] = p0[0];
         dpoints[dindex + 1] = p0[1];
         dpoints[dindex + 2] = p1[0];
         dpoints[dindex + 3] = p1[1];
         dindex += 4;
+        have_last = TRUE;
 
         last0[0] = p0[0];
         last0[1] = p0[1];
