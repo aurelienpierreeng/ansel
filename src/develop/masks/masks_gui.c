@@ -4134,8 +4134,8 @@ void dt_masks_iop_combo_populate(GtkWidget *widget, void *data)
   const guint forms_count = g_list_length(module->dev->forms);
   const guint iop_count = g_list_length(module->dev->iop);
   guint combo_capacity = 5 + forms_count + iop_count;
-  dt_free(blend_data->masks_combo_ids);
-  blend_data->masks_combo_ids = malloc(sizeof(int) * combo_capacity);
+  dt_free_align(blend_data->masks_combo_ids);
+  blend_data->masks_combo_ids = dt_alloc_align(sizeof(int) * combo_capacity);
 
   int *combo_ids = blend_data->masks_combo_ids;
   GtkWidget *combo = blend_data->masks_combo;

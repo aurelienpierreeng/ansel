@@ -874,7 +874,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
   const guint node_count = g_list_length(mask_form->points);
 
-  dt_masks_node_brush_t **nodes = malloc((size_t)node_count * sizeof(*nodes));
+  dt_masks_node_brush_t **nodes = dt_alloc_align((size_t)node_count * sizeof(*nodes));
   if(!nodes)
   {
     dt_masks_dynbuf_free(dpoints);
@@ -1107,7 +1107,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     }
   }
 
-  dt_free(nodes);
+  dt_free_align(nodes);
 
   *point_count = dt_masks_dynbuf_position(dpoints) / 2;
   *point_buffer = dt_masks_dynbuf_harvest(dpoints);
@@ -1458,7 +1458,7 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
      * Measured at 4096: five cuts made and seven real crossings left drawn. The greedy pass
      * below collapses the duplicates, so the only cost of a large cap is the scratch buffer. */
     const int max_pairs = 1 << 16;
-    float *const crossings = (float *)malloc(sizeof(float) * 2 * (size_t)max_pairs);
+    float *const crossings = dt_alloc_align_float(2 * (size_t)max_pairs);
     *border_skip_count = 0;
 
     if(!IS_NULL_PTR(crossings))
@@ -1529,7 +1529,7 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
           *border_skip_count = accepted;
         }
       }
-      free(crossings);
+      dt_free_align(crossings);
     }
 
 

@@ -240,7 +240,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *mask_form)
 
   if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return;
   
-  dt_masks_node_polygon_t **nodes = malloc((size_t)node_count * sizeof(*nodes));
+  dt_masks_node_polygon_t **nodes = dt_alloc_align((size_t)node_count * sizeof(*nodes));
   if(IS_NULL_PTR(nodes)) return;
   const GList *form_points = mask_form->points;
   for(guint node_index = 0; node_index < node_count; node_index++)
@@ -252,7 +252,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *mask_form)
   for(guint node_index = 0; node_index < node_count; node_index++)
   {
     dt_masks_node_polygon_t *point3 = nodes[node_index];
-    if(IS_NULL_PTR(point3)) { dt_free(nodes); return; }
+    if(IS_NULL_PTR(point3)) { dt_free_align(nodes); return; }
     // if the point has not been set manually, we redefine it
     if(point3->state == DT_MASKS_POINT_STATE_NORMAL)
     {
@@ -260,7 +260,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *mask_form)
       dt_masks_node_polygon_t *point2 = nodes[(node_index + node_count - 1) % node_count];
       dt_masks_node_polygon_t *point4 = nodes[(node_index + 1) % node_count];
       dt_masks_node_polygon_t *point5 = nodes[(node_index + 2) % node_count];
-      if(IS_NULL_PTR(point1) || IS_NULL_PTR(point2) || IS_NULL_PTR(point4) || IS_NULL_PTR(point5)) { dt_free(nodes); return; }
+      if(IS_NULL_PTR(point1) || IS_NULL_PTR(point2) || IS_NULL_PTR(point4) || IS_NULL_PTR(point5)) { dt_free_align(nodes); return; }
 
       float bezier1_x = 0.0f;
       float bezier1_y = 0.0f;
@@ -282,7 +282,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *mask_form)
       point3->ctrl2[1] = bezier1_y;
     }
   }
-  dt_free(nodes);
+  dt_free_align(nodes);
   return;
 }
 
@@ -2911,12 +2911,12 @@ static int _polygon_crop_to_roi(float *polygon, const int point_count, float xmi
     float delta;
   } roi_crop_segment_t;
 
-  roi_crop_segment_t *xmax_segs = malloc(sizeof(*xmax_segs) * point_count);
-  roi_crop_segment_t *ymax_segs = malloc(sizeof(*ymax_segs) * point_count);
+  roi_crop_segment_t *xmax_segs = dt_alloc_align(sizeof(*xmax_segs) * point_count);
+  roi_crop_segment_t *ymax_segs = dt_alloc_align(sizeof(*ymax_segs) * point_count);
   if(IS_NULL_PTR(xmax_segs) || IS_NULL_PTR(ymax_segs))
   {
-    dt_free(xmax_segs);
-    dt_free(ymax_segs);
+    dt_free_align(xmax_segs);
+    dt_free_align(ymax_segs);
     goto fallback_passes;
   }
 
@@ -2985,7 +2985,7 @@ static int _polygon_crop_to_roi(float *polygon, const int point_count, float xmi
     }
   }
 
-  dt_free(xmax_segs);
+  dt_free_align(xmax_segs);
 
   int ymin_l = -1, ymin_r = -1;
   int ymax_l = -1, ymax_r = -1;
@@ -3052,7 +3052,7 @@ static int _polygon_crop_to_roi(float *polygon, const int point_count, float xmi
     }
   }
 
-  dt_free(ymax_segs);
+  dt_free_align(ymax_segs);
   return 1;
 
 fallback_passes:
