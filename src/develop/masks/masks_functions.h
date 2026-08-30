@@ -82,7 +82,9 @@ typedef struct dt_masks_functions_t
    */
   dt_masks_raster_result_t (*get_points_border)(struct dt_develop_t *dev, struct dt_masks_form_t *form,
                            float **points, int *points_count,
-                           float **border, int *border_count, int source, const dt_iop_module_t *const module);
+                           float **border, int *border_count,
+                           dt_masks_skip_range_t **border_skips, int *border_skip_count,
+                           int source, const dt_iop_module_t *const module);
   /** Rasterise into a freshly allocated buffer covering the shape's own bounding box.
    * Same three outcomes as get_mask_roi. On anything but OK the out-parameters are still
    * written (NULL buffer, zero geometry): callers read them unconditionally. */
@@ -155,7 +157,48 @@ dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const modu
 
 dt_masks_raster_result_t dt_masks_get_points_border(struct dt_develop_t *dev, dt_masks_form_t *form,
                                float **points, int *points_count,
-                               float **border, int *border_count, int source, dt_iop_module_t *module);
+                               float **border, int *border_count,
+                               dt_masks_skip_range_t **border_skips, int *border_skip_count,
+                               int source, dt_iop_module_t *module);
+
+/**
+ * @brief Turn the self-intersection detector's raw crossing pairs into the disjoint,
+ * forward-only skip ranges every border walk consumes. Pure, allocation-free.
+ *
+ * @details Each pair (v, w) names two raw border indices where the offset curve crosses
+ * itself, in whatever order the detector's discovery walk met them. This normalizes each to
+ * forward order, DROPS a pair whose forward span is the longer arc of the closed contour (a
+ * fold straddling the buffer seam -- issue #1313: encoding it as [min,max] named its
+ * complement and swallowed the shape; the sentinels, and now the ranges, can only express a
+ * forward skip, so that fold is left in and the damage stays bounded by the fold itself),
+ * then sorts and merges overlaps so the result is disjoint (unmerged overlapping ranges are
+ * how the walk got trapped in a cycle once already).
+ *
+ * @param crossing_pairs 2*pair_count floats, as _polygon_find_self_intersection() emits them.
+ * @param point_count    Number of points in the border buffer (bounds the indices).
+ * @param out            Capacity >= pair_count entries. Receives the merged ranges.
+ * @param dropped_wrapping (may be NULL) how many seam-straddling pairs were dropped.
+ * @return the number of ranges written to @p out.
+ */
+int dt_masks_skip_ranges_build(const float *crossing_pairs, int pair_count, int point_count,
+                               dt_masks_skip_range_t *out, int *dropped_wrapping);
+
+/**
+ * @brief Ray-cast point-in-polygon over a form point stream, honouring skip ranges.
+ *
+ * Walks [points_start, points_count) forward, wrapping to points_start exactly once. A skip
+ * range closes the contour with a chord from the point before `jump_from` to `resume_at`.
+ * A range that does not move the walk strictly forward is IGNORED AND REPORTED rather than
+ * followed: a backward jump would re-walk the span just left and spin until the visit cap --
+ * the silent-garbage mode both historical bugs of the in-band encoding shipped as.
+ *
+ * @param skips may be NULL (with skip_count 0): no cuts, the common case for every shape
+ *              but polygon and for path (non-border) walks.
+ * @return Index of the first tested point found inside the form, -1 otherwise.
+ */
+int dt_masks_point_in_form_exact(const float *pts, int num_pts, const float *points,
+                                 int points_start, int points_count,
+                                 const dt_masks_skip_range_t *skips, int skip_count);
 
 /* The raw membership-state mutator. Module-private on purpose: it takes a row by pointer and
  * cannot touch the group, so every external caller had to remember the copy-on-write dance and

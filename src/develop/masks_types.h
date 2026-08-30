@@ -198,6 +198,33 @@ typedef struct dt_masks_form_info_t
   char            name[DT_MASKS_FORM_NAME_LEN];
 } dt_masks_form_info_t;
 
+/**
+ * @brief One cut in a shape's border outline: while walking the border buffer forward, on
+ * reaching index `jump_from`, resume at index `resume_at`.
+ *
+ * @details A polygon's border is its path offset outward by the feathering radius, and that
+ * offset curve folds over itself at every concave run tighter than the radius. The folds are
+ * found by _polygon_find_self_intersection() and must be skipped by every walk that counts
+ * crossings (the hit-test and the rasterisers), or the fold is filled as if it were shape.
+ *
+ * These used to travel IN-BAND, encoded into the border buffer itself: NaN in the x slot,
+ * the jump target smuggled as an integer in the float y slot. Both bugs this mechanism ever
+ * had lived in that encoding, not in the geometry -- a cycle when overlapping ranges pointed
+ * into each other (fixed by sorting and merging), then issue #1313, where a fold straddling
+ * the buffer seam was encoded as its own complement and swallowed 99.8% of the contour. An
+ * out-of-band range cannot express either mistake: `resume_at > jump_from` IS the
+ * forward-only invariant, checkable at a glance and validated by the consumers.
+ *
+ * Invariants a producer must guarantee (dt_masks_skip_ranges_build() does):
+ *   - resume_at > jump_from (every skip moves the walk strictly forward);
+ *   - ranges sorted by jump_from and pairwise disjoint (resume_at < next jump_from).
+ */
+typedef struct dt_masks_skip_range_t
+{
+  int jump_from;
+  int resume_at;
+} dt_masks_skip_range_t;
+
 #ifdef __cplusplus
 }
 #endif

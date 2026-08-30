@@ -71,7 +71,7 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
   const float pt[2] = { x, y };
 
   if(gpt->source && gpt->source_count > 0
-     && dt_masks_point_in_form_exact(pt, 1, gpt->source, 1, gpt->source_count) >= 0)
+     && dt_masks_point_in_form_exact(pt, 1, gpt->source, 1, gpt->source_count, NULL, 0) >= 0)
   {
     *inside_source = 1;
     *inside = 1;
@@ -92,11 +92,11 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
   *dist = sqf(center_dx) + sqf(center_dy);
 
   // we check if it's inside borders
-  if(dt_masks_point_in_form_exact(pt, 1, gpt->border, 1, gpt->border_count) < 0) return;
+  if(dt_masks_point_in_form_exact(pt, 1, gpt->border, 1, gpt->border_count, NULL, 0) < 0) return;
   *inside = 1;
 
   // and we check if it's inside form
-  if(dt_masks_point_in_form_exact(pt, 1, gpt->points, 1, gpt->points_count) < 0)
+  if(dt_masks_point_in_form_exact(pt, 1, gpt->points, 1, gpt->points_count, NULL, 0) < 0)
     *inside_border = 1;
 }
 
@@ -683,9 +683,14 @@ static void _bounding_box(const float *const points, int num_points, int *width,
 
 static dt_masks_raster_result_t _circle_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *form,
                                      float **points,
-                                     int *points_count, float **border, int *border_count, int source,
+                                     int *points_count, float **border, int *border_count,
+                                     dt_masks_skip_range_t **border_skips, int *border_skip_count,
+                                     int source,
                                      const dt_iop_module_t *module)
 {
+  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
+  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
+
   /* No geometry to build an outline from: the outline is empty, which is a result, not a
    * failure. Reporting success here (as this did) told the caller to cache a NULL outline as
    * if it had been built. */
