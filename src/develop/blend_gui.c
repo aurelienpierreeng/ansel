@@ -4317,7 +4317,7 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
   if(bd->timeout_handle)
     g_source_remove(bd->timeout_handle);
 
-  dt_free(bd->masks_combo_ids);
+  dt_free_align(bd->masks_combo_ids);
   dt_pthread_mutex_unlock(&bd->lock);
   dt_pthread_mutex_destroy(&bd->lock);
 
@@ -4836,7 +4836,7 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
     g_source_remove(bd->timeout_handle);
     bd->timeout_handle = 0;
   }
-  dt_free(bd->masks_combo_ids);
+  dt_free_align(bd->masks_combo_ids);
   dt_pthread_mutex_unlock(&bd->lock);
 
   if(bd->masks_ic_inverse) g_object_unref(bd->masks_ic_inverse);

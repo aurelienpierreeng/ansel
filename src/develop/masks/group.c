@@ -246,22 +246,22 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
   // we allocate buffers and values
   const guint nb = g_list_length(form->points);
   if(nb == 0) return DT_MASKS_RASTER_EMPTY;
-  float **bufs = calloc(nb, sizeof(float *));
-  int *w = malloc(sizeof(int) * nb);
-  int *h = malloc(sizeof(int) * nb);
-  int *px = malloc(sizeof(int) * nb);
-  int *py = malloc(sizeof(int) * nb);
-  int *states = malloc(sizeof(int) * nb);
-  float *op = malloc(sizeof(float) * nb);
+  float **bufs = dt_calloc_align(nb * sizeof(float *));
+  int *w = dt_alloc_align(sizeof(int) * nb);
+  int *h = dt_alloc_align(sizeof(int) * nb);
+  int *px = dt_alloc_align(sizeof(int) * nb);
+  int *py = dt_alloc_align(sizeof(int) * nb);
+  int *states = dt_alloc_align(sizeof(int) * nb);
+  float *op = dt_alloc_align_float(nb);
   if(IS_NULL_PTR(bufs) || IS_NULL_PTR(w) || IS_NULL_PTR(h) || IS_NULL_PTR(px) || IS_NULL_PTR(py) || IS_NULL_PTR(states) || IS_NULL_PTR(op))
   {
-    dt_free(op);
-    dt_free(states);
-    dt_free(py);
-    dt_free(px);
-    dt_free(h);
-    dt_free(w);
-    dt_free(bufs);
+    dt_free_align(op);
+    dt_free_align(states);
+    dt_free_align(py);
+    dt_free_align(px);
+    dt_free_align(h);
+    dt_free_align(w);
+    dt_free_align(bufs);
     return DT_MASKS_RASTER_ERROR;
   }
 
@@ -495,14 +495,14 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
   }
 
 cleanup:
-  dt_free(op);
-  dt_free(states);
-  dt_free(py);
-  dt_free(px);
-  dt_free(h);
-  dt_free(w);
+  dt_free_align(op);
+  dt_free_align(states);
+  dt_free_align(py);
+  dt_free_align(px);
+  dt_free_align(h);
+  dt_free_align(w);
   for(int i = 0; i < nb; i++) dt_pixelpipe_cache_free_align(bufs[i]);
-  dt_free(bufs);
+  dt_free_align(bufs);
   return err;
 }
 

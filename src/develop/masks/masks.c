@@ -352,7 +352,7 @@ int dt_masks_border_find_self_intersections(const float *const border, const int
    * other is wasteful; but decimating to a whole pixel smooths the small loops away entirely.
    * Measured: at one probe per pixel, four real crossings spanning 7 to 17 pixels went unseen,
    * and each of them is a visible kink in the drawn outline. */
-  int *probes = (int *)malloc(sizeof(int) * (size_t)(border_count - header));
+  int *probes = (int *)dt_alloc_align(sizeof(int) * (size_t)(border_count - header));
   if(IS_NULL_PTR(probes)) return 0;
 
   int n = 0;
@@ -368,18 +368,18 @@ int dt_masks_border_find_self_intersections(const float *const border, const int
     probes[n++] = i;
     previous = i;
   }
-  if(n < 8) { free(probes); return 0; }
+  if(n < 8) { dt_free_align(probes); return 0; }
 
   /* Bucket every probe segment by the cells its bounding box covers. A hash keyed on the cell
    * coordinates keeps this independent of where the shape sits and of how large the image is --
    * a grid over the bounding box would be tens of megabytes for a stroke across a 50 Mpx frame. */
   const int buckets = 1 << 14;
-  int *heads = (int *)malloc(sizeof(int) * buckets);
-  int *next = (int *)malloc(sizeof(int) * (size_t)(n * 4));
-  int *owner = (int *)malloc(sizeof(int) * (size_t)(n * 4));
+  int *heads = (int *)dt_alloc_align(sizeof(int) * buckets);
+  int *next = (int *)dt_alloc_align(sizeof(int) * (size_t)(n * 4));
+  int *owner = (int *)dt_alloc_align(sizeof(int) * (size_t)(n * 4));
   if(IS_NULL_PTR(heads) || IS_NULL_PTR(next) || IS_NULL_PTR(owner))
   {
-    free(probes); free(heads); free(next); free(owner);
+    dt_free_align(probes); dt_free_align(heads); dt_free_align(next); dt_free_align(owner);
     return 0;
   }
   for(int i = 0; i < buckets; i++) heads[i] = -1;
@@ -462,7 +462,7 @@ int dt_masks_border_find_self_intersections(const float *const border, const int
       }
   }
 
-  free(probes); free(heads); free(next); free(owner);
+  dt_free_align(probes); dt_free_align(heads); dt_free_align(next); dt_free_align(owner);
   return found;
 }
 
@@ -1052,7 +1052,7 @@ int dt_masks_copy_used_forms_for_module(dt_develop_t *develop_dest, dt_develop_t
   const guint form_count = g_list_length(develop_src->forms);
   if(form_count == 0) return 0;
 
-  int *used_form_ids = calloc(form_count, sizeof(int));
+  int *used_form_ids = dt_calloc_align(form_count * sizeof(int));
   if(IS_NULL_PTR(used_form_ids)) return 1;
 
   _masks_fill_used_forms(develop_src->forms, source_module->blend_params->mask_id,
@@ -1074,7 +1074,7 @@ int dt_masks_copy_used_forms_for_module(dt_develop_t *develop_dest, dt_develop_t
       dt_masks_form_t *new_form = dt_masks_dup_masks_form(mask_form);
       if(IS_NULL_PTR(new_form))
       {
-        dt_free(used_form_ids);
+        dt_free_align(used_form_ids);
         return 1;
       }
       develop_dest->forms = g_list_append(develop_dest->forms, new_form);
@@ -1086,7 +1086,7 @@ int dt_masks_copy_used_forms_for_module(dt_develop_t *develop_dest, dt_develop_t
     }
   }
 
-  dt_free(used_form_ids);
+  dt_free_align(used_form_ids);
   return 0;
 }
 
@@ -1215,7 +1215,7 @@ void dt_masks_write_masks_history_item(const int32_t image_id, const int history
   // nothing at all in that case -- the whole INSERT sat inside this test.
   if(!mask_form->functions) return;
 
-  char *const restrict point_buffer = (char *)malloc(point_count * point_struct_size);
+  char *const restrict point_buffer = (char *)dt_alloc_align(point_count * point_struct_size);
   int buffer_offset = 0;
   for(GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
   {
@@ -1228,7 +1228,7 @@ void dt_masks_write_masks_history_item(const int32_t image_id, const int history
                                         point_count * point_struct_size, point_count,
                                         mask_form->source, 2 * sizeof(float));
 
-  dt_free(point_buffer);
+  dt_free_align(point_buffer);
 }
 
 void dt_masks_free_form(dt_masks_form_t *mask_form)
@@ -1599,7 +1599,7 @@ static int _masks_cleanup_unused(dt_develop_t *dev, GList **forms_list, GList *h
 
   // we create a table to store the ids of used forms
   guint form_count = g_list_length(forms);
-  int *used_form_ids = calloc(form_count, sizeof(int));
+  int *used_form_ids = dt_calloc_align(form_count * sizeof(int));
 
   // check in history if the module has drawn masks and add it to used array
   int history_index = 0;
@@ -1646,7 +1646,7 @@ static int _masks_cleanup_unused(dt_develop_t *dev, GList **forms_list, GList *h
     }
   }
 
-  dt_free(used_form_ids);
+  dt_free_align(used_form_ids);
 
   *forms_list = forms;
 
