@@ -1,0 +1,38 @@
+/*
+    This file is part of Ansel,
+    Copyright (C) 2026 Paolo SANTUCCI.
+
+    Ansel is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Ansel is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include "libs/tagging_completion.h"
+
+#include "metadata/tags.h"
+#include "system/macros.h"
+
+void dt_tagging_completion_refresh(GtkListStore *store)
+{
+  gtk_list_store_clear(store);
+  GList *tags = NULL;
+  dt_tag_get_with_usage(&tags);
+  for(GList *tag_iter = tags; tag_iter; tag_iter = g_list_next(tag_iter))
+  {
+    const dt_tag_t *tag = (const dt_tag_t *)tag_iter->data;
+    if(IS_NULL_PTR(tag->tag)) continue;
+    GtkTreeIter store_iter;
+    gtk_list_store_append(store, &store_iter);
+    gtk_list_store_set(store, &store_iter, 0, tag->tag, -1);
+  }
+  dt_tag_free_result(&tags);
+}

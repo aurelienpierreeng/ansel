@@ -18,7 +18,7 @@ set(MODULES ${MODULES} module_toolbox)
 # modules
 add_library(export MODULE "export.c" "export_metadata.c")
 add_library(styles MODULE "styles.c")
-add_library(tagging MODULE "tagging.c")
+add_library(tagging MODULE "tagging.c" "tagging_completion.c")
 add_library(collect MODULE "collect.c")
 add_library(metadata MODULE "metadata.c")
 add_library(metadata_view MODULE "metadata_view.c")
