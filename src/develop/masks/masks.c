@@ -214,6 +214,39 @@ int dt_masks_form_duplicate_in_group(dt_develop_t *develop, int group_id, int fo
   return nid;
 }
 
+/** Repair and report a non-finite coordinate in an outline buffer. See the contract in
+ * dt_masks_get_points_border(): these buffers carry geometry only. */
+static void _outline_assert_finite(const char *which, const char *name, float **buffer, const int *count)
+{
+  if(IS_NULL_PTR(buffer) || IS_NULL_PTR(*buffer) || IS_NULL_PTR(count) || *count <= 0) return;
+
+  float *const pts = *buffer;
+  int bad = 0;
+  float last_x = 0.0f, last_y = 0.0f;
+  gboolean have_last = FALSE;
+
+  for(int i = 0; i < *count; i++)
+  {
+    if(isfinite(pts[i * 2]) && isfinite(pts[i * 2 + 1]))
+    {
+      last_x = pts[i * 2];
+      last_y = pts[i * 2 + 1];
+      have_last = TRUE;
+      continue;
+    }
+    bad++;
+    /* hold the previous sample rather than leave a coordinate no consumer may look at */
+    pts[i * 2] = have_last ? last_x : 0.0f;
+    pts[i * 2 + 1] = have_last ? last_y : 0.0f;
+  }
+
+  if(bad > 0)
+    dt_print(DT_DEBUG_ALWAYS,
+             "[masks] %s: %d of %d %s samples are not finite -- the outline builder is writing"
+             " sentinels into a buffer that carries geometry only; held the previous sample\n",
+             IS_NULL_PTR(name) ? "?" : name, bad, *count, which);
+}
+
 dt_masks_raster_result_t dt_masks_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                float **point_buffer, int *point_count,
                                float **border_buffer, int *border_count,
@@ -224,11 +257,37 @@ dt_masks_raster_result_t dt_masks_get_points_border(dt_develop_t *develop, dt_ma
   if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
 
   /* A shape type with no outline builder is a programming error, not an empty outline. */
-  if(mask_form->functions && mask_form->functions->get_points_border)
-    return mask_form->functions->get_points_border(develop, mask_form, point_buffer, point_count,
-                                                   border_buffer, border_count,
-                                                   border_skips, border_skip_count, source, module);
-  return DT_MASKS_RASTER_ERROR;
+  if(IS_NULL_PTR(mask_form->functions) || IS_NULL_PTR(mask_form->functions->get_points_border))
+    return DT_MASKS_RASTER_ERROR;
+
+  const dt_masks_raster_result_t status
+      = mask_form->functions->get_points_border(develop, mask_form, point_buffer, point_count,
+                                                border_buffer, border_count,
+                                                border_skips, border_skip_count, source, module);
+
+  /* THE OUTLINE BUFFERS HOLD FINITE GEOMETRY AND NOTHING ELSE.
+   *
+   * Everything a consumer must not draw travels beside the buffer, in border_skips. Nothing is
+   * encoded into the coordinates -- no NaN marking an excluded sample, no NaN,NaN marking the
+   * end of a contour, and above all no index smuggled through a float y with a NaN x, which is
+   * what issue #1313 shipped and what the out-of-band ranges replaced.
+   *
+   * This is the one place every shape's outline passes through, so the invariant is checked
+   * once here rather than re-tested by each of the dozen walkers downstream. Those walkers used
+   * to test it, which is how it came to be relied upon: a hidden encoding in a buffer of plain
+   * floats is invisible to any consumer that does not already know about it, and silently wrong
+   * for one that forgets. Two had forgotten -- the polygon drew its own folds, and the brush's
+   * per-node border handle vanished wherever an excluded sample was the nearest one.
+   *
+   * A violation is REPORTED, not absorbed. It is a producer bug and it should be loud; the
+   * repair that follows only keeps the GUI usable until someone fixes it. */
+  if(status != DT_MASKS_RASTER_ERROR)
+  {
+    _outline_assert_finite("points", mask_form->name, point_buffer, point_count);
+    _outline_assert_finite("border", mask_form->name, border_buffer, border_count);
+  }
+
+  return status;
 }
 
 static int _skip_range_cmp(const void *a, const void *b)
@@ -300,7 +359,6 @@ int dt_masks_border_find_self_intersections(const float *const border, const int
   int previous = -1;
   for(int i = header; i < border_count; i++)
   {
-    if(isnan(border[i * 2]) || isnan(border[i * 2 + 1])) continue;
     if(previous >= 0)
     {
       const float dx = border[i * 2] - border[previous * 2];
@@ -379,13 +437,11 @@ int dt_masks_border_find_self_intersections(const float *const border, const int
           float lo_d2 = FLT_MAX, hi_d2 = FLT_MAX;
           for(int t = probes[j]; t <= probes[j + 1]; t++)
           {
-            if(isnan(border[t * 2])) continue;
             const float d2 = sqf(border[t * 2] - ix) + sqf(border[t * 2 + 1] - iy);
             if(d2 < lo_d2) { lo_d2 = d2; lo = t; }
           }
           for(int t = probes[k]; t <= probes[k + 1]; t++)
           {
-            if(isnan(border[t * 2])) continue;
             const float d2 = sqf(border[t * 2] - ix) + sqf(border[t * 2 + 1] - iy);
             if(d2 < hi_d2) { hi_d2 = d2; hi = t; }
           }
@@ -408,6 +464,24 @@ int dt_masks_border_find_self_intersections(const float *const border, const int
 
   free(probes); free(heads); free(next); free(owner);
   return found;
+}
+
+/** Is @p index inside one of the excluded spans? For a consumer that SEARCHES the outline
+ * rather than walking it forward -- a forward walk should use dt_masks_draw_outline_runs() or
+ * carry its own cursor. @p skips must be sorted and disjoint. */
+gboolean dt_masks_skip_contains(const dt_masks_skip_range_t *skips, const int skip_count, const int index)
+{
+  if(IS_NULL_PTR(skips) || skip_count <= 0) return FALSE;
+
+  int lo = 0, hi = skip_count - 1;
+  while(lo <= hi)
+  {
+    const int mid = (lo + hi) / 2;
+    if(index < skips[mid].jump_from) hi = mid - 1;
+    else if(index >= skips[mid].resume_at) lo = mid + 1;
+    else return TRUE;
+  }
+  return FALSE;
 }
 
 int dt_masks_skip_ranges_build(const float *crossing_pairs, const int pair_count, const int point_count,

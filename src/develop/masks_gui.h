@@ -367,6 +367,14 @@ static inline float dt_masks_border_from_projected_handle(dt_develop_t *dev, con
 
 // Circle, ellipse and gradient creation previews all follow the same drawing sequence:
 // optional save/restore, draw the shape, then draw the border preview if present.
+/** Append a shape's outline to @p cr as the complement of its exclusion list: one cairo sub-path
+ * per run between the spans in @p skips, which are where the offset curve doubles back on itself
+ * and must not be drawn. Pass NULL and 0 for a shape with nothing to exclude. Implemented in
+ * masks/masks_gui.c -- see there for why the excluded spans travel beside the buffer and not
+ * inside it. */
+void dt_masks_draw_outline_runs(cairo_t *cr, const float *const points, const int first, const int last,
+                                const dt_masks_skip_range_t *skips, const int skip_count);
+
 static inline void dt_masks_draw_preview_shape(struct dt_develop_t *dev, cairo_t *cr, const float zoom_scale,
                                                const int num_points,
                                                float *points, const int points_count,
@@ -380,10 +388,11 @@ static inline void dt_masks_draw_preview_shape(struct dt_develop_t *dev, cairo_t
   if(save_restore) cairo_save(cr);
   if(points && points_count > 0)
     dt_draw_shape_lines(dev, DT_MASKS_NO_DASH, source, cr, num_points, FALSE, zoom_scale, points, points_count,
-                        draw_shape, shape_cap);
+                        draw_shape, shape_cap, NULL, 0);
   if(border && border_count > 0)
+    /* a creation preview is drawn while the shape is still being placed: it has no cuts yet */
     dt_draw_shape_lines(dev, DT_MASKS_DASH_STICK, source, cr, num_points, FALSE, zoom_scale, border, border_count,
-                        draw_shape, border_cap);
+                        draw_shape, border_cap, NULL, 0);
   if(save_restore) cairo_restore(cr);
 }
 

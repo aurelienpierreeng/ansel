@@ -972,7 +972,8 @@ cleanup:
   return err;
 }
 
-static void _gradient_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source)
+static void _gradient_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source,
+                              const dt_masks_skip_range_t *skips, const int skip_count)
 {
   // safeguard in case of malformed arrays of points
   if(border && pts_line_count <= 3) return;
@@ -1124,13 +1125,13 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
   // draw main line
   if(gpt->points && gpt->points_count > 0)
     dt_draw_shape_lines(gui->dev, DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected), zoom_scale, gpt->points,
-                        gpt->points_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
+                        gpt->points_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND, NULL, 0);
   // draw borders
   if(gui->group_selected == index)
   {
     if(gpt->border && gpt->border_count > 0)
       dt_draw_shape_lines(gui->dev, DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border,
-                          gpt->border_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
+                          gpt->border_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND, NULL, 0);
   }
 
   if(gpt->points && gpt->points_count >= 3)
