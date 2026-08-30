@@ -3081,11 +3081,6 @@ static void _recent_tags_changed(GtkSpinButton *spin, dt_lib_module_t *self)
   _refresh_suggestions(self);
 }
 
-static void _entry_clear_icon(GtkEntry *entry, GtkEntryIconPosition pos, GdkEvent *event, gpointer user_data)
-{
-  if(pos == GTK_ENTRY_ICON_SECONDARY) gtk_entry_set_text(entry, "");
-}
-
 // validate button next to the entry: attach the typed/picked tag (same as pressing Enter)
 static void _validate_button_clicked(GtkButton *button, dt_lib_module_t *self)
 {
@@ -3225,7 +3220,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_entry_set_placeholder_text(GTK_ENTRY(w), _("enter or pick a tag, Enter to attach"));
   gtk_entry_set_icon_from_icon_name(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, "edit-clear-symbolic");
   gtk_entry_set_icon_tooltip_text(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, _("clear entry"));
-  g_signal_connect(G_OBJECT(w), "icon-press", G_CALLBACK(_entry_clear_icon), NULL);
+  g_signal_connect(G_OBJECT(w), "icon-release", G_CALLBACK(dt_tagging_entry_clear_icon), NULL);
   gtk_box_pack_start(hbox, w, TRUE, TRUE, 0);
   gtk_widget_add_events(GTK_WIDGET(w), GDK_KEY_RELEASE_MASK);
   d->entry = GTK_ENTRY(w);
@@ -3247,6 +3242,7 @@ void gui_init(dt_lib_module_t *self)
     gtk_entry_completion_set_model(completion, GTK_TREE_MODEL(d->completion_store));
     gtk_entry_completion_set_text_column(completion, DT_COMPL_COL_PATH);
     gtk_entry_completion_set_inline_completion(completion, TRUE);
+    gtk_entry_completion_set_popup_completion(completion, TRUE);
     gtk_entry_completion_set_popup_set_width(completion, FALSE);
     gtk_entry_completion_set_minimum_key_length(completion, 1);
     g_signal_connect(G_OBJECT(completion), "match-selected", G_CALLBACK(_match_selected_func), self);
@@ -3284,7 +3280,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_entry_set_placeholder_text(GTK_ENTRY(w), _("type to filter the tag dictionary below"));
   gtk_entry_set_icon_from_icon_name(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, "edit-clear-symbolic");
   gtk_entry_set_icon_tooltip_text(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, _("clear entry"));
-  g_signal_connect(G_OBJECT(w), "icon-press", G_CALLBACK(_entry_clear_icon), NULL);
+  g_signal_connect(G_OBJECT(w), "icon-release", G_CALLBACK(dt_tagging_entry_clear_icon), NULL);
   gtk_widget_add_events(GTK_WIDGET(w), GDK_KEY_RELEASE_MASK);
   g_signal_connect(G_OBJECT(w), "changed", G_CALLBACK(_tag_name_changed), (gpointer)self);
   d->dict_entry = GTK_ENTRY(w);

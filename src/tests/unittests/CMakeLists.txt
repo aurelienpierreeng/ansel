@@ -11,6 +11,7 @@ set(DATABASE_UNIT_TESTS
   test_history_repository
   test_preset_repository
   test_tag_selection_metadata
+  test_tagging_completion
   test_tagging_completion_model
   test_metadata_notify
   # Not database tests, but they want the same standalone-binary-linking-lib_ansel treatment,
@@ -47,5 +48,8 @@ foreach(test ${DATABASE_UNIT_TESTS})
   endif()
 endforeach()
 
+target_sources(test_tagging_completion PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
 target_sources(test_tagging_completion_model PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
+set_tests_properties(test_tagging_completion PROPERTIES SKIP_RETURN_CODE 77)

@@ -22,3 +22,7 @@
 
 /** Replace a completion model's contents with the current tag vocabulary. */
 void dt_tagging_completion_refresh(GtkListStore *store);
+
+/** Clear a tag entry from its secondary icon while retaining text-input focus. */
+void dt_tagging_entry_clear_icon(GtkEntry *entry, GtkEntryIconPosition position,
+                                 GdkEvent *event, gpointer user_data);

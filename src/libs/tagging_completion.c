@@ -36,3 +36,11 @@ void dt_tagging_completion_refresh(GtkListStore *store)
   }
   dt_tag_free_result(&tags);
 }
+
+void dt_tagging_entry_clear_icon(GtkEntry *entry, const GtkEntryIconPosition position,
+                                 GdkEvent *event, gpointer user_data)
+{
+  if(position != GTK_ENTRY_ICON_SECONDARY) return;
+  gtk_entry_set_text(entry, "");
+  gtk_widget_grab_focus(GTK_WIDGET(entry));
+}
