@@ -67,6 +67,7 @@
 #include "widgets/accelerators.h"
 #include "gui/drag_and_drop.h"
 #include "libs/lib.h"
+#include "libs/tagging_completion.h"
 #include "libs/lib_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
@@ -137,7 +138,6 @@ typedef enum dt_tag_sort_id
 } dt_tag_sort_id;
 
 static void _save_last_tag_used(const char *tags, dt_lib_tagging_t *d);
-static void _refresh_completion_store(dt_lib_module_t *self);
 static void _refresh_collection_tags(dt_lib_module_t *self);
 static void _size_recent_tags_list();
 static gboolean _lib_tagging_tag_redo_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
@@ -640,10 +640,11 @@ static void _lib_tagging_redraw_callback(gpointer instance, dt_lib_module_t *sel
 
 static void _lib_tagging_tags_changed_callback(gpointer instance, dt_lib_module_t *self)
 {
+  dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   _init_treeview(self, 0);
   _init_treeview(self, 1);
   // the set of known tags may have changed (created / deleted / renamed)
-  _refresh_completion_store(self);
+  dt_tagging_completion_refresh(d->completion_store);
   _refresh_collection_tags(self);
 }
 
@@ -1089,6 +1090,7 @@ static GList *_selected_tagids(GtkTreeView *view)
 // detach the given tag ids from the images to act on, then refresh the views
 static void _detach_tagids(GList *tagids, dt_lib_module_t *self)
 {
+  dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   if(IS_NULL_PTR(tagids)) return;
   GList *imgs = dt_act_on_get_images();
   if(IS_NULL_PTR(imgs)) return;
@@ -1110,7 +1112,7 @@ static void _detach_tagids(GList *tagids, dt_lib_module_t *self)
 
   _init_treeview(self, 0);
   _init_treeview(self, 1);
-  _refresh_completion_store(self);
+  dt_tagging_completion_refresh(d->completion_store);
   _refresh_collection_tags(self);
   if(changed) _raise_signal_tag_changed(self);
 }
@@ -1382,7 +1384,7 @@ static void _create_tag_from_entry(dt_lib_module_t *self, GtkEntry *src)
   _init_treeview(self, 1);
   // _raise_signal_tag_changed() may block the tags-changed callback, so refresh
   // the autocompletion explicitly to pick up the freshly created tag
-  _refresh_completion_store(self);
+  dt_tagging_completion_refresh(d->completion_store);
   _refresh_collection_tags(self);
   char *tagname = strrchr(d->last_tag, ',');
   if(res) _raise_signal_tag_changed(self);
@@ -1524,6 +1526,8 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   dt_image_synch_xmps(tagged_images);
   g_list_free(tagged_images);
   tagged_images = NULL;
+  dt_tagging_completion_refresh(d->completion_store);
+  _refresh_collection_tags(self);
   _raise_signal_tag_changed(self);
   dt_free(tagname);
 }
@@ -1643,6 +1647,8 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
         dt_tag_set_synonyms(new_tagid, new_synonyms_list);
       dt_free(new_synonyms_list);
       _init_treeview(self, 1);
+      dt_tagging_completion_refresh(d->completion_store);
+      _raise_signal_tag_changed(self);
       _show_tag_on_view(view, new_tagname, FALSE, TRUE);
     }
     dt_free(new_tagname);
@@ -1847,6 +1853,8 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
         dt_free(new_prefix_tag);
       }
 
+      dt_tagging_completion_refresh(d->completion_store);
+      _refresh_collection_tags(self);
       _raise_signal_tag_changed(self);
       dt_tag_free_result(&tag_family);
       dt_image_synch_xmps(tagged_images);
@@ -1940,6 +1948,8 @@ static gboolean _apply_rename_path(GtkWidget *dialog, const char *tagname,
     }
     _init_treeview(self, 0);
     _init_treeview(self, 1);
+    dt_tagging_completion_refresh(d->completion_store);
+    _refresh_collection_tags(self);
     dt_image_synch_xmps(tagged_images);
     _raise_signal_tag_changed(self);
     _show_tag_on_view(d->dictionary_view, newtag, FALSE, TRUE);
@@ -2096,6 +2106,7 @@ static void _pop_menu_dictionary_copy_tag(GtkWidget *menuitem, dt_lib_module_t *
 // delete the given tag ids from the database (after a single confirmation), then refresh
 static void _delete_tagids(GList *tagids, dt_lib_module_t *self)
 {
+  dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   if(IS_NULL_PTR(tagids)) return;
   const guint nb = g_list_length(tagids);
 
@@ -2145,7 +2156,7 @@ static void _delete_tagids(GList *tagids, dt_lib_module_t *self)
 
   _init_treeview(self, 0);
   _init_treeview(self, 1);
-  _refresh_completion_store(self);
+  dt_tagging_completion_refresh(d->completion_store);
   _refresh_collection_tags(self);
   dt_image_synch_xmps(affected);
   g_list_free(affected);
@@ -2178,6 +2189,8 @@ static void _pop_menu_dictionary_set_as_tag(GtkWidget *menuitem, dt_lib_module_t
   dt_control_log(_("tag %s created"), tagname);
 
   _init_treeview(self, 1);
+  dt_tagging_completion_refresh(d->completion_store);
+  _raise_signal_tag_changed(self);
   _show_tag_on_view(d->dictionary_view, tagname, FALSE, TRUE);
   dt_free(tagname);
 
@@ -2691,25 +2704,6 @@ int position()
 // Single-column model feeding the tag entry autocompletion (full tag path).
 enum { DT_COMPL_COL_PATH = 0, DT_COMPL_NUM_COLS };
 
-// (Re)populate the entry autocompletion store with every known tag.
-static void _refresh_completion_store(dt_lib_module_t *self)
-{
-  dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
-  if(!d->completion_store) return;
-  gtk_list_store_clear(d->completion_store);
-  GList *tags = NULL;
-  dt_tag_get_with_usage(&tags);
-  for(GList *t = tags; t; t = g_list_next(t))
-  {
-    const dt_tag_t *tag = (const dt_tag_t *)t->data;
-    if(IS_NULL_PTR(tag->tag)) continue;
-    GtkTreeIter iter;
-    gtk_list_store_append(d->completion_store, &iter);
-    gtk_list_store_set(d->completion_store, &iter, DT_COMPL_COL_PATH, tag->tag, -1);
-  }
-  dt_tag_free_result(&tags);
-}
-
 // (Re)build the set of tags used by the current collection. Used to seed the
 // entry autocompletion when nothing has been typed yet.
 static void _refresh_collection_tags(dt_lib_module_t *self)
@@ -3087,7 +3081,6 @@ static void _recent_tags_changed(GtkSpinButton *spin, dt_lib_module_t *self)
   _refresh_suggestions(self);
 }
 
-// clear the GtkEntry when its built-in secondary (clear) icon is pressed
 static void _entry_clear_icon(GtkEntry *entry, GtkEntryIconPosition pos, GdkEvent *event, gpointer user_data)
 {
   if(pos == GTK_ENTRY_ICON_SECONDARY) gtk_entry_set_text(entry, "");
@@ -3445,7 +3438,7 @@ void gui_init(dt_lib_module_t *self)
   _set_keyword(self);
   _init_treeview(self, 1);
   _update_atdetach_buttons(self);
-  _refresh_completion_store(self);
+  dt_tagging_completion_refresh(d->completion_store);
   _refresh_collection_tags(self);
 
   dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_show_accel, self, NULL,
@@ -3532,6 +3525,8 @@ static gboolean _lib_tagging_tag_key_press(GtkWidget *entry, GdkEventKey *event,
 
       _init_treeview(self, 0);
       _init_treeview(self, 1);
+      dt_tagging_completion_refresh(d->completion_store);
+      _refresh_collection_tags(self);
       gtk_widget_destroy(d->floating_tag_window);
       gtk_window_present(GTK_WINDOW(dt_gui_main_window()));
       if(res) _raise_signal_tag_changed(self);
@@ -3567,6 +3562,8 @@ static gboolean _lib_tagging_tag_redo_accel(GtkAccelGroup *accel_group, GObject 
     imgs = NULL;
     _init_treeview(self, 0);
     _init_treeview(self, 1);
+    dt_tagging_completion_refresh(d->completion_store);
+    _refresh_collection_tags(self);
     if(res) _raise_signal_tag_changed(self);
   }
 

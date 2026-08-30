@@ -11,6 +11,7 @@ set(DATABASE_UNIT_TESTS
   test_history_repository
   test_preset_repository
   test_tag_selection_metadata
+  test_tagging_completion_model
   test_metadata_notify
   # Not database tests, but they want the same standalone-binary-linking-lib_ansel treatment,
   # and splitting the list to say so would be more ceremony than it is worth.
@@ -45,3 +46,6 @@ foreach(test ${DATABASE_UNIT_TESTS})
                           RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../..)
   endif()
 endforeach()
+
+target_sources(test_tagging_completion_model PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
