@@ -1063,6 +1063,28 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
           if(v < 0 || v >= buf_count || w < 0 || w >= buf_count) continue;
           const int range_v = MIN(v, w);
           const int range_w = MAX(v, w);
+
+          /* The border is a CLOSED contour, so a crossing pair cuts it into TWO arcs, and the
+           * fold to remove is the shorter one -- not whichever of the two happens to avoid the
+           * buffer seam. When the fold straddles the seam, [min(v,w), max(v,w)] names its
+           * COMPLEMENT: measured on the polygon of issue #1313 (67 nodes, uniform feather), 3 of
+           * its 27 crossings straddled the seam and each named ~147000 of 147546 border points
+           * instead of the 330-454 its fold actually spans. The merge below then swallowed all 27
+           * into a single range covering 99.8% of the contour, and the hit-test -- which is also
+           * what renders the pixel mask -- saw one straight chord instead of the shape.
+           *
+           * A wrapping removal cannot be expressed with these sentinels.
+           * dt_masks_point_in_form_exact() walks [start_index, count) forward and wraps exactly
+           * once, so a jump backwards sends the walk back over the span it just left, to arrive at
+           * the same sentinel again; it spins until its own visited_points cap stops it and
+           * returns a meaningless crossing count. That is the cycle the sorting and merging below
+           * exist to prevent, and it is why every range written here has to run forward.
+           *
+           * So a seam-straddling fold is LEFT IN. The offset curve keeps a small kink near that
+           * one fold -- the very thing the detector exists to hide -- but the damage is bounded by
+           * the fold's own size instead of taking the rest of the shape with it. */
+          if(range_w - range_v > buf_count - (range_w - range_v)) continue;
+
           if(!IS_NULL_PTR(ranges))
           {
             ranges[range_count].v = range_v;
