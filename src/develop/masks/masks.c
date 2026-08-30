@@ -116,6 +116,7 @@ void dt_masks_form_gui_points_free(gpointer data)
 
   dt_pixelpipe_cache_free_align(gui_points->points);
   dt_pixelpipe_cache_free_align(gui_points->border);
+  dt_pixelpipe_cache_free_align(gui_points->border_skips);
   dt_pixelpipe_cache_free_align(gui_points->source);
   dt_free(gui_points);
 }
@@ -216,13 +217,82 @@ int dt_masks_form_duplicate_in_group(dt_develop_t *develop, int group_id, int fo
 dt_masks_raster_result_t dt_masks_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                float **point_buffer, int *point_count,
                                float **border_buffer, int *border_count,
+                               dt_masks_skip_range_t **border_skips, int *border_skip_count,
                                int source, dt_iop_module_t *module)
 {
+  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
+  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
+
   /* A shape type with no outline builder is a programming error, not an empty outline. */
   if(mask_form->functions && mask_form->functions->get_points_border)
     return mask_form->functions->get_points_border(develop, mask_form, point_buffer, point_count,
-                                                   border_buffer, border_count, source, module);
+                                                   border_buffer, border_count,
+                                                   border_skips, border_skip_count, source, module);
   return DT_MASKS_RASTER_ERROR;
+}
+
+static int _skip_range_cmp(const void *a, const void *b)
+{
+  const int va = ((const dt_masks_skip_range_t *)a)->jump_from;
+  const int vb = ((const dt_masks_skip_range_t *)b)->jump_from;
+  return (va > vb) - (va < vb);
+}
+
+int dt_masks_skip_ranges_build(const float *crossing_pairs, const int pair_count, const int point_count,
+                               dt_masks_skip_range_t *out, int *dropped_wrapping)
+{
+  if(!IS_NULL_PTR(dropped_wrapping)) *dropped_wrapping = 0;
+  if(IS_NULL_PTR(crossing_pairs) || IS_NULL_PTR(out) || pair_count <= 0 || point_count <= 0) return 0;
+
+  int count = 0;
+  for(int i = 0; i < pair_count; i++)
+  {
+    const int v = (int)crossing_pairs[i * 2];
+    const int w = (int)crossing_pairs[i * 2 + 1];
+    if(v < 0 || v >= point_count || w < 0 || w >= point_count) continue;
+    if(v == w) continue;
+
+    /* Discovery order is not read order: the detector walks from a shape extremum, so either
+     * index of the pair can come first in the buffer. The read walk is a fixed forward
+     * rotation, so the smaller raw index is always the one it reaches first. */
+    const int jump_from = MIN(v, w);
+    const int resume_at = MAX(v, w);
+
+    /* The border is a CLOSED contour: two crossing points cut it into TWO arcs, and the fold
+     * to remove is the SHORTER one -- not whichever happens to avoid the buffer seam. When the
+     * fold straddles the seam, [min, max] names its complement (issue #1313: three such pairs
+     * each covered ~147000 of 147546 border points instead of the 330-454 their folds actually
+     * spanned, and merging swallowed the shape). A wrapping skip cannot be expressed by a
+     * forward-only range, so the seam-straddling fold is left in: a small local kink, bounded
+     * by the fold's own size, instead of a straight chord across the whole shape. */
+    if(resume_at - jump_from > point_count - (resume_at - jump_from))
+    {
+      if(!IS_NULL_PTR(dropped_wrapping)) (*dropped_wrapping)++;
+      continue;
+    }
+
+    out[count].jump_from = jump_from;
+    out[count].resume_at = resume_at;
+    count++;
+  }
+
+  if(count == 0) return 0;
+
+  /* Sort and merge overlaps into disjoint ranges. Two overlapping ranges consumed
+   * independently once trapped the read walk in a cycle between them; disjoint and sorted,
+   * every skip moves strictly forward and each border index is visited at most once. */
+  qsort(out, count, sizeof(dt_masks_skip_range_t), _skip_range_cmp);
+
+  int merged = 1;
+  for(int i = 1; i < count; i++)
+  {
+    if(out[i].jump_from <= out[merged - 1].resume_at)
+      out[merged - 1].resume_at = MAX(out[merged - 1].resume_at, out[i].resume_at);
+    else
+      out[merged++] = out[i];
+  }
+
+  return merged;
 }
 
 dt_masks_raster_result_t dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,

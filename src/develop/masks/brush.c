@@ -1255,8 +1255,12 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
 static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                     float **point_buffer, int *point_count,
                                     float **border_buffer, int *border_count,
+                                    dt_masks_skip_range_t **border_skips, int *border_skip_count,
                                     int use_source, const dt_iop_module_t *module)
 {
+  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
+  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
+
   // Asking for the source outline without a module is a programming error, not an empty shape.
   if(use_source && IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   const double ioporder = (module) ? module->iop_order : 0.0f;

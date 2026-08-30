@@ -1813,7 +1813,8 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
   const dt_masks_raster_result_t border_status
       = dt_masks_get_points_border(mask_gui->dev, mask_form, &gui_points->points, &gui_points->points_count,
-                                   &gui_points->border, &gui_points->border_count, 0, NULL);
+                                   &gui_points->border, &gui_points->border_count,
+                                   &gui_points->border_skips, &gui_points->border_skip_count, 0, NULL);
 
   /* Only a genuine FAILURE may leave the cache key unset, and it must: the key covers the whole
    * group, so one unstamped shape rebuilds every shape of the group on every later expose --
@@ -1836,7 +1837,7 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
     if(border_status == DT_MASKS_RASTER_OK && (mask_form->type & DT_MASKS_CLONE))
     {
       if(dt_masks_get_points_border(mask_gui->dev, mask_form, &gui_points->source, &gui_points->source_count,
-                                    NULL, NULL, TRUE, module)
+                                    NULL, NULL, NULL, NULL, TRUE, module)
          != DT_MASKS_RASTER_OK)
         return;
     }
@@ -2271,10 +2272,13 @@ void dt_masks_gui_form_remove(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
   if(!IS_NULL_PTR(gui_points))
   {
     gui_points->points_count = gui_points->border_count = gui_points->source_count = 0;
+    gui_points->border_skip_count = 0;
     dt_pixelpipe_cache_free_align(gui_points->points);
     gui_points->points = NULL;
     dt_pixelpipe_cache_free_align(gui_points->border);
     gui_points->border = NULL;
+    dt_pixelpipe_cache_free_align(gui_points->border_skips);
+    gui_points->border_skips = NULL;
     dt_pixelpipe_cache_free_align(gui_points->source);
     gui_points->source = NULL;
   }
@@ -3214,13 +3218,13 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *mask_gui, const int 
       // From more frequent to least frequent, to get out of loop earlier. Tail first, then source.
       const float pts[4] = { tail[0], tail[1], source[0], source[1] };
       gboolean overlap = (dt_masks_point_in_form_exact(pts, 2, gui_points->points, first_point_index,
-                                                       gui_points->points_count) >= 0);
+                                                       gui_points->points_count, NULL, 0) >= 0);
       // Skip the second containment test when overlap is already detected.
       if(!overlap)
       {
         const float origin_pt[2] = { main[0], main[1] };
         overlap = (dt_masks_point_in_form_exact(origin_pt, 1, gui_points->source, first_point_index,
-                                                gui_points->source_count) >= 0);
+                                                gui_points->source_count, NULL, 0) >= 0);
       }
 
       // Update head position to be between main and source center point.
@@ -4526,13 +4530,20 @@ void dt_masks_group_ungroup(dt_develop_t *dev, dt_masks_form_t *dest_group, dt_m
  * @return int Index of the first tested point found inside the form, -1 otherwise.
  */
 int dt_masks_point_in_form_exact(const float *test_points, int test_point_count,
-                                 const float *form_points, int form_points_start, int form_points_count)
+                                 const float *form_points, int form_points_start, int form_points_count,
+                                 const dt_masks_skip_range_t *skips, int skip_count)
 {
   if(IS_NULL_PTR(test_points) || test_point_count <= 0 || IS_NULL_PTR(form_points)) return -1;
   if(form_points_count <= 2 + form_points_start) return -1;
   if(form_points_start < 0 || form_points_start >= form_points_count) return -1;
+  if(IS_NULL_PTR(skips)) skip_count = 0;
 
   const int start_index = form_points_start;
+  // Once per call, not per finding: a corrupt input corrupts every test point alike, and the
+  // point of reporting is a greppable line, not a flood.
+  gboolean reported_bad_skip = FALSE;
+  gboolean reported_trapped_walk = FALSE;
+
   for(int test_index = 0; test_index < test_point_count; test_index++)
   {
     int intersection_count = 0;
@@ -4542,21 +4553,81 @@ int dt_masks_point_in_form_exact(const float *test_points, int test_point_count,
 
     for(int i = form_points_start, next = start_index + 1; i < form_points_count;)
     {
-      // The form point stream may contain NaN sentinels that jump across
-      // self-intersection cuts. Broken jump targets must not trap the GUI event
-      // loop in an endless hit-test.
       if(next < start_index || next >= form_points_count) break;
-      if(++visited_points > form_points_count - start_index + 1) break;
+      if(++visited_points > form_points_count - start_index + 1)
+      {
+        /* Unreachable over a well-formed stream: the walk visits each index at most once and
+         * wraps exactly once. Tripping it means the input is corrupt, and the crossing count
+         * below is then garbage. This used to be silent -- both historical bugs of the cut
+         * mechanism shipped as exactly this silence. */
+        if(!reported_trapped_walk)
+        {
+          dt_print(DT_DEBUG_ALWAYS,
+                   "[masks] point_in_form walk trapped after %d visits of %d points -- corrupt"
+                   " outline or skip ranges; hit-test result is unreliable\n",
+                   visited_points, form_points_count - form_points_start);
+          reported_trapped_walk = TRUE;
+        }
+        break;
+      }
+
+      /* Out-of-band self-intersection cuts: on reaching one, close the contour with a chord to
+       * its resume point. Only a skip that moves the walk STRICTLY FORWARD is followed -- a
+       * backward one would re-walk the span just left until the cap above fires, which is the
+       * cycle the old in-band encoding actually produced once. Such a range is a producer bug:
+       * ignore it and say so. */
+      gboolean jumped = TRUE;
+      int hops = 0;
+      while(jumped && hops <= skip_count)
+      {
+        jumped = FALSE;
+        for(int s = 0; s < skip_count; s++)
+        {
+          if(next != skips[s].jump_from) continue;
+          if(skips[s].resume_at <= skips[s].jump_from || skips[s].resume_at >= form_points_count)
+          {
+            if(!reported_bad_skip)
+            {
+              dt_print(DT_DEBUG_ALWAYS,
+                       "[masks] skip range [%d -> %d] does not move forward within %d points --"
+                       " ignoring it; the producer is broken\n",
+                       skips[s].jump_from, skips[s].resume_at, form_points_count);
+              reported_bad_skip = TRUE;
+            }
+          }
+          else
+          {
+            next = skips[s].resume_at;
+            jumped = TRUE;
+            hops++;
+          }
+          break;
+        }
+      }
+      if(next >= form_points_count) break;
 
       const float y1 = form_points[i * 2 + 1];
       const float y2 = form_points[next * 2 + 1];
 
-      // if we need to skip points (in case of deleted point, because of self-intersection)
       if(isnan(form_points[next * 2]))
       {
-        const int jump_index = isnan(y2) ? start_index : (int)y2;
-        if(jump_index == next || jump_index < start_index || jump_index >= form_points_count) break;
-        next = jump_index;
+        /* A bare NaN,NaN point is a close-the-contour marker an outline builder may emit for a
+         * degenerate sample. A NaN x with a FINITE y was the in-band jump encoding -- an index
+         * smuggled through a float coordinate -- which no producer emits any more; decoding one
+         * silently is how issue #1313 shipped, so it is now reported corruption, not a jump. */
+        if(!isnan(y2))
+        {
+          if(!reported_bad_skip)
+          {
+            dt_print(DT_DEBUG_ALWAYS,
+                     "[masks] in-band NaN jump sentinel found at %d of %d -- no producer emits"
+                     " these any more; treating the outline as ended\n", next, form_points_count);
+            reported_bad_skip = TRUE;
+          }
+          break;
+        }
+        if(next == start_index) break;
+        next = start_index;
         continue;
       }
 

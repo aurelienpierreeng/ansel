@@ -199,7 +199,7 @@ static void _ellipse_get_distance(float x, float y, float mouse_radius, dt_masks
   // we first check if we are inside the source form
   if(gpt->source && gpt->source_count > 10)
   {
-    if(dt_masks_point_in_form_exact(pt, 1, gpt->source, 10, gpt->source_count - 5) >= 0)
+    if(dt_masks_point_in_form_exact(pt, 1, gpt->source, 10, gpt->source_count - 5, NULL, 0) >= 0)
     {
       *inside_source = 1;
       *inside = 1;
@@ -226,7 +226,7 @@ static void _ellipse_get_distance(float x, float y, float mouse_radius, dt_masks
   *dist = sqf(center_dx) + sqf(center_dy);
 
   const gboolean close_to_border = _ellipse_point_close_to_path(x, y, mouse_radius * 1.5, gpt->border + 10, gpt->border_count - 5);
-  const gboolean in_border = dt_masks_point_in_form_exact(pt, 1, gpt->border + 10, 10, gpt->border_count - 5) >= 0;
+  const gboolean in_border = dt_masks_point_in_form_exact(pt, 1, gpt->border + 10, 10, gpt->border_count - 5, NULL, 0) >= 0;
   // we check if it's inside borders
   if(!close_to_border && !in_border) return;  
   *inside = 1;
@@ -466,9 +466,14 @@ static int _ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radi
 
 static dt_masks_raster_result_t _ellipse_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *form,
                                       float **points,
-                                      int *points_count, float **border, int *border_count, int source,
+                                      int *points_count, float **border, int *border_count,
+                                      dt_masks_skip_range_t **border_skips, int *border_skip_count,
+                                      int source,
                                       const dt_iop_module_t *module)
 {
+  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
+  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
+
   // No geometry: an empty outline is the correct result here, not a failure. See the circle.
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
