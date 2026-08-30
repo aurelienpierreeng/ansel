@@ -813,6 +813,14 @@ static inline void dt_draw_shape_lines(struct dt_develop_t *dev, const dt_draw_d
 {
   cairo_save(cr);
 
+  /* An overlay is guide lines about a pixel wide, not artwork: cairo's best-quality analytic
+   * coverage buys nothing visible here and costs about half the time of drawing them. Measured
+   * per shape per frame at fit zoom on issue #1313's raw: 2.05 -> 1.20 ms for the brush's border,
+   * 1.39 -> 0.78 ms for polygon #2's. Scoped by the cairo_save() above, so nothing else -- the
+   * node handles in particular, which are small filled discs where the difference would show --
+   * inherits it. */
+  cairo_set_antialias(cr, CAIRO_ANTIALIAS_FAST);
+
   cairo_set_line_cap(cr, line_cap);
   // Are we drawing a border ?
   const gboolean border = (dash_type != DT_MASKS_NO_DASH);
@@ -873,7 +881,20 @@ static inline void dt_draw_shape_lines(struct dt_develop_t *dev, const dt_draw_d
  */
 static inline double dt_draw_min_emit_step(cairo_t *cr)
 {
-  double dx = 0.5, dy = 0.5;
+  /* ONE device pixel, not half of one.
+   *
+   * Nothing an overlay draws is finer than the 1 px line it is drawn with, so a chord shorter
+   * than a pixel cannot show: the deviation a straight chord makes from the curve it replaces is
+   * step^2 / 8R, which for a 1 px chord is under an eighth of a pixel for any curve of radius
+   * 1 px or more. What it costs is real -- measured on issue #1313's brush at fit zoom, the
+   * dashed border went from 2163 segments and 2.05 ms per frame to 1098 and 1.85 ms with the
+   * default antialiasing, and 1.20 -> 0.76 ms with ANTIALIAS_FAST below.
+   *
+   * Do NOT read that as "coarser is always better". The cost is not per-segment: the same
+   * polyline split into 1, 11 or 57 separately stroked pieces measures 4.9, 3.8 and 3.7 ms, so
+   * batching strokes buys nothing and the per-segment styling that costs is free. What the step
+   * buys is fewer edges for the rasteriser, and it stops paying well before it starts to show. */
+  double dx = 1.0, dy = 1.0;
   cairo_device_to_user_distance(cr, &dx, &dy);
   const double step = fmin(fabs(dx), fabs(dy));
   return isfinite(step) ? step : 0.0;
