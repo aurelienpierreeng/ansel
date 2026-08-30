@@ -3551,7 +3551,6 @@ static gboolean _session_bbox_from_points(const dt_masks_form_gui_t *gui, double
     {
       const double x = pts->points[2 * i];
       const double y = pts->points[2 * i + 1];
-      if(isnan(x) || isnan(y)) continue;
 
       if(!any)
       {
@@ -4628,21 +4627,22 @@ int dt_masks_point_in_form_exact(const float *test_points, int test_point_count,
 
       if(isnan(form_points[next * 2]))
       {
-        /* A bare NaN,NaN point is a close-the-contour marker an outline builder may emit for a
-         * degenerate sample. A NaN x with a FINITE y was the in-band jump encoding -- an index
-         * smuggled through a float coordinate -- which no producer emits any more; decoding one
-         * silently is how issue #1313 shipped, so it is now reported corruption, not a jump. */
-        if(!isnan(y2))
+        /* NOTHING should reach this. dt_masks_get_points_border() guarantees the outline holds
+         * finite geometry, and everything a consumer must not use travels beside it in the
+         * exclusion list. Both shapes of sentinel are therefore reported: a NaN x with a finite
+         * y was the in-band jump encoding, an index smuggled through a coordinate, and decoding
+         * one silently is how issue #1313 shipped; a bare NaN,NaN was a close-the-contour
+         * marker, which no builder emits any longer. This walk is also reached with buffers
+         * that never went through that entry point, which is why the check stays at all. */
+        if(!reported_bad_skip)
         {
-          if(!reported_bad_skip)
-          {
-            dt_print(DT_DEBUG_ALWAYS,
-                     "[masks] in-band NaN jump sentinel found at %d of %d -- no producer emits"
-                     " these any more; treating the outline as ended\n", next, form_points_count);
-            reported_bad_skip = TRUE;
-          }
-          break;
+          dt_print(DT_DEBUG_ALWAYS,
+                   "[masks] non-finite outline sample at %d of %d (y %s) -- the buffer should"
+                   " hold geometry only; treating the outline as ended\n", next, form_points_count,
+                   isnan(y2) ? "also NaN" : "finite, i.e. the old in-band jump encoding");
+          reported_bad_skip = TRUE;
         }
+        break;
         if(next == start_index) break;
         next = start_index;
         continue;
@@ -5122,6 +5122,85 @@ gboolean dt_masks_debug_write_png(dt_develop_t *dev, dt_masks_form_t *form,
   if(!ok) dt_print(DT_DEBUG_ALWAYS, "[masks debug] could not write %s\n", path);
   return ok;
 }
+
+/**
+ * @brief Append a shape's outline to @p cr as the COMPLEMENT of its exclusion list.
+ *
+ * @details Samples [@p first, @p last) are emitted as one sub-path per run between the spans in
+ * @p skips, which are the places the offset curve doubles back on itself and must not be shown.
+ *
+ * There is one implementation of this walk because there was very nearly none: the encoding it
+ * replaces blanked the excluded samples to NaN inside the point buffer, which each shape then
+ * tested for in its own copy of the loop. That is an encoding hidden in a buffer of plain
+ * floats -- invisible to any consumer that does not already know, and silently wrong for one
+ * that forgets. Two consumers had forgotten: the polygon's outline drew its folds, and the
+ * brush's per-node border handle lost both its dash and its drag wherever a blanked sample was
+ * the nearest one.
+ *
+ * Emitting runs also makes a hole a hole. Skipping excluded samples with the pen down turns the
+ * next one into a line_to, so each span comes out as a straight chord across the shape --
+ * measured on issue #1313's brush at 50 to 137 pixels, one per node. A new sub-path per run
+ * cannot do that, and stroking a path of several sub-paths costs nothing.
+ *
+ * @p skips must be sorted and disjoint (dt_masks_skip_ranges_build() guarantees it); pass NULL
+ * and 0 for a shape with nothing to exclude.
+ *
+ * It lives here rather than in widgets/draw.h with the other drawing helpers because it needs
+ * both cairo and the masks vocabulary, and a widget header must not inherit the latter -- that
+ * would invert the layering. masks_gui.c already has both.
+ */
+void dt_masks_draw_outline_runs(cairo_t *cr, const float *const points, const int first, const int last,
+                                const dt_masks_skip_range_t *skips, const int skip_count)
+{
+  if(!cr || !points || first >= last) return;
+
+  /* One line_to per sample at RAW resolution is several per device pixel; emit at the resolution
+   * the context can actually show. See dt_draw_min_emit_step(). */
+  const double min_step = dt_draw_min_emit_step(cr);
+  const double min_step2 = min_step * min_step;
+
+  const int count = IS_NULL_PTR(skips) ? 0 : skip_count;
+
+  int at = first;
+  int next = 0;
+
+  while(at < last)
+  {
+    while(next < count && skips[next].resume_at <= at) next++;
+
+    int run_end = last;
+    if(next < count && skips[next].jump_from < last) run_end = MAX(skips[next].jump_from, at);
+
+    if(run_end > at)
+    {
+      double last_x = points[at * 2], last_y = points[at * 2 + 1];
+      cairo_move_to(cr, last_x, last_y);
+
+      for(int i = at + 1; i < run_end; i++)
+      {
+        const double x = points[i * 2], y = points[i * 2 + 1];
+        const double dx = x - last_x, dy = y - last_y;
+        if((dx * dx + dy * dy) < min_step2) continue;
+        cairo_line_to(cr, x, y);
+        last_x = x; last_y = y;
+      }
+
+      /* the run's last sample always lands, so a run ends where the geometry does and not
+       * wherever the decimation happened to stop */
+      const double x = points[(run_end - 1) * 2], y = points[(run_end - 1) * 2 + 1];
+      if(x != last_x || y != last_y) cairo_line_to(cr, x, y);
+    }
+
+    if(next < count && skips[next].jump_from < last)
+    {
+      at = MAX(skips[next].resume_at, at + 1);
+      next++;
+    }
+    else
+      break;
+  }
+}
+
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

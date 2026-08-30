@@ -779,7 +779,20 @@ static inline void dt_draw_handle(cairo_t *cr, const float pt[2], const float zo
 // dev is the develop instance owning the shape being drawn. It is threaded explicitly so shape
 // drawing code never has to reach for the darktable.develop global (which would couple every
 // shape file to the whole application and hide which instance is read).
-typedef void (*shape_draw_function_t)(struct dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
+//
+// skips/skip_count are the shape's EXCLUSION LIST: the spans of the outline that must not be
+// drawn, because the offset curve doubles back on itself there. They travel alongside the buffer
+// rather than inside it -- the alternative, and what this replaced, was blanking those samples to
+// NaN and having every walker test for it. That encoding hides in a buffer of plain floats, has
+// to be re-learned by each new consumer, and is silently wrong for any consumer that forgets:
+// see the entry in masks_types.h for the two bugs it hosted. A shape with nothing to exclude
+// passes NULL and 0.
+//
+// Declared as a struct tag so this header stays free of masks_types.h -- a widget helper has no
+// business inheriting the masks vocabulary.
+struct dt_masks_skip_range_t;
+typedef void (*shape_draw_function_t)(struct dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source,
+                                      const struct dt_masks_skip_range_t *skips, const int skip_count);
 
 /**
  * @brief Draw the lines of a mask shape.
@@ -795,7 +808,8 @@ typedef void (*shape_draw_function_t)(struct dt_develop_t *dev, cairo_t *cr, con
  * @param functions the functions table of the shape
  */
 static inline void dt_draw_shape_lines(struct dt_develop_t *dev, const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
-                const float zoom_scale, const float *points, const int points_count, const shape_draw_function_t *draw_shape_func, const cairo_line_cap_t line_cap)
+                const float zoom_scale, const float *points, const int points_count, const shape_draw_function_t *draw_shape_func, const cairo_line_cap_t line_cap,
+                const struct dt_masks_skip_range_t *skips, const int skip_count)
 {
   cairo_save(cr);
 
@@ -805,7 +819,7 @@ static inline void dt_draw_shape_lines(struct dt_develop_t *dev, const dt_draw_d
 
   // Draw the shape from the integrated function if any
   if(points && points_count >= 2 && draw_shape_func)
-    (*draw_shape_func)(dev, cr, points, points_count, nb, border, FALSE);
+    (*draw_shape_func)(dev, cr, points, points_count, nb, border, FALSE, skips, skip_count);
 
   const dt_draw_dash_type_t dash = (dash_type && !source)
                                   ? dash_type : DT_MASKS_NO_DASH;
@@ -868,7 +882,7 @@ static inline double dt_draw_min_emit_step(cairo_t *cr)
 static inline void dt_draw_stroke_line(const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr,
                           const gboolean selected, const float zoom_scale, const cairo_line_cap_t line_cap)
 {
-  dt_draw_shape_lines(NULL, dash_type, source, cr, 0, selected, zoom_scale, NULL, 0, NULL, line_cap);
+  dt_draw_shape_lines(NULL, dash_type, source, cr, 0, selected, zoom_scale, NULL, 0, NULL, line_cap, NULL, 0);
 }
 
 static void _draw_arrow_head(cairo_t *cr, const float arrow[2], const float arrow_x_a, const float arrow_y_a,
@@ -1007,7 +1021,8 @@ static inline void dt_draw_source_shape(struct dt_develop_t *dev, cairo_t *cr, c
   dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
 
   if(draw_shape_func)
-    (*draw_shape_func)(dev, cr, source_pts, source_pts_count, nodes_nb, FALSE, TRUE);
+    /* a source outline is a copy of the shape placed elsewhere; it carries no cuts */
+    (*draw_shape_func)(dev, cr, source_pts, source_pts_count, nodes_nb, FALSE, TRUE, NULL, 0);
 
   //dark line
   if(selected)

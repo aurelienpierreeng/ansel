@@ -1019,7 +1019,8 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, double x,
   return 0;
 }
 
-static void _ellipse_draw_shape(dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source)
+static void _ellipse_draw_shape(dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source,
+                              const dt_masks_skip_range_t *skips, const int skip_count)
 {
   // dev unused, kept for shape_draw_function_t signature
   /* Decimate to the device resolution, as the brush does; see dt_draw_min_emit_step(). */
@@ -1099,14 +1100,14 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
   if(gpt->points && gpt->points_count > 5)
     dt_draw_shape_lines(gui->dev, DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points,
-                        gpt->points_count, &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_BUTT);
+                        gpt->points_count, &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_BUTT, NULL, 0);
   
   if(gui->group_selected == index)
   {
     // we draw the borders
     if(gpt->border && gpt->border_count > 5)
       dt_draw_shape_lines(gui->dev, DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
-                          gpt->border_count, &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_ROUND);
+                          gpt->border_count, &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_ROUND, NULL, 0);
 
     // draw handles
     _ellipse_draw_handles(gui, cr, zoom_scale, gpt, index);

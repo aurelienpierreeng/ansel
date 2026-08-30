@@ -94,7 +94,7 @@ static void _polygon_get_XY(const float p0_x, const float p0_y, const float p1_x
  *
  * The border point is offset along the normal, scaled by rad.
  */
-static void _polygon_border_get_XY(const float p0_x, const float p0_y, const float p1_x, const float p1_y,
+static gboolean _polygon_border_get_XY(const float p0_x, const float p0_y, const float p1_x, const float p1_y,
                                    const float p2_x, const float p2_y, const float p3_x, const float p3_y,
                                    const float t, const float radius,
                                    float *center_x, float *center_y, float *border_x, float *border_y)
@@ -118,15 +118,16 @@ static void _polygon_border_get_XY(const float p0_x, const float p0_y, const flo
   const double dy = -p0_y * a + p1_y * b + p2_y * c + p3_y * d;
 
   // so we can have the resulting point
-  if(dx == 0 && dy == 0)
-  {
-    *border_x = NAN;
-    *border_y = NAN;
-    return;
-  }
+  /* A curve collapsed to a single point has no direction, so there is nothing to offset along
+   * and the honest answer is "none". This used to be written into the border coordinates as
+   * NaN, which every walker downstream then had to recognise and repair -- a sentinel inside a
+   * buffer that is supposed to hold geometry. It is a return value now. */
+  if(dx == 0 && dy == 0) return FALSE;
+
   const double l = 1.0 / sqrt(dx * dx + dy * dy);
   *border_x = (*center_x) + radius * dy * l;
   *border_y = (*center_y) - radius * dx * l;
+  return TRUE;
 }
 
 /**
@@ -423,19 +424,26 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
                                    float *border_min, float *border_max,
                                    float *result_polygon, float *result_border,
                                    dt_masks_dynbuf_t *draw_points, dt_masks_dynbuf_t *draw_border,
-                                   int with_border, const int pixel_threshold)
+                                   int with_border, const int pixel_threshold,
+                                   const gboolean have_min, const gboolean have_max,
+                                   gboolean have_border_min, gboolean have_border_max,
+                                   gboolean *out_have_border)
 {
-  // we calculate points if needed
-  if(isnan(polygon_min[0]))
+  /* have_* say whether the caller already evaluated that endpoint and whether a border point
+   * came with it. They were read out of the arrays as NaN, so "not computed", "no border" and
+   * real geometry all shared one representation in the buffers the outline is built from. */
+  if(!have_min)
   {
+    have_border_min =
     _polygon_border_get_XY(segment_start[0], segment_start[1], segment_start[2], segment_start[3],
                            segment_end[2], segment_end[3], segment_end[0], segment_end[1], t_min,
                            segment_start[4]
                                + (segment_end[4] - segment_start[4]) * t_min * t_min * (3.0 - 2.0 * t_min),
                            polygon_min, polygon_min + 1, border_min, border_min + 1);
   }
-  if(isnan(polygon_max[0]))
+  if(!have_max)
   {
+    have_border_max =
     _polygon_border_get_XY(segment_start[0], segment_start[1], segment_start[2], segment_start[3],
                            segment_end[2], segment_end[3], segment_end[0], segment_end[1], t_max,
                            segment_start[4]
@@ -454,27 +462,37 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
 
     if(with_border)
     {
+      /* one end of the span may have had no direction to offset along; borrow the other's */
+      if(!have_border_max && have_border_min)
+      {
+        border_max[0] = border_min[0];
+        border_max[1] = border_min[1];
+        have_border_max = TRUE;
+      }
       dt_masks_dynbuf_add_2(draw_border, border_max[0], border_max[1]);
       result_border[0] = border_max[0];
       result_border[1] = border_max[1];
+      if(!IS_NULL_PTR(out_have_border)) *out_have_border = have_border_max;
     }
     return;
   }
 
   // we split in two part
   double t_mid = (t_min + t_max) / 2.0;
-  float polygon_mid[2] = { NAN, NAN };
-  float border_mid[2] = { NAN, NAN };
+  float polygon_mid[2] = { 0.0f, 0.0f };
+  float border_mid[2] = { 0.0f, 0.0f };
   float polygon_result_left[2] = { 0 };
   float border_result_left[2] = { 0 };
   _polygon_points_recurs(segment_start, segment_end, t_min, t_mid,
                          polygon_min, polygon_mid, border_min, border_mid,
                          polygon_result_left, border_result_left,
-                         draw_points, draw_border, with_border, pixel_threshold);
+                         draw_points, draw_border, with_border, pixel_threshold,
+                         have_min, FALSE, have_border_min, FALSE, NULL);
   _polygon_points_recurs(segment_start, segment_end, t_mid, t_max,
                          polygon_result_left, polygon_max, border_result_left, border_max,
                          result_polygon, result_border,
-                         draw_points, draw_border, with_border, pixel_threshold);
+                         draw_points, draw_border, with_border, pixel_threshold,
+                         TRUE, have_max, TRUE, have_border_max, out_have_border);
 }
 
 // Maximum number of self-intersection portions to track;
@@ -504,29 +522,10 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *intersections,
 
   for(int i = node_count * 3; i < border_point_count; i++)
   {
-    if(isnan(border_points[i * 2]) || isnan(border_points[i * 2 + 1]))
-    {
-      // find nearest previous valid point; if at start, wrap to last valid point
-      int prev = i - 1;
-      while(prev >= node_count * 3
-            && (isnan(border_points[prev * 2]) || isnan(border_points[prev * 2 + 1]))) prev--;
-      if(prev < node_count * 3)
-      {
-        // wrap to last valid point in buffer
-        prev = border_point_count - 1;
-        while(prev >= node_count * 3
-              && (isnan(border_points[prev * 2]) || isnan(border_points[prev * 2 + 1]))) prev--;
-      }
-      if(prev >= node_count * 3)
-      {
-        border_points[i * 2] = border_points[prev * 2];
-        border_points[i * 2 + 1] = border_points[prev * 2 + 1];
-      }
-      else
-      {
-        continue; // skip if no valid point found
-      }
-    }
+    /* No NaN test here any more. dt_masks_get_points_border() guarantees these buffers hold
+     * finite geometry -- everything a consumer must not use travels beside them, in the
+     * exclusion list -- so the hole-filling this replaces had nothing left to fill, and it did
+     * it by MUTATING a buffer this function does not own. */
     if(xmin_f > border_points[i * 2])
     {
       xmin_f = border_points[i * 2];
@@ -858,8 +857,10 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
     float cmin[2] = { NAN, NAN };
     float cmax[2] = { NAN, NAN };
 
+    gboolean have_rb = FALSE;
     _polygon_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, dpoints, dborder,
-                           border_buffer && (node_count >= 3), pixel_threshold);
+                           border_buffer && (node_count >= 3), pixel_threshold,
+                           FALSE, FALSE, FALSE, FALSE, &have_rb);
 
     // we check gaps in the border (sharp edges)
     if(dborder)
@@ -879,19 +880,13 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
     if(dborder)
     {
-      if(isnan(rb[0]))
+      if(!have_rb)
       {
-        float lastb0 = dt_masks_dynbuf_get(dborder, -2);
-        float lastb1 = dt_masks_dynbuf_get(dborder, -1);
-        if(isnan(lastb0))
-        {
-          lastb0 = dt_masks_dynbuf_get(dborder, -4);
-          lastb1 = dt_masks_dynbuf_get(dborder, -3);
-          dt_masks_dynbuf_set(dborder, -2, lastb0);
-          dt_masks_dynbuf_set(dborder, -1, lastb1);
-        }
-        rb[0] = lastb0;
-        rb[1] = lastb1;
+        /* the segment had no direction to offset along anywhere; hold the last border sample so
+         * the buffer stays continuous geometry. The nested "and if THAT one was NaN too" case
+         * this replaces cannot arise any more: nothing writes a sentinel into the buffer. */
+        rb[0] = dt_masks_dynbuf_get(dborder, -2);
+        rb[1] = dt_masks_dynbuf_get(dborder, -1);
       }
       dt_masks_dynbuf_add_2(dborder, rb[0], rb[1]);
 
@@ -907,13 +902,10 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
       // we get the next point (start of the next segment)
       // t=0.00001f to workaround rounding effects with full optimization that result in bmax[0] NOT being set to
       // NAN when t=0 and the two points in p3 are identical (as is the case on a control node set to sharp corner)
-      _polygon_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.00001f, p3[4], cmin, cmin + 1,
-                          bmax, bmax + 1);
-      if(isnan(bmax[0]))
-      {
-        _polygon_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.00001f, p3[4], cmin,
-                            cmin + 1, bmax, bmax + 1);
-      }
+      if(!_polygon_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.00001f, p3[4],
+                                 cmin, cmin + 1, bmax, bmax + 1))
+        _polygon_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.00001f, p3[4],
+                               cmin, cmin + 1, bmax, bmax + 1);
       if(bmax[0] - rb[0] > 1 || bmax[0] - rb[0] < -1 || bmax[1] - rb[1] > 1 || bmax[1] - rb[1] < -1)
       {
         float bmin2[2] = { dt_masks_dynbuf_get(dborder, -22), dt_masks_dynbuf_get(dborder, -21) };
@@ -1266,15 +1258,14 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
       const float fx = gui_points->border[i * 2];
       const float fy = gui_points->border[i * 2 + 1];
 
-      // ??? looks like when x border is nan then y is a point index
-      // see draw border in _polygon_events_post_expose.
-      if(!isnan(fx))
-      {
-        fp1[0] = fminf(fp1[0], fx);
-        fp2[0] = fmaxf(fp2[0], fx);
-        fp1[1] = fminf(fp1[1], fy);
-        fp2[1] = fmaxf(fp2[1], fy);
-      }
+      /* The "??? looks like when x border is nan then y is a point index" this replaces was a
+       * true reading of the in-band jump encoding, and the question mark was the problem: a
+       * coordinate buffer that sometimes holds an index, recognisable only by a NaN beside it.
+       * It is gone; the border is coordinates. */
+      fp1[0] = fminf(fp1[0], fx);
+      fp2[0] = fmaxf(fp2[0], fx);
+      fp1[1] = fminf(fp1[1], fy);
+      fp2[1] = fmaxf(fp2[1], fy);
     }
   }
 
@@ -1510,7 +1501,7 @@ static gboolean _polygon_border_handle_cb(const dt_masks_form_gui_points_t *gui_
   if(IS_NULL_PTR(gui_points) || node_index < 0 || node_index >= node_count) return FALSE;
   *handle_x = gui_points->border[node_index * 6];
   *handle_y = gui_points->border[node_index * 6 + 1];
-  return !(isnan(*handle_x) || isnan(*handle_y));
+  return TRUE;
 }
 
 /**
@@ -2229,39 +2220,15 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
  * @brief Draw a polygon or border polyline, skipping NaN points.
  */
 static void _polygon_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *point_buffer, const int point_count,
-                                const int node_count, const gboolean draw_border, const gboolean draw_source)
+                                const int node_count, const gboolean draw_border, const gboolean draw_source,
+                                const dt_masks_skip_range_t *skips, const int skip_count)
 {
-
-  // Find the first valid non-NaN point to start drawing
-  // FIXME: Why not just avoid having NaN points in the array?
-  int start_idx = -1;
-  for(int point_index = node_count * 3 + draw_border; point_index < point_count; point_index++)
-  {
-    if(!isnan(point_buffer[point_index * 2]) && !isnan(point_buffer[point_index * 2 + 1]))
-    {
-      start_idx = point_index;
-      break;
-    }
-  }
-
-  // Only draw if we have at least one valid point
-  if(start_idx >= 0)
-  {
-    /* Decimate to device resolution, as the brush does; see dt_draw_min_emit_step(). */
-    const double min_step = dt_draw_min_emit_step(cr);
-    const double min_step2 = min_step * min_step;
-    double last_x = point_buffer[start_idx * 2], last_y = point_buffer[start_idx * 2 + 1];
-    cairo_move_to(cr, last_x, last_y);
-    for(int point_index = start_idx + 1; point_index < point_count; point_index++)
-    {
-      const double x = point_buffer[point_index * 2], y = point_buffer[point_index * 2 + 1];
-      if(isnan(x) || isnan(y)) continue;
-      const double dx = x - last_x, dy = y - last_y;
-      if((dx * dx + dy * dy) < min_step2) continue;
-      cairo_line_to(cr, x, y);
-      last_x = x; last_y = y;
-    }
-  }
+  /* This used to ignore the exclusion list and test the buffer for NaN instead -- which polygon
+   * never writes, since its cuts have travelled out-of-band since the #1313 refactor. So the
+   * test matched nothing and the folds were drawn. Honouring the list is the fix and costs one
+   * call: it is the same walk the brush does, because it is the same question. */
+  dt_masks_draw_outline_runs(cr, point_buffer, node_count * 3 + draw_border, point_count,
+                             skips, skip_count);
 }
 
 /**
@@ -2320,7 +2287,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     {
       dt_draw_shape_lines(mask_gui->dev, DT_MASKS_DASH_STICK, FALSE, cr, node_count, (mask_gui->border_selected), zoom_scale,
                           gui_points->border, gui_points->border_count, &dt_masks_functions_polygon.draw_shape,
-                          CAIRO_LINE_CAP_ROUND);
+                          CAIRO_LINE_CAP_ROUND, gui_points->border_skips, gui_points->border_skip_count);
     }
 
     // draw the current node's handle if it's a curve node

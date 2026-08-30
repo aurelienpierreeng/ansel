@@ -172,6 +172,10 @@ int dt_masks_border_find_self_intersections(const float *const border, const int
                                             const int header, float *const crossing_pairs,
                                             const int max_pairs);
 
+/** Is @p index inside one of the excluded spans? For a consumer that SEARCHES the outline rather
+ * than walking it; a forward walk should use dt_masks_draw_outline_runs() instead. */
+gboolean dt_masks_skip_contains(const dt_masks_skip_range_t *skips, const int skip_count, const int index);
+
 /**
  * @brief Turn the self-intersection detector's raw crossing pairs into the disjoint,
  * forward-only skip ranges every border walk consumes. Pure, allocation-free.

@@ -218,9 +218,17 @@ static void _brush_get_XY(float p0_x, float p0_y, float p1_x, float p1_y, float 
 /**
  * @brief Evaluate a cubic Bezier and compute its offset border point.
  */
-static void _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p1_y, float p2_x, float p2_y,
-                                 float p3_x, float p3_y, float t, float radius,
-                                 float *point_x, float *point_y, float *border_x, float *border_y)
+/** Evaluate the curve at @p t and offset it by @p radius along the normal.
+ *
+ * The point is always produced. The BORDER is not: a curve collapsed to a single point has no
+ * direction, so there is nothing to offset along and the honest answer is "none". That used to
+ * be signalled by writing NaN into the border coordinates, which then had to be recognised --
+ * and repaired -- by everyone downstream, and which is how a sentinel gets into a buffer that
+ * is supposed to hold geometry. It is a return value now, so the border is either written or
+ * left exactly as the caller had it. Returns TRUE when a border point was produced. */
+static gboolean _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p1_y, float p2_x, float p2_y,
+                                     float p3_x, float p3_y, float t, float radius,
+                                     float *point_x, float *point_y, float *border_x, float *border_y)
 {
   // we get the point
   _brush_get_XY(p0_x, p0_y, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y, t, point_x, point_y);
@@ -278,16 +286,12 @@ static void _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p1_y,
 
     if(fabsf(dx) < degenerate && fabsf(dy) < degenerate) { dx = p3_x - p0_x; dy = p3_y - p0_y; }
 
-    if(dx == 0.0f && dy == 0.0f)
-    {
-      *border_x = NAN;
-      *border_y = NAN;
-      return;
-    }
+    if(dx == 0.0f && dy == 0.0f) return FALSE;   // a single point: no direction to offset along
   }
   const float l = 1.0f / sqrtf(dx * dx + dy * dy);
   *border_x = (*point_x) + radius * dy * l;
   *border_y = (*point_y) - radius * dx * l;
+  return TRUE;
 }
 
 /**
@@ -339,16 +343,17 @@ static gboolean _brush_get_border_handle_resampled(const dt_masks_form_gui_point
 
   for(int i = start; i < max_points; i++)
   {
+    /* Skip an index inside an EXCLUDED span, because the border sample there is one the outline
+     * does not show -- the offset curve doubles back on itself, and a node can sit opposite such
+     * a span; a cusp does. This used to be a NaN test against the buffer, back when the excluded
+     * samples were blanked in place, and it cost the node its handle outright when it fired: no
+     * dash drawn, and no hover or drag either, since both interactions resolve through here.
+     * Asking the list instead both keeps the handle and stops this function caring how the
+     * drawer marks its exclusions. */
+    if(dt_masks_skip_contains(gui_points->border_skips, gui_points->border_skip_count, i)) continue;
+
     const float px = gui_points->points[i * 2];
     const float py = gui_points->points[i * 2 + 1];
-    if(isnan(px) || isnan(py)) continue;
-    /* ... and the BORDER sample at that index has to exist, because that is what gets returned.
-     * The drawn outline blanks the border wherever it doubles back on itself, and a node can sit
-     * opposite such a span -- a cusp does. Choosing the nearest centreline point without looking
-     * at its border, then failing on NaN, costs that node its border handle outright: no dash
-     * drawn, and no hover or drag either, since both interactions resolve through here. */
-    if(isnan(gui_points->border[i * 2]) || isnan(gui_points->border[i * 2 + 1])) continue;
-
     const float dx = node_x - px;
     const float dy = node_y - py;
     const float dist2 = dx * dx + dy * dy;
@@ -363,14 +368,14 @@ static gboolean _brush_get_border_handle_resampled(const dt_masks_form_gui_point
 
   *handle_x = gui_points->border[best_idx * 2];
   *handle_y = gui_points->border[best_idx * 2 + 1];
-  return !(isnan(*handle_x) || isnan(*handle_y));
+  return TRUE;
 }
 
 static gboolean _brush_get_border_handle_mirrored(const dt_masks_form_gui_points_t *gui_points, int node_count,
                                                   int node_index, float *handle_x, float *handle_y)
 {
-  float resampled_x = NAN;
-  float resampled_y = NAN;
+  float resampled_x = 0.0f;
+  float resampled_y = 0.0f;
   if(!_brush_get_border_handle_resampled(gui_points, node_count, node_index, &resampled_x, &resampled_y)) return FALSE;
 
   const float node_x = gui_points->points[node_index * 6 + 2];
@@ -378,7 +383,7 @@ static gboolean _brush_get_border_handle_mirrored(const dt_masks_form_gui_points
 
   *handle_x = node_x - (resampled_x - node_x);
   *handle_y = node_y - (resampled_y - node_y);
-  return !(isnan(*handle_x) || isnan(*handle_y));
+  return TRUE;
 }
 
 /** get bezier control points from feather extremity */
@@ -678,27 +683,31 @@ static inline void _brush_payload_sync(dt_masks_dynbuf_t *dpayload, dt_masks_dyn
 
 /** recursive function to get all points of the brush AND all point of the border */
 /** the function takes care to avoid big gaps between points */
+/* @p have_min / @p have_max say whether the caller already evaluated that endpoint, and
+ * @p have_border_min / @p have_border_max whether a border point came with it. They used to be
+ * read out of the arrays as NaN -- "not computed" and "no border" sharing one representation
+ * with each other and with real geometry. Which of the three a NaN meant depended on where you
+ * were standing, and the arrays are the same ones that end up in the outline. */
 static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax, float *points_min,
                                  float *points_max, float *border_min, float *border_max, float *rpoints,
                                  float *rborder, float *rpayload, dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder,
-                                 dt_masks_dynbuf_t *dpayload, const int pixel_threshold)
+                                 dt_masks_dynbuf_t *dpayload, const int pixel_threshold,
+                                 const gboolean have_min, const gboolean have_max,
+                                 gboolean have_border_min, gboolean have_border_max,
+                                 gboolean *out_have_border)
 {
   const gboolean withborder = (!IS_NULL_PTR(dborder));
   const gboolean withpayload = (!IS_NULL_PTR(dpayload));
 
   // we calculate points if needed
-  if(isnan(points_min[0]))
-  {
-    _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmin,
-                         p1[4] + (p2[4] - p1[4]) * tmin * tmin * (3.0 - 2.0 * tmin), points_min,
-                         points_min + 1, border_min, border_min + 1);
-  }
-  if(isnan(points_max[0]))
-  {
-    _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmax,
-                         p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax), points_max,
-                         points_max + 1, border_max, border_max + 1);
-  }
+  if(!have_min)
+    have_border_min = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmin,
+                                           p1[4] + (p2[4] - p1[4]) * tmin * tmin * (3.0 - 2.0 * tmin), points_min,
+                                           points_min + 1, border_min, border_min + 1);
+  if(!have_max)
+    have_border_max = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmax,
+                                           p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax), points_max,
+                                           points_max + 1, border_max, border_max + 1);
 
   // are the points near_handle ?
   if((tmax - tmin < 0.0001f)
@@ -711,15 +720,18 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
 
     if(withborder)
     {
-      if(isnan(border_max[0]))
+      /* one end of the span may have had no direction to offset along; borrow the other's */
+      if(!have_border_max && have_border_min)
       {
         border_max[0] = border_min[0];
         border_max[1] = border_min[1];
+        have_border_max = TRUE;
       }
-      else if(isnan(border_min[0]))
+      else if(!have_border_min && have_border_max)
       {
         border_min[0] = border_max[0];
         border_min[1] = border_max[1];
+        have_border_min = TRUE;
       }
 
       // we check gaps in the border (sharp edges)
@@ -730,6 +742,7 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
 
       rborder[0] = border_max[0];
       rborder[1] = border_max[1];
+      if(!IS_NULL_PTR(out_have_border)) *out_have_border = have_border_max;
       dt_masks_dynbuf_add_2(dborder, rborder[0], rborder[1]);
     }
 
@@ -745,12 +758,15 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
 
   // we split in two part
   double tx = (tmin + tmax) / 2.0;
-  float c[2] = { NAN, NAN }, b[2] = { NAN, NAN };
+  float c[2] = { 0.0f, 0.0f }, b[2] = { 0.0f, 0.0f };
   float rc[2], rb[2], rp[2];
+  /* the left half inherits our min end and computes the midpoint; the right half is then handed
+   * that midpoint already evaluated, and inherits our max end */
   _brush_points_recurs(p1, p2, tmin, tx, points_min, c, border_min, b, rc, rb, rp, dpoints, dborder, dpayload,
-                       pixel_threshold);
+                       pixel_threshold, have_min, FALSE, have_border_min, FALSE, NULL);
   _brush_points_recurs(p1, p2, tx, tmax, rc, points_max, rb, border_max, rpoints, rborder, rpayload, dpoints,
-                       dborder, dpayload, pixel_threshold);
+                       dborder, dpayload, pixel_threshold, TRUE, have_max, TRUE, have_border_max,
+                       out_have_border);
 }
 
 
@@ -1022,13 +1038,14 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
     // and we determine all points by recursion (to be sure the distance between 2 points is <=1)
     float rc[2], rb[2], rp[2];
-    float bmin[2] = { NAN, NAN };
-    float bmax[2] = { NAN, NAN };
-    float cmin[2] = { NAN, NAN };
-    float cmax[2] = { NAN, NAN };
+    float bmin[2] = { 0.0f, 0.0f };
+    float bmax[2] = { 0.0f, 0.0f };
+    float cmin[2] = { 0.0f, 0.0f };
+    float cmax[2] = { 0.0f, 0.0f };
+    gboolean have_rb = FALSE;
 
     _brush_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, rp, dpoints, dborder, dpayload,
-                         pixel_threshold);
+                         pixel_threshold, FALSE, FALSE, FALSE, FALSE, &have_rb);
 
     dt_masks_dynbuf_add_2(dpoints, rc[0], rc[1]);
 
@@ -1039,19 +1056,13 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
     if(!IS_NULL_PTR(dborder))
     {
-      if(isnan(rb[0]))
+      if(!have_rb)
       {
-        float lastb0 = dt_masks_dynbuf_get(dborder, -2);
-        float lastb1 = dt_masks_dynbuf_get(dborder, -1);
-        if(isnan(lastb0))
-        {
-          lastb0 = dt_masks_dynbuf_get(dborder, -4);
-          lastb1 = dt_masks_dynbuf_get(dborder, -3);
-          dt_masks_dynbuf_set(dborder, -2, lastb0);
-          dt_masks_dynbuf_set(dborder, -1, lastb1);
-        }
-        rb[0] = lastb0;
-        rb[1] = lastb1;
+        /* the segment had no direction to offset along anywhere; hold the last border sample so
+         * the buffer stays continuous geometry. The nested "and if THAT one was NaN too" case
+         * this replaces could not arise any more: nothing writes a sentinel into the buffer. */
+        rb[0] = dt_masks_dynbuf_get(dborder, -2);
+        rb[1] = dt_masks_dynbuf_get(dborder, -1);
       }
       dt_masks_dynbuf_add_2(dborder, rb[0], rb[1]);
     }
@@ -1060,13 +1071,13 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     if(!IS_NULL_PTR(dborder) && node_count >= 3)
     {
       // we get the next point (start of the next segment)
-      _brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0, p3[4], cmin, cmin + 1,
-                           bmax, bmax + 1);
-      if(isnan(bmax[0]))
-      {
-        _brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.0001, p3[4], cmin,
-                             cmin + 1, bmax, bmax + 1);
-      }
+      /* t = 0 lands exactly on the node, where a cusp's collapsed handles leave no direction;
+       * a hair along the curve there is one. If even that fails the node is isolated, and the
+       * arc below is skipped by its own gap test rather than fed a stale bmax. */
+      if(!_brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0, p3[4],
+                               cmin, cmin + 1, bmax, bmax + 1))
+        _brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.0001, p3[4],
+                             cmin, cmin + 1, bmax, bmax + 1);
       /* The border of the two segments meeting at this node ends on one side of the joint and
        * restarts on the other; this arc bridges the wedge between them, centred on the node.
        * Without it the rasteriser has no border samples across the joint, so the falloff paints
@@ -1522,16 +1533,6 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
     }
 
 
-    for(int i = 0; i < *border_skip_count; i++)
-    {
-      const int from = (*border_skips)[i].jump_from;
-      const int to = MIN((*border_skips)[i].resume_at, *border_count);
-      for(int j = MAX(from, 0); j < to; j++)
-      {
-        (*border_buffer)[j * 2] = NAN;
-        (*border_buffer)[j * 2 + 1] = NAN;
-      }
-    }
   }
 
   return dt_masks_raster_from_status(status);
@@ -2060,7 +2061,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
     }
     else if(mask_gui->handle_border_hovered >= 0)
     {
-      float handle_x = NAN, handle_y = NAN;
+      float handle_x = 0.0f, handle_y = 0.0f;
       if(_brush_get_border_handle_mirrored(gui_points, node_count, mask_gui->handle_border_hovered,
                                            &handle_x, &handle_y))
       {
@@ -2396,7 +2397,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
         = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, node_index);
     if(IS_NULL_PTR(node)) return 0;
 
-    float handle_x = NAN, handle_y = NAN;
+    float handle_x = 0.0f, handle_y = 0.0f;
     if(!_brush_get_border_handle_mirrored(gui_points, node_count, node_index, &handle_x, &handle_y))
       return 0;
 
@@ -2463,79 +2464,14 @@ static inline int _brush_centerline_end(const int points_count, const int node_c
   return first + (points_count - first) / 2;
 }
 
-static void _brush_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
+static void _brush_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source,
+                              const dt_masks_skip_range_t *skips, const int skip_count)
 {
-   // unused arg, keep compiler from complaining
- // Find the first valid non-NaN point to start drawing
- // FIXME: Why not just avoid having NaN points in the array?
-  int start_idx = -1;
-  for(int i = node_nb * 3 + border; i < points_count; i++)
-  {
-    if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
-    {
-      start_idx = i;
-      break;
-    }
-  }
-
-  // Only draw if we have at least one valid point
-  if(start_idx >= 0)
-  {
-    cairo_move_to(cr, points[start_idx * 2], points[start_idx * 2 + 1]);
-
-    // We don't want to draw the plain line twice, adapt the end index accordingly
-    const int end_idx = border ? points_count : _brush_centerline_end(points_count, node_nb);
-
-    /* One line_to per point sampled at RAW resolution is several per device pixel; emit at the
-     * resolution the context can actually show. See dt_draw_min_emit_step(). */
-    const double min_step = dt_draw_min_emit_step(cr);
-    const double min_step2 = min_step * min_step;
-    double last_x = points[start_idx * 2];
-    double last_y = points[start_idx * 2 + 1];
-
-    /* A NaN run is a HOLE in the outline, not a shortcut across it. Skipping the samples with
-     * the pen still down makes the next valid point a line_to, so every blanked span comes out
-     * as a straight chord -- at a cusp, a chord slicing across the rounded tip the stroke
-     * actually has. Lift the pen instead: begin a new sub-path at the first sample after the
-     * run, so the span is simply absent. Stroking a path of several sub-paths is free. */
-    gboolean pen_down = TRUE;
-
-    for(int i = start_idx + 1; i < end_idx; i++)
-    {
-      const double x = points[i * 2];
-      const double y = points[i * 2 + 1];
-      if(isnan(x) || isnan(y)) { pen_down = FALSE; continue; }
-
-      const double step_x = x - last_x;
-      const double step_y = y - last_y;
-      /* the decimation must not apply across a lifted pen: the new sub-path has to start
-       * somewhere, however close it landed to where the old one stopped */
-      if(pen_down && (step_x * step_x + step_y * step_y) < min_step2) continue;
-
-      if(pen_down)
-        cairo_line_to(cr, x, y);
-      else
-      {
-        cairo_move_to(cr, x, y);
-        pen_down = TRUE;
-      }
-      last_x = x;
-      last_y = y;
-    }
-
-    // the last point always lands, so the outline closes where the shape does
-    if(end_idx > start_idx + 1)
-    {
-      const double x = points[(end_idx - 1) * 2];
-      const double y = points[(end_idx - 1) * 2 + 1];
-      if(!isnan(x) && !isnan(y) && (x != last_x || y != last_y))
-      {
-        // ... but not across a hole, for the same reason as above
-        if(pen_down) cairo_line_to(cr, x, y);
-        else         cairo_move_to(cr, x, y);
-      }
-    }
-  }
+  /* The centreline is walked there and back (see _brush_centerline_end): stroking the whole
+   * array would draw it twice. The border wraps the stroke and is walked once. */
+  const int first = node_nb * 3 + border;
+  const int last = border ? points_count : _brush_centerline_end(points_count, node_nb);
+  dt_masks_draw_outline_runs(cr, points, first, last, skips, skip_count);
 }
 
 static float _brush_line_length(const float *line, const int first_pt, const int last_pt)
@@ -2549,7 +2485,6 @@ static float _brush_line_length(const float *line, const int first_pt, const int
     const float y0 = line[i0 + 1];
     const float x1 = line[i1];
     const float y1 = line[i1 + 1];
-    if(isnan(x0) || isnan(y0) || isnan(x1) || isnan(y1)) continue;
     const float dx = x1 - x0;
     const float dy = y1 - y0;
     const float len = dx * dx + dy * dy;
@@ -2566,7 +2501,7 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
 
   float acc = 0.0f;
   gboolean has_fallback = FALSE;
-  float fallback_x = NAN, fallback_y = NAN;
+  float fallback_x = 0.0f, fallback_y = 0.0f;
 
   for(int i = first_pt; i < last_pt; i++)
   {
@@ -2576,7 +2511,6 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
     const float y0 = line[i0 + 1];
     const float x1 = line[i1];
     const float y1 = line[i1 + 1];
-    if(isnan(x0) || isnan(y0) || isnan(x1) || isnan(y1)) continue;
 
     const float dx = x1 - x0;
     const float dy = y1 - y0;
@@ -2597,7 +2531,7 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
     acc += len;
   }
 
-  if(!has_fallback || isnan(fallback_x) || isnan(fallback_y)) return FALSE;
+  if(!has_fallback) return FALSE;
   *x = fallback_x;
   *y = fallback_y;
   return TRUE;
@@ -2899,7 +2833,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     {
       dt_draw_shape_lines(mask_gui->dev, DT_MASKS_DASH_STICK, FALSE, cr, node_count, (mask_gui->border_selected), zoom_scale,
                           gui_points->border, gui_points->border_count, &dt_masks_functions_brush.draw_shape,
-                          CAIRO_LINE_CAP_ROUND);
+                          CAIRO_LINE_CAP_ROUND, gui_points->border_skips, gui_points->border_skip_count);
     }
 
     // draw the current node's handle if it's a curve node
@@ -2935,7 +2869,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       const gboolean selected = (mask_gui->node_hovered == edited
                               || selected_handle_border == edited
                               || mask_gui->handle_border_hovered == edited);
-      float handle[2] = {NAN, NAN};
+      float handle[2] = { 0.0f, 0.0f };
       // Show the border handle on the opposite side from the curve handle
       if(_brush_get_border_handle_mirrored(gui_points, node_count, edited, &handle[0], &handle[1]))
       {
