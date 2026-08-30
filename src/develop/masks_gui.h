@@ -65,6 +65,10 @@ typedef struct dt_masks_form_gui_points_t
   int points_count;
   float *border;   // border points in absolute coordinates in output image space
   int border_count;
+  // Self-intersection cuts of `border', out-of-band -- see dt_masks_skip_range_t. NULL/0 for
+  // every shape whose border cannot fold over itself (all but polygon today).
+  dt_masks_skip_range_t *border_skips;
+  int border_skip_count;
   float *source;   // source point in absolute coordinates in output image space
   int source_count;
   gboolean clockwise;
@@ -617,7 +621,6 @@ dt_masks_form_group_t *dt_masks_group_add_form_with_state(dt_develop_t *dev, dt_
                                                           dt_masks_state_t state, float opacity);
 
 /** utils functions */
-int dt_masks_point_in_form_exact(const float *pts, int num_pts, const float *points, int points_start, int points_count);
 
 /** allow to select a shape inside an iop */
 void dt_masks_select_form(dt_develop_t *dev, struct dt_iop_module_t *module, dt_masks_form_t *sel);

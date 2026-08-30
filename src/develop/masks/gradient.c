@@ -1140,9 +1140,14 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
 
 static dt_masks_raster_result_t _gradient_get_points_border(dt_develop_t *dev, dt_masks_form_t *form,
                                        float **points, int *points_count,
-                                       float **border, int *border_count, int source,
+                                       float **border, int *border_count,
+                                       dt_masks_skip_range_t **border_skips, int *border_skip_count,
+                                       int source,
                                        const dt_iop_module_t *module)
 {
+  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
+  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
+
     // unused arg, keep compiler from complaining
   // No geometry: an empty outline is the correct result here, not a failure. See the circle.
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;

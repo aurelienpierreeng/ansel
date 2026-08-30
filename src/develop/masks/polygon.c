@@ -68,6 +68,7 @@
 
 static void _polygon_bounding_box_raw(const float *const point_buffer, const float *border_buffer,
                                       const int corner_count, const int point_count, int border_count,
+                                      const dt_masks_skip_range_t *border_skips, const int border_skip_count,
                                       float *x_min, float *x_max, float *y_min, float *y_max);
 
 /**
@@ -694,20 +695,11 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *intersections,
   return 0;
 }
 
-// A self-intersection skip range [v, w] in the border buffer's index space -- see the
-// sort+merge step in _polygon_get_pts_border() for why these need to be disjoint before being
-// written as NaN jump sentinels.
-typedef struct
-{
-  int v, w;
-} dt_masks_polygon_range_t;
-
-static int _polygon_range_cmp(const void *a, const void *b)
-{
-  const int va = ((const dt_masks_polygon_range_t *)a)->v;
-  const int vb = ((const dt_masks_polygon_range_t *)b)->v;
-  return (va > vb) - (va < vb);
-}
+// Self-intersection cuts are dt_masks_skip_range_t (masks_types.h), built by
+// dt_masks_skip_ranges_build() and handed to every consumer OUT-OF-BAND -- never encoded into
+// the border buffer. The in-band NaN-jump encoding this replaced hosted both bugs the
+// mechanism ever had (a reader cycle, then issue #1313's seam fold) while the geometry was
+// right both times.
 
 /**
  * @brief Build point and border buffers for a polygon mask.
@@ -717,12 +709,16 @@ static int _polygon_range_cmp(const void *a, const void *b)
 static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                    const double iop_order, const int transform_direction,
                                    const dt_masks_distort_t *const dist, float **point_buffer, int *point_count,
-                                   float **border_buffer, int *border_count, gboolean source)
+                                   float **border_buffer, int *border_count,
+                                   dt_masks_skip_range_t **border_skips, int *border_skip_count,
+                                   gboolean source)
 {
   *point_buffer = NULL;
   *point_count = 0;
   if(!IS_NULL_PTR(border_buffer)) *border_buffer = NULL;
   if(!IS_NULL_PTR(border_buffer)) *border_count = 0;
+  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
+  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
 
   if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
 
@@ -1025,101 +1021,60 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
           for(int i = 2; i < 6; i++)
             (*border_buffer)[node_index * 6 + i] = border_init[node_index * 6 + i];
 
-        // now we want to write the skipping zones
-        // guard: buffer must be large enough to hold node falloff data
-        const int buf_count = *border_count;
-
-        // Each (v, w) pair names two raw border-buffer indices where the offset curve crosses
-        // itself, in the order _polygon_find_self_intersection()'s *discovery* walk (which
-        // starts at a shape extremum, not at start_index) encountered them -- not necessarily
-        // v <= w in raw-index terms, and not the order dt_masks_point_in_form_exact()'s *read*
-        // walk (masks.c, which always starts at start_index) will visit them in. What must be
-        // skipped is the read-order span between the two crossing points; in raw-index terms
-        // that span is simply [min(v,w), max(v,w)] -- read order is a fixed rotation starting
-        // at start_index, so whichever of v/w has the smaller raw index is always the one the
-        // read walk reaches first, regardless of which one discovery found first. Normalizing
-        // (v > w used to instead take a separate path that redirected through a single shared
-        // slot at start_index for every such pair) removes the only source of jump-sentinel
-        // cycles here: with every pair now oriented the same way, sorting and merging
-        // overlapping/nested ranges into disjoint, non-overlapping ones guarantees every jump
-        // in the resulting chain moves strictly forward through read order, so the walk can
-        // only ever visit each border index once. Without the merge, two overlapping ranges
-        // written independently can still point the reader into each other and trap its walk
-        // retracing the same few indices forever -- caught only by its own visited_points
-        // safety cap, which then leaves it reporting a bogus, incomplete crossing count for
-        // every point tested, not just points near the overlap. A polygon with many nodes and
-        // a generous per-node border/feathering radius produces many such ranges (its offset
-        // curve self-intersects at every concave run tighter than that radius), so this isn't
-        // rare on complex hand-drawn shapes.
-        dt_masks_polygon_range_t *ranges = dt_pixelpipe_cache_alloc_align_cache(
-            sizeof(dt_masks_polygon_range_t) * MAX(inter_count, 1), 0);
-        int range_count = 0;
-
-        for(int i = 0; i < inter_count; i++)
+        // The self-intersection cuts leave here OUT-OF-BAND, as dt_masks_skip_range_t --
+        // never encoded into the border buffer. dt_masks_skip_ranges_build() owns the
+        // normalize / drop-seam-straddlers / sort / merge pipeline and documents why each
+        // step exists.
+        if(inter_count > 0 && !IS_NULL_PTR(border_skips) && !IS_NULL_PTR(border_skip_count))
         {
-          const int v = (int)(dt_masks_dynbuf_buffer(intersections))[i * 2];
-          const int w = (int)(dt_masks_dynbuf_buffer(intersections))[i * 2 + 1];
-          // bounds-check v and w against the allocated buffer size
-          if(v < 0 || v >= buf_count || w < 0 || w >= buf_count) continue;
-          const int range_v = MIN(v, w);
-          const int range_w = MAX(v, w);
-
-          /* The border is a CLOSED contour, so a crossing pair cuts it into TWO arcs, and the
-           * fold to remove is the shorter one -- not whichever of the two happens to avoid the
-           * buffer seam. When the fold straddles the seam, [min(v,w), max(v,w)] names its
-           * COMPLEMENT: measured on the polygon of issue #1313 (67 nodes, uniform feather), 3 of
-           * its 27 crossings straddled the seam and each named ~147000 of 147546 border points
-           * instead of the 330-454 its fold actually spans. The merge below then swallowed all 27
-           * into a single range covering 99.8% of the contour, and the hit-test -- which is also
-           * what renders the pixel mask -- saw one straight chord instead of the shape.
-           *
-           * A wrapping removal cannot be expressed with these sentinels.
-           * dt_masks_point_in_form_exact() walks [start_index, count) forward and wraps exactly
-           * once, so a jump backwards sends the walk back over the span it just left, to arrive at
-           * the same sentinel again; it spins until its own visited_points cap stops it and
-           * returns a meaningless crossing count. That is the cycle the sorting and merging below
-           * exist to prevent, and it is why every range written here has to run forward.
-           *
-           * So a seam-straddling fold is LEFT IN. The offset curve keeps a small kink near that
-           * one fold -- the very thing the detector exists to hide -- but the damage is bounded by
-           * the fold's own size instead of taking the rest of the shape with it. */
-          if(range_w - range_v > buf_count - (range_w - range_v)) continue;
-
-          if(!IS_NULL_PTR(ranges))
+          dt_masks_skip_range_t *skips = dt_pixelpipe_cache_alloc_align_cache(
+              sizeof(dt_masks_skip_range_t) * inter_count, 0);
+          if(IS_NULL_PTR(skips))
           {
-            ranges[range_count].v = range_v;
-            ranges[range_count].w = range_w;
-            range_count++;
+            // No cuts is a RENDERABLE state -- the folds get filled as shape, a bounded local
+            // artefact -- but it is not the intended one, so it does not pass silently.
+            dt_print(DT_DEBUG_ALWAYS,
+                     "[masks %s] out of memory for %d self-intersection cuts; the border's folds"
+                     " will render filled\n", mask_form->name, inter_count);
           }
           else
           {
-            // allocation failed: fall back to writing this range unmerged, same as before
-            (*border_buffer)[range_v * 2] = NAN;
-            (*border_buffer)[range_v * 2 + 1] = range_w;
-          }
-        }
+            int dropped_wrapping = 0;
+            const int skip_count
+                = dt_masks_skip_ranges_build(dt_masks_dynbuf_buffer(intersections), inter_count,
+                                             *border_count, skips, &dropped_wrapping);
 
-        if(!IS_NULL_PTR(ranges) && range_count > 0)
-        {
-          qsort(ranges, range_count, sizeof(dt_masks_polygon_range_t), _polygon_range_cmp);
+            int skipped_total = 0;
+            for(int i = 0; i < skip_count; i++)
+              skipped_total += skips[i].resume_at - skips[i].jump_from;
 
-          int merged_count = 1;
-          for(int i = 1; i < range_count; i++)
-          {
-            if(ranges[i].v <= ranges[merged_count - 1].w)
-              ranges[merged_count - 1].w = MAX(ranges[merged_count - 1].w, ranges[i].w);
+            /* The invariant issue #1313 violated, checked where it is cheapest: no legitimate
+             * set of folds spans most of the contour, so a total this large means the ranges
+             * are wrong and the render damage would be #1313's straight chord across the
+             * shape. Scream rather than trust it -- 99.8% of this contour was being skipped
+             * in silence before. */
+            if(2 * skipped_total > *border_count)
+              dt_print(DT_DEBUG_ALWAYS,
+                       "[masks %s] self-intersection cuts skip %d of %d border points -- more"
+                       " than half the contour. The ranges are almost certainly wrong; keeping"
+                       " them, but this needs looking at\n",
+                       mask_form->name, skipped_total, *border_count);
+            else if(dt_get_debug_flags() & DT_DEBUG_MASKS)
+              dt_print(DT_DEBUG_MASKS,
+                       "[masks %s] self-intersections: %d crossings -> %d cuts (%d pts, %.1f%%"
+                       " of the border), %d seam-straddling fold(s) left in\n",
+                       mask_form->name, inter_count, skip_count, skipped_total,
+                       100.0 * skipped_total / MAX(*border_count, 1), dropped_wrapping);
+
+            if(skip_count > 0)
+            {
+              *border_skips = skips;
+              *border_skip_count = skip_count;
+            }
             else
-              ranges[merged_count++] = ranges[i];
-          }
-
-          for(int i = 0; i < merged_count; i++)
-          {
-            (*border_buffer)[ranges[i].v * 2] = NAN;
-            (*border_buffer)[ranges[i].v * 2 + 1] = ranges[i].w;
+              dt_pixelpipe_cache_free_align(skips);
           }
         }
-
-        if(!IS_NULL_PTR(ranges)) dt_pixelpipe_cache_free_align(ranges);
       }
 
       if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1257,6 +1212,7 @@ static void _polygon_translate_all_nodes(dt_masks_form_t *mask_form, const float
 static dt_masks_raster_result_t _polygon_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                       float **point_buffer, int *point_count,
                                       float **border_buffer, int *border_count,
+                                      dt_masks_skip_range_t **border_skips, int *border_skip_count,
                                       int source, const dt_iop_module_t *module)
 {
   // Asking for the source outline without a module is a programming error, not an empty shape.
@@ -1266,7 +1222,7 @@ static dt_masks_raster_result_t _polygon_get_points_border(dt_develop_t *develop
   return dt_masks_raster_from_status(
       _polygon_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
                               &gui_dist, point_buffer, point_count,
-                              border_buffer, border_count, source));
+                              border_buffer, border_count, border_skips, border_skip_count, source));
 }
 
 static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *mask_form,
@@ -1456,7 +1412,7 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
   if(gui_points->source && gui_points->points
      && gui_points->source_count > node_count * 3 && gui_points->points_count > node_count * 3
      && dt_masks_point_in_form_exact(pt, 1, gui_points->source, node_count * 3,
-                                     gui_points->source_count) >= 0)
+                                     gui_points->source_count, NULL, 0) >= 0)
   {
     *inside_source = 1;
     *inside = 1;
@@ -1530,7 +1486,8 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
   // we check if it's not inside borders, meaning we are not inside at all
   if(!gui_points->border || gui_points->border_count <= node_count * 3
      || dt_masks_point_in_form_exact(pt, 1, gui_points->border, node_count * 3,
-                                     gui_points->border_count) < 0)
+                                     gui_points->border_count,
+                                     gui_points->border_skips, gui_points->border_skip_count) < 0)
     return;
 
   // we are at least inside the border
@@ -1539,7 +1496,7 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
   // and we check if it's not inside form, meaning we are inside border only
   if(IS_NULL_PTR(gui_points->points) || gui_points->points_count <= node_count * 3) return;
   *inside_border = (dt_masks_point_in_form_exact(pt, 1, gui_points->points,
-                                                 node_count * 3, gui_points->points_count) < 0);
+                                                 node_count * 3, gui_points->points_count, NULL, 0) < 0);
 }
 
 /**
@@ -2460,22 +2417,26 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
  */
 static void _polygon_bounding_box_raw(const float *const point_buffer, const float *border_buffer,
                                       const int corner_count, const int point_count, int border_count,
+                                      const dt_masks_skip_range_t *border_skips, const int border_skip_count,
                                       float *x_min, float *x_max, float *y_min, float *y_max)
 {
   float xmin, xmax, ymin, ymax;
   xmin = ymin = FLT_MAX;
   xmax = ymax = FLT_MIN;
+  int skip_cursor = 0;
   for(int border_index = corner_count * 3; border_index < border_count; border_index++)
   {
+    // A cut span is not shape: its points are the offset curve folded over itself, and the
+    // walks that render the mask never visit them, so the box must not grow to include them.
+    if(skip_cursor < border_skip_count && border_index >= border_skips[skip_cursor].jump_from)
+    {
+      border_index = border_skips[skip_cursor].resume_at - 1;
+      skip_cursor++;
+      continue;
+    }
     // we look at the borders
     const float xx = border_buffer[border_index * 2];
     const float yy = border_buffer[border_index * 2 + 1];
-    if(isnan(xx))
-    {
-     if(isnan(yy)) break; // that means we have to skip the end of the border polygon
-      border_index = yy - 1;
-      continue;
-    }
     xmin = MIN(xx, xmin);
     xmax = MAX(xx, xmax);
     ymin = MIN(yy, ymin);
@@ -2503,12 +2464,13 @@ static void _polygon_bounding_box_raw(const float *const point_buffer, const flo
  */
 static void _polygon_bounding_box(const float *const point_buffer, const float *border_buffer,
                                   const int corner_count, const int point_count, int border_count,
+                                  const dt_masks_skip_range_t *border_skips, const int border_skip_count,
                                   int *width, int *height, int *posx, int *posy)
 {
   // now we want to find the area, so we search min/max points
   float xmin, xmax, ymin, ymax;
   _polygon_bounding_box_raw(point_buffer, border_buffer, corner_count, point_count, border_count,
-                            &xmin, &xmax, &ymin, &ymax);
+                            border_skips, border_skip_count, &xmin, &xmax, &ymin, &ymax);
   *height = ymax - ymin + 4;
   *width = xmax - xmin + 4;
   *posx = xmin - 2;
@@ -2525,24 +2487,29 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   // we get buffers for all points
   float *point_buffer = NULL;
   float *border_buffer = NULL;
+  dt_masks_skip_range_t *border_skips = NULL;
   int point_count = 0;
   int border_count = 0;
+  int border_skip_count = 0;
 
   const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
   if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
-                             &point_buffer, &point_count, &border_buffer, &border_count, get_source) != 0)
+                             &point_buffer, &point_count, &border_buffer, &border_count,
+                             &border_skips, &border_skip_count, get_source) != 0)
   {
     dt_pixelpipe_cache_free_align(point_buffer);
     dt_pixelpipe_cache_free_align(border_buffer);
+    dt_pixelpipe_cache_free_align(border_skips);
     return 1;
   }
 
   const guint corner_count = g_list_length(mask_form->points);
   _polygon_bounding_box(point_buffer, border_buffer, corner_count, point_count, border_count,
-                        width, height, posx, posy);
+                        border_skips, border_skip_count, width, height, posx, posy);
 
   dt_pixelpipe_cache_free_align(point_buffer);
   dt_pixelpipe_cache_free_align(border_buffer);
+  dt_pixelpipe_cache_free_align(border_skips);
   return 0;
 }
 
@@ -2618,15 +2585,19 @@ static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const m
   // we get buffers for all points
   float *point_buffer = NULL;
   float *border_buffer = NULL;
+  dt_masks_skip_range_t *border_skips = NULL;
   int point_count = 0;
   int border_count = 0;
+  int border_skip_count = 0;
   const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
   if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order,
                              DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist, &point_buffer, &point_count,
-                             &border_buffer, &border_count, FALSE) != 0)
+                             &border_buffer, &border_count, &border_skips, &border_skip_count,
+                             FALSE) != 0)
   {
     dt_pixelpipe_cache_free_align(point_buffer);
     dt_pixelpipe_cache_free_align(border_buffer);
+    dt_pixelpipe_cache_free_align(border_skips);
     return DT_MASKS_RASTER_ERROR;
   }
 
@@ -2640,7 +2611,7 @@ static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const m
   // now we want to find the area, so we search min/max points
   const guint corner_count = g_list_length(mask_form->points);
   _polygon_bounding_box(point_buffer, border_buffer, corner_count, point_count, border_count,
-                        width, height, posx, posy);
+                        border_skips, border_skip_count, width, height, posx, posy);
 
   const int hb = *height;
   const int wb = *width;
@@ -2668,6 +2639,7 @@ static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const m
   {
     dt_pixelpipe_cache_free_align(point_buffer);
     dt_pixelpipe_cache_free_align(border_buffer);
+    dt_pixelpipe_cache_free_align(border_skips);
     return DT_MASKS_RASTER_ERROR;
   }
 
@@ -2801,33 +2773,26 @@ static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const m
 
   // now we fill the falloff
   int p0[2] = { 0 }, p1[2] = { 0 };
-  float pf1[2] = { 0.0f };
   int prev0[2] = { 0 }, prev1[2] = { 0 };
   gboolean have_prev = FALSE;
   int last0[2] = { -100, -100 }, last1[2] = { -100, -100 };
-  int next = 0;
+  int skip_cursor = 0;
   for(int i = corner_count * 3; i < border_count; i++)
   {
     p0[0] = point_buffer[i * 2];
     p0[1] = point_buffer[i * 2 + 1];
-    if(next > 0)
-      p1[0] = pf1[0] = border_buffer[next * 2], p1[1] = pf1[1] = border_buffer[next * 2 + 1];
-    else
-      p1[0] = pf1[0] = border_buffer[i * 2], p1[1] = pf1[1] = border_buffer[i * 2 + 1];
 
-    // now we check p1 value to know if we have to skip a part
-    if(next == i) next = 0;
-    while(isnan(pf1[0]))
-    {
-      if(isnan(pf1[1]))
-        next = i - 1;
-      else
-        next = p1[1];
-      p1[0] = pf1[0] = border_buffer[next * 2];
-      p1[1] = pf1[1] = border_buffer[next * 2 + 1];
-    }
+    /* Inside a cut, the border side of every falloff segment collapses to the cut's resume
+     * point: the same segments the in-band jump used to produce, read from a range instead of
+     * decoded out of a NaN slot. */
+    while(skip_cursor < border_skip_count && i >= border_skips[skip_cursor].resume_at) skip_cursor++;
+    const gboolean in_skip
+        = (skip_cursor < border_skip_count && i >= border_skips[skip_cursor].jump_from);
+    const int border_index = in_skip ? border_skips[skip_cursor].resume_at : i;
+    p1[0] = border_buffer[border_index * 2];
+    p1[1] = border_buffer[border_index * 2 + 1];
 
-    const gboolean used_next = (next > 0);
+    const gboolean used_next = in_skip;
 
     if(sparse && have_prev && !used_next
        && (prev0[0] != p0[0] || prev0[1] != p0[1] || prev1[0] != p1[0] || prev1[1] != p1[1]))
@@ -2873,6 +2838,7 @@ static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const m
 
   dt_pixelpipe_cache_free_align(point_buffer);
   dt_pixelpipe_cache_free_align(border_buffer);
+  dt_pixelpipe_cache_free_align(border_skips);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon fill buffer took %0.04f sec\n", mask_form->name,
@@ -3254,20 +3220,24 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
 
   // we get buffers for all points
   float *points = NULL, *border = NULL;
-  int points_count = 0, border_count = 0;
+  dt_masks_skip_range_t *border_skips = NULL;
+  int points_count = 0, border_count = 0, border_skip_count = 0;
   const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
   if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order,
                              DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
-                             &points, &points_count, &border, &border_count, FALSE) != 0)
+                             &points, &points_count, &border, &border_count,
+                             &border_skips, &border_skip_count, FALSE) != 0)
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(border_skips);
     return DT_MASKS_RASTER_ERROR;
   }
   if(points_count <= 2)
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(border_skips);
     return DT_MASKS_RASTER_EMPTY;
   }
 
@@ -3280,19 +3250,15 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
 
   const guint corner_count = g_list_length(mask_form->points);
 
-  // we shift and scale down polygon and border
+  // we shift and scale down polygon and border. Cut spans are scaled too: their points are
+  // valid coordinates (the cuts travel out-of-band now), and every reader below skips the
+  // spans by range, so nothing observes them either way -- while the old skip-during-scaling
+  // left them in IMAGE coordinates, which is what painted the feather from out-of-buffer
+  // positions when a spurious cut appeared (issue #1116).
   for(int i = corner_count * 3; i < border_count; i++)
   {
-    const float xx = border[2 * i];
-    const float yy = border[2 * i + 1];
-    if(isnan(xx))
-    {
-      if(isnan(yy)) break; // that means we have to skip the end of the border polygon
-      i = yy - 1;
-      continue;
-    }
-    border[2 * i] = xx * scale - px;
-    border[2 * i + 1] = yy * scale - py;
+    border[2 * i] = border[2 * i] * scale - px;
+    border[2 * i + 1] = border[2 * i + 1] * scale - py;
   }
   for(int i = corner_count * 3; i < points_count; i++)
   {
@@ -3340,17 +3306,18 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
     }
   }
 
-  // now check if feather is at least partially within roi
+  // now check if feather is at least partially within roi. Cut spans are not feather.
+  int feather_skip_cursor = 0;
   for(int i = corner_count * 3; i < border_count; i++)
   {
-    const float xx = border[i * 2];
-    const float yy = border[i * 2 + 1];
-    if(isnan(xx))
+    if(feather_skip_cursor < border_skip_count && i >= border_skips[feather_skip_cursor].jump_from)
     {
-      if(isnan(yy)) break; // that means we have to skip the end of the border polygon
-      i = yy - 1;
+      i = border_skips[feather_skip_cursor].resume_at - 1;
+      feather_skip_cursor++;
       continue;
     }
+    const float xx = border[i * 2];
+    const float yy = border[i * 2 + 1];
     if(xx > 1 && yy > 1 && xx < width - 2 && yy < height - 2)
     {
       feather_in_roi = 1;
@@ -3363,13 +3330,14 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(border_skips);
     return DT_MASKS_RASTER_EMPTY;
   }
 
   // now get min/max values
   float xmin, xmax, ymin, ymax;
   _polygon_bounding_box_raw(points, border, corner_count, points_count, border_count,
-                            &xmin, &xmax, &ymin, &ymax);
+                            border_skips, border_skip_count, &xmin, &xmax, &ymin, &ymax);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
@@ -3394,6 +3362,7 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
     {
       dt_pixelpipe_cache_free_align(points);
       dt_pixelpipe_cache_free_align(border);
+      dt_pixelpipe_cache_free_align(border_skips);
       return DT_MASKS_RASTER_ERROR;
     }
     memcpy(cpoints, points, sizeof(float) * 2 * points_count);
@@ -3507,46 +3476,36 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
     {
       dt_pixelpipe_cache_free_align(points);
       dt_pixelpipe_cache_free_align(border);
+      dt_pixelpipe_cache_free_align(border_skips);
       return DT_MASKS_RASTER_ERROR;
     }
 
     int dindex = 0;
     int p0[2], p1[2];
-    float pf1[2];
     int prev0[2] = { 0, 0 };
     int prev1[2] = { 0, 0 };
     gboolean have_prev = FALSE;
     int last0[2] = { -100, -100 };
     int last1[2] = { -100, -100 };
-    int next_index = 0;
+    int falloff_skip_cursor = 0;
     for(int i = corner_count * 3; i < border_count; i++)
     {
       p0[0] = floorf(points[i * 2] + 0.5f);
       p0[1] = ceilf(points[i * 2 + 1]);
-      if(next_index > 0)
-      {
-        p1[0] = pf1[0] = border[next_index * 2];
-        p1[1] = pf1[1] = border[next_index * 2 + 1];
-      }
-      else
-      {
-        p1[0] = pf1[0] = border[i * 2];
-        p1[1] = pf1[1] = border[i * 2 + 1];
-      }
 
-      // now we check p1 value to know if we have to skip a part
-      if(next_index == i) next_index = 0;
-      while(isnan(pf1[0]))
-      {
-        if(isnan(pf1[1]))
-          next_index = i - 1;
-        else
-          next_index = p1[1];
-        p1[0] = pf1[0] = border[next_index * 2];
-        p1[1] = pf1[1] = border[next_index * 2 + 1];
-      }
+      /* Inside a cut, the border side of every falloff segment collapses to the cut's resume
+       * point: the same segments the in-band jump used to produce, read from a range instead
+       * of decoded out of a NaN slot. */
+      while(falloff_skip_cursor < border_skip_count
+            && i >= border_skips[falloff_skip_cursor].resume_at)
+        falloff_skip_cursor++;
+      const gboolean in_skip = (falloff_skip_cursor < border_skip_count
+                                && i >= border_skips[falloff_skip_cursor].jump_from);
+      const int border_index = in_skip ? border_skips[falloff_skip_cursor].resume_at : i;
+      p1[0] = border[border_index * 2];
+      p1[1] = border[border_index * 2 + 1];
 
-      const gboolean used_next = (next_index > 0);
+      const gboolean used_next = in_skip;
 
       if(sparse && have_prev && !used_next
          && (prev0[0] != p0[0] || prev0[1] != p0[1] || prev1[0] != p1[0] || prev1[1] != p1[1]))
@@ -3613,6 +3572,7 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
 
   dt_pixelpipe_cache_free_align(points);
   dt_pixelpipe_cache_free_align(border);
+  dt_pixelpipe_cache_free_align(border_skips);
 
   /* The raw bounding box already spans the border samples, so the feather falloff lies inside
    * it too; the margin covers the one-pixel neighbour writes of the falloff stamps. The
