@@ -342,6 +342,12 @@ static gboolean _brush_get_border_handle_resampled(const dt_masks_form_gui_point
     const float px = gui_points->points[i * 2];
     const float py = gui_points->points[i * 2 + 1];
     if(isnan(px) || isnan(py)) continue;
+    /* ... and the BORDER sample at that index has to exist, because that is what gets returned.
+     * The drawn outline blanks the border wherever it doubles back on itself, and a node can sit
+     * opposite such a span -- a cusp does. Choosing the nearest centreline point without looking
+     * at its border, then failing on NaN, costs that node its border handle outright: no dash
+     * drawn, and no hover or drag either, since both interactions resolve through here. */
+    if(isnan(gui_points->border[i * 2]) || isnan(gui_points->border[i * 2 + 1])) continue;
 
     const float dx = node_x - px;
     const float dy = node_y - py;
@@ -1370,6 +1376,26 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
   *distance = min_dist;
 }
 
+
+/** longest span first; ties broken by position so the order is deterministic */
+static int _skip_range_cmp_span(const void *a, const void *b)
+{
+  const dt_masks_skip_range_t *const x = (const dt_masks_skip_range_t *)a;
+  const dt_masks_skip_range_t *const y = (const dt_masks_skip_range_t *)b;
+  const int sx = x->resume_at - x->jump_from;
+  const int sy = y->resume_at - y->jump_from;
+  if(sx != sy) return (sx > sy) ? -1 : 1;
+  return (x->jump_from < y->jump_from) ? -1 : (x->jump_from > y->jump_from);
+}
+
+static int _skip_range_cmp_fwd(const void *a, const void *b)
+{
+  const dt_masks_skip_range_t *const x = (const dt_masks_skip_range_t *)a;
+  const dt_masks_skip_range_t *const y = (const dt_masks_skip_range_t *)b;
+  if(x->jump_from != y->jump_from) return (x->jump_from < y->jump_from) ? -1 : 1;
+  return (x->resume_at < y->resume_at) ? -1 : (x->resume_at > y->resume_at);
+}
+
 static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                     float **point_buffer, int *point_count,
                                     float **border_buffer, int *border_count,
@@ -1399,6 +1425,103 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
   if(status == 0 && !IS_NULL_PTR(border_buffer) && !IS_NULL_PTR(*border_buffer)
      && !IS_NULL_PTR(border_skips) && !IS_NULL_PTR(*border_skips) && !IS_NULL_PTR(border_skip_count))
   {
+    /* Ask the shared detector where the outline crosses itself, and cut exactly there.
+     *
+     * The three attempts before this one all searched around the JOINTS, on the theory that a
+     * fold is something a corner does. Two measurements killed that: the two strands that cross
+     * at a fold sit half the buffer apart, so a local window cannot see both; and a fold needs
+     * no corner at all -- where a smooth segment curves tighter than its own radius the inner
+     * offset loops on its own, and on this brush one such crossing (samples 16807 x 17893) sat a
+     * thousand samples from the nearest joint. Every local rule got some joints right and
+     * invented a new artefact at others: chords straight across the stroke at five nodes, the
+     * outline vanishing at the widest one, node-centred circles at three more.
+     *
+     * dt_masks_border_find_self_intersections() answers the actual question over the whole
+     * contour at once. It is the polygon's detector, moved to masks.c unchanged and shared --
+     * the brush had no equivalent, which is why this took four tries to notice. */
+    const int header = (int)g_list_length(mask_form->points) * 3;
+    /* Generous, because one geometric crossing yields MANY probe-pair hits at quarter-pixel
+     * spacing -- the segments either side of it all cross their opposite numbers. A tight cap
+     * is not a budget, it is a truncation: the scan walks the contour in order, so exhausting
+     * it on the first few crossings means the rest of the shape is never examined at all.
+     * Measured at 4096: five cuts made and seven real crossings left drawn. The greedy pass
+     * below collapses the duplicates, so the only cost of a large cap is the scratch buffer. */
+    const int max_pairs = 1 << 16;
+    float *const crossings = (float *)malloc(sizeof(float) * 2 * (size_t)max_pairs);
+    *border_skip_count = 0;
+
+    if(!IS_NULL_PTR(crossings))
+    {
+      const int found = dt_masks_border_find_self_intersections(*border_buffer, *border_count,
+                                                                header, crossings, max_pairs);
+      if(found > 0)
+      {
+        /* Size the output to what the DETECTOR found, not to whatever the producer happened to
+         * allocate: the two counts are unrelated, and the normaliser writes one range per pair. */
+        dt_pixelpipe_cache_free_align(*border_skips);
+        *border_skips
+            = dt_pixelpipe_cache_alloc_align_cache(sizeof(dt_masks_skip_range_t) * found, 0);
+
+        /* Select DISJOINT ranges, SHORTEST FIRST, and never merge them.
+         *
+         * Two rules, and both were learned by watching the outline break.
+         *
+         * Do not merge. dt_masks_skip_ranges_build() merges overlaps, which is right for the
+         * hit-test walk -- it only needs a traversal that moves forward and terminates -- and
+         * wrong for drawing. Each crossing pair names two samples that ARE the same point, so
+         * cutting between them leaves the outline closed; the union of two overlapping pairs
+         * names two samples that are not, and the drawer spans the gap with a straight chord.
+         * Measured after a merge: cuts leaving 105, 170 and 73 pixel gaps, one chord across the
+         * stroke each.
+         *
+         * LONGEST first, under a cap. Three orderings were tried and the first two are traps.
+         * By position: one 10035-sample span won and blocked every genuine fold inside it,
+         * erasing the inner border at the cusp. Shortest first: the opposite failure -- a tiny
+         * crossing NESTED inside a real loop wins and blocks it, leaving 30 and 14 pixel kinks
+         * on the concave stretch. Nested loops want the OUTER one removed, since it subsumes
+         * the inner, so the order is longest first.
+         *
+         * What makes that safe is the cap. The detector also pairs the two SIDES of the stroke
+         * where they meet, which is not a loop to remove at all, and those pairings are huge --
+         * 41253 samples of a 52492-sample contour on this brush, against 3180 for the largest
+         * real fold. An eighth of the contour separates the two populations by an order of
+         * magnitude and needs no tuning. */
+        if(!IS_NULL_PTR(*border_skips))
+        {
+          dt_masks_skip_range_t *const out = *border_skips;
+          int kept = 0;
+          for(int i = 0; i < found; i++)
+          {
+            const int lo = (int)crossings[i * 2];
+            const int hi = (int)crossings[i * 2 + 1];
+            if(lo < 0 || hi <= lo || hi >= *border_count) continue;
+            if(hi - lo > *border_count - (hi - lo)) continue;   // names the fold's complement
+            if(hi - lo > *border_count / 8) continue;           // the two sides meeting, not a fold
+            out[kept].jump_from = lo;
+            out[kept].resume_at = hi;
+            kept++;
+          }
+          qsort(out, kept, sizeof(dt_masks_skip_range_t), _skip_range_cmp_span);
+
+          int accepted = 0;
+          for(int i = 0; i < kept; i++)
+          {
+            gboolean clashes = FALSE;
+            for(int j = 0; j < accepted && !clashes; j++)
+              clashes = (out[i].jump_from < out[j].resume_at && out[j].jump_from < out[i].resume_at);
+            if(clashes) continue;
+            const dt_masks_skip_range_t take = out[i];
+            out[accepted++] = take;
+          }
+          /* the blanking pass walks forward, so hand it sorted ranges */
+          qsort(out, accepted, sizeof(dt_masks_skip_range_t), _skip_range_cmp_fwd);
+          *border_skip_count = accepted;
+        }
+      }
+      free(crossings);
+    }
+
+
     for(int i = 0; i < *border_skip_count; i++)
     {
       const int from = (*border_skips)[i].jump_from;
@@ -2370,17 +2493,32 @@ static void _brush_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float
     double last_x = points[start_idx * 2];
     double last_y = points[start_idx * 2 + 1];
 
+    /* A NaN run is a HOLE in the outline, not a shortcut across it. Skipping the samples with
+     * the pen still down makes the next valid point a line_to, so every blanked span comes out
+     * as a straight chord -- at a cusp, a chord slicing across the rounded tip the stroke
+     * actually has. Lift the pen instead: begin a new sub-path at the first sample after the
+     * run, so the span is simply absent. Stroking a path of several sub-paths is free. */
+    gboolean pen_down = TRUE;
+
     for(int i = start_idx + 1; i < end_idx; i++)
     {
       const double x = points[i * 2];
       const double y = points[i * 2 + 1];
-      if(isnan(x) || isnan(y)) continue;
+      if(isnan(x) || isnan(y)) { pen_down = FALSE; continue; }
 
       const double step_x = x - last_x;
       const double step_y = y - last_y;
-      if((step_x * step_x + step_y * step_y) < min_step2) continue;
+      /* the decimation must not apply across a lifted pen: the new sub-path has to start
+       * somewhere, however close it landed to where the old one stopped */
+      if(pen_down && (step_x * step_x + step_y * step_y) < min_step2) continue;
 
-      cairo_line_to(cr, x, y);
+      if(pen_down)
+        cairo_line_to(cr, x, y);
+      else
+      {
+        cairo_move_to(cr, x, y);
+        pen_down = TRUE;
+      }
       last_x = x;
       last_y = y;
     }
@@ -2390,7 +2528,12 @@ static void _brush_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float
     {
       const double x = points[(end_idx - 1) * 2];
       const double y = points[(end_idx - 1) * 2 + 1];
-      if(!isnan(x) && !isnan(y) && (x != last_x || y != last_y)) cairo_line_to(cr, x, y);
+      if(!isnan(x) && !isnan(y) && (x != last_x || y != last_y))
+      {
+        // ... but not across a hole, for the same reason as above
+        if(pen_down) cairo_line_to(cr, x, y);
+        else         cairo_move_to(cr, x, y);
+      }
     }
   }
 }
