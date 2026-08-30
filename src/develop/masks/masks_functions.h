@@ -161,6 +161,17 @@ dt_masks_raster_result_t dt_masks_get_points_border(struct dt_develop_t *dev, dt
                                dt_masks_skip_range_t **border_skips, int *border_skip_count,
                                int source, dt_iop_module_t *module);
 
+/** Find every place a shape's closed border contour crosses itself, writing one (i, j) sample-
+ * index pair per crossing into @p crossing_pairs (2 floats each, at most @p max_pairs pairs) and
+ * returning how many were written. @p header is where the border samples start, past the shape's
+ * per-node header triplets. Feed the result to dt_masks_skip_ranges_build().
+ *
+ * Exact (segment intersection over a spatial hash), unlike polygon.c's own pixel-grid detector,
+ * and the reported indices sit AT the crossing so a cut made between them closes. */
+int dt_masks_border_find_self_intersections(const float *const border, const int border_count,
+                                            const int header, float *const crossing_pairs,
+                                            const int max_pairs);
+
 /**
  * @brief Turn the self-intersection detector's raw crossing pairs into the disjoint,
  * forward-only skip ranges every border walk consumes. Pure, allocation-free.

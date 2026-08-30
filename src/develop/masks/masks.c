@@ -238,6 +238,178 @@ static int _skip_range_cmp(const void *a, const void *b)
   return (va > vb) - (va < vb);
 }
 
+/* ------------------------------------------------------------------------------------- */
+/* Where does a shape's border cross itself?
+ *
+ * polygon.c has answered this since forever with a pixel grid: walk the contour, stamp each cell
+ * with the index that passed through it, and call a revisited cell a crossing. That works well
+ * enough there and is left alone -- but it is an approximation with shape-specific guards (it
+ * refuses any span containing a shape extremum, and merges a new crossing into the previous one
+ * on an index-ordering test), and measured against ground truth on issue #1313's brush it missed
+ * four of the eight real crossings while finding one the local search could not.
+ *
+ * A brush needs all of them, so this answers the question exactly: bucket the segments into a
+ * coarse spatial hash, and run a real segment-segment intersection on the pairs that share a
+ * bucket. No extrema guard, no merge heuristic, and the intersection POINT falls out of the
+ * test, which is what lets the caller land its cut on the samples that sit at the crossing --
+ * cutting anywhere else leaves the two ends apart and the drawer spans the gap with a chord.
+ *
+ * Complexity is the hash's, not O(n^2): the contour is decimated to about one probe per pixel
+ * first, and only same-bucket pairs are tested. Polygon should migrate here once someone is
+ * willing to re-verify its output against the grid version; until then the two coexist
+ * deliberately, and this comment is the record of why.
+ */
+
+#define MASKS_XSECT_BUCKET 4      /* px */
+
+/** Do the two segments properly cross, and where? Endpoint touches do not count. */
+static gboolean _segments_cross(const float *a0, const float *a1, const float *b0, const float *b1,
+                                float *out_x, float *out_y)
+{
+  const float rx = a1[0] - a0[0], ry = a1[1] - a0[1];
+  const float sx = b1[0] - b0[0], sy = b1[1] - b0[1];
+  const float denom = rx * sy - ry * sx;
+  if(fabsf(denom) < 1e-12f) return FALSE;
+
+  const float qpx = b0[0] - a0[0], qpy = b0[1] - a0[1];
+  const float t = (qpx * sy - qpy * sx) / denom;
+  const float u = (qpx * ry - qpy * rx) / denom;
+  if(t <= 0.0f || t >= 1.0f || u <= 0.0f || u >= 1.0f) return FALSE;
+
+  *out_x = a0[0] + t * rx;
+  *out_y = a0[1] + t * ry;
+  return TRUE;
+}
+
+int dt_masks_border_find_self_intersections(const float *const border, const int border_count,
+                                            const int header, float *const crossing_pairs,
+                                            const int max_pairs)
+{
+  if(IS_NULL_PTR(border) || IS_NULL_PTR(crossing_pairs) || max_pairs <= 0) return 0;
+  if(border_count - header < 8) return 0;
+
+  /* Decimate, but only to a QUARTER pixel. The border is sampled at raw-image resolution --
+   * about 13 samples per pixel on a full-size brush -- so testing every sample against every
+   * other is wasteful; but decimating to a whole pixel smooths the small loops away entirely.
+   * Measured: at one probe per pixel, four real crossings spanning 7 to 17 pixels went unseen,
+   * and each of them is a visible kink in the drawn outline. */
+  int *probes = (int *)malloc(sizeof(int) * (size_t)(border_count - header));
+  if(IS_NULL_PTR(probes)) return 0;
+
+  int n = 0;
+  int previous = -1;
+  for(int i = header; i < border_count; i++)
+  {
+    if(isnan(border[i * 2]) || isnan(border[i * 2 + 1])) continue;
+    if(previous >= 0)
+    {
+      const float dx = border[i * 2] - border[previous * 2];
+      const float dy = border[i * 2 + 1] - border[previous * 2 + 1];
+      if(dx * dx + dy * dy < 0.0625f) continue;   // (0.25 px)^2
+    }
+    probes[n++] = i;
+    previous = i;
+  }
+  if(n < 8) { free(probes); return 0; }
+
+  /* Bucket every probe segment by the cells its bounding box covers. A hash keyed on the cell
+   * coordinates keeps this independent of where the shape sits and of how large the image is --
+   * a grid over the bounding box would be tens of megabytes for a stroke across a 50 Mpx frame. */
+  const int buckets = 1 << 14;
+  int *heads = (int *)malloc(sizeof(int) * buckets);
+  int *next = (int *)malloc(sizeof(int) * (size_t)(n * 4));
+  int *owner = (int *)malloc(sizeof(int) * (size_t)(n * 4));
+  if(IS_NULL_PTR(heads) || IS_NULL_PTR(next) || IS_NULL_PTR(owner))
+  {
+    free(probes); free(heads); free(next); free(owner);
+    return 0;
+  }
+  for(int i = 0; i < buckets; i++) heads[i] = -1;
+
+  int entries = 0;
+  int found = 0;
+
+  for(int k = 0; k + 1 < n && found < max_pairs; k++)
+  {
+    const float ax = border[probes[k] * 2],     ay = border[probes[k] * 2 + 1];
+    const float bx = border[probes[k + 1] * 2], by = border[probes[k + 1] * 2 + 1];
+
+    const int cx0 = (int)floorf(MIN(ax, bx) / MASKS_XSECT_BUCKET);
+    const int cx1 = (int)floorf(MAX(ax, bx) / MASKS_XSECT_BUCKET);
+    const int cy0 = (int)floorf(MIN(ay, by) / MASKS_XSECT_BUCKET);
+    const int cy1 = (int)floorf(MAX(ay, by) / MASKS_XSECT_BUCKET);
+    /* A segment spanning many cells means the contour jumped; it is not worth indexing widely. */
+    if((cx1 - cx0) > 4 || (cy1 - cy0) > 4) continue;
+
+    for(int cy = cy0; cy <= cy1; cy++)
+      for(int cx = cx0; cx <= cx1; cx++)
+      {
+        const unsigned int h = ((unsigned int)(cx * 73856093) ^ (unsigned int)(cy * 19349663))
+                               & (unsigned int)(buckets - 1);
+        /* test against everything already in this bucket ... */
+        for(int e = heads[h]; e >= 0 && found < max_pairs; e = next[e])
+        {
+          const int j = owner[e];
+          if(k - j < 8) continue;   // ~2 px apart: nearer than that they share an endpoint
+
+          /* A loop closes in one of two ways, and only testing for one of them leaves the
+           * other drawn. Two strands that CROSS meet transversally -- that is the fold. An arc
+           * that sweeps all the way round a node comes back to its own starting point and meets
+           * it TANGENTIALLY: no crossing, and yet it plainly encloses a loop. Those are the
+           * node-centred circles that appear over the stroke when the arcs are left in.
+           *
+           * The near-return test costs nothing here, since the two probes are already in hand
+           * and already known to share a bucket. It cannot fire on the two sides of a stroke
+           * approaching each other, because the caller only accepts short spans and a stroke
+           * that thin has no interior to protect anyway. */
+          float ix = 0.0f, iy = 0.0f;
+          if(!_segments_cross(&border[probes[j] * 2], &border[probes[j + 1] * 2],
+                              &border[probes[k] * 2], &border[probes[k + 1] * 2], &ix, &iy))
+          {
+            const float dx = border[probes[k] * 2] - border[probes[j] * 2];
+            const float dy = border[probes[k] * 2 + 1] - border[probes[j] * 2 + 1];
+            if(dx * dx + dy * dy > 2.25f) continue;    // (1.5 px)^2
+            ix = border[probes[j] * 2];
+            iy = border[probes[j] * 2 + 1];
+          }
+
+          /* Report the SAMPLES nearest the intersection, not the probes bracketing it: a cut
+           * has to land on the crossing itself or its two ends do not meet. */
+          int lo = probes[j], hi = probes[k];
+          float lo_d2 = FLT_MAX, hi_d2 = FLT_MAX;
+          for(int t = probes[j]; t <= probes[j + 1]; t++)
+          {
+            if(isnan(border[t * 2])) continue;
+            const float d2 = sqf(border[t * 2] - ix) + sqf(border[t * 2 + 1] - iy);
+            if(d2 < lo_d2) { lo_d2 = d2; lo = t; }
+          }
+          for(int t = probes[k]; t <= probes[k + 1]; t++)
+          {
+            if(isnan(border[t * 2])) continue;
+            const float d2 = sqf(border[t * 2] - ix) + sqf(border[t * 2 + 1] - iy);
+            if(d2 < hi_d2) { hi_d2 = d2; hi = t; }
+          }
+          if(hi <= lo + 1) continue;
+
+          crossing_pairs[found * 2] = (float)lo;
+          crossing_pairs[found * 2 + 1] = (float)hi;
+          found++;
+        }
+        /* ... then add ourselves, so each pair is tested exactly once */
+        if(entries < n * 4)
+        {
+          owner[entries] = k;
+          next[entries] = heads[h];
+          heads[h] = entries;
+          entries++;
+        }
+      }
+  }
+
+  free(probes); free(heads); free(next); free(owner);
+  return found;
+}
+
 int dt_masks_skip_ranges_build(const float *crossing_pairs, const int pair_count, const int point_count,
                                dt_masks_skip_range_t *out, int *dropped_wrapping)
 {
