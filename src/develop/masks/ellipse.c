@@ -1131,23 +1131,6 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
 }
 
-static void _bounding_box(const float *const points, int num_points, int *width, int *height, int *posx, int *posy)
-{
-  // search for min/max X and Y coordinates
-  float xmin = FLT_MAX, xmax = FLT_MIN, ymin = FLT_MAX, ymax = FLT_MIN;
-  for(int i = 1; i < num_points; i++) // skip point[0], which is circle's center
-  {
-    xmin = fminf(points[i * 2], xmin);
-    xmax = fmaxf(points[i * 2], xmax);
-    ymin = fminf(points[i * 2 + 1], ymin);
-    ymax = fmaxf(points[i * 2 + 1], ymax);
-  }
-  // set the min/max values we found
-  *posx = xmin;
-  *posy = ymin;
-  *width = (xmax - xmin);
-  *height = (ymax - ymin);
-}
 
 static void _fill_mask(const size_t numpoints, float *const bufptr, const float *const points,
                        const float *const center, const float a, const float b, const float ta, const float tb,
@@ -1291,7 +1274,7 @@ static dt_masks_raster_result_t _ellipse_get_source_area(dt_iop_module_t *module
   }
 
   // finally, find the extreme left/right and top/bottom points
-  _bounding_box(points, point_count, width, height, posx, posy);
+  dt_masks_points_bounding_box(points, point_count, width, height, posx, posy);
   dt_pixelpipe_cache_free_align(points);
   return DT_MASKS_RASTER_OK;
 }
@@ -1329,7 +1312,7 @@ static dt_masks_raster_result_t _ellipse_get_area(const dt_iop_module_t *const m
   }
 
   // finally, find the extreme left/right and top/bottom points
-  _bounding_box(points, point_count, width, height, posx, posy);
+  dt_masks_points_bounding_box(points, point_count, width, height, posx, posy);
   dt_pixelpipe_cache_free_align(points);
   return DT_MASKS_RASTER_OK;
 }
@@ -1572,39 +1555,13 @@ static dt_masks_raster_result_t _ellipse_get_mask_roi(const dt_iop_module_t *con
   if(bbw <= 1 || bbh <= 1)
     return DT_MASKS_RASTER_EMPTY;
 
-  float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * bbw * bbh, 0);
+  const dt_masks_sample_grid_t sample_grid
+      = { .x0 = bbxm, .y0 = bbym, .width = bbw, .height = bbh,
+          .step = grid, .px = px, .py = py, .iscale = iscale };
+  float *points
+      = dt_masks_sample_grid_backtransform(pipe, module->iop_order, &sample_grid, "ellipse", form->name);
   if(IS_NULL_PTR(points)) return DT_MASKS_RASTER_ERROR;
-
-  // we populate the grid points in module coordinates
-  __OMP_PARALLEL_FOR__(collapse(2) if((size_t)bbw * bbh > 50000))
-  for(int j = bbym; j <= bbYM; j++)
-    for(int i = bbxm; i <= bbXM; i++)
-    {
-      const size_t index = (size_t)(j - bbym) * bbw + i - bbxm;
-      points[index * 2] = (grid * i + px) * iscale;
-      points[index * 2 + 1] = (grid * j + py) * iscale;
-    }
-
-  if(dt_get_debug_flags() & DT_DEBUG_PERF)
-  {
-    dt_print(DT_DEBUG_MASKS, "[masks %s] ellipse grid took %0.04f sec\n", form->name, dt_get_wtime() - start2);
-    start2 = dt_get_wtime();
-  }
-
-  // we back transform all these points to the input image coordinates
-  if(!dt_dev_distort_backtransform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
-                                        (size_t)bbw * bbh))
-  {
-    dt_pixelpipe_cache_free_align(points);
-    return DT_MASKS_RASTER_ERROR;
-  }
-
-  if(dt_get_debug_flags() & DT_DEBUG_PERF)
-  {
-    dt_print(DT_DEBUG_MASKS, "[masks %s] ellipse transform took %0.04f sec\n", form->name,
-             dt_get_wtime() - start2);
-    start2 = dt_get_wtime();
-  }
+  start2 = dt_get_wtime();
 
   // we calculate the mask values at the transformed points;
   // re-use the points array for results; this requires out_scale==1 to double the offsets at which they are stored

@@ -918,7 +918,55 @@ int main(int argc, char *argv[])
     g_list_free_full(form.points, free);
   }
 
-  /* 5. A circle, as the control: no joints, no folds. If this ever grows a hole the fault is
+  /* 5. The two shapes the corpus had no case for at all. A circle is a degenerate ellipse and
+   *    the two files share most of their rasteriser by copy-paste, so anything factored out of
+   *    one has to be answerable for in the other -- and until now only the circle was covered.
+   *    Both are rotated and non-axis-aligned on purpose: an axis-aligned ellipse hides a whole
+   *    class of transform error, and a gradient at 0 or 90 degrees hides another. */
+  {
+    dt_masks_form_t form = { 0 };
+    form.type = DT_MASKS_ELLIPSE;
+    form.functions = &dt_masks_functions_ellipse;
+    form.version = 6;
+    form.formid = 107;
+    g_strlcpy(form.name, "ellipse", sizeof(form.name));
+    dt_masks_node_ellipse_t *e = (dt_masks_node_ellipse_t *)calloc(1, sizeof(dt_masks_node_ellipse_t));
+    e->center[0] = 0.42f;
+    e->center[1] = 0.55f;
+    e->radius[0] = 0.20f;
+    e->radius[1] = 0.09f;
+    e->rotation = 27.0f;
+    e->border = 0.04f;
+    e->flags = DT_MASKS_ELLIPSE_EQUIDISTANT;
+    form.points = g_list_append(form.points, e);
+    _run_case(&dev, &form, "ellipse-rotated", dir, 0, 0);
+    g_list_free_full(form.points, free);
+  }
+
+  {
+    dt_masks_form_t form = { 0 };
+    form.type = DT_MASKS_GRADIENT;
+    form.functions = &dt_masks_functions_gradient;
+    form.version = 6;
+    form.formid = 108;
+    g_strlcpy(form.name, "gradient", sizeof(form.name));
+    dt_masks_anchor_gradient_t *g
+        = (dt_masks_anchor_gradient_t *)calloc(1, sizeof(dt_masks_anchor_gradient_t));
+    g->center[0] = 0.5f;
+    g->center[1] = 0.5f;
+    g->rotation = 34.0f;
+    g->extent = 0.12f;
+    g->steepness = 0.0f;
+    g->curvature = 0.3f;
+    g->state = DT_MASKS_GRADIENT_STATE_SIGMOIDAL;
+    form.points = g_list_append(form.points, g);
+    /* A gradient covers the frame edge to edge, so "enclosed holes" is the only thing to assert
+     * and coverage is whatever the ramp gives; the baseline is what actually pins its shape. */
+    _run_case(&dev, &form, "gradient-curved", dir, 0, 0);
+    g_list_free_full(form.points, free);
+  }
+
+  /* 6. A circle, as the control: no joints, no folds. If this ever grows a hole the fault is
    *    in the fill, not in any of the geometry above. */
   {
     dt_masks_form_t form = { 0 };
