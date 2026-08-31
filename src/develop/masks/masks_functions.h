@@ -204,6 +204,26 @@ float *dt_masks_sample_grid_backtransform(struct dt_dev_pixelpipe_t *pipe, const
                                           const dt_masks_sample_grid_t *const grid,
                                           const char *const shape, const char *const form_name);
 
+
+/** Largest cell spacing any caller of the sample-grid helpers may ask for.
+ *
+ * The ROI rasterisers clamp their step to 4; `_gradient_get_mask()` uses a fixed 8. The
+ * interpolator sizes its per-cell weight tables from this, so a caller wanting a coarser grid
+ * must raise it here rather than locally. */
+#define DT_MASKS_GRID_MAX_STEP 8
+
+/** Bilinear expansion of a coarse grid of mask values back to full ROI resolution.
+ *
+ * `points` is the buffer `dt_masks_sample_grid_backtransform()` returned, with each cell's mask
+ * value written over its x coordinate (that is, at `points[index * 2]`) -- every shape evaluates
+ * in place like that, so the interpolator reads the same stride whatever the shape.
+ *
+ * Writes into `buffer` over the rectangle the grid covers, clipped to the buffer, and reports the
+ * exclusive end of that rectangle through `endx`/`endy` for callers that go on to mark the
+ * touched box. */
+void dt_masks_sample_grid_interpolate(const float *const points, const dt_masks_sample_grid_t *const grid,
+                                      float *const buffer, const int buf_width, const int buf_height,
+                                      int *const endx, int *const endy);
 /**
  * @brief Turn the self-intersection detector's raw crossing pairs into the disjoint,
  * forward-only skip ranges every border walk consumes. Pure, allocation-free.
