@@ -1138,6 +1138,62 @@ are now refcounted (`dt_masks_form_t.refcount`, `src/develop/masks/masks_history
   already guarantees a GUI-side edit clones instead of mutating a form an in-flight pipeline run
   is holding.
 
+### The unused-shape sweep's used-set is not a subset of the snapshot it sweeps
+
+"Delete unused shapes" in the shape manager (`libs/masks.c`, `dt_masks_cleanup_unused()`) keeps a
+form when some history entry's `blend_params->mask_id` names it, or names a group that
+transitively contains it. Those ids are collected by walking history from the bottom up, and they
+are **not** a subset of the `hist->forms` snapshot being swept: a module whose drawn mask was
+since dropped keeps its old `mask_id` in every history entry it ever wrote, and no form in a
+later snapshot answers to it. The set is therefore unbounded with respect to the snapshot, and
+must live in a hash set — `_cleanup_unused_recurs()` sizing a table on `g_list_length(forms)`
+filled it with ids that match nothing and ran out of slots before the one live group's membership
+was walked, deleting shapes from the tail of that group inward while the module was still using
+them. Measured on a 20-step history: four departed groups (`colorbalancergb`, two `toneequal`, an
+older `exposure`) took four of the eight slots an 8-form snapshot allowed, the live group and its
+first three members took the rest, and the group's last two shapes were swept.
+
+Marking an id and recursing into it are now the same step, which also bounds a group that
+contains itself through a chain of member groups — the old code broke out of its scan on an
+already-seen id but recursed regardless, so such a cycle did not terminate.
+
+A swept form's snapshot reference is **handed to `dev->allforms`**, not released: a form read back
+from `masks_history` is built by `dt_masks_create()` and its snapshot membership is its only
+claim, so unref-ing at that point would free an object `dev->forms` may still hold by address. One
+`allforms` entry per transferred claim is what keeps teardown balanced; do not "fix" the missing
+unref.
+
+The sweep is history-wide by necessity: `main.masks_history` stores one row per (history step,
+form), so a shape only really leaves the database once **every** snapshot has stopped naming it —
+hence the rewrite of every `hist->forms` in place, after which `dev->forms` is re-pointed at the
+topmost surviving snapshot.
+
+That is still undoable, and the menu handler opens the undo record itself, **before** the sweep.
+`dt_dev_add_history_item()` opens one of its own, but by then every snapshot has been rewritten
+and the "before" state it would capture is the swept one; `dt_dev_history_undo_start_record()`'s
+depth counter makes the inner pair a no-op, so the recorded pair spans the whole operation. What
+makes the restore work is that `dt_history_duplicate()` copies each item's forms **list**
+(`g_list_copy` plus one reference per form) instead of aliasing it: the record owns its own
+cells, the sweep's `g_list_remove()` on the live items cannot reach them, and every swept shape
+stays alive as long as the record holds it. `_pop_undo()` rewrites the database from the restored
+history, so the `masks_history` rows come back too. Measured round trip on one image:
+65 rows / 23 forms → 70 / 22 after the sweep → 65 / 23 after undo, the swept shape restored and
+nothing else moved.
+
+That rewrite is in-memory only. `main.history` and `main.masks_history` are deleted and
+re-inserted wholesale from `dev->history` by `_write_history_from_state()`, and nothing on this
+path triggers it — so the menu handler commits a mask-manager history entry
+(`dt_dev_add_history_item(dev, NULL, FALSE, TRUE)`) after the sweep, the way every other forms
+mutation in `libs/masks.c` must. Without it the swept shapes stay in the database and come back
+on the next read, and the pipeline never resyncs. Measured on a 20-step history: 60 rows / 24
+forms before, 58 / 22 after, with exactly the two orphans gone and one extra history step.
+
+The sweep also takes `dev->history_mutex` as **writer** for its whole span. The async DB write
+job walks `hist->forms` with the lock released; its snapshot references keep each history *item*
+alive but say nothing about the list cells `g_list_remove()` frees under it. Order is
+`history_mutex` outer, `masks_mutex` (taken by `dt_masks_replace_current_forms()`) inner — the
+same way a history commit takes them.
+
 ### A form mutation that never reaches a history commit is invisible to undo/redo
 
 `dt_dev_add_history_item_ext()` (`dev_history.c`) is the only place that turns the current
