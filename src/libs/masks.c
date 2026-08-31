@@ -454,10 +454,33 @@ static void _set_iter_name(dt_lib_masks_t *lm, dt_masks_form_t *form, int state,
                      (!IS_NULL_PTR(icop)), TREE_IC_INVERSE, icinv, TREE_IC_INVERSE_VISIBLE, (!IS_NULL_PTR(icinv)), -1);
 }
 
-static void _tree_cleanup(GtkButton *button, dt_lib_module_t *self)
+static void _tree_delete_unused(GtkButton *button, dt_lib_module_t *self)
 {
-  dt_masks_cleanup_unused(dt_dev_get_global());
+  dt_develop_t *dev = dt_dev_get_global();
+
+  /* The undo record has to be opened HERE, before the sweep. dt_dev_add_history_item() below
+   * opens one of its own, but by then every hist->forms has been rewritten in place and the
+   * "before" state it captures is the swept one. dt_dev_history_undo_start_record()'s depth
+   * counter makes that inner pair a no-op, so the recorded before/after spans the whole
+   * operation.
+   *
+   * What makes the restore work is that dt_history_duplicate() copies each item's forms LIST
+   * (g_list_copy plus one reference per form) rather than aliasing it: the snapshot owns its
+   * own cells, the sweep's g_list_remove() on the live items cannot reach them, and every
+   * swept shape stays alive as long as the record holds it. _pop_undo() rewrites the database
+   * from the restored history, so undoing puts the masks_history rows back too. */
+  dt_dev_undo_start_record(dev);
+
+  dt_masks_cleanup_unused(dev);
   _lib_masks_recreate_list(self);
+
+  // The sweep only rewrote the in-memory snapshots. main.history and main.masks_history are
+  // rewritten wholesale from dev->history by the write a commit triggers, so without one the
+  // deleted shapes stay in the database and come back on the next read -- and, like every other
+  // forms mutation here, the deletion is never recorded as its own history step.
+  dt_dev_add_history_item(dev, NULL, FALSE, TRUE);
+
+  dt_dev_undo_end_record(dev);
 }
 
 static void _add_masks_history_item(dt_lib_masks_t *lm)
@@ -1000,8 +1023,8 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
     gtk_menu_shell_append(menu, item);
   }
 
-  item = gtk_menu_item_new_with_label(_("Cleanup unused shapes"));
-  g_signal_connect(item, "activate", (GCallback)_tree_cleanup, self);
+  item = gtk_menu_item_new_with_label(_("Delete unused shapes"));
+  g_signal_connect(item, "activate", (GCallback)_tree_delete_unused, self);
   gtk_menu_shell_append(menu, item);
   
   return GTK_WIDGET(menu);

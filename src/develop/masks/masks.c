@@ -1694,21 +1694,22 @@ uint64_t dt_masks_form_get_own_hash(uint64_t hash, GList *masks, const dt_masks_
   return hash;
 }
 
-// adds formid to used array
-// if formid is a group it adds all the forms that belongs to that group
-static void _cleanup_unused_recurs(GList *form_list, int form_id, int *used_form_ids, int used_count)
+/* Marks form_id as used, and every form a group transitively contains.
+ *
+ * The set is unbounded on purpose. Its members are not a subset of form_list: every
+ * blend_params->mask_id ever recorded in history is fed in, groups of modules whose mask was
+ * since dropped included, and those ids have no form to match in the snapshot being cleaned.
+ * A fixed table sized on the snapshot's form count therefore fills up on ids that answer
+ * nothing, and the members discovered last -- the tail of the one group that IS live -- find no
+ * slot left and are silently taken for unused. Measured on a 20-step history: four departed
+ * groups ate the eight slots an 8-form snapshot allowed, and the two last shapes of the module's
+ * own mask group were deleted while the module was still using them.
+ *
+ * Re-entering an already-marked id also stops the walk here rather than after it: a group that
+ * contains itself through some chain of member groups would otherwise not terminate. */
+static void _cleanup_unused_recurs(GList *form_list, int form_id, GHashTable *used_form_ids)
 {
-  // first, we search for the formid in used table
-  for(int used_index = 0; used_index < used_count; used_index++)
-  {
-    if(used_form_ids[used_index] == 0)
-    {
-      // we store the formid
-      used_form_ids[used_index] = form_id;
-      break;
-    }
-    if(used_form_ids[used_index] == form_id) break;
-  }
+  if(!g_hash_table_add(used_form_ids, GINT_TO_POINTER(form_id))) return;
 
   // if the form is a group, we iterate through the sub-forms
   dt_masks_form_t *mask_form = dt_masks_get_from_id_ext(form_list, form_id);
@@ -1717,7 +1718,7 @@ static void _cleanup_unused_recurs(GList *form_list, int form_id, int *used_form
     for(GList *group_node = mask_form->points; group_node; group_node = g_list_next(group_node))
     {
       dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)group_node->data;
-      _cleanup_unused_recurs(form_list, group_entry->formid, used_form_ids, used_count);
+      _cleanup_unused_recurs(form_list, group_entry->formid, used_form_ids);
     }
   }
 }
@@ -1728,9 +1729,8 @@ static int _masks_cleanup_unused(dt_develop_t *dev, GList **forms_list, GList *h
   int masks_removed = 0;
   GList *forms = *forms_list;
 
-  // we create a table to store the ids of used forms
-  guint form_count = g_list_length(forms);
-  int *used_form_ids = dt_calloc_align(form_count * sizeof(int));
+  // the set of ids used by the history entries we are about to walk
+  GHashTable *used_form_ids = g_hash_table_new(g_direct_hash, g_direct_equal);
 
   // check in history if the module has drawn masks and add it to used array
   int history_index = 0;
@@ -1745,7 +1745,7 @@ static int _masks_cleanup_unused(dt_develop_t *dev, GList **forms_list, GList *h
     if(blend_params)
     {
       if(blend_params->mask_id > 0)
-        _cleanup_unused_recurs(forms, blend_params->mask_id, used_form_ids, form_count);
+        _cleanup_unused_recurs(forms, blend_params->mask_id, used_form_ids);
     }
     history_index++;
   }
@@ -1755,29 +1755,23 @@ static int _masks_cleanup_unused(dt_develop_t *dev, GList **forms_list, GList *h
   while(shape_node)
   {
     dt_masks_form_t *mask_form = (dt_masks_form_t *)shape_node->data;
-    int is_used = 0;
-    for(int used_index = 0; used_index < form_count; used_index++)
-    {
-      if(used_form_ids[used_index] == mask_form->formid)
-      {
-        is_used = 1;
-        break;
-      }
-      if(used_form_ids[used_index] == 0) break;
-    }
+    const gboolean is_used = g_hash_table_contains(used_form_ids, GINT_TO_POINTER(mask_form->formid));
 
     shape_node = g_list_next(shape_node); // need to get 'next' now, because we may be removing the current node
 
-    if(is_used == 0)
+    if(!is_used)
     {
       forms = g_list_remove(forms, mask_form);
-      // and add it to allforms for cleanup
+      // This list's reference is handed over to dev->allforms rather than released: a form read
+      // from masks_history is created by dt_masks_create() and its snapshot membership is its
+      // only claim, so unref-ing here would free an object dev->forms may still be holding by
+      // address. One allforms entry per transferred claim keeps the teardown balanced.
       dev->allforms = g_list_append(dev->allforms, mask_form);
       masks_removed = 1;
     }
   }
 
-  dt_free_align(used_form_ids);
+  g_hash_table_destroy(used_form_ids);
 
   *forms_list = forms;
 
@@ -1791,7 +1785,7 @@ static int _masks_cleanup_unused(dt_develop_t *dev, GList **forms_list, GList *h
  * Caveat: if multiple history entries reference masks, some unused masks may remain.
  *         This is intentional so users can still jump back in history.
  */
-void dt_masks_cleanup_unused_from_list(dt_develop_t *dev, GList *history_list)
+static void _masks_cleanup_unused_from_list(dt_develop_t *dev, GList *history_list)
 {
   // a mask is used in a given hist->forms entry if it is used up to the next hist->forms
   // so we are going to remove for each hist->forms from the top
@@ -1819,8 +1813,17 @@ void dt_masks_cleanup_unused(dt_develop_t *develop)
 {
   dt_masks_change_form_gui(develop, NULL);
 
+  /* The sweep rewrites every hist->forms in place, and the async DB write job walks those same
+   * lists with history_mutex released. Its snapshot holds a reference on each history ITEM,
+   * which keeps the item alive but says nothing about the list cells g_list_remove() frees
+   * under it. Hold the writer across the sweep and the re-point that reads its result, so the
+   * job sees the image either fully swept or untouched. Order is history_mutex outer,
+   * masks_mutex (taken by dt_masks_replace_current_forms) inner -- the same way a history
+   * commit takes them. */
+  dt_pthread_rwlock_wrlock(&develop->history_mutex);
+
   // we remove the forms from history
-  dt_masks_cleanup_unused_from_list(develop, develop->history);
+  _masks_cleanup_unused_from_list(develop, develop->history);
 
   // and we save all that
   GList *forms = NULL;
@@ -1836,6 +1839,8 @@ void dt_masks_cleanup_unused(dt_develop_t *develop)
   }
 
   dt_masks_replace_current_forms(develop, forms);
+
+  dt_pthread_rwlock_unlock(&develop->history_mutex);
 }
 
 #include "detail.c"
