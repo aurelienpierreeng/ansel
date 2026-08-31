@@ -35,6 +35,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "control/control.h"
+#include "math/math.h"
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
@@ -288,7 +289,7 @@ static gboolean _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p
 
     if(dx == 0.0f && dy == 0.0f) return FALSE;   // a single point: no direction to offset along
   }
-  const float l = 1.0f / sqrtf(dx * dx + dy * dy);
+  const float l = 1.0f / dt_fast_hypotf(dx, dy);
   *border_x = (*point_x) + radius * dy * l;
   *border_y = (*point_y) - radius * dx * l;
   return TRUE;
@@ -525,8 +526,8 @@ static void _brush_points_recurs_border_gaps(float *cmax, float *bmin, float *bm
   }
 
   // we determine start and end radius too
-  float r1 = sqrtf((bmin[1] - cmax[1]) * (bmin[1] - cmax[1]) + (bmin[0] - cmax[0]) * (bmin[0] - cmax[0]));
-  float r2 = sqrtf((bmax[1] - cmax[1]) * (bmax[1] - cmax[1]) + (bmax[0] - cmax[0]) * (bmax[0] - cmax[0]));
+  float r1 = dt_fast_hypotf(bmin[1] - cmax[1], bmin[0] - cmax[0]);
+  float r2 = dt_fast_hypotf(bmax[1] - cmax[1], bmax[0] - cmax[0]);
 
   // and the max length of the circle arc
   const int l = fabsf(a2 - a1) * fmaxf(r1, r2);
@@ -580,8 +581,8 @@ static void _brush_points_recurs_border_small_gaps(float *cmax, float *bmin, flo
   if(a1 == a2) return;
 
   // we determine start and end radius too
-  const float r1 = sqrtf((bmin[1] - cmax[1]) * (bmin[1] - cmax[1]) + (bmin[0] - cmax[0]) * (bmin[0] - cmax[0]));
-  const float r2 = sqrtf((bmax[1] - cmax[1]) * (bmax[1] - cmax[1]) + (bmax[0] - cmax[0]) * (bmax[0] - cmax[0]));
+  const float r1 = dt_fast_hypotf(bmin[1] - cmax[1], bmin[0] - cmax[0]);
+  const float r2 = dt_fast_hypotf(bmax[1] - cmax[1], bmax[0] - cmax[0]);
 
   // we close the gap in the shortest direction
   float delta = a2 - a1;
@@ -636,7 +637,7 @@ static void _brush_points_stamp(float *cmax, float *bmin, dt_masks_dynbuf_t *dpo
   const float a1 = atan2f(bmin[1] - cmax[1], bmin[0] - cmax[0]);
 
   // we determine the radius too
-  const float rad = sqrtf((bmin[1] - cmax[1]) * (bmin[1] - cmax[1]) + (bmin[0] - cmax[0]) * (bmin[0] - cmax[0]));
+  const float rad = dt_fast_hypotf(bmin[1] - cmax[1], bmin[0] - cmax[0]);
 
   // determine the max length of the circle arc
   const int l = 2.0f * M_PI * rad;
@@ -2541,7 +2542,7 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
 
     const float dx = x1 - x0;
     const float dy = y1 - y0;
-    const float len = sqrtf(dx * dx + dy * dy);
+    const float len = dt_fast_hypotf(dx, dy);
     if(len <= 1e-6f) continue;
 
     has_fallback = TRUE;

@@ -34,6 +34,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "control/user_message.h"
+#include "math/math.h"
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "common/logging.h"
@@ -973,7 +974,7 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, double x,
     gui->delta[0] = xref - gui->pos[0];
     gui->delta[1] = yref - gui->pos[1];
 
-    const float r = sqrtf(rx * rx + ry * ry);
+    const float r = dt_fast_hypotf(rx, ry);
     const float d = (rx * deltax + ry * deltay) / r;
     const float s = fmaxf(r > 0.0f ? (r + d) / r : 0.0f, 0.0f);
     

@@ -30,6 +30,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "math/math.h"
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "common/logging.h"
@@ -772,14 +773,14 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   const float ht = geometry.raw_height;
   if(!isfinite(wd) || !isfinite(ht) || wd <= 0.0f || ht <= 0.0f) return 1;
 
-  const float scale = sqrtf(wd * wd + ht * ht);
+  const float scale = dt_fast_hypotf(wd, ht);
   const float distance = 0.1f * fminf(wd, ht);
 
   const float v = (-rotation / 180.0f) * M_PI;
   const float cosv = cosf(v);
   const float sinv = sinf(v);
 
-  const int count = sqrtf(wd * wd + ht * ht) + 3;
+  const int count = dt_fast_hypotf(wd, ht) + 3;
   *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * count, 0);
   if(IS_NULL_PTR(*points)) return 1;
 
@@ -896,7 +897,7 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
   const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
   const float wd = geometry.raw_width;
   const float ht = geometry.raw_height;
-  const float scale = sqrtf(wd * wd + ht * ht);
+  const float scale = dt_fast_hypotf(wd, ht);
   
   // Calculate perpendicular offsets (±90 degrees from rotation)
   const float v1 = (-(rotation - 90.0f) / 180.0f) * M_PI;
@@ -1285,7 +1286,7 @@ static dt_masks_raster_result_t _gradient_get_mask(const dt_iop_module_t *const 
   // we calculate the mask at grid points and recycle point buffer to store results
   const float wd = pipe->iwidth;
   const float ht = pipe->iheight;
-  const float hwscale = 1.0f / sqrtf(wd * wd + ht * ht);
+  const float hwscale = 1.0f / dt_fast_hypotf(wd, ht);
   const float ihwscale = 1.0f / hwscale;
   const float v = (-gradient->rotation / 180.0f) * M_PI;
   const float sinv = sinf(v);
@@ -1453,7 +1454,7 @@ static dt_masks_raster_result_t _gradient_get_mask_roi(const dt_iop_module_t *co
   // we calculate the mask at grid points and recycle point buffer to store results
   const float wd = pipe->iwidth;
   const float ht = pipe->iheight;
-  const float hwscale = 1.0f / sqrtf(wd * wd + ht * ht);
+  const float hwscale = 1.0f / dt_fast_hypotf(wd, ht);
   const float ihwscale = 1.0f / hwscale;
   const float v = (-gradient->rotation / 180.0f) * M_PI;
   const float sinv = sinf(v);
