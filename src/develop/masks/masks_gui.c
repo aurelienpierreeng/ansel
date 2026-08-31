@@ -5225,3 +5225,73 @@ void dt_masks_draw_outline_runs(cairo_t *cr, const float *const points, const in
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
+
+
+int dt_masks_preview_add_clone_source(dt_masks_form_gui_t *gui, dt_masks_preview_buffers_t *preview)
+{
+  float source_pos[2] = { 0.0f, 0.0f };
+  dt_masks_calculate_source_pos_origin(gui, gui->pos[0], gui->pos[1], gui->pos[0], gui->pos[1],
+                                       &source_pos[0], &source_pos[1], FALSE);
+  const float center_source[2] = { source_pos[0] - gui->pos[0], source_pos[1] - gui->pos[1] };
+
+  preview->source_points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * preview->points_count, 0);
+  if(IS_NULL_PTR(preview->source_points)) return 1;
+
+  for(int i = 0; i < preview->points_count; i++)
+  {
+    preview->source_points[i * 2] = preview->points[i * 2] + center_source[0];
+    preview->source_points[i * 2 + 1] = preview->points[i * 2 + 1] + center_source[1];
+  }
+
+  return 0;
+}
+
+
+int dt_masks_points_shift_to_source(dt_develop_t *dev, const dt_iop_module_t *module,
+                                    float **points, int *points_count,
+                                    const float xs, const float ys, const int first_shifted)
+{
+  // every distortion that happens BEFORE the module: the TARGET outline in module input reference
+  if(!dt_dev_distort_transform_gui(dev, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+                                   *points, *points_count))
+    goto error;
+
+  // the source anchor, taken to the same reference, gives the shift
+  float pts[2] = { xs, ys };
+  dt_dev_coordinates_raw_norm_to_raw_abs(dev, pts, 1);
+  if(!dt_dev_distort_transform_gui(dev, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1))
+    goto error;
+
+  {
+    const float dx = pts[0] - (*points)[0];
+    const float dy = pts[1] - (*points)[1];
+
+    // a shape with handle points in its header keeps them where they are and takes the anchor
+    // verbatim; one whose point 0 is just the centre lets the loop below carry it
+    if(first_shifted > 0)
+    {
+      (*points)[0] = pts[0];
+      (*points)[1] = pts[1];
+    }
+
+    __OMP_PARALLEL_FOR_SIMD__(if(*points_count > 100) aligned(points:64))
+    for(int i = first_shifted; i < *points_count; i++)
+    {
+      (*points)[i * 2] += dx;
+      (*points)[i * 2 + 1] += dy;
+    }
+  }
+
+  // and the distortions AFTER the module: the SOURCE outline in final image reference
+  if(!dt_dev_distort_transform_gui(dev, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+                                   *points, *points_count))
+    goto error;
+
+  return 0;
+
+error:
+  dt_pixelpipe_cache_free_align(*points);
+  *points = NULL;
+  *points_count = 0;
+  return 1;
+}

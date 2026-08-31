@@ -308,22 +308,7 @@ static int _ellipse_get_creation_preview(dt_masks_form_t *form, dt_masks_form_gu
                               &preview->border, &preview->border_count);
   
   if(!err && dt_masks_form_is_clone(form))
-  {
-    float source_pos[2] = { 0.0f, 0.0f };
-    dt_masks_calculate_source_pos_origin(gui, gui->pos[0], gui->pos[1], gui->pos[0], gui->pos[1],
-                                        &source_pos[0], &source_pos[1], FALSE);
-    const float center_source[2] = { source_pos[0] - gui->pos[0], source_pos[1] - gui->pos[1] };
-
-    preview->source_points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * preview->points_count, 0);
-    if(IS_NULL_PTR(preview->source_points))
-      err = 1;
-
-    for(int i = 0; !err && i < preview->points_count; i++)
-    {
-      preview->source_points[i * 2] = preview->points[i * 2] + center_source[0];
-      preview->source_points[i * 2 + 1] = preview->points[i * 2 + 1] + center_source[1];
-    }
-  }
+    err = dt_masks_preview_add_clone_source(gui, preview);
 
   if(err)
     dt_masks_preview_buffers_cleanup(preview);
@@ -400,47 +385,7 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
   *points = _points_to_transform(dev, xx, yy, radius_a, radius_b, rotation, wd, ht, points_count);
   if(IS_NULL_PTR(*points)) return 1;
 
-  // we transform with all distortion that happen *before* the module
-  // so we have now the TARGET points in module input reference
-  if(!dt_dev_distort_transform_gui(dev, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
-                                    *points, *points_count))
-    goto error;
-
-  // now we move all the points by the shift
-  // so we have now the SOURCE points in module input reference
-  float pts[2] = { xs, ys };
-  dt_dev_coordinates_raw_norm_to_raw_abs(dev, pts, 1);
-  if(!dt_dev_distort_transform_gui(dev, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
-                                    pts, 1))
-    goto error;
-
-  {
-    const float dx = pts[0] - (*points)[0];
-    const float dy = pts[1] - (*points)[1];
-    (*points)[0] = pts[0];
-    (*points)[1] = pts[1];
-    __OMP_PARALLEL_FOR_SIMD__(if(*points_count > 100) aligned(points:64))
-    for(int i = 5; i < *points_count; i++)
-    {
-      (*points)[i * 2] += dx;
-      (*points)[i * 2 + 1] += dy;
-    }
-  }
-
-  // we apply the rest of the distortions (those after the module)
-  // so we have now the SOURCE points in final image reference
-  if(!dt_dev_distort_transform_gui(dev, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
-                                    *points, *points_count))
-    goto error;
-
-  return 0;
-
-  // if we failed, then free all and return
-error:
-  dt_pixelpipe_cache_free_align(*points);
-  *points = NULL;
-  *points_count = 0;
-  return 1;
+  return dt_masks_points_shift_to_source(dev, module, points, points_count, xs, ys, 5);
 }
 
 static int _ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radius_a, float radius_b,
