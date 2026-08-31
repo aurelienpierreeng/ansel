@@ -205,6 +205,26 @@ float *dt_masks_sample_grid_backtransform(struct dt_dev_pixelpipe_t *pipe, const
                                           const char *const shape, const char *const form_name);
 
 
+/** Give a creation preview its clone-source outline: the target outline, offset by the drag.
+ *
+ * Allocates `preview->source_points` from `preview->points`, which must already be populated.
+ * Returns 0 on success, 1 on allocation failure -- the caller's own error convention. */
+int dt_masks_preview_add_clone_source(struct dt_masks_form_gui_t *gui,
+                                      struct dt_masks_preview_buffers_t *preview);
+
+/** Turn an outline of a shape into the outline of its clone source, in final image reference.
+ *
+ * `*points` arrives as the TARGET outline in RAW reference and leaves as the SOURCE outline with
+ * every distortion applied. `first_shifted` is the index the outline proper begins at: shapes
+ * that keep handle points in their header pass the index past them and get their centre written
+ * directly, shapes whose point 0 is the centre and nothing else pass 0 and have it shifted with
+ * the rest. On failure the buffer is freed and `*points`/`*points_count` are cleared.
+ *
+ * Returns 0 on success, 1 on failure. */
+int dt_masks_points_shift_to_source(struct dt_develop_t *dev, const struct dt_iop_module_t *module,
+                                    float **points, int *points_count,
+                                    const float xs, const float ys, const int first_shifted);
+
 /** Largest cell spacing any caller of the sample-grid helpers may ask for.
  *
  * The ROI rasterisers clamp their step to 4; `_gradient_get_mask()` uses a fixed 8. The
