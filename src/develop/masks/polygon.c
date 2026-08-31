@@ -2254,6 +2254,10 @@ static void _polygon_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const flo
                                 const int node_count, const gboolean draw_border, const gboolean draw_source,
                                 const dt_masks_skip_range_t *skips, const int skip_count)
 {
+  /* dev and draw_source are the shared shape_draw_function_t signature; the source outline is
+   * drawn by its own caller, which passes no exclusion list. */
+  (void)dev; (void)draw_source;
+
   /* This used to ignore the exclusion list and test the buffer for NaN instead -- which polygon
    * never writes, since its cuts have travelled out-of-band since the #1313 refactor. So the
    * test matched nothing and the folds were drawn. Honouring the list is the fix and costs one
