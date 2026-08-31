@@ -206,7 +206,8 @@ static gint _resizable_scroll_max_height(void)
  * persisted height when set, otherwise the window ceiling so the area auto-grows to its content.
  * This makes small content shrink to fit, lets nested lists grow and have their parent panel scroll
  * until the user drags the handle to cap them, and snaps lists/textviews to whole rows to avoid
- * clipped half-rows. The computed bare (pre-padding) height is cached for the drag handle.
+ * clipped half-rows. The computed bare height -- before the scrolled window's own padding and
+ * border are added back -- is cached for the drag handle.
  */
 static void _resizable_scroll_apply(GtkWidget *w)
 {
@@ -264,13 +265,23 @@ static void _resizable_scroll_apply(GtkWidget *w)
   }
   state->last_height = height;
 
+  // The request covers the scrolled window's whole CSS box, and the viewport only gets what is
+  // left of it: padding AND border are both taken out first. Counting one and not the other
+  // leaves the content exactly that many pixels short of fitting, and an AUTOMATIC policy
+  // answers a two-pixel shortfall with a full scrollbar -- on an area whose whole purpose is to
+  // be sized to fit its content. The .dt_recessed_scroll treeviews carry both (2px padding over
+  // a 1px border), so this is not a hypothetical.
+  GtkStyleContext *sw_context = gtk_widget_get_style_context(sw);
+  const GtkStateFlags sw_state = gtk_widget_get_state_flags(sw);
   GtkBorder padding;
-  gtk_style_context_get_padding(gtk_widget_get_style_context(sw),
-                                gtk_widget_get_state_flags(sw), &padding);
+  GtkBorder border;
+  gtk_style_context_get_padding(sw_context, sw_state, &padding);
+  gtk_style_context_get_border(sw_context, sw_state, &border);
 
   gint old_height = 0;
   gtk_widget_get_size_request(sw, NULL, &old_height);
-  const gint new_height = height + padding.top + padding.bottom + (GTK_IS_TEXT_VIEW(w) ? 2 : 0);
+  const gint new_height = height + padding.top + padding.bottom + border.top + border.bottom
+                          + (GTK_IS_TEXT_VIEW(w) ? 2 : 0);
   if(new_height != old_height)
     gtk_widget_set_size_request(sw, -1, new_height);
 }

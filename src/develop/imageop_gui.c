@@ -737,12 +737,17 @@ static gboolean _rename_module_resize(GtkWidget *entry, GdkEventKey *event, dt_i
 {
   int width = 0;
   GtkBorder padding;
+  GtkBorder border;
 
   pango_layout_get_pixel_size(gtk_entry_get_layout(GTK_ENTRY(entry)), &width, NULL);
-  gtk_style_context_get_padding(gtk_widget_get_style_context (entry),
-                                gtk_widget_get_state_flags (entry),
-                                &padding);
-  gtk_widget_set_size_request(entry, width + padding.left + padding.right + 1, -1);
+  // The entry's frame eats into its allocation before the text gets any room, so the request has
+  // to carry the border as well as the padding -- the theme gives every entry a 1px one.
+  GtkStyleContext *context = gtk_widget_get_style_context(entry);
+  const GtkStateFlags state = gtk_widget_get_state_flags(entry);
+  gtk_style_context_get_padding(context, state, &padding);
+  gtk_style_context_get_border(context, state, &border);
+  gtk_widget_set_size_request(entry, width + padding.left + padding.right
+                                     + border.left + border.right + 1, -1);
 
   return TRUE;
 }
