@@ -382,6 +382,127 @@ static const float _polygon_1788045925[15][8] = {
   { 0.099891551f, 0.033659276f, 0.098198950f, 0.043141894f, 0.101584166f, 0.024176663f, 0.021000000f, 1 },
 };
 
+
+/* ------------------------------------------------------------------------------------- */
+/* Baseline comparison.
+ *
+ * The oracle above answers "did the rasteriser deliver the coverage it owed", which is the
+ * question the reported defects were about. It cannot answer "did anything change" -- a shifted
+ * edge, a different feather ramp, an overlay that stopped drawing a handle all satisfy it. Most
+ * of what was actually found while fixing this series was found by rendering before and after and
+ * diffing, so that comparison belongs in the test rather than in somebody's scratch directory.
+ *
+ * The baselines live in the shared sample bank (tests/image_test/samples/baseline/masks-geometry),
+ * alongside the raw-export baselines and reviewed the same way -- regenerated deliberately,
+ * looked at, and committed. They are full resolution on purpose: the defects in this series are
+ * 1 to 5 pixels wide and a downscaled baseline would not see any of them.
+ *
+ * A tolerance rather than exact equality, because the overlay is antialiased by cairo and its
+ * output is not promised to be identical across cairo versions. Anything that moves geometry
+ * moves far more than this. */
+#define MASKS_BASELINE_MAX_DELTA 8       /* per channel, of 255 */
+#define MASKS_BASELINE_MAX_SHARE 0.0002  /* share of pixels allowed to differ at all */
+
+static const char *baseline_dir = NULL;
+static gboolean baseline_update = FALSE;
+static int baseline_missing = 0;
+
+/** Compare @p path against its baseline, or create the baseline when updating. Returns TRUE when
+ * the render is acceptable (or there is nothing to compare against). */
+static gboolean _baseline_check(const char *path, const char *name)
+{
+  if(IS_NULL_PTR(baseline_dir)) return TRUE;
+
+  char *base = g_strdup_printf("%s/%s.png", baseline_dir, name);
+
+  if(baseline_update)
+  {
+    /* never overwrite: an existing entry is reviewed, and silently replacing it is how a
+     * regression becomes the new reference. Delete it deliberately to refresh one. */
+    if(!g_file_test(base, G_FILE_TEST_EXISTS))
+    {
+      char *dirname = g_path_get_dirname(base);
+      g_mkdir_with_parents(dirname, 0755);
+      g_free(dirname);
+      GError *e = NULL;
+      char *content = NULL;
+      gsize len = 0;
+      if(g_file_get_contents(path, &content, &len, &e) && g_file_set_contents(base, content, len, &e))
+        printf("      baseline: added %s.png\n", name);
+      else
+      {
+        printf("      baseline: could NOT add %s.png (%s)\n", name, e ? e->message : "?");
+        if(e) g_error_free(e);
+      }
+      g_free(content);
+    }
+    g_free(base);
+    return TRUE;
+  }
+
+  if(!g_file_test(base, G_FILE_TEST_EXISTS))
+  {
+    baseline_missing++;
+    g_free(base);
+    return TRUE;   /* no baseline yet is not a failure; `update-baseline' adds it */
+  }
+
+  cairo_surface_t *a = cairo_image_surface_create_from_png(path);
+  cairo_surface_t *b = cairo_image_surface_create_from_png(base);
+  gboolean ok = TRUE;
+
+  if(cairo_surface_status(a) != CAIRO_STATUS_SUCCESS || cairo_surface_status(b) != CAIRO_STATUS_SUCCESS)
+  {
+    printf("      baseline: unreadable (%s)\n", name);
+    ok = FALSE;
+  }
+  else if(cairo_image_surface_get_width(a) != cairo_image_surface_get_width(b)
+          || cairo_image_surface_get_height(a) != cairo_image_surface_get_height(b))
+  {
+    printf("      baseline: %s is %dx%d, baseline is %dx%d\n", name,
+           cairo_image_surface_get_width(a), cairo_image_surface_get_height(a),
+           cairo_image_surface_get_width(b), cairo_image_surface_get_height(b));
+    ok = FALSE;
+  }
+  else
+  {
+    cairo_surface_flush(a);
+    cairo_surface_flush(b);
+    const int w = cairo_image_surface_get_width(a);
+    const int h = cairo_image_surface_get_height(a);
+    const int sa = cairo_image_surface_get_stride(a);
+    const int sb = cairo_image_surface_get_stride(b);
+    const uint8_t *pa = cairo_image_surface_get_data(a);
+    const uint8_t *pb = cairo_image_surface_get_data(b);
+
+    size_t differing = 0;
+    int worst = 0;
+    int wx = -1, wy = -1;
+    for(int y = 0; y < h; y++)
+      for(int x = 0; x < w; x++)
+        for(int c = 0; c < 3; c++)
+        {
+          const int d = abs((int)pa[y * sa + x * 4 + c] - (int)pb[y * sb + x * 4 + c]);
+          if(d == 0) continue;
+          if(c == 0) differing++;   /* count a pixel once */
+          if(d > worst) { worst = d; wx = x; wy = y; }
+        }
+
+    const double share = (double)differing / ((double)w * h);
+    if(worst > MASKS_BASELINE_MAX_DELTA || share > MASKS_BASELINE_MAX_SHARE)
+    {
+      printf("      baseline: %s differs -- %zu px (%.4f%%), worst %d at (%d,%d)\n",
+             name, differing, 100.0 * share, worst, wx, wy);
+      ok = FALSE;
+    }
+  }
+
+  cairo_surface_destroy(a);
+  cairo_surface_destroy(b);
+  g_free(base);
+  return ok;
+}
+
 static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const int count,
                                const char *name, const char *dir, const int budget_px,
                                const int img_w, const int img_h)
@@ -421,6 +542,13 @@ static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const 
   dt_masks_debug_write_png(dev, &form, &alpha_req, alpha_path);
   dt_masks_debug_write_png(dev, &form, &over_req, over_path);
 
+  char *alpha_name = g_strdup_printf("%s-alpha", name);
+  char *over_name = g_strdup_printf("%s-overlay", name);
+  const gboolean baseline_ok = _baseline_check(alpha_path, alpha_name)
+                               & _baseline_check(over_path, over_name);
+  g_free(alpha_name);
+  g_free(over_name);
+
   /* A picture of exactly what is owed and missing: red where the disc union covers a pixel the
    * rasteriser left empty, over the mask itself. This is the artefact to look at first when a
    * case fails -- it says WHERE the stroke went missing, which no scalar can. */
@@ -457,7 +585,7 @@ static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const 
     g_free(csv);
   }
 
-  const gboolean ok = (largest <= budget_px);
+  const gboolean ok = (largest <= budget_px) && baseline_ok;
   printf("[%s] %-22s %5dx%-5d missing coverage %6d px, largest run %5d px", ok ? "PASS" : "FAIL",
          name, img_w, img_h, missing, largest);
   if(largest > 0) printf(" around (%d,%d)", cx, cy);
@@ -503,6 +631,13 @@ static void _run_case_at(dt_develop_t *dev, dt_masks_form_t *form, const char *n
   dt_masks_debug_write_png(dev, form, &alpha_req, alpha_path);
   dt_masks_debug_write_png(dev, form, &over_req, over_path);
 
+  char *alpha_name = g_strdup_printf("%s-alpha", name);
+  char *over_name = g_strdup_printf("%s-overlay", name);
+  const gboolean baseline_ok = _baseline_check(alpha_path, alpha_name)
+                               & _baseline_check(over_path, over_name);
+  g_free(alpha_name);
+  g_free(over_name);
+
   if(holes > max_holes || largest > max_hole_px)
   {
     char *csv = g_strdup_printf("%s/%s-outline.csv", dir, name);
@@ -510,7 +645,7 @@ static void _run_case_at(dt_develop_t *dev, dt_masks_form_t *form, const char *n
     g_free(csv);
   }
 
-  const gboolean ok = (holes <= max_holes) && (largest <= max_hole_px);
+  const gboolean ok = (holes <= max_holes) && (largest <= max_hole_px) && baseline_ok;
   printf("[%s] %-22s %5dx%-5d coverage %.4f  enclosed holes %d (largest %d px)  budget %d/%d  -> %s\n",
          ok ? "PASS" : "FAIL", name, img_w, img_h, coverage, holes, largest, max_holes, max_hole_px, alpha_path);
   if(!ok) failures++;
@@ -528,8 +663,32 @@ static void _run_case(dt_develop_t *dev, dt_masks_form_t *form, const char *name
 
 int main(int argc, char *argv[])
 {
-  const char *dir = (argc > 1) ? argv[1] : "/tmp";
+  const char *dir = (argc > 1 && argv[1][0] != '-') ? argv[1] : "/tmp";
   g_mkdir_with_parents(dir, 0755);
+
+  /* Baselines live in the shared sample bank, beside the raw-export ones and reviewed the same
+   * way. The bank is a plain clone, not a submodule (the superproject is public), so presence is
+   * decided by what is on disk -- exactly as tests/image_test.sh decides it. Nothing to compare
+   * against is not a failure: a fresh checkout without the bank runs the oracle and says so. */
+  char *default_baseline
+      = g_strdup(ANSEL_TEST_SOURCE_DIR "/tests/image_test/samples/baseline/masks-geometry");
+  for(int i = 1; i < argc; i++)
+  {
+    if(!strcmp(argv[i], "--update-baseline")) baseline_update = TRUE;
+    else if(!strcmp(argv[i], "--baseline") && i + 1 < argc)
+    {
+      g_free(default_baseline);
+      default_baseline = g_strdup(argv[++i]);
+    }
+    else if(!strcmp(argv[i], "--no-baseline"))
+    {
+      g_free(default_baseline);
+      default_baseline = NULL;
+    }
+  }
+  if(!IS_NULL_PTR(default_baseline)
+     && (baseline_update || g_file_test(default_baseline, G_FILE_TEST_IS_DIR)))
+    baseline_dir = default_baseline;
 
   /* The masks code allocates through the pixelpipe cache, whose lock dt_init() creates, and
    * reads conf for per-shape defaults -- so a geometry test still needs a booted instance,
@@ -707,6 +866,13 @@ int main(int argc, char *argv[])
 
   dt_pthread_rwlock_destroy(&dev.masks_mutex);
   dt_pthread_rwlock_destroy(&dev.history_mutex);
+
+  if(IS_NULL_PTR(baseline_dir))
+    printf("baseline: not compared (no %s)\n",
+           "tests/image_test/samples/baseline/masks-geometry -- clone the bank to enable it");
+  else if(baseline_missing > 0)
+    printf("baseline: %d render(s) have no entry yet -- run with --update-baseline to add them\n",
+           baseline_missing);
 
   printf("%s: %d failing case(s)\n", failures ? "FAIL" : "PASS", failures);
 
