@@ -39,6 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "control/user_message.h"
+#include "math/math.h"
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
@@ -2547,7 +2548,7 @@ static dt_masks_raster_result_t _polygon_get_area(const dt_iop_module_t *const m
                                  int posx, int posy, int buffer_width)
 {
   // segment length
-  int l = sqrtf(sqf(p1[0] - p0[0]) + sqf(p1[1] - p0[1])) + 1;
+  int l = dt_fast_hypotf(p1[0] - p0[0], p1[1] - p0[1]) + 1;
 
   const float lx = p1[0] - p0[0];
   const float ly = p1[1] - p0[1];
