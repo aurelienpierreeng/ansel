@@ -2568,6 +2568,74 @@ static dt_masks_raster_result_t _polygon_get_area(const dt_iop_module_t *const m
   }
 }
 
+/** How many sub-steps bridge the jump between two consecutive feather spokes.
+ *
+ * The feather is the union of segments from each outline sample to its border sample, so it stays
+ * continuous only while consecutive segments are within a pixel of each other at BOTH ends. At a
+ * cut boundary they are not: the border side collapses to the cut's resume point and the fan opens
+ * in a single step, leaving a wedge nothing stamps -- the thin dark radial line reported as "a
+ * radial spoke is missing" at node 12 of polygon #2 in issue #1313's sidecar. One sub-step per
+ * pixel of the larger jump closes it.
+ *
+ * The two rasterisers differ only in where the bridging spokes GO, so the geometry lives here once
+ * and each sink gets its own three-line wrapper below. */
+static inline int _falloff_bridge_steps(const int *const last0, const int *const last1,
+                                        const int *const p0, const int *const p1)
+{
+  const int jump = MAX(MAX(abs(p0[0] - last0[0]), abs(p0[1] - last0[1])),
+                       MAX(abs(p1[0] - last1[0]), abs(p1[1] - last1[1])));
+  /* a bound: past this the two samples are not a fan, they are unrelated geometry */
+  return MIN(jump, 64);
+}
+
+static inline void _falloff_bridge_lerp(const int *const from, const int *const to, const float t,
+                                        int *const out)
+{
+  out[0] = (int)floorf(from[0] + t * (to[0] - from[0]) + 0.5f);
+  out[1] = (int)floorf(from[1] + t * (to[1] - from[1]) + 0.5f);
+}
+
+/** Stamp the bridging spokes straight into @p buffer. */
+static inline void _falloff_bridge_stamp(float *const restrict buffer, const int *const last0,
+                                         const int *const last1, const int *const p0,
+                                         const int *const p1, const int posx, const int posy,
+                                         const int width)
+{
+  const int steps = _falloff_bridge_steps(last0, last1, p0, p1);
+  for(int k = 1; k < steps; k++)
+  {
+    const float t = (float)k / (float)steps;
+    int b0[2];
+    int b1[2];
+    _falloff_bridge_lerp(last0, p0, t, b0);
+    _falloff_bridge_lerp(last1, p1, t, b1);
+    _polygon_falloff(buffer, b0, b1, posx, posy, width);
+  }
+}
+
+/** Queue the bridging spokes for the ROI path, which stamps them in parallel afterwards. Returns
+ * the new write index. Same geometry as _falloff_bridge_stamp(), different sink. */
+static inline int _falloff_bridge_queue(int *const dpoints, int dindex, const int capacity,
+                                        const int *const last0, const int *const last1,
+                                        const int *const p0, const int *const p1)
+{
+  const int steps = _falloff_bridge_steps(last0, last1, p0, p1);
+  for(int k = 1; k < steps && dindex + 4 <= capacity; k++)
+  {
+    const float t = (float)k / (float)steps;
+    int b0[2];
+    int b1[2];
+    _falloff_bridge_lerp(last0, p0, t, b0);
+    _falloff_bridge_lerp(last1, p1, t, b1);
+    dpoints[dindex] = b0[0];
+    dpoints[dindex + 1] = b0[1];
+    dpoints[dindex + 2] = b1[0];
+    dpoints[dindex + 3] = b1[1];
+    dindex += 4;
+  }
+  return dindex;
+}
+
 static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                              const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const mask_form,
@@ -2828,20 +2896,8 @@ static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const m
     if(last0[0] != p0[0] || last0[1] != p0[1] || last1[0] != p1[0] || last1[1] != p1[1])
     {
       if(last0[0] > -100 || last0[1] > -100)
-      {
-        const int jump0 = MAX(abs(p0[0] - last0[0]), abs(p0[1] - last0[1]));
-        const int jump1 = MAX(abs(p1[0] - last1[0]), abs(p1[1] - last1[1]));
-        const int steps = MIN(MAX(jump0, jump1), 64);   /* a bound: a jump this big is not a fan */
-        for(int k = 1; k < steps; k++)
-        {
-          const float t = (float)k / (float)steps;
-          int b0[2] = { (int)floorf(last0[0] + t * (p0[0] - last0[0]) + 0.5f),
-                        (int)floorf(last0[1] + t * (p0[1] - last0[1]) + 0.5f) };
-          int b1[2] = { (int)floorf(last1[0] + t * (p1[0] - last1[0]) + 0.5f),
-                        (int)floorf(last1[1] + t * (p1[1] - last1[1]) + 0.5f) };
-          _polygon_falloff(bufptr, b0, b1, *posx, *posy, *width);
-        }
-      }
+        _falloff_bridge_stamp(bufptr, last0, last1, p0, p1, *posx, *posy, *width);
+
       _polygon_falloff(bufptr, p0, p1, *posx, *posy, *width);
       last0[0] = p0[0];
       last0[1] = p0[1];
@@ -3582,21 +3638,8 @@ static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *con
       if(last0[0] != p0[0] || last0[1] != p0[1] || last1[0] != p1[0] || last1[1] != p1[1])
       {
         if(have_last)
-        {
-          const int jump = MAX(MAX(abs(p0[0] - last0[0]), abs(p0[1] - last0[1])),
-                               MAX(abs(p1[0] - last1[0]), abs(p1[1] - last1[1])));
-          /* a bound: past this the two samples are not a fan, they are unrelated geometry */
-          const int steps = MIN(jump, 64);
-          for(int k = 1; k < steps && dindex + 4 <= dpoints_capacity; k++)
-          {
-            const float t = (float)k / (float)steps;
-            dpoints[dindex] = (int)floorf(last0[0] + t * (p0[0] - last0[0]) + 0.5f);
-            dpoints[dindex + 1] = (int)floorf(last0[1] + t * (p0[1] - last0[1]) + 0.5f);
-            dpoints[dindex + 2] = (int)floorf(last1[0] + t * (p1[0] - last1[0]) + 0.5f);
-            dpoints[dindex + 3] = (int)floorf(last1[1] + t * (p1[1] - last1[1]) + 0.5f);
-            dindex += 4;
-          }
-        }
+          dindex = _falloff_bridge_queue(dpoints, dindex, dpoints_capacity,
+                                         last0, last1, p0, p1);
 
         if(dindex + 4 > dpoints_capacity) break;
         dpoints[dindex] = p0[0];

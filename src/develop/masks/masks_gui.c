@@ -5013,6 +5013,39 @@ int dt_masks_form_change_opacity(dt_develop_t *dev, dt_masks_form_t *mask_form, 
  * already the GUI half of masks -- and it is where dt_masks_events_post_expose_with(), the one
  * production drawing routine this calls, already lives. There is deliberately no second
  * drawing path: what a regression test looks at is what the darkroom paints. */
+/** Rasterise @p form and paint it under the overlay as 8-bit grey. Its own function because
+ * compositing a backdrop and drawing an overlay are two jobs, and nesting the pixel loop inside
+ * the surface bookkeeping made both harder to follow. */
+static void _paint_mask_backdrop(cairo_t *cr, dt_develop_t *dev, dt_masks_form_t *form,
+                                 const int width, const int height)
+{
+  float *const mask = dt_masks_debug_rasterise(dev, form, width, height);
+  if(IS_NULL_PTR(mask)) return;
+
+  cairo_surface_t *grey = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+  if(cairo_surface_status(grey) == CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_flush(grey);
+    uint8_t *const pixels = cairo_image_surface_get_data(grey);
+    const int stride = cairo_image_surface_get_stride(grey);
+    for(int y = 0; y < height; y++)
+    {
+      uint32_t *const row = (uint32_t *)(pixels + (size_t)y * stride);
+      for(int x = 0; x < width; x++)
+      {
+        const float v = mask[(size_t)y * width + x];
+        const uint32_t g = (uint32_t)(CLAMPF(v, 0.0f, 1.0f) * 255.0f + 0.5f);
+        row[x] = (g << 16) | (g << 8) | g;
+      }
+    }
+    cairo_surface_mark_dirty(grey);
+    cairo_set_source_surface(cr, grey, 0, 0);
+    cairo_paint(cr);
+  }
+  cairo_surface_destroy(grey);
+  dt_free_align(mask);
+}
+
 gboolean dt_masks_debug_write_png(dt_develop_t *dev, dt_masks_form_t *form,
                                   const dt_masks_debug_request_t *request, const char *path)
 {
@@ -5045,34 +5078,7 @@ gboolean dt_masks_debug_write_png(dt_develop_t *dev, dt_masks_form_t *form,
   }
 
   if(request->backdrop == DT_MASKS_DEBUG_BACKDROP_RASTER)
-  {
-    float *const mask = dt_masks_debug_rasterise(dev, form, width, height);
-    if(!IS_NULL_PTR(mask))
-    {
-      cairo_surface_t *grey = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
-      if(cairo_surface_status(grey) == CAIRO_STATUS_SUCCESS)
-      {
-        cairo_surface_flush(grey);
-        uint8_t *const pixels = cairo_image_surface_get_data(grey);
-        const int stride = cairo_image_surface_get_stride(grey);
-        for(int y = 0; y < height; y++)
-        {
-          uint32_t *const row = (uint32_t *)(pixels + (size_t)y * stride);
-          for(int x = 0; x < width; x++)
-          {
-            const float v = mask[(size_t)y * width + x];
-            const uint32_t g = (uint32_t)(CLAMPF(v, 0.0f, 1.0f) * 255.0f + 0.5f);
-            row[x] = (g << 16) | (g << 8) | g;
-          }
-        }
-        cairo_surface_mark_dirty(grey);
-        cairo_set_source_surface(cr, grey, 0, 0);
-        cairo_paint(cr);
-      }
-      cairo_surface_destroy(grey);
-      dt_free_align(mask);
-    }
-  }
+    _paint_mask_backdrop(cr, dev, form, width, height);
 
   if(request->draw_overlay)
   {
@@ -5149,6 +5155,36 @@ gboolean dt_masks_debug_write_png(dt_develop_t *dev, dt_masks_form_t *form,
  * both cairo and the masks vocabulary, and a widget header must not inherit the latter -- that
  * would invert the layering. masks_gui.c already has both.
  */
+/** Append samples [@p first, @p last) as ONE cairo sub-path, decimated to what the context can
+ * show. A sub-path per run is what makes an excluded span absent rather than a shortcut across
+ * it: skipping samples with the pen down turns the next one into a line_to, and the span comes
+ * out as a straight chord. */
+static inline void _emit_run(cairo_t *cr, const float *const points, const int first, const int last,
+                             const double min_step2)
+{
+  double last_x = points[first * 2];
+  double last_y = points[first * 2 + 1];
+  cairo_move_to(cr, last_x, last_y);
+
+  for(int i = first + 1; i < last; i++)
+  {
+    const double x = points[i * 2];
+    const double y = points[i * 2 + 1];
+    const double dx = x - last_x;
+    const double dy = y - last_y;
+    if((dx * dx + dy * dy) < min_step2) continue;
+    cairo_line_to(cr, x, y);
+    last_x = x;
+    last_y = y;
+  }
+
+  /* the run's last sample always lands, so a run ends where the geometry does and not wherever
+   * the decimation happened to stop */
+  const double x = points[(last - 1) * 2];
+  const double y = points[(last - 1) * 2 + 1];
+  if(x != last_x || y != last_y) cairo_line_to(cr, x, y);
+}
+
 void dt_masks_draw_outline_runs(cairo_t *cr, const float *const points, const int first, const int last,
                                 const dt_masks_skip_range_t *skips, const int skip_count)
 {
@@ -5171,25 +5207,7 @@ void dt_masks_draw_outline_runs(cairo_t *cr, const float *const points, const in
     int run_end = last;
     if(next < count && skips[next].jump_from < last) run_end = MAX(skips[next].jump_from, at);
 
-    if(run_end > at)
-    {
-      double last_x = points[at * 2], last_y = points[at * 2 + 1];
-      cairo_move_to(cr, last_x, last_y);
-
-      for(int i = at + 1; i < run_end; i++)
-      {
-        const double x = points[i * 2], y = points[i * 2 + 1];
-        const double dx = x - last_x, dy = y - last_y;
-        if((dx * dx + dy * dy) < min_step2) continue;
-        cairo_line_to(cr, x, y);
-        last_x = x; last_y = y;
-      }
-
-      /* the run's last sample always lands, so a run ends where the geometry does and not
-       * wherever the decimation happened to stop */
-      const double x = points[(run_end - 1) * 2], y = points[(run_end - 1) * 2 + 1];
-      if(x != last_x || y != last_y) cairo_line_to(cr, x, y);
-    }
+    if(run_end > at) _emit_run(cr, points, at, run_end, min_step2);
 
     if(next < count && skips[next].jump_from < last)
     {

@@ -1408,6 +1408,57 @@ static int _skip_range_cmp_fwd(const void *a, const void *b)
   return (x->resume_at < y->resume_at) ? -1 : (x->resume_at > y->resume_at);
 }
 
+/** Turn the detector's crossing pairs into the disjoint cuts the drawer walks.
+ *
+ * Two rules, both learned by watching the outline break.
+ *
+ * Do not merge. dt_masks_skip_ranges_build() merges overlaps, which is right for the hit-test walk
+ * -- it only needs a traversal that moves forward and terminates -- and wrong for drawing. Each
+ * crossing pair names two samples that ARE the same point, so cutting between them leaves the
+ * outline closed; the union of two overlapping pairs names two samples that are not, and the
+ * drawer then spans the gap with a straight chord. Measured after a merge: cuts leaving 105, 170
+ * and 73 pixel gaps, one chord across the stroke each.
+ *
+ * Longest first, not first-by-position. A fold is LOCAL, and nested loops want the outer one
+ * removed since it subsumes the inner. By position, one 10035-sample span won and blocked every
+ * fold inside it, erasing the inner border at the cusp; shortest first, a tiny crossing NESTED in
+ * a real loop won and blocked it, leaving 30 px and 14 px kinks. What makes longest-first safe is
+ * the cap: the detector also pairs the two SIDES of the stroke where they meet, which is no loop
+ * at all, and those are 41253 samples of a 52492-sample contour against 3180 for the largest real
+ * fold -- an eighth of the contour separates the two populations by an order of magnitude. */
+static int _select_disjoint_cuts(const float *const crossings, const int found, const int border_count,
+                                 dt_masks_skip_range_t *const out)
+{
+  int kept = 0;
+  for(int i = 0; i < found; i++)
+  {
+    const int lo = (int)crossings[i * 2];
+    const int hi = (int)crossings[i * 2 + 1];
+    if(lo < 0 || hi <= lo || hi >= border_count) continue;
+    if(hi - lo > border_count - (hi - lo)) continue;   // names the fold's complement
+    if(hi - lo > border_count / 8) continue;           // the two sides meeting, not a fold
+    out[kept].jump_from = lo;
+    out[kept].resume_at = hi;
+    kept++;
+  }
+  qsort(out, kept, sizeof(dt_masks_skip_range_t), _skip_range_cmp_span);
+
+  int accepted = 0;
+  for(int i = 0; i < kept; i++)
+  {
+    gboolean clashes = FALSE;
+    for(int j = 0; j < accepted && !clashes; j++)
+      clashes = (out[i].jump_from < out[j].resume_at && out[j].jump_from < out[i].resume_at);
+    if(clashes) continue;
+    const dt_masks_skip_range_t take = out[i];
+    out[accepted++] = take;
+  }
+
+  /* the blanking pass walks forward, so hand it sorted ranges */
+  qsort(out, accepted, sizeof(dt_masks_skip_range_t), _skip_range_cmp_fwd);
+  return accepted;
+}
+
 static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                     float **point_buffer, int *point_count,
                                     float **border_buffer, int *border_count,
@@ -1499,36 +1550,8 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
          * real fold. An eighth of the contour separates the two populations by an order of
          * magnitude and needs no tuning. */
         if(!IS_NULL_PTR(*border_skips))
-        {
-          dt_masks_skip_range_t *const out = *border_skips;
-          int kept = 0;
-          for(int i = 0; i < found; i++)
-          {
-            const int lo = (int)crossings[i * 2];
-            const int hi = (int)crossings[i * 2 + 1];
-            if(lo < 0 || hi <= lo || hi >= *border_count) continue;
-            if(hi - lo > *border_count - (hi - lo)) continue;   // names the fold's complement
-            if(hi - lo > *border_count / 8) continue;           // the two sides meeting, not a fold
-            out[kept].jump_from = lo;
-            out[kept].resume_at = hi;
-            kept++;
-          }
-          qsort(out, kept, sizeof(dt_masks_skip_range_t), _skip_range_cmp_span);
-
-          int accepted = 0;
-          for(int i = 0; i < kept; i++)
-          {
-            gboolean clashes = FALSE;
-            for(int j = 0; j < accepted && !clashes; j++)
-              clashes = (out[i].jump_from < out[j].resume_at && out[j].jump_from < out[i].resume_at);
-            if(clashes) continue;
-            const dt_masks_skip_range_t take = out[i];
-            out[accepted++] = take;
-          }
-          /* the blanking pass walks forward, so hand it sorted ranges */
-          qsort(out, accepted, sizeof(dt_masks_skip_range_t), _skip_range_cmp_fwd);
-          *border_skip_count = accepted;
-        }
+          *border_skip_count = _select_disjoint_cuts(crossings, found, *border_count,
+                                                     *border_skips);
       }
       dt_free_align(crossings);
     }

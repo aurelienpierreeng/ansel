@@ -423,6 +423,43 @@ static const float _polygon_1788045925[15][8] = {
 #define MASKS_BASELINE_MAX_DELTA 8       /* per channel, of 255 */
 #define MASKS_BASELINE_MAX_SHARE 0.0002  /* share of pixels allowed to differ at all */
 
+/** Compare two same-sized ARGB surfaces: how many pixels differ at all, and the worst per-channel
+ * delta with where it is. Lifted out of the baseline check because "are these the same picture"
+ * is a separate question from "what do I do about it", and nesting a triple loop inside the
+ * decision made both harder to read. */
+static void _surface_diff(cairo_surface_t *const a, cairo_surface_t *const b,
+                          size_t *const differing, int *const worst, int *const wx, int *const wy)
+{
+  cairo_surface_flush(a);
+  cairo_surface_flush(b);
+
+  const int w = cairo_image_surface_get_width(a);
+  const int h = cairo_image_surface_get_height(a);
+  const int sa = cairo_image_surface_get_stride(a);
+  const int sb = cairo_image_surface_get_stride(b);
+  const uint8_t *const pa = cairo_image_surface_get_data(a);
+  const uint8_t *const pb = cairo_image_surface_get_data(b);
+
+  for(int y = 0; y < h; y++)
+    for(int x = 0; x < w; x++)
+    {
+      int pixel_worst = 0;
+      for(int c = 0; c < 3; c++)
+      {
+        const int d = abs((int)pa[y * sa + x * 4 + c] - (int)pb[y * sb + x * 4 + c]);
+        if(d > pixel_worst) pixel_worst = d;
+      }
+      if(pixel_worst == 0) continue;
+      (*differing)++;
+      if(pixel_worst > *worst)
+      {
+        *worst = pixel_worst;
+        *wx = x;
+        *wy = y;
+      }
+    }
+}
+
 static const char *baseline_dir = NULL;
 static gboolean baseline_update = FALSE;
 static int baseline_missing = 0;
@@ -486,29 +523,14 @@ static gboolean _baseline_check(const char *path, const char *name)
   }
   else
   {
-    cairo_surface_flush(a);
-    cairo_surface_flush(b);
-    const int w = cairo_image_surface_get_width(a);
-    const int h = cairo_image_surface_get_height(a);
-    const int sa = cairo_image_surface_get_stride(a);
-    const int sb = cairo_image_surface_get_stride(b);
-    const uint8_t *pa = cairo_image_surface_get_data(a);
-    const uint8_t *pb = cairo_image_surface_get_data(b);
-
     size_t differing = 0;
     int worst = 0;
-    int wx = -1, wy = -1;
-    for(int y = 0; y < h; y++)
-      for(int x = 0; x < w; x++)
-        for(int c = 0; c < 3; c++)
-        {
-          const int d = abs((int)pa[y * sa + x * 4 + c] - (int)pb[y * sb + x * 4 + c]);
-          if(d == 0) continue;
-          if(c == 0) differing++;   /* count a pixel once */
-          if(d > worst) { worst = d; wx = x; wy = y; }
-        }
+    int wx = -1;
+    int wy = -1;
+    _surface_diff(a, b, &differing, &worst, &wx, &wy);
 
-    const double share = (double)differing / ((double)w * h);
+    const double share = (double)differing / ((double)cairo_image_surface_get_width(a)
+                                              * cairo_image_surface_get_height(a));
     if(worst > MASKS_BASELINE_MAX_DELTA || share > MASKS_BASELINE_MAX_SHARE)
     {
       printf("      baseline: %s differs -- %zu px (%.4f%%), worst %d at (%d,%d)\n",
@@ -521,6 +543,38 @@ static gboolean _baseline_check(const char *path, const char *name)
   cairo_surface_destroy(b);
   g_free(base);
   return ok;
+}
+
+/** A picture of exactly what is owed and missing: red where the disc union covers a pixel the
+ * rasteriser left empty, over the mask itself. This is the artefact to look at first when a case
+ * fails -- it says WHERE the stroke went missing, which no scalar can. */
+static void _write_missing_map(const char *dir, const char *name, const float *const mask,
+                               const uint8_t *const reference, const int w, const int h)
+{
+  char *path = g_strdup_printf("%s/%s-missing.png", dir, name);
+  cairo_surface_t *surf = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w, h);
+
+  if(cairo_surface_status(surf) == CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_flush(surf);
+    uint8_t *const pixels = cairo_image_surface_get_data(surf);
+    const int stride = cairo_image_surface_get_stride(surf);
+    for(int y = 0; y < h; y++)
+    {
+      uint32_t *const row = (uint32_t *)(pixels + (size_t)y * stride);
+      for(int x = 0; x < w; x++)
+      {
+        const size_t i = (size_t)y * w + x;
+        const uint32_t g = (uint32_t)(CLAMPF(mask[i], 0.0f, 1.0f) * 255.0f + 0.5f);
+        row[x] = (reference[i] && mask[i] <= 0.0f) ? 0x00FF2020u : ((g << 16) | (g << 8) | g);
+      }
+    }
+    cairo_surface_mark_dirty(surf);
+    cairo_surface_write_to_png(surf, path);
+  }
+
+  cairo_surface_destroy(surf);
+  g_free(path);
 }
 
 static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const int count,
@@ -573,30 +627,7 @@ static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const 
    * rasteriser left empty, over the mask itself. This is the artefact to look at first when a
    * case fails -- it says WHERE the stroke went missing, which no scalar can. */
   if(!IS_NULL_PTR(reference) && missing > 0)
-  {
-    char *miss_path = g_strdup_printf("%s/%s-missing.png", dir, name);
-    cairo_surface_t *surf = cairo_image_surface_create(CAIRO_FORMAT_RGB24, img_w, img_h);
-    if(cairo_surface_status(surf) == CAIRO_STATUS_SUCCESS)
-    {
-      cairo_surface_flush(surf);
-      uint8_t *const px = cairo_image_surface_get_data(surf);
-      const int stride = cairo_image_surface_get_stride(surf);
-      for(int y = 0; y < img_h; y++)
-      {
-        uint32_t *const row = (uint32_t *)(px + (size_t)y * stride);
-        for(int x = 0; x < img_w; x++)
-        {
-          const size_t i = (size_t)y * img_w + x;
-          const uint32_t g = (uint32_t)(CLAMPF(mask[i], 0.0f, 1.0f) * 200.0f + 0.5f);
-          row[x] = (reference[i] && mask[i] <= 0.0f) ? 0x00FF2020u : ((g << 16) | (g << 8) | g);
-        }
-      }
-      cairo_surface_mark_dirty(surf);
-      cairo_surface_write_to_png(surf, miss_path);
-    }
-    cairo_surface_destroy(surf);
-    g_free(miss_path);
-  }
+    _write_missing_map(dir, name, mask, reference, img_w, img_h);
 
   if(missing > 0)
   {
