@@ -176,6 +176,34 @@ int dt_masks_border_find_self_intersections(const float *const border, const int
  * than walking it; a forward walk should use dt_masks_draw_outline_runs() instead. */
 gboolean dt_masks_skip_contains(const dt_masks_skip_range_t *skips, const int skip_count, const int index);
 
+
+/** One rectangular lattice of sample points over a rasterisation ROI.
+ *
+ * Every shape whose mask is evaluated on a coarse grid and then interpolated back up describes
+ * that grid the same way: a cell count, a spacing in output pixels, the ROI origin, and the
+ * inverse of the ROI scale. `x0`/`y0` are the index of the first cell -- non-zero for the shapes
+ * that grid only their own bounding box (circle, ellipse), zero for the ones that grid the whole
+ * ROI (gradient). */
+typedef struct dt_masks_sample_grid_t
+{
+  int x0, y0;         // index of the first cell, in cells
+  int width, height;  // number of cells
+  int step;           // cell spacing, in output pixels
+  int px, py;         // ROI origin, in output pixels
+  float iscale;       // 1.0f / roi->scale
+} dt_masks_sample_grid_t;
+
+/** Axis-aligned bounding box of an outline, in the outline's own coordinates.
+ *
+ * `points` is the interleaved x/y array a shape's `get_points_border` produced, and point 0 is
+ * SKIPPED: every shape that uses this stores its centre there, not a point on the outline. */
+void dt_masks_points_bounding_box(const float *const points, const int num_points,
+                                  int *width, int *height, int *posx, int *posy);
+
+float *dt_masks_sample_grid_backtransform(struct dt_dev_pixelpipe_t *pipe, const double iop_order,
+                                          const dt_masks_sample_grid_t *const grid,
+                                          const char *const shape, const char *const form_name);
+
 /**
  * @brief Turn the self-intersection detector's raw crossing pairs into the disjoint,
  * forward-only skip ranges every border walk consumes. Pure, allocation-free.

@@ -1417,39 +1417,13 @@ static dt_masks_raster_result_t _gradient_get_mask_roi(const dt_iop_module_t *co
   const int gw = (w + grid - 1) / grid + 1;
   const int gh = (h + grid - 1) / grid + 1;
 
-  float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * gw * gh, 0);
+  const dt_masks_sample_grid_t sample_grid
+      = { .x0 = 0, .y0 = 0, .width = gw, .height = gh,
+          .step = grid, .px = px, .py = py, .iscale = iscale };
+  float *points
+      = dt_masks_sample_grid_backtransform(pipe, module->iop_order, &sample_grid, "gradient", form->name);
   if(IS_NULL_PTR(points)) return DT_MASKS_RASTER_ERROR;
-  __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
-  for(int j = 0; j < gh; j++)
-    for(int i = 0; i < gw; i++)
-    {
-
-      const size_t index = (size_t)j * gw + i;
-      points[index * 2] = (grid * i + px) * iscale;
-      points[index * 2 + 1] = (grid * j + py) * iscale;
-    }
-
-  if(dt_get_debug_flags() & DT_DEBUG_PERF)
-  {
-    dt_print(DT_DEBUG_MASKS, "[masks %s] gradient draw took %0.04f sec\n", form->name,
-             dt_get_wtime() - start2);
-    start2 = dt_get_wtime();
-  }
-
-  // we backtransform all these points
-  if(!dt_dev_distort_backtransform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
-                                        (size_t)gw * gh))
-  {
-    dt_pixelpipe_cache_free_align(points);
-    return DT_MASKS_RASTER_ERROR;
-  }
-
-  if(dt_get_debug_flags() & DT_DEBUG_PERF)
-  {
-    dt_print(DT_DEBUG_MASKS, "[masks %s] gradient transform took %0.04f sec\n", form->name,
-             dt_get_wtime() - start2);
-    start2 = dt_get_wtime();
-  }
+  start2 = dt_get_wtime();
 
   // we calculate the mask at grid points and recycle point buffer to store results
   const float wd = pipe->iwidth;

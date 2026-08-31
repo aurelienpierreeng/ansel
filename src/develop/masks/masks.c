@@ -43,6 +43,7 @@
 #include "system/macros.h"
 #include "database/history_repository.h"
 #include "system/target_clones.h"
+#include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/hash.h"
 #include "common/logging.h"
@@ -483,6 +484,78 @@ gboolean dt_masks_skip_contains(const dt_masks_skip_range_t *skips, const int sk
     else return TRUE;
   }
   return FALSE;
+}
+
+
+void dt_masks_points_bounding_box(const float *const points, const int num_points,
+                                  int *width, int *height, int *posx, int *posy)
+{
+  // NOTE the seeds: -FLT_MAX, not FLT_MIN. FLT_MIN is the smallest POSITIVE normal float, so
+  // seeding a running maximum with it silently clamps the box at 0 for a shape that lies
+  // entirely off the left or top edge -- an over-large box rather than a wrong one, which is
+  // why it went unnoticed, but wrong all the same.
+  float xmin = FLT_MAX, xmax = -FLT_MAX, ymin = FLT_MAX, ymax = -FLT_MAX;
+
+  for(int i = 1; i < num_points; i++) // point 0 is the centre, not part of the outline
+  {
+    xmin = fminf(points[i * 2], xmin);
+    xmax = fmaxf(points[i * 2], xmax);
+    ymin = fminf(points[i * 2 + 1], ymin);
+    ymax = fmaxf(points[i * 2 + 1], ymax);
+  }
+
+  *posx = xmin;
+  *posy = ymin;
+  *width = (xmax - xmin);
+  *height = (ymax - ymin);
+}
+
+float *dt_masks_sample_grid_backtransform(struct dt_dev_pixelpipe_t *pipe, const double iop_order,
+                                          const dt_masks_sample_grid_t *const grid,
+                                          const char *const shape, const char *const form_name)
+{
+  const int gw = grid->width;
+  const int gh = grid->height;
+  const int step = grid->step;
+  const int px = grid->px;
+  const int py = grid->py;
+  const float iscale = grid->iscale;
+  const size_t count = (size_t)gw * gh;
+
+  double start = dt_get_wtime();
+
+  float *const restrict points = dt_pixelpipe_cache_alloc_align_float_cache(2 * count, 0);
+  if(IS_NULL_PTR(points)) return NULL;
+
+  // the grid points, in module coordinates
+  __OMP_PARALLEL_FOR__(collapse(2) if(count > 50000))
+  for(int j = 0; j < gh; j++)
+    for(int i = 0; i < gw; i++)
+    {
+      const size_t index = (size_t)j * gw + i;
+      points[index * 2] = (step * (i + grid->x0) + px) * iscale;
+      points[index * 2 + 1] = (step * (j + grid->y0) + py) * iscale;
+    }
+
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
+  {
+    dt_print(DT_DEBUG_MASKS, "[masks %s] %s grid took %0.04f sec\n", form_name, shape,
+             dt_get_wtime() - start);
+    start = dt_get_wtime();
+  }
+
+  // and back to input image coordinates
+  if(!dt_dev_distort_backtransform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, count))
+  {
+    dt_pixelpipe_cache_free_align(points);
+    return NULL;
+  }
+
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
+    dt_print(DT_DEBUG_MASKS, "[masks %s] %s transform took %0.04f sec\n", form_name, shape,
+             dt_get_wtime() - start);
+
+  return points;
 }
 
 int dt_masks_skip_ranges_build(const float *crossing_pairs, const int pair_count, const int point_count,
