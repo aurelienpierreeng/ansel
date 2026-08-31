@@ -1022,7 +1022,10 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, double x,
 static void _ellipse_draw_shape(dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source,
                               const dt_masks_skip_range_t *skips, const int skip_count)
 {
-  // dev unused, kept for shape_draw_function_t signature
+  /* An ellipse has no self-intersections, so it never carries an exclusion list -- these are the
+   * shared shape_draw_function_t signature, not something to honour here. */
+  (void)dev; (void)nb; (void)border; (void)source; (void)skips; (void)skip_count;
+
   /* Decimate to the device resolution, as the brush does; see dt_draw_min_emit_step(). */
   const double min_step = dt_draw_min_emit_step(cr);
   const double min_step2 = min_step * min_step;

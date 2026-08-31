@@ -975,6 +975,10 @@ cleanup:
 static void _gradient_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source,
                               const dt_masks_skip_range_t *skips, const int skip_count)
 {
+  /* A gradient has no self-intersections, so it never carries an exclusion list -- these are the
+   * shared shape_draw_function_t signature, not something to honour here. */
+  (void)dev; (void)nb; (void)source; (void)skips; (void)skip_count;
+
   // safeguard in case of malformed arrays of points
   if(border && pts_line_count <= 3) return;
   if(!border && pts_line_count <= 4) return;

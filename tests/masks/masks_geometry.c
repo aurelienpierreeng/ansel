@@ -200,18 +200,24 @@ static void _missing_coverage(const float *mask, const uint8_t *reference, const
                               int *total, int *largest, int *cx, int *cy)
 {
   *total = 0; *largest = 0; *cx = -1; *cy = -1;
-  uint8_t *miss = (uint8_t *)calloc((size_t)w * h, 1);
-  int *stack = (int *)malloc(sizeof(int) * (size_t)w * h);
+
+  /* A frame with no pixels has nothing to measure, and saying so here is not only defensive: it
+   * is what lets a reader (and a static analyser) bound every index below. */
+  if(w <= 0 || h <= 0) return;
+  const size_t npix = (size_t)w * h;
+
+  uint8_t *miss = (uint8_t *)calloc(npix, 1);
+  int *stack = (int *)malloc(sizeof(int) * npix);
   if(IS_NULL_PTR(miss) || IS_NULL_PTR(stack)) { free(miss); free(stack); return; }
 
   /* ANY coverage counts, not a thresholded core. `border' is the OUTER radius: the stroke is
    * solid in the middle and fades to zero at that edge, so most of the disc legitimately holds
    * values below a half. What cannot be legitimate is a pixel the disc covers with no coverage
    * at all -- that is the stroke missing, which is the defect this corpus is about. */
-  for(size_t i = 0; i < (size_t)w * h; i++)
+  for(size_t i = 0; i < npix; i++)
     if(reference[i] && mask[i] <= 0.0f) { miss[i] = 1; (*total)++; }
 
-  uint8_t *seen = (uint8_t *)calloc((size_t)w * h, 1);
+  uint8_t *seen = (uint8_t *)calloc(npix, 1);
   if(IS_NULL_PTR(seen)) { free(miss); free(stack); return; }
   for(int y = 0; y < h; y++)
     for(int x = 0; x < w; x++)
@@ -233,7 +239,12 @@ static void _missing_coverage(const float *mask, const uint8_t *reference, const
           if(nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
           const size_t ni = (size_t)ny * w + nx;
           if(!miss[ni] || seen[ni]) continue;
-          seen[ni] = 1; stack[top++] = (int)ni;
+          seen[ni] = 1;
+          /* The push is bounded because a cell is marked BEFORE it is pushed, so none can enter
+           * the stack twice and `top' cannot pass npix. Stating that in code rather than only in
+           * a comment costs one compare per neighbour, and removes the reader's -- and the
+           * analyser's -- obligation to reconstruct the argument from two places. */
+          if((size_t)top < npix) stack[top++] = (int)ni;
         }
       }
       if(size > *largest) { *largest = size; *cx = (int)(sx / size); *cy = (int)(sy / size); }
@@ -248,13 +259,18 @@ static void _measure(const float *mask, const int w, const int h, double *covera
 {
   *coverage = 0.0; *hole_count = 0; *largest_hole = 0;
 
-  int *label = (int *)calloc((size_t)w * h, sizeof(int));
-  int *stack = (int *)malloc(sizeof(int) * (size_t)w * h);
+  /* A frame with no pixels has nothing to measure, and saying so here is not only defensive: it
+   * is what lets a reader (and a static analyser) bound every index below. */
+  if(w <= 0 || h <= 0) return;
+  const size_t npix = (size_t)w * h;
+
+  int *label = (int *)calloc(npix, sizeof(int));
+  int *stack = (int *)malloc(sizeof(int) * npix);
   if(IS_NULL_PTR(label) || IS_NULL_PTR(stack)) { free(label); free(stack); return; }
 
   size_t painted = 0;
-  for(size_t i = 0; i < (size_t)w * h; i++) if(mask[i] > 0.5f) painted++;
-  *coverage = (double)painted / ((double)w * h);
+  for(size_t i = 0; i < npix; i++) if(mask[i] > 0.5f) painted++;
+  *coverage = (double)painted / (double)npix;
 
   int next_label = 0;
   for(int y = 0; y < h; y++)
@@ -282,7 +298,11 @@ static void _measure(const float *mask, const int w, const int h, double *covera
           const size_t ni = (size_t)ny * w + nx;
           if(mask[ni] > 0.5f || label[ni]) continue;
           label[ni] = next_label;
-          stack[top++] = (int)ni;
+          /* The push is bounded because a cell is marked BEFORE it is pushed, so none can enter
+           * the stack twice and `top' cannot pass npix. Stating that in code rather than only in
+           * a comment costs one compare per neighbour, and removes the reader's -- and the
+           * analyser's -- obligation to reconstruct the argument from two places. */
+          if((size_t)top < npix) stack[top++] = (int)ni;
         }
       }
       if(!touches_border)
@@ -663,8 +683,28 @@ static void _run_case(dt_develop_t *dev, dt_masks_form_t *form, const char *name
 
 int main(int argc, char *argv[])
 {
-  const char *dir = (argc > 1 && argv[1][0] != '-') ? argv[1] : "/tmp";
-  g_mkdir_with_parents(dir, 0755);
+  /* Defaulting to "/tmp" wrote three dozen renders and CSVs to PREDICTABLE names in a
+   * world-writable directory: anyone can pre-create those names, or leave symlinks under them
+   * pointing elsewhere, and this follows them. ctest always passes an explicit directory, so it
+   * only ever affected a manual run -- which is exactly when someone is poking at this as root.
+   * g_mkdtemp() creates one atomically, mode 0700, under a name nobody can guess, and two
+   * concurrent manual runs stop overwriting each other's output as a side effect. */
+  char *scratch_out = NULL;
+  const char *dir = (argc > 1 && argv[1][0] != '-') ? argv[1] : NULL;
+  if(IS_NULL_PTR(dir))
+  {
+    scratch_out = g_strdup_printf("%s/ansel-test-masks-out-XXXXXX", g_get_tmp_dir());
+    dir = g_mkdtemp(scratch_out);
+    if(IS_NULL_PTR(dir))
+    {
+      fprintf(stderr, "[FAIL] could not create an output directory\n");
+      g_free(scratch_out);
+      return 1;
+    }
+    printf("output directory: %s\n", dir);
+  }
+  else
+    g_mkdir_with_parents(dir, 0755);
 
   /* Baselines live in the shared sample bank, beside the raw-export ones and reviewed the same
    * way. The bank is a plain clone, not a submodule (the superproject is public), so presence is
@@ -875,6 +915,7 @@ int main(int argc, char *argv[])
            baseline_missing);
 
   printf("%s: %d failing case(s)\n", failures ? "FAIL" : "PASS", failures);
+  g_free(scratch_out);
 
   dt_cleanup();
   g_free(config_dir);

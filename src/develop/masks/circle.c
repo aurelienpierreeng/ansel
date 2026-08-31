@@ -479,7 +479,10 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, double x, 
 static void _circle_draw_shape(dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int coord_nb, const gboolean border, const gboolean source,
                               const dt_masks_skip_range_t *skips, const int skip_count)
 {
-   // unused arg, keep compiler from complaining
+  /* A circle has no self-intersections, so it never carries an exclusion list -- these are the
+   * shared shape_draw_function_t signature, not something to honour here. */
+  (void)dev; (void)border; (void)source; (void)skips; (void)skip_count;
+
   /* One line_to per point sampled at RAW resolution is several per device pixel; emit at the
    * resolution the context can actually show. See dt_draw_min_emit_step() (mirrors the brush). */
   const double min_step = dt_draw_min_emit_step(cr);

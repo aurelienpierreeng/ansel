@@ -729,9 +729,10 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
       }
       else if(!have_border_min && have_border_max)
       {
+        /* no have_border_min = TRUE here: only have_border_max is reported upward, and this
+         * branch has it TRUE by its own condition. Setting it would be dead. */
         border_min[0] = border_max[0];
         border_min[1] = border_max[1];
-        have_border_min = TRUE;
       }
 
       // we check gaps in the border (sharp edges)
@@ -2467,6 +2468,9 @@ static inline int _brush_centerline_end(const int points_count, const int node_c
 static void _brush_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source,
                               const dt_masks_skip_range_t *skips, const int skip_count)
 {
+  /* dev and source are the shared shape_draw_function_t signature. */
+  (void)dev; (void)source;
+
   /* The centreline is walked there and back (see _brush_centerline_end): stroking the whole
    * array would draw it twice. The border wraps the stroke and is walked once. */
   const int first = node_nb * 3 + border;
