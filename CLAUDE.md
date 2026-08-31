@@ -1503,6 +1503,27 @@ Verify this class of layout by measuring, not by looking: build the widget in a
 `gtk_widget_get_allocation()` for the cells. It answers in seconds what several rebuild-and-look
 round trips do not.
 
+### A height/width request must cover the CSS border, not just the padding
+
+A widget's size request is its whole CSS box: padding *and* border come out of the allocation
+before the content sees any of it. Code that sizes an area to fit its content therefore has to
+add both back, and `gtk_style_context_get_padding()` without the matching
+`gtk_style_context_get_border()` leaves the content short by exactly one border.
+
+Two pixels is enough to be visible, because the widgets that care answer a shortfall with a
+whole scrollbar rather than a clipped pixel. `dt_ui_scroll_wrap()` (`widgets/scroll_wrap.c`)
+sizes every list and textview in the application to `clamp(min(content, cap), min_size, 75%
+window)`, snapped to whole rows so it never shows a half-row — no slack anywhere — and its
+`GtkScrolledWindow` carries `.dt_recessed_scroll`, which the theme gives `padding: 2px` over a
+`border: 1px`. Counting the padding alone handed the viewport 123 px for 125 px of content, and
+`GTK_POLICY_AUTOMATIC` did the rest. Measured, same rows and same CSS, border omitted then
+counted: `page=123 < upper=125, scrollbar` → `page=125 = upper=125, none`.
+
+Reproduce this class of bug offscreen in seconds: build the widget with the theme's CSS on it,
+pump the main loop, then compare the scrolled window's vadjustment `page_size` against `upper`.
+A scrollbar that appears for a couple of pixels looks like a content-height miscount and is
+usually a frame the request forgot.
+
 ### Modal dialogs must explicitly refocus their parent on close
 
 `gtk_window_set_transient_for()` at dialog creation is not enough to guarantee focus returns to
