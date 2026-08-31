@@ -5219,14 +5219,6 @@ void dt_masks_draw_outline_runs(cairo_t *cr, const float *const points, const in
   }
 }
 
-
-// clang-format off
-// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
-// vim: shiftwidth=2 expandtab tabstop=2 cindent
-// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
-// clang-format on
-
-
 int dt_masks_preview_add_clone_source(dt_masks_form_gui_t *gui, dt_masks_preview_buffers_t *preview)
 {
   float source_pos[2] = { 0.0f, 0.0f };
@@ -5295,3 +5287,9 @@ error:
   *points_count = 0;
   return 1;
 }
+
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+// vim: shiftwidth=2 expandtab tabstop=2 cindent
+// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on
