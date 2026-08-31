@@ -1056,43 +1056,8 @@ static dt_masks_raster_result_t _circle_get_mask_roi(const dt_iop_module_t *cons
 
   // we fill the pre-initialized output buffer by interpolation;
   // we only need to take the contents of our bounding box into account
-  const int endx = MIN(width, bbXM * grid);
-  const int endy = MIN(height, bbYM * grid);
-  const float inv_grid2 = 1.0f / (grid * grid);
-  float w0[4], w1[4];
-  for(int i = 0; i < grid; i++)
-  {
-    w0[i] = (float)(grid - i);
-    w1[i] = (float)i;
-  }
-  __OMP_PARALLEL_FOR__(if((size_t)(endy - bbym * grid) * (size_t)(endx - bbxm * grid) > 50000))
-  for(int j = bbym * grid; j < endy; j++)
-  {
-    const int jj = j % grid;
-    const int mj = j / grid - bbym;
-    const float wj0 = w0[jj];
-    const float wj1 = w1[jj];
-    const size_t row_base = (size_t)mj * bbw;
-    float *const row = buffer + (size_t)j * width;
-    int ii = 0;
-    int mi = 0;
-    for(int i = bbxm * grid; i < endx; i++)
-    {
-      const size_t mindex = row_base + mi;
-      const float wii0 = w0[ii];
-      const float wii1 = w1[ii];
-      row[i] = (points[mindex * 2] * wii0 * wj0
-                + points[(mindex + 1) * 2] * wii1 * wj0
-                + points[(mindex + bbw) * 2] * wii0 * wj1
-                + points[(mindex + bbw + 1) * 2] * wii1 * wj1) * inv_grid2;
-      ii++;
-      if(ii == grid)
-      {
-        ii = 0;
-        mi++;
-      }
-    }
-  }
+  int endx = 0, endy = 0;
+  dt_masks_sample_grid_interpolate(points, &sample_grid, buffer, width, height, &endx, &endy);
 
   dt_pixelpipe_cache_free_align(points);
 

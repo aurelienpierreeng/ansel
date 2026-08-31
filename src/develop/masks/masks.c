@@ -558,6 +558,63 @@ float *dt_masks_sample_grid_backtransform(struct dt_dev_pixelpipe_t *pipe, const
   return points;
 }
 
+void dt_masks_sample_grid_interpolate(const float *const points, const dt_masks_sample_grid_t *const grid,
+                                      float *const buffer, const int buf_width, const int buf_height,
+                                      int *const endx, int *const endy)
+{
+  const int step = grid->step;
+  const int gw = grid->width;
+  const int startx = grid->x0 * step;
+  const int starty = grid->y0 * step;
+
+  // the last cell contributes its far corner, so the covered rectangle ends one whole cell short
+  // of the lattice -- and is clipped to the buffer, since a bounding box may overhang the ROI
+  const int ex = MIN(buf_width, (grid->x0 + gw - 1) * step);
+  const int ey = MIN(buf_height, (grid->y0 + grid->height - 1) * step);
+
+  // the two bilinear weight ramps, one entry per position within a cell
+  float w0[DT_MASKS_GRID_MAX_STEP], w1[DT_MASKS_GRID_MAX_STEP];
+  for(int i = 0; i < step; i++)
+  {
+    w0[i] = (float)(step - i);
+    w1[i] = (float)i;
+  }
+  const float inv_step2 = 1.0f / (step * step);
+
+  __OMP_PARALLEL_FOR__(if((size_t)(ey - starty) * (size_t)(ex - startx) > 50000))
+  for(int j = starty; j < ey; j++)
+  {
+    const int jj = j % step;
+    const int mj = j / step - grid->y0;
+    const float wj0 = w0[jj];
+    const float wj1 = w1[jj];
+    const size_t row_base = (size_t)mj * gw;
+    float *const row = buffer + (size_t)j * buf_width;
+    int ii = 0;
+    int mi = 0;
+
+    for(int i = startx; i < ex; i++)
+    {
+      const size_t mindex = row_base + mi;
+      const float wii0 = w0[ii];
+      const float wii1 = w1[ii];
+      row[i] = (points[mindex * 2] * wii0 * wj0
+                + points[(mindex + 1) * 2] * wii1 * wj0
+                + points[(mindex + gw) * 2] * wii0 * wj1
+                + points[(mindex + gw + 1) * 2] * wii1 * wj1) * inv_step2;
+      ii++;
+      if(ii == step)
+      {
+        ii = 0;
+        mi++;
+      }
+    }
+  }
+
+  if(endx) *endx = ex;
+  if(endy) *endy = ey;
+}
+
 int dt_masks_skip_ranges_build(const float *crossing_pairs, const int pair_count, const int point_count,
                                dt_masks_skip_range_t *out, int *dropped_wrapping)
 {

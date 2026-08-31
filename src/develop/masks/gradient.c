@@ -1252,36 +1252,14 @@ static dt_masks_raster_result_t _gradient_get_mask(const dt_iop_module_t *const 
   const int gw = (w + grid - 1) / grid + 1;
   const int gh = (h + grid - 1) / grid + 1;
 
-  float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * gw * gh, 0);
+  // this path works in unscaled coordinates, which is iscale == 1 (an exact multiplication)
+  const dt_masks_sample_grid_t sample_grid
+      = { .x0 = 0, .y0 = 0, .width = gw, .height = gh,
+          .step = grid, .px = px, .py = py, .iscale = 1.0f };
+  float *points
+      = dt_masks_sample_grid_backtransform(pipe, module->iop_order, &sample_grid, "gradient", form->name);
   if(IS_NULL_PTR(points)) return DT_MASKS_RASTER_ERROR;
-  __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
-  for(int j = 0; j < gh; j++)
-    for(int i = 0; i < gw; i++)
-    {
-      points[(j * gw + i) * 2] = (grid * i + px);
-      points[(j * gw + i) * 2 + 1] = (grid * j + py);
-    }
-
-  if(dt_get_debug_flags() & DT_DEBUG_PERF)
-  {
-    dt_print(DT_DEBUG_MASKS, "[masks %s] gradient draw took %0.04f sec\n", form->name,
-             dt_get_wtime() - start2);
-    start2 = dt_get_wtime();
-  }
-
-  // we backtransform all these points
-  if(!dt_dev_distort_backtransform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)gw * gh))
-  {
-    dt_pixelpipe_cache_free_align(points);
-    return DT_MASKS_RASTER_ERROR;
-  }
-
-  if(dt_get_debug_flags() & DT_DEBUG_PERF)
-  {
-    dt_print(DT_DEBUG_MASKS, "[masks %s] gradient transform took %0.04f sec\n", form->name,
-             dt_get_wtime() - start2);
-    start2 = dt_get_wtime();
-  }
+  start2 = dt_get_wtime();
 
   // we calculate the mask at grid points and recycle point buffer to store results
   const float wd = pipe->iwidth;
@@ -1346,43 +1324,7 @@ static dt_masks_raster_result_t _gradient_get_mask(const dt_iop_module_t *const 
     return DT_MASKS_RASTER_ERROR;
   }
 
-  const float inv_grid2 = 1.0f / (grid * grid);
-  float w0[8], w1[8];
-  for(int i = 0; i < grid; i++)
-  {
-    w0[i] = (float)(grid - i);
-    w1[i] = (float)i;
-  }
-
-// we fill the mask buffer by interpolation
-  __OMP_PARALLEL_FOR__(if((size_t)w * h > 50000))
-  for(int j = 0; j < h; j++)
-  {
-    const int jj = j % grid;
-    const int mj = j / grid;
-    const float wj0 = w0[jj];
-    const float wj1 = w1[jj];
-    const size_t row_base = (size_t)mj * gw;
-    float *const row = bufptr + (size_t)j * w;
-    int ii = 0;
-    int mi = 0;
-    for(int i = 0; i < w; i++)
-    {
-      const size_t pt_index = row_base + mi;
-      const float wii0 = w0[ii];
-      const float wii1 = w1[ii];
-      row[i] = (points[2 * pt_index] * wii0 * wj0
-                + points[2 * (pt_index + 1)] * wii1 * wj0
-                + points[2 * (pt_index + gw)] * wii0 * wj1
-                + points[2 * (pt_index + gw + 1)] * wii1 * wj1) * inv_grid2;
-      ii++;
-      if(ii == grid)
-      {
-        ii = 0;
-        mi++;
-      }
-    }
-  }
+  dt_masks_sample_grid_interpolate(points, &sample_grid, bufptr, w, h, NULL, NULL);
 
   dt_pixelpipe_cache_free_align(points);
 
@@ -1479,43 +1421,7 @@ static dt_masks_raster_result_t _gradient_get_mask_roi(const dt_iop_module_t *co
 
   dt_pixelpipe_cache_free_align(lut);
 
-  const float inv_grid2 = 1.0f / (grid * grid);
-  float w0[8], w1[8];
-  for(int i = 0; i < grid; i++)
-  {
-    w0[i] = (float)(grid - i);
-    w1[i] = (float)i;
-  }
-
-// we fill the mask buffer by interpolation
-  __OMP_PARALLEL_FOR__(if((size_t)w * h > 50000))
-  for(int j = 0; j < h; j++)
-  {
-    const int jj = j % grid;
-    const int mj = j / grid;
-    const float wj0 = w0[jj];
-    const float wj1 = w1[jj];
-    const size_t row_base = (size_t)mj * gw;
-    float *const row = buffer + (size_t)j * w;
-    int ii = 0;
-    int mi = 0;
-    for(int i = 0; i < w; i++)
-    {
-      const size_t mindex = row_base + mi;
-      const float wii0 = w0[ii];
-      const float wii1 = w1[ii];
-      row[i] = (points[mindex * 2] * wii0 * wj0
-                + points[(mindex + 1) * 2] * wii1 * wj0
-                + points[(mindex + gw) * 2] * wii0 * wj1
-                + points[(mindex + gw + 1) * 2] * wii1 * wj1) * inv_grid2;
-      ii++;
-      if(ii == grid)
-      {
-        ii = 0;
-        mi++;
-      }
-    }
-  }
+  dt_masks_sample_grid_interpolate(points, &sample_grid, buffer, w, h, NULL, NULL);
 
   dt_pixelpipe_cache_free_align(points);
 
