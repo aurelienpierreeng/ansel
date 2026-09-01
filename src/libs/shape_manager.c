@@ -86,7 +86,11 @@ typedef struct dt_shape_manager_t
   GtkWidget *popup_window;
   GtkWidget *popup_button;
 
-  GdkPixbuf *ic_inverse, *ic_union, *ic_intersection, *ic_difference, *ic_exclusion;
+  GdkPixbuf *ic_inverse;
+  GdkPixbuf *ic_union;
+  GdkPixbuf *ic_intersection;
+  GdkPixbuf *ic_difference;
+  GdkPixbuf *ic_exclusion;
   int gui_reset;
 } dt_shape_manager_t;
 
@@ -251,7 +255,6 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
   // add we save
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
   _shape_manager_recreate_list(self);
-  // dt_masks_change_form_gui(darktable.develop, grp);
 }
 
 static int _tree_format_form_usage_label(char *str, const size_t str_size,
@@ -695,14 +698,10 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
     GList *selected = gtk_tree_selection_get_selected_rows(selection, NULL);
     GtkTreePath *it0 = (GtkTreePath *)selected->data;
     depth = gtk_tree_path_get_depth(it0);
-    if(nb == 1)
-    {
-      // before freeing the list of selected rows, we check if the form is a group or not
-      if(gtk_tree_model_get_iter(model, &iter, it0))
-      {
-        _shape_manager_get_values(model, &iter, NULL, &parentid, &grpid);
-      }
-    }
+    // A single selected row is the only case whose group the menu below needs to know about;
+    // read it before the list of paths is freed.
+    if(nb == 1 && gtk_tree_model_get_iter(model, &iter, it0))
+      _shape_manager_get_values(model, &iter, NULL, &parentid, &grpid);
     g_list_free_full(selected, (GDestroyNotify)gtk_tree_path_free);
     selected = NULL;
   }
@@ -992,37 +991,35 @@ static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel 
   // if selection is empty, no pb
   if(gtk_tree_selection_count_selected_rows(selection) == 0) return TRUE;
 
-  // now we unselect all members of selection with not the same parent node
-  // idem for all those with a different depth
-  int *indices = gtk_tree_path_get_indices(path);
-  int depth = gtk_tree_path_get_depth(path);
+  /* A row joins the selection only among peers: the same depth, and for a child row the same
+   * parent. Whatever is already selected and does not qualify is dropped.
+   *
+   * The rows to drop are gathered before any is dropped. Unselecting re-enters this function --
+   * with path_currently_selected TRUE, so those calls return at the top -- and the previous form
+   * answered that by re-reading the selection and restarting the walk after every single
+   * removal, which is quadratic for no gain: the list gtk_tree_selection_get_selected_rows()
+   * returns is our own copy, and unselecting does not touch it. */
+  const int *indices = gtk_tree_path_get_indices(path);
+  const int depth = gtk_tree_path_get_depth(path);
 
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
-  GList *items_iter = items;
-  while(items_iter)
+  GList *doomed = NULL;
+  for(const GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
   {
     GtkTreePath *item = (GtkTreePath *)items_iter->data;
-    int dd = gtk_tree_path_get_depth(item);
-    int *ii = gtk_tree_path_get_indices(item);
-    int ok = 1;
-    if(dd != depth)
-      ok = 0;
-    else if(dd == 1)
-      ok = 1;
-    else if(ii[dd - 2] != indices[dd - 2])
-      ok = 0;
-    if(!ok)
-    {
-      gtk_tree_selection_unselect_path(selection, item);
-      g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
-      items = NULL;
-      items_iter = items = gtk_tree_selection_get_selected_rows(selection, NULL);
-      continue;
-    }
-    items_iter = g_list_next(items_iter);
+    const int dd = gtk_tree_path_get_depth(item);
+    const int *ii = gtk_tree_path_get_indices(item);
+    const gboolean peer = (dd == depth) && (dd == 1 || ii[dd - 2] == indices[dd - 2]);
+    if(!peer) doomed = g_list_prepend(doomed, item);
   }
+
+  for(const GList *doomed_iter = doomed; doomed_iter; doomed_iter = g_list_next(doomed_iter))
+    gtk_tree_selection_unselect_path(selection, (GtkTreePath *)doomed_iter->data);
+
+  // doomed borrows its paths from items, which owns and frees them
+  g_list_free(doomed);
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
-  items = NULL;
+
   return TRUE;
 }
 
@@ -1170,7 +1167,8 @@ gboolean _find_mask_iter_by_values(GtkTreeModel *model, GtkTreeIter *iter,
       && ((level == 1)
           || (IS_NULL_PTR(module) || (mod && (!g_strcmp0(module->op, mod->op)))));
     if(found) return found;
-    GtkTreeIter child, parent = *iter;
+    GtkTreeIter child;
+    GtkTreeIter parent = *iter;
     if(gtk_tree_model_iter_children(model, &child, &parent))
     {
       found = _find_mask_iter_by_values(model, &child, module, formid, level + 1);
@@ -1275,7 +1273,7 @@ static void _shape_manager_recreate_list(dt_lib_module_t *self)
       GtkTreeModel *model = GTK_TREE_MODEL(treestore);
       dt_iop_module_t *mod = (dt_iop_module_t *)ids->data;
       ids = g_list_next(ids);
-      // const int gid = GPOINTER_TO_INT(ids->data); // not needed, skip it
+      // the group id sits between the module and the form id, and this walk has no use for it
       ids = g_list_next(ids);
       const int fid = GPOINTER_TO_INT(ids->data);
       ids = g_list_next(ids);
@@ -1497,7 +1495,8 @@ static gboolean _shape_manager_selection_change_r(GtkTreeModel *model, GtkTreeSe
     }
 
     // check for children if any
-    GtkTreeIter child, parent = i;
+    GtkTreeIter child;
+    GtkTreeIter parent = i;
     if(gtk_tree_model_iter_children(model, &child, &parent))
     {
       found = _shape_manager_selection_change_r(model, selection, &child, module, selectid, throw_event, level + 1);
@@ -1628,7 +1627,6 @@ static void _shape_manager_handler_callback(gpointer instance, const int formid,
       case DT_MASKS_EVENT_REMOVE :
       {
         _shape_manager_recreate_list(self);
-        //_shape_manager_remove_item(self, formid, parentid);
       }
       break;
 
@@ -1937,7 +1935,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_tree_selection_set_mode(selection, GTK_SELECTION_MULTIPLE);
   gtk_tree_selection_set_select_function(selection, _tree_restrict_select, d, NULL);
   gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->treeview), FALSE);
-  // gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->treeview),TREE_USED_TEXT);
+  // A query-tooltip handler rather than a tooltip column: only the rows that carry a "used by"
+  // text show one, which a column would not let us decide per row.
   g_object_set(d->treeview, "has-tooltip", TRUE, (gchar *)0);
   g_signal_connect(d->treeview, "query-tooltip", G_CALLBACK(_tree_query_tooltip), NULL);
   g_signal_connect(selection, "changed", G_CALLBACK(_tree_selection_change), d);
