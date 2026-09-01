@@ -998,6 +998,48 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
   return GTK_WIDGET(menu);
 }
 
+/* The selection a left click asks for. Ctrl toggles the row, so a second one takes it back out
+ * rather than being a no-op; Shift extends from the cursor, which is the anchor GTK would have
+ * used, and rows the range picks up that _tree_restrict_select refuses -- a different parent, a
+ * different depth -- are dropped by it as usual. A click on blank space clears the selection.
+ *
+ * Returns whether the gesture was answered here, which is what the caller reports as handled:
+ * an unmodified click on a row is left to GtkTreeView, the one case it does act on. */
+static int _tree_apply_click_selection(GtkWidget *treeview, GtkTreeSelection *selection,
+                                       const GdkEventButton *event, GtkTreePath *mouse_path)
+{
+  if(IS_NULL_PTR(mouse_path))
+  {
+    gtk_tree_selection_unselect_all(selection);
+    return 0;
+  }
+
+  if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
+  {
+    if(gtk_tree_selection_path_is_selected(selection, mouse_path))
+      gtk_tree_selection_unselect_path(selection, mouse_path);
+    else
+      gtk_tree_selection_select_path(selection, mouse_path);
+    return 1;
+  }
+
+  if(dt_modifier_is(event->state, GDK_SHIFT_MASK))
+  {
+    GtkTreePath *anchor = NULL;
+    gtk_tree_view_get_cursor(GTK_TREE_VIEW(treeview), &anchor, NULL);
+    if(anchor)
+    {
+      gtk_tree_selection_select_range(selection, anchor, mouse_path);
+      gtk_tree_path_free(anchor);
+    }
+    else
+      gtk_tree_selection_select_path(selection, mouse_path);
+    return 1;
+  }
+
+  return 0;
+}
+
 /* Ctrl+click toggles a row, Shift+click extends from the cursor. GtkTreeView's own handler does
  * neither on this tree: measured, the intent masks it derives are the expected ones (modify 0x4,
  * extend 0x1), the event carries them, the selection is GTK_SELECTION_MULTIPLE and the select
@@ -1013,12 +1055,11 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
   GtkTreePath *mouse_path = NULL;
   GtkTreeIter iter;
   dt_iop_module_t *module = NULL;
-  int on_row = 0;
   int handled = 0;
+  // mouse_path is non-NULL exactly when the pointer is over a row, so it answers "on a row?" too.
   if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &mouse_path, NULL,
                                    NULL, NULL))
   {
-    on_row = 1;
     // we retrieve the iter and module from path
     if(gtk_tree_model_get_iter(model, &iter, mouse_path))
     {
@@ -1028,41 +1069,12 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
   /* single click with the right mouse button? */
   if(event->type == GDK_BUTTON_PRESS && event->button == 1)
   {
-    if(on_row && dt_modifier_is(event->state, DT_PRIMARY_MASK))
-    {
-      // Toggle, which is what this modifier means everywhere else: a second Ctrl+click on a row
-      // takes it back out of the selection rather than being a no-op.
-      if(gtk_tree_selection_path_is_selected(selection, mouse_path))
-        gtk_tree_selection_unselect_path(selection, mouse_path);
-      else
-        gtk_tree_selection_select_path(selection, mouse_path);
-      handled = 1;
-    }
-    else if(on_row && dt_modifier_is(event->state, GDK_SHIFT_MASK))
-    {
-      // The cursor is the anchor GTK would have used. Rows the range picks up that _tree_restrict_select
-      // refuses -- a different parent, a different depth -- are dropped by it as usual.
-      GtkTreePath *anchor = NULL;
-      gtk_tree_view_get_cursor(GTK_TREE_VIEW(treeview), &anchor, NULL);
-      if(anchor)
-      {
-        gtk_tree_selection_select_range(selection, anchor, mouse_path);
-        gtk_tree_path_free(anchor);
-      }
-      else
-        gtk_tree_selection_select_path(selection, mouse_path);
-      handled = 1;
-    }
-    // if click on a blank space, then deselect all
-    else if(!on_row)
-    {
-      gtk_tree_selection_unselect_all(selection);
-    }
+    handled = _tree_apply_click_selection(treeview, selection, event, mouse_path);
   }
   else if(event->type == GDK_BUTTON_PRESS && event->button == 3)
   {
     // if we are already inside the selection, no change
-    if(on_row && !gtk_tree_selection_path_is_selected(selection, mouse_path))
+    if(!IS_NULL_PTR(mouse_path) && !gtk_tree_selection_path_is_selected(selection, mouse_path))
     {
       if(!dt_modifier_is(event->state, DT_PRIMARY_MASK)) gtk_tree_selection_unselect_all(selection);
       gtk_tree_selection_select_path(selection, mouse_path);
@@ -1884,7 +1896,8 @@ static void _lib_masks_popup_button_toggled_cb(GtkWidget *button, gpointer user_
 /** @brief Closing from the window manager hides the panel, same as the toolbox button, so its
  * widgets and state survive. Un-pressing the button is what actually hides the window (and saves
  * the geometry before it goes), so the two ways of closing cannot disagree. */
-static gboolean _lib_masks_popup_delete_cb(GtkWidget *window, GdkEvent *event, gpointer user_data)
+static gboolean _lib_masks_popup_delete_cb(GtkWidget *window __attribute__((unused)),
+                                           GdkEvent *event __attribute__((unused)), gpointer user_data)
 {
   dt_lib_masks_t *d = (dt_lib_masks_t *)user_data;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->popup_button), FALSE);
