@@ -42,6 +42,7 @@
 #include "develop/masks.h"
 #include "develop/masks_group.h"   // dt_masks_group_set_member_operation()
 #include "develop/masks_gui.h"
+#include "develop/masks/masks_history.h"   // dt_masks_form_unref()
 #include "common/logging.h"
 #include "system/macros.h"
 #include "common/module_versioning.h"
@@ -79,8 +80,6 @@ static void _lib_masks_update_list(dt_lib_module_t *self);
 
 typedef struct dt_lib_masks_t
 {
-  GtkWidget *hbox;
-  GtkWidget *bt_circle, *bt_path, *bt_gradient, *bt_ellipse, *bt_brush;
   GtkWidget *treeview;
   dt_iop_module_t *active_module;
   dt_iop_module_t *hosted_module;
@@ -347,7 +346,11 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
 {
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
   // we create the new group
-  dt_masks_form_t *mask = dt_masks_create(DT_MASKS_GROUP);
+  // create_ext registers the group in dev->allforms and dt_masks_append_form() below takes
+  // dev->forms's own reference, so both lists have a claim and teardown balances. Neither
+  // touches dev->forms outside masks_mutex, which a hand-rolled g_list_append does -- and the
+  // pipeline thread reads that list under the same lock.
+  dt_masks_form_t *mask = dt_masks_create_ext(dt_dev_get_global(), DT_MASKS_GROUP);
   g_snprintf(mask->name, sizeof(mask->name), _("Mask #%d"), g_list_length(dt_dev_get_global()->forms));
 
   // we add all selected forms to this group
@@ -377,7 +380,7 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
   items = NULL;
 
   // we add this group to the general list
-  dt_dev_get_global()->forms = g_list_append(dt_dev_get_global()->forms, mask);
+  dt_masks_append_form(dt_dev_get_global(), mask);
 
   // add we save
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
@@ -794,6 +797,10 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
   dt_masks_form_t *grp_dest = dt_masks_create(DT_MASKS_GROUP);
   grp_dest->formid = 0;
   dt_masks_group_ungroup(dev, grp_dest, grp);
+  // grp was a scratch group built to flatten the selection into grp_dest, which only reads it.
+  // It never joined dev->forms or dev->allforms, so this is the only reference there is --
+  // unlike grp_dest, whose reference passes to form_visible below.
+  dt_masks_form_unref(grp);
   dt_masks_change_form_gui(dev, grp_dest);
   dev->form_gui->edit_mode = DT_MASKS_EDIT_FULL;
   if(nb == 1 && !IS_NULL_PTR(selected_form))
@@ -1964,12 +1971,11 @@ void gui_init(dt_lib_module_t *self)
 
   // From here, everything goes into the mask manager popup,
   // so there is no child added to self->widget from here.
-  GtkWidget *shape_buttons[DEVELOP_MASKS_NB_SHAPES] = { 0 };
   const dt_masks_shape_buttons_config_t shape_buttons_config = {
     .dev = dt_dev_get_global(),
     .owner_module = NULL,
     .creation_module = NULL,
-    .buttons = shape_buttons,
+    .buttons = NULL,   // nothing here reads the individual buttons back
     .types = NULL,
     .action_section = NULL,
     .flags = DT_MASKS_SHAPE_BUTTONS_ALL,
@@ -1984,12 +1990,6 @@ void gui_init(dt_lib_module_t *self)
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *shape_buttons_box = dt_masks_shape_buttons_create(&shape_buttons_config);
   gtk_box_pack_start(GTK_BOX(hbox), shape_buttons_box, FALSE, FALSE, 0);
-  d->bt_gradient = shape_buttons[DT_MASKS_SHAPE_INDEX_GRADIENT];
-  d->bt_path = shape_buttons[DT_MASKS_SHAPE_INDEX_POLYGON];
-  d->bt_ellipse = shape_buttons[DT_MASKS_SHAPE_INDEX_ELLIPSE];
-  d->bt_circle = shape_buttons[DT_MASKS_SHAPE_INDEX_CIRCLE];
-  d->bt_brush = shape_buttons[DT_MASKS_SHAPE_INDEX_BRUSH];
-
   // The button row keeps its natural height and stays at the top: expanding it would split the
   // surplus with the shape list below and stretch the buttons vertically. It is the container's
   // first child, so nothing separates it from the window edge -- give it the same gap the
