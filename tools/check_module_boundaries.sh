@@ -411,7 +411,7 @@ fi
 #                  are excluded; naming the type there is the design, not the leak.
 masks_include_baseline=19
 masks_gui_include_baseline=11
-masks_member_baseline=79
+masks_member_baseline=78
 masks_write_baseline=16
 masks_alloc_baseline=1
 masks_forms_baseline=75
