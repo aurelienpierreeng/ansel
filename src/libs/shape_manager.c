@@ -1237,138 +1237,128 @@ GList *_shape_manager_get_selected(dt_lib_module_t *self)
   return res;
 }
 
+/* Expands to the row, scrolls it into view and selects it. */
+static void _tree_reveal_row(dt_shape_manager_t *lm, GtkTreeModel *model, GtkTreeIter *iter,
+                             const gboolean exclusive)
+{
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+  GtkTreePath *path = gtk_tree_model_get_path(model, iter);
+
+  if(exclusive) gtk_tree_selection_unselect_all(selection);
+  gtk_tree_view_expand_to_path(GTK_TREE_VIEW(lm->treeview), path);
+  gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(lm->treeview), path, NULL, TRUE, 0.5, 0.5);
+  gtk_tree_selection_select_iter(selection, iter);
+
+  gtk_tree_path_free(path);
+}
+
+static void _tree_store_add_forms(GtkTreeStore *treestore, dt_shape_manager_t *lm, const gboolean groups)
+{
+  for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
+  {
+    dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
+    if(!!(form->type & DT_MASKS_GROUP) != groups) continue;
+
+    const _tree_row_t row = { .form = form, .opacity = 1.0f };
+    _shape_manager_list_recurs(treestore, NULL, lm, &row);
+  }
+}
+
+/* Groups first, then the shapes no group holds: that is the order the tree shows them in. */
+static GtkTreeStore *_tree_store_build(dt_shape_manager_t *lm)
+{
+  // we store : text ; *module ; groupid ; formid
+  GtkTreeStore *treestore = gtk_tree_store_new(TREE_COUNT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT,
+                                               G_TYPE_INT, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN,
+                                               GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING);
+  _tree_store_add_forms(treestore, lm, TRUE);
+  _tree_store_add_forms(treestore, lm, FALSE);
+  return treestore;
+}
+
+/* Puts back what was selected before the store was replaced. selectids holds three entries per
+ * row -- module, group id, form id -- as _shape_manager_get_selected() built it. */
+static void _tree_restore_selection(dt_shape_manager_t *lm, GtkTreeModel *model, GList *selectids)
+{
+  const GList *ids = selectids;
+  while(ids)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)ids->data;
+    ids = g_list_next(ids);
+    // the group id sits between the module and the form id, and this walk has no use for it
+    ids = g_list_next(ids);
+    const int fid = GPOINTER_TO_INT(ids->data);
+    ids = g_list_next(ids);
+
+    GtkTreeIter iter;
+    // An empty store leaves iter untouched, and _find_mask_iter_by_values() then walks a
+    // stack-garbage iterator: gtk_tree_store_get_value() and gtk_tree_store_iter_next() assert
+    // on it, and the walk has no reason to terminate. Nothing later can make the store
+    // non-empty, so stop rather than skip.
+    if(!gtk_tree_model_get_iter_first(model, &iter)) return;
+
+    if(_find_mask_iter_by_values(model, &iter, mod, fid, 1)) _tree_reveal_row(lm, model, &iter, FALSE);
+  }
+}
+
+/* Points the tree at the focused module's mask group, and says whether it moved the selection --
+ * the caller replays the selection handler when it did, so the canvas follows. */
+static gboolean _tree_select_module_group(dt_shape_manager_t *lm, GtkTreeModel *model,
+                                          const dt_masks_form_gui_t *gui)
+{
+  dt_iop_module_t *const module = dt_dev_get_global()->gui_module;
+  const int group_id = (!IS_NULL_PTR(module) && module->blend_params
+                        && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
+                        && !(module->flags() & IOP_FLAGS_NO_MASKS))
+                           ? module->blend_params->mask_id
+                           : 0;
+
+  if(group_id <= 0) return FALSE;
+  // Mid-creation the tree follows the shape being drawn, not the module.
+  if(!IS_NULL_PTR(gui) && gui->creation) return FALSE;
+
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter_first(model, &iter)) return FALSE;
+  if(!_find_mask_iter_by_values(model, &iter, module, group_id, 1)) return FALSE;
+
+  _tree_reveal_row(lm, model, &iter, TRUE);
+  return TRUE;
+}
+
 static void _shape_manager_recreate_list(dt_lib_module_t *self)
 {
-  /* first destroy all buttons in list */
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
-  if(IS_NULL_PTR(lm)) return;
-  if(lm->gui_reset) return;
+  if(IS_NULL_PTR(lm) || lm->gui_reset) return;
 
+  // Everything below drives the tree itself, so the handlers it would wake must stay quiet.
   const int gui_reset = lm->gui_reset;
   lm->gui_reset = 1;
-  gboolean sync_center_view = FALSE;
 
-  // if a treeview is already present, let's get the currently selected items
-  // as we are going to recreate the tree.
-  GList *selectids = NULL;
+  // The tree is about to be replaced, so what is selected has to be read before it goes.
+  GList *selectids = lm->treeview ? _shape_manager_get_selected(self) : NULL;
 
-  if(lm->treeview)
-  {
-    selectids = _shape_manager_get_selected(self);
-  }
-
-  // Rebuilding the shape manager list is also used to refresh shapes created
-  // during continuous creation. In that case, the active creation button must
-  // stay active until the user cancels creation explicitly.
+  // Rebuilding the list also refreshes shapes created during continuous creation. In that case
+  // the active creation button must stay active until the user cancels creation explicitly.
   dt_masks_form_gui_t *gui = dt_dev_get_global()->form_gui;
   if(IS_NULL_PTR(gui) || !gui->creation) dt_masks_shape_buttons_deactivate_all(NULL);
 
-  GtkTreeStore *treestore;
-  // we store : text ; *module ; groupid ; formid
-  treestore = gtk_tree_store_new(TREE_COUNT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT, G_TYPE_INT,
-                                 G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF,
-                                 G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING);
+  GtkTreeStore *treestore = _tree_store_build(lm);
+  GtkTreeModel *model = GTK_TREE_MODEL(treestore);
+  gtk_tree_view_set_model(GTK_TREE_VIEW(lm->treeview), model);
 
-  // we first add all groups
-  for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
-  {
-    dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
-    if(form->type & DT_MASKS_GROUP)
-    {
-      const _tree_row_t row = { .form = form, .opacity = 1.0f };
-      _shape_manager_list_recurs(treestore, NULL, lm, &row);
-    }
-  }
-
-  // and we add all forms
-  for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
-  {
-    dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
-    if(!(form->type & DT_MASKS_GROUP))
-    {
-      const _tree_row_t row = { .form = form, .opacity = 1.0f };
-      _shape_manager_list_recurs(treestore, NULL, lm, &row);
-    }
-  }
-
-  gtk_tree_view_set_model(GTK_TREE_VIEW(lm->treeview), GTK_TREE_MODEL(treestore));
-  
-  // select the images as selected in the previous tree
   if(selectids)
   {
-    GList *ids = selectids;
-    while(ids)
-    {
-      GtkTreeModel *model = GTK_TREE_MODEL(treestore);
-      dt_iop_module_t *mod = (dt_iop_module_t *)ids->data;
-      ids = g_list_next(ids);
-      // the group id sits between the module and the form id, and this walk has no use for it
-      ids = g_list_next(ids);
-      const int fid = GPOINTER_TO_INT(ids->data);
-      ids = g_list_next(ids);
-
-      GtkTreeIter iter;
-      // An empty store leaves iter untouched, and _find_mask_iter_by_values() then walks a
-      // stack-garbage iterator: gtk_tree_store_get_value() and gtk_tree_store_iter_next()
-      // assert on it, and the walk has no reason to terminate. Nothing later in this loop can
-      // make the store non-empty, so stop rather than skip.
-      if(!gtk_tree_model_get_iter_first(model, &iter)) break;
-      // get formid in group for the given module
-      const gboolean found = _find_mask_iter_by_values(model, &iter, mod, fid, 1);
-
-      if(found)
-      {
-        GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
-        gtk_tree_view_expand_to_path(GTK_TREE_VIEW(lm->treeview), path);
-        gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(lm->treeview), path, NULL, TRUE, 0.5, 0.5);
-        gtk_tree_path_free(path);
-        GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
-        gtk_tree_selection_select_iter(selection, &iter);
-      }
-    }
+    _tree_restore_selection(lm, model, selectids);
     g_list_free(selectids);
-    selectids = NULL;
   }
 
-  // After list refresh, keep the tree selection aligned with the current GUI module mask group.
-  dt_iop_module_t *const current_module = dt_dev_get_global()->gui_module;
-  const int current_group_id
-      = (!IS_NULL_PTR(current_module) && current_module->blend_params
-         && (current_module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
-         && !(current_module->flags() & IOP_FLAGS_NO_MASKS))
-            ? current_module->blend_params->mask_id
-            : 0;
-
-  if(current_group_id > 0 && (IS_NULL_PTR(gui) || !gui->creation))
-  {
-    GtkTreeModel *model = GTK_TREE_MODEL(treestore);
-    GtkTreeIter iter;
-    if(gtk_tree_model_get_iter_first(model, &iter))
-    {
-      const gboolean found = _find_mask_iter_by_values(model, &iter, current_module, current_group_id, 1);
-      if(found)
-      {
-        GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
-        GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
-        gtk_tree_selection_unselect_all(selection);
-        gtk_tree_view_expand_to_path(GTK_TREE_VIEW(lm->treeview), path);
-        gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(lm->treeview), path, NULL, TRUE, 0.5, 0.5);
-        gtk_tree_selection_select_iter(selection, &iter);
-        gtk_tree_path_free(path);
-        sync_center_view = TRUE;
-      }
-    }
-  }
+  const gboolean sync_center_view = _tree_select_module_group(lm, model, gui);
 
   g_object_unref(treestore);
-
   lm->gui_reset = gui_reset;
 
   if(sync_center_view)
-  {
-    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
-    _tree_selection_change(selection, lm);
-  }
+    _tree_selection_change(gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview)), lm);
 }
 
 static void _shape_manager_update_item(dt_lib_module_t *self __attribute__((unused)), int formid, int parentid, dt_shape_manager_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
@@ -1854,7 +1844,7 @@ void gui_init(dt_lib_module_t *self)
 
   // 2. Setup the non-modal popup window
   d->popup_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-  gtk_window_set_title(GTK_WINDOW(d->popup_window), _("Shape Manager Panel"));
+  gtk_window_set_title(GTK_WINDOW(d->popup_window), _("Shape Manager"));
   gtk_window_set_type_hint(GTK_WINDOW(d->popup_window), GDK_WINDOW_TYPE_HINT_UTILITY);
   
   // NON-MODAL & NO FOCUS STEAL: Prevents window manager from stealing active focus when mapped/shown
