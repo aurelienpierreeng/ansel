@@ -122,7 +122,7 @@ dt_help_url urls_db[] =
   {"modulegroups",               "modules/utility-modules/darkroom/manage-module-layouts/"},
   {"history",                    "modules/utility-modules/darkroom/history-stack/"},
   {"colorpicker",                "modules/utility-modules/darkroom/global-color-picker/"},
-  {"masks",                      "modules/utility-modules/darkroom/mask-manager/"},
+  {"shape_manager",              "modules/utility-modules/darkroom/mask-manager/"},
   {"masks_drawn",                "views/darkroom/masking-and-blending/masks/drawn/"},
   {"masks_parametric",           "views/darkroom/masking-and-blending/masks/parametric/"},
   {"masks_raster",               "views/darkroom/masking-and-blending/masks/raster/"},

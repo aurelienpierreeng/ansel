@@ -413,6 +413,9 @@ typedef struct dt_develop_t
       void (*list_update)(struct dt_lib_module_t *self);
       /* selected forms change */
       void (*selection_change)(struct dt_lib_module_t *self, struct dt_iop_module_t *module, const int selectid, const int throw_event);
+      /* is the shape manager's window on screen? The darkroom draws the mask overlays while the
+         user is looking at it, the way it used to while its panel section was expanded. */
+      gboolean (*is_visible)(struct dt_lib_module_t *self);
     } masks;
 
     // what is the ID of the module currently doing pipeline chromatic adaptation ?
@@ -620,6 +623,8 @@ void dt_dev_masks_list_change(dt_develop_t *dev);
 void dt_dev_masks_list_update(dt_develop_t *dev);
 void dt_dev_masks_list_remove(dt_develop_t *dev, int formid, int parentid);
 void dt_dev_masks_selection_change(dt_develop_t *dev, struct dt_iop_module_t *module, const int selectid, const int throw_event);
+/* FALSE when no shape manager is registered, which is also the answer when its window is closed */
+gboolean dt_dev_masks_manager_is_visible(dt_develop_t *dev);
 
 /** integrity hash of the forms/shapes stack */
 void dt_dev_masks_update_hash(dt_develop_t *dev);

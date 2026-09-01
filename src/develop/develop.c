@@ -1331,6 +1331,12 @@ void dt_dev_modulegroups_switch_tab(dt_develop_t *dev, dt_iop_module_t *module)
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, module);
 }
 
+gboolean dt_dev_masks_manager_is_visible(dt_develop_t *dev)
+{
+  return dev && dev->proxy.masks.module && dev->proxy.masks.is_visible
+         && dev->proxy.masks.is_visible(dev->proxy.masks.module);
+}
+
 void dt_dev_masks_list_change(dt_develop_t *dev)
 {
   if(dev->proxy.masks.module && dev->proxy.masks.list_change)

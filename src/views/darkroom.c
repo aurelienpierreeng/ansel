@@ -1103,9 +1103,9 @@ void expose(
   }
   else
   {
-    // display mask if we have a current module activated or if the masks manager module is expanded
+    // display mask if we have a current module activated or if the shape manager window is open
     const gboolean display_masks = (dev->gui_module && dev->gui_module->enabled)
-                                 || dt_lib_gui_get_expanded(dt_lib_get_module("masks"));
+                                 || dt_dev_masks_manager_is_visible(dev);
 
     if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_show_times(&stage, "[darkroom] overlay predicates");
 
