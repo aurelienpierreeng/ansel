@@ -1862,30 +1862,38 @@ static void _lib_masks_popup_restore_geometry(dt_lib_masks_t *d)
   gtk_window_move(GTK_WINDOW(d->popup_window), clamped_x, clamped_y);
 }
 
-/** @brief Closing from the window manager hides the panel, same as the toolbox button, so its
- * widgets and state survive -- but the geometry has to be read before it goes. */
-static gboolean _lib_masks_popup_delete_cb(GtkWidget *window, GdkEvent *event, gpointer user_data)
-{
-  _lib_masks_popup_save_geometry((dt_lib_masks_t *)user_data);
-  return gtk_widget_hide_on_delete(window);
-}
-
-static void _lib_masks_popup_button_clicked_cb(GtkWidget *button, gpointer user_data)
+/** @brief The toolbox button is the panel's only state: showing and hiding both go through its
+ * active flag, so every way of closing the panel leaves the button un-pressed. Re-entrant by
+ * design -- the window-manager close path toggles the button, which comes back here. */
+static void _lib_masks_popup_button_toggled_cb(GtkWidget *button, gpointer user_data)
 {
   dt_lib_masks_t *d = (dt_lib_masks_t *)user_data;
-  if(!d->popup_window) return;
+  if(IS_NULL_PTR(d->popup_window)) return;
 
-  if(gtk_widget_get_visible(d->popup_window))
-  {
-    _lib_masks_popup_save_geometry(d);
-    gtk_widget_hide(d->popup_window);
-  }
-  else
+  const gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button));
+  if(active == gtk_widget_get_visible(d->popup_window)) return;
+
+  if(active)
   {
     // before mapping: a move applied to a mapped window makes it jump in view
     _lib_masks_popup_restore_geometry(d);
     gtk_widget_show_all(d->popup_window);
   }
+  else
+  {
+    _lib_masks_popup_save_geometry(d);
+    gtk_widget_hide(d->popup_window);
+  }
+}
+
+/** @brief Closing from the window manager hides the panel, same as the toolbox button, so its
+ * widgets and state survive. Un-pressing the button is what actually hides the window (and saves
+ * the geometry before it goes), so the two ways of closing cannot disagree. */
+static gboolean _lib_masks_popup_delete_cb(GtkWidget *window, GdkEvent *event, gpointer user_data)
+{
+  dt_lib_masks_t *d = (dt_lib_masks_t *)user_data;
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->popup_button), FALSE);
+  return TRUE;
 }
 
 /* Idle callback to add the popup button to the module toolbox once the
@@ -1967,7 +1975,7 @@ void gui_init(dt_lib_module_t *self)
    * other modules (including the module_toolbox) have had their gui_init
    * called. The callback will remove itself once it succeeds. */
   g_idle_add((GSourceFunc)_lib_masks_add_popup_button_idle, d);
-  g_signal_connect(G_OBJECT(d->popup_button), "clicked", G_CALLBACK(_lib_masks_popup_button_clicked_cb), d);
+  g_signal_connect(G_OBJECT(d->popup_button), "toggled", G_CALLBACK(_lib_masks_popup_button_toggled_cb), d);
 
   // From here, everything goes into the mask manager popup,
   // so there is no child added to self->widget from here.

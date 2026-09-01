@@ -1600,6 +1600,22 @@ The hint costs nothing for a panel shown and hidden repeatedly: GTK consults it 
 mapping only, so a window the user has dragged elsewhere keeps the place they gave it across
 later hide/show cycles.
 
+### A window a toggle button opens has exactly one state: the button's
+
+`gtk_widget_hide_on_delete()` is the usual answer to a window whose widgets and state must
+survive being closed, but it hides the window behind the back of whatever opened it. When the
+opener is a `GtkToggleButton` — the shape manager panel's toolbox button (`libs/masks.c`) — the
+button stays pressed after a window-manager close, and the next click reads that state as "the
+panel is open" and hides an already-hidden window: it takes two clicks to bring the panel back.
+
+So the button's `active` flag is the panel's only state. Visibility is driven from `toggled`,
+never from `clicked`, and the `delete-event` handler hides nothing itself — it un-presses the
+button and returns `TRUE`, leaving that same `toggled` handler to save the geometry and hide.
+The order matters: `gtk_toggle_button_set_active()` emits `clicked` as well as `toggled`, so a
+`clicked` handler flipping visibility would re-show the window it was just asked to close. The
+handler compares `active` against the window's actual visibility and returns when the two agree,
+which is what makes it safe to re-enter from the close path.
+
 ### Modal dialogs must explicitly refocus their parent on close
 
 `gtk_window_set_transient_for()` at dialog creation is not enough to guarantee focus returns to
