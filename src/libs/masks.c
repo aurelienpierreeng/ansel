@@ -1041,6 +1041,12 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
   return GTK_WIDGET(menu);
 }
 
+/* Ctrl+click toggles a row, Shift+click extends from the cursor. GtkTreeView's own handler does
+ * neither on this tree: measured, the intent masks it derives are the expected ones (modify 0x4,
+ * extend 0x1), the event carries them, the selection is GTK_SELECTION_MULTIPLE and the select
+ * function allows the row -- yet no selection change follows a modified click, while a plain one
+ * works. Why it stays inert was not found; driving the two gestures here is not a workaround for
+ * that so much as the place this widget already adjusts its own selection. */
 static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_lib_module_t *self)
 {
   // we first need to adjust selection
@@ -1051,6 +1057,7 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
   GtkTreeIter iter;
   dt_iop_module_t *module = NULL;
   int on_row = 0;
+  int handled = 0;
   if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &mouse_path, NULL,
                                    NULL, NULL))
   {
@@ -1064,8 +1071,33 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
   /* single click with the right mouse button? */
   if(event->type == GDK_BUTTON_PRESS && event->button == 1)
   {
+    if(on_row && dt_modifier_is(event->state, DT_PRIMARY_MASK))
+    {
+      // Toggle, which is what this modifier means everywhere else: a second Ctrl+click on a row
+      // takes it back out of the selection rather than being a no-op.
+      if(gtk_tree_selection_path_is_selected(selection, mouse_path))
+        gtk_tree_selection_unselect_path(selection, mouse_path);
+      else
+        gtk_tree_selection_select_path(selection, mouse_path);
+      handled = 1;
+    }
+    else if(on_row && dt_modifier_is(event->state, GDK_SHIFT_MASK))
+    {
+      // The cursor is the anchor GTK would have used. Rows the range picks up that _tree_restrict_select
+      // refuses -- a different parent, a different depth -- are dropped by it as usual.
+      GtkTreePath *anchor = NULL;
+      gtk_tree_view_get_cursor(GTK_TREE_VIEW(treeview), &anchor, NULL);
+      if(anchor)
+      {
+        gtk_tree_selection_select_range(selection, anchor, mouse_path);
+        gtk_tree_path_free(anchor);
+      }
+      else
+        gtk_tree_selection_select_path(selection, mouse_path);
+      handled = 1;
+    }
     // if click on a blank space, then deselect all
-    if(!on_row)
+    else if(!on_row)
     {
       gtk_tree_selection_unselect_all(selection);
     }
@@ -1077,7 +1109,6 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
     {
       if(!dt_modifier_is(event->state, DT_PRIMARY_MASK)) gtk_tree_selection_unselect_all(selection);
       gtk_tree_selection_select_path(selection, mouse_path);
-      gtk_tree_path_free(mouse_path);
     }
 
     // and we display the context-menu
@@ -1087,10 +1118,13 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
 
     gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
 
-    return 1;
+    handled = 1;
   }
 
-  return 0;
+  // One exit for the path: it was leaked on every button-1 press before, and freed on only one
+  // of the two button-3 branches.
+  if(mouse_path) gtk_tree_path_free(mouse_path);
+  return handled;
 }
 
 static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel *model, GtkTreePath *path,
