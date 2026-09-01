@@ -1394,7 +1394,11 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
       ids = g_list_next(ids);
 
       GtkTreeIter iter;
-      gtk_tree_model_get_iter_first(model, &iter);
+      // An empty store leaves iter untouched, and _find_mask_iter_by_values() then walks a
+      // stack-garbage iterator: gtk_tree_store_get_value() and gtk_tree_store_iter_next()
+      // assert on it, and the walk has no reason to terminate. Nothing later in this loop can
+      // make the store non-empty, so stop rather than skip.
+      if(!gtk_tree_model_get_iter_first(model, &iter)) break;
       // get formid in group for the given module
       const gboolean found = _find_mask_iter_by_values(model, &iter, mod, fid, 1);
 
