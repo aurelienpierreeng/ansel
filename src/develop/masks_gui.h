@@ -496,6 +496,20 @@ typedef struct dt_masks_shape_buttons_config_t
 } dt_masks_shape_buttons_config_t;GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *config);
 void dt_masks_shape_buttons_deactivate_all(GtkWidget *active_button);
 
+/** @brief Make every shape toolbar show the shape currently being created, if any.
+ *
+ * The pressed button is a view on the creation state, so any code arming or re-arming a creation
+ * outside a toolbar button calls this. dt_masks_creation_mode_enter() already does. */
+void dt_masks_shape_buttons_sync_all(void);
+
+/** @brief Append a menu entry for one shape type: its toolbar icon, then its toolbar label.
+ *
+ * The icon and the name both come from the same table the shape toolbars are built from, so a
+ * menu offering a shape and the button offering it cannot drift apart. Returns the entry, or
+ * NULL for a type no toolbar knows. */
+GtkWidget *dt_masks_shape_menu_item_new(GtkWidget *menu, const dt_masks_type_t type,
+                                        GCallback activate_callback, gpointer user_data);
+
 int dt_masks_events_mouse_moved(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, double pressure,
                                 int which);
 int dt_masks_events_button_released(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, int which,

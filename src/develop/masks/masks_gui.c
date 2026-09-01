@@ -59,8 +59,11 @@ typedef struct dt_masks_shape_button_def_t
   int index;
   guint flag;
   dt_masks_type_t type;
+  // label/ctrl_label are the button's two tooltips and read as actions ("add circle"); name is the
+  // shape itself, for a place that already says what it does -- an "Add new shape ..." submenu.
   const gchar *label;
   const gchar *ctrl_label;
+  const gchar *name;
   DTGTKCairoPaintIconFunc paint;
 } dt_masks_shape_button_def_t;
 
@@ -74,15 +77,15 @@ typedef struct dt_masks_shape_buttons_data_t
 
 static const dt_masks_shape_button_def_t _masks_shape_button_defs[] = {
   { DT_MASKS_SHAPE_INDEX_GRADIENT, DT_MASKS_SHAPE_BUTTONS_GRADIENT, DT_MASKS_GRADIENT,
-    N_("add gradient"), N_("add multiple gradients"), dtgtk_cairo_paint_masks_gradient },
+    N_("add gradient"), N_("add multiple gradients"), N_("Gradient"), dtgtk_cairo_paint_masks_gradient },
   { DT_MASKS_SHAPE_INDEX_BRUSH, DT_MASKS_SHAPE_BUTTONS_BRUSH, DT_MASKS_BRUSH,
-    N_("add brush"), N_("add multiple brush strokes"), dtgtk_cairo_paint_masks_brush },
+    N_("add brush"), N_("add multiple brush strokes"), N_("Brush"), dtgtk_cairo_paint_masks_brush },
   { DT_MASKS_SHAPE_INDEX_POLYGON, DT_MASKS_SHAPE_BUTTONS_POLYGON, DT_MASKS_POLYGON,
-    N_("add polygon"), N_("add multiple polygons"), dtgtk_cairo_paint_masks_polygon },
+    N_("add polygon"), N_("add multiple polygons"), N_("Polygon"), dtgtk_cairo_paint_masks_polygon },
   { DT_MASKS_SHAPE_INDEX_ELLIPSE, DT_MASKS_SHAPE_BUTTONS_ELLIPSE, DT_MASKS_ELLIPSE,
-    N_("add ellipse"), N_("add multiple ellipses"), dtgtk_cairo_paint_masks_ellipse },
+    N_("add ellipse"), N_("add multiple ellipses"), N_("Ellipse"), dtgtk_cairo_paint_masks_ellipse },
   { DT_MASKS_SHAPE_INDEX_CIRCLE, DT_MASKS_SHAPE_BUTTONS_CIRCLE, DT_MASKS_CIRCLE,
-    N_("add circle"), N_("add multiple circles"), dtgtk_cairo_paint_masks_circle },
+    N_("add circle"), N_("add multiple circles"), N_("Circle"), dtgtk_cairo_paint_masks_circle },
 };
 
 static void _masks_shape_buttons_deactivate(GtkWidget *active_button, dt_masks_shape_buttons_data_t *data)
@@ -127,10 +130,106 @@ static gboolean _masks_shape_button_is_current_creation(dt_develop_t *dev,
   dt_masks_form_gui_t *mask_gui = dev->form_gui;
   dt_masks_form_t *visible_form = dt_masks_get_visible_form(dev);
 
-  return !IS_NULL_PTR(mask_gui) && mask_gui->creation
-         && mask_gui->creation_module == data->config.creation_module
-         && !IS_NULL_PTR(visible_form)
-         && (visible_form->type & data->types[button_index]);
+  if(IS_NULL_PTR(mask_gui) || !mask_gui->creation || IS_NULL_PTR(visible_form)) return FALSE;
+  if(!(visible_form->type & data->types[button_index])) return FALSE;
+
+  /* A toolbar with no creation_module belongs to no module: it is the shape manager's, which lists
+   * every plain drawn shape whoever created it, so it reports any creation but a retouch/spot one,
+   * whose shapes it never shows. Every other toolbar is a module's own and speaks only for it. */
+  if(IS_NULL_PTR(data->config.creation_module))
+    return (visible_form->type & DT_MASKS_IS_RETOUCHE) == 0;
+
+  return mask_gui->creation_module == data->config.creation_module;
+}
+
+/* The pressed button is a view on dev->form_gui, not a state of its own: recompute it rather than
+ * remembering what was clicked, since creation is armed from places that have no button at all --
+ * the shape manager's "Add new shape ..." context menu, the keyboard shortcuts. */
+static void _masks_shape_buttons_sync(dt_masks_shape_buttons_data_t *data)
+{
+  if(IS_NULL_PTR(data)) return;
+
+  dt_develop_t *dev = !IS_NULL_PTR(data->config.creation_module) ? data->config.creation_module->dev
+                                                                : data->config.dev;
+  if(IS_NULL_PTR(dev)) return;
+
+  for(int i = 0; i < DT_MASKS_SHAPE_BUTTON_COUNT; i++)
+  {
+    GtkWidget *button = data->buttons[i];
+    if(!GTK_IS_TOGGLE_BUTTON(button)) continue;
+
+    const gboolean active = _masks_shape_button_is_current_creation(dev, data, i);
+    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button)) != active)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), active);
+  }
+}
+
+static void _masks_shape_buttons_sync_signal(gpointer instance, dt_masks_shape_buttons_data_t *data)
+{
+  _masks_shape_buttons_sync(data);
+}
+
+void dt_masks_shape_buttons_sync_all(void)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_SHAPE_BUTTONS_SYNC);
+}
+
+static const dt_masks_shape_button_def_t *_masks_shape_button_def(const dt_masks_type_t type)
+{
+  const size_t count = sizeof(_masks_shape_button_defs) / sizeof(_masks_shape_button_defs[0]);
+  for(size_t i = 0; i < count; i++)
+    if(_masks_shape_button_defs[i].type == type) return &_masks_shape_button_defs[i];
+
+  return NULL;
+}
+
+static gboolean _masks_shape_icon_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
+{
+  DTGTKCairoPaintIconFunc paint = (DTGTKCairoPaintIconFunc)user_data;
+
+  // Follow the menu item's own foreground, so the icon dims and highlights with the row it is in.
+  GdkRGBA color;
+  gtk_style_context_get_color(gtk_widget_get_style_context(widget),
+                              gtk_widget_get_state_flags(widget), &color);
+  gdk_cairo_set_source_rgba(cr, &color);
+
+  GtkAllocation alloc;
+  gtk_widget_get_allocation(widget, &alloc);
+  // The shapes are drawn out to the edges of the square they are handed, so inset it: at this
+  // size the outermost stroke would otherwise be clipped by the allocation.
+  const gint pad = 1;
+  paint(cr, pad, pad, alloc.width - 2 * pad, alloc.height - 2 * pad, 0, NULL);
+
+  return FALSE;
+}
+
+GtkWidget *dt_masks_shape_menu_item_new(GtkWidget *menu, const dt_masks_type_t type,
+                                        GCallback activate_callback, gpointer user_data)
+{
+  const dt_masks_shape_button_def_t *def = _masks_shape_button_def(type);
+  if(IS_NULL_PTR(def) || !GTK_IS_MENU_SHELL(menu)) return NULL;
+
+  GtkWidget *menu_item = gtk_menu_item_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  GtkWidget *icon = gtk_drawing_area_new();
+
+  // Square, and the height of a line of text, so the row keeps the height it would have had.
+  const gint size = DT_PIXEL_APPLY_DPI(12);
+  gtk_widget_set_size_request(icon, size, size);
+  gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+  g_signal_connect(G_OBJECT(icon), "draw", G_CALLBACK(_masks_shape_icon_draw), def->paint);
+
+  GtkWidget *label = gtk_label_new(_(def->name));
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+
+  gtk_box_pack_start(GTK_BOX(box), icon, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 0);
+  gtk_container_add(GTK_CONTAINER(menu_item), box);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", activate_callback, user_data);
+
+  return menu_item;
 }
 
 static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *event, gpointer user_data)
@@ -190,6 +289,7 @@ static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *e
 static void _masks_shape_buttons_destroy(GtkWidget *widget, dt_masks_shape_buttons_data_t *data)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_masks_shape_buttons_deactivate_signal), data);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_masks_shape_buttons_sync_signal), data);
   dt_free(data);
 }
 
@@ -259,6 +359,8 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE,
                                   G_CALLBACK(_masks_shape_buttons_deactivate_signal), data);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_SHAPE_BUTTONS_SYNC,
+                                  G_CALLBACK(_masks_shape_buttons_sync_signal), data);
   g_signal_connect(G_OBJECT(data->box), "destroy", G_CALLBACK(_masks_shape_buttons_destroy), data);
 
   return data->box;
@@ -4940,6 +5042,12 @@ gboolean dt_masks_creation_mode_enter(dt_develop_t *dev, dt_iop_module_t *module
   dev->form_gui->creation_type = type;
   dev->form_gui->creation_formids = NULL;
   dev->form_gui->creation_last_formid = 0;
+
+  /* Whichever gesture armed the tool -- a toolbar button, the shape manager's "Add new shape ..."
+   * entry, a shortcut -- every toolbar now shows the shape being created. Raised after the whole
+   * creation state is written, so a handler asking is told the truth; the buttons act on
+   * "button-press-event", not "toggled", so pressing one here cannot re-enter this function. */
+  dt_masks_shape_buttons_sync_all();
 
   // Give focus to central view to allow using shortcuts for mask creation right after selecting a mask type in the manager
   gtk_widget_grab_focus(dt_gui_center_widget());

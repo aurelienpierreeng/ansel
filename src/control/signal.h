@@ -315,6 +315,10 @@ typedef enum dt_signal_t
   DT_SIGNAL_MASK_CHANGED,
   DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE,
 
+  /* Raised when mask creation mode is entered, so every shape toolbar re-reads which shape is
+     being created and presses the matching button -- the toolbars are not the only way in. */
+  DT_SIGNAL_MASK_SHAPE_BUTTONS_SYNC,
+
   /* Raised when the focused darkroom module changes or its masks/blending GUI needs refresh */
   DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED,
 
