@@ -1106,6 +1106,34 @@ ctrl+click only work once that node is *selected* (a mere hover gets the shorter
 `dt_hinter_set_message()` joins `\n` into `, `, so each line must read as a clause of one
 sentence.
 
+### A shape toolbar's pressed button is a view on the creation state, not a state of its own
+
+Which shape button looks armed is derived, never remembered. `dt_masks_creation_mode_enter()`
+(`masks/masks_gui.c`) ends by raising `DT_SIGNAL_MASK_SHAPE_BUTTONS_SYNC`
+(`dt_masks_shape_buttons_sync_all()`), and every toolbar built by `dt_masks_shape_buttons_create()`
+answers by recomputing each of its buttons from `_masks_shape_button_is_current_creation()` against
+`dev->form_gui`. `dt_masks_form_exit_creation()` is the symmetric half and raises
+`..._DEACTIVATE`. That is what lets creation be armed from places that own no button at all — the
+shape manager's "Add new shape ..." context menu (`libs/masks.c`), the keyboard shortcuts,
+`iop/spots.c` — without each of them having to find and press a widget.
+
+So a new way to arm a shape needs no toolbar code, and a toolbar must not track what was clicked.
+The buttons act on `button-press-event`, not `toggled`, which is why the sync may set them freely
+without re-entering the press handler; and the sync is raised *after* the whole creation state is
+written, so a handler that asks is told the truth.
+
+**A toolbar with a NULL `creation_module` is the shape manager's and belongs to no module**, so it
+reports any creation whose form is not a retouch/spot one (`DT_MASKS_IS_RETOUCHE`) — those never
+appear in its tree. Every other toolbar carries its owner in `creation_module` and lights up only
+for that module. The distinction matters because the manager's context menu arms creation with the
+*selected group's* module, not with the manager's own NULL: a strict identity test would leave the
+button that menu just chose unpressed.
+
+`_masks_shape_button_defs` is the one table naming a shape's icon and its two button tooltips
+(`label`, `ctrl_label`, phrased as actions) plus its bare `name`. Menu entries offering a shape are
+built from it through `dt_masks_shape_menu_item_new()`, so a menu and the button offering the same
+shape cannot drift apart — they did, as "add path" against "add polygon".
+
 ### Forms are refcounted, not deep-copied
 
 `dev->forms` (`dt_develop_t`) is the live, mutable `GList` of every mask shape and group

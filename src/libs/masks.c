@@ -273,44 +273,25 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
   dt_iop_gui_update_blending(module);
 }
 
-static void _tree_add_circle(GtkButton *button, dt_iop_module_t *module)
+/* The shape to create rides on the menu item, the way "masks-operation" already does below --
+ * one handler for the five entries, which is also what lets them be built from a loop. Arming the
+ * tool is dt_masks_creation_mode_enter()'s business alone, toolbars included: it tells every shape
+ * toolbar to press the matching button, so the entry and the button agree without either knowing
+ * about the other. */
+static void _tree_add_shape(GtkWidget *menu_item, dt_iop_module_t *module)
 {
-  // we create the new form
-  dt_masks_creation_mode_enter(dt_dev_get_global(), module, DT_MASKS_CIRCLE);
+  const dt_masks_type_t type
+      = (dt_masks_type_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "masks-shape-type"));
+
+  dt_masks_creation_mode_enter(dt_dev_get_global(), module, type);
   dt_dev_get_global()->form_gui->group_selected = 0;
   dt_control_queue_redraw_center();
 }
 
-static void _tree_add_ellipse(GtkButton *button, dt_iop_module_t *module)
+static void _tree_add_shape_menu_item(GtkWidget *menu, const dt_masks_type_t type, dt_iop_module_t *module)
 {
-  // we create the new form
-  dt_masks_creation_mode_enter(dt_dev_get_global(), module, DT_MASKS_ELLIPSE);
-  dt_dev_get_global()->form_gui->group_selected = 0;
-  dt_control_queue_redraw_center();
-}
-
-static void _tree_add_polygon(GtkButton *button, dt_iop_module_t *module)
-{
-  // we create the new form
-  dt_masks_creation_mode_enter(dt_dev_get_global(), module, DT_MASKS_POLYGON);
-  dt_dev_get_global()->form_gui->group_selected = 0;
-  dt_control_queue_redraw_center();
-}
-
-static void _tree_add_gradient(GtkButton *button, dt_iop_module_t *module)
-{
-  // we create the new form
-  dt_masks_creation_mode_enter(dt_dev_get_global(), module, DT_MASKS_GRADIENT);
-  dt_dev_get_global()->form_gui->group_selected = 0;
-  dt_control_queue_redraw_center();
-}
-
-static void _tree_add_brush(GtkButton *button, dt_iop_module_t *module)
-{
-  // we create the new form
-  dt_masks_creation_mode_enter(dt_dev_get_global(), module, DT_MASKS_BRUSH);
-  dt_dev_get_global()->form_gui->group_selected = 0;
-  dt_control_queue_redraw_center();
+  GtkWidget *item = dt_masks_shape_menu_item_new(menu, type, G_CALLBACK(_tree_add_shape), module);
+  if(!IS_NULL_PTR(item)) g_object_set_data(G_OBJECT(item), "masks-shape-type", GINT_TO_POINTER(type));
 }
 
 static void _lib_masks_shape_button_started(GtkWidget *button, dt_iop_module_t *module,
@@ -849,21 +830,11 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(add_item), add_menu);
     gtk_menu_shell_append(menu, add_item);
 
-    item = gtk_menu_item_new_with_label(_("add circle"));
-    g_signal_connect(item, "activate", (GCallback)_tree_add_circle, module);
-    gtk_menu_shell_append(GTK_MENU_SHELL(add_menu), item);
-
-    item = gtk_menu_item_new_with_label(_("add ellipse"));
-    g_signal_connect(item, "activate", (GCallback)_tree_add_ellipse, module);
-    gtk_menu_shell_append(GTK_MENU_SHELL(add_menu), item);
-
-    item = gtk_menu_item_new_with_label(_("add path"));
-    g_signal_connect(item, "activate", (GCallback)_tree_add_polygon, module);
-    gtk_menu_shell_append(GTK_MENU_SHELL(add_menu), item);
-
-    item = gtk_menu_item_new_with_label(_("add gradient"));
-    g_signal_connect(item, "activate", (GCallback)_tree_add_gradient, module);
-    gtk_menu_shell_append(GTK_MENU_SHELL(add_menu), item);
+    _tree_add_shape_menu_item(add_menu, DT_MASKS_BRUSH, module);
+    _tree_add_shape_menu_item(add_menu, DT_MASKS_CIRCLE, module);
+    _tree_add_shape_menu_item(add_menu, DT_MASKS_ELLIPSE, module);
+    _tree_add_shape_menu_item(add_menu, DT_MASKS_POLYGON, module);
+    _tree_add_shape_menu_item(add_menu, DT_MASKS_GRADIENT, module);
 
     gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
   }
@@ -878,25 +849,11 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
       gtk_menu_item_set_submenu(GTK_MENU_ITEM(add_item), add_menu);
       gtk_menu_shell_append(menu, add_item);
 
-      item = gtk_menu_item_new_with_label(_("Add brush"));
-      g_signal_connect(item, "activate", (GCallback)_tree_add_brush, module);
-      gtk_menu_shell_append(GTK_MENU_SHELL(add_menu), item);
-
-      item = gtk_menu_item_new_with_label(_("Add circle"));
-      g_signal_connect(item, "activate", (GCallback)_tree_add_circle, module);
-      gtk_menu_shell_append(GTK_MENU_SHELL(add_menu), item);
-
-      item = gtk_menu_item_new_with_label(_("Add ellipse"));
-      g_signal_connect(item, "activate", (GCallback)_tree_add_ellipse, module);
-      gtk_menu_shell_append(GTK_MENU_SHELL(add_menu), item);
-
-      item = gtk_menu_item_new_with_label(_("Add polygon"));
-      g_signal_connect(item, "activate", (GCallback)_tree_add_polygon, module);
-      gtk_menu_shell_append(GTK_MENU_SHELL(add_menu), item);
-
-      item = gtk_menu_item_new_with_label(_("Add gradient"));
-      g_signal_connect(item, "activate", (GCallback)_tree_add_gradient, module);
-      gtk_menu_shell_append(GTK_MENU_SHELL(add_menu), item);
+      _tree_add_shape_menu_item(add_menu, DT_MASKS_BRUSH, module);
+      _tree_add_shape_menu_item(add_menu, DT_MASKS_CIRCLE, module);
+      _tree_add_shape_menu_item(add_menu, DT_MASKS_ELLIPSE, module);
+      _tree_add_shape_menu_item(add_menu, DT_MASKS_POLYGON, module);
+      _tree_add_shape_menu_item(add_menu, DT_MASKS_GRADIENT, module);
 
       // existing forms
       gboolean has_unused_shapes = FALSE;
