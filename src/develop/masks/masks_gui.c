@@ -164,7 +164,8 @@ static void _masks_shape_buttons_sync(dt_masks_shape_buttons_data_t *data)
   }
 }
 
-static void _masks_shape_buttons_sync_signal(gpointer instance, dt_masks_shape_buttons_data_t *data)
+static void _masks_shape_buttons_sync_signal(gpointer instance __attribute__((unused)),
+                                             dt_masks_shape_buttons_data_t *data)
 {
   _masks_shape_buttons_sync(data);
 }
