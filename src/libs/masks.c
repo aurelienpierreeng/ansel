@@ -1057,14 +1057,13 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
   dt_iop_module_t *module = NULL;
   int handled = 0;
   // mouse_path is non-NULL exactly when the pointer is over a row, so it answers "on a row?" too.
+  // The module is only wanted for the context menu below; a row that resolves to no iter simply
+  // leaves it NULL, which is what _tree_context_menu() already expects.
   if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &mouse_path, NULL,
-                                   NULL, NULL))
+                                   NULL, NULL)
+     && gtk_tree_model_get_iter(model, &iter, mouse_path))
   {
-    // we retrieve the iter and module from path
-    if(gtk_tree_model_get_iter(model, &iter, mouse_path))
-    {
-      _lib_masks_get_values(model, &iter, &module, NULL, NULL);
-    }
+    _lib_masks_get_values(model, &iter, &module, NULL, NULL);
   }
   /* single click with the right mouse button? */
   if(event->type == GDK_BUTTON_PRESS && event->button == 1)
