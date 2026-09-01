@@ -81,8 +81,6 @@ static void _lib_masks_update_list(dt_lib_module_t *self);
 typedef struct dt_lib_masks_t
 {
   GtkWidget *treeview;
-  dt_iop_module_t *active_module;
-  dt_iop_module_t *hosted_module;
 
   /* Replacement for shape_manager_expander */
   GtkWidget *popup_window;
@@ -95,28 +93,21 @@ typedef struct dt_lib_masks_t
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("Masking & Blending");
+  return _("Shape Manager");
 }
 
+/* Never shown in a panel: everything this module builds lives in its own window, opened by the
+ * button it pushes into the darkroom toolbox. Same arrangement as libs/export.c, which is also a
+ * module whose interface is a window rather than a panel section. */
 const char **views(dt_lib_module_t *self)
 {
-  static const char *v[] = {"darkroom", NULL};
+  static const char *v[] = {"special", NULL};
   return v;
 }
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
-}
-
-int expandable(dt_lib_module_t *self)
-{
-  return 1;
-}
-
-int position()
-{
-  return 850;
+  return DT_UI_CONTAINER_SIZE;
 }
 
 typedef enum dt_masks_tree_cols_t
@@ -165,112 +156,6 @@ static void _lib_masks_get_values(GtkTreeModel *model, GtkTreeIter *iter,
     *formid = g_value_get_int(&gv);
     g_value_unset(&gv);
   }
-}
-
-static gboolean _lib_masks_module_is_current(const dt_iop_module_t *module)
-{
-  return dt_dev_get_global() && module && g_list_find(dt_dev_get_global()->iop, (gpointer)module);
-}
-
-static void _lib_masks_clear_blending_box(dt_lib_module_t *self)
-{
-  if(IS_NULL_PTR(self) || !GTK_IS_WIDGET(self->widget)) return;
-
-  GList *children = gtk_container_get_children(GTK_CONTAINER(self->widget));
-  for(GList *iter = children; iter; iter = g_list_next(iter))
-    gtk_widget_destroy(GTK_WIDGET(iter->data));
-  g_list_free(children);
-  children = NULL;
-}
-
-static gboolean _lib_masks_can_host_blending(const dt_iop_module_t *module)
-{
-  if(!_lib_masks_module_is_current(module) || !module->flags
-     || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !module->gui || !module->gui->blend_data)
-    return FALSE;
-
-  return TRUE;
-}
-
-static void _lib_masks_release_blending(dt_lib_module_t *self)
-{
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-  dt_iop_module_t *hosted_module = lm->hosted_module;
-  lm->hosted_module = NULL;
-
-  if(_lib_masks_can_host_blending(hosted_module))
-    dt_iop_gui_cleanup_blending_body(hosted_module);
-  else
-    _lib_masks_clear_blending_box(self);
-}
-
-static void _lib_masks_show_blending_message(dt_lib_module_t *self, gchar *markup)
-{
-  if(IS_NULL_PTR(self) || !GTK_IS_WIDGET(self->widget) || IS_NULL_PTR(markup)) return;
-
-  GtkWidget *label = gtk_label_new(NULL);
-  gtk_label_set_markup(GTK_LABEL(label), markup);
-  gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
-  gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
-  gtk_widget_set_margin_top(label, DT_PIXEL_APPLY_DPI(16));
-  gtk_widget_set_margin_bottom(label, DT_PIXEL_APPLY_DPI(16));
-  gtk_widget_set_sensitive(label, FALSE);
-  gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
-  // self->widget is the expander body: its own visibility encodes the
-  // expanded/collapsed state persisted in conf, so show only the child.
-  gtk_widget_show_all(label);
-}
-
-static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_module_t *self)
-{
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
-
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-  dt_iop_module_t *module = dt_dev_get_global()->gui_module;
-
-  if(IS_NULL_PTR(dt_dev_get_global()) || !dt_dev_get_global()->history || !module)
-  {
-    _lib_masks_release_blending(self);
-    _lib_masks_clear_blending_box(self);
-
-    gchar *markup = g_markup_printf_escaped(_("<i>Select a module to edit its blending settings.</i>"));
-
-    _lib_masks_show_blending_message(self, markup);
-    g_free(markup);
-  
-    return;
-  }
-
-  if(!_lib_masks_can_host_blending(module))
-  {
-    _lib_masks_release_blending(self);
-    _lib_masks_clear_blending_box(self);
-
-    gchar *module_label = dt_history_item_get_name(module);
-    gchar *markup = g_markup_printf_escaped(_("<i>Blending is not available for the <b>%s</b> module.</i>"), module_label);
-
-    _lib_masks_show_blending_message(self, markup);
-    g_free(markup);
-    dt_free(module_label);
-  
-    return;
-  }
-
-  const gboolean module_changed = (lm->active_module != module);
-  lm->active_module = module;
-
-  if(module_changed) _lib_masks_release_blending(self);
-
-  if(!lm->hosted_module) _lib_masks_clear_blending_box(self);
-
-  // dt_iop_gui_init_blending_body() shows the children it packs; don't show
-  // self->widget itself, it is the expander body whose visibility encodes the
-  // expanded/collapsed state persisted in conf.
-  dt_iop_gui_init_blending_body(self->widget, module);
-  lm->hosted_module = module;
-
-  dt_iop_gui_update_blending(module);
 }
 
 /* The shape to create rides on the menu item, the way "masks-operation" already does below --
@@ -1971,10 +1856,9 @@ void gui_init(dt_lib_module_t *self)
   gtk_container_set_border_width(GTK_CONTAINER(shape_manager_container), DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(d->popup_window), shape_manager_container);
 
-  // The main container for module blending params.
-  // It's populated in blend_gui.c when a mask-able module gets focused.
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-
+  // No panel body: this module's interface is the window built below, so self->widget stays
+  // NULL and the module is never packed -- dt_lib_is_visible_in_view() already excludes a
+  // "special" view from every panel.
 
   // Create and pack the button to control the popup panel.
   // NOTE: it's added to the darkroom module toolbox, aka not here.
@@ -2056,8 +1940,6 @@ void gui_init(dt_lib_module_t *self)
                      TRUE, TRUE, 0);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, G_CALLBACK(_lib_masks_handler_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED,
-                                  G_CALLBACK(_lib_masks_blending_gui_changed_callback), self);
 
   // set proxy functions
   dt_dev_get_global()->proxy.masks.module = self;
@@ -2065,8 +1947,6 @@ void gui_init(dt_lib_module_t *self)
   dt_dev_get_global()->proxy.masks.list_update = _lib_masks_update_list;
   dt_dev_get_global()->proxy.masks.list_remove = _lib_masks_remove_item;
   dt_dev_get_global()->proxy.masks.selection_change = _lib_masks_selection_change;
-
-  _lib_masks_blending_gui_changed_callback(NULL, self);
 }
 
 void gui_cleanup(dt_lib_module_t *self)
@@ -2096,13 +1976,11 @@ void gui_cleanup(dt_lib_module_t *self)
     d->ic_intersection = NULL;
     d->ic_difference = NULL;
     d->ic_exclusion = NULL;
-    _lib_masks_release_blending(self);
   }
 
   dt_free(self->data);
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_masks_handler_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_masks_blending_gui_changed_callback), self);
 }
 
 // clang-format off
