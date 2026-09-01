@@ -600,6 +600,24 @@ static void _tree_cell_edited(GtkCellRendererText *cell __attribute__((unused)),
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
 }
 
+/* A group's own module, when the tree row names one that can show masks. Presses its "show and
+ * edit" toggle, so selecting a module's mask group in the manager lights the module's own
+ * button too. */
+static void _show_masks_on_owning_module(GtkTreeModel *model, GtkTreeIter *iter)
+{
+  dt_iop_module_t *module = NULL;
+  _shape_manager_get_values(model, iter, &module, NULL, NULL);
+
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->blend_data)
+     || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || (module->flags() & IOP_FLAGS_NO_MASKS))
+    return;
+
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
+  bd->masks_shown = 1;
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
+  gtk_widget_queue_draw(bd->masks_edit);
+}
+
 static void _tree_selection_change(GtkTreeSelection *selection, dt_shape_manager_t *self)
 {
   dt_develop_t *const dev = dt_dev_get_global();
@@ -628,35 +646,20 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_shape_manager
   {
     GtkTreePath *item = (GtkTreePath *)items_iter->data;
     GtkTreeIter iter;
-    if(gtk_tree_model_get_iter(model, &iter, item))
-    {
-      int grid = -1;
-      int id = -1;
-      _shape_manager_get_values(model, &iter, NULL, &grid, &id);
+    if(!gtk_tree_model_get_iter(model, &iter, item)) continue;
 
-      dt_masks_form_t *form = dt_masks_get_from_id(dev, id);
-      if(!IS_NULL_PTR(form))
-      {
-        if(nb == 1) selected_form = form;
-        dt_masks_group_add_form_with_state(dev, grp, form, grid, DT_MASKS_STATE_USE, 1.0f);
-        // we eventually set the "show masks" icon of iops
-        if(nb == 1 && (form->type & DT_MASKS_GROUP))
-        {
-          dt_iop_module_t *module = NULL;
-          _shape_manager_get_values(model, &iter, &module, NULL, NULL);
+    int grid = -1;
+    int id = -1;
+    _shape_manager_get_values(model, &iter, NULL, &grid, &id);
 
-          if(module && module->gui && module->gui->blend_data
-             && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
-             && !(module->flags() & IOP_FLAGS_NO_MASKS))
-          {
-            dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
-            bd->masks_shown = 1;
-            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
-            gtk_widget_queue_draw(bd->masks_edit);
-          }
-        }
-      }
-    }
+    dt_masks_form_t *form = dt_masks_get_from_id(dev, id);
+    if(IS_NULL_PTR(form)) continue;
+
+    if(nb == 1) selected_form = form;
+    dt_masks_group_add_form_with_state(dev, grp, form, grid, DT_MASKS_STATE_USE, 1.0f);
+
+    // we eventually set the "show masks" icon of iops
+    if(nb == 1 && (form->type & DT_MASKS_GROUP)) _show_masks_on_owning_module(model, &iter);
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
   items = NULL;
@@ -1083,79 +1086,92 @@ static void _is_form_used(const int formid, char *text, const size_t text_length
   }
 }
 
-static void _shape_manager_list_recurs(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_masks_form_t *form,
-                                   int grp_id, dt_iop_module_t *module, int gstate, float opacity,
-                                   dt_shape_manager_t *lm, int index)
+/* What one row of the tree says about the form it shows. The recursion used to pass these as
+ * nine separate arguments; only treestore and lm are the same for every row. */
+typedef struct _tree_row_t
 {
-  if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE)) return;
-  // we create the text entry
-  char str[256] = "";
-  g_strlcat(str, form->name, sizeof(str));
-  // we get the right pixbufs
-  GdkPixbuf *icop = NULL;
-  GdkPixbuf *icinv = NULL;
-  if(gstate & DT_MASKS_STATE_UNION)
-    icop = lm->ic_union;
-  else if(gstate & DT_MASKS_STATE_INTERSECTION)
-    icop = lm->ic_intersection;
-  else if(gstate & DT_MASKS_STATE_DIFFERENCE)
-    icop = lm->ic_difference;
-  else if(gstate & DT_MASKS_STATE_EXCLUSION)
-    icop = lm->ic_exclusion;
-  if(gstate & DT_MASKS_STATE_INVERSE) icinv = lm->ic_inverse;
-  char str2[1000] = "";
-  int nbuse = 0;
-  if(grp_id == 0) _is_form_used(form->formid, str2, sizeof(str2), &nbuse);
+  dt_masks_form_t *form;
+  int grp_id;              // 0 for a row listed at top level, the parent group's id otherwise
+  dt_iop_module_t *module; // the module owning the group this row sits under, when there is one
+  int gstate;              // the combine/invert bits this form carries inside its parent
+  float opacity;
+  int index;               // rank inside the parent, which _set_iter_name() shows
+} _tree_row_t;
 
-  if(!(form->type & DT_MASKS_GROUP))
+/* The module whose drawn mask is this group, if any. A group listed at top level with no module
+ * yet is the only case worth asking about: a nested one inherits its parent's. */
+static dt_iop_module_t *_module_owning_group(const dt_masks_form_t *group)
+{
+  for(const GList *iops = dt_dev_get_global()->iop; iops; iops = g_list_next(iops))
   {
-    // we just add it to the tree
-    GtkTreeIter child;
-    gtk_tree_store_append(treestore, &child, toplevel);
-    gtk_tree_store_set(treestore, &child, TREE_TEXT, str, TREE_MODULE, module, TREE_GROUPID, grp_id,
-                       TREE_FORMID, form->formid, TREE_EDITABLE, (grp_id == 0), TREE_IC_OP, icop,
-                       TREE_IC_OP_VISIBLE, (!IS_NULL_PTR(icop)), TREE_IC_INVERSE, icinv, TREE_IC_INVERSE_VISIBLE,
-                       (!IS_NULL_PTR(icinv)), TREE_IC_USED_VISIBLE, (nbuse > 0),
-                       TREE_USED_TEXT, str2, -1);
-    _set_iter_name(lm, form, gstate, opacity, GTK_TREE_MODEL(treestore), &child, index);
+    dt_iop_module_t *iop = (dt_iop_module_t *)iops->data;
+    if((iop->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && !(iop->flags() & IOP_FLAGS_NO_MASKS)
+       && iop->blend_params->mask_id == group->formid)
+      return iop;
   }
-  else
+  return NULL;
+}
+
+/* Appends the row and returns its iter, which a group needs to hang its members from. Shapes and
+ * groups are described identically here; only what happens afterwards differs. */
+static void _tree_append_row(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_shape_manager_t *lm,
+                             const _tree_row_t *row, GtkTreeIter *child)
+{
+  GdkPixbuf *icop = NULL;
+  if(row->gstate & DT_MASKS_STATE_UNION)
+    icop = lm->ic_union;
+  else if(row->gstate & DT_MASKS_STATE_INTERSECTION)
+    icop = lm->ic_intersection;
+  else if(row->gstate & DT_MASKS_STATE_DIFFERENCE)
+    icop = lm->ic_difference;
+  else if(row->gstate & DT_MASKS_STATE_EXCLUSION)
+    icop = lm->ic_exclusion;
+
+  GdkPixbuf *icinv = (row->gstate & DT_MASKS_STATE_INVERSE) ? lm->ic_inverse : NULL;
+
+  // Only a top-level row asks who else uses the shape: a row under a group already says so.
+  char used_by[1000] = "";
+  int nbuse = 0;
+  if(row->grp_id == 0) _is_form_used(row->form->formid, used_by, sizeof(used_by), &nbuse);
+
+  gtk_tree_store_append(treestore, child, toplevel);
+  gtk_tree_store_set(treestore, child, TREE_TEXT, row->form->name, TREE_MODULE, row->module,
+                     TREE_GROUPID, row->grp_id, TREE_FORMID, row->form->formid,
+                     TREE_EDITABLE, (row->grp_id == 0), TREE_IC_OP, icop,
+                     TREE_IC_OP_VISIBLE, (!IS_NULL_PTR(icop)), TREE_IC_INVERSE, icinv,
+                     TREE_IC_INVERSE_VISIBLE, (!IS_NULL_PTR(icinv)),
+                     TREE_IC_USED_VISIBLE, (nbuse > 0), TREE_USED_TEXT, used_by, -1);
+  _set_iter_name(lm, row->form, row->gstate, row->opacity, GTK_TREE_MODEL(treestore), child, row->index);
+}
+
+static void _shape_manager_list_recurs(GtkTreeStore *treestore, GtkTreeIter *toplevel,
+                                       dt_shape_manager_t *lm, const _tree_row_t *row)
+{
+  // Clone sources belong to retouch's own UI, not to this tree.
+  if(row->form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) return;
+
+  _tree_row_t self = *row;
+  if((self.form->type & DT_MASKS_GROUP) && self.grp_id == 0 && IS_NULL_PTR(self.module))
+    self.module = _module_owning_group(self.form);
+
+  GtkTreeIter child;
+  _tree_append_row(treestore, toplevel, lm, &self, &child);
+
+  if(!(self.form->type & DT_MASKS_GROUP)) return;
+
+  int index = 0;
+  for(const GList *forms = self.form->points; forms; forms = g_list_next(forms))
   {
-    // we first check if it's a "module" group or not
-    if(grp_id == 0 && !module)
+    const dt_masks_form_group_t *grpt = (const dt_masks_form_group_t *)forms->data;
+    dt_masks_form_t *member = dt_masks_get_from_id(dt_dev_get_global(), grpt->formid);
+    if(!IS_NULL_PTR(member))
     {
-      for(const GList *iops = dt_dev_get_global()->iop; iops; iops = g_list_next(iops))
-      {
-        dt_iop_module_t *iop = (dt_iop_module_t *)iops->data;
-        if((iop->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && !(iop->flags() & IOP_FLAGS_NO_MASKS)
-           && iop->blend_params->mask_id == form->formid)
-        {
-          module = iop;
-          break;
-        }
-      }
+      const _tree_row_t member_row = { .form = member, .grp_id = self.form->formid,
+                                       .module = self.module, .gstate = grpt->state,
+                                       .opacity = grpt->opacity, .index = index };
+      _shape_manager_list_recurs(treestore, &child, lm, &member_row);
     }
-
-    // we add the group node to the tree
-    GtkTreeIter child;
-    gtk_tree_store_append(treestore, &child, toplevel);
-    gtk_tree_store_set(treestore, &child, TREE_TEXT, str, TREE_MODULE, module, TREE_GROUPID, grp_id,
-                       TREE_FORMID, form->formid, TREE_EDITABLE, (grp_id == 0), TREE_IC_OP, icop,
-                       TREE_IC_OP_VISIBLE, (!IS_NULL_PTR(icop)), TREE_IC_INVERSE, icinv, TREE_IC_INVERSE_VISIBLE,
-                       (!IS_NULL_PTR(icinv)), TREE_IC_USED_VISIBLE, (nbuse > 0),
-                       TREE_USED_TEXT, str2, -1);
-    _set_iter_name(lm, form, gstate, opacity, GTK_TREE_MODEL(treestore), &child, index);
-
-    index = 0;
-    // we add all nodes to the tree
-    for(const GList *forms = form->points; forms; forms = g_list_next(forms))
-    {
-      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-      dt_masks_form_t *f = dt_masks_get_from_id(dt_dev_get_global(), grpt->formid);
-      if(f)
-        _shape_manager_list_recurs(treestore, &child, f, form->formid, module, grpt->state, grpt->opacity, lm, index);
-      index++;
-    }
+    index++;
   }
 }
 
@@ -1257,14 +1273,22 @@ static void _shape_manager_recreate_list(dt_lib_module_t *self)
   for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
   {
     dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
-    if(form->type & DT_MASKS_GROUP) _shape_manager_list_recurs(treestore, NULL, form, 0, NULL, 0, 1.0, lm, 0);
+    if(form->type & DT_MASKS_GROUP)
+    {
+      const _tree_row_t row = { .form = form, .opacity = 1.0f };
+      _shape_manager_list_recurs(treestore, NULL, lm, &row);
+    }
   }
 
   // and we add all forms
   for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
   {
     dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
-    if(!(form->type & DT_MASKS_GROUP)) _shape_manager_list_recurs(treestore, NULL, form, 0, NULL, 0, 1.0, lm, 0);
+    if(!(form->type & DT_MASKS_GROUP))
+    {
+      const _tree_row_t row = { .form = form, .opacity = 1.0f };
+      _shape_manager_list_recurs(treestore, NULL, lm, &row);
+    }
   }
 
   gtk_tree_view_set_model(GTK_TREE_VIEW(lm->treeview), GTK_TREE_MODEL(treestore));
