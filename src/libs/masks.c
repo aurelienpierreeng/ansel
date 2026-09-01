@@ -1958,6 +1958,10 @@ void gui_init(dt_lib_module_t *self)
 
   // 3. Create a clean box container inside the popup window to receive original shape elements
   GtkWidget *shape_manager_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  // The window is its own frame, so nothing would otherwise separate the content from its edges.
+  // DT_GUI_BOX_SPACING is the 0.625em the theme gives a module body (.dt_plugin_ui_main), so the
+  // panel breathes the same way a side-panel module does, at any font size.
+  gtk_container_set_border_width(GTK_CONTAINER(shape_manager_container), DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(d->popup_window), shape_manager_container);
 
   // The main container for module blending params.
@@ -1999,10 +2003,7 @@ void gui_init(dt_lib_module_t *self)
   GtkWidget *shape_buttons_box = dt_masks_shape_buttons_create(&shape_buttons_config);
   gtk_box_pack_start(GTK_BOX(hbox), shape_buttons_box, FALSE, FALSE, 0);
   // The button row keeps its natural height and stays at the top: expanding it would split the
-  // surplus with the shape list below and stretch the buttons vertically. It is the container's
-  // first child, so nothing separates it from the window edge -- give it the same gap the
-  // container puts between its children.
-  gtk_widget_set_margin_top(hbox, DT_GUI_BOX_SPACING);
+  // surplus with the shape list below and stretch the buttons vertically.
   gtk_box_pack_start(GTK_BOX(shape_manager_container), hbox, FALSE, FALSE, 0);
 
   d->treeview = gtk_tree_view_new();
