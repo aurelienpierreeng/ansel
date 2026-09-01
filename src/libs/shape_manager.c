@@ -232,19 +232,17 @@ static void _tree_group(GtkButton *button __attribute__((unused)), dt_lib_module
   {
     GtkTreePath *item = (GtkTreePath *)items_iter->data;
     GtkTreeIter iter;
-    if(gtk_tree_model_get_iter(model, &iter, item))
-    {
-      int id = -1;
-      _shape_manager_get_values(model, &iter, NULL, NULL, &id);
+    if(!gtk_tree_model_get_iter(model, &iter, item)) continue;
 
-      if(id > 0)
-      {
-        dt_masks_form_t *member = dt_masks_get_from_id(dt_dev_get_global(), id);
-        if(!IS_NULL_PTR(member))
-          dt_masks_group_add_form_with_state(dt_dev_get_global(), mask, member, mask->formid,
-                                             DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION, 1.0f);
-      }
-    }
+    int id = -1;
+    _shape_manager_get_values(model, &iter, NULL, NULL, &id);
+    if(id <= 0) continue;
+
+    dt_masks_form_t *member = dt_masks_get_from_id(dt_dev_get_global(), id);
+    if(IS_NULL_PTR(member)) continue;
+
+    dt_masks_group_add_form_with_state(dt_dev_get_global(), mask, member, mask->formid,
+                                       DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION, 1.0f);
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
   items = NULL;
@@ -270,23 +268,23 @@ static int _tree_format_form_usage_label(char *str, const size_t str_size,
   for(const GList *modules = dt_dev_get_global()->iop; modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *m = (dt_iop_module_t *)modules->data;
-    dt_masks_form_t *grp = dt_masks_get_from_id(m->dev, m->blend_params->mask_id);
-    if(grp && (grp->type & DT_MASKS_GROUP))
+    const dt_masks_form_t *grp = dt_masks_get_from_id(m->dev, m->blend_params->mask_id);
+    if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) continue;
+
+    for(const GList *pts = grp->points; pts; pts = g_list_next(pts))
     {
-      for(const GList *pts = grp->points; pts; pts = g_list_next(pts))
-      {
-        dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
-        if(pt->formid == form->formid)
-        {
-          if(m == module) return -1;
-          if(nbuse == 0) g_strlcat(str, " (", str_size);
-          g_strlcat(str, " ", str_size);
-          gchar *module_label = dt_history_item_get_name(m);
-          g_strlcat(str, module_label, str_size);
-          dt_free(module_label);
-          nbuse++;
-        }
-      }
+      const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)pts->data;
+      if(pt->formid != form->formid) continue;
+
+      // The caller's own module is not worth naming to it, and says so by asking for no label.
+      if(m == module) return -1;
+
+      if(nbuse == 0) g_strlcat(str, " (", str_size);
+      g_strlcat(str, " ", str_size);
+      gchar *module_label = dt_history_item_get_name(m);
+      g_strlcat(str, module_label, str_size);
+      dt_free(module_label);
+      nbuse++;
     }
   }
 
@@ -1048,33 +1046,38 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
   return show;
 }
 
-static void _is_form_used(int formid, dt_masks_form_t *grp, char *text, size_t text_length, int *nb)
+/* Appends the name of every group inside grp that lists formid, one per line, and counts them.
+ * Recurses into member groups, so a shape held by a nested group names that group too. */
+static void _groups_naming_form(const int formid, const dt_masks_form_t *grp, char *text,
+                                const size_t text_length, int *nb)
 {
-  if(IS_NULL_PTR(grp))
+  if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return;
+
+  for(const GList *points = grp->points; points; points = g_list_next(points))
   {
-    for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
+    const dt_masks_form_group_t *point = (const dt_masks_form_group_t *)points->data;
+    const dt_masks_form_t *form = dt_masks_get_from_id(dt_dev_get_global(), point->formid);
+    if(IS_NULL_PTR(form)) continue;
+
+    if(point->formid == formid)
     {
-      dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
-      if(form->type & DT_MASKS_GROUP) _is_form_used(formid, form, text, text_length, nb);
+      (*nb)++;
+      if(*nb > 1) g_strlcat(text, "\n", text_length);
+      g_strlcat(text, grp->name, text_length);
     }
+
+    if(form->type & DT_MASKS_GROUP) _groups_naming_form(formid, form, text, text_length, nb);
   }
-  else if(grp->type & DT_MASKS_GROUP)
+}
+
+/* Same, over every group in the image. The entry and the walk used to be one function switching
+ * on a NULL group, which is why it took one. */
+static void _is_form_used(const int formid, char *text, const size_t text_length, int *nb)
+{
+  for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
   {
-    for(const GList *points = grp->points; points; points = g_list_next(points))
-    {
-      dt_masks_form_group_t *point = (dt_masks_form_group_t *)points->data;
-      dt_masks_form_t *form = dt_masks_get_from_id(dt_dev_get_global(), point->formid);
-      if(form)
-      {
-        if(point->formid == formid)
-        {
-          (*nb)++;
-          if(*nb > 1) g_strlcat(text, "\n", text_length);
-          g_strlcat(text, grp->name, text_length);
-        }
-        if(form->type & DT_MASKS_GROUP) _is_form_used(formid, form, text, text_length, nb);
-      }
-    }
+    const dt_masks_form_t *form = (const dt_masks_form_t *)forms->data;
+    if(form->type & DT_MASKS_GROUP) _groups_naming_form(formid, form, text, text_length, nb);
   }
 }
 
@@ -1100,7 +1103,7 @@ static void _shape_manager_list_recurs(GtkTreeStore *treestore, GtkTreeIter *top
   if(gstate & DT_MASKS_STATE_INVERSE) icinv = lm->ic_inverse;
   char str2[1000] = "";
   int nbuse = 0;
-  if(grp_id == 0) _is_form_used(form->formid, NULL, str2, sizeof(str2), &nbuse);
+  if(grp_id == 0) _is_form_used(form->formid, str2, sizeof(str2), &nbuse);
 
   if(!(form->type & DT_MASKS_GROUP))
   {
@@ -1478,6 +1481,8 @@ static gboolean _shape_manager_selection_change_r(GtkTreeModel *model, GtkTreeSe
 {
   gboolean found = FALSE;
 
+  // The walk stops at the first match, whether this level made it or a child did, so the loop
+  // carries that in its own condition rather than breaking out of it twice.
   GtkTreeIter i = *iter;
   do
   {
@@ -1491,21 +1496,15 @@ static gboolean _shape_manager_selection_change_r(GtkTreeModel *model, GtkTreeSe
     {
       gtk_tree_selection_select_iter(selection, &i);
       found = TRUE;
-      break;
+      continue;
     }
 
     // check for children if any
     GtkTreeIter child;
     GtkTreeIter parent = i;
     if(gtk_tree_model_iter_children(model, &child, &parent))
-    {
       found = _shape_manager_selection_change_r(model, selection, &child, module, selectid, throw_event, level + 1);
-      if(found)
-      {
-        break;
-      }
-    }
-  } while(gtk_tree_model_iter_next(model, &i) == TRUE);
+  } while(!found && gtk_tree_model_iter_next(model, &i) == TRUE);
 
   return found;
 }
