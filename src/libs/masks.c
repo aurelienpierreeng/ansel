@@ -63,7 +63,7 @@
 #include "control/signal.h"
 
 #ifdef GDK_WINDOWING_WAYLAND
-#include <gdk/gdkwayland.h>
+#include <gdk/gdkwayland.h>   // conditional-ok: GDK_IS_WAYLAND_DISPLAY() is used only inside the same #ifdef
 #endif
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
@@ -1778,11 +1778,10 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
 static gboolean _lib_masks_popup_position_is_usable(GtkWidget *window)
 {
 #ifdef GDK_WINDOWING_WAYLAND
-  if(GDK_IS_WAYLAND_DISPLAY(gtk_widget_get_display(window))) return FALSE;
+  return !GDK_IS_WAYLAND_DISPLAY(gtk_widget_get_display(window));
 #else
-  (void)window;
-#endif
   return TRUE;
+#endif
 }
 
 /** @brief Remember where the user put the panel and how wide they made it. Called on every path
