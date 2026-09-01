@@ -149,9 +149,16 @@ static void _gui_changed_callback(gpointer instance __attribute__((unused)), dt_
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
 
   dt_lib_blending_t *d = (dt_lib_blending_t *)self->data;
-  dt_iop_module_t *module = dt_dev_get_global()->gui_module;
 
-  if(IS_NULL_PTR(dt_dev_get_global()) || !dt_dev_get_global()->history || !module)
+  /* dt_dev_get_global() is NULL outside the darkroom -- only the views that own that lifetime
+   * publish it -- so it is read once and tested before anything is read through it. Nothing
+   * reaches this callback that early today (dt_lib_init() runs after dt_view_manager_init(),
+   * which darktable.c refuses to continue without a develop), but the guard was written for a
+   * NULL it then dereferenced one line above it. */
+  dt_develop_t *dev = dt_dev_get_global();
+  dt_iop_module_t *module = IS_NULL_PTR(dev) ? NULL : dev->gui_module;
+
+  if(IS_NULL_PTR(dev) || !dev->history || !module)
   {
     _release(self);
     _clear_box(self);
