@@ -95,7 +95,7 @@ typedef struct dt_shape_manager_t
 } dt_shape_manager_t;
 
 
-const char *name(struct dt_lib_module_t *self)
+const char *name(struct dt_lib_module_t *self __attribute__((unused)))
 {
   return _("Shape Manager");
 }
@@ -103,13 +103,13 @@ const char *name(struct dt_lib_module_t *self)
 /* Never shown in a panel: everything this module builds lives in its own window, opened by the
  * button it pushes into the darkroom toolbox. Same arrangement as libs/export.c, which is also a
  * module whose interface is a window rather than a panel section. */
-const char **views(dt_lib_module_t *self)
+const char **views(dt_lib_module_t *self __attribute__((unused)))
 {
   static const char *v[] = {"special", NULL};
   return v;
 }
 
-uint32_t container(dt_lib_module_t *self)
+uint32_t container(dt_lib_module_t *self __attribute__((unused)))
 {
   return DT_UI_CONTAINER_SIZE;
 }
@@ -183,8 +183,8 @@ static void _tree_add_shape_menu_item(GtkWidget *menu, const dt_masks_type_t typ
   if(!IS_NULL_PTR(item)) g_object_set_data(G_OBJECT(item), "masks-shape-type", GINT_TO_POINTER(type));
 }
 
-static void _shape_manager_shape_button_started(GtkWidget *button, dt_iop_module_t *module,
-                                            dt_masks_type_t type, gpointer user_data)
+static void _shape_manager_shape_button_started(GtkWidget *button __attribute__((unused)), dt_iop_module_t *module __attribute__((unused)),
+                                            dt_masks_type_t type __attribute__((unused)), gpointer user_data __attribute__((unused)))
 {
   dt_dev_get_global()->form_gui->group_selected = 0;
 }
@@ -212,7 +212,7 @@ static void _tree_add_exist(GtkButton *button, dt_masks_form_t *grp)
   }
 }
 
-static void _tree_group(GtkButton *button, dt_lib_module_t *self)
+static void _tree_group(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   // we create the new group
@@ -330,7 +330,7 @@ static void _set_iter_name(dt_shape_manager_t *lm, dt_masks_form_t *form, int st
                      (!IS_NULL_PTR(icop)), TREE_IC_INVERSE, icinv, TREE_IC_INVERSE_VISIBLE, (!IS_NULL_PTR(icinv)), -1);
 }
 
-static void _tree_delete_unused(GtkButton *button, dt_lib_module_t *self)
+static void _tree_delete_unused(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
 {
   dt_develop_t *dev = dt_dev_get_global();
 
@@ -419,7 +419,7 @@ static void _tree_apply_operation(GtkWidget *menu_item, dt_lib_module_t *self)
   }
 }
 
-static void _tree_moveup(GtkButton *button, dt_lib_module_t *self)
+static void _tree_moveup(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
@@ -457,7 +457,7 @@ static void _tree_moveup(GtkButton *button, dt_lib_module_t *self)
   _add_masks_history_item(lm);
 }
 
-static void _tree_movedown(GtkButton *button, dt_lib_module_t *self)
+static void _tree_movedown(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
@@ -495,7 +495,7 @@ static void _tree_movedown(GtkButton *button, dt_lib_module_t *self)
   _add_masks_history_item(lm);
 }
 
-static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
+static void _tree_delete_shape(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
@@ -534,7 +534,7 @@ static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
 }
 
-static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
+static void _tree_duplicate_shape(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
@@ -578,7 +578,7 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
   items = NULL;
 }
 
-static void _tree_cell_edited(GtkCellRendererText *cell, gchar *path_string, gchar *new_text,
+static void _tree_cell_edited(GtkCellRendererText *cell __attribute__((unused)), gchar *path_string, gchar *new_text,
                               dt_lib_module_t *self)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
@@ -979,7 +979,7 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
   return handled;
 }
 
-static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel *model, GtkTreePath *path,
+static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel *model __attribute__((unused)), GtkTreePath *path,
                                       gboolean path_currently_selected, gpointer data)
 {
   dt_shape_manager_t *self = (dt_shape_manager_t *)data;
@@ -1024,7 +1024,7 @@ static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel 
 }
 
 static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboard_tip,
-                                    GtkTooltip *tooltip, gpointer data)
+                                    GtkTooltip *tooltip, gpointer data __attribute__((unused)))
 {
   GtkTreeIter iter;
   GtkTreeView *tree_view = GTK_TREE_VIEW(widget);
@@ -1342,7 +1342,7 @@ static void _shape_manager_recreate_list(dt_lib_module_t *self)
   }
 }
 
-static void _shape_manager_update_item(dt_lib_module_t *self, int formid, int parentid, dt_shape_manager_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
+static void _shape_manager_update_item(dt_lib_module_t *self __attribute__((unused)), int formid, int parentid, dt_shape_manager_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
 {
   // we retrieve the forms
   dt_masks_form_t *form = dt_masks_get_from_id(dt_dev_get_global(), formid);
@@ -1373,7 +1373,7 @@ static void _shape_manager_update_item(dt_lib_module_t *self, int formid, int pa
   return;
 }
 
-static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
+static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path __attribute__((unused)), GtkTreeIter *iter, gpointer data)
 {
   if(IS_NULL_PTR(iter)) return 0;
 
@@ -1591,7 +1591,7 @@ static gboolean _find_iter_by_parentid_and_formid(GtkTreeModel *model, int paren
   return found;
 }
 
-static void _shape_manager_handler_callback(gpointer instance, const int formid, const int parentid, const dt_masks_event_t event, dt_lib_module_t *self)
+static void _shape_manager_handler_callback(gpointer instance __attribute__((unused)), const int formid, const int parentid, const dt_masks_event_t event, dt_lib_module_t *self)
 {
   if(IS_NULL_PTR(self)) return;
 
