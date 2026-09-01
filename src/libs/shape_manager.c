@@ -75,10 +75,10 @@ DT_MODULE(1)
 
 #pragma GCC diagnostic ignored "-Wshadow"
 
-static void _lib_masks_recreate_list(dt_lib_module_t *self);
-static void _lib_masks_update_list(dt_lib_module_t *self);
+static void _shape_manager_recreate_list(dt_lib_module_t *self);
+static void _shape_manager_update_list(dt_lib_module_t *self);
 
-typedef struct dt_lib_masks_t
+typedef struct dt_shape_manager_t
 {
   GtkWidget *treeview;
 
@@ -88,7 +88,7 @@ typedef struct dt_lib_masks_t
 
   GdkPixbuf *ic_inverse, *ic_union, *ic_intersection, *ic_difference, *ic_exclusion;
   int gui_reset;
-} dt_lib_masks_t;
+} dt_shape_manager_t;
 
 
 const char *name(struct dt_lib_module_t *self)
@@ -126,7 +126,7 @@ typedef enum dt_masks_tree_cols_t
   TREE_COUNT
 } dt_masks_tree_cols_t;
 
-static void _lib_masks_get_values(GtkTreeModel *model, GtkTreeIter *iter,
+static void _shape_manager_get_values(GtkTreeModel *model, GtkTreeIter *iter,
                                   dt_iop_module_t **module, int *groupid, int *formid)
 {
   // returns module & groupid & formid if requested
@@ -179,7 +179,7 @@ static void _tree_add_shape_menu_item(GtkWidget *menu, const dt_masks_type_t typ
   if(!IS_NULL_PTR(item)) g_object_set_data(G_OBJECT(item), "masks-shape-type", GINT_TO_POINTER(type));
 }
 
-static void _lib_masks_shape_button_started(GtkWidget *button, dt_iop_module_t *module,
+static void _shape_manager_shape_button_started(GtkWidget *button, dt_iop_module_t *module,
                                             dt_masks_type_t type, gpointer user_data)
 {
   dt_dev_get_global()->form_gui->group_selected = 0;
@@ -210,7 +210,7 @@ static void _tree_add_exist(GtkButton *button, dt_masks_form_t *grp)
 
 static void _tree_group(GtkButton *button, dt_lib_module_t *self)
 {
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   // we create the new group
   // create_ext registers the group in dev->allforms and dt_masks_append_form() below takes
   // dev->forms's own reference, so both lists have a claim and teardown balances. Neither
@@ -231,7 +231,7 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
     if(gtk_tree_model_get_iter(model, &iter, item))
     {
       int id = -1;
-      _lib_masks_get_values(model, &iter, NULL, NULL, &id);
+      _shape_manager_get_values(model, &iter, NULL, NULL, &id);
 
       if(id > 0)
       {
@@ -250,7 +250,7 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
 
   // add we save
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
-  _lib_masks_recreate_list(self);
+  _shape_manager_recreate_list(self);
   // dt_masks_change_form_gui(darktable.develop, grp);
 }
 
@@ -291,7 +291,7 @@ static int _tree_format_form_usage_label(char *str, const size_t str_size,
   return nbuse;
 }
 
-static void _set_iter_name(dt_lib_masks_t *lm, dt_masks_form_t *form, int state, float opacity,
+static void _set_iter_name(dt_shape_manager_t *lm, dt_masks_form_t *form, int state, float opacity,
                            GtkTreeModel *model, GtkTreeIter *iter, int index)
 {
   if(IS_NULL_PTR(form)) return;
@@ -345,7 +345,7 @@ static void _tree_delete_unused(GtkButton *button, dt_lib_module_t *self)
   dt_dev_undo_start_record(dev);
 
   dt_masks_cleanup_unused(dev);
-  _lib_masks_recreate_list(self);
+  _shape_manager_recreate_list(self);
 
   // The sweep only rewrote the in-memory snapshots. main.history and main.masks_history are
   // rewritten wholesale from dev->history by the write a commit triggers, so without one the
@@ -356,7 +356,7 @@ static void _tree_delete_unused(GtkButton *button, dt_lib_module_t *self)
   dt_dev_undo_end_record(dev);
 }
 
-static void _add_masks_history_item(dt_lib_masks_t *lm)
+static void _add_masks_history_item(dt_shape_manager_t *lm)
 {
   const int reset = lm->gui_reset;
   lm->gui_reset = 1;
@@ -374,7 +374,7 @@ static void _tree_apply_operation(GtkWidget *menu_item, dt_lib_module_t *self)
       = (dt_masks_state_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "masks-operation"));
   if(operation == DT_MASKS_STATE_NONE) return;
 
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   // now we go through all selected nodes
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
@@ -389,7 +389,7 @@ static void _tree_apply_operation(GtkWidget *menu_item, dt_lib_module_t *self)
     {
       int grid = -1;
       int id = -1;
-      _lib_masks_get_values(model, &iter, NULL, &grid, &id);
+      _shape_manager_get_values(model, &iter, NULL, &grid, &id);
 
       /* The module owns the copy-on-write: it touches the group before resolving the row, which
        * this loop did not do -- it mutated a refcounted membership block that a history snapshot
@@ -418,7 +418,7 @@ static void _tree_apply_operation(GtkWidget *menu_item, dt_lib_module_t *self)
 
 static void _tree_moveup(GtkButton *button, dt_lib_module_t *self)
 {
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   // we first discard all visible shapes
   dt_masks_change_form_gui(dt_dev_get_global(), NULL);
@@ -436,7 +436,7 @@ static void _tree_moveup(GtkButton *button, dt_lib_module_t *self)
     {
       int grid = -1;
       int id = -1;
-      _lib_masks_get_values(model, &iter, NULL, &grid, &id);
+      _shape_manager_get_values(model, &iter, NULL, &grid, &id);
 
       dt_masks_form_t *group_form = dt_masks_get_from_id(dt_dev_get_global(), grid);
       group_form = dt_masks_cow_touch(dt_dev_get_global(), group_form);
@@ -447,7 +447,7 @@ static void _tree_moveup(GtkButton *button, dt_lib_module_t *self)
   items = NULL;
 
   lm->gui_reset = 0;
-  _lib_masks_recreate_list(self);
+  _shape_manager_recreate_list(self);
 
   // Without this, the reorder only mutates the live group's points list: it's never recorded
   // as its own history step, so the next undo/redo silently discards the new order.
@@ -456,7 +456,7 @@ static void _tree_moveup(GtkButton *button, dt_lib_module_t *self)
 
 static void _tree_movedown(GtkButton *button, dt_lib_module_t *self)
 {
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   // we first discard all visible shapes
   dt_masks_change_form_gui(dt_dev_get_global(), NULL);
@@ -474,7 +474,7 @@ static void _tree_movedown(GtkButton *button, dt_lib_module_t *self)
     {
       int grid = -1;
       int id = -1;
-      _lib_masks_get_values(model, &iter, NULL, &grid, &id);
+      _shape_manager_get_values(model, &iter, NULL, &grid, &id);
 
       dt_masks_form_t *group_form = dt_masks_get_from_id(dt_dev_get_global(), grid);
       group_form = dt_masks_cow_touch(dt_dev_get_global(), group_form);
@@ -485,7 +485,7 @@ static void _tree_movedown(GtkButton *button, dt_lib_module_t *self)
   items = NULL;
 
   lm->gui_reset = 0;
-  _lib_masks_recreate_list(self);
+  _shape_manager_recreate_list(self);
 
   // Without this, the reorder only mutates the live group's points list: it's never recorded
   // as its own history step, so the next undo/redo silently discards the new order.
@@ -494,7 +494,7 @@ static void _tree_movedown(GtkButton *button, dt_lib_module_t *self)
 
 static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
 {
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   // we first discard all visible shapes
   dt_masks_change_form_gui(dt_dev_get_global(), NULL);
@@ -513,7 +513,7 @@ static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
     {
       int grid = -1;
       int id = -1;
-      _lib_masks_get_values(model, &iter, &module, &grid, &id);
+      _shape_manager_get_values(model, &iter, &module, &grid, &id);
 
       dt_masks_form_delete(dt_dev_get_global(), module, dt_masks_get_from_id(dt_dev_get_global(), grid),
                            dt_masks_get_from_id(dt_dev_get_global(), id));
@@ -523,7 +523,7 @@ static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
   items = NULL;
 
   lm->gui_reset = 0;
-  _lib_masks_recreate_list(self);
+  _shape_manager_recreate_list(self);
 
   // Without this, the deletion only mutates the live dev->forms: it's never recorded as its
   // own history step, so the next history navigation (undo/redo) silently discards it and
@@ -533,7 +533,7 @@ static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
 
 static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
 {
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   // we get the selected node
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
@@ -547,7 +547,7 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
     dt_iop_module_t *module = NULL;
     int grid = -1;
     int id = -1;
-    _lib_masks_get_values(model, &iter, &module, &grid, &id);
+    _shape_manager_get_values(model, &iter, &module, &grid, &id);
 
     // dt_masks_form_duplicate_in_group also attaches the duplicate to the source shape's
     // group (grid), inheriting its state/opacity -- without that, the duplicate would be an
@@ -566,9 +566,9 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
 
       // _add_masks_history_item briefly sets lm->gui_reset while committing, and
       // dt_dev_add_history_item's own list-change signal fires synchronously inside that
-      // window -- _lib_masks_recreate_list's gui_reset guard swallows it. Refresh explicitly,
+      // window -- _shape_manager_recreate_list's gui_reset guard swallows it. Refresh explicitly,
       // now that gui_reset is back to its prior value, so the new row actually appears.
-      _lib_masks_recreate_list(self);
+      _shape_manager_recreate_list(self);
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
@@ -578,13 +578,13 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
 static void _tree_cell_edited(GtkCellRendererText *cell, gchar *path_string, gchar *new_text,
                               dt_lib_module_t *self)
 {
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
   GtkTreeIter iter;
   if(!gtk_tree_model_get_iter_from_string(model, &iter, path_string)) return;
 
   int id = -1;
-  _lib_masks_get_values(model, &iter, NULL, NULL, &id);
+  _shape_manager_get_values(model, &iter, NULL, NULL, &id);
   dt_masks_form_t *form = dt_masks_get_from_id(dt_dev_get_global(), id);
   if(IS_NULL_PTR(form)) return;
 
@@ -599,7 +599,7 @@ static void _tree_cell_edited(GtkCellRendererText *cell, gchar *path_string, gch
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
 }
 
-static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *self)
+static void _tree_selection_change(GtkTreeSelection *selection, dt_shape_manager_t *self)
 {
   dt_develop_t *const dev = dt_dev_get_global();
   if(self->gui_reset) return;
@@ -631,7 +631,7 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
     {
       int grid = -1;
       int id = -1;
-      _lib_masks_get_values(model, &iter, NULL, &grid, &id);
+      _shape_manager_get_values(model, &iter, NULL, &grid, &id);
 
       dt_masks_form_t *form = dt_masks_get_from_id(dev, id);
       if(!IS_NULL_PTR(form))
@@ -642,7 +642,7 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
         if(nb == 1 && (form->type & DT_MASKS_GROUP))
         {
           dt_iop_module_t *module = NULL;
-          _lib_masks_get_values(model, &iter, &module, NULL, NULL);
+          _shape_manager_get_values(model, &iter, &module, NULL, NULL);
 
           if(module && module->gui && module->gui->blend_data
              && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
@@ -700,7 +700,7 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
       // before freeing the list of selected rows, we check if the form is a group or not
       if(gtk_tree_model_get_iter(model, &iter, it0))
       {
-        _lib_masks_get_values(model, &iter, NULL, &parentid, &grpid);
+        _shape_manager_get_values(model, &iter, NULL, &parentid, &grpid);
       }
     }
     g_list_free_full(selected, (GDestroyNotify)gtk_tree_path_free);
@@ -784,7 +784,7 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
 
   // Same shape-parameter sliders (size/fading/rotation/opacity) as the darkroom canvas's and
   // the blend module's own shape context menus. Available for any single selected shape, not
-  // just one nested under a group in the tree: _lib_masks_list_recurs also lists every shape
+  // just one nested under a group in the tree: _shape_manager_list_recurs also lists every shape
   // at top level regardless of group membership (TREE_GROUPID == 0 there), so when the tree
   // doesn't hand us the parent directly, look up whichever group actually references it.
   if(nb == 1 && !IS_NULL_PTR(grp) && !(grp->type & DT_MASKS_GROUP))
@@ -948,7 +948,7 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
                                    NULL, NULL)
      && gtk_tree_model_get_iter(model, &iter, mouse_path))
   {
-    _lib_masks_get_values(model, &iter, &module, NULL, NULL);
+    _shape_manager_get_values(model, &iter, &module, NULL, NULL);
   }
   /* single click with the right mouse button? */
   if(event->type == GDK_BUTTON_PRESS && event->button == 1)
@@ -983,7 +983,7 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
 static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel *model, GtkTreePath *path,
                                       gboolean path_currently_selected, gpointer data)
 {
-  dt_lib_masks_t *self = (dt_lib_masks_t *)data;
+  dt_shape_manager_t *self = (dt_shape_manager_t *)data;
   if(self->gui_reset) return TRUE;
 
   // if the change is SELECT->UNSELECT no pb
@@ -1081,9 +1081,9 @@ static void _is_form_used(int formid, dt_masks_form_t *grp, char *text, size_t t
   }
 }
 
-static void _lib_masks_list_recurs(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_masks_form_t *form,
+static void _shape_manager_list_recurs(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_masks_form_t *form,
                                    int grp_id, dt_iop_module_t *module, int gstate, float opacity,
-                                   dt_lib_masks_t *lm, int index)
+                                   dt_shape_manager_t *lm, int index)
 {
   if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE)) return;
   // we create the text entry
@@ -1151,7 +1151,7 @@ static void _lib_masks_list_recurs(GtkTreeStore *treestore, GtkTreeIter *topleve
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       dt_masks_form_t *f = dt_masks_get_from_id(dt_dev_get_global(), grpt->formid);
       if(f)
-        _lib_masks_list_recurs(treestore, &child, f, form->formid, module, grpt->state, grpt->opacity, lm, index);
+        _shape_manager_list_recurs(treestore, &child, f, form->formid, module, grpt->state, grpt->opacity, lm, index);
       index++;
     }
   }
@@ -1165,7 +1165,7 @@ gboolean _find_mask_iter_by_values(GtkTreeModel *model, GtkTreeIter *iter,
   {
     int fid = -1;
     dt_iop_module_t *mod;
-    _lib_masks_get_values(model, iter, &mod, NULL, &fid);
+    _shape_manager_get_values(model, iter, &mod, NULL, &fid);
     found = (fid == formid)
       && ((level == 1)
           || (IS_NULL_PTR(module) || (mod && (!g_strcmp0(module->op, mod->op)))));
@@ -1184,10 +1184,10 @@ gboolean _find_mask_iter_by_values(GtkTreeModel *model, GtkTreeIter *iter,
   return found;
 }
 
-GList *_lib_masks_get_selected(dt_lib_module_t *self)
+GList *_shape_manager_get_selected(dt_lib_module_t *self)
 {
   GList *res = NULL;
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
 
@@ -1204,7 +1204,7 @@ GList *_lib_masks_get_selected(dt_lib_module_t *self)
       int fid = -1;
       int gid = -1;
       dt_iop_module_t *mod;
-      _lib_masks_get_values(model, &iter, &mod, &gid, &fid);
+      _shape_manager_get_values(model, &iter, &mod, &gid, &fid);
       res = g_list_prepend(res, GINT_TO_POINTER(fid));
       res = g_list_prepend(res, GINT_TO_POINTER(gid));
       res = g_list_prepend(res, (void *)(mod));
@@ -1218,10 +1218,10 @@ GList *_lib_masks_get_selected(dt_lib_module_t *self)
   return res;
 }
 
-static void _lib_masks_recreate_list(dt_lib_module_t *self)
+static void _shape_manager_recreate_list(dt_lib_module_t *self)
 {
   /* first destroy all buttons in list */
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   if(IS_NULL_PTR(lm)) return;
   if(lm->gui_reset) return;
 
@@ -1235,7 +1235,7 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
 
   if(lm->treeview)
   {
-    selectids = _lib_masks_get_selected(self);
+    selectids = _shape_manager_get_selected(self);
   }
 
   // Rebuilding the shape manager list is also used to refresh shapes created
@@ -1254,14 +1254,14 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
   for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
   {
     dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
-    if(form->type & DT_MASKS_GROUP) _lib_masks_list_recurs(treestore, NULL, form, 0, NULL, 0, 1.0, lm, 0);
+    if(form->type & DT_MASKS_GROUP) _shape_manager_list_recurs(treestore, NULL, form, 0, NULL, 0, 1.0, lm, 0);
   }
 
   // and we add all forms
   for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
   {
     dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
-    if(!(form->type & DT_MASKS_GROUP)) _lib_masks_list_recurs(treestore, NULL, form, 0, NULL, 0, 1.0, lm, 0);
+    if(!(form->type & DT_MASKS_GROUP)) _shape_manager_list_recurs(treestore, NULL, form, 0, NULL, 0, 1.0, lm, 0);
   }
 
   gtk_tree_view_set_model(GTK_TREE_VIEW(lm->treeview), GTK_TREE_MODEL(treestore));
@@ -1344,7 +1344,7 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
   }
 }
 
-static void _lib_masks_update_item(dt_lib_module_t *self, int formid, int parentid, dt_lib_masks_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
+static void _shape_manager_update_item(dt_lib_module_t *self, int formid, int parentid, dt_shape_manager_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
 {
   // we retrieve the forms
   dt_masks_form_t *form = dt_masks_get_from_id(dt_dev_get_global(), formid);
@@ -1382,7 +1382,7 @@ static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeI
   // we retrieve the ids
   int grid = -1;
   int id = -1;
-  _lib_masks_get_values(model, iter, NULL, &grid, &id);
+  _shape_manager_get_values(model, iter, NULL, &grid, &id);
 
   // we retrieve the forms
   dt_masks_form_t *form = dt_masks_get_from_id(dt_dev_get_global(), id);
@@ -1414,9 +1414,9 @@ static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeI
 }
 
 // Update each item of the list
-static void _lib_masks_update_list(dt_lib_module_t *self)
+static void _shape_manager_update_list(dt_lib_module_t *self)
 {
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   if(IS_NULL_PTR(lm)) return;
   if(IS_NULL_PTR(lm->treeview)) return;
 
@@ -1435,7 +1435,7 @@ static gboolean _remove_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeI
 
   int grid = -1;
   int id = -1;
-  _lib_masks_get_values(model, iter, NULL, &grid, &id);
+  _shape_manager_get_values(model, iter, NULL, &grid, &id);
 
   if(grid == refgid && id == refid)
   {
@@ -1445,9 +1445,9 @@ static gboolean _remove_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeI
   return 0;
 }
 
-static void _lib_masks_remove_item(dt_lib_module_t *self, int formid, int parentid)
+static void _shape_manager_remove_item(dt_lib_module_t *self, int formid, int parentid)
 {
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   // for each node , we refresh the string
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
   GList *rl = NULL;
@@ -1474,7 +1474,7 @@ static void _lib_masks_remove_item(dt_lib_module_t *self, int formid, int parent
   rl = NULL;
 }
 
-static gboolean _lib_masks_selection_change_r(GtkTreeModel *model, GtkTreeSelection *selection,
+static gboolean _shape_manager_selection_change_r(GtkTreeModel *model, GtkTreeSelection *selection,
                                               GtkTreeIter *iter, struct dt_iop_module_t *module,
                                               const int selectid, int throw_event, const int level)
 {
@@ -1485,7 +1485,7 @@ static gboolean _lib_masks_selection_change_r(GtkTreeModel *model, GtkTreeSelect
   {
     int id = -1;
     dt_iop_module_t *mod;
-    _lib_masks_get_values(model, &i, &mod, NULL, &id);
+    _shape_manager_get_values(model, &i, &mod, NULL, &id);
 
     if((id == selectid)
        && ((level == 1)
@@ -1500,7 +1500,7 @@ static gboolean _lib_masks_selection_change_r(GtkTreeModel *model, GtkTreeSelect
     GtkTreeIter child, parent = i;
     if(gtk_tree_model_iter_children(model, &child, &parent))
     {
-      found = _lib_masks_selection_change_r(model, selection, &child, module, selectid, throw_event, level + 1);
+      found = _shape_manager_selection_change_r(model, selection, &child, module, selectid, throw_event, level + 1);
       if(found)
       {
         break;
@@ -1511,9 +1511,9 @@ static gboolean _lib_masks_selection_change_r(GtkTreeModel *model, GtkTreeSelect
   return found;
 }
 
-static void _lib_masks_selection_change(dt_lib_module_t *self, struct dt_iop_module_t *module, const int selectid, const int throw_event)
+static void _shape_manager_selection_change(dt_lib_module_t *self, struct dt_iop_module_t *module, const int selectid, const int throw_event)
 {
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   if(IS_NULL_PTR(lm->treeview)) return;
 
   // we first unselect all
@@ -1536,7 +1536,7 @@ static void _lib_masks_selection_change(dt_lib_module_t *self, struct dt_iop_mod
   if(valid)
   {
     gtk_tree_view_expand_all(GTK_TREE_VIEW(lm->treeview));
-    const gboolean found = _lib_masks_selection_change_r(model, selection, &iter, module, selectid, throw_event, 1);
+    const gboolean found = _shape_manager_selection_change_r(model, selection, &iter, module, selectid, throw_event, 1);
     if(!found) gtk_tree_view_collapse_all(GTK_TREE_VIEW(lm->treeview));
   }
 
@@ -1592,11 +1592,11 @@ static gboolean _find_iter_by_parentid_and_formid(GtkTreeModel *model, int paren
   return found;
 }
 
-static void _lib_masks_handler_callback(gpointer instance, const int formid, const int parentid, const dt_masks_event_t event, dt_lib_module_t *self)
+static void _shape_manager_handler_callback(gpointer instance, const int formid, const int parentid, const dt_masks_event_t event, dt_lib_module_t *self)
 {
   if(IS_NULL_PTR(self)) return;
 
-  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   if(IS_NULL_PTR(lm)) return;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
   if(!GTK_IS_TREE_MODEL(model)) return;
@@ -1609,33 +1609,33 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
     {
       case DT_MASKS_EVENT_UPDATE :
       {
-        _lib_masks_update_item(self, formid, parentid, lm, model, &iter);
+        _shape_manager_update_item(self, formid, parentid, lm, model, &iter);
       }
       break;
 
       case DT_MASKS_EVENT_CHANGE :
       {
-        _lib_masks_recreate_list(self);
+        _shape_manager_recreate_list(self);
       }
       break;
 
       case DT_MASKS_EVENT_DELETE :
       {
-        _lib_masks_recreate_list(self);
+        _shape_manager_recreate_list(self);
       }
       break;
 
       case DT_MASKS_EVENT_REMOVE :
       {
-        _lib_masks_recreate_list(self);
-        //_lib_masks_remove_item(self, formid, parentid);
+        _shape_manager_recreate_list(self);
+        //_shape_manager_remove_item(self, formid, parentid);
       }
       break;
 
       case DT_MASKS_EVENT_NONE :
       default:
       {
-        dt_print(DT_DEBUG_MASKS, "[_lib_masks_handler_callback] Mask event cannot be found.");
+        dt_print(DT_DEBUG_MASKS, "[_shape_manager_handler_callback] Mask event cannot be found.");
       }
       break;
     }
@@ -1643,19 +1643,19 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
   
   else if(event == DT_MASKS_EVENT_RESET)
   {
-    _lib_masks_recreate_list(self);
+    _shape_manager_recreate_list(self);
   }
 
   else if(event == DT_MASKS_EVENT_DELETE || event == DT_MASKS_EVENT_REMOVE)
   {
     // When a shape is deleted from the model, we may no longer find its previous row in the current tree.
     // In that case, force a full list refresh so stale rows don't remain visible.
-    _lib_masks_recreate_list(self);
+    _shape_manager_recreate_list(self);
   }
 
   else if(event == DT_MASKS_EVENT_ADD)
   {
-    _lib_masks_recreate_list(self);
+    _shape_manager_recreate_list(self);
     dt_masks_form_gui_t *gui = dt_dev_get_global()->form_gui;
     if(IS_NULL_PTR(gui) || !gui->creation)
       dt_masks_set_visible_form(dt_dev_get_global(),
@@ -1673,7 +1673,7 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
 
 /** @brief Is this window on a backend where absolute coordinates mean anything? Wayland gives a
  * client neither its own position nor the right to set it, so there we remember the width only. */
-static gboolean _lib_masks_popup_position_is_usable(GtkWidget *window)
+static gboolean _shape_manager_popup_position_is_usable(GtkWidget *window)
 {
 #ifdef GDK_WINDOWING_WAYLAND
   return !GDK_IS_WAYLAND_DISPLAY(gtk_widget_get_display(window));
@@ -1684,7 +1684,7 @@ static gboolean _lib_masks_popup_position_is_usable(GtkWidget *window)
 
 /** @brief Remember where the user put the panel and how wide they made it. Called on every path
  * that takes the window off screen, since a hidden window no longer has a position to read. */
-static void _lib_masks_popup_save_geometry(dt_lib_masks_t *d)
+static void _shape_manager_popup_save_geometry(dt_shape_manager_t *d)
 {
   if(!GTK_IS_WINDOW(d->popup_window) || !gtk_widget_get_visible(d->popup_window)) return;
 
@@ -1693,7 +1693,7 @@ static void _lib_masks_popup_save_geometry(dt_lib_masks_t *d)
   gtk_window_get_size(GTK_WINDOW(d->popup_window), &width, &height);
   if(width > 0) dt_conf_set_int(DT_MASKS_PANEL_CONF_WIDTH, width);
 
-  if(!_lib_masks_popup_position_is_usable(d->popup_window)) return;
+  if(!_shape_manager_popup_position_is_usable(d->popup_window)) return;
 
   gint x = 0;
   gint y = 0;
@@ -1705,7 +1705,7 @@ static void _lib_masks_popup_save_geometry(dt_lib_masks_t *d)
 /** @brief Put the panel back where it was left, before it is mapped. With nothing stored -- first
  * run, or a session that never moved it -- nothing is imposed and GTK_WIN_POS_CENTER_ON_PARENT
  * still decides, which is what puts the window on the screen the application is on. */
-static void _lib_masks_popup_restore_geometry(dt_lib_masks_t *d)
+static void _shape_manager_popup_restore_geometry(dt_shape_manager_t *d)
 {
   if(!GTK_IS_WINDOW(d->popup_window)) return;
 
@@ -1723,7 +1723,7 @@ static void _lib_masks_popup_restore_geometry(dt_lib_masks_t *d)
     }
   }
 
-  if(!_lib_masks_popup_position_is_usable(d->popup_window)) return;
+  if(!_shape_manager_popup_position_is_usable(d->popup_window)) return;
   if(!dt_conf_key_exists(DT_MASKS_PANEL_CONF_X) || !dt_conf_key_exists(DT_MASKS_PANEL_CONF_Y)) return;
 
   const int x = dt_conf_get_int(DT_MASKS_PANEL_CONF_X);
@@ -1756,9 +1756,9 @@ static void _lib_masks_popup_restore_geometry(dt_lib_masks_t *d)
 /** @brief The toolbox button is the panel's only state: showing and hiding both go through its
  * active flag, so every way of closing the panel leaves the button un-pressed. Re-entrant by
  * design -- the window-manager close path toggles the button, which comes back here. */
-static void _lib_masks_popup_button_toggled_cb(GtkWidget *button, gpointer user_data)
+static void _shape_manager_popup_button_toggled_cb(GtkWidget *button, gpointer user_data)
 {
-  dt_lib_masks_t *d = (dt_lib_masks_t *)user_data;
+  dt_shape_manager_t *d = (dt_shape_manager_t *)user_data;
   if(IS_NULL_PTR(d->popup_window)) return;
 
   const gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button));
@@ -1767,12 +1767,12 @@ static void _lib_masks_popup_button_toggled_cb(GtkWidget *button, gpointer user_
   if(active)
   {
     // before mapping: a move applied to a mapped window makes it jump in view
-    _lib_masks_popup_restore_geometry(d);
+    _shape_manager_popup_restore_geometry(d);
     gtk_widget_show_all(d->popup_window);
   }
   else
   {
-    _lib_masks_popup_save_geometry(d);
+    _shape_manager_popup_save_geometry(d);
     gtk_widget_hide(d->popup_window);
   }
 }
@@ -1780,10 +1780,10 @@ static void _lib_masks_popup_button_toggled_cb(GtkWidget *button, gpointer user_
 /** @brief Closing from the window manager hides the panel, same as the toolbox button, so its
  * widgets and state survive. Un-pressing the button is what actually hides the window (and saves
  * the geometry before it goes), so the two ways of closing cannot disagree. */
-static gboolean _lib_masks_popup_delete_cb(GtkWidget *window __attribute__((unused)),
+static gboolean _shape_manager_popup_delete_cb(GtkWidget *window __attribute__((unused)),
                                            GdkEvent *event __attribute__((unused)), gpointer user_data)
 {
-  dt_lib_masks_t *d = (dt_lib_masks_t *)user_data;
+  dt_shape_manager_t *d = (dt_shape_manager_t *)user_data;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->popup_button), FALSE);
   return TRUE;
 }
@@ -1791,9 +1791,19 @@ static gboolean _lib_masks_popup_delete_cb(GtkWidget *window __attribute__((unus
 /* Idle callback to add the popup button to the module toolbox once the
  * module_toolbox proxy has been initialized. Returns FALSE when done so
  * it is removed from the idle loop. */
-static gboolean _lib_masks_add_popup_button_idle(gpointer user_data)
+/* Published through dev->proxy.masks so the darkroom can draw the mask overlays while the user
+ * is looking at the manager -- what dt_lib_gui_get_expanded() answered while this was a panel
+ * section, and what no expander can answer now that it is a window. */
+static gboolean _shape_manager_is_window_visible(dt_lib_module_t *self)
 {
-  dt_lib_masks_t *d = (dt_lib_masks_t *)user_data;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return FALSE;
+  dt_shape_manager_t *d = (dt_shape_manager_t *)self->data;
+  return !IS_NULL_PTR(d->popup_window) && gtk_widget_get_visible(d->popup_window);
+}
+
+static gboolean _shape_manager_add_popup_button_idle(gpointer user_data)
+{
+  dt_shape_manager_t *d = (dt_shape_manager_t *)user_data;
   if(!d || !d->popup_button) return FALSE;
 
   if(dt_view_manager_get_global()->proxy.module_toolbox.module)
@@ -1807,7 +1817,7 @@ static gboolean _lib_masks_add_popup_button_idle(gpointer user_data)
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize ui widgets */
-  dt_lib_masks_t *d = (dt_lib_masks_t *)g_malloc0(sizeof(dt_lib_masks_t));
+  dt_shape_manager_t *d = (dt_shape_manager_t *)g_malloc0(sizeof(dt_shape_manager_t));
   self->data = (void *)d;
   d->gui_reset = 0;
 
@@ -1846,7 +1856,7 @@ void gui_init(dt_lib_module_t *self)
 #endif
 
   // Intercept the window close action to hide the widget instead of completely destroying it
-  g_signal_connect(G_OBJECT(d->popup_window), "delete-event", G_CALLBACK(_lib_masks_popup_delete_cb), d);
+  g_signal_connect(G_OBJECT(d->popup_window), "delete-event", G_CALLBACK(_shape_manager_popup_delete_cb), d);
 
   // 3. Create a clean box container inside the popup window to receive original shape elements
   GtkWidget *shape_manager_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
@@ -1869,8 +1879,8 @@ void gui_init(dt_lib_module_t *self)
    * Schedule adding the popup button via an idle callback so it runs after
    * other modules (including the module_toolbox) have had their gui_init
    * called. The callback will remove itself once it succeeds. */
-  g_idle_add((GSourceFunc)_lib_masks_add_popup_button_idle, d);
-  g_signal_connect(G_OBJECT(d->popup_button), "toggled", G_CALLBACK(_lib_masks_popup_button_toggled_cb), d);
+  g_idle_add((GSourceFunc)_shape_manager_add_popup_button_idle, d);
+  g_signal_connect(G_OBJECT(d->popup_button), "toggled", G_CALLBACK(_shape_manager_popup_button_toggled_cb), d);
 
   // From here, everything goes into the mask manager popup,
   // so there is no child added to self->widget from here.
@@ -1887,7 +1897,7 @@ void gui_init(dt_lib_module_t *self)
     .user_data = NULL,
     .can_start = NULL,
     .form_type = NULL,
-    .started = _lib_masks_shape_button_started,
+    .started = _shape_manager_shape_button_started,
     .exited = NULL,
   };
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
@@ -1939,14 +1949,15 @@ void gui_init(dt_lib_module_t *self)
                                        DT_UI_RESIZE_DYNAMIC),
                      TRUE, TRUE, 0);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, G_CALLBACK(_lib_masks_handler_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, G_CALLBACK(_shape_manager_handler_callback), self);
 
   // set proxy functions
   dt_dev_get_global()->proxy.masks.module = self;
-  dt_dev_get_global()->proxy.masks.list_change = _lib_masks_recreate_list;
-  dt_dev_get_global()->proxy.masks.list_update = _lib_masks_update_list;
-  dt_dev_get_global()->proxy.masks.list_remove = _lib_masks_remove_item;
-  dt_dev_get_global()->proxy.masks.selection_change = _lib_masks_selection_change;
+  dt_dev_get_global()->proxy.masks.list_change = _shape_manager_recreate_list;
+  dt_dev_get_global()->proxy.masks.list_update = _shape_manager_update_list;
+  dt_dev_get_global()->proxy.masks.list_remove = _shape_manager_remove_item;
+  dt_dev_get_global()->proxy.masks.selection_change = _shape_manager_selection_change;
+  dt_dev_get_global()->proxy.masks.is_visible = _shape_manager_is_window_visible;
 }
 
 void gui_cleanup(dt_lib_module_t *self)
@@ -1954,13 +1965,13 @@ void gui_cleanup(dt_lib_module_t *self)
   if(IS_NULL_PTR(self->data)) return;
   if(self && self->data)
   {
-    dt_lib_masks_t *d = (dt_lib_masks_t *)self->data;
+    dt_shape_manager_t *d = (dt_shape_manager_t *)self->data;
 
     // Destroy window allocation to prevent leaks
     if(d->popup_window)
     {
       // leaving with the panel open still counts as where the user left it
-      _lib_masks_popup_save_geometry(d);
+      _shape_manager_popup_save_geometry(d);
       gtk_widget_destroy(d->popup_window);
       d->popup_window = NULL;
     }
@@ -1980,7 +1991,7 @@ void gui_cleanup(dt_lib_module_t *self)
 
   dt_free(self->data);
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_masks_handler_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_shape_manager_handler_callback), self);
 }
 
 // clang-format off

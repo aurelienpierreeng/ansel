@@ -8,7 +8,7 @@ add_definitions(-include libs/lib_api.h)
 
 
 # The modules
-set(MODULES export styles tagging collect metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs masks blending duplicate ioporder textnotes studio_style studio_import)
+set(MODULES export styles tagging collect metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs shape_manager blending duplicate ioporder textnotes studio_style studio_import)
 
 # The tools
 set(MODULES ${MODULES} filter)
@@ -28,7 +28,7 @@ add_library(history MODULE "history.c")
 add_library(snapshots MODULE "snapshots.c")
 add_library(modulegroups MODULE "modulegroups.c")
 add_library(backgroundjobs MODULE "backgroundjobs.c")
-add_library(masks MODULE "masks.c")
+add_library(shape_manager MODULE "shape_manager.c")
 add_library(blending MODULE "blending.c")
 add_library(duplicate MODULE "duplicate.c")
 add_library(ioporder MODULE "ioporder.c")
