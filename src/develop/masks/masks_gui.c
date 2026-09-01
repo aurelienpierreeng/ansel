@@ -2155,6 +2155,26 @@ gboolean dt_masks_form_exit_creation(dt_iop_module_t *module, dt_masks_form_gui_
     }
 
     dt_masks_creation_mode_quit(mask_gui);
+
+    /* The user-facing ways to abandon a creation session all land here -- Esc, the right-click
+     * menu entry, backspace on a polygon with no node placed, the darkroom tearing down
+     * mid-creation -- and none of them told the shape toolbars, so a shape abandoned with Esc
+     * left its button pressed. Only the click-the-armed-button-again path deactivated, because
+     * it does so itself before calling us. Finishing a shape is NOT one of these: continuous
+     * creation deliberately keeps the tool armed for the next one.
+     *
+     * This is not the only place mask_gui->creation is cleared -- dt_masks_clear_form_gui()
+     * does it too, so entering edit mode leaves creation through dt_masks_change_form_gui()
+     * instead, and deactivates the toolbars on its own (develop/blend_gui.c). Neither that
+     * function nor dt_masks_creation_mode_quit() can carry this call, tempting as the latter
+     * looks: dt_masks_creation_mode_enter() reaches both while ARMING a tool, so deactivating
+     * there would switch off the button the same gesture just pressed.
+     *
+     * Raised after creation is cleared, so a handler that asks is told the truth; the buttons
+     * are on "button-press-event", not "toggled", so setting them inactive cannot re-enter
+     * this function. */
+    dt_masks_shape_buttons_deactivate_all(NULL);
+
     g_list_free(mask_gui->creation_formids);
     mask_gui->creation_formids = NULL;
     mask_gui->creation_last_formid = 0;
