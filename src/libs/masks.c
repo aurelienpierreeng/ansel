@@ -57,9 +57,14 @@
 #include "libs/lib_api.h"
 #include "views/view.h"
 #include "widgets/scroll_wrap.h"
+#include "common/conf.h"          // dt_conf_get_int(), dt_conf_key_exists()
 
 #include "widgets/togglebutton.h"
 #include "control/signal.h"
+
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
@@ -84,7 +89,7 @@ typedef struct dt_lib_masks_t
   GtkWidget *popup_window;
   GtkWidget *popup_button;
 
-  GdkPixbuf *ic_inverse, *ic_union, *ic_intersection, *ic_difference, *ic_exclusion, *ic_wired;
+  GdkPixbuf *ic_inverse, *ic_union, *ic_intersection, *ic_difference, *ic_exclusion;
   int gui_reset;
 } dt_lib_masks_t;
 
@@ -126,7 +131,6 @@ typedef enum dt_masks_tree_cols_t
   TREE_IC_OP_VISIBLE,
   TREE_IC_INVERSE,
   TREE_IC_INVERSE_VISIBLE,
-  TREE_IC_USED,
   TREE_IC_USED_VISIBLE,
   TREE_USED_TEXT,
   TREE_COUNT
@@ -1194,7 +1198,6 @@ static void _lib_masks_list_recurs(GtkTreeStore *treestore, GtkTreeIter *topleve
   // we get the right pixbufs
   GdkPixbuf *icop = NULL;
   GdkPixbuf *icinv = NULL;
-  GdkPixbuf *icuse = NULL;
   if(gstate & DT_MASKS_STATE_UNION)
     icop = lm->ic_union;
   else if(gstate & DT_MASKS_STATE_INTERSECTION)
@@ -1206,11 +1209,7 @@ static void _lib_masks_list_recurs(GtkTreeStore *treestore, GtkTreeIter *topleve
   if(gstate & DT_MASKS_STATE_INVERSE) icinv = lm->ic_inverse;
   char str2[1000] = "";
   int nbuse = 0;
-  if(grp_id == 0)
-  {
-    _is_form_used(form->formid, NULL, str2, sizeof(str2), &nbuse);
-    if(nbuse > 0) icuse = lm->ic_wired;
-  }
+  if(grp_id == 0) _is_form_used(form->formid, NULL, str2, sizeof(str2), &nbuse);
 
   if(!(form->type & DT_MASKS_GROUP))
   {
@@ -1220,7 +1219,7 @@ static void _lib_masks_list_recurs(GtkTreeStore *treestore, GtkTreeIter *topleve
     gtk_tree_store_set(treestore, &child, TREE_TEXT, str, TREE_MODULE, module, TREE_GROUPID, grp_id,
                        TREE_FORMID, form->formid, TREE_EDITABLE, (grp_id == 0), TREE_IC_OP, icop,
                        TREE_IC_OP_VISIBLE, (!IS_NULL_PTR(icop)), TREE_IC_INVERSE, icinv, TREE_IC_INVERSE_VISIBLE,
-                       (!IS_NULL_PTR(icinv)), TREE_IC_USED, icuse, TREE_IC_USED_VISIBLE, (nbuse > 0),
+                       (!IS_NULL_PTR(icinv)), TREE_IC_USED_VISIBLE, (nbuse > 0),
                        TREE_USED_TEXT, str2, -1);
     _set_iter_name(lm, form, gstate, opacity, GTK_TREE_MODEL(treestore), &child, index);
   }
@@ -1247,7 +1246,7 @@ static void _lib_masks_list_recurs(GtkTreeStore *treestore, GtkTreeIter *topleve
     gtk_tree_store_set(treestore, &child, TREE_TEXT, str, TREE_MODULE, module, TREE_GROUPID, grp_id,
                        TREE_FORMID, form->formid, TREE_EDITABLE, (grp_id == 0), TREE_IC_OP, icop,
                        TREE_IC_OP_VISIBLE, (!IS_NULL_PTR(icop)), TREE_IC_INVERSE, icinv, TREE_IC_INVERSE_VISIBLE,
-                       (!IS_NULL_PTR(icinv)), TREE_IC_USED, icuse, TREE_IC_USED_VISIBLE, (nbuse > 0),
+                       (!IS_NULL_PTR(icinv)), TREE_IC_USED_VISIBLE, (nbuse > 0),
                        TREE_USED_TEXT, str2, -1);
     _set_iter_name(lm, form, gstate, opacity, GTK_TREE_MODEL(treestore), &child, index);
 
@@ -1355,7 +1354,7 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
   // we store : text ; *module ; groupid ; formid
   treestore = gtk_tree_store_new(TREE_COUNT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT, G_TYPE_INT,
                                  G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF,
-                                 G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, G_TYPE_STRING);
+                                 G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING);
 
   // we first add all groups
   for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
@@ -1768,6 +1767,103 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
   dt_control_queue_redraw_center();
 }
 
+/* Geometry the user gives the shape manager by hand. The height is not ours: the shape list
+ * carries its own persisted height (dt_ui_scroll_wrap below) and the window follows it. */
+#define DT_MASKS_PANEL_CONF_WIDTH "plugins/darkroom/masks/windowwidth"
+#define DT_MASKS_PANEL_CONF_X "plugins/darkroom/masks/window_x"
+#define DT_MASKS_PANEL_CONF_Y "plugins/darkroom/masks/window_y"
+
+/** @brief Is this window on a backend where absolute coordinates mean anything? Wayland gives a
+ * client neither its own position nor the right to set it, so there we remember the width only. */
+static gboolean _lib_masks_popup_position_is_usable(GtkWidget *window)
+{
+#ifdef GDK_WINDOWING_WAYLAND
+  if(GDK_IS_WAYLAND_DISPLAY(gtk_widget_get_display(window))) return FALSE;
+#else
+  (void)window;
+#endif
+  return TRUE;
+}
+
+/** @brief Remember where the user put the panel and how wide they made it. Called on every path
+ * that takes the window off screen, since a hidden window no longer has a position to read. */
+static void _lib_masks_popup_save_geometry(dt_lib_masks_t *d)
+{
+  if(!GTK_IS_WINDOW(d->popup_window) || !gtk_widget_get_visible(d->popup_window)) return;
+
+  gint width = 0;
+  gint height = 0;
+  gtk_window_get_size(GTK_WINDOW(d->popup_window), &width, &height);
+  if(width > 0) dt_conf_set_int(DT_MASKS_PANEL_CONF_WIDTH, width);
+
+  if(!_lib_masks_popup_position_is_usable(d->popup_window)) return;
+
+  gint x = 0;
+  gint y = 0;
+  gtk_window_get_position(GTK_WINDOW(d->popup_window), &x, &y);
+  dt_conf_set_int(DT_MASKS_PANEL_CONF_X, x);
+  dt_conf_set_int(DT_MASKS_PANEL_CONF_Y, y);
+}
+
+/** @brief Put the panel back where it was left, before it is mapped. With nothing stored -- first
+ * run, or a session that never moved it -- nothing is imposed and GTK_WIN_POS_CENTER_ON_PARENT
+ * still decides, which is what puts the window on the screen the application is on. */
+static void _lib_masks_popup_restore_geometry(dt_lib_masks_t *d)
+{
+  if(!GTK_IS_WINDOW(d->popup_window)) return;
+
+  gint width = 0;
+  gint height = 0;
+  gtk_window_get_size(GTK_WINDOW(d->popup_window), &width, &height);
+
+  if(dt_conf_key_exists(DT_MASKS_PANEL_CONF_WIDTH))
+  {
+    const int stored_width = dt_conf_get_int(DT_MASKS_PANEL_CONF_WIDTH);
+    if(stored_width > 0)
+    {
+      width = stored_width;
+      gtk_window_resize(GTK_WINDOW(d->popup_window), width, MAX(height, 1));
+    }
+  }
+
+  if(!_lib_masks_popup_position_is_usable(d->popup_window)) return;
+  if(!dt_conf_key_exists(DT_MASKS_PANEL_CONF_X) || !dt_conf_key_exists(DT_MASKS_PANEL_CONF_Y)) return;
+
+  const int x = dt_conf_get_int(DT_MASKS_PANEL_CONF_X);
+  const int y = dt_conf_get_int(DT_MASKS_PANEL_CONF_Y);
+
+  // A position saved on a monitor that is no longer attached would strand the panel off screen,
+  // so it is clamped into the work area of whichever monitor it now lands on.
+  int clamped_x = x;
+  int clamped_y = y;
+  GdkDisplay *display = gtk_widget_get_display(d->popup_window);
+  if(!IS_NULL_PTR(display))
+  {
+    GdkMonitor *monitor = gdk_display_get_monitor_at_point(display, x + width / 2, y + height / 2);
+    if(IS_NULL_PTR(monitor)) monitor = gdk_display_get_primary_monitor(display);
+    if(IS_NULL_PTR(monitor) && gdk_display_get_n_monitors(display) > 0)
+      monitor = gdk_display_get_monitor(display, 0);
+
+    if(!IS_NULL_PTR(monitor))
+    {
+      GdkRectangle workarea = { 0 };
+      gdk_monitor_get_workarea(monitor, &workarea);
+      clamped_x = CLAMP(x, workarea.x, workarea.x + MAX(0, workarea.width - width));
+      clamped_y = CLAMP(y, workarea.y, workarea.y + MAX(0, workarea.height - height));
+    }
+  }
+
+  gtk_window_move(GTK_WINDOW(d->popup_window), clamped_x, clamped_y);
+}
+
+/** @brief Closing from the window manager hides the panel, same as the toolbox button, so its
+ * widgets and state survive -- but the geometry has to be read before it goes. */
+static gboolean _lib_masks_popup_delete_cb(GtkWidget *window, GdkEvent *event, gpointer user_data)
+{
+  _lib_masks_popup_save_geometry((dt_lib_masks_t *)user_data);
+  return gtk_widget_hide_on_delete(window);
+}
+
 static void _lib_masks_popup_button_clicked_cb(GtkWidget *button, gpointer user_data)
 {
   dt_lib_masks_t *d = (dt_lib_masks_t *)user_data;
@@ -1775,10 +1871,13 @@ static void _lib_masks_popup_button_clicked_cb(GtkWidget *button, gpointer user_
 
   if(gtk_widget_get_visible(d->popup_window))
   {
+    _lib_masks_popup_save_geometry(d);
     gtk_widget_hide(d->popup_window);
   }
   else
   {
+    // before mapping: a move applied to a mapped window makes it jump in view
+    _lib_masks_popup_restore_geometry(d);
     gtk_widget_show_all(d->popup_window);
   }
 }
@@ -1809,7 +1908,6 @@ void gui_init(dt_lib_module_t *self)
   // initialise all masks pixbuf. This is needed for the "automatic" cell renderer of the treeview
   const int bs2 = DT_PIXEL_APPLY_DPI(13);
   d->ic_inverse = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_inverse, bs2, bs2);
-  d->ic_wired = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_link_chain, bs2, bs2);
   d->ic_union = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_union, bs2 * 2, bs2);
   d->ic_intersection = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_intersection, bs2 * 2, bs2);
   d->ic_difference = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_difference, bs2 * 2, bs2);
@@ -1827,13 +1925,22 @@ void gui_init(dt_lib_module_t *self)
   gtk_window_set_accept_focus(GTK_WINDOW(d->popup_window), FALSE);
   gtk_window_set_transient_for(GTK_WINDOW(d->popup_window), GTK_WINDOW(dt_gui_main_window()));
 
+  // Being transient for the main window does not decide where the window manager puts this
+  // one: with no position asked for, it lands at the root origin, i.e. on the leftmost
+  // monitor rather than on the one the application sits on. GTK honours the hint on the
+  // first mapping only, so a panel the user has dragged elsewhere keeps its place.
+  gtk_window_set_position(GTK_WINDOW(d->popup_window), GTK_WIN_POS_CENTER_ON_PARENT);
+
+  // Let the user shrink the panel down to a narrow strip: the shape list carries its own
+  // height rule (dt_ui_scroll_wrap below), the width is theirs to set.
+  gtk_widget_set_size_request(d->popup_window, DT_PIXEL_APPLY_DPI(300), -1);
+
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(d->popup_window);
-  gtk_window_set_position(GTK_WINDOW(d->popup_window), GTK_WIN_POS_CENTER_ON_PARENT);
 #endif
 
   // Intercept the window close action to hide the widget instead of completely destroying it
-  g_signal_connect(G_OBJECT(d->popup_window), "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL);
+  g_signal_connect(G_OBJECT(d->popup_window), "delete-event", G_CALLBACK(_lib_masks_popup_delete_cb), d);
 
   // 3. Create a clean box container inside the popup window to receive original shape elements
   GtkWidget *shape_manager_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
@@ -1877,14 +1984,19 @@ void gui_init(dt_lib_module_t *self)
   };
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *shape_buttons_box = dt_masks_shape_buttons_create(&shape_buttons_config);
-  gtk_box_pack_end(GTK_BOX(hbox), shape_buttons_box, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(hbox), shape_buttons_box, FALSE, FALSE, 0);
   d->bt_gradient = shape_buttons[DT_MASKS_SHAPE_INDEX_GRADIENT];
   d->bt_path = shape_buttons[DT_MASKS_SHAPE_INDEX_POLYGON];
   d->bt_ellipse = shape_buttons[DT_MASKS_SHAPE_INDEX_ELLIPSE];
   d->bt_circle = shape_buttons[DT_MASKS_SHAPE_INDEX_CIRCLE];
   d->bt_brush = shape_buttons[DT_MASKS_SHAPE_INDEX_BRUSH];
 
-  gtk_box_pack_start(GTK_BOX(shape_manager_container), hbox, TRUE, TRUE, 0);
+  // The button row keeps its natural height and stays at the top: expanding it would split the
+  // surplus with the shape list below and stretch the buttons vertically. It is the container's
+  // first child, so nothing separates it from the window edge -- give it the same gap the
+  // container puts between its children.
+  gtk_widget_set_margin_top(hbox, DT_GUI_BOX_SPACING);
+  gtk_box_pack_start(GTK_BOX(shape_manager_container), hbox, FALSE, FALSE, 0);
 
   d->treeview = gtk_tree_view_new();
   GtkTreeViewColumn *col = gtk_tree_view_column_new();
@@ -1904,9 +2016,12 @@ void gui_init(dt_lib_module_t *self)
   gtk_tree_view_column_add_attribute(col, renderer, "text", TREE_TEXT);
   gtk_tree_view_column_add_attribute(col, renderer, "editable", TREE_EDITABLE);
   g_signal_connect(renderer, "edited", (GCallback)_tree_cell_edited, self);
+  // Themed icon marking a shape shared by several modules, same pattern as the
+  // trash icons of the shapes lists in develop/blend_gui.c: the renderer names the icon
+  // and the theme draws it, the model only carries whether this row shows one.
   renderer = gtk_cell_renderer_pixbuf_new();
+  g_object_set(renderer, "icon-name", "mail-attachment-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
   gtk_tree_view_column_pack_end(col, renderer, FALSE);
-  gtk_tree_view_column_set_attributes(col, renderer, "pixbuf", TREE_IC_USED, NULL);
   gtk_tree_view_column_add_attribute(col, renderer, "visible", TREE_IC_USED_VISIBLE);
 
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(d->treeview));
@@ -1949,19 +2064,19 @@ void gui_cleanup(dt_lib_module_t *self)
     // Destroy window allocation to prevent leaks
     if(d->popup_window)
     {
+      // leaving with the panel open still counts as where the user left it
+      _lib_masks_popup_save_geometry(d);
       gtk_widget_destroy(d->popup_window);
       d->popup_window = NULL;
     }
 
     if(!IS_NULL_PTR(d->ic_inverse)) g_object_unref(d->ic_inverse);
-    if(!IS_NULL_PTR(d->ic_wired)) g_object_unref(d->ic_wired);
     if(!IS_NULL_PTR(d->ic_union)) g_object_unref(d->ic_union);
     if(!IS_NULL_PTR(d->ic_intersection)) g_object_unref(d->ic_intersection);
     if(!IS_NULL_PTR(d->ic_difference)) g_object_unref(d->ic_difference);
     if(!IS_NULL_PTR(d->ic_exclusion)) g_object_unref(d->ic_exclusion);
 
     d->ic_inverse = NULL;
-    d->ic_wired = NULL;
     d->ic_union = NULL;
     d->ic_intersection = NULL;
     d->ic_difference = NULL;

@@ -1580,6 +1580,26 @@ pump the main loop, then compare the scrolled window's vadjustment `page_size` a
 A scrollbar that appears for a couple of pixels looks like a content-height miscount and is
 usually a frame the request forgot.
 
+### A UTILITY window must ask for its position, transient-for is not enough
+
+`gtk_window_set_transient_for()` ties a window to its parent for stacking and focus, but the
+window manager still decides *where* to map it. For an ordinary toplevel it places it over the
+parent; give it `GDK_WINDOW_TYPE_HINT_UTILITY` and it drops the window at the root origin
+instead — the leftmost monitor on a multi-head setup, whichever screen the application is
+actually on. Measured on X11 with two monitors (primary at x=1920), same parent and same
+transient hint throughout: transient alone lands at (2020, 129), transient + UTILITY at (0, 0),
+and the focus flags (`set_focus_on_map`, `set_accept_focus`) change nothing either way.
+
+So a UTILITY window states its position itself, `GTK_WIN_POS_CENTER_ON_PARENT`, on every
+platform — not inside a `#ifdef GDK_WINDOWING_QUARTZ` block, which is how the shape manager
+panel (`libs/masks.c`) came to open on the wrong screen while the module-order graph
+(`libs/ioporder.c`), the tag manager (`libs/tagging.c`) and the event supervisor
+(`gui/actions/supervisor_window.c`) — none of which set the UTILITY hint — opened correctly.
+
+The hint costs nothing for a panel shown and hidden repeatedly: GTK consults it on the first
+mapping only, so a window the user has dragged elsewhere keeps the place they gave it across
+later hide/show cycles.
+
 ### Modal dialogs must explicitly refocus their parent on close
 
 `gtk_window_set_transient_for()` at dialog creation is not enough to guarantee focus returns to

@@ -371,9 +371,6 @@ void dtgtk_cairo_paint_shortcut(cairo_t *cr, gint x, gint y, gint w, gint h, gin
 /** Paint a pined icon for filtering */
 void dtgtk_cairo_paint_pin(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 
-/** Paint a chained link icon for shapes */
-void dtgtk_cairo_paint_link_chain(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
-
 
 /** Paint button for Liquify */
 void dtgtk_liquify_cairo_paint_node_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
