@@ -60,23 +60,23 @@ typedef struct dt_lib_blending_t
 /* The name the panel section has always carried. The module hosts the whole blending body, whose
  * Drawn / Parametric / Raster tabs are the three kinds of mask, so "masking" belongs in it -- and
  * keeping the string spares every translation that already has it. */
-const char *name(struct dt_lib_module_t *self)
+const char *name(struct dt_lib_module_t *self __attribute__((unused)))
 {
   return _("Masking & Blending");
 }
 
-const char **views(dt_lib_module_t *self)
+const char **views(dt_lib_module_t *self __attribute__((unused)))
 {
   static const char *v[] = {"darkroom", NULL};
   return v;
 }
 
-uint32_t container(dt_lib_module_t *self)
+uint32_t container(dt_lib_module_t *self __attribute__((unused)))
 {
   return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
 }
 
-int expandable(dt_lib_module_t *self)
+int expandable(dt_lib_module_t *self __attribute__((unused)))
 {
   return 1;
 }
@@ -91,7 +91,7 @@ int position()
  * from a dev that has since been replaced, and neither may be dereferenced. */
 static gboolean _module_is_current(const dt_iop_module_t *module)
 {
-  return dt_dev_get_global() && module && g_list_find(dt_dev_get_global()->iop, (gpointer)module);
+  return dt_dev_get_global() && module && g_list_find(dt_dev_get_global()->iop, module);
 }
 
 static void _clear_box(dt_lib_module_t *self)
