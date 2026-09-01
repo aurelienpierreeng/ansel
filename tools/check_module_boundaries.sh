@@ -414,7 +414,7 @@ masks_gui_include_baseline=11
 masks_member_baseline=83
 masks_write_baseline=20
 masks_alloc_baseline=1
-masks_forms_baseline=76
+masks_forms_baseline=75
 masks_row_baseline=35
 
 # Members no other struct in the tree uses. Keep it that way: adding an ambiguous name here
