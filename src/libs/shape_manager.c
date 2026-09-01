@@ -576,8 +576,10 @@ static void _tree_duplicate_shape(GtkButton *button __attribute__((unused)), dt_
   items = NULL;
 }
 
-static void _tree_cell_edited(GtkCellRendererText *cell __attribute__((unused)), gchar *path_string, gchar *new_text,
-                              dt_lib_module_t *self)
+/* The "edited" signal hands both strings as gchar *, but this only reads them -- and the
+ * connection goes through a GCallback cast, so nothing checks the signature against GTK's. */
+static void _tree_cell_edited(GtkCellRendererText *cell __attribute__((unused)), const gchar *path_string,
+                              const gchar *new_text, dt_lib_module_t *self)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
@@ -592,7 +594,7 @@ static void _tree_cell_edited(GtkCellRendererText *cell __attribute__((unused)),
   // we want to make sure that the new name is not an empty string. else this would convert
   // in the xmp file into "<rdf:li/>" which produces problems. we use a single whitespace
   // as the pure minimum text.
-  gchar *text = strlen(new_text) == 0 ? " " : new_text;
+  const gchar *text = strlen(new_text) == 0 ? " " : new_text;
 
   // first, we need to update the mask name
 
@@ -1278,7 +1280,7 @@ static GtkTreeStore *_tree_store_build(dt_shape_manager_t *lm)
 
 /* Puts back what was selected before the store was replaced. selectids holds three entries per
  * row -- module, group id, form id -- as _shape_manager_get_selected() built it. */
-static void _tree_restore_selection(dt_shape_manager_t *lm, GtkTreeModel *model, GList *selectids)
+static void _tree_restore_selection(dt_shape_manager_t *lm, GtkTreeModel *model, const GList *selectids)
 {
   const GList *ids = selectids;
   while(ids)
