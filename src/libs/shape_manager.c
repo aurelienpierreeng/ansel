@@ -2761,7 +2761,7 @@ void gui_init(dt_lib_module_t *self)
   g_idle_add((GSourceFunc)_shape_manager_add_popup_button_idle, d);
   g_signal_connect(G_OBJECT(d->popup_button), "toggled", G_CALLBACK(_shape_manager_popup_button_toggled_cb), d);
 
-  // From here, everything goes into the mask manager popup,
+  // From here, everything goes into the shape manager popup,
   // so there is no child added to self->widget from here.
   const dt_masks_shape_buttons_config_t shape_buttons_config = {
     .dev = dt_dev_get_global(),

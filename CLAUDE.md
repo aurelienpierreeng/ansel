@@ -1242,6 +1242,76 @@ are now refcounted (`dt_masks_form_t.refcount`, `src/develop/masks/masks_history
   already guarantees a GUI-side edit clones instead of mutating a form an in-flight pipeline run
   is holding.
 
+### A mask shared between modules is `mask_id`, and nothing else
+
+`blend_params->mask_id` lives inside each module's own params blob, so nothing stops several
+modules from naming the same group — and that IS a shared mask. There is no back-reference from a
+group to the modules using it, and there must not be one: the answer is derived by walking
+`dev->iop`, which is what `_modules_owning_group()` (`libs/shape_manager.c`) does. Caching it in a
+hash table would buy nothing over ~80 modules and would cost an invalidation problem, since
+`dev->iop` is rebuilt on module add/remove and on history navigation — stored raw module pointers
+would dangle.
+
+Two consequences a reader has to hold together:
+
+- **Detaching a shape from a shared group detaches it for every module rendering that group.**
+  There is one membership, not one per module. The shape manager's attachment dialog says so by
+  reopening with those modules unticked; anything else offering a detach has to mean the same
+  thing.
+- **The tree stores one module per row**, so a shared group is listed once, attributed to
+  `_module_owning_group()` — the *first* owner in pipeline order. `_modules_owning_group()`
+  returns all of them and is the one to use for any question about who renders a group.
+
+`dt_iop_gui_blend_set_drawn_mask_group()` (`develop/blend_gui.h`) is how a module starts using a
+group: it points `mask_id`, raises `DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE`, refreshes the
+raster-mask source table and repaints whatever of the blend GUI exists. It tolerates a module the
+user has never expanded (no `dt_iop_gui_blend_data_t`) and commits nothing, so a caller attaching
+one group to several modules commits once. Before it existed, that sequence lived only inside
+`blend_gui.c`'s own widget callbacks and anything else had to write `blend_params` by hand.
+
+### The same shape applied twice in one mask is legal, and not always a no-op
+
+A module renders one group, that group can nest others, and nothing stops a shape from sitting in
+both. Whether the second application changes anything depends entirely on the combine operator
+(`develop/masks/group.c`): union is `max(dst, src·opacity)` and intersection `min(b1, b2·opacity)`,
+both idempotent — but difference is `b1·(1−b2)`, so applying it twice gives `b1·(1−b2)²`, and
+exclusion does not settle either. **So a duplicate instance must never be greyed out or refused as
+redundant**: the panel would claim an absence of effect the pipeline does not honour. Mark it and
+leave it alone. `dt_masks_group_first_use()` answers which application the later ones are read
+against, walking in compositing order — a group's members in their own order, descending into a
+member group at the position that group sits at.
+
+Compositing order is that walk, forward: `dt_masks_group_get_mask()` fills its buffers walking
+`points` forward and folds them in the same index order, so the topmost member is the base and each
+later one combines onto the result of those above it. A list that does not show that order does not
+show what the mask does — which is why the Drawn tab's mask tree is built in one pass
+(`_blendop_masks_group_tree_append`). Its *available shapes* list below deliberately keeps groups
+first instead: that one is a catalogue to pick from, not a rendering order.
+
+Note `nb_ok` is only incremented for members that actually rasterize something: a shape that draws
+nothing (`DT_MASKS_RASTER_EMPTY`) occupies a row in the list but no rank in the composition, so the
+displayed rank and the effective one can differ by one.
+
+### The shape manager's two lists, and the graph questions behind them
+
+`libs/shape_manager.c` shows the forms in two trees, split by one question: is this group some
+module's drawn mask, or nobody's yet? The left list is the inventory — every shape, plus the groups
+no module uses — and the right one is the assignment. A shape a module uses appears in both, once
+as itself and once as a member, the same arrangement the Drawn tab already uses. Membership is
+derived per rebuild by `_form_belongs_to()`, never stored, so a form crosses lists the moment a
+module claims or releases its group — which is why both stores are always rebuilt together.
+
+Every tree handler is handed a `dt_shape_manager_list_t`, not the module, because the first thing
+each needs to know is which tree the gesture came from. **That includes the context menu items**:
+connecting them with the module instead is what once made every menu action dereference arbitrary
+memory.
+
+The graph questions live in `develop/masks_group.h`, id-keyed and by value like the rest of that
+header — `dt_masks_group_contains()` (cycle guard: wiring a group into one that already holds it
+makes every walk non-terminating), `dt_masks_group_covers_shapes()`, `dt_masks_group_first_use()`.
+They walk `->points` where `->points` belongs. Asking them from `libs/` by hand is what
+`tools/check_module_boundaries.sh` section 9 counts and refuses.
+
 ### The unused-shape sweep's used-set is not a subset of the snapshot it sweeps
 
 "Delete unused shapes" in the shape manager (`libs/shape_manager.c`, `dt_masks_cleanup_unused()`) keeps a
