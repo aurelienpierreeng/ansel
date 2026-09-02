@@ -214,10 +214,13 @@ void dt_iop_gui_blend_masks_update(dt_iop_module_t *module);
  * Nothing is committed to history -- a caller attaching one group to several modules commits
  * once, at the end.
  *
+ * Takes the group's id rather than the group: a caller outside develop/masks has no business
+ * reaching into a dt_masks_form_t to read one, and the id is what blend_params stores anyway.
+ *
  * @return TRUE if anything actually changed, FALSE if the module already used that group with
  * drawn blending on, or if it cannot carry a drawn mask at all.
  */
-gboolean dt_iop_gui_blend_set_drawn_mask_group(dt_iop_module_t *module, struct dt_masks_form_t *group);
+gboolean dt_iop_gui_blend_set_drawn_mask_group(dt_iop_module_t *module, int group_id);
 
 gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt_dev_pixelpipe_t *pipe,
                                   dt_dev_pixelpipe_iop_t *piece);
