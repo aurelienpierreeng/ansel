@@ -1745,17 +1745,19 @@ static void _blendop_masks_apply_and_commit(dt_iop_module_t *module)
   dt_control_queue_redraw_center();
 }
 
-gboolean dt_iop_gui_blend_set_drawn_mask_group(dt_iop_module_t *module, dt_masks_form_t *group)
+gboolean dt_iop_gui_blend_set_drawn_mask_group(dt_iop_module_t *module, const int group_id)
 {
   if(!dt_iop_module_supports_drawn_mask(module)) return FALSE;
+
+  const dt_masks_form_t *group = dt_masks_get_from_id(module->dev, group_id);
   if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return FALSE;
 
   const uint32_t drawn = DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE;
-  const gboolean changed = (module->blend_params->mask_id != group->formid)
+  const gboolean changed = (module->blend_params->mask_id != group_id)
                            || ((module->blend_params->mask_mode & drawn) != drawn);
   if(!changed) return FALSE;
 
-  module->blend_params->mask_id = group->formid;
+  module->blend_params->mask_id = group_id;
   module->blend_params->mask_mode |= drawn;
 
   // Reads blend_params->mask_mode back rather than taking it as an argument, so it has to come

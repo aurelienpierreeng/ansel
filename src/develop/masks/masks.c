@@ -2091,6 +2091,112 @@ dt_masks_result_t dt_masks_group_get_member(dt_develop_t *dev, const int group_i
 }
 
 
+/* The membership graph queries. All three walk ->points, which is why they live here: outside the
+ * module a caller would have to reach into dt_masks_form_t and dt_masks_form_group_t to ask. */
+
+static gboolean _group_contains_recurs(dt_develop_t *dev, const int container_id, const int needle_id)
+{
+  if(container_id == needle_id) return TRUE;
+
+  const dt_masks_form_t *container = dt_masks_get_from_id(dev, container_id);
+  if(IS_NULL_PTR(container) || !(container->type & DT_MASKS_GROUP)) return FALSE;
+
+  for(const GList *pts = container->points; pts; pts = g_list_next(pts))
+  {
+    const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)pts->data;
+    if(_group_contains_recurs(dev, pt->formid, needle_id)) return TRUE;
+  }
+
+  return FALSE;
+}
+
+dt_masks_result_t dt_masks_group_contains(dt_develop_t *dev, const int container_id, const int needle_id)
+{
+  if(IS_NULL_PTR(dev)) return DT_MASKS_INVALID;
+  return _group_contains_recurs(dev, container_id, needle_id) ? DT_MASKS_OK : DT_MASKS_NOT_FOUND;
+}
+
+static gboolean _group_covers_recurs(dt_develop_t *dev, const int group_id, const int target_id,
+                                     gboolean *has_shapes)
+{
+  const dt_masks_form_t *group = dt_masks_get_from_id(dev, group_id);
+  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return TRUE;
+
+  for(const GList *pts = group->points; pts; pts = g_list_next(pts))
+  {
+    const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)pts->data;
+    const dt_masks_form_t *member = dt_masks_get_from_id(dev, pt->formid);
+    if(IS_NULL_PTR(member)) continue;
+
+    if(member->type & DT_MASKS_GROUP)
+    {
+      if(!_group_covers_recurs(dev, pt->formid, target_id, has_shapes)) return FALSE;
+      continue;
+    }
+
+    if(!IS_NULL_PTR(has_shapes)) *has_shapes = TRUE;
+    if(!_group_contains_recurs(dev, target_id, pt->formid)) return FALSE;
+  }
+
+  return TRUE;
+}
+
+dt_masks_result_t dt_masks_group_covers_shapes(dt_develop_t *dev, const int group_id, const int target_id,
+                                               gboolean *has_shapes)
+{
+  if(IS_NULL_PTR(dev)) return DT_MASKS_INVALID;
+  if(!IS_NULL_PTR(has_shapes)) *has_shapes = FALSE;
+  return _group_covers_recurs(dev, group_id, target_id, has_shapes) ? DT_MASKS_OK : DT_MASKS_NOT_FOUND;
+}
+
+static gboolean _first_use_recurs(dt_develop_t *dev, const int group_id, const int formid,
+                                  int *holder_id, guint *index, const dt_masks_form_t **holder)
+{
+  const dt_masks_form_t *group = dt_masks_get_from_id(dev, group_id);
+  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return FALSE;
+
+  guint i = 0;
+  for(const GList *pts = group->points; pts; pts = g_list_next(pts))
+  {
+    const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)pts->data;
+
+    if(pt->formid == formid)
+    {
+      if(!IS_NULL_PTR(holder_id)) *holder_id = group_id;
+      if(!IS_NULL_PTR(index)) *index = i;
+      *holder = group;
+      return TRUE;
+    }
+
+    /* Descend where the member sits, not after the whole level: a shape inside a member group is
+     * composited at that group's position, so pre-order is the compositing order. */
+    const dt_masks_form_t *member = dt_masks_get_from_id(dev, pt->formid);
+    if(!IS_NULL_PTR(member) && (member->type & DT_MASKS_GROUP)
+       && _first_use_recurs(dev, pt->formid, formid, holder_id, index, holder))
+      return TRUE;
+
+    i++;
+  }
+
+  return FALSE;
+}
+
+dt_masks_result_t dt_masks_group_first_use(dt_develop_t *dev, const int root_id, const int formid,
+                                           int *holder_id, guint *index,
+                                           char *holder_name, const size_t holder_name_size)
+{
+  if(IS_NULL_PTR(dev)) return DT_MASKS_INVALID;
+
+  const dt_masks_form_t *holder = NULL;
+  if(!_first_use_recurs(dev, root_id, formid, holder_id, index, &holder)) return DT_MASKS_NOT_FOUND;
+
+  // Copied, not borrowed: the next copy-on-write replaces the object the name lives in.
+  if(!IS_NULL_PTR(holder_name) && holder_name_size > 0)
+    g_strlcpy(holder_name, IS_NULL_PTR(holder) ? "" : holder->name, holder_name_size);
+
+  return DT_MASKS_OK;
+}
+
 dt_masks_result_t dt_masks_group_set_member_opacity(dt_develop_t *dev, const int group_id, const int formid,
                                                     const float opacity, dt_masks_member_t *out)
 {

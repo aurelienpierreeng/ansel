@@ -670,53 +670,6 @@ static int _selected_group_in_module_list(const dt_shape_manager_t *lm)
   return group_id;
 }
 
-/* Whether container_id holds needle_id, at any depth. A group added to a group that already
- * contains it would make the membership graph cyclic, and every walk over it -- the tree build
- * first of all -- would not terminate. */
-static gboolean _group_contains(const dt_develop_t *dev, const int container_id, const int needle_id)
-{
-  if(container_id == needle_id) return TRUE;
-
-  const dt_masks_form_t *container = dt_masks_get_from_id((dt_develop_t *)dev, container_id);
-  if(IS_NULL_PTR(container) || !(container->type & DT_MASKS_GROUP)) return FALSE;
-
-  for(const GList *pts = container->points; pts; pts = g_list_next(pts))
-  {
-    const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)pts->data;
-    if(_group_contains(dev, pt->formid, needle_id)) return TRUE;
-  }
-
-  return FALSE;
-}
-
-/* Whether every shape the group ultimately holds is already rendered by the target, directly or
- * through one of its own sub-groups. Sets *any as soon as it meets a leaf shape, so a caller can
- * tell "all covered" from "nothing in it to cover". */
-static gboolean _group_leaves_all_in(dt_develop_t *dev, const int group_id, const int target_id,
-                                     gboolean *any)
-{
-  const dt_masks_form_t *group = dt_masks_get_from_id(dev, group_id);
-  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return TRUE;
-
-  for(const GList *pts = group->points; pts; pts = g_list_next(pts))
-  {
-    const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)pts->data;
-    const dt_masks_form_t *member = dt_masks_get_from_id(dev, pt->formid);
-    if(IS_NULL_PTR(member)) continue;
-
-    if(member->type & DT_MASKS_GROUP)
-    {
-      if(!_group_leaves_all_in(dev, pt->formid, target_id, any)) return FALSE;
-      continue;
-    }
-
-    *any = TRUE;
-    if(!_group_contains(dev, target_id, pt->formid)) return FALSE;
-  }
-
-  return TRUE;
-}
-
 /* Whether this row's "+" can do anything. Three ways it cannot: nothing is selected in the module
  * list, so there is nowhere to add to; the form is already a member of that group, and re-adding
  * it would write an undo step for a no-op; or the row is a group that already contains the
@@ -738,16 +691,16 @@ static gboolean _row_can_be_added(const dt_shape_manager_t *lm, GtkTreeModel *mo
   if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return FALSE;
 
   if(dt_masks_group_get_member(dev, group_id, fid, NULL) == DT_MASKS_OK) return FALSE;
-  if(_group_contains(dev, fid, group_id)) return FALSE;
+  if(dt_masks_group_contains(dev, fid, group_id) == DT_MASKS_OK) return FALSE;
 
   /* A group every one of whose shapes the target already renders would add nothing: nesting it
-   * duplicates coverage the mask already has. Checked leaf by leaf and at any depth on both
-   * sides, so it holds for a group of groups too. */
+   * duplicates coverage the mask already has. */
   const dt_masks_form_t *row_form = dt_masks_get_from_id(dev, fid);
   if(!IS_NULL_PTR(row_form) && (row_form->type & DT_MASKS_GROUP))
   {
-    gboolean any = FALSE;
-    if(_group_leaves_all_in(dev, fid, group_id, &any) && any) return FALSE;
+    gboolean has_shapes = FALSE;
+    if(dt_masks_group_covers_shapes(dev, fid, group_id, &has_shapes) == DT_MASKS_OK && has_shapes)
+      return FALSE;
   }
 
   return TRUE;
@@ -1017,7 +970,7 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
   GList *to_detach = NULL;
   if(!_modchooser_run(form, &to_attach, &to_detach)) return;
 
-  dt_masks_form_t *shared = NULL;
+  int shared_id = 0;
   gboolean changed = FALSE;
 
   /* Detaching first, so a module the user unticked and a module they ticked cannot fight over
@@ -1039,13 +992,14 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
   for(const GList *m = to_attach; m; m = g_list_next(m))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)m->data;
-    dt_masks_form_t *own = dt_masks_get_from_id(dev, module->blend_params->mask_id);
+    const int own_id = module->blend_params->mask_id;
+    dt_masks_form_t *own = dt_masks_get_from_id(dev, own_id);
 
     if(!IS_NULL_PTR(own) && (own->type & DT_MASKS_GROUP))
     {
       // The module already renders a mask: add the shape to it rather than replacing it.
-      if(dt_masks_group_get_member(dev, own->formid, fid, NULL) == DT_MASKS_OK) continue;
-      if(_group_contains(dev, fid, own->formid)) continue;
+      if(dt_masks_group_get_member(dev, own_id, fid, NULL) == DT_MASKS_OK) continue;
+      if(dt_masks_group_contains(dev, fid, own_id) == DT_MASKS_OK) continue;
 
       own = dt_masks_cow_touch(dev, own);
       if(IS_NULL_PTR(dt_masks_group_add_form(dev, own, form))) continue;
@@ -1055,24 +1009,28 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
       continue;
     }
 
-    if(IS_NULL_PTR(shared))
+    if(shared_id <= 0)
     {
       /* Named after the first module that needs it, which is the first ticked one in pipeline
        * order -- the name is the user's to change, and the rename below opens on it. */
-      shared = dt_masks_create_ext(dev, DT_MASKS_GROUP);
+      dt_masks_form_t *shared = dt_masks_create_ext(dev, DT_MASKS_GROUP);
       if(IS_NULL_PTR(shared)) break;
 
       gchar *name = dt_dev_get_masks_group_name(module);
       g_strlcpy(shared->name, name, sizeof(shared->name));
       dt_free(name);
 
-      dt_masks_group_add_form_with_state(dev, shared, form, shared->formid,
+      dt_masks_form_info_t shared_info = { 0 };
+      if(!dt_masks_form_get_info(shared, &shared_info)) break;
+      shared_id = shared_info.formid;
+
+      dt_masks_group_add_form_with_state(dev, shared, form, shared_id,
                                          DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION, 1.0f);
       dt_masks_append_form(dev, shared);
       changed = TRUE;
     }
 
-    if(dt_iop_gui_blend_set_drawn_mask_group(module, shared))
+    if(dt_iop_gui_blend_set_drawn_mask_group(module, shared_id))
     {
       // A module's blend_params are its own history entry; the forms get one of their own below.
       dt_dev_add_history_item(dev, module, TRUE, TRUE);
@@ -1089,7 +1047,7 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
   _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
 
   // A group the user has just conjured wants a name, so its row opens straight into editing.
-  if(!IS_NULL_PTR(shared)) _tree_edit_group_name(self, shared->formid);
+  if(shared_id > 0) _tree_edit_group_name(self, shared_id);
 }
 
 /* The inventory's "+": add this row's form to the group the module list points at. */
@@ -1773,7 +1731,7 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
             text = g_strdup_printf(_("Add this shape to the mask '%s'."), grp->name);
           else if(member)
             text = g_strdup_printf(_("This shape is already part of the mask '%s'."), grp->name);
-          else if(_group_contains(dt_dev_get_global(), fid, group_id))
+          else if(dt_masks_group_contains(dt_dev_get_global(), fid, group_id) == DT_MASKS_OK)
             text = g_strdup_printf(_("This group cannot be added to the mask '%s': it already contains it."),
                                    grp->name);
           else
@@ -1886,46 +1844,6 @@ static dt_iop_module_t *_module_owning_group(const dt_masks_form_t *group)
   return first;
 }
 
-/* Where the module's mask FIRST applies this shape, walked the way the tree shows it: members in
- * their own order, descending into a member group at the position that group sits at.
- *
- * A shape can legitimately be applied twice inside one mask, and the second application is not
- * always a no-op -- union and intersection are idempotent, but difference squares its own
- * factor and exclusion does not settle either (develop/masks/group.c). So neither instance can
- * be treated as void; what the list can say is which one came first, since that is the one the
- * later ones are read against.
- *
- * @return FALSE if the shape is not in this mask at all. */
-static gboolean _first_use_in_mask(dt_develop_t *dev, const int group_id, const int formid,
-                                   int *parent_id, int *index, const char **group_name)
-{
-  const dt_masks_form_t *group = dt_masks_get_from_id(dev, group_id);
-  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return FALSE;
-
-  int i = 0;
-  for(const GList *pts = group->points; pts; pts = g_list_next(pts))
-  {
-    const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)pts->data;
-
-    if(pt->formid == formid)
-    {
-      *parent_id = group_id;
-      *index = i;
-      *group_name = group->name;
-      return TRUE;
-    }
-
-    const dt_masks_form_t *member = dt_masks_get_from_id(dev, pt->formid);
-    if(!IS_NULL_PTR(member) && (member->type & DT_MASKS_GROUP)
-       && _first_use_in_mask(dev, pt->formid, formid, parent_id, index, group_name))
-      return TRUE;
-
-    i++;
-  }
-
-  return FALSE;
-}
-
 /* Appends the row and returns its iter, which a group needs to hang its members from. Shapes and
  * groups are described identically here; only what happens afterwards differs. */
 static void _tree_append_row(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_shape_manager_t *lm,
@@ -1943,10 +1861,16 @@ static void _tree_append_row(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_
 
   GdkPixbuf *icinv = (row->gstate & DT_MASKS_STATE_INVERSE) ? lm->ic_inverse : NULL;
 
+  /* One by-value description of the form, which every field below is taken from. The name it
+   * carries is copied rather than borrowed, so nothing here holds a pointer into a refcounted
+   * form across a call that could clone it. */
+  dt_masks_form_info_t info = { 0 };
+  if(!dt_masks_form_get_info(row->form, &info)) return;
+
   // Only a top-level row asks who else uses the shape: a row under a group already says so.
   char used_by[1000] = "";
   int nbuse = 0;
-  if(row->grp_id == 0) _is_form_used(row->form->formid, used_by, sizeof(used_by), &nbuse);
+  if(row->grp_id == 0) _is_form_used(info.formid, used_by, sizeof(used_by), &nbuse);
 
   /* Only inside a module's mask, and only for a shape sitting under a group: a top-level row is
    * not reached through anything, and a group's own duplication is a different question.
@@ -1954,21 +1878,21 @@ static void _tree_append_row(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_
    * Only the instances AFTER the first are marked. Both used to be, symmetrically, which said
    * that the shape appears twice but not which application the other is measured against. */
   gchar *note = NULL;
-  if(row->root_id > 0 && row->grp_id > 0 && !(row->form->type & DT_MASKS_GROUP))
+  if(row->root_id > 0 && row->grp_id > 0 && !info.is_group)
   {
-    int first_parent = 0;
-    int first_index = 0;
-    const char *first_group = NULL;
-    if(_first_use_in_mask(dt_dev_get_global(), row->root_id, row->form->formid, &first_parent,
-                          &first_index, &first_group)
-       && (first_parent != row->grp_id || first_index != row->index))
+    int holder_id = 0;
+    guint holder_index = 0;
+    char holder_name[DT_MASKS_FORM_NAME_LEN] = "";
+    if(dt_masks_group_first_use(dt_dev_get_global(), row->root_id, info.formid, &holder_id,
+                                &holder_index, holder_name, sizeof(holder_name)) == DT_MASKS_OK
+       && (holder_id != row->grp_id || (int)holder_index != row->index))
       // Same wording the Drawn tab's shape list already uses for the same kind of remark.
-      note = g_strdup_printf(_("Already in '%s'"), first_group);
+      note = g_strdup_printf(_("Already in '%s'"), holder_name);
   }
 
   gtk_tree_store_append(treestore, child, toplevel);
-  gtk_tree_store_set(treestore, child, TREE_TEXT, row->form->name, TREE_MODULE, row->module,
-                     TREE_GROUPID, row->grp_id, TREE_FORMID, row->form->formid,
+  gtk_tree_store_set(treestore, child, TREE_TEXT, info.name, TREE_MODULE, row->module,
+                     TREE_GROUPID, row->grp_id, TREE_FORMID, info.formid,
                      TREE_EDITABLE, (row->grp_id == 0), TREE_IC_OP, icop,
                      TREE_IC_OP_VISIBLE, (!IS_NULL_PTR(icop)), TREE_IC_INVERSE, icinv,
                      TREE_IC_INVERSE_VISIBLE, (!IS_NULL_PTR(icinv)),
