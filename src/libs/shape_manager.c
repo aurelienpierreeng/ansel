@@ -1021,7 +1021,7 @@ static void _menu_append_existing_shapes(GtkMenuShell *menu, dt_masks_form_t *gr
 /* One entry per combine mode, plus the reordering pair. The same Invert/Union/Intersection/
  * Difference/Exclusion grouping the darkroom canvas and the blend module offer; all five differ
  * by a constant, so they ride on the menu item under "masks-operation". */
-static void _menu_append_operations(GtkMenuShell *menu, dt_lib_module_t *self, const int nb)
+static void _menu_append_operations(GtkMenuShell *menu, dt_shape_manager_list_t *list, const int nb)
 {
   static const struct
   {
@@ -1043,7 +1043,7 @@ static void _menu_append_operations(GtkMenuShell *menu, dt_lib_module_t *self, c
 
   item = gtk_menu_item_new_with_label(_("Invert shape"));
   g_object_set_data(G_OBJECT(item), "masks-operation", GINT_TO_POINTER(DT_MASKS_STATE_INVERSE));
-  g_signal_connect(item, "activate", (GCallback)_tree_apply_operation, self);
+  g_signal_connect(item, "activate", (GCallback)_tree_apply_operation, list);
   gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
 
   // Combining is a question about one shape against its group; several at once has no answer.
@@ -1054,23 +1054,23 @@ static void _menu_append_operations(GtkMenuShell *menu, dt_lib_module_t *self, c
     {
       item = gtk_menu_item_new_with_label(_(combine[i].label));
       g_object_set_data(G_OBJECT(item), "masks-operation", GINT_TO_POINTER(combine[i].state));
-      g_signal_connect(item, "activate", (GCallback)_tree_apply_operation, self);
+      g_signal_connect(item, "activate", (GCallback)_tree_apply_operation, list);
       gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
     }
   }
 
   gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
   item = gtk_menu_item_new_with_label(_("Move up"));
-  g_signal_connect(item, "activate", (GCallback)_tree_moveup, self);
+  g_signal_connect(item, "activate", (GCallback)_tree_moveup, list);
   gtk_menu_shell_append(menu, item);
   item = gtk_menu_item_new_with_label(_("Move down"));
-  g_signal_connect(item, "activate", (GCallback)_tree_movedown, self);
+  g_signal_connect(item, "activate", (GCallback)_tree_movedown, list);
   gtk_menu_shell_append(menu, item);
   gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
 }
 
 static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *model,
-                                     dt_lib_module_t *self, dt_iop_module_t *module)
+                                     dt_shape_manager_list_t *list, dt_iop_module_t *module)
 {
   GtkTreeIter iter;
   GtkMenuShell *menu = GTK_MENU_SHELL(gtk_menu_new());
@@ -1119,7 +1119,7 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
   {
     gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
     item = gtk_menu_item_new_with_label(_("Group the forms"));
-    g_signal_connect(item, "activate", (GCallback)_tree_group, self);
+    g_signal_connect(item, "activate", (GCallback)_tree_group, list);
     gtk_menu_shell_append(menu, item);
   }
 
@@ -1141,12 +1141,12 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
     }
   }
 
-  if(from_group && depth < 3) _menu_append_operations(menu, self, nb);
+  if(from_group && depth < 3) _menu_append_operations(menu, list, nb);
 
   if(!from_group && !grp_is_group && nb == 1)
   {
     item = gtk_menu_item_new_with_label(_("Duplicate shape"));
-    g_signal_connect(item, "activate", (GCallback)_tree_duplicate_shape, self);
+    g_signal_connect(item, "activate", (GCallback)_tree_duplicate_shape, list);
     gtk_menu_shell_append(menu, item);
     gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
   }
@@ -1155,18 +1155,18 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
   {
     // One entry, named for what the row holds -- the whole mask when it is a group.
     item = gtk_menu_item_new_with_label(grp_is_group ? _("Delete mask") : _("Delete shape"));
-    g_signal_connect(item, "activate", (GCallback)_tree_delete_shape, self);
+    g_signal_connect(item, "activate", (GCallback)_tree_delete_shape, list);
     gtk_menu_shell_append(menu, item);
   }
   else if(nb > 0 && depth < 3)
   {
     item = gtk_menu_item_new_with_label(_("Remove shape from mask"));
-    g_signal_connect(item, "activate", (GCallback)_tree_delete_shape, self);
+    g_signal_connect(item, "activate", (GCallback)_tree_delete_shape, list);
     gtk_menu_shell_append(menu, item);
   }
 
   item = gtk_menu_item_new_with_label(_("Delete unused shapes"));
-  g_signal_connect(item, "activate", (GCallback)_tree_delete_unused, self);
+  g_signal_connect(item, "activate", (GCallback)_tree_delete_unused, list);
   gtk_menu_shell_append(menu, item);
   
   return GTK_WIDGET(menu);
@@ -1222,7 +1222,6 @@ static int _tree_apply_click_selection(GtkWidget *treeview, GtkTreeSelection *se
  * that so much as the place this widget already adjusts its own selection. */
 static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_shape_manager_list_t *list)
 {
-  dt_lib_module_t *self = list->self;
   // we first need to adjust selection
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview));
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
@@ -1278,7 +1277,7 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_s
     }
 
     // and we display the context-menu
-    GtkWidget *menu = _tree_context_menu(selection, model, self, module);
+    GtkWidget *menu = _tree_context_menu(selection, model, list, module);
 
     gtk_widget_show_all(menu);
 
