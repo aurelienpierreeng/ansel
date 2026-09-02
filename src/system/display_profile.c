@@ -34,6 +34,12 @@
 #include <gdk/gdkwin32.h>
 #endif
 
+#ifdef GDK_WINDOWING_WAYLAND
+#include <sys/mman.h>
+#include <gtk-3.0/gdk/gdkwayland.h>
+#include "color-management-v1-client-protocol.h"
+#endif
+
 #if 0
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
@@ -54,6 +60,114 @@ static int _monitor_index(GdkMonitor *monitor)
 
   return -1;
 }
+#endif
+
+#if defined GDK_WINDOWING_WAYLAND
+typedef struct {
+  struct wl_surface *color_wl_surface;
+  struct wp_color_manager_v1 *color_manager;
+  struct wp_color_management_surface_v1 *color_surface;
+  struct wp_color_management_surface_feedback_v1 *color_surface_feedback;
+  struct wp_image_description_v1 *color_image_description;
+  struct wp_image_description_info_v1 *color_image_description_info;
+  guint8 *icc_buffer;
+  gint icc_buffer_size;
+  gboolean have_registry;
+  gboolean have_color_manager;
+} wayland_color_management_struct;
+
+wayland_color_management_struct wayland_color_management = {0};
+
+void noop(){return;}
+
+void handle_wp_image_description_info_icc_file(void *data,
+			                                         struct wp_image_description_info_v1 *wp_image_description_info_v1,
+																							 int32_t icc,
+																							 uint32_t icc_size)
+{
+  wayland_color_management_struct *wcm = data;
+
+  wcm->icc_buffer = mmap(NULL, icc_size, PROT_READ, MAP_PRIVATE, icc, 0);
+  wcm->icc_buffer_size = icc_size;
+  close(icc);
+}
+
+struct wp_image_description_info_v1_listener wp_image_description_info_v1_listener = {
+  .done = noop,
+	.icc_file = handle_wp_image_description_info_icc_file,
+	.primaries = noop,
+	.primaries_named = noop,
+	.tf_power = noop,
+	.tf_named = noop,
+	.luminances = noop,
+	.target_primaries = noop,
+	.target_luminance = noop,
+	.target_max_cll = noop,
+	.target_max_fall = noop,
+};
+
+void handle_wp_image_decription_ready(void *data,
+		                                  struct wp_image_description_v1 *wp_image_description_v1,
+																			uint32_t identity)
+{
+  wayland_color_management_struct *wcm = data;
+
+  wcm->color_image_description_info = wp_image_description_v1_get_information(wcm->color_image_description);
+  wp_image_description_info_v1_add_listener(wcm->color_image_description_info, &wp_image_description_info_v1_listener, &wayland_color_management);
+
+  // Set image description on surface to tell compositor in which colorspace window is in.
+  wp_color_management_surface_v1_set_image_description(wcm->color_surface, wcm->color_image_description, WP_COLOR_MANAGER_V1_RENDER_INTENT_PERCEPTUAL);
+
+  wl_surface_commit(wcm->color_wl_surface);
+}
+
+struct wp_image_description_v1_listener wp_image_description_v1_listener = {
+  .failed = noop,
+	.ready = handle_wp_image_decription_ready,
+};
+
+void handle_wp_color_management_surface_feedback_preferred_changed(void *data,
+				                                                           struct wp_color_management_surface_feedback_v1 *wp_color_management_surface_feedback_v1,
+																																	 uint32_t identity)
+{
+  wayland_color_management_struct *wcm = data;
+
+  if (wcm->color_image_description)
+  {
+    wp_image_description_v1_destroy(wcm->color_image_description);
+    wcm->color_image_description = NULL;
+  }
+
+  wayland_color_management.color_image_description = wp_color_management_surface_feedback_v1_get_preferred(wayland_color_management.color_surface_feedback);
+  wp_image_description_v1_add_listener(wayland_color_management.color_image_description, &wp_image_description_v1_listener, &wayland_color_management);
+}
+
+struct wp_color_management_surface_feedback_v1_listener wp_color_management_surface_feedback_v1_listener = {
+  .preferred_changed = handle_wp_color_management_surface_feedback_preferred_changed,
+};
+
+void handle_wl_registry_global(void *data,
+		                           struct wl_registry *wl_registry,
+															 uint32_t name,
+									             const char *interface,
+															 uint32_t version)
+{
+  wayland_color_management_struct *wcm = data;
+
+  if (strcmp(interface, wp_color_manager_v1_interface.name) == 0) {
+    wcm->color_manager = wl_registry_bind(wl_registry, name, &wp_color_manager_v1_interface, 1);
+
+    if (wcm->color_manager)
+    {
+      wcm->have_color_manager = TRUE;
+    }
+  }
+}
+
+struct wl_registry_listener wl_registry_listener = {
+	.global = handle_wl_registry_global,
+	.global_remove = noop,
+};
 #endif
 
 void dt_display_profile_read(GtkWidget *widget, guint8 **buffer, gint *buffer_size, gchar **source)
@@ -82,6 +196,63 @@ void dt_display_profile_read(GtkWidget *widget, guint8 **buffer, gint *buffer_si
   gdk_property_get(gdk_screen_get_root_window(screen), gdk_atom_intern(atom_name, FALSE), GDK_NONE, 0,
                    64 * 1024 * 1024, FALSE, &type, &format, buffer_size, buffer);
   dt_free(atom_name);
+
+#endif
+
+#if defined GDK_WINDOWING_WAYLAND
+  GdkDisplay *wayland_gdk_display = gtk_widget_get_display(widget);
+  GdkWindow *wayland_gdk_window = gtk_widget_get_window(widget);
+
+  if (GDK_IS_WAYLAND_DISPLAY(wayland_gdk_display))
+  {
+    printf("help\n");
+    if (!wayland_color_management.color_manager)
+    {
+      struct wl_display *wl_display = gdk_wayland_display_get_wl_display(wayland_gdk_display);
+
+      if (!wayland_color_management.have_registry)
+      {
+        struct wl_registry *wl_registry = wl_display_get_registry(wl_display);
+        wl_registry_add_listener(wl_registry, &wl_registry_listener, &wayland_color_management);
+
+        // Initial roundtrip for wl_registry events
+        wl_display_roundtrip(wl_display);
+        wayland_color_management.have_registry = TRUE;
+      }
+
+      if (wayland_color_management.have_color_manager)
+      {
+        // Initial roundtrip for wp_color_manager events.
+        wl_display_roundtrip(wl_display);
+
+        wayland_color_management.color_wl_surface = gdk_wayland_window_get_wl_surface(wayland_gdk_window);
+
+        wayland_color_management.color_surface = wp_color_manager_v1_get_surface(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
+
+        wayland_color_management.color_surface_feedback = wp_color_manager_v1_get_surface_feedback(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
+        wp_color_management_surface_feedback_v1_add_listener(wayland_color_management.color_surface_feedback, &wp_color_management_surface_feedback_v1_listener, &wayland_color_management);
+
+        wayland_color_management.color_image_description = wp_color_management_surface_feedback_v1_get_preferred(wayland_color_management.color_surface_feedback);
+        wp_image_description_v1_add_listener(wayland_color_management.color_image_description, &wp_image_description_v1_listener, &wayland_color_management);
+
+        // Initial roundtrip for wp_image_description events
+        wl_display_roundtrip(wl_display);
+
+        // Initial roundtrip for wp_image_description_info events
+        wl_display_roundtrip(wl_display);
+      }
+    }
+
+    if (wayland_color_management.color_manager && wayland_color_management.icc_buffer && wayland_color_management.icc_buffer_size > 0)
+    {
+      buffer = &wayland_color_management.icc_buffer;
+      buffer_size = &wayland_color_management.icc_buffer_size;
+      *source = g_strdup("Wayland color profile api");
+    }
+    printf("%p\n", buffer);
+    printf("%i\n", *buffer_size);
+    printf("%s\n", *source);
+  }
 
 #elif defined GDK_WINDOWING_QUARTZ
 #if 0
