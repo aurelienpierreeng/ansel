@@ -40,7 +40,7 @@
 */
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"
-#include "develop/masks_group.h"   // dt_masks_group_set_member_operation()
+#include "develop/masks_group.h"   // dt_masks_group_set_member_operation(), dt_masks_group_get_member()
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_history.h"   // dt_masks_form_unref()
 #include "common/logging.h"
@@ -100,6 +100,12 @@ typedef struct dt_shape_manager_list_t
   /* The rightmost column, the one carrying the per-row trash / minus icon. Kept because a click
    * and a tooltip are both answered by comparing against the column the pointer is over. */
   GtkTreeViewColumn *action_col;
+
+  /* The "add to the selected module group" column, on the inventory list only -- NULL on the
+   * module list. Its renderer is kept because whether the button is available is not a property
+   * of the row but of the other list's selection, and that is a renderer-wide sensitivity. */
+  GtkTreeViewColumn *add_col;
+  GtkCellRenderer *add_renderer;
 
   dt_shape_list_t which;
   dt_lib_module_t *self;   // the module both lists belong to
@@ -611,6 +617,106 @@ static void _tree_delete_shape(GtkButton *button __attribute__((unused)), dt_sha
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
 }
 
+/* The group the module list currently points at, which is what the inventory's "+" adds to.
+ *
+ * A row that is itself a group answers for itself; any other row hands the question up to its
+ * parent, so clicking "+" after selecting a shape inside a module's mask adds to that mask
+ * rather than doing nothing. Returns 0 when nothing usable is selected, which is also what
+ * greys the button out. */
+static int _selected_group_in_module_list(const dt_shape_manager_t *lm)
+{
+  const dt_shape_manager_list_t *list = &lm->lists[DT_SHAPE_LIST_MODULES];
+  if(IS_NULL_PTR(list->treeview)) return 0;
+
+  GtkTreeModel *model = NULL;
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
+  GList *rows = gtk_tree_selection_get_selected_rows(selection, &model);
+  if(IS_NULL_PTR(rows)) return 0;
+
+  int group_id = 0;
+  GtkTreeIter iter;
+  if(gtk_tree_model_get_iter(model, &iter, (GtkTreePath *)rows->data))
+  {
+    int grid = -1;
+    int fid = -1;
+    _shape_manager_get_values(model, &iter, NULL, &grid, &fid);
+
+    const dt_masks_form_t *form = dt_masks_get_from_id(dt_dev_get_global(), fid);
+    if(!IS_NULL_PTR(form) && (form->type & DT_MASKS_GROUP))
+      group_id = fid;
+    else if(grid > 0)
+      group_id = grid;
+  }
+
+  g_list_free_full(rows, (GDestroyNotify)gtk_tree_path_free);
+  return group_id;
+}
+
+/* Whether container_id holds needle_id, at any depth. A group added to a group that already
+ * contains it would make the membership graph cyclic, and every walk over it -- the tree build
+ * first of all -- would not terminate. */
+static gboolean _group_contains(const dt_develop_t *dev, const int container_id, const int needle_id)
+{
+  if(container_id == needle_id) return TRUE;
+
+  const dt_masks_form_t *container = dt_masks_get_from_id((dt_develop_t *)dev, container_id);
+  if(IS_NULL_PTR(container) || !(container->type & DT_MASKS_GROUP)) return FALSE;
+
+  for(const GList *pts = container->points; pts; pts = g_list_next(pts))
+  {
+    const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)pts->data;
+    if(_group_contains(dev, pt->formid, needle_id)) return TRUE;
+  }
+
+  return FALSE;
+}
+
+/* The "+" is available exactly when the module list points at a group. That is a property of the
+ * other list's selection rather than of any row, so it is the renderer's own sensitivity, and
+ * the inventory has to be redrawn when it changes. */
+static void _shape_manager_sync_add_sensitivity(const dt_shape_manager_t *lm)
+{
+  const dt_shape_manager_list_t *list = &lm->lists[DT_SHAPE_LIST_SHAPES];
+  if(IS_NULL_PTR(list->add_renderer)) return;
+
+  const gboolean available = (_selected_group_in_module_list(lm) > 0);
+  if(gtk_cell_renderer_get_sensitive(list->add_renderer) == available) return;
+
+  gtk_cell_renderer_set_sensitive(list->add_renderer, available);
+  if(!IS_NULL_PTR(list->treeview)) gtk_widget_queue_draw(list->treeview);
+}
+
+/* The inventory's "+": add this row's form to the group the module list points at. */
+static void _tree_row_add_to_group(dt_shape_manager_list_t *list, GtkTreeModel *model, GtkTreeIter *iter)
+{
+  dt_lib_module_t *self = list->self;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
+  dt_develop_t *const dev = dt_dev_get_global();
+
+  const int group_id = _selected_group_in_module_list(lm);
+  if(group_id <= 0) return;
+
+  int fid = -1;
+  _shape_manager_get_values(model, iter, NULL, NULL, &fid);
+
+  dt_masks_form_t *form = dt_masks_get_from_id(dev, fid);
+  dt_masks_form_t *grp = dt_masks_get_from_id(dev, group_id);
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return;
+
+  // Adding a group to itself, or to one of its own descendants, would close a cycle.
+  if(_group_contains(dev, fid, group_id)) return;
+
+  // Already a member: nothing to add, and a no-op must not write an undo step.
+  if(dt_masks_group_get_member(dev, group_id, fid, NULL) == DT_MASKS_OK) return;
+
+  grp = dt_masks_cow_touch(dev, grp);
+  if(IS_NULL_PTR(dt_masks_group_add_form(dev, grp, form))) return;
+
+  dt_dev_add_history_item(dev, NULL, FALSE, TRUE);
+  _shape_manager_recreate_list(self);
+  _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
+}
+
 /* The per-row action icon at the right end of every form row, the same two the shape lists of
  * the Drawn tab offer (develop/blend_gui.c): a top-level row carries a trash and is deleted from
  * every mask and from the list of shapes, a row under a group carries a minus and is only
@@ -751,6 +857,12 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_shape_manager
 {
   const dt_shape_manager_t *lm = (const dt_shape_manager_t *)list->self->data;
   dt_develop_t *const dev = dt_dev_get_global();
+
+  /* Ahead of the gui_reset gate: what the module list points at decides whether the inventory's
+   * "+" is available, and that stays true while the panel is driving itself -- a rebuild
+   * reselects rows with gui_reset raised, and the button must follow. */
+  if(list->which == DT_SHAPE_LIST_MODULES) _shape_manager_sync_add_sensitivity(lm);
+
   if(lm->gui_reset) return;
   dt_masks_form_gui_t *creation_gui = dev->form_gui;
   if(!IS_NULL_PTR(creation_gui) && creation_gui->creation) return;
@@ -1089,12 +1201,23 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_s
   /* single click with the right mouse button? */
   if(event->type == GDK_BUTTON_PRESS && event->button == 1)
   {
-    // The action icons act on the row under the pointer alone, whatever is selected: they are
-    // buttons the row carries, not a command applied to the selection.
+    // The action icons act on the row under the pointer alone, whatever is selected in this
+    // list: they are buttons the row carries, not a command applied to the selection.
     if(on_row && mouse_col == list->action_col)
     {
       gtk_tree_path_free(mouse_path);
       _tree_row_action(list, model, &iter);
+      return 1;
+    }
+
+    /* The "+" is the one exception: it reads the OTHER list's selection, which is what it adds
+     * to. Greyed out when there is none, and then a click on it does nothing rather than
+     * falling through to selecting the row -- the row under a disabled button is not what the
+     * user was aiming at. */
+    if(on_row && !IS_NULL_PTR(list->add_col) && mouse_col == list->add_col)
+    {
+      gtk_tree_path_free(mouse_path);
+      _tree_row_add_to_group(list, model, &iter);
       return 1;
     }
 
@@ -1194,12 +1317,14 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
     {
       GtkTreeIter action_iter;
       int grid = -1;
-      gboolean got = (action_column == list->action_col)
+      const gboolean on_action = (action_column == list->action_col);
+      const gboolean on_add = !IS_NULL_PTR(list->add_col) && (action_column == list->add_col);
+      gboolean got = (on_action || on_add)
                      && gtk_tree_model_get_iter(model, &action_iter, action_path);
       if(got) _shape_manager_get_values(model, &action_iter, NULL, &grid, NULL);
       gtk_tree_path_free(action_path);
 
-      if(got)
+      if(got && on_action)
       {
         gtk_tooltip_set_text(tooltip,
                              (grid == 0)
@@ -1207,6 +1332,26 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
                                      "and removed from the list of available shapes.")
                                  : _("Detach this shape from the mask. The shape is kept and stays "
                                      "available for reuse."));
+        return TRUE;
+      }
+
+      if(got && on_add)
+      {
+        // The button says what it will do, so it has to name what is selected right now.
+        const dt_shape_manager_t *lm = (const dt_shape_manager_t *)list->self->data;
+        const int group_id = _selected_group_in_module_list(lm);
+        const dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), group_id);
+
+        if(IS_NULL_PTR(grp))
+        {
+          gtk_tooltip_set_text(tooltip, _("Select a mask in the module groups list to add this shape to it."));
+        }
+        else
+        {
+          gchar *text = g_strdup_printf(_("Add this shape to the mask '%s'."), grp->name);
+          gtk_tooltip_set_text(tooltip, text);
+          dt_free(text);
+        }
         return TRUE;
       }
     }
@@ -1616,6 +1761,9 @@ static void _shape_manager_recreate_list(dt_lib_module_t *self)
   }
 
   lm->gui_reset = gui_reset;
+
+  // Both models were replaced, so whatever the module list held may or may not have come back.
+  _shape_manager_sync_add_sensitivity(lm);
 
   if(!IS_NULL_PTR(follow))
     _tree_selection_change(gtk_tree_view_get_selection(GTK_TREE_VIEW(follow->treeview)), follow);
@@ -2293,6 +2441,23 @@ void gui_init(dt_lib_module_t *self)
      * which is what keeps the action flush right. Clicks are answered in _tree_button_pressed()
      * by comparing the column, the way develop/blend_gui.c does for the same two icons. */
     gtk_tree_view_column_set_expand(col, TRUE);
+
+    /* The inventory's "+", between the "used by" icon and the trash. Shown on the same rows the
+     * trash is -- the top-level ones -- and greyed out until the module list points at a mask. */
+    if(list->which == DT_SHAPE_LIST_SHAPES)
+    {
+      list->add_col = gtk_tree_view_column_new();
+      gtk_tree_view_column_set_sizing(list->add_col, GTK_TREE_VIEW_COLUMN_FIXED);
+      gtk_tree_view_column_set_fixed_width(list->add_col, DT_PIXEL_APPLY_DPI(24));
+
+      list->add_renderer = gtk_cell_renderer_pixbuf_new();
+      g_object_set(list->add_renderer, "icon-name", "list-add-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+      gtk_cell_renderer_set_sensitive(list->add_renderer, FALSE);
+      gtk_tree_view_column_pack_start(list->add_col, list->add_renderer, FALSE);
+      gtk_tree_view_column_add_attribute(list->add_col, list->add_renderer, "visible", TREE_IC_DELETE_VISIBLE);
+
+      gtk_tree_view_append_column(GTK_TREE_VIEW(list->treeview), list->add_col);
+    }
 
     list->action_col = gtk_tree_view_column_new();
     gtk_tree_view_column_set_sizing(list->action_col, GTK_TREE_VIEW_COLUMN_FIXED);
