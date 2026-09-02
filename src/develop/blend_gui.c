@@ -1745,6 +1745,39 @@ static void _blendop_masks_apply_and_commit(dt_iop_module_t *module)
   dt_control_queue_redraw_center();
 }
 
+gboolean dt_iop_gui_blend_set_drawn_mask_group(dt_iop_module_t *module, dt_masks_form_t *group)
+{
+  if(!dt_iop_module_supports_drawn_mask(module)) return FALSE;
+  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return FALSE;
+
+  const uint32_t drawn = DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE;
+  const gboolean changed = (module->blend_params->mask_id != group->formid)
+                           || ((module->blend_params->mask_mode & drawn) != drawn);
+  if(!changed) return FALSE;
+
+  module->blend_params->mask_id = group->formid;
+  module->blend_params->mask_mode |= drawn;
+
+  // Reads blend_params->mask_mode back rather than taking it as an argument, so it has to come
+  // after the write above.
+  dt_iop_set_mask_mode(module, module->blend_params->mask_mode);
+
+  /* A module the user has never expanded has no blend GUI to refresh, and one whose blending
+   * body was never built has a dt_iop_gui_blend_data_t but no widgets in it -- which is exactly
+   * what blending_box records, the same gate _blendop_masks_mode_callback() applies. */
+  if(!IS_NULL_PTR(module->gui) && !IS_NULL_PTR(module->gui->blend_data))
+  {
+    const dt_iop_gui_blend_data_t *bd = (const dt_iop_gui_blend_data_t *)module->gui->blend_data;
+    if(bd->blending_box) dt_iop_gui_update_blending(module);
+    dt_iop_gui_blend_masks_update(module);
+  }
+
+  dt_iop_add_remove_mask_indicator(module);
+  dt_iop_gui_update_header(module);
+
+  return TRUE;
+}
+
 static void _blendop_masks_group_name_commit(dt_iop_module_t *module, const gchar *new_text)
 {
   if(IS_NULL_PTR(module)) return;
