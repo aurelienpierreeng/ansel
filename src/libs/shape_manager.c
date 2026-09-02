@@ -710,7 +710,7 @@ static void _show_masks_on_owning_module(GtkTreeModel *model, GtkTreeIter *iter)
   _shape_manager_get_values(model, iter, &module, NULL, NULL);
 
   if(IS_NULL_PTR(module) || IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->blend_data)
-     || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || (module->flags() & IOP_FLAGS_NO_MASKS))
+     || !dt_iop_module_supports_drawn_mask(module))
     return;
 
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
@@ -1246,18 +1246,39 @@ typedef struct _tree_row_t
   int index;               // rank inside the parent, which _set_iter_name() shows
 } _tree_row_t;
 
-/* The module whose drawn mask is this group, if any. A group listed at top level with no module
- * yet is the only case worth asking about: a nested one inherits its parent's. */
-static dt_iop_module_t *_module_owning_group(const dt_masks_form_t *group)
+/* Every module whose drawn mask is this group, in pipeline order.
+ *
+ * The link between a group and a module is blend_params->mask_id, which lives in each module's
+ * own params blob, so nothing stops several modules from naming the same group -- and that is
+ * what a group shared between modules is. There is no stored back-reference to keep in step:
+ * the answer is derived here, from the one place the truth is, on a walk over ~80 modules.
+ *
+ * Returns a GList of dt_iop_module_t* the caller frees with g_list_free(), borrowing the
+ * modules themselves; NULL when no module uses the group. */
+static GList *_modules_owning_group(const dt_masks_form_t *group)
 {
+  if(IS_NULL_PTR(group)) return NULL;
+
+  GList *owners = NULL;
   for(const GList *iops = dt_dev_get_global()->iop; iops; iops = g_list_next(iops))
   {
     dt_iop_module_t *iop = (dt_iop_module_t *)iops->data;
-    if((iop->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && !(iop->flags() & IOP_FLAGS_NO_MASKS)
-       && iop->blend_params->mask_id == group->formid)
-      return iop;
+    if(dt_iop_module_supports_drawn_mask(iop) && iop->blend_params->mask_id == group->formid)
+      owners = g_list_prepend(owners, iop);
   }
-  return NULL;
+
+  return g_list_reverse(owners);
+}
+
+/* The first module using this group, for the callers that need one module to speak for the row --
+ * the tree stores a single module per row. A group listed at top level with no module yet is the
+ * only case worth asking about: a nested one inherits its parent's. */
+static dt_iop_module_t *_module_owning_group(const dt_masks_form_t *group)
+{
+  GList *owners = _modules_owning_group(group);
+  dt_iop_module_t *first = IS_NULL_PTR(owners) ? NULL : (dt_iop_module_t *)owners->data;
+  g_list_free(owners);
+  return first;
 }
 
 /* Appends the row and returns its iter, which a group needs to hang its members from. Shapes and
@@ -1491,11 +1512,7 @@ static gboolean _tree_select_module_group(dt_shape_manager_t *lm, GtkTreeModel *
                                           const dt_masks_form_gui_t *gui)
 {
   dt_iop_module_t *const module = dt_dev_get_global()->gui_module;
-  const int group_id = (!IS_NULL_PTR(module) && module->blend_params
-                        && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
-                        && !(module->flags() & IOP_FLAGS_NO_MASKS))
-                           ? module->blend_params->mask_id
-                           : 0;
+  const int group_id = dt_iop_module_supports_drawn_mask(module) ? module->blend_params->mask_id : 0;
 
   if(group_id <= 0) return FALSE;
   // Mid-creation the tree follows the shape being drawn, not the module.

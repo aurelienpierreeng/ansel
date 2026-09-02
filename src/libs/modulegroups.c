@@ -447,7 +447,10 @@ static gboolean _is_module_in_tab(dt_iop_module_t *module, dt_modulesgroups_tabs
   switch(current_tab)
   {
     case MOD_TAB_ACTIVE:
-      return (_is_module_in_history(module) || module->enabled);
+      // The one place this rule is written. Anything else that needs to list the pipeline's
+      // modules -- the shape manager's module chooser, say -- asks the same function, so the
+      // two cannot answer differently.
+      return dt_iop_module_is_in_pipeline(module);
     case MOD_TAB_ALL:
       return (_is_module_in_history(module) || module->enabled || !(module->flags() & IOP_FLAGS_DEPRECATED));
 
@@ -1166,8 +1169,6 @@ static gboolean _update_iop_visibility(gpointer user_data)
   for(int i = 0; i < MOD_TAB_LAST; i++) gtk_widget_set_visible(d->pages[i], i == tab);
 
   /* Walk every develop module and decide whether it belongs to the active tab and which box should host it. */
-  const int history_end = dt_dev_get_history_end_ext(dev);
-
   for(GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
@@ -1187,11 +1188,7 @@ static gboolean _update_iop_visibility(gpointer user_data)
     // FIXME: at some point, we will need to embrace the nodal paradigm and use a "create instance"
     // approach, even for the first instance, instead of mixing GUI toolboxes à la Lightroom for the first
     // (base) instance and then nodal approach for the others.
-    dt_pthread_rwlock_rdlock(&dev->history_mutex);
-    const gboolean in_history = !IS_NULL_PTR(dt_dev_history_get_last_item_by_module(dev->history, module, history_end));
-    dt_pthread_rwlock_unlock(&dev->history_mutex);
-
-    if(visible && (in_history || module->multi_priority == 0))
+    if(visible && dt_iop_module_instance_exists(module))
     {
       _modulegroups_setup_drag_source(self, module);
       _modulegroups_move_widget(w, target);

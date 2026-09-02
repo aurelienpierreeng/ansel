@@ -441,6 +441,23 @@ void dt_iop_cleanup_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe
 gboolean dt_iop_so_is_hidden(dt_iop_module_so_t *module);
 gboolean dt_iop_is_hidden(dt_iop_module_t *module);
 
+/** Whether this instance conceptually exists yet.
+ *
+ * An extra instance is created by a history item, so one whose item sits past the current
+ * history end is only a disabled pipeline node referenced by an entry the user has not reached:
+ * it exists in dev->iop but not, as far as anything the user can act on is concerned. A base
+ * instance (multi_priority 0) always exists. */
+gboolean dt_iop_module_instance_exists(dt_iop_module_t *module);
+
+/** Whether the module is part of the pipeline the user sees -- the rule the "Pipeline" tab of
+ *  the module groups panel lists modules by, so that a list of pipeline modules built anywhere
+ *  else agrees with what that tab shows. Includes disabled modules that carry history. */
+gboolean dt_iop_module_is_in_pipeline(dt_iop_module_t *module);
+
+/** Whether the module can carry a drawn mask, i.e. whether offering it one means anything.
+ *  Supports blending, and is not one of the modules that opt out of masks specifically. */
+gboolean dt_iop_module_supports_drawn_mask(dt_iop_module_t *module);
+
 /** Check if the module is currently visible in GUI */
 gboolean dt_iop_is_visible(dt_iop_module_t *module);
 
