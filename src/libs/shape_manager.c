@@ -73,8 +73,6 @@
 
 DT_MODULE(1)
 
-#pragma GCC diagnostic ignored "-Wshadow"
-
 static void _shape_manager_recreate_list(dt_lib_module_t *self);
 static void _shape_manager_update_list(dt_lib_module_t *self);
 
