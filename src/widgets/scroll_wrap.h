@@ -80,7 +80,7 @@ typedef struct dt_gui_widget_auto_height_t
  *             height regardless of content (avoids layout shifts for hover-/selection-driven
  *             widgets).
  */
-GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str, dt_ui_resize_mode_t mode);
+GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, const char *config_str, dt_ui_resize_mode_t mode);
 
 /**
  * @brief Return the inner GtkScrolledWindow of a dt_ui_scroll_wrap() wrapper, or NULL.

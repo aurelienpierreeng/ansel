@@ -79,13 +79,35 @@ static void _shape_manager_update_list(dt_lib_module_t *self);
 static void _shape_manager_broadcast(dt_lib_module_t *self, const int formid, const int parentid,
                                      const dt_masks_event_t event);
 
-typedef struct dt_shape_manager_t
+/* The panel splits the forms by the one question that separates them: is this group some
+ * module's drawn mask, or nobody's yet? The left list is the inventory -- every shape, plus the
+ * groups no module uses -- and the right one is the assignment: the groups modules actually
+ * render, members underneath. A shape a module uses therefore appears in both, once as itself
+ * and once as a member, which is the arrangement a module's own Drawn tab already uses. */
+typedef enum dt_shape_list_t
+{
+  DT_SHAPE_LIST_SHAPES = 0,   // every shape, plus the groups no module uses
+  DT_SHAPE_LIST_MODULES,      // the groups that are some module's drawn mask
+  DT_SHAPE_LIST_COUNT
+} dt_shape_list_t;
+
+/* One of the two lists. Every tree handler is handed this rather than the module, because the
+ * first thing each of them needs to know is which of the two trees the user acted on. */
+typedef struct dt_shape_manager_list_t
 {
   GtkWidget *treeview;
 
   /* The rightmost column, the one carrying the per-row trash / minus icon. Kept because a click
    * and a tooltip are both answered by comparing against the column the pointer is over. */
   GtkTreeViewColumn *action_col;
+
+  dt_shape_list_t which;
+  dt_lib_module_t *self;   // the module both lists belong to
+} dt_shape_manager_list_t;
+
+typedef struct dt_shape_manager_t
+{
+  dt_shape_manager_list_t lists[DT_SHAPE_LIST_COUNT];
 
   /* Replacement for shape_manager_expander */
   GtkWidget *popup_window;
@@ -228,9 +250,9 @@ static void _tree_add_exist(GtkButton *button, dt_masks_form_t *grp)
   }
 }
 
-static void _tree_group(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
+static void _tree_group(GtkButton *button __attribute__((unused)), dt_shape_manager_list_t *list)
 {
-  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
+  dt_lib_module_t *self = list->self;
   // we create the new group
   // create_ext registers the group in dev->allforms and dt_masks_append_form() below takes
   // dev->forms's own reference, so both lists have a claim and teardown balances. Neither
@@ -240,8 +262,8 @@ static void _tree_group(GtkButton *button __attribute__((unused)), dt_lib_module
   g_snprintf(mask->name, sizeof(mask->name), _("Mask #%d"), g_list_length(dt_dev_get_global()->forms));
 
   // we add all selected forms to this group
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
 
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
   for(GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
@@ -345,8 +367,9 @@ static void _set_iter_name(dt_shape_manager_t *lm, dt_masks_form_t *form, int st
                      (!IS_NULL_PTR(icop)), TREE_IC_INVERSE, icinv, TREE_IC_INVERSE_VISIBLE, (!IS_NULL_PTR(icinv)), -1);
 }
 
-static void _tree_delete_unused(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
+static void _tree_delete_unused(GtkButton *button __attribute__((unused)), dt_shape_manager_list_t *list)
 {
+  dt_lib_module_t *self = list->self;
   dt_develop_t *dev = dt_dev_get_global();
 
   /* The undo record has to be opened HERE, before the sweep. dt_dev_add_history_item() below
@@ -413,17 +436,18 @@ static void _add_masks_history_item(dt_shape_manager_t *lm)
 /* One handler for all five operations. They differed by a single constant and were otherwise
  * identical to the line, which is how five copies of a copy-on-write mistake got written; the
  * operation now rides on the menu item, the way develop/blend_gui.c already carries "blend-state". */
-static void _tree_apply_operation(GtkWidget *menu_item, dt_lib_module_t *self)
+static void _tree_apply_operation(GtkWidget *menu_item, dt_shape_manager_list_t *list)
 {
   const dt_masks_state_t operation
       = (dt_masks_state_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "masks-operation"));
   if(operation == DT_MASKS_STATE_NONE) return;
 
+  dt_lib_module_t *self = list->self;
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   // now we go through all selected nodes
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
   int change = 0;
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
   for(const GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
@@ -466,16 +490,17 @@ static void _tree_apply_operation(GtkWidget *menu_item, dt_lib_module_t *self)
   }
 }
 
-static void _tree_moveup(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
+static void _tree_moveup(GtkButton *button __attribute__((unused)), dt_shape_manager_list_t *list)
 {
+  dt_lib_module_t *self = list->self;
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   // we first discard all visible shapes
   dt_masks_change_form_gui(dt_dev_get_global(), NULL);
 
   // now we go through all selected nodes
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
   lm->gui_reset = 1;
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
   for(const GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
@@ -505,16 +530,17 @@ static void _tree_moveup(GtkButton *button __attribute__((unused)), dt_lib_modul
   _add_masks_history_item(lm);
 }
 
-static void _tree_movedown(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
+static void _tree_movedown(GtkButton *button __attribute__((unused)), dt_shape_manager_list_t *list)
 {
+  dt_lib_module_t *self = list->self;
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   // we first discard all visible shapes
   dt_masks_change_form_gui(dt_dev_get_global(), NULL);
 
   // now we go through all selected nodes
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
   lm->gui_reset = 1;
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
   for(const GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
@@ -544,16 +570,17 @@ static void _tree_movedown(GtkButton *button __attribute__((unused)), dt_lib_mod
   _add_masks_history_item(lm);
 }
 
-static void _tree_delete_shape(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
+static void _tree_delete_shape(GtkButton *button __attribute__((unused)), dt_shape_manager_list_t *list)
 {
+  dt_lib_module_t *self = list->self;
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   // we first discard all visible shapes
   dt_masks_change_form_gui(dt_dev_get_global(), NULL);
 
   // now we go through all selected nodes
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
   dt_iop_module_t *module = NULL;
   lm->gui_reset = 1;
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
@@ -593,8 +620,9 @@ static void _tree_delete_shape(GtkButton *button __attribute__((unused)), dt_lib
  *
  * dt_masks_form_delete() reads that distinction off its group argument: a group to detach from,
  * or NULL to destroy. A top-level row has group id 0, which no form answers to. */
-static void _tree_row_action(dt_lib_module_t *self, GtkTreeModel *model, GtkTreeIter *iter)
+static void _tree_row_action(dt_shape_manager_list_t *list, GtkTreeModel *model, GtkTreeIter *iter)
 {
+  dt_lib_module_t *self = list->self;
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   dt_develop_t *const dev = dt_dev_get_global();
 
@@ -625,13 +653,14 @@ static void _tree_row_action(dt_lib_module_t *self, GtkTreeModel *model, GtkTree
   dt_dev_add_history_item(dev, NULL, FALSE, TRUE);
 }
 
-static void _tree_duplicate_shape(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
+static void _tree_duplicate_shape(GtkButton *button __attribute__((unused)), dt_shape_manager_list_t *list)
 {
+  dt_lib_module_t *self = list->self;
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
   // we get the selected node
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
   if(IS_NULL_PTR(items)) return;
   GtkTreePath *item = (GtkTreePath *)items->data;
@@ -673,10 +702,9 @@ static void _tree_duplicate_shape(GtkButton *button __attribute__((unused)), dt_
 /* The "edited" signal hands both strings as gchar *, but this only reads them -- and the
  * connection goes through a GCallback cast, so nothing checks the signature against GTK's. */
 static void _tree_cell_edited(GtkCellRendererText *cell __attribute__((unused)), const gchar *path_string,
-                              const gchar *new_text, dt_lib_module_t *self)
+                              const gchar *new_text, dt_shape_manager_list_t *list)
 {
-  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
   GtkTreeIter iter;
   if(!gtk_tree_model_get_iter_from_string(model, &iter, path_string)) return;
 
@@ -719,11 +747,11 @@ static void _show_masks_on_owning_module(GtkTreeModel *model, GtkTreeIter *iter)
   gtk_widget_queue_draw(bd->masks_edit);
 }
 
-static void _tree_selection_change(GtkTreeSelection *selection, dt_shape_manager_t *self)
+static void _tree_selection_change(GtkTreeSelection *selection, dt_shape_manager_list_t *list)
 {
-
+  const dt_shape_manager_t *lm = (const dt_shape_manager_t *)list->self->data;
   dt_develop_t *const dev = dt_dev_get_global();
-  if(self->gui_reset) return;
+  if(lm->gui_reset) return;
   dt_masks_form_gui_t *creation_gui = dev->form_gui;
   if(!IS_NULL_PTR(creation_gui) && creation_gui->creation) return;
 
@@ -740,7 +768,7 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_shape_manager
   }
 
   // else, we create a new form group with the selection and display it
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(self->treeview));
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
   dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
   dt_masks_form_t *selected_form = NULL;
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
@@ -1035,8 +1063,9 @@ static int _tree_apply_click_selection(GtkWidget *treeview, GtkTreeSelection *se
  * function allows the row -- yet no selection change follows a modified click, while a plain one
  * works. Why it stays inert was not found; driving the two gestures here is not a workaround for
  * that so much as the place this widget already adjusts its own selection. */
-static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_lib_module_t *self)
+static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_shape_manager_list_t *list)
 {
+  dt_lib_module_t *self = list->self;
   // we first need to adjust selection
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview));
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
@@ -1060,13 +1089,12 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
   /* single click with the right mouse button? */
   if(event->type == GDK_BUTTON_PRESS && event->button == 1)
   {
-    dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
     // The action icons act on the row under the pointer alone, whatever is selected: they are
     // buttons the row carries, not a command applied to the selection.
-    if(on_row && mouse_col == lm->action_col)
+    if(on_row && mouse_col == list->action_col)
     {
       gtk_tree_path_free(mouse_path);
-      _tree_row_action(self, model, &iter);
+      _tree_row_action(list, model, &iter);
       return 1;
     }
 
@@ -1150,12 +1178,12 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
   GtkTreePath *path = NULL;
   gchar *tmp = NULL;
   gboolean show = FALSE;
-  dt_shape_manager_t *lm = (dt_shape_manager_t *)data;
+  const dt_shape_manager_list_t *list = (const dt_shape_manager_list_t *)data;
 
   /* The action icon says what it does, and what it does depends on the row's depth, so the
    * pointer's column is asked first: gtk_tree_view_get_tooltip_context() below reports the row
    * but not the column, and it rewrites x/y on the way. Keyboard tooltips carry no position. */
-  if(!keyboard_tip && !IS_NULL_PTR(lm))
+  if(!keyboard_tip && !IS_NULL_PTR(list))
   {
     gint bx = 0, by = 0;
     gtk_tree_view_convert_widget_to_bin_window_coords(tree_view, x, y, &bx, &by);
@@ -1166,7 +1194,7 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
     {
       GtkTreeIter action_iter;
       int grid = -1;
-      gboolean got = (action_column == lm->action_col)
+      gboolean got = (action_column == list->action_col)
                      && gtk_tree_model_get_iter(model, &action_iter, action_path);
       if(got) _shape_manager_get_values(model, &action_iter, NULL, &grid, NULL);
       gtk_tree_path_free(action_path);
@@ -1374,14 +1402,13 @@ gboolean _find_mask_iter_by_values(GtkTreeModel *model, GtkTreeIter *iter,
   return found;
 }
 
-GList *_shape_manager_get_selected(dt_lib_module_t *self)
+GList *_shape_manager_get_selected(dt_shape_manager_list_t *list)
 {
   GList *res = NULL;
-  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
 
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
 
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
 
   GList *items = gtk_tree_selection_get_selected_rows(selection, &model);
 
@@ -1409,22 +1436,37 @@ GList *_shape_manager_get_selected(dt_lib_module_t *self)
 }
 
 /* Expands to the row, scrolls it into view and selects it. */
-static void _tree_reveal_row(dt_shape_manager_t *lm, GtkTreeModel *model, GtkTreeIter *iter,
+static void _tree_reveal_row(dt_shape_manager_list_t *list, GtkTreeModel *model, GtkTreeIter *iter,
                              const gboolean exclusive)
 {
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
   GtkTreePath *path = gtk_tree_model_get_path(model, iter);
 
   if(exclusive) gtk_tree_selection_unselect_all(selection);
-  gtk_tree_view_expand_to_path(GTK_TREE_VIEW(lm->treeview), path);
-  gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(lm->treeview), path, NULL, TRUE, 0.5, 0.5);
+  gtk_tree_view_expand_to_path(GTK_TREE_VIEW(list->treeview), path);
+  gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(list->treeview), path, NULL, TRUE, 0.5, 0.5);
   gtk_tree_selection_select_iter(selection, iter);
 
   gtk_tree_path_free(path);
 }
 
+/* Which of the two lists a top-level form belongs in. Only a group can be claimed by a module,
+ * so a plain shape is always in the inventory -- including one a module's group holds, which is
+ * then listed twice, once here and once as that group's member. */
+static dt_shape_list_t _form_belongs_to(const dt_masks_form_t *form)
+{
+  if(IS_NULL_PTR(form) || !(form->type & DT_MASKS_GROUP)) return DT_SHAPE_LIST_SHAPES;
+
+  GList *owners = _modules_owning_group(form);
+  const gboolean assigned = !IS_NULL_PTR(owners);
+  g_list_free(owners);
+
+  return assigned ? DT_SHAPE_LIST_MODULES : DT_SHAPE_LIST_SHAPES;
+}
+
 /* Returns whether it added anything, which is what tells the caller a separator is worth having. */
-static gboolean _tree_store_add_forms(GtkTreeStore *treestore, dt_shape_manager_t *lm, const gboolean groups)
+static gboolean _tree_store_add_forms(GtkTreeStore *treestore, dt_shape_manager_t *lm,
+                                      const dt_shape_list_t which, const gboolean groups)
 {
   gboolean any = FALSE;
 
@@ -1432,6 +1474,7 @@ static gboolean _tree_store_add_forms(GtkTreeStore *treestore, dt_shape_manager_
   {
     dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
     if(!!(form->type & DT_MASKS_GROUP) != groups) continue;
+    if(_form_belongs_to(form) != which) continue;
 
     const _tree_row_t row = { .form = form, .opacity = 1.0f };
     _shape_manager_list_recurs(treestore, NULL, lm, &row);
@@ -1451,15 +1494,18 @@ static gboolean _tree_row_is_separator(GtkTreeModel *model, GtkTreeIter *iter,
   return is_separator;
 }
 
-/* Groups first, then the shapes no group holds: that is the order the tree shows them in. */
-static GtkTreeStore *_tree_store_build(dt_shape_manager_t *lm)
+/* The inventory list shows the unclaimed groups first, then every shape, with a rule between
+ * them. The module list has only groups, so it gets neither the second pass nor the rule. */
+static GtkTreeStore *_tree_store_build(dt_shape_manager_t *lm, const dt_shape_list_t which)
 {
   // we store : text ; *module ; groupid ; formid
   GtkTreeStore *treestore = gtk_tree_store_new(TREE_COUNT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT,
                                                G_TYPE_INT, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN,
                                                GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING,
                                                G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN);
-  const gboolean had_groups = _tree_store_add_forms(treestore, lm, TRUE);
+  const gboolean had_groups = _tree_store_add_forms(treestore, lm, which, TRUE);
+  if(which == DT_SHAPE_LIST_MODULES) return treestore;
+
 
   /* A rule between the module groups and the loose shapes, added between the two passes and kept
    * only when both sides of it exist -- one opening or closing the list would be a line against
@@ -1475,7 +1521,7 @@ static GtkTreeStore *_tree_store_build(dt_shape_manager_t *lm)
                        TREE_GROUPID, -1, TREE_EDITABLE, FALSE, -1);
   }
 
-  const gboolean had_shapes = _tree_store_add_forms(treestore, lm, FALSE);
+  const gboolean had_shapes = _tree_store_add_forms(treestore, lm, which, FALSE);
   if(had_groups && !had_shapes) gtk_tree_store_remove(treestore, &separator);
 
   return treestore;
@@ -1483,7 +1529,7 @@ static GtkTreeStore *_tree_store_build(dt_shape_manager_t *lm)
 
 /* Puts back what was selected before the store was replaced. selectids holds three entries per
  * row -- module, group id, form id -- as _shape_manager_get_selected() built it. */
-static void _tree_restore_selection(dt_shape_manager_t *lm, GtkTreeModel *model, const GList *selectids)
+static void _tree_restore_selection(dt_shape_manager_list_t *list, GtkTreeModel *model, const GList *selectids)
 {
   const GList *ids = selectids;
   while(ids)
@@ -1502,13 +1548,13 @@ static void _tree_restore_selection(dt_shape_manager_t *lm, GtkTreeModel *model,
     // non-empty, so stop rather than skip.
     if(!gtk_tree_model_get_iter_first(model, &iter)) return;
 
-    if(_find_mask_iter_by_values(model, &iter, mod, fid, 1)) _tree_reveal_row(lm, model, &iter, FALSE);
+    if(_find_mask_iter_by_values(model, &iter, mod, fid, 1)) _tree_reveal_row(list, model, &iter, FALSE);
   }
 }
 
 /* Points the tree at the focused module's mask group, and says whether it moved the selection --
  * the caller replays the selection handler when it did, so the canvas follows. */
-static gboolean _tree_select_module_group(dt_shape_manager_t *lm, GtkTreeModel *model,
+static gboolean _tree_select_module_group(dt_shape_manager_list_t *list, GtkTreeModel *model,
                                           const dt_masks_form_gui_t *gui)
 {
   dt_iop_module_t *const module = dt_dev_get_global()->gui_module;
@@ -1522,7 +1568,7 @@ static gboolean _tree_select_module_group(dt_shape_manager_t *lm, GtkTreeModel *
   if(!gtk_tree_model_get_iter_first(model, &iter)) return FALSE;
   if(!_find_mask_iter_by_values(model, &iter, module, group_id, 1)) return FALSE;
 
-  _tree_reveal_row(lm, model, &iter, TRUE);
+  _tree_reveal_row(list, model, &iter, TRUE);
   return TRUE;
 }
 
@@ -1531,35 +1577,48 @@ static void _shape_manager_recreate_list(dt_lib_module_t *self)
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   if(IS_NULL_PTR(lm) || lm->gui_reset) return;
 
-  // Everything below drives the tree itself, so the handlers it would wake must stay quiet.
+  // Everything below drives the trees itself, so the handlers they would wake must stay quiet.
   const int gui_reset = lm->gui_reset;
   lm->gui_reset = 1;
-
-  // The tree is about to be replaced, so what is selected has to be read before it goes.
-  GList *selectids = lm->treeview ? _shape_manager_get_selected(self) : NULL;
 
   // Rebuilding the list also refreshes shapes created during continuous creation. In that case
   // the active creation button must stay active until the user cancels creation explicitly.
   dt_masks_form_gui_t *gui = dt_dev_get_global()->form_gui;
   if(IS_NULL_PTR(gui) || !gui->creation) dt_masks_shape_buttons_deactivate_all(NULL);
 
-  GtkTreeStore *treestore = _tree_store_build(lm);
-  GtkTreeModel *model = GTK_TREE_MODEL(treestore);
-  gtk_tree_view_set_model(GTK_TREE_VIEW(lm->treeview), model);
-
-  if(selectids)
+  /* Both stores are rebuilt from scratch: a form crosses from one list to the other the moment
+   * a module claims or releases its group, so neither can be refreshed on its own. */
+  dt_shape_manager_list_t *follow = NULL;
+  for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
   {
-    _tree_restore_selection(lm, model, selectids);
-    g_list_free(selectids);
+    dt_shape_manager_list_t *list = &lm->lists[i];
+    if(IS_NULL_PTR(list->treeview)) continue;
+
+    // The store is about to be replaced, so what is selected has to be read before it goes.
+    GList *selectids = _shape_manager_get_selected(list);
+
+    GtkTreeStore *treestore = _tree_store_build(lm, list->which);
+    GtkTreeModel *model = GTK_TREE_MODEL(treestore);
+    gtk_tree_view_set_model(GTK_TREE_VIEW(list->treeview), model);
+
+    if(selectids)
+    {
+      _tree_restore_selection(list, model, selectids);
+      g_list_free(selectids);
+    }
+
+    // Only the module list can follow the focused module's own mask group; the inventory does
+    // not hold it.
+    if(list->which == DT_SHAPE_LIST_MODULES && _tree_select_module_group(list, model, gui))
+      follow = list;
+
+    g_object_unref(treestore);
   }
 
-  const gboolean sync_center_view = _tree_select_module_group(lm, model, gui);
-
-  g_object_unref(treestore);
   lm->gui_reset = gui_reset;
 
-  if(sync_center_view)
-    _tree_selection_change(gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview)), lm);
+  if(!IS_NULL_PTR(follow))
+    _tree_selection_change(gtk_tree_view_get_selection(GTK_TREE_VIEW(follow->treeview)), follow);
 }
 
 static void _shape_manager_update_item(dt_lib_module_t *self __attribute__((unused)), int formid, int parentid, dt_shape_manager_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
@@ -1631,17 +1690,22 @@ static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path __attribu
   return 0;
 }
 
-// Update each item of the list
+// Update each item of both lists. The same form can have a row in each, so neither is skipped.
 static void _shape_manager_update_list(dt_lib_module_t *self)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   if(IS_NULL_PTR(lm)) return;
-  if(IS_NULL_PTR(lm->treeview)) return;
 
-  // for each node , we refresh the string
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  if(!GTK_IS_TREE_MODEL(model)) return;
-  gtk_tree_model_foreach(model, _update_foreach, lm);
+  for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
+  {
+    const dt_shape_manager_list_t *list = &lm->lists[i];
+    if(IS_NULL_PTR(list->treeview)) continue;
+
+    // for each node , we refresh the string
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
+    if(!GTK_IS_TREE_MODEL(model)) continue;
+    gtk_tree_model_foreach(model, _update_foreach, lm);
+  }
 }
 
 static gboolean _remove_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
@@ -1663,11 +1727,12 @@ static gboolean _remove_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeI
   return 0;
 }
 
-static void _shape_manager_remove_item(dt_lib_module_t *self, int formid, int parentid)
+/* Drops the (formid, parentid) row from one list's store. */
+static void _shape_manager_remove_item_from(const dt_shape_manager_list_t *list, int formid, int parentid)
 {
-  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
-  // for each node , we refresh the string
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
+  if(IS_NULL_PTR(list->treeview)) return;
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
+  if(!GTK_IS_TREE_MODEL(model)) return;
   GList *rl = NULL;
   g_object_set_data(G_OBJECT(model), "formid", GUINT_TO_POINTER(formid));
   g_object_set_data(G_OBJECT(model), "groupid", GUINT_TO_POINTER(parentid));
@@ -1690,6 +1755,15 @@ static void _shape_manager_remove_item(dt_lib_module_t *self, int formid, int pa
   }
   g_list_free(rl);
   rl = NULL;
+}
+
+static void _shape_manager_remove_item(dt_lib_module_t *self, int formid, int parentid)
+{
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
+  if(IS_NULL_PTR(lm)) return;
+
+  for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
+    _shape_manager_remove_item_from(&lm->lists[i], formid, parentid);
 }
 
 static gboolean _shape_manager_selection_change_r(GtkTreeModel *model, GtkTreeSelection *selection,
@@ -1726,13 +1800,15 @@ static gboolean _shape_manager_selection_change_r(GtkTreeModel *model, GtkTreeSe
   return found;
 }
 
-static void _shape_manager_selection_change(dt_lib_module_t *self, struct dt_iop_module_t *module, const int selectid, const int throw_event)
+/* Points one list at the form, and says whether it holds it at all. */
+static gboolean _shape_manager_selection_change_in(dt_shape_manager_t *lm, const dt_shape_manager_list_t *list,
+                                                  struct dt_iop_module_t *module, const int selectid,
+                                                  const int throw_event)
 {
-  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
-  if(IS_NULL_PTR(lm->treeview)) return;
+  if(IS_NULL_PTR(list->treeview)) return FALSE;
 
   // we first unselect all
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
   lm->gui_reset = 1;
   gtk_tree_selection_unselect_all(selection);
   lm->gui_reset = 0;
@@ -1740,22 +1816,34 @@ static void _shape_manager_selection_change(dt_lib_module_t *self, struct dt_iop
   // we go through all nodes
   lm->gui_reset = 1 - throw_event;
   GtkTreeIter iter;
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
   if(!GTK_IS_TREE_MODEL(model))
   {
     lm->gui_reset = 0;
-    return;
+    return FALSE;
   }
-  gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
 
-  if(valid)
+  gboolean found = FALSE;
+  if(gtk_tree_model_get_iter_first(model, &iter))
   {
-    gtk_tree_view_expand_all(GTK_TREE_VIEW(lm->treeview));
-    const gboolean found = _shape_manager_selection_change_r(model, selection, &iter, module, selectid, throw_event, 1);
-    if(!found) gtk_tree_view_collapse_all(GTK_TREE_VIEW(lm->treeview));
+    gtk_tree_view_expand_all(GTK_TREE_VIEW(list->treeview));
+    found = _shape_manager_selection_change_r(model, selection, &iter, module, selectid, throw_event, 1);
+    if(!found) gtk_tree_view_collapse_all(GTK_TREE_VIEW(list->treeview));
   }
 
   lm->gui_reset = 0;
+  return found;
+}
+
+/* A form can have a row in either list, or in both -- a shape is listed in the inventory and
+ * again under whichever module group holds it -- so both are pointed at it. */
+static void _shape_manager_selection_change(dt_lib_module_t *self, struct dt_iop_module_t *module, const int selectid, const int throw_event)
+{
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
+  if(IS_NULL_PTR(lm)) return;
+
+  for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
+    _shape_manager_selection_change_in(lm, &lm->lists[i], module, selectid, throw_event);
 }
 
 static gboolean _find_child_iter_by_formid(GtkTreeModel *model, GtkTreeIter *parent_iter, int formid, GtkTreeIter *child_iter)
@@ -1813,33 +1901,39 @@ static void _shape_manager_handler_callback(gpointer instance __attribute__((unu
 
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   if(IS_NULL_PTR(lm)) return;
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
-  if(!GTK_IS_TREE_MODEL(model)) return;
-  GtkTreeIter iter;
-  gboolean found_iter = gtk_tree_model_get_iter_first(model, &iter);
 
-  if(found_iter && _find_iter_by_parentid_and_formid(model, parentid, formid, &iter))
+  /* The row a single-row event names can be in either list -- or in both, when a module group
+   * holds a shape the inventory also lists -- so both are asked, and an UPDATE refreshes every
+   * row that answers. `found` is what the branches below used to read off the one tree there
+   * was: whether the event named a row this panel is currently showing at all. */
+  gboolean found = FALSE;
+  for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
+  {
+    const dt_shape_manager_list_t *list = &lm->lists[i];
+    if(IS_NULL_PTR(list->treeview)) continue;
+
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
+    if(!GTK_IS_TREE_MODEL(model)) continue;
+
+    GtkTreeIter iter;
+    if(!gtk_tree_model_get_iter_first(model, &iter)) continue;
+    if(!_find_iter_by_parentid_and_formid(model, parentid, formid, &iter)) continue;
+
+    found = TRUE;
+    if(event == DT_MASKS_EVENT_UPDATE)
+      _shape_manager_update_item(self, formid, parentid, lm, model, &iter);
+  }
+
+  if(found)
   {
     switch(event)
     {
       case DT_MASKS_EVENT_UPDATE :
-      {
-        _shape_manager_update_item(self, formid, parentid, lm, model, &iter);
-      }
-      break;
+        // already done, once per list holding the row
+        break;
 
       case DT_MASKS_EVENT_CHANGE :
-      {
-        _shape_manager_recreate_list(self);
-      }
-      break;
-
       case DT_MASKS_EVENT_DELETE :
-      {
-        _shape_manager_recreate_list(self);
-      }
-      break;
-
       case DT_MASKS_EVENT_REMOVE :
       {
         _shape_manager_recreate_list(self);
@@ -2061,9 +2155,9 @@ void gui_init(dt_lib_module_t *self)
   // first mapping only, so a panel the user has dragged elsewhere keeps its place.
   gtk_window_set_position(GTK_WINDOW(d->popup_window), GTK_WIN_POS_CENTER_ON_PARENT);
 
-  // Let the user shrink the panel down to a narrow strip: the shape list carries its own
-  // height rule (dt_ui_scroll_wrap below), the width is theirs to set.
-  gtk_widget_set_size_request(d->popup_window, DT_PIXEL_APPLY_DPI(300), -1);
+  /* No width request of its own: the two lists below each carry a min-content-width, so the
+   * window's own minimum is what they add up to, and it grows with whatever the user drags the
+   * paned or the frame to. Heights come from each list's dt_ui_scroll_wrap() rule. */
 
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(d->popup_window);
@@ -2121,87 +2215,140 @@ void gui_init(dt_lib_module_t *self)
   // surplus with the shape list below and stretch the buttons vertically.
   gtk_box_pack_start(GTK_BOX(shape_manager_container), hbox, FALSE, FALSE, 0);
 
-  d->treeview = gtk_tree_view_new();
-  GtkTreeViewColumn *col = gtk_tree_view_column_new();
-  gtk_tree_view_column_set_title(col, "shapes");
-  gtk_tree_view_append_column(GTK_TREE_VIEW(d->treeview), col);
-
-  GtkCellRenderer *renderer = gtk_cell_renderer_pixbuf_new();
-  gtk_tree_view_column_pack_start(col, renderer, FALSE);
-  gtk_tree_view_column_set_attributes(col, renderer, "pixbuf", TREE_IC_OP, NULL);
-  gtk_tree_view_column_add_attribute(col, renderer, "visible", TREE_IC_OP_VISIBLE);
-  renderer = gtk_cell_renderer_pixbuf_new();
-  gtk_tree_view_column_pack_start(col, renderer, FALSE);
-  gtk_tree_view_column_set_attributes(col, renderer, "pixbuf", TREE_IC_INVERSE, NULL);
-  gtk_tree_view_column_add_attribute(col, renderer, "visible", TREE_IC_INVERSE_VISIBLE);
-  renderer = gtk_cell_renderer_text_new();
-  gtk_tree_view_column_pack_start(col, renderer, TRUE);
-  gtk_tree_view_column_add_attribute(col, renderer, "text", TREE_TEXT);
-  gtk_tree_view_column_add_attribute(col, renderer, "editable", TREE_EDITABLE);
-  g_signal_connect(renderer, "edited", (GCallback)_tree_cell_edited, self);
-  /* Icon marking a shape shared by several modules. It is a remark about the shape rather than
+  /* The "used by" icon, tinted once for both trees. It is a remark about the shape rather than
    * something to click, so it is drawn in the theme's own disabled grey -- a flat grey, next to
    * the action icon it sits beside, rather than the washed-out foreground a GtkCellRenderer's
-   * insensitive state produces. A cell renderer has no colour of its own, so the icon is loaded
-   * once as a pre-tinted pixbuf; the model still only carries whether this row shows one. */
+   * insensitive state produces. A cell renderer has no colour of its own, hence a pre-tinted
+   * pixbuf; the model still only carries whether a row shows one. */
   GdkRGBA used_color;
-  if(!gtk_style_context_lookup_color(gtk_widget_get_style_context(d->treeview), "disabled_fg_color",
-                                     &used_color))
+  if(!gtk_style_context_lookup_color(gtk_widget_get_style_context(shape_manager_container),
+                                     "disabled_fg_color", &used_color))
     used_color = (GdkRGBA){ 0.62, 0.62, 0.62, 1.0 };
 
   d->ic_used = dt_gui_symbolic_icon_pixbuf("mail-attachment-symbolic", GTK_ICON_SIZE_MENU, &used_color, NULL);
 
-  renderer = gtk_cell_renderer_pixbuf_new();
-  // A theme with no symbolic variant of that icon leaves the pixbuf NULL: name the icon instead
-  // and let GTK draw it, untinted, rather than show nothing.
-  if(IS_NULL_PTR(d->ic_used))
-    g_object_set(renderer, "icon-name", "mail-attachment-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
-  else
-    g_object_set(renderer, "pixbuf", d->ic_used, NULL);
-  gtk_tree_view_column_pack_end(col, renderer, FALSE);
-  gtk_tree_view_column_add_attribute(col, renderer, "visible", TREE_IC_USED_VISIBLE);
+  /* The two lists sit side by side in a paned, so the split is the user's and persists. Each
+   * half is built identically -- the only thing that differs between them is which forms their
+   * store holds, which _tree_store_build() decides from list->which. */
+  GtkWidget *lists_paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
 
-  /* The per-row action icon, to the right of everything the name column carries -- the "used by"
-   * icon included, since that one is packed at that column's end. Both renderers live in this one
-   * column and exactly one of them is visible on any row, so the icon lands in the same place
-   * whichever action the row offers. The name column expands to take up the slack, which is what
-   * keeps the action flush right. Clicks are answered in _tree_button_pressed() by comparing the
-   * column, the way develop/blend_gui.c does for the same two icons. */
-  gtk_tree_view_column_set_expand(col, TRUE);
+  static const struct
+  {
+    const char *title;
+    const char *tooltip;
+    const char *height_key;
+  } list_defs[DT_SHAPE_LIST_COUNT] = {
+    [DT_SHAPE_LIST_SHAPES] = { N_("All shapes"),
+                               N_("Every shape drawn on this image, and the groups no module uses yet."),
+                               "plugins/darkroom/masks/windowheight" },
+    [DT_SHAPE_LIST_MODULES] = { N_("Module groups"),
+                                N_("The masks modules actually render, and the shapes each one is made of."),
+                                "plugins/darkroom/masks/moduleslistheight" },
+  };
 
-  d->action_col = gtk_tree_view_column_new();
-  gtk_tree_view_column_set_sizing(d->action_col, GTK_TREE_VIEW_COLUMN_FIXED);
-  gtk_tree_view_column_set_fixed_width(d->action_col, DT_PIXEL_APPLY_DPI(24));
+  for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
+  {
+    dt_shape_manager_list_t *list = &d->lists[i];
+    list->which = (dt_shape_list_t)i;
+    list->self = self;
+    list->treeview = gtk_tree_view_new();
 
-  renderer = gtk_cell_renderer_pixbuf_new();
-  g_object_set(renderer, "icon-name", "list-remove-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
-  gtk_tree_view_column_pack_start(d->action_col, renderer, FALSE);
-  gtk_tree_view_column_add_attribute(d->action_col, renderer, "visible", TREE_IC_UNLINK_VISIBLE);
+    GtkTreeViewColumn *col = gtk_tree_view_column_new();
+    gtk_tree_view_append_column(GTK_TREE_VIEW(list->treeview), col);
 
-  renderer = gtk_cell_renderer_pixbuf_new();
-  g_object_set(renderer, "icon-name", "user-trash-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
-  gtk_tree_view_column_pack_start(d->action_col, renderer, FALSE);
-  gtk_tree_view_column_add_attribute(d->action_col, renderer, "visible", TREE_IC_DELETE_VISIBLE);
+    GtkCellRenderer *renderer = gtk_cell_renderer_pixbuf_new();
+    gtk_tree_view_column_pack_start(col, renderer, FALSE);
+    gtk_tree_view_column_set_attributes(col, renderer, "pixbuf", TREE_IC_OP, NULL);
+    gtk_tree_view_column_add_attribute(col, renderer, "visible", TREE_IC_OP_VISIBLE);
 
-  gtk_tree_view_append_column(GTK_TREE_VIEW(d->treeview), d->action_col);
+    renderer = gtk_cell_renderer_pixbuf_new();
+    gtk_tree_view_column_pack_start(col, renderer, FALSE);
+    gtk_tree_view_column_set_attributes(col, renderer, "pixbuf", TREE_IC_INVERSE, NULL);
+    gtk_tree_view_column_add_attribute(col, renderer, "visible", TREE_IC_INVERSE_VISIBLE);
 
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(d->treeview));
-  gtk_tree_selection_set_mode(selection, GTK_SELECTION_MULTIPLE);
-  gtk_tree_selection_set_select_function(selection, _tree_restrict_select, d, NULL);
-  gtk_tree_view_set_row_separator_func(GTK_TREE_VIEW(d->treeview), _tree_row_is_separator, NULL, NULL);
-  gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->treeview), FALSE);
-  // A query-tooltip handler rather than a tooltip column: only the rows that carry a "used by"
-  // text show one, which a column would not let us decide per row.
-  g_object_set(d->treeview, "has-tooltip", TRUE, (gchar *)0);
-  g_signal_connect(d->treeview, "query-tooltip", G_CALLBACK(_tree_query_tooltip), d);
-  g_signal_connect(selection, "changed", G_CALLBACK(_tree_selection_change), d);
-  g_signal_connect(d->treeview, "button-press-event", (GCallback)_tree_button_pressed, self);
+    renderer = gtk_cell_renderer_text_new();
+    g_object_set(renderer, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
+    gtk_tree_view_column_pack_start(col, renderer, TRUE);
+    gtk_tree_view_column_add_attribute(col, renderer, "text", TREE_TEXT);
+    gtk_tree_view_column_add_attribute(col, renderer, "editable", TREE_EDITABLE);
+    g_signal_connect(renderer, "edited", (GCallback)_tree_cell_edited, list);
 
-  // Auto-grows to its content (the side panel scrolls) up to a user-set, persisted height.
-  gtk_box_pack_start(GTK_BOX(shape_manager_container),
-                     dt_ui_scroll_wrap(d->treeview, 90, "plugins/darkroom/masks/windowheight",
-                                       DT_UI_RESIZE_DYNAMIC),
-                     TRUE, TRUE, 0);
+    renderer = gtk_cell_renderer_pixbuf_new();
+    // A theme with no symbolic variant of that icon leaves the pixbuf NULL: name the icon instead
+    // and let GTK draw it, untinted, rather than show nothing.
+    if(IS_NULL_PTR(d->ic_used))
+      g_object_set(renderer, "icon-name", "mail-attachment-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+    else
+      g_object_set(renderer, "pixbuf", d->ic_used, NULL);
+    gtk_tree_view_column_pack_end(col, renderer, FALSE);
+    gtk_tree_view_column_add_attribute(col, renderer, "visible", TREE_IC_USED_VISIBLE);
+
+    /* The per-row action icon, to the right of everything the name column carries -- the "used
+     * by" icon included, since that one is packed at that column's end. Both renderers live in
+     * this one column and exactly one of them is visible on any row, so the icon lands in the
+     * same place whichever action the row offers. The name column expands to take up the slack,
+     * which is what keeps the action flush right. Clicks are answered in _tree_button_pressed()
+     * by comparing the column, the way develop/blend_gui.c does for the same two icons. */
+    gtk_tree_view_column_set_expand(col, TRUE);
+
+    list->action_col = gtk_tree_view_column_new();
+    gtk_tree_view_column_set_sizing(list->action_col, GTK_TREE_VIEW_COLUMN_FIXED);
+    gtk_tree_view_column_set_fixed_width(list->action_col, DT_PIXEL_APPLY_DPI(24));
+
+    renderer = gtk_cell_renderer_pixbuf_new();
+    g_object_set(renderer, "icon-name", "list-remove-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+    gtk_tree_view_column_pack_start(list->action_col, renderer, FALSE);
+    gtk_tree_view_column_add_attribute(list->action_col, renderer, "visible", TREE_IC_UNLINK_VISIBLE);
+
+    renderer = gtk_cell_renderer_pixbuf_new();
+    g_object_set(renderer, "icon-name", "user-trash-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+    gtk_tree_view_column_pack_start(list->action_col, renderer, FALSE);
+    gtk_tree_view_column_add_attribute(list->action_col, renderer, "visible", TREE_IC_DELETE_VISIBLE);
+
+    gtk_tree_view_append_column(GTK_TREE_VIEW(list->treeview), list->action_col);
+
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(list->treeview));
+    gtk_tree_selection_set_mode(selection, GTK_SELECTION_MULTIPLE);
+    gtk_tree_selection_set_select_function(selection, _tree_restrict_select, d, NULL);
+    // Only the inventory list carries a rule; the module list holds groups alone.
+    if(list->which == DT_SHAPE_LIST_SHAPES)
+      gtk_tree_view_set_row_separator_func(GTK_TREE_VIEW(list->treeview), _tree_row_is_separator, NULL, NULL);
+    gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(list->treeview), FALSE);
+    // A query-tooltip handler rather than a tooltip column: only the rows that carry a "used by"
+    // text show one, which a column would not let us decide per row.
+    g_object_set(list->treeview, "has-tooltip", TRUE, (gchar *)0);
+    g_signal_connect(list->treeview, "query-tooltip", G_CALLBACK(_tree_query_tooltip), list);
+    g_signal_connect(selection, "changed", G_CALLBACK(_tree_selection_change), list);
+    g_signal_connect(list->treeview, "button-press-event", (GCallback)_tree_button_pressed, list);
+
+    /* Each half is a titled column of its own: with two trees side by side and no headers, a
+     * label is the only thing saying which is which. */
+    GtkWidget *half = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+    GtkWidget *title = dt_ui_label_new(_(list_defs[i].title));
+    gtk_widget_set_tooltip_text(title, _(list_defs[i].tooltip));
+    gtk_box_pack_start(GTK_BOX(half), title, FALSE, FALSE, 0);
+
+    // Auto-grows to its content (the window scrolls) up to a user-set, persisted height.
+    GtkWidget *wrapper = dt_ui_scroll_wrap(list->treeview, 90, list_defs[i].height_key,
+                                           DT_UI_RESIZE_DYNAMIC);
+
+    /* The width floor is set here rather than on the window: a tree in a scrolled window has
+     * almost no minimum width of its own, so without this the paned would let either half be
+     * dragged down to nothing, and the window would have no sensible minimum either. Names
+     * ellipsize in the middle, so a narrow half stays readable at both ends. */
+    GtkWidget *scrolled = dt_ui_scroll_wrap_get_scrolled_window(wrapper);
+    if(GTK_IS_SCROLLED_WINDOW(scrolled))
+      gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled), DT_PIXEL_APPLY_DPI(190));
+
+    gtk_box_pack_start(GTK_BOX(half), wrapper, TRUE, TRUE, 0);
+
+    if(i == 0)
+      gtk_paned_pack1(GTK_PANED(lists_paned), half, TRUE, FALSE);
+    else
+      gtk_paned_pack2(GTK_PANED(lists_paned), half, TRUE, FALSE);
+  }
+
+  gtk_box_pack_start(GTK_BOX(shape_manager_container), lists_paned, TRUE, TRUE, 0);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, G_CALLBACK(_shape_manager_handler_callback), self);
 
