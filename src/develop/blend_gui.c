@@ -1565,7 +1565,10 @@ static int _blendop_masks_group_tree_append(const dt_iop_gui_blend_data_t *bd, G
 
   int row_count = 0;
 
-  // First pass: groups containing shapes.
+  /* One pass, in the group's own membership order. This used to run twice -- the members that
+   * are groups holding shapes, then everything else -- which put every sub-group at the top of
+   * the mask whatever its rank inside it. The rank is what the combine operators are read
+   * against, so the list has to show it. */
   int index = 0;
   for(const GList *group_node = parent_group->points; group_node; group_node = g_list_next(group_node))
   {
@@ -1573,25 +1576,9 @@ static int _blendop_masks_group_tree_append(const dt_iop_gui_blend_data_t *bd, G
     const dt_masks_form_t *mask_form = group_entry
                                            ? dt_masks_get_from_id(bd->module->dev, group_entry->formid)
                                            : NULL;
-    if(mask_form && _blendop_masks_is_group_with_shapes(bd->module->dev, mask_form))
+    if(mask_form)
       row_count += _blendop_masks_group_tree_append_entry(bd, tree_store, parent_iter, group_entry, mask_form,
                                                           index);
-    index++;
-  }
-
-  // Second pass: all remaining entries.
-  index = 0;
-  for(const GList *group_node = parent_group->points; group_node; group_node = g_list_next(group_node))
-  {
-    const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)group_node->data;
-    const dt_masks_form_t *mask_form = group_entry
-                                           ? dt_masks_get_from_id(bd->module->dev, group_entry->formid)
-                                           : NULL;
-    if(mask_form && !_blendop_masks_is_group_with_shapes(bd->module->dev, mask_form))
-    {
-      row_count += _blendop_masks_group_tree_append_entry(bd, tree_store, parent_iter, group_entry, mask_form,
-                                                          index);
-    }
     index++;
   }
 
@@ -1651,6 +1638,10 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
   gtk_tree_store_clear(GTK_TREE_STORE(group_model));
 
   dt_masks_form_t *group_form = _blendop_masks_group_from_module(module);
+
+  /* The available shapes keep the groups at the top, ahead of the loose shapes: this list is a
+   * catalogue to pick from rather than a rendering order, and a group is the coarser thing to
+   * pick. The mask's own tree, above, is the one that must show rank. */
 
   // First pass: groups containing shapes first.
   for(const GList *form_node = module->dev->forms; form_node; form_node = g_list_next(form_node))
