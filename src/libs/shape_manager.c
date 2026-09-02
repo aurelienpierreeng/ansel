@@ -180,6 +180,9 @@ typedef enum dt_masks_tree_cols_t
    * detaches. Exactly one is TRUE on a form row, and neither on the separator. */
   TREE_IC_DELETE_VISIBLE,
   TREE_IC_UNLINK_VISIBLE,
+  /* What the row has to say about itself beyond its name -- currently only that the same shape
+   * is reached twice within one module's mask. Empty on every row that has nothing to add. */
+  TREE_NOTE,
   TREE_IS_SEPARATOR,
   TREE_COUNT
 } dt_masks_tree_cols_t;
@@ -1844,6 +1847,8 @@ typedef struct _tree_row_t
   int gstate;              // the combine/invert bits this form carries inside its parent
   float opacity;
   int index;               // rank inside the parent, which _set_iter_name() shows
+  int root_id;             /* the module mask this row sits somewhere inside, 0 outside the
+                            * module list -- the scope the note below is searched in */
 } _tree_row_t;
 
 /* Every module whose drawn mask is this group, in pipeline order.
@@ -1881,6 +1886,46 @@ static dt_iop_module_t *_module_owning_group(const dt_masks_form_t *group)
   return first;
 }
 
+/* Where the module's mask FIRST applies this shape, walked the way the tree shows it: members in
+ * their own order, descending into a member group at the position that group sits at.
+ *
+ * A shape can legitimately be applied twice inside one mask, and the second application is not
+ * always a no-op -- union and intersection are idempotent, but difference squares its own
+ * factor and exclusion does not settle either (develop/masks/group.c). So neither instance can
+ * be treated as void; what the list can say is which one came first, since that is the one the
+ * later ones are read against.
+ *
+ * @return FALSE if the shape is not in this mask at all. */
+static gboolean _first_use_in_mask(dt_develop_t *dev, const int group_id, const int formid,
+                                   int *parent_id, int *index, const char **group_name)
+{
+  const dt_masks_form_t *group = dt_masks_get_from_id(dev, group_id);
+  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return FALSE;
+
+  int i = 0;
+  for(const GList *pts = group->points; pts; pts = g_list_next(pts))
+  {
+    const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)pts->data;
+
+    if(pt->formid == formid)
+    {
+      *parent_id = group_id;
+      *index = i;
+      *group_name = group->name;
+      return TRUE;
+    }
+
+    const dt_masks_form_t *member = dt_masks_get_from_id(dev, pt->formid);
+    if(!IS_NULL_PTR(member) && (member->type & DT_MASKS_GROUP)
+       && _first_use_in_mask(dev, pt->formid, formid, parent_id, index, group_name))
+      return TRUE;
+
+    i++;
+  }
+
+  return FALSE;
+}
+
 /* Appends the row and returns its iter, which a group needs to hang its members from. Shapes and
  * groups are described identically here; only what happens afterwards differs. */
 static void _tree_append_row(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_shape_manager_t *lm,
@@ -1903,6 +1948,24 @@ static void _tree_append_row(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_
   int nbuse = 0;
   if(row->grp_id == 0) _is_form_used(row->form->formid, used_by, sizeof(used_by), &nbuse);
 
+  /* Only inside a module's mask, and only for a shape sitting under a group: a top-level row is
+   * not reached through anything, and a group's own duplication is a different question.
+   *
+   * Only the instances AFTER the first are marked. Both used to be, symmetrically, which said
+   * that the shape appears twice but not which application the other is measured against. */
+  gchar *note = NULL;
+  if(row->root_id > 0 && row->grp_id > 0 && !(row->form->type & DT_MASKS_GROUP))
+  {
+    int first_parent = 0;
+    int first_index = 0;
+    const char *first_group = NULL;
+    if(_first_use_in_mask(dt_dev_get_global(), row->root_id, row->form->formid, &first_parent,
+                          &first_index, &first_group)
+       && (first_parent != row->grp_id || first_index != row->index))
+      // Same wording the Drawn tab's shape list already uses for the same kind of remark.
+      note = g_strdup_printf(_("Already in '%s'"), first_group);
+  }
+
   gtk_tree_store_append(treestore, child, toplevel);
   gtk_tree_store_set(treestore, child, TREE_TEXT, row->form->name, TREE_MODULE, row->module,
                      TREE_GROUPID, row->grp_id, TREE_FORMID, row->form->formid,
@@ -1911,7 +1974,9 @@ static void _tree_append_row(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_
                      TREE_IC_INVERSE_VISIBLE, (!IS_NULL_PTR(icinv)),
                      TREE_IC_USED_VISIBLE, (nbuse > 0), TREE_USED_TEXT, used_by,
                      TREE_IC_DELETE_VISIBLE, (row->grp_id == 0),
-                     TREE_IC_UNLINK_VISIBLE, (row->grp_id != 0), -1);
+                     TREE_IC_UNLINK_VISIBLE, (row->grp_id != 0),
+                     TREE_NOTE, IS_NULL_PTR(note) ? "" : note, -1);
+  dt_free(note);
   _set_iter_name(lm, row->form, row->gstate, row->opacity, GTK_TREE_MODEL(treestore), child, row->index);
 }
 
@@ -1939,7 +2004,8 @@ static void _shape_manager_list_recurs(GtkTreeStore *treestore, GtkTreeIter *top
     {
       const _tree_row_t member_row = { .form = member, .grp_id = self.form->formid,
                                        .module = self.module, .gstate = grpt->state,
-                                       .opacity = grpt->opacity, .index = index };
+                                       .opacity = grpt->opacity, .index = index,
+                                       .root_id = self.root_id };
       _shape_manager_list_recurs(treestore, &child, lm, &member_row);
     }
     index++;
@@ -2048,7 +2114,12 @@ static gboolean _tree_store_add_forms(GtkTreeStore *treestore, dt_shape_manager_
     if(!!(form->type & DT_MASKS_GROUP) != groups) continue;
     if(_form_belongs_to(form) != which) continue;
 
-    const _tree_row_t row = { .form = form, .opacity = 1.0f };
+    /* The mask this row and everything under it belongs to. Only the module list has one: the
+     * inventory's groups are nobody's mask, so a shape under them is reached once and there is
+     * nothing to warn about. */
+    const int root_id = (which == DT_SHAPE_LIST_MODULES && groups) ? form->formid : 0;
+
+    const _tree_row_t row = { .form = form, .opacity = 1.0f, .root_id = root_id };
     _shape_manager_list_recurs(treestore, NULL, lm, &row);
     any = TRUE;
   }
@@ -2074,7 +2145,8 @@ static GtkTreeStore *_tree_store_build(dt_shape_manager_t *lm, const dt_shape_li
   GtkTreeStore *treestore = gtk_tree_store_new(TREE_COUNT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT,
                                                G_TYPE_INT, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN,
                                                GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING,
-                                               G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN);
+                                               G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING,
+                                               G_TYPE_BOOLEAN);
   const gboolean had_groups = _tree_store_add_forms(treestore, lm, which, TRUE);
   if(which == DT_SHAPE_LIST_MODULES) return treestore;
 
@@ -2864,6 +2936,15 @@ void gui_init(dt_lib_module_t *self)
     // Kept so a freshly created group's row can be opened straight into editing.
     list->name_col = col;
     list->name_renderer = renderer;
+
+    /* What the row has to say about itself, in italics against the right end of the name column,
+     * so it reads as an annotation rather than as part of the shape's name. Empty on every row
+     * that has nothing to add, which costs those no space. */
+    renderer = gtk_cell_renderer_text_new();
+    g_object_set(renderer, "style", PANGO_STYLE_ITALIC, "xalign", 1.0f, NULL);
+    gtk_cell_renderer_set_sensitive(renderer, FALSE);
+    gtk_tree_view_column_pack_end(col, renderer, FALSE);
+    gtk_tree_view_column_add_attribute(col, renderer, "text", TREE_NOTE);
 
     renderer = gtk_cell_renderer_pixbuf_new();
     // A theme with no symbolic variant of that icon leaves the pixbuf NULL: name the icon instead
