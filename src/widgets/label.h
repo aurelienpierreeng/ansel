@@ -72,6 +72,20 @@ void dt_ellipsize_combo(GtkComboBox *cbox);
 void dt_gui_set_symbolic_icon(GtkWidget *image, const char *icon_name, GtkIconSize size, const GdkRGBA *color);
 
 /**
+ * @brief Load a symbolic icon as a pre-tinted pixbuf, at the pixel size `size` names.
+ *
+ * The pixbuf half of dt_gui_set_symbolic_icon(), for the callers that need the pixbuf itself
+ * rather than an image widget -- a GtkCellRendererPixbuf, say, which has no colour of its own
+ * and takes a "pixbuf" property instead. Tinted with `color` when one is given, and with
+ * `context`'s own foreground otherwise (`context` is unused when `color` is given).
+ *
+ * @return GdkPixbuf* owned by the caller, or NULL if the theme has no such icon -- in which case
+ * the caller should name the icon and let GTK draw it.
+ */
+GdkPixbuf *dt_gui_symbolic_icon_pixbuf(const char *icon_name, GtkIconSize size, const GdkRGBA *color,
+                                       GtkStyleContext *context);
+
+/**
  * @brief Apply the standard recessed-input text padding to a GtkTextView.
  *
  * CSS padding on the textview "text" node is parsed but ignored for layout in GTK3, so the

@@ -60,6 +60,7 @@
 #include "widgets/scroll_wrap.h"
 #include "common/conf.h"          // dt_conf_get_int(), dt_conf_key_exists()
 
+#include "widgets/label.h"   // dt_gui_symbolic_icon_pixbuf()
 #include "widgets/togglebutton.h"
 #include "control/signal.h"
 
@@ -82,10 +83,15 @@ typedef struct dt_shape_manager_t
 {
   GtkWidget *treeview;
 
+  /* The rightmost column, the one carrying the per-row trash / minus icon. Kept because a click
+   * and a tooltip are both answered by comparing against the column the pointer is over. */
+  GtkTreeViewColumn *action_col;
+
   /* Replacement for shape_manager_expander */
   GtkWidget *popup_window;
   GtkWidget *popup_button;
 
+  GdkPixbuf *ic_used;
   GdkPixbuf *ic_inverse;
   GdkPixbuf *ic_union;
   GdkPixbuf *ic_intersection;
@@ -127,6 +133,10 @@ typedef enum dt_masks_tree_cols_t
   TREE_IC_INVERSE_VISIBLE,
   TREE_IC_USED_VISIBLE,
   TREE_USED_TEXT,
+  /* Which of the two action icons the row shows -- a top-level row deletes, a row under a group
+   * detaches. Exactly one is TRUE on a form row, and neither on the separator. */
+  TREE_IC_DELETE_VISIBLE,
+  TREE_IC_UNLINK_VISIBLE,
   TREE_IS_SEPARATOR,
   TREE_COUNT
 } dt_masks_tree_cols_t;
@@ -574,6 +584,47 @@ static void _tree_delete_shape(GtkButton *button __attribute__((unused)), dt_lib
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
 }
 
+/* The per-row action icon at the right end of every form row, the same two the shape lists of
+ * the Drawn tab offer (develop/blend_gui.c): a top-level row carries a trash and is deleted from
+ * every mask and from the list of shapes, a row under a group carries a minus and is only
+ * detached from that group, staying available for reuse. Which one a row shows is the model's
+ * business (TREE_IC_DELETE_VISIBLE / TREE_IC_UNLINK_VISIBLE); which one a click means is decided
+ * here, from the same group id, so the icon and the action cannot disagree.
+ *
+ * dt_masks_form_delete() reads that distinction off its group argument: a group to detach from,
+ * or NULL to destroy. A top-level row has group id 0, which no form answers to. */
+static void _tree_row_action(dt_lib_module_t *self, GtkTreeModel *model, GtkTreeIter *iter)
+{
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
+  dt_develop_t *const dev = dt_dev_get_global();
+
+  dt_iop_module_t *module = NULL;
+  int grid = -1;
+  int id = -1;
+  _shape_manager_get_values(model, iter, &module, &grid, &id);
+
+  dt_masks_form_t *form = dt_masks_get_from_id(dev, id);
+  if(IS_NULL_PTR(form)) return;
+
+  // Only the permanent delete destroys anything, so only it asks.
+  if(grid == 0 && !dt_masks_gui_confirm_permanent_delete(form->name)) return;
+
+  // we first discard all visible shapes
+  dt_masks_change_form_gui(dev, NULL);
+
+  lm->gui_reset = 1;
+  dt_masks_form_delete(dev, module, dt_masks_get_from_id(dev, grid), form);
+  lm->gui_reset = 0;
+
+  _shape_manager_recreate_list(self);
+  _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
+
+  // Without this, the change only mutates the live dev->forms: it's never recorded as its own
+  // history step, so the next history navigation (undo/redo) silently discards it and reverts
+  // to whatever forms snapshot was last actually committed.
+  dt_dev_add_history_item(dev, NULL, FALSE, TRUE);
+}
+
 static void _tree_duplicate_shape(GtkButton *button __attribute__((unused)), dt_lib_module_t *self)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
@@ -991,21 +1042,34 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
 
   GtkTreePath *mouse_path = NULL;
+  GtkTreeViewColumn *mouse_col = NULL;
   GtkTreeIter iter;
+  gboolean on_row = FALSE;
   dt_iop_module_t *module = NULL;
   int handled = 0;
   // mouse_path is non-NULL exactly when the pointer is over a row, so it answers "on a row?" too.
   // The module is only wanted for the context menu below; a row that resolves to no iter simply
   // leaves it NULL, which is what _tree_context_menu() already expects.
-  if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &mouse_path, NULL,
-                                   NULL, NULL)
+  if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &mouse_path,
+                                   &mouse_col, NULL, NULL)
      && gtk_tree_model_get_iter(model, &iter, mouse_path))
   {
+    on_row = TRUE;
     _shape_manager_get_values(model, &iter, &module, NULL, NULL);
   }
   /* single click with the right mouse button? */
   if(event->type == GDK_BUTTON_PRESS && event->button == 1)
   {
+    dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
+    // The action icons act on the row under the pointer alone, whatever is selected: they are
+    // buttons the row carries, not a command applied to the selection.
+    if(on_row && mouse_col == lm->action_col)
+    {
+      gtk_tree_path_free(mouse_path);
+      _tree_row_action(self, model, &iter);
+      return 1;
+    }
+
     handled = _tree_apply_click_selection(treeview, selection, event, mouse_path);
   }
   else if(event->type == GDK_BUTTON_PRESS && event->button == 3)
@@ -1078,7 +1142,7 @@ static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel 
 }
 
 static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboard_tip,
-                                    GtkTooltip *tooltip, gpointer data __attribute__((unused)))
+                                    GtkTooltip *tooltip, gpointer data)
 {
   GtkTreeIter iter;
   GtkTreeView *tree_view = GTK_TREE_VIEW(widget);
@@ -1086,6 +1150,39 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
   GtkTreePath *path = NULL;
   gchar *tmp = NULL;
   gboolean show = FALSE;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)data;
+
+  /* The action icon says what it does, and what it does depends on the row's depth, so the
+   * pointer's column is asked first: gtk_tree_view_get_tooltip_context() below reports the row
+   * but not the column, and it rewrites x/y on the way. Keyboard tooltips carry no position. */
+  if(!keyboard_tip && !IS_NULL_PTR(lm))
+  {
+    gint bx = 0, by = 0;
+    gtk_tree_view_convert_widget_to_bin_window_coords(tree_view, x, y, &bx, &by);
+
+    GtkTreePath *action_path = NULL;
+    GtkTreeViewColumn *action_column = NULL;
+    if(gtk_tree_view_get_path_at_pos(tree_view, bx, by, &action_path, &action_column, NULL, NULL))
+    {
+      GtkTreeIter action_iter;
+      int grid = -1;
+      gboolean got = (action_column == lm->action_col)
+                     && gtk_tree_model_get_iter(model, &action_iter, action_path);
+      if(got) _shape_manager_get_values(model, &action_iter, NULL, &grid, NULL);
+      gtk_tree_path_free(action_path);
+
+      if(got)
+      {
+        gtk_tooltip_set_text(tooltip,
+                             (grid == 0)
+                                 ? _("Permanently delete this shape. It is detached from every mask "
+                                     "and removed from the list of available shapes.")
+                                 : _("Detach this shape from the mask. The shape is kept and stays "
+                                     "available for reuse."));
+        return TRUE;
+      }
+    }
+  }
 
   if(!gtk_tree_view_get_tooltip_context(tree_view, &x, &y, keyboard_tip, &model, &path, &iter)) return FALSE;
 
@@ -1191,7 +1288,9 @@ static void _tree_append_row(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_
                      TREE_EDITABLE, (row->grp_id == 0), TREE_IC_OP, icop,
                      TREE_IC_OP_VISIBLE, (!IS_NULL_PTR(icop)), TREE_IC_INVERSE, icinv,
                      TREE_IC_INVERSE_VISIBLE, (!IS_NULL_PTR(icinv)),
-                     TREE_IC_USED_VISIBLE, (nbuse > 0), TREE_USED_TEXT, used_by, -1);
+                     TREE_IC_USED_VISIBLE, (nbuse > 0), TREE_USED_TEXT, used_by,
+                     TREE_IC_DELETE_VISIBLE, (row->grp_id == 0),
+                     TREE_IC_UNLINK_VISIBLE, (row->grp_id != 0), -1);
   _set_iter_name(lm, row->form, row->gstate, row->opacity, GTK_TREE_MODEL(treestore), child, row->index);
 }
 
@@ -1338,7 +1437,7 @@ static GtkTreeStore *_tree_store_build(dt_shape_manager_t *lm)
   GtkTreeStore *treestore = gtk_tree_store_new(TREE_COUNT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT,
                                                G_TYPE_INT, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN,
                                                GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING,
-                                               G_TYPE_BOOLEAN);
+                                               G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN);
   const gboolean had_groups = _tree_store_add_forms(treestore, lm, TRUE);
 
   /* A rule between the module groups and the loose shapes, added between the two passes and kept
@@ -2023,13 +2122,51 @@ void gui_init(dt_lib_module_t *self)
   gtk_tree_view_column_add_attribute(col, renderer, "text", TREE_TEXT);
   gtk_tree_view_column_add_attribute(col, renderer, "editable", TREE_EDITABLE);
   g_signal_connect(renderer, "edited", (GCallback)_tree_cell_edited, self);
-  // Themed icon marking a shape shared by several modules, same pattern as the
-  // trash icons of the shapes lists in develop/blend_gui.c: the renderer names the icon
-  // and the theme draws it, the model only carries whether this row shows one.
+  /* Icon marking a shape shared by several modules. It is a remark about the shape rather than
+   * something to click, so it is drawn in the theme's own disabled grey -- a flat grey, next to
+   * the action icon it sits beside, rather than the washed-out foreground a GtkCellRenderer's
+   * insensitive state produces. A cell renderer has no colour of its own, so the icon is loaded
+   * once as a pre-tinted pixbuf; the model still only carries whether this row shows one. */
+  GdkRGBA used_color;
+  if(!gtk_style_context_lookup_color(gtk_widget_get_style_context(d->treeview), "disabled_fg_color",
+                                     &used_color))
+    used_color = (GdkRGBA){ 0.62, 0.62, 0.62, 1.0 };
+
+  d->ic_used = dt_gui_symbolic_icon_pixbuf("mail-attachment-symbolic", GTK_ICON_SIZE_MENU, &used_color, NULL);
+
   renderer = gtk_cell_renderer_pixbuf_new();
-  g_object_set(renderer, "icon-name", "mail-attachment-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+  // A theme with no symbolic variant of that icon leaves the pixbuf NULL: name the icon instead
+  // and let GTK draw it, untinted, rather than show nothing.
+  if(IS_NULL_PTR(d->ic_used))
+    g_object_set(renderer, "icon-name", "mail-attachment-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+  else
+    g_object_set(renderer, "pixbuf", d->ic_used, NULL);
   gtk_tree_view_column_pack_end(col, renderer, FALSE);
   gtk_tree_view_column_add_attribute(col, renderer, "visible", TREE_IC_USED_VISIBLE);
+
+  /* The per-row action icon, to the right of everything the name column carries -- the "used by"
+   * icon included, since that one is packed at that column's end. Both renderers live in this one
+   * column and exactly one of them is visible on any row, so the icon lands in the same place
+   * whichever action the row offers. The name column expands to take up the slack, which is what
+   * keeps the action flush right. Clicks are answered in _tree_button_pressed() by comparing the
+   * column, the way develop/blend_gui.c does for the same two icons. */
+  gtk_tree_view_column_set_expand(col, TRUE);
+
+  d->action_col = gtk_tree_view_column_new();
+  gtk_tree_view_column_set_sizing(d->action_col, GTK_TREE_VIEW_COLUMN_FIXED);
+  gtk_tree_view_column_set_fixed_width(d->action_col, DT_PIXEL_APPLY_DPI(24));
+
+  renderer = gtk_cell_renderer_pixbuf_new();
+  g_object_set(renderer, "icon-name", "list-remove-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+  gtk_tree_view_column_pack_start(d->action_col, renderer, FALSE);
+  gtk_tree_view_column_add_attribute(d->action_col, renderer, "visible", TREE_IC_UNLINK_VISIBLE);
+
+  renderer = gtk_cell_renderer_pixbuf_new();
+  g_object_set(renderer, "icon-name", "user-trash-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+  gtk_tree_view_column_pack_start(d->action_col, renderer, FALSE);
+  gtk_tree_view_column_add_attribute(d->action_col, renderer, "visible", TREE_IC_DELETE_VISIBLE);
+
+  gtk_tree_view_append_column(GTK_TREE_VIEW(d->treeview), d->action_col);
 
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(d->treeview));
   gtk_tree_selection_set_mode(selection, GTK_SELECTION_MULTIPLE);
@@ -2039,7 +2176,7 @@ void gui_init(dt_lib_module_t *self)
   // A query-tooltip handler rather than a tooltip column: only the rows that carry a "used by"
   // text show one, which a column would not let us decide per row.
   g_object_set(d->treeview, "has-tooltip", TRUE, (gchar *)0);
-  g_signal_connect(d->treeview, "query-tooltip", G_CALLBACK(_tree_query_tooltip), NULL);
+  g_signal_connect(d->treeview, "query-tooltip", G_CALLBACK(_tree_query_tooltip), d);
   g_signal_connect(selection, "changed", G_CALLBACK(_tree_selection_change), d);
   g_signal_connect(d->treeview, "button-press-event", (GCallback)_tree_button_pressed, self);
 
@@ -2076,12 +2213,14 @@ void gui_cleanup(dt_lib_module_t *self)
       d->popup_window = NULL;
     }
 
+    if(!IS_NULL_PTR(d->ic_used)) g_object_unref(d->ic_used);
     if(!IS_NULL_PTR(d->ic_inverse)) g_object_unref(d->ic_inverse);
     if(!IS_NULL_PTR(d->ic_union)) g_object_unref(d->ic_union);
     if(!IS_NULL_PTR(d->ic_intersection)) g_object_unref(d->ic_intersection);
     if(!IS_NULL_PTR(d->ic_difference)) g_object_unref(d->ic_difference);
     if(!IS_NULL_PTR(d->ic_exclusion)) g_object_unref(d->ic_exclusion);
 
+    d->ic_used = NULL;
     d->ic_inverse = NULL;
     d->ic_union = NULL;
     d->ic_intersection = NULL;
