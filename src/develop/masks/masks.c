@@ -1454,7 +1454,7 @@ void dt_masks_form_delete(dt_develop_t *dev, struct dt_iop_module_t *module, dt_
 
   if(mask_form->type & DT_MASKS_GROUP && mask_form->type & DT_MASKS_CLONE)
   {
-    // when removing a cloning group the children have to be removed, too, as they won't be shown in the mask manager
+    // when removing a cloning group the children have to be removed, too, as they won't be shown in the shape manager
     // and are thus not accessible afterwards.
     while(mask_form->points)
     {

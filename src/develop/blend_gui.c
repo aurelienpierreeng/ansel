@@ -2236,8 +2236,8 @@ static void _blendop_masks_group_duplicate_callback(GtkWidget *menu_item, dt_iop
   const int parentid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-parentid"));
 
   // dt_masks_form_duplicate_in_group also attaches the duplicate to the group right away,
-  // inheriting the source entry's state/opacity -- same helper used by the mask manager's
-  // own "Duplicate shape" action (libs/masks.c).
+  // inheriting the source entry's state/opacity -- same helper used by the shape manager's
+  // own "Duplicate shape" action (libs/shape_manager.c).
   const int nid = dt_masks_form_duplicate_in_group(module->dev, parentid, formid);
   if(nid <= 0) return;
 

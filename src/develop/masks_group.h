@@ -203,7 +203,7 @@ dt_masks_result_t dt_masks_group_first_use(struct dt_develop_t *dev, int root_id
  *
  * A shape's own dt_masks_form_t does not record who holds it, and the row's parentid records where
  * it was AUTHORED, not where it currently lives -- so a caller holding only a shape id, as the
- * mask-manager tree does when it lists shapes at top level, has to search. Returns the first
+ * shape manager's tree does when it lists shapes at top level, has to search. Returns the first
  * holder found; a shape referenced by two groups has no single answer, and the caller wanting a
  * specific one already knows which.
  *

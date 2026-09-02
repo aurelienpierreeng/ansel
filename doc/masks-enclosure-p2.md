@@ -195,16 +195,22 @@ dt_masks_result_t dt_masks_form_set_retouch_mode(struct dt_develop_t *dev, int f
 int               dt_masks_group_create_for_module(struct dt_iop_module_t *module, const char *name);
 ```
 
+> **The line numbers below are historical.** They were verified against `libs/masks.c` as it stood
+> when this survey was made. That file is now `libs/shape_manager.c` and has been substantially
+> rewritten since — the panel was split into two lists and grew per-row actions — so the numbers
+> locate nothing in the current tree. The file and symbol names are still right; find the code by
+> those.
+
 Every one: resolve → `dt_masks_cow_touch()` → **re-resolve the row from the touched group** →
 mutate → compare. An id-keyed signature is the only shape that *can* be written this way, which is
 the whole point: cloning a parent also clones its `dt_masks_form_group_t` blocks, so any entry
 pointer taken before the touch belongs to the abandoned copy.
 
-- `set_member_operation` closes **six verified COW holes** (`libs/masks.c` 502/557/612/667/722 and
+- `set_member_operation` closes **six verified COW holes** (`libs/shape_manager.c` 502/557/612/667/722 and
   `blend_gui.c:2091`) and collapses five ~50-line handlers into one. Do it in a single commit —
   fixing it in five places separately is how one gets missed.
 - `add_member` becomes the **sole constructor** for `dt_masks_form_group_t`, retiring the three
-  hand-rolled `malloc`s (`libs/masks.c` 365-369 / 970-974, `retouch.c` 685-690). It keeps the
+  hand-rolled `malloc`s (`libs/shape_manager.c` 365-369 / 970-974, `retouch.c` 685-690). It keeps the
   self-inclusion guard and the `dt_masks_form_update_gravity_center()` all three skip, and
   `parentid` is never a parameter — always stamped `group_id`.
 - `move_member` is **keyed on formid, not index**: the GTK model already carries
@@ -225,7 +231,7 @@ assumptions — took for granted. They are the reason to read this document befo
    `dev->forms`" is wrong about which end is dangerous: every *writer* of `dev->forms` is on the GUI
    thread, and the only cross-thread reader is `pixelpipe_hb.c:1629`'s snapshot on the worker.
    Single writer ⟹ the unlocked GUI reads are benign today. The genuinely racy site is the unlocked
-   **write** at `libs/masks.c:377`. Read-side locking in the new enumerators is cheap insurance, not
+   **write** at `libs/shape_manager.c:377`. Read-side locking in the new enumerators is cheap insurance, not
    a bug fix — and it is still a behaviour change that needs approval.
 3. **P2 does not make `dt_masks_form_t` opaque, and no phase of P2 will.** Three blockers survive:
    the rasterisers take *non-const* `dt_masks_form_t *` because they lazily fill cached geometry (12
@@ -319,5 +325,5 @@ zero callers, because they shipped ahead of their consumers.)
   external-facing, and `masks/masks_functions.h`, which is module-private. So the reach will not
   drop until the `masks_gui.h` edge is cut, and that — not `blend.h` — is the one carrying the
   surface to the rest of the tree. Retarget the next header tranche accordingly.
-- **Then** the write API against `libs/masks.c` and `blend_gui.c` (the six COW holes), and finally
+- **Then** the write API against `libs/shape_manager.c` and `blend_gui.c` (the six COW holes), and finally
   the P2b per-shape geometry axis for `retouch.c` and `spots.c`.

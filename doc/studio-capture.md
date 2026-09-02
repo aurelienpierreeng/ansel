@@ -33,7 +33,7 @@ match the current view; nothing is ever removed. Hiding must target the
 auto-creates around each button, not the button itself: a visible-but-empty
 wrapper still reserves a cell and its spacing in the flow layout, which used
 to leave gaps and push later buttons rightward whenever a view hid some of
-its siblings (visible in darkroom as the mask manager button drifting away
+its siblings (visible in darkroom as the shape manager button drifting away
 from the rest, and in Studio Capture as its buttons failing to pack flush
 left) — `view_enter()` now hides/shows `gtk_widget_get_parent()` of the
 button when that parent is a `GtkFlowBoxChild`.
@@ -108,7 +108,7 @@ view, and its state (a global toggle, not tied to any one `dev`) is correct
 in both views already.
 
 Auto-set, the pipeline node graph (both darkroom-editing concepts) and the
-mask manager popup (`libs/masks.c`) stay `DT_VIEW_DARKROOM` only, unextracted.
+shape manager popup (`libs/shape_manager.c`) stay `DT_VIEW_DARKROOM` only, unextracted.
 
 ## Import module
 

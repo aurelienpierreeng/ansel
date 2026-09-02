@@ -1495,7 +1495,7 @@ dt_masks_form_group_t *dt_masks_form_group_from_parentid(dt_develop_t *dev, int 
 // corrupted or maliciously crafted masks_history (a group referencing an ancestor of itself --
 // dt_masks_group_add_form guards against this interactively via _find_in_group, but a raw
 // DB/XMP load does not validate it) cannot stack-overflow the caller; the UI never nests
-// groups anywhere near this deep (see the `depth < 3` guards in libs/masks.c).
+// groups anywhere near this deep (see the `depth < 3` guards in libs/shape_manager.c).
 
 /**
  * @brief Get the selected group entry from the GUI selection index.
@@ -2182,7 +2182,7 @@ static gboolean _masks_remove_or_delete_finish(struct dt_iop_module_t *module, d
 
   if(res && next_formid > 0)
   {
-    // The mask manager rebuilds its tree on the delete/remove signal, so apply
+    // The shape manager rebuilds its tree on the delete/remove signal, so apply
     // the replacement selection after the signal has finished refreshing lists.
     mask_gui->group_selected = next_form_index;
     mask_gui->form_selected = TRUE;
