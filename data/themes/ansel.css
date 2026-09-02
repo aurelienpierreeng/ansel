@@ -353,6 +353,36 @@ menu separator {
   min-height: 1px;
 }
 
+/**
+ * A treeview row separator is not a `separator` widget: GtkTreeView draws it as a row of its own,
+ * and the rule above -- which styles the widget -- does not reach it.
+ *
+ * Two things had to be measured rather than reasoned about. Setting only `color`, which is what
+ * gtk_render_line() takes, is not enough: `treeview *:hover` further down imposes its own colour
+ * on every node of the tree, so the line took the hover colour and vanished whenever the pointer
+ * passed over a neighbouring row. And painting the row's background instead only holds above one
+ * pixel: at 1px the hovered neighbour's own background covers the band entirely, opaque colour or
+ * not. Both were established by changing one thing at a time against a deliberately garish test
+ * colour, after two guesses that each looked right and were not.
+ **/
+/**
+ * A treeview row separator is not a `separator` widget: GtkTreeView draws it itself, and it takes
+ * the `color` property rather than the `background-color` the rule above sets. Setting only that
+ * colour is not enough either -- `treeview *:hover` further down imposes its own `color` on every
+ * node of the tree, so the line took the hover colour and vanished whenever the pointer passed
+ * over a neighbouring row. Painting the row's background as well gives it something that does not
+ * depend on the text colour at all, and the hover state is answered explicitly so the band keeps
+ * its tint when the pointer is on it.
+ **/
+treeview.view.separator,
+treeview.view.separator:hover,
+treeview separator,
+.view.separator {
+  color: @grey_55;
+  background-color: @grey_55;
+  min-height: 3px;
+}
+
 .dt_dimmed {
   opacity: 0.6;
 }

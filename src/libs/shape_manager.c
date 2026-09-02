@@ -127,6 +127,7 @@ typedef enum dt_masks_tree_cols_t
   TREE_IC_INVERSE_VISIBLE,
   TREE_IC_USED_VISIBLE,
   TREE_USED_TEXT,
+  TREE_IS_SEPARATOR,
   TREE_COUNT
 } dt_masks_tree_cols_t;
 
@@ -669,6 +670,7 @@ static void _show_masks_on_owning_module(GtkTreeModel *model, GtkTreeIter *iter)
 
 static void _tree_selection_change(GtkTreeSelection *selection, dt_shape_manager_t *self)
 {
+
   dt_develop_t *const dev = dt_dev_get_global();
   if(self->gui_reset) return;
   dt_masks_form_gui_t *creation_gui = dev->form_gui;
@@ -1301,8 +1303,11 @@ static void _tree_reveal_row(dt_shape_manager_t *lm, GtkTreeModel *model, GtkTre
   gtk_tree_path_free(path);
 }
 
-static void _tree_store_add_forms(GtkTreeStore *treestore, dt_shape_manager_t *lm, const gboolean groups)
+/* Returns whether it added anything, which is what tells the caller a separator is worth having. */
+static gboolean _tree_store_add_forms(GtkTreeStore *treestore, dt_shape_manager_t *lm, const gboolean groups)
 {
+  gboolean any = FALSE;
+
   for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
   {
     dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
@@ -1310,7 +1315,20 @@ static void _tree_store_add_forms(GtkTreeStore *treestore, dt_shape_manager_t *l
 
     const _tree_row_t row = { .form = form, .opacity = 1.0f };
     _shape_manager_list_recurs(treestore, NULL, lm, &row);
+    any = TRUE;
   }
+
+  return any;
+}
+
+/* The one row GTK draws as a rule rather than as content. It carries no form, so every walk that
+ * looks a row up by id passes over it, and GtkTreeView skips it for selection on its own. */
+static gboolean _tree_row_is_separator(GtkTreeModel *model, GtkTreeIter *iter,
+                                       gpointer data __attribute__((unused)))
+{
+  gboolean is_separator = FALSE;
+  gtk_tree_model_get(model, iter, TREE_IS_SEPARATOR, &is_separator, -1);
+  return is_separator;
 }
 
 /* Groups first, then the shapes no group holds: that is the order the tree shows them in. */
@@ -1319,9 +1337,27 @@ static GtkTreeStore *_tree_store_build(dt_shape_manager_t *lm)
   // we store : text ; *module ; groupid ; formid
   GtkTreeStore *treestore = gtk_tree_store_new(TREE_COUNT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT,
                                                G_TYPE_INT, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN,
-                                               GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING);
-  _tree_store_add_forms(treestore, lm, TRUE);
-  _tree_store_add_forms(treestore, lm, FALSE);
+                                               GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING,
+                                               G_TYPE_BOOLEAN);
+  const gboolean had_groups = _tree_store_add_forms(treestore, lm, TRUE);
+
+  /* A rule between the module groups and the loose shapes, added between the two passes and kept
+   * only when both sides of it exist -- one opening or closing the list would be a line against
+   * nothing.
+   *
+   * Its ids are -1, not 0: _shape_manager_selection_change_r() is asked for id 0 whenever no mask
+   * is current, and a row carrying 0 would answer. Nothing ever looks for -1. */
+  GtkTreeIter separator;
+  if(had_groups)
+  {
+    gtk_tree_store_append(treestore, &separator, NULL);
+    gtk_tree_store_set(treestore, &separator, TREE_IS_SEPARATOR, TRUE, TREE_FORMID, -1,
+                       TREE_GROUPID, -1, TREE_EDITABLE, FALSE, -1);
+  }
+
+  const gboolean had_shapes = _tree_store_add_forms(treestore, lm, FALSE);
+  if(had_groups && !had_shapes) gtk_tree_store_remove(treestore, &separator);
+
   return treestore;
 }
 
@@ -1998,6 +2034,7 @@ void gui_init(dt_lib_module_t *self)
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(d->treeview));
   gtk_tree_selection_set_mode(selection, GTK_SELECTION_MULTIPLE);
   gtk_tree_selection_set_select_function(selection, _tree_restrict_select, d, NULL);
+  gtk_tree_view_set_row_separator_func(GTK_TREE_VIEW(d->treeview), _tree_row_is_separator, NULL, NULL);
   gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->treeview), FALSE);
   // A query-tooltip handler rather than a tooltip column: only the rows that carry a "used by"
   // text show one, which a column would not let us decide per row.

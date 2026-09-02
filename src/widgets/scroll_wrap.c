@@ -43,6 +43,51 @@ typedef struct dt_ui_resizable_area_t
   int last_height;    // last applied height, shared with the drag handle
 } dt_ui_resizable_area_t;
 
+/* The tallest run of whole rows that fits in `limit`, walked in display order.
+ *
+ * Rounding to a multiple of a nominal row height cannot answer this once a row is not that
+ * height: a separator is three pixels, so a list of four rows plus a separator rounds to five
+ * nominal rows and cuts the fifth in half -- which is the very thing the rounding exists to
+ * prevent. Returns TRUE once the limit is reached, so the recursion into expanded children can
+ * stop the walk. */
+static gboolean _treeview_fit_rows(GtkTreeView *treeview, GtkTreeModel *model, GtkTreeIter *parent,
+                                   const gint nominal, const gint limit, gint *used)
+{
+  if(!GTK_IS_TREE_MODEL(model)) return TRUE;
+
+  GtkTreeIter iter;
+  gboolean valid = parent ? gtk_tree_model_iter_children(model, &iter, parent)
+                          : gtk_tree_model_get_iter_first(model, &iter);
+
+  while(valid)
+  {
+    GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
+
+    GdkRectangle rect = { 0 };
+    if(path) gtk_tree_view_get_background_area(treeview, path, NULL, &rect);
+    const gint row = rect.height > 0 ? rect.height : nominal;
+
+    if(*used + row > limit)
+    {
+      if(path) gtk_tree_path_free(path);
+      return TRUE;
+    }
+    *used += row;
+
+    if(path && gtk_tree_model_iter_has_child(model, &iter) && gtk_tree_view_row_expanded(treeview, path)
+       && _treeview_fit_rows(treeview, model, &iter, nominal, limit, used))
+    {
+      gtk_tree_path_free(path);
+      return TRUE;
+    }
+
+    if(path) gtk_tree_path_free(path);
+    valid = gtk_tree_model_iter_next(model, &iter);
+  }
+
+  return FALSE;
+}
+
 static gint _get_container_row_heigth(GtkWidget *w)
 {
   gint height = DT_PIXEL_APPLY_DPI(10);
@@ -98,37 +143,41 @@ static GtkWidget *_search_parent_scrolled_window(GtkWidget *w)
 }
 
 // Counts only visible items (those whose parents are expanded)
-static int _treeview_count_visible_rows(GtkTreeView *treeview, GtkTreeModel *model, GtkTreeIter *parent)
+/* The height the visible rows actually occupy.
+ *
+ * Each row is measured rather than counted, because not every row is one nominal row tall: a
+ * GtkTreeView separator is drawn as a few pixels, and counting it as a row would claim a whole
+ * one of window height for it. gtk_tree_view_get_background_area() answers 0 for a view that is
+ * not realised yet, and those rows fall back to the nominal height -- which is what this did for
+ * every row before. */
+static int _treeview_visible_height(GtkTreeView *treeview, GtkTreeModel *model, GtkTreeIter *parent,
+                                    const gint nominal)
 {
   if(!GTK_IS_TREE_MODEL(model)) return 0;
 
   GtkTreeIter iter;
   gboolean valid = parent ? gtk_tree_model_iter_children(model, &iter, parent)
                           : gtk_tree_model_get_iter_first(model, &iter);
-  int count = 0;
+  int height = 0;
 
   while(valid)
   {
-    count++;
-    
-    // If this item is expanded, recursively count its visible children
-    if(gtk_tree_model_iter_has_child(model, &iter))
-    {
-      GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
-      if(path)
-      {
-        if(gtk_tree_view_row_expanded(treeview, path))
-        {
-          count += _treeview_count_visible_rows(treeview, model, &iter);
-        }
-        gtk_tree_path_free(path);
-      }
-    }
-    
+    GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
+
+    GdkRectangle rect = { 0 };
+    if(path) gtk_tree_view_get_background_area(treeview, path, NULL, &rect);
+    height += rect.height > 0 ? rect.height : nominal;
+
+    // If this item is expanded, recursively measure its visible children
+    if(path && gtk_tree_model_iter_has_child(model, &iter) && gtk_tree_view_row_expanded(treeview, path))
+      height += _treeview_visible_height(treeview, model, &iter, nominal);
+
+    if(path) gtk_tree_path_free(path);
+
     valid = gtk_tree_model_iter_next(model, &iter);
   }
 
-  return count;
+  return height;
 }
 
 static int _textview_count_visible_rows(GtkWidget *textview)
@@ -240,8 +289,9 @@ static void _resizable_scroll_apply(GtkWidget *w)
     gint content = 0;
     if(GTK_IS_TREE_VIEW(w))
     {
-      const int rows = _treeview_count_visible_rows(GTK_TREE_VIEW(w), gtk_tree_view_get_model(GTK_TREE_VIEW(w)), NULL);
-      content = MAX(1, rows) * increment;
+      const int measured = _treeview_visible_height(GTK_TREE_VIEW(w), gtk_tree_view_get_model(GTK_TREE_VIEW(w)),
+                                                   NULL, increment);
+      content = MAX(increment, measured);
     }
     else if(GTK_IS_TEXT_VIEW(w))
     {
@@ -256,11 +306,25 @@ static void _resizable_scroll_apply(GtkWidget *w)
     const gint cap = has_conf ? CLAMP(stored, min_size, max_height) : max_height;
     height = CLAMP(MIN(content, cap), min_size, max_height);
 
-    // snap to whole rows for lists/textviews to avoid clipped half-rows
-    if(increment > 0)
+    /* Snap to whole rows to avoid clipped half-rows -- but only when the area is showing less
+     * than it holds, which is the only case where a row can be cut. When everything fits, the
+     * measured height is already exact, and rounding it up would add most of a row of dead space
+     * for any content that is not a whole number of them, such as a list carrying a separator. */
+    if(increment > 0 && height < content)
     {
-      height += increment - 1;
-      height -= height % increment;
+      if(GTK_IS_TREE_VIEW(w))
+      {
+        gint used = 0;
+        _treeview_fit_rows(GTK_TREE_VIEW(w), gtk_tree_view_get_model(GTK_TREE_VIEW(w)), NULL, increment,
+                           height, &used);
+        if(used > 0) height = used;
+      }
+      else
+      {
+        // A textview's lines are all the one height, so a multiple of it is a row boundary.
+        height += increment - 1;
+        height -= height % increment;
+      }
     }
   }
   state->last_height = height;
