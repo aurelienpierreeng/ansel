@@ -41,6 +41,18 @@ void dt_tagging_entry_clear_icon(GtkEntry *entry, const GtkEntryIconPosition pos
                                  GdkEvent *event, gpointer user_data)
 {
   if(position != GTK_ENTRY_ICON_SECONDARY) return;
+
+  GtkEntryCompletion *completion = gtk_entry_get_completion(entry);
+  if(!IS_NULL_PTR(completion))
+  {
+    g_object_ref(completion);
+    gtk_entry_set_completion(entry, NULL);
+  }
   gtk_entry_set_text(entry, "");
+  if(!IS_NULL_PTR(completion))
+  {
+    gtk_entry_set_completion(entry, completion);
+    g_object_unref(completion);
+  }
   gtk_widget_grab_focus(GTK_WIDGET(entry));
 }
