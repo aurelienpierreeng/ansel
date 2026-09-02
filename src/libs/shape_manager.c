@@ -950,11 +950,17 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
 
 /* Puts the row's form to work in the modules the user picks.
  *
- * One group is created and SHARED by every picked module that has no mask of its own -- the link
- * is each module's own blend_params->mask_id, so several naming the same group is exactly what a
- * shared mask is, and nothing else has to be stored for it. A module that already has a mask
- * keeps it and receives the shape into it instead: repointing it at the shared group would
- * orphan the shapes it already carries. */
+ * Every module renders its OWN mask group -- created here, named "Mask <module>", if it has none
+ * yet -- and the row's form is nested as a member of each. What is shared between the modules is
+ * that form, not the mask holding it: one shape or shape group, referenced by as many module
+ * masks as tick it.
+ *
+ * That is what keeps each module independent. A module's own mask carries its own combine
+ * operators, opacities and order, so attaching the same shape group to a second module cannot
+ * disturb the first -- and unticking one removes the form from THAT module's mask alone. The
+ * alternative, pointing several modules at one mask group, would make every one of those
+ * settings, and every detach, common to all of them.
+ */
 static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeModel *model,
                                         GtkTreeIter *iter)
 {
@@ -970,20 +976,19 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
   GList *to_detach = NULL;
   if(!_modchooser_run(form, &to_attach, &to_detach)) return;
 
-  int shared_id = 0;
+  int created_id = 0;
+  int created_count = 0;
   gboolean changed = FALSE;
 
-  /* Detaching first, so a module the user unticked and a module they ticked cannot fight over
-   * the same group within one validation. Note what a shared group means here: the shape is
-   * removed from the GROUP, so every module rendering that group stops using it -- there is one
-   * membership, not one per module. Reopening the dialog shows exactly that. */
+  /* Detaching first, so a module the user unticked and one they ticked cannot fight over the
+   * same mask within one validation. */
   for(const GList *m = to_detach; m; m = g_list_next(m))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)m->data;
     dt_masks_form_t *own = dt_masks_get_from_id(dev, module->blend_params->mask_id);
     if(IS_NULL_PTR(own) || !(own->type & DT_MASKS_GROUP)) continue;
 
-    // Empties the group and deletes it if nothing is left, which dt_masks_form_delete() handles.
+    // Empties the mask and deletes it if nothing is left, which dt_masks_form_delete() handles.
     dt_masks_form_delete(dev, module, own, form);
     dt_iop_gui_blend_masks_update(module);
     changed = TRUE;
@@ -992,50 +997,45 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
   for(const GList *m = to_attach; m; m = g_list_next(m))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)m->data;
-    const int own_id = module->blend_params->mask_id;
+    int own_id = module->blend_params->mask_id;
     dt_masks_form_t *own = dt_masks_get_from_id(dev, own_id);
 
-    if(!IS_NULL_PTR(own) && (own->type & DT_MASKS_GROUP))
+    if(IS_NULL_PTR(own) || !(own->type & DT_MASKS_GROUP))
     {
-      // The module already renders a mask: add the shape to it rather than replacing it.
-      if(dt_masks_group_get_member(dev, own_id, fid, NULL) == DT_MASKS_OK) continue;
-      if(dt_masks_group_contains(dev, fid, own_id) == DT_MASKS_OK) continue;
-
-      own = dt_masks_cow_touch(dev, own);
-      if(IS_NULL_PTR(dt_masks_group_add_form(dev, own, form))) continue;
-
-      dt_iop_gui_blend_masks_update(module);
-      changed = TRUE;
-      continue;
-    }
-
-    if(shared_id <= 0)
-    {
-      /* Named after the first module that needs it, which is the first ticked one in pipeline
-       * order -- the name is the user's to change, and the rename below opens on it. */
-      dt_masks_form_t *shared = dt_masks_create_ext(dev, DT_MASKS_GROUP);
-      if(IS_NULL_PTR(shared)) break;
+      // No mask of its own yet: give it one, named after it, and switch drawn blending on.
+      own = dt_masks_create_ext(dev, DT_MASKS_GROUP);
+      if(IS_NULL_PTR(own)) break;
 
       gchar *name = dt_dev_get_masks_group_name(module);
-      g_strlcpy(shared->name, name, sizeof(shared->name));
+      g_strlcpy(own->name, name, sizeof(own->name));
       dt_free(name);
 
-      dt_masks_form_info_t shared_info = { 0 };
-      if(!dt_masks_form_get_info(shared, &shared_info)) break;
-      shared_id = shared_info.formid;
+      dt_masks_form_info_t own_info = { 0 };
+      if(!dt_masks_form_get_info(own, &own_info)) break;
+      own_id = own_info.formid;
 
-      dt_masks_group_add_form_with_state(dev, shared, form, shared_id,
-                                         DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION, 1.0f);
-      dt_masks_append_form(dev, shared);
+      dt_masks_append_form(dev, own);
+
+      if(dt_iop_gui_blend_set_drawn_mask_group(module, own_id))
+      {
+        // A module's blend_params are its own history entry; the forms get one of their own below.
+        dt_dev_add_history_item(dev, module, TRUE, TRUE);
+      }
+
+      created_id = own_id;
+      created_count++;
       changed = TRUE;
     }
 
-    if(dt_iop_gui_blend_set_drawn_mask_group(module, shared_id))
-    {
-      // A module's blend_params are its own history entry; the forms get one of their own below.
-      dt_dev_add_history_item(dev, module, TRUE, TRUE);
-      changed = TRUE;
-    }
+    // Already there, or it would close a cycle: leave the mask alone.
+    if(dt_masks_group_get_member(dev, own_id, fid, NULL) == DT_MASKS_OK) continue;
+    if(dt_masks_group_contains(dev, fid, own_id) == DT_MASKS_OK) continue;
+
+    own = dt_masks_cow_touch(dev, own);
+    if(IS_NULL_PTR(dt_masks_group_add_form(dev, own, form))) continue;
+
+    dt_iop_gui_blend_masks_update(module);
+    changed = TRUE;
   }
 
   g_list_free(to_attach);
@@ -1046,8 +1046,10 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
   _shape_manager_recreate_list(self);
   _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
 
-  // A group the user has just conjured wants a name, so its row opens straight into editing.
-  if(shared_id > 0) _tree_edit_group_name(self, shared_id);
+  /* A mask the user has just conjured wants a name, so its row opens straight into editing --
+   * but only when exactly one was made. With several there is no "the" one to open, and each
+   * already carries its module's name, which is the answer most of the time anyway. */
+  if(created_count == 1) _tree_edit_group_name(self, created_id);
 }
 
 /* The inventory's "+": add this row's form to the group the module list points at. */
@@ -2040,8 +2042,15 @@ static gboolean _tree_store_add_forms(GtkTreeStore *treestore, dt_shape_manager_
 
     /* The mask this row and everything under it belongs to. Only the module list has one: the
      * inventory's groups are nobody's mask, so a shape under them is reached once and there is
-     * nothing to warn about. */
-    const int root_id = (which == DT_SHAPE_LIST_MODULES && groups) ? form->formid : 0;
+     * nothing to warn about. A module owns its mask group, so one row per group is already one
+     * row per module. */
+    int root_id = 0;
+    if(which == DT_SHAPE_LIST_MODULES && groups)
+    {
+      dt_masks_form_info_t info = { 0 };
+      if(!dt_masks_form_get_info(form, &info)) continue;
+      root_id = info.formid;
+    }
 
     const _tree_row_t row = { .form = form, .opacity = 1.0f, .root_id = root_id };
     _shape_manager_list_recurs(treestore, NULL, lm, &row);
