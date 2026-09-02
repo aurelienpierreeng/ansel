@@ -75,6 +75,8 @@ DT_MODULE(1)
 
 static void _shape_manager_recreate_list(dt_lib_module_t *self);
 static void _shape_manager_update_list(dt_lib_module_t *self);
+static void _shape_manager_broadcast(dt_lib_module_t *self, const int formid, const int parentid,
+                                     const dt_masks_event_t event);
 
 typedef struct dt_shape_manager_t
 {
@@ -207,6 +209,11 @@ static void _tree_add_exist(GtkButton *button, dt_masks_form_t *grp)
 
     dt_iop_gui_blend_masks_update(module);
     dt_dev_masks_selection_change(dev, NULL, grp->formid, TRUE);
+
+  /* Raised rather than broadcast: unlike the handlers above, this one does not rebuild the tree
+   * itself, so our own handler is left to do it as well as blend_gui's. */
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, 0, 0,
+                                  DT_MASKS_EVENT_CHANGE);
   }
 }
 
@@ -251,6 +258,7 @@ static void _tree_group(GtkButton *button __attribute__((unused)), dt_lib_module
   // add we save
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
   _shape_manager_recreate_list(self);
+  _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
 }
 
 static int _tree_format_form_usage_label(char *str, const size_t str_size,
@@ -345,6 +353,7 @@ static void _tree_delete_unused(GtkButton *button __attribute__((unused)), dt_li
 
   dt_masks_cleanup_unused(dev);
   _shape_manager_recreate_list(self);
+  _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
 
   // The sweep only rewrote the in-memory snapshots. main.history and main.masks_history are
   // rewritten wholesale from dev->history by the write a commit triggers, so without one the
@@ -353,6 +362,32 @@ static void _tree_delete_unused(GtkButton *button __attribute__((unused)), dt_li
   dt_dev_add_history_item(dev, NULL, FALSE, TRUE);
 
   dt_dev_undo_end_record(dev);
+}
+
+/* Tells the rest of the GUI that the shapes changed.
+ *
+ * The Drawn tab of a module's blending panel keeps its own two lists, and blend_gui.c refreshes
+ * them from DT_SIGNAL_MASK_CHANGED -- the same signal it raises when the user edits shapes from
+ * there, which is how this manager already hears about those. Only this direction was missing:
+ * the manager rebuilt its own tree and told nobody, so a shape grouped, renamed or deleted here
+ * stayed as it was in the panel until something else happened to refresh it.
+ *
+ * gui_reset is held over the raise because the caller rebuilds our own tree itself: it makes our
+ * own handler's rebuild a no-op instead of doing the same work twice. blend_gui's handler is a
+ * different callback with its own data and is unaffected.
+ *
+ * The ids only matter for DT_MASKS_EVENT_UPDATE, the one event both handlers answer by
+ * refreshing a single row; anything else refreshes the whole list on either side. */
+static void _shape_manager_broadcast(dt_lib_module_t *self, const int formid, const int parentid,
+                                     const dt_masks_event_t event)
+{
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
+
+  const int reset = lm->gui_reset;
+  lm->gui_reset = 1;
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, formid, parentid, event);
+  lm->gui_reset = reset;
 }
 
 static void _add_masks_history_item(dt_shape_manager_t *lm)
@@ -411,6 +446,11 @@ static void _tree_apply_operation(GtkWidget *menu_item, dt_lib_module_t *self)
   {
     _add_masks_history_item(lm);
 
+  /* Raised rather than broadcast: unlike the handlers above, this one does not rebuild the tree
+   * itself, so our own handler is left to do it as well as blend_gui's. */
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, 0, 0,
+                                  DT_MASKS_EVENT_CHANGE);
+
     dt_control_queue_redraw_center();
   }
 }
@@ -447,6 +487,7 @@ static void _tree_moveup(GtkButton *button __attribute__((unused)), dt_lib_modul
 
   lm->gui_reset = 0;
   _shape_manager_recreate_list(self);
+  _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
 
   // Without this, the reorder only mutates the live group's points list: it's never recorded
   // as its own history step, so the next undo/redo silently discards the new order.
@@ -485,6 +526,7 @@ static void _tree_movedown(GtkButton *button __attribute__((unused)), dt_lib_mod
 
   lm->gui_reset = 0;
   _shape_manager_recreate_list(self);
+  _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
 
   // Without this, the reorder only mutates the live group's points list: it's never recorded
   // as its own history step, so the next undo/redo silently discards the new order.
@@ -523,6 +565,7 @@ static void _tree_delete_shape(GtkButton *button __attribute__((unused)), dt_lib
 
   lm->gui_reset = 0;
   _shape_manager_recreate_list(self);
+  _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
 
   // Without this, the deletion only mutates the live dev->forms: it's never recorded as its
   // own history step, so the next history navigation (undo/redo) silently discards it and
@@ -568,6 +611,7 @@ static void _tree_duplicate_shape(GtkButton *button __attribute__((unused)), dt_
       // window -- _shape_manager_recreate_list's gui_reset guard swallows it. Refresh explicitly,
       // now that gui_reset is back to its prior value, so the new row actually appears.
       _shape_manager_recreate_list(self);
+  _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
@@ -598,6 +642,11 @@ static void _tree_cell_edited(GtkCellRendererText *cell __attribute__((unused)),
 
   g_strlcpy(form->name, text, sizeof(form->name));
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
+
+  /* Raised rather than broadcast: unlike the handlers above, this one does not rebuild the tree
+   * itself, so our own handler is left to do it as well as blend_gui's. */
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, 0, 0,
+                                DT_MASKS_EVENT_CHANGE);
 }
 
 /* A group's own module, when the tree row names one that can show masks. Presses its "show and
