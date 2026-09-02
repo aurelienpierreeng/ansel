@@ -2231,6 +2231,9 @@ void gui_init(dt_lib_module_t *self)
    * half is built identically -- the only thing that differs between them is which forms their
    * store holds, which _tree_store_build() decides from list->which. */
   GtkWidget *lists_paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+  // Named so the theme can draw the divider between the two lists: a paned's handle is invisible
+  // by default, and these are two separate inventories rather than two views of one thing.
+  gtk_widget_set_name(lists_paned, "shape-manager-lists");
 
   static const struct
   {
@@ -2321,10 +2324,12 @@ void gui_init(dt_lib_module_t *self)
     g_signal_connect(selection, "changed", G_CALLBACK(_tree_selection_change), list);
     g_signal_connect(list->treeview, "button-press-event", (GCallback)_tree_button_pressed, list);
 
-    /* Each half is a titled column of its own: with two trees side by side and no headers, a
-     * label is the only thing saying which is which. */
+    /* Each half is a titled section of its own: with two trees side by side and no column
+     * headers, the heading is what says which is which, and the rule the theme draws under a
+     * section label is what closes each list off from the other. */
     GtkWidget *half = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-    GtkWidget *title = dt_ui_label_new(_(list_defs[i].title));
+    gtk_widget_set_name(half, "shape-manager-list");
+    GtkWidget *title = dt_ui_section_label_new(_(list_defs[i].title));
     gtk_widget_set_tooltip_text(title, _(list_defs[i].tooltip));
     gtk_box_pack_start(GTK_BOX(half), title, FALSE, FALSE, 0);
 
