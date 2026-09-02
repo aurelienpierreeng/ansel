@@ -102,10 +102,9 @@ typedef struct dt_shape_manager_list_t
   GtkTreeViewColumn *action_col;
 
   /* The "add to the selected module group" column, on the inventory list only -- NULL on the
-   * module list. Its renderer is kept because whether the button is available is not a property
-   * of the row but of the other list's selection, and that is a renderer-wide sensitivity. */
+   * module list. Kept for the same reason as action_col: a click and a tooltip are both answered
+   * by comparing against the column the pointer is over. */
   GtkTreeViewColumn *add_col;
-  GtkCellRenderer *add_renderer;
 
   dt_shape_list_t which;
   dt_lib_module_t *self;   // the module both lists belong to
@@ -120,6 +119,11 @@ typedef struct dt_shape_manager_t
   GtkWidget *popup_button;
 
   GdkPixbuf *ic_used;
+  /* The "+" in its two states. A cell renderer has no colour of its own and its insensitive
+   * rendering is far too faint to read as disabled (measured: at most 49 of 255 on a channel),
+   * so availability is shown by swapping the icon for a differently tinted one. */
+  GdkPixbuf *ic_add;
+  GdkPixbuf *ic_add_off;
   GdkPixbuf *ic_inverse;
   GdkPixbuf *ic_union;
   GdkPixbuf *ic_intersection;
@@ -671,19 +675,66 @@ static gboolean _group_contains(const dt_develop_t *dev, const int container_id,
   return FALSE;
 }
 
-/* The "+" is available exactly when the module list points at a group. That is a property of the
- * other list's selection rather than of any row, so it is the renderer's own sensitivity, and
- * the inventory has to be redrawn when it changes. */
+/* Whether this row's "+" can do anything. Three ways it cannot: nothing is selected in the module
+ * list, so there is nowhere to add to; the form is already a member of that group, and re-adding
+ * it would write an undo step for a no-op; or the row is a group that already contains the
+ * target, and adding it would close a cycle in the membership graph -- every walk over it, the
+ * tree build first of all, would then stop terminating.
+ *
+ * The icon and the click both ask this one function, so a button that looks available always is. */
+static gboolean _row_can_be_added(const dt_shape_manager_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
+{
+  const int group_id = _selected_group_in_module_list(lm);
+  if(group_id <= 0) return FALSE;
+
+  int fid = -1;
+  _shape_manager_get_values(model, iter, NULL, NULL, &fid);
+  if(fid <= 0) return FALSE;
+
+  dt_develop_t *const dev = dt_dev_get_global();
+  const dt_masks_form_t *grp = dt_masks_get_from_id(dev, group_id);
+  if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return FALSE;
+
+  if(dt_masks_group_get_member(dev, group_id, fid, NULL) == DT_MASKS_OK) return FALSE;
+  if(_group_contains(dev, fid, group_id)) return FALSE;
+
+  return TRUE;
+}
+
+/* Availability is per row and depends on the OTHER list's selection, so it is recomputed at draw
+ * time rather than stored: nothing can go stale, and there is no model column to keep in step.
+ *
+ * The renderer's sensitivity carries the meaning but not the look -- measured on this exact
+ * renderer, offscreen, an insensitive icon-name pixbuf cell differs from a sensitive one by at
+ * most 49 of 255 on a channel, a faint dim rather than a grey-out -- so the icon is swapped for
+ * a differently tinted one, the same answer the "used by" icon got.
+ *
+ * A cell data func replaces the column's attribute mapping rather than adding to it, so this
+ * sets "visible" too instead of leaving it to gtk_tree_view_column_add_attribute(). */
+static void _add_cell_data_func(GtkTreeViewColumn *col __attribute__((unused)), GtkCellRenderer *renderer,
+                                GtkTreeModel *model, GtkTreeIter *iter, gpointer data)
+{
+  const dt_shape_manager_t *lm = (const dt_shape_manager_t *)data;
+
+  gboolean on_row = FALSE;
+  gtk_tree_model_get(model, iter, TREE_IC_DELETE_VISIBLE, &on_row, -1);
+  g_object_set(renderer, "visible", on_row, NULL);
+  if(!on_row) return;
+
+  const gboolean available = _row_can_be_added(lm, model, iter);
+  gtk_cell_renderer_set_sensitive(renderer, available);
+
+  GdkPixbuf *icon = available ? lm->ic_add : lm->ic_add_off;
+  if(!IS_NULL_PTR(icon)) g_object_set(renderer, "pixbuf", icon, NULL);
+}
+
+/* The module list's selection decides every inventory row's "+", so a change there redraws the
+ * inventory and the data func above answers again. */
 static void _shape_manager_sync_add_sensitivity(const dt_shape_manager_t *lm)
 {
   const dt_shape_manager_list_t *list = &lm->lists[DT_SHAPE_LIST_SHAPES];
-  if(IS_NULL_PTR(list->add_renderer)) return;
-
-  const gboolean available = (_selected_group_in_module_list(lm) > 0);
-  if(gtk_cell_renderer_get_sensitive(list->add_renderer) == available) return;
-
-  gtk_cell_renderer_set_sensitive(list->add_renderer, available);
-  if(!IS_NULL_PTR(list->treeview)) gtk_widget_queue_draw(list->treeview);
+  if(IS_NULL_PTR(list->add_col) || IS_NULL_PTR(list->treeview)) return;
+  gtk_widget_queue_draw(list->treeview);
 }
 
 /* The inventory's "+": add this row's form to the group the module list points at. */
@@ -693,21 +744,15 @@ static void _tree_row_add_to_group(dt_shape_manager_list_t *list, GtkTreeModel *
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   dt_develop_t *const dev = dt_dev_get_global();
 
-  const int group_id = _selected_group_in_module_list(lm);
-  if(group_id <= 0) return;
+  // The same question the icon was drawn from, so a greyed "+" cannot act.
+  if(!_row_can_be_added(lm, model, iter)) return;
 
   int fid = -1;
   _shape_manager_get_values(model, iter, NULL, NULL, &fid);
 
   dt_masks_form_t *form = dt_masks_get_from_id(dev, fid);
-  dt_masks_form_t *grp = dt_masks_get_from_id(dev, group_id);
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return;
-
-  // Adding a group to itself, or to one of its own descendants, would close a cycle.
-  if(_group_contains(dev, fid, group_id)) return;
-
-  // Already a member: nothing to add, and a no-op must not write an undo step.
-  if(dt_masks_group_get_member(dev, group_id, fid, NULL) == DT_MASKS_OK) return;
+  dt_masks_form_t *grp = dt_masks_get_from_id(dev, _selected_group_in_module_list(lm));
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(grp)) return;
 
   grp = dt_masks_cow_touch(dev, grp);
   if(IS_NULL_PTR(dt_masks_group_add_form(dev, grp, form))) return;
@@ -1337,7 +1382,8 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
 
       if(got && on_add)
       {
-        // The button says what it will do, so it has to name what is selected right now.
+        // The button says what it will do, so it has to name what is selected right now -- and
+        // when it is dead, which of the reasons it is dead for.
         const dt_shape_manager_t *lm = (const dt_shape_manager_t *)list->self->data;
         const int group_id = _selected_group_in_module_list(lm);
         const dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), group_id);
@@ -1348,7 +1394,20 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
         }
         else
         {
-          gchar *text = g_strdup_printf(_("Add this shape to the mask '%s'."), grp->name);
+          int fid = -1;
+          _shape_manager_get_values(model, &action_iter, NULL, NULL, &fid);
+          const gboolean member
+              = (dt_masks_group_get_member(dt_dev_get_global(), group_id, fid, NULL) == DT_MASKS_OK);
+
+          gchar *text;
+          if(_row_can_be_added(lm, model, &action_iter))
+            text = g_strdup_printf(_("Add this shape to the mask '%s'."), grp->name);
+          else if(member)
+            text = g_strdup_printf(_("This shape is already part of the mask '%s'."), grp->name);
+          else
+            // The remaining refusal: this group already holds the mask, at some depth.
+            text = g_strdup_printf(_("This group cannot be added to the mask '%s': it already contains it."),
+                                   grp->name);
           gtk_tooltip_set_text(tooltip, text);
           dt_free(text);
         }
@@ -2375,6 +2434,16 @@ void gui_init(dt_lib_module_t *self)
 
   d->ic_used = dt_gui_symbolic_icon_pixbuf("mail-attachment-symbolic", GTK_ICON_SIZE_MENU, &used_color, NULL);
 
+  // The "+" in its available and unavailable tints: the plain foreground against the same
+  // disabled grey the "used by" icon uses, which is the contrast that reads as a dead button.
+  GdkRGBA fg_color;
+  if(!gtk_style_context_lookup_color(gtk_widget_get_style_context(shape_manager_container),
+                                     "fg_color", &fg_color))
+    fg_color = (GdkRGBA){ 1.0, 1.0, 1.0, 1.0 };
+
+  d->ic_add = dt_gui_symbolic_icon_pixbuf("list-add-symbolic", GTK_ICON_SIZE_MENU, &fg_color, NULL);
+  d->ic_add_off = dt_gui_symbolic_icon_pixbuf("list-add-symbolic", GTK_ICON_SIZE_MENU, &used_color, NULL);
+
   /* The two lists sit side by side in a paned, so the split is the user's and persists. Each
    * half is built identically -- the only thing that differs between them is which forms their
    * store holds, which _tree_store_build() decides from list->which. */
@@ -2450,11 +2519,15 @@ void gui_init(dt_lib_module_t *self)
       gtk_tree_view_column_set_sizing(list->add_col, GTK_TREE_VIEW_COLUMN_FIXED);
       gtk_tree_view_column_set_fixed_width(list->add_col, DT_PIXEL_APPLY_DPI(24));
 
-      list->add_renderer = gtk_cell_renderer_pixbuf_new();
-      g_object_set(list->add_renderer, "icon-name", "list-add-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
-      gtk_cell_renderer_set_sensitive(list->add_renderer, FALSE);
-      gtk_tree_view_column_pack_start(list->add_col, list->add_renderer, FALSE);
-      gtk_tree_view_column_add_attribute(list->add_col, list->add_renderer, "visible", TREE_IC_DELETE_VISIBLE);
+      renderer = gtk_cell_renderer_pixbuf_new();
+      // Same fallback as the "used by" icon: a theme with no symbolic variant gets the plain
+      // named icon, untinted, rather than nothing. The data func swaps the tinted pixbufs in
+      // when they exist, and sets visibility, so no attribute is bound on this column.
+      if(IS_NULL_PTR(d->ic_add_off))
+        g_object_set(renderer, "icon-name", "list-add-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+      gtk_cell_renderer_set_sensitive(renderer, FALSE);
+      gtk_tree_view_column_pack_start(list->add_col, renderer, FALSE);
+      gtk_tree_view_column_set_cell_data_func(list->add_col, renderer, _add_cell_data_func, d, NULL);
 
       gtk_tree_view_append_column(GTK_TREE_VIEW(list->treeview), list->add_col);
     }
@@ -2548,6 +2621,8 @@ void gui_cleanup(dt_lib_module_t *self)
     }
 
     if(!IS_NULL_PTR(d->ic_used)) g_object_unref(d->ic_used);
+    if(!IS_NULL_PTR(d->ic_add)) g_object_unref(d->ic_add);
+    if(!IS_NULL_PTR(d->ic_add_off)) g_object_unref(d->ic_add_off);
     if(!IS_NULL_PTR(d->ic_inverse)) g_object_unref(d->ic_inverse);
     if(!IS_NULL_PTR(d->ic_union)) g_object_unref(d->ic_union);
     if(!IS_NULL_PTR(d->ic_intersection)) g_object_unref(d->ic_intersection);
@@ -2555,6 +2630,8 @@ void gui_cleanup(dt_lib_module_t *self)
     if(!IS_NULL_PTR(d->ic_exclusion)) g_object_unref(d->ic_exclusion);
 
     d->ic_used = NULL;
+    d->ic_add = NULL;
+    d->ic_add_off = NULL;
     d->ic_inverse = NULL;
     d->ic_union = NULL;
     d->ic_intersection = NULL;
