@@ -205,7 +205,6 @@ void dt_display_profile_read(GtkWidget *widget, guint8 **buffer, gint *buffer_si
 
   if (GDK_IS_WAYLAND_DISPLAY(wayland_gdk_display))
   {
-    printf("help\n");
     if (!wayland_color_management.color_manager)
     {
       struct wl_display *wl_display = gdk_wayland_display_get_wl_display(wayland_gdk_display);
@@ -249,9 +248,6 @@ void dt_display_profile_read(GtkWidget *widget, guint8 **buffer, gint *buffer_si
       buffer_size = &wayland_color_management.icc_buffer_size;
       *source = g_strdup("Wayland color profile api");
     }
-    printf("%p\n", buffer);
-    printf("%i\n", *buffer_size);
-    printf("%s\n", *source);
   }
 
 #elif defined GDK_WINDOWING_QUARTZ
