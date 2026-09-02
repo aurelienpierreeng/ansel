@@ -1242,32 +1242,30 @@ are now refcounted (`dt_masks_form_t.refcount`, `src/develop/masks/masks_history
   already guarantees a GUI-side edit clones instead of mutating a form an in-flight pipeline run
   is holding.
 
-### A mask shared between modules is `mask_id`, and nothing else
+### Each module owns its mask group; what modules share is a shape
 
-`blend_params->mask_id` lives inside each module's own params blob, so nothing stops several
-modules from naming the same group — and that IS a shared mask. There is no back-reference from a
-group to the modules using it, and there must not be one: the answer is derived by walking
-`dev->iop`, which is what `_modules_owning_group()` (`libs/shape_manager.c`) does. Caching it in a
-hash table would buy nothing over ~80 modules and would cost an invalidation problem, since
-`dev->iop` is rebuilt on module add/remove and on history navigation — stored raw module pointers
-would dangle.
+`blend_params->mask_id` lives inside each module's own params blob, so several modules naming the
+same group is *representable* — but it is not what anything builds, and code here should not
+create it. A module owns ONE mask group of its own, named "Mask <module>", and a shape or shape
+group used by several modules is nested as a member of each of their masks.
 
-Two consequences a reader has to hold together:
+That separation is what keeps the modules independent. A module's own mask carries its own combine
+operators, opacities and member order, so attaching the same shape group to a second module cannot
+disturb the first, and detaching it from one removes the membership from that module's mask alone.
+Pointing several modules at one mask group would make every one of those settings — and every
+detach — common to all of them. `_tree_row_assign_to_modules()` (`libs/shape_manager.c`) is the
+path that creates a module's mask when it has none, and `dt_iop_gui_blend_set_drawn_mask_group()`
+(`develop/blend_gui.h`) is the one that points `mask_id` at it, raises `DEVELOP_MASK_ENABLED |
+DEVELOP_MASK_SHAPE`, refreshes the raster-mask source table and repaints whatever of the blend GUI
+exists. It tolerates a module the user has never expanded (no `dt_iop_gui_blend_data_t`) and
+commits nothing, so a caller wiring several modules commits per module and once for the forms.
 
-- **Detaching a shape from a shared group detaches it for every module rendering that group.**
-  There is one membership, not one per module. The shape manager's attachment dialog says so by
-  reopening with those modules unticked; anything else offering a detach has to mean the same
-  thing.
-- **The tree stores one module per row**, so a shared group is listed once, attributed to
-  `_module_owning_group()` — the *first* owner in pipeline order. `_modules_owning_group()`
-  returns all of them and is the one to use for any question about who renders a group.
-
-`dt_iop_gui_blend_set_drawn_mask_group()` (`develop/blend_gui.h`) is how a module starts using a
-group: it points `mask_id`, raises `DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE`, refreshes the
-raster-mask source table and repaints whatever of the blend GUI exists. It tolerates a module the
-user has never expanded (no `dt_iop_gui_blend_data_t`) and commits nothing, so a caller attaching
-one group to several modules commits once. Before it existed, that sequence lived only inside
-`blend_gui.c`'s own widget callbacks and anything else had to write `blend_params` by hand.
+There is no back-reference from a group to the modules using it, and there must not be one: the
+answer is derived by walking `dev->iop`, which is what `_modules_owning_group()` does. Caching it
+would buy nothing over ~80 modules and would cost an invalidation problem, since `dev->iop` is
+rebuilt on module add/remove and on history navigation — stored raw module pointers would dangle.
+`_module_owning_group()` returns the first of them, which is all a tree row storing one module can
+show; anything asking *who renders this group* wants the list.
 
 ### The same shape applied twice in one mask is legal, and not always a no-op
 
