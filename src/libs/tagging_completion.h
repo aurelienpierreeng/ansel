@@ -23,6 +23,9 @@
 /** Replace a completion model's contents with the current tag vocabulary. */
 void dt_tagging_completion_refresh(GtkListStore *store);
 
-/** Clear a tag entry from its secondary icon while retaining text-input focus. */
-void dt_tagging_entry_clear_icon(GtkEntry *entry, GtkEntryIconPosition position,
-                                 GdkEvent *event, gpointer user_data);
+/** Replace the active comma-separated token with the selected completion row. */
+gboolean dt_tagging_completion_match_selected(GtkEntryCompletion *completion, GtkTreeModel *model,
+                                              GtkTreeIter *iter, gpointer user_data);
+
+/** Cancel pending completion work and clear an entry while preserving its completion. */
+void dt_tagging_entry_clear(GtkEntry *entry);
