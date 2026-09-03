@@ -825,6 +825,28 @@ static gboolean _modchooser_button_pressed(GtkWidget *treeview, GdkEventButton *
   return TRUE;
 }
 
+/* Clicking past this window dismisses it, applying nothing -- the same as Cancel, which is what
+ * dismissing a window by clicking past it means everywhere else.
+ *
+ * Tested against the press itself rather than against the keyboard focus. Focus is too coarse a
+ * signal for this: it also moves when the window manager hands the pointer over a frame edge, so
+ * a focus-out handler closed the dialog on a click on its OWN border.
+ *
+ * The window is modal, so GTK routes every button press in the application to it; a press landing
+ * on one of its own GdkWindows is inside it and is left to the widget under the pointer. */
+static gboolean _modchooser_button_press(GtkWidget *dialog, GdkEventButton *event,
+                                         gpointer user_data __attribute__((unused)))
+{
+  if(event->type != GDK_BUTTON_PRESS) return FALSE;
+
+  GdkWindow *const toplevel = gtk_widget_get_window(dialog);
+  for(GdkWindow *w = event->window; !IS_NULL_PTR(w); w = gdk_window_get_parent(w))
+    if(w == toplevel) return FALSE;
+
+  gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
+  return TRUE;
+}
+
 /* Runs the attachment manager modally and answers with what the user changed: the modules to
  * attach the shape to, and the ones to detach it from. Both lists are in the order the modules
  * were listed, borrow their modules, and are freed by the caller with g_list_free().
@@ -877,6 +899,13 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
                                                   _("Cancel"), GTK_RESPONSE_CANCEL,
                                                   _("Apply"), GTK_RESPONSE_ACCEPT, NULL);
   gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+
+  /* Above everything, because the window it is about -- the shape manager's own panel -- is a
+   * toplevel of its own and would otherwise be free to cover it. */
+  gtk_window_set_keep_above(GTK_WINDOW(dialog), TRUE);
+
+  gtk_widget_add_events(dialog, GDK_BUTTON_PRESS_MASK);
+  g_signal_connect(dialog, "button-press-event", G_CALLBACK(_modchooser_button_press), NULL);
 
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
   gtk_container_set_border_width(GTK_CONTAINER(content), DT_GUI_BOX_SPACING);
