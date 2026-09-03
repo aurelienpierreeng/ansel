@@ -94,6 +94,7 @@ typedef struct dt_lib_tagging_t
   GtkTreeStore *attached_treestore, *dictionary_treestore;
   GtkTreeModelFilter *dictionary_listfilter, *dictionary_treefilter;
   GHashTable *collection_tags;
+  gulong entry_key_handler_id;
   GtkWidget *floating_tag_window;
   GList *floating_tag_imgs;
   gboolean tree_flag, suggestion_flag, sort_count_flag, hide_path_flag, dttags_flag;
@@ -140,6 +141,7 @@ typedef enum dt_tag_sort_id
 static void _save_last_tag_used(const char *tags, dt_lib_tagging_t *d);
 static void _refresh_collection_tags(dt_lib_module_t *self);
 static void _size_recent_tags_list();
+static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self);
 static gboolean _lib_tagging_tag_redo_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                             GdkModifierType mods, gpointer user_data);
 static gboolean _lib_tagging_tag_show_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
@@ -1377,8 +1379,15 @@ static void _create_tag_from_entry(dt_lib_module_t *self, GtkEntry *src)
   /** record last tag used */
   _save_last_tag_used(tag, d);
 
-  /** clear input box */
-  gtk_entry_set_text(src, "");
+  if(src == d->entry)
+  {
+    g_signal_handler_disconnect(d->entry, d->entry_key_handler_id);
+    dt_tagging_entry_clear(d->entry);
+    d->entry_key_handler_id = g_signal_connect(G_OBJECT(d->entry), "key-press-event",
+                                               G_CALLBACK(_enter_key_pressed), self);
+  }
+  else
+    dt_tagging_entry_clear(src);
 
   _init_treeview(self, 0);
   _init_treeview(self, 1);
@@ -1415,7 +1424,10 @@ static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_
     {
       if(_select_next_user_attached_tag(0, d->attached_view))
       {
-        gtk_entry_set_text(GTK_ENTRY(entry), "");
+        g_signal_handler_disconnect(d->entry, d->entry_key_handler_id);
+        dt_tagging_entry_clear(d->entry);
+        d->entry_key_handler_id = g_signal_connect(G_OBJECT(d->entry), "key-press-event",
+                                                   G_CALLBACK(_enter_key_pressed), self);
         gtk_widget_grab_focus(GTK_WIDGET(d->attached_view));
       }
       return TRUE;
@@ -1424,6 +1436,24 @@ static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_
       break;
   }
   return FALSE;
+}
+
+static void _entry_clear_icon(GtkEntry *entry, const GtkEntryIconPosition position,
+                              GdkEvent *event, dt_lib_module_t *self)
+{
+  if(position != GTK_ENTRY_ICON_SECONDARY) return;
+
+  dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
+  if(entry == d->entry)
+  {
+    g_signal_handler_disconnect(d->entry, d->entry_key_handler_id);
+    dt_tagging_entry_clear(d->entry);
+    d->entry_key_handler_id = g_signal_connect(G_OBJECT(d->entry), "key-press-event",
+                                               G_CALLBACK(_enter_key_pressed), self);
+  }
+  else
+    dt_tagging_entry_clear(entry);
+  gtk_widget_grab_focus(GTK_WIDGET(entry));
 }
 
 
@@ -2689,8 +2719,11 @@ void gui_reset(dt_lib_module_t *self)
 {
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   // clear entry boxes and query
-  gtk_entry_set_text(d->entry, "");
-  gtk_entry_set_text(d->dict_entry, "");
+  g_signal_handler_disconnect(d->entry, d->entry_key_handler_id);
+  dt_tagging_entry_clear(d->entry);
+  d->entry_key_handler_id = g_signal_connect(G_OBJECT(d->entry), "key-press-event",
+                                             G_CALLBACK(_enter_key_pressed), self);
+  dt_tagging_entry_clear(d->dict_entry);
   _set_keyword(self);
   _init_treeview(self, 1);
   _update_atdetach_buttons(self);
@@ -2720,43 +2753,6 @@ static void _refresh_collection_tags(dt_lib_module_t *self)
     g_hash_table_add(d->collection_tags, g_strdup(tag->tag));
   }
   dt_tag_free_result(&tags);
-}
-
-static gboolean _match_selected_func(GtkEntryCompletion *completion, GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
-{
-  const int column = gtk_entry_completion_get_text_column(completion);
-  char *tag = NULL;
-
-  if(gtk_tree_model_get_column_type(model, column) != G_TYPE_STRING) return TRUE;
-
-  GtkEditable *e = (GtkEditable *)gtk_entry_completion_get_entry(completion);
-  if(!GTK_IS_EDITABLE(e))
-  {
-    return FALSE;
-  }
-
-  gtk_tree_model_get(model, iter, column, &tag, -1);
-
-  gint cut_off, cur_pos = gtk_editable_get_position(e);
-
-  gchar *currentText = gtk_editable_get_chars(e, 0, -1);
-  const gchar *lastTag = g_strrstr(currentText, ",");
-  if(IS_NULL_PTR(lastTag))
-  {
-    cut_off = 0;
-  }
-  else
-  {
-    cut_off = (int)(g_utf8_strlen(currentText, -1) - g_utf8_strlen(lastTag, -1))+1;
-  }
-  dt_free(currentText);
-
-  gtk_editable_delete_text(e, cut_off, cur_pos);
-  cur_pos = cut_off;
-  gtk_editable_insert_text(e, tag, -1, &cur_pos);
-  gtk_editable_set_position(e, cur_pos);
-  dt_free(tag);  // release result of gtk_tree_model_get
-  return TRUE;
 }
 
 static gboolean _completion_match_func(GtkEntryCompletion *completion, const gchar *key, GtkTreeIter *iter,
@@ -3220,7 +3216,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_entry_set_placeholder_text(GTK_ENTRY(w), _("enter or pick a tag, Enter to attach"));
   gtk_entry_set_icon_from_icon_name(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, "edit-clear-symbolic");
   gtk_entry_set_icon_tooltip_text(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, _("clear entry"));
-  g_signal_connect(G_OBJECT(w), "icon-release", G_CALLBACK(dt_tagging_entry_clear_icon), NULL);
+  g_signal_connect(G_OBJECT(w), "icon-release", G_CALLBACK(_entry_clear_icon), self);
   gtk_box_pack_start(hbox, w, TRUE, TRUE, 0);
   gtk_widget_add_events(GTK_WIDGET(w), GDK_KEY_RELEASE_MASK);
   d->entry = GTK_ENTRY(w);
@@ -3245,7 +3241,8 @@ void gui_init(dt_lib_module_t *self)
     gtk_entry_completion_set_popup_completion(completion, TRUE);
     gtk_entry_completion_set_popup_set_width(completion, FALSE);
     gtk_entry_completion_set_minimum_key_length(completion, 1);
-    g_signal_connect(G_OBJECT(completion), "match-selected", G_CALLBACK(_match_selected_func), self);
+    g_signal_connect(G_OBJECT(completion), "match-selected",
+                     G_CALLBACK(dt_tagging_completion_match_selected), self);
     gtk_entry_completion_set_match_func(completion, _completion_match_func, self, NULL);
     gtk_entry_set_completion(d->entry, completion);
     g_object_unref(completion);
@@ -3255,7 +3252,8 @@ void gui_init(dt_lib_module_t *self)
   // handling (accepting a keyboard-highlighted popup match into the entry text) runs
   // before ours: otherwise a tag gets created from the raw typed prefix instead of the
   // selected suggestion (#905)
-  g_signal_connect(G_OBJECT(d->entry), "key-press-event", G_CALLBACK(_enter_key_pressed), (gpointer)self);
+  d->entry_key_handler_id = g_signal_connect(G_OBJECT(d->entry), "key-press-event",
+                                             G_CALLBACK(_enter_key_pressed), self);
 
   // ── tag management popup window (persistent, hidden until requested) ────
   d->manage_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -3280,7 +3278,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_entry_set_placeholder_text(GTK_ENTRY(w), _("type to filter the tag dictionary below"));
   gtk_entry_set_icon_from_icon_name(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, "edit-clear-symbolic");
   gtk_entry_set_icon_tooltip_text(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, _("clear entry"));
-  g_signal_connect(G_OBJECT(w), "icon-release", G_CALLBACK(dt_tagging_entry_clear_icon), NULL);
+  g_signal_connect(G_OBJECT(w), "icon-release", G_CALLBACK(_entry_clear_icon), self);
   gtk_widget_add_events(GTK_WIDGET(w), GDK_KEY_RELEASE_MASK);
   g_signal_connect(G_OBJECT(w), "changed", G_CALLBACK(_tag_name_changed), (gpointer)self);
   d->dict_entry = GTK_ENTRY(w);
@@ -3625,7 +3623,8 @@ static gboolean _lib_tagging_tag_show_accel(GtkAccelGroup *accel_group, GObject 
   gtk_entry_completion_set_inline_completion(completion, TRUE);
   gtk_entry_completion_set_popup_set_width(completion, FALSE);
   gtk_entry_completion_set_minimum_key_length(completion, 0);
-  g_signal_connect(G_OBJECT(completion), "match-selected", G_CALLBACK(_match_selected_func), self);
+  g_signal_connect(G_OBJECT(completion), "match-selected",
+                   G_CALLBACK(dt_tagging_completion_match_selected), self);
   gtk_entry_completion_set_match_func(completion, _completion_match_func, self, NULL);
   gtk_entry_set_completion(GTK_ENTRY(entry), completion);
 
