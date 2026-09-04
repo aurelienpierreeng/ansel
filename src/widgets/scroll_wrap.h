@@ -88,6 +88,17 @@ GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, const char *config_str
 GtkWidget *dt_ui_scroll_wrap_get_scrolled_window(GtkWidget *wrapper);
 
 /**
+ * @brief One row's height for @p content_widget, the same measurement dt_ui_scroll_wrap()'s own
+ * dynamic sizing is built on -- a GtkTreeView's tallest column cell plus its vertical-separator
+ * style property, or a GtkTextView's line height. Works on an empty model: it reads renderer and
+ * font metrics, not actual rows.
+ *
+ * For a caller that needs to reserve room for one more row than the content itself requires (a
+ * trailing blank line, say) without re-deriving this measurement by hand.
+ */
+gint dt_ui_scroll_wrap_row_height(GtkWidget *content_widget);
+
+/**
  * @brief Make a self-drawing widget (typically a GtkDrawingArea graph or scope) vertically
  * resizable.
  *

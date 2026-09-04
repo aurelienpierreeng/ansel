@@ -616,6 +616,11 @@ GtkWidget *dt_ui_scroll_wrap_get_scrolled_window(GtkWidget *wrapper)
   return sw;
 }
 
+gint dt_ui_scroll_wrap_row_height(GtkWidget *content_widget)
+{
+  return _get_container_row_heigth(content_widget);
+}
+
 static void _resizable_area_free(gpointer data)
 {
   dt_ui_resizable_area_t *state = (dt_ui_resizable_area_t *)data;
