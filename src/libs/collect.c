@@ -2500,7 +2500,9 @@ static void entry_activated(GtkWidget *entry, dt_lib_collect_rule_t *dr)
 static gboolean _entry_focus_in(GtkWidget *w, GdkEventFocus *event, dt_lib_collect_rule_t *dr)
 {
   dt_lib_collect_t *c = get_collect(dr);
-  update_view(get_active_rule(c));
+  c->active_rule = dr->num;
+  c->view_rule = -1;
+  update_view(dr);
   return FALSE;
 }
 
@@ -2572,6 +2574,7 @@ static void menuitem_mode(GtkMenuItem *menuitem, dt_lib_collect_rule_t *dr)
     _rule_set_mode(active, mode);
     _rule_set_string(active, "");
     _rule_set_item(active, DT_COLLECTION_PROP_FILMROLL);
+    _rule_set_recursive(active, FALSE);
     _rules_set_count(active + 1);
     dt_lib_collect_t *c = get_collect(dr);
     c->active_rule = active;
@@ -2596,27 +2599,30 @@ static void menuitem_clear(GtkMenuItem *menuitem, dt_lib_collect_rule_t *dr)
   dt_lib_collect_t *c = get_collect(dr);
   if(active > 1)
   {
-    _rules_set_count(active - 1);
-    if(c->active_rule >= active - 1) c->active_rule = active - 2;
+    const int new_count = active - 1;
+    _rules_set_count(new_count);
+    if(c->active_rule > dr->num) c->active_rule--;
+    if(c->active_rule >= new_count) c->active_rule = new_count - 1;
+    for(int i = dr->num; i < MAX_RULES - 1; i++)
+    {
+      gchar *string = _rule_get_string(i + 1);
+      if(string)
+      {
+        _rule_set_mode(i, _rule_get_mode(i + 1));
+        _rule_set_item(i, _rule_get_item(i + 1));
+        _rule_set_string(i, string);
+        _rule_set_recursive(i, _rule_get_recursive(i + 1));
+        dt_free(string);
+      }
+    }
   }
   else
   {
     _rule_set_mode(0, DT_LIB_COLLECT_MODE_AND);
     _rule_set_item(0, DT_COLLECTION_PROP_FILMROLL);
     _rule_set_string(0, "");
+    _rule_set_recursive(0, FALSE);
     dr->typing = FALSE;
-  }
-  // shift the rules below the removed one up by one
-  for(int i = dr->num; i < MAX_RULES - 1; i++)
-  {
-    gchar *string = _rule_get_string(i + 1);
-    if(string)
-    {
-      _rule_set_mode(i, _rule_get_mode(i + 1));
-      _rule_set_item(i, _rule_get_item(i + 1));
-      _rule_set_string(i, string);
-      dt_free(string);
-    }
   }
   c->view_rule = -1;
   _commit_colllection();
@@ -2851,7 +2857,7 @@ static void _configure_tab(dt_lib_collect_t *d, dt_collect_tab_t tab)
     else
     {
       gtk_widget_hide(d->raw_entry);
-      for(int i = 0; i <= d->active_rule; i++)
+      for(int i = 0; i < d->nb_rules; i++)
       {
         _combo_as_full(d->rule[i].combo);
         get_properties(&d->rule[i]);
@@ -2859,7 +2865,7 @@ static void _configure_tab(dt_lib_collect_t *d, dt_collect_tab_t tab)
         gtk_widget_show_all(d->rule[i].hbox);
         gtk_widget_show(d->rule[i].combo);
         gtk_widget_show(d->rule[i].button); // rule +/- management, Queries tab only
-        _set_rule_button(&d->rule[i], i == MAX_RULES - 1, i == d->active_rule);
+        _set_rule_button(&d->rule[i], i == MAX_RULES - 1, i == d->nb_rules - 1);
         gtk_entry_set_placeholder_text(GTK_ENTRY(d->rule[i].text), _("Search..."));
         _set_tooltip(&d->rule[i]);
         _update_op_combo(&d->rule[i]);
@@ -2955,7 +2961,7 @@ static void collection_updated(gpointer instance, dt_collection_change_t query_c
   if(query_change == DT_COLLECTION_CHANGE_RELOAD && changed_property != DT_COLLECTION_PROP_UNDEF)
   {
     refresh = FALSE;
-    for(int i = 0; i <= d->active_rule; i++)
+    for(int i = 0; i < d->nb_rules; i++)
       if(_combo_get_active_collection(d->rule[i].combo) == changed_property)
       {
         refresh = TRUE;
