@@ -790,15 +790,23 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
   // We need a list of files to regenerate .xmp files if there are duplicates
   GList *list = dt_image_repository_get_full_paths(t);
 
+  /* One undo record per image, grouped so Ctrl+Z takes the whole batch back at once. The
+   * files stay on disk, but the database rows do not, and neither the edit nor the tags nor
+   * the group membership they carry can be reconstructed from the file -- so they are staged
+   * before deletion rather than re-imported after. */
+  dt_undo_start_group(dt_undo_get_global(), DT_UNDO_REMOVE);
+
   double fraction = 0.0f;
   while(t)
   {
     int32_t imgid = GPOINTER_TO_INT(t->data);
-    dt_image_remove(imgid);
+    dt_image_remove_undoable(imgid);
     t = g_list_next(t);
     fraction += 1.0 / total;
     dt_control_job_set_progress(job, fraction);
   }
+
+  dt_undo_end_group(dt_undo_get_global());
 
   _resync_xmp_duplicates(list);
   dt_film_remove_empty();
