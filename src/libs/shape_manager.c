@@ -58,6 +58,7 @@
 #include "libs/lib_api.h"
 #include "views/view.h"
 #include "widgets/scroll_wrap.h"
+#include "widgets/widget_settings.h"  // dt_widget_root_window(), dt_widget_store_int()
 #include "common/conf.h"          // dt_conf_get_int(), dt_conf_key_exists()
 
 #include "widgets/label.h"   // dt_gui_symbolic_icon_pixbuf()
@@ -82,14 +83,16 @@ static void _shape_manager_broadcast(dt_lib_module_t *self, const int formid, co
                                      const dt_masks_event_t event);
 
 /* The panel splits the forms by the one question that separates them: is this group some
- * module's drawn mask, or nobody's yet? The left list is the inventory -- every shape, plus the
- * groups no module uses -- and the right one is the assignment: the groups modules actually
- * render, members underneath. A shape a module uses therefore appears in both, once as itself
- * and once as a member, which is the arrangement a module's own Drawn tab already uses. */
+ * module's drawn mask, or nobody's yet? The left list is the inventory -- every shape and every
+ * group, module masks included, so any of them can be picked up and reused -- and the right one
+ * is the assignment: only the groups modules actually render, members underneath. A module mask
+ * therefore appears in both, once in the inventory as an ordinary reusable group and once in the
+ * assignment under the module rendering it, the same way a shape a module uses appears in both
+ * its own row and as a member -- the arrangement a module's own Drawn tab already uses. */
 typedef enum dt_shape_list_t
 {
-  DT_SHAPE_LIST_SHAPES = 0,   // every shape, plus the groups no module uses
-  DT_SHAPE_LIST_MODULES,      // the groups that are some module's drawn mask
+  DT_SHAPE_LIST_SHAPES = 0,   // every shape and every group, module masks included
+  DT_SHAPE_LIST_MODULES,      // only the groups that are some module's drawn mask
   DT_SHAPE_LIST_COUNT
 } dt_shape_list_t;
 
@@ -118,6 +121,11 @@ typedef struct dt_shape_manager_list_t
 
   dt_shape_list_t which;
   dt_lib_module_t *self;   // the module both lists belong to
+
+  /* The conf key dt_ui_scroll_wrap() persists this list's dragged height under. Kept so the
+   * popup can raise the ceiling on it at show time, independently of whatever gui_init built the
+   * wrapper with -- see _shape_manager_relax_height_caps(). */
+  const char *height_key;
 } dt_shape_manager_list_t;
 
 typedef struct dt_shape_manager_t
@@ -641,6 +649,20 @@ static void _tree_delete_shape(GtkButton *button __attribute__((unused)), dt_sha
  * parent, so clicking "+" after selecting a shape inside a module's mask adds to that mask
  * rather than doing nothing. Returns 0 when nothing usable is selected, which is also what
  * greys the button out. */
+/* The top-level ancestor of a row -- itself, if it has none. The module list holds one row per
+ * module and that row's whole subtree, so nothing below the top level is its own destination:
+ * selecting a sub-group or a shape nested inside a module's mask still means "this mask". */
+static int _tree_root_formid(GtkTreeModel *model, GtkTreeIter iter)
+{
+  GtkTreeIter parent;
+  while(gtk_tree_model_iter_parent(model, &parent, &iter))
+    iter = parent;
+
+  int formid = 0;
+  gtk_tree_model_get(model, &iter, TREE_FORMID, &formid, -1);
+  return formid;
+}
+
 static int _selected_group_in_module_list(const dt_shape_manager_t *lm)
 {
   const dt_shape_manager_list_t *list = &lm->lists[DT_SHAPE_LIST_MODULES];
@@ -654,27 +676,20 @@ static int _selected_group_in_module_list(const dt_shape_manager_t *lm)
   int group_id = 0;
   GtkTreeIter iter;
   if(gtk_tree_model_get_iter(model, &iter, (GtkTreePath *)rows->data))
-  {
-    int grid = -1;
-    int fid = -1;
-    _shape_manager_get_values(model, &iter, NULL, &grid, &fid);
-
-    const dt_masks_form_t *form = dt_masks_get_from_id(dt_dev_get_global(), fid);
-    if(!IS_NULL_PTR(form) && (form->type & DT_MASKS_GROUP))
-      group_id = fid;
-    else if(grid > 0)
-      group_id = grid;
-  }
+    group_id = _tree_root_formid(model, iter);
 
   g_list_free_full(rows, (GDestroyNotify)gtk_tree_path_free);
   return group_id;
 }
 
-/* Whether this row's "+" can do anything. Three ways it cannot: nothing is selected in the module
- * list, so there is nowhere to add to; the form is already a member of that group, and re-adding
- * it would write an undo step for a no-op; or the row is a group that already contains the
- * target, and adding it would close a cycle in the membership graph -- every walk over it, the
- * tree build first of all, would then stop terminating.
+/* Whether this row's "+" can do anything. Four ways it cannot: nothing is selected in the module
+ * list, so there is nowhere to add to; the target mask -- always resolved to its top level, never
+ * to whatever sub-group or shape happens to be selected inside it -- already reaches this form,
+ * directly or through one of its own sub-groups, so adding it again would write an undo step for
+ * a no-op; the row is a group that already contains the target, and adding it would close a cycle
+ * in the membership graph -- every walk over it, the tree build first of all, would then stop
+ * terminating; or the row is a group every one of whose shapes the target already renders, adding
+ * nothing new.
  *
  * The icon and the click both ask this one function, so a button that looks available always is. */
 static gboolean _row_can_be_added(const dt_shape_manager_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
@@ -690,7 +705,10 @@ static gboolean _row_can_be_added(const dt_shape_manager_t *lm, GtkTreeModel *mo
   const dt_masks_form_t *grp = dt_masks_get_from_id(dev, group_id);
   if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return FALSE;
 
-  if(dt_masks_group_get_member(dev, group_id, fid, NULL) == DT_MASKS_OK) return FALSE;
+  /* Subsumes "it is the same group" (trivial at depth 0) and "it is already a direct member": a
+   * mask that already reaches this form ANYWHERE in its own subtree gains nothing from reaching
+   * it again at the top. */
+  if(dt_masks_group_contains(dev, group_id, fid) == DT_MASKS_OK) return FALSE;
   if(dt_masks_group_contains(dev, fid, group_id) == DT_MASKS_OK) return FALSE;
 
   /* A group every one of whose shapes the target already renders would add nothing: nesting it
@@ -790,7 +808,9 @@ typedef enum dt_modchooser_col_t
 {
   MODCHOOSER_CHECKED = 0,
   MODCHOOSER_WAS_CHECKED,   // as the dialog opened, so validation can act on the difference
+  MODCHOOSER_SENSITIVE,     // FALSE for a row ticking could not act on -- the module's own mask
   MODCHOOSER_NAME,
+  MODCHOOSER_NOTE,          // why an insensitive row is insensitive; empty otherwise
   MODCHOOSER_MODULE,
   MODCHOOSER_COUNT
 } dt_modchooser_col_t;
@@ -802,7 +822,13 @@ static void _modchooser_toggled(GtkCellRendererToggle *cell __attribute__((unuse
   if(!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(store), &iter, path_string)) return;
 
   gboolean checked = FALSE;
-  gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, MODCHOOSER_CHECKED, &checked, -1);
+  gboolean sensitive = TRUE;
+  gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, MODCHOOSER_CHECKED, &checked,
+                     MODCHOOSER_SENSITIVE, &sensitive, -1);
+
+  // A row ticking could not change stays where it is, whichever way it was reached.
+  if(!sensitive) return;
+
   gtk_list_store_set(store, &iter, MODCHOOSER_CHECKED, !checked, -1);
 }
 
@@ -862,9 +888,17 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
   *to_attach = NULL;
   *to_detach = NULL;
 
+  // One by-value description of the form: every field below is taken from it, not from a raw
+  // reach into the struct.
+  dt_masks_form_info_t info = { 0 };
+  if(!dt_masks_form_get_info(form, &info)) return FALSE;
+
   dt_develop_t *const dev = dt_dev_get_global();
   GtkListStore *store = gtk_list_store_new(MODCHOOSER_COUNT, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
-                                           G_TYPE_STRING, G_TYPE_POINTER);
+                                           G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_POINTER);
+
+  // What the dialog's title, intro and tooltip call the thing being managed.
+  const char *noun = info.is_group ? _("group") : _("shape");
 
   gboolean any = FALSE;
   for(const GList *iops = g_list_last(dt_dev_get_global()->iop); iops; iops = g_list_previous(iops))
@@ -872,14 +906,23 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
     dt_iop_module_t *module = (dt_iop_module_t *)iops->data;
     if(!dt_iop_module_is_in_pipeline(module) || !dt_iop_module_supports_drawn_mask(module)) continue;
 
+    /* A module cannot render its own mask as a member of itself -- ticking this would ask
+     * dt_masks_group_add_form() to nest a group inside itself, which _row_can_be_added()'s
+     * equivalent, dt_masks_group_contains(), already refuses trivially at depth 0. Surfacing it
+     * here instead of letting the tick silently do nothing on validation. */
+    const gboolean is_self_mask = (module->blend_params->mask_id == info.formid);
     const gboolean attached
-        = (dt_masks_group_get_member(dev, module->blend_params->mask_id, form->formid, NULL) == DT_MASKS_OK);
+        = !is_self_mask
+          && (dt_masks_group_get_member(dev, module->blend_params->mask_id, info.formid, NULL)
+              == DT_MASKS_OK);
 
     gchar *label = dt_history_item_get_name(module);
     GtkTreeIter iter;
     gtk_list_store_append(store, &iter);
     gtk_list_store_set(store, &iter, MODCHOOSER_CHECKED, attached, MODCHOOSER_WAS_CHECKED, attached,
-                       MODCHOOSER_NAME, label, MODCHOOSER_MODULE, module, -1);
+                       MODCHOOSER_SENSITIVE, !is_self_mask, MODCHOOSER_NAME, label,
+                       MODCHOOSER_NOTE, is_self_mask ? _("this is the module's own mask") : "",
+                       MODCHOOSER_MODULE, module, -1);
     dt_free(label);
     any = TRUE;
   }
@@ -894,10 +937,12 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
   /* Parented to the main window rather than to the shape manager's own panel: that panel is a
    * UTILITY window that declines focus, which is not something to hang a modal dialog off. */
   GtkWindow *parent = GTK_WINDOW(dt_gui_main_window());
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Modules using this shape"), parent,
+  gchar *title = g_strdup_printf(_("Modules using this %s"), noun);
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(title, parent,
                                                   GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
                                                   _("Cancel"), GTK_RESPONSE_CANCEL,
                                                   _("Apply"), GTK_RESPONSE_ACCEPT, NULL);
+  dt_free(title);   // gtk_window_set_title() (called internally) copies it
   gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
 
   /* Above everything, because the window it is about -- the shape manager's own panel -- is a
@@ -911,8 +956,8 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
   gtk_container_set_border_width(GTK_CONTAINER(content), DT_GUI_BOX_SPACING);
   gtk_box_set_spacing(GTK_BOX(content), DT_GUI_BOX_SPACING);
 
-  gchar *intro = g_strdup_printf(_("Tick the modules that should use the shape '%s', untick the ones "
-                                   "that should stop."), form->name);
+  gchar *intro = g_strdup_printf(_("Tick the modules that should use the %s '%s', untick the ones "
+                                   "that should stop."), noun, info.name);
   GtkWidget *label = dt_ui_label_new(intro);
   dt_free(intro);
   gtk_box_pack_start(GTK_BOX(content), label, FALSE, FALSE, 0);
@@ -922,15 +967,29 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
   gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview)), GTK_SELECTION_NONE);
 
   GtkTreeViewColumn *col = gtk_tree_view_column_new();
+  gtk_tree_view_column_set_expand(col, TRUE);
+
   GtkCellRenderer *renderer = gtk_cell_renderer_toggle_new();
   g_object_set(renderer, "activatable", TRUE, NULL);
   g_signal_connect(renderer, "toggled", G_CALLBACK(_modchooser_toggled), store);
   gtk_tree_view_column_pack_start(col, renderer, FALSE);
   gtk_tree_view_column_add_attribute(col, renderer, "active", MODCHOOSER_CHECKED);
+  gtk_tree_view_column_add_attribute(col, renderer, "sensitive", MODCHOOSER_SENSITIVE);
 
   renderer = gtk_cell_renderer_text_new();
   gtk_tree_view_column_pack_start(col, renderer, TRUE);
   gtk_tree_view_column_add_attribute(col, renderer, "text", MODCHOOSER_NAME);
+  gtk_tree_view_column_add_attribute(col, renderer, "sensitive", MODCHOOSER_SENSITIVE);
+
+  /* The reason a row is dead, said on the row itself: italic and against the right edge, so it
+   * reads as an annotation rather than part of the module's name. Empty on every live row, which
+   * costs it no space. */
+  renderer = gtk_cell_renderer_text_new();
+  g_object_set(renderer, "style", PANGO_STYLE_ITALIC, "xalign", 1.0f, NULL);
+  gtk_cell_renderer_set_sensitive(renderer, FALSE);
+  gtk_tree_view_column_pack_end(col, renderer, FALSE);
+  gtk_tree_view_column_add_attribute(col, renderer, "text", MODCHOOSER_NOTE);
+
   gtk_tree_view_append_column(GTK_TREE_VIEW(treeview), col);
 
   g_signal_connect(treeview, "button-press-event", G_CALLBACK(_modchooser_button_pressed), store);
@@ -1303,6 +1362,15 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_shape_manager
   // unlike grp_dest, whose reference passes to form_visible below.
   dt_masks_form_unref(grp);
   dt_masks_change_form_gui(dev, grp_dest);
+  /* dt_masks_change_form_gui() is NULL-safe on dev->form_gui throughout -- it is only ever
+   * allocated by dt_masks_gui_init(), on entering darkroom, and freed back to NULL on leaving it
+   * (views/darkroom.c, views/studio_capture.c's own dev teardown). This panel's window is a
+   * standalone toplevel that can outlive that: switching away from darkroom while it stays open,
+   * then selecting a row here, reached this point with dev->form_gui NULL and no guard (SIGSEGV,
+   * observed live). edit_mode has nothing to record it into then, and there is no "current form"
+   * for the pipeline to preview either -- the whole point of a view with no darkroom -- so this
+   * simply has nothing to do. */
+  if(IS_NULL_PTR(dev->form_gui)) return;
   dev->form_gui->edit_mode = DT_MASKS_EDIT_FULL;
   if(nb == 1 && !IS_NULL_PTR(selected_form))
     dt_masks_center_view_on_form(dev, selected_form);
@@ -1733,8 +1801,16 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
 
       if(got && on_assign)
       {
-        gtk_tooltip_set_text(tooltip, _("Manage which modules use this shape. A mask is created for the "
-                                        "ticked ones that have none, and shared between them."));
+        int fid = -1;
+        _shape_manager_get_values(model, &action_iter, NULL, NULL, &fid);
+        dt_masks_form_info_t row_info = { 0 };
+        dt_masks_form_get_info(dt_masks_get_from_id(dt_dev_get_global(), fid), &row_info);
+
+        gchar *text = g_strdup_printf(_("Manage which modules use this %s. A mask is created for the "
+                                        "ticked ones that have none, and shared between them."),
+                                      row_info.is_group ? _("group") : _("shape"));
+        gtk_tooltip_set_text(tooltip, text);
+        dt_free(text);
         return TRUE;
       }
 
@@ -1754,15 +1830,18 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
         {
           int fid = -1;
           _shape_manager_get_values(model, &action_iter, NULL, NULL, &fid);
-          const gboolean member
-              = (dt_masks_group_get_member(dt_dev_get_global(), group_id, fid, NULL) == DT_MASKS_OK);
+          dt_develop_t *const dev = dt_dev_get_global();
+
+          // Same reasoning _row_can_be_added() applies, so the wording never disagrees with it.
+          const gboolean already_in = (dt_masks_group_contains(dev, group_id, fid) == DT_MASKS_OK);
+          const gboolean would_cycle = (dt_masks_group_contains(dev, fid, group_id) == DT_MASKS_OK);
 
           gchar *text;
           if(_row_can_be_added(lm, model, &action_iter))
-            text = g_strdup_printf(_("Add this shape to the mask '%s'."), grp->name);
-          else if(member)
-            text = g_strdup_printf(_("This shape is already part of the mask '%s'."), grp->name);
-          else if(dt_masks_group_contains(dt_dev_get_global(), fid, group_id) == DT_MASKS_OK)
+            text = g_strdup_printf(_("Add this to the mask '%s'."), grp->name);
+          else if(already_in)
+            text = g_strdup_printf(_("This is already part of the mask '%s'."), grp->name);
+          else if(would_cycle)
             text = g_strdup_printf(_("This group cannot be added to the mask '%s': it already contains it."),
                                    grp->name);
           else
@@ -1838,6 +1917,9 @@ typedef struct _tree_row_t
   int index;               // rank inside the parent, which _set_iter_name() shows
   int root_id;             /* the module mask this row sits somewhere inside, 0 outside the
                             * module list -- the scope the note below is searched in */
+  gboolean flat;           /* TRUE to append this row without descending into its own members --
+                            * a module mask shown in the inventory: a single, non-expandable row
+                            * there, its full subtree still shown, expandable, in the module list */
 } _tree_row_t;
 
 /* Every module whose drawn mask is this group, in pipeline order.
@@ -1948,6 +2030,9 @@ static void _shape_manager_list_recurs(GtkTreeStore *treestore, GtkTreeIter *top
   GtkTreeIter child;
   _tree_append_row(treestore, toplevel, lm, &self, &child);
 
+  // A flat row is a single line by request: no expander, no children appended under it.
+  if(self.flat) return;
+
   if(!(self.form->type & DT_MASKS_GROUP)) return;
 
   int index = 0;
@@ -2043,18 +2128,41 @@ static void _tree_reveal_row(dt_shape_manager_list_t *list, GtkTreeModel *model,
   gtk_tree_path_free(path);
 }
 
-/* Which of the two lists a top-level form belongs in. Only a group can be claimed by a module,
- * so a plain shape is always in the inventory -- including one a module's group holds, which is
- * then listed twice, once here and once as that group's member. */
-static dt_shape_list_t _form_belongs_to(const dt_masks_form_t *form)
+/* Whether this group is some module's drawn mask, which is what the module list holds. */
+static gboolean _group_is_module_mask(const dt_masks_form_t *form)
 {
-  if(IS_NULL_PTR(form) || !(form->type & DT_MASKS_GROUP)) return DT_SHAPE_LIST_SHAPES;
+  if(IS_NULL_PTR(form) || !(form->type & DT_MASKS_GROUP)) return FALSE;
 
   GList *owners = _modules_owning_group(form);
   const gboolean assigned = !IS_NULL_PTR(owners);
   g_list_free(owners);
 
-  return assigned ? DT_SHAPE_LIST_MODULES : DT_SHAPE_LIST_SHAPES;
+  return assigned;
+}
+
+/* Appends one group's row (and, recursively, everything under it, unless @p flat) and answers
+ * whether it did -- FALSE only when a module-mask row's own id could not be read, which leaves
+ * the row unlisted rather than mislabelled. root_id is a property of the row's SCOPE (see
+ * _tree_row_t), not of the group itself: it is only ever set for a module mask, so the "applied
+ * twice in this mask" note has something to search.
+ *
+ * @param flat the inventory's own copy of a module mask: a single row, no expander, no members
+ *             appended under it -- that subtree is the module list's to show, not shown twice. */
+static gboolean _tree_store_append_group_row(GtkTreeStore *treestore, dt_shape_manager_t *lm,
+                                             dt_masks_form_t *form, const gboolean is_module_mask,
+                                             const gboolean flat)
+{
+  int root_id = 0;
+  if(is_module_mask)
+  {
+    dt_masks_form_info_t info = { 0 };
+    if(!dt_masks_form_get_info(form, &info)) return FALSE;
+    root_id = info.formid;
+  }
+
+  const _tree_row_t row = { .form = form, .opacity = 1.0f, .root_id = root_id, .flat = flat };
+  _shape_manager_list_recurs(treestore, NULL, lm, &row);
+  return TRUE;
 }
 
 /* Returns whether it added anything, which is what tells the caller a separator is worth having. */
@@ -2063,27 +2171,47 @@ static gboolean _tree_store_add_forms(GtkTreeStore *treestore, dt_shape_manager_
 {
   gboolean any = FALSE;
 
+  /* Module masks are walked in pipeline order rather than in creation order, in both lists --
+   * the inventory holds them too (see _group_is_module_mask()'s own comment).
+   * Reverse iop_order, the "bottom of the stack first" convention _modchooser_run() and the
+   * module groups panel's Pipeline tab already use for the same kind of module list, so a
+   * module's mask lands at the same relative position here as its own row does everywhere else
+   * in the darkroom.
+   *
+   * Scoped exactly like _modules_owning_group() -- every module in dev->iop, not just the ones
+   * dt_iop_module_is_in_pipeline() currently shows -- so a mask belonging to a hidden or
+   * not-yet-reached instance is still found here rather than silently dropped from both this
+   * loop and the "unclaimed groups" one below, which skips it on the assumption it was already
+   * handled. */
+  if(groups)
+  {
+    dt_develop_t *const dev = dt_dev_get_global();
+    for(const GList *iops = g_list_last(dev->iop); iops; iops = g_list_previous(iops))
+    {
+      dt_iop_module_t *module = (dt_iop_module_t *)iops->data;
+      if(!dt_iop_module_supports_drawn_mask(module)) continue;
+
+      dt_masks_form_t *mask = dt_masks_get_from_id(dev, module->blend_params->mask_id);
+      if(IS_NULL_PTR(mask) || !(mask->type & DT_MASKS_GROUP)) continue;
+
+      // Expandable in the module list (its own home), a single flat row in the inventory.
+      if(_tree_store_append_group_row(treestore, lm, mask, TRUE, which == DT_SHAPE_LIST_SHAPES))
+        any = TRUE;
+    }
+
+    // The module list holds nothing else.
+    if(which == DT_SHAPE_LIST_MODULES) return any;
+  }
+
   for(const GList *forms = dt_dev_get_global()->forms; forms; forms = g_list_next(forms))
   {
     dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
     if(!!(form->type & DT_MASKS_GROUP) != groups) continue;
-    if(_form_belongs_to(form) != which) continue;
 
-    /* The mask this row and everything under it belongs to. Only the module list has one: the
-     * inventory's groups are nobody's mask, so a shape under them is reached once and there is
-     * nothing to warn about. A module owns its mask group, so one row per group is already one
-     * row per module. */
-    int root_id = 0;
-    if(which == DT_SHAPE_LIST_MODULES && groups)
-    {
-      dt_masks_form_info_t info = { 0 };
-      if(!dt_masks_form_get_info(form, &info)) continue;
-      root_id = info.formid;
-    }
+    // Already appended above, in pipeline order: this pass is unclaimed groups (and shapes) only.
+    if(groups && _group_is_module_mask(form)) continue;
 
-    const _tree_row_t row = { .form = form, .opacity = 1.0f, .root_id = root_id };
-    _shape_manager_list_recurs(treestore, NULL, lm, &row);
-    any = TRUE;
+    if(_tree_store_append_group_row(treestore, lm, form, FALSE, FALSE)) any = TRUE;
   }
 
   return any;
@@ -2432,12 +2560,28 @@ static gboolean _shape_manager_selection_change_in(dt_shape_manager_t *lm, const
     return FALSE;
   }
 
+  /* The recursive search below walks the MODEL (gtk_tree_model_iter_children()), which holds
+   * every row regardless of the view's own expand/collapse display state -- it needs nothing
+   * expanded to find its target. Expanding the WHOLE tree first, as this used to, was only ever
+   * about making the match visible afterward, and it did that by exploding every OTHER group
+   * open too, module masks and unclaimed groups alike, for a search that had nothing to do with
+   * them. Revealing just the path to the row actually found -- the same targeted
+   * expand-to-path/scroll _tree_reveal_row() already uses elsewhere -- gets the same visibility
+   * without the side effect. */
   gboolean found = FALSE;
   if(gtk_tree_model_get_iter_first(model, &iter))
-  {
-    gtk_tree_view_expand_all(GTK_TREE_VIEW(list->treeview));
     found = _shape_manager_selection_change_r(model, selection, &iter, module, selectid, throw_event, 1);
-    if(!found) gtk_tree_view_collapse_all(GTK_TREE_VIEW(list->treeview));
+
+  if(found)
+  {
+    GList *rows = gtk_tree_selection_get_selected_rows(selection, NULL);
+    if(!IS_NULL_PTR(rows))
+    {
+      GtkTreePath *path = (GtkTreePath *)rows->data;
+      gtk_tree_view_expand_to_path(GTK_TREE_VIEW(list->treeview), path);
+      gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(list->treeview), path, NULL, TRUE, 0.5, 0.5);
+    }
+    g_list_free_full(rows, (GDestroyNotify)gtk_tree_path_free);
   }
 
   lm->gui_reset = 0;
@@ -2673,6 +2817,57 @@ static void _shape_manager_popup_restore_geometry(dt_shape_manager_t *d)
 /** @brief The toolbox button is the panel's only state: showing and hiding both go through its
  * active flag, so every way of closing the panel leaves the button un-pressed. Re-entrant by
  * design -- the window-manager close path toggles the button, which comes back here. */
+/** @brief The room a fresh, un-dragged dt_ui_scroll_wrap area is allowed to grow to -- the same
+ * ceiling scroll_wrap.c's own ungated case uses, so raising a list's cap to this number is
+ * indistinguishable from that list never having been dragged at all. */
+static gint _shape_manager_height_ceiling(void)
+{
+  GtkWidget *win = dt_widget_root_window();
+  return win ? gtk_widget_get_allocated_height(win) : DT_PIXEL_APPLY_DPI(1000);
+}
+
+/** @brief Forget how far the user last dragged each list, so the auto-sizing pass that follows
+ * measures true, full content instead of stopping at a small stale cap from a previous session.
+ *
+ * There is no "erase this conf key" call, so the ceiling itself is stored in its place: as far as
+ * dt_ui_scroll_wrap()'s own sizing rule can tell, that is exactly what an un-dragged list looks
+ * like. A later manual drag overwrites it with a real choice again, same as always -- this only
+ * resets what STARTUP sees. */
+static void _shape_manager_relax_height_caps(const dt_shape_manager_t *d)
+{
+  const gint ceiling = _shape_manager_height_ceiling();
+  for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
+  {
+    const dt_shape_manager_list_t *list = &d->lists[i];
+    if(!IS_NULL_PTR(list->height_key)) dt_widget_store_int(list->height_key, ceiling);
+  }
+}
+
+/** @brief Grows the just-shown window by one row past whatever height the (now uncapped) lists
+ * settled on, so the longer one reads as complete rather than filled edge-to-edge -- and so a
+ * list exactly as tall as the window doesn't look like it might have one more row hidden below.
+ *
+ * Must run AFTER gtk_widget_show_all(): the row-height query works on an empty model, but the
+ * window's OWN height only reflects the lists' true content once they have been realized and
+ * dt_ui_scroll_wrap's sizing rule has run against the raised ceiling. */
+static void _shape_manager_grow_by_one_row(const dt_shape_manager_t *d)
+{
+  if(!GTK_IS_WINDOW(d->popup_window)) return;
+
+  gint row = 0;
+  for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
+  {
+    const gint h = dt_ui_scroll_wrap_row_height(d->lists[i].treeview);
+    if(h > row) row = h;
+  }
+  if(row <= 0) return;
+
+  gint width = 0;
+  gint height = 0;
+  gtk_window_get_size(GTK_WINDOW(d->popup_window), &width, &height);
+  gtk_window_resize(GTK_WINDOW(d->popup_window), width, height + row);
+}
+
 static void _shape_manager_popup_button_toggled_cb(GtkWidget *button, gpointer user_data)
 {
   dt_shape_manager_t *d = (dt_shape_manager_t *)user_data;
@@ -2685,7 +2880,15 @@ static void _shape_manager_popup_button_toggled_cb(GtkWidget *button, gpointer u
   {
     // before mapping: a move applied to a mapped window makes it jump in view
     _shape_manager_popup_restore_geometry(d);
+
+    // Also before mapping: dt_ui_scroll_wrap's sizing rule reads this the moment each treeview
+    // realizes, which show_all() triggers below.
+    _shape_manager_relax_height_caps(d);
+
     gtk_widget_show_all(d->popup_window);
+
+    // Only after: needs the lists' post-realize, freshly-uncapped height to add one row to it.
+    _shape_manager_grow_by_one_row(d);
   }
   else
   {
@@ -2764,9 +2967,11 @@ void gui_init(dt_lib_module_t *self)
   // first mapping only, so a panel the user has dragged elsewhere keeps its place.
   gtk_window_set_position(GTK_WINDOW(d->popup_window), GTK_WIN_POS_CENTER_ON_PARENT);
 
-  /* No width request of its own: the two lists below each carry a min-content-width, so the
-   * window's own minimum is what they add up to, and it grows with whatever the user drags the
-   * paned or the frame to. Heights come from each list's dt_ui_scroll_wrap() rule. */
+  /* No width request of its own: the window's own minimum is whatever the two lists below need
+   * -- their own content (names are never ellipsized, so a long one raises that floor) or their
+   * min-content-width default when there is none -- added together, and it grows further with
+   * whatever the user drags the paned or the frame to. Heights come from each list's
+   * dt_ui_scroll_wrap() rule. */
 
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(d->popup_window);
@@ -2862,7 +3067,8 @@ void gui_init(dt_lib_module_t *self)
     const char *height_key;
   } list_defs[DT_SHAPE_LIST_COUNT] = {
     [DT_SHAPE_LIST_SHAPES] = { N_("All shapes"),
-                               N_("Every shape drawn on this image, and the groups no module uses yet."),
+                               N_("Every shape and group drawn on this image, including the masks "
+                                  "modules already use -- pick any of them up to reuse."),
                                "plugins/darkroom/masks/windowheight" },
     [DT_SHAPE_LIST_MODULES] = { N_("Module groups"),
                                 N_("The masks modules actually render, and the shapes each one is made of."),
@@ -2874,6 +3080,7 @@ void gui_init(dt_lib_module_t *self)
     dt_shape_manager_list_t *list = &d->lists[i];
     list->which = (dt_shape_list_t)i;
     list->self = self;
+    list->height_key = list_defs[i].height_key;
     list->treeview = gtk_tree_view_new();
 
     GtkTreeViewColumn *col = gtk_tree_view_column_new();
@@ -2889,8 +3096,15 @@ void gui_init(dt_lib_module_t *self)
     gtk_tree_view_column_set_attributes(col, renderer, "pixbuf", TREE_IC_INVERSE, NULL);
     gtk_tree_view_column_add_attribute(col, renderer, "visible", TREE_IC_INVERSE_VISIBLE);
 
+    /* No ellipsize: a name that does not fit is not something to shorten, it is something the
+     * column has to make room for. Measured offscreen -- with no ellipsize set, a GtkTreeView
+     * reports its true, full-content preferred width, and that width propagates all the way up
+     * through a GTK_POLICY_NEVER scrolled window to the window itself; gtk_window_resize() (used
+     * to restore a persisted width below) cannot force the window narrower than that reported
+     * minimum, GTK clamps it back up. So the name is simply never compressed, in either list, by
+     * a narrow paned split or a narrow restored window -- both floors hold at the content's own
+     * minimum instead. */
     renderer = gtk_cell_renderer_text_new();
-    g_object_set(renderer, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
     gtk_tree_view_column_pack_start(col, renderer, TRUE);
     gtk_tree_view_column_add_attribute(col, renderer, "text", TREE_TEXT);
     gtk_tree_view_column_add_attribute(col, renderer, "editable", TREE_EDITABLE);
@@ -2899,15 +3113,10 @@ void gui_init(dt_lib_module_t *self)
     list->name_col = col;
     list->name_renderer = renderer;
 
-    /* What the row has to say about itself, in italics against the right end of the name column,
-     * so it reads as an annotation rather than as part of the shape's name. Empty on every row
-     * that has nothing to add, which costs those no space. */
-    renderer = gtk_cell_renderer_text_new();
-    g_object_set(renderer, "style", PANGO_STYLE_ITALIC, "xalign", 1.0f, NULL);
-    gtk_cell_renderer_set_sensitive(renderer, FALSE);
-    gtk_tree_view_column_pack_end(col, renderer, FALSE);
-    gtk_tree_view_column_add_attribute(col, renderer, "text", TREE_NOTE);
-
+    /* Measured offscreen: of two renderers packed at a column's end, the FIRST one packed lands
+     * at the true right edge, and each renderer packed after it sits closer to the main content
+     * instead -- so the icon has to be packed before the note text, not after, to end up to the
+     * note's right. */
     renderer = gtk_cell_renderer_pixbuf_new();
     // A theme with no symbolic variant of that icon leaves the pixbuf NULL: name the icon instead
     // and let GTK draw it, untinted, rather than show nothing.
@@ -2917,6 +3126,16 @@ void gui_init(dt_lib_module_t *self)
       g_object_set(renderer, "pixbuf", d->ic_used, NULL);
     gtk_tree_view_column_pack_end(col, renderer, FALSE);
     gtk_tree_view_column_add_attribute(col, renderer, "visible", TREE_IC_USED_VISIBLE);
+
+    /* What the row has to say about itself, in italics, sitting to the LEFT of the "used by" icon
+     * above (packed after it, per the same measurement) so it reads as an annotation on the name
+     * rather than as part of it. Empty on every row that has nothing to add, which costs those no
+     * space. */
+    renderer = gtk_cell_renderer_text_new();
+    g_object_set(renderer, "style", PANGO_STYLE_ITALIC, "xalign", 1.0f, NULL);
+    gtk_cell_renderer_set_sensitive(renderer, FALSE);
+    gtk_tree_view_column_pack_end(col, renderer, FALSE);
+    gtk_tree_view_column_add_attribute(col, renderer, "text", TREE_NOTE);
 
     /* The per-row action icon, to the right of everything the name column carries -- the "used
      * by" icon included, since that one is packed at that column's end. Both renderers live in
@@ -3006,18 +3225,24 @@ void gui_init(dt_lib_module_t *self)
     GtkWidget *wrapper = dt_ui_scroll_wrap(list->treeview, 90, list_defs[i].height_key,
                                            DT_UI_RESIZE_DYNAMIC);
 
-    /* The width floor is set here rather than on the window: a tree in a scrolled window has
-     * almost no minimum width of its own, so without this the paned would let either half be
-     * dragged down to nothing, and the window would have no sensible minimum either. Names
-     * ellipsize in the middle, so a narrow half stays readable at both ends. */
+    /* A default floor for an EMPTY list, where the treeview's own content-derived minimum is
+     * near zero: without this, an empty paned half could be dragged down to nothing. It never
+     * shrinks a list below its actual content, though -- gtk_scrolled_window_set_min_content_width()
+     * only raises the reported minimum when it is the larger of the two; a longer name simply
+     * wins on its own, per the name renderer's own comment above. */
     GtkWidget *scrolled = dt_ui_scroll_wrap_get_scrolled_window(wrapper);
     if(GTK_IS_SCROLLED_WINDOW(scrolled))
       gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled), DT_PIXEL_APPLY_DPI(190));
 
     gtk_box_pack_start(GTK_BOX(half), wrapper, TRUE, TRUE, 0);
 
+    /* Measured offscreen: with both sides resize=TRUE, GtkPaned splits any width the window
+     * gains between the two -- the divider drifts to keep an even split, rather than staying
+     * where it was left. The inventory (pack1) is pinned instead (resize=FALSE) so growing the
+     * window hands all of the new width to the module list (pack2, resize=TRUE) and the divider
+     * itself does not move; a manual drag still repositions it normally either way. */
     if(i == 0)
-      gtk_paned_pack1(GTK_PANED(lists_paned), half, TRUE, FALSE);
+      gtk_paned_pack1(GTK_PANED(lists_paned), half, FALSE, FALSE);
     else
       gtk_paned_pack2(GTK_PANED(lists_paned), half, TRUE, FALSE);
   }

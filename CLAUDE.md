@@ -1293,16 +1293,62 @@ displayed rank and the effective one can differ by one.
 ### The shape manager's two lists, and the graph questions behind them
 
 `libs/shape_manager.c` shows the forms in two trees, split by one question: is this group some
-module's drawn mask, or nobody's yet? The left list is the inventory — every shape, plus the groups
-no module uses — and the right one is the assignment. A shape a module uses appears in both, once
-as itself and once as a member, the same arrangement the Drawn tab already uses. Membership is
-derived per rebuild by `_form_belongs_to()`, never stored, so a form crosses lists the moment a
-module claims or releases its group — which is why both stores are always rebuilt together.
+module's drawn mask, or nobody's yet? The left list is the inventory — every shape and every
+group, module masks included — and the right one is the assignment, holding only the groups a
+module actually renders. A module mask is therefore listed in BOTH: once in the inventory, where
+it can be picked up like any other group (nested into another mask through the "+", or attached
+to more modules through the chooser) and reused, and once in the assignment, under the module that
+renders it. A shape a module uses appears in both for the same reason, once as itself and once as
+a member — the arrangement the Drawn tab already uses. Membership is derived per rebuild by
+`_group_is_module_mask()`, never stored, so a group's assignment-list row appears or disappears the
+moment a module claims or releases it — which is why both stores are always rebuilt together.
 
 Every tree handler is handed a `dt_shape_manager_list_t`, not the module, because the first thing
 each needs to know is which tree the gesture came from. **That includes the context menu items**:
 connecting them with the module instead is what once made every menu action dereference arbitrary
 memory.
+
+A module mask is shown FLAT in the inventory -- one row, no expander, its members not appended
+under it -- and expandable in the module list, which is where that subtree belongs. `_tree_row_t`
+carries the `flat` flag that stops `_shape_manager_list_recurs()` after the row itself.
+
+Both lists order module masks by **reverse `iop_order`**, walking `dev->iop` from `g_list_last()`
+backwards -- the "bottom of the stack first" convention the module chooser and the module groups
+panel's Pipeline tab already use, so a mask sits where its module does everywhere else. That walk
+is scoped like `_modules_owning_group()`, every module in `dev->iop` rather than only the ones
+`dt_iop_module_is_in_pipeline()` shows: the "unclaimed groups" pass afterwards skips anything
+`_group_is_module_mask()` claims, so a narrower scope here would drop a hidden instance's mask
+from both passes.
+
+**Three GTK behaviours here were measured offscreen, not reasoned about, and each one contradicted
+the obvious guess:**
+
+- **Names carry no `ellipsize`, and that is what guarantees they are never compressed.** A
+  `GtkTreeView` with no ellipsize reports its true full-content preferred width, that width
+  propagates through a `GTK_POLICY_NEVER` scrolled window (a `min-content-width` smaller than the
+  content does NOT lower it), and `gtk_window_resize()` -- which restores the persisted panel
+  width -- cannot force a window below its content minimum: GTK clamps it back up. So the width
+  floor is structural, not something the panel has to compute.
+- **A `GtkPaned` with `resize=TRUE` on both children splits new width between them**, drifting the
+  divider on every window resize. The inventory is packed `resize=FALSE` so the divider holds and
+  the module list absorbs the growth; a manual drag still repositions it.
+- **Of two renderers packed with `gtk_tree_view_column_pack_end()`, the FIRST packed lands at the
+  true right edge**, each later one closer to the content. The "used by" icon is therefore packed
+  BEFORE the note text to end up to its right.
+
+**`_shape_manager_selection_change_in()` must reveal by path, never `gtk_tree_view_expand_all()`.**
+The recursive search walks the MODEL, which holds every row whatever the view has collapsed, so it
+needs nothing expanded; expanding everything was only about making the match visible afterwards,
+and it blew every unrelated group open to do it -- visible as "creating a shape expands all the
+groups". `gtk_tree_view_expand_to_path()` on the found row does the same job. The paired
+`collapse_all()` on the not-found branch went with it: without an `expand_all()` to undo, it would
+have destroyed the user's own expansions on any selection event that missed.
+
+**`dev->form_gui` can be NULL while this panel is open.** It is allocated on entering darkroom and
+freed back to NULL on leaving it (`views/darkroom.c`, `views/studio_capture.c`), and this panel is
+a standalone toplevel that outlives that. `dt_masks_change_form_gui()` is NULL-safe throughout and
+does NOT allocate one, so a caller cannot assume it has one afterwards -- `_tree_selection_change()`
+dereferenced it unguarded and crashed (SIGSEGV, observed live).
 
 The graph questions live in `develop/masks_group.h`, id-keyed and by value like the rest of that
 header — `dt_masks_group_contains()` (cycle guard: wiring a group into one that already holds it
