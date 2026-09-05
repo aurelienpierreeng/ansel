@@ -788,11 +788,17 @@ static gboolean image_set_rawcrops(const int32_t imgid, int dx, int dy)
   return TRUE;
 }
 
-// check if image contains GainMaps of the exact type that we can apply here
-// we may reject some GainMaps that are valid according to Adobe DNG spec but we do not support
-gboolean check_gain_maps(dt_iop_module_t *self, dt_dng_gain_map_t **gainmaps_out)
+// Check whether `image` carries GainMaps of the exact type we can apply here. We may reject some
+// GainMaps that are valid per the Adobe DNG spec but that we do not support.
+//
+// The caller MUST hold an image-cache read lock on `image` for the whole call, and for as long as it
+// then uses `gainmaps_out`: both the list and the maps it points at belong to the cache entry, which
+// frees them in `dt_image_cache_deallocate()` on eviction. Never pass `&dev->image_storage` here --
+// that is a SHALLOW struct copy taken by `_dt_dev_refresh_image_storage()`, which drops the cache
+// lock on the line after copying, so its `dng_gain_maps` is a borrowed pointer with no owner. Walking
+// it while a thumbnail run evicted the entry is the segfault in Sentry 140771917.
+static gboolean _validate_gain_maps(const dt_image_t *const image, dt_dng_gain_map_t **gainmaps_out)
 {
-  const dt_image_t *const image = &(self->dev->image_storage);
   dt_dng_gain_map_t *gainmaps[4] = {0};
 
   if(g_list_length(image->dng_gain_maps) != 4)
@@ -809,6 +815,13 @@ gboolean check_gain_maps(dt_iop_module_t *self, dt_dng_gain_map_t **gainmaps_out
       g->map_points_v < 2 || g->map_points_h < 2 ||
       g->top > 1 || g->left > 1 ||
       g->bottom != image->height || g->right != image->width)
+      return FALSE;
+    /* The grid dimensions come from the file and are not cross-checked against the number of gain
+     * values the opcode actually carried, so a truncated or malformed DNG can declare a grid larger
+     * than its payload. Everything downstream then indexes map_gain[] as map_points_h * map_points_v
+     * -- process() reads row map_points_v - 1, and _own_gainmaps() memcpy's that many floats out of a
+     * source block that only ever held map_gain_count. Reject the map instead of reading past it. */
+    if((uint64_t)g->map_points_h * (uint64_t)g->map_points_v > (uint64_t)g->map_gain_count)
       return FALSE;
     uint32_t filter = ((g->top & 1) << 1) + (g->left & 1);
     gainmaps[filter] = g;
@@ -836,6 +849,18 @@ gboolean check_gain_maps(dt_iop_module_t *self, dt_dng_gain_map_t **gainmaps_out
   return TRUE;
 }
 
+// Does this image carry GainMaps we can apply? Answers against the cache entry, under its read lock,
+// and lets no pointer escape.
+gboolean check_gain_maps(const int32_t imgid)
+{
+  const dt_image_t *const image = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(image)) return FALSE;
+
+  const gboolean supported = _validate_gain_maps(image, NULL);
+  dt_image_cache_read_release(image);
+  return supported;
+}
+
 // Free the pipe-owned deep copies of the GainMaps held in piece->data (see commit_params).
 static void _free_owned_gainmaps(dt_iop_rawprepare_data_t *d)
 {
@@ -846,21 +871,25 @@ static void _free_owned_gainmaps(dt_iop_rawprepare_data_t *d)
   }
 }
 
-// Build pipe-owned deep copies of the image's GainMaps into d->gainmaps[]. The pointers from
-// check_gain_maps() borrow image_storage.dng_gain_maps, which is a shallow copy of cache-owned
-// memory with the cache lock already dropped (see _dt_dev_refresh_image_storage): it can be
-// freed/rebuilt (e.g. eviction under thumbnail-generation pressure) before process() reads it
-// -> use-after-free (Sentry #129880848). Owning a private copy decouples us from the cache.
+// Build pipe-owned deep copies of the image's GainMaps into d->gainmaps[]. The maps belong to the
+// image-cache entry, which frees them on eviction (thumbnail-generation pressure is enough), so
+// `process()` must not read them directly -- that was Sentry #129880848, fixed by owning a private
+// copy. The validation and the copy must BOTH happen under the cache read lock taken here: doing the
+// copy after releasing it just moves the same use-after-free into the memcpy, and validating through
+// `dev->image_storage` -- a shallow copy whose lock was dropped when it was made -- moves it into the
+// list walk, which is Sentry 140771917.
 // Caller must have freed/NULLed d->gainmaps[] first. Returns TRUE only if all four were copied.
-static gboolean _own_gainmaps(dt_iop_module_t *self, dt_iop_rawprepare_data_t *d)
+static gboolean _own_gainmaps(const int32_t imgid, dt_iop_rawprepare_data_t *d)
 {
-  dt_dng_gain_map_t *src[4] = { 0 };
-  if(!check_gain_maps(self, src))
-    return FALSE;
+  const dt_image_t *const image = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(image)) return FALSE;
 
-  for(int i = 0; i < 4; i++)
+  dt_dng_gain_map_t *src[4] = { 0 };
+  gboolean owned = _validate_gain_maps(image, src);
+
+  for(int i = 0; owned && i < 4; i++)
   {
-    // map_planes == 1 is enforced by check_gain_maps(), so the gain payload is
+    // map_planes == 1 is enforced by _validate_gain_maps(), so the gain payload is
     // map_points_h * map_points_v floats -- exactly what process() indexes.
     const size_t sz = sizeof(dt_dng_gain_map_t)
                       + (size_t)src[i]->map_points_h * src[i]->map_points_v * sizeof(float);
@@ -868,11 +897,14 @@ static gboolean _own_gainmaps(dt_iop_module_t *self, dt_iop_rawprepare_data_t *d
     if(IS_NULL_PTR(d->gainmaps[i]))
     {
       _free_owned_gainmaps(d); // partial copy (OOM): drop everything, don't apply
-      return FALSE;
+      owned = FALSE;
+      break;
     }
     memcpy(d->gainmaps[i], src[i], sz);
   }
-  return TRUE;
+
+  dt_image_cache_read_release(image);
+  return owned;
 }
 
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
@@ -930,7 +962,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   // Refresh our private, pipe-owned copy of the GainMaps (see _own_gainmaps() for why we must own
   // them rather than borrow image_storage.dng_gain_maps). Free the previous copy in all cases.
   _free_owned_gainmaps(d);
-  d->apply_gainmaps = (p->flat_field == FLAT_FIELD_EMBEDDED) && _own_gainmaps(self, d);
+  d->apply_gainmaps = (p->flat_field == FLAT_FIELD_EMBEDDED) && _own_gainmaps(img->id, d);
 
   if(image_set_rawcrops(pipe->dev->image_storage.id, d->x + d->width, d->y + d->height))
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_METADATA_UPDATE);
@@ -1053,7 +1085,7 @@ void reload_defaults(dt_iop_module_t *self)
   const dt_image_t *const image = &(self->dev->image_storage);
 
   // if there are embedded GainMaps, they should be applied by default to avoid uneven color cast
-  gboolean has_gainmaps = check_gain_maps(self, NULL);
+  gboolean has_gainmaps = check_gain_maps(self->dev->image_storage.id);
 
   *d = (dt_iop_rawprepare_params_t){.x = image->crop_x,
                                     .y = image->crop_y,
@@ -1117,7 +1149,7 @@ void gui_update(dt_iop_module_t *self)
   for(int i = 1; i < 4; i++)
     gtk_widget_set_visible(g->black_level_separate[i], !is_monochrome);
 
-  gtk_widget_set_visible(g->flat_field, check_gain_maps(self, NULL));
+  gtk_widget_set_visible(g->flat_field, check_gain_maps(self->dev->image_storage.id));
   dt_bauhaus_combobox_set(g->flat_field, p->flat_field);
 
   // raw vs non_raw page, from the per-image default computed by reload_defaults()

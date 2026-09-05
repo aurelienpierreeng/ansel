@@ -112,6 +112,7 @@ void dt_dng_opcode_process_opcode_list_2(uint8_t *buf, uint32_t buf_size, dt_ima
       gm->map_origin_v = get_double(&param[56]);
       gm->map_origin_h = get_double(&param[64]);
       gm->map_planes = get_long(&param[72]);
+      gm->map_gain_count = gain_count;
       for(uint32_t i = 0; i < gain_count; i++)
         gm->map_gain[i] = get_float(&param[76 + 4*i]);
 

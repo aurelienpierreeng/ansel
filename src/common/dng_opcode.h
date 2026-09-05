@@ -59,6 +59,11 @@ typedef struct dt_dng_gain_map_t
   double map_origin_v;
   double map_origin_h;
   uint32_t map_planes;
+  /* Number of floats actually stored in map_gain[], i.e. how many the opcode carried. The grid
+   * dimensions above are read straight out of the file and are NOT guaranteed to agree with it:
+   * consumers index map_gain[] as map_points_h * map_points_v (see iop/rawprepare.c) and must check
+   * that this many are really there before doing so. */
+  uint32_t map_gain_count;
   float map_gain[];
 } dt_dng_gain_map_t;
 
