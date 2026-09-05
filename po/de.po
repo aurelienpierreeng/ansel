@@ -4412,10 +4412,20 @@ msgstr "leer"
 msgid "unknown/invalid"
 msgstr "unbekannt/ungültig"
 
-#: ../src/common/colorlabels.c:336
+#: ../src/metadata/colorlabels.c:267
 #, c-format
 msgid "Color label set to %s for %i image(s)"
 msgstr "Farbmarkierung auf %s bei %i Bild(ern) gesetzt"
+
+#: ../src/metadata/colorlabels.c:270
+#, c-format
+msgid "Color label %s removed for %i image(s)"
+msgstr "Farbmarkierung %s bei %i Bild(ern) entfernt"
+
+#: ../src/metadata/colorlabels.c:265
+#, c-format
+msgid "Color labels removed for %i image(s)"
+msgstr "Farbmarkierungen bei %i Bild(ern) entfernt"
 
 #: ../src/common/colorspaces.c:1691
 #, fuzzy
@@ -10080,7 +10090,7 @@ msgstr "<span foreground='#2222BB'>⬤</span> Blau"
 
 #: ../src/gui/actions/image.c:233
 msgid "<span foreground='#BB22BB'>⬤</span> Purple"
-msgstr "<span foreground='#2222BB'>⬤</span> Lila"
+msgstr "<span foreground='#BB22BB'>⬤</span> Lila"
 
 #: ../src/gui/actions/image.c:238
 msgid "<span foreground='#BBBBBB'>⬤</span> Clear labels"

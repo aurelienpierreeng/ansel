@@ -4317,10 +4317,20 @@ msgstr ""
 msgid "unknown/invalid"
 msgstr "ismeretlen"
 
-#: ../src/common/colorlabels.c:336
+#: ../src/metadata/colorlabels.c:267
 #, c-format
 msgid "Color label set to %s for %i image(s)"
 msgstr ""
+
+#: ../src/metadata/colorlabels.c:270
+#, c-format
+msgid "Color label %s removed for %i image(s)"
+msgstr "%s színcímke eltávolítva %i képről"
+
+#: ../src/metadata/colorlabels.c:265
+#, c-format
+msgid "Color labels removed for %i image(s)"
+msgstr "Színcímkék eltávolítva %i képről"
 
 #: ../src/common/colorspaces.c:1691
 #, fuzzy
