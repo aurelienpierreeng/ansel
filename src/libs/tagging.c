@@ -76,6 +76,7 @@
 #include "widgets/dialog.h"
 #include "widgets/label.h"
 #include "widgets/scroll_wrap.h"
+#include "widgets/widget_settings.h"  // dt_gui_widget_freeze(), dt_gui_widgets_suppressed()
 
 #define FLOATING_ENTRY_WIDTH DT_PIXEL_APPLY_DPI(150)
 
@@ -94,7 +95,6 @@ typedef struct dt_lib_tagging_t
   GtkTreeStore *attached_treestore, *dictionary_treestore;
   GtkTreeModelFilter *dictionary_listfilter, *dictionary_treefilter;
   GHashTable *collection_tags;
-  gulong entry_key_handler_id;
   GtkWidget *floating_tag_window;
   GList *floating_tag_imgs;
   gboolean tree_flag, suggestion_flag, sort_count_flag, hide_path_flag, dttags_flag;
@@ -141,7 +141,7 @@ typedef enum dt_tag_sort_id
 static void _save_last_tag_used(const char *tags, dt_lib_tagging_t *d);
 static void _refresh_collection_tags(dt_lib_module_t *self);
 static void _size_recent_tags_list();
-static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self);
+static void _entry_clear_suppressed(GtkEntry *entry);
 static gboolean _lib_tagging_tag_redo_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                             GdkModifierType mods, gpointer user_data);
 static gboolean _lib_tagging_tag_show_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
@@ -1379,15 +1379,7 @@ static void _create_tag_from_entry(dt_lib_module_t *self, GtkEntry *src)
   /** record last tag used */
   _save_last_tag_used(tag, d);
 
-  if(src == d->entry)
-  {
-    g_signal_handler_disconnect(d->entry, d->entry_key_handler_id);
-    dt_tagging_entry_clear(d->entry);
-    d->entry_key_handler_id = g_signal_connect(G_OBJECT(d->entry), "key-press-event",
-                                               G_CALLBACK(_enter_key_pressed), self);
-  }
-  else
-    dt_tagging_entry_clear(src);
+  _entry_clear_suppressed(src);
 
   _init_treeview(self, 0);
   _init_treeview(self, 1);
@@ -1408,8 +1400,26 @@ static void _new_button_clicked(GtkButton *button, dt_lib_module_t *self)
   _create_tag_from_entry(self, d->dict_entry);
 }
 
+/* Clear a tag entry without its own key handler taking the programmatic change for user input.
+ *
+ * dt_gui_widget_freeze() (widgets/widget_settings.h) is the application-wide way to say that, and
+ * the one this file already uses everywhere else: it raises the suppression depth for the rest of
+ * the enclosing scope and drops it on every exit path, while each widget callback opens by asking
+ * dt_gui_widgets_suppressed(). Disconnecting the handler by id and reconnecting it around the
+ * clear expressed the same intent, but had to be spelled out identically at four call sites, and
+ * left the entry with NO key handler at all if anything between the two ever returned early. */
+static void _entry_clear_suppressed(GtkEntry *entry)
+{
+  dt_gui_widget_freeze();
+  dt_tagging_entry_clear(entry);
+}
+
 static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self)
 {
+  // A programmatic clear of the entry is not the user pressing a key. FALSE, not TRUE: a
+  // suppressed callback declines the event rather than swallowing it.
+  if(dt_gui_widgets_suppressed()) return FALSE;
+
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   guint key = dt_keys_mainpad_alternatives(event->keyval);
   switch(key)
@@ -1424,10 +1434,7 @@ static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_
     {
       if(_select_next_user_attached_tag(0, d->attached_view))
       {
-        g_signal_handler_disconnect(d->entry, d->entry_key_handler_id);
-        dt_tagging_entry_clear(d->entry);
-        d->entry_key_handler_id = g_signal_connect(G_OBJECT(d->entry), "key-press-event",
-                                                   G_CALLBACK(_enter_key_pressed), self);
+        _entry_clear_suppressed(d->entry);
         gtk_widget_grab_focus(GTK_WIDGET(d->attached_view));
       }
       return TRUE;
@@ -1443,16 +1450,7 @@ static void _entry_clear_icon(GtkEntry *entry, const GtkEntryIconPosition positi
 {
   if(position != GTK_ENTRY_ICON_SECONDARY) return;
 
-  dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
-  if(entry == d->entry)
-  {
-    g_signal_handler_disconnect(d->entry, d->entry_key_handler_id);
-    dt_tagging_entry_clear(d->entry);
-    d->entry_key_handler_id = g_signal_connect(G_OBJECT(d->entry), "key-press-event",
-                                               G_CALLBACK(_enter_key_pressed), self);
-  }
-  else
-    dt_tagging_entry_clear(entry);
+  _entry_clear_suppressed(entry);
   gtk_widget_grab_focus(GTK_WIDGET(entry));
 }
 
@@ -2719,11 +2717,8 @@ void gui_reset(dt_lib_module_t *self)
 {
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   // clear entry boxes and query
-  g_signal_handler_disconnect(d->entry, d->entry_key_handler_id);
-  dt_tagging_entry_clear(d->entry);
-  d->entry_key_handler_id = g_signal_connect(G_OBJECT(d->entry), "key-press-event",
-                                             G_CALLBACK(_enter_key_pressed), self);
-  dt_tagging_entry_clear(d->dict_entry);
+  _entry_clear_suppressed(d->entry);
+  _entry_clear_suppressed(d->dict_entry);
   _set_keyword(self);
   _init_treeview(self, 1);
   _update_atdetach_buttons(self);
@@ -3252,8 +3247,7 @@ void gui_init(dt_lib_module_t *self)
   // handling (accepting a keyboard-highlighted popup match into the entry text) runs
   // before ours: otherwise a tag gets created from the raw typed prefix instead of the
   // selected suggestion (#905)
-  d->entry_key_handler_id = g_signal_connect(G_OBJECT(d->entry), "key-press-event",
-                                             G_CALLBACK(_enter_key_pressed), self);
+  g_signal_connect(G_OBJECT(d->entry), "key-press-event", G_CALLBACK(_enter_key_pressed), self);
 
   // ── tag management popup window (persistent, hidden until requested) ────
   d->manage_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
