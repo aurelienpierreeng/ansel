@@ -93,7 +93,7 @@ src/apps/ansel-cli/main.c
 src/pixel/chromatic_adaptation.h
 src/common/collection.c
 src/common/color_vocabulary.c
-src/common/colorlabels.c
+src/metadata/colorlabels.c
 src/colorprofiles/colorspaces.c
 src/common/colorchecker.h
 src/common/colorchecker.c

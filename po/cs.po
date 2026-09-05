@@ -4305,10 +4305,20 @@ msgstr ""
 msgid "unknown/invalid"
 msgstr "neznámý"
 
-#: ../src/common/colorlabels.c:336
+#: ../src/metadata/colorlabels.c:267
 #, c-format
 msgid "Color label set to %s for %i image(s)"
 msgstr ""
+
+#: ../src/metadata/colorlabels.c:270
+#, c-format
+msgid "Color label %s removed for %i image(s)"
+msgstr "Barevný štítek %s odstraněn u %i obrázku(ů)"
+
+#: ../src/metadata/colorlabels.c:265
+#, c-format
+msgid "Color labels removed for %i image(s)"
+msgstr "Barevné štítky odstraněny u %i obrázku(ů)"
 
 #: ../src/common/colorspaces.c:1691
 #, fuzzy

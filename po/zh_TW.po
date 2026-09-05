@@ -4298,10 +4298,20 @@ msgstr ""
 msgid "unknown/invalid"
 msgstr "未知"
 
-#: ../src/common/colorlabels.c:336
+#: ../src/metadata/colorlabels.c:267
 #, c-format
 msgid "Color label set to %s for %i image(s)"
 msgstr ""
+
+#: ../src/metadata/colorlabels.c:270
+#, c-format
+msgid "Color label %s removed for %i image(s)"
+msgstr "已將色彩標籤 %s 從 %i 張影像移除。"
+
+#: ../src/metadata/colorlabels.c:265
+#, c-format
+msgid "Color labels removed for %i image(s)"
+msgstr "已移除 %i 張影像的色彩標籤。"
 
 #: ../src/common/colorspaces.c:1691
 #, fuzzy
