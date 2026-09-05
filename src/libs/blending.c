@@ -39,7 +39,7 @@
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "system/macros.h"        // IS_NULL_PTR()
-#include "system/mem_alloc.h"     // dt_free()
+#include "system/mem_alloc.h"     // dt_free(), dt_calloc_align(), dt_free_align()
 #include "widgets/widget_settings.h"   // DT_GUI_BOX_SPACING, DT_PIXEL_APPLY_DPI()
 
 #include <glib.h>
@@ -224,8 +224,15 @@ void gui_cleanup(dt_lib_module_t *self)
   if(!IS_NULL_PTR(self->data))
   {
     _release(self);
-    dt_free(self->data);
-    self->data = NULL;
+    /* gui_init() takes this block from dt_calloc_align(), so it goes back to dt_free_align().
+     * The two families are only interchangeable on Linux, where both end at g_free(). On Windows
+     * the aligned one is _aligned_malloc()/_aligned_free(), and handing one of its blocks to
+     * g_free() is STATUS_HEAP_CORRUPTION (0xc0000374) -- which aborted dt_cleanup() here, before
+     * it ever reached dt_conf_cleanup() and the database teardown further down. That is why the
+     * window vanished but the process died in the background, anselrc kept the previous session's
+     * keys, and the next start found the database still locked (issue #1369).
+     * dt_free_align() NULLs self->data itself. */
+    dt_free_align(self->data);
   }
 }
 
