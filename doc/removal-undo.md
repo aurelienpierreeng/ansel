@@ -92,6 +92,13 @@ with it, and `main.images.film_id` has a foreign key on it. Every image stages a
 roll, and the restore inserts it with `OR IGNORE` — only one image of the roll actually needs
 to recreate it, and the others must not fail on the duplicate.
 
+Whoever shows the folder list has to be told, and `common/image.c` states that as a fact rather
+than as a signal: `dt_film_notify_rolls_changed()` (`common/film.h`) carries it, and
+`gui/common/film_gui.c` is what turns it into `DT_SIGNAL_FILMROLLS_CHANGED`. Raising the signal
+from `common/` would be a layer-1 file calling into `control/`, which `tools/check_layering.sh`
+counts; the same inversion is what `common/image_notify.h` and `common/thumbnail_notify.h`
+already do for theirs, and a headless run with no handler installed simply drops the fact.
+
 ### The staging tables die with the connection, and the undo stack outlives it
 
 `memory.` is per-connection, so the twins exist only as long as the database is open. At

@@ -525,8 +525,18 @@ endif()
 # bundled build would then vouch for a system Exiv2 that has no BMFF at all -- exactly the
 # silent-wrongness this check exists to prevent. One tiny compile per configure is cheaper
 # than that.
+#
+# The probe must COMPILE only. check_symbol_exists() links by default, so any toolchain that
+# cannot link -- an OpenMP runtime missing for the chosen clang, say -- answers NO for a
+# reason that has nothing to do with Exiv2, and the diagnostic below then blames a bundled
+# build that is in fact correct. Whether a header defines a macro is a preprocessor question;
+# asking it with a linker in the loop is what makes the answer unreliable.
+set(_dt_saved_try_compile_target_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 unset(HAVE_EXV_ENABLE_BMFF CACHE)
 check_symbol_exists(EXV_ENABLE_BMFF "${_exv_conf_h}" HAVE_EXV_ENABLE_BMFF)
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_dt_saved_try_compile_target_type}")
+unset(_dt_saved_try_compile_target_type)
 
 if(NOT HAVE_EXV_ENABLE_BMFF)
   if(USE_BUNDLED_EXIV2)

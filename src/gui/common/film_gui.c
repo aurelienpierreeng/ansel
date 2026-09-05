@@ -24,6 +24,7 @@
 #include "gui/common/film_gui.h"
 
 #include "common/film.h"
+#include "control/signal.h"
 #include "system/mem_alloc.h"
 #include "gui/application.h"
 
@@ -104,9 +105,18 @@ static void _confirm_rmdir(GList *empty_dirs)
   g_idle_add(_ask_and_delete, empty_dirs);
 }
 
+/* The backend states the fact; the signal is how this application distributes it. Raised on
+ * whichever thread changed the rolls, same as the emission this replaces -- the Library
+ * panel's handler is what marshals itself onto the GUI thread. */
+static void _rolls_changed(void)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FILMROLLS_CHANGED);
+}
+
 void dt_film_gui_register_handlers(void)
 {
   dt_film_set_confirm_rmdir_handler(_confirm_rmdir);
+  dt_film_set_rolls_changed_handler(_rolls_changed);
 }
 
 // clang-format off

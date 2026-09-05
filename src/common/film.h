@@ -98,6 +98,24 @@ void dt_film_set_confirm_rmdir_handler(dt_film_confirm_rmdir_handler_t handler);
 /** rmdir() every path in `dirs`. The list is NOT freed. Call once the user has agreed. */
 void dt_film_remove_directories(const GList *dirs);
 
+
+/* Whoever is showing the film-roll list wants to know when that list changed -- a roll
+ * removed, or one brought back by an undo. Raising DT_SIGNAL_FILMROLLS_CHANGED here would
+ * be a call into control/ (layer 3) from layer 1, which is what the include-graph ratchet
+ * counts; the fact travels the other way instead, exactly as common/image_notify.h and
+ * common/thumbnail_notify.h already do for theirs. With no handler installed -- ansel-cli,
+ * a unit test -- it is dropped, which is correct for both. */
+
+/** @brief The film-roll list changed. Raised on whichever thread changed it; a handler that
+ *  touches widgets gets itself onto the GUI thread, as the signal emission it replaces did. */
+typedef void (*dt_film_rolls_changed_handler_t)(void);
+
+/** @brief Install the handler, or NULL to remove it. */
+void dt_film_set_rolls_changed_handler(dt_film_rolls_changed_handler_t handler);
+
+/** @brief State that the film-roll list changed. */
+void dt_film_notify_rolls_changed(void);
+
 #endif // DT_COMMON_FILM_H
 
 // clang-format off

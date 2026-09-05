@@ -79,6 +79,14 @@ alternative costs every one of their users their raw files, and costs us the bug
 If you hit that error with `-DUSE_BUNDLED_EXIV2=OFF`, the fix is either to rebuild Exiv2 with
 `-DEXIV2_ENABLE_BMFF=ON` or — far easier — to drop back to the bundled build.
 
+The probe compiles but does not link. `check_symbol_exists()` links its test program by
+default, so a toolchain that cannot link at all — a clang whose matching `libomp` is not
+installed, say — answers NO for a reason that has nothing to do with Exiv2, and the bundled
+branch of the diagnostic then accuses a bundled build that is in fact correct. Whether a
+header defines a macro is a preprocessor question, so `CMAKE_TRY_COMPILE_TARGET_TYPE` is set
+to `STATIC_LIBRARY` around the call and restored after it. The check still discriminates: a
+header without the define fails to compile, which is the whole answer.
+
 ---
 
 ## Windows paths

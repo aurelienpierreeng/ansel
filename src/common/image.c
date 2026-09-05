@@ -84,8 +84,8 @@
 #include "metadata/exif.h"
 #include "common/file_location.h"
 #include "common/grouping.h"
+#include "common/film.h"
 #include "history/history.h"
-#include "control/signal.h"
 #include "database/database.h"
 #include "database/history_repository.h"
 #include "database/film_repository.h"
@@ -947,12 +947,23 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
          * for deletion any more, so the flag goes. */
         dt_image_repository_clear_flag_among(one, DT_IMAGE_REMOVE);
 
-        /* The image cache and the mipmap cache were emptied of it on the way out, and both
-         * refill themselves from the rows that just came back. The collection does not:
-         * nothing about a restored row reaches the grid until the query is re-run. */
+        /* The removal emptied the image cache and the mipmap cache of this image, and neither
+         * refills itself: the mipmap cache regenerates only on explicit removal, and the image
+         * cache's history_items -- the "altered" flag deciding raw processing over the unedited
+         * embedded JPEG -- would be whatever the entry held before. Without this the image comes
+         * back looking undeveloped, or as a thumbnail that never renders at all. Reloading also
+         * re-reads the flags cleared just above, so no stale cache entry can write DT_IMAGE_REMOVE
+         * back over the restored row. TRUE: this is a lighttable operation, the filmstrip may
+         * refresh with the grid. */
+        dt_image_history_changed(undo->imgid, TRUE);
+
+        /* The collection is the last one: nothing about a restored row reaches the grid until
+         * the query is re-run. */
         dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD,
                                    DT_COLLECTION_PROP_UNDEF, g_list_copy(one));
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FILMROLLS_CHANGED);
+        /* Restoring the last image of a film roll brings the roll back with it, so the
+         * folder list has to be told; the notifier keeps that a layer-1 statement. */
+        dt_film_notify_rolls_changed();
         *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undo->imgid));
       }
       else
@@ -965,7 +976,7 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
       _image_remove(undo->imgid, FALSE);
       dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD,
                                  DT_COLLECTION_PROP_UNDEF, g_list_copy(one));
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FILMROLLS_CHANGED);
+      dt_film_notify_rolls_changed();
     }
 
     g_list_free(one);

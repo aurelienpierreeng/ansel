@@ -1559,6 +1559,12 @@ defer_foreign_keys = ON`, because a group removed in one go comes back one undo 
 time and an image regularly precedes the leader it points at; any `group_id` still dangling at
 the end is repointed at the image itself rather than allowed to fail the commit.
 
+The folder list learns about a restored roll through `dt_film_notify_rolls_changed()`
+(`common/film.h`), which `gui/common/film_gui.c` turns into `DT_SIGNAL_FILMROLLS_CHANGED`.
+`common/` is layer 1 and `control/` is layer 3, so raising the signal from `common/image.c`
+is a layering inversion `tools/check_layering.sh` counts against the baseline; the notifier
+is the same inversion `common/image_notify.h` and `common/thumbnail_notify.h` already use.
+
 **The schema does not cascade uniformly.** Only `history`, `masks_history`, `tagged_images`
 and `history_hash` carry a foreign key on `images(id)`; `module_order`, `color_labels` and
 `meta_data` carry none, in a fresh database as in a migrated one — `dt_image_repository_delete()`
