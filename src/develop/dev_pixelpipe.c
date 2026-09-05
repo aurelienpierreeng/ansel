@@ -711,11 +711,11 @@ const dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const dt_d
   return NULL;
 }
 
-gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
-                                         void **data, dt_pixel_cache_entry_t **cache_entry,
-                                         dt_dev_pixelpipe_cache_wait_t *wait,
-                                         dt_dev_pixelpipe_cache_ready_callback_t restart,
-                                         gpointer restart_data)
+static gboolean _peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                          void **data, dt_pixel_cache_entry_t **cache_entry,
+                          dt_dev_pixelpipe_cache_wait_t *wait,
+                          dt_dev_pixelpipe_cache_ready_callback_t restart,
+                          gpointer restart_data, const gboolean retain)
 {
   if(!IS_NULL_PTR(data)) *data = NULL;
   if(!IS_NULL_PTR(cache_entry)) *cache_entry = NULL;
@@ -755,15 +755,36 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
   // racing whichever pipeline thread currently owns the device — the clReleaseEvent crash). A device-only
   // entry is reported as a miss, so the request below waits for the pipeline to publish a host copy
   // (modules whose output the GUI samples, e.g. initialscale, already cache to RAM).
-  if(display_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dt_dev_pixelpipe_cache_peek(display_hash, &buffer, &entry, -1, NULL)
-     &&  !IS_NULL_PTR(buffer) && !IS_NULL_PTR(entry))
+  //
+  // `retain` picks between the two ownership models a GUI consumer can have on a cacheline, and
+  // they are not interchangeable. A consumer that merely BORROWS the currently published
+  // backbuffer (the darkroom surface, the navigation thumbnail, the scopes) is covered by the
+  // keepalive reference its publisher holds, and must not take one of its own. A consumer that
+  // samples an INTERMEDIATE module cacheline (color picker, module histograms, autoset,
+  // colorequal) has no such cover: those entries sit at refcount 0 between renders and the
+  // pipeline may evict one at any moment. Looking one up and taking the reference afterwards
+  // leaves a window in which it is freed under the caller, so that acquisition happens under one
+  // hold of the cache lock -- the hazard `dt_dev_pixelpipe_process_rec()` already avoids for its
+  // own exact-hit lookups, for exactly the same reason.
+  const gboolean got = display_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
+                       && (retain ? dt_dev_pixelpipe_cache_ref_host_entry_by_hash(display_hash, &buffer, &entry)
+                                  : dt_dev_pixelpipe_cache_peek(display_hash, &buffer, &entry, -1, NULL));
+  if(got && !IS_NULL_PTR(buffer) && !IS_NULL_PTR(entry))
   {
     dt_pixelpipe_cache_wait_count_immediate_hit();
     dt_dev_pixelpipe_cache_wait_cleanup(wait, "peek-gui-immediate-hit");
     if(!IS_NULL_PTR(data)) *data = buffer;
     if(!IS_NULL_PTR(cache_entry)) *cache_entry = entry;
     return TRUE;
+  }
+
+  /* A retained entry the caller cannot be handed back (it asked for neither the data nor the
+   * entry) would leak its reference: nobody would ever release it. */
+  if(retain && got && !IS_NULL_PTR(entry))
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+    entry = NULL;
+    buffer = NULL;
   }
 
   dt_pixelpipe_cache_wait_count_miss();
@@ -885,6 +906,25 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   return FALSE;
 }
+
+gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                         void **data, dt_pixel_cache_entry_t **cache_entry,
+                                         dt_dev_pixelpipe_cache_wait_t *wait,
+                                         dt_dev_pixelpipe_cache_ready_callback_t restart,
+                                         gpointer restart_data)
+{
+  return _peek_gui(pipe, piece, data, cache_entry, wait, restart, restart_data, FALSE);
+}
+
+gboolean dt_dev_pixelpipe_cache_peek_gui_retained(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                                  void **data, dt_pixel_cache_entry_t **cache_entry,
+                                                  dt_dev_pixelpipe_cache_wait_t *wait,
+                                                  dt_dev_pixelpipe_cache_ready_callback_t restart,
+                                                  gpointer restart_data)
+{
+  return _peek_gui(pipe, piece, data, cache_entry, wait, restart, restart_data, TRUE);
+}
+
 
 /**
  * @brief Serve queued GUI cache waiters matching one published cacheline hash.

@@ -332,10 +332,15 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
 
   if(expected_hash != DT_PIXELPIPE_CACHE_HASH_INVALID && hash != expected_hash) return FALSE;
 
+  /* Retained, because this is where the keepalive every scope later borrows is MINTED. Looking the
+   * entry up and referencing it afterwards would let the worker evict it in between, and the
+   * backbuffer would then publish a hash whose entry is already gone -- with every borrowing
+   * consumer believing a keepalive covers it. */
   dt_pixel_cache_entry_t *entry = NULL;
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID
-     || !dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, !strcmp(op, "gamma") ? previous_piece : piece,
-                                         NULL, &entry, NULL, NULL, NULL))
+     || !dt_dev_pixelpipe_cache_peek_gui_retained(dev->preview_pipe,
+                                                  !strcmp(op, "gamma") ? previous_piece : piece,
+                                                  NULL, &entry, NULL, NULL, NULL))
   {
     _clear_histogram_backbuf(backbuf);
     return FALSE;
@@ -346,15 +351,25 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
    * hash and the geometry above cannot hand the drawing code an over-long buffer. */
   if(roi.width <= 0 || roi.height <= 0 || dsc.bpp < 1
      || dt_pixel_cache_entry_get_size(entry) < (size_t)roi.width * (size_t)roi.height * (size_t)dsc.bpp)
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
     return FALSE;
+  }
 
   const uint64_t previous_hash = dt_dev_backbuf_get_hash(backbuf);
   if(previous_hash != hash)
   {
     /* The module output already owns its producer ref. Tagging it as a global histogram backbuffer
-     * reserves one additional consumer ref so GUI readers only need `peek()` and read locks later. */
+     * reserves one additional consumer ref so GUI readers only need `peek()` and read locks later --
+     * and that consumer ref is precisely the one the retained lookup above just took, handed over
+     * rather than taken a second time. `_clear_histogram_backbuf()` and the next publication release
+     * it through `dt_dev_pixelpipe_cache_unref_hash()`. */
     dt_dev_pixelpipe_cache_unref_hash(previous_hash);
-    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
+  }
+  else
+  {
+    /* Already published under this very hash, so the keepalive is held: ours is one too many. */
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
   }
 
   dt_dev_set_backbuf(backbuf, roi.width, roi.height, dsc.bpp, hash, DT_PIXELPIPE_CACHE_HASH_INVALID);
@@ -382,12 +397,13 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
   dt_lib_histogram_t *const d = !IS_NULL_PTR(histogram_module) ? histogram_module->data : NULL;
   if(!IS_NULL_PTR(d))
     dt_dev_pixelpipe_cache_wait_set_owner(&d->module_wait, "histogram-module-refresh", module);
-  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry,
-                                      !IS_NULL_PTR(d) ? &d->module_wait : NULL,
-                                      _histogram_restart_cache_wait, histogram_module))
+  /* Retained: this is an intermediate module cacheline, at refcount 0 between renders, so the
+   * reference has to be taken with the lookup and not after it. */
+  if(!dt_dev_pixelpipe_cache_peek_gui_retained(dev->preview_pipe, previous_piece, &input, &input_entry,
+                                               !IS_NULL_PTR(d) ? &d->module_wait : NULL,
+                                               _histogram_restart_cache_wait, histogram_module))
     return FALSE;
 
-  dt_dev_pixelpipe_cache_ref_count_entry(TRUE, input_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
 
   /* `piece->roi_in` and `piece->dsc_in` are rewritten by the pipeline worker on every ROI-planning

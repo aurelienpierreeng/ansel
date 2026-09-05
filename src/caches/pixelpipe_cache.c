@@ -381,6 +381,49 @@ gboolean dt_dev_pixelpipe_cache_ref_entry_by_hash(const uint64_t hash,
 }
 
 
+gboolean dt_dev_pixelpipe_cache_ref_host_entry_by_hash(const uint64_t hash,
+                                                       void **data,
+                                                       dt_pixel_cache_entry_t **entry)
+{
+  dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
+  if(!IS_NULL_PTR(data)) *data = NULL;
+  if(!IS_NULL_PTR(entry)) *entry = NULL;
+  if(IS_NULL_PTR(cache) || hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return FALSE;
+
+  gboolean found = FALSE;
+  size_t found_size = 0;
+
+  dt_pthread_mutex_lock(&cache->lock);
+  cache->queries++;
+
+  dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
+  if(!IS_NULL_PTR(cache_entry) && !cache_entry->auto_destroy && !IS_NULL_PTR(cache_entry->data))
+  {
+    /* The same rejection `dt_dev_pixelpipe_cache_peek()` applies, for the same reason: a reusable
+     * output cacheline is rekeyed to its new hash BEFORE the recompute that fills it starts, so an
+     * entry somebody currently holds the write lock on carries stale or half-written pixels under a
+     * key that already claims to describe the new ones. Never WAIT on that lock -- report a miss and
+     * let the caller queue for the publication instead. */
+    if(dt_pthread_rwlock_tryrdlock(&cache_entry->lock) == 0)
+    {
+      dt_pthread_rwlock_unlock(&cache_entry->lock);
+      cache->hits++;
+      cache_entry->hits++;
+      _non_thread_safe_cache_ref_count_entry(cache, TRUE, cache_entry);
+      _pixelpipe_cache_finalize_entry(cache_entry, data, "ref-host-by-hash");
+      if(!IS_NULL_PTR(entry)) *entry = cache_entry;
+      found = TRUE;
+      found_size = cache_entry->size;
+    }
+  }
+
+  dt_pthread_mutex_unlock(&cache->lock);
+
+  if(found) _observe_read(hash, found_size);
+
+  return found;
+}
+
 // remove the cache entry with the given hash and update the cache memory usage
 // WARNING: not internally thread-safe, protect its calls with mutex lock
 // return 0 on success, 1 on error

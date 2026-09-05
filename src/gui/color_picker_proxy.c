@@ -458,9 +458,13 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
   const gboolean output_cache_blocked_by_policy
       = piece->bypass_cache || pipe->bypass_cache || pipe->no_cache || dt_dev_pixelpipe_get_realtime(pipe);
   dt_dev_pixelpipe_cache_wait_set_owner(&dev->color_picker.output_wait, "color-picker-output", dev->color_picker.module);
-  const gboolean have_output = dt_dev_pixelpipe_cache_peek_gui(pipe, piece, &output, &output_entry,
-                                                               &dev->color_picker.output_wait,
-                                                               _restart_picker_cache_wait, dev);
+  /* Retained: module input/output cachelines are intermediates sitting at refcount 0 between
+   * renders, so the reference must be taken under the same cache lock as the lookup -- taking it
+   * afterwards leaves a window in which the worker evicts the entry and frees the payload. From
+   * here to the releases below, every exit path owes one release per retained entry. */
+  const gboolean have_output = dt_dev_pixelpipe_cache_peek_gui_retained(pipe, piece, &output, &output_entry,
+                                                                        &dev->color_picker.output_wait,
+                                                                        _restart_picker_cache_wait, dev);
   if(!have_output && !output_cache_blocked_by_policy)
   {
     dev->color_picker.wait_output_hash = piece->global_hash;
@@ -473,12 +477,13 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
   dt_dev_pixelpipe_cache_wait_set_owner(&dev->color_picker.input_wait, "color-picker-input", dev->color_picker.module);
-  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, previous_piece, &input, &input_entry,
-                                      &dev->color_picker.input_wait, _restart_picker_cache_wait, dev))
+  if(!dt_dev_pixelpipe_cache_peek_gui_retained(pipe, previous_piece, &input, &input_entry,
+                                               &dev->color_picker.input_wait, _restart_picker_cache_wait, dev))
   {
     dev->color_picker.wait_input_hash = previous_piece->global_hash;
     dt_print(DT_DEBUG_DEV, "[picker] input cache miss module=%s prev_hash=%" PRIu64 "\n",
              piece->module->op, previous_piece->global_hash);
+    if(have_output) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, output_entry);
     return DT_COLOR_PICKER_RESAMPLE_RETRY;
   }
 
@@ -506,20 +511,17 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
     dt_print(DT_DEBUG_DEV,
              "[picker] non-float buffers module=%s input_type=%d output_type=%d\n",
              piece->module->op, previous_piece->dsc_out.datatype, piece->dsc_out.datatype);
+    if(have_output) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, output_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
     return DT_COLOR_PICKER_RESAMPLE_CONSUMED;
   }
 
   /* Unlike histogram/global backbuffers, module color-pickers do not publish a dedicated long-lived buffer.
-   * They reopen the current module input/output cachelines by immutable `global_hash`, then take a temporary
-   * ref plus read lock only for the duration of the sampling pass so concurrent cache recycling cannot free
-   * the payload mid-read. */
-  dt_dev_pixelpipe_cache_ref_count_entry(TRUE, input_entry);
+   * They reopen the current module input/output cachelines by immutable `global_hash` and hold the reference
+   * the retained lookup gave them, plus a read lock for the duration of the sampling pass, so concurrent
+   * cache recycling cannot free the payload mid-read. */
   dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
-  if(have_output)
-  {
-    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, output_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(TRUE, output_entry);
-  }
+  if(have_output) dt_dev_pixelpipe_cache_rdlock_entry(TRUE, output_entry);
 
   const gboolean sampled_input
       = _sample_picker_buffer(pipe, piece->module, &previous_piece->dsc_out, &previous_piece->roi_out,

@@ -2047,8 +2047,10 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
   dt_dev_pixelpipe_cache_wait_set_owner(&g->preview_wait, "colorequal-preview-cursor", self);
-  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry,
-                                      &g->preview_wait, _preview_cache_wait_restart, self)
+  /* Retained: this is an intermediate module cacheline, at refcount 0 between renders, so the
+   * reference has to be taken with the lookup and not after it. */
+  if(!dt_dev_pixelpipe_cache_peek_gui_retained(dev->preview_pipe, previous_piece, &input, &input_entry,
+                                               &g->preview_wait, _preview_cache_wait_restart, self)
      || IS_NULL_PTR(input) || IS_NULL_PTR(input_entry))
   {
     g->pending_preview_hash = previous_piece->global_hash;
@@ -2057,7 +2059,6 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
     return FALSE;
   }
 
-  dt_dev_pixelpipe_cache_ref_count_entry(TRUE, input_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
 
   const float point_preview[2] = { (float)g->cursor_pos_x, (float)g->cursor_pos_y };

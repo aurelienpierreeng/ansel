@@ -243,6 +243,34 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe,
                                          dt_dev_pixelpipe_cache_ready_callback_t restart,
                                          gpointer restart_data);
 
+/**
+ * @brief `dt_dev_pixelpipe_cache_peek_gui()`, but the cacheline comes back RETAINED.
+ *
+ * @details
+ * Same lookup and same queue-on-miss behaviour; the difference is ownership. The plain form hands
+ * back an unreferenced entry, which is correct only for a consumer covered by somebody else's
+ * keepalive reference -- the darkroom surface, the navigation thumbnail and the scopes all borrow
+ * a published backbuffer whose publisher holds one for them.
+ *
+ * A consumer sampling an INTERMEDIATE module cacheline has no such cover: those entries sit at
+ * refcount 0 between renders, so the pipeline may evict one at any moment. Taking the reference
+ * after the lookup returned is too late -- the entry can be freed in between, and the sampling
+ * pass then reads a dangling buffer. Here the lookup and the reference happen under one hold of
+ * the cache lock. Use this one, and do NOT call `dt_dev_pixelpipe_cache_ref_count_entry(TRUE, ...)`
+ * on top of it.
+ *
+ * On success the caller owns exactly one reference and must release it with
+ * `dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry)` on every exit path. On failure nothing is
+ * retained.
+ */
+gboolean dt_dev_pixelpipe_cache_peek_gui_retained(dt_dev_pixelpipe_t *pipe,
+                                                  const struct dt_dev_pixelpipe_iop_t *piece,
+                                                  void **data,
+                                                  struct dt_pixel_cache_entry_t **cache_entry,
+                                                  dt_dev_pixelpipe_cache_wait_t *wait,
+                                                  dt_dev_pixelpipe_cache_ready_callback_t restart,
+                                                  gpointer restart_data);
+
 // Direction-independent forward pass that (re)establishes the per-node buffer-format contract
 // (dsc_in/dsc_out) for the whole chain from the input image descriptor, and is the single place
 // that disables a node whose input is incompatible with what the previous stage publishes.

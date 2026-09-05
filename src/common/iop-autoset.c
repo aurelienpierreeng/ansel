@@ -169,21 +169,17 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   dt_pixel_cache_entry_t *entry = NULL;
   void *input = NULL;
   dt_dev_pixelpipe_cache_wait_set_owner(input_wait, "autoset-input", manager);
-  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, input_piece, &input, &entry,
-                                      input_wait, _dt_iop_autoset_restart_cache_wait, manager))
+  /* Retained: `peek_gui_retained()` takes the reference under the same hold of the cache lock as
+   * the lookup, so the worker cannot evict this intermediate module-input cacheline -- which has
+   * refcount 0 between renders -- in between and free the buffer under the autoset() call below. */
+  if(!dt_dev_pixelpipe_cache_peek_gui_retained(pipe, input_piece, &input, &entry,
+                                               input_wait, _dt_iop_autoset_restart_cache_wait, manager))
     return 1;
 
   // module->autoset manipulates the module's internal parameters outside of the
   // normal (GUI) control flow. Protect concurrent params writes from the GUI and
   // write history while we still hold the lock.
-  //
-  // Pin the cacheline (refcount) *before* read-locking it, exactly like the color
-  // picker / colorequal / histogram consumers do: peek_gui() hands back an unreffed
-  // entry (its internal read lock is already released), so without a ref the worker
-  // could evict this intermediate module-input cacheline — which has refcount 0
-  // between renders — during the autoset() sampling call, freeing the buffer under us.
   dt_iop_gui_enter_critical_section(module);
-  dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
   dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
   module->autoset(module, pipe, piece, input);
   dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);

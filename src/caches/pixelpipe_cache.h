@@ -560,6 +560,33 @@ gboolean dt_dev_pixelpipe_cache_ref_entry_by_hash(const uint64_t hash,
                                                   void **data,
                                                   struct dt_pixel_cache_entry_t **entry);
 
+/**
+ * @brief Resolve and retain an existing cacheline that already holds HOST pixels.
+ *
+ * @details
+ * The race-free lookup for GUI consumers that sample an intermediate module cacheline --
+ * color picker, module histograms, autoset, colorequal. Those cachelines sit at refcount 0
+ * between renders, so the pipeline is free to evict them at any moment: looking one up and
+ * THEN taking a reference leaves a window in which it is freed, and the sampling pass then
+ * reads a dangling buffer. Here the lookup and the reference happen under one hold of the
+ * cache lock, so an entry handed back cannot have been evicted in between.
+ *
+ * Unlike `dt_dev_pixelpipe_cache_ref_entry_by_hash()`, this one additionally requires host
+ * pixels to be present (GUI threads own no OpenCL device and must never materialize a
+ * device-only payload) and refuses an entry that is currently write-locked. It never
+ * allocates and never waits on a lock.
+ *
+ * Release a successful result with `dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry)`.
+ *
+ * @param hash Cacheline hash to resolve.
+ * @param data Returned host buffer pointer, if requested. Never NULL on success.
+ * @param entry Returned retained cache entry, if requested.
+ * @return TRUE when a host-resident, unlocked, non-auto-destroy entry was retained.
+ */
+gboolean dt_dev_pixelpipe_cache_ref_host_entry_by_hash(const uint64_t hash,
+                                                       void **data,
+                                                       struct dt_pixel_cache_entry_t **entry);
+
 /** Peek the host data pointer of a cache entry without allocating. */
 void *dt_pixel_cache_entry_get_data(struct dt_pixel_cache_entry_t *entry);
 
