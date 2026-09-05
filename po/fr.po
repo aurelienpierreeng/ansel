@@ -21415,7 +21415,7 @@ msgstr "Alterner entre l'inclusion/l'exclusion des images marquées bleu"
 
 #: ../src/libs/tools/filter.c:660
 msgid "Toggle filtering in/out images with purple label"
-msgstr "Alterner entre l'inclusion/l'exclusion des images marquée pourpre"
+msgstr "Alterner entre l'inclusion/l'exclusion des images marquées violet"
 
 #: ../src/libs/tools/filter.c:672
 msgid "Toggle filtering in/out unedited images"
