@@ -2022,6 +2022,55 @@ shortcut type already uses. Any future direct caller of `gtk_widget_add_accelera
 keyboard shortcut in this codebase has the same problem: it needs a closure the internal
 dispatcher can invoke, not just a GTK-level accelerator that no window will ever activate.
 
+### A weak pointer must be removed before the struct holding it is freed
+
+`dt_shortcut_set_closure()` (`src/widgets/accelerators.c`) registers `&pc->widget` — the third
+member of a 24-byte `PayloadClosure` — with `g_object_add_weak_pointer()`, so that a widget
+destroyed while its closure is still listed reads back as NULL rather than as a dangling pointer.
+That registration is a live write permission GObject holds on those eight bytes, and it must be
+withdrawn before the bytes go back to the allocator.
+
+The struct has **two** teardown paths and only one honoured that. `_g_list_closure_unref()`, the
+`GDestroyNotify` handed to `g_list_free_full()`, drops the weak pointer first and carries the
+comment saying why. `dt_shortcut_remove_closure()` open-coded the same teardown a hundred lines
+below and left that one line out. Any future third path has the same obligation: call the
+destructor, do not re-spell it.
+
+The two ends of the bug meet inside a single function, seventy lines apart:
+`dt_iop_gui_cleanup_module()` (`develop/imageop_gui.c`) removes the module's accels at :1101 —
+freeing the payload — and destroys the widget tree at :1170, at which point GObject fires
+`g_nullify_pointer()` and writes NULL sixteen bytes into a freed twenty-four-byte block. That
+lands on glibc's chunk metadata, and the process dies at the next `malloc()` large enough to
+trigger `malloc_consolidate()` — in a different, innocent caller every run
+(`dt_preset_repository_list_for_upgrade`, `dt_image_from_stmt` and `dt_image_repository_load`
+were all observed). It fires from `_init_module_so()`'s startup probe loop, which builds and
+tears down every module's GUI once to register accelerators, so it presented as a plain
+startup crash: the packaged build aborted four times in a row on the same library.
+
+**AddressSanitizer cannot see this class of bug, and its silence means nothing here.** ASAN only
+instruments code compiled with it; the faulting store executes inside libglib's
+`g_nullify_pointer()`. A full ASAN startup reports zero errors while glibc aborts reliably —
+ASAN also replaces the allocator outright, so the metadata checks that *were* catching it no
+longer run. `valgrind --tool=memcheck` instruments the system libraries too and named the
+allocation, the free and the write in a single pass; it was the only invalid write in the whole
+startup. Reach for memcheck, not ASAN, whenever a corruption's likely writer is inside GTK,
+GObject, GLib or sqlite3.
+
+**`malloc_trim()` probes do NOT localise a heap overflow.** Breaking on a per-module function and
+calling `malloc_trim(0)` looks like a clean bisect and is not one: `malloc_consolidate()` walks
+**free** chunks only, so it fires when the *victim* is freed, not when the overflow happens.
+Successive runs of the identical script blamed `atrous`, then `bilateral`, then `colorbalancergb`.
+The module such a probe names tracks the heap layout, not the bug. For the same reason a hardware
+watchpoint on the corrupted address does not survive a re-run: the worker threads make the layout
+differ every time.
+
+The reproduction trigger is worth keeping too, because the crash otherwise looks intermittent.
+`dt_gui_presets_init()` (`gui/presets.c`) re-enables preset auto-generation whenever
+`<version>|<UI language>` differs from `ui_last/presets_autogen_signature`, and that signature
+only reaches `anselrc` on a **clean** exit — so a crash during startup loses it and every
+relaunch replays the same path. Forcing that conf key to a bogus value in a throwaway
+`--configdir` reproduces the whole startup on demand without touching the user's library.
+
 ---
 
 ## Interpolation
