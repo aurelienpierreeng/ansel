@@ -4,6 +4,7 @@
     "runtime-version": "49",
     "sdk": "org.gnome.Sdk",
     "command": "ansel",
+    "separate-locales": false,
     "build-options": {
         "libdir": "/app/lib"
     },
