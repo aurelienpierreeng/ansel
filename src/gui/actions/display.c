@@ -533,5 +533,5 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_sub_menu_entry(menus, lists, _("Full screen"), index, NULL, full_screen_callback,
                      full_screen_checked_callback, NULL, NULL, GDK_KEY_F11, 0);
 
-  dt_accels_new_global_action(_toggle_side_borders_accel_callback, NULL, N_("Global/Actions"), N_("Toggle all panels visibility"), GDK_KEY_F11, GDK_SHIFT_MASK, _("Triggers the action"));
+  dt_accels_new_global_action(_toggle_side_borders_accel_callback, NULL, NULL, N_("Global/Actions"), N_("Toggle all panels visibility"), GDK_KEY_F11, GDK_SHIFT_MASK, _("Triggers the action"));
 }

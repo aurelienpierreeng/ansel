@@ -217,10 +217,10 @@ void dt_dev_toolbox_add_accels(dt_develop_t *dev, GtkAccelGroup *accel_group, co
     }
 
     if(activate_label)
-      dt_accels_new_action_shortcut(dt_gui_get_accels(), dt_dev_toolbox_activate_accel, button, accel_group,
+      dt_accels_new_action_shortcut(dt_gui_get_accels(), dt_dev_toolbox_activate_accel, button, button, accel_group,
                                     category, activate_label, 0, 0, FALSE, _("Triggers the action"));
     if(focus_label)
-      dt_accels_new_action_shortcut(dt_gui_get_accels(), dt_dev_toolbox_focus_accel, button, accel_group,
+      dt_accels_new_action_shortcut(dt_gui_get_accels(), dt_dev_toolbox_focus_accel, button, button, accel_group,
                                     category, focus_label, 0, 0, FALSE, _("Shows the options popover"));
   }
 }

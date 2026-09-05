@@ -384,7 +384,7 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
       const gchar *parent_path = gtk_menu_get_accel_path(parent);
 
       dt_accels_new_action_shortcut(
-          dt_gui_get_accels(), action_callback, entry->widget, accel_group,
+          dt_gui_get_accels(), action_callback, entry->widget, entry->widget, accel_group,
           parent_path, clean_label,
           key_val, mods, FALSE, _("Triggers the action"));
 

@@ -643,31 +643,31 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
 void gui_init(dt_view_t *self)
 {
-  dt_accels_new_slideshow_action(_slideshow_start_stop_accel, self, N_("Slideshow/Actions"),
+  dt_accels_new_slideshow_action(_slideshow_start_stop_accel, self, NULL, N_("Slideshow/Actions"),
                                  N_("Start and stop"), GDK_KEY_space, 0,
                                  _("Toggles slideshow auto-advance"));
-  dt_accels_new_slideshow_action(_slideshow_slow_down_accel, self, N_("Slideshow/Actions"),
+  dt_accels_new_slideshow_action(_slideshow_slow_down_accel, self, NULL, N_("Slideshow/Actions"),
                                  N_("Slow down"), GDK_KEY_Up, 0,
                                  _("Increases the slideshow delay"));
-  dt_accels_new_slideshow_action(_slideshow_slow_down_accel, self, N_("Slideshow/Actions"),
+  dt_accels_new_slideshow_action(_slideshow_slow_down_accel, self, NULL, N_("Slideshow/Actions"),
                                  N_("Slow down"), GDK_KEY_KP_Add, 0,
                                  _("Increases the slideshow delay"));
-  dt_accels_new_slideshow_action(_slideshow_slow_down_accel, self, N_("Slideshow/Actions"),
+  dt_accels_new_slideshow_action(_slideshow_slow_down_accel, self, NULL, N_("Slideshow/Actions"),
                                  N_("Slow down"), GDK_KEY_plus, 0,
                                  _("Increases the slideshow delay"));
-  dt_accels_new_slideshow_action(_slideshow_speed_up_accel, self, N_("Slideshow/Actions"),
+  dt_accels_new_slideshow_action(_slideshow_speed_up_accel, self, NULL, N_("Slideshow/Actions"),
                                  N_("Speed up"), GDK_KEY_Down, 0,
                                  _("Decreases the slideshow delay"));
-  dt_accels_new_slideshow_action(_slideshow_speed_up_accel, self, N_("Slideshow/Actions"),
+  dt_accels_new_slideshow_action(_slideshow_speed_up_accel, self, NULL, N_("Slideshow/Actions"),
                                  N_("Speed up"), GDK_KEY_KP_Subtract, 0,
                                  _("Decreases the slideshow delay"));
-  dt_accels_new_slideshow_action(_slideshow_speed_up_accel, self, N_("Slideshow/Actions"),
+  dt_accels_new_slideshow_action(_slideshow_speed_up_accel, self, NULL, N_("Slideshow/Actions"),
                                  N_("Speed up"), GDK_KEY_minus, 0,
                                  _("Decreases the slideshow delay"));
-  dt_accels_new_slideshow_action(_slideshow_step_back_accel, self, N_("Slideshow/Actions"),
+  dt_accels_new_slideshow_action(_slideshow_step_back_accel, self, NULL, N_("Slideshow/Actions"),
                                  N_("Step back"), GDK_KEY_Left, 0,
                                  _("Displays the previous image"));
-  dt_accels_new_slideshow_action(_slideshow_step_forward_accel, self, N_("Slideshow/Actions"),
+  dt_accels_new_slideshow_action(_slideshow_step_forward_accel, self, NULL, N_("Slideshow/Actions"),
                                  N_("Step forward"), GDK_KEY_Right, 0,
                                  _("Displays the next image"));
 }

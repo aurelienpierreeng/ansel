@@ -300,7 +300,14 @@ void dt_accels_new_widget_shortcut(dt_accels_t *accels, GtkWidget *widget, const
  * ```
  *
  * @param accels
- * @param data
+ * @param data Opaque payload handed back to @p action_callback. Its type is the caller's business and
+ * is never inspected here.
+ * @param target_widget The widget this action acts on, or NULL when it acts on something that is not a
+ * widget. Pass @p data itself when @p data IS a widget. The dispatcher uses it to pick between several
+ * instances registered on the same path, and to decide whether invoking the action should first move
+ * focus back to the center view. It must be declared rather than derived: asking GTK whether an opaque
+ * pointer is a widget reads through it as if it were a GObject, which is undefined for every payload
+ * that is not one.
  * @param accel_group
  * @param action_scope Human-readable, translated, category or scope of the action. Will be turned into path
  * internally
@@ -314,9 +321,9 @@ void dt_accels_new_action_shortcut(dt_accels_t *accels,
                                    gboolean (*action_callback)(GtkAccelGroup *group, GObject *acceleratable,
                                                                guint keyval, GdkModifierType mods,
                                                                gpointer user_data),
-                                   gpointer data, GtkAccelGroup *accel_group, const gchar *action_scope,
-                                   const gchar *action_name, guint key_val, GdkModifierType accel_mods,
-                                   const gboolean lock, const char *description);
+                                   gpointer data, GtkWidget *target_widget, GtkAccelGroup *accel_group,
+                                   const gchar *action_scope, const gchar *action_name, guint key_val,
+                                   GdkModifierType accel_mods, const gboolean lock, const char *description);
 
 
 /**
@@ -436,8 +443,8 @@ void dt_accels_set_recent_handlers(dt_accels_recent_get_handler_t get,
 
 /* Shorthand for a darkroom-scoped action shortcut, resolved through this module's own
  * instance rather than through the application's GUI struct. */
-#define dt_accels_new_darkroom_action(a, b, c, d, e, f, g)                                    \
-  dt_accels_new_action_shortcut(dt_accels_get_global(), a, b,                                 \
+#define dt_accels_new_darkroom_action(a, b, w, c, d, e, f, g)                                 \
+  dt_accels_new_action_shortcut(dt_accels_get_global(), a, b, w,                              \
                                 dt_accels_get_global()->darkroom_accels, c, d, e, f, FALSE, g)
 
 G_END_DECLS

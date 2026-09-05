@@ -1600,9 +1600,9 @@ void gui_init(dt_view_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_preview_pipe_finished), self);
 
-  dt_accels_new_darkroom_action(_switch_to_next_picture, self, N_("Darkroom/Actions"),
+  dt_accels_new_darkroom_action(_switch_to_next_picture, self, NULL, N_("Darkroom/Actions"),
                                 N_("Switch to the next picture"), GDK_KEY_Right, GDK_MOD1_MASK, _("Triggers the action"));
-  dt_accels_new_darkroom_action(_switch_to_prev_picture, self, N_("Darkroom/Actions"),
+  dt_accels_new_darkroom_action(_switch_to_prev_picture, self, NULL, N_("Darkroom/Actions"),
                                 N_("Switch to the previous picture"), GDK_KEY_Left, GDK_MOD1_MASK, _("Triggers the action"));
 
   gchar *path = dt_accels_build_path(_("Darkroom/Actions"), _("Give focus to the main image"));
@@ -1792,7 +1792,7 @@ void gui_init(dt_view_t *self)
                    G_CALLBACK(_darkroom_ioporder_quickbutton_clicked), dev);
   dt_view_manager_module_toolbox_add(dt_view_manager_get_global(), _darkroom_ioporder_button, DT_VIEW_DARKROOM);
   dt_accels_new_darkroom_action(dt_dev_toolbox_activate_accel, _darkroom_ioporder_button,
-                                N_("Darkroom/Toolbox"),
+                                _darkroom_ioporder_button, N_("Darkroom/Toolbox"),
                                 N_("Show the pipeline node graph"), 0, 0,
                                 _("Triggers the action"));
 
@@ -1814,11 +1814,11 @@ void gui_init(dt_view_t *self)
     dt_view_manager_module_toolbox_add(vm, vm->guides_toggle,
                                        DT_VIEW_DARKROOM | DT_VIEW_STUDIO_CAPTURE);
     dt_accels_new_darkroom_action(dt_dev_toolbox_activate_accel,
-                                  vm->guides_toggle, N_("Darkroom/Toolbox"),
+                                  vm->guides_toggle, vm->guides_toggle, N_("Darkroom/Toolbox"),
                                   N_("Toggle guide lines"), 0, 0,
                                   _("Triggers the action"));
     dt_accels_new_darkroom_action(dt_dev_toolbox_focus_accel,
-                                  vm->guides_toggle, N_("Darkroom/Toolbox"),
+                                  vm->guides_toggle, vm->guides_toggle, N_("Darkroom/Toolbox"),
                                   N_("Focus guide lines options"), 0, 0,
                                   _("Shows the options popover"));
     // we want to update button state each time the view change
@@ -1845,7 +1845,7 @@ void gui_init(dt_view_t *self)
                       _darkroom_autoset_popover);
     /*
     dt_accels_new_darkroom_action(dt_dev_toolbox_activate_accel, _darkroom_autoset_button,
-                                  N_("Darkroom/Toolbox"),
+                                  _darkroom_autoset_button, N_("Darkroom/Toolbox"),
                                   N_("Show the pipeline node graph"), 0, 0,
                                   _("Triggers the action"));
     */

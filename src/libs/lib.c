@@ -741,7 +741,7 @@ static void dt_lib_init_module(void *m)
       }
 
       if(accel_group && label)
-        dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_plugin_focus_accel, m,
+        dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_plugin_focus_accel, m, NULL,
                                       accel_group, label, clean_name, 0, 0, FALSE,
                                       _("Focuses the module"));
       dt_free(label);

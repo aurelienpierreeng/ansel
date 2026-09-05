@@ -1031,13 +1031,15 @@ void dt_iop_gui_init(dt_iop_module_t *module)
     const gchar *const main_scope = _("Darkroom/Modules");
     mod->accel_path =  dt_accels_build_path(main_scope, clean_name);
     
-    dt_accels_new_darkroom_action(_iop_plugin_focus_accel, module, main_scope, clean_name, 0, 0, _("Focuses the module"));
+    dt_accels_new_darkroom_action(_iop_plugin_focus_accel, module, NULL, main_scope, clean_name, 0, 0,
+                                  _("Focuses the module"));
 
     // NOTE: we should enable the accel only if the module is disable-able, but this property is set at runtime
     // in reload_defaults(), which depends on the image metadata for each pipeline.
     // We have no way of knowing here at init time.
     // if(!module->hide_enable_button)
-    dt_accels_new_darkroom_action(_iop_plugin_enable_accel, module, mod->accel_path, _("Enable"), 0, 0, _("Enables the module"));
+    dt_accels_new_darkroom_action(_iop_plugin_enable_accel, module, NULL, mod->accel_path, _("Enable"), 0, 0,
+                                  _("Enables the module"));
 
     dt_free(clean_name);
   }

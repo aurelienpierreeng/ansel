@@ -102,6 +102,18 @@ void dt_accels_set_recent_handlers(dt_accels_recent_get_handler_t get,
 typedef struct {
   GClosure  *base;
   gpointer  parent_data; // Reference to the closure->data of the parent shortcut instance, if any
+  /* The widget this closure acts on, or NULL when it acts on something that is not a widget.
+   *
+   * This used to be recovered by asking `GTK_IS_WIDGET(base->data)`, which is undefined: `base->data`
+   * is whatever the registering caller passed as its callback payload, and that is a GtkWidget for
+   * menu entries and toolbox buttons but a `dt_shortcut_t *`, a `dt_lib_module_t *` or a
+   * `dt_iop_module_t *` everywhere else. GLib's type check reads `((GTypeInstance *)p)->g_class` and
+   * then dereferences THAT as a class, so on a non-GObject it walks whatever the struct's first field
+   * happens to hold -- `dt_shortcut_t` opens with a `GtkWidget *`, the module structs with a
+   * `GList *`. It answered FALSE by luck as long as the walk stayed inside mapped memory, and
+   * segfaulted when it did not (Sentry 131420071 / 129371422). A pointer's type is known where it is
+   * registered and nowhere else, so it is recorded here instead of guessed later. */
+  GtkWidget *widget;
 } PayloadClosure;
 
 typedef struct _accel_removal_t
@@ -115,6 +127,9 @@ static void _g_list_closure_unref(gpointer data)
 {
   PayloadClosure *pc = (PayloadClosure *)data;
   if(pc->base) g_closure_unref(pc->base);
+  /* The weak pointer must go before the struct holding it does, or the widget's eventual destruction
+   * writes NULL into freed memory. */
+  if(pc->widget) g_object_remove_weak_pointer(G_OBJECT(pc->widget), (gpointer *)&pc->widget);
   dt_free(pc);
 }
 
@@ -352,11 +367,16 @@ static void _insert_parent_data_into_children(dt_shortcut_t *shortcut)
 void dt_shortcut_set_closure(dt_shortcut_t *shortcut,
                              gboolean (*action_callback)(GtkAccelGroup *group, GObject *acceleratable,
                                                          guint keyval, GdkModifierType mods, gpointer user_data),
-                             gpointer data)
+                             gpointer data, GtkWidget *widget)
 {
   PayloadClosure *pc = malloc(sizeof(PayloadClosure));
   pc->base = g_cclosure_new(G_CALLBACK(action_callback), data, NULL);
   pc->parent_data = NULL;
+  /* Weak, so a widget destroyed while its closure is still listed reads back as NULL rather than as a
+   * dangling pointer the dispatcher would hand to GTK. Rebuilding the accel table on a view or module
+   * switch is exactly when that happens. */
+  pc->widget = widget;
+  if(pc->widget) g_object_add_weak_pointer(G_OBJECT(pc->widget), (gpointer *)&pc->widget);
 
   g_closure_set_marshal(pc->base, g_cclosure_marshal_generic);
   g_closure_ref(pc->base);
@@ -691,7 +711,7 @@ void dt_accels_new_virtual_shortcut(dt_accels_t *accels, GtkAccelGroup *accel_gr
     shortcut->virtual_shortcut = TRUE;
     shortcut->description = _("Contextual interaction on focus");
     shortcut->accels = accels;
-    dt_shortcut_set_closure(shortcut, _virtual_shortcut_callback, shortcut);
+    dt_shortcut_set_closure(shortcut, _virtual_shortcut_callback, shortcut, widget);
     _insert_accel(accels, shortcut);
     _shortcut_set_widget_data(widget, shortcut);
   }
@@ -726,7 +746,7 @@ void dt_accels_new_virtual_instance_shortcut(dt_accels_t *accels,
     shortcut->virtual_shortcut = TRUE;
     shortcut->description = _("Focuses the instance");
     shortcut->accels = accels;
-    dt_shortcut_set_closure(shortcut, action_callback, data);
+    dt_shortcut_set_closure(shortcut, action_callback, data, NULL);
 
     dt_pthread_mutex_lock(&accels->lock);
     g_hash_table_insert(accels->acceleratables, shortcut->path, shortcut);
@@ -777,7 +797,7 @@ void dt_accels_new_widget_shortcut(dt_accels_t *accels, GtkWidget *widget, const
     shortcut->virtual_shortcut = FALSE;
     shortcut->description = _("Trigger the action");
     shortcut->accels = accels;
-    dt_shortcut_set_closure(shortcut, _widget_shortcut_callback, shortcut);
+    dt_shortcut_set_closure(shortcut, _widget_shortcut_callback, shortcut, widget);
     _insert_accel(accels, shortcut);
     _shortcut_set_widget_data(widget, shortcut);
     // accel is inited with empty keys so user config may set it.
@@ -797,9 +817,9 @@ void dt_accels_new_action_shortcut(dt_accels_t *accels,
                                    gboolean (*action_callback)(GtkAccelGroup *group, GObject *acceleratable,
                                                                guint keyval, GdkModifierType mods,
                                                                gpointer user_data),
-                                   gpointer data, GtkAccelGroup *accel_group, const gchar *action_scope,
-                                   const gchar *action_name, guint key_val, GdkModifierType accel_mods,
-                                   const gboolean lock, const char *description)
+                                   gpointer data, GtkWidget *target_widget, GtkAccelGroup *accel_group,
+                                   const gchar *action_scope, const gchar *action_name, guint key_val,
+                                   GdkModifierType accel_mods, const gboolean lock, const char *description)
 {
   // Our own circuitery to keep track of things after user-defined shortcuts are updated
   gchar *accel_path = dt_accels_build_path(action_scope, action_name);
@@ -820,7 +840,7 @@ void dt_accels_new_action_shortcut(dt_accels_t *accels,
   {
     // If we already have a shortcut object wired to Gtk for this accel path, just update it
     if(shortcut->key > 0 && closure) _remove_generic_accel(shortcut);
-    dt_shortcut_set_closure(shortcut, action_callback, data);
+    dt_shortcut_set_closure(shortcut, action_callback, data, target_widget);
     if(shortcut->key > 0) _add_generic_accel(shortcut, accels->flags);
   }
   // else if shortcut && shortcut->type == DT_SHORTCUT_UNSET, we need to wait for the next call to dt_accels_connect_accels()
@@ -840,7 +860,7 @@ void dt_accels_new_action_shortcut(dt_accels_t *accels,
     shortcut->virtual_shortcut = FALSE;
     shortcut->description = description;
     shortcut->accels = accels;
-    dt_shortcut_set_closure(shortcut, action_callback, data);
+    dt_shortcut_set_closure(shortcut, action_callback, data, target_widget);
     _insert_accel(accels, shortcut);
     // accel is inited with empty keys so user config may set it.
     // dt_accels_load_config needs to run next
@@ -2594,9 +2614,12 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
     {
       PayloadClosure *candidate = (PayloadClosure *)item->data;
       if(IS_NULL_PTR(candidate) || IS_NULL_PTR(candidate->base)) continue;
-      if(GTK_IS_WIDGET(candidate->base->data))
+      /* `candidate->widget` is what the registering caller declared, and the weak pointer has already
+       * cleared it if that widget has since been destroyed. Never re-derive it from
+       * `candidate->base->data`, which is an opaque payload of unknown type. */
+      if(!IS_NULL_PTR(candidate->widget))
       {
-        GtkWidget *candidate_widget = GTK_WIDGET(candidate->base->data);
+        GtkWidget *candidate_widget = candidate->widget;
         const gboolean in_main_window = IS_NULL_PTR(state->main_window)
                                         || gtk_widget_is_ancestor(candidate_widget, GTK_WIDGET(state->main_window));
         if(in_main_window && IS_NULL_PTR(payload_in_main_window))
@@ -2613,8 +2636,8 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
   if(IS_NULL_PTR(payload)) payload = dt_shortcut_get_payload_closure(shortcut);
 
   GtkWidget *target_widget = NULL;
-  if(!IS_NULL_PTR(payload) && !IS_NULL_PTR(payload->base) && GTK_IS_WIDGET(payload->base->data))
-    target_widget = GTK_WIDGET(payload->base->data);
+  if(!IS_NULL_PTR(payload) && !IS_NULL_PTR(payload->widget))
+    target_widget = payload->widget;
   else if(!IS_NULL_PTR(shortcut->widget))
     target_widget = shortcut->widget;
 

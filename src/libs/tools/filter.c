@@ -761,7 +761,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->text), TRUE, TRUE, 0);
   gtk_widget_set_name(d->text, "quickfilter-search-box");
 
-  dt_accels_new_lighttable_action(_focus_search_action, self, N_("Lighttable/Actions"), N_("Search a picture"),
+  dt_accels_new_lighttable_action(_focus_search_action, self, NULL, N_("Lighttable/Actions"), N_("Search a picture"),
                                   GDK_KEY_f, DT_PRIMARY_MASK, _("Focuses the control"));
 
   _insert_section_sep(self);

@@ -273,19 +273,19 @@ gboolean dt_ui_panel_visible(dt_ui_t *ui, const dt_ui_panel_t);
 // capitalize strings. Because grammar says sentences start with a capital,
 // and typography says it makes it easier to extract the structure of the text.
 
-#define dt_accels_new_global_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->global_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_global_action(a, b, w, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, w, dt_gui_get_global()->accels->global_accels, c, d, e, f, FALSE, g)
 
 // dt_accels_new_darkroom_action() now lives in widgets/accelerators.h
 
-#define dt_accels_new_lighttable_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->lighttable_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_lighttable_action(a, b, w, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, w, dt_gui_get_global()->accels->lighttable_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_map_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->map_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_map_action(a, b, w, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, w, dt_gui_get_global()->accels->map_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_print_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->print_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_print_action(a, b, w, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, w, dt_gui_get_global()->accels->print_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_slideshow_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->slideshow_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_slideshow_action(a, b, w, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, w, dt_gui_get_global()->accels->slideshow_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_darkroom_locked_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->darkroom_accels, c, d, e, f, TRUE, g)
+#define dt_accels_new_darkroom_locked_action(a, b, w, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, w, dt_gui_get_global()->accels->darkroom_accels, c, d, e, f, TRUE, g)
 
 
 void dt_gui_add_help_link(GtkWidget *widget, char *link);

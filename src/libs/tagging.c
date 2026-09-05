@@ -3448,19 +3448,19 @@ void gui_init(dt_lib_module_t *self)
   _refresh_completion_store(self);
   _refresh_collection_tags(self);
 
-  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_show_accel, self,
+  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_show_accel, self, NULL,
                                 dt_gui_get_accels()->lighttable_accels, N_("Lighttable/Tags"),
                                 N_("Tag"), GDK_KEY_t, DT_PRIMARY_MASK, FALSE,
                                 _("Opens the quick tagging entry"));
-  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_redo_accel, self,
+  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_redo_accel, self, NULL,
                                 dt_gui_get_accels()->lighttable_accels, N_("Lighttable/Tags"),
                                 N_("Redo last tag"), GDK_KEY_t, GDK_MOD1_MASK, FALSE,
                                 _("Re-applies the last used tag"));
-  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_show_accel, self,
+  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_show_accel, self, NULL,
                                 dt_gui_get_accels()->map_accels, N_("Map/Tags"),
                                 N_("Tag"), GDK_KEY_t, DT_PRIMARY_MASK, FALSE,
                                 _("Opens the quick tagging entry"));
-  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_redo_accel, self,
+  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_redo_accel, self, NULL,
                                 dt_gui_get_accels()->map_accels, N_("Map/Tags"),
                                 N_("Redo last tag"), GDK_KEY_t, GDK_MOD1_MASK, FALSE,
                                 _("Re-applies the last used tag"));

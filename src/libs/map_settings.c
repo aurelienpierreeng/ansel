@@ -183,7 +183,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->images_thumb), "changed", G_CALLBACK(_parameter_changed), self);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(grid), FALSE, FALSE, 0);
 
-  dt_accels_new_map_action(_thumbnail_change_accel, self, N_("Map/Actions"),
+  dt_accels_new_map_action(_thumbnail_change_accel, self, NULL, N_("Map/Actions"),
                            N_("Thumbnail display"), GDK_KEY_s, GDK_SHIFT_MASK,
                            _("Cycles the image display mode on the map"));
 }
