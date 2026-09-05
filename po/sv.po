@@ -4478,10 +4478,20 @@ msgstr ""
 msgid "unknown/invalid"
 msgstr "okänd"
 
-#: ../src/common/colorlabels.c:336
+#: ../src/metadata/colorlabels.c:267
 #, c-format
 msgid "Color label set to %s for %i image(s)"
 msgstr ""
+
+#: ../src/metadata/colorlabels.c:270
+#, c-format
+msgid "Color label %s removed for %i image(s)"
+msgstr "Färgmarkering %s borttagen från %i bild(er)"
+
+#: ../src/metadata/colorlabels.c:265
+#, c-format
+msgid "Color labels removed for %i image(s)"
+msgstr "Färgmarkeringar borttagna från %i bild(er)"
 
 #: ../src/common/colorspaces.c:1691
 #, fuzzy

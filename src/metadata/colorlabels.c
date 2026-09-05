@@ -166,7 +166,9 @@ typedef enum dt_colorlabels_actions_t
 } dt_colorlabels_actions_t;
 
 
-static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, const gboolean undo_on, int action)
+// Returns the action actually performed: DT_CA_ADD when the labels were added to the images,
+// DT_CA_TOGGLE when they were removed from all of them, DT_CA_SET when they were set verbatim.
+static int _colorlabels_execute(GList *imgs, const int labels, GList **undo, const gboolean undo_on, int action)
 {
   if(action == DT_CA_TOGGLE)
   {
@@ -228,6 +230,8 @@ static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, co
       *undo = g_list_append(*undo, undocolorlabels);
     }
   }
+
+  return action;
 }
 
 void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gboolean undo_on)
@@ -236,13 +240,17 @@ void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gbo
   GList *undo = NULL;
   if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_COLORLABELS);
 
+  // The toggle resolves to an addition as soon as one image lacks the label, and to a removal
+  // only when every image already carries it: ask _colorlabels_execute() what it actually did
+  // instead of assuming, or the toast announces an addition on the way out too.
+  int done;
   if(color == 5)
   {
-    _colorlabels_execute(list, 0, &undo, undo_on, DT_CA_SET);
+    done = _colorlabels_execute(list, 0, &undo, undo_on, DT_CA_SET);
   }
   else
   {
-    _colorlabels_execute(list, label, &undo, undo_on, DT_CA_TOGGLE);
+    done = _colorlabels_execute(list, label, &undo, undo_on, DT_CA_TOGGLE);
   }
 
   if(undo_on)
@@ -251,8 +259,16 @@ void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gbo
     dt_undo_end_group(dt_undo_get_global());
   }
   dt_collection_hint_message(dt_collection_get_global());
-  dt_metadata_notify(DT_METADATA_NOTICE_TOAST, _("Color label set to %s for %i image(s)"),
-                     dt_colorlabels_get_name(color), g_list_length(list));
+
+  const int count = (int)g_list_length(list);
+  if(color == 5)
+    dt_metadata_notify(DT_METADATA_NOTICE_TOAST, _("Color labels removed for %i image(s)"), count);
+  else if(done == DT_CA_ADD)
+    dt_metadata_notify(DT_METADATA_NOTICE_TOAST, _("Color label set to %s for %i image(s)"),
+                       dt_colorlabels_get_name(color), count);
+  else
+    dt_metadata_notify(DT_METADATA_NOTICE_TOAST, _("Color label %s removed for %i image(s)"),
+                       dt_colorlabels_get_name(color), count);
 }
 
 int dt_colorlabels_check_label(const int32_t imgid, const int color)
