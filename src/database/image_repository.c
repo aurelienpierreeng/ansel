@@ -16,6 +16,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <math.h>   // NAN, the "no colour matrix" sentinel restored below
 #include <string.h>
 
 #include "database/image_repository.h"
@@ -137,8 +138,24 @@ static void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
     uint32_t tmp = sqlite3_column_int(stmt, 34);
     memcpy(&img->legacy_flip, &tmp, sizeof(dt_image_raw_parameters_t));
   }
+  /* Size the copy from the blob, not from the destination: the writer binds exactly
+   * sizeof(d65_color_matrix) (see dt_image_repository_store()), so anything shorter is a row this
+   * schema did not write so anything else is a row no writer of this schema produces and reading nine
+   * floats out of it is undefined. No null test: sqlite returns NULL only for a NULL or a zero-length
+   * value, so a size of exactly 36 already says the pointer is good. sqlite3_column_bytes() comes AFTER
+   * sqlite3_column_blob() on purpose -- that is the order sqlite3.h documents as safe, a size
+   * asked for first being allowed to describe a value the later call converts.
+   *
+   * The else branch is the one that runs in practice, on the NULL column of a row not yet stored.
+   * It matters because dt_image_cache_get_reload() reloads into an already populated struct
+   * WITHOUT going through dt_image_init(): the matrix from a previous load would otherwise
+   * survive a row that no longer carries one. NAN is the documented "no matrix" sentinel the
+   * readers test (imageio_profile.c, iop/colorin.c, pixel/illuminants.h). */
   const void *color_matrix = sqlite3_column_blob(stmt, 35);
-  if(color_matrix) memcpy(img->d65_color_matrix, color_matrix, sizeof(img->d65_color_matrix));
+  if(sqlite3_column_bytes(stmt, 35) == (int)sizeof(img->d65_color_matrix))
+    memcpy(img->d65_color_matrix, color_matrix, sizeof(img->d65_color_matrix));
+  else
+    img->d65_color_matrix[0] = NAN;
   if(sqlite3_column_type(stmt, 36) != SQLITE_NULL) img->colorspace = sqlite3_column_int(stmt, 36);
   if(sqlite3_column_type(stmt, 37) != SQLITE_NULL) img->raw_black_level = sqlite3_column_int(stmt, 37);
   if(sqlite3_column_type(stmt, 38) != SQLITE_NULL) img->raw_white_point = sqlite3_column_int(stmt, 38);
