@@ -4467,10 +4467,20 @@ msgstr ""
 msgid "unknown/invalid"
 msgstr "desconegut"
 
-#: ../src/common/colorlabels.c:336
+#: ../src/metadata/colorlabels.c:267
 #, c-format
 msgid "Color label set to %s for %i image(s)"
 msgstr ""
+
+#: ../src/metadata/colorlabels.c:270
+#, c-format
+msgid "Color label %s removed for %i image(s)"
+msgstr "Etiqueta de color %s suprimida de %i imatge(s)"
+
+#: ../src/metadata/colorlabels.c:265
+#, c-format
+msgid "Color labels removed for %i image(s)"
+msgstr "Etiquetes de color suprimides de %i imatge(s)"
 
 #: ../src/common/colorspaces.c:1691
 #, fuzzy

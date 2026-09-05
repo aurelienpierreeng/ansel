@@ -4498,10 +4498,20 @@ msgstr ""
 msgid "unknown/invalid"
 msgstr "άγνωστο"
 
-#: ../src/common/colorlabels.c:336
+#: ../src/metadata/colorlabels.c:267
 #, c-format
 msgid "Color label set to %s for %i image(s)"
 msgstr ""
+
+#: ../src/metadata/colorlabels.c:270
+#, c-format
+msgid "Color label %s removed for %i image(s)"
+msgstr "Η χρωματική ετικέτα %s αφαιρέθηκε από %i εικόνα(ες)"
+
+#: ../src/metadata/colorlabels.c:265
+#, c-format
+msgid "Color labels removed for %i image(s)"
+msgstr "Οι χρωματικές ετικέτες αφαιρέθηκαν από %i εικόνα(ες)"
 
 #: ../src/common/colorspaces.c:1691
 #, fuzzy

@@ -4294,10 +4294,20 @@ msgstr ""
 msgid "unknown/invalid"
 msgstr "不明"
 
-#: ../src/common/colorlabels.c:336
+#: ../src/metadata/colorlabels.c:267
 #, c-format
 msgid "Color label set to %s for %i image(s)"
 msgstr ""
+
+#: ../src/metadata/colorlabels.c:270
+#, c-format
+msgid "Color label %s removed for %i image(s)"
+msgstr "カラーラベル %s を %i 枚の画像から削除しました"
+
+#: ../src/metadata/colorlabels.c:265
+#, c-format
+msgid "Color labels removed for %i image(s)"
+msgstr "%i 枚の画像からカラーラベルを削除しました"
 
 #: ../src/common/colorspaces.c:1691
 #, fuzzy
