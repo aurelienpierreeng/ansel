@@ -235,6 +235,21 @@ void dt_film_set_confirm_rmdir_handler(dt_film_confirm_rmdir_handler_t handler)
   _confirm_rmdir_handler = handler;
 }
 
+/* Written once, at startup, before any film roll can change; read from whichever thread
+ * changes one. A lock would be guarding against a race nobody can create. */
+static dt_film_rolls_changed_handler_t _rolls_changed_handler = NULL;
+
+void dt_film_set_rolls_changed_handler(dt_film_rolls_changed_handler_t handler)
+{
+  _rolls_changed_handler = handler;
+}
+
+void dt_film_notify_rolls_changed(void)
+{
+  dt_film_rolls_changed_handler_t handler = _rolls_changed_handler;
+  if(handler) handler();
+}
+
 void dt_film_remove_directories(const GList *dirs)
 {
   for(const GList *iter = dirs; iter; iter = g_list_next(iter))
@@ -359,7 +374,7 @@ void dt_film_remove(const int id)
   dt_film_repository_delete(id);
   // dt_control_update_recent_films();
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FILMROLLS_CHANGED);
+  dt_film_notify_rolls_changed();
 }
 
 void dt_film_relocate(const char *old_path, const char *new_path)
