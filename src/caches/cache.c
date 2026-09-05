@@ -380,7 +380,13 @@ void dt_cache_release_with_caller(dt_cache_t *cache, dt_cache_entry_t *entry, co
 # elif defined(HAVE_THREAD_RWLOCK_ARCH_T_NR_READERS)
   if(entry->lock.lock.__data.__nr_readers <= 1)
 # else /* HAVE_THREAD_RWLOCK_ARCH_T_(NR_)READERS */
-#  error "No valid reader member"
+  // Neither glibc reader-count field was detected -- true on any platform whose
+  // pthread_rwlock_t isn't glibc's (e.g. winpthreads on Windows never exposes this
+  // internal layout at all), so there is no portable way to introspect the reader
+  // count here. Skip the poisoning rather than guess: an entry that stays
+  // unpoisoned is still safe, whereas poisoning it while another reader may still
+  // be touching it is exactly the bug this whole block exists to avoid.
+  if(0)
 # endif /* HAVE_THREAD_RWLOCK_ARCH_T_(NR_)READERS */
   {
     // only if there are no other reades we may poison.
