@@ -42,6 +42,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_pipe_cache_auto_destroy
   test_backbuf_publish
   test_conf_value_lifetime
+  test_xmp_colorlabels
   test_dtpthread_recursive
   test_history_snapshot
   test_masks_raster_contract
