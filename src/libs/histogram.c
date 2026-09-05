@@ -237,7 +237,12 @@ static void _clear_pending_preview_histograms(void)
   _preview_refresh_state.gamma_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 }
 
+/* `roi` and `cst` are the caller's SNAPSHOT of `piece->roi_in`/`piece->dsc_in.cst`, not the live
+ * fields: the pipeline worker rewrites those on every ROI-planning pass while this runs on the GUI
+ * thread, and the buffer we are about to bin was sized against one particular reading of them.
+ * Re-reading `piece->roi_in` here would let the binning loop walk past the end of that buffer. */
 static void _refresh_module_histogram(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                      const dt_iop_roi_t *const roi, const dt_iop_colorspace_type_t cst,
                                       const float *pixel, dt_iop_module_t *module)
 {
   dt_dev_histogram_collection_params_t histogram_params = piece->histogram_params;
@@ -246,17 +251,17 @@ static void _refresh_module_histogram(const dt_dev_pixelpipe_t *pipe, const dt_d
   if(IS_NULL_PTR(histogram_params.roi))
   {
     histogram_roi = (dt_histogram_roi_t){
-      .width = piece->roi_in.width, .height = piece->roi_in.height,
+      .width = roi->width, .height = roi->height,
       .crop_x = 0, .crop_y = 0, .crop_width = 0, .crop_height = 0
     };
     histogram_params.roi = &histogram_roi;
   }
 
   dt_iop_gui_enter_critical_section(module);
-  dt_histogram_helper(&histogram_params, &module->histogram_stats, piece->dsc_in.cst, module->histogram_cst,
+  dt_histogram_helper(&histogram_params, &module->histogram_stats, cst, module->histogram_cst,
                       pixel, &module->histogram, module->histogram_middle_grey,
                       dt_ioppr_get_pipe_work_profile_info(pipe));
-  dt_histogram_max_helper(&module->histogram_stats, piece->dsc_in.cst, module->histogram_cst,
+  dt_histogram_max_helper(&module->histogram_stats, cst, module->histogram_cst,
                           &module->histogram, module->histogram_max);
   dt_iop_gui_leave_critical_section(module);
 
@@ -304,8 +309,12 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
   const dt_dev_pixelpipe_iop_t *const previous_piece
       = dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece);
 
-  const dt_iop_roi_t *roi = &piece->roi_out;
-  const dt_iop_buffer_dsc_t *dsc = &piece->dsc_out;
+  /* Copies, not pointers into the live piece: the pipeline worker rewrites roi_out/dsc_out on
+   * every ROI-planning pass, and what gets published here is the (geometry, hash) PAIR every
+   * scope later reads the cacheline with. Following the live fields would let the pair drift
+   * apart between the peek below and the publication. */
+  dt_iop_roi_t roi = piece->roi_out;
+  dt_iop_buffer_dsc_t dsc = piece->dsc_out;
   uint64_t hash = piece->global_hash;
 
   if(!strcmp(op, "gamma"))
@@ -316,8 +325,8 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
       return FALSE;
     }
 
-    roi = &previous_piece->roi_out;
-    dsc = &previous_piece->dsc_out;
+    roi = previous_piece->roi_out;
+    dsc = previous_piece->dsc_out;
     hash = previous_piece->global_hash;
   }
 
@@ -332,6 +341,13 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
     return FALSE;
   }
 
+  /* The scopes read `backbuf->width * height * bpp` bytes out of this cacheline. Publish the pair
+   * only once the cache confirms it reserved at least that much, so a plan that moved between the
+   * hash and the geometry above cannot hand the drawing code an over-long buffer. */
+  if(roi.width <= 0 || roi.height <= 0 || dsc.bpp < 1
+     || dt_pixel_cache_entry_get_size(entry) < (size_t)roi.width * (size_t)roi.height * (size_t)dsc.bpp)
+    return FALSE;
+
   const uint64_t previous_hash = dt_dev_backbuf_get_hash(backbuf);
   if(previous_hash != hash)
   {
@@ -341,7 +357,7 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
     dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
   }
 
-  dt_dev_set_backbuf(backbuf, roi->width, roi->height, dsc->bpp, hash, DT_PIXELPIPE_CACHE_HASH_INVALID);
+  dt_dev_set_backbuf(backbuf, roi.width, roi.height, dsc.bpp, hash, DT_PIXELPIPE_CACHE_HASH_INVALID);
   return TRUE;
 }
 
@@ -374,15 +390,44 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
   dt_dev_pixelpipe_cache_ref_count_entry(TRUE, input_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
 
+  /* `piece->roi_in` and `piece->dsc_in` are rewritten by the pipeline worker on every ROI-planning
+   * pass, and this runs on the GUI thread without the pipe's busy_mutex (see the comment in
+   * `_refresh_preview_histograms()`: taking it here would freeze the UI). Read them ONCE, into
+   * locals, and describe the buffer with nothing else afterwards. Reading them again for the loop
+   * bounds after having sized an allocation from an earlier reading is how a ROI that grew in
+   * between made the colourspace conversion write past the end of its own buffer, in the middle of
+   * an OpenMP region (Sentry 145090920, `_transform_lab_to_rgb_matrix.omp_outlined`). */
+  const dt_iop_roi_t roi_in = piece->roi_in;
+  const dt_iop_buffer_dsc_t dsc_in = piece->dsc_in;
+
   const float *histogram_input = input;
   float *transformed_input = NULL;
   dt_iop_buffer_dsc_t input_dsc = previous_piece->dsc_out;
 
-  if(input_dsc.cst != piece->dsc_in.cst
-     && !(dt_iop_colorspace_is_rgb(input_dsc.cst) && dt_iop_colorspace_is_rgb(piece->dsc_in.cst)))
+  /* The cacheline was produced by `previous_piece` against ITS own roi_out, whichever reading of the
+   * plan was current then. The one authoritative bound on what may be read out of it is the size the
+   * cache actually reserved, so check the geometry we just snapshotted against it rather than trust
+   * two live fields to still agree. A mismatch means the plan moved under us: bail out and let the
+   * caller re-queue this refresh for the cacheline the new plan will publish. This also covers the
+   * histogram binning below, which addresses `dsc_in.channels` floats per pixel just the same
+   * (Sentry 144448425, `histogram_helper_cs_rgb` in `dt_histogram_worker.omp_outlined`). */
+  const size_t pixels = (size_t)roi_in.width * (size_t)roi_in.height;
+  const size_t bytes = pixels * (size_t)dsc_in.channels * sizeof(float);
+  if(roi_in.width <= 0 || roi_in.height <= 0 || dsc_in.channels < 1
+     || dt_pixel_cache_entry_get_size(input_entry) < bytes)
   {
-    const size_t pixels = (size_t)piece->roi_in.width * (size_t)piece->roi_in.height;
-    const size_t bytes = pixels * (size_t)piece->dsc_in.channels * sizeof(float);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
+    return FALSE;
+  }
+
+  /* `dt_colorspaces_apply_profile()` addresses 4 floats per pixel unconditionally, so the
+   * destination has to be that wide too -- `bytes` is sized on `dsc_in.channels`. The only
+   * conversions it performs are Lab<->RGB, which every module declares with 4 channels, so this
+   * only ever declines a pair the matrix path would have refused anyway. */
+  if(input_dsc.cst != dsc_in.cst && dsc_in.channels == 4
+     && !(dt_iop_colorspace_is_rgb(input_dsc.cst) && dt_iop_colorspace_is_rgb(dsc_in.cst)))
+  {
     transformed_input = dt_alloc_align(bytes);
 
     if(IS_NULL_PTR(transformed_input))
@@ -394,17 +439,17 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
 
     memcpy(transformed_input, input, bytes);
     dt_colorspaces_apply_profile(module->op, module->multi_name, transformed_input, transformed_input,
-                                        piece->roi_in.width, piece->roi_in.height,
-                                        input_dsc.cst, piece->dsc_in.cst, &input_dsc.cst,
+                                        roi_in.width, roi_in.height,
+                                        input_dsc.cst, dsc_in.cst, &input_dsc.cst,
                                         dt_ioppr_get_pipe_work_profile_info(dev->preview_pipe));
     histogram_input = transformed_input;
   }
-  else if(input_dsc.cst != piece->dsc_in.cst)
+  else if(input_dsc.cst != dsc_in.cst)
   {
-    input_dsc.cst = piece->dsc_in.cst;
+    input_dsc.cst = dsc_in.cst;
   }
 
-  _refresh_module_histogram(dev->preview_pipe, piece, histogram_input, module);
+  _refresh_module_histogram(dev->preview_pipe, piece, &roi_in, dsc_in.cst, histogram_input, module);
 
   dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
