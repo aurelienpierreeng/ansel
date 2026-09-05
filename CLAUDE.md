@@ -173,7 +173,7 @@ hash table via `g_hash_table_iter_remove` — do NOT subtract `current_memory` m
 
 ### Mipmap invalidation is explicit, not hash-driven
 
-The mipmap cache get path (`_generate_blocking` in `common/mipmap_cache.c`) does NOT compare
+The mipmap cache get path (`_generate_blocking` in `caches/mipmap_cache.c`) does NOT compare
 `history_hash` vs `mipmap_hash` to detect staleness. Regeneration only happens after an explicit
 `dt_mipmap_cache_remove(cache, imgid, TRUE)`.
 
@@ -388,7 +388,7 @@ Three things a reviewer would otherwise "simplify" away:
 
 Scrolling (size / feather / opacity) has no release, so there the throttle marks the end of the
 burst: each step renders live, one commit lands after the last. The mask-manager path
-(`libs/masks.c`, no focused module) is unchanged and still commits directly; the focused-piece
+(`libs/shape_manager.c`, no focused module) is unchanged and still commits directly; the focused-piece
 path needs `dev->gui_module` to be the shape's owner.
 
 ### `_insert_default_modules` must check `dev->history` in memory, not the DB row for `dev->image_storage.id`
@@ -424,7 +424,7 @@ behavior regresses.
 `dt_dev_pixelpipe_create_nodes()` copies `pipe->iwidth`/`iheight` into each `piece->iwidth`/`iheight`
 once, at node-creation time — it is not refreshed on later ROI passes. Darkroom pipes call
 `dt_dev_pixelpipe_set_input()` (which sets `pipe->iwidth`/`iheight`) before creating nodes; the
-export pipe (`common/imageio.c`) does the reverse, so every piece was permanently stuck at 0 there
+export pipe (`imageio/imageio_core.c`) does the reverse, so every piece was permanently stuck at 0 there
 (issue #967: `iop/toneequal.c`'s blending radius and `iop/soften.c`'s glow radius silently collapsed
 to 0 on export only, regardless of the module's params, while darkroom rendered correctly). Fixed by
 having `dt_dev_pixelpipe_set_input()` re-sync `iwidth`/`iheight` onto any already-created nodes. See
@@ -442,7 +442,7 @@ the destination copy size) from `roi_out`, and use `pipe->iwidth`/`iheight` — 
 `height`, which is always the full frame too — for the source row stride. Reading the offset from
 `roi_in` instead always crops from the sensor's true `(0,0)`: harmless whenever the requested
 window is itself near `(0,0)` (a fit-to-screen view, a barely-cropping module), silently wrong by
-the full requested offset otherwise (e.g. `iop/lens.cc`'s `scale` slider, whose backward-pass
+the full requested offset otherwise (e.g. `iop/lens.c`'s `scale` slider, whose backward-pass
 `roi_in.x/y` grows with the zoom amount) — every downstream module still looks internally
 consistent (sizes match, ROI planning round-trips cleanly), because each of them only reads
 buffer-relative pixels and never re-derives its own absolute position from `pipe->iwidth`/
@@ -659,7 +659,7 @@ Note *where* a non-zero RAW-domain ROI offset can come from, because the obvious
 backwards, so every module below it — `lens` (15.0), `demosaic` (8.0), `rawdenoiseai` (2.5),
 `basebuffer` (0.5) — is handed offset 0 no matter how the user pans or zooms. A non-zero offset
 reaches the RAW domain only from a module *between* it and `initialscale` that grows its own
-`roi_in` on the backward pass: in practice `iop/lens.cc` (distortion, TCA, and the `scale`
+`roi_in` on the backward pass: in practice `iop/lens.c` (distortion, TCA, and the `scale`
 slider). So "it only misbehaves when zoomed in" is the wrong mental model for this whole class of
 bug; "it only misbehaves with lens correction enabled" is the right one.
 
@@ -1150,7 +1150,7 @@ Which shape button looks armed is derived, never remembered. `dt_masks_creation_
 answers by recomputing each of its buttons from `_masks_shape_button_is_current_creation()` against
 `dev->form_gui`. `dt_masks_form_exit_creation()` is the symmetric half and raises
 `..._DEACTIVATE`. That is what lets creation be armed from places that own no button at all — the
-shape manager's "Add new shape ..." context menu (`libs/masks.c`), the keyboard shortcuts,
+shape manager's "Add new shape ..." context menu (`libs/shape_manager.c`), the keyboard shortcuts,
 `iop/spots.c` — without each of them having to find and press a widget.
 
 So a new way to arm a shape needs no toolbar code, and a toolbar must not track what was clicked.
@@ -1190,7 +1190,7 @@ are now refcounted (`dt_masks_form_t.refcount`, `src/develop/masks/masks_history
   first, splice the clone into `dev->forms` in place of the original, and mutate the clone —
   never mutate a form that might be observed by a frozen snapshot. Every mutation call site
   (mouse/keyboard event dispatchers in `masks.c`, `dt_masks_form_delete`, group add/move/ungroup,
-  `blend_gui.c` group operations, the shape-manager panel in `libs/masks.c`) must route through
+  `blend_gui.c` group operations, the shape-manager panel in `libs/shape_manager.c`) must route through
   this before touching `form->points` or any other field. `dt_masks_cow_touch` also re-points
   `dev->form_gui->form_visible` if it was the form that got cloned — that's the only other raw
   `dt_masks_form_t*` cached outside `dev->forms`.
@@ -1204,7 +1204,7 @@ are now refcounted (`dt_masks_form_t.refcount`, `src/develop/masks/masks_history
 
 ### The unused-shape sweep's used-set is not a subset of the snapshot it sweeps
 
-"Delete unused shapes" in the shape manager (`libs/masks.c`, `dt_masks_cleanup_unused()`) keeps a
+"Delete unused shapes" in the shape manager (`libs/shape_manager.c`, `dt_masks_cleanup_unused()`) keeps a
 form when some history entry's `blend_params->mask_id` names it, or names a group that
 transitively contains it. Those ids are collected by walking history from the bottom up, and they
 are **not** a subset of the `hist->forms` snapshot being swept: a module whose drawn mask was
@@ -1248,7 +1248,7 @@ That rewrite is in-memory only. `main.history` and `main.masks_history` are dele
 re-inserted wholesale from `dev->history` by `_write_history_from_state()`, and nothing on this
 path triggers it — so the menu handler commits a mask-manager history entry
 (`dt_dev_add_history_item(dev, NULL, FALSE, TRUE)`) after the sweep, the way every other forms
-mutation in `libs/masks.c` must. Without it the swept shapes stay in the database and come back
+mutation in `libs/shape_manager.c` must. Without it the swept shapes stay in the database and come back
 on the next read, and the pipeline never resyncs. Measured on a 20-step history: 60 rows / 24
 forms before, 58 / 22 after, with exactly the two orphans gone and one extra history step.
 
@@ -1272,12 +1272,12 @@ recorded `before_snapshot`/`after_snapshot` (`dt_history_duplicate`, itself ref-
 **last history item that actually has one** — walking backwards over items with
 `hist->forms == NULL`. If a mutation was never committed, every subsequent history navigation
 silently falls back to whatever was last actually recorded and the live edit is lost. Confirmed
-bug instances, found by auditing every handler in `libs/masks.c` for a trailing
+bug instances, found by auditing every handler in `libs/shape_manager.c` for a trailing
 `dt_dev_add_history_item()`/`_add_masks_history_item()` call: `_tree_delete_shape` (delete),
 `_tree_moveup`/`_tree_movedown` (reorder inside a group — silently lost on next undo/redo), and
 `_tree_duplicate_shape` (the duplicate was also never attached to the source shape's parent group
 via `dt_masks_group_add_form`, so it was an orphan on top of being uncommitted). All four are
-fixed; audit any *new* handler in `libs/masks.c` / `blend_gui.c` that mutates forms without a
+fixed; audit any *new* handler in `libs/shape_manager.c` / `blend_gui.c` that mutates forms without a
 trailing commit before trusting its undo/redo behavior.
 
 ### Same-thread rwlock reentrancy
@@ -1288,7 +1288,7 @@ history-commit path resyncing the virtual pipe mid-commit). glibc's default
 `PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP` policy self-deadlocks such a thread as soon as a
 second thread is queued for the write lock. Fixed by porting the same-thread recursive-writer
 tracking that already existed in the `_DEBUG` build of `dt_pthread_rwlock_t`
-(`common/dtpthread.h`: `writer` + `writer_depth` fields) into the release path too — a thread
+(`system/dtpthread.h`: `writer` + `writer_depth` fields) into the release path too — a thread
 that already holds the write lock cannot race itself, so letting it re-enter (as reader or
 writer) is safe. `try*` locks keep their "is it locked by anyone?" probe contract and still
 report busy on same-thread reentry, so callers relying on that semantic are unaffected.
@@ -1309,7 +1309,7 @@ prematurely).
 ### The masks module is being enclosed, and the ratchet counts the way out
 
 `src/develop/masks` is not a closed module yet: five files outside it (`develop/blend_gui.c`,
-`libs/masks.c`, `iop/retouch.c`, `iop/spots.c`, `develop/supervisor.c`) reach directly into
+`libs/shape_manager.c`, `iop/retouch.c`, `iop/spots.c`, `develop/supervisor.c`) reach directly into
 `dt_masks_form_t` and friends, four places `malloc` a masks type by hand, and `->forms` is walked
 as a plain `GList` all over `develop/`. The audit behind that is issue #1299; the plan is to drain
 it phase by phase rather than in one break.
@@ -1656,7 +1656,7 @@ and the focus flags (`set_focus_on_map`, `set_accept_focus`) change nothing eith
 
 So a UTILITY window states its position itself, `GTK_WIN_POS_CENTER_ON_PARENT`, on every
 platform — not inside a `#ifdef GDK_WINDOWING_QUARTZ` block, which is how the shape manager
-panel (`libs/masks.c`) came to open on the wrong screen while the module-order graph
+panel (`libs/shape_manager.c`) came to open on the wrong screen while the module-order graph
 (`libs/ioporder.c`), the tag manager (`libs/tagging.c`) and the event supervisor
 (`gui/actions/supervisor_window.c`) — none of which set the UTILITY hint — opened correctly.
 
@@ -1668,7 +1668,7 @@ later hide/show cycles.
 
 `gtk_widget_hide_on_delete()` is the usual answer to a window whose widgets and state must
 survive being closed, but it hides the window behind the back of whatever opened it. When the
-opener is a `GtkToggleButton` — the shape manager panel's toolbox button (`libs/masks.c`) — the
+opener is a `GtkToggleButton` — the shape manager panel's toolbox button (`libs/shape_manager.c`) — the
 button stays pressed after a window-manager close, and the next click reads that state as "the
 panel is open" and hides an already-hidden window: it takes two clicks to bring the panel back.
 
@@ -1778,7 +1778,7 @@ Rationale: Lanczos has large negative side-lobes → halos at high-contrast edge
 premultiplied alpha out of [0,1]. Mitchell is near-halo-free (~3% residual undershoot), sharp,
 and a separable partition-of-unity kernel that fits the existing tap machinery for CPU and GPU.
 
-The pipeline's interpolation architecture in `src/common/interpolation.c` is separable — each
+The pipeline's interpolation architecture in `src/pixel/interpolation.c` is separable — each
 kernel registers a 1D `maketaps`, and both `dt_interpolation_resample` (CPU) and
 `dt_interpolation_resample_cl` (GPU) consume the same CPU-computed taps. A new separable kernel
 is automatically CPU+GPU.
