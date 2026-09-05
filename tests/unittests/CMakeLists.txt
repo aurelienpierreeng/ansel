@@ -32,6 +32,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_tagging_completion
   test_tagging_completion_model
   test_metadata_notify
+  test_accel_map_defaults
   # Not database tests, but they want the same standalone-binary-linking-lib_ansel treatment,
   # and splitting the list to say so would be more ceremony than it is worth.
   test_pipe_cache_policy
