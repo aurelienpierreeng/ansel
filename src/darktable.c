@@ -1554,15 +1554,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // This handler reloads dt_image_t from DB so all downstream callbacks see fresh metadata.
   dt_image_cache_connect_info_changed_first(darktable.signals);
 
-  // Make sure that the database and xmp files are in sync
-  // We need conf and db to be up and running for that which is the case here.
-  // FIXME: is this also useful in non-gui mode?
-  GList *changed_xmp_files = NULL;
-  if(init_gui && dt_conf_get_bool("run_crawler_on_start"))
-  {
-    changed_xmp_files = dt_control_crawler_run();
-  }
-
   if(init_gui)
   {
     dt_control_init(darktable.control);
@@ -1797,11 +1788,15 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 #endif
   }
 
-  // last but not least construct the popup that asks the user about images whose xmp files are newer than the
-  // db entry
-  if(init_gui && changed_xmp_files)
+  // Make sure that the database and xmp files are in sync. This is a background job on
+  // purpose: it costs one directory listing per film roll, so on a network-mounted library it
+  // takes seconds to minutes, and it used to run to completion right here on the startup
+  // path -- before dt_control_init(), before the main window existed. It asks the user about
+  // images whose xmp files are newer than the db entry itself, once it knows of any.
+  // FIXME: is this also useful in non-gui mode?
+  if(init_gui && dt_conf_get_bool("run_crawler_on_start"))
   {
-    dt_control_crawler_show_image_list(changed_xmp_files);
+    dt_control_crawler_run_in_background();
   }
 
   if(init_gui)
