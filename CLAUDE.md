@@ -1733,6 +1733,52 @@ shortcut type already uses. Any future direct caller of `gtk_widget_add_accelera
 keyboard shortcut in this codebase has the same problem: it needs a closure the internal
 dispatcher can invoke, not just a GTK-level accelerator that no window will ever activate.
 
+### An accel path absent from the user's config is not a shortcut the user cleared
+
+`_insert_accel()` (`src/widgets/accelerators.c`) used to seed every accel path with
+`gtk_accel_map_add_entry(path, 0, 0)` and let `gtk_accel_map_load()` fill in the keys. That
+reads the user's config correctly and loses the app's own defaults: the load runs *before* any
+widget registers (`gui/application.c`), so a path the config has never heard of comes back with
+key 0, and `_update_shortcut_state()` — comparing that 0 against a non-zero app default with
+`accels->init` FALSE, i.e. "a config file exists" — files it under "the user changed this" and
+records the shortcut as permanently unbound. **Every newly added default shortcut was born dead
+for anyone with an existing `keyboardrc`**, silently, with the menu simply showing no
+accelerator.
+
+Accel pathes are built from **translated** GUI labels — that is why the config file is
+localized, one per language — so the same thing happens when a translation lands or changes for
+a label that already had a shortcut. F5 stopped applying the purple colour label in French when
+`po/fr.po` gained "⬤ Violet" for a menu entry that had been falling back to the English "⬤
+Purple" (commit `b7dcf716`): the path moved, the F5 saved under the old one was orphaned, and
+the new one was read as user-cleared. Every other colour kept its key because its translation
+had not moved. The orphaned line stays in the file — GTK has no API to delete a map entry — but
+it is inert: `_find_path_for_keys()` scans `accels->acceleratables`, not the accel map, and
+`gtk_accel_map_change_entry(..., replace=FALSE)` only reports a conflict against entries an
+accel group actually uses, so it does not block rebinding those keys either (measured, not
+assumed).
+
+Fixed by registering the app default **as the accel-map entry's own default**,
+`gtk_accel_map_add_entry(shortcut->path, shortcut->key, shortcut->mods)`. `add_entry` only sets
+the current value when it *creates* the entry, so anything the config supplied still wins; and
+it makes GTK's changed/unchanged bookkeeping mean what this code needs on the way out, since
+`gtk_accel_map_save()` comments out an entry sitting at its default and writes every other one
+as a live line. A shortcut the user cleared is therefore saved as a real `(path "")` line and
+read back as a *known* path with key 0 — still cleared, this time because the file says so
+rather than because the file is silent. `src/tests/unittests/test_accel_map_defaults.c` pins
+all four cases, including the old `(0, 0)` spelling's inability to tell the two apart.
+
+One migration cost, paid once: a config written by an older build recorded a cleared default as
+a *commented* line, which reads back as "unknown path", so such a shortcut returns to its
+default on the first run after this change. It is then saved under the new spelling and stays
+cleared from there on. There is no marker in the file to distinguish the two eras, so this is
+not avoidable — only bounded.
+
+**Do not verify this class of change by reading GTK's source or reasoning about it.** Every
+question here (does the parser register an empty entry? does `add_entry` overwrite a loaded
+value? how is a cleared entry saved?) is answered in seconds by a ten-line program calling
+`gtk_accel_map_load`/`add_entry`/`lookup_entry`/`save` and printing the file — and two
+plausible readings of that API were wrong when measured.
+
 ---
 
 ## Interpolation
