@@ -1702,7 +1702,7 @@ skips the now-invalid widgets instead of touching freed GTK objects.
 
 ### Widget shortcuts need their own closure — GTK's native accel-group activation is unreachable
 
-`src/gui/accelerators.c` offers two ways to register a shortcut: a "generic" one
+`src/widgets/accelerators.c` offers two ways to register a shortcut: a "generic" one
 (`dt_accels_new_action_shortcut`, `dt_accels_new_virtual_shortcut`/`_instance`) that builds a
 `GClosure` via `dt_shortcut_set_closure()`, and a "widget" one (`dt_accels_new_widget_shortcut`)
 that instead calls `gtk_widget_add_accelerator(widget, signal, accel_group, key, mods, flags)`,
