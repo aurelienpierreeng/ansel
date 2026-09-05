@@ -21,6 +21,7 @@ set(DATABASE_UNIT_TESTS
   test_history_snapshot
   test_masks_raster_contract
   test_masks_skip_ranges
+  test_import_jobs
 )
 
 foreach(test ${DATABASE_UNIT_TESTS})

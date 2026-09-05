@@ -99,12 +99,30 @@ void dt_control_import_data_free(dt_control_import_t *data);
  * @brief Build a full path for a given image file, given a pattern.
  *
  * @param filename Full path of the original file
- * @param index Incremental number in a sequence
+ * @param sequence 1-based number expanded by $(SEQUENCE). Files sharing the same
+ * source path up to the extension (e.g. a raw and its JPEG rendition) are given
+ * the same number, so they land as a group under one name.
  * @param img dt_image_t object. Needs to be inited with EXIF fields prior to calling this function, otherwise EXIF variables are expanded to defaults/fallback.
  * @param data Import options
  * @return gchar* The full path after variables expansion
  */
-gchar *dt_build_filename_from_pattern(const char *const filename, const int index, dt_image_t *img, dt_control_import_t *data);
+gchar *dt_build_filename_from_pattern(const char *const filename, const int sequence, dt_image_t *img, dt_control_import_t *data);
+
+
+/**
+ * @brief Assign a 1-based sequence number shared by all files of the same capture.
+ *
+ * The capture key is the source path with the last extension removed, but only when
+ * that extension lies after the last directory separator. A fresh key is inserted into
+ * @p capture_sequences on the first encounter and owned by the table; on subsequent
+ * encounters the local copy is freed and the existing number is reused.
+ *
+ * @param capture_sequences Hash table mapping capture keys to sequence numbers.
+ * @param filename Full path of the source file.
+ * @param[in,out] sequence Last sequence number assigned; incremented when a new capture is seen.
+ * @return int The sequence number for @p filename, 1-based.
+ */
+int dt_control_import_capture_sequence(GHashTable *capture_sequences, const char *filename, int *sequence);
 
 
 /**
