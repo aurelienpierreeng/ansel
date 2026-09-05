@@ -2611,6 +2611,34 @@ static void _create_memory_schema(dt_database_t *db)
       "CREATE TABLE memory.film_folder (id INTEGER PRIMARY KEY, status INTEGER)",
       NULL, NULL, NULL);
   // clang-format on
+
+  /* Staging area for "undo remove from library": one twin per table a removed image owns
+   * rows in. They are created as `CREATE TABLE ... AS SELECT` over the live tables rather
+   * than declared column by column, so their shape follows whatever main holds and a schema
+   * migration reaches database/removed_image_repository.c without an edit there -- that file
+   * names its columns from PRAGMA table_info() on these very tables. `WHERE 0` copies the
+   * shape and no row; the two leading columns it prepends are the key the repository works
+   * on. This runs after the library schema is created or upgraded, which is what makes the
+   * SELECT resolvable. */
+  static const char *const removed_twins[]
+      = { "film_rolls", "images", "history", "masks_history", "module_order",
+          "tagged_images", "color_labels", "meta_data", "history_hash" };
+
+  for(gsize i = 0; i < G_N_ELEMENTS(removed_twins); i++)
+  {
+    gchar *query = g_strdup_printf("CREATE TABLE memory.removed_%s AS"
+                                   "  SELECT 0 AS snap_id, 0 AS undo_imgid, * FROM main.%s WHERE 0",
+                                   removed_twins[i], removed_twins[i]);
+    sqlite3_exec(db->handle, query, NULL, NULL, NULL);
+    g_free(query);
+  }
+
+  /* Group membership is the one thing a removal changes outside the removed image's own
+   * rows: dropping a group's leader hands the group to a survivor, rewriting a group_id that
+   * belongs to an image nobody asked to remove. */
+  sqlite3_exec(db->handle,
+      "CREATE TABLE memory.removed_groups (snap_id INTEGER, undo_imgid INTEGER, id INTEGER, group_id INTEGER)",
+      NULL, NULL, NULL);
 }
 
 static void _sanitize_db(dt_database_t *db)

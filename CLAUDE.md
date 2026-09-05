@@ -1532,6 +1532,58 @@ The import job only asks for `IMAGE` when it imported exactly one image *and* at
 (duplicates) and none of them is the obvious one to open. Zero is the ordinary no-sidecar case
 and still opens.
 
+### "Remove from library" is undoable, and the flag that hides an image survives the snapshot
+
+Removing an image from the library stages every row it owns into `memory.removed_*` twins
+before the foreign keys delete them, and Ctrl+Z copies them back — `doc/removal-undo.md` is
+the full map, `database/removed_image_repository.c` the SQL, `dt_image_remove_undoable()` and
+`_pop_undo()` (`common/image.c`) the bookkeeping. `dt_image_remove()` still records nothing
+and is what delete-from-disk uses: a trashed file has nothing to restore.
+
+**The trap that costs a whole test round is `DT_IMAGE_REMOVE`.**
+`dt_control_remove_images_job_run()` sets it on the batch *before* deleting anything, so the
+grid stops showing the images while the job runs, and `database/collection_query.c` filters
+that flag out of every collection query. It is therefore in the row that gets staged, and a
+verbatim restore brings the image back into the database and into **no view at all** — the
+row is present, complete and correct, `PRAGMA foreign_key_check` is clean, and the image is
+simply never selected by any query again. Reading "the rows came back" as "the undo works" is
+exactly the mistake this bug rewards: the check that separates the two is `flags & 256` on
+the restored row, not the row's existence. `_pop_undo()` clears it through
+`dt_image_repository_clear_flag_among()` before re-running the collection query.
+
+Two more things a reviewer would otherwise simplify away. The snapshot must be taken at the
+very top of the removal, before `dt_grouping_remove_from_group()` runs: that call rewrites the
+`group_id` of images **nobody asked to remove**, which lives in no table the removed image
+owns and is staged separately in `memory.removed_groups`. And the restore runs under `PRAGMA
+defer_foreign_keys = ON`, because a group removed in one go comes back one undo record at a
+time and an image regularly precedes the leader it points at; any `group_id` still dangling at
+the end is repointed at the image itself rather than allowed to fail the commit.
+
+The folder list learns about a restored roll through `dt_film_notify_rolls_changed()`
+(`common/film.h`), which `gui/common/film_gui.c` turns into `DT_SIGNAL_FILMROLLS_CHANGED`.
+`common/` is layer 1 and `control/` is layer 3, so raising the signal from `common/image.c`
+is a layering inversion `tools/check_layering.sh` counts against the baseline; the notifier
+is the same inversion `common/image_notify.h` and `common/thumbnail_notify.h` already use.
+
+**The schema does not cascade uniformly.** Only `history`, `masks_history`, `tagged_images`
+and `history_hash` carry a foreign key on `images(id)`; `module_order`, `color_labels` and
+`meta_data` carry none, in a fresh database as in a migrated one — `dt_image_repository_delete()`
+deletes `meta_data` by hand, and the other two are left behind by every removal, undone or not.
+So the restore DELETEs each child table's rows before copying the staged ones back: a no-op for
+the four that cascade, and the only thing stopping `color_labels` — which has no unique
+constraint either — from gaining a duplicate row on every remove/undo cycle.
+
+**`memory.` dies with the connection, and the undo stack outlives it.** `dt_database_close()`
+runs before `dt_undo_cleanup()`, so the free callback of a removal the user never undid runs
+against a closed connection; `_remove_undo_data_free()` checks `dt_database_is_open()` first.
+Skipping that check costs an abort on quit in a debug build (`assert(x == SQLITE_OK)` inside
+`DT_DEBUG_SQLITE3_PREPARE_V2`) and a crash wherever SQLite is built without API armor.
+
+The undo window closes when the lighttable is re-entered — `enter()` calls
+`dt_undo_clear(..., DT_UNDO_LIGHTTABLE)`, `DT_UNDO_REMOVE` is in that mask, and discarding the
+record frees the snapshot. That is every lighttable undo's lifetime, but here it is also the
+point of no return for data the database was the only holder of.
+
 ---
 
 ## GTK / UI

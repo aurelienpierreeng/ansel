@@ -84,10 +84,13 @@
 #include "metadata/exif.h"
 #include "common/file_location.h"
 #include "common/grouping.h"
+#include "common/film.h"
 #include "history/history.h"
+#include "database/database.h"
 #include "database/history_repository.h"
 #include "database/film_repository.h"
 #include "database/image_repository.h"
+#include "database/removed_image_repository.h"
 #include "develop/history_merge.h"
 #include "history/history_snapshot.h"
 #include "caches/image_cache.h"
@@ -109,6 +112,7 @@
 #include "win/filepath.h"
 #include <assert.h>
 #include <ctype.h>
+#include <inttypes.h>
 #include <math.h>
 #include <sqlite3.h>
 #include <stdlib.h>
@@ -148,9 +152,18 @@ typedef struct dt_undo_duplicate_t
   int32_t new_imgid;
 } dt_undo_duplicate_t;
 
+/* An image removed from the library holds nothing in memory worth keeping: the whole state
+ * is the rows database/removed_image_repository.c staged, and this is the ticket to them. */
+typedef struct dt_undo_remove_t
+{
+  int32_t imgid;
+  int snap_id;
+} dt_undo_remove_t;
+
 static void _pop_undo_execute(const int32_t imgid, const gboolean before, const gboolean after);
 static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t newversion, const gboolean undo,
                                              const gboolean reload);
+static void _image_remove(const int32_t imgid, const gboolean undo);
 static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_data_t data, const dt_undo_action_t action, GList **imgs);
 
 static void _copy_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path);
@@ -914,6 +927,60 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undo->new_imgid));
     }
   }
+  else if(type == DT_UNDO_REMOVE)
+  {
+    dt_undo_remove_t *undo = (dt_undo_remove_t *)data;
+
+    /* Undo puts the rows back, redo takes them out again -- and in both directions the
+     * snapshot stays: it is the undo record's, and the record can be popped either way any
+     * number of times. It is dropped only when the record itself is, by
+     * _remove_undo_data_free() below. */
+    GList *one = g_list_prepend(NULL, GINT_TO_POINTER(undo->imgid));
+
+    if(action == DT_ACTION_UNDO)
+    {
+      if(dt_removed_image_repository_restore(undo->snap_id, undo->imgid))
+      {
+        /* DT_IMAGE_REMOVE is written to the row BEFORE the removal runs, so it is part of
+         * what was staged -- and every collection query filters that flag out, which would
+         * bring the image back into the database and into no view. The image is not marked
+         * for deletion any more, so the flag goes. */
+        dt_image_repository_clear_flag_among(one, DT_IMAGE_REMOVE);
+
+        /* The removal emptied the image cache and the mipmap cache of this image, and neither
+         * refills itself: the mipmap cache regenerates only on explicit removal, and the image
+         * cache's history_items -- the "altered" flag deciding raw processing over the unedited
+         * embedded JPEG -- would be whatever the entry held before. Without this the image comes
+         * back looking undeveloped, or as a thumbnail that never renders at all. Reloading also
+         * re-reads the flags cleared just above, so no stale cache entry can write DT_IMAGE_REMOVE
+         * back over the restored row. TRUE: this is a lighttable operation, the filmstrip may
+         * refresh with the grid. */
+        dt_image_history_changed(undo->imgid, TRUE);
+
+        /* The collection is the last one: nothing about a restored row reaches the grid until
+         * the query is re-run. */
+        dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD,
+                                   DT_COLLECTION_PROP_UNDEF, g_list_copy(one));
+        /* Restoring the last image of a film roll brings the roll back with it, so the
+         * folder list has to be told; the notifier keeps that a layer-1 statement. */
+        dt_film_notify_rolls_changed();
+        *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undo->imgid));
+      }
+      else
+        fprintf(stderr, "[dt_image_remove] fails to restore image %" PRId32 "\n", undo->imgid);
+    }
+    else
+    {
+      // not added to *imgs: dt_undo_do_undo() ends by writing the XMP of every image it
+      // names, and this one no longer has a row to write from.
+      _image_remove(undo->imgid, FALSE);
+      dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD,
+                                 DT_COLLECTION_PROP_UNDEF, g_list_copy(one));
+      dt_film_notify_rolls_changed();
+    }
+
+    g_list_free(one);
+  }
   else if(type == DT_UNDO_FLAGS)
   {
     dt_undo_monochrome_t *undomono = (dt_undo_monochrome_t *)data;
@@ -1368,11 +1435,45 @@ int32_t dt_image_duplicate_no_reload(const int32_t imgid)
   return _image_duplicate_with_version(imgid, -1, TRUE, FALSE);
 }
 
-void dt_image_remove(const int32_t imgid)
+static void _remove_undo_data_free(gpointer data)
+{
+  dt_undo_remove_t *undo = (dt_undo_remove_t *)data;
+
+  /* The record is gone, so the removal it could have undone is now permanent. Nothing to
+   * drop once the connection is closed, though: the staging tables are `memory.` ones and
+   * went with it. That is not a corner case -- dt_undo_cleanup() runs AFTER
+   * dt_database_close() at shutdown, so this is the path taken by every record still held
+   * when the application quits. */
+  if(dt_database_is_open())
+    dt_removed_image_repository_clear(undo->snap_id, undo->imgid);
+
+  dt_free(undo);
+}
+
+static void _image_remove(const int32_t imgid, const gboolean undo)
 {
   // if a local copy exists, remove it
 
   if(dt_image_local_copy_reset(imgid)) return;
+
+  /* Snapshot before anything below runs, dt_grouping_remove_from_group() included: that call
+   * rewrites the group_id of the images STAYING behind, and putting that back is part of
+   * undoing this removal. A snapshot that cannot be taken is not recorded -- removing the
+   * image anyway is better than an undo entry that restores nothing. */
+  if(undo)
+  {
+    dt_undo_remove_t *rm = (dt_undo_remove_t *)g_malloc0(sizeof(dt_undo_remove_t));
+    rm->imgid = imgid;
+    rm->snap_id = dt_removed_image_repository_next_id(imgid);
+
+    if(dt_removed_image_repository_create(rm->snap_id, imgid))
+      dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_REMOVE, rm, _pop_undo, _remove_undo_data_free);
+    else
+    {
+      fprintf(stderr, "[dt_image_remove] fails to snapshot image %" PRId32 ", removing it without undo\n", imgid);
+      dt_free(rm);
+    }
+  }
 
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   dt_image_cache_read_release(img);
@@ -1385,6 +1486,16 @@ void dt_image_remove(const int32_t imgid)
 
   // also clear all thumbnails in mipmap_cache.
   dt_mipmap_cache_remove(imgid, TRUE);
+}
+
+void dt_image_remove(const int32_t imgid)
+{
+  _image_remove(imgid, FALSE);
+}
+
+void dt_image_remove_undoable(const int32_t imgid)
+{
+  _image_remove(imgid, TRUE);
 }
 
 uint32_t dt_image_altered(const int32_t imgid)
