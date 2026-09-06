@@ -929,7 +929,7 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
   }
   else if(type == DT_UNDO_REMOVE)
   {
-    dt_undo_remove_t *undo = (dt_undo_remove_t *)data;
+    const dt_undo_remove_t *undo = (const dt_undo_remove_t *)data;
 
     /* Undo puts the rows back, redo takes them out again -- and in both directions the
      * snapshot stays: it is the undo record's, and the record can be popped either way any
@@ -1484,8 +1484,11 @@ static void _image_remove(const int32_t imgid, const gboolean undo)
   dt_grouping_remove_from_group(imgid);
   dt_image_repository_delete(imgid);
 
-  // also clear all thumbnails in mipmap_cache.
-  dt_mipmap_cache_remove(imgid, TRUE);
+  /* Every buffer, not just the thumbnails: the decoded raw input survives dt_mipmap_cache_remove()
+   * by design, and an image that has left the library has no business keeping one. It is what the
+   * pipeline slices through basebuffer when the image comes back on Ctrl+Z, and a stale entry
+   * there renders as a husk that no later pass replaces. */
+  dt_mipmap_cache_remove_all_sizes(imgid, TRUE);
 }
 
 void dt_image_remove(const int32_t imgid)

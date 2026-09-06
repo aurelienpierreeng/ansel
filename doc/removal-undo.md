@@ -99,6 +99,22 @@ from `common/` would be a layer-1 file calling into `control/`, which `tools/che
 counts; the same inversion is what `common/image_notify.h` and `common/thumbnail_notify.h`
 already do for theirs, and a headless run with no handler installed simply drops the fact.
 
+### The caches are emptied on the way out, and neither refills itself
+
+`dt_image_history_changed()` runs on the restore: the removal emptied the image cache and the
+mipmap cache, the mipmap cache regenerates only after an explicit removal, and the image cache's
+`history_items` — the "altered" flag choosing raw processing over the unedited embedded JPEG —
+would otherwise be whatever the entry held before. Reloading also re-reads the flags cleared
+just above it, so no stale entry can write `DT_IMAGE_REMOVE` back over the restored row.
+
+The removal itself uses `dt_mipmap_cache_remove_all_sizes()` rather than
+`dt_mipmap_cache_remove()`, because the latter drops the thumbnails and deliberately keeps
+`DT_MIPMAP_F` and `DT_MIPMAP_FULL`, the decoded raw input. Keeping them is right for a
+development change and wrong for a removal: the buffer outlives the row, and on the way back
+`basebuffer` slices a zero-sized buffer out of the stale entry and the thumbnail becomes an
+8x8 husk that no later render replaces. Only a developed image shows it — an unaltered one
+comes back from the embedded JPEG and never asks for the input.
+
 ### The staging tables die with the connection, and the undo stack outlives it
 
 `memory.` is per-connection, so the twins exist only as long as the database is open. At

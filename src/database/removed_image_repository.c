@@ -122,22 +122,26 @@ gboolean dt_removed_image_repository_create(const int snap_id, const int32_t img
 
   dt_database_start_transaction();
 
-  for(gsize i = 0; i < G_N_ELEMENTS(_removed_tables) && all_ok; i++)
+  /* One exit, at the bottom: a table whose columns cannot be read and a statement that fails
+   * are the same outcome here, since the transaction is rolled back whole and there is
+   * nothing to gain by staging the rest. */
+  for(gsize i = 0; i < G_N_ELEMENTS(_removed_tables); i++)
   {
     gchar *columns = _columns_of(_removed_tables[i].name);
-    if(IS_NULL_PTR(columns))
+    all_ok = !IS_NULL_PTR(columns);
+
+    if(all_ok)
     {
-      all_ok = FALSE;
-      break;
+      gchar *query = g_strdup_printf("INSERT INTO memory.removed_%s (snap_id, undo_imgid, %s)"
+                                     "  SELECT ?1, ?2, %s FROM main.%s WHERE %s",
+                                     _removed_tables[i].name, columns, columns,
+                                     _removed_tables[i].name, _removed_tables[i].filter);
+      all_ok = _run(query, snap_id, imgid);
+      dt_free(query);
+      dt_free(columns);
     }
 
-    gchar *query = g_strdup_printf("INSERT INTO memory.removed_%s (snap_id, undo_imgid, %s)"
-                                   "  SELECT ?1, ?2, %s FROM main.%s WHERE %s",
-                                   _removed_tables[i].name, columns, columns,
-                                   _removed_tables[i].name, _removed_tables[i].filter);
-    all_ok = _run(query, snap_id, imgid);
-    dt_free(query);
-    dt_free(columns);
+    if(!all_ok) break;
   }
 
   /* Who else is in this image's group. dt_grouping_remove_from_group() hands the group to a
@@ -169,34 +173,36 @@ gboolean dt_removed_image_repository_restore(const int snap_id, const int32_t im
 
   gboolean all_ok = TRUE;
 
-  for(gsize i = 0; i < G_N_ELEMENTS(_removed_tables) && all_ok; i++)
+  // one exit at the bottom, for the same reason as the staging loop above
+  for(gsize i = 0; i < G_N_ELEMENTS(_removed_tables); i++)
   {
     gchar *columns = _columns_of(_removed_tables[i].name);
-    if(IS_NULL_PTR(columns))
+    all_ok = !IS_NULL_PTR(columns);
+
+    if(all_ok)
     {
-      all_ok = FALSE;
-      break;
+      // whatever survived the removal in this table goes, so the staged copy is the only one
+      if(!IS_NULL_PTR(_removed_tables[i].child_key))
+      {
+        gchar *clear = g_strdup_printf("DELETE FROM main.%s WHERE %s = ?2",
+                                       _removed_tables[i].name, _removed_tables[i].child_key);
+        all_ok = _run(clear, snap_id, imgid);
+        dt_free(clear);
+      }
+
+      /* OR IGNORE because the film roll is regularly still there: only the roll's LAST image
+       * takes it down, and every image of the roll staged a copy of it. */
+      gchar *query = g_strdup_printf("INSERT OR IGNORE INTO main.%s (%s)"
+                                     "  SELECT %s FROM memory.removed_%s"
+                                     "  WHERE snap_id = ?1 AND undo_imgid = ?2",
+                                     _removed_tables[i].name, columns, columns,
+                                     _removed_tables[i].name);
+      all_ok = all_ok && _run(query, snap_id, imgid);
+      dt_free(query);
+      dt_free(columns);
     }
 
-    // whatever survived the removal in this table goes, so the staged copy is the only one
-    if(!IS_NULL_PTR(_removed_tables[i].child_key))
-    {
-      gchar *clear = g_strdup_printf("DELETE FROM main.%s WHERE %s = ?2",
-                                     _removed_tables[i].name, _removed_tables[i].child_key);
-      all_ok = _run(clear, snap_id, imgid);
-      dt_free(clear);
-    }
-
-    /* OR IGNORE because the film roll is regularly still there: only the roll's LAST image
-     * takes it down, and every image of the roll staged a copy of it. */
-    gchar *query = g_strdup_printf("INSERT OR IGNORE INTO main.%s (%s)"
-                                   "  SELECT %s FROM memory.removed_%s"
-                                   "  WHERE snap_id = ?1 AND undo_imgid = ?2",
-                                   _removed_tables[i].name, columns, columns,
-                                   _removed_tables[i].name);
-    all_ok = all_ok && _run(query, snap_id, imgid);
-    dt_free(query);
-    dt_free(columns);
+    if(!all_ok) break;
   }
 
   // give the group its leader back -- those rows were never deleted, so this is an update
