@@ -977,6 +977,20 @@ typedef struct _row_table_t
   int capacity;
 } _row_table_t;
 
+/* One crossing into row @p y: counted always, written only while filling and only inside the
+ * table's capacity. FALSE when the table refused it. */
+static inline gboolean _row_table_put(const _row_table_t *const t, const int y, const float x)
+{
+  if(!IS_NULL_PTR(t->xs))
+  {
+    const int at = t->at[y] + t->count[y];
+    if(at < 0 || at >= t->capacity) return FALSE;
+    t->xs[at] = x;
+  }
+  t->count[y]++;
+  return TRUE;
+}
+
 /* Where the closed path crosses each row, sampled at the row's centre. Two passes: with
  * @p t->xs NULL only the per-row counts are taken; with it, the crossings are written at the
  * row offsets, never outside [0, capacity), and the counts rebuilt from what was written. The
@@ -1007,15 +1021,7 @@ static void _path_row_crossings(const float *const px, const float *const py, co
     const int ya = MAX((int)ceilf(y0 - 0.5f), 0);
     const int yb = MIN((int)ceilf(y1 - 0.5f), h);
     for(int y = ya; y < yb; y++)
-    {
-      if(!IS_NULL_PTR(t->xs))
-      {
-        const int at = t->at[y] + t->count[y];
-        if(at < 0 || at >= t->capacity) continue;
-        t->xs[at] = x0 + (x1 - x0) * (((float)y + 0.5f) - y0) / (y1 - y0);
-      }
-      t->count[y]++;
-    }
+      _row_table_put(t, y, x0 + (x1 - x0) * (((float)y + 0.5f) - y0) / (y1 - y0));
   }
 }
 
