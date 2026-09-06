@@ -628,19 +628,25 @@ static void _brush_points_recurs_border_small_gaps(float *cmax, float *bmin, flo
 }
 
 
-/** draw a circle with given radius. can be used to terminate a stroke and to draw junctions where attributes
- * (opacity) change */
-static void _brush_points_stamp(float *cmax, float *bmin, dt_masks_dynbuf_t *dpoints,  dt_masks_dynbuf_t *dborder,
-                                gboolean clockwise)
+/** Stamp a full disc: one spoke per pixel of circumference, all from @p centre, at @p radius.
+ *
+ * The radius is an ARGUMENT. It used to be measured as the distance from the centre to the
+ * border sample last written to the buffer, on the assumption that the two belonged to the
+ * same spoke. Issue #1360 is what happens when they do not: a degenerate segment had left the
+ * image origin in the border buffer, the "radius" came out as the distance from the stroke to
+ * the corner of the frame -- 2058 px on the reporter's file -- and ten of these discs were
+ * stamped at that size. Every radius in this file now comes from the node data, and no
+ * geometry is ever derived from what happens to sit at the end of a buffer.
+ *
+ * @p from_border only chooses the start angle, so the first sample continues from the border
+ * sample the caller just wrote; any angle is geometrically right. */
+static void _brush_points_stamp(const float *const centre, const float *const from_border, const float radius,
+                                dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder)
 {
-  // we want to find the start angle
-  const float a1 = atan2f(bmin[1] - cmax[1], bmin[0] - cmax[0]);
-
-  // we determine the radius too
-  const float rad = dt_fast_hypotf(bmin[1] - cmax[1], bmin[0] - cmax[0]);
+  const float a1 = atan2f(from_border[1] - centre[1], from_border[0] - centre[0]);
 
   // determine the max length of the circle arc
-  const int l = 2.0f * M_PI * rad;
+  const int l = 2.0f * M_PI * radius;
   if(l < 2) return;
 
   // and now we add the points
@@ -655,10 +661,10 @@ static void _brush_points_stamp(float *cmax, float *bmin, dt_masks_dynbuf_t *dpo
   {
     for(int i = 0; i < l; i++)
     {
-      *dpoints_ptr++ = cmax[0];
-      *dpoints_ptr++ = cmax[1];
-      *dborder_ptr++ = cmax[0] + rad * cosf(aa);
-      *dborder_ptr++ = cmax[1] + rad * sinf(aa);
+      *dpoints_ptr++ = centre[0];
+      *dpoints_ptr++ = centre[1];
+      *dborder_ptr++ = centre[0] + radius * cosf(aa);
+      *dborder_ptr++ = centre[1] + radius * sinf(aa);
       aa += incra;
     }
   }
@@ -735,6 +741,23 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
         border_min[0] = border_max[0];
         border_min[1] = border_max[1];
       }
+      else if(!have_border_min && !have_border_max)
+      {
+        /* Neither end has a direction. The caller only walks segments that have one at an
+         * end (see _brush_segment_degenerate()), so this is unreachable in practice -- but
+         * what used to happen here is the whole of issue #1360: border_max was the caller's
+         * zero-initialised scratch, and (0, 0) -- the image origin -- went into the buffer as
+         * if it were geometry. A spoke of the right LENGTH in some direction is always a valid
+         * piece of the disc union; a spoke to the corner of the frame never is. */
+        const float radius = p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax);
+        float nx = p2[1] - p1[1];
+        float ny = -(p2[0] - p1[0]);
+        const float len = dt_fast_hypotf(nx, ny);
+        if(len > 0.0f) { nx /= len; ny /= len; } else { nx = 1.0f; ny = 0.0f; }
+        border_max[0] = points_max[0] + radius * nx;
+        border_max[1] = points_max[1] + radius * ny;
+        have_border_max = TRUE;
+      }
 
       // we check gaps in the border (sharp edges)
       if(abs((int)border_max[0] - (int)border_min[0]) > 2 || abs((int)border_max[1] - (int)border_min[1]) > 2)
@@ -772,33 +795,92 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
 }
 
 
-/** converts n into a cyclical sequence counting upwards from 0 to nb-1 and back down again, counting
- * endpoints twice */
-static inline int _brush_cyclic_cursor(int n, int nb)
+/* The two ends of one segment of the walk, in image pixels: node, the control point that
+ * faces the other end, radius, fading, density. Travelling forward the segment leaves node
+ * `from` through its ctrl2 and enters `to` through its ctrl1; backward it is the other pair.
+ * The radii are read the way the walk always has: the start of a segment carries its node's
+ * border[1] and the end its node's border[0]. Every writer in this file sets the two together,
+ * so they agree; the walk takes the larger wherever it has to choose one for a node. */
+static void _brush_segment_load(const dt_masks_node_brush_t *const from, const dt_masks_node_brush_t *const to,
+                                const gboolean forward, const float iwd, const float iht,
+                                const float dx, const float dy, float p1[7], float p2[7])
 {
-  const int o = n % (2 * nb);
-  const int p = o % nb;
+  const float *const from_ctrl = forward ? from->ctrl2 : from->ctrl1;
+  const float *const to_ctrl = forward ? to->ctrl1 : to->ctrl2;
+  const float radius_scale = MIN(iwd, iht);
 
-  return (o <= p) ? o : o - 2 * p - 1;
+  p1[0] = from->node[0] * iwd - dx;
+  p1[1] = from->node[1] * iht - dy;
+  p1[2] = from_ctrl[0] * iwd - dx;
+  p1[3] = from_ctrl[1] * iht - dy;
+  p1[4] = from->border[1] * radius_scale;
+  p1[5] = from->fading;
+  p1[6] = from->density;
+
+  p2[0] = to->node[0] * iwd - dx;
+  p2[1] = to->node[1] * iht - dy;
+  p2[2] = to_ctrl[0] * iwd - dx;
+  p2[3] = to_ctrl[1] * iht - dy;
+  p2[4] = to->border[0] * radius_scale;
+  p2[5] = to->fading;
+  p2[6] = to->density;
 }
 
-
-/* Record, as an out-of-band span, the border samples a join arc is about to append: the
- * DISPLAY outline excludes these spans (a node-centred arc reads as a self-intersecting circle
- * on the dashed border -- the complaint that got the arcs disabled outright in 0b54897b50),
- * while the rasteriser keeps every sample, because border coverage IS mask coverage. Pairs of
- * (first, one-past-last) border indices; an empty pair is dropped at conversion. */
-static inline void _brush_record_skip_span_begin(dt_masks_dynbuf_t *dskips, dt_masks_dynbuf_t *dborder)
+/* The arc that bridges a joint: from @p from to @p to around @p centre, the SHORT way round.
+ *
+ * On the convex side of a turn the short way is the exterior wedge the spokes leave open,
+ * which is the whole point of the arc. On the concave side the two borders have crossed and
+ * the short way runs through the inside of the stroke, painting nothing new but costing only
+ * the turn's worth of samples. Sweeping a fixed rotation instead -- clockwise on the forward
+ * pass, as this used to -- covered the same wedge on one side and went the long way round on
+ * the other: a near-full circle of interior spokes at every joint, 2*pi*r samples for a turn of
+ * a few degrees, in every consumer's buffers. Half the samples of a many-jointed stroke were
+ * those loops.
+ *
+ * At a cusp the two are the same length and the choice matters: the two halves of the tip
+ * disc are covered by the two passes, one each, and which is which is the pass's own rotation
+ * (clockwise going forward, the other way coming back -- the same rule the end caps follow).
+ * So a tie within a few degrees of pi keeps the pass's rotation, and only a sweep clearly
+ * longer than pi flips to the short way. */
+static void _brush_joint_arc(const float *const centre, const float *const from, const float *const to,
+                             const gboolean forward, dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder)
 {
-  if(IS_NULL_PTR(dskips) || IS_NULL_PTR(dborder)) return;
-  const float at = (float)(dt_masks_dynbuf_position(dborder) / 2);
-  dt_masks_dynbuf_add_2(dskips, at, at);
+  const float a1 = atan2f(from[1] - centre[1], from[0] - centre[0]);
+  const float a2 = atan2f(to[1] - centre[1], to[0] - centre[0]);
+  float sweep_cw = a2 - a1;
+  if(sweep_cw < 0.0f) sweep_cw += 2.0f * M_PI;   /* the clockwise sweep, in (0, 2 pi) */
+
+  gboolean clockwise = forward;
+  const float tie = 0.05f;
+  if(forward && sweep_cw > M_PI + tie) clockwise = FALSE;
+  if(!forward && sweep_cw < M_PI - tie) clockwise = TRUE;
+
+  float f[2] = { from[0], from[1] };
+  float t[2] = { to[0], to[1] };
+  float c[2] = { centre[0], centre[1] };
+  _brush_points_recurs_border_gaps(c, f, NULL, t, dpoints, dborder, clockwise);
 }
 
-static inline void _brush_record_skip_span_end(dt_masks_dynbuf_t *dskips, dt_masks_dynbuf_t *dborder)
+/* A border sample at @p radius from @p centre in the direction of (dx, dy), for an end that
+ * has a radius but no direction of its own: it borrows the other end's. Never a position
+ * copied from somewhere else -- a spoke of the right length in a borrowed direction is part of
+ * the disc union, a spoke to a copied position is of no particular length at all. */
+static void _brush_border_from_direction(const float *const centre, float dx, float dy, const float radius,
+                                         float *const border)
 {
-  if(IS_NULL_PTR(dskips) || IS_NULL_PTR(dborder)) return;
-  dt_masks_dynbuf_set(dskips, -1, (float)(dt_masks_dynbuf_position(dborder) / 2));
+  const float len = dt_fast_hypotf(dx, dy);
+  if(len > 0.0f)
+  {
+    dx /= len;
+    dy /= len;
+  }
+  else
+  {
+    dx = 1.0f;
+    dy = 0.0f;
+  }
+  border[0] = centre[0] + radius * dx;
+  border[1] = centre[1] + radius * dy;
 }
 
 /** get all points of the brush and the border */
@@ -832,7 +914,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   // spread out and the radial spokes stamped from them leave gaps between each pair (#1116).
   const int pixel_threshold = dist->rasterization_step;
 
-  dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL, *dskips = NULL;
+  dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL;
 
   dpoints = dt_masks_dynbuf_init(1000000, "brush dpoints");
   if(IS_NULL_PTR(dpoints)) return 1;
@@ -858,12 +940,6 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     }
   }
 
-  if(!IS_NULL_PTR(dborder) && !IS_NULL_PTR(border_skips) && !IS_NULL_PTR(border_skip_count))
-  {
-    // an allocation failure here only loses the display exclusion, never the geometry
-    dskips = dt_masks_dynbuf_init(256, "brush dskips");
-  }
-
   // we store all points
   float dx = 0.0f, dy = 0.0f;
 
@@ -882,7 +958,6 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     dt_masks_dynbuf_free(dpoints);
     dt_masks_dynbuf_free(dborder);
     dt_masks_dynbuf_free(dpayload);
-    dt_masks_dynbuf_free(dskips);
     return 1;
   }
 
@@ -915,9 +990,6 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     dt_masks_dynbuf_add_zeros(dpayload, 6 * node_count); // we need six zeros for each border point
   }
 
-  int cw = 1;
-  int start_stamp = 0;
-
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush_points init took %0.04f sec\n", mask_form->name,
@@ -925,187 +997,141 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     start2 = dt_get_wtime();
   }
 
-  // we render all segments first upwards, then downwards
-  for(int n = 0; n < 2 * node_count; n++)
+  /* THE WALK.
+   *
+   * A brush is the union of a disc of the local radius over every point of its centreline, and
+   * the rasteriser paints that union as spokes: from every centreline sample out to its border
+   * sample, on both sides. So the centreline is walked twice, forward with the border on the
+   * right and backward with the border on the right again -- the other side -- and the two
+   * sides are joined by a cap at each end. Where the direction, the radius or the payload jumps
+   * at a node, the spokes of the two segments meeting there leave a wedge; a disc or an arc,
+   * centred on that node at that node's radius, fills it.
+   *
+   * Everything a joint or a cap needs is taken from the two segment END SAMPLES that meet
+   * there, and from the node data. Nothing is read back out of the buffers. The previous walk
+   * took "the last centreline sample and the last border sample written" as the centre and
+   * radius of every cap, arc and stamp, on the assumption that they belonged to one spoke; a
+   * degenerate segment broke that assumption once and the damage compounded through every
+   * later joint of the stroke (issue #1360: a circle 2058 px across, centred on the stroke,
+   * grown from a border sample that was the image origin).
+   *
+   * A DEGENERATE segment -- its four control points one point, which is what a pen resting
+   * under rising pressure produces -- has no direction and so no spokes, and contributes
+   * nothing: its disc is the cap of whichever neighbour has a direction. The walk skips it and
+   * joins the segments either side of it as if it were not there, which for the disc union is
+   * exactly right. */
+  for(int pass = 0; pass < 2; pass++)
   {
-    float p1[7], p2[7], p3[7], p4[7];
-    const int k = _brush_cyclic_cursor(n, node_count);
-    const int k1 = _brush_cyclic_cursor(n + 1, node_count);
-    const int k2 = _brush_cyclic_cursor(n + 2, node_count);
+    const gboolean forward = (pass == 0);
 
-    dt_masks_node_brush_t *point1 = nodes[k];
-    dt_masks_node_brush_t *point2 = nodes[k1];
-    dt_masks_node_brush_t *point3 = nodes[k2];
-    if(cw > 0)
-    {
-      const float pa[7] = { point1->node[0] * iwd - dx, point1->node[1] * iht - dy, point1->ctrl2[0] * iwd - dx,
-                            point1->ctrl2[1] * iht - dy, point1->border[1] * MIN(iwd, iht), point1->fading,
-                            point1->density };
-      const float pb[7] = { point2->node[0] * iwd - dx, point2->node[1] * iht - dy, point2->ctrl1[0] * iwd - dx,
-                            point2->ctrl1[1] * iht - dy, point2->border[0] * MIN(iwd, iht), point2->fading,
-                            point2->density };
-      const float pc[7] = { point2->node[0] * iwd - dx, point2->node[1] * iht - dy, point2->ctrl2[0] * iwd - dx,
-                            point2->ctrl2[1] * iht - dy, point2->border[1] * MIN(iwd, iht), point2->fading,
-                            point2->density };
-      const float pd[7] = { point3->node[0] * iwd - dx, point3->node[1] * iht - dy, point3->ctrl1[0] * iwd - dx,
-                            point3->ctrl1[1] * iht - dy, point3->border[0] * MIN(iwd, iht), point3->fading,
-                            point3->density };
-      memcpy(p1, pa, sizeof(float) * 7);
-      memcpy(p2, pb, sizeof(float) * 7);
-      memcpy(p3, pc, sizeof(float) * 7);
-      memcpy(p4, pd, sizeof(float) * 7);
-    }
-    else
-    {
-      const float pa[7] = { point1->node[0] * iwd - dx, point1->node[1] * iht - dy, point1->ctrl1[0] * iwd - dx,
-                            point1->ctrl1[1] * iht - dy, point1->border[1] * MIN(iwd, iht), point1->fading,
-                            point1->density };
-      const float pb[7] = { point2->node[0] * iwd - dx, point2->node[1] * iht - dy, point2->ctrl2[0] * iwd - dx,
-                            point2->ctrl2[1] * iht - dy, point2->border[0] * MIN(iwd, iht), point2->fading,
-                            point2->density };
-      const float pc[7] = { point2->node[0] * iwd - dx, point2->node[1] * iht - dy, point2->ctrl1[0] * iwd - dx,
-                            point2->ctrl1[1] * iht - dy, point2->border[1] * MIN(iwd, iht), point2->fading,
-                            point2->density };
-      const float pd[7] = { point3->node[0] * iwd - dx, point3->node[1] * iht - dy, point3->ctrl2[0] * iwd - dx,
-                            point3->ctrl2[1] * iht - dy, point3->border[0] * MIN(iwd, iht), point3->fading,
-                            point3->density };
-      memcpy(p1, pa, sizeof(float) * 7);
-      memcpy(p2, pb, sizeof(float) * 7);
-      memcpy(p3, pc, sizeof(float) * 7);
-      memcpy(p4, pd, sizeof(float) * 7);
-    }
+    /* the end sample of the previous non-degenerate segment of this pass, i.e. the state of
+     * the walk at the node the next segment starts from */
+    gboolean have_prev = FALSE;
+    float prev_c[2] = { 0.0f, 0.0f };
+    float prev_b[2] = { 0.0f, 0.0f };
+    float prev_r = 0.0f;
+    float prev_payload[2] = { 0.0f, 0.0f };
 
-    // 1st. special case: render abrupt transitions between different opacity and/or fading values
-    if((fabsf(p1[5] - p2[5]) > 0.05f || fabsf(p1[6] - p2[6]) > 0.05f)
-       || (start_stamp && n == 2 * node_count - 1))
+    for(int step = 0; step + 1 < (int)node_count; step++)
     {
-      if(n == 0)
+      const int k = forward ? step : (int)node_count - 1 - step;
+      const int k1 = forward ? step + 1 : (int)node_count - 2 - step;
+      float p1[7], p2[7];
+      _brush_segment_load(nodes[k], nodes[k1], forward, iwd, iht, dx, dy, p1, p2);
+
+      /* the segment's own end samples; a segment with a direction at neither end is a point */
+      float c0[2], b0[2], c1[2], b1[2];
+      const gboolean have_b0 = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1],
+                                                    0.0f, p1[4], c0, c0 + 1, b0, b0 + 1);
+      const gboolean have_b1 = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1],
+                                                    1.0f, p2[4], c1, c1 + 1, b1, b1 + 1);
+      if(!have_b0 && !have_b1) continue;
+      if(!have_b0) _brush_border_from_direction(c0, b1[0] - c1[0], b1[1] - c1[1], p1[4], b0);
+      if(!have_b1) _brush_border_from_direction(c1, b0[0] - c0[0], b0[1] - c0[1], p2[4], b1);
+
+      /* --- what the node this segment starts from needs, now that both its segments are known --- */
+      if(have_prev)
       {
-        start_stamp = 1; // remember to deal with the first node as a final step
-      }
-      else
-      {
-        if(!IS_NULL_PTR(dborder))
+        /* The stroke changes attribute along this segment: the node it starts from gets a full
+         * disc at the attribute it leaves behind, so an opacity or size step reads as a round
+         * junction and not as a seam across the stroke. Same triggers as ever; the radius is the
+         * larger of the two the node carries, which is the disc the union actually has there. */
+        const gboolean payload_step = (fabsf(p1[5] - p2[5]) > 0.05f || fabsf(p1[6] - p2[6]) > 0.05f);
+        const gboolean radius_step = (fabsf(p1[4] - p2[4]) > 0.0001f || fabsf(prev_r - p1[4]) > 0.0001f);
+        if(!IS_NULL_PTR(dborder) && (payload_step || radius_step))
         {
-          float bmin[2] = { dt_masks_dynbuf_get(dborder, -2), dt_masks_dynbuf_get(dborder, -1) };
-          float cmax[2] = { dt_masks_dynbuf_get(dpoints, -2), dt_masks_dynbuf_get(dpoints, -1) };
-          _brush_points_stamp(cmax, bmin, dpoints, dborder, TRUE);
+          _brush_points_stamp(prev_c, prev_b, fmaxf(prev_r, p1[4]), dpoints, dborder);
+          if(!IS_NULL_PTR(dpayload)) _brush_payload_sync(dpayload, dpoints, prev_payload[0], prev_payload[1]);
         }
 
-        if(!IS_NULL_PTR(dpayload))
+        /* The border of the previous segment ends on one side of the joint and this one's starts
+         * on the other; this arc bridges the wedge between them, centred on the node. Without it
+         * the rasteriser has no spokes across the joint and the stroke loses its radius toward
+         * the node -- at a cusp that is a sharp V hole in the exported mask (issue #1313's
+         * follow-up). On the concave side of a joint the short sweep runs through the inside of
+         * the stroke, which paints nothing new; those samples are inside the disc union, so the
+         * boundary pass hides them from the outline. */
+        if(!IS_NULL_PTR(dborder)
+           && (fabsf(b0[0] - prev_b[0]) > 1.0f || fabsf(b0[1] - prev_b[1]) > 1.0f))
         {
-          _brush_payload_sync(dpayload, dpoints, p1[5], p1[6]);
+          _brush_joint_arc(c0, prev_b, b0, forward, dpoints, dborder);
+          if(!IS_NULL_PTR(dpayload)) _brush_payload_sync(dpayload, dpoints, prev_payload[0], prev_payload[1]);
         }
       }
-    }
 
-    // 2nd. special case: render transition point between different brush sizes
-    if(fabsf(p1[4] - p2[4]) > 0.0001f && n > 0)
-    {
+      /* --- the segment itself: every sample within a pixel of the last, and its border --- */
+      float rc[2], rb[2], rp[2];
+      float bmin[2] = { b0[0], b0[1] };
+      float bmax[2] = { b1[0], b1[1] };
+      float cmin[2] = { c0[0], c0[1] };
+      float cmax[2] = { c1[0], c1[1] };
+      gboolean have_rb = FALSE;
+
+      _brush_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, rp, dpoints, dborder, dpayload,
+                           pixel_threshold, TRUE, TRUE, TRUE, TRUE, &have_rb);
+
+      dt_masks_dynbuf_add_2(dpoints, rc[0], rc[1]);
+      if(!IS_NULL_PTR(dpayload)) dt_masks_dynbuf_add_2(dpayload, rp[0], rp[1]);
       if(!IS_NULL_PTR(dborder))
       {
-        float bmin[2] = { dt_masks_dynbuf_get(dborder, -2), dt_masks_dynbuf_get(dborder, -1) };
-        float cmax[2] = { dt_masks_dynbuf_get(dpoints, -2), dt_masks_dynbuf_get(dpoints, -1) };
-        float bmax[2] = { 2 * cmax[0] - bmin[0], 2 * cmax[1] - bmin[1] };
-        _brush_record_skip_span_begin(dskips, dborder);
-        _brush_points_recurs_border_gaps(cmax, bmin, NULL, bmax, dpoints, dborder, TRUE);
-        _brush_record_skip_span_end(dskips, dborder);
+        if(!have_rb) _brush_border_from_direction(rc, b1[0] - c1[0], b1[1] - c1[1], p2[4], rb);
+        dt_masks_dynbuf_add_2(dborder, rb[0], rb[1]);
       }
 
-      if(!IS_NULL_PTR(dpayload))
-      {
-        _brush_payload_sync(dpayload, dpoints, p1[5], p1[6]);
-      }
+      prev_c[0] = rc[0];
+      prev_c[1] = rc[1];
+      prev_b[0] = rb[0];
+      prev_b[1] = rb[1];
+      prev_r = p2[4];
+      prev_payload[0] = rp[0];
+      prev_payload[1] = rp[1];
+      have_prev = TRUE;
     }
 
-    // 3rd. special case: render endpoints
-    if(k == k1)
+    /* --- the cap: from the last border sample of this pass around the outside of the end node
+     *     to the opposite side, where the other pass takes over --- */
+    if(have_prev && !IS_NULL_PTR(dborder))
     {
+      float opposite[2] = { 2.0f * prev_c[0] - prev_b[0], 2.0f * prev_c[1] - prev_b[1] };
+      _brush_points_recurs_border_gaps(prev_c, prev_b, NULL, opposite, dpoints, dborder, TRUE);
+      if(!IS_NULL_PTR(dpayload)) _brush_payload_sync(dpayload, dpoints, prev_payload[0], prev_payload[1]);
+    }
+    else if(!have_prev && forward)
+    {
+      /* every segment is a point: the whole brush is one dab. It still has a radius and a
+       * payload, so it is still a disc; stamp it once, from the first node. */
+      const dt_masks_node_brush_t *const n0 = nodes[0];
+      const float centre[2] = { n0->node[0] * iwd - dx, n0->node[1] * iht - dy };
+      const float radius = fmaxf(n0->border[0], n0->border[1]) * MIN(iwd, iht);
+      const float from[2] = { centre[0] + radius, centre[1] };
+      dt_masks_dynbuf_add_2(dpoints, centre[0], centre[1]);
       if(!IS_NULL_PTR(dborder))
       {
-        float bmin[2] = { dt_masks_dynbuf_get(dborder, -2), dt_masks_dynbuf_get(dborder, -1) };
-        float cmax[2] = { dt_masks_dynbuf_get(dpoints, -2), dt_masks_dynbuf_get(dpoints, -1) };
-        float bmax[2] = { 2 * cmax[0] - bmin[0], 2 * cmax[1] - bmin[1] };
-        _brush_points_recurs_border_gaps(cmax, bmin, NULL, bmax, dpoints, dborder, TRUE);
+        dt_masks_dynbuf_add_2(dborder, from[0], from[1]);
+        _brush_points_stamp(centre, from, radius, dpoints, dborder);
       }
-
-      if(!IS_NULL_PTR(dpayload))
-      {
-        _brush_payload_sync(dpayload, dpoints, p1[5], p1[6]);
-      }
-
-      cw *= -1;
-      continue;
-    }
-
-    // and we determine all points by recursion (to be sure the distance between 2 points is <=1)
-    float rc[2], rb[2], rp[2];
-    float bmin[2] = { 0.0f, 0.0f };
-    float bmax[2] = { 0.0f, 0.0f };
-    float cmin[2] = { 0.0f, 0.0f };
-    float cmax[2] = { 0.0f, 0.0f };
-    gboolean have_rb = FALSE;
-
-    _brush_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, rp, dpoints, dborder, dpayload,
-                         pixel_threshold, FALSE, FALSE, FALSE, FALSE, &have_rb);
-
-    dt_masks_dynbuf_add_2(dpoints, rc[0], rc[1]);
-
-    if(!IS_NULL_PTR(dpayload))
-    {
-      dt_masks_dynbuf_add_2(dpayload, rp[0], rp[1]);
-    }
-
-    if(!IS_NULL_PTR(dborder))
-    {
-      if(!have_rb)
-      {
-        /* the segment had no direction to offset along anywhere; hold the last border sample so
-         * the buffer stays continuous geometry. The nested "and if THAT one was NaN too" case
-         * this replaces could not arise any more: nothing writes a sentinel into the buffer. */
-        rb[0] = dt_masks_dynbuf_get(dborder, -2);
-        rb[1] = dt_masks_dynbuf_get(dborder, -1);
-      }
-      dt_masks_dynbuf_add_2(dborder, rb[0], rb[1]);
-    }
-
-    // we first want to be sure that there are no gaps in border
-    if(!IS_NULL_PTR(dborder) && node_count >= 3)
-    {
-      // we get the next point (start of the next segment)
-      /* t = 0 lands exactly on the node, where a cusp's collapsed handles leave no direction;
-       * a hair along the curve there is one. If even that fails the node is isolated, and the
-       * arc below is skipped by its own gap test rather than fed a stale bmax. */
-      if(!_brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0, p3[4],
-                               cmin, cmin + 1, bmax, bmax + 1))
-        _brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.0001, p3[4],
-                             cmin, cmin + 1, bmax, bmax + 1);
-      /* The border of the two segments meeting at this node ends on one side of the joint and
-       * restarts on the other; this arc bridges the wedge between them, centred on the node.
-       * Without it the rasteriser has no border samples across the joint, so the falloff paints
-       * no spokes there and the stroke loses its radius toward the node -- at a cusp (both
-       * control handles collapsed onto the node) that is a sharp V hole in the EXPORTED mask,
-       * reported as a follow-up of issue #1313 and confirmed fixed by restoring exactly this
-       * call.
-       *
-       * The arc was disabled by 0b54897b50 ("Path shapes: Add border handle per node",
-       * 2026-02) behind an always-FALSE flag, because the GUI's dashed border outline drew
-       * these arcs as self-intersecting circles at sharp joints. That traded a cosmetic GUI
-       * blemish for a correctness hole in every rendered mask -- the mask is the union of
-       * centreline->border spokes, so border coverage IS mask coverage. The cosmetic half is
-       * handled where it belongs: the arc span is recorded out-of-band and the DISPLAY border
-       * excludes it (see _brush_get_points_border()), while the rasteriser keeps every sample. */
-      if(bmax[0] - rb[0] > 1 || bmax[0] - rb[0] < -1 || bmax[1] - rb[1] > 1 || bmax[1] - rb[1] < -1)
-      {
-        _brush_record_skip_span_begin(dskips, dborder);
-        _brush_points_recurs_border_gaps(rc, rb, NULL, bmax, dpoints, dborder, cw);
-        _brush_record_skip_span_end(dskips, dborder);
-      }
-    }
-
-    if(!IS_NULL_PTR(dpayload))
-    {
-      _brush_payload_sync(dpayload, dpoints, rp[0], rp[1]);
+      if(!IS_NULL_PTR(dpayload)) _brush_payload_sync(dpayload, dpoints, n0->fading, n0->density);
+      break;
     }
   }
 
@@ -1129,37 +1155,6 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     dt_masks_dynbuf_free(dpayload);
   }
 
-  if(!IS_NULL_PTR(dskips))
-  {
-    const int pair_count = dt_masks_dynbuf_position(dskips) / 2;
-    const float *pairs = dt_masks_dynbuf_buffer(dskips);
-    if(pair_count > 0)
-    {
-      dt_masks_skip_range_t *skips
-          = dt_pixelpipe_cache_alloc_align_cache(sizeof(dt_masks_skip_range_t) * pair_count, 0);
-      if(!IS_NULL_PTR(skips))
-      {
-        int count = 0;
-        for(int i = 0; i < pair_count; i++)
-        {
-          const int from = (int)pairs[i * 2];
-          const int to = (int)pairs[i * 2 + 1];
-          if(to <= from) continue;   // the arc appended nothing
-          skips[count].jump_from = from;
-          skips[count].resume_at = to;
-          count++;
-        }
-        if(count > 0)
-        {
-          *border_skips = skips;
-          *border_skip_count = count;
-        }
-        else
-          dt_pixelpipe_cache_free_align(skips);
-      }
-    }
-    dt_masks_dynbuf_free(dskips);
-  }
   // printf("points %d, border %d, playload %d\n", *points_count, border ? *border_count : -1, payload ?
   // *payload_count : -1);
 
@@ -1391,73 +1386,306 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
 
 
 /** longest span first; ties broken by position so the order is deterministic */
-static int _skip_range_cmp_span(const void *a, const void *b)
+/* THE BOUNDARY OF THE STROKE.
+ *
+ * The rasteriser paints every spoke it is given, and it should: each one is a radius of a disc
+ * the stroke is the union of, so a spoke that lies inside another spoke's disc paints nothing
+ * new and costs nothing but time. The DRAWN outline is another matter. It is the boundary of
+ * that union, and a border sample that lies inside some other disc is not on it -- it is the
+ * inner side of a fold where the centreline bends tighter than its own radius, the inside of
+ * a joint arc, a cap swallowed by the next segment, or one side of the stroke running through
+ * the other. Every one of those used to be found AFTER the fact, by intersecting the outline
+ * with itself and cutting the loops out, and every ordering of those cuts moved the artefact
+ * somewhere else (issues #1352 and #1360; the three attempts recorded at the previous version
+ * of this function). The question the cuts were approximating is answered here directly, per
+ * sample: is this border sample strictly inside any other sample's disc? If so it is not on
+ * the boundary and the outline does not show it. Nothing is intersected and nothing is
+ * chosen between.
+ *
+ * Two searches, because the discs that can hide a sample come from two places, and what
+ * separates them is their INDEX along the walk, not their position. A disc within twice the
+ * largest radius of the sample's own spine position can reach it and no other can, so a
+ * window of discs either side of the sample's own is exhaustive for folds, joints and caps;
+ * consecutive discs move at most a step, so the window is scanned in blocks and a block whose
+ * first disc is out of reach is skipped whole. The stroke can also come back on itself -- a
+ * hairpin, a crossing, a spiral -- and then the hiding disc is any distance away along the
+ * walk but within one radius in the plane. A bucket grid of one reach per cell finds those,
+ * and each bucket holds its discs as RUNS of consecutive indices: a run inside the window is
+ * the near part, already answered, and is dismissed in one comparison; only runs from far
+ * along the walk are tested disc by disc. On a stroke that never revisits its own ground that
+ * is nothing at all, and at a crossing it is the discs of the other pass and no more.
+ *
+ * A first version used a coarse occupancy map of the union for the far part instead. It was
+ * conservative, and so it left every sample within a few pixels of a far boundary undecided;
+ * refining those exactly meant refining every sample, because every boundary sample is within
+ * a few pixels of its OWN stroke's interior, and the build went from 30 ms to 250 ms on the
+ * corpus. Position cannot tell near from far; the index can.
+ *
+ * Cost is bounded by decimation, not by the sample count: consecutive samples closer than half
+ * a pixel with the same radius are one disc, so the window and the grid both see a few
+ * thousand discs on a stroke of a hundred thousand samples. */
+typedef struct _brush_disc_t
 {
-  const dt_masks_skip_range_t *const x = (const dt_masks_skip_range_t *)a;
-  const dt_masks_skip_range_t *const y = (const dt_masks_skip_range_t *)b;
-  const int sx = x->resume_at - x->jump_from;
-  const int sy = y->resume_at - y->jump_from;
-  if(sx != sy) return (sx > sy) ? -1 : 1;
-  return (x->jump_from < y->jump_from) ? -1 : (x->jump_from > y->jump_from);
+  float x, y, r;
+} _brush_disc_t;
+
+/* is @p b strictly inside disc @p d, by more than the boundary tolerance */
+static inline gboolean _brush_disc_contains(const _brush_disc_t *const d, const float bx, const float by,
+                                            const float eps)
+{
+  const float jx = d->x - bx, jy = d->y - by;
+  const float rin = d->r - eps;
+  return (rin > 0.0f && jx * jx + jy * jy < rin * rin);
 }
 
-static int _skip_range_cmp_fwd(const void *a, const void *b)
+/* test the discs [lo, hi] against the probe, in blocks: consecutive discs move at most
+ * @p step_max, so a block whose first disc is further than reach + block * step_max away
+ * holds nothing that can contain the probe */
+static gboolean _brush_discs_contain(const _brush_disc_t *const discs, const int lo, const int hi,
+                                     const float bx, const float by, const float reach, const float eps)
 {
-  const dt_masks_skip_range_t *const x = (const dt_masks_skip_range_t *)a;
-  const dt_masks_skip_range_t *const y = (const dt_masks_skip_range_t *)b;
-  if(x->jump_from != y->jump_from) return (x->jump_from < y->jump_from) ? -1 : 1;
-  return (x->resume_at < y->resume_at) ? -1 : (x->resume_at > y->resume_at);
+  const int block = 8;
+  for(int d = lo; d <= hi; d += block)
+  {
+    const float ddx = discs[d].x - bx, ddy = discs[d].y - by;
+    if(ddx * ddx + ddy * ddy > reach * reach) continue;
+    const int e = MIN(d + block - 1, hi);
+    for(int j = d; j <= e; j++)
+      if(_brush_disc_contains(&discs[j], bx, by, eps)) return TRUE;
+  }
+  return FALSE;
 }
 
-/** Turn the detector's crossing pairs into the disjoint cuts the drawer walks.
- *
- * Two rules, both learned by watching the outline break.
- *
- * Do not merge. dt_masks_skip_ranges_build() merges overlaps, which is right for the hit-test walk
- * -- it only needs a traversal that moves forward and terminates -- and wrong for drawing. Each
- * crossing pair names two samples that ARE the same point, so cutting between them leaves the
- * outline closed; the union of two overlapping pairs names two samples that are not, and the
- * drawer then spans the gap with a straight chord. Measured after a merge: cuts leaving 105, 170
- * and 73 pixel gaps, one chord across the stroke each.
- *
- * Longest first, not first-by-position. A fold is LOCAL, and nested loops want the outer one
- * removed since it subsumes the inner. By position, one 10035-sample span won and blocked every
- * fold inside it, erasing the inner border at the cusp; shortest first, a tiny crossing NESTED in
- * a real loop won and blocked it, leaving 30 px and 14 px kinks. What makes longest-first safe is
- * the cap: the detector also pairs the two SIDES of the stroke where they meet, which is no loop
- * at all, and those are 41253 samples of a 52492-sample contour against 3180 for the largest real
- * fold -- an eighth of the contour separates the two populations by an order of magnitude. */
-static int _select_disjoint_cuts(const float *const crossings, const int found, const int border_count,
-                                 dt_masks_skip_range_t *const out)
+static int _brush_outline_boundary_skips(const float *const points, const float *const border,
+                                         const int count, const int header,
+                                         dt_masks_skip_range_t **skips_out)
 {
-  int kept = 0;
-  for(int i = 0; i < found; i++)
-  {
-    const int lo = (int)crossings[i * 2];
-    const int hi = (int)crossings[i * 2 + 1];
-    if(lo < 0 || hi <= lo || hi >= border_count) continue;
-    if(hi - lo > border_count - (hi - lo)) continue;   // names the fold's complement
-    if(hi - lo > border_count / 8) continue;           // the two sides meeting, not a fold
-    out[kept].jump_from = lo;
-    out[kept].resume_at = hi;
-    kept++;
-  }
-  qsort(out, kept, sizeof(dt_masks_skip_range_t), _skip_range_cmp_span);
+  *skips_out = NULL;
+  const int n = count - header;
+  if(IS_NULL_PTR(points) || IS_NULL_PTR(border) || n < 8) return 0;
 
-  int accepted = 0;
-  for(int i = 0; i < kept; i++)
+  /* --- the discs, decimated --- */
+  _brush_disc_t *discs = dt_alloc_align((size_t)n * sizeof(_brush_disc_t));
+  int *disc_of = dt_alloc_align((size_t)n * sizeof(int));
+  uint8_t *dropped = dt_alloc_align((size_t)n);
+  if(IS_NULL_PTR(discs) || IS_NULL_PTR(disc_of) || IS_NULL_PTR(dropped))
   {
-    gboolean clashes = FALSE;
-    for(int j = 0; j < accepted && !clashes; j++)
-      clashes = (out[i].jump_from < out[j].resume_at && out[j].jump_from < out[i].resume_at);
-    if(clashes) continue;
-    const dt_masks_skip_range_t take = out[i];
-    out[accepted++] = take;
+    dt_free_align(discs);
+    dt_free_align(disc_of);
+    dt_free_align(dropped);
+    return 0;
+  }
+  memset(dropped, 0, (size_t)n);
+
+  int ndisc = 0;
+  float r_max = 0.0f;
+  float step_max = 0.0f;
+  float minx = FLT_MAX, miny = FLT_MAX, maxx = -FLT_MAX, maxy = -FLT_MAX;
+  for(int i = 0; i < n; i++)
+  {
+    const float px = points[(header + i) * 2], py = points[(header + i) * 2 + 1];
+    const float bx = border[(header + i) * 2], by = border[(header + i) * 2 + 1];
+    const float r = dt_fast_hypotf(bx - px, by - py);
+    minx = fminf(minx, fminf(bx, px)); maxx = fmaxf(maxx, fmaxf(bx, px));
+    miny = fminf(miny, fminf(by, py)); maxy = fmaxf(maxy, fmaxf(by, py));
+    gboolean new_disc = (ndisc == 0);
+    if(!new_disc)
+    {
+      const _brush_disc_t *const last = &discs[ndisc - 1];
+      const float moved = dt_fast_hypotf(px - last->x, py - last->y);
+      new_disc = (moved > 0.5f || fabsf(r - last->r) > 0.5f);
+      if(new_disc) step_max = fmaxf(step_max, moved);
+    }
+    if(new_disc)
+    {
+      discs[ndisc].x = px;
+      discs[ndisc].y = py;
+      discs[ndisc].r = r;
+      ndisc++;
+      r_max = fmaxf(r_max, r);
+    }
+    disc_of[i] = ndisc - 1;
   }
 
-  /* the blanking pass walks forward, so hand it sorted ranges */
-  qsort(out, accepted, sizeof(dt_masks_skip_range_t), _skip_range_cmp_fwd);
-  return accepted;
+  /* --- the bucket grid: one reach per cell, each bucket a list of index runs --- */
+  const float bucket = fmaxf(r_max, 16.0f);
+  const int bw = (int)((maxx - minx) / bucket) + 3;
+  const int bh = (int)((maxy - miny) / bucket) + 3;
+  int *bucket_head = dt_alloc_align((size_t)bw * bh * sizeof(int));
+  int *run_start = dt_alloc_align((size_t)ndisc * sizeof(int));
+  int *run_end = dt_alloc_align((size_t)ndisc * sizeof(int));
+  int *run_next = dt_alloc_align((size_t)ndisc * sizeof(int));
+  int nruns = 0;
+  const gboolean have_grid = !IS_NULL_PTR(bucket_head) && !IS_NULL_PTR(run_start) && !IS_NULL_PTR(run_end)
+                             && !IS_NULL_PTR(run_next);
+  if(have_grid)
+  {
+    for(int b = 0; b < bw * bh; b++) bucket_head[b] = -1;
+    int last_bucket = -1;
+    for(int d = 0; d < ndisc; d++)
+    {
+      const int gx = CLAMP((int)((discs[d].x - minx) / bucket) + 1, 0, bw - 1);
+      const int gy = CLAMP((int)((discs[d].y - miny) / bucket) + 1, 0, bh - 1);
+      const int b = gy * bw + gx;
+      if(b == last_bucket)
+        run_end[nruns - 1] = d;   /* the walk is still in this bucket: extend its latest run */
+      else
+      {
+        run_start[nruns] = d;
+        run_end[nruns] = d;
+        run_next[nruns] = bucket_head[b];
+        bucket_head[b] = nruns;
+        nruns++;
+        last_bucket = b;
+      }
+    }
+  }
+
+  /* --- the probes.
+   *
+   * Not every sample: the border is sampled several times per pixel, and two samples a
+   * quarter of a pixel apart cannot be on different sides of a boundary that is decided to
+   * half a pixel. So a sample is probed when it has moved half a pixel from the last probe,
+   * and the samples between two probes that agree take their answer; only where two probes
+   * disagree is every sample between them probed, which is what makes the cut land on the
+   * sample it belongs to and not on a neighbour. Measured on the corpus: the same skip ranges
+   * to the sample, at a third of the probes. --- */
+  const int window = (int)(4.0f * r_max) + 8;
+  const float reach = r_max + 8.0f * fmaxf(step_max, 1.0f);
+  const float eps = 0.5f;
+  int ndropped = 0;
+  int last_probe = -1;
+  gboolean last_inside = FALSE;
+  float last_bx = 0.0f, last_by = 0.0f;
+
+  for(int i = 0; i < n; i++)
+  {
+    const float bx = border[(header + i) * 2], by = border[(header + i) * 2 + 1];
+    const gboolean is_probe = (last_probe < 0) || (i == n - 1)
+                              || (fabsf(bx - last_bx) > 0.5f || fabsf(by - last_by) > 0.5f);
+    if(!is_probe) continue;
+    const int d0 = disc_of[i];
+    const int lo = MAX(d0 - window, 0), hi = MIN(d0 + window, ndisc - 1);
+
+    /* near: the window along the walk */
+    gboolean inside = _brush_discs_contain(discs, lo, hi, bx, by, reach, eps);
+
+    /* far: every run in reach that lies outside the window */
+    if(!inside && have_grid)
+    {
+      const int gx = CLAMP((int)((bx - minx) / bucket) + 1, 0, bw - 1);
+      const int gy = CLAMP((int)((by - miny) / bucket) + 1, 0, bh - 1);
+      for(int yy = MAX(gy - 1, 0); yy <= MIN(gy + 1, bh - 1) && !inside; yy++)
+        for(int xx = MAX(gx - 1, 0); xx <= MIN(gx + 1, bw - 1) && !inside; xx++)
+          for(int r = bucket_head[yy * bw + xx]; r >= 0 && !inside; r = run_next[r])
+          {
+            /* only the parts of the run outside the window are new; a run inside it is the
+             * near part, already answered, and costs these two comparisons */
+            if(run_start[r] < lo)
+              inside = _brush_discs_contain(discs, run_start[r], MIN(run_end[r], lo - 1), bx, by, reach, eps);
+            if(!inside && run_end[r] > hi)
+              inside = _brush_discs_contain(discs, MAX(run_start[r], hi + 1), run_end[r], bx, by, reach, eps);
+          }
+    }
+
+    /* settle the samples since the last probe: same answer on both sides, they take it;
+     * different answers, each one is asked itself */
+    if(last_probe >= 0 && i > last_probe + 1)
+    {
+      if(inside == last_inside)
+      {
+        if(inside)
+          for(int j = last_probe + 1; j < i; j++) { dropped[j] = 1; ndropped++; }
+      }
+      else
+      {
+        for(int j = last_probe + 1; j < i; j++)
+        {
+          const float jbx = border[(header + j) * 2], jby = border[(header + j) * 2 + 1];
+          const int jd0 = disc_of[j];
+          const int jlo = MAX(jd0 - window, 0), jhi = MIN(jd0 + window, ndisc - 1);
+          gboolean jin = _brush_discs_contain(discs, jlo, jhi, jbx, jby, reach, eps);
+          if(!jin && have_grid)
+          {
+            const int gx = CLAMP((int)((jbx - minx) / bucket) + 1, 0, bw - 1);
+            const int gy = CLAMP((int)((jby - miny) / bucket) + 1, 0, bh - 1);
+            for(int yy = MAX(gy - 1, 0); yy <= MIN(gy + 1, bh - 1) && !jin; yy++)
+              for(int xx = MAX(gx - 1, 0); xx <= MIN(gx + 1, bw - 1) && !jin; xx++)
+                for(int r = bucket_head[yy * bw + xx]; r >= 0 && !jin; r = run_next[r])
+                {
+                  if(run_start[r] < jlo)
+                    jin = _brush_discs_contain(discs, run_start[r], MIN(run_end[r], jlo - 1), jbx, jby, reach, eps);
+                  if(!jin && run_end[r] > jhi)
+                    jin = _brush_discs_contain(discs, MAX(run_start[r], jhi + 1), run_end[r], jbx, jby, reach, eps);
+                }
+          }
+          if(jin) { dropped[j] = 1; ndropped++; }
+        }
+      }
+    }
+    if(inside)
+    {
+      dropped[i] = 1;
+      ndropped++;
+    }
+    last_probe = i;
+    last_inside = inside;
+    last_bx = bx;
+    last_by = by;
+  }
+
+  dt_free_align(bucket_head);
+  dt_free_align(run_start);
+  dt_free_align(run_end);
+  dt_free_align(run_next);
+  dt_free_align(discs);
+  dt_free_align(disc_of);
+
+  /* --- runs of dropped samples become skip ranges; a kept run of one or two samples between
+   *     two dropped ones is noise at a crossing, not a boundary, and goes with them --- */
+  int nskips = 0;
+  if(ndropped > 0)
+  {
+    for(int i = 0; i < n;)
+    {
+      if(!dropped[i]) { i++; continue; }
+      int j = i;
+      while(j < n && dropped[j]) j++;
+      /* absorb a kept run of <= 2 samples that is followed by more dropped ones */
+      while(j < n && j + 2 < n && !dropped[j] && (dropped[j + 1] || dropped[j + 2]))
+      {
+        while(j < n && !dropped[j]) j++;
+        while(j < n && dropped[j]) j++;
+      }
+      nskips++;
+      i = j;
+    }
+    dt_masks_skip_range_t *skips = dt_pixelpipe_cache_alloc_align_cache(sizeof(dt_masks_skip_range_t) * nskips, 0);
+    if(IS_NULL_PTR(skips))
+      nskips = 0;
+    else
+    {
+      int at = 0;
+      for(int i = 0; i < n;)
+      {
+        if(!dropped[i]) { i++; continue; }
+        int j = i;
+        while(j < n && dropped[j]) j++;
+        while(j < n && j + 2 < n && !dropped[j] && (dropped[j + 1] || dropped[j + 2]))
+        {
+          while(j < n && !dropped[j]) j++;
+          while(j < n && dropped[j]) j++;
+        }
+        skips[at].jump_from = header + i;
+        skips[at].resume_at = header + j;
+        at++;
+        i = j;
+      }
+      *skips_out = skips;
+    }
+  }
+  dt_free_align(dropped);
+  return nskips;
 }
 
 static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
@@ -1478,86 +1706,18 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
                               &gui_dist, point_buffer, point_count, border_buffer,
                               border_count, NULL, NULL, border_skips, border_skip_count, use_source);
 
-  /* This outline feeds the GUI only -- the rasterisers build their own from the pixel path. The
-   * join arcs the producer appended are geometry the MASK needs and the drawn border must not
-   * show: stroked, a node-centred arc reads as a self-intersecting circle at every sharp joint,
-   * which is what got the arcs deleted outright in 0b54897b50 (and the exported mask holed).
-   * The spans travel out-of-band; here their points are blanked to the drawer's existing
-   * bare-NaN "invisible point" marker, so the dashed outline skips them without any consumer
-   * learning a new contract. The spans themselves stay published in border_skips: they are the
-   * record of what was blanked, not an encoding to decode. */
+  /* This outline feeds the GUI only -- the rasterisers build their own from the pixel path and
+   * paint every spoke. What the outline shows is the BOUNDARY of what they paint, decided per
+   * sample by _brush_outline_boundary_skips(); the excluded samples travel out-of-band as skip
+   * ranges, which is what every consumer of this outline already reads. */
   if(status == 0 && !IS_NULL_PTR(border_buffer) && !IS_NULL_PTR(*border_buffer)
-     && !IS_NULL_PTR(border_skips) && !IS_NULL_PTR(*border_skips) && !IS_NULL_PTR(border_skip_count))
+     && !IS_NULL_PTR(border_skips) && !IS_NULL_PTR(border_skip_count))
   {
-    /* Ask the shared detector where the outline crosses itself, and cut exactly there.
-     *
-     * The three attempts before this one all searched around the JOINTS, on the theory that a
-     * fold is something a corner does. Two measurements killed that: the two strands that cross
-     * at a fold sit half the buffer apart, so a local window cannot see both; and a fold needs
-     * no corner at all -- where a smooth segment curves tighter than its own radius the inner
-     * offset loops on its own, and on this brush one such crossing (samples 16807 x 17893) sat a
-     * thousand samples from the nearest joint. Every local rule got some joints right and
-     * invented a new artefact at others: chords straight across the stroke at five nodes, the
-     * outline vanishing at the widest one, node-centred circles at three more.
-     *
-     * dt_masks_border_find_self_intersections() answers the actual question over the whole
-     * contour at once. It is the polygon's detector, moved to masks.c unchanged and shared --
-     * the brush had no equivalent, which is why this took four tries to notice. */
     const int header = (int)g_list_length(mask_form->points) * 3;
-    /* Generous, because one geometric crossing yields MANY probe-pair hits at quarter-pixel
-     * spacing -- the segments either side of it all cross their opposite numbers. A tight cap
-     * is not a budget, it is a truncation: the scan walks the contour in order, so exhausting
-     * it on the first few crossings means the rest of the shape is never examined at all.
-     * Measured at 4096: five cuts made and seven real crossings left drawn. The greedy pass
-     * below collapses the duplicates, so the only cost of a large cap is the scratch buffer. */
-    const int max_pairs = 1 << 16;
-    float *const crossings = dt_alloc_align_float(2 * (size_t)max_pairs);
-    *border_skip_count = 0;
-
-    if(!IS_NULL_PTR(crossings))
-    {
-      const int found = dt_masks_border_find_self_intersections(*border_buffer, *border_count,
-                                                                header, crossings, max_pairs);
-      if(found > 0)
-      {
-        /* Size the output to what the DETECTOR found, not to whatever the producer happened to
-         * allocate: the two counts are unrelated, and the normaliser writes one range per pair. */
-        dt_pixelpipe_cache_free_align(*border_skips);
-        *border_skips
-            = dt_pixelpipe_cache_alloc_align_cache(sizeof(dt_masks_skip_range_t) * found, 0);
-
-        /* Select DISJOINT ranges, SHORTEST FIRST, and never merge them.
-         *
-         * Two rules, and both were learned by watching the outline break.
-         *
-         * Do not merge. dt_masks_skip_ranges_build() merges overlaps, which is right for the
-         * hit-test walk -- it only needs a traversal that moves forward and terminates -- and
-         * wrong for drawing. Each crossing pair names two samples that ARE the same point, so
-         * cutting between them leaves the outline closed; the union of two overlapping pairs
-         * names two samples that are not, and the drawer spans the gap with a straight chord.
-         * Measured after a merge: cuts leaving 105, 170 and 73 pixel gaps, one chord across the
-         * stroke each.
-         *
-         * LONGEST first, under a cap. Three orderings were tried and the first two are traps.
-         * By position: one 10035-sample span won and blocked every genuine fold inside it,
-         * erasing the inner border at the cusp. Shortest first: the opposite failure -- a tiny
-         * crossing NESTED inside a real loop wins and blocks it, leaving 30 and 14 pixel kinks
-         * on the concave stretch. Nested loops want the OUTER one removed, since it subsumes
-         * the inner, so the order is longest first.
-         *
-         * What makes that safe is the cap. The detector also pairs the two SIDES of the stroke
-         * where they meet, which is not a loop to remove at all, and those pairings are huge --
-         * 41253 samples of a 52492-sample contour on this brush, against 3180 for the largest
-         * real fold. An eighth of the contour separates the two populations by an order of
-         * magnitude and needs no tuning. */
-        if(!IS_NULL_PTR(*border_skips))
-          *border_skip_count = _select_disjoint_cuts(crossings, found, *border_count,
-                                                     *border_skips);
-      }
-      dt_free_align(crossings);
-    }
-
-
+    dt_pixelpipe_cache_free_align(*border_skips);
+    *border_skips = NULL;
+    *border_skip_count = _brush_outline_boundary_skips(*point_buffer, *border_buffer, *border_count, header,
+                                                       border_skips);
   }
 
   return dt_masks_raster_from_status(status);

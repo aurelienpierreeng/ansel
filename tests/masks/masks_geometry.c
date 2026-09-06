@@ -141,63 +141,113 @@ static GList *_brush_from_table(const float table[][9], const int count)
  * This is what "enclosed holes" could not see. The defect reported against #1313 is a V that
  * bites INTO the stroke from outside -- it is open, connected to the background, and no
  * hole-counting metric will ever flag it. Measuring against the disc union does, and it says
- * what the user said: the brush lost its radius near the cusp. */
-static void _brush_reference(const float table[][9], const int count, const int w, const int h,
-                             uint8_t *reference)
+ * what the user said: the brush lost its radius near the cusp.
+ *
+ * The same construction, run the other way, answers the question issue #1360 asks: coverage
+ * the rasteriser delivered that NO disc owes. A border sample that lands far from its
+ * centreline paints a spoke out to wherever it landed, and the mask grows a region the stroke
+ * never covered -- in that report, a circle spanning the whole frame. The owed map cannot see
+ * it: every owed pixel is painted, and then some. So two maps are built from the same discs:
+ * OWED, the smaller radius shrunk by two pixels, which the mask must cover entirely; and
+ * PERMITTED, the larger radius grown by a margin, outside which the mask must be empty. */
+typedef enum _disc_pick_t { DISC_OWED, DISC_PERMITTED } _disc_pick_t;
+
+/* Stamp the disc union of the stroke into @p map. Row spans through a difference array: a
+ * disc costs O(r) rather than O(r^2), which is what makes a 43-node, 176 px stroke measurable
+ * -- the per-pixel form of this loop is ten thousand million writes for that one case. The
+ * discretisation is the one the per-pixel form used: a row of a disc of integer radius r_i
+ * reaches |dx| <= floor(sqrt(r_i^2 - dy^2)), so the owed map is identical to before. */
+static void _brush_disc_union(const GList *const nodes, const int w, const int h, const _disc_pick_t pick,
+                              uint8_t *const map)
 {
   const float radius_scale = (float)MIN(w, h);
-  memset(reference, 0, (size_t)w * h);
+  memset(map, 0, (size_t)w * h);
 
-  for(int seg = 0; seg + 1 < count; seg++)
+  /* one spare slot per row: a span ending at the last pixel closes at x = w, in its own row */
+  const size_t stride = (size_t)w + 1;
+  int32_t *diff = (int32_t *)calloc(stride * h, sizeof(int32_t));
+  if(IS_NULL_PTR(diff)) return;
+
+  for(const GList *l = nodes; l && l->next; l = l->next)
   {
-    const float p0x = table[seg][0] * w,     p0y = table[seg][1] * h;
-    const float p1x = table[seg][4] * w,     p1y = table[seg][5] * h;   /* ctrl2 of this node */
-    const float p2x = table[seg + 1][2] * w, p2y = table[seg + 1][3] * h; /* ctrl1 of the next */
-    const float p3x = table[seg + 1][0] * w, p3y = table[seg + 1][1] * h;
+    const dt_masks_node_brush_t *const n0 = (const dt_masks_node_brush_t *)l->data;
+    const dt_masks_node_brush_t *const n1 = (const dt_masks_node_brush_t *)l->next->data;
+    const float p0x = n0->node[0] * w,  p0y = n0->node[1] * h;
+    const float p1x = n0->ctrl2[0] * w, p1y = n0->ctrl2[1] * h;   /* ctrl2 of this node */
+    const float p2x = n1->ctrl1[0] * w, p2y = n1->ctrl1[1] * h;   /* ctrl1 of the next */
+    const float p3x = n1->node[0] * w,  p3y = n1->node[1] * h;
+
+    /* The segment runs from this node's OUTGOING radius to the next node's INCOMING one --
+     * border[1] then border[0] -- which is how the builder reads them (see the pa/pb rows in
+     * _brush_get_pts_border()). Nodes with one radius store it in both. */
+    const float r_out = n0->border[1] * radius_scale;
+    const float r_in = n1->border[0] * radius_scale;
+
+    /* OWED: the SMALLER of the two node radii, not the interpolated one.
+     *
+     * A disc union and a normal-offset stroke are not the same shape wherever the radius is
+     * changing. The implementation offsets the centreline along its normal by the local
+     * radius; the envelope of a growing disc family leans outward from that normal by
+     * asin(dr/ds), so across a fast radius transition the disc union genuinely covers more
+     * than the rasteriser owes. Asserting the interpolated radius there flagged 3552 px of
+     * crescents hugging the OUTSIDE of the widest bulge -- a real difference between two
+     * definitions, and not a defect under either of them.
+     *
+     * The smaller radius is what both definitions agree on, so that is the strongest claim
+     * this oracle can honestly make. It costs nothing where it matters: a cusp is a direction
+     * reversal, not a radius change, so the two nodes bracketing one have near-equal radii and
+     * the V hole is still caught at full strength (verified by re-running the corpus against
+     * master, which still fails this case).
+     *
+     * Shrink by two pixels. A disc and a rasterised stroke never agree exactly along the
+     * perimeter -- the stroke is stamped from discrete spokes and anti-aliased -- so the
+     * outermost ring would report a one-pixel sliver on every well-behaved case and drown
+     * the signal. Two pixels in, any disagreement is interior, which is the only kind that
+     * means the stroke is missing.
+     *
+     * PERMITTED: the LARGER radius, grown by three pixels: one for the spoke's extra neighbour
+     * write, the rest for the same perimeter disagreement in the other direction. Nothing a
+     * correct stroke paints can lie outside it. */
+    const float r = (pick == DISC_OWED) ? MIN(r_out, r_in) : MAX(r_out, r_in);
+    const int r_i = (pick == DISC_OWED) ? MAX((int)floorf(r) - 2, 0) : (int)ceilf(r) + 3;
 
     for(int k = 0; k <= 2000; k++)
     {
       const float t = (float)k / 2000.0f, u = 1.0f - t;
       const float bx = u*u*u*p0x + 3*u*u*t*p1x + 3*u*t*t*p2x + t*t*t*p3x;
       const float by = u*u*u*p0y + 3*u*u*t*p1y + 3*u*t*t*p2y + t*t*t*p3y;
-      /* The SMALLER of the two node radii, not the interpolated one.
-       *
-       * A disc union and a normal-offset stroke are not the same shape wherever the radius is
-       * changing. The implementation offsets the centreline along its normal by the local
-       * radius; the envelope of a growing disc family leans outward from that normal by
-       * asin(dr/ds), so across a fast radius transition the disc union genuinely covers more
-       * than the rasteriser owes. Asserting the interpolated radius there flagged 3552 px of
-       * crescents hugging the OUTSIDE of the widest bulge -- a real difference between two
-       * definitions, and not a defect under either of them.
-       *
-       * The smaller radius is what both definitions agree on, so that is the strongest claim
-       * this oracle can honestly make. It costs nothing where it matters: a cusp is a direction
-       * reversal, not a radius change, so the two nodes bracketing one have near-equal radii and
-       * the V hole is still caught at full strength (verified by re-running the corpus against
-       * master, which still fails this case). */
-      const float r = MIN(table[seg][6], table[seg + 1][6]) * radius_scale;
-      /* Shrink by two pixels. A disc and a rasterised stroke never agree exactly along the
-       * perimeter -- the stroke is stamped from discrete spokes and anti-aliased -- so the
-       * outermost ring would report a one-pixel sliver on every well-behaved case and drown
-       * the signal. Two pixels in, any disagreement is interior, which is the only kind that
-       * means the stroke is missing. */
-      const int r_i = MAX((int)floorf(r) - 2, 0);
       const int cx = (int)lrintf(bx), cy = (int)lrintf(by);
       for(int dy = -r_i; dy <= r_i; dy++)
-        for(int dx = -r_i; dx <= r_i; dx++)
-        {
-          if(dx * dx + dy * dy > r_i * r_i) continue;
-          const int x = cx + dx, y = cy + dy;
-          if(x < 0 || y < 0 || x >= w || y >= h) continue;
-          reference[(size_t)y * w + x] = 1;
-        }
+      {
+        const int y = cy + dy;
+        if(y < 0 || y >= h) continue;
+        const int half = (int)floorf(sqrtf((float)(r_i * r_i - dy * dy)));
+        const int x0 = MAX(cx - half, 0), x1 = MIN(cx + half, w - 1);
+        if(x0 > x1) continue;
+        diff[(size_t)y * stride + x0] += 1;
+        diff[(size_t)y * stride + x1 + 1] -= 1;
+      }
     }
   }
+
+  for(int y = 0; y < h; y++)
+  {
+    int32_t running = 0;
+    for(int x = 0; x < w; x++)
+    {
+      running += diff[(size_t)y * stride + x];
+      map[(size_t)y * w + x] = (running > 0) ? 1 : 0;
+    }
+  }
+  free(diff);
 }
 
-/** Largest connected run of owed-but-missing coverage, and its total. */
-static void _missing_coverage(const float *mask, const uint8_t *reference, const int w, const int h,
-                              int *total, int *largest, int *cx, int *cy)
+typedef enum _runs_mode_t { RUNS_MISSING, RUNS_EXCESS } _runs_mode_t;
+
+/** Largest connected run of coverage that disagrees with the reference, and its total:
+ * MISSING is owed and unpainted, EXCESS is painted and not permitted. */
+static void _coverage_runs(const float *mask, const uint8_t *reference, const int w, const int h,
+                           const _runs_mode_t mode, int *total, int *largest, int *cx, int *cy)
 {
   *total = 0; *largest = 0; *cx = -1; *cy = -1;
 
@@ -215,7 +265,11 @@ static void _missing_coverage(const float *mask, const uint8_t *reference, const
    * values below a half. What cannot be legitimate is a pixel the disc covers with no coverage
    * at all -- that is the stroke missing, which is the defect this corpus is about. */
   for(size_t i = 0; i < npix; i++)
-    if(reference[i] && mask[i] <= 0.0f) { miss[i] = 1; (*total)++; }
+  {
+    const gboolean flagged = (mode == RUNS_MISSING) ? (reference[i] && mask[i] <= 0.0f)
+                                                     : (!reference[i] && mask[i] > 0.0f);
+    if(flagged) { miss[i] = 1; (*total)++; }
+  }
 
   uint8_t *seen = (uint8_t *)calloc(npix, 1);
   if(IS_NULL_PTR(seen)) { free(miss); free(stack); return; }
@@ -366,6 +420,76 @@ static const float _brush_concave_tbl[5][9] = {
   { 0.50f, 0.50f, 0.50f, 0.44f, 0.50f, 0.56f, 0.045f, 1.0f, 0.66f },
   { 0.44f, 0.64f, 0.50f, 0.62f, 0.36f, 0.66f, 0.045f, 1.0f, 0.66f },
   { 0.20f, 0.70f, 0.28f, 0.68f, 0.16f, 0.70f, 0.045f, 1.0f, 0.66f },
+};
+
+/* THE THIRD REPORTED SHAPE. Issue #1360, "brush #1" of the attached sidecar, decoded verbatim.
+ * Drawn with a pen: the tablet delivered the first seventeen nodes within half a pixel of
+ * each other while the pressure -- mapped to opacity -- ramped from 0.05 to 0.91, and the
+ * last three the same way as the pen lifted. Every one of those density steps takes the
+ * stroke through the opacity-transition stamp, and every one of those coincident segments is
+ * degenerate: no direction to offset along. The reporter's mask grew a circle spanning the
+ * frame. Frame 5184x3888 is the reporter's own (Panasonic GX9). */
+static const float _brush_1360[43][11] = {
+  /* node.x, node.y, ctrl1.x, ctrl1.y, ctrl2.x, ctrl2.y, border.in, border.out, density, fading, state */
+  { 0.22329402f, 0.437683344f, 0.223308727f, 0.437683344f, 0.223279327f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.0500000007f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223257273f, 0.437683344f, 0.223242566f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.163728267f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.263469368f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.330415487f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.436690927f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.493527323f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.559117258f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.612624824f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.651337683f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.68659842f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.720872879f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.770558476f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.795832813f, 0.790861964f, 1 },
+  { 0.223249912f, 0.437683344f, 0.223242566f, 0.437683344f, 0.223257273f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.82949084f, 0.790861964f, 1 },
+  { 0.22329402f, 0.437683344f, 0.223271966f, 0.437683344f, 0.223316073f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.851436317f, 0.790861964f, 1 },
+  { 0.223382235f, 0.437683344f, 0.223367542f, 0.437683344f, 0.223396942f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.857847393f, 0.790861964f, 1 },
+  { 0.223382235f, 0.437683344f, 0.223374888f, 0.4377231f, 0.223389596f, 0.437643617f, 0.0340311043f, 0.0340311043f, 0.909628928f, 0.790861964f, 1 },
+  { 0.223426342f, 0.437444836f, 0.224293813f, 0.44460988f, 0.222558886f, 0.430279791f, 0.0340311043f, 0.0340311043f, 0.932067573f, 0.790861964f, 1 },
+  { 0.218177453f, 0.394693047f, 0.217354104f, 0.403786033f, 0.219000816f, 0.38560009f, 0.0340311043f, 0.0340311043f, 0.892984807f, 0.790861964f, 1 },
+  { 0.228366479f, 0.382887095f, 0.218559727f, 0.388342857f, 0.238173231f, 0.377431333f, 0.0340311043f, 0.0340311043f, 0.883491576f, 0.790861964f, 1 },
+  { 0.277017951f, 0.361958414f, 0.259396702f, 0.372373074f, 0.29463923f, 0.351543754f, 0.0340311043f, 0.0340311043f, 0.858956993f, 0.790861964f, 1 },
+  { 0.334094107f, 0.320399076f, 0.315803885f, 0.332115591f, 0.352384329f, 0.308682591f, 0.0340311043f, 0.0340311043f, 0.856861055f, 0.790861964f, 1 },
+  { 0.3867594f, 0.291659355f, 0.376151383f, 0.28612408f, 0.397367477f, 0.29719466f, 0.0340311043f, 0.0340311043f, 0.859450102f, 0.790861964f, 1 },
+  { 0.39774242f, 0.353610754f, 0.392405331f, 0.330813766f, 0.40307951f, 0.376407743f, 0.0340311043f, 0.0340311043f, 0.892984807f, 0.790861964f, 1 },
+  { 0.418782055f, 0.428441316f, 0.419451058f, 0.415542245f, 0.418113083f, 0.441340417f, 0.0340311043f, 0.0340311043f, 0.94464308f, 0.790861964f, 1 },
+  { 0.393728524f, 0.431005239f, 0.407460898f, 0.427636355f, 0.379996151f, 0.434374154f, 0.0340311043f, 0.0340311043f, 0.966835141f, 0.790861964f, 1 },
+  { 0.336387753f, 0.448654532f, 0.364014268f, 0.445325434f, 0.308761239f, 0.45198366f, 0.0340311043f, 0.0340311043f, 0.981383324f, 0.790861964f, 1 },
+  { 0.227969483f, 0.450979918f, 0.243914649f, 0.456723928f, 0.212024316f, 0.445235968f, 0.0340311043f, 0.0340311043f, 0.999876738f, 0.790861964f, 1 },
+  { 0.240716785f, 0.41419071f, 0.214722306f, 0.423989266f, 0.266711295f, 0.404392183f, 0.0340311043f, 0.0340311043f, 0.981383324f, 0.790861964f, 1 },
+  { 0.383936495f, 0.392188728f, 0.362793893f, 0.401897848f, 0.405079097f, 0.382479638f, 0.0340311043f, 0.0340311043f, 0.968807817f, 0.790861964f, 1 },
+  { 0.367572308f, 0.35593611f, 0.371056885f, 0.366261333f, 0.36408776f, 0.345610917f, 0.0340311043f, 0.0340311043f, 0.971273601f, 0.790861964f, 1 },
+  { 0.363029122f, 0.330237389f, 0.364991963f, 0.330992669f, 0.361066312f, 0.329482168f, 0.0340311043f, 0.0340311043f, 0.981383324f, 0.790861964f, 1 },
+  { 0.355795383f, 0.351404577f, 0.359191746f, 0.345690429f, 0.352399051f, 0.357118726f, 0.0340311043f, 0.0340311043f, 0.948095202f, 0.790861964f, 1 },
+  { 0.342651129f, 0.364522308f, 0.351039052f, 0.359195709f, 0.334263206f, 0.369848907f, 0.0340311043f, 0.0340311043f, 0.953026772f, 0.790861964f, 1 },
+  { 0.305467844f, 0.383364111f, 0.314164549f, 0.380064815f, 0.296771169f, 0.386663437f, 0.0340311043f, 0.0340311043f, 0.987671077f, 0.790861964f, 1 },
+  { 0.290470988f, 0.384318113f, 0.28567791f, 0.388144135f, 0.295264095f, 0.380492091f, 0.0340311043f, 0.0340311043f, 0.999630153f, 0.790861964f, 1 },
+  { 0.334226459f, 0.360408098f, 0.325316578f, 0.363538474f, 0.343136311f, 0.357277751f, 0.0340311043f, 0.0340311043f, 0.990999877f, 0.790861964f, 1 },
+  { 0.343930244f, 0.365535945f, 0.340533912f, 0.361550927f, 0.347326607f, 0.369520962f, 0.0340311043f, 0.0340311043f, 0.970780432f, 0.790861964f, 1 },
+  { 0.354604453f, 0.384318113f, 0.35239169f, 0.379160494f, 0.356817216f, 0.389475763f, 0.0340311043f, 0.0340311043f, 0.968807817f, 0.790861964f, 1 },
+  { 0.357206851f, 0.396481782f, 0.358831495f, 0.393172562f, 0.355582207f, 0.399791002f, 0.0340311043f, 0.0340311043f, 0.969794095f, 0.790861964f, 1 },
+  { 0.34485653f, 0.404173523f, 0.346914947f, 0.4029015f, 0.342798173f, 0.405445546f, 0.0340311043f, 0.0340311043f, 0.988164246f, 0.790861964f, 1 },
+  { 0.34485653f, 0.404113948f, 0.344812453f, 0.404282898f, 0.344900668f, 0.403945029f, 0.0340311043f, 0.0340311043f, 0.647515714f, 0.790861964f, 1 },
+  { 0.345121175f, 0.403159916f, 0.34503299f, 0.403477967f, 0.34520942f, 0.402841896f, 0.0340311043f, 0.0340311043f, 0.0500000007f, 0.790861964f, 1 },
+};
+
+/* THE FOURTH. Issue #1352, "brush #2": seven nodes, the sixth with a smaller radius than its
+ * neighbours and its handles pulled far apart -- the "fading handle near the end" the report
+ * describes. The radius step takes the builder through the size-transition arc, and the
+ * drawn border came out with straight chords across the stroke. Reported at an unknown
+ * frame size; the JPEG it was drawn on is not attached, so it runs at the corpus default. */
+static const float _brush_1352[7][11] = {
+  /* node.x, node.y, ctrl1.x, ctrl1.y, ctrl2.x, ctrl2.y, border.in, border.out, density, fading, state */
+  { 0.465645701f, 0.0646421909f, 0.474728316f, 0.0589693412f, 0.456563115f, 0.0703150481f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
+  { 0.438397855f, 0.0816607475f, 0.445377052f, 0.0763829798f, 0.431418657f, 0.0869385153f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
+  { 0.423770666f, 0.0963087901f, 0.428022474f, 0.0899883211f, 0.419518888f, 0.102629259f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
+  { 0.412887126f, 0.119583569f, 0.415665925f, 0.10959287f, 0.410108328f, 0.129574269f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
+  { 0.407097936f, 0.156252995f, 0.410558552f, 0.147158578f, 0.40363735f, 0.165347442f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
+  { 0.392123342f, 0.174150184f, 0.395232916f, 0.141441733f, 0.389013737f, 0.206858635f, 0.018198235f, 0.018198235f, 1.0f, 0.660000026f, 2 },
+  { 0.36773169f, 0.193801045f, 0.375862241f, 0.187250778f, 0.35960114f, 0.200351343f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
 };
 
 /* Point the dev's geometry at a given frame size. The chain must be rebuilt afterwards or it
@@ -577,9 +701,73 @@ static void _write_missing_map(const char *dir, const char *name, const float *c
   g_free(path);
 }
 
-static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const int count,
-                               const char *name, const char *dir, const int budget_px,
-                               const int img_w, const int img_h)
+/* An 11-column node: both radii, the density and the fading are data here, because the
+ * defects this corpus grew for depend on them -- issue #1360's stroke is a run of coincident
+ * nodes whose only difference is a pen-pressure density ramp, and the density step is what
+ * triggers the code path that misbehaves. A 9-column case cannot express it. */
+static GList *_brush_from_table11(const float table[][11], const int count)
+{
+  GList *points = NULL;
+  for(int i = 0; i < count; i++)
+  {
+    dt_masks_node_brush_t *n = _brush_node(table[i][0], table[i][1], table[i][2], table[i][3],
+                                           table[i][4], table[i][5], table[i][6]);
+    n->border[1] = table[i][7];
+    n->density = table[i][8];
+    n->fading = table[i][9];
+    n->state = (dt_masks_points_states_t)(int)table[i][10];
+    points = g_list_append(points, n);
+  }
+  return points;
+}
+
+/** The drawn outline against the disc union.
+ *
+ * What the GUI draws is meant to be the boundary of what the pipe paints. The two maps the
+ * raster is judged against bound that boundary from both sides -- a boundary point is outside
+ * the owed map (the union shrunk by two pixels) and inside the permitted one (grown by three)
+ * -- so every border sample the outline keeps must land in that band. One that lands deep
+ * inside the union is a fold, a joint arc or a crossing the outline failed to hide (issue
+ * #1352's chords); one outside the permitted map is a spoke to nowhere (issue #1360). Counts
+ * both, and returns how long the GUI-side build took, which is the cost a drag pays. */
+static double _outline_band_check(dt_develop_t *dev, dt_masks_form_t *form, const uint8_t *owed,
+                                  const uint8_t *permitted, const int w, const int h,
+                                  int *inside_count, int *outside_count, int *kept_count)
+{
+  *inside_count = *outside_count = *kept_count = 0;
+  float *points = NULL, *border = NULL;
+  int points_count = 0, border_count = 0, skip_count = 0;
+  dt_masks_skip_range_t *skips = NULL;
+
+  const double t0 = dt_get_wtime();
+  const dt_masks_raster_result_t st = dt_masks_get_points_border(dev, form, &points, &points_count, &border,
+                                                                 &border_count, &skips, &skip_count, 0, NULL);
+  const double elapsed = dt_get_wtime() - t0;
+  if(st != DT_MASKS_RASTER_OK || IS_NULL_PTR(border)) goto done;
+
+  const int header = (int)g_list_length(form->points) * 3;
+  for(int i = header; i < border_count; i++)
+  {
+    if(dt_masks_skip_contains(skips, skip_count, i)) continue;
+    (*kept_count)++;
+    const int x = (int)lrintf(border[i * 2]), y = (int)lrintf(border[i * 2 + 1]);
+    if(x < 0 || y < 0 || x >= w || y >= h) { (*outside_count)++; continue; }
+    const size_t at = (size_t)y * w + x;
+    if(owed[at]) (*inside_count)++;
+    else if(!permitted[at]) (*outside_count)++;
+  }
+
+done:
+  dt_pixelpipe_cache_free_align(points);
+  dt_pixelpipe_cache_free_align(border);
+  dt_pixelpipe_cache_free_align(skips);
+  return elapsed;
+}
+
+/** Run one brush through both consumers and measure the raster against the disc union in
+ * both directions. Takes ownership of @p nodes. */
+static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const char *name, const char *dir,
+                                const int budget_px, const int img_w, const int img_h)
 {
   _set_frame(dev, img_w, img_h);
   dt_masks_form_t form = { 0 };
@@ -588,7 +776,7 @@ static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const 
   form.version = 6;
   form.formid = 900;
   g_strlcpy(form.name, name, sizeof(form.name));
-  form.points = _brush_from_table(table, count);
+  form.points = nodes;
 
   float *mask = dt_masks_debug_rasterise(dev, &form, img_w, img_h);
   if(IS_NULL_PTR(mask))
@@ -599,12 +787,16 @@ static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const 
     return;
   }
 
-  uint8_t *reference = (uint8_t *)malloc((size_t)img_w * img_h);
+  uint8_t *owed = (uint8_t *)malloc((size_t)img_w * img_h);
+  uint8_t *permitted = (uint8_t *)malloc((size_t)img_w * img_h);
   int missing = 0, largest = 0, cx = -1, cy = -1;
-  if(!IS_NULL_PTR(reference))
+  int excess = 0, excess_largest = 0, ex = -1, ey = -1;
+  if(!IS_NULL_PTR(owed) && !IS_NULL_PTR(permitted))
   {
-    _brush_reference(table, count, img_w, img_h, reference);
-    _missing_coverage(mask, reference, img_w, img_h, &missing, &largest, &cx, &cy);
+    _brush_disc_union(form.points, img_w, img_h, DISC_OWED, owed);
+    _coverage_runs(mask, owed, img_w, img_h, RUNS_MISSING, &missing, &largest, &cx, &cy);
+    _brush_disc_union(form.points, img_w, img_h, DISC_PERMITTED, permitted);
+    _coverage_runs(mask, permitted, img_w, img_h, RUNS_EXCESS, &excess, &excess_largest, &ex, &ey);
   }
 
   char *alpha_path = g_strdup_printf("%s/%s-alpha.png", dir, name);
@@ -626,28 +818,54 @@ static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const 
   /* A picture of exactly what is owed and missing: red where the disc union covers a pixel the
    * rasteriser left empty, over the mask itself. This is the artefact to look at first when a
    * case fails -- it says WHERE the stroke went missing, which no scalar can. */
-  if(!IS_NULL_PTR(reference) && missing > 0)
-    _write_missing_map(dir, name, mask, reference, img_w, img_h);
+  if(!IS_NULL_PTR(owed) && missing > 0)
+    _write_missing_map(dir, name, mask, owed, img_w, img_h);
 
-  if(missing > 0)
+  int band_inside = 0, band_outside = 0, band_kept = 0;
+  double outline_seconds = 0.0;
+  if(!IS_NULL_PTR(owed) && !IS_NULL_PTR(permitted))
+    outline_seconds = _outline_band_check(dev, &form, owed, permitted, img_w, img_h, &band_inside, &band_outside,
+                                          &band_kept);
+
+  /* Either kind of disagreement is explained by the outline buffers and nothing else. */
+  if(missing > 0 || excess > 0 || band_inside > 0 || band_outside > 0 || !IS_NULL_PTR(g_getenv("MASKS_DUMP_OUTLINE")))
   {
     char *csv = g_strdup_printf("%s/%s-outline.csv", dir, name);
     dt_masks_debug_write_outline_csv(dev, &form, csv);
     g_free(csv);
   }
 
-  const gboolean ok = (largest <= budget_px) && baseline_ok;
-  printf("[%s] %-22s %5dx%-5d missing coverage %6d px, largest run %5d px", ok ? "PASS" : "FAIL",
+  const gboolean ok = (largest <= budget_px) && (excess_largest <= budget_px) && baseline_ok
+                      && (band_inside <= budget_px) && (band_outside <= budget_px);
+  printf("[%s] %-22s %5dx%-5d missing %6d px (largest run %5d px", ok ? "PASS" : "FAIL",
          name, img_w, img_h, missing, largest);
   if(largest > 0) printf(" around (%d,%d)", cx, cy);
-  printf("  budget %d  -> %s\n", budget_px, alpha_path);
+  printf(")  excess %7d px (largest run %7d px", excess, excess_largest);
+  if(excess_largest > 0) printf(" around (%d,%d)", ex, ey);
+  printf(")  outline: %d kept, %d inside, %d outside, built in %.1f ms  budget %d  -> %s\n",
+         band_kept, band_inside, band_outside, 1000.0 * outline_seconds, budget_px, alpha_path);
   if(!ok) failures++;
 
-  free(reference);
+  free(owed);
+  free(permitted);
   dt_free_align(mask);
   g_free(alpha_path);
   g_free(over_path);
   g_list_free_full(form.points, free);
+}
+
+static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const int count,
+                               const char *name, const char *dir, const int budget_px,
+                               const int img_w, const int img_h)
+{
+  _run_brush_nodes_at(dev, _brush_from_table(table, count), name, dir, budget_px, img_w, img_h);
+}
+
+static void _run_brush_case11_at(dt_develop_t *dev, const float table[][11], const int count,
+                                 const char *name, const char *dir, const int budget_px,
+                                 const int img_w, const int img_h)
+{
+  _run_brush_nodes_at(dev, _brush_from_table11(table, count), name, dir, budget_px, img_w, img_h);
 }
 
 static void _run_brush_case(dt_develop_t *dev, const float table[][9], const int count,
@@ -862,6 +1080,13 @@ int main(int argc, char *argv[])
   _run_brush_case(&dev, _brush_zigzag_tbl,    6, "brush-zigzag",    dir, 0);
   _run_brush_case(&dev, _brush_selfcross_tbl, 5, "brush-selfcross", dir, 0);
   _run_brush_case(&dev, _brush_concave_tbl,   5, "brush-concave",   dir, 0);
+
+  /* 3a. THE THIRD AND FOURTH REPORTED SHAPES. Both are judged in BOTH directions: #1360's
+   *     defect is coverage nobody owes (a circle the size of the frame), which the owed map
+   *     cannot see, and #1352's is the drawn border, which the overlay baseline sees. */
+  _run_brush_case11_at(&dev, _brush_1360, 43, "brush-1360-pressure-ramp", dir, 0, 5184, 3888);
+  _run_brush_case11_at(&dev, _brush_1352, 7,  "brush-1352-radius-step",   dir, 0, IMG_W, IMG_H);
+  _run_brush_case11_at(&dev, _brush_1352, 7,  "brush-1352-radius-step-2999x2251", dir, 0, 2999, 2251);
 
   /* 3b. THE SECOND REPORTED SHAPE, polygon #2. Two defects were reported against it: the outer
    *     border self-intersecting between nodes 0 and 14, where the outline runs into a
