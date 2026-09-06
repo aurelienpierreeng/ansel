@@ -164,9 +164,22 @@ LOCK, not the image".
 A snapshot is a full copy of every row the image owns, held in RAM (`memory.` is an in-memory
 database) until the undo record is discarded. A mask-heavy history is the bulk of it, and a
 removal of several thousand such images holds several thousand copies at once. Two things
-bound that: the lighttable discards the records on every view entry, and the copies are only
-of what was about to be deleted anyway. Each image also stages its own copy of the shared
-film roll row, so that any single undo can recreate it without depending on the others.
+bound that: any view switch discards the records, and the copies are only of what was about to
+be deleted anyway. Each image also stages its own copy of the shared film roll row, so that any
+single undo can recreate it without depending on the others.
+
+Measured on a library of 991 images carrying 16582 history rows, through the `-d memory` traces
+in `removed_image_repository.c`: staging 984 of them took `sqlite3_memory_used()` from 2.6 MB to
+20.8 MB, i.e. **about 19 kiB per image**. A removal of ten thousand would be on the order of
+190 MB, for as long as the undo record lives.
+
+**The purge is proved by a second cycle, not by watching memory fall.** Neither `VmRSS` nor
+`sqlite3_memory_used()` drops when the records are discarded, and neither can: deleting rows
+from an in-memory database returns pages to that database's own free list, and glibc rarely
+returns a freed heap to the kernel. Both instruments read flat whether the rows were released
+or leaked. What settles it is doing the whole thing twice -- the second run staged the same 984
+snapshots and `sqlite3_memory_used()` grew by **0.0 MB**, reusing the pages the first purge had
+freed. Had they leaked, it would have needed 18 MB more.
 
 ## What a restore does not put back
 
