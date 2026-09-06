@@ -33,6 +33,7 @@
 #ifndef _WIN32
 #endif
 #include <string.h>
+#include <sys/stat.h>
 #include <glib/gstdio.h>
 #include "common/utility.h"
 #ifdef __APPLE__
@@ -75,14 +76,14 @@ gchar *_path_cleanup(gchar *path_in)
   return path_out;
 }
 
-gchar *dt_build_filename_from_pattern(const char *const filename, const int index, dt_image_t *img, dt_control_import_t *data)
+gchar *dt_build_filename_from_pattern(const char *const filename, const int sequence, dt_image_t *img, dt_control_import_t *data)
 {
   dt_variables_params_t *params;
   dt_variables_params_init(&params);
   // Borrowed references, like every other dt_variables_params_t caller (see iop/watermark.c):
   // dt_variables_params_destroy() does not own/free filename or jobcode.
   params->filename = filename;
-  params->sequence = index;
+  params->sequence = sequence;
   params->jobcode = data->jobcode;
   params->imgid = UNKNOWN_IMAGE;
   params->img = img;
@@ -251,43 +252,38 @@ int _import_copy_txt(const char *const filename, const char *dest_file_path)
  *
  * @param params job informations.
  * @param data import module information.
+ * @param sequence 1-based number expanded by $(SEQUENCE), shared by all the files
+ * of the same capture.
  * @param img_path_to_db will be set to the file path for import.
  * @param pathname_len the `img_path_to_db` size.
  * @param discarded the list of file pathes discarded because the target already exists
  * @return int -1 on copy error, 0 when the destination already existed, 1 when the file was copied
  */
-int _import_copy_file(const char *const filename, const int index, dt_control_import_t *data, gchar *img_path_to_db, size_t pathname_len, GList **discarded)
+int _import_copy_file(const char *const filename, const int sequence, dt_control_import_t *data, gchar *img_path_to_db, size_t pathname_len, GList **discarded)
 {
-  dt_image_t *img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
+  dt_image_t *img = dt_alloc_align(sizeof(dt_image_t));
+  if(IS_NULL_PTR(img)) return -1;
   dt_image_init(img);
 
-  // Generate file I/O only if the pattern is using EXIF variables.
-  // Otherwise, discard it since it's really expensive if the file is on external/remote storage.
-  // This is mandatory BEFORE expanding variables in pattern
   if(strstr(data->target_file_pattern, "$(EXIF") != NULL
-    || strstr(data->target_subfolder_pattern, "$(EXIF") != NULL )
+     || strstr(data->target_subfolder_pattern, "$(EXIF") != NULL)
   {
     dt_print(DT_DEBUG_IMPORT, "[Import] EXIF will be read for %s because the pattern needs it (performance penalty)\n", filename);
     dt_exif_read(img, filename);
   }
 
-  gchar *dest_file_path = dt_build_filename_from_pattern(filename, index, img, data);
+  gchar *dest_file_path = dt_build_filename_from_pattern(filename, sequence, img, data);
   dt_print(DT_DEBUG_IMPORT, "[Import] Image %s will be copied into %s\n", filename, dest_file_path);
   dt_free_align(img);
 
-  int process = TRUE;
-  int copied = 0;
-
   gboolean exists = _file_exist(dest_file_path);
 
-  // Resolve a name collision according to the requested policy. UNIQUE rewrites
-  // the destination to a free "<stem>_NN.<ext>" so the copy proceeds normally.
   if(exists && data->on_conflict == DT_IMPORT_ONCONFLICT_UNIQUE)
   {
     const char *dot = strrchr(dest_file_path, '.');
     const int stem_len = dot ? (int)(dot - dest_file_path) : (int)strlen(dest_file_path);
     const char *ext = dot ? dot : "";
-    char *unique = NULL;
+    gchar *unique = NULL;
     for(int seq = 1; seq < 10000; seq++)
     {
       dt_free(unique);
@@ -299,55 +295,55 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
     exists = FALSE;
   }
 
-  // OVERWRITE deletes the stale destination so g_file_copy() (G_FILE_COPY_NONE)
-  // does not fail on an existing target.
   if(exists && data->on_conflict == DT_IMPORT_ONCONFLICT_OVERWRITE)
   {
     g_unlink(dest_file_path);
     exists = FALSE;
   }
 
-  if(!exists)
+  if(exists)
   {
-    if(!dt_util_dir_exist(data->target_dir))
-      process = !_create_dir(data->target_dir);
-    else
-      dt_print(DT_DEBUG_PRINT, "[Import] target folder %s already exists. Nothing to do.\n", data->target_dir);
-
-    if(process)
-      process = dt_util_test_writable_dir(data->target_dir);
-    else
-      fprintf(stdout, "[Import] Unable to create the target folder %s.\n", data->target_dir);
-
-    if(process)
-    {
-      process = _copy_file(filename, dest_file_path);
-      copied = process;
-    }
-    else
-      fprintf(stdout, "[Import] Not allowed to write in the %s folder.\n", data->target_dir);
-
-    if(process)
-    {
-      _import_copy_xmp(filename, dest_file_path);
-      _import_copy_txt(filename, dest_file_path);
-    }
-
-    if(process)
-      g_strlcpy(img_path_to_db, dest_file_path, pathname_len);
-    else
-      fprintf(stderr, "[Import] Unable to copy the file %s to %s.\n", img_path_to_db, dest_file_path);
-  }
-  else
-  {
-    // SKIP: keep and import the pre-existing destination file.
     *discarded = g_list_prepend(*discarded, g_strdup(filename));
     g_strlcpy(img_path_to_db, dest_file_path, pathname_len);
     dt_print(DT_DEBUG_IMPORT, "[Import] File copy skipped, the target file %s already exists on the destination.\n", dest_file_path);
+    dt_free(dest_file_path);
+    return 0;
   }
 
+  if(!dt_util_dir_exist(data->target_dir))
+  {
+    if(_create_dir(data->target_dir))
+    {
+      fprintf(stdout, "[Import] Unable to create the target folder %s.\n", data->target_dir);
+      fprintf(stdout, "[Import] Not allowed to write in the %s folder.\n", data->target_dir);
+      fprintf(stderr, "[Import] Unable to copy the file %s to %s.\n", filename, dest_file_path);
+      dt_free(dest_file_path);
+      return -1;
+    }
+  }
+  else
+    dt_print(DT_DEBUG_PRINT, "[Import] target folder %s already exists. Nothing to do.\n", data->target_dir);
+
+  if(!dt_util_test_writable_dir(data->target_dir))
+  {
+    fprintf(stdout, "[Import] Not allowed to write in the %s folder.\n", data->target_dir);
+    fprintf(stderr, "[Import] Unable to copy the file %s to %s.\n", filename, dest_file_path);
+    dt_free(dest_file_path);
+    return -1;
+  }
+
+  if(!_copy_file(filename, dest_file_path))
+  {
+    fprintf(stderr, "[Import] Unable to copy the file %s to %s.\n", filename, dest_file_path);
+    dt_free(dest_file_path);
+    return -1;
+  }
+
+  _import_copy_xmp(filename, dest_file_path);
+  _import_copy_txt(filename, dest_file_path);
+  g_strlcpy(img_path_to_db, dest_file_path, pathname_len);
   dt_free(dest_file_path);
-  return process ? copied : -1;
+  return 1;
 }
 
 void _write_xmp_id(const char *filename, int32_t imgid)
@@ -380,127 +376,198 @@ void _write_xmp_id(const char *filename, int32_t imgid)
 }
 
 /**
+ * @brief Result of comparing two regular files byte-for-byte.
+ */
+typedef enum _file_compare_result_t
+{
+  FILES_COMPARE_IDENTICAL = 0,
+  FILES_COMPARE_DIFFERENT,
+  FILES_COMPARE_ERROR
+} _file_compare_result_t;
+
+/**
+ * @brief Compare two regular files byte-for-byte.
+ *
+ * @param source path to the first file.
+ * @param destination path to the second file.
+ * @return FILES_COMPARE_IDENTICAL if both files exist, have the same size, and identical contents;
+ *         FILES_COMPARE_DIFFERENT if sizes or contents differ;
+ *         FILES_COMPARE_ERROR on any stat/open/allocation/read error.
+ */
+static _file_compare_result_t _compare_files(const char *source, const char *destination)
+{
+  FILE *source_file = g_fopen(source, "rb");
+  FILE *destination_file = g_fopen(destination, "rb");
+  if(IS_NULL_PTR(source_file) || IS_NULL_PTR(destination_file))
+  {
+    if(!IS_NULL_PTR(source_file)) fclose(source_file);
+    if(!IS_NULL_PTR(destination_file)) fclose(destination_file);
+    return FILES_COMPARE_ERROR;
+  }
+
+  GStatBuf source_stat;
+  GStatBuf destination_stat;
+  if(fstat(fileno(source_file), &source_stat) != 0
+     || fstat(fileno(destination_file), &destination_stat) != 0)
+  {
+    fclose(source_file);
+    fclose(destination_file);
+    return FILES_COMPARE_ERROR;
+  }
+
+  if(source_stat.st_size != destination_stat.st_size)
+  {
+    fclose(source_file);
+    fclose(destination_file);
+    return FILES_COMPARE_DIFFERENT;
+  }
+
+  const size_t buffer_size = 64 * 1024;
+  unsigned char *source_buffer = dt_alloc_align(buffer_size);
+  unsigned char *destination_buffer = dt_alloc_align(buffer_size);
+  if(IS_NULL_PTR(source_buffer) || IS_NULL_PTR(destination_buffer))
+  {
+    dt_free_align(source_buffer);
+    dt_free_align(destination_buffer);
+    fclose(source_file);
+    fclose(destination_file);
+    return FILES_COMPARE_ERROR;
+  }
+
+  _file_compare_result_t result = FILES_COMPARE_IDENTICAL;
+  while(result == FILES_COMPARE_IDENTICAL)
+  {
+    const size_t source_read = fread(source_buffer, 1, buffer_size, source_file);
+    const size_t destination_read = fread(destination_buffer, 1, buffer_size, destination_file);
+
+    if(ferror(source_file) || ferror(destination_file))
+      result = FILES_COMPARE_ERROR;
+    else if(source_read != destination_read || memcmp(source_buffer, destination_buffer, source_read))
+      result = FILES_COMPARE_DIFFERENT;
+
+    if(source_read < buffer_size) break;
+  }
+
+  dt_free_align(source_buffer);
+  dt_free_align(destination_buffer);
+  fclose(source_file);
+  fclose(destination_file);
+
+  return result;
+}
+
+/**
  * @brief process to copy (or not) and import an image to database.
  *
  * @param img the current image.
  * @param data info from import module.
- * @param index current loop's index.
+ * @param sequence 1-based number expanded by $(SEQUENCE), shared by all the files
+ * of the same capture.
  * @return int32_t the imgid of the imported image (or -1 if import failed)
  */
-int32_t _import_image(const GList *img, dt_control_import_t *data, const int index, GList **discarded, int *xmps)
+int32_t _import_image(const GList *img, dt_control_import_t *data, const int sequence, GList **discarded, int *xmps)
 {
   const char *filename = (const char*) img->data;
-
   gchar img_path_to_db[DT_PATH_MAX] = { 0 };
-  gboolean process_error = FALSE;
   int copy_status = 0;
-  int32_t imgid = UNKNOWN_IMAGE;
 
   if(data->copy)
   {
-    // Copy the file to destination folder, expanding variables internally
-    copy_status = _import_copy_file(filename, index + 1, data, img_path_to_db, sizeof(img_path_to_db), discarded);
-    process_error = copy_status < 0;
+    copy_status = _import_copy_file(filename, sequence, data, img_path_to_db, sizeof(img_path_to_db), discarded);
+    if(copy_status < 0) return UNKNOWN_IMAGE;
   }
   else
-    // destination = origin, nothing to do
     g_strlcpy(img_path_to_db, filename, sizeof(img_path_to_db));
 
-  if(process_error)
-    ;
-  else if(img_path_to_db[0] == 0)
-    fprintf(stderr, "[Import] Could not import file from disk: empty file path\n");
-  else
+  if(img_path_to_db[0] == '\0')
   {
-    imgid = _import_job(data, img_path_to_db);
+    fprintf(stderr, "[Import] Could not import file from disk: empty file path\n");
+    return UNKNOWN_IMAGE;
+  }
 
-    if(imgid == UNKNOWN_IMAGE)
+  int32_t imgid = _import_job(data, img_path_to_db);
+  if(imgid == UNKNOWN_IMAGE)
+  {
+    dt_control_log(_("Error importing file in collection: %s"), img_path_to_db);
+    fprintf(stderr, "[Import] Error importing file in collection: %s", img_path_to_db);
+    return UNKNOWN_IMAGE;
+  }
+
+  *xmps = dt_image_read_duplicates(imgid, img_path_to_db, FALSE);
+  dt_print(DT_DEBUG_IMPORT, "[Import] Found and imported %i XMP for %s.\n", *xmps, img_path_to_db);
+  dt_print(DT_DEBUG_IMPORT, "[Import] successfully imported %s in DB at imgid %i\n", img_path_to_db, imgid);
+
+  if(data->delete_source && copy_status == 1)
+  {
+    const _file_compare_result_t comparison = _compare_files(filename, img_path_to_db);
+    if(comparison == FILES_COMPARE_IDENTICAL)
     {
-      dt_control_log(_("Error importing file in collection: %s"), img_path_to_db);
-      fprintf(stderr, "[Import] Error importing file in collection: %s", img_path_to_db);
+      if(g_unlink(filename) != 0)
+        dt_control_log(_("The imported file was verified but the original could not be deleted: %s"), filename);
+    }
+    else if(comparison == FILES_COMPARE_DIFFERENT)
+    {
+      dt_control_log(_("The imported file differs from the original, which was not deleted: %s"), filename);
     }
     else
     {
-      // read all sidecar files (including the original one) and import them if not found in db.
-      *xmps = dt_image_read_duplicates(imgid, img_path_to_db, FALSE);
-      dt_print(DT_DEBUG_IMPORT, "[Import] Found and imported %i XMP for %s.\n", *xmps, img_path_to_db);
-      dt_print(DT_DEBUG_IMPORT, "[Import] successfully imported %s in DB at imgid %i\n", img_path_to_db, imgid);
-
-      if(data->delete_source && copy_status == 1)
-      {
-        // Compare the complete source and destination byte streams before
-        // deleting files from temporary ingest storage.
-        gboolean identical = FALSE;
-        GStatBuf source_stat;
-        GStatBuf destination_stat;
-        if(g_stat(filename, &source_stat) == 0
-           && g_stat(img_path_to_db, &destination_stat) == 0
-           && source_stat.st_size == destination_stat.st_size)
-        {
-          FILE *source = g_fopen(filename, "rb");
-          FILE *destination = g_fopen(img_path_to_db, "rb");
-          if(!IS_NULL_PTR(source) && !IS_NULL_PTR(destination))
-          {
-            const size_t buffer_size = 64 * 1024;
-            unsigned char *source_buffer = malloc(buffer_size);
-            unsigned char *destination_buffer = malloc(buffer_size);
-            identical = !IS_NULL_PTR(source_buffer) && !IS_NULL_PTR(destination_buffer);
-
-            while(identical)
-            {
-              const size_t source_read = fread(source_buffer, 1, buffer_size, source);
-              const size_t destination_read = fread(destination_buffer, 1, buffer_size, destination);
-              if(source_read != destination_read
-                 || memcmp(source_buffer, destination_buffer, source_read))
-                identical = FALSE;
-
-              if(source_read < buffer_size)
-              {
-                if(ferror(source) || ferror(destination)) identical = FALSE;
-                break;
-              }
-            }
-
-            dt_free(source_buffer);
-            dt_free(destination_buffer);
-          }
-
-          if(!IS_NULL_PTR(source)) fclose(source);
-          if(!IS_NULL_PTR(destination)) fclose(destination);
-        }
-
-        if(identical)
-        {
-          if(g_unlink(filename) != 0)
-            dt_control_log(_("The imported file was verified but the original could not be deleted: %s"), filename);
-        }
-        else
-          dt_control_log(_("The imported file differs from the original, which was not deleted: %s"), filename);
-      }
-
-      // Studio capture auto-styling: replace the freshly imported default
-      // history with the first style, then stack the remaining styles in the
-      // user-defined order (source wins on conflicts).
-      if(!IS_NULL_PTR(data->styles))
-      {
-        dt_hm_batch_state_t batch = { 0 };
-        for(GList *s = data->styles; s; s = g_list_next(s))
-        {
-          const char *style_name = (const char *)s->data;
-          const int32_t style_id = dt_styles_get_id_by_name(style_name);
-          if(style_id <= 0) continue;
-          dt_styles_apply_to_image_merge(style_name, style_id, imgid, DT_HISTORY_MERGE_APPEND, &batch);
-        }
-        dt_hm_batch_state_cleanup(&batch);
-
-        // The styles were written straight to DB: reload cached metadata, drop
-        // the stale mipmap and refresh thumbnails (lighttable + filmstrip).
-        dt_image_history_changed(imgid, TRUE);
-      }
+      dt_control_log(_("The imported file could not be verified against the original, which was not deleted: %s"), filename);
     }
   }
 
+  if(!IS_NULL_PTR(data->styles))
+  {
+    dt_hm_batch_state_t batch = { 0 };
+    for(GList *s = data->styles; s; s = g_list_next(s))
+    {
+      const char *style_name = (const char *)s->data;
+      const int32_t style_id = dt_styles_get_id_by_name(style_name);
+      if(style_id <= 0) continue;
+      dt_styles_apply_to_image_merge(style_name, style_id, imgid, DT_HISTORY_MERGE_APPEND, &batch);
+    }
+    dt_hm_batch_state_cleanup(&batch);
+    dt_image_history_changed(imgid, TRUE);
+  }
+
   return imgid;
+}
+
+/**
+ * @brief Assign a 1-based sequence number shared by all files of the same capture.
+ *
+ * The capture key is the source path with the last extension removed, but only when
+ * that extension lies after the last directory separator. A fresh key is inserted into
+ * @p capture_sequences on the first encounter and owned by the table; on subsequent
+ * encounters the local copy is freed and the existing number is reused.
+ *
+ * @param capture_sequences Hash table mapping capture keys to sequence numbers.
+ * @param filename Full path of the source file.
+ * @param[in,out] sequence Last sequence number assigned; incremented when a new capture is seen.
+ * @return int The sequence number for @p filename, 1-based.
+ */
+int dt_control_import_capture_sequence(GHashTable *capture_sequences, const char *filename, int *sequence)
+{
+  gchar *capture = g_strdup(filename);
+  gchar *dot = strrchr(capture, '.');
+  const gchar *sep = strrchr(capture, G_DIR_SEPARATOR);
+  const gchar *sep_alt = strrchr(capture, G_DIR_SEPARATOR == '/' ? '\\' : '/');
+  if(!IS_NULL_PTR(sep_alt) && (IS_NULL_PTR(sep) || sep_alt > sep)) sep = sep_alt;
+  if(!IS_NULL_PTR(dot) && (IS_NULL_PTR(sep) || dot > sep)) *dot = '\0';
+
+  int file_sequence;
+  const gpointer known_sequence = g_hash_table_lookup(capture_sequences, capture);
+  if(!IS_NULL_PTR(known_sequence))
+  {
+    dt_free(capture);
+    file_sequence = GPOINTER_TO_INT(known_sequence);
+  }
+  else
+  {
+    (*sequence)++;
+    g_hash_table_replace(capture_sequences, capture, GINT_TO_POINTER(*sequence));
+    file_sequence = *sequence;
+  }
+  return file_sequence;
 }
 
 /**
@@ -530,14 +597,13 @@ static int32_t _control_import_job_run(dt_job_t *job)
   dt_control_import_t *data = params->data;
 
   int index = 0;
-  int xmps = 0; // number of xmps imported in db.
-  int32_t imgid = UNKNOWN_IMAGE;
+  int xmps = 0;
+  int32_t last_imgid = UNKNOWN_IMAGE;
   gint64 last_collection_refresh = 0;
 
-  // What this import may do to the view the user is in, decided once from what the import IS. An
-  // automatic (folder survey) one never moves them: Studio Capture displays the capture itself,
-  // from DT_SIGNAL_IMAGE_IMPORT, and the survey outlives its atelier. A requested one shows the
-  // grid as images arrive, and opens the darkroom instead if it turns out to have imported one.
+  GHashTable *capture_sequences = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
+  int sequence = 0;
+
   const dt_collection_import_view_t first_image_policy = data->folder_survey
                                                          ? DT_COLLECTION_IMPORT_VIEW_KEEP
                                                          : DT_COLLECTION_IMPORT_VIEW_GRID;
@@ -548,33 +614,27 @@ static int32_t _control_import_job_run(dt_job_t *job)
   for(GList *img = g_list_first(data->imgs); img; img = g_list_next(img))
   {
     dt_print(DT_DEBUG_IMPORT, "[Import] starting import of image #%i...\n", index);
-
     _refresh_progress_counter(job, data->elements, index, data->folder_survey);
-    imgid = _import_image(img, data, index, &data->discarded, &xmps);
+
+    const int file_sequence = dt_control_import_capture_sequence(capture_sequences,
+                                                                  (const char *)img->data,
+                                                                  &sequence);
+
+    const int32_t current_imgid = _import_image(img, data, file_sequence, &data->discarded, &xmps);
     if(!IS_NULL_PTR(data->file_imported))
-      data->file_imported((const char *)img->data, imgid > UNKNOWN_IMAGE, data->callback_data);
+      data->file_imported((const char *)img->data, current_imgid > UNKNOWN_IMAGE, data->callback_data);
 
-    if(imgid > UNKNOWN_IMAGE)
-    {
-      // On the first image, try to switch the current filmroll to the imported image's folder.
-      // dt_collection_load_filmroll() silently declines to do anything (no collection refresh)
-      // when it cannot switch folders, e.g. the collect module is not on the "Folders" tab. In
-      // that case a single imported image would never show up until the user reloads the
-      // collection by hand (issue #860). So always run a collection update afterwards: it
-      // re-runs the current query and makes newly-imported matching images appear.
-      if(index == 0)
-        dt_collection_load_filmroll(dt_collection_get_global(), imgid, first_image_policy, TRUE);
+    if(current_imgid <= UNKNOWN_IMAGE) continue;
 
-      // known_image_folder is NULL: in copy mode the image's final DB location can be a
-      // completely different, pattern-generated folder from its original source path, which is
-      // all this loop has at hand -- dt_collection_notify_imported() must resolve it fresh.
-      dt_collection_notify_imported(imgid, NULL, &last_collection_refresh);
+    if(index == 0)
+      dt_collection_load_filmroll(dt_collection_get_global(), current_imgid, first_image_policy, TRUE);
 
-      index++;
-    }
+    dt_collection_notify_imported(current_imgid, NULL, &last_collection_refresh);
+    last_imgid = current_imgid;
+    index++;
   }
+  g_hash_table_destroy(capture_sequences);
 
-  // Guarantee the final state is reflected even if the last few images landed inside the throttle window.
   if(index > 0)
     dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 
@@ -587,16 +647,10 @@ static int32_t _control_import_job_run(dt_job_t *job)
     return 1;
   }
 
-  // Don't open the picture in darkroom if more than 1 xmp (= duplicates) has been imported: the
-  // single file then stands for several images in the DB and none of them is the obvious one to
-  // open. Zero xmp is the ordinary case of a file with no sidecar (and of a library configured
-  // not to write any), still exactly one image: open it like any other single import.
   if(index == 1 && xmps <= 1)
   {
-    // A requested single image opens in the darkroom, which is announcement enough -- only the
-    // survey, which stays where it is, says anything.
     if(data->folder_survey) dt_control_log(_("Capture: imported 1 image."));
-    dt_collection_load_filmroll(dt_collection_get_global(), imgid, single_image_policy, TRUE);
+    dt_collection_load_filmroll(dt_collection_get_global(), last_imgid, single_image_policy, TRUE);
     return 0;
   }
 
