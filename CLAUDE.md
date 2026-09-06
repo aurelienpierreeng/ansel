@@ -190,6 +190,21 @@ write history straight to DB (XMP load, `dt_image_set_flip`) bypass it and need 
 Do NOT refresh the filmstrip from darkroom write paths — it competes with the realtime main
 preview pipeline. Lighttable ops may refresh both.
 
+**`dt_mipmap_cache_remove()` drops the THUMBNAILS, never the decoded raw.** Its loop stops at
+`DT_MIPMAP_F`, and `dt_mipmap_cache_remove_at_size()` refuses `DT_MIPMAP_F`/`DT_MIPMAP_FULL`
+outright, so those two — the unprocessed input, RAM-only, every disk write being gated on
+`mip < DT_MIPMAP_F` — are reachable only through `dt_mipmap_cache_remove_all_sizes()`. That is
+the right default for the list above: a development change does not invalidate the decoded raw,
+and dropping it on every history commit would re-read and re-demosaic the file per slider tick.
+
+An image LEAVING the library is the other case, and the only caller of the all-sizes form.
+Its input buffer otherwise outlives the row, with nothing but memory pressure to reclaim it,
+and `basebuffer` — which slices that buffer — is handed the stale entry when the image comes
+back on Ctrl+Z. It reports `invalid cache entry size 0 for module basebuffer`, the mipmap get
+path answers with an 8x8 husk, and no later render replaces it. **Only a developed image shows
+this**: an unaltered one is drawn from the embedded JPEG and never asks for the input at all,
+which is why the symptom reads as "one broken thumbnail" rather than as a cache bug.
+
 ### Duplicating an image races its own thumbnail generation against the history copy
 
 Lighttable "Duplicate" (`dt_control_duplicate_images_job_run`, `control_jobs.c`) creates the new
