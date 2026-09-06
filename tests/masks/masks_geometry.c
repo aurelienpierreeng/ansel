@@ -152,6 +152,24 @@ static GList *_brush_from_table(const float table[][9], const int count)
  * PERMITTED, the larger radius grown by a margin, outside which the mask must be empty. */
 typedef enum _disc_pick_t { DISC_OWED, DISC_PERMITTED } _disc_pick_t;
 
+/* One disc of integer radius @p r_i at (cx, cy) into the row difference array: a row of it
+ * reaches |dx| <= floor(sqrt(r_i^2 - dy^2)), the discretisation the per-pixel form used. */
+static inline void _stamp_disc_rows(int32_t *const diff, const size_t stride, const int w, const int h,
+                             const int cx, const int cy, const int r_i)
+{
+  for(int dy = -r_i; dy <= r_i; dy++)
+  {
+    const int y = cy + dy;
+    if(y < 0 || y >= h) continue;
+    const int half = (int)floorf(sqrtf((float)(r_i * r_i - dy * dy)));
+    const int x0 = MAX(cx - half, 0);
+    const int x1 = MIN(cx + half, w - 1);
+    if(x0 > x1) continue;
+    diff[(size_t)y * stride + x0] += 1;
+    diff[(size_t)y * stride + x1 + 1] -= 1;
+  }
+}
+
 /* Stamp the disc union of the stroke into @p map. Row spans through a difference array: a
  * disc costs O(r) rather than O(r^2), which is what makes a 43-node, 176 px stroke measurable
  * -- the per-pixel form of this loop is ten thousand million writes for that one case. The
@@ -172,10 +190,15 @@ static void _brush_disc_union(const GList *const nodes, const int w, const int h
   {
     const dt_masks_node_brush_t *const n0 = (const dt_masks_node_brush_t *)l->data;
     const dt_masks_node_brush_t *const n1 = (const dt_masks_node_brush_t *)l->next->data;
-    const float p0x = n0->node[0] * w,  p0y = n0->node[1] * h;
-    const float p1x = n0->ctrl2[0] * w, p1y = n0->ctrl2[1] * h;   /* ctrl2 of this node */
-    const float p2x = n1->ctrl1[0] * w, p2y = n1->ctrl1[1] * h;   /* ctrl1 of the next */
-    const float p3x = n1->node[0] * w,  p3y = n1->node[1] * h;
+    /* the cubic: this node, its ctrl2, the next node's ctrl1, the next node */
+    const float p0x = n0->node[0] * w;
+    const float p0y = n0->node[1] * h;
+    const float p1x = n0->ctrl2[0] * w;
+    const float p1y = n0->ctrl2[1] * h;
+    const float p2x = n1->ctrl1[0] * w;
+    const float p2y = n1->ctrl1[1] * h;
+    const float p3x = n1->node[0] * w;
+    const float p3y = n1->node[1] * h;
 
     /* The segment runs from this node's OUTGOING radius to the next node's INCOMING one --
      * border[1] then border[0] -- which is how the builder reads them (see the pa/pb rows in
@@ -213,20 +236,11 @@ static void _brush_disc_union(const GList *const nodes, const int w, const int h
 
     for(int k = 0; k <= 2000; k++)
     {
-      const float t = (float)k / 2000.0f, u = 1.0f - t;
+      const float t = (float)k / 2000.0f;
+      const float u = 1.0f - t;
       const float bx = u*u*u*p0x + 3*u*u*t*p1x + 3*u*t*t*p2x + t*t*t*p3x;
       const float by = u*u*u*p0y + 3*u*u*t*p1y + 3*u*t*t*p2y + t*t*t*p3y;
-      const int cx = (int)lrintf(bx), cy = (int)lrintf(by);
-      for(int dy = -r_i; dy <= r_i; dy++)
-      {
-        const int y = cy + dy;
-        if(y < 0 || y >= h) continue;
-        const int half = (int)floorf(sqrtf((float)(r_i * r_i - dy * dy)));
-        const int x0 = MAX(cx - half, 0), x1 = MIN(cx + half, w - 1);
-        if(x0 > x1) continue;
-        diff[(size_t)y * stride + x0] += 1;
-        diff[(size_t)y * stride + x1 + 1] -= 1;
-      }
+      _stamp_disc_rows(diff, stride, w, h, (int)lrintf(bx), (int)lrintf(by), r_i);
     }
   }
 
@@ -244,21 +258,79 @@ static void _brush_disc_union(const GList *const nodes, const int w, const int h
 
 typedef enum _runs_mode_t { RUNS_MISSING, RUNS_EXCESS } _runs_mode_t;
 
+/** How much coverage disagrees with the reference, and where the largest connected run is. */
+typedef struct _runs_t
+{
+  int total;
+  int largest;
+  int cx;
+  int cy;
+} _runs_t;
+
+/* One connected component of @p flag from @p seed, 4-connected: its size and the sum of its
+ * coordinates, so the caller can place it. @p seen is marked as it goes. */
+static inline void _flood_component(const uint8_t *const flag, uint8_t *const seen, int *const stack, const int w,
+                             const int h, const size_t seed, long *const sum)
+{
+  const size_t npix = (size_t)w * h;
+  int top = 0;
+  stack[top++] = (int)seed;
+  seen[seed] = 1;
+  sum[0] = 0;
+  sum[1] = 0;
+  sum[2] = 0;
+  while(top > 0)
+  {
+    const int cur = stack[--top];
+    const int px = cur % w;
+    const int py = cur / w;
+    sum[0]++;
+    sum[1] += px;
+    sum[2] += py;
+    const int dx[4] = { 1, -1, 0, 0 };
+    const int dy[4] = { 0, 0, 1, -1 };
+    for(int k = 0; k < 4; k++)
+    {
+      const int nx = px + dx[k];
+      const int ny = py + dy[k];
+      if(nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const size_t ni = (size_t)ny * w + nx;
+      if(!flag[ni] || seen[ni]) continue;
+      seen[ni] = 1;
+      /* The push is bounded because a cell is marked BEFORE it is pushed, so none can enter
+       * the stack twice and `top' cannot pass npix. Stating that in code rather than only in
+       * a comment costs one compare per neighbour, and removes the reader's -- and the
+       * analyser's -- obligation to reconstruct the argument from two places. */
+      if((size_t)top < npix) stack[top++] = (int)ni;
+    }
+  }
+}
+
 /** Largest connected run of coverage that disagrees with the reference, and its total:
  * MISSING is owed and unpainted, EXCESS is painted and not permitted. */
 static void _coverage_runs(const float *mask, const uint8_t *reference, const int w, const int h,
-                           const _runs_mode_t mode, int *total, int *largest, int *cx, int *cy)
+                           const _runs_mode_t mode, _runs_t *const out)
 {
-  *total = 0; *largest = 0; *cx = -1; *cy = -1;
+  out->total = 0;
+  out->largest = 0;
+  out->cx = -1;
+  out->cy = -1;
 
   /* A frame with no pixels has nothing to measure, and saying so here is not only defensive: it
    * is what lets a reader (and a static analyser) bound every index below. */
   if(w <= 0 || h <= 0) return;
   const size_t npix = (size_t)w * h;
 
-  uint8_t *miss = (uint8_t *)calloc(npix, 1);
+  uint8_t *flag = (uint8_t *)calloc(npix, 1);
+  uint8_t *seen = (uint8_t *)calloc(npix, 1);
   int *stack = (int *)malloc(sizeof(int) * npix);
-  if(IS_NULL_PTR(miss) || IS_NULL_PTR(stack)) { free(miss); free(stack); return; }
+  if(IS_NULL_PTR(flag) || IS_NULL_PTR(seen) || IS_NULL_PTR(stack))
+  {
+    free(flag);
+    free(seen);
+    free(stack);
+    return;
+  }
 
   /* ANY coverage counts, not a thresholded core. `border' is the OUTER radius: the stroke is
    * solid in the middle and fades to zero at that edge, so most of the disc legitimately holds
@@ -268,43 +340,25 @@ static void _coverage_runs(const float *mask, const uint8_t *reference, const in
   {
     const gboolean flagged = (mode == RUNS_MISSING) ? (reference[i] && mask[i] <= 0.0f)
                                                      : (!reference[i] && mask[i] > 0.0f);
-    if(flagged) { miss[i] = 1; (*total)++; }
+    if(!flagged) continue;
+    flag[i] = 1;
+    out->total++;
   }
 
-  uint8_t *seen = (uint8_t *)calloc(npix, 1);
-  if(IS_NULL_PTR(seen)) { free(miss); free(stack); return; }
-  for(int y = 0; y < h; y++)
-    for(int x = 0; x < w; x++)
-    {
-      const size_t seed = (size_t)y * w + x;
-      if(!miss[seed] || seen[seed]) continue;
-      int top = 0, size = 0;
-      long sx = 0, sy = 0;
-      stack[top++] = (int)seed; seen[seed] = 1;
-      while(top > 0)
-      {
-        const int cur = stack[--top];
-        const int px = cur % w, py = cur / w;
-        size++; sx += px; sy += py;
-        const int dx[4] = { 1, -1, 0, 0 }, dy[4] = { 0, 0, 1, -1 };
-        for(int k = 0; k < 4; k++)
-        {
-          const int nx = px + dx[k], ny = py + dy[k];
-          if(nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-          const size_t ni = (size_t)ny * w + nx;
-          if(!miss[ni] || seen[ni]) continue;
-          seen[ni] = 1;
-          /* The push is bounded because a cell is marked BEFORE it is pushed, so none can enter
-           * the stack twice and `top' cannot pass npix. Stating that in code rather than only in
-           * a comment costs one compare per neighbour, and removes the reader's -- and the
-           * analyser's -- obligation to reconstruct the argument from two places. */
-          if((size_t)top < npix) stack[top++] = (int)ni;
-        }
-      }
-      if(size > *largest) { *largest = size; *cx = (int)(sx / size); *cy = (int)(sy / size); }
-    }
+  for(size_t seed = 0; seed < npix; seed++)
+  {
+    if(!flag[seed] || seen[seed]) continue;
+    long sum[3];
+    _flood_component(flag, seen, stack, w, h, seed, sum);
+    if(sum[0] <= out->largest) continue;
+    out->largest = (int)sum[0];
+    out->cx = (int)(sum[1] / sum[0]);
+    out->cy = (int)(sum[2] / sum[0]);
+  }
 
-  free(miss); free(seen); free(stack);
+  free(flag);
+  free(seen);
+  free(stack);
 }
 
 /** Coverage plus enclosed holes: an unpainted component that does not touch the border. */
@@ -430,7 +484,7 @@ static const float _brush_concave_tbl[5][9] = {
  * degenerate: no direction to offset along. The reporter's mask grew a circle spanning the
  * frame. Frame 5184x3888 is the reporter's own (Panasonic GX9). */
 static const float _brush_1360[43][11] = {
-  /* node.x, node.y, ctrl1.x, ctrl1.y, ctrl2.x, ctrl2.y, border.in, border.out, density, fading, state */
+  /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
   { 0.22329402f, 0.437683344f, 0.223308727f, 0.437683344f, 0.223279327f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.0500000007f, 0.790861964f, 1 },
   { 0.223249912f, 0.437683344f, 0.223257273f, 0.437683344f, 0.223242566f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.163728267f, 0.790861964f, 1 },
   { 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.223249912f, 0.437683344f, 0.0340311043f, 0.0340311043f, 0.263469368f, 0.790861964f, 1 },
@@ -482,7 +536,7 @@ static const float _brush_1360[43][11] = {
  * drawn border came out with straight chords across the stroke. Reported at an unknown
  * frame size; the JPEG it was drawn on is not attached, so it runs at the corpus default. */
 static const float _brush_1352[7][11] = {
-  /* node.x, node.y, ctrl1.x, ctrl1.y, ctrl2.x, ctrl2.y, border.in, border.out, density, fading, state */
+  /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
   { 0.465645701f, 0.0646421909f, 0.474728316f, 0.0589693412f, 0.456563115f, 0.0703150481f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
   { 0.438397855f, 0.0816607475f, 0.445377052f, 0.0763829798f, 0.431418657f, 0.0869385153f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
   { 0.423770666f, 0.0963087901f, 0.428022474f, 0.0899883211f, 0.419518888f, 0.102629259f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
@@ -546,6 +600,14 @@ static const float _polygon_1788045925[15][8] = {
  * moves far more than this. */
 #define MASKS_BASELINE_MAX_DELTA 8       /* per channel, of 255 */
 #define MASKS_BASELINE_MAX_SHARE 0.0002  /* share of pixels allowed to differ at all */
+/* The per-pixel bound only means something once enough pixels carry it. A change that moves
+ * geometry moves hundreds of pixels; an outline sample moved by a float ulp moves a handful,
+ * because a dash edge on the antialiased overlay lands one pixel over. Measured: restructuring
+ * brush.c into named steps moved every outline sample by at most 0.0003 px -- FMA contraction
+ * landing differently across the new function boundaries, identical sample counts and skip
+ * ranges -- and one frame size out of sixteen came out with 4 pixels at a delta of 16. Below
+ * this many differing pixels, the worst delta is noise; at or above it, it is a change. */
+#define MASKS_BASELINE_NOISE_PX 64
 
 /** Compare two same-sized ARGB surfaces: how many pixels differ at all, and the worst per-channel
  * delta with where it is. Lifted out of the baseline check because "are these the same picture"
@@ -655,7 +717,8 @@ static gboolean _baseline_check(const char *path, const char *name)
 
     const double share = (double)differing / ((double)cairo_image_surface_get_width(a)
                                               * cairo_image_surface_get_height(a));
-    if(worst > MASKS_BASELINE_MAX_DELTA || share > MASKS_BASELINE_MAX_SHARE)
+    if(share > MASKS_BASELINE_MAX_SHARE
+       || (worst > MASKS_BASELINE_MAX_DELTA && differing >= MASKS_BASELINE_NOISE_PX))
     {
       printf("      baseline: %s differs -- %zu px (%.4f%%), worst %d at (%d,%d)\n",
              name, differing, 100.0 * share, worst, wx, wy);
@@ -729,87 +792,113 @@ static GList *_brush_from_table11(const float table[][11], const int count)
  * -- so every border sample the outline keeps must land in that band. One that lands deep
  * inside the union is a fold, a joint arc or a crossing the outline failed to hide (issue
  * #1352's chords); one outside the permitted map is a spoke to nowhere (issue #1360). Counts
- * both, and returns how long the GUI-side build took, which is the cost a drag pays. */
-static double _outline_band_check(dt_develop_t *dev, dt_masks_form_t *form, const uint8_t *owed,
-                                  const uint8_t *permitted, const int w, const int h,
-                                  int *inside_count, int *outside_count, int *kept_count)
+ * both, and how long the GUI-side build took, which is the cost a drag pays. */
+typedef struct _band_t
 {
-  *inside_count = *outside_count = *kept_count = 0;
-  float *points = NULL, *border = NULL;
-  int points_count = 0, border_count = 0, skip_count = 0;
+  int kept;
+  int inside;
+  int outside;
+  double seconds;
+} _band_t;
+
+static _band_t _outline_band_check(dt_develop_t *dev, dt_masks_form_t *form, const uint8_t *owed,
+                                   const uint8_t *permitted, const int w, const int h)
+{
+  _band_t band = { 0 };
+  float *points = NULL;
+  float *border = NULL;
+  int points_count = 0;
+  int border_count = 0;
+  int skip_count = 0;
   dt_masks_skip_range_t *skips = NULL;
 
   const double t0 = dt_get_wtime();
   const dt_masks_raster_result_t st = dt_masks_get_points_border(dev, form, &points, &points_count, &border,
                                                                  &border_count, &skips, &skip_count, 0, NULL);
-  const double elapsed = dt_get_wtime() - t0;
+  band.seconds = dt_get_wtime() - t0;
   if(st != DT_MASKS_RASTER_OK || IS_NULL_PTR(border)) goto done;
 
   const int header = (int)g_list_length(form->points) * 3;
   for(int i = header; i < border_count; i++)
   {
     if(dt_masks_skip_contains(skips, skip_count, i)) continue;
-    (*kept_count)++;
-    const int x = (int)lrintf(border[i * 2]), y = (int)lrintf(border[i * 2 + 1]);
-    if(x < 0 || y < 0 || x >= w || y >= h) { (*outside_count)++; continue; }
+    band.kept++;
+    const int x = (int)lrintf(border[i * 2]);
+    const int y = (int)lrintf(border[i * 2 + 1]);
+    if(x < 0 || y < 0 || x >= w || y >= h)
+    {
+      band.outside++;
+      continue;
+    }
     const size_t at = (size_t)y * w + x;
-    if(owed[at]) (*inside_count)++;
-    else if(!permitted[at]) (*outside_count)++;
+    if(owed[at]) band.inside++;
+    else if(!permitted[at]) band.outside++;
   }
 
 done:
   dt_pixelpipe_cache_free_align(points);
   dt_pixelpipe_cache_free_align(border);
   dt_pixelpipe_cache_free_align(skips);
-  return elapsed;
+  return band;
 }
+
+/** One brush case: what to call it, where to write, what to tolerate, at what frame size. */
+typedef struct _brush_case_t
+{
+  const char *name;
+  const char *dir;
+  int budget_px;
+  int w;
+  int h;
+} _brush_case_t;
 
 /** Run one brush through both consumers and measure the raster against the disc union in
  * both directions. Takes ownership of @p nodes. */
-static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const char *name, const char *dir,
-                                const int budget_px, const int img_w, const int img_h)
+static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const _brush_case_t *const c)
 {
-  _set_frame(dev, img_w, img_h);
+  _set_frame(dev, c->w, c->h);
   dt_masks_form_t form = { 0 };
   form.type = DT_MASKS_BRUSH;
   form.functions = &dt_masks_functions_brush;
   form.version = 6;
   form.formid = 900;
-  g_strlcpy(form.name, name, sizeof(form.name));
+  g_strlcpy(form.name, c->name, sizeof(form.name));
   form.points = nodes;
 
-  float *mask = dt_masks_debug_rasterise(dev, &form, img_w, img_h);
+  float *mask = dt_masks_debug_rasterise(dev, &form, c->w, c->h);
   if(IS_NULL_PTR(mask))
   {
-    printf("[FAIL] %-22s rasterisation returned nothing\n", name);
+    printf("[FAIL] %-22s rasterisation returned nothing\n", c->name);
     failures++;
     g_list_free_full(form.points, free);
     return;
   }
 
-  uint8_t *owed = (uint8_t *)malloc((size_t)img_w * img_h);
-  uint8_t *permitted = (uint8_t *)malloc((size_t)img_w * img_h);
-  int missing = 0, largest = 0, cx = -1, cy = -1;
-  int excess = 0, excess_largest = 0, ex = -1, ey = -1;
+  uint8_t *owed = (uint8_t *)malloc((size_t)c->w * c->h);
+  uint8_t *permitted = (uint8_t *)malloc((size_t)c->w * c->h);
+  _runs_t missing = { 0, 0, -1, -1 };
+  _runs_t excess = { 0, 0, -1, -1 };
+  _band_t band = { 0 };
   if(!IS_NULL_PTR(owed) && !IS_NULL_PTR(permitted))
   {
-    _brush_disc_union(form.points, img_w, img_h, DISC_OWED, owed);
-    _coverage_runs(mask, owed, img_w, img_h, RUNS_MISSING, &missing, &largest, &cx, &cy);
-    _brush_disc_union(form.points, img_w, img_h, DISC_PERMITTED, permitted);
-    _coverage_runs(mask, permitted, img_w, img_h, RUNS_EXCESS, &excess, &excess_largest, &ex, &ey);
+    _brush_disc_union(form.points, c->w, c->h, DISC_OWED, owed);
+    _coverage_runs(mask, owed, c->w, c->h, RUNS_MISSING, &missing);
+    _brush_disc_union(form.points, c->w, c->h, DISC_PERMITTED, permitted);
+    _coverage_runs(mask, permitted, c->w, c->h, RUNS_EXCESS, &excess);
+    band = _outline_band_check(dev, &form, owed, permitted, c->w, c->h);
   }
 
-  char *alpha_path = g_strdup_printf("%s/%s-alpha.png", dir, name);
-  char *over_path = g_strdup_printf("%s/%s-overlay.png", dir, name);
+  char *alpha_path = g_strdup_printf("%s/%s-alpha.png", c->dir, c->name);
+  char *over_path = g_strdup_printf("%s/%s-overlay.png", c->dir, c->name);
   const dt_masks_debug_request_t alpha_req
-      = { .width = img_w, .height = img_h, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = FALSE };
+      = { .width = c->w, .height = c->h, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = FALSE };
   const dt_masks_debug_request_t over_req
-      = { .width = img_w, .height = img_h, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = TRUE };
+      = { .width = c->w, .height = c->h, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = TRUE };
   dt_masks_debug_write_png(dev, &form, &alpha_req, alpha_path);
   dt_masks_debug_write_png(dev, &form, &over_req, over_path);
 
-  char *alpha_name = g_strdup_printf("%s-alpha", name);
-  char *over_name = g_strdup_printf("%s-overlay", name);
+  char *alpha_name = g_strdup_printf("%s-alpha", c->name);
+  char *over_name = g_strdup_printf("%s-overlay", c->name);
   const gboolean baseline_ok = _baseline_check(alpha_path, alpha_name)
                                & _baseline_check(over_path, over_name);
   g_free(alpha_name);
@@ -818,32 +907,27 @@ static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const char *nam
   /* A picture of exactly what is owed and missing: red where the disc union covers a pixel the
    * rasteriser left empty, over the mask itself. This is the artefact to look at first when a
    * case fails -- it says WHERE the stroke went missing, which no scalar can. */
-  if(!IS_NULL_PTR(owed) && missing > 0)
-    _write_missing_map(dir, name, mask, owed, img_w, img_h);
-
-  int band_inside = 0, band_outside = 0, band_kept = 0;
-  double outline_seconds = 0.0;
-  if(!IS_NULL_PTR(owed) && !IS_NULL_PTR(permitted))
-    outline_seconds = _outline_band_check(dev, &form, owed, permitted, img_w, img_h, &band_inside, &band_outside,
-                                          &band_kept);
+  if(!IS_NULL_PTR(owed) && missing.total > 0)
+    _write_missing_map(c->dir, c->name, mask, owed, c->w, c->h);
 
   /* Either kind of disagreement is explained by the outline buffers and nothing else. */
-  if(missing > 0 || excess > 0 || band_inside > 0 || band_outside > 0 || !IS_NULL_PTR(g_getenv("MASKS_DUMP_OUTLINE")))
+  const gboolean disagreement = (missing.total > 0 || excess.total > 0 || band.inside > 0 || band.outside > 0);
+  if(disagreement || !IS_NULL_PTR(g_getenv("MASKS_DUMP_OUTLINE")))
   {
-    char *csv = g_strdup_printf("%s/%s-outline.csv", dir, name);
+    char *csv = g_strdup_printf("%s/%s-outline.csv", c->dir, c->name);
     dt_masks_debug_write_outline_csv(dev, &form, csv);
     g_free(csv);
   }
 
-  const gboolean ok = (largest <= budget_px) && (excess_largest <= budget_px) && baseline_ok
-                      && (band_inside <= budget_px) && (band_outside <= budget_px);
+  const gboolean ok = (missing.largest <= c->budget_px) && (excess.largest <= c->budget_px) && baseline_ok
+                      && (band.inside <= c->budget_px) && (band.outside <= c->budget_px);
   printf("[%s] %-22s %5dx%-5d missing %6d px (largest run %5d px", ok ? "PASS" : "FAIL",
-         name, img_w, img_h, missing, largest);
-  if(largest > 0) printf(" around (%d,%d)", cx, cy);
-  printf(")  excess %7d px (largest run %7d px", excess, excess_largest);
-  if(excess_largest > 0) printf(" around (%d,%d)", ex, ey);
+         c->name, c->w, c->h, missing.total, missing.largest);
+  if(missing.largest > 0) printf(" around (%d,%d)", missing.cx, missing.cy);
+  printf(")  excess %7d px (largest run %7d px", excess.total, excess.largest);
+  if(excess.largest > 0) printf(" around (%d,%d)", excess.cx, excess.cy);
   printf(")  outline: %d kept, %d inside, %d outside, built in %.1f ms  budget %d  -> %s\n",
-         band_kept, band_inside, band_outside, 1000.0 * outline_seconds, budget_px, alpha_path);
+         band.kept, band.inside, band.outside, 1000.0 * band.seconds, c->budget_px, alpha_path);
   if(!ok) failures++;
 
   free(owed);
@@ -855,23 +939,22 @@ static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const char *nam
 }
 
 static void _run_brush_case_at(dt_develop_t *dev, const float table[][9], const int count,
-                               const char *name, const char *dir, const int budget_px,
-                               const int img_w, const int img_h)
+                               const _brush_case_t *const c)
 {
-  _run_brush_nodes_at(dev, _brush_from_table(table, count), name, dir, budget_px, img_w, img_h);
+  _run_brush_nodes_at(dev, _brush_from_table(table, count), c);
 }
 
 static void _run_brush_case11_at(dt_develop_t *dev, const float table[][11], const int count,
-                                 const char *name, const char *dir, const int budget_px,
-                                 const int img_w, const int img_h)
+                                 const _brush_case_t *const c)
 {
-  _run_brush_nodes_at(dev, _brush_from_table11(table, count), name, dir, budget_px, img_w, img_h);
+  _run_brush_nodes_at(dev, _brush_from_table11(table, count), c);
 }
 
 static void _run_brush_case(dt_develop_t *dev, const float table[][9], const int count,
                             const char *name, const char *dir, const int budget_px)
 {
-  _run_brush_case_at(dev, table, count, name, dir, budget_px, IMG_W, IMG_H);
+  const _brush_case_t c = { name, dir, budget_px, IMG_W, IMG_H };
+  _run_brush_case_at(dev, table, count, &c);
 }
 
 static void _run_case_at(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const char *dir,
@@ -1071,7 +1154,8 @@ int main(int argc, char *argv[])
   for(int f = 0; f < (int)(sizeof(frames) / sizeof(*frames)); f++)
   {
     char *nm = g_strdup_printf("brush-1313-cusp-%dx%d", frames[f][0], frames[f][1]);
-    _run_brush_case_at(&dev, _brush_1313, 11, nm, dir, 0, frames[f][0], frames[f][1]);
+    const _brush_case_t c = { nm, dir, 0, frames[f][0], frames[f][1] };
+    _run_brush_case_at(&dev, _brush_1313, 11, &c);
     g_free(nm);
   }
 
@@ -1084,9 +1168,14 @@ int main(int argc, char *argv[])
   /* 3a. THE THIRD AND FOURTH REPORTED SHAPES. Both are judged in BOTH directions: #1360's
    *     defect is coverage nobody owes (a circle the size of the frame), which the owed map
    *     cannot see, and #1352's is the drawn border, which the overlay baseline sees. */
-  _run_brush_case11_at(&dev, _brush_1360, 43, "brush-1360-pressure-ramp", dir, 0, 5184, 3888);
-  _run_brush_case11_at(&dev, _brush_1352, 7,  "brush-1352-radius-step",   dir, 0, IMG_W, IMG_H);
-  _run_brush_case11_at(&dev, _brush_1352, 7,  "brush-1352-radius-step-2999x2251", dir, 0, 2999, 2251);
+  {
+    const _brush_case_t c1360 = { "brush-1360-pressure-ramp", dir, 0, 5184, 3888 };
+    const _brush_case_t c1352 = { "brush-1352-radius-step", dir, 0, IMG_W, IMG_H };
+    const _brush_case_t c1352_small = { "brush-1352-radius-step-2999x2251", dir, 0, 2999, 2251 };
+    _run_brush_case11_at(&dev, _brush_1360, 43, &c1360);
+    _run_brush_case11_at(&dev, _brush_1352, 7, &c1352);
+    _run_brush_case11_at(&dev, _brush_1352, 7, &c1352_small);
+  }
 
   /* 3b. THE SECOND REPORTED SHAPE, polygon #2. Two defects were reported against it: the outer
    *     border self-intersecting between nodes 0 and 14, where the outline runs into a
