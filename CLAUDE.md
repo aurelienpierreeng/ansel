@@ -205,6 +205,31 @@ path answers with an 8x8 husk, and no later render replaces it. **Only a develop
 this**: an unaltered one is drawn from the embedded JPEG and never asks for the input at all,
 which is why the symptom reads as "one broken thumbnail" rather than as a cache bug.
 
+### Releasing an image cache entry returns the LOCK, not the image
+
+`dt_image_cache_read_release()` and `dt_image_cache_write_release()` (`caches/image_cache.c`)
+guard on a NULL pointer and nothing else. They used to read `if(IS_NULL_PTR(img) || img->id <= 0)
+return;` — which is `dt_image_invalid()` spelled out — and that skipped the release for precisely
+the entries most likely to have one outstanding.
+
+An entry whose row has gone stays in the cache with `id == UNKNOWN_IMAGE` (-1): the allocator
+runs `dt_image_repository_load()`, that fails with `no more rows available`, and `dt_image_init()`
+has already left the id there. Anything holding such an entry then called release, got nothing,
+and left it locked forever. `dt_cache_get()` spins on `trywrlock` with a `g_usleep(5)` retry, and
+`try*` locks report busy even on same-thread reentry (see the rwlock section below), so the next
+writer hangs the GUI thread with no error and no stack anywhere else — every other thread sits
+idle in `dt_pthread_cond_wait`. Measured: a whole film roll removed and undone froze in
+`dt_image_history_changed()` waiting on an entry nobody held.
+
+`dt_image_cache_testget()` is the other half and now carries the validity check its two siblings
+(`dt_image_cache_get()`, `dt_image_cache_get_reload()`) always had: handing out a LOCKED invalid
+image is what creates the leak, because the caller has no way to release what it was told is not
+an image.
+
+This is reachable whenever a row disappears while the GUI still refers to it — removal, and the
+lighttable refreshing a thumbnail right after. Grouped images make it far likelier, since
+`_add_thumbnail_group_borders()` re-reads every member.
+
 ### Duplicating an image races its own thumbnail generation against the history copy
 
 Lighttable "Duplicate" (`dt_control_duplicate_images_job_run`, `control_jobs.c`) creates the new
@@ -1624,16 +1649,24 @@ So the restore DELETEs each child table's rows before copying the staged ones ba
 the four that cascade, and the only thing stopping `color_labels` — which has no unique
 constraint either — from gaining a duplicate row on every remove/undo cycle.
 
-**`memory.` dies with the connection, and the undo stack outlives it.** `dt_database_close()`
-runs before `dt_undo_cleanup()`, so the free callback of a removal the user never undid runs
-against a closed connection; `_remove_undo_data_free()` checks `dt_database_is_open()` first.
-Skipping that check costs an abort on quit in a debug build (`assert(x == SQLITE_OK)` inside
-`DT_DEBUG_SQLITE3_PREPARE_V2`) and a crash wherever SQLite is built without API armor.
+**`memory.` dies with the connection, and `_remove_undo_data_free()` checks
+`dt_database_is_open()` before dropping a snapshot.** `dt_undo_cleanup()` does run after
+`dt_database_close()`, but measurement says it finds an empty list: the GUI teardown calls
+`dt_ctl_switch_mode_to("")` (`darktable.c`, well before the close), switching to no view enters
+`dt_view_manager_switch_by_view()`, and its first act is `dt_undo_clear(..., DT_UNDO_ALL)` —
+database still open. Without a GUI the order reverses, but no removal can have been recorded
+either, both callers of `dt_control_remove_images()` being GUI ones. **So the guarded branch is
+unreachable today and the check stays anyway**, for the cost of one call: it is the day either
+half of that changes that a debug build would otherwise abort on quit, inside
+`DT_DEBUG_SQLITE3_PREPARE_V2`'s assert, and a SQLite built without API armor would crash.
+`dt_view_manager_cleanup()` is not what clears the list — it only unloads the view modules.
 
-The undo window closes when the lighttable is re-entered — `enter()` calls
-`dt_undo_clear(..., DT_UNDO_LIGHTTABLE)`, `DT_UNDO_REMOVE` is in that mask, and discarding the
-record frees the snapshot. That is every lighttable undo's lifetime, but here it is also the
-point of no return for data the database was the only holder of.
+**Any view switch closes the undo window, not just re-entering the lighttable.**
+`dt_view_manager_switch_by_view()` clears `DT_UNDO_ALL` on every switch, and the lighttable's
+own `enter()` additionally clears `DT_UNDO_LIGHTTABLE`. `DT_UNDO_REMOVE` is in both masks, and
+discarding the record frees the snapshot. That is every lighttable undo's lifetime, but here it
+is also the point of no return for data the database was the only holder of: a trip to the
+darkroom and back makes a removal permanent.
 
 ---
 

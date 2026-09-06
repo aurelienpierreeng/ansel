@@ -248,6 +248,48 @@ static void test_partial_undo_repoints_a_departed_leader(void **state)
   assert_false(_in_group(a, b));
 }
 
+static void test_whole_group_removed_and_fully_undone_keeps_one_group(void **state)
+{
+  /* The batch case, which the partial one above deliberately stops short of. A whole group
+   * goes in one job, and Ctrl+Z pops every record: each restore ends by repointing at itself
+   * any image whose group_id names an image that has not come back YET, and the question is
+   * whether a later record heals that or leaves the group split for good. */
+  const int32_t film = testdb_make_film("/testdb/removal/wholegroup");
+  const int32_t a = testdb_make_image(film, "a.raw");
+  const int32_t b = testdb_make_image(film, "b.raw");
+  const int32_t c = testdb_make_image(film, "c.raw");
+  assert_true(a > 0 && b > 0 && c > 0);
+  assert_true(dt_image_repository_set_group(a, a));
+  assert_true(dt_image_repository_set_group(b, a));
+  assert_true(dt_image_repository_set_group(c, a));
+
+  // the job walks the selection in id order, snapshotting each image before it deletes it
+  const int snap_a = dt_removed_image_repository_next_id(a);
+  assert_true(dt_removed_image_repository_create(snap_a, a));
+  _remove(a);
+  const int snap_b = dt_removed_image_repository_next_id(b);
+  assert_true(dt_removed_image_repository_create(snap_b, b));
+  _remove(b);
+  const int snap_c = dt_removed_image_repository_next_id(c);
+  assert_true(dt_removed_image_repository_create(snap_c, c));
+  _remove(c);
+
+  // one undo group, popped last-recorded-first
+  assert_true(dt_removed_image_repository_restore(snap_c, c));
+  assert_true(dt_removed_image_repository_restore(snap_b, b));
+  assert_true(dt_removed_image_repository_restore(snap_a, a));
+
+  // every image is back ...
+  assert_int_equal(dt_image_repository_find_by_film_and_filename(film, "a.raw"), a);
+  assert_int_equal(dt_image_repository_find_by_film_and_filename(film, "b.raw"), b);
+  assert_int_equal(dt_image_repository_find_by_film_and_filename(film, "c.raw"), c);
+
+  // ... and so is the one group they were in, under its original leader
+  assert_true(_in_group(a, a));
+  assert_true(_in_group(a, b));
+  assert_true(_in_group(a, c));
+}
+
 static void test_clear_drops_the_snapshot(void **state)
 {
   const int32_t film = testdb_make_film("/testdb/removal/clear");
@@ -300,6 +342,7 @@ int main(void)
     cmocka_unit_test(test_group_leader_restores_membership),
     cmocka_unit_test(test_film_roll_comes_back_with_its_last_image),
     cmocka_unit_test(test_partial_undo_repoints_a_departed_leader),
+    cmocka_unit_test(test_whole_group_removed_and_fully_undone_keeps_one_group),
     cmocka_unit_test(test_clear_drops_the_snapshot),
     cmocka_unit_test(test_successive_snapshots_do_not_collide),
   };
