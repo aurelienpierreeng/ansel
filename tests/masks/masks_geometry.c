@@ -967,16 +967,25 @@ static int _path_dense_samples(const GList *const nodes, const int w, const int 
   return count;
 }
 
-/* Where the closed path crosses each row, sampled at the row's centre. Two passes: with
- * @p xs NULL only the per-row counts are taken; with it, the crossings are written at the
- * @p row_at offsets, never past @p capacity, and the counts rebuilt. The two passes walk the
- * same edges and agree, but the bound is what makes that a property of the code rather than
- * of the reader. */
-static void _path_row_crossings(const float *const px, const float *const py, const int count, const int h,
-                                int *const row_count, const int *const row_at, float *const xs,
-                                const int capacity)
+/* The per-row crossing table: how many crossings each row has, where each row's run starts in
+ * @p xs, and how many entries @p xs can hold at all. */
+typedef struct _row_table_t
 {
-  memset(row_count, 0, sizeof(int) * (size_t)h);
+  int *count;
+  const int *at;
+  float *xs;   /* NULL while only counting */
+  int capacity;
+} _row_table_t;
+
+/* Where the closed path crosses each row, sampled at the row's centre. Two passes: with
+ * @p t->xs NULL only the per-row counts are taken; with it, the crossings are written at the
+ * row offsets, never outside [0, capacity), and the counts rebuilt from what was written. The
+ * two passes walk the same edges and agree, but the bound is what makes that a property of the
+ * code rather than of the reader. */
+static void _path_row_crossings(const float *const px, const float *const py, const int count, const int h,
+                                const _row_table_t *const t)
+{
+  memset(t->count, 0, sizeof(int) * (size_t)h);
   for(int i = 0; i < count; i++)
   {
     const int j = (i + 1) % count;
@@ -999,10 +1008,13 @@ static void _path_row_crossings(const float *const px, const float *const py, co
     const int yb = MIN((int)ceilf(y1 - 0.5f), h);
     for(int y = ya; y < yb; y++)
     {
-      const int at = row_at[y] + row_count[y];
-      if(!IS_NULL_PTR(xs) && at >= capacity) continue;
-      if(!IS_NULL_PTR(xs)) xs[at] = x0 + (x1 - x0) * (((float)y + 0.5f) - y0) / (y1 - y0);
-      row_count[y]++;
+      if(!IS_NULL_PTR(t->xs))
+      {
+        const int at = t->at[y] + t->count[y];
+        if(at < 0 || at >= t->capacity) continue;
+        t->xs[at] = x0 + (x1 - x0) * (((float)y + 0.5f) - y0) / (y1 - y0);
+      }
+      t->count[y]++;
     }
   }
 }
@@ -1019,21 +1031,24 @@ static void _path_interior(const float *const px, const float *const py, const i
     free(row_at);
     return;
   }
-  _path_row_crossings(px, py, count, h, row_count, row_at, NULL, 0);
+  const _row_table_t counting = { .count = row_count, .at = row_at, .xs = NULL, .capacity = 0 };
+  _path_row_crossings(px, py, count, h, &counting);
   int total = 0;
   for(int y = 0; y < h; y++)
   {
     row_at[y] = total;
     total += row_count[y];
   }
-  float *xs = (float *)malloc(sizeof(float) * (size_t)(total + 1));
+  /* zeroed, so that nothing the bound refused to write is ever read as a crossing */
+  float *xs = (float *)calloc((size_t)total + 1, sizeof(float));
   if(IS_NULL_PTR(xs))
   {
     free(row_count);
     free(row_at);
     return;
   }
-  _path_row_crossings(px, py, count, h, row_count, row_at, xs, total);
+  const _row_table_t filling = { .count = row_count, .at = row_at, .xs = xs, .capacity = total };
+  _path_row_crossings(px, py, count, h, &filling);
 
   for(int y = 0; y < h; y++)
   {
