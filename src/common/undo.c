@@ -279,6 +279,26 @@ void dt_undo_do_undo(dt_undo_t *self, uint32_t filter)
   _undo_do_undo_redo(self, filter, DT_ACTION_UNDO);
 }
 
+static int _do_undo_list_length(dt_undo_t *self, uint32_t filter, dt_undo_action_t action)
+{
+  if(IS_NULL_PTR(self)) return 0;
+  int count = 0;
+
+  LOCK;
+
+  GList **from = action == DT_ACTION_UNDO ? &self->undo_list : &self->redo_list;
+
+  for(GList *l = *from; l; l = g_list_next(l))
+  {
+    const dt_undo_item_t *item = (const dt_undo_item_t *)l->data;
+    if(item->type & filter) count++;
+  }
+
+  UNLOCK;
+
+  return count;
+}
+
 static gboolean _is_do_undo_list_populated(dt_undo_t *self, uint32_t filter, dt_undo_action_t action)
 {
   if(IS_NULL_PTR(self)) return FALSE;
@@ -311,6 +331,16 @@ gboolean dt_is_undo_list_populated(dt_undo_t *self, uint32_t filter)
 gboolean dt_is_redo_list_populated(dt_undo_t *self, uint32_t filter)
 {
   return _is_do_undo_list_populated(self, filter, DT_ACTION_REDO);
+}
+
+int dt_undo_list_length(dt_undo_t *self, uint32_t filter)
+{
+  return _do_undo_list_length(self, filter, DT_ACTION_UNDO);
+}
+
+int dt_redo_list_length(dt_undo_t *self, uint32_t filter)
+{
+  return _do_undo_list_length(self, filter, DT_ACTION_REDO);
 }
 
 static void _undo_clear_list(GList **list, uint32_t filter)

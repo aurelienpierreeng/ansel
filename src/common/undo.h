@@ -118,6 +118,13 @@ void dt_undo_disable_next(dt_undo_t *self);
 gboolean dt_is_undo_list_populated(dt_undo_t *self, uint32_t filter);
 gboolean dt_is_redo_list_populated(dt_undo_t *self, uint32_t filter);
 
+/** @brief How many records match @p filter, so a caller can tell a one-record undo from a
+ *  batch of a thousand. The GUI uses it to decide whether an operation is worth announcing:
+ *  popping a whole removal runs on the GUI thread and takes tens of seconds, while an
+ *  ordinary rating change is instant and must not raise a toast. */
+int dt_undo_list_length(dt_undo_t *self, uint32_t filter);
+int dt_redo_list_length(dt_undo_t *self, uint32_t filter);
+
 #endif // DT_COMMON_UNDO_H
 
 // clang-format off
