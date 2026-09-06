@@ -1061,6 +1061,42 @@ reading and died on the first measurement.
 Reproduce: export with `--export_masks 1`; page 1 of the TIFF is the mask. Flood-fill from the
 border and anything left unset is a hole.
 
+### A brush's geometry comes from its nodes, and its outline is the boundary of its raster
+
+A brush is the union of a disc of the local radius over every point of its spine, and the
+pipe paints it as spokes from every spine sample to its border sample. `doc/brush-boundary.md`
+is the full account; the rules that were each paid for by a reported defect:
+
+- **Nothing in `_brush_get_pts_border()` is read back out of the buffers.** Every cap, joint
+  arc and stamp takes its centre and radius from the segment end samples that meet there and
+  from the node data. The old walk measured a stamp's radius as "the distance from the last
+  centreline sample to the last border sample written"; a degenerate segment (a pen resting
+  under rising pressure: seventeen coincident nodes) once left the image origin in the border
+  buffer, the radius came out as 2058 px, and ten discs of that size followed (#1360).
+- **A degenerate segment contributes nothing**; its disc is the neighbour's cap. An end with a
+  radius but no direction borrows the other end's *direction*, never a position.
+- **The drawn outline is decided per sample by a definition** — a border sample is on the
+  boundary iff it is not strictly inside any other sample's disc
+  (`_brush_outline_boundary_skips()`) — not by intersecting the outline with itself and
+  choosing cuts. Every ordering of those cuts moved the artefact somewhere else (#1352). The
+  answer travels as the same skip ranges every consumer already reads; the rasteriser keeps
+  every spoke, because a spoke inside another disc paints nothing new and costs nothing.
+- **Near and far discs are told apart by index, never by position.** A window along the walk
+  is exhaustive for folds, joints and caps; a bucket grid of index *runs* finds the discs a
+  hairpin or a crossing brings back from far along the walk, dismissing near runs in one
+  comparison. A coarse occupancy map was tried first and made the build eight times slower:
+  every boundary sample is within a few pixels of its *own* interior, so a map's band is
+  everything.
+- **Joint arcs sweep the short way; at a cusp the pass's rotation decides.** A fixed rotation
+  went the long way round on one side of every turn. Do not "fix" the cusp tie-break to
+  shortest-path: the two passes each cover one half of the tip disc, and which half is which
+  is the pass's rotation. The #1313 cusp corpus, at all eight frame sizes, is the check.
+
+The corpus (`tests/masks/masks_geometry.c`) judges a brush in **both directions** — owed
+coverage missing, and coverage no disc owes — and judges the drawn outline against the same
+two maps. `MASKS_DUMP_OUTLINE=1` dumps every outline. An owed-only oracle passed #1360 while
+half the frame was painted.
+
 ### The mouse wheel edits the property the user mapped it to; shapes never read modifiers
 
 Which property the wheel edits is resolved **once**, by `dt_masks_events_mouse_scrolled()`
