@@ -738,17 +738,17 @@ gboolean dt_iop_is_hidden(dt_iop_module_t *module)
   return dt_iop_so_is_hidden(module->so);
 }
 
-gboolean dt_iop_module_instance_exists(dt_iop_module_t *module)
+gboolean dt_iop_module_instance_exists(dt_iop_module_t *iop)
 {
-  if(IS_NULL_PTR(module)) return FALSE;
-  if(module->multi_priority == 0) return TRUE;
+  if(IS_NULL_PTR(iop)) return FALSE;
+  if(iop->multi_priority == 0) return TRUE;
 
-  dt_develop_t *const dev = module->dev;
+  dt_develop_t *const dev = iop->dev;
   if(IS_NULL_PTR(dev)) return FALSE;
 
   dt_pthread_rwlock_rdlock(&dev->history_mutex);
   const gboolean exists = !IS_NULL_PTR(
-      dt_dev_history_get_last_item_by_module(dev->history, module, dt_dev_get_history_end_ext(dev)));
+      dt_dev_history_get_last_item_by_module(dev->history, iop, dt_dev_get_history_end_ext(dev)));
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   return exists;
@@ -775,17 +775,17 @@ static gboolean _module_carries_history(dt_iop_module_t *module)
   return found;
 }
 
-gboolean dt_iop_module_is_in_pipeline(dt_iop_module_t *module)
+gboolean dt_iop_module_is_in_pipeline(dt_iop_module_t *iop)
 {
-  if(IS_NULL_PTR(module) || dt_iop_is_hidden(module)) return FALSE;
-  if(!module->enabled && !_module_carries_history(module)) return FALSE;
-  return dt_iop_module_instance_exists(module);
+  if(IS_NULL_PTR(iop) || dt_iop_is_hidden(iop)) return FALSE;
+  if(!iop->enabled && !_module_carries_history(iop)) return FALSE;
+  return dt_iop_module_instance_exists(iop);
 }
 
-gboolean dt_iop_module_supports_drawn_mask(dt_iop_module_t *module)
+gboolean dt_iop_module_supports_drawn_mask(dt_iop_module_t *iop)
 {
-  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->blend_params)) return FALSE;
-  const int flags = module->flags();
+  if(IS_NULL_PTR(iop) || IS_NULL_PTR(iop->blend_params)) return FALSE;
+  const int flags = iop->flags();
   return (flags & IOP_FLAGS_SUPPORTS_BLENDING) && !(flags & IOP_FLAGS_NO_MASKS);
 }
 

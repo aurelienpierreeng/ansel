@@ -815,8 +815,8 @@ typedef enum dt_modchooser_col_t
   MODCHOOSER_COUNT
 } dt_modchooser_col_t;
 
-static void _modchooser_toggled(GtkCellRendererToggle *cell __attribute__((unused)), gchar *path_string,
-                                GtkListStore *store)
+static void _modchooser_toggled(GtkCellRendererToggle *cell __attribute__((unused)),
+                                const gchar *path_string, GtkListStore *store)
 {
   GtkTreeIter iter;
   if(!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(store), &iter, path_string)) return;
@@ -833,7 +833,7 @@ static void _modchooser_toggled(GtkCellRendererToggle *cell __attribute__((unuse
 }
 
 /* A left click anywhere on the row toggles it, not just on the 12 pixels of the checkbox. */
-static gboolean _modchooser_button_pressed(GtkWidget *treeview, GdkEventButton *event,
+static gboolean _modchooser_button_pressed(GtkWidget *treeview, const GdkEventButton *event,
                                            GtkListStore *store)
 {
   if(event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_PRIMARY) return FALSE;
@@ -860,17 +860,42 @@ static gboolean _modchooser_button_pressed(GtkWidget *treeview, GdkEventButton *
  *
  * The window is modal, so GTK routes every button press in the application to it; a press landing
  * on one of its own GdkWindows is inside it and is left to the widget under the pointer. */
-static gboolean _modchooser_button_press(GtkWidget *dialog, GdkEventButton *event,
+static gboolean _modchooser_button_press(GtkWidget *dialog, const GdkEventButton *event,
                                          gpointer user_data __attribute__((unused)))
 {
   if(event->type != GDK_BUTTON_PRESS) return FALSE;
 
-  GdkWindow *const toplevel = gtk_widget_get_window(dialog);
+  const GdkWindow *const toplevel = gtk_widget_get_window(dialog);
   for(GdkWindow *w = event->window; !IS_NULL_PTR(w); w = gdk_window_get_parent(w))
     if(w == toplevel) return FALSE;
 
   gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
   return TRUE;
+}
+
+/* Reads the validated dialog back: the rows whose box the user actually moved, in the order they
+ * were listed. An untouched module goes in neither list -- ticking a box and unticking it again
+ * is not a change, and reporting it as one would rewrite a mask the user left alone. */
+static void _modchooser_collect(GtkListStore *store, GList **to_attach, GList **to_detach)
+{
+  GtkTreeIter iter;
+  for(gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store), &iter); valid;
+      valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter))
+  {
+    gboolean checked = FALSE;
+    gboolean was_checked = FALSE;
+    dt_iop_module_t *module = NULL;
+    gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, MODCHOOSER_CHECKED, &checked,
+                       MODCHOOSER_WAS_CHECKED, &was_checked, MODCHOOSER_MODULE, &module, -1);
+
+    if(IS_NULL_PTR(module) || checked == was_checked) continue;
+
+    GList **target = checked ? to_attach : to_detach;
+    *target = g_list_prepend(*target, module);
+  }
+
+  *to_attach = g_list_reverse(*to_attach);
+  *to_detach = g_list_reverse(*to_detach);
 }
 
 /* Runs the attachment manager modally and answers with what the user changed: the modules to
@@ -1002,38 +1027,38 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
   gtk_widget_show_all(dialog);
   const gint response = gtk_dialog_run(GTK_DIALOG(dialog));
 
-  if(response == GTK_RESPONSE_ACCEPT)
-  {
-    GtkTreeIter iter;
-    gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store), &iter);
-    while(valid)
-    {
-      gboolean checked = FALSE;
-      gboolean was_checked = FALSE;
-      dt_iop_module_t *module = NULL;
-      gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, MODCHOOSER_CHECKED, &checked,
-                         MODCHOOSER_WAS_CHECKED, &was_checked, MODCHOOSER_MODULE, &module, -1);
-
-      // Only the rows the user actually moved: an untouched module is left exactly as it was.
-      if(!IS_NULL_PTR(module) && checked != was_checked)
-      {
-        if(checked)
-          *to_attach = g_list_prepend(*to_attach, module);
-        else
-          *to_detach = g_list_prepend(*to_detach, module);
-      }
-
-      valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter);
-    }
-    *to_attach = g_list_reverse(*to_attach);
-    *to_detach = g_list_reverse(*to_detach);
-  }
+  if(response == GTK_RESPONSE_ACCEPT) _modchooser_collect(store, to_attach, to_detach);
 
   gtk_widget_destroy(dialog);
   g_object_unref(store);
   dt_gui_refocus_parent(parent);
 
   return response == GTK_RESPONSE_ACCEPT;
+}
+
+/* Gives a module a drawn mask of its own -- an empty group named after it, with drawn blending
+ * switched on -- and answers it, writing its id to own_id. Answers NULL if the form could not be
+ * made; the abandoned one is registered in dev->allforms and released with the image. */
+static dt_masks_form_t *_module_create_own_mask(dt_develop_t *dev, dt_iop_module_t *module, int *own_id)
+{
+  dt_masks_form_t *own = dt_masks_create_ext(dev, DT_MASKS_GROUP);
+  if(IS_NULL_PTR(own)) return NULL;
+
+  gchar *name = dt_dev_get_masks_group_name(module);
+  g_strlcpy(own->name, name, sizeof(own->name));
+  dt_free(name);
+
+  dt_masks_form_info_t own_info = { 0 };
+  if(!dt_masks_form_get_info(own, &own_info)) return NULL;
+  *own_id = own_info.formid;
+
+  dt_masks_append_form(dev, own);
+
+  // A module's blend_params are its own history entry; the forms get one of their own later.
+  if(dt_iop_gui_blend_set_drawn_mask_group(module, *own_id))
+    dt_dev_add_history_item(dev, module, TRUE, TRUE);
+
+  return own;
 }
 
 /* Puts the row's form to work in the modules the user picks.
@@ -1090,25 +1115,8 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
 
     if(IS_NULL_PTR(own) || !(own->type & DT_MASKS_GROUP))
     {
-      // No mask of its own yet: give it one, named after it, and switch drawn blending on.
-      own = dt_masks_create_ext(dev, DT_MASKS_GROUP);
+      own = _module_create_own_mask(dev, module, &own_id);
       if(IS_NULL_PTR(own)) break;
-
-      gchar *name = dt_dev_get_masks_group_name(module);
-      g_strlcpy(own->name, name, sizeof(own->name));
-      dt_free(name);
-
-      dt_masks_form_info_t own_info = { 0 };
-      if(!dt_masks_form_get_info(own, &own_info)) break;
-      own_id = own_info.formid;
-
-      dt_masks_append_form(dev, own);
-
-      if(dt_iop_gui_blend_set_drawn_mask_group(module, own_id))
-      {
-        // A module's blend_params are its own history entry; the forms get one of their own below.
-        dt_dev_add_history_item(dev, module, TRUE, TRUE);
-      }
 
       created_id = own_id;
       created_count++;
@@ -1144,7 +1152,7 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
 static void _tree_row_add_to_group(dt_shape_manager_list_t *list, GtkTreeModel *model, GtkTreeIter *iter)
 {
   dt_lib_module_t *self = list->self;
-  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
+  const dt_shape_manager_t *const lm = (const dt_shape_manager_t *)self->data;
   dt_develop_t *const dev = dt_dev_get_global();
 
   // The same question the icon was drawn from, so a greyed "+" cannot act.
@@ -1755,6 +1763,101 @@ static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel 
   return TRUE;
 }
 
+/* What the action column's icon does depends on the row's depth: a top-level row owns its shape
+ * and deleting it is permanent, a nested one only holds a membership. */
+static const char *_tooltip_action_text(const int grid)
+{
+  return (grid == 0) ? _("Permanently delete this shape. It is detached from every mask "
+                         "and removed from the list of available shapes.")
+                     : _("Detach this shape from the mask. The shape is kept and stays "
+                         "available for reuse.");
+}
+
+/* The chooser manages attachments for whatever the row holds, so the text names it. */
+static gchar *_tooltip_assign_text(GtkTreeModel *model, GtkTreeIter *iter)
+{
+  int fid = -1;
+  _shape_manager_get_values(model, iter, NULL, NULL, &fid);
+
+  dt_masks_form_info_t row_info = { 0 };
+  dt_masks_form_get_info(dt_masks_get_from_id(dt_dev_get_global(), fid), &row_info);
+
+  return g_strdup_printf(_("Manage which modules use this %s. A mask is created for the "
+                           "ticked ones that have none, and shared between them."),
+                         row_info.is_group ? _("group") : _("shape"));
+}
+
+/* The "+" says what it will do, so it has to name what is selected right now -- and when it is
+ * dead, which of the reasons it is dead for. The refusals are read off the same questions
+ * _row_can_be_added() asks, so the wording can never disagree with the icon. */
+static gchar *_tooltip_add_text(const dt_shape_manager_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
+{
+  const int group_id = _selected_group_in_module_list(lm);
+  const dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), group_id);
+
+  if(IS_NULL_PTR(grp))
+    return g_strdup(_("Select a mask in the module groups list to add this shape to it."));
+
+  if(_row_can_be_added(lm, model, iter))
+    return g_strdup_printf(_("Add this to the mask '%s'."), grp->name);
+
+  int fid = -1;
+  _shape_manager_get_values(model, iter, NULL, NULL, &fid);
+  dt_develop_t *const dev = dt_dev_get_global();
+
+  if(dt_masks_group_contains(dev, group_id, fid) == DT_MASKS_OK)
+    return g_strdup_printf(_("This is already part of the mask '%s'."), grp->name);
+
+  if(dt_masks_group_contains(dev, fid, group_id) == DT_MASKS_OK)
+    return g_strdup_printf(_("This group cannot be added to the mask '%s': it already contains it."),
+                           grp->name);
+
+  // The remaining refusal: every shape it holds is already in the target.
+  return g_strdup_printf(_("The mask '%s' already uses every shape of this group."), grp->name);
+}
+
+/* The tooltip of the row's buttons, answered from the column the pointer is over.
+ *
+ * The pointer's column has to be asked here rather than left to gtk_tree_view_get_tooltip_context(),
+ * which reports the row but not the column, and rewrites x/y on the way.
+ *
+ * @return whether the pointer was over a button column, i.e. whether the tooltip was set. */
+static gboolean _tree_button_tooltip(const dt_shape_manager_list_t *list, GtkTreeView *tree_view,
+                                     const gint x, const gint y, GtkTooltip *tooltip)
+{
+  gint bx = 0, by = 0;
+  gtk_tree_view_convert_widget_to_bin_window_coords(tree_view, x, y, &bx, &by);
+
+  GtkTreePath *path = NULL;
+  GtkTreeViewColumn *column = NULL;
+  if(!gtk_tree_view_get_path_at_pos(tree_view, bx, by, &path, &column, NULL, NULL)) return FALSE;
+
+  const gboolean on_action = (column == list->action_col);
+  const gboolean on_add = !IS_NULL_PTR(list->add_col) && (column == list->add_col);
+  const gboolean on_assign = !IS_NULL_PTR(list->assign_col) && (column == list->assign_col);
+
+  GtkTreeModel *model = gtk_tree_view_get_model(tree_view);
+  GtkTreeIter iter;
+  const gboolean got = (on_action || on_add || on_assign) && gtk_tree_model_get_iter(model, &iter, path);
+  gtk_tree_path_free(path);
+  if(!got) return FALSE;
+
+  if(on_action)
+  {
+    int grid = -1;
+    _shape_manager_get_values(model, &iter, NULL, &grid, NULL);
+    gtk_tooltip_set_text(tooltip, _tooltip_action_text(grid));
+    return TRUE;
+  }
+
+  gchar *text = on_assign ? _tooltip_assign_text(model, &iter)
+                          : _tooltip_add_text((const dt_shape_manager_t *)list->self->data, model, &iter);
+  gtk_tooltip_set_text(tooltip, text);
+  dt_free(text);
+
+  return TRUE;
+}
+
 static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboard_tip,
                                     GtkTooltip *tooltip, gpointer data)
 {
@@ -1766,94 +1869,9 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
   gboolean show = FALSE;
   const dt_shape_manager_list_t *list = (const dt_shape_manager_list_t *)data;
 
-  /* The action icon says what it does, and what it does depends on the row's depth, so the
-   * pointer's column is asked first: gtk_tree_view_get_tooltip_context() below reports the row
-   * but not the column, and it rewrites x/y on the way. Keyboard tooltips carry no position. */
-  if(!keyboard_tip && !IS_NULL_PTR(list))
-  {
-    gint bx = 0, by = 0;
-    gtk_tree_view_convert_widget_to_bin_window_coords(tree_view, x, y, &bx, &by);
-
-    GtkTreePath *action_path = NULL;
-    GtkTreeViewColumn *action_column = NULL;
-    if(gtk_tree_view_get_path_at_pos(tree_view, bx, by, &action_path, &action_column, NULL, NULL))
-    {
-      GtkTreeIter action_iter;
-      int grid = -1;
-      const gboolean on_action = (action_column == list->action_col);
-      const gboolean on_add = !IS_NULL_PTR(list->add_col) && (action_column == list->add_col);
-      const gboolean on_assign = !IS_NULL_PTR(list->assign_col) && (action_column == list->assign_col);
-      gboolean got = (on_action || on_add || on_assign)
-                     && gtk_tree_model_get_iter(model, &action_iter, action_path);
-      if(got) _shape_manager_get_values(model, &action_iter, NULL, &grid, NULL);
-      gtk_tree_path_free(action_path);
-
-      if(got && on_action)
-      {
-        gtk_tooltip_set_text(tooltip,
-                             (grid == 0)
-                                 ? _("Permanently delete this shape. It is detached from every mask "
-                                     "and removed from the list of available shapes.")
-                                 : _("Detach this shape from the mask. The shape is kept and stays "
-                                     "available for reuse."));
-        return TRUE;
-      }
-
-      if(got && on_assign)
-      {
-        int fid = -1;
-        _shape_manager_get_values(model, &action_iter, NULL, NULL, &fid);
-        dt_masks_form_info_t row_info = { 0 };
-        dt_masks_form_get_info(dt_masks_get_from_id(dt_dev_get_global(), fid), &row_info);
-
-        gchar *text = g_strdup_printf(_("Manage which modules use this %s. A mask is created for the "
-                                        "ticked ones that have none, and shared between them."),
-                                      row_info.is_group ? _("group") : _("shape"));
-        gtk_tooltip_set_text(tooltip, text);
-        dt_free(text);
-        return TRUE;
-      }
-
-      if(got && on_add)
-      {
-        // The button says what it will do, so it has to name what is selected right now -- and
-        // when it is dead, which of the reasons it is dead for.
-        const dt_shape_manager_t *lm = (const dt_shape_manager_t *)list->self->data;
-        const int group_id = _selected_group_in_module_list(lm);
-        const dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), group_id);
-
-        if(IS_NULL_PTR(grp))
-        {
-          gtk_tooltip_set_text(tooltip, _("Select a mask in the module groups list to add this shape to it."));
-        }
-        else
-        {
-          int fid = -1;
-          _shape_manager_get_values(model, &action_iter, NULL, NULL, &fid);
-          dt_develop_t *const dev = dt_dev_get_global();
-
-          // Same reasoning _row_can_be_added() applies, so the wording never disagrees with it.
-          const gboolean already_in = (dt_masks_group_contains(dev, group_id, fid) == DT_MASKS_OK);
-          const gboolean would_cycle = (dt_masks_group_contains(dev, fid, group_id) == DT_MASKS_OK);
-
-          gchar *text;
-          if(_row_can_be_added(lm, model, &action_iter))
-            text = g_strdup_printf(_("Add this to the mask '%s'."), grp->name);
-          else if(already_in)
-            text = g_strdup_printf(_("This is already part of the mask '%s'."), grp->name);
-          else if(would_cycle)
-            text = g_strdup_printf(_("This group cannot be added to the mask '%s': it already contains it."),
-                                   grp->name);
-          else
-            // The remaining refusal: every shape it holds is already in the target.
-            text = g_strdup_printf(_("The mask '%s' already uses every shape of this group."), grp->name);
-          gtk_tooltip_set_text(tooltip, text);
-          dt_free(text);
-        }
-        return TRUE;
-      }
-    }
-  }
+  // Keyboard tooltips carry no position, so they can only be about the row.
+  if(!keyboard_tip && !IS_NULL_PTR(list) && _tree_button_tooltip(list, tree_view, x, y, tooltip))
+    return TRUE;
 
   if(!gtk_tree_view_get_tooltip_context(tree_view, &x, &y, keyboard_tip, &model, &path, &iter)) return FALSE;
 
@@ -2648,17 +2666,15 @@ static gboolean _find_iter_by_parentid_and_formid(GtkTreeModel *model, int paren
   return found;
 }
 
-static void _shape_manager_handler_callback(gpointer instance __attribute__((unused)), const int formid, const int parentid, const dt_masks_event_t event, dt_lib_module_t *self)
+/* Answers whether the event names a row this panel is currently showing, refreshing every row
+ * that does when the event is an UPDATE.
+ *
+ * A single-row event can name a row in either list -- or in both, when a module group holds a
+ * shape the inventory also lists -- so both are asked. */
+static gboolean _shape_manager_refresh_row(dt_lib_module_t *self, dt_shape_manager_t *lm,
+                                           const int formid, const int parentid,
+                                           const dt_masks_event_t event)
 {
-  if(IS_NULL_PTR(self)) return;
-
-  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
-  if(IS_NULL_PTR(lm)) return;
-
-  /* The row a single-row event names can be in either list -- or in both, when a module group
-   * holds a shape the inventory also lists -- so both are asked, and an UPDATE refreshes every
-   * row that answers. `found` is what the branches below used to read off the one tree there
-   * was: whether the event named a row this panel is currently showing at all. */
   gboolean found = FALSE;
   for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
   {
@@ -2676,6 +2692,18 @@ static void _shape_manager_handler_callback(gpointer instance __attribute__((unu
     if(event == DT_MASKS_EVENT_UPDATE)
       _shape_manager_update_item(self, formid, parentid, lm, model, &iter);
   }
+
+  return found;
+}
+
+static void _shape_manager_handler_callback(gpointer instance __attribute__((unused)), const int formid, const int parentid, const dt_masks_event_t event, dt_lib_module_t *self)
+{
+  if(IS_NULL_PTR(self)) return;
+
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
+  if(IS_NULL_PTR(lm)) return;
+
+  const gboolean found = _shape_manager_refresh_row(self, lm, formid, parentid, event);
 
   if(found)
   {
