@@ -102,7 +102,10 @@ static gboolean _run(const char *query, const int snap_id, const int32_t imgid)
   return ok;
 }
 
-int dt_removed_image_repository_next_id(const int32_t imgid)
+/* The id the next snapshot of this image gets: one past the highest it already has. Called
+ * only from inside dt_removed_image_repository_create()'s transaction, which is what makes
+ * reading it and writing rows under it one step -- see the comment there. */
+static int _next_id(const int32_t imgid)
 {
   sqlite3_stmt *stmt = NULL;
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
@@ -132,11 +135,20 @@ static void _debug_memory(const char *stage, const int snap_id, const int32_t im
            stage, snap_id, imgid, (long long)sqlite3_memory_used());
 }
 
-gboolean dt_removed_image_repository_create(const int snap_id, const int32_t imgid)
+int dt_removed_image_repository_create(const int32_t imgid)
 {
   gboolean all_ok = TRUE;
 
   dt_database_start_transaction();
+
+  /* The id is taken INSIDE the transaction, which is what makes "read the highest id, then
+   * write rows under the next one" a single step: dt_database_start_transaction() holds the
+   * database write lock for the whole span, so no other thread can read the same id in
+   * between. Taken outside, two removals of the same image racing each other would not fail
+   * -- the twins carry no unique constraint, a `CREATE TABLE ... AS SELECT` copying none --
+   * they would silently share one snapshot, and discarding either undo record would take the
+   * other's rows with it. */
+  const int snap_id = _next_id(imgid);
 
   /* One exit, at the bottom: a table whose columns cannot be read and a statement that fails
    * are the same outcome here, since the transaction is rolled back whole and there is
@@ -175,7 +187,7 @@ gboolean dt_removed_image_repository_create(const int snap_id, const int32_t img
     dt_database_rollback_transaction();
 
   _debug_memory("staged", snap_id, imgid);
-  return all_ok;
+  return all_ok ? snap_id : -1;
 }
 
 gboolean dt_removed_image_repository_restore(const int snap_id, const int32_t imgid)

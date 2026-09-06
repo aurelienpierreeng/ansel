@@ -1471,9 +1471,9 @@ static void _image_remove(const int32_t imgid, const gboolean undo)
   {
     dt_undo_remove_t *rm = (dt_undo_remove_t *)g_malloc0(sizeof(dt_undo_remove_t));
     rm->imgid = imgid;
-    rm->snap_id = dt_removed_image_repository_next_id(imgid);
+    rm->snap_id = dt_removed_image_repository_create(imgid);
 
-    if(dt_removed_image_repository_create(rm->snap_id, imgid))
+    if(rm->snap_id >= 0)
       dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_REMOVE, rm, _pop_undo, _remove_undo_data_free);
     else
     {

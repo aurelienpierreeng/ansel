@@ -45,20 +45,22 @@
 
 G_BEGIN_DECLS
 
-/** @brief The id the next snapshot of @p imgid should use: one past the highest taken. */
-int dt_removed_image_repository_next_id(const int32_t imgid);
-
 /**
  * @brief Copy every row @p imgid owns out of `main`, so the removal about to happen can be undone.
  *
  * @details Call this BEFORE anything touches the image: the group membership of the images
  * staying behind is part of the snapshot, and removing a group's leader rewrites it.
  *
- * @return TRUE when every statement succeeded. The whole thing is one transaction and rolls
- *         back otherwise, in which case the caller must remove the image without an undo
- *         record rather than record one that cannot restore anything.
+ * The snapshot id is allocated here rather than asked for separately, so that reading the
+ * highest id an image already has and writing rows under the next one happen inside the same
+ * transaction.
+ *
+ * @return The snapshot id, to be handed back to restore() and clear(), or -1 when a statement
+ *         failed. The whole thing is one transaction and rolls back in that case, and the
+ *         caller must remove the image without an undo record rather than record one that
+ *         cannot restore anything.
  */
-gboolean dt_removed_image_repository_create(const int snap_id, const int32_t imgid);
+int dt_removed_image_repository_create(const int32_t imgid);
 
 /**
  * @brief Copy snapshot @p snap_id of @p imgid back into `main`, film roll included.
