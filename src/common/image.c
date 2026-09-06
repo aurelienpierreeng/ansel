@@ -1441,9 +1441,16 @@ static void _remove_undo_data_free(gpointer data)
 
   /* The record is gone, so the removal it could have undone is now permanent. Nothing to
    * drop once the connection is closed, though: the staging tables are `memory.` ones and
-   * went with it. That is not a corner case -- dt_undo_cleanup() runs AFTER
-   * dt_database_close() at shutdown, so this is the path taken by every record still held
-   * when the application quits. */
+   * went with it.
+   *
+   * No reachable path takes that branch today, and the check stays anyway. dt_undo_cleanup()
+   * does run after dt_database_close() at shutdown, but it finds an empty list: the GUI's
+   * teardown calls dt_ctl_switch_mode_to(""), and switching to no view begins by clearing
+   * DT_UNDO_ALL -- while the database is still open. Without a GUI the order reverses, but
+   * then nothing can have recorded a removal either, both callers of dt_control_remove_images()
+   * being GUI ones. So this guards an ordering that nothing enforces, for the cost of one
+   * call: dropping it would cost an abort on quit in a debug build (the assert inside
+   * DT_DEBUG_SQLITE3_PREPARE_V2) the day either half of that changes. */
   if(dt_database_is_open())
     dt_removed_image_repository_clear(undo->snap_id, undo->imgid);
 

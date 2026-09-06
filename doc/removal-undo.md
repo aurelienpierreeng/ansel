@@ -37,9 +37,12 @@ delete-from-disk job and the duplicate-undo path call.
 
 ### The undo window closes when the view is left
 
-`views/lighttable.c`'s `enter()` calls `dt_undo_clear(dt_undo_get_global(),
-DT_UNDO_LIGHTTABLE)`, and `DT_UNDO_REMOVE` is part of that mask. Going to the darkroom and
-coming back discards the record, which frees the snapshot and makes the removal permanent.
+Leaving is enough, and coming back is not required: `dt_view_manager_switch_by_view()`
+(`views/view.c`) clears `DT_UNDO_ALL` on EVERY switch, before the old view's `leave()` has
+even run. `views/lighttable.c`'s `enter()` then clears `DT_UNDO_LIGHTTABLE` as well, and
+`DT_UNDO_REMOVE` is in both masks. Either way the record is discarded, which frees the
+snapshot and makes the removal permanent.
+
 That is the same lifetime every other lighttable undo has; the difference is that here it is
 also the point of no return for data the database was the only holder of.
 
@@ -115,16 +118,46 @@ development change and wrong for a removal: the buffer outlives the row, and on 
 8x8 husk that no later render replaces. Only a developed image shows it — an unaltered one
 comes back from the embedded JPEG and never asks for the input.
 
-### The staging tables die with the connection, and the undo stack outlives it
+### The staging tables die with the connection, and the guard for that is unreachable
 
-`memory.` is per-connection, so the twins exist only as long as the database is open. At
-shutdown `dt_database_close()` runs BEFORE `dt_undo_cleanup()`, which is what frees every
-undo record still held -- so the free callback of a removal the user never undid runs against
-a closed connection. `_remove_undo_data_free()` (`common/image.c`) checks
-`dt_database_is_open()` first: there is nothing to drop, the tables went with the connection.
-Without that check the ten DELETEs fire on a NULL handle, which the debug build's
-`assert(x == SQLITE_OK)` turns into an abort on quit, and which a platform whose SQLite is
-built without API armor turns into a crash.
+`memory.` is per-connection, so the twins exist only as long as the database is open, and
+`_remove_undo_data_free()` (`common/image.c`) checks `dt_database_is_open()` before trying to
+drop a snapshot: there would be nothing to drop, the tables having gone with the connection.
+
+`dt_undo_cleanup()` does run after `dt_database_close()` at shutdown, which is what the check
+reads as its reason. Measured on a debug build, it is not: the four records of a removal that
+was never undone are freed 1.6 s EARLIER, with the database still open. The GUI teardown calls
+`dt_ctl_switch_mode_to("")` (`darktable.c`) well before the close; an empty view name is the
+`switching_to_none` case of `dt_view_manager_switch()`, which calls
+`dt_view_manager_switch_by_view()` with a NULL view anyway, and its first act is
+`dt_undo_clear(..., DT_UNDO_ALL)`. `dt_undo_cleanup()` then finds an empty list.
+(`dt_view_manager_cleanup()` is not involved -- it only unloads the view modules.)
+
+Without a GUI the order does reverse, but nothing can have recorded a removal either: both
+callers of `dt_control_remove_images()` -- `libs/collect.c` and `gui/dtgtk/thumbtable.c` --
+are GUI ones. So no reachable path runs that callback against a closed connection today.
+
+The check stays regardless. It costs one call, it cannot be exercised by a test, and it is
+what stops a debug build from aborting on quit inside `DT_DEBUG_SQLITE3_PREPARE_V2`'s assert
+-- and a SQLite built without API armor from crashing -- the day either half of that ordering
+changes.
+
+### The image cache entry of a removed image, and the deadlock it used to cause
+
+Removing an image deletes its row while the lighttable is still showing it, so the next
+thumbnail refresh asks the image cache for something the database no longer has. The entry is
+re-created, `dt_image_repository_load()` fails, and it stays in the cache with
+`id == UNKNOWN_IMAGE` -- locked, because that is how it was asked for.
+
+Releasing it used to do nothing: both release functions guarded on `img->id <= 0`. The entry
+stayed locked for the life of the process, and Ctrl+Z then hung the GUI thread inside
+`dt_image_history_changed()`, waiting on a write lock nobody held -- `dt_cache_get()` spins on
+`trywrlock`, which never yields. It looks like a crash and is not: the application is frozen and
+has to be killed, which is what actually loses the snapshots, `memory.` going with the process.
+
+Both release functions now guard the pointer only, and `dt_image_cache_testget()` refuses to
+hand out an invalid entry at all. See CLAUDE.md, "Releasing an image cache entry returns the
+LOCK, not the image".
 
 ### What it costs
 
