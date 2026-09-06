@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_LIBS_TAGGING_COMPLETION_H
+#define DT_LIBS_TAGGING_COMPLETION_H
 
 #include <gtk/gtk.h>
 
@@ -29,3 +30,5 @@ gboolean dt_tagging_completion_match_selected(GtkEntryCompletion *completion, Gt
 
 /** Cancel pending completion work and clear an entry while preserving its completion. */
 void dt_tagging_entry_clear(GtkEntry *entry);
+
+#endif // DT_LIBS_TAGGING_COMPLETION_H
