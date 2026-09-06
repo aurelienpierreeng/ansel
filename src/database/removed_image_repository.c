@@ -18,6 +18,8 @@
 
 #include "database/removed_image_repository.h"
 
+#include "common/logging.h"
+
 #include "database/database.h"
 #include "database/sql_debug.h"
 #include "system/macros.h"
@@ -116,6 +118,20 @@ int dt_removed_image_repository_next_id(const int32_t imgid)
   return snap_id;
 }
 
+/* What the staging actually costs, and whether discarding a record gives it back. A snapshot
+ * is a full copy of every row an image owns, held in an in-memory database until the undo
+ * record is dropped -- and neither VmRSS nor the process heap can answer whether it was given
+ * back, since SQLite keeps freed pages in its own cache and glibc rarely returns them to the
+ * kernel. sqlite3_memory_used() measures the one allocator that matters here. Under
+ * `-d memory` the pair of prints below draws the curve: it rises once per staged image and
+ * has to come back down as the records are discarded. */
+static void _debug_memory(const char *stage, const int snap_id, const int32_t imgid)
+{
+  // dt_print() gates on the channel itself, so this costs one atomic read when -d memory is off
+  dt_print(DT_DEBUG_MEMORY, "[removed_image] %s snapshot %d for image %d -- sqlite holds %lld bytes\n",
+           stage, snap_id, imgid, (long long)sqlite3_memory_used());
+}
+
 gboolean dt_removed_image_repository_create(const int snap_id, const int32_t imgid)
 {
   gboolean all_ok = TRUE;
@@ -158,6 +174,7 @@ gboolean dt_removed_image_repository_create(const int snap_id, const int32_t img
   else
     dt_database_rollback_transaction();
 
+  _debug_memory("staged", snap_id, imgid);
   return all_ok;
 }
 
@@ -243,6 +260,8 @@ void dt_removed_image_repository_clear(const int snap_id, const int32_t imgid)
   }
 
   _run("DELETE FROM memory.removed_groups WHERE snap_id = ?1 AND undo_imgid = ?2", snap_id, imgid);
+
+  _debug_memory("dropped", snap_id, imgid);
 }
 
 // clang-format off
