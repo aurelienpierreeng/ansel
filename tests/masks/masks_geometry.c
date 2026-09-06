@@ -931,8 +931,9 @@ static void _judge_raster(dt_develop_t *dev, dt_masks_form_t *form, const _brush
 /* The dense closed path into (px, py), stamping the feather discs as it goes. Returns the
  * sample count. */
 static int _path_dense_samples(const GList *const nodes, const int w, const int h, const _disc_pick_t pick,
-                               float *const px, float *const py, int32_t *const diff, const size_t stride)
+                               float *const px, float *const py, int32_t *const diff)
 {
+  const size_t stride = (size_t)w + 1;
   const float radius_scale = (float)MIN(w, h);
   int count = 0;
   for(const GList *l = nodes; l; l = l->next)
@@ -968,9 +969,12 @@ static int _path_dense_samples(const GList *const nodes, const int w, const int 
 
 /* Where the closed path crosses each row, sampled at the row's centre. Two passes: with
  * @p xs NULL only the per-row counts are taken; with it, the crossings are written at the
- * @p row_at offsets and the counts rebuilt. */
+ * @p row_at offsets, never past @p capacity, and the counts rebuilt. The two passes walk the
+ * same edges and agree, but the bound is what makes that a property of the code rather than
+ * of the reader. */
 static void _path_row_crossings(const float *const px, const float *const py, const int count, const int h,
-                                int *const row_count, const int *const row_at, float *const xs)
+                                int *const row_count, const int *const row_at, float *const xs,
+                                const int capacity)
 {
   memset(row_count, 0, sizeof(int) * (size_t)h);
   for(int i = 0; i < count; i++)
@@ -995,7 +999,9 @@ static void _path_row_crossings(const float *const px, const float *const py, co
     const int yb = MIN((int)ceilf(y1 - 0.5f), h);
     for(int y = ya; y < yb; y++)
     {
-      if(!IS_NULL_PTR(xs)) xs[row_at[y] + row_count[y]] = x0 + (x1 - x0) * (((float)y + 0.5f) - y0) / (y1 - y0);
+      const int at = row_at[y] + row_count[y];
+      if(!IS_NULL_PTR(xs) && at >= capacity) continue;
+      if(!IS_NULL_PTR(xs)) xs[at] = x0 + (x1 - x0) * (((float)y + 0.5f) - y0) / (y1 - y0);
       row_count[y]++;
     }
   }
@@ -1013,26 +1019,26 @@ static void _path_interior(const float *const px, const float *const py, const i
     free(row_at);
     return;
   }
-  _path_row_crossings(px, py, count, h, row_count, row_at, NULL);
+  _path_row_crossings(px, py, count, h, row_count, row_at, NULL, 0);
   int total = 0;
   for(int y = 0; y < h; y++)
   {
     row_at[y] = total;
     total += row_count[y];
   }
-  float *xs = (float *)malloc(sizeof(float) * (size_t)MAX(total, 1));
+  float *xs = (float *)malloc(sizeof(float) * (size_t)(total + 1));
   if(IS_NULL_PTR(xs))
   {
     free(row_count);
     free(row_at);
     return;
   }
-  _path_row_crossings(px, py, count, h, row_count, row_at, xs);
+  _path_row_crossings(px, py, count, h, row_count, row_at, xs, total);
 
   for(int y = 0; y < h; y++)
   {
     float *const row = xs + row_at[y];
-    const int m = row_count[y];
+    const int m = MIN(row_count[y], total - row_at[y]);
     /* insertion sort: a row rarely has more than a handful of crossings */
     for(int a = 1; a < m; a++)
     {
@@ -1063,7 +1069,8 @@ static void _polygon_disc_union(const GList *const nodes, const int w, const int
                                 uint8_t *const map)
 {
   memset(map, 0, (size_t)w * h);
-  const int n = g_list_length((GList *)nodes);
+  int n = 0;
+  for(const GList *l = nodes; l; l = l->next) n++;
   if(n < 3) return;
 
   const size_t stride = (size_t)w + 1;
@@ -1072,7 +1079,7 @@ static void _polygon_disc_union(const GList *const nodes, const int w, const int
   float *py = (float *)malloc(sizeof(float) * (size_t)n * PATH_SAMPLES_PER_SEGMENT);
   if(!IS_NULL_PTR(diff) && !IS_NULL_PTR(px) && !IS_NULL_PTR(py))
   {
-    const int count = _path_dense_samples(nodes, w, h, pick, px, py, diff, stride);
+    const int count = _path_dense_samples(nodes, w, h, pick, px, py, diff);
     _path_interior(px, py, count, w, h, diff, stride);
     for(int y = 0; y < h; y++)
     {

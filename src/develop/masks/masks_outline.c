@@ -123,7 +123,9 @@ gboolean dt_masks_outline_short_way(const float *const centre, const float *cons
  * thousand discs on a stroke of a hundred thousand samples. */
 typedef struct _outline_disc_t
 {
-  float x, y, r;
+  float x;
+  float y;
+  float r;
 } _outline_disc_t;
 
 /* is @p b strictly inside disc @p d, by more than the boundary tolerance */

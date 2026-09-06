@@ -316,8 +316,8 @@ static gboolean _polygon_is_clockwise(dt_masks_form_t *mask_form)
  *
  * This is used when the border has gaps, especially near_handle sharp nodes.
  */
-static void _polygon_points_recurs_border_gaps(float *center_max, float *border_min, float *border_max,
-                                               dt_masks_dynbuf_t *draw_points,
+static void _polygon_points_recurs_border_gaps(const float *const center_max, const float *const border_min,
+                                               const float *const border_max, dt_masks_dynbuf_t *draw_points,
                                                dt_masks_dynbuf_t *draw_border,
                                                gboolean clockwise)
 {
@@ -568,10 +568,7 @@ static void _polygon_joint_arc(const _polygon_walk_t *const w, const float *cons
 {
   if(fabsf(to[0] - from[0]) <= 1.0f && fabsf(to[1] - from[1]) <= 1.0f) return;
   const gboolean clockwise = dt_masks_outline_short_way(centre, from, to, w->clockwise);
-  float c[2] = { centre[0], centre[1] };
-  float f[2] = { from[0], from[1] };
-  float t[2] = { to[0], to[1] };
-  _polygon_points_recurs_border_gaps(c, f, t, w->dpoints, w->dborder, clockwise);
+  _polygon_points_recurs_border_gaps(centre, from, to, w->dpoints, w->dborder, clockwise);
 }
 
 /* One segment of the walk: the joint at its start node, then every sample within a pixel of
@@ -816,16 +813,14 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
                mask_form->name, dt_get_wtime() - start2);
     return 0;
   }
-  else if(dt_masks_distort_transform(dist, iop_order, transform_direction, *point_buffer, *point_count))
+  else if(dt_masks_distort_transform(dist, iop_order, transform_direction, *point_buffer, *point_count)
+          && (IS_NULL_PTR(border_buffer)
+              || dt_masks_distort_transform(dist, iop_order, transform_direction, *border_buffer, *border_count)))
   {
-    if(IS_NULL_PTR(border_buffer)
-       || dt_masks_distort_transform(dist, iop_order, transform_direction, *border_buffer, *border_count))
-    {
-      if(dt_get_debug_flags() & DT_DEBUG_PERF)
-        dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_points transform took %0.04f sec\n", mask_form->name,
-                 dt_get_wtime() - start2);
-      return 0;
-    }
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+      dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_points transform took %0.04f sec\n", mask_form->name,
+               dt_get_wtime() - start2);
+    return 0;
   }
 
 fail:
