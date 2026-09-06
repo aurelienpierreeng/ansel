@@ -497,16 +497,17 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
       }
     }
 
-    if((dt_image_get_xmp_mode()) ||
-       dt_conf_get_bool("ui_last/import_last_tags_imported"))
+    // reading the photograph's own tags must not depend on the sidecar-WRITE preference, and
+    // the wipe below is only justified when the document actually carries a keyword bag: a
+    // keyword-less XMP leaves the image's tags alone. A full sidecar read lets the document
+    // replace the user tags (the darktable|* ones no XMP editor knows about are kept); an
+    // embedded read only adds to them, exactly like colour labels above.
+    if(FIND_XMP_TAG("Xmp.lr.hierarchicalSubject") || FIND_XMP_TAG("Xmp.dc.subject"))
     {
-      GList *tags = NULL;
-      // preserve dt tags which are not saved in xmp file
-      if(!exif_read) dt_tag_set_tags(tags, imgs, TRUE, TRUE, FALSE);
-      if(FIND_XMP_TAG("Xmp.lr.hierarchicalSubject"))
-        _exif_import_tags(img, pos);
-      else if(FIND_XMP_TAG("Xmp.dc.subject"))
-        _exif_import_tags(img, pos);
+      if(!exif_read) dt_tag_set_tags(NULL, imgs, TRUE, TRUE, FALSE);
+      _exif_import_tags(img, pos);
+      // the direct repository writes bypass dt_tag_*(), so no signal fires on its own
+      dt_metadata_tags_changed();
     }
 
     /* read gps location */
@@ -2303,27 +2304,29 @@ static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos)
     char tagbuf[1024];
     std::string pos_str = pos->toString(i);
     g_strlcpy(tagbuf, pos_str.c_str(), sizeof(tagbuf));
-    int tagid = -1;
     char *tag = tagbuf;
     while(tag)
     {
       char *next_tag = strstr(tag, ",");
       if(next_tag) *(next_tag++) = 0;
-      // check if tag is available, get its id:
-      for(int k = 0; k < 2; k++)
+      g_strstrip(tag);
+      if(*tag != '\0')
       {
-        const guint found = dt_tag_repository_find_by_name(tag);
-        if(found > 0) tagid = (int)found;
-
-        if(tagid > 0) break;
-
-        fprintf(stderr, "[xmp_import] creating tag: %s\n", tag);
-        // create this tag (increment id, leave icon empty), retry.
-        dt_tag_repository_insert(tag);
+        // check if tag is available, get its id: create the tag when there is none
+        guint tagid = dt_tag_repository_find_by_name(tag);
+        if(tagid == 0)
+        {
+          fprintf(stderr, "[xmp_import] creating tag: %s\n", tag);
+          // create this tag (increment id, leave icon empty); insert returns its id
+          tagid = dt_tag_repository_insert(tag);
+        }
+        // associate image and tag. An id of 0 means the tag could not be created and
+        // attaching it anyway would only corrupt main.tagged_images.
+        if(tagid > 0)
+          dt_tag_repository_attach(tagid, img->id);
+        else
+          fprintf(stderr, "[xmp_import] cannot create tag: %s\n", tag);
       }
-      // associate image and tag.
-      dt_tag_repository_attach(tagid, img->id);
-
       tag = next_tag;
     }
   }
