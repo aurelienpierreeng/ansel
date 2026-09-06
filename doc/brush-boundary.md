@@ -1,8 +1,8 @@
-# The brush boundary: one geometry, two consumers
+# The brush and polygon boundary: one geometry, two consumers
 
-Status: implemented on `brush-boundary-rework` (issues #1352, #1360). Measured with
-`tests/masks/masks_geometry.c`; every number below comes from that corpus or from the
-reporters' own files.
+Status: the brush landed in #1381 (issues #1352, #1360); the polygon, and the shared boundary
+pass, on `polygon-boundary`. Measured with `tests/masks/masks_geometry.c`; every number below
+comes from that corpus or from the reporters' own files.
 
 ## What a brush is
 
@@ -184,13 +184,68 @@ What still differs, and why it should:
 
 ## The polygon
 
-A polygon's border is the offset of a closed path plus a feather band, not a disc union;
-its display still uses `dt_masks_border_find_self_intersections()` and
-`dt_masks_skip_ranges_build()`, which were the polygon's own machinery before the brush
-borrowed them. The definition transfers: an outer border sample is on the polygon's
-boundary if and only if it is neither inside the path (a point-in-polygon test) nor within
-the feather radius of it (the same window-and-buckets search over the path's samples).
-That is the next step, and it is not done here.
+A polygon's mask is its path's interior, filled by an even-odd scanline over the path
+samples, plus a feather: the union of a disc of the local radius over every point of the
+path, painted as spokes from each path sample to its border sample with a linear falloff.
+The border is the path offset outward, so it folds wherever a concave run bends tighter than
+the radius, exactly as a brush's does. The polygon had grown its own answer to that: a
+detector that intersected the border with itself on a pixel grid, and cut ranges that every
+consumer honoured — the GUI to draw, the hit-test to count crossings, and **the rasteriser**,
+which sent every spoke inside a cut to the fold's crossing point instead of its own border
+sample. The producer also fed its joint arcs from the buffer's tail and from ten samples
+before it, and its recursion wrote its caller's scratch — NaN at the top level, the origin
+below it — into the border wherever a segment had no direction: the brush's #1360, waiting
+for a pen on a polygon.
+
+Three things follow the brush's design now, and one more turned out to be wrong before:
+
+- **The walk takes everything from the node data and the segment end samples.** The path is
+  closed, so it is walked once with the border outside (the winding folds into the sign of
+  the radius); a degenerate segment contributes nothing and the joint that closes over it is
+  between its two live neighbours; the joint that closes the path is made explicitly at the
+  end, between the last live segment and the first. Joint arcs sweep the short way through
+  `dt_masks_outline_short_way()`, the winding deciding a tie.
+- **The outline is the boundary by the same definition**, through the same function
+  (`dt_masks_outline_boundary_skips()`, now in `masks_outline.c`): a border sample is on it iff
+  it is not strictly inside any other path sample's disc. That is sufficient for a polygon
+  without a point-in-path test: a border sample that lies inside the interior got there by
+  crossing the path, and the crossing point is a path sample less than a radius away.
+- **The rasteriser paints every spoke.** A spoke inside another disc paints nothing new under
+  the max-over-spokes fill, so the cuts had nothing to protect the raster from — and what
+  they did to it was measurably wrong. A redirected spoke ran from a fold sample to the
+  crossing point, which is √(r² + t²) away, farther than the radius, so its falloff was
+  stretched and every reflex notch came out brighter than the ideal `1 − d/r` feather:
+
+  | `polygon-comb`, pixels the two rasters disagree on | mean error | RMS error |
+  |---|---|---|
+  | before, redirected spokes | +0.0052 | 0.0090 |
+  | after, every spoke to its own border | −0.0013 | 0.0065 |
+
+  measured against the distance transform of the path. The cuts, the detector, the pixel
+  grid it ran on, the fill-gaps helper and `dt_masks_skip_ranges_build()` are gone, with the
+  unit test that pinned the latter's invariants; `dt_masks_skip_contains()` stays for the
+  brush's handle finder.
+
+The reported polygon (`polygon-1788045925`, issue #1313's second shape), judged the way the
+brush is now:
+
+| frame | outline samples inside the union, before | after |
+|---|---|---|
+| 5198×3904 | 633 | 0 |
+| 4000×3000 | 486 | 0 |
+| 2137×1603 | 189 | 0 |
+
+with 0 missing and 0 excess coverage in both states: the raster was complete before, the
+outline was not the boundary. The comb's folds the old cuts happened to handle (0 before and
+after), which is what made the previous detector look sufficient.
+
+## Circle and ellipse
+
+Nothing to propagate. A circle's border is a concentric circle of radius `r + feather`; an
+ellipse's is an ellipse with both semi-axes enlarged (or scaled, in proportional mode) —
+neither is a normal offset, so neither can fold, and the drawn curve is the contour the
+raster computes from the same parameters. Their outline is the boundary of their raster by
+construction.
 
 ## Judging it: the corpus
 

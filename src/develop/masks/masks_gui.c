@@ -5285,7 +5285,7 @@ gboolean dt_masks_debug_write_png(dt_develop_t *dev, dt_masks_form_t *form,
  * measured on issue #1313's brush at 50 to 137 pixels, one per node. A new sub-path per run
  * cannot do that, and stroking a path of several sub-paths costs nothing.
  *
- * @p skips must be sorted and disjoint (dt_masks_skip_ranges_build() guarantees it); pass NULL
+ * @p skips must be sorted and disjoint (dt_masks_outline_boundary_skips() guarantees it); pass NULL
  * and 0 for a shape with nothing to exclude.
  *
  * It lives here rather than in widgets/draw.h with the other drawing helpers because it needs

@@ -1101,11 +1101,12 @@ reading and died on the first measurement.
 Reproduce: export with `--export_masks 1`; page 1 of the TIFF is the mask. Flood-fill from the
 border and anything left unset is a hole.
 
-### A brush's geometry comes from its nodes, and its outline is the boundary of its raster
+### A brush's or polygon's geometry comes from its nodes, and its outline is the boundary of its raster
 
 A brush is the union of a disc of the local radius over every point of its spine, and the
-pipe paints it as spokes from every spine sample to its border sample. `doc/brush-boundary.md`
-is the full account; the rules that were each paid for by a reported defect:
+pipe paints it as spokes from every spine sample to its border sample; a polygon is its path's
+interior plus the same feather outside it. `doc/brush-boundary.md` is the full account; the
+rules that were each paid for by a reported defect:
 
 - **Nothing in `_brush_get_pts_border()` is read back out of the buffers.** Every cap, joint
   arc and stamp takes its centre and radius from the segment end samples that meet there and
@@ -1132,10 +1133,18 @@ is the full account; the rules that were each paid for by a reported defect:
   shortest-path: the two passes each cover one half of the tip disc, and which half is which
   is the pass's rotation. The #1313 cusp corpus, at all eight frame sizes, is the check.
 
-The corpus (`tests/masks/masks_geometry.c`) judges a brush in **both directions** — owed
+The corpus (`tests/masks/masks_geometry.c`) judges a brush and a polygon in **both directions** — owed
 coverage missing, and coverage no disc owes — and judges the drawn outline against the same
 two maps. `MASKS_DUMP_OUTLINE=1` dumps every outline. An owed-only oracle passed #1360 while
 half the frame was painted.
+
+- **The polygon's rasteriser paints every spoke too.** It used to send every spoke inside a
+  self-intersection cut to the fold's crossing point, which is √(r² + t²) from the sample —
+  farther than the radius — so every reflex notch came out brighter than the `1 − d/r` feather
+  (measured: mean error +0.0052 → −0.0013 against the path's distance transform). The boundary
+  pass is `masks_outline.c`, one function for both shapes; the shared detector, the polygon's
+  own, and `dt_masks_skip_ranges_build()` are gone. Circle and ellipse need none of this: their
+  borders are concentric or enlarged curves, never a normal offset, and cannot fold.
 
 ### The mouse wheel edits the property the user mapped it to; shapes never read modifiers
 
