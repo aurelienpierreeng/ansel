@@ -996,12 +996,12 @@ static void _path_row_crossings(const float *const px, const float *const py, co
     if(y0 == y1) continue;
     if(y0 > y1)
     {
-      float t = x0;
+      const float sx = x0;
+      const float sy = y0;
       x0 = x1;
-      x1 = t;
-      t = y0;
       y0 = y1;
-      y1 = t;
+      x1 = sx;
+      y1 = sy;
     }
     /* a row y is crossed if y0 <= y + 0.5 < y1 */
     const int ya = MAX((int)ceilf(y0 - 0.5f), 0);
