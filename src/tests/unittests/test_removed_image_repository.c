@@ -116,8 +116,8 @@ static void test_round_trip_restores_every_table(void **state)
   assert_true(film > 0 && imgid > 0);
   _seed_every_table(imgid, "testdb|roundtrip", "a creator");
 
-  const int snap = dt_removed_image_repository_next_id(imgid);
-  assert_true(dt_removed_image_repository_create(snap, imgid));
+  const int snap = dt_removed_image_repository_create(imgid);
+  assert_true(snap >= 0);
   _remove(imgid);
 
   /* The cascade really did take these, or the round trip below proves nothing. Only four
@@ -175,8 +175,8 @@ static void test_group_leader_restores_membership(void **state)
   assert_true(dt_image_repository_set_group(b, a));
   assert_true(dt_image_repository_set_group(c, a));
 
-  const int snap = dt_removed_image_repository_next_id(a);
-  assert_true(dt_removed_image_repository_create(snap, a));
+  const int snap = dt_removed_image_repository_create(a);
+  assert_true(snap >= 0);
   _remove(a);
 
   // the survivors were handed to a new leader -- that rewrite is what has to be undone, and
@@ -197,8 +197,8 @@ static void test_film_roll_comes_back_with_its_last_image(void **state)
   const int32_t imgid = testdb_make_image(film, "only.raw");
   assert_true(film > 0 && imgid > 0);
 
-  const int snap = dt_removed_image_repository_next_id(imgid);
-  assert_true(dt_removed_image_repository_create(snap, imgid));
+  const int snap = dt_removed_image_repository_create(imgid);
+  assert_true(snap >= 0);
   _remove(imgid);
 
   // dt_film_remove_empty(): the roll's last image took the roll with it
@@ -231,12 +231,12 @@ static void test_partial_undo_repoints_a_departed_leader(void **state)
   /* b leaves first, so ITS snapshot still names a as the group leader. Then a leaves too.
    * Undoing only b is the case the restore has to survive: the group_id it wants to write
    * back names an image that is not coming with it. */
-  const int snap_b = dt_removed_image_repository_next_id(b);
-  assert_true(dt_removed_image_repository_create(snap_b, b));
+  const int snap_b = dt_removed_image_repository_create(b);
+  assert_true(snap_b >= 0);
   _remove(b);
 
-  const int snap_a = dt_removed_image_repository_next_id(a);
-  assert_true(dt_removed_image_repository_create(snap_a, a));
+  const int snap_a = dt_removed_image_repository_create(a);
+  assert_true(snap_a >= 0);
   _remove(a);
 
   assert_true(dt_removed_image_repository_restore(snap_b, b));
@@ -264,14 +264,14 @@ static void test_whole_group_removed_and_fully_undone_keeps_one_group(void **sta
   assert_true(dt_image_repository_set_group(c, a));
 
   // the job walks the selection in id order, snapshotting each image before it deletes it
-  const int snap_a = dt_removed_image_repository_next_id(a);
-  assert_true(dt_removed_image_repository_create(snap_a, a));
+  const int snap_a = dt_removed_image_repository_create(a);
+  assert_true(snap_a >= 0);
   _remove(a);
-  const int snap_b = dt_removed_image_repository_next_id(b);
-  assert_true(dt_removed_image_repository_create(snap_b, b));
+  const int snap_b = dt_removed_image_repository_create(b);
+  assert_true(snap_b >= 0);
   _remove(b);
-  const int snap_c = dt_removed_image_repository_next_id(c);
-  assert_true(dt_removed_image_repository_create(snap_c, c));
+  const int snap_c = dt_removed_image_repository_create(c);
+  assert_true(snap_c >= 0);
   _remove(c);
 
   // one undo group, popped last-recorded-first
@@ -296,8 +296,8 @@ static void test_clear_drops_the_snapshot(void **state)
   const int32_t imgid = testdb_make_image(film, "a.raw");
   _seed_every_table(imgid, "testdb|clear", "gone");
 
-  const int snap = dt_removed_image_repository_next_id(imgid);
-  assert_true(dt_removed_image_repository_create(snap, imgid));
+  const int snap = dt_removed_image_repository_create(imgid);
+  assert_true(snap >= 0);
   _remove(imgid);
 
   // this is what makes a removal permanent: the undo record was discarded
@@ -317,17 +317,17 @@ static void test_successive_snapshots_do_not_collide(void **state)
   assert_true(dt_image_repository_set_flags(imgid, SEEDED_FLAGS));
   assert_true(dt_image_repository_set_group(imgid, imgid));
 
-  const int first = dt_removed_image_repository_next_id(imgid);
-  assert_true(dt_removed_image_repository_create(first, imgid));
+  const int first = dt_removed_image_repository_create(imgid);
+  assert_true(first >= 0);
   _remove(imgid);
   assert_true(dt_removed_image_repository_restore(first, imgid));
 
-  /* Remove and restore the SAME image again. next_id() must not hand back the id the first
+  /* Remove and restore the SAME image again. create() must not hand back the id the first
    * snapshot still occupies: two copies of the row under one key would leave the primary key
    * to decide which one the restore inserts. */
-  const int second = dt_removed_image_repository_next_id(imgid);
+  const int second = dt_removed_image_repository_create(imgid);
+  assert_true(second >= 0);
   assert_int_not_equal(second, first);
-  assert_true(dt_removed_image_repository_create(second, imgid));
   _remove(imgid);
   assert_true(dt_removed_image_repository_restore(second, imgid));
 
