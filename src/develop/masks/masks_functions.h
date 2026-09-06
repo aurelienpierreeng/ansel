@@ -161,16 +161,20 @@ dt_masks_raster_result_t dt_masks_get_points_border(struct dt_develop_t *dev, dt
                                dt_masks_skip_range_t **border_skips, int *border_skip_count,
                                int source, dt_iop_module_t *module);
 
-/** Find every place a shape's closed border contour crosses itself, writing one (i, j) sample-
- * index pair per crossing into @p crossing_pairs (2 floats each, at most @p max_pairs pairs) and
- * returning how many were written. @p header is where the border samples start, past the shape's
- * per-node header triplets. Feed the result to dt_masks_skip_ranges_build().
- *
- * Exact (segment intersection over a spatial hash), unlike polygon.c's own pixel-grid detector,
- * and the reported indices sit AT the crossing so a cut made between them closes. */
-int dt_masks_border_find_self_intersections(const float *const border, const int border_count,
-                                            const int header, float *const crossing_pairs,
-                                            const int max_pairs);
+/** The boundary of a shape's outline: which border samples are not strictly inside any other
+ * sample's disc, published as the skip ranges every consumer of the outline already reads.
+ * @p points and @p border are the index-aligned centreline and border arrays, @p header the
+ * per-node header triplets both carry. See masks_outline.c. */
+int dt_masks_outline_boundary_skips(const float *const points, const float *const border, const int count,
+                                    const int header, dt_masks_skip_range_t **skips_out);
+/** Which way round a joint arc from @p from to @p to about @p centre goes: the short way, or
+ * @p default_clockwise on a tie. */
+gboolean dt_masks_outline_short_way(const float *const centre, const float *const from, const float *const to,
+                                    const gboolean default_clockwise);
+/** A border sample at @p radius from @p centre in the direction (dx, dy); (1, 0) if none. */
+void dt_masks_outline_offset_along(const float *const centre, float dx, float dy, const float radius,
+                                   float *const border);
+
 
 /** Is @p index inside one of the excluded spans? For a consumer that SEARCHES the outline rather
  * than walking it; a forward walk should use dt_masks_draw_outline_runs() instead. */
@@ -244,28 +248,6 @@ int dt_masks_points_shift_to_source(struct dt_develop_t *dev, const struct dt_io
 void dt_masks_sample_grid_interpolate(const float *const points, const dt_masks_sample_grid_t *const grid,
                                       float *const buffer, const int buf_width, const int buf_height,
                                       int *const endx, int *const endy);
-/**
- * @brief Turn the self-intersection detector's raw crossing pairs into the disjoint,
- * forward-only skip ranges every border walk consumes. Pure, allocation-free.
- *
- * @details Each pair (v, w) names two raw border indices where the offset curve crosses
- * itself, in whatever order the detector's discovery walk met them. This normalizes each to
- * forward order, DROPS a pair whose forward span is the longer arc of the closed contour (a
- * fold straddling the buffer seam -- issue #1313: encoding it as [min,max] named its
- * complement and swallowed the shape; the sentinels, and now the ranges, can only express a
- * forward skip, so that fold is left in and the damage stays bounded by the fold itself),
- * then sorts and merges overlaps so the result is disjoint (unmerged overlapping ranges are
- * how the walk got trapped in a cycle once already).
- *
- * @param crossing_pairs 2*pair_count floats, as _polygon_find_self_intersection() emits them.
- * @param point_count    Number of points in the border buffer (bounds the indices).
- * @param out            Capacity >= pair_count entries. Receives the merged ranges.
- * @param dropped_wrapping (may be NULL) how many seam-straddling pairs were dropped.
- * @return the number of ranges written to @p out.
- */
-int dt_masks_skip_ranges_build(const float *crossing_pairs, int pair_count, int point_count,
-                               dt_masks_skip_range_t *out, int *dropped_wrapping);
-
 /**
  * @brief Ray-cast point-in-polygon over a form point stream, honouring skip ranges.
  *

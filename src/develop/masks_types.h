@@ -202,10 +202,13 @@ typedef struct dt_masks_form_info_t
  * @brief One cut in a shape's border outline: while walking the border buffer forward, on
  * reaching index `jump_from`, resume at index `resume_at`.
  *
- * @details A polygon's border is its path offset outward by the feathering radius, and that
- * offset curve folds over itself at every concave run tighter than the radius. The folds are
- * found by _polygon_find_self_intersection() and must be skipped by every walk that counts
- * crossings (the hit-test and the rasterisers), or the fold is filled as if it were shape.
+ * @details A brush's or a polygon's border is its centreline offset by the local radius, and
+ * that offset curve folds over itself wherever the centreline bends tighter than the radius,
+ * and runs through the shape wherever the centreline comes back on itself. The samples that
+ * are not on the shape's boundary are found by dt_masks_outline_boundary_skips() -- a border
+ * sample is on the boundary iff it is not strictly inside any other sample's disc -- and are
+ * skipped by the GUI's drawer and by every walk that counts crossings (the hit-test). The
+ * rasterisers paint every sample: a spoke inside another disc paints nothing new.
  *
  * These used to travel IN-BAND, encoded into the border buffer itself: NaN in the x slot,
  * the jump target smuggled as an integer in the float y slot. Both bugs this mechanism ever
@@ -215,7 +218,7 @@ typedef struct dt_masks_form_info_t
  * out-of-band range cannot express either mistake: `resume_at > jump_from` IS the
  * forward-only invariant, checkable at a glance and validated by the consumers.
  *
- * Invariants a producer must guarantee (dt_masks_skip_ranges_build() does):
+ * Invariants a producer must guarantee (dt_masks_outline_boundary_skips() does):
  *   - resume_at > jump_from (every skip moves the walk strictly forward);
  *   - ranges sorted by jump_from and pairwise disjoint (resume_at < next jump_from).
  */
