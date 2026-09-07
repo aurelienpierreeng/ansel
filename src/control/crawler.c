@@ -36,6 +36,7 @@
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 #include <glib/gstdio.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -74,8 +75,8 @@ typedef enum dt_control_crawler_cols_t
 typedef struct dt_control_crawler_result_t
 {
   int id;
-  time_t timestamp_xmp;
-  time_t timestamp_db;
+  int64_t timestamp_xmp;
+  int64_t timestamp_db;
   char *image_path, *xmp_path;
 } dt_control_crawler_result_t;
 
@@ -94,8 +95,9 @@ static void _free_crawler_results(GList *results)
 }
 
 static void _set_modification_time(char *filename,
-                                   const time_t timestamp)
+                                   const int64_t timestamp)
 {
+  const guint64 modification_time = (guint64)timestamp;
   GFile *gfile = g_file_new_for_path(filename);
 
   GFileInfo *info = g_file_query_info(
@@ -117,7 +119,7 @@ static void _set_modification_time(char *filename,
     g_file_info_set_attribute_uint64
       (info,
        G_FILE_ATTRIBUTE_TIME_MODIFIED,
-       timestamp);
+       modification_time);
 
     g_file_set_attributes_from_info(
       gfile,
@@ -673,12 +675,16 @@ static void _get_crawler_entry_from_model(GtkTreeModel *model,
                                           GtkTreeIter *iter,
                                           dt_control_crawler_result_t *entry)
 {
+  gint64 timestamp_db;
+  gint64 timestamp_xmp;
   gtk_tree_model_get(model, iter,
                      DT_CONTROL_CRAWLER_COL_IMAGE_PATH, &entry->image_path,
                      DT_CONTROL_CRAWLER_COL_ID,         &entry->id,
                      DT_CONTROL_CRAWLER_COL_XMP_PATH,   &entry->xmp_path,
-                     DT_CONTROL_CRAWLER_COL_TS_DB_INT,  &entry->timestamp_db,
-                     DT_CONTROL_CRAWLER_COL_TS_XMP_INT, &entry->timestamp_xmp, -1);
+                     DT_CONTROL_CRAWLER_COL_TS_DB_INT,  &timestamp_db,
+                     DT_CONTROL_CRAWLER_COL_TS_XMP_INT, &timestamp_xmp, -1);
+  entry->timestamp_db = timestamp_db;
+  entry->timestamp_xmp = timestamp_xmp;
 }
 
 
@@ -958,21 +964,21 @@ static void _oldest_button_clicked(GtkButton *button, gpointer user_data)
   gtk_spinner_stop(GTK_SPINNER(gui->spinner));
 }
 
-static gchar* str_time_delta(const int time_delta)
+static gchar* str_time_delta(const uint64_t time_delta)
 {
-  // display the time difference as a legible string
-  int seconds = time_delta;
+  uint64_t seconds = time_delta;
 
-  int minutes = seconds / 60;
+  uint64_t minutes = seconds / 60;
   seconds -= 60 * minutes;
 
-  int hours = minutes / 60;
+  uint64_t hours = minutes / 60;
   minutes -= 60 * hours;
 
-  const int days = hours / 24;
+  const uint64_t days = hours / 24;
   hours -= 24 * days;
 
-  return g_strdup_printf(_("%id %02dh %02dm %02ds"), days, hours, minutes, seconds);
+  return g_strdup_printf(_("%" PRIu64 "d %02" PRIu64 "h %02" PRIu64 "m %02" PRIu64 "s"),
+                        days, hours, minutes, seconds);
 }
 
 // show a popup window with a list of updated images/xmp files and allow the user to tell dt what to do about them
@@ -993,8 +999,8 @@ void dt_control_crawler_show_image_list(GList *images)
                                            G_TYPE_STRING, // xmp path
                                            G_TYPE_STRING, // timestamp from xmp
                                            G_TYPE_STRING, // timestamp from db
-                                           G_TYPE_INT,    // timestamp to db
-                                           G_TYPE_INT,
+                                           G_TYPE_INT64,  // timestamp to db
+                                           G_TYPE_INT64,
                                            G_TYPE_STRING, // report: newer version
                                            G_TYPE_STRING);// time delta
 
@@ -1004,14 +1010,20 @@ void dt_control_crawler_show_image_list(GList *images)
   {
     GtkTreeIter iter;
     dt_control_crawler_result_t *item = list_iter->data;
-    char timestamp_db[64], timestamp_xmp[64];
+    char timestamp_db[64] = { 0 }, timestamp_xmp[64] = { 0 };
     struct tm tm_stamp;
-    strftime(timestamp_db, sizeof(timestamp_db),
-             "%c", localtime_r(&item->timestamp_db, &tm_stamp));
-    strftime(timestamp_xmp, sizeof(timestamp_xmp),
-             "%c", localtime_r(&item->timestamp_xmp, &tm_stamp));
+    const time_t timestamp_db_time = (time_t)item->timestamp_db;
+    const time_t timestamp_xmp_time = (time_t)item->timestamp_xmp;
+    if(localtime_r(&timestamp_db_time, &tm_stamp))
+      strftime(timestamp_db, sizeof(timestamp_db), "%c", &tm_stamp);
+    if(localtime_r(&timestamp_xmp_time, &tm_stamp))
+      strftime(timestamp_xmp, sizeof(timestamp_xmp), "%c", &tm_stamp);
 
-    const time_t time_delta = llabs(item->timestamp_db - item->timestamp_xmp);
+    const uint64_t time_delta = item->timestamp_db >= item->timestamp_xmp
+                                   ? (uint64_t)item->timestamp_db - (uint64_t)item->timestamp_xmp
+                                   : (uint64_t)item->timestamp_xmp - (uint64_t)item->timestamp_db;
+    const gint64 timestamp_xmp_int = (gint64)item->timestamp_xmp;
+    const gint64 timestamp_db_int = (gint64)item->timestamp_db;
     gchar *timestamp_delta = str_time_delta(time_delta);
 
     gtk_list_store_append(store, &iter);
@@ -1022,8 +1034,8 @@ void dt_control_crawler_show_image_list(GList *images)
        DT_CONTROL_CRAWLER_COL_XMP_PATH, item->xmp_path,
        DT_CONTROL_CRAWLER_COL_TS_XMP, timestamp_xmp,
        DT_CONTROL_CRAWLER_COL_TS_DB, timestamp_db,
-       DT_CONTROL_CRAWLER_COL_TS_XMP_INT, item->timestamp_xmp,
-       DT_CONTROL_CRAWLER_COL_TS_DB_INT, item->timestamp_db,
+        DT_CONTROL_CRAWLER_COL_TS_XMP_INT, timestamp_xmp_int,
+        DT_CONTROL_CRAWLER_COL_TS_DB_INT, timestamp_db_int,
        DT_CONTROL_CRAWLER_COL_REPORT, (item->timestamp_xmp > item->timestamp_db)
                                       ? _("XMP")
                                       : _("database"),
