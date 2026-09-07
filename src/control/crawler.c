@@ -44,7 +44,6 @@
 #include "system/mem_alloc.h"
 #include "control/control.h"
 #include "control/jobs.h"
-#include "database/database.h"
 #include "database/image_repository.h"
 #include "common/image.h"
 #include "common/utility.h"
@@ -343,17 +342,23 @@ static void _crawl_image(const int32_t id,
 
     // TODO: decide if we want to remove the flag for images that lost
     // their extra file. currently we do (the else cases)
-    int new_flags = flags;
-    if(has_txt)
-      new_flags |= DT_IMAGE_HAS_TXT;
-    else
-      new_flags &= ~DT_IMAGE_HAS_TXT;
-    if(has_wav)
-      new_flags |= DT_IMAGE_HAS_WAV;
-    else
-      new_flags &= ~DT_IMAGE_HAS_WAV;
-    if(flags != new_flags)
-      dt_image_repository_set_flags(id, new_flags);
+    const int mask = DT_IMAGE_HAS_TXT | DT_IMAGE_HAS_WAV;
+    int value = 0;
+    if(has_txt) value |= DT_IMAGE_HAS_TXT;
+    if(has_wav) value |= DT_IMAGE_HAS_WAV;
+
+    /* Masked, never a whole-word write. `flags` was read from the row before this folder was
+     * listed, and that listing is a filesystem round-trip -- up to a second on a network
+     * share, longer on one that has gone away. A star rating or a colour label the user sets
+     * in that window lives in the same word, and writing the word back would silently revert
+     * it. These two bits are the only ones the crawl owns, so they are the only ones it
+     * writes; the row supplies the rest.
+     *
+     * The comparison below is only there to skip a write that would change nothing. It reads
+     * the stale copy on purpose: the bits it looks at are the ones nothing else touches, so
+     * the worst a stale answer can cost is one redundant UPDATE. */
+    if((flags & mask) != value)
+      dt_image_repository_set_flags_masked(id, mask, value);
   }
 
 done:
@@ -369,10 +374,27 @@ GList *dt_control_crawler_run(void)
           .folders = g_hash_table_new_full(g_str_hash, g_str_equal,
                                            dt_free_gpointer, _free_folder) };
 
-  // let's wrap this into a transaction, it might make it a little faster.
-  dt_database_start_transaction();
+  /* NO transaction around this walk, deliberately -- it used to carry one, inherited from the
+   * days when the crawl ran before the main window existed and nothing else could touch the
+   * database. It cannot stay now that this runs as a background job:
+   *
+   *  - dt_database_start_transaction() takes the module-wide _db_lock as a WRITER and holds it
+   *    until the matching release, so every other thread that opens a transaction -- the GUI
+   *    thread does so constantly -- would block for the whole crawl;
+   *  - the module owns ONE sqlite3 connection, and a transaction belongs to the connection
+   *    rather than to the thread, so any statement the GUI thread issues outside a transaction
+   *    of its own would silently execute inside OURS: not durable until we commit, and gone if
+   *    anything rolled us back;
+   *  - and what it spanned is not database work at all. _crawler_folder() lists a directory
+   *    from inside the callback, so the lock would be held across every filesystem round-trip
+   *    -- 1.1 s on the measured SMB share, and the full mount timeout when a share is gone.
+   *
+   * Nothing is lost by dropping it. The walk is a read; the only writes are the rare
+   * dt_image_repository_set_flags_masked() calls for an image whose .txt/.wav sibling appeared or
+   * disappeared, and the database runs `synchronous = OFF` with `journal_mode = MEMORY`
+   * (dt_database_open), so a commit costs no disk sync and batching them buys nothing.
+   */
   dt_image_repository_foreach_with_path(_crawl_image, &walk);
-  dt_database_release_transaction();
 
   g_hash_table_destroy(walk.folders);
 

@@ -41,6 +41,7 @@ static sqlite3_stmt *_image_write_history_hash_stmt = NULL;
 static sqlite3_stmt *_image_write_timestamp_select_stmt = NULL;
 static sqlite3_stmt *_image_write_timestamp_update_stmt = NULL;
 static sqlite3_stmt *_image_set_flags_stmt = NULL;
+static sqlite3_stmt *_image_set_flags_masked_stmt = NULL;
 static dt_pthread_mutex_t _image_stmt_mutex;
 static gsize _image_stmt_mutex_inited = 0;
 
@@ -730,6 +731,39 @@ gboolean dt_image_repository_set_flags(const int32_t imgid, const int flags)
   const gboolean ok = (sqlite3_step(_image_set_flags_stmt) == SQLITE_DONE);
   sqlite3_reset(_image_set_flags_stmt);
   sqlite3_clear_bindings(_image_set_flags_stmt);
+  dt_pthread_mutex_unlock(&_image_stmt_mutex);
+
+  return ok;
+}
+
+gboolean dt_image_repository_set_flags_masked(const int32_t imgid, const int mask, const int value)
+{
+  if(imgid <= 0 || mask == 0) return FALSE;
+
+  _image_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  if(IS_NULL_PTR(_image_set_flags_masked_stmt))
+  {
+    // The row supplies the bits outside the mask, so nothing this caller read earlier can be
+    // written back over them. Same shape as dt_image_repository_set_flag_among()'s
+    // `flags|?1` and its clearing twin, with both halves in one statement.
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "UPDATE main.images SET flags = (flags & ~?1) | (?2 & ?1)"
+                                " WHERE id = ?3",
+                                -1, &_image_set_flags_masked_stmt, NULL);
+  }
+  if(IS_NULL_PTR(_image_set_flags_masked_stmt))
+  {
+    dt_pthread_mutex_unlock(&_image_stmt_mutex);
+    return FALSE;
+  }
+
+  DT_DEBUG_SQLITE3_BIND_INT(_image_set_flags_masked_stmt, 1, mask);
+  DT_DEBUG_SQLITE3_BIND_INT(_image_set_flags_masked_stmt, 2, value);
+  DT_DEBUG_SQLITE3_BIND_INT(_image_set_flags_masked_stmt, 3, imgid);
+  const gboolean ok = (sqlite3_step(_image_set_flags_masked_stmt) == SQLITE_DONE);
+  sqlite3_reset(_image_set_flags_masked_stmt);
+  sqlite3_clear_bindings(_image_set_flags_masked_stmt);
   dt_pthread_mutex_unlock(&_image_stmt_mutex);
 
   return ok;
@@ -1617,6 +1651,11 @@ void dt_image_repository_cleanup(void)
   {
     sqlite3_finalize(_image_set_flags_stmt);
     _image_set_flags_stmt = NULL;
+  }
+  if(_image_set_flags_masked_stmt)
+  {
+    sqlite3_finalize(_image_set_flags_masked_stmt);
+    _image_set_flags_masked_stmt = NULL;
   }
 
   if(_image_stmt_mutex_inited)
