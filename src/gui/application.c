@@ -881,6 +881,61 @@ static gboolean _key_pressed(GtkWidget *w, GdkEventKey *event)
   return TRUE;
 }
 
+/* Keyboard trace for "-d input", installed by dt_gui_gtk_init() on that flag alone.
+ *
+ * A keystroke goes to whichever toplevel holds the focus, and each of them handles keys on
+ * its own: dt_accels_dispatch() sees the main window's, a dialog or a standalone panel sees
+ * its own, and a focused text entry swallows what it consumes before either. There is no
+ * single handler the whole program's keys pass through, so an emission hook takes them at
+ * the signal instead -- it runs ahead of every handler and whatever they return.
+ *
+ * The hook is on "event", NOT on "key-press-event". GtkWidget emits the generic signal
+ * first and only emits the specific one if nothing handled it, and the keys worth tracing
+ * are precisely the handled ones: dt_accels_dispatch() is connected to "event" on the main
+ * window and returns TRUE for every keystroke that fires a shortcut, so a hook on
+ * "key-press-event" prints every key the program ignores and none of the ones it acts on.
+ *
+ * One keystroke reaches the hook several times: gtk_propagate_event() hands it to the
+ * toplevel, which walks the focus chain until a widget handles it. It is the same GdkEvent
+ * throughout, so the first emission is printed and the repeats are skipped. Identity is the
+ * tuple the windowing system filled in, which two distinct keystrokes cannot share --
+ * auto-repeat does reuse a timestamp for the release and the press it pairs with, but those
+ * differ by type.
+ */
+static gboolean _log_key_event(GSignalInvocationHint *hint, guint n_params, const GValue *params, gpointer data)
+{
+  static GdkEventType last_type = GDK_NOTHING;
+  static guint32 last_time = 0;
+  static guint last_keyval = 0;
+  static guint last_state = 0;
+  static guint16 last_keycode = 0;
+
+  const GdkEventKey *event = (const GdkEventKey *)g_value_get_boxed(&params[1]);
+  if(IS_NULL_PTR(event) || (event->type != GDK_KEY_PRESS && event->type != GDK_KEY_RELEASE)) return TRUE;
+
+  if(event->type == last_type && event->time == last_time && event->keyval == last_keyval
+     && event->state == last_state && event->hardware_keycode == last_keycode)
+    return TRUE;
+
+  last_type = event->type;
+  last_time = event->time;
+  last_keyval = event->keyval;
+  last_state = event->state;
+  last_keycode = event->hardware_keycode;
+
+  // Same spelling as the shortcuts registry uses, so a trace line can be read against
+  // the accelerators the user configured.
+  gchar *accel = gtk_accelerator_name(event->keyval, event->state & gtk_accelerator_get_default_mod_mask());
+  GtkWidget *widget = GTK_WIDGET(g_value_get_object(&params[0]));
+  dt_print(DT_DEBUG_INPUT, "[input] key %s: %s (keyval 0x%x, keycode %u, state 0x%x) on %s\n",
+           (event->type == GDK_KEY_PRESS) ? "pressed" : "released", IS_NULL_PTR(accel) ? "<unnamed>" : accel,
+           event->keyval, (unsigned int)event->hardware_keycode, event->state,
+           IS_NULL_PTR(widget) ? "<none>" : G_OBJECT_TYPE_NAME(widget));
+  dt_free(accel);
+
+  return TRUE;
+}
+
 static gboolean _center_leave(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
   dt_control_mouse_leave();
@@ -1288,6 +1343,14 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   {
     g_list_free(input_devices);
     input_devices = NULL;
+  }
+
+  // The keystroke trace costs an emission hook on every event every widget receives --
+  // motion included -- so it is installed only when the channel it prints on is on. Debug
+  // flags are parsed from the command line before this runs and never change afterwards.
+  if(dt_get_debug_flags() & DT_DEBUG_INPUT)
+  {
+    g_signal_add_emission_hook(g_signal_lookup("event", GTK_TYPE_WIDGET), 0, _log_key_event, NULL, NULL);
   }
 
   // Gtk seems to capture some reserved shortcuts (Tab). We need to bypass it entirely
