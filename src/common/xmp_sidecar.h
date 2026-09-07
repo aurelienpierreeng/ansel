@@ -32,8 +32,8 @@
  * @details This is the half of the old `common/exif.cc` that is not about the photograph's
  * own description. It reads and writes `Xmp.darktable.history`, `masks_history`,
  * `iop_order_list` and their neighbours, so it necessarily names `develop/` (layer 5) and
- * `imageio/` (layer 6) -- eleven `dt_ioppr_*` symbols, `dt_develop_blend_params_t`,
- * `dt_masks_form_group_t`, `dt_imageio_dng_write_tiff_header`. That is precisely why it
+ * `imageio/` (layer 6) -- eleven `dt_ioppr_*` symbols, `dt_develop_blend_params_t`, and
+ * `dt_imageio_dng_write_tiff_header`. That is precisely why it
  * could not follow the tag half into `src/metadata` (layer 1), and why the metadata module
  * gate still reads zero without it.
  *
