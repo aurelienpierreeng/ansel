@@ -56,6 +56,7 @@ static dt_stroke_style_t _solid(const double width, const double r, const double
 
 static void _a_horizontal_line_paints_a_band_of_its_width(void **state)
 {
+  (void)state;
   cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 100, 20);
   const double xy[] = { 10.5, 10.5, 90.5, 10.5 };   /* pixel centres */
   const dt_stroke_style_t style = _solid(4.0, 0.0, 0.0, 1.0);
@@ -85,6 +86,7 @@ static void _a_horizontal_line_paints_a_band_of_its_width(void **state)
 
 static void _flat_caps_stop_at_the_ends(void **state)
 {
+  (void)state;
   cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 100, 20);
   const double xy[] = { 10.5, 10.5, 90.5, 10.5 };
   dt_stroke_style_t style = _solid(4.0, 0.0, 0.0, 1.0);
@@ -98,6 +100,7 @@ static void _flat_caps_stop_at_the_ends(void **state)
 
 static void _dashes_leave_gaps_along_the_line(void **state)
 {
+  (void)state;
   cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 120, 20);
   const double xy[] = { 0.5, 10.5, 100.5, 10.5 };
   dt_stroke_style_t style = _solid(2.0, 1.0, 1.0, 1.0);
@@ -115,6 +118,7 @@ static void _dashes_leave_gaps_along_the_line(void **state)
 
 static void _the_bright_pass_paints_over_the_dark_one(void **state)
 {
+  (void)state;
   cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 100, 20);
   const double xy[] = { 10.5, 10.5, 90.5, 10.5 };
   dt_stroke_style_t style = _solid(6.0, 1.0, 0.0, 0.0);
@@ -129,6 +133,7 @@ static void _the_bright_pass_paints_over_the_dark_one(void **state)
 
 static void _a_surface_it_cannot_write_is_refused_and_the_path_kept(void **state)
 {
+  (void)state;
   cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 100, 20);
   cairo_t *cr = cairo_create(s);
   cairo_move_to(cr, 10, 10);
@@ -146,6 +151,7 @@ static void _a_surface_it_cannot_write_is_refused_and_the_path_kept(void **state
 
 static void _a_path_in_a_pushed_group_lands_where_cairo_puts_it(void **state)
 {
+  (void)state;
   /* The group's surface is sized to the clip and offset to it; a stroke painted into that
    * surface must still appear at the path's device position once the group is composited. */
   cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 100, 100);
@@ -171,6 +177,7 @@ static void _a_path_in_a_pushed_group_lands_where_cairo_puts_it(void **state)
 
 static void _the_matrix_scales_widths_and_positions(void **state)
 {
+  (void)state;
   cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 120, 60);
   cairo_t *cr = cairo_create(s);
   cairo_scale(cr, 2.0, 2.0);
@@ -188,6 +195,7 @@ static void _the_matrix_scales_widths_and_positions(void **state)
 
 static void _the_touched_record_resets(void **state)
 {
+  (void)state;
   cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 100, 20);
   cairo_rectangle_int_t touched;
   assert_false(dt_stroke_raster_touched(s, &touched));

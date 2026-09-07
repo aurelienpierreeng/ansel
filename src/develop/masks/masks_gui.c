@@ -4059,6 +4059,84 @@ static void _canvas_dirty_from_headers(cairo_t *canvas_cr, const dt_masks_form_g
 }
 
 
+/* A frame of the canvas: where it sits in cr's device space, and the context that draws
+ * into it in cr's coordinates. */
+typedef struct _canvas_frame_t
+{
+  cairo_surface_t *canvas;
+  cairo_t *cr;            /* draws into the canvas, in the caller's coordinates */
+  int x;                  /* the canvas's origin in the target's device pixels */
+  int y;
+  int width;
+  int height;
+  double device_scale;    /* the target's, copied to the canvas */
+} _canvas_frame_t;
+
+/* Open a frame covering cr's clip. Returns FALSE with nothing to draw into when the clip is
+ * empty or the canvas cannot be had. */
+static gboolean _canvas_begin(cairo_t *cr, _canvas_frame_t *frame)
+{
+  double clip_x0 = 0.0;
+  double clip_y0 = 0.0;
+  double clip_x1 = 0.0;
+  double clip_y1 = 0.0;
+  cairo_clip_extents(cr, &clip_x0, &clip_y0, &clip_x1, &clip_y1);
+  double device_x0 = clip_x0;
+  double device_y0 = clip_y0;
+  double device_x1 = clip_x1;
+  double device_y1 = clip_y1;
+  cairo_user_to_device(cr, &device_x0, &device_y0);
+  cairo_user_to_device(cr, &device_x1, &device_y1);
+  frame->x = (int)floor(MIN(device_x0, device_x1));
+  frame->y = (int)floor(MIN(device_y0, device_y1));
+  frame->width = (int)ceil(MAX(device_x0, device_x1)) - frame->x;
+  frame->height = (int)ceil(MAX(device_y0, device_y1)) - frame->y;
+  if(frame->width <= 0 || frame->height <= 0) return FALSE;
+
+  double device_scale_x = 1.0;
+  double device_scale_y = 1.0;
+  cairo_surface_get_device_scale(cairo_get_target(cr), &device_scale_x, &device_scale_y);
+  frame->device_scale = (device_scale_x > 0.0) ? device_scale_x : 1.0;
+
+  frame->canvas = _canvas_acquire(frame->width, frame->height, frame->device_scale);
+  if(IS_NULL_PTR(frame->canvas)) return FALSE;
+  dt_stroke_raster_touched_reset(frame->canvas);
+  frame->cr = cairo_create(frame->canvas);
+
+  /* The canvas draws in cr's coordinates, shifted so that its pixel (0, 0) is the clip's
+   * device origin: cr's matrix, then a device-space translation -- in the units the device
+   * scale multiplies, so divided by it. */
+  cairo_matrix_t matrix;
+  cairo_matrix_t shift;
+  cairo_matrix_t canvas_matrix;
+  cairo_get_matrix(cr, &matrix);
+  cairo_matrix_init_translate(&shift, -frame->x / frame->device_scale, -frame->y / frame->device_scale);
+  cairo_matrix_multiply(&canvas_matrix, &matrix, &shift);
+  cairo_set_matrix(frame->cr, &canvas_matrix);
+  return TRUE;
+}
+
+/* Composite @p dirty of the frame's canvas onto @p cr, one pixel to one device pixel, then
+ * clear it so the next frame starts from transparency there. */
+static void _canvas_end(cairo_t *cr, const _canvas_frame_t *frame, const cairo_rectangle_int_t *dirty)
+{
+  const int x0 = CLAMP(dirty->x, 0, frame->width);
+  const int y0 = CLAMP(dirty->y, 0, frame->height);
+  const int x1 = CLAMP(dirty->x + dirty->width, 0, frame->width);
+  const int y1 = CLAMP(dirty->y + dirty->height, 0, frame->height);
+  if(x1 <= x0 || y1 <= y0) return;
+  const double s = frame->device_scale;
+  cairo_surface_flush(frame->canvas);
+  cairo_save(cr);
+  cairo_identity_matrix(cr);
+  cairo_set_source_surface(cr, frame->canvas, frame->x / s, frame->y / s);
+  cairo_rectangle(cr, (frame->x + x0) / s, (frame->y + y0) / s, (x1 - x0) / s, (y1 - y0) / s);
+  cairo_fill(cr);
+  cairo_restore(cr);
+  const cairo_rectangle_int_t painted = { x0, y0, x1 - x0, y1 - y0 };
+  _canvas_clear(frame->canvas, &painted);
+}
+
 void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr,
                                       int32_t width, int32_t height, int32_t pointerx, int32_t pointery,
                                       const dt_masks_overlay_transform_t *transform)
@@ -4096,48 +4174,13 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks] overlay preamble took %0.04f sec\n", group_start - post_expose_start);
 
-  /* The canvas covers the clip, in the device pixels of cr's target. */
-  double clip_x0 = 0.0;
-  double clip_y0 = 0.0;
-  double clip_x1 = 0.0;
-  double clip_y1 = 0.0;
-  cairo_clip_extents(cr, &clip_x0, &clip_y0, &clip_x1, &clip_y1);
-  double device_x0 = clip_x0;
-  double device_y0 = clip_y0;
-  double device_x1 = clip_x1;
-  double device_y1 = clip_y1;
-  cairo_user_to_device(cr, &device_x0, &device_y0);
-  cairo_user_to_device(cr, &device_x1, &device_y1);
-  const int canvas_x = (int)floor(MIN(device_x0, device_x1));
-  const int canvas_y = (int)floor(MIN(device_y0, device_y1));
-  const int canvas_width = (int)ceil(MAX(device_x0, device_x1)) - canvas_x;
-  const int canvas_height = (int)ceil(MAX(device_y0, device_y1)) - canvas_y;
-  if(canvas_width <= 0 || canvas_height <= 0) return;
-  double device_scale_x = 1.0;
-  double device_scale_y = 1.0;
-  cairo_surface_get_device_scale(cairo_get_target(cr), &device_scale_x, &device_scale_y);
-  const double device_scale = (device_scale_x > 0.0) ? device_scale_x : 1.0;
-
-  cairo_surface_t *canvas = _canvas_acquire(canvas_width, canvas_height, device_scale);
-  if(IS_NULL_PTR(canvas)) return;
-  dt_stroke_raster_touched_reset(canvas);
-  cairo_t *const mask_draw = cairo_create(canvas);
+  _canvas_frame_t frame = { 0 };
+  if(!_canvas_begin(cr, &frame)) return;
+  cairo_t *const mask_draw = frame.cr;
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
-    dt_print(DT_DEBUG_MASKS, "[masks] overlay canvas %dx%d ready in %0.04f sec\n", canvas_width, canvas_height,
+    dt_print(DT_DEBUG_MASKS, "[masks] overlay canvas %dx%d ready in %0.04f sec\n", frame.width, frame.height,
              dt_get_wtime() - group_start);
 
-  /* The canvas draws in cr's coordinates, shifted so that its pixel (0, 0) is the clip's
-   * device origin: cr's matrix, then a device-space translation -- in the units the device
-   * scale multiplies, so divided by it. */
-  {
-    cairo_matrix_t matrix;
-    cairo_matrix_t shift;
-    cairo_matrix_t canvas_matrix;
-    cairo_get_matrix(cr, &matrix);
-    cairo_matrix_init_translate(&shift, -canvas_x / device_scale, -canvas_y / device_scale);
-    cairo_matrix_multiply(&canvas_matrix, &matrix, &shift);
-    cairo_set_matrix(mask_draw, &canvas_matrix);
-  }
   cairo_save(mask_draw);
 
   // We rescale to input space -- from the viewport, or from the caller's own mapping when it
@@ -4190,10 +4233,10 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
    * The transform is still in effect here, which is what the header bounds need; a creation
    * session paints through its own cached pattern and takes the whole canvas. */
   cairo_rectangle_int_t dirty = { 0, 0, 0, 0 };
-  gboolean any = dt_stroke_raster_touched(canvas, &dirty);
+  gboolean any = dt_stroke_raster_touched(frame.canvas, &dirty);
   if(mask_gui->creation || !IS_NULL_PTR(mask_gui->creation_formids))
   {
-    dirty = (cairo_rectangle_int_t){ 0, 0, canvas_width, canvas_height };
+    dirty = (cairo_rectangle_int_t){ 0, 0, frame.width, frame.height };
     any = TRUE;
   }
   else
@@ -4204,32 +4247,11 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
   if(dt_get_debug_flags() & DT_DEBUG_MASKS)
     dt_show_times(&draw_start, "[masks] overlay drawn");
 
-  /* Composite the dirty rectangle of the canvas onto the view, one pixel to one device pixel,
-   * then clear it so the next frame starts from transparency there. */
   const double composite_start = dt_get_wtime();
-  if(any)
-  {
-    const int x0 = CLAMP(dirty.x, 0, canvas_width);
-    const int y0 = CLAMP(dirty.y, 0, canvas_height);
-    const int x1 = CLAMP(dirty.x + dirty.width, 0, canvas_width);
-    const int y1 = CLAMP(dirty.y + dirty.height, 0, canvas_height);
-    if(x1 > x0 && y1 > y0)
-    {
-      cairo_surface_flush(canvas);
-      cairo_save(cr);
-      cairo_identity_matrix(cr);
-      cairo_set_source_surface(cr, canvas, canvas_x / device_scale, canvas_y / device_scale);
-      cairo_rectangle(cr, (canvas_x + x0) / device_scale, (canvas_y + y0) / device_scale,
-                      (x1 - x0) / device_scale, (y1 - y0) / device_scale);
-      cairo_fill(cr);
-      cairo_restore(cr);
-      const cairo_rectangle_int_t painted = { x0, y0, x1 - x0, y1 - y0 };
-      _canvas_clear(canvas, &painted);
-    }
-  }
+  if(any) _canvas_end(cr, &frame, &dirty);
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks] overlay composited (%dx%d of %dx%d) in %0.04f sec\n",
-             any ? dirty.width : 0, any ? dirty.height : 0, canvas_width, canvas_height,
+             any ? dirty.width : 0, any ? dirty.height : 0, frame.width, frame.height,
              dt_get_wtime() - composite_start);
 }
 
