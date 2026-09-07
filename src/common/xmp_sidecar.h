@@ -65,8 +65,9 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
 /** get the xmp blob for imgid. */
 char *dt_exif_xmp_read_string(const int32_t imgid);
 
-/** read xmp sidecar file. */
-int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only);
+/** Read an XMP sidecar and optionally update the image write timestamp in its transaction. */
+int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only,
+                     const int64_t *write_timestamp);
 
 #ifdef __cplusplus
 }

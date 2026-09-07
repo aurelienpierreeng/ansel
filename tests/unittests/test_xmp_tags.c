@@ -1,6 +1,6 @@
 /*
     This file is part of Ansel,
-    Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Paolo SANTUCCI.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -75,7 +75,7 @@ static int teardown(void **state)
 {
   dt_exif_cleanup();
   dt_conf_cleanup(darktable.conf);
-  free(darktable.conf);
+  dt_free(darktable.conf);
   darktable.conf = NULL;
   g_remove(config_path);
   dt_free(config_path);
@@ -91,7 +91,7 @@ static void write_xmp(const char *properties)
   char *packet = g_strdup_printf(
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
       "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">"
-      "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999-02-22-rdf-syntax-ns#\">"
+      "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">"
       "<rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" "
       "xmlns:darktable=\"http://darktable.sf.net/\" "
       "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" "
@@ -146,7 +146,7 @@ static void test_full_sidecar_read_imports_tags_without_sidecar_writing(void **s
             "<rdf:li>alpha</rdf:li><rdf:li>beta</rdf:li>"
             "</rdf:Bag></dc:subject>");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
   assert_tag_attached("alpha", image.id, TRUE);
   assert_tag_attached("beta", image.id, TRUE);
 }
@@ -158,7 +158,7 @@ static void test_keywordless_xmp_preserves_existing_tags(void **state)
   seed_tag("keepme", image.id);
   write_xmp("");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
   assert_tag_attached("keepme", image.id, TRUE);
 }
 
@@ -170,7 +170,7 @@ static void test_xmp_replaces_user_tags_and_keeps_internal(void **state)
   seed_tag("oldtag", image.id);
   write_xmp("<dc:subject><rdf:Bag><rdf:li>newtag</rdf:li></rdf:Bag></dc:subject>");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
   assert_tag_attached("newtag", image.id, TRUE);
   assert_tag_attached("oldtag", image.id, FALSE);
   assert_true(dt_tag_repository_is_attached(internal, image.id));
@@ -184,7 +184,7 @@ static void test_comma_separated_and_padded_keywords(void **state)
             "<rdf:li>gamma, delta</rdf:li><rdf:li>epsilon,</rdf:li>"
             "</rdf:Bag></dc:subject>");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
   assert_tag_attached("gamma", image.id, TRUE);
   assert_tag_attached("delta", image.id, TRUE);
   assert_tag_attached("epsilon", image.id, TRUE);
@@ -201,7 +201,7 @@ static void test_empty_tokens_do_not_corrupt(void **state)
             "<rdf:li>,zeta</rdf:li><rdf:li>   ,</rdf:li>"
             "</rdf:Bag></dc:subject>");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
   assert_tag_attached("zeta", image.id, TRUE);
   // neither the empty name nor the old tagid == -1 sentinel may reach the database
   assert_int_equal(dt_tag_repository_find_by_name(""), 0);
@@ -216,8 +216,8 @@ static void test_repeated_reads_are_stable(void **state)
             "<rdf:li>eta</rdf:li><rdf:li>theta</rdf:li>"
             "</rdf:Bag></dc:subject>");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
   assert_tag_attached("eta", image.id, TRUE);
   assert_tag_attached("theta", image.id, TRUE);
   assert_int_equal(dt_tag_repository_count_attachments(dt_tag_repository_find_by_name("eta")), 1);
@@ -231,9 +231,22 @@ static void test_hierarchical_subject_takes_precedence(void **state)
             "<rdf:li>Scapes|Dunes</rdf:li></rdf:Bag></lr:hierarchicalSubject>"
             "<dc:subject><rdf:Bag><rdf:li>iignored</rdf:li></rdf:Bag></dc:subject>");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
   assert_tag_attached("Scapes|Dunes", image.id, TRUE);
   assert_tag_attached("iignored", image.id, FALSE);
+}
+
+static void test_empty_hierarchical_subject_clears_user_tags(void **state)
+{
+  (void)state;
+  dt_image_t image = make_image("empty-hierarchical.raw");
+  seed_tag("oldtag", image.id);
+  write_xmp("<lr:hierarchicalSubject><rdf:Bag/></lr:hierarchicalSubject>"
+            "<dc:subject><rdf:Bag><rdf:li>ignored</rdf:li></rdf:Bag></dc:subject>");
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_tag_attached("oldtag", image.id, FALSE);
+  assert_tag_attached("ignored", image.id, FALSE);
 }
 
 static void test_embedded_read_overlays_without_wipe(void **state)
@@ -249,6 +262,22 @@ static void test_embedded_read_overlays_without_wipe(void **state)
   assert_tag_attached("keepme2", image.id, TRUE);
 }
 
+static void test_overlong_keyword_rolls_back_tag_replacement(void **state)
+{
+  (void)state;
+  dt_image_t image = make_image("overlong.raw");
+  seed_tag("keepme3", image.id);
+  char *keyword = g_strnfill(1024, 'a');
+  char *properties = g_strdup_printf("<dc:subject><rdf:Bag><rdf:li>%s</rdf:li></rdf:Bag></dc:subject>", keyword);
+  write_xmp(properties);
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
+  assert_tag_attached("keepme3", image.id, TRUE);
+
+  dt_free(properties);
+  dt_free(keyword);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -259,7 +288,9 @@ int main(void)
     cmocka_unit_test(test_empty_tokens_do_not_corrupt),
     cmocka_unit_test(test_repeated_reads_are_stable),
     cmocka_unit_test(test_hierarchical_subject_takes_precedence),
+    cmocka_unit_test(test_empty_hierarchical_subject_clears_user_tags),
     cmocka_unit_test(test_embedded_read_overlays_without_wipe),
+    cmocka_unit_test(test_overlong_keyword_rolls_back_tag_replacement),
   };
   return cmocka_run_group_tests(tests, setup, teardown);
 }

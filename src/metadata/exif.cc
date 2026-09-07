@@ -107,6 +107,7 @@
 #include "common/logging.h"
 #include "common/utility.h"
 #include "database/tag_repository.h"
+#include "database/database.h"
 #include "math/math.h"
 #include "metadata/colorlabels.h"
 #include "metadata/metadata.h"
@@ -365,7 +366,7 @@ const GList* dt_exif_get_exiv2_taglist()
   return exiv2_taglist;
 }
 
-static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos);
+static gboolean _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos);
 
 // inspired by ufraw_exiv2.cc:
 
@@ -435,13 +436,41 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
   {
     Exiv2::XmpData::iterator pos;
 
+    if(FIND_XMP_TAG("Xmp.xmp.Rating"))
+    {
+      const int stars = pos->toLong();
+      if(stars < -1 || stars > 5)
+      {
+        g_list_free(imgs);
+        return false;
+      }
+    }
+
+    pos = xmpData.findKey(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject"));
+    if(pos == xmpData.end()) pos = xmpData.findKey(Exiv2::XmpKey("Xmp.dc.subject"));
+    if(pos != xmpData.end())
+    {
+      gboolean tags_ok = TRUE;
+      if(!exif_read) tags_ok = dt_tag_set_tags(NULL, imgs, TRUE, TRUE, FALSE);
+      if(tags_ok) tags_ok = _exif_import_tags(img, pos);
+      if(!tags_ok)
+      {
+        g_list_free(imgs);
+        return false;
+      }
+    }
+
     // older darktable version did not write this data correctly:
     // the reasoning behind strdup'ing all the strings before passing it to sqlite3 is, that
     // they are somehow corrupt after the call to sqlite3_prepare_v2() -- don't ask me
     // why for they don't get passed to that function.
     if(version == -1 || version > 0)
     {
-      if(!exif_read) dt_metadata_clear(imgs, FALSE);
+      if(!exif_read && !dt_metadata_clear(imgs, FALSE))
+      {
+        g_list_free(imgs);
+        return false;
+      }
       for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
       {
         const gchar *key = dt_metadata_get_key(i);
@@ -455,8 +484,13 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
             while(*value != ' ' && *value) value++;
             while(*value == ' ') value++;
           }
-          dt_metadata_set_import(img->id, key, value);
+          const gboolean metadata_set = dt_metadata_set_import(img->id, key, value);
           dt_free(adr);
+          if(!metadata_set)
+          {
+            g_list_free(imgs);
+            return false;
+          }
         }
       }
     }
@@ -495,19 +529,6 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
         if(color >= 0 && color < DT_COLORLABELS_LAST)
           img->color_labels |= 1 << color;
       }
-    }
-
-    // reading the photograph's own tags must not depend on the sidecar-WRITE preference, and
-    // the wipe below is only justified when the document actually carries a keyword bag: a
-    // keyword-less XMP leaves the image's tags alone. A full sidecar read lets the document
-    // replace the user tags (the darktable|* ones no XMP editor knows about are kept); an
-    // embedded read only adds to them, exactly like colour labels above.
-    if(FIND_XMP_TAG("Xmp.lr.hierarchicalSubject") || FIND_XMP_TAG("Xmp.dc.subject"))
-    {
-      if(!exif_read) dt_tag_set_tags(NULL, imgs, TRUE, TRUE, FALSE);
-      _exif_import_tags(img, pos);
-      // the direct repository writes bypass dt_tag_*(), so no signal fires on its own
-      dt_metadata_tags_changed();
     }
 
     /* read gps location */
@@ -615,37 +636,39 @@ static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
         std::string str = pos->print();
         char *tag = dt_util_foo_to_utf8(str.c_str());
         guint tagid = 0;
-        dt_tag_new(tag, &tagid);
-        dt_tag_attach(tagid, img->id, FALSE, FALSE);
+        const gboolean tag_created = dt_tag_new(tag, &tagid);
+        const gboolean tag_attached = tag_created
+                                     && (dt_tag_repository_is_attached(tagid, img->id)
+                                         || dt_tag_attach(tagid, img->id, FALSE, FALSE));
         dt_free(tag);
+        if(!tag_attached) return false;
         ++pos;
       }
-      dt_metadata_tags_changed();
     }
     if(FIND_IPTC_TAG("Iptc.Application2.Caption"))
     {
       std::string str = pos->print(/*&iptcData*/);
-      dt_metadata_set_import(img->id, "Xmp.dc.description", str.c_str());
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.description", str.c_str())) return false;
     }
     if(FIND_IPTC_TAG("Iptc.Application2.Copyright"))
     {
       std::string str = pos->print(/*&iptcData*/);
-      dt_metadata_set_import(img->id, "Xmp.dc.rights", str.c_str());
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.rights", str.c_str())) return false;
     }
     if(FIND_IPTC_TAG("Iptc.Application2.Byline"))
     {
       std::string str = pos->print(/*&iptcData*/);
-      dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str());
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str())) return false;
     }
     else if(FIND_IPTC_TAG("Iptc.Application2.Writer"))
     {
       std::string str = pos->print(/*&iptcData*/);
-      dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str());
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str())) return false;
     }
     else if(FIND_IPTC_TAG("Iptc.Application2.Contact"))
     {
       std::string str = pos->print(/*&iptcData*/);
-      dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str());
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str())) return false;
     }
     if(FIND_IPTC_TAG("Iptc.Application2.DateCreated"))
     {
@@ -816,7 +839,10 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
   {
     g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size()); // NOSONAR
     pos->copy(data, Exiv2::invalidByteOrder);
-    dt_dng_opcode_process_opcode_list_2(data, pos->size(), img);
+    dt_image_t decoded = *img;
+    decoded.dng_gain_maps = NULL;
+    dt_dng_opcode_process_opcode_list_2(data, pos->size(), &decoded);
+    img->dng_gain_maps = decoded.dng_gain_maps;
     has_opcodes = TRUE;
   }
   else
@@ -1594,12 +1620,12 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     if(FIND_EXIF_TAG("Exif.Image.Artist"))
     {
       std::string str = pos->print(&exifData);
-      dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str());
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str())) return false;
     }
     else if(FIND_EXIF_TAG("Exif.Canon.OwnerName"))
     {
       std::string str = pos->print(&exifData);
-      dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str());
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str())) return false;
     }
 
     // FIXME: Should the UserComment go into the description? Or do we need an extra field for this?
@@ -1609,18 +1635,18 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       Exiv2::CommentValue value(str);
       std::string str2 = value.comment();
       if(str2 != "binary comment")
-        dt_metadata_set_import(img->id, "Xmp.dc.description", str2.c_str());
+        if(!dt_metadata_set_import(img->id, "Xmp.dc.description", str2.c_str())) return false;
     }
     else if(FIND_EXIF_TAG("Exif.Image.ImageDescription"))
     {
       std::string str = pos->print(&exifData);
-      dt_metadata_set_import(img->id, "Xmp.dc.description", str.c_str());
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.description", str.c_str())) return false;
     }
 
     if(FIND_EXIF_TAG("Exif.Image.Copyright"))
     {
       std::string str = pos->print(&exifData);
-      dt_metadata_set_import(img->id, "Xmp.dc.rights", str.c_str());
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.rights", str.c_str())) return false;
     }
 
     if(FIND_EXIF_TAG("Exif.Image.Rating"))
@@ -1996,6 +2022,12 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
  */
 int dt_exif_read(dt_image_t *img, const char *path)
 {
+  const dt_image_t original = *img;
+  gboolean transaction_started = FALSE;
+  gboolean tags_present = FALSE;
+  gboolean dng_opcodes_read = FALSE;
+  gboolean success = TRUE;
+
   // Seed the provisional image-type flag (LDR / HDR / RAW, from the file extension) before we probe
   // dt_image_is_ldr() / dt_image_is_hdr() while decoding the EXIF below. This function can run on a
   // freshly dt_image_init()'d object (import preview, path-pattern expansion) long before the buffer
@@ -2019,42 +2051,80 @@ int dt_exif_read(dt_image_t *img, const char *path)
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
-    if(!image.get()) return 1;
+    if(!image.get())
+    {
+      *img = original;
+      return 1;
+    }
     image->readMetadata();
-    bool res = true;
+
+    transaction_started = dt_database_start_transaction();
+    success = transaction_started;
 
     // EXIF metadata
     Exiv2::ExifData &exifData = image->exifData();
-    if(!exifData.empty())
+    if(success && !exifData.empty())
     {
-      res = _exif_decode_exif_data(img, exifData);
+      dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList2")) != exifData.end();
+      if(!dng_opcodes_read)
+        dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList2")) != exifData.end();
+      success = _exif_decode_exif_data(img, exifData);
     }
     else
       img->exif_inited = 1;
 
     // IPTC metadata.
     Exiv2::IptcData &iptcData = image->iptcData();
-    if(!iptcData.empty()) res = _exif_decode_iptc_data(img, iptcData) && res;
-
     // XMP metadata
     Exiv2::XmpData &xmpData = image->xmpData();
-    if(!xmpData.empty())
-      res = dt_exif_decode_xmp_data(img, xmpData, -1, true) && res;
+    tags_present = iptcData.findKey(Exiv2::IptcKey("Iptc.Application2.Keywords")) != iptcData.end()
+                   || xmpData.findKey(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject")) != xmpData.end()
+                   || xmpData.findKey(Exiv2::XmpKey("Xmp.dc.subject")) != xmpData.end();
+    if(success && (!iptcData.empty() || !xmpData.empty()))
+    {
+      if(!iptcData.empty()) success = _exif_decode_iptc_data(img, iptcData);
+      if(success && !xmpData.empty()) success = dt_exif_decode_xmp_data(img, xmpData, -1, true);
+      if(success)
+      {
+        img->height = image->pixelHeight();
+        img->width = image->pixelWidth();
+        success = dt_database_release_transaction();
+        transaction_started = FALSE;
+      }
+    }
 
     // Initialize size - don't wait for full raw to be loaded to get this
     // information. If use_embedded_thumbnail is set, it will take a
     // change in development history to have this information
-    img->height = image->pixelHeight();
-    img->width = image->pixelWidth();
-
-    return res ? 0 : 1;
+    if(success && iptcData.empty() && xmpData.empty())
+    {
+      img->height = image->pixelHeight();
+      img->width = image->pixelWidth();
+      success = dt_database_release_transaction();
+      transaction_started = FALSE;
+    }
   }
   catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_read] " << path << ": " << s << std::endl;
+    success = FALSE;
+  }
+
+  if(!success)
+  {
+    if(transaction_started) dt_database_rollback_transaction();
+    if(dng_opcodes_read && img->dng_gain_maps != original.dng_gain_maps)
+      g_list_free_full(img->dng_gain_maps, dt_free_gpointer);
+    *img = original;
     return 1;
   }
+
+  if(dng_opcodes_read && img->dng_gain_maps != original.dng_gain_maps)
+    g_list_free_full(original.dng_gain_maps, dt_free_gpointer);
+
+  if(tags_present) dt_metadata_tags_changed();
+  return 0;
 }
 
 int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int compressed)
@@ -2210,17 +2280,22 @@ char *dt_exif_xmp_encode_internal(const unsigned char *input, const int len, int
 unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_len)
 {
   unsigned char *output = NULL;
+  const size_t max_output_size = 64 * 1024 * 1024;
+
+  if(IS_NULL_PTR(input) || len < 0) return NULL;
 
   // check if data is in compressed format
-  if(!strncmp(input, "gz", 2))
+  if(len >= 4 && !strncmp(input, "gz", 2))
   {
     // we have compressed data in base64 representation with leading "gz"
 
     // get stored compression factor so we know the needed buffer size for uncompress
-    const float factor = 10 * (input[2] - '0') + (input[3] - '0');
+    if(!g_ascii_isdigit(input[2]) || !g_ascii_isdigit(input[3])) return NULL;
+    const size_t factor = 10 * (input[2] - '0') + (input[3] - '0');
+    if((size_t)(len - 4) > max_output_size) return NULL;
 
     // get a rw copy of input buffer omitting leading "gz" and compression factor
-    unsigned char *buffer = (unsigned char *)strdup(input + 4);
+    unsigned char *buffer = (unsigned char *)g_strndup(input + 4, len - 4);
     if(IS_NULL_PTR(buffer)) return NULL;
 
     // decode from base64 to compressed binary
@@ -2228,8 +2303,16 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
     g_base64_decode_inplace((char *)buffer, &compressed_size);
 
     // do the actual uncompress step
+    if(compressed_size == 0 || compressed_size > max_output_size) {
+      dt_free(buffer);
+      return NULL;
+    }
+
     int result = Z_BUF_ERROR;
-    uLongf bufLen = factor * compressed_size;
+    const size_t estimated_size = factor > max_output_size / compressed_size
+                                    ? max_output_size
+                                    : factor * compressed_size;
+    size_t bufLen = MIN(max_output_size, MAX(compressed_size, estimated_size));
     uLongf destLen;
 
     // we know the actual compression factor but if that fails we re-try with
@@ -2247,7 +2330,8 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
 
       result = uncompress(output, &destLen, buffer, compressed_size);
 
-      bufLen *= 2;
+      if(bufLen == max_output_size) break;
+      bufLen = MIN(max_output_size, bufLen * 2);
 
     } while(result == Z_BUF_ERROR);
 
@@ -2263,7 +2347,7 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
       return NULL;
     }
 
-    if(output_len) *output_len = destLen;
+    if(output_len) *output_len = (int)destLen;
   }
   else
   {
@@ -2275,9 +2359,12 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
 #define TO_BINARY(a) (a > 57 ? a - 97 + 10 : a - 48)
 
     // make sure that we don't find any unexpected characters indicating corrupted data
-    if(strspn(input, "0123456789abcdef") != strlen(input)) return NULL;
+    if(len % 2) return NULL;
+    if((size_t)len / 2 > max_output_size) return NULL;
+    for(int i = 0; i < len; i++)
+      if(!g_ascii_isxdigit(input[i]) || g_ascii_isupper(input[i])) return NULL;
 
-    output = (unsigned char *)malloc(len / 2);
+    output = (unsigned char *)malloc(MAX(len / 2, 1));
     if(IS_NULL_PTR(output)) return NULL;
 
     if(output_len) *output_len = len / 2;
@@ -2294,7 +2381,7 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
   return output;
 }
 
-static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos)
+static gboolean _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos)
 {
   // tags in array
   const int cnt = pos->count();
@@ -2303,6 +2390,7 @@ static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos)
   {
     char tagbuf[1024];
     std::string pos_str = pos->toString(i);
+    if(pos_str.size() >= sizeof(tagbuf)) return FALSE;
     g_strlcpy(tagbuf, pos_str.c_str(), sizeof(tagbuf));
     char *tag = tagbuf;
     while(tag)
@@ -2322,14 +2410,15 @@ static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos)
         }
         // associate image and tag. An id of 0 means the tag could not be created and
         // attaching it anyway would only corrupt main.tagged_images.
-        if(tagid > 0)
-          dt_tag_repository_attach(tagid, img->id);
-        else
-          fprintf(stderr, "[xmp_import] cannot create tag: %s\n", tag);
+        if(tagid == 0
+           || (!dt_tag_repository_is_attached(tagid, img->id)
+               && !dt_tag_repository_attach(tagid, img->id)))
+          return FALSE;
       }
       tag = next_tag;
     }
   }
+  return TRUE;
 }
 
 dt_colorspaces_color_profile_type_t dt_exif_get_color_space(const uint8_t *data, size_t size)

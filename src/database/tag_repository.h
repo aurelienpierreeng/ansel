@@ -144,12 +144,14 @@ GList *dt_tag_repository_get_images_in_list(const guint tagid, const char *imgid
 uint32_t dt_tag_repository_count_distinct_images(const guint tagid);
 
 /** @brief Detach every tag in @p tagid_list from @p imgid.
- *  @param tagid_list comma-separated decimal tag ids. Does nothing when NULL. */
-void dt_tag_repository_detach_batch(const int32_t imgid, const char *tagid_list);
+ *  @param tagid_list comma-separated decimal tag ids. Does nothing when NULL.
+ *  @return TRUE when no removal was needed or SQLite completed the deletion. */
+gboolean dt_tag_repository_detach_batch(const int32_t imgid, const char *tagid_list);
 
 /** @brief Attach rows given as the VALUES clause of the insert -- `"(imgid,tagid,pos),…"`.
- *  The position expression is the caller's, which is why this takes text. */
-void dt_tag_repository_attach_batch(const char *values);
+ *  The position expression is the caller's, which is why this takes text.
+ *  @return TRUE when no insertion was needed or SQLite completed the insertion. */
+gboolean dt_tag_repository_attach_batch(const char *values);
 
 /* ---------------------------------------------------------------------------------------
  *  Attached-tag listings
