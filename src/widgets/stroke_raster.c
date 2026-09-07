@@ -24,12 +24,17 @@
 #include <stdint.h>
 #include <string.h>
 
+/* This file holds no state of its own: src/widgets keeps none outside its two registries, and
+ * a rasteriser has no business remembering anything between two strokes. What it needs across
+ * a call -- a scratch plane -- and across a frame -- what was touched -- lives on the surface
+ * being painted, as cairo user data, and dies with it. */
+
 /* ---------------------------------------------------------------------------------------------
  * The touched rectangle, kept on the surface it describes.
  *
- * A surface carries its own record of what was painted into it here, as cairo user data, so a
- * caller that owns the surface can composite or clear exactly that much: the rasteriser is the
- * one thing that knows where its pixels went. Half-open pixel ranges, [x0, x1) x [y0, y1). */
+ * A surface carries its own record of what was painted into it here, so a caller that owns the
+ * surface can composite or clear exactly that much: the rasteriser is the one thing that knows
+ * where its pixels went. Half-open pixel ranges, [x0, x1) x [y0, y1). */
 typedef struct _touched_t
 {
   gboolean any;
@@ -101,19 +106,54 @@ gboolean dt_stroke_raster_can_paint(cairo_surface_t *surface)
 }
 
 /* ---------------------------------------------------------------------------------------------
- * The distance plane.
+ * The distance plane, and the scratch it is cut from.
  *
- * One scratch plane over the polyline's bounding box, holding per pixel not the distance but
+ * One plane over the polyline's bounding box, holding per pixel not the distance but
  * `reach^2 - d^2', where reach is the widest pass's half-width plus the antialiasing pixel:
  * positive inside the stroke's reach, zero outside and for anything never stamped. Zero being
- * the resting state is what makes the plane cheap to keep: it is never cleared as a whole, only
- * the spans a stroke actually wrote are zeroed again once composited, and a plane that only ever
- * grows starts every new byte at zero. Stamping is MAX, which for this quantity is the nearest
- * point of the polyline, and squared distances need no square root until compositing, which
- * touches only the pixels of the stroke's band and not the box around it.
+ * the resting state is what makes the scratch cheap to keep: it is never cleared as a whole,
+ * only the spans a stroke actually wrote are zeroed again once composited, and memory that
+ * only ever grows starts every new byte at zero. Stamping is MAX, which for this quantity is
+ * the nearest point of the polyline, and squared distances need no square root until
+ * compositing, which touches only the pixels of the stroke's band and not the box around it.
  *
  * Per row, the extent that was written, so compositing and the clearing after it walk the band
- * rather than the box. Overlays are drawn from one thread at a time; the lock says so. */
+ * rather than the box. The scratch belongs to the surface, grows to the largest box that
+ * surface ever asked for, and is freed with it. */
+typedef struct _scratch_t
+{
+  float *value;
+  size_t count;
+  int *span_min;
+  int *span_max;
+  int rows;
+} _scratch_t;
+
+static const cairo_user_data_key_t _scratch_key = { 0 };
+
+static void _scratch_free(void *data)
+{
+  _scratch_t *scratch = (_scratch_t *)data;
+  if(!scratch) return;
+  g_free(scratch->value);
+  g_free(scratch->span_min);
+  g_free(scratch->span_max);
+  g_free(scratch);
+}
+
+static _scratch_t *_scratch_of(cairo_surface_t *surface)
+{
+  _scratch_t *scratch = (_scratch_t *)cairo_surface_get_user_data(surface, &_scratch_key);
+  if(scratch) return scratch;
+  scratch = g_malloc0(sizeof(_scratch_t));
+  if(cairo_surface_set_user_data(surface, &_scratch_key, scratch, _scratch_free) != CAIRO_STATUS_SUCCESS)
+  {
+    g_free(scratch);
+    return NULL;
+  }
+  return scratch;
+}
+
 typedef struct _plane_t
 {
   float *value;      /* reach^2 - d^2, zero at rest */
@@ -125,26 +165,23 @@ typedef struct _plane_t
   int y0;
 } _plane_t;
 
-static GMutex _scratch_lock;
-static float *_scratch_value = NULL;
-static size_t _scratch_value_count = 0;
-static int *_scratch_span_min = NULL;
-static int *_scratch_span_max = NULL;
-static int _scratch_span_rows = 0;
-
-/* Take the scratch for a box of @p width x @p height, growing it -- zeroed -- as needed. */
-static gboolean _plane_acquire(_plane_t *plane, const int x0, const int y0, const int width, const int height)
+/* Cut a plane for a box of @p width x @p height from the surface's scratch, growing it --
+ * zeroed -- as needed. */
+static gboolean _plane_acquire(cairo_surface_t *surface, _plane_t *plane, const int x0, const int y0,
+                               const int width, const int height)
 {
+  _scratch_t *scratch = _scratch_of(surface);
+  if(!scratch) return FALSE;
   const size_t count = (size_t)width * (size_t)height;
-  if(count > _scratch_value_count)
+  if(count > scratch->count)
   {
     float *grown = g_try_malloc0(count * sizeof(float));
     if(!grown) return FALSE;
-    g_free(_scratch_value);
-    _scratch_value = grown;
-    _scratch_value_count = count;
+    g_free(scratch->value);
+    scratch->value = grown;
+    scratch->count = count;
   }
-  if(height > _scratch_span_rows)
+  if(height > scratch->rows)
   {
     int *min_grown = g_try_malloc(sizeof(int) * (size_t)height);
     int *max_grown = g_try_malloc(sizeof(int) * (size_t)height);
@@ -154,20 +191,20 @@ static gboolean _plane_acquire(_plane_t *plane, const int x0, const int y0, cons
       g_free(max_grown);
       return FALSE;
     }
-    g_free(_scratch_span_min);
-    g_free(_scratch_span_max);
-    _scratch_span_min = min_grown;
-    _scratch_span_max = max_grown;
-    _scratch_span_rows = height;
+    g_free(scratch->span_min);
+    g_free(scratch->span_max);
+    scratch->span_min = min_grown;
+    scratch->span_max = max_grown;
+    scratch->rows = height;
   }
   for(int y = 0; y < height; y++)
   {
-    _scratch_span_min[y] = INT_MAX;
-    _scratch_span_max[y] = -1;
+    scratch->span_min[y] = INT_MAX;
+    scratch->span_max[y] = -1;
   }
-  plane->value = _scratch_value;
-  plane->span_min = _scratch_span_min;
-  plane->span_max = _scratch_span_max;
+  plane->value = scratch->value;
+  plane->span_min = scratch->span_min;
+  plane->span_max = scratch->span_max;
   plane->width = width;
   plane->height = height;
   plane->x0 = x0;
@@ -175,63 +212,152 @@ static gboolean _plane_acquire(_plane_t *plane, const int x0, const int y0, cons
   return TRUE;
 }
 
-/* Stamp the capsule of half-width @p reach around the segment (ax, ay)-(bx, by), in surface
- * pixels, into the plane. A capped end is round; an uncapped one is cut flat at the segment's
- * end plane, which is what a butt cap is. */
-static inline void _plane_stamp_capsule(_plane_t *const plane, const double ax, const double ay, const double bx,
-                                        const double by, const double reach, const gboolean cap_a,
-                                        const gboolean cap_b)
-{
-  const double dx = bx - ax;
-  const double dy = by - ay;
-  const double len2 = dx * dx + dy * dy;
-  const double reach2 = reach * reach;
+/* ---------------------------------------------------------------------------------------------
+ * Stamping: the capsule of a segment. */
 
-  int x_first = (int)floor(MIN(ax, bx) - reach) - plane->x0;
-  int x_last = (int)ceil(MAX(ax, bx) + reach) - plane->x0;
-  int y_first = (int)floor(MIN(ay, by) - reach) - plane->y0;
-  int y_last = (int)ceil(MAX(ay, by) + reach) - plane->y0;
-  x_first = MAX(x_first, 0);
-  y_first = MAX(y_first, 0);
-  x_last = MIN(x_last, plane->width - 1);
-  y_last = MIN(y_last, plane->height - 1);
+/* One segment of a polyline, in surface pixels, with what its ends are: a capped end is round,
+ * an uncapped one is cut flat at the segment's end plane, which is what a butt cap is. Every
+ * end inside a polyline is capped, so consecutive segments join round and seamless. */
+typedef struct _segment_t
+{
+  double ax;
+  double ay;
+  double bx;
+  double by;
+  gboolean cap_a;
+  gboolean cap_b;
+} _segment_t;
+
+/* One row of the capsule: every pixel of [x_first, x_last] within reach of the segment takes
+ * the nearest distance. Returns whether any did. */
+static inline gboolean _plane_stamp_row(_plane_t *const plane, const int y, const int x_first, const int x_last,
+                                        const _segment_t *const seg, const double reach2)
+{
+  const double dx = seg->bx - seg->ax;
+  const double dy = seg->by - seg->ay;
+  const double len2 = dx * dx + dy * dy;
+  const double py = (double)(y + plane->y0) + 0.5;
+  float *const row = plane->value + (size_t)y * plane->width;
+  gboolean wrote = FALSE;
+  for(int x = x_first; x <= x_last; x++)
+  {
+    const double px = (double)(x + plane->x0) + 0.5;
+    double t = (len2 > 0.0) ? ((px - seg->ax) * dx + (py - seg->ay) * dy) / len2 : 0.0;
+    if(t < 0.0 && !seg->cap_a) continue;
+    if(t > 1.0 && !seg->cap_b) continue;
+    t = CLAMP(t, 0.0, 1.0);
+    const double ex = seg->ax + t * dx - px;
+    const double ey = seg->ay + t * dy - py;
+    const double d2 = ex * ex + ey * ey;
+    if(d2 >= reach2) continue;
+    const float inside = (float)(reach2 - d2);
+    if(inside <= row[x]) continue;
+    row[x] = inside;
+    wrote = TRUE;
+  }
+  return wrote;
+}
+
+/* Stamp the capsule of half-width @p reach around @p seg into the plane. */
+static inline void _plane_stamp_capsule(_plane_t *const plane, const _segment_t *const seg, const double reach)
+{
+  const double reach2 = reach * reach;
+  const int x_first = MAX((int)floor(MIN(seg->ax, seg->bx) - reach) - plane->x0, 0);
+  const int x_last = MIN((int)ceil(MAX(seg->ax, seg->bx) + reach) - plane->x0, plane->width - 1);
+  const int y_first = MAX((int)floor(MIN(seg->ay, seg->by) - reach) - plane->y0, 0);
+  const int y_last = MIN((int)ceil(MAX(seg->ay, seg->by) + reach) - plane->y0, plane->height - 1);
   if(x_first > x_last || y_first > y_last) return;
 
   for(int y = y_first; y <= y_last; y++)
   {
-    const double py = (double)(y + plane->y0) + 0.5;
-    float *const row = plane->value + (size_t)y * plane->width;
-    gboolean wrote = FALSE;
-    for(int x = x_first; x <= x_last; x++)
+    if(!_plane_stamp_row(plane, y, x_first, x_last, seg, reach2)) continue;
+    plane->span_min[y] = MIN(plane->span_min[y], x_first);
+    plane->span_max[y] = MAX(plane->span_max[y], x_last);
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * The walk along a polyline: dashes cut by arc length, capsules stamped. */
+
+/* Where the walk is in the dash pattern. */
+typedef struct _dash_t
+{
+  gboolean on;          /* inside a dash rather than a gap */
+  double left;          /* what remains of the current dash or gap */
+  gboolean fresh;       /* the current dash started at a cut, not at the line's start */
+} _dash_t;
+
+/* The dashed pieces of one segment. A piece that starts at a cut, or ends at one, gets the
+ * cap style's end there; one that continues from or into the neighbouring segment is a join,
+ * always capped so the two halves meet round. */
+static void _plane_stamp_dashed(_plane_t *const plane, const _segment_t *const seg, const dt_stroke_style_t *style,
+                                const double reach, _dash_t *const dash)
+{
+  const double length = hypot(seg->bx - seg->ax, seg->by - seg->ay);
+  const gboolean caps = style->round_caps;
+  double pos = 0.0;
+  gboolean piece_starts_at_cut = dash->fresh;   /* the line's own start counts as a cut */
+  while(pos < length)
+  {
+    const double run = MIN(dash->left, length - pos);
+    const double end = pos + run;
+    if(dash->on)
     {
-      const double px = (double)(x + plane->x0) + 0.5;
-      double t = (len2 > 0.0) ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0.0;
-      if(t < 0.0)
-      {
-        if(!cap_a) continue;
-        t = 0.0;
-      }
-      else if(t > 1.0)
-      {
-        if(!cap_b) continue;
-        t = 1.0;
-      }
-      const double ex = ax + t * dx - px;
-      const double ey = ay + t * dy - py;
-      const double d2 = ex * ex + ey * ey;
-      if(d2 >= reach2) continue;
-      const float inside = (float)(reach2 - d2);
-      if(inside > row[x])
-      {
-        row[x] = inside;
-        wrote = TRUE;
-      }
+      const double t0 = pos / length;
+      const double t1 = end / length;
+      const gboolean ends_at_cut = (end < length) || seg->cap_b == FALSE;
+      const _segment_t piece = { .ax = seg->ax + t0 * (seg->bx - seg->ax),
+                                 .ay = seg->ay + t0 * (seg->by - seg->ay),
+                                 .bx = seg->ax + t1 * (seg->bx - seg->ax),
+                                 .by = seg->ay + t1 * (seg->by - seg->ay),
+                                 .cap_a = caps || !(piece_starts_at_cut || (pos == 0.0 && !seg->cap_a)),
+                                 .cap_b = caps || !ends_at_cut };
+      _plane_stamp_capsule(plane, &piece, reach);
     }
-    if(wrote)
+    dash->left -= run;
+    pos = end;
+    if(dash->left <= 0.0)
     {
-      plane->span_min[y] = MIN(plane->span_min[y], x_first);
-      plane->span_max[y] = MAX(plane->span_max[y], x_last);
+      dash->on = !dash->on;
+      dash->left = dash->on ? style->dash_on : style->dash_off;
+      piece_starts_at_cut = TRUE;
     }
+    else
+      piece_starts_at_cut = FALSE;
+  }
+  /* the next segment continues whatever this one was in, unless a cut fell exactly at its end */
+  dash->fresh = piece_starts_at_cut;
+}
+
+static void _polyline_stamp(_plane_t *const plane, const double *xy, const int count, const dt_stroke_style_t *style,
+                            const double reach, const gboolean closed)
+{
+  const gboolean caps = style->round_caps;
+  if(count == 1)
+  {
+    if(!caps) return;
+    const _segment_t dot = { xy[0], xy[1], xy[0], xy[1], TRUE, TRUE };
+    _plane_stamp_capsule(plane, &dot, reach);
+    return;
+  }
+  const gboolean dashed = style->dash_on > 0.0 && style->dash_off > 0.0;
+  _dash_t dash = { .on = TRUE, .left = style->dash_on, .fresh = TRUE };
+  const int last = count - 1;
+  for(int i = 0; i < last; i++)
+  {
+    /* the polyline's own two ends take the cap style; a closed one has none */
+    const gboolean starts_line = (i == 0) && !closed;
+    const gboolean ends_line = (i == last - 1) && !closed;
+    const _segment_t seg = { .ax = xy[2 * i],
+                             .ay = xy[2 * i + 1],
+                             .bx = xy[2 * i + 2],
+                             .by = xy[2 * i + 3],
+                             .cap_a = caps || !starts_line,
+                             .cap_b = caps || !ends_line };
+    if(dashed)
+      _plane_stamp_dashed(plane, &seg, style, reach, &dash);
+    else
+      _plane_stamp_capsule(plane, &seg, reach);
   }
 }
 
@@ -242,6 +368,19 @@ static inline void _plane_stamp_capsule(_plane_t *const plane, const double ax, 
  * alpha. The dark pass goes first and the bright pass over it, each with coverage
  * clamp(R + 1/2 - d, 0, 1) for its own half-width R -- the one-pixel ramp of a fast antialiased
  * cairo stroke. A pass with alpha or width at zero contributes nothing. */
+typedef struct _composite_t
+{
+  const dt_stroke_pass_t *dark;     /* NULL when the pass contributes nothing */
+  const dt_stroke_pass_t *bright;
+  double reach2;
+  double half_dark;
+  double half_bright;
+  uint8_t *data;
+  int stride;
+  int surface_width;
+  int surface_height;
+} _composite_t;
+
 static inline uint32_t _pixel_pack(const double a, const double r, const double g, const double b)
 {
   const uint32_t ia = (uint32_t)(a * 255.0 + 0.5);
@@ -264,133 +403,74 @@ static inline void _pixel_over(uint32_t *const pixel, const dt_stroke_pass_t *co
   *pixel = _pixel_pack(MIN(a, 1.0), MIN(r, 1.0), MIN(g, 1.0), MIN(b, 1.0));
 }
 
-static void _plane_composite_and_clear(_plane_t *const plane, cairo_surface_t *surface, const dt_stroke_style_t *style,
-                                       const double reach, cairo_rectangle_int_t *touched)
+/* One row's span: composite what was stamped, and widen the touched range [tx0, tx1) to it.
+ * Returns whether any pixel was painted. */
+static inline gboolean _composite_row(const _plane_t *const plane, const int y, const _composite_t *const c,
+                                      int *const tx0, int *const tx1)
 {
-  const double reach2 = reach * reach;
-  const double half_dark = 0.5 * style->dark.width;
-  const double half_bright = 0.5 * style->bright.width;
+  const int sy = y + plane->y0;
+  if(sy < 0 || sy >= c->surface_height) return FALSE;
+  const float *const row = plane->value + (size_t)y * plane->width;
+  uint32_t *const pixels = (uint32_t *)(c->data + (size_t)sy * c->stride);
+  gboolean painted = FALSE;
+  for(int x = plane->span_min[y]; x <= plane->span_max[y]; x++)
+  {
+    const float inside = row[x];
+    if(inside <= 0.0f) continue;
+    const int sx = x + plane->x0;
+    if(sx < 0 || sx >= c->surface_width) continue;
+    const double d = sqrt(MAX(c->reach2 - (double)inside, 0.0));
+    if(c->dark) _pixel_over(&pixels[sx], c->dark, CLAMP(c->half_dark + 0.5 - d, 0.0, 1.0));
+    if(c->bright) _pixel_over(&pixels[sx], c->bright, CLAMP(c->half_bright + 0.5 - d, 0.0, 1.0));
+    *tx0 = MIN(*tx0, sx);
+    *tx1 = MAX(*tx1, sx + 1);
+    painted = TRUE;
+  }
+  return painted;
+}
+
+static void _plane_composite_and_clear(_plane_t *const plane, cairo_surface_t *surface, const dt_stroke_style_t *style,
+                                       const double reach)
+{
+  cairo_surface_flush(surface);
   const gboolean with_dark = style->dark.width > 0.0 && style->dark.alpha > 0.0;
   const gboolean with_bright = style->bright.width > 0.0 && style->bright.alpha > 0.0;
-
-  cairo_surface_flush(surface);
-  uint8_t *const data = cairo_image_surface_get_data(surface);
-  const int stride = cairo_image_surface_get_stride(surface);
-  const int surface_width = cairo_image_surface_get_width(surface);
-  const int surface_height = cairo_image_surface_get_height(surface);
+  const _composite_t c = { .dark = with_dark ? &style->dark : NULL,
+                           .bright = with_bright ? &style->bright : NULL,
+                           .reach2 = reach * reach,
+                           .half_dark = 0.5 * style->dark.width,
+                           .half_bright = 0.5 * style->bright.width,
+                           .data = cairo_image_surface_get_data(surface),
+                           .stride = cairo_image_surface_get_stride(surface),
+                           .surface_width = cairo_image_surface_get_width(surface),
+                           .surface_height = cairo_image_surface_get_height(surface) };
 
   int tx0 = INT_MAX;
-  int ty0 = INT_MAX;
   int tx1 = -1;
+  int ty0 = INT_MAX;
   int ty1 = -1;
   for(int y = 0; y < plane->height; y++)
   {
     if(plane->span_max[y] < plane->span_min[y]) continue;
-    const int sy = y + plane->y0;
-    float *const row = plane->value + (size_t)y * plane->width;
-    if(sy >= 0 && sy < surface_height)
+    if(_composite_row(plane, y, &c, &tx0, &tx1))
     {
-      uint32_t *const pixels = (uint32_t *)(data + (size_t)sy * stride);
-      for(int x = plane->span_min[y]; x <= plane->span_max[y]; x++)
-      {
-        const float inside = row[x];
-        if(inside <= 0.0f) continue;
-        const int sx = x + plane->x0;
-        if(sx < 0 || sx >= surface_width) continue;
-        const double d = sqrt(MAX(reach2 - (double)inside, 0.0));
-        if(with_dark) _pixel_over(&pixels[sx], &style->dark, CLAMP(half_dark + 0.5 - d, 0.0, 1.0));
-        if(with_bright) _pixel_over(&pixels[sx], &style->bright, CLAMP(half_bright + 0.5 - d, 0.0, 1.0));
-        tx0 = MIN(tx0, sx);
-        tx1 = MAX(tx1, sx);
-        ty0 = MIN(ty0, sy);
-        ty1 = MAX(ty1, sy);
-      }
+      ty0 = MIN(ty0, y + plane->y0);
+      ty1 = MAX(ty1, y + plane->y0 + 1);
     }
     /* back to rest: only what was written */
-    memset(row + plane->span_min[y], 0, sizeof(float) * (size_t)(plane->span_max[y] - plane->span_min[y] + 1));
+    memset(plane->value + (size_t)y * plane->width + plane->span_min[y], 0,
+           sizeof(float) * (size_t)(plane->span_max[y] - plane->span_min[y] + 1));
   }
 
-  if(tx1 >= tx0 && ty1 >= ty0)
+  if(tx1 > tx0 && ty1 > ty0)
   {
-    cairo_surface_mark_dirty_rectangle(surface, tx0, ty0, tx1 - tx0 + 1, ty1 - ty0 + 1);
-    _touched_add(surface, tx0, ty0, tx1 + 1, ty1 + 1);
-    if(touched)
-    {
-      touched->x = tx0;
-      touched->y = ty0;
-      touched->width = tx1 - tx0 + 1;
-      touched->height = ty1 - ty0 + 1;
-    }
+    cairo_surface_mark_dirty_rectangle(surface, tx0, ty0, tx1 - tx0, ty1 - ty0);
+    _touched_add(surface, tx0, ty0, tx1, ty1);
   }
 }
 
 /* ---------------------------------------------------------------------------------------------
- * The walk along a polyline: dashes cut by arc length, capsules stamped. */
-typedef struct _dash_state_t
-{
-  gboolean on;        /* inside a dash rather than a gap */
-  double left;        /* what remains of the current dash or gap */
-} _dash_state_t;
-
-static void _polyline_stamp(_plane_t *const plane, const double *xy, const int count, const dt_stroke_style_t *style,
-                            const double reach, const gboolean closed)
-{
-  const gboolean dashed = style->dash_on > 0.0 && style->dash_off > 0.0;
-  _dash_state_t dash = { .on = TRUE, .left = dashed ? style->dash_on : DBL_MAX };
-  /* The ends of the polyline: round when asked, flat otherwise; a closed polyline has none.
-   * Every other piece end is a join or a dash cut inside the line, always capped so the joins
-   * between consecutive segments are round and seamless. */
-  const gboolean caps = style->round_caps;
-  const int last = count - 1;
-  /* a dash cut is a piece end; whether it is capped follows the cap style */
-  for(int i = 0; i < last; i++)
-  {
-    const double ax = xy[2 * i];
-    const double ay = xy[2 * i + 1];
-    const double bx = xy[2 * i + 2];
-    const double by = xy[2 * i + 3];
-    const double length = hypot(bx - ax, by - ay);
-    const gboolean starts_line = (i == 0) && !closed;
-    const gboolean ends_line = (i == last - 1) && !closed;
-
-    if(!dashed)
-    {
-      _plane_stamp_capsule(plane, ax, ay, bx, by, reach, caps || !starts_line, caps || !ends_line);
-      continue;
-    }
-
-    double pos = 0.0;
-    gboolean piece_begins_here = starts_line;   /* the current on-piece started at the line's start */
-    while(pos < length)
-    {
-      const double run = MIN(dash.left, length - pos);
-      const double end = pos + run;
-      if(dash.on)
-      {
-        const double t0 = pos / length;
-        const double t1 = end / length;
-        const gboolean piece_starts = (pos == 0.0) ? piece_begins_here : TRUE;   /* a cut: a dash start */
-        const gboolean piece_ends_at_cut = (end < length) || (ends_line && end >= length);
-        const gboolean cap_a = caps || !(piece_starts);
-        const gboolean cap_b = caps || !piece_ends_at_cut;
-        _plane_stamp_capsule(plane, ax + t0 * (bx - ax), ay + t0 * (by - ay), ax + t1 * (bx - ax),
-                             ay + t1 * (by - ay), reach, cap_a, cap_b);
-      }
-      dash.left -= run;
-      pos = end;
-      if(dash.left <= 0.0)
-      {
-        dash.on = !dash.on;
-        dash.left = dash.on ? style->dash_on : style->dash_off;
-        piece_begins_here = TRUE;
-      }
-      else
-        piece_begins_here = FALSE;
-    }
-  }
-  if(count == 1 && caps)
-    _plane_stamp_capsule(plane, xy[0], xy[1], xy[0], xy[1], reach, TRUE, TRUE);   /* a dot */
-}
+ * A polyline, and a path's worth of them. */
 
 static gboolean _stroke_polyline(cairo_surface_t *surface, const double *xy, const int count,
                                  const dt_stroke_style_t *style, const gboolean closed)
@@ -422,16 +502,11 @@ static gboolean _stroke_polyline(cairo_surface_t *surface, const double *xy, con
   const int y1 = MIN((int)ceil(y_max + reach) + 1, surface_height - 1);
   if(x1 < x0 || y1 < y0) return FALSE;   /* entirely off the surface */
 
-  g_mutex_lock(&_scratch_lock);
   _plane_t plane;
-  gboolean ok = _plane_acquire(&plane, x0, y0, x1 - x0 + 1, y1 - y0 + 1);
-  if(ok)
-  {
-    _polyline_stamp(&plane, xy, count, style, reach, closed);
-    _plane_composite_and_clear(&plane, surface, style, reach, NULL);
-  }
-  g_mutex_unlock(&_scratch_lock);
-  return ok;
+  if(!_plane_acquire(surface, &plane, x0, y0, x1 - x0 + 1, y1 - y0 + 1)) return FALSE;
+  _polyline_stamp(&plane, xy, count, style, reach, closed);
+  _plane_composite_and_clear(&plane, surface, style, reach);
+  return TRUE;
 }
 
 gboolean dt_stroke_raster_polyline(cairo_surface_t *surface, const double *xy, int count,
@@ -440,9 +515,6 @@ gboolean dt_stroke_raster_polyline(cairo_surface_t *surface, const double *xy, i
   if(!dt_stroke_raster_can_paint(surface) || !xy || !style || count < 1) return FALSE;
   return _stroke_polyline(surface, xy, count, style, FALSE);
 }
-
-/* ---------------------------------------------------------------------------------------------
- * From a cairo path. */
 
 /* How much cr's matrix scales a length, taken as the geometric mean of the two axes so an
  * anisotropic matrix -- which no overlay has -- degrades gracefully. */
@@ -458,6 +530,42 @@ static double _matrix_scale(cairo_t *cr)
   return isfinite(scale) ? scale : 1.0;
 }
 
+/* The polyline being gathered from a path: its vertices in surface pixels, and its first one
+ * for a close. */
+typedef struct _gather_t
+{
+  GArray *vertices;
+  double first_x;
+  double first_y;
+  gboolean closed;
+  double offset_x;   /* the surface's device offset: pixel = device + offset */
+  double offset_y;
+} _gather_t;
+
+static void _gather_flush(_gather_t *const g, cairo_surface_t *surface, const dt_stroke_style_t *style)
+{
+  if(g->vertices->len >= 2)
+    _stroke_polyline(surface, (const double *)g->vertices->data, (int)(g->vertices->len / 2), style, g->closed);
+  g_array_set_size(g->vertices, 0);
+  g->closed = FALSE;
+}
+
+static void _gather_point(_gather_t *const g, cairo_t *cr, const cairo_path_data_t *const point)
+{
+  double x = point->point.x;
+  double y = point->point.y;
+  cairo_user_to_device(cr, &x, &y);
+  x += g->offset_x;
+  y += g->offset_y;
+  if(g->vertices->len == 0)
+  {
+    g->first_x = x;
+    g->first_y = y;
+  }
+  g_array_append_val(g->vertices, x);
+  g_array_append_val(g->vertices, y);
+}
+
 gboolean dt_stroke_raster_path(cairo_t *cr, const dt_stroke_style_t *style)
 {
   if(!cr || !style) return FALSE;
@@ -471,12 +579,6 @@ gboolean dt_stroke_raster_path(cairo_t *cr, const dt_stroke_style_t *style)
     return FALSE;
   }
 
-  /* the surface's pixel grid is device space shifted by the surface's device offset: for the
-   * group cairo pushed, that is the clip's origin */
-  double offset_x = 0.0;
-  double offset_y = 0.0;
-  cairo_surface_get_device_offset(surface, &offset_x, &offset_y);
-
   const double scale = _matrix_scale(cr);
   dt_stroke_style_t device_style = *style;
   device_style.dark.width *= scale;
@@ -484,58 +586,38 @@ gboolean dt_stroke_raster_path(cairo_t *cr, const dt_stroke_style_t *style)
   device_style.dash_on *= scale;
   device_style.dash_off *= scale;
 
-  GArray *vertices = g_array_sized_new(FALSE, FALSE, sizeof(double), 2 * 1024);
-  gboolean closed = FALSE;
-  double first_x = 0.0;
-  double first_y = 0.0;
+  /* the surface's pixel grid is device space shifted by the surface's device offset: for the
+   * group cairo pushed, that is the clip's origin */
+  _gather_t gather = { .vertices = g_array_sized_new(FALSE, FALSE, sizeof(double), 2 * 1024) };
+  cairo_surface_get_device_offset(surface, &gather.offset_x, &gather.offset_y);
+
   for(int i = 0; i < path->num_data; i += path->data[i].header.length)
   {
     const cairo_path_data_t *const element = &path->data[i];
-    const cairo_path_data_type_t type = element->header.type;
-    if(type == CAIRO_PATH_MOVE_TO)
-    {
-      /* a move ends the polyline before it and starts the next one at its point */
-      if(vertices->len >= 2)
-        _stroke_polyline(surface, (const double *)vertices->data, (int)(vertices->len / 2), &device_style, closed);
-      g_array_set_size(vertices, 0);
-      closed = FALSE;
-    }
-    switch(type)
+    switch(element->header.type)
     {
       case CAIRO_PATH_MOVE_TO:
+        _gather_flush(&gather, surface, &device_style);
+        _gather_point(&gather, cr, &element[1]);
+        break;
       case CAIRO_PATH_LINE_TO:
-      {
-        double x = element[1].point.x;
-        double y = element[1].point.y;
-        cairo_user_to_device(cr, &x, &y);
-        x += offset_x;
-        y += offset_y;
-        if(vertices->len == 0)
-        {
-          first_x = x;
-          first_y = y;
-        }
-        g_array_append_val(vertices, x);
-        g_array_append_val(vertices, y);
+        _gather_point(&gather, cr, &element[1]);
         break;
-      }
       case CAIRO_PATH_CLOSE_PATH:
-        if(vertices->len >= 2)
+        if(gather.vertices->len >= 2)
         {
-          g_array_append_val(vertices, first_x);
-          g_array_append_val(vertices, first_y);
-          closed = TRUE;
+          g_array_append_val(gather.vertices, gather.first_x);
+          g_array_append_val(gather.vertices, gather.first_y);
+          gather.closed = TRUE;
         }
         break;
-      case CAIRO_PATH_CURVE_TO:
       default:
         break;   /* a flattened path has no curves */
     }
   }
-  if(vertices->len >= 2)
-    _stroke_polyline(surface, (const double *)vertices->data, (int)(vertices->len / 2), &device_style, closed);
+  _gather_flush(&gather, surface, &device_style);
 
-  g_array_free(vertices, TRUE);
+  g_array_free(gather.vertices, TRUE);
   cairo_path_destroy(path);
   cairo_new_path(cr);
   return TRUE;
