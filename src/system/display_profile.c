@@ -464,28 +464,37 @@ void dt_display_profile_read(GtkWidget *widget, guint8 **buffer, gint *buffer_si
 
       curve[0] = curve[1] = curve[2] = cmsBuildGamma(NULL, wayland_color_management.tf_power / 10000.0);
 
-      if (curve[0])
+      if (!curve[0])
       {
-        lcms_profile = cmsCreateRGBProfile(&white_point, &primaries, curve);
-
-        if (lcms_profile)
-        {
-          cmsUInt32Number size = 0;
-
-          if (cmsSaveProfileToMem(lcms_profile, NULL, &size) && size > 0)
-          {
-            guint8 *data = g_malloc(size);
-
-            if (cmsSaveProfileToMem(lcms_profile, data, &size))
-            {
-              *buffer = data;
-              *buffer_size = size;
-              *source = g_strdup("Wayland color profile api");
-            }
-          }
-        }
-        cmsCloseProfile(lcms_profile);
+        cmsFreeToneCurve(curve[0]);
+        return;
       }
+
+      lcms_profile = cmsCreateRGBProfile(&white_point, &primaries, curve);
+
+      if (!lcms_profile)
+      {
+        cmsCloseProfile(lcms_profile);
+        return;
+      }
+
+      cmsUInt32Number size = 0;
+
+      if (!cmsSaveProfileToMem(lcms_profile, NULL, &size) && size == 0)
+      {
+        return;
+      }
+
+      guint8 *data = g_malloc(size);
+
+      if (cmsSaveProfileToMem(lcms_profile, data, &size))
+      {
+        *buffer = data;
+        *buffer_size = size;
+        *source = g_strdup("Wayland color profile api");
+      }
+
+      cmsCloseProfile(lcms_profile);
       cmsFreeToneCurve(curve[0]);
 
       return;
