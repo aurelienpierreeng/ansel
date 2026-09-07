@@ -937,12 +937,39 @@ static gboolean _log_key_event(GSignalInvocationHint *hint, guint n_params, cons
   last_state = event->state;
   last_keycode = event->hardware_keycode;
 
-  // Same spelling as the shortcuts registry uses, so a trace line can be read against
-  // the accelerators the user configured.
-  gchar *accel = gtk_accelerator_name(event->keyval, event->state & gtk_accelerator_get_default_mod_mask());
+  // `state` holds the modifiers as they were BEFORE this event, so a modifier key's own
+  // press carries none of its own bit while its release carries it -- the same keyval either
+  // way. That is GDK's contract, not a decoding accident, and reading the trace requires it,
+  // which is why the primary modifier is named from the KEY below and not from the state.
+  GdkModifierType mods = (GdkModifierType)(event->state & gtk_accelerator_get_default_mod_mask());
+
+  // The primary modifier is spelled by the application, not by GTK's per-platform naming
+  // table: DT_PRIMARY_MASK is the bit every shortcut is registered and matched against, and on
+  // Quartz one physical Cmd also sets GDK's virtual GDK_META_MASK duplicate next to it -- which
+  // gtk_accelerator_name() renders as a SECOND modifier ("<Primary><Mod2>"), spelling one
+  // keystroke as two. Both bits come out here and the token is printed once, the same way
+  // _accels_keys_decode() (widgets/accelerators.c) and dt_modifier_is() drop that duplicate
+  // before matching. The raw state is printed as well, so nothing is hidden.
+  gboolean primary_mod = (mods & DT_PRIMARY_MASK) != 0;
+  mods = (GdkModifierType)(mods & ~DT_PRIMARY_MASK);
+#ifdef GDK_WINDOWING_QUARTZ
+  primary_mod = primary_mod || (mods & GDK_META_MASK) != 0;
+  mods = (GdkModifierType)(mods & ~GDK_META_MASK);
+  // Cmd, which GDK reports as the Meta keysym on this backend.
+  const gboolean primary_key = event->keyval == GDK_KEY_Meta_L || event->keyval == GDK_KEY_Meta_R;
+#else
+  const gboolean primary_key = event->keyval == GDK_KEY_Control_L || event->keyval == GDK_KEY_Control_R;
+#endif
+
+  // The key that IS the primary modifier is announced as such -- with the physical key it
+  // stands for, since that differs per platform -- and then carries no separate modifier
+  // token of its own, which would name it twice on the release.
+  gchar *accel = gtk_accelerator_name(event->keyval, mods);
   GtkWidget *widget = GTK_WIDGET(g_value_get_object(&params[0]));
-  dt_print(DT_DEBUG_INPUT, "[input] key %s: %s (keyval 0x%x, keycode %u, state 0x%x) on %s\n",
-           (event->type == GDK_KEY_PRESS) ? "pressed" : "released", IS_NULL_PTR(accel) ? "<unnamed>" : accel,
+  dt_print(DT_DEBUG_INPUT, "[input] key %s: %s%s%s%s (keyval 0x%x, keycode %u, state 0x%x) on %s\n",
+           (event->type == GDK_KEY_PRESS) ? "pressed" : "released",
+           (primary_mod && !primary_key) ? "<Primary>" : "", primary_key ? "<Primary> (" : "",
+           IS_NULL_PTR(accel) ? "<unnamed>" : accel, primary_key ? ")" : "",
            event->keyval, (unsigned int)event->hardware_keycode, event->state,
            IS_NULL_PTR(widget) ? "<none>" : G_OBJECT_TYPE_NAME(widget));
   dt_free(accel);

@@ -2138,6 +2138,31 @@ parameter spelled `which` on the `mouse_moved` chain (`dt_control_mouse_moved()`
 IOP's `mouse_moved()`); it is modifiers there too, not a button number — `iop/vignette.c` reads
 it with `dt_modifier_is(which, DT_PRIMARY_MASK)`.
 
+### The `-d input` keystroke trace hooks the generic `event` signal, and spells the primary modifier itself
+
+`_log_key_event()` (`gui/application.c`) is a GTK emission hook, installed by `dt_gui_gtk_init()`
+only when that channel is on. It is on **`GtkWidget::event`, not `key-press-event`**: a widget
+emits the generic signal first and the specific one only if nothing handled it, and
+`dt_accels_dispatch()` is connected to `event` on the main window and returns TRUE for every
+keystroke that fires a shortcut — so a hook on `key-press-event` prints every key the program
+ignores and none of the ones it acts on. An emission hook is also what makes the trace global:
+keys go to whichever toplevel has the focus, each handles its own, and no single handler sees
+them all. One keystroke reaches the hook several times as `gtk_propagate_event()` walks the focus
+chain with the same `GdkEvent`, so the first emission is printed and the repeats are skipped.
+
+Two things about a key event that the trace has to state rather than pass through:
+
+- **`state` holds the modifiers as they were BEFORE the event**, so a modifier key's own press
+  carries none of its bit and its release carries it, with the same keyval either way. That is
+  why the primary modifier is announced from the KEY (`Control_L`/`Control_R`, `Meta_L`/`Meta_R`
+  on Quartz — Cmd is reported as the Meta keysym) and not from the state.
+- **The primary token comes from `DT_PRIMARY_MASK`, not from `gtk_accelerator_name()`.** On
+  Quartz one physical Cmd sets `GDK_MOD2_MASK` — the bit every shortcut is registered and matched
+  against — plus GDK's virtual `GDK_META_MASK` duplicate, and GTK names the pair as two separate
+  modifiers (`<Primary><Mod2>`), spelling one keystroke twice. Both bits come out before naming
+  and `<Primary>` is printed once, the same duplicate `_accels_keys_decode()` and
+  `dt_modifier_is()` drop before matching. The raw `state` is printed alongside, in hex.
+
 ---
 
 ## Interpolation
