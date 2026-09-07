@@ -71,6 +71,25 @@ struct dt_iop_module_t;
 gboolean dt_masks_form_get_info(const struct dt_masks_form_t *form, dt_masks_form_info_t *out);
 
 /**
+ * @brief Validate a serialized group-membership blob and copy its child form IDs.
+ *
+ * The blob must contain exactly @p member_count group membership records in the masks on-disk
+ * representation. On success, @p child_ids receives a newly allocated array in stored order;
+ * the caller owns it and releases it with dt_free_align(). A zero-member group succeeds with
+ * @p child_ids set to NULL. The implementation owns the wire layout, so callers never name or
+ * dereference its internal record type.
+ *
+ * @param serialized the serialized membership blob, or NULL only when @p member_count is zero.
+ * @param serialized_size the blob size in bytes.
+ * @param member_count the number of membership records declared beside the blob.
+ * @param child_ids receives the allocated child-ID array on success and NULL on failure.
+ * @return TRUE for an exact, representable group blob; FALSE for invalid sizes, a missing blob,
+ *         allocation failure, or a NULL @p child_ids output pointer.
+ */
+gboolean dt_masks_group_deserialize_child_ids(const void *serialized, int serialized_size,
+                                              int member_count, int **child_ids);
+
+/**
  * @brief Copy a group's membership rows, in order, into caller storage.
  *
  * Thread-neutral: reads only @p group's own memory. Takes no lock and does not copy-on-write.

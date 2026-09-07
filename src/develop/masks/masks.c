@@ -1658,6 +1658,30 @@ gboolean dt_masks_form_get_info(const dt_masks_form_t *form, dt_masks_form_info_
   return TRUE;
 }
 
+gboolean dt_masks_group_deserialize_child_ids(const void *serialized, const int serialized_size,
+                                              const int member_count, int **child_ids)
+{
+  if(IS_NULL_PTR(child_ids)) return FALSE;
+  *child_ids = NULL;
+
+  if(serialized_size < 0 || member_count < 0
+     || (gsize)member_count > G_MAXSIZE / sizeof(dt_masks_form_group_t)) return FALSE;
+
+  const gsize group_size = (gsize)member_count * sizeof(dt_masks_form_group_t);
+  if((gsize)serialized_size != group_size || (member_count > 0 && IS_NULL_PTR(serialized))) return FALSE;
+  if(member_count == 0) return TRUE;
+
+  int *ids = dt_calloc_align((gsize)member_count * sizeof(*ids));
+  if(IS_NULL_PTR(ids)) return FALSE;
+
+  const char *records = (const char *)serialized;
+  for(int index = 0; index < member_count; index++)
+    memcpy(&ids[index], records + (gsize)index * sizeof(dt_masks_form_group_t), sizeof(ids[index]));
+
+  *child_ids = ids;
+  return TRUE;
+}
+
 /* One place builds the value type callers see, so a row is never copied out field by field at
  * three separate call sites -- each of which would have to be found again the day
  * dt_masks_member_t grows a field. @p entry may be NULL: the member comes back zeroed but KEEPS

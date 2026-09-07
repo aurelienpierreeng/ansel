@@ -122,7 +122,7 @@
 #include "database/metadata_repository.h"
 #include "develop/blend.h"
 #include "develop/iop_order.h"
-#include "develop/masks.h"
+#include "develop/masks_group.h"
 #include "imageio/imageio_core.h"
 #include "metadata/metadata.h"
 #include "metadata/notify.h"
@@ -1417,16 +1417,21 @@ static gboolean validate_mask_entry(GHashTable *mask_entries, mask_entry_t *entr
   entry->validating = TRUE;
   if(entry->mask_type & DT_MASKS_GROUP)
   {
-    if(entry->mask_nb < 0 || entry->mask_points_len < 0
-       || entry->mask_points_len % (int)sizeof(dt_masks_form_group_t) != 0
-       || entry->mask_nb != entry->mask_points_len / (int)sizeof(dt_masks_form_group_t))
+    int *child_ids = NULL;
+    if(!dt_masks_group_deserialize_child_ids(entry->mask_points, entry->mask_points_len,
+                                             entry->mask_nb, &child_ids))
       return FALSE;
-    const dt_masks_form_group_t *group = (const dt_masks_form_group_t *)entry->mask_points;
+
     for(int i = 0; i < entry->mask_nb; i++)
     {
-      mask_entry_t *child = (mask_entry_t *)g_hash_table_lookup(mask_entries, &group[i].formid);
-      if(IS_NULL_PTR(child) || !validate_mask_entry(mask_entries, child, depth + 1)) return FALSE;
+      mask_entry_t *child = (mask_entry_t *)g_hash_table_lookup(mask_entries, &child_ids[i]);
+      if(IS_NULL_PTR(child) || !validate_mask_entry(mask_entries, child, depth + 1))
+      {
+        dt_free_align(child_ids);
+        return FALSE;
+      }
     }
+    dt_free_align(child_ids);
   }
   entry->validating = FALSE;
   entry->validated = TRUE;
@@ -1473,14 +1478,20 @@ static gboolean add_mask_entries_to_db(int32_t imgid, GHashTable *mask_entries, 
   // if it's a group: recurse into the children first
   if(entry->mask_type & DT_MASKS_GROUP)
   {
-    dt_masks_form_group_t *group = (dt_masks_form_group_t *)entry->mask_points;
-    if((int)(entry->mask_nb * sizeof(dt_masks_form_group_t)) != entry->mask_points_len)
+    int *child_ids = NULL;
+    if(!dt_masks_group_deserialize_child_ids(entry->mask_points, entry->mask_points_len,
+                                             entry->mask_nb, &child_ids))
     {
       fprintf(stderr, "[masks] error loading masks from xmp file, bad binary blob size.\n");
       return FALSE;
     }
     for(int i = 0; i < entry->mask_nb; i++)
-      if(!add_mask_entries_to_db(imgid, mask_entries, group[i].formid, depth + 1)) return FALSE;
+      if(!add_mask_entries_to_db(imgid, mask_entries, child_ids[i], depth + 1))
+      {
+        dt_free_align(child_ids);
+        return FALSE;
+      }
+    dt_free_align(child_ids);
   }
 
   return add_mask_entry_to_db(imgid, entry);

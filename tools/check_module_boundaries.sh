@@ -410,17 +410,17 @@ fi
 #                  snapshots that were supposed to be frozen. The module's own interface headers
 #                  are excluded; naming the type there is the design, not the leak.
 # 19 -> 18 and 34 -> 30 when tests/unittests/test_masks_raster_contract.c left src/ for
-# tests/, where every other test in the tree lives. The ratchet counts what src/ reaches into,
-# so a test moving out of src/ lowers it -- but nothing about the module's enclosure changed,
-# and the test still names those types. Lowered because the rule is that a count which falls
-# is written down, not because ground was won here.
-masks_include_baseline=18
+# tests/, where every other test in the tree lives. 18 -> 17 and 30 -> 28 replace
+# common/xmp_sidecar.cc's masks.h include and direct membership-row accesses with the masks-owned
+# serialized-group API. The first reduction only records a test relocation; the second encloses
+# the serialized membership layout inside the masks module.
+masks_include_baseline=17
 masks_gui_include_baseline=11
 masks_member_baseline=75
 masks_write_baseline=16
 masks_alloc_baseline=1
 masks_forms_baseline=74
-masks_row_baseline=30
+masks_row_baseline=28
 
 # Members no other struct in the tree uses. Keep it that way: adding an ambiguous name here
 # buys a bigger number and loses the gate.
