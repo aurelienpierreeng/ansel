@@ -35,6 +35,7 @@
 #include "metadata/metadata.h"
 #include "common/act_on.h"
 #include "database/colorlabel_repository.h"
+#include "database/database.h"
 #include "database/image_repository.h"
 #include "database/metadata_repository.h"
 #include "database/tag_repository.h"
@@ -236,11 +237,12 @@ static GList *_list_find_custom(GList *list, gpointer data)
   return NULL;
 }
 
-static gchar *_get_tb_removed_metadata_string_values(GList *before, GList *after)
+static gchar *_get_tb_removed_metadata_string_values(GList *before, GList *after, gboolean *has_removals)
 {
   GList *b = before;
   GList *a = after;
   gchar *metadata_list = NULL;
+  *has_removals = FALSE;
 
   while(b)
   {
@@ -255,6 +257,7 @@ static gchar *_get_tb_removed_metadata_string_values(GList *before, GList *after
     }
     if(!same_key || different_value || !value[0])
     {
+      *has_removals = TRUE;
       metadata_list = dt_util_dstrcat(metadata_list, "%d,", atoi(b->data));
     }
     b = g_list_next(b);
@@ -300,26 +303,41 @@ static GArray *_get_tb_added_metadata_rows(const int img, GList *before, GList *
   return rows;
 }
 
-static void _bulk_remove_metadata(const int img, const gchar *metadata_list)
+static gboolean _bulk_remove_metadata(const int img, const gchar *metadata_list)
 {
-  dt_metadata_repository_remove(img, metadata_list);
+  return dt_metadata_repository_remove(img, metadata_list);
 }
 
-static void _bulk_add_metadata(GArray *rows)
+static gboolean _bulk_add_metadata(GArray *rows)
 {
-  dt_metadata_repository_add((const dt_metadata_row_t *)rows->data, rows->len);
+  return dt_metadata_repository_add((const dt_metadata_row_t *)rows->data, rows->len);
 }
 
-static void _pop_undo_execute(const int32_t imgid, GList *before, GList *after)
+static gboolean _pop_undo_execute(const int32_t imgid, GList *before, GList *after)
 {
-  gchar *tobe_removed_list = _get_tb_removed_metadata_string_values(before, after);
+  gboolean has_removals = FALSE;
+  gchar *tobe_removed_list = _get_tb_removed_metadata_string_values(before, after, &has_removals);
   GArray *tobe_added_rows = _get_tb_added_metadata_rows(imgid, before, after);
+  if((has_removals && IS_NULL_PTR(tobe_removed_list)) || IS_NULL_PTR(tobe_added_rows))
+  {
+    dt_free(tobe_removed_list);
+    return FALSE;
+  }
 
-  _bulk_remove_metadata(imgid, tobe_removed_list);
-  _bulk_add_metadata(tobe_added_rows);
+  if(!dt_database_start_transaction())
+  {
+    dt_free(tobe_removed_list);
+    g_array_free(tobe_added_rows, TRUE);
+    return FALSE;
+  }
+  const gboolean removed = _bulk_remove_metadata(imgid, tobe_removed_list);
+  const gboolean added = removed && _bulk_add_metadata(tobe_added_rows);
+  if(!added) dt_database_rollback_transaction();
+  const gboolean committed = added && dt_database_release_transaction();
 
   dt_free(tobe_removed_list);
   g_array_free(tobe_added_rows, TRUE);
+  return committed;
 }
 
 static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_data_t data, const dt_undo_action_t action, GList **imgs)
@@ -332,8 +350,8 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
 
       GList *before = (action == DT_ACTION_UNDO) ? undometadata->after : undometadata->before;
       GList *after = (action == DT_ACTION_UNDO) ? undometadata->before : undometadata->after;
-      _pop_undo_execute(undometadata->imgid, before, after);
-      *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undometadata->imgid));
+      if(_pop_undo_execute(undometadata->imgid, before, after))
+        *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undometadata->imgid));
     }
   }
 }
@@ -472,14 +490,18 @@ typedef enum dt_tag_actions_t
   DT_MA_REMOVE
 } dt_tag_actions_t;
 
-static void _metadata_execute(const GList *imgs, const GList *metadata, GList **undo,
-                              const gboolean undo_on, const gint action)
+static gboolean _metadata_execute(const GList *imgs, const GList *metadata, GList **undo,
+                                  const gboolean undo_on, const gint action)
 {
+  GList *pending_undo = NULL;
+  if(!dt_database_start_transaction()) return FALSE;
+
   for(const GList *images = imgs; images; images = g_list_next(images))
   {
     const int32_t image_id = GPOINTER_TO_INT(images->data);
 
     dt_undo_metadata_t *undometadata = (dt_undo_metadata_t *)malloc(sizeof(dt_undo_metadata_t));
+    if(IS_NULL_PTR(undometadata)) goto failure;
     undometadata->imgid = image_id;
     undometadata->before = dt_metadata_get_list_id(image_id);
     switch(action)
@@ -500,13 +522,39 @@ static void _metadata_execute(const GList *imgs, const GList *metadata, GList **
         break;
     }
 
-    _pop_undo_execute(image_id, undometadata->before, undometadata->after);
+    if(!_pop_undo_execute(image_id, undometadata->before, undometadata->after))
+    {
+      _undo_metadata_free(undometadata);
+      goto failure;
+    }
 
     if(undo_on)
-      *undo = g_list_append(*undo, undometadata);
+    {
+      GList *appended = g_list_append(pending_undo, undometadata);
+      if(IS_NULL_PTR(appended))
+      {
+        _undo_metadata_free(undometadata);
+        goto failure;
+      }
+      pending_undo = appended;
+    }
     else
       _undo_metadata_free(undometadata);
   }
+
+  if(!dt_database_release_transaction())
+  {
+    g_list_free_full(pending_undo, _undo_metadata_free);
+    return FALSE;
+  }
+
+  if(undo_on) *undo = g_list_concat(*undo, pending_undo);
+  return TRUE;
+
+failure:
+  dt_database_rollback_transaction();
+  g_list_free_full(pending_undo, _undo_metadata_free);
+  return FALSE;
 }
 
 void dt_metadata_set(const int32_t imgid, const char *key, const char *value, const gboolean undo_on)
@@ -532,61 +580,79 @@ void dt_metadata_set(const int32_t imgid, const char *key, const char *value, co
       metadata = g_list_append(metadata, (gpointer)ckey);
       metadata = g_list_append(metadata, (gpointer)cvalue);
 
-      _metadata_execute(imgs, metadata, &undo, undo_on, DT_MA_ADD);
+      const gboolean success = _metadata_execute(imgs, metadata, &undo, undo_on, DT_MA_ADD);
 
       g_list_free_full(metadata, dt_free_gpointer);
       metadata = NULL;
       g_list_free(imgs);
       imgs = NULL;
-      if(undo_on)
+      if(undo_on && success && undo)
       {
         dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_METADATA, undo, _pop_undo, _metadata_undo_data_free);
+        dt_undo_end_group(dt_undo_get_global());
+      }
+      else if(undo_on)
+      {
+        _metadata_undo_data_free(undo);
         dt_undo_end_group(dt_undo_get_global());
       }
     }
   }
 }
 
-void dt_metadata_set_import(const int32_t imgid, const char *key, const char *value)
+gboolean dt_metadata_set_import(const int32_t imgid, const char *key, const char *value)
 {
-  if(IS_NULL_PTR(key) || !imgid || imgid == UNKNOWN_IMAGE) return;
+  if(IS_NULL_PTR(key) || !imgid || imgid == UNKNOWN_IMAGE) return TRUE;
 
   const int keyid = dt_metadata_get_keyid(key);
 
-  if(keyid != -1) // known key
+  if(keyid == -1) return TRUE;
+
+  gboolean imported = dt_image_get_xmp_mode();
+  if(!imported && dt_metadata_get_type(keyid) != DT_METADATA_TYPE_INTERNAL)
   {
-    // FIXME: what does XMP writing preference has to do with anything here ???
-    gboolean imported = dt_image_get_xmp_mode();
-    if(!imported && dt_metadata_get_type(keyid) != DT_METADATA_TYPE_INTERNAL)
-    {
-      const gchar *name = dt_metadata_get_name(keyid);
-      char *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
-      imported = dt_conf_get_int(setting) & DT_METADATA_FLAG_IMPORTED;
-      dt_free(setting);
-    }
-    if(imported)
-    {
-      GList *imgs = NULL;
-      imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));
-      if(imgs)
-      {
-        GList *undo = NULL;
-
-        const gchar *ckey = g_strdup_printf("%d", keyid);
-        const gchar *cvalue = _cleanup_metadata_value(value);
-        GList *metadata = NULL;
-        metadata = g_list_append(metadata, (gpointer)ckey);
-        metadata = g_list_append(metadata, (gpointer)cvalue);
-
-        _metadata_execute(imgs, metadata, &undo, FALSE, DT_MA_ADD);
-
-        g_list_free_full(metadata, dt_free_gpointer);
-        metadata = NULL;
-        g_list_free(imgs);
-        imgs = NULL;
-      }
-    }
+    const gchar *name = dt_metadata_get_name(keyid);
+    char *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
+    if(IS_NULL_PTR(setting)) return FALSE;
+    imported = dt_conf_get_int(setting) & DT_METADATA_FLAG_IMPORTED;
+    dt_free(setting);
   }
+  if(!imported) return TRUE;
+
+  GList *imgs = g_list_prepend(NULL, GINT_TO_POINTER(imgid));
+  if(IS_NULL_PTR(imgs)) return FALSE;
+
+  gchar *ckey = g_strdup_printf("%d", keyid);
+  gchar *cvalue = _cleanup_metadata_value(value);
+  if(IS_NULL_PTR(ckey) || IS_NULL_PTR(cvalue))
+  {
+    dt_free(ckey);
+    dt_free(cvalue);
+    g_list_free(imgs);
+    return FALSE;
+  }
+
+  GList *metadata = g_list_append(NULL, ckey);
+  if(IS_NULL_PTR(metadata))
+  {
+    dt_free(ckey);
+    dt_free(cvalue);
+    g_list_free(imgs);
+    return FALSE;
+  }
+  metadata = g_list_append(metadata, cvalue);
+  if(g_list_length(metadata) != 2)
+  {
+    g_list_free_full(metadata, dt_free_gpointer);
+    dt_free(cvalue);
+    g_list_free(imgs);
+    return FALSE;
+  }
+  const gboolean success = _metadata_execute(imgs, metadata, NULL, FALSE, DT_MA_ADD);
+
+  g_list_free_full(metadata, dt_free_gpointer);
+  g_list_free(imgs);
+  return success;
 }
 
 void dt_metadata_set_list(const GList *imgs, GList *key_value, const gboolean undo_on)
@@ -621,11 +687,16 @@ void dt_metadata_set_list(const GList *imgs, GList *key_value, const gboolean un
     GList *undo = NULL;
     if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_METADATA);
 
-    _metadata_execute(imgs, metadata, &undo, undo_on, DT_MA_ADD);
+    const gboolean success = _metadata_execute(imgs, metadata, &undo, undo_on, DT_MA_ADD);
 
-    if(undo_on)
+    if(undo_on && success && undo)
     {
       dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_METADATA, undo, _pop_undo, _metadata_undo_data_free);
+      dt_undo_end_group(dt_undo_get_global());
+    }
+    else if(undo_on)
+    {
+      _metadata_undo_data_free(undo);
       dt_undo_end_group(dt_undo_get_global());
     }
 
@@ -634,9 +705,8 @@ void dt_metadata_set_list(const GList *imgs, GList *key_value, const gboolean un
   }
 }
 
-void dt_metadata_clear(const GList *imgs, const gboolean undo_on)
+gboolean dt_metadata_clear(const GList *imgs, const gboolean undo_on)
 {
-  // do not clear internal or hidden metadata
   GList *metadata = NULL;
   for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
   {
@@ -644,12 +714,25 @@ void dt_metadata_clear(const GList *imgs, const gboolean undo_on)
     {
       const gchar *name = dt_metadata_get_name(i);
       char *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
+      if(IS_NULL_PTR(setting))
+      {
+        g_list_free_full(metadata, dt_free_gpointer);
+        return FALSE;
+      }
       const gboolean hidden = dt_conf_get_int(setting) & DT_METADATA_FLAG_HIDDEN;
+      const gboolean imported = dt_image_get_xmp_mode()
+                                || (dt_conf_get_int(setting) & DT_METADATA_FLAG_IMPORTED);
       dt_free(setting);
-      if(!hidden)
+      if(!hidden && imported)
       {
         // caution: metadata is a simple list here
-        metadata = g_list_prepend(metadata, g_strdup_printf("%d", i));
+        gchar *keyid = g_strdup_printf("%d", i);
+        if(IS_NULL_PTR(keyid))
+        {
+          g_list_free_full(metadata, dt_free_gpointer);
+          return FALSE;
+        }
+        metadata = g_list_prepend(metadata, keyid);
       }
     }
   }
@@ -660,7 +743,15 @@ void dt_metadata_clear(const GList *imgs, const gboolean undo_on)
     GList *undo = NULL;
     if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_METADATA);
 
-    _metadata_execute(imgs, metadata, &undo, undo_on, DT_MA_REMOVE);
+    const gboolean success = _metadata_execute(imgs, metadata, &undo, undo_on, DT_MA_REMOVE);
+
+    if(!success)
+    {
+      _metadata_undo_data_free(undo);
+      if(undo_on) dt_undo_end_group(dt_undo_get_global());
+      g_list_free_full(metadata, dt_free_gpointer);
+      return FALSE;
+    }
 
     if(undo_on)
     {
@@ -671,6 +762,7 @@ void dt_metadata_clear(const GList *imgs, const gboolean undo_on)
     g_list_free_full(metadata, dt_free_gpointer);
     metadata = NULL;
   }
+  return TRUE;
 }
 
 void dt_metadata_set_list_id(const GList *img, const GList *metadata, const gboolean clear_on,
@@ -681,11 +773,16 @@ void dt_metadata_set_list_id(const GList *img, const GList *metadata, const gboo
     GList *undo = NULL;
     if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_METADATA);
 
-    _metadata_execute(img, metadata, &undo, undo_on, clear_on ? DT_MA_SET : DT_MA_ADD);
+    const gboolean success = _metadata_execute(img, metadata, &undo, undo_on, clear_on ? DT_MA_SET : DT_MA_ADD);
 
-    if(undo_on)
+    if(undo_on && success && undo)
     {
       dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_METADATA, undo, _pop_undo, _metadata_undo_data_free);
+      dt_undo_end_group(dt_undo_get_global());
+    }
+    else if(undo_on)
+    {
+      _metadata_undo_data_free(undo);
       dt_undo_end_group(dt_undo_get_global());
     }
   }

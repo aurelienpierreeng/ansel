@@ -281,14 +281,16 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename);
  *
  * These took a `const dt_database_t *` that all 50 call sites filled with
  * dt_database_get_global(). They do not any more, and that accessor is gone with them. */
-void dt_database_start_transaction_debug(void);
-void dt_database_release_transaction_debug(void);
+gboolean dt_database_start_transaction_debug(void);
+gboolean dt_database_release_transaction_debug(void);
 void dt_database_rollback_transaction(void);
 void dt_database_begin_transaction_batch(void);
 void dt_database_end_transaction_batch(void);
+/** Whether the calling thread owns an active transaction or transaction batch. */
+gboolean dt_database_transaction_is_owned_by_current_thread(void);
 
-#define dt_database_start_transaction() DT_DEBUG_TRACE_WRAPPER_VOID(DT_DEBUG_SQL, dt_database_start_transaction_debug)
-#define dt_database_release_transaction() DT_DEBUG_TRACE_WRAPPER_VOID(DT_DEBUG_SQL, dt_database_release_transaction_debug)
+#define dt_database_start_transaction() DT_DEBUG_TRACE_WRAPPER_RESULT_VOID(DT_DEBUG_SQL, dt_database_start_transaction_debug)
+#define dt_database_release_transaction() DT_DEBUG_TRACE_WRAPPER_RESULT_VOID(DT_DEBUG_SQL, dt_database_release_transaction_debug)
 
 #ifdef __cplusplus
 }
