@@ -19,7 +19,7 @@
 /* Three-way parity check for the .anselnn executor: torch (the golden fixture) against the CPU
  * path and against the OpenCL path, on the same input.
  *
- * src/tests/nn_model_test.c already does torch-vs-CPU and builds standalone, without Ansel.
+ * tests/nn_model_test.c already does torch-vs-CPU and builds standalone, without Ansel.
  * The GPU side cannot: dt_nn_cl_create() wants a compiled program number, which only exists
  * once dt_opencl_init() has run, so this half has to live in an application that links
  * lib_ansel. It follows ansel-cltest's pattern of appending its own arguments to force the

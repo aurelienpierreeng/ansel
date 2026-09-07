@@ -361,7 +361,7 @@ threshold**; the compute cost is unchanged, only the lock is gone. The three oth
 points (`dt_dev_pixelpipe_synch_all`/`synch_top`, used by export, snapshots and the focus
 overlay on throwaway devs) take their own brief snapshot the same way. The writer's COW gate is
 the other half of the contract: a snapshotted item has refcount > 1, so `cow_touch` clones it
-and the snapshot never sees a half-rewritten item. `src/tests/unittests/test_history_snapshot.c`
+and the snapshot never sees a half-rewritten item. `tests/unittests/test_history_snapshot.c`
 pins that contract; `-d history` shows the hold times.
 
 **Three things about this design that are not obvious from the code:**

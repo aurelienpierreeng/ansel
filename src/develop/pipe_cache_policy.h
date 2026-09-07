@@ -28,7 +28,7 @@
  * was wrong, the symptom was a downstream module silently reading stale host bytes from a
  * rekeyed cacheline, and it was found by dumping OpenCL buffers, not by a test.
  *
- * A pure function can be pinned by one, which is what src/tests/unittests/test_pipe_cache_policy.c
+ * A pure function can be pinned by one, which is what tests/unittests/test_pipe_cache_policy.c
  * does. Gathering the inputs -- which of them come from the GUI, which from the pipe -- stays
  * in dev_pixelpipe.c, where it can see those things.
  */

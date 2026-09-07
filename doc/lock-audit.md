@@ -340,7 +340,7 @@ findings in 5 files**:
 | `caches/cache.c` | 3 |
 | `pixel/colorequal_shared.c` | 2 |
 
-`src/tests/unittests/test_dtpthread_recursive.c` is deliberately **not** in that table. Its
+`tests/unittests/test_dtpthread_recursive.c` is deliberately **not** in that table. Its
 four cases re-acquire a lock they already hold, which is the property under test and exactly
 what the analysis is built to reject — it models a lock as held or not held, so the second
 acquisition reads as "already held" and the matching release as "was not held". The bodies

@@ -422,7 +422,7 @@ actually care about: *noise is not detail*.
 | `data/kernels/rawdenoiseai.cl` | OpenCL kernels (convolution, upsampling) |
 | `data/CMakeLists.txt` | build-time hash-verified model fetch (`FETCH_NN_MODELS`) |
 | [ansel-denoise](https://github.com/aurelienpierreeng/ansel-denoise) | training pipeline, data harvesting, published models (`models/`) |
-| `src/tests/nn_model_test.c` | torch-vs-CPU parity selftest, builds standalone without Ansel (tolerance $2\times10^{-4}$, measured $\sim 2\times10^{-7}$) |
+| `tests/nn_model_test.c` | torch-vs-CPU parity selftest, builds standalone without Ansel (tolerance $2\times10^{-4}$, measured $\sim 2\times10^{-7}$) |
 | `src/apps/ansel-nn-parity` | torch vs CPU vs **OpenCL** on the same fixture; needs lib_ansel because the GPU path wants a compiled program number |
 | `tools/opencl-math-accuracy.c` | standalone probe: scores each OpenCL device's math library per build-option set, prints the `anselrc` line to fix a bad one |
 | `doc/opencl-math-accuracy.md` | the measurements behind the kernel build options, and how to override them per device |
