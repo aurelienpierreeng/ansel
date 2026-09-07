@@ -4037,67 +4037,6 @@ static void _rect_include(cairo_rectangle_int_t *rect, gboolean *any, const doub
  * quarter turn about its node (same length, any direction), by a node's disc and by an arrow
  * head. A buffer too short to have a header (a circle's, a source's) contributes its first
  * points. The outlines themselves the rasteriser reports exactly, on top of this. */
-/* Does this buffer carry a node header at all: three points per node, ahead of the samples. */
-static inline gboolean header_reach_wanted(const int nodes, const int points_count)
-{
-  return nodes > 0 && points_count >= nodes * 3;
-}
-
-static void _canvas_cairo_bound(cairo_t *canvas_cr, const dt_masks_form_gui_t *gui, cairo_rectangle_int_t *rect,
-                                gboolean *any)
-{
-  const dt_masks_form_t *form = dt_masks_get_visible_form(gui->dev);
-  const int nodes = IS_NULL_PTR(form) ? 0 : (int)g_list_length(form->points);
-  double scale = 1.0;
-  double scale_y = 1.0;
-  cairo_surface_get_device_scale(cairo_get_target(canvas_cr), &scale, &scale_y);
-  if(scale <= 0.0) scale = 1.0;
-  double reach = 0.0;
-  for(const GList *node = gui->points; node; node = g_list_next(node))
-  {
-    const dt_masks_form_gui_points_t *const pts = (const dt_masks_form_gui_points_t *)node->data;
-    if(IS_NULL_PTR(pts)) continue;
-    const float *const arrays[3] = { pts->points, pts->border, pts->source };
-    const int counts[3] = { pts->points_count, pts->border_count, pts->source_count };
-    for(int a = 0; a < 3; a++)
-    {
-      if(IS_NULL_PTR(arrays[a]) || counts[a] <= 0) continue;
-      const int header = MIN(nodes * 3, counts[a]);
-      const int limit = (header > 0) ? header : MIN(counts[a], 64);
-      for(int i = 0; i < limit; i++)
-      {
-        double x = arrays[a][2 * i];
-        double y = arrays[a][2 * i + 1];
-        cairo_user_to_device(canvas_cr, &x, &y);
-        _rect_include(rect, any, x * scale, y * scale, 0);   /* device units to canvas pixels */
-      }
-    }
-    /* the longest control vector of this outline's header, in device pixels */
-    if(!IS_NULL_PTR(pts->points) && header_reach_wanted(nodes, pts->points_count))
-    {
-      for(int k = 0; k < nodes; k++)
-      {
-        double nx = pts->points[k * 6 + 2];
-        double ny = pts->points[k * 6 + 3];
-        cairo_user_to_device(canvas_cr, &nx, &ny);
-        for(int c = 0; c < 2; c++)
-        {
-          double cx = pts->points[k * 6 + (c ? 4 : 0)];
-          double cy = pts->points[k * 6 + (c ? 5 : 1)];
-          cairo_user_to_device(canvas_cr, &cx, &cy);
-          reach = MAX(reach, hypot(cx - nx, cy - ny) * scale);
-        }
-      }
-    }
-  }
-  if(!*any) return;
-  const int margin = (int)ceil(reach + 2.0 * DT_DRAW_RADIUS_NODE_SELECTED + DT_DRAW_SCALE_ARROW) + 2;
-  rect->x -= margin;
-  rect->y -= margin;
-  rect->width += 2 * margin;
-  rect->height += 2 * margin;
-}
-
 /* A frame of the canvas: where it sits in cr's device space, and the context that draws
  * into it in cr's coordinates. */
 typedef struct _canvas_frame_t
@@ -4110,6 +4049,115 @@ typedef struct _canvas_frame_t
   int height;
   double device_scale;    /* the target's, copied to the canvas */
 } _canvas_frame_t;
+
+/* Does this buffer carry a node header at all: three points per node, ahead of the samples. */
+static inline gboolean header_reach_wanted(const int nodes, const int points_count)
+{
+  return nodes > 0 && points_count >= nodes * 3;
+}
+
+/* The device scale of the surface @p cr draws on: pixel = device unit * scale. */
+static double _canvas_device_scale(cairo_t *cr)
+{
+  double scale_x = 1.0;
+  double scale_y = 1.0;
+  cairo_surface_get_device_scale(cairo_get_target(cr), &scale_x, &scale_y);
+  return (scale_x > 0.0) ? scale_x : 1.0;
+}
+
+/* Include the first @p limit points of @p array, taken through @p canvas_cr's matrix to canvas
+ * pixels, in @p rect. */
+static void _bound_include_points(cairo_t *canvas_cr, const float *const array, const int limit,
+                                  const double scale, cairo_rectangle_int_t *rect, gboolean *any)
+{
+  for(int i = 0; i < limit; i++)
+  {
+    double x = array[2 * i];
+    double y = array[2 * i + 1];
+    cairo_user_to_device(canvas_cr, &x, &y);
+    _rect_include(rect, any, x * scale, y * scale, 0);   /* device units to canvas pixels */
+  }
+}
+
+/* Include the node header of each of an outline's three buffers -- or, for a buffer with no
+ * header, its first samples -- in @p rect. */
+static void _bound_include_headers(cairo_t *canvas_cr, const dt_masks_form_gui_points_t *const pts, const int nodes,
+                                   const double scale, cairo_rectangle_int_t *rect, gboolean *any)
+{
+  const float *const arrays[3] = { pts->points, pts->border, pts->source };
+  const int counts[3] = { pts->points_count, pts->border_count, pts->source_count };
+  for(int a = 0; a < 3; a++)
+  {
+    if(IS_NULL_PTR(arrays[a]) || counts[a] <= 0) continue;
+    const int header = MIN(nodes * 3, counts[a]);
+    const int limit = (header > 0) ? header : MIN(counts[a], 64);
+    _bound_include_points(canvas_cr, arrays[a], limit, scale, rect, any);
+  }
+}
+
+/* The longest control vector of an outline's node header, in canvas pixels: how far from a
+ * node its curvature handle can be drawn. */
+static double _bound_header_reach(cairo_t *canvas_cr, const dt_masks_form_gui_points_t *const pts, const int nodes,
+                                  const double scale)
+{
+  if(IS_NULL_PTR(pts->points) || !header_reach_wanted(nodes, pts->points_count)) return 0.0;
+  double reach = 0.0;
+  for(int k = 0; k < nodes; k++)
+  {
+    double nx = pts->points[k * 6 + 2];
+    double ny = pts->points[k * 6 + 3];
+    cairo_user_to_device(canvas_cr, &nx, &ny);
+    for(int c = 0; c < 2; c++)
+    {
+      double cx = pts->points[k * 6 + (c ? 4 : 0)];
+      double cy = pts->points[k * 6 + (c ? 5 : 1)];
+      cairo_user_to_device(canvas_cr, &cx, &cy);
+      reach = MAX(reach, hypot(cx - nx, cy - ny) * scale);
+    }
+  }
+  return reach;
+}
+
+static void _canvas_cairo_bound(cairo_t *canvas_cr, const dt_masks_form_gui_t *gui, cairo_rectangle_int_t *rect,
+                                gboolean *any)
+{
+  const dt_masks_form_t *form = dt_masks_get_visible_form(gui->dev);
+  const int nodes = IS_NULL_PTR(form) ? 0 : (int)g_list_length(form->points);
+  const double scale = _canvas_device_scale(canvas_cr);
+  double reach = 0.0;
+  for(const GList *node = gui->points; node; node = g_list_next(node))
+  {
+    const dt_masks_form_gui_points_t *const pts = (const dt_masks_form_gui_points_t *)node->data;
+    if(IS_NULL_PTR(pts)) continue;
+    _bound_include_headers(canvas_cr, pts, nodes, scale, rect, any);
+    reach = MAX(reach, _bound_header_reach(canvas_cr, pts, nodes, scale));
+  }
+  if(!*any) return;
+  const int margin = (int)ceil(reach + 2.0 * DT_DRAW_RADIUS_NODE_SELECTED + DT_DRAW_SCALE_ARROW) + 2;
+  rect->x -= margin;
+  rect->y -= margin;
+  rect->width += 2 * margin;
+  rect->height += 2 * margin;
+}
+
+/* Bound what cairo may paint on top of the outlines and clip the canvas context to it. A
+ * creation session paints through its own cached pattern and keeps @p bound as the caller set
+ * it, the whole canvas, unclipped. Returns whether @p bound holds a rectangle at all. */
+static gboolean _overlay_clip_to_bound(cairo_t *mask_draw, const dt_masks_form_gui_t *gui,
+                                       const _canvas_frame_t *const frame, cairo_rectangle_int_t *bound)
+{
+  if(gui->creation || !IS_NULL_PTR(gui->creation_formids)) return TRUE;
+  gboolean bounded = FALSE;
+  _canvas_cairo_bound(mask_draw, gui, bound, &bounded);
+  if(!bounded) return FALSE;
+  const double s = frame->device_scale;
+  cairo_save(mask_draw);
+  cairo_identity_matrix(mask_draw);
+  cairo_rectangle(mask_draw, bound->x / s, bound->y / s, bound->width / s, bound->height / s);
+  cairo_restore(mask_draw);
+  cairo_clip(mask_draw);
+  return TRUE;
+}
 
 /* Open a frame covering cr's clip. Returns FALSE with nothing to draw into when the clip is
  * empty or the canvas cannot be had. */
@@ -4305,24 +4353,9 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
   if(!((mask_form->type & DT_MASKS_IS_PRIMITIVE_SHAPE) && mask_gui->creation))
     dt_masks_gui_form_test_create(mask_form, mask_gui, module);
 
-  /* The rectangle cairo may paint in, and the clip that holds it to that. A creation session
-   * paints through its own cached pattern and takes the whole canvas instead. */
+  /* The rectangle cairo may paint in, and the clip that holds it to that. */
   cairo_rectangle_int_t cairo_bound = { 0, 0, frame.width, frame.height };
-  gboolean cairo_bounded = TRUE;
-  if(!mask_gui->creation && IS_NULL_PTR(mask_gui->creation_formids))
-  {
-    cairo_bounded = FALSE;
-    _canvas_cairo_bound(mask_draw, mask_gui, &cairo_bound, &cairo_bounded);
-    if(cairo_bounded)
-    {
-      cairo_save(mask_draw);
-      cairo_identity_matrix(mask_draw);
-      cairo_rectangle(mask_draw, cairo_bound.x / frame.device_scale, cairo_bound.y / frame.device_scale,
-                      cairo_bound.width / frame.device_scale, cairo_bound.height / frame.device_scale);
-      cairo_restore(mask_draw);
-      cairo_clip(mask_draw);
-    }
-  }
+  const gboolean cairo_bounded = _overlay_clip_to_bound(mask_draw, mask_gui, &frame, &cairo_bound);
 
   if(dt_get_debug_flags() & DT_DEBUG_MASKS)
     dt_show_times(&rebuild_start, "[masks] overlay outline refresh");
