@@ -531,14 +531,24 @@ static double _matrix_scale(cairo_t *cr)
 }
 
 /* The polyline being gathered from a path: its vertices in surface pixels, and its first one
- * for a close. */
+ * for a close.
+ *
+ * Cairo's "device space" is not the pixel grid. It is the space the CTM maps user space into,
+ * and the surface then applies its own device transform: pixel = device * device_scale +
+ * device_offset, the scale being what a HiDPI widget carries (2 on a 2x screen) and the offset
+ * what a pushed group carries (minus its clip's origin, in pixels). cairo_user_to_device()
+ * stops at device space -- measured: on a surface with device scale 2, (10, 10) maps to
+ * (10, 10) -- so both factors are applied here. Leaving the scale out put every overlay at half
+ * size in the top-left quadrant of a HiDPI view. */
 typedef struct _gather_t
 {
   GArray *vertices;
   double first_x;
   double first_y;
   gboolean closed;
-  double offset_x;   /* the surface's device offset: pixel = device + offset */
+  double scale_x;    /* the surface's device scale */
+  double scale_y;
+  double offset_x;   /* the surface's device offset, in pixels */
   double offset_y;
 } _gather_t;
 
@@ -555,8 +565,8 @@ static void _gather_point(_gather_t *const g, cairo_t *cr, const cairo_path_data
   double x = point->point.x;
   double y = point->point.y;
   cairo_user_to_device(cr, &x, &y);
-  x += g->offset_x;
-  y += g->offset_y;
+  x = x * g->scale_x + g->offset_x;
+  y = y * g->scale_y + g->offset_y;
   if(g->vertices->len == 0)
   {
     g->first_x = x;
@@ -579,17 +589,22 @@ gboolean dt_stroke_raster_path(cairo_t *cr, const dt_stroke_style_t *style)
     return FALSE;
   }
 
-  const double scale = _matrix_scale(cr);
+  /* the surface's pixel grid is device space scaled by the surface's device scale and shifted
+   * by its device offset: for the group cairo pushed, that is the clip's origin */
+  _gather_t gather = { .vertices = g_array_sized_new(FALSE, FALSE, sizeof(double), 2 * 1024),
+                       .scale_x = 1.0,
+                       .scale_y = 1.0 };
+  cairo_surface_get_device_scale(surface, &gather.scale_x, &gather.scale_y);
+  cairo_surface_get_device_offset(surface, &gather.offset_x, &gather.offset_y);
+  if(gather.scale_x <= 0.0) gather.scale_x = 1.0;
+  if(gather.scale_y <= 0.0) gather.scale_y = 1.0;
+
+  const double scale = _matrix_scale(cr) * sqrt(gather.scale_x * gather.scale_y);
   dt_stroke_style_t device_style = *style;
   device_style.dark.width *= scale;
   device_style.bright.width *= scale;
   device_style.dash_on *= scale;
   device_style.dash_off *= scale;
-
-  /* the surface's pixel grid is device space shifted by the surface's device offset: for the
-   * group cairo pushed, that is the clip's origin */
-  _gather_t gather = { .vertices = g_array_sized_new(FALSE, FALSE, sizeof(double), 2 * 1024) };
-  cairo_surface_get_device_offset(surface, &gather.offset_x, &gather.offset_y);
 
   for(int i = 0; i < path->num_data; i += path->data[i].header.length)
   {

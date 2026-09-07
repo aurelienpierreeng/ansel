@@ -4048,6 +4048,10 @@ static void _canvas_cairo_bound(cairo_t *canvas_cr, const dt_masks_form_gui_t *g
 {
   const dt_masks_form_t *form = dt_masks_get_visible_form(gui->dev);
   const int nodes = IS_NULL_PTR(form) ? 0 : (int)g_list_length(form->points);
+  double scale = 1.0;
+  double scale_y = 1.0;
+  cairo_surface_get_device_scale(cairo_get_target(canvas_cr), &scale, &scale_y);
+  if(scale <= 0.0) scale = 1.0;
   double reach = 0.0;
   for(const GList *node = gui->points; node; node = g_list_next(node))
   {
@@ -4065,7 +4069,7 @@ static void _canvas_cairo_bound(cairo_t *canvas_cr, const dt_masks_form_gui_t *g
         double x = arrays[a][2 * i];
         double y = arrays[a][2 * i + 1];
         cairo_user_to_device(canvas_cr, &x, &y);
-        _rect_include(rect, any, x, y, 0);
+        _rect_include(rect, any, x * scale, y * scale, 0);   /* device units to canvas pixels */
       }
     }
     /* the longest control vector of this outline's header, in device pixels */
@@ -4081,7 +4085,7 @@ static void _canvas_cairo_bound(cairo_t *canvas_cr, const dt_masks_form_gui_t *g
           double cx = pts->points[k * 6 + (c ? 4 : 0)];
           double cy = pts->points[k * 6 + (c ? 5 : 1)];
           cairo_user_to_device(canvas_cr, &cx, &cy);
-          reach = MAX(reach, hypot(cx - nx, cy - ny));
+          reach = MAX(reach, hypot(cx - nx, cy - ny) * scale);
         }
       }
     }
@@ -4122,30 +4126,41 @@ static gboolean _canvas_begin(cairo_t *cr, _canvas_frame_t *frame)
   double device_y1 = clip_y1;
   cairo_user_to_device(cr, &device_x0, &device_y0);
   cairo_user_to_device(cr, &device_x1, &device_y1);
-  frame->x = (int)floor(MIN(device_x0, device_x1));
-  frame->y = (int)floor(MIN(device_y0, device_y1));
-  frame->width = (int)ceil(MAX(device_x0, device_x1)) - frame->x;
-  frame->height = (int)ceil(MAX(device_y0, device_y1)) - frame->y;
-  if(frame->width <= 0 || frame->height <= 0) return FALSE;
 
+  /* cairo's device space stops short of the pixel grid: a pixel is device * device_scale +
+   * device_offset, the scale being what a HiDPI widget carries. The frame is in pixels. */
   double device_scale_x = 1.0;
   double device_scale_y = 1.0;
+  double device_offset_x = 0.0;
+  double device_offset_y = 0.0;
   cairo_surface_get_device_scale(cairo_get_target(cr), &device_scale_x, &device_scale_y);
+  cairo_surface_get_device_offset(cairo_get_target(cr), &device_offset_x, &device_offset_y);
   frame->device_scale = (device_scale_x > 0.0) ? device_scale_x : 1.0;
+  const double px0 = MIN(device_x0, device_x1) * frame->device_scale + device_offset_x;
+  const double px1 = MAX(device_x0, device_x1) * frame->device_scale + device_offset_x;
+  const double py0 = MIN(device_y0, device_y1) * frame->device_scale + device_offset_y;
+  const double py1 = MAX(device_y0, device_y1) * frame->device_scale + device_offset_y;
+  frame->x = (int)floor(px0);
+  frame->y = (int)floor(py0);
+  frame->width = (int)ceil(px1) - frame->x;
+  frame->height = (int)ceil(py1) - frame->y;
+  if(frame->width <= 0 || frame->height <= 0) return FALSE;
 
   frame->canvas = _canvas_acquire(frame->width, frame->height, frame->device_scale);
   if(IS_NULL_PTR(frame->canvas)) return FALSE;
   dt_stroke_raster_touched_reset(frame->canvas);
   frame->cr = cairo_create(frame->canvas);
 
-  /* The canvas draws in cr's coordinates, shifted so that its pixel (0, 0) is the clip's
-   * device origin: cr's matrix, then a device-space translation -- in the units the device
-   * scale multiplies, so divided by it. */
+  /* The canvas draws in cr's coordinates, shifted so that its pixel (0, 0) is the frame's
+   * origin: cr's matrix, then a device-space translation. The canvas has the target's device
+   * scale, so a pixel shift is that many device units, and the target's own device offset is
+   * taken back out. */
   cairo_matrix_t matrix;
   cairo_matrix_t shift;
   cairo_matrix_t canvas_matrix;
   cairo_get_matrix(cr, &matrix);
-  cairo_matrix_init_translate(&shift, -frame->x / frame->device_scale, -frame->y / frame->device_scale);
+  cairo_matrix_init_translate(&shift, (device_offset_x - frame->x) / frame->device_scale,
+                              (device_offset_y - frame->y) / frame->device_scale);
   cairo_matrix_multiply(&canvas_matrix, &matrix, &shift);
   cairo_set_matrix(frame->cr, &canvas_matrix);
   return TRUE;
@@ -4160,12 +4175,19 @@ static void _canvas_end(cairo_t *cr, const _canvas_frame_t *frame, const cairo_r
   const int x1 = CLAMP(dirty->x + dirty->width, 0, frame->width);
   const int y1 = CLAMP(dirty->y + dirty->height, 0, frame->height);
   if(x1 <= x0 || y1 <= y0) return;
+  /* With the identity matrix a user unit is one device unit, and the target maps those to
+   * pixels through its device scale and offset; the canvas, carrying the same device scale,
+   * then lands pixel on pixel. */
   const double s = frame->device_scale;
+  double offset_x = 0.0;
+  double offset_y = 0.0;
+  cairo_surface_get_device_offset(cairo_get_target(cr), &offset_x, &offset_y);
   cairo_surface_flush(frame->canvas);
   cairo_save(cr);
   cairo_identity_matrix(cr);
-  cairo_set_source_surface(cr, frame->canvas, frame->x / s, frame->y / s);
-  cairo_rectangle(cr, (frame->x + x0) / s, (frame->y + y0) / s, (x1 - x0) / s, (y1 - y0) / s);
+  cairo_set_source_surface(cr, frame->canvas, (frame->x - offset_x) / s, (frame->y - offset_y) / s);
+  cairo_rectangle(cr, (frame->x + x0 - offset_x) / s, (frame->y + y0 - offset_y) / s, (x1 - x0) / s,
+                  (y1 - y0) / s);
   cairo_fill(cr);
   cairo_restore(cr);
   const cairo_rectangle_int_t painted = { x0, y0, x1 - x0, y1 - y0 };

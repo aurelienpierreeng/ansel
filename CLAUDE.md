@@ -1903,8 +1903,14 @@ for any other target. `masks_gui.c` draws everything into a persistent device-pi
 composites only the painted rectangle. Nodes, handles, arrows and the creation trace stay with
 cairo, on the same canvas. `doc/overlay-raster.md` is the account; the numbers and the pixel
 comparison come from `ansel-test-masks-geometry --time-overlay` (add `MASKS_DEBUG=1` for the
-per-stage traces). Two traps: stamping discs instead of capsules scallops thin lines, and inside
-a pushed group the writable surface is `cairo_get_group_target()`, not `cairo_get_target()`.
+per-stage traces). Three traps: stamping discs instead of capsules scallops thin lines; inside
+a pushed group the writable surface is `cairo_get_group_target()`, not `cairo_get_target()`; and
+**cairo's device space is not the pixel grid** — `cairo_user_to_device()` stops before the
+surface's own transform (pixel = device × device_scale + device_offset), so on a 2x screen every
+pixel derived from it must be multiplied by `cairo_surface_get_device_scale()`. The first version
+did not, was correct on every 1x screen and every unit test, and drew the whole overlay at half
+size in the top-left quadrant of a HiDPI darkroom; `test_stroke_raster` and the harness's
+`hidpi placement` check now paint on device-scaled surfaces.
 
 ### A rotated GtkLabel sizes the column it sits in
 

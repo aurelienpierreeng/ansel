@@ -1381,6 +1381,71 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
   cairo_surface_destroy(surface);
 }
 
+/* The painted pixels' bounding box of an overlay rendered onto @p surface. */
+static gboolean _painted_bbox(cairo_surface_t *surface, int *x0, int *y0, int *x1, int *y1)
+{
+  cairo_surface_flush(surface);
+  const uint32_t *px = (const uint32_t *)cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface) / 4;
+  const int w = cairo_image_surface_get_width(surface);
+  const int h = cairo_image_surface_get_height(surface);
+  gboolean any = FALSE;
+  const uint32_t background = px[0];   /* the corner is letterboxed, never painted */
+  for(int y = 0; y < h; y++)
+    for(int x = 0; x < w; x++)
+    {
+      const uint32_t p = px[y * stride + x];
+      if(p == background) continue;
+      if(!any) { *x0 = *x1 = x; *y0 = *y1 = y; any = TRUE; }
+      *x0 = MIN(*x0, x); *x1 = MAX(*x1, x); *y0 = MIN(*y0, y); *y1 = MAX(*y1, y);
+    }
+  return any;
+}
+
+/* A HiDPI view: the same pixels, a device scale of 2 on the surface, half the user units. The
+ * overlay must land on the same pixels as at scale 1 -- measured as the painted bounding box,
+ * to within the antialiasing and the thicker lines a 2x screen is entitled to. This is the
+ * check the darkroom on a 2x screen made necessary: everything at half size in the top-left
+ * quadrant, because cairo's device space is not the pixel grid. */
+static void _check_hidpi_placement(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const int img_w,
+                                   const int img_h)
+{
+  _set_frame(dev, img_w, img_h);
+  dev->form_gui->form_visible = form;
+  dt_dev_geometry_set_processed_size(dev, img_w, img_h);
+  const double scale = MIN((double)OVERLAY_SCREEN_W / img_w, (double)OVERLAY_SCREEN_H / img_h);
+  int bbox[2][4] = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
+  gboolean any[2] = { FALSE, FALSE };
+  for(int hidpi = 0; hidpi < 2; hidpi++)
+  {
+    const double ppd = hidpi ? 2.0 : 1.0;
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H);
+    cairo_surface_set_device_scale(surface, ppd, ppd);
+    const dt_masks_overlay_transform_t transform
+        = { .scale = scale / ppd,
+            .offset_x = 0.5 * (OVERLAY_SCREEN_W - scale * img_w) / ppd,
+            .offset_y = 0.5 * (OVERLAY_SCREEN_H - scale * img_h) / ppd };
+    dev->form_gui->formid = 0;
+    dev->form_gui->geometry_generation = 0;
+    dev->form_gui->group_selected = 0;
+    cairo_t *cr = cairo_create(surface);
+    cairo_set_source_rgb(cr, 0.12, 0.12, 0.12);
+    cairo_paint(cr);
+    dt_masks_events_post_expose_with(dev, NULL, cr, (int)(OVERLAY_SCREEN_W / ppd), (int)(OVERLAY_SCREEN_H / ppd), -1, -1,
+                                     &transform);
+    cairo_destroy(cr);
+    any[hidpi] = _painted_bbox(surface, &bbox[hidpi][0], &bbox[hidpi][1], &bbox[hidpi][2], &bbox[hidpi][3]);
+    cairo_surface_destroy(surface);
+  }
+  const int tolerance = 12;   /* antialiasing plus the wider lines and handles of a 2x screen */
+  gboolean ok = any[0] && any[1];
+  for(int i = 0; ok && i < 4; i++)
+    if(abs(bbox[0][i] - bbox[1][i]) > tolerance) ok = FALSE;
+  printf("[%s] %-26s hidpi placement: 1x bbox (%d,%d)-(%d,%d)  2x bbox (%d,%d)-(%d,%d)\n", ok ? "PASS" : "FAIL", name,
+         bbox[0][0], bbox[0][1], bbox[0][2], bbox[0][3], bbox[1][0], bbox[1][1], bbox[1][2], bbox[1][3]);
+  if(!ok) failures++;
+}
+
 static void _time_overlay_brush(dt_develop_t *dev, GList *nodes, const char *name, const char *dir,
                                 const int img_w, const int img_h, const int frames)
 {
@@ -1392,6 +1457,7 @@ static void _time_overlay_brush(dt_develop_t *dev, GList *nodes, const char *nam
   g_strlcpy(form.name, name, sizeof(form.name));
   form.points = nodes;
   _time_overlay_form(dev, &form, name, dir, img_w, img_h, frames);
+  _check_hidpi_placement(dev, &form, name, img_w, img_h);
   g_list_free_full(form.points, free);
 }
 
@@ -1421,6 +1487,7 @@ static void _time_overlay_all(dt_develop_t *dev, const char *dir, const int fram
       form.points = g_list_append(form.points, _polygon_node(r[0], r[1], r[2], r[3], r[4], r[5], r[6]));
     }
     _time_overlay_form(dev, &form, "polygon-1788045925", dir, 5198, 3904, frames);
+    _check_hidpi_placement(dev, &form, "polygon-1788045925", 5198, 3904);
     g_list_free_full(form.points, free);
   }
   {
@@ -1441,6 +1508,7 @@ static void _time_overlay_all(dt_develop_t *dev, const char *dir, const int fram
     form.points = g_list_append(form.points, _polygon_node(0.80f, 0.78f, 0.80f, 0.78f, 0.80f, 0.78f, radius));
     form.points = g_list_append(form.points, _polygon_node(0.20f, 0.78f, 0.20f, 0.78f, 0.20f, 0.78f, radius));
     _time_overlay_form(dev, &form, "polygon-comb", dir, IMG_W, IMG_H, frames);
+    _check_hidpi_placement(dev, &form, "polygon-comb", IMG_W, IMG_H);
     g_list_free_full(form.points, free);
   }
 }
