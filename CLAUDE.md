@@ -1891,6 +1891,21 @@ policy must be `GTK_POLICY_EXTERNAL` + `set_min_content_height(1)` +
 reconfigures (the table persists across view enter/leave; the guard would otherwise skip the
 reconfigure on same-size re-entry).
 
+### The mask overlay's outlines are rasterised directly, not stroked by cairo
+
+A shape's outline reaches the drawing code already sampled at one point per device pixel;
+handing it to cairo as a path to stroke twice was raster → vector → raster, 7–18 ms per shape
+per frame at fit zoom. `widgets/stroke_raster.c` paints the polyline itself (a per-segment
+capsule distance field, two passes, dashes cut by arc length, the same one-pixel ramp as
+`CAIRO_ANTIALIAS_FAST`) into the ARGB32 surface `cr` draws on — the current group's surface,
+offset included — and `dt_draw_shape_lines()` tries it before falling back to the cairo strokes
+for any other target. `masks_gui.c` draws everything into a persistent device-pixel canvas and
+composites only the painted rectangle. Nodes, handles, arrows and the creation trace stay with
+cairo, on the same canvas. `doc/overlay-raster.md` is the account; the numbers and the pixel
+comparison come from `ansel-test-masks-geometry --time-overlay` (add `MASKS_DEBUG=1` for the
+per-stage traces). Two traps: stamping discs instead of capsules scallops thin lines, and inside
+a pushed group the writable surface is `cairo_get_group_target()`, not `cairo_get_target()`.
+
 ### A rotated GtkLabel sizes the column it sits in
 
 A `GtkLabel` with `gtk_label_set_angle()` requests the width of its *slanted* bounding box, so a
