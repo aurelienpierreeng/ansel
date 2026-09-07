@@ -932,7 +932,7 @@ static GList *read_history_v2(Exiv2::XmpData &xmpData, const char *filename, gbo
       key_iter += strlen("Xmp.darktable.history[");
       errno = 0;
       const long parsed_index = strtol(key_iter, &key_iter, 10);
-      if(errno || parsed_index <= 0 || parsed_index > G_MAXUINT)
+      if(errno || parsed_index <= 0 || static_cast<unsigned long>(parsed_index) > G_MAXUINT)
       {
         std::cerr << "error reading history from '" << key << "' (" << filename << ")" << std::endl;
         g_list_free_full(history_entries, free_history_entry);
@@ -1257,7 +1257,7 @@ static GList *read_masks_v3(Exiv2::XmpData &xmpData, const char *filename, const
       key_iter += strlen("Xmp.darktable.masks_history[");
       errno = 0;
       const long parsed_index = strtol(key_iter, &key_iter, 10);
-      if(errno || parsed_index <= 0 || parsed_index > G_MAXUINT)
+      if(errno || parsed_index <= 0 || static_cast<unsigned long>(parsed_index) > G_MAXUINT)
       {
         std::cerr << "error reading masks history from '" << key << "' (" << filename << ")" << std::endl;
         g_list_free_full(history_entries, free_mask_entry);
