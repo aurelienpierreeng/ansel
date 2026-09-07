@@ -4137,6 +4137,40 @@ static void _canvas_end(cairo_t *cr, const _canvas_frame_t *frame, const cairo_r
   _canvas_clear(frame->canvas, &painted);
 }
 
+/* Draw the visible form: a group member by member, anything else through its own drawer. */
+static void _overlay_draw_form(cairo_t *cr, const float zoom_scale, dt_masks_form_t *mask_form,
+                               dt_masks_form_gui_t *mask_gui)
+{
+  if(mask_form->type & DT_MASKS_GROUP)
+  {
+    dt_group_events_post_expose(cr, zoom_scale, mask_form, mask_gui);
+    return;
+  }
+  if(mask_form->functions && mask_form->functions->post_expose)
+  {
+    const guint point_count = g_list_length(mask_form->points);
+    mask_gui->type = mask_form->type;
+    mask_form->functions->post_expose(cr, zoom_scale, mask_gui, 0, point_count);
+  }
+}
+
+/* What was painted this frame: the rasteriser's own record, and the bounds of what cairo drew
+ * on top. The transform must still be in effect on @p canvas_cr, which is what the header
+ * bounds need; a creation session paints through its own cached pattern and takes the whole
+ * canvas. Returns FALSE when nothing was painted. */
+static gboolean _overlay_dirty(cairo_t *canvas_cr, const _canvas_frame_t *frame, const dt_masks_form_gui_t *mask_gui,
+                               cairo_rectangle_int_t *dirty)
+{
+  if(mask_gui->creation || !IS_NULL_PTR(mask_gui->creation_formids))
+  {
+    *dirty = (cairo_rectangle_int_t){ 0, 0, frame->width, frame->height };
+    return TRUE;
+  }
+  gboolean any = dt_stroke_raster_touched(frame->canvas, dirty);
+  _canvas_dirty_from_headers(canvas_cr, mask_gui, dirty, &any);
+  return any;
+}
+
 void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr,
                                       int32_t width, int32_t height, int32_t pointerx, int32_t pointery,
                                       const dt_masks_overlay_transform_t *transform)
@@ -4221,26 +4255,12 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
   const dt_times_t draw_start = { 0 };
   dt_get_times((dt_times_t *)&draw_start);
 
-  if(mask_form->type & DT_MASKS_GROUP)
-    dt_group_events_post_expose(mask_draw, zoom_scale, mask_form, mask_gui);
-  else if(mask_form->functions && mask_form->functions->post_expose)
-  {
-    const guint point_count = g_list_length(mask_form->points);
-    mask_gui->type = mask_form->type;
-    mask_form->functions->post_expose(mask_draw, zoom_scale, mask_gui, 0, point_count);
-  }
+  _overlay_draw_form(mask_draw, zoom_scale, mask_form, mask_gui);
   /* What was painted: the rasteriser's own record, and the bounds of what cairo drew on top.
    * The transform is still in effect here, which is what the header bounds need; a creation
    * session paints through its own cached pattern and takes the whole canvas. */
   cairo_rectangle_int_t dirty = { 0, 0, 0, 0 };
-  gboolean any = dt_stroke_raster_touched(frame.canvas, &dirty);
-  if(mask_gui->creation || !IS_NULL_PTR(mask_gui->creation_formids))
-  {
-    dirty = (cairo_rectangle_int_t){ 0, 0, frame.width, frame.height };
-    any = TRUE;
-  }
-  else
-    _canvas_dirty_from_headers(mask_draw, mask_gui, &dirty, &any);
+  const gboolean any = _overlay_dirty(mask_draw, &frame, mask_gui, &dirty);
   cairo_restore(mask_draw);
   cairo_destroy(mask_draw);
 
