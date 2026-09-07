@@ -40,6 +40,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_dtpthread_recursive
   test_history_snapshot
   test_masks_raster_contract
+  test_stroke_raster
 )
 
 foreach(test ${LIB_ANSEL_UNIT_TESTS})
