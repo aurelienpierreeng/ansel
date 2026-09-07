@@ -425,9 +425,19 @@ void dt_display_profile_read(GtkWidget *widget, guint8 **buffer, gint *buffer_si
 
     if (wayland_color_management.color_manager && wayland_color_management.have_icc)
     {
-      *buffer = wayland_color_management.icc_buffer;
+      *buffer = g_malloc(wayland_color_management.icc_buffer_size);
       *buffer_size = wayland_color_management.icc_buffer_size;
       *source = g_strdup("Wayland color profile api");
+
+      if (*buffer == NULL)
+      {
+        g_free(*source);
+        *source = NULL;
+        *buffer_size = 0;
+        return;
+      }
+
+      memcpy(*buffer, wayland_color_management.icc_buffer, wayland_color_management.icc_buffer_size);
       return;
     }
 
