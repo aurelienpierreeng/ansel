@@ -107,14 +107,28 @@ void handle_wp_image_description_info_icc_file(void *data,
 {
   wayland_color_management_struct *wcm = data;
 
+  if (icc_size == 0)
+  {
+    close(icc);
+    wcm->icc_buffer = NULL;
+    wcm->icc_buffer_size = 0;
+    return;
+  }
+
   wcm->icc_buffer = mmap(NULL, icc_size, PROT_READ, MAP_PRIVATE, icc, 0);
   wcm->icc_buffer_size = icc_size;
+
+  if (wcm->icc_buffer == MAP_FAILED)
+  {
+    close(icc);
+    wcm->icc_buffer = NULL;
+    wcm->icc_buffer_size = 0;
+    return;
+  }
+
   close(icc);
 
-  if (wcm->icc_buffer && wcm->icc_buffer_size > 0)
-  {
-    wcm->have_icc = TRUE;
-  }
+  wcm->have_icc = TRUE;
 }
 
 void handle_wp_image_description_info_primaries(void *data,
