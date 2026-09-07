@@ -409,13 +409,18 @@ fi
 #                  history at every step -- so from the second step on they edited the very
 #                  snapshots that were supposed to be frozen. The module's own interface headers
 #                  are excluded; naming the type there is the design, not the leak.
-masks_include_baseline=19
+# 19 -> 18 and 34 -> 30 when tests/unittests/test_masks_raster_contract.c left src/ for
+# tests/, where every other test in the tree lives. The ratchet counts what src/ reaches into,
+# so a test moving out of src/ lowers it -- but nothing about the module's enclosure changed,
+# and the test still names those types. Lowered because the rule is that a count which falls
+# is written down, not because ground was won here.
+masks_include_baseline=18
 masks_gui_include_baseline=11
 masks_member_baseline=77
 masks_write_baseline=16
 masks_alloc_baseline=1
 masks_forms_baseline=74
-masks_row_baseline=34
+masks_row_baseline=30
 
 # Members no other struct in the tree uses. Keep it that way: adding an ambiguous name here
 # buys a bigger number and loses the gate.

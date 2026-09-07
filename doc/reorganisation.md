@@ -423,7 +423,7 @@ The compute cost is unchanged — the resync is as expensive as it was — but n
 any more. `pipe->last_history_item` became an atomic pointer the pipe holds a reference on,
 exchanged with `dt_atomic_exch_ptr()` (added to `system/atomic.h`), so the marker that
 `synch_top` bounds its work with stays valid across a copy-on-write clone landing from the GUI
-thread while the worker writes the slot outside the lock. `src/tests/unittests/test_history_snapshot.c`
+thread while the worker writes the slot outside the lock. `tests/unittests/test_history_snapshot.c`
 pins the snapshot/COW/refcount contract. See CLAUDE.md, "History items are refcounted; the pipe
 resyncs against a snapshot, not under `history_mutex`", for the three design constraints that are
 not obvious from the code.

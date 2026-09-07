@@ -398,7 +398,7 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
     const gboolean has_autoset = pipe->autoset && !IS_NULL_PTR(module->autoset);
 
     // The decision is a pure function of these nine facts (develop/pipe_cache_policy.h), pinned
-    // by src/tests/unittests/test_pipe_cache_policy.c. What stays here is GATHERING them, which
+    // by tests/unittests/test_pipe_cache_policy.c. What stays here is GATHERING them, which
     // is the part that needs a pipe and a dev to look at.
     const dt_dev_pipe_cache_policy_inputs_t inputs = { .authored_cache = authored_cache,
                                                        .user_requested_cache = user_requested_cache,

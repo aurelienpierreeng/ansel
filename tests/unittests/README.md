@@ -29,7 +29,7 @@ tree).
 To run all tests together, type `make test` in the build folder. This will kick
 ctest to run all tests and provide a summary output. To run a single test suite
 and get all debug output, you can run the binary directly from the build folder,
-e.g: `./src/tests/unittests/test_sample`.
+e.g: `./tests/unittests/test_sample`.
 
 ## Design rules for unit tests
 
