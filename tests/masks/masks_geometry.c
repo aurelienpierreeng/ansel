@@ -1323,16 +1323,52 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
 
     int points = 0;
     int border = 0;
+    int skip_ranges = 0;
+    int skipped = 0;
     const dt_masks_form_gui_points_t *const gp
         = (const dt_masks_form_gui_points_t *)g_list_nth_data(dev->form_gui->points, 0);
     if(!IS_NULL_PTR(gp))
     {
       points = gp->points_count;
       border = gp->border_count;
+      skip_ranges = gp->border_skip_count;
+      for(int k = 0; k < gp->border_skip_count; k++)
+        skipped += gp->border_skips[k].resume_at - gp->border_skips[k].jump_from;
+      if(!IS_NULL_PTR(g_getenv("MASKS_DUMP_SKIPS")) && selected)
+      {
+        /* every border sample, raw coordinates, with the range that skips it or -1 */
+        char *path = g_strdup_printf("%s/%s-border.txt", g_getenv("MASKS_DUMP_SKIPS"), name);
+        FILE *f = g_fopen(path, "w");
+        if(f)
+        {
+          for(int i = 0; i < border; i++)
+          {
+            int in = -1;
+            for(int k = 0; k < gp->border_skip_count; k++)
+              if(i >= gp->border_skips[k].jump_from && i < gp->border_skips[k].resume_at) in = k;
+            fprintf(f, "%d %.2f %.2f %d %.2f %.2f\n", i, gp->border[2 * i], gp->border[2 * i + 1], in,
+                    gp->points[2 * i], gp->points[2 * i + 1]);
+          }
+          fclose(f);
+        }
+        g_free(path);
+      }
+      if(!IS_NULL_PTR(g_getenv("MASKS_DUMP_SKIPS")) && selected)
+        for(int k = 0; k < gp->border_skip_count; k++)
+        {
+          const int a = gp->border_skips[k].jump_from;
+          const int b = gp->border_skips[k].resume_at;
+          printf("  skip %2d: [%6d, %6d) %6d samples  from (%.0f, %.0f) to (%.0f, %.0f) on screen\n", k, a, b, b - a,
+                 gp->border[2 * a] * transform.scale + transform.offset_x,
+                 gp->border[2 * a + 1] * transform.scale + transform.offset_y,
+                 gp->border[2 * MIN(b, border - 1)] * transform.scale + transform.offset_x,
+                 gp->border[2 * MIN(b, border - 1) + 1] * transform.scale + transform.offset_y);
+        }
     }
     printf("[TIME] %-26s %5dx%-4d %-8s %7.2f ms/frame  (first frame incl. build %7.2f ms;"
-           " %d outline samples, %d border samples)\n",
-           name, img_w, img_h, selected ? "selected" : "member", per_frame_ms, build_ms, points, border);
+           " %d outline samples, %d border samples, %d skipped in %d ranges)\n",
+           name, img_w, img_h, selected ? "selected" : "member", per_frame_ms, build_ms, points, border, skipped,
+           skip_ranges);
 
     if(!IS_NULL_PTR(dir))
     {
