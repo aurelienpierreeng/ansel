@@ -57,6 +57,27 @@ void dt_masks_outline_offset_along(const float *const centre, float dx, float dy
   border[1] = centre[1] + radius * dy;
 }
 
+void dt_masks_outline_envelope_offset(const float *centre, float dx, float dy, float radius, float radius_rate,
+                                      float *out)
+{
+  const float length = dt_fast_hypotf(dx, dy);
+  if(!(length > 0.0f))
+  {
+    out[0] = centre[0];
+    out[1] = centre[1];
+    return;
+  }
+  const float l = 1.0f / length;
+  /* r' = dr/ds: the rate by the parameter over the speed by the parameter */
+  float along = -radius_rate * l;
+  along = CLAMP(along, -DT_MASKS_OUTLINE_TILT_MAX, DT_MASKS_OUTLINE_TILT_MAX);
+  const float across = sqrtf(1.0f - along * along);
+  const float tx = dx * l;
+  const float ty = dy * l;
+  out[0] = centre[0] + radius * (along * tx + across * ty);
+  out[1] = centre[1] + radius * (along * ty - across * tx);
+}
+
 /* Which way round a joint arc goes: from @p from to @p to about @p centre, the SHORT way.
  *
  * On the convex side of a turn the short way is the exterior wedge the spokes leave open, which

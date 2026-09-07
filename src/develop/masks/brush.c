@@ -228,7 +228,7 @@ static void _brush_get_XY(float p0_x, float p0_y, float p1_x, float p1_y, float 
  * is supposed to hold geometry. It is a return value now, so the border is either written or
  * left exactly as the caller had it. Returns TRUE when a border point was produced. */
 static gboolean _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p1_y, float p2_x, float p2_y,
-                                     float p3_x, float p3_y, float t, float radius,
+                                     float p3_x, float p3_y, float t, float radius, float radius_rate,
                                      float *point_x, float *point_y, float *border_x, float *border_y)
 {
   // we get the point
@@ -288,11 +288,32 @@ static gboolean _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p
     if(fabsf(dx) < degenerate && fabsf(dy) < degenerate) { dx = p3_x - p0_x; dy = p3_y - p0_y; }
 
     if(dx == 0.0f && dy == 0.0f) return FALSE;   // a single point: no direction to offset along
+
+    /* a limit direction has a direction and no speed, so no rate can be taken against it */
+    radius_rate = 0.0f;
   }
-  const float l = 1.0f / dt_fast_hypotf(dx, dy);
-  *border_x = (*point_x) + radius * dy * l;
-  *border_y = (*point_y) - radius * dx * l;
+
+  /* on the envelope of the discs, not on the normal: see dt_masks_outline_envelope_offset() */
+  const float centre[2] = { *point_x, *point_y };
+  float border[2];
+  dt_masks_outline_envelope_offset(centre, dx, dy, radius, radius_rate, border);
+  *border_x = border[0];
+  *border_y = border[1];
   return TRUE;
+}
+
+/* The radius along a segment eases from one node's to the other's, r1 + (r2 - r1) * t^2 (3 - 2t),
+ * and its rate by t is what the envelope needs: (r2 - r1) * 6 t (1 - t), zero at both ends, so a
+ * segment's end samples stay on the normal and the caps and joint arcs built from them are
+ * unchanged. */
+static inline float _brush_radius_at(const float r1, const float r2, const double t)
+{
+  return r1 + (r2 - r1) * t * t * (3.0 - 2.0 * t);
+}
+
+static inline float _brush_radius_rate_at(const float r1, const float r2, const double t)
+{
+  return (r2 - r1) * 6.0 * t * (1.0 - t);
 }
 
 /**
@@ -756,11 +777,13 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
   // we calculate points if needed
   if(!have_min)
     have_border_min = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmin,
-                                           p1[4] + (p2[4] - p1[4]) * tmin * tmin * (3.0 - 2.0 * tmin), points_min,
+                                           _brush_radius_at(p1[4], p2[4], tmin),
+                                           _brush_radius_rate_at(p1[4], p2[4], tmin), points_min,
                                            points_min + 1, border_min, border_min + 1);
   if(!have_max)
     have_border_max = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmax,
-                                           p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax), points_max,
+                                           _brush_radius_at(p1[4], p2[4], tmax),
+                                           _brush_radius_rate_at(p1[4], p2[4], tmax), points_max,
                                            points_max + 1, border_max, border_max + 1);
 
   if(!_brush_span_is_leaf(tmin, tmax, points_min, points_max, withborder ? border_min : NULL, border_max,
@@ -790,7 +813,7 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
 
   if(withborder)
   {
-    const float radius = p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax);
+    const float radius = _brush_radius_at(p1[4], p2[4], tmax);
     const float chord[2] = { p2[0] - p1[0], p2[1] - p1[1] };
     _brush_leaf_borrow_border(border_min, border_max, have_border_min, have_border_max, points_max, chord, radius);
 
@@ -965,9 +988,9 @@ static gboolean _brush_walk_segment(const _brush_walk_t *const w, _brush_walk_st
   float c1[2];
   float b1[2];
   const gboolean have_b0 = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], 0.0f,
-                                                p1[4], c0, c0 + 1, b0, b0 + 1);
+                                                p1[4], 0.0f, c0, c0 + 1, b0, b0 + 1);
   const gboolean have_b1 = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], 1.0f,
-                                                p2[4], c1, c1 + 1, b1, b1 + 1);
+                                                p2[4], 0.0f, c1, c1 + 1, b1, b1 + 1);
   if(!have_b0 && !have_b1) return FALSE;
   if(!have_b0) dt_masks_outline_offset_along(c0, b1[0] - c1[0], b1[1] - c1[1], p1[4], b0);
   if(!have_b1) dt_masks_outline_offset_along(c1, b0[0] - c0[0], b0[1] - c0[1], p2[4], b1);
@@ -998,6 +1021,7 @@ static gboolean _brush_walk_segment(const _brush_walk_t *const w, _brush_walk_st
   s->b[0] = rb[0];
   s->b[1] = rb[1];
   s->r = p2[4];
+
   s->payload[0] = rp[0];
   s->payload[1] = rp[1];
   s->have_prev = TRUE;
