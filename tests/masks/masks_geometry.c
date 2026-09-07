@@ -1341,6 +1341,42 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
       cairo_surface_write_to_png(surface, png);
       g_free(png);
     }
+
+    /* A frame must leave nothing behind. Draw once more at a PANNED transform, then compare
+     * with the same frame drawn onto a fresh surface after a rebuild: anything the selected
+     * frame left in the canvas -- a handle painted outside the rectangle it composited and
+     * cleared -- would land in the panned frame as pixels the fresh one does not have. */
+    const dt_masks_overlay_transform_t panned
+        = { .scale = scale, .offset_x = transform.offset_x + 97.0, .offset_y = transform.offset_y - 61.0 };
+    cairo_surface_t *fresh = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H);
+    cairo_t *cr_panned = cairo_create(surface);
+    cairo_set_source_rgb(cr_panned, 0.12, 0.12, 0.12);
+    cairo_paint(cr_panned);
+    dt_masks_events_post_expose_with(dev, NULL, cr_panned, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H, -1, -1, &panned);
+    cairo_destroy(cr_panned);
+    dev->form_gui->formid = 0;
+    dev->form_gui->geometry_generation = 0;
+    cairo_t *cr_fresh = cairo_create(fresh);
+    cairo_set_source_rgb(cr_fresh, 0.12, 0.12, 0.12);
+    cairo_paint(cr_fresh);
+    dt_masks_events_post_expose_with(dev, NULL, cr_fresh, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H, -1, -1, &panned);
+    cairo_destroy(cr_fresh);
+    cairo_surface_flush(surface);
+    cairo_surface_flush(fresh);
+    const uint32_t *pa = (const uint32_t *)cairo_image_surface_get_data(surface);
+    const uint32_t *pb = (const uint32_t *)cairo_image_surface_get_data(fresh);
+    const int stride = cairo_image_surface_get_stride(surface) / 4;
+    long leftovers = 0;
+    for(int y = 0; y < OVERLAY_SCREEN_H; y++)
+      for(int x = 0; x < OVERLAY_SCREEN_W; x++)
+        if(pa[y * stride + x] != pb[y * stride + x]) leftovers++;
+    cairo_surface_destroy(fresh);
+    if(leftovers > 0)
+    {
+      printf("[FAIL] %-26s %-8s left %ld pixel(s) behind for the next, panned frame\n", name,
+             selected ? "selected" : "member", leftovers);
+      failures++;
+    }
   }
   cairo_surface_destroy(surface);
 }
