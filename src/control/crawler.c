@@ -42,6 +42,7 @@
 #include "common/history_actions.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
+#include "caches/image_cache.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "database/image_repository.h"
@@ -358,7 +359,37 @@ static void _crawl_image(const int32_t id,
      * the stale copy on purpose: the bits it looks at are the ones nothing else touches, so
      * the worst a stale answer can cost is one redundant UPDATE. */
     if((flags & mask) != value)
-      dt_image_repository_set_flags_masked(id, mask, value);
+    {
+      /* The row is not the only copy of this word. An image the user has looked at also has an
+       * image-cache entry holding its own dt_image_t, and releasing that entry writes the whole
+       * struct back -- which is how a rating or a colour label reaches the database at all
+       * (metadata/ratings.c's _ratings_apply_to_image()). Writing the row from here and leaving
+       * a cached entry carrying the bits we just replaced would have that entry undo this crawl
+       * on the user's next rating, silently and at a moment nothing connects to it.
+       *
+       * So when the image has an entry, the entry is what we edit: it owns the struct, and its
+       * write lock is the one _ratings_apply_to_image() takes, which is what serialises the two
+       * against each other. A rating set meanwhile either lands before us and is read here, or
+       * lands after us and sees our bits.
+       *
+       * testget(), never get(): it hands back only an entry that ALREADY exists, so a crawl
+       * over the whole library does not pull the whole library into the cache on its way past.
+       * NULL means either no entry -- nothing to keep in step, and the masked UPDATE is the
+       * whole job -- or an entry someone holds this instant, which is rare and still leaves the
+       * row correct.
+       *
+       * RELAXED rather than SAFE: this writes the row, but it must not queue an XMP write, from
+       * the one job whose entire purpose is to find out whether the sidecars are in sync.
+       */
+      dt_image_t *cached = dt_image_cache_testget(id, 'w');
+      if(!IS_NULL_PTR(cached))
+      {
+        cached->flags = (cached->flags & ~mask) | value;
+        dt_image_cache_write_release(cached, DT_IMAGE_CACHE_RELAXED);
+      }
+      else
+        dt_image_repository_set_flags_masked(id, mask, value);
+    }
   }
 
 done:
