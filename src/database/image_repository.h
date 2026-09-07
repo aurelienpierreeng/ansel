@@ -256,6 +256,11 @@ GList *dt_image_repository_get_ids_with_flag_among(GList *imgids, const int flag
 /** @brief Set @p flag on every image in @p imgids. */
 gboolean dt_image_repository_set_flag_among(GList *imgids, const int flag);
 
+/** @brief Clear @p flag on every image in @p imgids -- the counterpart of
+ *  dt_image_repository_set_flag_among(), for a flag that marks a pending operation the image
+ *  turns out not to be going through after all. */
+gboolean dt_image_repository_clear_flag_among(GList *imgids, const int flag);
+
 /** @brief "<folder>/<filename>" for every image in @p imgids, distinct, in row order.
  *  Caller owns the strings. */
 GList *dt_image_repository_get_full_paths(GList *imgids);

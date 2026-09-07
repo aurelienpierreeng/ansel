@@ -50,11 +50,13 @@ typedef enum dt_undo_type_t
   DT_UNDO_FLAGS       = 1 << 8,
   DT_UNDO_DATETIME    = 1 << 9,
   DT_UNDO_DUPLICATE   = 1 << 10,
+  DT_UNDO_REMOVE      = 1 << 11,
   DT_UNDO_DEVELOP     = DT_UNDO_HISTORY | DT_UNDO_MASK | DT_UNDO_TAGS
                         | DT_UNDO_RATINGS | DT_UNDO_COLORLABELS | DT_UNDO_DUPLICATE,
   DT_UNDO_LIGHTTABLE  = DT_UNDO_RATINGS | DT_UNDO_COLORLABELS | DT_UNDO_TAGS
                         | DT_UNDO_METADATA | DT_UNDO_LT_HISTORY | DT_UNDO_GEOTAG
-                        | DT_UNDO_FLAGS | DT_UNDO_DATETIME | DT_UNDO_DUPLICATE,
+                        | DT_UNDO_FLAGS | DT_UNDO_DATETIME | DT_UNDO_DUPLICATE
+                        | DT_UNDO_REMOVE,
   DT_UNDO_MAP         = DT_UNDO_GEOTAG | DT_UNDO_TAGS | DT_UNDO_DATETIME,
   DT_UNDO_ALL         = DT_UNDO_MAP | DT_UNDO_DEVELOP | DT_UNDO_LIGHTTABLE
 } dt_undo_type_t;
@@ -115,6 +117,13 @@ void dt_undo_disable_next(dt_undo_t *self);
 // Mostly meant to disable GUI undo/redo controls if they wouldn't have any effect.
 gboolean dt_is_undo_list_populated(dt_undo_t *self, uint32_t filter);
 gboolean dt_is_redo_list_populated(dt_undo_t *self, uint32_t filter);
+
+/** @brief How many records match @p filter, so a caller can tell a one-record undo from a
+ *  batch of a thousand. The GUI uses it to decide whether an operation is worth announcing:
+ *  popping a whole removal runs on the GUI thread and takes tens of seconds, while an
+ *  ordinary rating change is instant and must not raise a toast. */
+int dt_undo_list_length(dt_undo_t *self, uint32_t filter);
+int dt_redo_list_length(dt_undo_t *self, uint32_t filter);
 
 #endif // DT_COMMON_UNDO_H
 

@@ -101,8 +101,10 @@ void dt_pixelpipe_cache_free_align_cache(void **mem, const char *message);
   ((double *)dt_pixelpipe_cache_alloc_align((size_t)(count) * sizeof(double), (pipe)))
 #endif
 
+/* No trailing semicolon: the caller writes it, as every one of the 871 call sites in the tree
+ * already does. With one here as well, each of those was two statements, the second empty. */
 #define dt_pixelpipe_cache_free_align(mem) \
-  dt_pixelpipe_cache_free_align_cache((void **)&(mem), __FILE__ ":" DT_STRINGIFY(__LINE__));
+  dt_pixelpipe_cache_free_align_cache((void **)&(mem), __FILE__ ":" DT_STRINGIFY(__LINE__))
 
 // Allocate a buffer for 'n' objects each of size 'objsize' bytes for each of the program's threads.
 // Ensures that there is no false sharing among threads by aligning and rounding up the allocation to

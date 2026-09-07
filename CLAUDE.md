@@ -173,7 +173,7 @@ hash table via `g_hash_table_iter_remove` — do NOT subtract `current_memory` m
 
 ### Mipmap invalidation is explicit, not hash-driven
 
-The mipmap cache get path (`_generate_blocking` in `common/mipmap_cache.c`) does NOT compare
+The mipmap cache get path (`_generate_blocking` in `caches/mipmap_cache.c`) does NOT compare
 `history_hash` vs `mipmap_hash` to detect staleness. Regeneration only happens after an explicit
 `dt_mipmap_cache_remove(cache, imgid, TRUE)`.
 
@@ -189,6 +189,46 @@ write history straight to DB (XMP load, `dt_image_set_flip`) bypass it and need 
 
 Do NOT refresh the filmstrip from darkroom write paths — it competes with the realtime main
 preview pipeline. Lighttable ops may refresh both.
+
+**`dt_mipmap_cache_remove()` drops the THUMBNAILS, never the decoded raw.** Its loop stops at
+`DT_MIPMAP_F`, and `dt_mipmap_cache_remove_at_size()` refuses `DT_MIPMAP_F`/`DT_MIPMAP_FULL`
+outright, so those two — the unprocessed input, RAM-only, every disk write being gated on
+`mip < DT_MIPMAP_F` — are reachable only through `dt_mipmap_cache_remove_all_sizes()`. That is
+the right default for the list above: a development change does not invalidate the decoded raw,
+and dropping it on every history commit would re-read and re-demosaic the file per slider tick.
+
+An image LEAVING the library is the other case, and the only caller of the all-sizes form.
+Its input buffer otherwise outlives the row, with nothing but memory pressure to reclaim it,
+and `basebuffer` — which slices that buffer — is handed the stale entry when the image comes
+back on Ctrl+Z. It reports `invalid cache entry size 0 for module basebuffer`, the mipmap get
+path answers with an 8x8 husk, and no later render replaces it. **Only a developed image shows
+this**: an unaltered one is drawn from the embedded JPEG and never asks for the input at all,
+which is why the symptom reads as "one broken thumbnail" rather than as a cache bug.
+
+### Releasing an image cache entry returns the LOCK, not the image
+
+`dt_image_cache_read_release()` and `dt_image_cache_write_release()` (`caches/image_cache.c`)
+guard on a NULL pointer and nothing else. They used to read `if(IS_NULL_PTR(img) || img->id <= 0)
+return;` — which is `dt_image_invalid()` spelled out — and that skipped the release for precisely
+the entries most likely to have one outstanding.
+
+An entry whose row has gone stays in the cache with `id == UNKNOWN_IMAGE` (-1): the allocator
+runs `dt_image_repository_load()`, that fails with `no more rows available`, and `dt_image_init()`
+has already left the id there. Anything holding such an entry then called release, got nothing,
+and left it locked forever. `dt_cache_get()` spins on `trywrlock` with a `g_usleep(5)` retry, and
+`try*` locks report busy even on same-thread reentry (see the rwlock section below), so the next
+writer hangs the GUI thread with no error and no stack anywhere else — every other thread sits
+idle in `dt_pthread_cond_wait`. Measured: a whole film roll removed and undone froze in
+`dt_image_history_changed()` waiting on an entry nobody held.
+
+`dt_image_cache_testget()` is the other half and now carries the validity check its two siblings
+(`dt_image_cache_get()`, `dt_image_cache_get_reload()`) always had: handing out a LOCKED invalid
+image is what creates the leak, because the caller has no way to release what it was told is not
+an image.
+
+This is reachable whenever a row disappears while the GUI still refers to it — removal, and the
+lighttable refreshing a thumbnail right after. Grouped images make it far likelier, since
+`_add_thumbnail_group_borders()` re-reads every member.
 
 ### Duplicating an image races its own thumbnail generation against the history copy
 
@@ -388,7 +428,7 @@ Three things a reviewer would otherwise "simplify" away:
 
 Scrolling (size / feather / opacity) has no release, so there the throttle marks the end of the
 burst: each step renders live, one commit lands after the last. The mask-manager path
-(`libs/masks.c`, no focused module) is unchanged and still commits directly; the focused-piece
+(`libs/shape_manager.c`, no focused module) is unchanged and still commits directly; the focused-piece
 path needs `dev->gui_module` to be the shape's owner.
 
 ### `_insert_default_modules` must check `dev->history` in memory, not the DB row for `dev->image_storage.id`
@@ -424,7 +464,7 @@ behavior regresses.
 `dt_dev_pixelpipe_create_nodes()` copies `pipe->iwidth`/`iheight` into each `piece->iwidth`/`iheight`
 once, at node-creation time — it is not refreshed on later ROI passes. Darkroom pipes call
 `dt_dev_pixelpipe_set_input()` (which sets `pipe->iwidth`/`iheight`) before creating nodes; the
-export pipe (`common/imageio.c`) does the reverse, so every piece was permanently stuck at 0 there
+export pipe (`imageio/imageio_core.c`) does the reverse, so every piece was permanently stuck at 0 there
 (issue #967: `iop/toneequal.c`'s blending radius and `iop/soften.c`'s glow radius silently collapsed
 to 0 on export only, regardless of the module's params, while darkroom rendered correctly). Fixed by
 having `dt_dev_pixelpipe_set_input()` re-sync `iwidth`/`iheight` onto any already-created nodes. See
@@ -442,7 +482,7 @@ the destination copy size) from `roi_out`, and use `pipe->iwidth`/`iheight` — 
 `height`, which is always the full frame too — for the source row stride. Reading the offset from
 `roi_in` instead always crops from the sensor's true `(0,0)`: harmless whenever the requested
 window is itself near `(0,0)` (a fit-to-screen view, a barely-cropping module), silently wrong by
-the full requested offset otherwise (e.g. `iop/lens.cc`'s `scale` slider, whose backward-pass
+the full requested offset otherwise (e.g. `iop/lens.c`'s `scale` slider, whose backward-pass
 `roi_in.x/y` grows with the zoom amount) — every downstream module still looks internally
 consistent (sizes match, ROI planning round-trips cleanly), because each of them only reads
 buffer-relative pixels and never re-derives its own absolute position from `pipe->iwidth`/
@@ -659,7 +699,7 @@ Note *where* a non-zero RAW-domain ROI offset can come from, because the obvious
 backwards, so every module below it — `lens` (15.0), `demosaic` (8.0), `rawdenoiseai` (2.5),
 `basebuffer` (0.5) — is handed offset 0 no matter how the user pans or zooms. A non-zero offset
 reaches the RAW domain only from a module *between* it and `initialscale` that grows its own
-`roi_in` on the backward pass: in practice `iop/lens.cc` (distortion, TCA, and the `scale`
+`roi_in` on the backward pass: in practice `iop/lens.c` (distortion, TCA, and the `scale`
 slider). So "it only misbehaves when zoomed in" is the wrong mental model for this whole class of
 bug; "it only misbehaves with lens correction enabled" is the right one.
 
@@ -1061,6 +1101,42 @@ reading and died on the first measurement.
 Reproduce: export with `--export_masks 1`; page 1 of the TIFF is the mask. Flood-fill from the
 border and anything left unset is a hole.
 
+### A brush's geometry comes from its nodes, and its outline is the boundary of its raster
+
+A brush is the union of a disc of the local radius over every point of its spine, and the
+pipe paints it as spokes from every spine sample to its border sample. `doc/brush-boundary.md`
+is the full account; the rules that were each paid for by a reported defect:
+
+- **Nothing in `_brush_get_pts_border()` is read back out of the buffers.** Every cap, joint
+  arc and stamp takes its centre and radius from the segment end samples that meet there and
+  from the node data. The old walk measured a stamp's radius as "the distance from the last
+  centreline sample to the last border sample written"; a degenerate segment (a pen resting
+  under rising pressure: seventeen coincident nodes) once left the image origin in the border
+  buffer, the radius came out as 2058 px, and ten discs of that size followed (#1360).
+- **A degenerate segment contributes nothing**; its disc is the neighbour's cap. An end with a
+  radius but no direction borrows the other end's *direction*, never a position.
+- **The drawn outline is decided per sample by a definition** — a border sample is on the
+  boundary iff it is not strictly inside any other sample's disc
+  (`_brush_outline_boundary_skips()`) — not by intersecting the outline with itself and
+  choosing cuts. Every ordering of those cuts moved the artefact somewhere else (#1352). The
+  answer travels as the same skip ranges every consumer already reads; the rasteriser keeps
+  every spoke, because a spoke inside another disc paints nothing new and costs nothing.
+- **Near and far discs are told apart by index, never by position.** A window along the walk
+  is exhaustive for folds, joints and caps; a bucket grid of index *runs* finds the discs a
+  hairpin or a crossing brings back from far along the walk, dismissing near runs in one
+  comparison. A coarse occupancy map was tried first and made the build eight times slower:
+  every boundary sample is within a few pixels of its *own* interior, so a map's band is
+  everything.
+- **Joint arcs sweep the short way; at a cusp the pass's rotation decides.** A fixed rotation
+  went the long way round on one side of every turn. Do not "fix" the cusp tie-break to
+  shortest-path: the two passes each cover one half of the tip disc, and which half is which
+  is the pass's rotation. The #1313 cusp corpus, at all eight frame sizes, is the check.
+
+The corpus (`tests/masks/masks_geometry.c`) judges a brush in **both directions** — owed
+coverage missing, and coverage no disc owes — and judges the drawn outline against the same
+two maps. `MASKS_DUMP_OUTLINE=1` dumps every outline. An owed-only oracle passed #1360 while
+half the frame was painted.
+
 ### The mouse wheel edits the property the user mapped it to; shapes never read modifiers
 
 Which property the wheel edits is resolved **once**, by `dt_masks_events_mouse_scrolled()`
@@ -1114,7 +1190,7 @@ Which shape button looks armed is derived, never remembered. `dt_masks_creation_
 answers by recomputing each of its buttons from `_masks_shape_button_is_current_creation()` against
 `dev->form_gui`. `dt_masks_form_exit_creation()` is the symmetric half and raises
 `..._DEACTIVATE`. That is what lets creation be armed from places that own no button at all — the
-shape manager's "Add new shape ..." context menu (`libs/masks.c`), the keyboard shortcuts,
+shape manager's "Add new shape ..." context menu (`libs/shape_manager.c`), the keyboard shortcuts,
 `iop/spots.c` — without each of them having to find and press a widget.
 
 So a new way to arm a shape needs no toolbar code, and a toolbar must not track what was clicked.
@@ -1154,7 +1230,7 @@ are now refcounted (`dt_masks_form_t.refcount`, `src/develop/masks/masks_history
   first, splice the clone into `dev->forms` in place of the original, and mutate the clone —
   never mutate a form that might be observed by a frozen snapshot. Every mutation call site
   (mouse/keyboard event dispatchers in `masks.c`, `dt_masks_form_delete`, group add/move/ungroup,
-  `blend_gui.c` group operations, the shape-manager panel in `libs/masks.c`) must route through
+  `blend_gui.c` group operations, the shape-manager panel in `libs/shape_manager.c`) must route through
   this before touching `form->points` or any other field. `dt_masks_cow_touch` also re-points
   `dev->form_gui->form_visible` if it was the form that got cloned — that's the only other raw
   `dt_masks_form_t*` cached outside `dev->forms`.
@@ -1168,7 +1244,7 @@ are now refcounted (`dt_masks_form_t.refcount`, `src/develop/masks/masks_history
 
 ### The unused-shape sweep's used-set is not a subset of the snapshot it sweeps
 
-"Delete unused shapes" in the shape manager (`libs/masks.c`, `dt_masks_cleanup_unused()`) keeps a
+"Delete unused shapes" in the shape manager (`libs/shape_manager.c`, `dt_masks_cleanup_unused()`) keeps a
 form when some history entry's `blend_params->mask_id` names it, or names a group that
 transitively contains it. Those ids are collected by walking history from the bottom up, and they
 are **not** a subset of the `hist->forms` snapshot being swept: a module whose drawn mask was
@@ -1212,7 +1288,7 @@ That rewrite is in-memory only. `main.history` and `main.masks_history` are dele
 re-inserted wholesale from `dev->history` by `_write_history_from_state()`, and nothing on this
 path triggers it — so the menu handler commits a mask-manager history entry
 (`dt_dev_add_history_item(dev, NULL, FALSE, TRUE)`) after the sweep, the way every other forms
-mutation in `libs/masks.c` must. Without it the swept shapes stay in the database and come back
+mutation in `libs/shape_manager.c` must. Without it the swept shapes stay in the database and come back
 on the next read, and the pipeline never resyncs. Measured on a 20-step history: 60 rows / 24
 forms before, 58 / 22 after, with exactly the two orphans gone and one extra history step.
 
@@ -1236,12 +1312,12 @@ recorded `before_snapshot`/`after_snapshot` (`dt_history_duplicate`, itself ref-
 **last history item that actually has one** — walking backwards over items with
 `hist->forms == NULL`. If a mutation was never committed, every subsequent history navigation
 silently falls back to whatever was last actually recorded and the live edit is lost. Confirmed
-bug instances, found by auditing every handler in `libs/masks.c` for a trailing
+bug instances, found by auditing every handler in `libs/shape_manager.c` for a trailing
 `dt_dev_add_history_item()`/`_add_masks_history_item()` call: `_tree_delete_shape` (delete),
 `_tree_moveup`/`_tree_movedown` (reorder inside a group — silently lost on next undo/redo), and
 `_tree_duplicate_shape` (the duplicate was also never attached to the source shape's parent group
 via `dt_masks_group_add_form`, so it was an orphan on top of being uncommitted). All four are
-fixed; audit any *new* handler in `libs/masks.c` / `blend_gui.c` that mutates forms without a
+fixed; audit any *new* handler in `libs/shape_manager.c` / `blend_gui.c` that mutates forms without a
 trailing commit before trusting its undo/redo behavior.
 
 ### Same-thread rwlock reentrancy
@@ -1252,7 +1328,7 @@ history-commit path resyncing the virtual pipe mid-commit). glibc's default
 `PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP` policy self-deadlocks such a thread as soon as a
 second thread is queued for the write lock. Fixed by porting the same-thread recursive-writer
 tracking that already existed in the `_DEBUG` build of `dt_pthread_rwlock_t`
-(`common/dtpthread.h`: `writer` + `writer_depth` fields) into the release path too — a thread
+(`system/dtpthread.h`: `writer` + `writer_depth` fields) into the release path too — a thread
 that already holds the write lock cannot race itself, so letting it re-enter (as reader or
 writer) is safe. `try*` locks keep their "is it locked by anyone?" probe contract and still
 report busy on same-thread reentry, so callers relying on that semantic are unaffected.
@@ -1273,7 +1349,7 @@ prematurely).
 ### The masks module is being enclosed, and the ratchet counts the way out
 
 `src/develop/masks` is not a closed module yet: five files outside it (`develop/blend_gui.c`,
-`libs/masks.c`, `iop/retouch.c`, `iop/spots.c`, `develop/supervisor.c`) reach directly into
+`libs/shape_manager.c`, `iop/retouch.c`, `iop/spots.c`, `develop/supervisor.c`) reach directly into
 `dt_masks_form_t` and friends, four places `malloc` a masks type by hand, and `->forms` is walked
 as a plain `GList` all over `develop/`. The audit behind that is issue #1299; the plan is to drain
 it phase by phase rather than in one break.
@@ -1532,6 +1608,66 @@ The import job only asks for `IMAGE` when it imported exactly one image *and* at
 (duplicates) and none of them is the obvious one to open. Zero is the ordinary no-sidecar case
 and still opens.
 
+### "Remove from library" is undoable, and the flag that hides an image survives the snapshot
+
+Removing an image from the library stages every row it owns into `memory.removed_*` twins
+before the foreign keys delete them, and Ctrl+Z copies them back — `doc/removal-undo.md` is
+the full map, `database/removed_image_repository.c` the SQL, `dt_image_remove_undoable()` and
+`_pop_undo()` (`common/image.c`) the bookkeeping. `dt_image_remove()` still records nothing
+and is what delete-from-disk uses: a trashed file has nothing to restore.
+
+**The trap that costs a whole test round is `DT_IMAGE_REMOVE`.**
+`dt_control_remove_images_job_run()` sets it on the batch *before* deleting anything, so the
+grid stops showing the images while the job runs, and `database/collection_query.c` filters
+that flag out of every collection query. It is therefore in the row that gets staged, and a
+verbatim restore brings the image back into the database and into **no view at all** — the
+row is present, complete and correct, `PRAGMA foreign_key_check` is clean, and the image is
+simply never selected by any query again. Reading "the rows came back" as "the undo works" is
+exactly the mistake this bug rewards: the check that separates the two is `flags & 256` on
+the restored row, not the row's existence. `_pop_undo()` clears it through
+`dt_image_repository_clear_flag_among()` before re-running the collection query.
+
+Two more things a reviewer would otherwise simplify away. The snapshot must be taken at the
+very top of the removal, before `dt_grouping_remove_from_group()` runs: that call rewrites the
+`group_id` of images **nobody asked to remove**, which lives in no table the removed image
+owns and is staged separately in `memory.removed_groups`. And the restore runs under `PRAGMA
+defer_foreign_keys = ON`, because a group removed in one go comes back one undo record at a
+time and an image regularly precedes the leader it points at; any `group_id` still dangling at
+the end is repointed at the image itself rather than allowed to fail the commit.
+
+The folder list learns about a restored roll through `dt_film_notify_rolls_changed()`
+(`common/film.h`), which `gui/common/film_gui.c` turns into `DT_SIGNAL_FILMROLLS_CHANGED`.
+`common/` is layer 1 and `control/` is layer 3, so raising the signal from `common/image.c`
+is a layering inversion `tools/check_layering.sh` counts against the baseline; the notifier
+is the same inversion `common/image_notify.h` and `common/thumbnail_notify.h` already use.
+
+**The schema does not cascade uniformly.** Only `history`, `masks_history`, `tagged_images`
+and `history_hash` carry a foreign key on `images(id)`; `module_order`, `color_labels` and
+`meta_data` carry none, in a fresh database as in a migrated one — `dt_image_repository_delete()`
+deletes `meta_data` by hand, and the other two are left behind by every removal, undone or not.
+So the restore DELETEs each child table's rows before copying the staged ones back: a no-op for
+the four that cascade, and the only thing stopping `color_labels` — which has no unique
+constraint either — from gaining a duplicate row on every remove/undo cycle.
+
+**`memory.` dies with the connection, and `_remove_undo_data_free()` checks
+`dt_database_is_open()` before dropping a snapshot.** `dt_undo_cleanup()` does run after
+`dt_database_close()`, but measurement says it finds an empty list: the GUI teardown calls
+`dt_ctl_switch_mode_to("")` (`darktable.c`, well before the close), switching to no view enters
+`dt_view_manager_switch_by_view()`, and its first act is `dt_undo_clear(..., DT_UNDO_ALL)` —
+database still open. Without a GUI the order reverses, but no removal can have been recorded
+either, both callers of `dt_control_remove_images()` being GUI ones. **So the guarded branch is
+unreachable today and the check stays anyway**, for the cost of one call: it is the day either
+half of that changes that a debug build would otherwise abort on quit, inside
+`DT_DEBUG_SQLITE3_PREPARE_V2`'s assert, and a SQLite built without API armor would crash.
+`dt_view_manager_cleanup()` is not what clears the list — it only unloads the view modules.
+
+**Any view switch closes the undo window, not just re-entering the lighttable.**
+`dt_view_manager_switch_by_view()` clears `DT_UNDO_ALL` on every switch, and the lighttable's
+own `enter()` additionally clears `DT_UNDO_LIGHTTABLE`. `DT_UNDO_REMOVE` is in both masks, and
+discarding the record frees the snapshot. That is every lighttable undo's lifetime, but here it
+is also the point of no return for data the database was the only holder of: a trip to the
+darkroom and back makes a removal permanent.
+
 ---
 
 ## GTK / UI
@@ -1620,7 +1756,7 @@ and the focus flags (`set_focus_on_map`, `set_accept_focus`) change nothing eith
 
 So a UTILITY window states its position itself, `GTK_WIN_POS_CENTER_ON_PARENT`, on every
 platform — not inside a `#ifdef GDK_WINDOWING_QUARTZ` block, which is how the shape manager
-panel (`libs/masks.c`) came to open on the wrong screen while the module-order graph
+panel (`libs/shape_manager.c`) came to open on the wrong screen while the module-order graph
 (`libs/ioporder.c`), the tag manager (`libs/tagging.c`) and the event supervisor
 (`gui/actions/supervisor_window.c`) — none of which set the UTILITY hint — opened correctly.
 
@@ -1632,7 +1768,7 @@ later hide/show cycles.
 
 `gtk_widget_hide_on_delete()` is the usual answer to a window whose widgets and state must
 survive being closed, but it hides the window behind the back of whatever opened it. When the
-opener is a `GtkToggleButton` — the shape manager panel's toolbox button (`libs/masks.c`) — the
+opener is a `GtkToggleButton` — the shape manager panel's toolbox button (`libs/shape_manager.c`) — the
 button stays pressed after a window-manager close, and the next click reads that state as "the
 panel is open" and hides an already-hidden window: it takes two clicks to bring the panel back.
 
@@ -1702,7 +1838,7 @@ skips the now-invalid widgets instead of touching freed GTK objects.
 
 ### Widget shortcuts need their own closure — GTK's native accel-group activation is unreachable
 
-`src/gui/accelerators.c` offers two ways to register a shortcut: a "generic" one
+`src/widgets/accelerators.c` offers two ways to register a shortcut: a "generic" one
 (`dt_accels_new_action_shortcut`, `dt_accels_new_virtual_shortcut`/`_instance`) that builds a
 `GClosure` via `dt_shortcut_set_closure()`, and a "widget" one (`dt_accels_new_widget_shortcut`)
 that instead calls `gtk_widget_add_accelerator(widget, signal, accel_group, key, mods, flags)`,
@@ -1742,7 +1878,7 @@ Rationale: Lanczos has large negative side-lobes → halos at high-contrast edge
 premultiplied alpha out of [0,1]. Mitchell is near-halo-free (~3% residual undershoot), sharp,
 and a separable partition-of-unity kernel that fits the existing tap machinery for CPU and GPU.
 
-The pipeline's interpolation architecture in `src/common/interpolation.c` is separable — each
+The pipeline's interpolation architecture in `src/pixel/interpolation.c` is separable — each
 kernel registers a 1D `maketaps`, and both `dt_interpolation_resample` (CPU) and
 `dt_interpolation_resample_cl` (GPU) consume the same CPU-computed taps. A new separable kernel
 is automatically CPU+GPU.

@@ -203,6 +203,21 @@ void dt_mipmap_cache_release_with_caller(dt_mipmap_buffer_t *buf, const char *fi
 void dt_mipmap_cache_remove(const int32_t imgid, const gboolean flush_disk);
 void dt_mipmap_cache_remove_at_size(const int32_t imgid, const dt_mipmap_size_t mip, const gboolean flush_disk);
 
+/* Every buffer this image owns, the decoded raw input (DT_MIPMAP_F, DT_MIPMAP_FULL) included.
+ *
+ * The two are deliberately outside dt_mipmap_cache_remove(), which exists for a development
+ * change: the decoded raw does not depend on the history, and dropping it there would re-read
+ * and re-demosaic the file on every commit. They are equally deliberately outside
+ * dt_mipmap_cache_remove_at_size(), which refuses them outright, so before this there was no
+ * way to drop them for one image and nothing but memory pressure ever did.
+ *
+ * An image leaving the library is the case that needs it. Its input buffer outlives the row,
+ * and if the image comes back -- "remove from library" is undoable -- the pipeline is handed
+ * that stale entry, basebuffer slices a zero-sized buffer out of it, and the thumbnail is a
+ * husk no later render replaces. Only a developed image shows it: an unaltered one is drawn
+ * from the embedded JPEG and never asks for the input at all. */
+void dt_mipmap_cache_remove_all_sizes(const int32_t imgid, const gboolean flush_disk);
+
 // evict thumbnails from cache. They will be written to disc if not existing
 void dt_mimap_cache_evict(const int32_t imgid);
 
