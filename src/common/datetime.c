@@ -196,9 +196,9 @@ gboolean dt_datetime_img_to_local(char *local, const size_t local_size,
   return dt_datetime_gtimespan_to_local(local, local_size, img->exif_datetime_taken, msec, FALSE);
 }
 
-gboolean dt_datetime_unix_to_img(dt_image_t *img, const time_t *unix)
+gboolean dt_datetime_unix_to_img(dt_image_t *img, const time_t *timestamp)
 {
-  GDateTime *gdt = g_date_time_new_from_unix_local(*unix);
+  GDateTime *gdt = g_date_time_new_from_unix_local(*timestamp);
   if(gdt)
   {
     img->exif_datetime_taken = g_date_time_difference(gdt, dt_datetime_origin());
@@ -209,9 +209,9 @@ gboolean dt_datetime_unix_to_img(dt_image_t *img, const time_t *unix)
   return FALSE;
 }
 
-gboolean dt_datetime_unix_to_exif(char *exif, const size_t exif_size, const time_t *unix)
+gboolean dt_datetime_unix_to_exif(char *exif, const size_t exif_size, const time_t *timestamp)
 {
-  GDateTime *gdt = g_date_time_new_from_unix_local(*unix);
+  GDateTime *gdt = g_date_time_new_from_unix_local(*timestamp);
   if(gdt)
   {
     const gboolean res = dt_datetime_gdatetime_to_exif(exif, exif_size, gdt);
@@ -511,4 +511,3 @@ gboolean dt_datetime_exif_add_numbers(const gchar *exif, const dt_datetime_t num
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
