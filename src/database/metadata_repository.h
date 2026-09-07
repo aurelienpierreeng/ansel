@@ -63,8 +63,9 @@ GList *dt_metadata_repository_get_values(const int32_t imgid, const int keyid);
 GList *dt_metadata_repository_get_all(const int32_t imgid);
 
 /** @brief Delete the rows of @p imgid whose key is in @p keyid_list, a comma-separated
- *  list of decimal key ids. Does nothing when @p keyid_list is NULL. */
-void dt_metadata_repository_remove(const int32_t imgid, const char *keyid_list);
+ *  list of decimal key ids. Does nothing when @p keyid_list is NULL.
+ *  @return TRUE when the statement completes successfully or no rows need removal. */
+gboolean dt_metadata_repository_remove(const int32_t imgid, const char *keyid_list);
 
 /** One (image, key, value) row to insert. */
 typedef struct dt_metadata_row_t
@@ -81,8 +82,10 @@ typedef struct dt_metadata_row_t
  * the caller, which is why `common/metadata.c` linked against sqlite for one function
  * call: a module that has to escape its own strings for SQL is still writing SQL. Nothing
  * happens when @p count is 0.
+ *
+ * @return TRUE when the statement completes successfully or no rows need insertion.
  */
-void dt_metadata_repository_add(const dt_metadata_row_t *rows, const size_t count);
+gboolean dt_metadata_repository_add(const dt_metadata_row_t *rows, const size_t count);
 
 /**
  * @brief The first image carrying @p value under any key, or -1.

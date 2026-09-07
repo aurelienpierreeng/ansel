@@ -1,6 +1,6 @@
 /*
     This file is part of Ansel,
-    Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Paolo SANTUCCI.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -64,7 +64,7 @@ static int teardown(void **state)
 {
   dt_exif_cleanup();
   dt_conf_cleanup(darktable.conf);
-  free(darktable.conf);
+  dt_free(darktable.conf);
   darktable.conf = NULL;
   g_remove(config_path);
   dt_free(config_path);
@@ -112,7 +112,7 @@ static void test_full_xmp_read_replaces_persisted_color_labels(void **state)
             "<rdf:li>1</rdf:li><rdf:li>3</rdf:li><rdf:li>-1</rdf:li><rdf:li>5</rdf:li>"
             "</rdf:Seq></darktable:colorlabels>");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
   assert_int_equal(image.color_labels, (1 << DT_COLORLABELS_YELLOW) | (1 << DT_COLORLABELS_BLUE));
 
   dt_image_repository_store(&image);
@@ -131,7 +131,7 @@ static void test_standard_xmp_label_takes_precedence(void **state)
   write_xmp("<xmp:Label>Green</xmp:Label>"
             "<darktable:colorlabels><rdf:Seq><rdf:li>1</rdf:li></rdf:Seq></darktable:colorlabels>");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
   assert_int_equal(image.color_labels, 1 << DT_COLORLABELS_GREEN);
 }
 
@@ -143,7 +143,7 @@ static void test_absent_xmp_labels_clear_existing_labels(void **state)
   dt_image_repository_store(&image);
   write_xmp("");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE), 0);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
   assert_int_equal(image.color_labels, 0);
   dt_image_repository_store(&image);
   assert_int_equal(dt_colorlabel_repository_get(image.id), 0);
