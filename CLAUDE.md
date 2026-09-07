@@ -1182,6 +1182,36 @@ ctrl+click only work once that node is *selected* (a mere hover gets the shorter
 `dt_hinter_set_message()` joins `\n` into `, `, so each line must read as a clause of one
 sentence.
 
+### A right click targets, it never drags — and the context menu leans on that
+
+`_apply_gui_button_pressed_state()` (`masks_gui.c`) does two things, and they answer to different
+buttons. It rebuilds the fine-grained selection from the current hover target — for the LEFT and
+the RIGHT button both, so that every `_selected` flag names what the cursor is on — and it then
+arms a drag, which is the **left button's alone**: `dt_masks_gui_set_dragging()` sits behind
+`if(button != 1) return;` and is that function's only caller anywhere. So no right-button motion
+can move a node, a segment, a handle, a shape or a clone source; the per-shape `mouse_moved()`
+handlers never read `which` at all, they branch on the `*_dragging` flags only. The one other
+place a `*_dragging` flag is written is `polygon.c`'s creation path, itself under `which == 1`.
+
+Rebuilding the selection on both buttons is what keeps ONE state instead of two. Three of those
+flags — `form_selected`, `border_selected`, `source_selected` — are written by `update_hover()`
+and follow the cursor whatever the button; had the node/segment/handle ones stayed on the left
+button, they would still hold wherever the last left click landed, which says nothing about where
+the right click that opened a menu went. The context menu is the one consumer reading both
+families at once, and is where such a split shows. One user-visible consequence is deliberate: a
+right click on a node makes it the selected node, so the wheel then edits that node alone
+(`dt_masks_gui_change_affects_selected_node_or_all()`) rather than the whole shape.
+
+The context menu is what makes this load-bearing rather than cosmetic. Its title names
+`gui->node_hovered` / `gui->seg_hovered` and its node entries gate on `node_hovered >= 0`, while
+polygon's and brush's "Add a node here" gates on `seg_selected` — which says the same thing only
+because the right click rebuilt it. Put the rebuild back behind `button != 1` and that entry
+silently leaves the menu for any segment the user has not left-clicked first, while the title goes
+on announcing the segment; the whole menu then reads as the shape's. Gating it on `seg_hovered`
+instead would survive that, since `dt_masks_gui_selected_segment_index()` (`masks_gui.h`) returns
+`seg_hovered` outright and consults no selection flag — but two spellings of one question is what
+this section exists to prevent, so the flags are kept honest at the source instead.
+
 ### A shape toolbar's pressed button is a view on the creation state, not a state of its own
 
 Which shape button looks armed is derived, never remembered. `dt_masks_creation_mode_enter()`

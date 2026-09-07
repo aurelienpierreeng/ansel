@@ -2667,7 +2667,13 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
                                             const uint32_t state,
                                             const gboolean shape_was_selected)
 {
-  if(IS_NULL_PTR(mask_gui) || mask_gui->creation || button != 1) return;
+  if(IS_NULL_PTR(mask_gui) || mask_gui->creation) return;
+  if(button != 1 && button != 3) return;
+  /* The fine-grained selection is rebuilt for the right button too, so that every `_selected'
+   * flag names what the cursor is on. Three of them -- form, border and source -- are written by
+   * update_hover() and follow the cursor whatever the button; leaving the node/segment/handle
+   * ones on the left button alone splits one state in two, and the context menu, which is the
+   * one consumer reading both families at once, is where the split shows. */
   // Drag is only allowed when this click happens on a shape that was already selected.
   // We still rebuild the fine-grained selection from the current hover target first, so the
   // pressed node/handle/segment becomes the active drag target when dragging is allowed.
@@ -2720,6 +2726,8 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
     mask_gui->source_selected = prev_source_selected;
   }
 
+  // Arming a drag is the left button's business alone -- a right click targets, it never drags.
+  if(button != 1) return;
   if(mask_gui->form_rotating || mask_gui->border_toggling || mask_gui->gradient_toggling) return;
   if(dt_modifier_is(state, DT_PRIMARY_MASK)) return;
   if(!shape_was_selected) return;
