@@ -1355,9 +1355,16 @@ static long _overlay_leftovers(dt_develop_t *dev, cairo_surface_t *surface,
   return leftovers;
 }
 
+/* What one state of one case cost: the frame, and the first frame that also built the outline. */
+typedef struct _overlay_timing_t
+{
+  double per_frame_ms;
+  double build_ms;
+} _overlay_timing_t;
+
 /* The measurement line of one state, with the outline's sample and skip counts. */
 static void _overlay_report(dt_develop_t *dev, const char *name, const int img_w, const int img_h,
-                            const gboolean selected, const double per_frame_ms, const double build_ms,
+                            const gboolean selected, const _overlay_timing_t *const timing,
                             const dt_masks_overlay_transform_t *const transform)
 {
   int points = 0;
@@ -1375,8 +1382,8 @@ static void _overlay_report(dt_develop_t *dev, const char *name, const int img_w
   }
   printf("[TIME] %-26s %5dx%-4d %-8s %7.2f ms/frame  (first frame incl. build %7.2f ms;"
          " %d outline samples, %d border samples, %d skipped in %d ranges)\n",
-         name, img_w, img_h, selected ? "selected" : "member", per_frame_ms, build_ms, points, border, skipped,
-         skip_ranges);
+         name, img_w, img_h, selected ? "selected" : "member", timing->per_frame_ms, timing->build_ms, points, border,
+         skipped, skip_ranges);
 }
 
 static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const char *dir,
@@ -1416,14 +1423,15 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
 
     /* the first frame builds the outline, which the darkroom also does once per edit; it is
      * not the per-frame cost and is timed apart */
+    _overlay_timing_t timing = { 0 };
     const double build_start = dt_get_wtime();
     _overlay_frame(dev, surface, &transform);
-    const double build_ms = 1000.0 * (dt_get_wtime() - build_start);
+    timing.build_ms = 1000.0 * (dt_get_wtime() - build_start);
 
     const double start = dt_get_wtime();
     for(int f = 0; f < frames; f++) _overlay_frame(dev, surface, &transform);
-    const double per_frame_ms = 1000.0 * (dt_get_wtime() - start) / MAX(frames, 1);
-    _overlay_report(dev, name, img_w, img_h, selected, per_frame_ms, build_ms, &transform);
+    timing.per_frame_ms = 1000.0 * (dt_get_wtime() - start) / MAX(frames, 1);
+    _overlay_report(dev, name, img_w, img_h, selected, &timing, &transform);
 
     if(!IS_NULL_PTR(dir))
     {
