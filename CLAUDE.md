@@ -1140,6 +1140,24 @@ rules that were each paid for by a reported defect:
   went the long way round on one side of every turn. Do not "fix" the cusp tie-break to
   shortest-path: the two passes each cover one half of the tip disc, and which half is which
   is the pass's rotation. The #1313 cusp corpus, at all eight frame sizes, is the check.
+- **A border sample lies on the ENVELOPE of the discs, not on the normal.** Where the radius
+  changes along the spine, the boundary of the union is `c + r·(−r′ T + √(1 − r′²) N)`, r′ being
+  dr/ds: tilted off the normal by asin(r′). The normal sample sits inside the union by about
+  r′² r / 2 — a fraction of a pixel at a pen's rates, invisible to the eye and exactly what the
+  boundary detector (rightly) rejects, so the outline of any stroke whose radius varied lost
+  whole stretches of both sides (37% of the #1313 brush's border, reported as "discontinuities
+  in the dashed border"), and the raster's spokes, which end on the same samples, left the
+  shoulders of a fat node as a flat shelf tens of pixels deep. `dt_masks_outline_envelope_offset()`
+  (`masks_outline.c`) places every brush and polygon sample; the rate is the smoothstep's
+  derivative, zero at both ends of a segment, so caps and joint arcs are untouched and every
+  constant-radius corpus case stayed bit-identical. The tilt is capped at
+  `DT_MASKS_OUTLINE_TILT_MAX` (0.7): past it the spokes would lean too far along the spine to paint
+  the width. Two traps from the round that landed it: the corpus judges only the samples that were
+  KEPT, so a boundary stretch the skips swallow whole passes it — measure the skipped fraction
+  (`ansel-test-masks-geometry --time-overlay` now prints it; `MASKS_DUMP_SKIPS=<dir>` dumps every
+  spoke with its range) — and an argument added to the evaluator by regex landed before the
+  radius instead of after it on two of five callers, which zeroed every segment end's spoke,
+  killed every cap, and read for an hour like a cap defect the tilt had exposed.
 
 The corpus (`tests/masks/masks_geometry.c`) judges a brush and a polygon in **both directions** — owed
 coverage missing, and coverage no disc owes — and judges the drawn outline against the same

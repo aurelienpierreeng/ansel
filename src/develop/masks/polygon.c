@@ -96,7 +96,7 @@ static void _polygon_get_XY(const float p0_x, const float p0_y, const float p1_x
  */
 static gboolean _polygon_border_get_XY(const float p0_x, const float p0_y, const float p1_x, const float p1_y,
                                    const float p2_x, const float p2_y, const float p3_x, const float p3_y,
-                                   const float t, const float radius,
+                                   const float t, const float radius, float radius_rate,
                                    float *center_x, float *center_y, float *border_x, float *border_y)
 {
   // we get the point
@@ -153,12 +153,32 @@ static gboolean _polygon_border_get_XY(const float p0_x, const float p0_y, const
     }
     /* only a curve collapsed to a single point has no direction at all */
     if(dx == 0.0 && dy == 0.0) return FALSE;
+
+    /* a limit direction has a direction and no speed, so no rate can be taken against it */
+    radius_rate = 0.0f;
   }
 
-  const double l = 1.0 / sqrt(dx * dx + dy * dy);
-  *border_x = (*center_x) + radius * dy * l;
-  *border_y = (*center_y) - radius * dx * l;
+  /* on the envelope of the feather's discs, not on the normal: see
+   * dt_masks_outline_envelope_offset() */
+  const float centre[2] = { *center_x, *center_y };
+  float border[2];
+  dt_masks_outline_envelope_offset(centre, (float)dx, (float)dy, radius, radius_rate, border);
+  *border_x = border[0];
+  *border_y = border[1];
   return TRUE;
+}
+
+/* The feather along a segment eases from one node's to the other's, r1 + (r2 - r1) * t^2 (3 - 2t);
+ * its rate by t, (r2 - r1) * 6 t (1 - t), is zero at both ends, so the end samples stay on the
+ * normal and the joints built from them are unchanged. */
+static inline float _polygon_radius_at(const float r1, const float r2, const double t)
+{
+  return r1 + (r2 - r1) * t * t * (3.0 - 2.0 * t);
+}
+
+static inline float _polygon_radius_rate_at(const float r1, const float r2, const double t)
+{
+  return (r2 - r1) * 6.0 * t * (1.0 - t);
 }
 
 /**
@@ -408,8 +428,8 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
     have_border_min =
     _polygon_border_get_XY(segment_start[0], segment_start[1], segment_start[2], segment_start[3],
                            segment_end[2], segment_end[3], segment_end[0], segment_end[1], t_min,
-                           segment_start[4]
-                               + (segment_end[4] - segment_start[4]) * t_min * t_min * (3.0 - 2.0 * t_min),
+                           _polygon_radius_at(segment_start[4], segment_end[4], t_min),
+                           _polygon_radius_rate_at(segment_start[4], segment_end[4], t_min),
                            polygon_min, polygon_min + 1, border_min, border_min + 1);
   }
   if(!have_max)
@@ -417,8 +437,8 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
     have_border_max =
     _polygon_border_get_XY(segment_start[0], segment_start[1], segment_start[2], segment_start[3],
                            segment_end[2], segment_end[3], segment_end[0], segment_end[1], t_max,
-                           segment_start[4]
-                               + (segment_end[4] - segment_start[4]) * t_max * t_max * (3.0 - 2.0 * t_max),
+                           _polygon_radius_at(segment_start[4], segment_end[4], t_max),
+                           _polygon_radius_rate_at(segment_start[4], segment_end[4], t_max),
                            polygon_max, polygon_max + 1, border_max, border_max + 1);
   }
 
@@ -448,8 +468,7 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
          * at the top level and (0, 0) -- the image origin -- below it, written to the buffer
          * as geometry. A spoke of the right LENGTH along the chord's normal is always a valid
          * piece of the disc union. */
-        const float radius = segment_start[4]
-                             + (segment_end[4] - segment_start[4]) * t_max * t_max * (3.0 - 2.0 * t_max);
+        const float radius = _polygon_radius_at(segment_start[4], segment_end[4], t_max);
         dt_masks_outline_offset_along(polygon_max, segment_end[1] - segment_start[1],
                                       -(segment_end[0] - segment_start[0]), radius, border_max);
         have_border_max = TRUE;
@@ -586,9 +605,9 @@ static gboolean _polygon_walk_segment(const _polygon_walk_t *const w, _polygon_w
   float c1[2];
   float b1[2];
   const gboolean have_b0 = _polygon_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], 0.0f,
-                                                  p1[4], c0, c0 + 1, b0, b0 + 1);
+                                                  p1[4], 0.0f, c0, c0 + 1, b0, b0 + 1);
   const gboolean have_b1 = _polygon_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], 1.0f,
-                                                  p2[4], c1, c1 + 1, b1, b1 + 1);
+                                                  p2[4], 0.0f, c1, c1 + 1, b1, b1 + 1);
   if(!have_b0 && !have_b1) return FALSE;
   if(!have_b0) dt_masks_outline_offset_along(c0, b1[0] - c1[0], b1[1] - c1[1], p1[4], b0);
   if(!have_b1) dt_masks_outline_offset_along(c1, b0[0] - c0[0], b0[1] - c0[1], p2[4], b1);
