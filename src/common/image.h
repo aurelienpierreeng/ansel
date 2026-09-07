@@ -593,6 +593,15 @@ int32_t dt_image_import(int32_t film_id, const char *filename, gboolean raise_si
 int32_t dt_image_import_lua(int32_t film_id, const char *filename);
 /** removes the given image from the database. */
 void dt_image_remove(const int32_t imgid);
+/** @brief Same as dt_image_remove(), and records the removal on the undo stack.
+ *
+ * @details The rows are staged in `memory.removed_*` before they are deleted (see
+ * database/removed_image_repository.h) and copied back if the user undoes, so this is for
+ * "remove from library", where the file survives on disk and only the database entry is
+ * being thrown away. Deleting the file itself has nothing to undo and stays on
+ * dt_image_remove(). The snapshot is dropped, and the removal made permanent, when the undo
+ * record is discarded -- which the lighttable does on every view entry. */
+void dt_image_remove_undoable(const int32_t imgid);
 /** duplicates the given image in the database with the duplicate getting the supplied version number. if that
     version already exists just return the imgid without producing new duplicate. called with newversion -1 a new
     duplicate is produced with the next free version number. */

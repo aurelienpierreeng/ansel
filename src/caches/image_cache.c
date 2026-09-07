@@ -362,6 +362,16 @@ dt_image_t *dt_image_cache_testget(const int32_t imgid, char mode)
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
   img->cache_entry = entry;
+
+  /* Same contract as dt_image_cache_get() and dt_image_cache_get_reload(): an entry whose row
+   * has gone stays in the cache with id == UNKNOWN_IMAGE, and handing it out LOCKED is how the
+   * lock leaks -- the caller has no way to release what it was told was not an image. */
+  if(dt_image_invalid(img))
+  {
+    dt_cache_release(&cache->cache, entry);
+    return NULL;
+  }
+
   _image_cache_lock_init(img);
   return img;
 }
@@ -453,7 +463,18 @@ void dt_image_cache_connect_info_changed_first(const struct dt_control_signal_t 
 void dt_image_cache_read_release(const dt_image_t *img)
 {
   dt_image_cache_t *cache = _image_cache;
-  if(IS_NULL_PTR(img) || img->id <= 0) return;
+  if(IS_NULL_PTR(img)) return;
+
+  /* What is being returned is the LOCK, not the image, so an entry whose row has gone in the
+   * meantime is released like any other. The guard used to read `|| img->id <= 0` -- which is
+   * dt_image_invalid() spelled out -- and that silently skipped the release for exactly the
+   * entries most likely to have one outstanding, deadlocking the next writer for good. */
+  if(dt_image_invalid(img))
+  {
+    if(!IS_NULL_PTR(img->cache_entry)) dt_cache_release(&cache->cache, img->cache_entry);
+    return;
+  }
+
   const uint64_t self_hash = _image_cache_self_hash(img);
   if(self_hash != img->self_hash)
     g_error("[image_cache] read lock modified image %d, you need to use a write lock\n", img->id);
@@ -467,7 +488,14 @@ void dt_image_cache_read_release(const dt_image_t *img)
 void dt_image_cache_write_release(dt_image_t *img, dt_image_cache_write_mode_t mode)
 {
   dt_image_cache_t *cache = _image_cache;
-  if(IS_NULL_PTR(img) || img->id <= 0) return;
+  if(IS_NULL_PTR(img)) return;
+
+  // same as the read side: release the lock, write nothing back for a row that is gone
+  if(dt_image_invalid(img))
+  {
+    if(!IS_NULL_PTR(img->cache_entry)) dt_cache_release(&cache->cache, img->cache_entry);
+    return;
+  }
 
   const uint64_t self_hash = _image_cache_self_hash(img);
   const gboolean changed = (self_hash != img->self_hash);

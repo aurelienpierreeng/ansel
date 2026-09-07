@@ -190,6 +190,46 @@ write history straight to DB (XMP load, `dt_image_set_flip`) bypass it and need 
 Do NOT refresh the filmstrip from darkroom write paths — it competes with the realtime main
 preview pipeline. Lighttable ops may refresh both.
 
+**`dt_mipmap_cache_remove()` drops the THUMBNAILS, never the decoded raw.** Its loop stops at
+`DT_MIPMAP_F`, and `dt_mipmap_cache_remove_at_size()` refuses `DT_MIPMAP_F`/`DT_MIPMAP_FULL`
+outright, so those two — the unprocessed input, RAM-only, every disk write being gated on
+`mip < DT_MIPMAP_F` — are reachable only through `dt_mipmap_cache_remove_all_sizes()`. That is
+the right default for the list above: a development change does not invalidate the decoded raw,
+and dropping it on every history commit would re-read and re-demosaic the file per slider tick.
+
+An image LEAVING the library is the other case, and the only caller of the all-sizes form.
+Its input buffer otherwise outlives the row, with nothing but memory pressure to reclaim it,
+and `basebuffer` — which slices that buffer — is handed the stale entry when the image comes
+back on Ctrl+Z. It reports `invalid cache entry size 0 for module basebuffer`, the mipmap get
+path answers with an 8x8 husk, and no later render replaces it. **Only a developed image shows
+this**: an unaltered one is drawn from the embedded JPEG and never asks for the input at all,
+which is why the symptom reads as "one broken thumbnail" rather than as a cache bug.
+
+### Releasing an image cache entry returns the LOCK, not the image
+
+`dt_image_cache_read_release()` and `dt_image_cache_write_release()` (`caches/image_cache.c`)
+guard on a NULL pointer and nothing else. They used to read `if(IS_NULL_PTR(img) || img->id <= 0)
+return;` — which is `dt_image_invalid()` spelled out — and that skipped the release for precisely
+the entries most likely to have one outstanding.
+
+An entry whose row has gone stays in the cache with `id == UNKNOWN_IMAGE` (-1): the allocator
+runs `dt_image_repository_load()`, that fails with `no more rows available`, and `dt_image_init()`
+has already left the id there. Anything holding such an entry then called release, got nothing,
+and left it locked forever. `dt_cache_get()` spins on `trywrlock` with a `g_usleep(5)` retry, and
+`try*` locks report busy even on same-thread reentry (see the rwlock section below), so the next
+writer hangs the GUI thread with no error and no stack anywhere else — every other thread sits
+idle in `dt_pthread_cond_wait`. Measured: a whole film roll removed and undone froze in
+`dt_image_history_changed()` waiting on an entry nobody held.
+
+`dt_image_cache_testget()` is the other half and now carries the validity check its two siblings
+(`dt_image_cache_get()`, `dt_image_cache_get_reload()`) always had: handing out a LOCKED invalid
+image is what creates the leak, because the caller has no way to release what it was told is not
+an image.
+
+This is reachable whenever a row disappears while the GUI still refers to it — removal, and the
+lighttable refreshing a thumbnail right after. Grouped images make it far likelier, since
+`_add_thumbnail_group_borders()` re-reads every member.
+
 ### Duplicating an image races its own thumbnail generation against the history copy
 
 Lighttable "Duplicate" (`dt_control_duplicate_images_job_run`, `control_jobs.c`) creates the new
@@ -1576,6 +1616,66 @@ The import job only asks for `IMAGE` when it imported exactly one image *and* at
 (`index == 1 && xmps <= 1`): two or more sidecars mean the file produced several DB images
 (duplicates) and none of them is the obvious one to open. Zero is the ordinary no-sidecar case
 and still opens.
+
+### "Remove from library" is undoable, and the flag that hides an image survives the snapshot
+
+Removing an image from the library stages every row it owns into `memory.removed_*` twins
+before the foreign keys delete them, and Ctrl+Z copies them back — `doc/removal-undo.md` is
+the full map, `database/removed_image_repository.c` the SQL, `dt_image_remove_undoable()` and
+`_pop_undo()` (`common/image.c`) the bookkeeping. `dt_image_remove()` still records nothing
+and is what delete-from-disk uses: a trashed file has nothing to restore.
+
+**The trap that costs a whole test round is `DT_IMAGE_REMOVE`.**
+`dt_control_remove_images_job_run()` sets it on the batch *before* deleting anything, so the
+grid stops showing the images while the job runs, and `database/collection_query.c` filters
+that flag out of every collection query. It is therefore in the row that gets staged, and a
+verbatim restore brings the image back into the database and into **no view at all** — the
+row is present, complete and correct, `PRAGMA foreign_key_check` is clean, and the image is
+simply never selected by any query again. Reading "the rows came back" as "the undo works" is
+exactly the mistake this bug rewards: the check that separates the two is `flags & 256` on
+the restored row, not the row's existence. `_pop_undo()` clears it through
+`dt_image_repository_clear_flag_among()` before re-running the collection query.
+
+Two more things a reviewer would otherwise simplify away. The snapshot must be taken at the
+very top of the removal, before `dt_grouping_remove_from_group()` runs: that call rewrites the
+`group_id` of images **nobody asked to remove**, which lives in no table the removed image
+owns and is staged separately in `memory.removed_groups`. And the restore runs under `PRAGMA
+defer_foreign_keys = ON`, because a group removed in one go comes back one undo record at a
+time and an image regularly precedes the leader it points at; any `group_id` still dangling at
+the end is repointed at the image itself rather than allowed to fail the commit.
+
+The folder list learns about a restored roll through `dt_film_notify_rolls_changed()`
+(`common/film.h`), which `gui/common/film_gui.c` turns into `DT_SIGNAL_FILMROLLS_CHANGED`.
+`common/` is layer 1 and `control/` is layer 3, so raising the signal from `common/image.c`
+is a layering inversion `tools/check_layering.sh` counts against the baseline; the notifier
+is the same inversion `common/image_notify.h` and `common/thumbnail_notify.h` already use.
+
+**The schema does not cascade uniformly.** Only `history`, `masks_history`, `tagged_images`
+and `history_hash` carry a foreign key on `images(id)`; `module_order`, `color_labels` and
+`meta_data` carry none, in a fresh database as in a migrated one — `dt_image_repository_delete()`
+deletes `meta_data` by hand, and the other two are left behind by every removal, undone or not.
+So the restore DELETEs each child table's rows before copying the staged ones back: a no-op for
+the four that cascade, and the only thing stopping `color_labels` — which has no unique
+constraint either — from gaining a duplicate row on every remove/undo cycle.
+
+**`memory.` dies with the connection, and `_remove_undo_data_free()` checks
+`dt_database_is_open()` before dropping a snapshot.** `dt_undo_cleanup()` does run after
+`dt_database_close()`, but measurement says it finds an empty list: the GUI teardown calls
+`dt_ctl_switch_mode_to("")` (`darktable.c`, well before the close), switching to no view enters
+`dt_view_manager_switch_by_view()`, and its first act is `dt_undo_clear(..., DT_UNDO_ALL)` —
+database still open. Without a GUI the order reverses, but no removal can have been recorded
+either, both callers of `dt_control_remove_images()` being GUI ones. **So the guarded branch is
+unreachable today and the check stays anyway**, for the cost of one call: it is the day either
+half of that changes that a debug build would otherwise abort on quit, inside
+`DT_DEBUG_SQLITE3_PREPARE_V2`'s assert, and a SQLite built without API armor would crash.
+`dt_view_manager_cleanup()` is not what clears the list — it only unloads the view modules.
+
+**Any view switch closes the undo window, not just re-entering the lighttable.**
+`dt_view_manager_switch_by_view()` clears `DT_UNDO_ALL` on every switch, and the lighttable's
+own `enter()` additionally clears `DT_UNDO_LIGHTTABLE`. `DT_UNDO_REMOVE` is in both masks, and
+discarding the record frees the snapshot. That is every lighttable undo's lifetime, but here it
+is also the point of no return for data the database was the only holder of: a trip to the
+darkroom and back makes a removal permanent.
 
 ---
 

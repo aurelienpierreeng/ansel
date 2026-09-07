@@ -36,6 +36,8 @@
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "control/control.h"
+#include "control/user_message.h"
+#include <gtk/gtk.h>
 #include <glib.h>
 #include "gui/application.h"
 #include "widgets/accelerators.h"
@@ -63,6 +65,32 @@ static gboolean undo_sensitive_callback()
   return sensitive;
 }
 
+/* Popping a lighttable undo record runs on the GUI thread, and a batch is not cheap: undoing a
+ * removal of 984 images took 23 s, measured, with nothing repainting and the application looking
+ * hung. Say so before blocking -- the toast is posted and the main loop pumped just enough to
+ * paint it -- then let the progress cursor carry the wait, the way every other synchronous
+ * GUI-thread operation here does (libs/snapshots.c, libs/duplicate.c, common/iop-autoset.c).
+ *
+ * Only above a threshold: an ordinary rating change is one record and instant, and announcing
+ * that would be noise on every Ctrl+Z. The pump is bounded and happens BEFORE any data is
+ * touched, so it cannot re-enter the pop it is announcing. */
+#define DT_UNDO_ANNOUNCE_FROM 20
+
+static gboolean _undo_announce(const int records, const char *message)
+{
+  if(records < DT_UNDO_ANNOUNCE_FROM) return FALSE;
+
+  dt_control_log("%s", message);
+  for(int i = 0; i < 32 && gtk_events_pending(); i++) gtk_main_iteration_do(FALSE);
+  dt_control_change_cursor_by_name_and_flush("progress");
+  return TRUE;
+}
+
+static void _undo_announce_end(const gboolean announced)
+{
+  if(announced) dt_control_commit_cursor();
+}
+
 static gboolean undo_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   dt_view_manager_t *const vm = dt_view_manager_get_global();
@@ -70,12 +98,18 @@ static gboolean undo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   const dt_view_t *cv = dt_view_manager_get_current_view(vm);
   if(IS_NULL_PTR(cv)) return FALSE;
 
-  if(!strcmp(cv->module_name, "lighttable"))
-    dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
-  else if(!strcmp(cv->module_name, "darkroom"))
-    dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_DEVELOP);
-  else if(!strcmp(cv->module_name, "map"))
-    dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_MAP);
+  uint32_t filter = 0;
+  if(!strcmp(cv->module_name, "lighttable"))    filter = DT_UNDO_LIGHTTABLE;
+  else if(!strcmp(cv->module_name, "darkroom")) filter = DT_UNDO_DEVELOP;
+  else if(!strcmp(cv->module_name, "map"))      filter = DT_UNDO_MAP;
+
+  if(filter)
+  {
+    const int records = dt_undo_list_length(dt_undo_get_global(), filter);
+    const gboolean announced = _undo_announce(records, _("undoing, please wait…"));
+    dt_undo_do_undo(dt_undo_get_global(), filter);
+    _undo_announce_end(announced);
+  }
   // Beware: it needs to block callbacks declared in view, which may not be loaded.
   // Another piece of shitty peculiar design that doesn't comply with the logic of the rest of the soft.
   // That's what you get from ignoring modularity principles.
@@ -112,12 +146,18 @@ static gboolean redo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   const dt_view_t *cv = dt_view_manager_get_current_view(vm);
   if(IS_NULL_PTR(cv)) return FALSE;
 
-  if(!strcmp(cv->module_name, "lighttable"))
-    dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
-  else if(!strcmp(cv->module_name, "darkroom"))
-    dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_DEVELOP);
-  else if(!strcmp(cv->module_name, "map"))
-    dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_MAP);
+  uint32_t filter = 0;
+  if(!strcmp(cv->module_name, "lighttable"))    filter = DT_UNDO_LIGHTTABLE;
+  else if(!strcmp(cv->module_name, "darkroom")) filter = DT_UNDO_DEVELOP;
+  else if(!strcmp(cv->module_name, "map"))      filter = DT_UNDO_MAP;
+
+  if(filter)
+  {
+    const int records = dt_redo_list_length(dt_undo_get_global(), filter);
+    const gboolean announced = _undo_announce(records, _("redoing, please wait…"));
+    dt_undo_do_redo(dt_undo_get_global(), filter);
+    _undo_announce_end(announced);
+  }
   //   see undo_callback()
 
   return TRUE;

@@ -1329,6 +1329,32 @@ void dt_mipmap_cache_remove(const int32_t imgid, const gboolean flush_disk)
     dt_mipmap_cache_remove_at_size(imgid, k, flush_disk);
 }
 
+/* Same as _remove_at_size(), minus the "thumbnails only" guard, so the two input sizes can
+ * be dropped by the one caller entitled to: the image is going away. DT_MIPMAP_F and
+ * DT_MIPMAP_FULL are RAM-only -- every disk write is gated on mip < DT_MIPMAP_F -- so there
+ * is no file to unlink for them and flush_disk has nothing to do. */
+static void _remove_one_size(const int32_t imgid, const dt_mipmap_size_t mip)
+{
+  dt_mipmap_cache_t *cache = _mipmap_cache;
+  const uint32_t key = get_key(imgid, mip);
+  dt_cache_entry_t *entry = dt_cache_testget(&_get_cache(cache, mip)->cache, key, 'w');
+  if(entry)
+  {
+    struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+    ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
+    dsc->flags |= DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE;
+    dt_cache_release(&_get_cache(cache, mip)->cache, entry);
+    dt_cache_remove(&_get_cache(cache, mip)->cache, key);
+  }
+}
+
+void dt_mipmap_cache_remove_all_sizes(const int32_t imgid, const gboolean flush_disk)
+{
+  dt_mipmap_cache_remove(imgid, flush_disk);
+  _remove_one_size(imgid, DT_MIPMAP_F);
+  _remove_one_size(imgid, DT_MIPMAP_FULL);
+}
+
 // write thumbnail to disc if not existing there
 void dt_mimap_cache_evict(const int32_t imgid)
 {

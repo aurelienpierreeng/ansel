@@ -653,6 +653,22 @@ gboolean dt_image_repository_set_flag_among(GList *imgids, const int flag)
   return ok;
 }
 
+gboolean dt_image_repository_clear_flag_among(GList *imgids, const int flag)
+{
+  char *set = _id_set(imgids);
+  if(IS_NULL_PTR(set)) return FALSE;
+
+  sqlite3_stmt *stmt;
+  char *query = g_strdup_printf("UPDATE main.images SET flags = (flags & ~?1) WHERE id IN (%s)", set);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, flag);
+  const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
+  sqlite3_finalize(stmt);
+  dt_free(query);
+  dt_free(set);
+  return ok;
+}
+
 GList *dt_image_repository_get_full_paths(GList *imgids)
 {
   char *set = _id_set(imgids);
