@@ -46,12 +46,15 @@ the same numbers they always passed to cairo — widths in user units, the dash 
 ## The canvas
 
 `dt_masks_events_post_expose_with()` no longer pushes a group. It keeps one ARGB32 image
-surface the size of the clip in device pixels (created once, kept across frames, given the
-target's device scale), draws every shape into it through a `cairo_t` carrying `cr`'s matrix
-shifted to the clip's origin, and composites onto the view only the rectangle that was painted:
-the rasteriser's own record, plus the node header of every outline — node and both control
-points, three per node — with a margin for a node's disc and an arrow head, which bounds what
-cairo drew on top. That rectangle is then cleared by hand for the next frame. A creation
+surface the size of the clip in pixels (created once, kept across frames, given the target's
+device scale), draws every shape into it through a `cairo_t` carrying `cr`'s matrix shifted to
+the clip's origin, and composites onto the view only the rectangle that was painted: the
+rasteriser's own record, plus a bound on what cairo may draw on top — the node header of every
+outline, node and both control points, three per node, with a margin for a node's disc and an
+arrow head. That bound is computed *before* anything is drawn and the canvas context is clipped
+to it, so a handle that lands outside the estimate is not painted rather than left behind for
+the next frame (the harness draws a panned frame after every state and fails on any pixel a
+fresh surface would not show). The rectangle is then cleared by hand for the next frame. A creation
 session, which paints through its own cached pattern, takes the whole canvas.
 
 ## Measured
@@ -82,11 +85,23 @@ baseline moved at all. The 23 overlay baselines were regenerated.
   between vertices `s` apart; at the bright pass's half-width that shows. The capsule per
   segment is the fix, and per-pixel it costs a dot product more than the disc.
 - **Inside a pushed group, `cairo_get_target()` is the ORIGINAL target.** The group's surface
-  is `cairo_get_group_target()`, and it carries a device offset: pixel = device + offset. The
-  unit test paints inside a clipped group and checks the composite lands where cairo puts it.
-- **A widget context has a device scale, so an identity matrix is not device pixels.** The
-  canvas takes the target's device scale, its matrix is `cr`'s followed by a translation in
-  device units divided by that scale, and the composite positions the canvas in the same units.
+  is `cairo_get_group_target()`, and it carries a device offset. The unit test paints inside a
+  clipped group and checks the composite lands where cairo puts it.
+- **Cairo's device space is NOT the pixel grid, and `cairo_user_to_device()` stops there.** A
+  surface applies its own device transform after the CTM: pixel = device × device_scale +
+  device_offset, the scale being what a HiDPI widget carries (2 on a 2x screen) and the offset
+  what a pushed group carries (minus its clip's origin, already in pixels). Measured with
+  pycairo: on a surface with device scale 2, `user_to_device(10, 10)` is `(10, 10)` and
+  `get_matrix()` is the identity; a group pushed under a clip at (20, 20) reports offset
+  (−40, −40). The first version mapped device units straight to pixels, which is invisible on
+  every 1x screen and every unit test, and put the whole overlay at half size in the top-left
+  quadrant of a 2x darkroom. So every place that derives a pixel from `cairo_user_to_device()`
+  — the rasteriser's vertices and widths, the canvas frame, the cairo bound — multiplies by the
+  surface's device scale and adds its offset; the canvas takes the target's device scale, its
+  matrix is `cr`'s followed by a translation of the pixel shift divided by that scale, and the
+  composite positions it in the same units. `test_stroke_raster` paints on a device-scaled
+  surface, plain and inside a clipped group, and the harness renders every case at device
+  scale 2 and compares the painted bounding box with the 1x render's.
 - **`cairo_copy_path_flat()` is the cheap bridge.** The shapes' path builders are unchanged;
   extracting the flattened path costs microseconds and keeps one implementation of every
   outline walk.

@@ -193,6 +193,49 @@ static void _the_matrix_scales_widths_and_positions(void **state)
   cairo_surface_destroy(s);
 }
 
+static void _a_device_scaled_surface_is_painted_in_its_pixels(void **state)
+{
+  (void)state;
+  /* A HiDPI widget's surface carries a device scale: cairo's device space is then half the
+   * pixel grid, and cairo_user_to_device() stops there. The line below is at user (10..40, 10)
+   * on a surface scaled by 2: it must land on pixel row 20, from column 20 to 80, four pixels
+   * wide for a width of 2 user units -- not on row 10 at half size. */
+  cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 120, 60);
+  cairo_surface_set_device_scale(s, 2.0, 2.0);
+  cairo_t *cr = cairo_create(s);
+  cairo_move_to(cr, 10.25, 10.25);
+  cairo_line_to(cr, 40.25, 10.25);
+  const dt_stroke_style_t style = _solid(2.0, 0.0, 0.0, 1.0);
+  assert_true(dt_stroke_raster_path(cr, &style));
+  cairo_destroy(cr);
+  assert_int_equal(_alpha(s, 50, 20), 255);   /* on the line, in pixels */
+  assert_int_equal(_alpha(s, 50, 21), 255);   /* four pixels wide */
+  assert_int_equal(_alpha(s, 50, 23), 0);
+  assert_int_equal(_alpha(s, 50, 10), 0);     /* where device units would have put it */
+  assert_int_equal(_alpha(s, 25, 10), 0);
+  assert_int_equal(_alpha(s, 79, 20), 255);   /* the end, in pixels */
+  assert_int_equal(_alpha(s, 86, 20), 0);
+  cairo_surface_destroy(s);
+
+  /* and inside a pushed group on such a surface, where the group's offset is in pixels */
+  s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 120, 120);
+  cairo_surface_set_device_scale(s, 2.0, 2.0);
+  cr = cairo_create(s);
+  cairo_rectangle(cr, 10, 10, 40, 40);   /* pixels 20..100 */
+  cairo_clip(cr);
+  cairo_push_group(cr);
+  cairo_move_to(cr, 15, 30);             /* pixels (30, 60) .. (90, 60) */
+  cairo_line_to(cr, 45, 30);
+  assert_true(dt_stroke_raster_path(cr, &style));
+  cairo_pop_group_to_source(cr);
+  cairo_paint(cr);
+  cairo_destroy(cr);
+  assert_int_equal(_alpha(s, 60, 60), 255);
+  assert_int_equal(_alpha(s, 60, 30), 0);     /* device units would have put it here */
+  assert_int_equal(_alpha(s, 10, 60), 0);     /* outside the clip */
+  cairo_surface_destroy(s);
+}
+
 static void _the_touched_record_resets(void **state)
 {
   (void)state;
@@ -218,6 +261,7 @@ int main(void)
     cmocka_unit_test(_a_surface_it_cannot_write_is_refused_and_the_path_kept),
     cmocka_unit_test(_a_path_in_a_pushed_group_lands_where_cairo_puts_it),
     cmocka_unit_test(_the_matrix_scales_widths_and_positions),
+    cmocka_unit_test(_a_device_scaled_surface_is_painted_in_its_pixels),
     cmocka_unit_test(_the_touched_record_resets),
   };
   return cmocka_run_group_tests(tests, NULL, NULL);
