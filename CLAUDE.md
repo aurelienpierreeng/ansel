@@ -1691,6 +1691,41 @@ Fixed by saving `img_src[i+3]` before the round trip and restoring it after. Any
 loop in this codebase that round-trips through these color conversion primitives on a buffer whose
 4th channel is meaningful (alpha, a mask, anything other than padding) has the same exposure.
 
+### toneequal: the GUI samples a pipeline buffer whose size it does not choose
+
+The luminance mask every GUI reader consumes — the cursor exposure readout, the on-canvas exposure
+cursor, the histogram, the colour picker — is the module's own pipeline buffer, published in the
+shared pixelpipe cache under `dt_hash(piece->global_hash, "toneequal:luminance")`. Two properties
+of that arrangement are not visible from the GUI code, and each one is a way to read the wrong
+pixels.
+
+**The mask's dimensions are the ROI the pipe planned, which is NOT the preview size.**
+`iop/finalscale.c` enables itself whenever `darkroom/render_size != 1` (render at 1:1, downscale
+at the very end) and then requests `roi_in = roi_out / roi_out.scale` — the full sensor resolution
+— so every module above it runs full-resolution *in the preview pipe too*. Measured on a
+7979x5319 raw with `render_size = 0`: the preview pipe's ROI is 1003x669 while `piece->roi_in` at
+tone equalizer is 7979x5319 and the luminance mask is 170 MB. The same module runs at 1003x669 the
+moment `finalscale` disables itself (zoom exactly 1:1, or `render_size == 1`) — one zoom step
+away. The cursor is therefore stored NORMALIZED (`g->cursor_pos_x/y` in [0, 1[) and resolved
+against the dimensions of whichever buffer is attached, through `get_luminance_at_norm()` — the
+convention `_sample_picker_luminance_mask()` already uses for the picker's box and point. Storing
+preview pixels instead samples the top-left ~12% of the image in full-resolution mode; storing
+full-resolution pixels reads far out of bounds in the other.
+
+**A hash says nothing about a buffer's size.** `dt_dev_pixelpipe_cache_get()` ignores its `size`
+argument on a hit, and the GUI attach paths resolve the cacheline by hash alone while reading the
+dimensions from a separate look at `piece->roi_in`. The worker thread replans that piece between
+two such reads, so one plan's hash gets paired with another plan's dimensions — and across the
+`finalscale` toggle the two plans differ by a factor of 8 per axis, i.e. a 170 MB read into a
+2.7 MB buffer, off the end of the cache arena. So every attach site (`process()`, `gui_focus()`,
+the `DT_SIGNAL_HISTORY_RESYNC` callback, the cacheline-ready callback) takes the hash and the
+dimensions from ONE call to `_current_preview_luminance_hash()`, and refuses any entry that cannot
+hold `width * height` floats (`luminance_entry_fits()`, over `dt_pixel_cache_entry_get_size()`).
+That check is what makes the geometry an invariant of `g->thumb_preview_entry` /
+`g->thumb_preview_buf_width` / `_height`, so the samplers can trust the triple under the GUI lock
+without re-deriving it. Any new GUI reader of a cacheline resolved by hash owes the same check:
+the hash identifies the content, never the size.
+
 ---
 
 ## Collection / Library module
