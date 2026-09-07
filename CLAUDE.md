@@ -2114,6 +2114,30 @@ only reaches `anselrc` on a **clean** exit — so a crash during startup loses i
 relaunch replays the same path. Forcing that conf key to a bogus value in a throwaway
 `--configdir` reproduces the whole startup on demand without touching the user's library.
 
+### A pointer event's modifier state must reach the handlers whole
+
+`_button_pressed()`, `_button_released()` and `_mouse_moved()` (`gui/application.c`) pass
+`event->state` to `dt_control_button_pressed()` / `_released()` / `dt_control_mouse_moved()`
+without narrowing it, and `_scrolled()` does the same. That is not incidental tidiness: masking
+the state to its low four bits keeps SHIFT, LOCK, CONTROL and MOD1 — every modifier that
+matters on X11 and Win32, and none of the one that matters on Quartz. A physical Cmd is
+reported there as `GDK_MOD2_MASK` (0x10), on button and motion events exactly as on key events
+(`get_keyboard_modifiers_from_ns_flags()` in GDK's own `gdkevents-quartz.c`), and that bit is
+what `DT_PRIMARY_MASK` resolves to and what every shortcut is registered and matched against.
+Drop it and every primary+click and primary+drag gesture in the application is unreachable on
+macOS — inserting a mask node, constraining a shape — while the same code keeps working
+everywhere else, because CONTROL survives such a mask. It is a whole-platform failure with no
+error anywhere, and it looks like a bug in whatever feature is reported first.
+
+Nothing downstream reads those bits raw. Every consumer goes through `dt_modifier_is()` /
+`dt_modifiers_include()` (`widgets/widget_settings.h`), which mask with
+`gtk_accelerator_get_default_mod_mask()` — the button bits a drag adds are not in it, and
+neither is `GDK_MOD2_MASK` on X11, where that bit is NumLock. So the narrowing buys nothing the
+consumers do not already do correctly per platform. Note the modifier state travels as the
+parameter spelled `which` on the `mouse_moved` chain (`dt_control_mouse_moved()` through every
+IOP's `mouse_moved()`); it is modifiers there too, not a button number — `iop/vignette.c` reads
+it with `dt_modifier_is(which, DT_PRIMARY_MASK)`.
+
 ---
 
 ## Interpolation

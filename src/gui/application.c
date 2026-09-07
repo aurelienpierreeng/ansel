@@ -800,6 +800,20 @@ static dt_control_pointer_input_t _extract_pointer_input(const GdkEvent *event, 
   return input;
 }
 
+/* The three pointer handlers below hand the modifier state on WHOLE. Masking it to the low
+ * four bits keeps SHIFT, LOCK, CONTROL and MOD1 -- every modifier that matters on X11 and
+ * Win32, and none of the one that matters on Quartz: a physical Cmd is reported there as
+ * GDK_MOD2_MASK (0x10), on button and motion events exactly as on key events, and that is the
+ * bit DT_PRIMARY_MASK resolves to and every shortcut is matched against. Dropping it makes
+ * every primary+click and primary+drag gesture in the application unreachable on macOS --
+ * inserting a mask node, constraining a shape, the colour picker's area gestures -- while the
+ * same code works on the other platforms, since CONTROL survives the mask there.
+ *
+ * Nothing downstream reads these bits raw: every consumer goes through dt_modifier_is() /
+ * dt_modifiers_include() (widgets/widget_settings.h), which mask with
+ * gtk_accelerator_get_default_mod_mask() -- the button bits a drag adds are not in it, and
+ * neither is GDK_MOD2_MASK on X11, where that bit is NumLock rather than a modifier anyone
+ * presses on purpose. _scrolled() above already passes the whole state for the same reason. */
 static gboolean _button_pressed(GtkWidget *w, GdkEventButton *event, gpointer user_data)
 {
   if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
@@ -812,7 +826,7 @@ static gboolean _button_pressed(GtkWidget *w, GdkEventButton *event, gpointer us
                                                                   event->time, TRUE, "button-press");
   dt_control_set_pointer_input(&input);
   const double pressure = input.has_pressure ? input.pressure : 1.0;
-  dt_control_button_pressed(event->x, event->y, pressure, event->button, event->type, event->state & 0xf);
+  dt_control_button_pressed(event->x, event->y, pressure, event->button, event->type, event->state);
   return FALSE;
 }
 
@@ -822,7 +836,7 @@ static gboolean _button_released(GtkWidget *w, GdkEventButton *event, gpointer u
   const dt_control_pointer_input_t input = _extract_pointer_input((const GdkEvent *)event, event->x, event->y,
                                                                   event->time, FALSE, "button-release");
   dt_control_set_pointer_input(&input);
-  dt_control_button_released(event->x, event->y, event->button, event->state & 0xf);
+  dt_control_button_released(event->x, event->y, event->button, event->state);
 
   return TRUE;
 }
@@ -834,7 +848,7 @@ static gboolean _mouse_moved(GtkWidget *w, GdkEventMotion *event, gpointer user_
   const dt_control_pointer_input_t input = _extract_pointer_input((const GdkEvent *)event, event->x, event->y,
                                                                   event->time, FALSE, "motion");
   dt_control_set_pointer_input(&input);
-  dt_control_mouse_moved(event->x, event->y, input.has_pressure ? input.pressure : 1.0, event->state & 0xf);
+  dt_control_mouse_moved(event->x, event->y, input.has_pressure ? input.pressure : 1.0, event->state);
   return FALSE;
 }
 
