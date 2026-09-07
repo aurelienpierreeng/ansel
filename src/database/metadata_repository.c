@@ -88,34 +88,44 @@ GList *dt_metadata_repository_get_all(const int32_t imgid)
   return metadata;
 }
 
-void dt_metadata_repository_remove(const int32_t imgid, const char *keyid_list)
+gboolean dt_metadata_repository_remove(const int32_t imgid, const char *keyid_list)
 {
-  if(imgid <= 0 || IS_NULL_PTR(keyid_list)) return;
+  if(imgid <= 0 || IS_NULL_PTR(keyid_list)) return TRUE;
 
   sqlite3_stmt *stmt = NULL;
   // clang-format off
   gchar *query = g_strdup_printf("DELETE FROM main.meta_data WHERE id = %d AND key IN (%s)",
                                  imgid, keyid_list);
   // clang-format on
+  if(IS_NULL_PTR(query)) return FALSE;
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
   dt_free(query);
+  if(IS_NULL_PTR(stmt)) return FALSE;
+
+  const gboolean stepped = sqlite3_step(stmt) == SQLITE_DONE;
+  const gboolean finalized = sqlite3_finalize(stmt) == SQLITE_OK;
+  return stepped && finalized;
 }
 
-void dt_metadata_repository_add(const dt_metadata_row_t *rows, const size_t count)
+gboolean dt_metadata_repository_add(const dt_metadata_row_t *rows, const size_t count)
 {
-  if(IS_NULL_PTR(rows) || count == 0) return;
+  if(IS_NULL_PTR(rows) || count == 0) return TRUE;
 
   /* One statement for the whole batch, as before. Built rather than bound because the
    * number of rows is not known until here, and a prepared statement's placeholder count
    * is fixed. */
   GString *values = g_string_new(NULL);
+  if(IS_NULL_PTR(values)) return FALSE;
   for(size_t i = 0; i < count; i++)
   {
     char *escaped = sqlite3_mprintf("%q", rows[i].value ? rows[i].value : "");
+    if(IS_NULL_PTR(escaped))
+    {
+      g_string_free(values, TRUE);
+      return FALSE;
+    }
     g_string_append_printf(values, "%s(%d,%d,'%s')", (i > 0) ? "," : "",
-                           rows[i].imgid, rows[i].keyid, escaped);
+                            rows[i].imgid, rows[i].keyid, escaped);
     sqlite3_free(escaped);
   }
 
@@ -123,11 +133,19 @@ void dt_metadata_repository_add(const dt_metadata_row_t *rows, const size_t coun
   // clang-format off
   gchar *query = g_strdup_printf("INSERT INTO main.meta_data (id, key, value) VALUES %s", values->str);
   // clang-format on
+  if(IS_NULL_PTR(query))
+  {
+    g_string_free(values, TRUE);
+    return FALSE;
+  }
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
   dt_free(query);
   g_string_free(values, TRUE);
+  if(IS_NULL_PTR(stmt)) return FALSE;
+
+  const gboolean stepped = sqlite3_step(stmt) == SQLITE_DONE;
+  const gboolean finalized = sqlite3_finalize(stmt) == SQLITE_OK;
+  return stepped && finalized;
 }
 
 int32_t dt_metadata_repository_find_image_by_value(const char *value)
