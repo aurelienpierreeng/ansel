@@ -1233,20 +1233,30 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
 
   *dist = min_dist_pixel;
 
-  // we check if it's not inside borders, meaning we are not inside at all
-  if(!gui_points->border || gui_points->border_count <= node_count * 3
-     || dt_masks_point_in_form_exact(pt, 1, gui_points->border, node_count * 3,
-                                     gui_points->border_count,
-                                     gui_points->border_skips, gui_points->border_skip_count) < 0)
-    return;
+  if(!gui_points->border || gui_points->border_count <= node_count * 3) return;
 
-  // we are at least inside the border
-  *inside = 1;
+  // Proximity to the feather's OUTER line, the same measure the form line was tested with above.
+  int near_border = 0;
+  for(int i = node_count * 3; i < gui_points->border_count && !near_border; i++)
+  {
+    const float bdx = point_x - gui_points->border[i * 2];
+    const float bdy = point_y - gui_points->border[i * 2 + 1];
+    near_border = (sqf(bdx) + sqf(bdy)) < radius2;
+  }
 
-  // and we check if it's not inside form, meaning we are inside border only
-  if(IS_NULL_PTR(gui_points->points) || gui_points->points_count <= node_count * 3) return;
-  *inside_border = (dt_masks_point_in_form_exact(pt, 1, gui_points->points,
-                                                 node_count * 3, gui_points->points_count, NULL, 0) < 0);
+  const int enclosed = dt_masks_point_in_form_exact(pt, 1, gui_points->border, node_count * 3,
+                                                    gui_points->border_count,
+                                                    gui_points->border_skips,
+                                                    gui_points->border_skip_count) >= 0;
+
+  /* The feathering is part of the shape and answers `inside'; being anywhere in that band is not
+   * a hit on the border. Only proximity to its outer line is, and only where no form-line segment
+   * is closer. The shared hit test answers on the border before the segment, so reporting the
+   * whole band left the segment reachable from the inside of the form line alone -- the outer
+   * half of the cursor's reach, the half that falls inside the feathering, went to the border
+   * instead. Same definition as the brush, whose band covers the whole stroke and hit this first. */
+  *inside = enclosed || near_border;
+  *inside_border = near_border && (*near_handle < 0);
 }
 
 /**

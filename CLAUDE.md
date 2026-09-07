@@ -1024,27 +1024,35 @@ last node's own coordinate sits at the very end of the forward pass. Everything 
 drawn centerline (the outline stroking, the source shape, the clone link's midpoint) uses that
 helper.
 
-### A brush's outline encloses the whole stroke, so "inside the border" cannot mean "on the border"
+### `inside_border` is proximity to the feather's outer line, not the feather band
 
-`dt_masks_find_closest_handle_common()` (`masks_gui.c`) answers in one fixed order — source,
-border, segment, shape — so whatever a shape's `get_distance()` reports as `inside_border`
-preempts its segment. For a closed shape the two are disjoint regions: a polygon's `inside_border`
-is the feather ring, true only *between* the outline and the form, so a cursor on the centerline
-falls through to the segment test.
+Two curves are in play and the vocabulary runs them together. `gui_points->points` is the **form
+line** — the shape itself, whose segments are hoverable and draggable. `gui_points->border` is the
+**outer line of the feathering**, and the band between the two is what "border" names everywhere
+else in this code. `inside_border` names neither the band nor the form line: it is the cursor
+being **on the outer line**.
 
-A brush has no such ring. Its `points` are the centerline walked there and back (zero area) and
-its `border` is the outline wrapping the whole painted band, so a point-in-polygon test on that
-border is true across the entire stroke. Reporting that as `inside_border` makes the brush's
-segment — drag to move it, Ctrl+Click to insert a node — unreachable everywhere, while the shape
-still looks perfectly hoverable. For a brush, `inside` is "enclosed by the outline" and
-`inside_border` is "within cursor reach of the outline itself, and no centerline segment is
-closer": the outline carries no drag action of its own (border width is edited through the
-per-node handle and the wheel), so on a thin stroke, where outline and centerline are both within
-reach at once, the segment wins.
+That matters because `dt_masks_find_closest_handle_common()` (`masks_gui.c`) answers in one fixed
+order — source, border, segment, shape — so whatever a shape's `get_distance()` reports as
+`inside_border` preempts its segment. For a brush and a polygon alike, `inside` is "enclosed by
+the outer line" — the feathering is part of the shape and drags it — and `inside_border` is
+"within cursor reach of the outer line itself, and no form-line segment is closer". Neither line
+carries a drag action of its own (the feathering is edited through the per-node handle and the
+wheel), so where both are within reach at once, the segment wins.
 
-`_brush_get_distance()`'s source pass walks a different outline, so its distances need their own
-accumulator — sharing one running minimum lets a clone source near the form veto every segment hit
-on the form itself.
+Reporting the **band** instead cuts the segment's reach in half along the form line, and each
+shape loses a different half. A brush's `points` are the centerline walked there and back (zero
+area) while its `border` wraps the whole painted band, so a point-in-polygon test on that border
+is true across the entire stroke: the segment — drag to move it, Ctrl+Click to insert a node —
+became unreachable everywhere, while the shape still looked perfectly hoverable. A polygon's
+feathering lies wholly *outside* its form line, so reporting the band left the segment reachable
+from the inside of the form line alone; the whole outer half of the cursor's reach, every pixel of
+it inside the feathering, went to the border instead. The wider the fading, the more one-sided it
+looks, and approaching a segment from the feathering grabbed the whole shape.
+
+`_brush_get_distance()`'s source pass walks a different outer line, so its distances need their
+own accumulator — sharing one running minimum lets a clone source near the form veto every segment
+hit on the form itself.
 
 ### A drawing pass must not leave a path in the cairo context
 
