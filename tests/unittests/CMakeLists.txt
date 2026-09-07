@@ -76,4 +76,6 @@ target_sources(test_tagging_completion PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
 target_sources(test_tagging_completion_model PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
+target_sources(test_xmp_colorlabels PRIVATE test_xmp_fixture.c)
+target_sources(test_xmp_tags PRIVATE test_xmp_fixture.c)
 set_tests_properties(test_tagging_completion PROPERTIES SKIP_RETURN_CODE 77)
