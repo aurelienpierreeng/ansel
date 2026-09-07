@@ -1267,6 +1267,94 @@ static void _run_case(dt_develop_t *dev, dt_masks_form_t *form, const char *name
 #define OVERLAY_SCREEN_W 2560
 #define OVERLAY_SCREEN_H 1440
 
+/* How much of an outline's border the boundary pass skipped: the sample count and the number
+ * of ranges. */
+static void _overlay_skipped(const dt_masks_form_gui_points_t *const gp, int *skipped, int *ranges)
+{
+  *skipped = 0;
+  *ranges = gp->border_skip_count;
+  for(int k = 0; k < gp->border_skip_count; k++)
+    *skipped += gp->border_skips[k].resume_at - gp->border_skips[k].jump_from;
+}
+
+/* The range that skips border sample @p i, or -1. */
+static int _overlay_skip_of(const dt_masks_form_gui_points_t *const gp, const int i)
+{
+  for(int k = 0; k < gp->border_skip_count; k++)
+    if(i >= gp->border_skips[k].jump_from && i < gp->border_skips[k].resume_at) return k;
+  return -1;
+}
+
+/* MASKS_DUMP_SKIPS=<dir>: every border sample of the selected state, raw coordinates, with the
+ * range that skips it and its spine point, as <dir>/<case>-border.txt; and every range on
+ * stdout with its ends on screen. This is what let the missing dashes be measured on the
+ * renders instead of judged by eye. */
+static void _overlay_dump_skips(const dt_masks_form_gui_points_t *const gp, const char *name,
+                                const dt_masks_overlay_transform_t *const transform)
+{
+  const char *dump_dir = g_getenv("MASKS_DUMP_SKIPS");
+  if(IS_NULL_PTR(dump_dir)) return;
+  const int border = gp->border_count;
+  char *path = g_strdup_printf("%s/%s-border.txt", dump_dir, name);
+  FILE *f = g_fopen(path, "w");
+  if(!IS_NULL_PTR(f))
+  {
+    for(int i = 0; i < border; i++)
+      fprintf(f, "%d %.2f %.2f %d %.2f %.2f\n", i, gp->border[2 * i], gp->border[2 * i + 1], _overlay_skip_of(gp, i),
+              gp->points[2 * i], gp->points[2 * i + 1]);
+    fclose(f);
+  }
+  g_free(path);
+  for(int k = 0; k < gp->border_skip_count; k++)
+  {
+    const int a = gp->border_skips[k].jump_from;
+    const int b = MIN(gp->border_skips[k].resume_at, border - 1);
+    printf("  skip %2d: [%6d, %6d) %6d samples  from (%.0f, %.0f) to (%.0f, %.0f) on screen\n", k, a,
+           gp->border_skips[k].resume_at, gp->border_skips[k].resume_at - a,
+           gp->border[2 * a] * transform->scale + transform->offset_x,
+           gp->border[2 * a + 1] * transform->scale + transform->offset_y,
+           gp->border[2 * b] * transform->scale + transform->offset_x,
+           gp->border[2 * b + 1] * transform->scale + transform->offset_y);
+  }
+}
+
+/* Paint the background and draw one overlay frame at @p transform. */
+static void _overlay_frame(dt_develop_t *dev, cairo_surface_t *surface, const dt_masks_overlay_transform_t *const transform)
+{
+  cairo_t *cr = cairo_create(surface);
+  cairo_set_source_rgb(cr, 0.12, 0.12, 0.12);
+  cairo_paint(cr);
+  dt_masks_events_post_expose_with(dev, NULL, cr, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H, -1, -1, transform);
+  cairo_destroy(cr);
+}
+
+/* A frame must leave nothing behind. Draw once more at a PANNED transform, then compare with
+ * the same frame drawn onto a fresh surface after a rebuild: anything the frame left in the
+ * canvas -- a handle painted outside the rectangle it composited and cleared -- lands in the
+ * panned frame as pixels the fresh one does not have. Returns how many. */
+static long _overlay_leftovers(dt_develop_t *dev, cairo_surface_t *surface,
+                               const dt_masks_overlay_transform_t *const transform)
+{
+  const dt_masks_overlay_transform_t panned
+      = { .scale = transform->scale, .offset_x = transform->offset_x + 97.0, .offset_y = transform->offset_y - 61.0 };
+  _overlay_frame(dev, surface, &panned);
+  cairo_surface_t *fresh = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H);
+  dev->form_gui->formid = 0;
+  dev->form_gui->geometry_generation = 0;
+  _overlay_frame(dev, fresh, &panned);
+  cairo_surface_flush(surface);
+  cairo_surface_flush(fresh);
+  const uint32_t *pa = (const uint32_t *)cairo_image_surface_get_data(surface);
+  const uint32_t *pb = (const uint32_t *)cairo_image_surface_get_data(fresh);
+  const int stride = cairo_image_surface_get_stride(surface) / 4;
+  long leftovers = 0;
+  for(int y = 0; y < OVERLAY_SCREEN_H; y++)
+    for(int x = 0; x < OVERLAY_SCREEN_W; x++)
+      if(pa[y * stride + x] != pb[y * stride + x]) leftovers++;
+  cairo_surface_destroy(fresh);
+  return leftovers;
+}
+
 static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const char *dir,
                                const int img_w, const int img_h, const int frames)
 {
@@ -1302,24 +1390,15 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
     dev->form_gui->group_selected = selected ? 0 : -1;
     dev->form_gui->form_selected = FALSE;
 
-    cairo_t *cr = cairo_create(surface);
-    cairo_set_source_rgb(cr, 0.12, 0.12, 0.12);
-    cairo_paint(cr);
     /* the first frame builds the outline, which the darkroom also does once per edit; it is
      * not the per-frame cost and is timed apart */
     const double build_start = dt_get_wtime();
-    dt_masks_events_post_expose_with(dev, NULL, cr, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H, -1, -1, &transform);
+    _overlay_frame(dev, surface, &transform);
     const double build_ms = 1000.0 * (dt_get_wtime() - build_start);
 
     const double start = dt_get_wtime();
-    for(int f = 0; f < frames; f++)
-    {
-      cairo_set_source_rgb(cr, 0.12, 0.12, 0.12);
-      cairo_paint(cr);
-      dt_masks_events_post_expose_with(dev, NULL, cr, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H, -1, -1, &transform);
-    }
+    for(int f = 0; f < frames; f++) _overlay_frame(dev, surface, &transform);
     const double per_frame_ms = 1000.0 * (dt_get_wtime() - start) / MAX(frames, 1);
-    cairo_destroy(cr);
 
     int points = 0;
     int border = 0;
@@ -1331,39 +1410,8 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
     {
       points = gp->points_count;
       border = gp->border_count;
-      skip_ranges = gp->border_skip_count;
-      for(int k = 0; k < gp->border_skip_count; k++)
-        skipped += gp->border_skips[k].resume_at - gp->border_skips[k].jump_from;
-      if(!IS_NULL_PTR(g_getenv("MASKS_DUMP_SKIPS")) && selected)
-      {
-        /* every border sample, raw coordinates, with the range that skips it or -1 */
-        char *path = g_strdup_printf("%s/%s-border.txt", g_getenv("MASKS_DUMP_SKIPS"), name);
-        FILE *f = g_fopen(path, "w");
-        if(f)
-        {
-          for(int i = 0; i < border; i++)
-          {
-            int in = -1;
-            for(int k = 0; k < gp->border_skip_count; k++)
-              if(i >= gp->border_skips[k].jump_from && i < gp->border_skips[k].resume_at) in = k;
-            fprintf(f, "%d %.2f %.2f %d %.2f %.2f\n", i, gp->border[2 * i], gp->border[2 * i + 1], in,
-                    gp->points[2 * i], gp->points[2 * i + 1]);
-          }
-          fclose(f);
-        }
-        g_free(path);
-      }
-      if(!IS_NULL_PTR(g_getenv("MASKS_DUMP_SKIPS")) && selected)
-        for(int k = 0; k < gp->border_skip_count; k++)
-        {
-          const int a = gp->border_skips[k].jump_from;
-          const int b = gp->border_skips[k].resume_at;
-          printf("  skip %2d: [%6d, %6d) %6d samples  from (%.0f, %.0f) to (%.0f, %.0f) on screen\n", k, a, b, b - a,
-                 gp->border[2 * a] * transform.scale + transform.offset_x,
-                 gp->border[2 * a + 1] * transform.scale + transform.offset_y,
-                 gp->border[2 * MIN(b, border - 1)] * transform.scale + transform.offset_x,
-                 gp->border[2 * MIN(b, border - 1) + 1] * transform.scale + transform.offset_y);
-        }
+      _overlay_skipped(gp, &skipped, &skip_ranges);
+      if(selected) _overlay_dump_skips(gp, name, &transform);
     }
     printf("[TIME] %-26s %5dx%-4d %-8s %7.2f ms/frame  (first frame incl. build %7.2f ms;"
            " %d outline samples, %d border samples, %d skipped in %d ranges)\n",
@@ -1378,35 +1426,7 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
       g_free(png);
     }
 
-    /* A frame must leave nothing behind. Draw once more at a PANNED transform, then compare
-     * with the same frame drawn onto a fresh surface after a rebuild: anything the selected
-     * frame left in the canvas -- a handle painted outside the rectangle it composited and
-     * cleared -- would land in the panned frame as pixels the fresh one does not have. */
-    const dt_masks_overlay_transform_t panned
-        = { .scale = scale, .offset_x = transform.offset_x + 97.0, .offset_y = transform.offset_y - 61.0 };
-    cairo_surface_t *fresh = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H);
-    cairo_t *cr_panned = cairo_create(surface);
-    cairo_set_source_rgb(cr_panned, 0.12, 0.12, 0.12);
-    cairo_paint(cr_panned);
-    dt_masks_events_post_expose_with(dev, NULL, cr_panned, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H, -1, -1, &panned);
-    cairo_destroy(cr_panned);
-    dev->form_gui->formid = 0;
-    dev->form_gui->geometry_generation = 0;
-    cairo_t *cr_fresh = cairo_create(fresh);
-    cairo_set_source_rgb(cr_fresh, 0.12, 0.12, 0.12);
-    cairo_paint(cr_fresh);
-    dt_masks_events_post_expose_with(dev, NULL, cr_fresh, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H, -1, -1, &panned);
-    cairo_destroy(cr_fresh);
-    cairo_surface_flush(surface);
-    cairo_surface_flush(fresh);
-    const uint32_t *pa = (const uint32_t *)cairo_image_surface_get_data(surface);
-    const uint32_t *pb = (const uint32_t *)cairo_image_surface_get_data(fresh);
-    const int stride = cairo_image_surface_get_stride(surface) / 4;
-    long leftovers = 0;
-    for(int y = 0; y < OVERLAY_SCREEN_H; y++)
-      for(int x = 0; x < OVERLAY_SCREEN_W; x++)
-        if(pa[y * stride + x] != pb[y * stride + x]) leftovers++;
-    cairo_surface_destroy(fresh);
+    const long leftovers = _overlay_leftovers(dev, surface, &transform);
     if(leftovers > 0)
     {
       printf("[FAIL] %-26s %-8s left %ld pixel(s) behind for the next, panned frame\n", name,
@@ -1432,8 +1452,18 @@ static gboolean _painted_bbox(cairo_surface_t *surface, int *x0, int *y0, int *x
     {
       const uint32_t p = px[y * stride + x];
       if(p == background) continue;
-      if(!any) { *x0 = *x1 = x; *y0 = *y1 = y; any = TRUE; }
-      *x0 = MIN(*x0, x); *x1 = MAX(*x1, x); *y0 = MIN(*y0, y); *y1 = MAX(*y1, y);
+      if(!any)
+      {
+        *x0 = x;
+        *x1 = x;
+        *y0 = y;
+        *y1 = y;
+        any = TRUE;
+      }
+      *x0 = MIN(*x0, x);
+      *x1 = MAX(*x1, x);
+      *y0 = MIN(*y0, y);
+      *y1 = MAX(*y1, y);
     }
   return any;
 }
@@ -1475,7 +1505,7 @@ static void _check_hidpi_placement(dt_develop_t *dev, dt_masks_form_t *form, con
   }
   const int tolerance = 12;   /* antialiasing plus the wider lines and handles of a 2x screen */
   gboolean ok = any[0] && any[1];
-  for(int i = 0; ok && i < 4; i++)
+  for(int i = 0; i < 4; i++)
     if(abs(bbox[0][i] - bbox[1][i]) > tolerance) ok = FALSE;
   printf("[%s] %-26s hidpi placement: 1x bbox (%d,%d)-(%d,%d)  2x bbox (%d,%d)-(%d,%d)\n", ok ? "PASS" : "FAIL", name,
          bbox[0][0], bbox[0][1], bbox[0][2], bbox[0][3], bbox[1][0], bbox[1][1], bbox[1][2], bbox[1][3]);
