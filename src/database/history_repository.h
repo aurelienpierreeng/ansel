@@ -185,12 +185,23 @@ gboolean dt_history_repository_write_mask_item(const int32_t imgid, const int nu
 /** how many mask rows an image has */
 int dt_history_repository_count_mask_items(const int32_t imgid);
 
-/** one main.masks_history row. The two blobs point INTO the statement -- copy them here. */
-typedef void (*dt_history_repository_mask_cb)(void *user_data, const int num, const int formid,
-                                              const int form, const char *name, const int version,
-                                              const void *points, const int points_len,
-                                              const int points_count, const void *source,
-                                              const int source_len);
+/** A borrowed mask-history row. String and blob storage is valid only during the callback. */
+typedef struct dt_history_repository_mask_row_t
+{
+  int num;
+  int mask_id;
+  int form;
+  const char *name;
+  int version;
+  const void *points;
+  int points_len;
+  int points_count;
+  const void *source;
+  int source_len;
+} dt_history_repository_mask_row_t;
+
+/** Consume a borrowed row without retaining its string or blob pointers. */
+typedef void (*dt_history_repository_mask_cb)(void *user_data, const dt_history_repository_mask_row_t *row);
 
 /** every mask row of an image, in num order */
 void dt_history_repository_foreach_mask_item(const int32_t imgid,
