@@ -562,6 +562,24 @@ static const float _brush_1074[8][11] = {
   { 0.614701509f, 0.904702842f, 0.609275997f, 0.908323109f, 0.603850603f, 0.911943376f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
 };
 
+/* The same brush as the darkroom held it on the evening of 2026-09-08, rebuilt from the
+ * frame dump (MASKS_DUMP_OVERLAY) rather than the sidecar, which no longer matched: node 1 is
+ * 287 px from node 0 now, and the radius rate along that segment peaks near 1 -- the discs
+ * almost nest, and the union's top is the rear envelope of the flare, 40 px outside node 1's
+ * circle at a tilt of 64 degrees. Radii measured on the dump: 132 px everywhere, 342.5 at
+ * node 1; frame 5184x3456. */
+static const float _brush_1074b[8][11] = {
+  /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
+  { 0.751560571f, 0.636493056f, 0.749378858f, 0.628718171f, 0.753744213f, 0.64426794f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.745943287f, 0.718943866f, 0.742395833f, 0.674337384f, 0.749488812f, 0.763550347f, 0.0991030093f, 0.0991030093f, 1.0f, 0.660000026f, 1 },
+  { 0.722523148f, 0.958313079f, 0.722864583f, 0.915240162f, 0.722181713f, 1.001386f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.705744599f, 0.972430556f, 0.713929398f, 0.970590278f, 0.697559799f, 0.974273727f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.673414352f, 0.969363426f, 0.686442901f, 0.974068287f, 0.660387731f, 0.964655671f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.627581019f, 0.944195602f, 0.637197145f, 0.950434028f, 0.617962963f, 0.937954282f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.615711806f, 0.931918403f, 0.62048804f, 0.932120949f, 0.6109375f, 0.931712963f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.598933256f, 0.942965856f, 0.604527392f, 0.939282407f, 0.593341049f, 0.946649306f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+};
+
 /* Point the dev's geometry at a given frame size. The chain must be rebuilt afterwards or it
  * stops being authoritative and every outline comes back empty, silently. */
 static void _set_frame(dt_develop_t *dev, const int w, const int h)
@@ -816,6 +834,7 @@ typedef struct _band_t
   int kept;
   int inside;
   int outside;
+  int off_frame;   /* kept samples past the edge of the frame, which no map can judge */
   double seconds;
 } _band_t;
 
@@ -845,7 +864,9 @@ static _band_t _outline_band_check(dt_develop_t *dev, dt_masks_form_t *form, con
     const int y = (int)lrintf(border[i * 2 + 1]);
     if(x < 0 || y < 0 || x >= w || y >= h)
     {
-      band.outside++;
+      /* a shape drawn past the edge of the image has a boundary there the maps cannot judge;
+       * it is drawn all the same, and not a spoke to nowhere */
+      band.off_frame++;
       continue;
     }
     const size_t at = (size_t)y * w + x;
@@ -925,8 +946,8 @@ static void _judge_raster(dt_develop_t *dev, dt_masks_form_t *form, const _brush
   if(missing.largest > 0) printf(" around (%d,%d)", missing.cx, missing.cy);
   printf(")  excess %7d px (largest run %7d px", excess.total, excess.largest);
   if(excess.largest > 0) printf(" around (%d,%d)", excess.cx, excess.cy);
-  printf(")  outline: %d kept, %d inside, %d outside, built in %.1f ms  budget %d  -> %s\n",
-         band.kept, band.inside, band.outside, 1000.0 * band.seconds, c->budget_px, alpha_path);
+  printf(")  outline: %d kept, %d inside, %d outside, %d off frame, built in %.1f ms  budget %d  -> %s\n",
+         band.kept, band.inside, band.outside, band.off_frame, 1000.0 * band.seconds, c->budget_px, alpha_path);
   if(!ok) failures++;
 
   g_free(alpha_path);
@@ -1613,6 +1634,7 @@ static void _time_overlay_all(dt_develop_t *dev, const char *dir, const int fram
   _time_overlay_brush(dev, _brush_from_table11(_brush_1360, 43), "brush-1360-pressure-ramp", dir, 5184, 3888, frames);
   _time_overlay_brush(dev, _brush_from_table11(_brush_1352, 7), "brush-1352-radius-step", dir, IMG_W, IMG_H, frames);
   _time_overlay_brush(dev, _brush_from_table11(_brush_1074, 8), "brush-1074-flare", dir, 5184, 3456, frames);
+  _time_overlay_brush(dev, _brush_from_table11(_brush_1074b, 8), "brush-1074-flare-b", dir, 5184, 3456, frames);
 
   {
     dt_masks_form_t form = { 0 };
@@ -1832,6 +1854,8 @@ int main(int argc, char *argv[])
     _run_brush_case11_at(&dev, _brush_1352, 7, &c1352_small);
     const _brush_case_t c1074 = { "brush-1074-flare", dir, 0, 5184, 3456 };
     _run_brush_case11_at(&dev, _brush_1074, 8, &c1074);
+    const _brush_case_t c1074b = { "brush-1074-flare-b", dir, 0, 5184, 3456 };
+    _run_brush_case11_at(&dev, _brush_1074b, 8, &c1074b);
   }
 
   /* 3b. THE SECOND REPORTED SHAPE, polygon #2. Two defects were reported against it: the outer
