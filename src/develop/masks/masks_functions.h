@@ -176,15 +176,16 @@ void dt_masks_outline_offset_along(const float *const centre, float dx, float dy
                                    float *const border);
 
 /** How far off the normal a border sample may tilt, as the sine of the angle: the rate of the
- * radius along the spine, |dr/ds|, up to which the envelope is followed exactly. Beyond it the
- * sample stays at that tilt, which puts it a little inside the union -- so the outline skips it
- * there -- but keeps the spoke painted from it reaching across the stroke. At a rate of 1 the
- * discs nest and there is no envelope to follow at all; between 0.7 and 1 the spokes of a
- * family tilted to the envelope would lean so far along the spine that nothing paints the
- * width, and the raster would open. With this cap every point across the width at a sample is
- * reached by the spoke of a sample one radius further on (r_j >= 1.41 r_i whenever the rate
- * exceeds 0.41), which is what keeps the union painted whatever the rate. */
-#define DT_MASKS_OUTLINE_TILT_MAX 0.7f
+ * radius along the spine, |dr/ds|, up to which the envelope is followed. At 1 the discs nest
+ * and there is no envelope beyond it, so this is the exact envelope and the clamp only keeps
+ * the square root real. A first version capped it at 0.7 to keep the spokes painted from the
+ * samples reaching across the stroke, on the argument that a family tilted further leans too
+ * far along the spine to paint the width. Measured, the raster oracle reports no missing pixel
+ * anywhere in the corpus at the exact envelope, while the cap left a real hole: a segment whose
+ * rate peaks near 1 -- a brush flaring from a 132 px node to a 342 px one over 287 px -- has its
+ * union's top on the rear envelope of the flare, 40 px outside the wide node's circle at a tilt
+ * of 64 degrees, and no sample reached it, so the outline lost the whole top of the shape. */
+#define DT_MASKS_OUTLINE_TILT_MAX 1.0f
 
 /** Place the border sample of a disc of @p radius centred at @p centre, when the disc belongs
  * to a family whose centre moves along the tangent (@p dx, @p dy) -- any length, the derivative
