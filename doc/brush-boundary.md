@@ -197,13 +197,17 @@ carries no speed and is given rate zero. Every constant-radius corpus case staye
 bit-identical; the two whose radius varies moved by the crescents above and their baselines
 were regenerated.
 
-The tilt is capped at `DT_MASKS_OUTLINE_TILT_MAX = 0.7` (the sine of the angle). At a rate
-of 1 the discs nest and there is no envelope; between 0.7 and 1 the spokes of a family tilted
-to the envelope lean so far along the spine that nothing paints the width. With the cap, every
-point across the width at a sample is reached by the spoke of a sample one radius further on
-(r_j ≥ 1.41 r_i whenever the rate exceeds 0.41), so the union stays painted whatever the rate;
-past the cap the sample is a little inside the union and the outline skips it, which is the
-right answer for a radius growing almost as fast as the pen moves.
+`DT_MASKS_OUTLINE_TILT_MAX` is 1.0: the exact envelope, the clamp only keeping the square root
+real where the discs nest. A first version capped the tilt at 0.7, reasoning that a family of
+spokes tilted further leans too far along the spine to paint the width. That reasoning was not
+measured, and it cost a real defect. `_MG_1074.CR2` brush #4, as the user drew it, flares from
+a 132 px node to a 342 px one over 287 px, and the radius rate along that segment peaks near 1:
+the discs almost nest, and the union's top is the rear envelope of the flare, 40 px outside the
+wide node's circle at a tilt of 64°. No capped sample reached it, the wide node's circle was
+correctly found inside, and the outline lost the whole top of the shape — found only from the
+darkroom's own frame dump (`MASKS_DUMP_OVERLAY`), since the sidecar on disk no longer held the
+shape. At the exact envelope the raster oracle reports no missing pixel on any corpus case,
+this one included, and the top closes.
 
 Two traps from the round that landed it. The corpus judges only the samples that were KEPT —
 a stretch the skips swallow whole passes the outline band check, so the skipped fraction has

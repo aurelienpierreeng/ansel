@@ -1142,9 +1142,14 @@ rules that were each paid for by a reported defect:
   shoulders of a fat node as a flat shelf tens of pixels deep. `dt_masks_outline_envelope_offset()`
   (`masks_outline.c`) places every brush and polygon sample; the rate is the smoothstep's
   derivative, zero at both ends of a segment, so caps and joint arcs are untouched and every
-  constant-radius corpus case stayed bit-identical. The tilt is capped at
-  `DT_MASKS_OUTLINE_TILT_MAX` (0.7): past it the spokes would lean too far along the spine to paint
-  the width. Two traps from the round that landed it: the corpus judges only the samples that were
+  constant-radius corpus case stayed bit-identical. `DT_MASKS_OUTLINE_TILT_MAX` is 1.0, the exact
+  envelope: a first version capped the tilt at 0.7 to keep the spokes painting across the width,
+  and that cap cost a real defect — a segment whose rate peaks near 1 (a 132 px node flaring to
+  342 px over 287 px, `_MG_1074.CR2` brush #4 as the user drew it) has its union's top on the
+  rear envelope, 40 px outside the wide node's circle at a 64° tilt, which no capped sample
+  reached, so the outline lost the whole top of the shape; at the exact envelope the raster oracle
+  reports no missing pixel anywhere in the corpus. Two traps from the round that landed it: the
+  corpus judges only the samples that were
   KEPT, so a boundary stretch the skips swallow whole passes it — measure the skipped fraction
   (`ansel-test-masks-geometry --time-overlay` now prints it; `MASKS_DUMP_SKIPS=<dir>` dumps every
   spoke with its range) — and an argument added to the evaluator by regex landed before the
