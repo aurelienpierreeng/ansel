@@ -1445,7 +1445,7 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
   /* fit the image into the screen, centred: what the darkroom shows at zoom "fit" -- or, with
    * MASKS_OVERLAY_VIEW="scale,offset_x,offset_y[,ppd]", the view the darkroom is showing, in
    * user units, with the surface's device scale, to reproduce what a user sees at a zoom */
-  double scale = MIN((double)OVERLAY_SCREEN_W / img_w, (double)OVERLAY_SCREEN_H / img_h);
+  const double scale = MIN((double)OVERLAY_SCREEN_W / img_w, (double)OVERLAY_SCREEN_H / img_h);
   dt_masks_overlay_transform_t transform
       = { .scale = scale,
           .offset_x = 0.5 * (OVERLAY_SCREEN_W - scale * img_w),
@@ -1458,7 +1458,6 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
     gchar **parts = g_strsplit(view, ",", 4);
     for(int i = 0; i < 4 && !IS_NULL_PTR(parts[i]); i++) v[i] = g_ascii_strtod(parts[i], NULL);
     g_strfreev(parts);
-    scale = v[0];
     transform.scale = v[0];
     transform.offset_x = v[1];
     transform.offset_y = v[2];
