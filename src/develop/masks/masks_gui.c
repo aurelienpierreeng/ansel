@@ -52,6 +52,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include "widgets/togglebutton.h"
+#include <glib/gstdio.h>
 
 #define DT_MASKS_SHAPE_BUTTON_COUNT 5
 
@@ -4242,6 +4243,50 @@ static void _canvas_end(cairo_t *cr, const _canvas_frame_t *frame, const cairo_r
   _canvas_clear(frame->canvas, &painted);
 }
 
+/* MASKS_DUMP_OVERLAY=<dir>: write what this frame drew -- the canvas before it is composited
+ * and cleared, and every outline in the GUI cache with its skip ranges -- so a darkroom that
+ * shows something the harness does not can be read from the files it leaves behind. Overwritten
+ * on every frame: the last one is the one on screen. */
+static void _overlay_dump(const _canvas_frame_t *const frame, const dt_masks_form_gui_t *const gui,
+                          const cairo_rectangle_int_t *const dirty)
+{
+  const char *dir = g_getenv("MASKS_DUMP_OVERLAY");
+  if(IS_NULL_PTR(dir)) return;
+  char *path = g_strdup_printf("%s/overlay-canvas.png", dir);
+  cairo_surface_flush(frame->canvas);
+  cairo_surface_write_to_png(frame->canvas, path);
+  g_free(path);
+  path = g_strdup_printf("%s/overlay-info.txt", dir);
+  FILE *info = g_fopen(path, "w");
+  g_free(path);
+  if(!IS_NULL_PTR(info))
+  {
+    fprintf(info, "canvas %d %d %dx%d device_scale %.3f dirty %d %d %dx%d\n", frame->x, frame->y, frame->width,
+            frame->height, frame->device_scale, dirty->x, dirty->y, dirty->width, dirty->height);
+    fclose(info);
+  }
+  int index = 0;
+  for(const GList *node = gui->points; node; node = g_list_next(node), index++)
+  {
+    const dt_masks_form_gui_points_t *const pts = (const dt_masks_form_gui_points_t *)node->data;
+    if(IS_NULL_PTR(pts) || IS_NULL_PTR(pts->border) || IS_NULL_PTR(pts->points)) continue;
+    path = g_strdup_printf("%s/outline-%d.txt", dir, index);
+    FILE *f = g_fopen(path, "w");
+    g_free(path);
+    if(IS_NULL_PTR(f)) continue;
+    const int count = MIN(pts->points_count, pts->border_count);
+    for(int i = 0; i < count; i++)
+    {
+      int skip = -1;
+      for(int k = 0; k < pts->border_skip_count; k++)
+        if(i >= pts->border_skips[k].jump_from && i < pts->border_skips[k].resume_at) skip = k;
+      fprintf(f, "%d %.2f %.2f %d %.2f %.2f\n", i, pts->border[2 * i], pts->border[2 * i + 1], skip,
+              pts->points[2 * i], pts->points[2 * i + 1]);
+    }
+    fclose(f);
+  }
+}
+
 /* Draw the visible form: a group member by member, anything else through its own drawer. */
 static void _overlay_draw_form(cairo_t *cr, const float zoom_scale, dt_masks_form_t *mask_form,
                                dt_masks_form_gui_t *mask_gui)
@@ -4376,6 +4421,7 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
    * session paints through its own cached pattern and takes the whole canvas. */
   cairo_rectangle_int_t dirty = { 0, 0, 0, 0 };
   const gboolean any = _overlay_dirty(&frame, &cairo_bound, cairo_bounded, &dirty);
+  _overlay_dump(&frame, mask_gui, &dirty);
   cairo_restore(mask_draw);
   cairo_destroy(mask_draw);
 
