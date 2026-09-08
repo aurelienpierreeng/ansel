@@ -546,6 +546,22 @@ static const float _brush_1352[7][11] = {
   { 0.36773169f, 0.193801045f, 0.375862241f, 0.187250778f, 0.35960114f, 0.200351343f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
 };
 
+/* _MG_1074.CR2, brush #4 of its sidecar (2026-09-08): eight nodes, the second with a radius
+ * 2.6 times its neighbours', so the stroke flares from node 0 into node 1 and back. Reported
+ * as "some dashed border missing near node 0" once the envelope samples had fixed the long
+ * sides elsewhere: the flare's rate sits near the tilt cap. Frame 5184x3456. */
+static const float _brush_1074[8][11] = {
+  /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
+  { 0.758693337f, 0.601638496f, 0.760810494f, 0.609281301f, 0.762927711f, 0.616924226f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.748442948f, 0.644278347f, 0.751883447f, 0.688123882f, 0.755324066f, 0.731969476f, 0.097397998f, 0.097397998f, 1.0f, 0.660000026f, 1 },
+  { 0.729495943f, 0.881070495f, 0.729165137f, 0.923407614f, 0.728834331f, 0.965744674f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.720828474f, 0.935475111f, 0.712888777f, 0.937285244f, 0.704949141f, 0.939095378f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.694164455f, 0.938894272f, 0.681527078f, 0.934268355f, 0.668889761f, 0.929642439f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.646394014f, 0.915664196f, 0.637064874f, 0.909529805f, 0.627735794f, 0.903395414f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.630183876f, 0.897663355f, 0.625552356f, 0.897462249f, 0.620920897f, 0.897261143f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.614701509f, 0.904702842f, 0.609275997f, 0.908323109f, 0.603850603f, 0.911943376f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+};
+
 /* Point the dev's geometry at a given frame size. The chain must be rebuilt afterwards or it
  * stops being authoritative and every outline comes back empty, silently. */
 static void _set_frame(dt_develop_t *dev, const int w, const int h)
@@ -1339,6 +1355,11 @@ static long _overlay_leftovers(dt_develop_t *dev, cairo_surface_t *surface,
       = { .scale = transform->scale, .offset_x = transform->offset_x + 97.0, .offset_y = transform->offset_y - 61.0 };
   _overlay_frame(dev, surface, &panned);
   cairo_surface_t *fresh = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H);
+  /* the same device scale, or the two frames differ by construction */
+  double ppd_x = 1.0;
+  double ppd_y = 1.0;
+  cairo_surface_get_device_scale(surface, &ppd_x, &ppd_y);
+  cairo_surface_set_device_scale(fresh, ppd_x, ppd_y);
   dev->form_gui->formid = 0;
   dev->form_gui->geometry_generation = 0;
   _overlay_frame(dev, fresh, &panned);
@@ -1348,9 +1369,30 @@ static long _overlay_leftovers(dt_develop_t *dev, cairo_surface_t *surface,
   const uint32_t *pb = (const uint32_t *)cairo_image_surface_get_data(fresh);
   const int stride = cairo_image_surface_get_stride(surface) / 4;
   long leftovers = 0;
+  int bx0 = OVERLAY_SCREEN_W;
+  int by0 = OVERLAY_SCREEN_H;
+  int bx1 = -1;
+  int by1 = -1;
   for(int y = 0; y < OVERLAY_SCREEN_H; y++)
     for(int x = 0; x < OVERLAY_SCREEN_W; x++)
-      if(pa[y * stride + x] != pb[y * stride + x]) leftovers++;
+      if(pa[y * stride + x] != pb[y * stride + x])
+      {
+        leftovers++;
+        bx0 = MIN(bx0, x);
+        by0 = MIN(by0, y);
+        bx1 = MAX(bx1, x);
+        by1 = MAX(by1, y);
+      }
+  if(leftovers > 0 && !IS_NULL_PTR(g_getenv("MASKS_DUMP_SKIPS")))
+  {
+    printf("  leftovers within (%d,%d)-(%d,%d)\n", bx0, by0, bx1, by1);
+    char *path = g_strdup_printf("%s/leftover-panned.png", g_getenv("MASKS_DUMP_SKIPS"));
+    cairo_surface_write_to_png(surface, path);
+    g_free(path);
+    path = g_strdup_printf("%s/leftover-fresh.png", g_getenv("MASKS_DUMP_SKIPS"));
+    cairo_surface_write_to_png(fresh, path);
+    g_free(path);
+  }
   cairo_surface_destroy(fresh);
   return leftovers;
 }
@@ -1400,12 +1442,28 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
   dev->form_gui->form_visible = form;
   dt_dev_geometry_set_processed_size(dev, img_w, img_h);
 
-  /* fit the image into the screen, centred: what the darkroom shows at zoom "fit" */
-  const double scale = MIN((double)OVERLAY_SCREEN_W / img_w, (double)OVERLAY_SCREEN_H / img_h);
-  const dt_masks_overlay_transform_t transform
+  /* fit the image into the screen, centred: what the darkroom shows at zoom "fit" -- or, with
+   * MASKS_OVERLAY_VIEW="scale,offset_x,offset_y[,ppd]", the view the darkroom is showing, in
+   * user units, with the surface's device scale, to reproduce what a user sees at a zoom */
+  double scale = MIN((double)OVERLAY_SCREEN_W / img_w, (double)OVERLAY_SCREEN_H / img_h);
+  dt_masks_overlay_transform_t transform
       = { .scale = scale,
           .offset_x = 0.5 * (OVERLAY_SCREEN_W - scale * img_w),
           .offset_y = 0.5 * (OVERLAY_SCREEN_H - scale * img_h) };
+  double ppd = 1.0;
+  const char *view = g_getenv("MASKS_OVERLAY_VIEW");
+  if(!IS_NULL_PTR(view))
+  {
+    double v[4] = { scale, transform.offset_x, transform.offset_y, 1.0 };
+    gchar **parts = g_strsplit(view, ",", 4);
+    for(int i = 0; i < 4 && !IS_NULL_PTR(parts[i]); i++) v[i] = g_ascii_strtod(parts[i], NULL);
+    g_strfreev(parts);
+    scale = v[0];
+    transform.scale = v[0];
+    transform.offset_x = v[1];
+    transform.offset_y = v[2];
+    ppd = (v[3] > 0.0) ? v[3] : 1.0;
+  }
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H);
   if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
@@ -1413,6 +1471,7 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
     cairo_surface_destroy(surface);
     return;
   }
+  cairo_surface_set_device_scale(surface, ppd, ppd);
 
   for(int selected = 0; selected < 2; selected++)
   {
@@ -1554,6 +1613,7 @@ static void _time_overlay_all(dt_develop_t *dev, const char *dir, const int fram
   _time_overlay_brush(dev, _brush_from_table(_brush_concave_tbl, 5), "brush-concave", dir, IMG_W, IMG_H, frames);
   _time_overlay_brush(dev, _brush_from_table11(_brush_1360, 43), "brush-1360-pressure-ramp", dir, 5184, 3888, frames);
   _time_overlay_brush(dev, _brush_from_table11(_brush_1352, 7), "brush-1352-radius-step", dir, IMG_W, IMG_H, frames);
+  _time_overlay_brush(dev, _brush_from_table11(_brush_1074, 8), "brush-1074-flare", dir, 5184, 3456, frames);
 
   {
     dt_masks_form_t form = { 0 };
@@ -1771,6 +1831,8 @@ int main(int argc, char *argv[])
     _run_brush_case11_at(&dev, _brush_1360, 43, &c1360);
     _run_brush_case11_at(&dev, _brush_1352, 7, &c1352);
     _run_brush_case11_at(&dev, _brush_1352, 7, &c1352_small);
+    const _brush_case_t c1074 = { "brush-1074-flare", dir, 0, 5184, 3456 };
+    _run_brush_case11_at(&dev, _brush_1074, 8, &c1074);
   }
 
   /* 3b. THE SECOND REPORTED SHAPE, polygon #2. Two defects were reported against it: the outer
