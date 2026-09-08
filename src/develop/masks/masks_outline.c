@@ -174,7 +174,7 @@ typedef struct _outline_boundary_t
   int ndisc;
   const int *disc_of;   /* per sample, the disc it belongs to */
   const float *border_h;   /* the border samples, past the header */
-  const float *points_h;   /* their spine points */
+  const float *walk;       /* per sample, the length of the border walked to reach it */
   int window;           /* discs either side of a sample's own that can reach it along the walk */
   float reach;          /* how far a block's first disc may be for the block to matter */
   float eps;            /* boundary tolerance, in pixels */
@@ -182,47 +182,58 @@ typedef struct _outline_boundary_t
   gboolean have_grid;
 } _outline_boundary_t;
 
-/* One border sample being probed: its index, its disc, its spine point and its position. */
+/* One border sample being probed: its index, its disc and its position. */
 typedef struct _outline_probe_t
 {
   int i;
   int own;
-  float px;
-  float py;
   float bx;
   float by;
+  float walk;   /* the border length walked to this sample */
 } _outline_probe_t;
 
-/* Does the probed sample repeat an earlier sample of disc @p j: one with the same spine point,
- * to a hundredth of a pixel, and a border position within three quarters of a pixel.
+/* How far back along the walk a sample may match: closer than this it is the sample's own
+ * run. Sixteen samples was the first guess, and the recursion samples a border a hundredth of
+ * a pixel apart around every integer crossing, where sixteen samples are less than a pixel. */
+#define OUTLINE_REPEAT_MIN_WALK 4.0f
+
+/* Does the probed sample repeat an earlier sample of disc @p j: a border position within three
+ * quarters of a pixel, at least sixteen samples earlier along the walk.
  *
  * The walk stamps a full disc at a node whose radius steps in BOTH passes, and bridges a joint
  * with an arc about the same node at the same radius; every copy after the first traces a
  * boundary the first already traces, and drawn on top of it with its own dash phase it fills
  * the gaps of the dashes -- measured on a flaring brush: 3,171 samples per pass centred on the
  * node to the float, 4,020 kept on a 2,114 px circumference, drawn as a near-solid line. A copy
- * is not a boundary sample.
+ * is not a boundary sample. Neither is the stretch where a segment leaves such a node: its
+ * envelope runs within the boundary tolerance of the node's circle for tens of pixels, and both
+ * were kept, a second dash over the first from a different phase.
  *
- * Two things this test is careful about, each paid for by a corpus round. The spine point, not
- * the disc: a disc's centre is its FIRST sample's, and a stamp's samples merge into the disc the
- * last moving sample opened, up to half a pixel off and differently in each pass. And the
- * three-quarter pixel: a copy of any phase has one of the original's within half a pixel, and
- * the other side of the stroke -- the backward pass revisits every spine point of the forward
- * one -- is a diameter away. A sample's own run is excluded by index instead: an arc filler can
- * sample closer than the tolerance, and matching a predecessor thinned every arc to fragments. */
+ * Position alone decides, whatever discs the two samples belong to: for drawing, two boundary
+ * samples within three quarters of a pixel are one line. The other side of the stroke -- the
+ * backward pass revisits every spine point of the forward one -- is a diameter away and never
+ * matches. A sample's own run is excluded by the length of border walked between the two,
+ * OUTLINE_REPEAT_MIN_WALK: an arc filler can sample closer than the tolerance, and the
+ * recursion samples a hundredth of a pixel apart around every integer crossing, so neither a
+ * count of samples nor a predecessor test can tell a run from its copy -- the walk can, a copy
+ * being the other pass or another stamp, thousands of pixels away along it. Keyed on the
+ * sample's disc or its spine point instead, this test missed the copies (a disc's centre is
+ * its first sample's, half a pixel off and differently per pass) or the junctions; each round
+ * was measured on the corpus before the next. The annulus test on the disc is what keeps it
+ * cheap: a disc's samples lie a radius from its centre, give or take the half pixel its spine
+ * may have moved. */
 static inline gboolean _outline_sample_repeats(const _outline_boundary_t *const b, const int j,
                                                const _outline_probe_t *const probe)
 {
   if(j > probe->own) return FALSE;
   const _outline_disc_t *const d = &b->discs[j];
-  /* a sample joins a disc whose centre is within half a pixel of its own spine point */
-  if(fabsf(d->x - probe->px) > 0.6f || fabsf(d->y - probe->py) > 0.6f) return FALSE;
-  /* never the probe's own neighbours: an arc filler can sample closer than the tolerance, and
-   * a copy is always far along the walk -- the other pass, or another stamp or arc */
-  const int last = MIN(d->last, probe->i - 16);
-  for(int k = d->first; k <= last; k++)
+  const float cx = d->x - probe->bx;
+  const float cy = d->y - probe->by;
+  const float distance = dt_fast_hypotf(cx, cy);
+  if(fabsf(distance - d->r) > 1.3f) return FALSE;   /* no sample of this disc can be within reach */
+  const float walk_limit = probe->walk - OUTLINE_REPEAT_MIN_WALK;
+  for(int k = d->first; k <= d->last && b->walk[k] <= walk_limit; k++)
   {
-    if(fabsf(b->points_h[2 * k] - probe->px) > 0.01f || fabsf(b->points_h[2 * k + 1] - probe->py) > 0.01f) continue;
     const float dx = b->border_h[2 * k] - probe->bx;
     const float dy = b->border_h[2 * k + 1] - probe->by;
     if(dx * dx + dy * dy <= 0.5625f) return TRUE;
@@ -357,8 +368,7 @@ static inline gboolean _outline_sample_inside(const _outline_boundary_t *const b
   const int d0 = b->disc_of[i];
   const int lo = MAX(d0 - b->window, 0);
   const int hi = MIN(d0 + b->window, b->ndisc - 1);
-  const _outline_probe_t probe = { .i = i, .own = d0, .px = b->points_h[2 * i], .py = b->points_h[2 * i + 1],
-                                   .bx = bx, .by = by };
+  const _outline_probe_t probe = { .i = i, .own = d0, .bx = bx, .by = by, .walk = b->walk[i] };
   if(_outline_discs_contain(b, lo, hi, &probe)) return TRUE;
   return b->have_grid && _outline_far_contains(b, lo, hi, &probe);
 }
@@ -433,7 +443,6 @@ static float _outline_discs_from_outline(const float *const points_h, const floa
   b->ndisc = ndisc;
   b->disc_of = disc_of;
   b->border_h = border_h;
-  b->points_h = points_h;
   b->window = (int)(4.0f * r_max) + 8;
   b->reach = r_max + 8.0f * fmaxf(step_max, 1.0f);
   b->eps = 0.5f;
@@ -464,6 +473,32 @@ static inline gboolean _outline_next_dropped_run(const uint8_t *const dropped, c
   *to = j;
   *cursor = j;
   return TRUE;
+}
+
+/* A dropped run of one or two samples between kept ones is kept again. Such a speck is a
+ * sample that coincides with a neighbour -- a gap filler's first point over the previous leaf's
+ * border, a sample a hair inside the next disc -- and hiding it changes nothing on screen while
+ * it cuts the run in two: every cut is a sub-path of its own to stroke, and a corpus brush went
+ * from one run to forty-seven for nothing. The mirror rule, a kept speck between dropped runs,
+ * lives in _outline_next_dropped_run(). */
+static void _outline_keep_specks(uint8_t *const dropped, const int n)
+{
+  int i = 0;
+  while(i < n)
+  {
+    if(!dropped[i])
+    {
+      i++;
+      continue;
+    }
+    int j = i;
+    while(j < n && dropped[j]) j++;
+    const gboolean kept_before = (i > 0) && !dropped[i - 1];
+    const gboolean kept_after = (j < n) && !dropped[j];
+    if(j - i <= 2 && kept_before && kept_after)
+      for(int k = i; k < j; k++) dropped[k] = 0;
+    i = j;
+  }
 }
 
 /* Runs of dropped samples become skip ranges, indices offset back past the header. */
@@ -505,18 +540,24 @@ int dt_masks_outline_boundary_skips(const float *const points, const float *cons
   _outline_disc_t *discs = dt_alloc_align((size_t)n * sizeof(_outline_disc_t));
   int *disc_of = dt_alloc_align((size_t)n * sizeof(int));
   uint8_t *dropped = dt_alloc_align((size_t)n);
-  if(IS_NULL_PTR(discs) || IS_NULL_PTR(disc_of) || IS_NULL_PTR(dropped))
+  float *walk = dt_alloc_align((size_t)n * sizeof(float));
+  if(IS_NULL_PTR(discs) || IS_NULL_PTR(disc_of) || IS_NULL_PTR(dropped) || IS_NULL_PTR(walk))
   {
     dt_free_align(discs);
     dt_free_align(disc_of);
     dt_free_align(dropped);
+    dt_free_align(walk);
     return 0;
   }
   memset(dropped, 0, (size_t)n);
+  walk[0] = 0.0f;
+  for(int i = 1; i < n; i++)
+    walk[i] = walk[i - 1] + dt_fast_hypotf(border_h[2 * i] - border_h[2 * i - 2], border_h[2 * i + 1] - border_h[2 * i - 1]);
 
   _outline_boundary_t b = { 0 };
   float bbox[4];
   const float r_max = _outline_discs_from_outline(points_h, border_h, n, discs, disc_of, &b, bbox);
+  b.walk = walk;
   b.have_grid = _outline_grid_build(&b, bbox, r_max);
 
   /* The probes.
@@ -560,7 +601,9 @@ int dt_masks_outline_boundary_skips(const float *const points, const float *cons
   dt_free_align(discs);
   dt_free_align(disc_of);
 
+  if(ndropped > 0) _outline_keep_specks(dropped, n);
   const int nskips = (ndropped > 0) ? _outline_skips_from_dropped(dropped, n, header, skips_out) : 0;
   dt_free_align(dropped);
+  dt_free_align(walk);
   return nskips;
 }

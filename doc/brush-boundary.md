@@ -223,21 +223,34 @@ copy is stroked as its own run with its own dash phase, so the copies fill each 
 the circle comes out as a near-solid line — `_MG_1074.CR2` brush #4, reported as a missing
 dashed border: 4,020 kept samples on a 2,114 px circumference.
 
-`_outline_sample_repeats()` drops a sample that repeats an earlier one: the same spine point to
-a hundredth of a pixel, a border position within three quarters of a pixel, and at least sixteen
-samples earlier along the walk. The other side of the stroke, which the backward pass lays on
-the very same spine points, is a diameter away and never matches; polygons, which bridge each
-joint once, and constant-radius brushes are bit-identical.
+`_outline_sample_repeats()` drops a sample within three quarters of a pixel of an earlier one
+that lies at least four pixels of border behind it along the walk, whatever discs the two belong
+to: for drawing, two boundary samples that close are one line. The other side of the stroke,
+which the backward pass lays on the very same spine points, is a diameter away and never
+matches. The same rule takes the stretch where a segment leaves a stamped node, whose envelope
+runs within the boundary tolerance of the node's circle for tens of pixels — a second dash over
+the first — which no identity of discs or spine points could pair. A dropped run of one or two
+samples between kept ones is kept again (`_outline_keep_specks()`): hiding it changes nothing on
+screen and cuts the run in two.
 
-Three corpus rounds shaped the clauses. Keyed on the disc rather than the sample's spine point
-the rule never fired, because a disc's centre is its first sample's and a stamp's samples merge
-into the disc the last moving sample opened, half a pixel off and differently in each pass. With
-half a pixel of centre tolerance it fused consecutive discs of a segment, which the builder
-separates by exactly that much, and thinned every segment to fragments. Without the index
-exclusion a dense arc filler matched its own predecessor and shredded every arc. The
-measurements that told those apart were the harness's skipped-sample counts per case — 2,821
-ranges on the zigzag against 4 — and the kept-sample count on the node's circle: 4,020, then
-3,980, then 1,804.
+Five corpus rounds shaped the clauses, each measured by the harness's skipped-sample and range
+counts per case before the next. Keyed on the disc the rule never fired, because a disc's centre
+is its first sample's and a stamp's samples merge into the disc the last moving sample opened,
+half a pixel off and differently in each pass. Keyed on the spine point it dropped the copies
+and missed the junctions. With half a pixel of centre tolerance it fused consecutive discs of a
+segment, which the builder separates by exactly that much, and thinned every segment to
+fragments. Excluding the sample's own run by a count of sixteen samples shredded every arc,
+because the recursion samples a hundredth of a pixel apart around every integer crossing, where
+sixteen samples are less than a pixel; only the length of border walked between two samples
+tells a run from its copy, a copy being the other pass or another stamp, thousands of pixels
+away along the walk. The kept-sample count on the node's circle went 4,020, 3,980, 1,804; the
+zigzag's ranges 4, 2,821, 4.
+
+The dashes are the other half of the same report. The rasteriser cut them by arc length but
+restarted the pattern at every sub-path, and an outline is one sub-path per kept run, so every
+run boundary bunched or stretched a dash. The pattern's state now travels across all the
+sub-paths of one stroke: a dash is a function of the pixels of border drawn before it, and a
+dash cut by a hidden stretch shows as a stub, which that metric owes.
 
 ## What is unified, and what is not
 

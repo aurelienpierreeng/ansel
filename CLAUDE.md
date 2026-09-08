@@ -1150,19 +1150,37 @@ rules that were each paid for by a reported defect:
   spoke with its range) — and an argument added to the evaluator by regex landed before the
   radius instead of after it on two of five callers, which zeroed every segment end's spoke,
   killed every cap, and read for an hour like a cap defect the tilt had exposed.
-- **A copy of a boundary stretch is not a boundary sample.** The walk stamps a full disc at a
+- **A repeat of a boundary sample is not a boundary sample.** The walk stamps a full disc at a
   node whose radius steps in BOTH passes and bridges joints with arcs about the same node, so a
   flaring node's circle was traced two or three times, each copy dashed from its own phase, and
   the copies filled each other's gaps: a near-solid line (`_MG_1074.CR2` brush #4, 4,020 kept
-  samples on a 2,114 px circumference). `_outline_sample_repeats()` drops a sample that repeats
-  an earlier one: the same SPINE POINT to a hundredth of a pixel, a border position within three
-  quarters of a pixel, and at least sixteen samples earlier along the walk. Each clause was paid
-  for by a corpus round: keyed on the disc instead of the spine point it never fired (a disc's
-  centre is its first sample's, half a pixel off and differently per pass); at half a pixel of
-  centre tolerance it fused consecutive segment discs and thinned every segment; without the
-  index exclusion a dense arc filler matched its own predecessor and shredded every arc. The
-  other side of the stroke, which the backward pass lays on the same spine points, is a diameter
-  away and never matches. Polygons and constant-radius brushes stay bit-identical.
+  samples on a 2,114 px circumference); and where a segment leaves such a node its envelope runs
+  within the boundary tolerance of the circle for tens of pixels, a second dash over the first.
+  `_outline_sample_repeats()` drops a sample within three quarters of a pixel of an earlier one
+  that is at least `OUTLINE_REPEAT_MIN_WALK` (4 px) of border BEHIND it along the walk, whatever
+  discs the two belong to: for drawing, two boundary samples that close are one line. Five corpus
+  rounds shaped it, each measured by the harness's skipped/ranges counts before the next: keyed
+  on the disc it never fired (a disc's centre is its first sample's, half a pixel off and
+  differently per pass); on the spine point it missed the junctions; a half-pixel centre
+  tolerance fused consecutive segment discs and thinned every segment; an exclusion by sixteen
+  SAMPLES shredded every arc, because the recursion samples a hundredth of a pixel apart around
+  every integer crossing, where sixteen samples are less than a pixel — only the walked length
+  tells a run from its copy, a copy being the other pass or another stamp, thousands of pixels
+  away along it. The other side of the stroke, which the backward pass lays on the same spine
+  points, is a diameter away and never matches; `_outline_keep_specks()` keeps a dropped run of
+  one or two samples between kept ones, since hiding it changes nothing and cuts the run.
+- **The dash phase is the arc length along the whole stroke, not along each sub-path.** An
+  outline is one cairo path of many sub-paths, one per kept run between skips, and cairo (and
+  the rasteriser, at first) restarts the dash pattern at every sub-path, so dashes bunched and
+  stretched at every run boundary. `dt_stroke_raster_path()` now carries one `_dash_t` across
+  all its sub-paths: a dash is a function of the pixels of border drawn before it. A dash cut by
+  a hidden stretch shows as a stub, which that metric owes.
+- **`MASKS_DUMP_OVERLAY=<dir>` makes the darkroom write what each frame drew**: the canvas
+  before it is composited and cleared, the frame and dirty rectangles, and every cached outline
+  with its skip ranges (`outline-<n>.txt`, the harness's format). It exists because a darkroom
+  cannot be driven from this machine, and a report the harness cannot reproduce needs the
+  darkroom's own frame, not a guess at it.
+
 - **`ansel-test-masks-geometry --time-overlay` renders at fit zoom; `MASKS_OVERLAY_VIEW=
   "scale,ox,oy[,ppd]"` renders the view the darkroom shows**, in user units with the surface's
   device scale, which is how the 1074 report was reproduced at 100% on a 2x screen. When adding
