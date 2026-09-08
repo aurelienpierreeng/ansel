@@ -353,6 +353,20 @@ menu separator {
   min-height: 1px;
 }
 
+/* The shape manager holds two separate lists side by side -- the shapes that exist, and the
+ * masks modules render. What separates them is each list's own section heading and recessed
+ * frame, so the paned handle paints nothing: it is only the gap between the two, and the width
+ * it keeps is the room to grab it by. Same choice as `filechooser paned separator` below. */
+#shape-manager-lists > separator {
+  min-width: 0.35em;
+  background: transparent;
+}
+
+#shape-manager-list {
+  padding-left: 0.4em;
+  padding-right: 0.4em;
+}
+
 /**
  * A treeview row separator is not a `separator` widget: GtkTreeView draws it as a row of its own,
  * and the rule above -- which styles the widget -- does not reach it.

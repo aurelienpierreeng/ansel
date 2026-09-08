@@ -1495,7 +1495,7 @@ dt_masks_form_group_t *dt_masks_form_group_from_parentid(dt_develop_t *dev, int 
 // corrupted or maliciously crafted masks_history (a group referencing an ancestor of itself --
 // dt_masks_group_add_form guards against this interactively via _find_in_group, but a raw
 // DB/XMP load does not validate it) cannot stack-overflow the caller; the UI never nests
-// groups anywhere near this deep (see the `depth < 3` guards in libs/masks.c).
+// groups anywhere near this deep (see the `depth < 3` guards in libs/shape_manager.c).
 
 /**
  * @brief Get the selected group entry from the GUI selection index.
@@ -2182,7 +2182,7 @@ static gboolean _masks_remove_or_delete_finish(struct dt_iop_module_t *module, d
 
   if(res && next_formid > 0)
   {
-    // The mask manager rebuilds its tree on the delete/remove signal, so apply
+    // The shape manager rebuilds its tree on the delete/remove signal, so apply
     // the replacement selection after the signal has finished refreshing lists.
     mask_gui->group_selected = next_form_index;
     mask_gui->form_selected = TRUE;
@@ -2667,7 +2667,13 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
                                             const uint32_t state,
                                             const gboolean shape_was_selected)
 {
-  if(IS_NULL_PTR(mask_gui) || mask_gui->creation || button != 1) return;
+  if(IS_NULL_PTR(mask_gui) || mask_gui->creation) return;
+  if(button != 1 && button != 3) return;
+  /* The fine-grained selection is rebuilt for the right button too, so that every `_selected'
+   * flag names what the cursor is on. Three of them -- form, border and source -- are written by
+   * update_hover() and follow the cursor whatever the button; leaving the node/segment/handle
+   * ones on the left button alone splits one state in two, and the context menu, which is the
+   * one consumer reading both families at once, is where the split shows. */
   // Drag is only allowed when this click happens on a shape that was already selected.
   // We still rebuild the fine-grained selection from the current hover target first, so the
   // pressed node/handle/segment becomes the active drag target when dragging is allowed.
@@ -2720,6 +2726,8 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
     mask_gui->source_selected = prev_source_selected;
   }
 
+  // Arming a drag is the left button's business alone -- a right click targets, it never drags.
+  if(button != 1) return;
   if(mask_gui->form_rotating || mask_gui->border_toggling || mask_gui->gradient_toggling) return;
   if(dt_modifier_is(state, DT_PRIMARY_MASK)) return;
   if(!shape_was_selected) return;
@@ -5277,7 +5285,7 @@ gboolean dt_masks_debug_write_png(dt_develop_t *dev, dt_masks_form_t *form,
  * measured on issue #1313's brush at 50 to 137 pixels, one per node. A new sub-path per run
  * cannot do that, and stroking a path of several sub-paths costs nothing.
  *
- * @p skips must be sorted and disjoint (dt_masks_skip_ranges_build() guarantees it); pass NULL
+ * @p skips must be sorted and disjoint (dt_masks_outline_boundary_skips() guarantees it); pass NULL
  * and 0 for a shape with nothing to exclude.
  *
  * It lives here rather than in widgets/draw.h with the other drawing helpers because it needs

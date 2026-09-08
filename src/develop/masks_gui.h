@@ -41,7 +41,7 @@
  * @details Cut out of develop/masks.h so that the data model and the rasterisation API no
  * longer feed widgets/draw.h (and GTK behind it) to every consumer that only wants
  * get_mask() -- which was every IOP that includes blend.h. This header is what the
- * darkroom view, libs/masks.c, blend_gui.c and the shape editors include.
+ * darkroom view, libs/shape_manager.c, blend_gui.c and the shape editors include.
  */
 
 #ifndef DT_DEVELOP_MASKS_GUI_H
@@ -80,7 +80,7 @@ typedef struct dt_masks_form_gui_t
 {
   // Owning develop instance, set once at init. Mask GUI code must use this (or an explicit
   // dev/module argument) instead of the darktable.develop global: shape handlers can run with
-  // module == NULL (mask-manager editing), and reaching for the global both couples every
+  // module == NULL (shape manager editing), and reaching for the global both couples every
   // shape file to the whole application and hides which develop instance the code mutates.
   struct dt_develop_t *dev;
 

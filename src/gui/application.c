@@ -800,6 +800,20 @@ static dt_control_pointer_input_t _extract_pointer_input(const GdkEvent *event, 
   return input;
 }
 
+/* The three pointer handlers below hand the modifier state on WHOLE. Masking it to the low
+ * four bits keeps SHIFT, LOCK, CONTROL and MOD1 -- every modifier that matters on X11 and
+ * Win32, and none of the one that matters on Quartz: a physical Cmd is reported there as
+ * GDK_MOD2_MASK (0x10), on button and motion events exactly as on key events, and that is the
+ * bit DT_PRIMARY_MASK resolves to and every shortcut is matched against. Dropping it makes
+ * every primary+click and primary+drag gesture in the application unreachable on macOS --
+ * inserting a mask node, constraining a shape, the colour picker's area gestures -- while the
+ * same code works on the other platforms, since CONTROL survives the mask there.
+ *
+ * Nothing downstream reads these bits raw: every consumer goes through dt_modifier_is() /
+ * dt_modifiers_include() (widgets/widget_settings.h), which mask with
+ * gtk_accelerator_get_default_mod_mask() -- the button bits a drag adds are not in it, and
+ * neither is GDK_MOD2_MASK on X11, where that bit is NumLock rather than a modifier anyone
+ * presses on purpose. _scrolled() above already passes the whole state for the same reason. */
 static gboolean _button_pressed(GtkWidget *w, GdkEventButton *event, gpointer user_data)
 {
   if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
@@ -812,7 +826,7 @@ static gboolean _button_pressed(GtkWidget *w, GdkEventButton *event, gpointer us
                                                                   event->time, TRUE, "button-press");
   dt_control_set_pointer_input(&input);
   const double pressure = input.has_pressure ? input.pressure : 1.0;
-  dt_control_button_pressed(event->x, event->y, pressure, event->button, event->type, event->state & 0xf);
+  dt_control_button_pressed(event->x, event->y, pressure, event->button, event->type, event->state);
   return FALSE;
 }
 
@@ -822,7 +836,7 @@ static gboolean _button_released(GtkWidget *w, GdkEventButton *event, gpointer u
   const dt_control_pointer_input_t input = _extract_pointer_input((const GdkEvent *)event, event->x, event->y,
                                                                   event->time, FALSE, "button-release");
   dt_control_set_pointer_input(&input);
-  dt_control_button_released(event->x, event->y, event->button, event->state & 0xf);
+  dt_control_button_released(event->x, event->y, event->button, event->state);
 
   return TRUE;
 }
@@ -834,7 +848,7 @@ static gboolean _mouse_moved(GtkWidget *w, GdkEventMotion *event, gpointer user_
   const dt_control_pointer_input_t input = _extract_pointer_input((const GdkEvent *)event, event->x, event->y,
                                                                   event->time, FALSE, "motion");
   dt_control_set_pointer_input(&input);
-  dt_control_mouse_moved(event->x, event->y, input.has_pressure ? input.pressure : 1.0, event->state & 0xf);
+  dt_control_mouse_moved(event->x, event->y, input.has_pressure ? input.pressure : 1.0, event->state);
   return FALSE;
 }
 
@@ -878,6 +892,88 @@ static gboolean _key_pressed(GtkWidget *w, GdkEventKey *event)
 {
   if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
   dt_control_key_pressed(event);
+  return TRUE;
+}
+
+/* Keyboard trace for "-d input", installed by dt_gui_gtk_init() on that flag alone.
+ *
+ * A keystroke goes to whichever toplevel holds the focus, and each of them handles keys on
+ * its own: dt_accels_dispatch() sees the main window's, a dialog or a standalone panel sees
+ * its own, and a focused text entry swallows what it consumes before either. There is no
+ * single handler the whole program's keys pass through, so an emission hook takes them at
+ * the signal instead -- it runs ahead of every handler and whatever they return.
+ *
+ * The hook is on "event", NOT on "key-press-event". GtkWidget emits the generic signal
+ * first and only emits the specific one if nothing handled it, and the keys worth tracing
+ * are precisely the handled ones: dt_accels_dispatch() is connected to "event" on the main
+ * window and returns TRUE for every keystroke that fires a shortcut, so a hook on
+ * "key-press-event" prints every key the program ignores and none of the ones it acts on.
+ *
+ * One keystroke reaches the hook several times: gtk_propagate_event() hands it to the
+ * toplevel, which walks the focus chain until a widget handles it. It is the same GdkEvent
+ * throughout, so the first emission is printed and the repeats are skipped. Identity is the
+ * tuple the windowing system filled in, which two distinct keystrokes cannot share --
+ * auto-repeat does reuse a timestamp for the release and the press it pairs with, but those
+ * differ by type.
+ */
+static gboolean _log_key_event(GSignalInvocationHint *hint, guint n_params, const GValue *params, gpointer data)
+{
+  static GdkEventType last_type = GDK_NOTHING;
+  static guint32 last_time = 0;
+  static guint last_keyval = 0;
+  static guint last_state = 0;
+  static guint16 last_keycode = 0;
+
+  const GdkEventKey *event = (const GdkEventKey *)g_value_get_boxed(&params[1]);
+  if(IS_NULL_PTR(event) || (event->type != GDK_KEY_PRESS && event->type != GDK_KEY_RELEASE)) return TRUE;
+
+  if(event->type == last_type && event->time == last_time && event->keyval == last_keyval
+     && event->state == last_state && event->hardware_keycode == last_keycode)
+    return TRUE;
+
+  last_type = event->type;
+  last_time = event->time;
+  last_keyval = event->keyval;
+  last_state = event->state;
+  last_keycode = event->hardware_keycode;
+
+  // `state` holds the modifiers as they were BEFORE this event, so a modifier key's own
+  // press carries none of its own bit while its release carries it -- the same keyval either
+  // way. That is GDK's contract, not a decoding accident, and reading the trace requires it,
+  // which is why the primary modifier is named from the KEY below and not from the state.
+  GdkModifierType mods = (GdkModifierType)(event->state & gtk_accelerator_get_default_mod_mask());
+
+  // The primary modifier is spelled by the application, not by GTK's per-platform naming
+  // table: DT_PRIMARY_MASK is the bit every shortcut is registered and matched against, and on
+  // Quartz one physical Cmd also sets GDK's virtual GDK_META_MASK duplicate next to it -- which
+  // gtk_accelerator_name() renders as a SECOND modifier ("<Primary><Mod2>"), spelling one
+  // keystroke as two. Both bits come out here and the token is printed once, the same way
+  // _accels_keys_decode() (widgets/accelerators.c) and dt_modifier_is() drop that duplicate
+  // before matching. The raw state is printed as well, so nothing is hidden.
+  gboolean primary_mod = (mods & DT_PRIMARY_MASK) != 0;
+  mods = (GdkModifierType)(mods & ~DT_PRIMARY_MASK);
+#ifdef GDK_WINDOWING_QUARTZ
+  primary_mod = primary_mod || (mods & GDK_META_MASK) != 0;
+  mods = (GdkModifierType)(mods & ~GDK_META_MASK);
+  // Cmd, which GDK reports as the Meta keysym on this backend.
+  const gboolean primary_key = event->keyval == GDK_KEY_Meta_L || event->keyval == GDK_KEY_Meta_R;
+#else
+  const gboolean primary_key = event->keyval == GDK_KEY_Control_L || event->keyval == GDK_KEY_Control_R;
+#endif
+
+  // The key that IS the primary modifier is announced as such -- with the physical key it
+  // stands for, since that differs per platform -- and then carries no separate modifier
+  // token of its own, which would name it twice on the release.
+  gchar *accel = gtk_accelerator_name(event->keyval, mods);
+  GtkWidget *widget = GTK_WIDGET(g_value_get_object(&params[0]));
+  dt_print(DT_DEBUG_INPUT, "[input] key %s: %s%s%s%s (keyval 0x%x, keycode %u, state 0x%x) on %s\n",
+           (event->type == GDK_KEY_PRESS) ? "pressed" : "released",
+           (primary_mod && !primary_key) ? "<Primary>" : "", primary_key ? "<Primary> (" : "",
+           IS_NULL_PTR(accel) ? "<unnamed>" : accel, primary_key ? ")" : "",
+           event->keyval, (unsigned int)event->hardware_keycode, event->state,
+           IS_NULL_PTR(widget) ? "<none>" : G_OBJECT_TYPE_NAME(widget));
+  dt_free(accel);
+
   return TRUE;
 }
 
@@ -1288,6 +1384,14 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   {
     g_list_free(input_devices);
     input_devices = NULL;
+  }
+
+  // The keystroke trace costs an emission hook on every event every widget receives --
+  // motion included -- so it is installed only when the channel it prints on is on. Debug
+  // flags are parsed from the command line before this runs and never change afterwards.
+  if(dt_get_debug_flags() & DT_DEBUG_INPUT)
+  {
+    g_signal_add_emission_hook(g_signal_lookup("event", GTK_TYPE_WIDGET), 0, _log_key_event, NULL, NULL);
   }
 
   // Gtk seems to capture some reserved shortcuts (Tab). We need to bypass it entirely

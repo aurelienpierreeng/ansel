@@ -521,7 +521,7 @@ drains in FIFO order on the throttle's schedule.
 
 **Do NOT merge queued requests.** An earlier draft of this plan proposed collapsing N pending
 requests into one that takes the union of their `add_new_pipe_node` / `has_forms` /
-`has_raster` flags. That is the wrong shape: masks, module enable/disable, the mask manager
+`has_raster` flags. That is the wrong shape: masks, module enable/disable, the shape manager
 and ordinary parameter edits all commit history with different resync needs, and any merging
 rule is a place to silently drop one. Keep every request, process them in order, stay boring.
 

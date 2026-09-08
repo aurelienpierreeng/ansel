@@ -361,7 +361,7 @@ threshold**; the compute cost is unchanged, only the lock is gone. The three oth
 points (`dt_dev_pixelpipe_synch_all`/`synch_top`, used by export, snapshots and the focus
 overlay on throwaway devs) take their own brief snapshot the same way. The writer's COW gate is
 the other half of the contract: a snapshotted item has refcount > 1, so `cow_touch` clones it
-and the snapshot never sees a half-rewritten item. `src/tests/unittests/test_history_snapshot.c`
+and the snapshot never sees a half-rewritten item. `tests/unittests/test_history_snapshot.c`
 pins that contract; `-d history` shows the hold times.
 
 **Three things about this design that are not obvious from the code:**
@@ -1024,27 +1024,35 @@ last node's own coordinate sits at the very end of the forward pass. Everything 
 drawn centerline (the outline stroking, the source shape, the clone link's midpoint) uses that
 helper.
 
-### A brush's outline encloses the whole stroke, so "inside the border" cannot mean "on the border"
+### `inside_border` is proximity to the feather's outer line, not the feather band
 
-`dt_masks_find_closest_handle_common()` (`masks_gui.c`) answers in one fixed order — source,
-border, segment, shape — so whatever a shape's `get_distance()` reports as `inside_border`
-preempts its segment. For a closed shape the two are disjoint regions: a polygon's `inside_border`
-is the feather ring, true only *between* the outline and the form, so a cursor on the centerline
-falls through to the segment test.
+Two curves are in play and the vocabulary runs them together. `gui_points->points` is the **form
+line** — the shape itself, whose segments are hoverable and draggable. `gui_points->border` is the
+**outer line of the feathering**, and the band between the two is what "border" names everywhere
+else in this code. `inside_border` names neither the band nor the form line: it is the cursor
+being **on the outer line**.
 
-A brush has no such ring. Its `points` are the centerline walked there and back (zero area) and
-its `border` is the outline wrapping the whole painted band, so a point-in-polygon test on that
-border is true across the entire stroke. Reporting that as `inside_border` makes the brush's
-segment — drag to move it, Ctrl+Click to insert a node — unreachable everywhere, while the shape
-still looks perfectly hoverable. For a brush, `inside` is "enclosed by the outline" and
-`inside_border` is "within cursor reach of the outline itself, and no centerline segment is
-closer": the outline carries no drag action of its own (border width is edited through the
-per-node handle and the wheel), so on a thin stroke, where outline and centerline are both within
-reach at once, the segment wins.
+That matters because `dt_masks_find_closest_handle_common()` (`masks_gui.c`) answers in one fixed
+order — source, border, segment, shape — so whatever a shape's `get_distance()` reports as
+`inside_border` preempts its segment. For a brush and a polygon alike, `inside` is "enclosed by
+the outer line" — the feathering is part of the shape and drags it — and `inside_border` is
+"within cursor reach of the outer line itself, and no form-line segment is closer". Neither line
+carries a drag action of its own (the feathering is edited through the per-node handle and the
+wheel), so where both are within reach at once, the segment wins.
 
-`_brush_get_distance()`'s source pass walks a different outline, so its distances need their own
-accumulator — sharing one running minimum lets a clone source near the form veto every segment hit
-on the form itself.
+Reporting the **band** instead cuts the segment's reach in half along the form line, and each
+shape loses a different half. A brush's `points` are the centerline walked there and back (zero
+area) while its `border` wraps the whole painted band, so a point-in-polygon test on that border
+is true across the entire stroke: the segment — drag to move it, Ctrl+Click to insert a node —
+became unreachable everywhere, while the shape still looked perfectly hoverable. A polygon's
+feathering lies wholly *outside* its form line, so reporting the band left the segment reachable
+from the inside of the form line alone; the whole outer half of the cursor's reach, every pixel of
+it inside the feathering, went to the border instead. The wider the fading, the more one-sided it
+looks, and approaching a segment from the feathering grabbed the whole shape.
+
+`_brush_get_distance()`'s source pass walks a different outer line, so its distances need their
+own accumulator — sharing one running minimum lets a clone source near the form veto every segment
+hit on the form itself.
 
 ### A drawing pass must not leave a path in the cairo context
 
@@ -1101,11 +1109,12 @@ reading and died on the first measurement.
 Reproduce: export with `--export_masks 1`; page 1 of the TIFF is the mask. Flood-fill from the
 border and anything left unset is a hole.
 
-### A brush's geometry comes from its nodes, and its outline is the boundary of its raster
+### A brush's or polygon's geometry comes from its nodes, and its outline is the boundary of its raster
 
 A brush is the union of a disc of the local radius over every point of its spine, and the
-pipe paints it as spokes from every spine sample to its border sample. `doc/brush-boundary.md`
-is the full account; the rules that were each paid for by a reported defect:
+pipe paints it as spokes from every spine sample to its border sample; a polygon is its path's
+interior plus the same feather outside it. `doc/brush-boundary.md` is the full account; the
+rules that were each paid for by a reported defect:
 
 - **Nothing in `_brush_get_pts_border()` is read back out of the buffers.** Every cap, joint
   arc and stamp takes its centre and radius from the segment end samples that meet there and
@@ -1132,10 +1141,18 @@ is the full account; the rules that were each paid for by a reported defect:
   shortest-path: the two passes each cover one half of the tip disc, and which half is which
   is the pass's rotation. The #1313 cusp corpus, at all eight frame sizes, is the check.
 
-The corpus (`tests/masks/masks_geometry.c`) judges a brush in **both directions** — owed
+The corpus (`tests/masks/masks_geometry.c`) judges a brush and a polygon in **both directions** — owed
 coverage missing, and coverage no disc owes — and judges the drawn outline against the same
 two maps. `MASKS_DUMP_OUTLINE=1` dumps every outline. An owed-only oracle passed #1360 while
 half the frame was painted.
+
+- **The polygon's rasteriser paints every spoke too.** It used to send every spoke inside a
+  self-intersection cut to the fold's crossing point, which is √(r² + t²) from the sample —
+  farther than the radius — so every reflex notch came out brighter than the `1 − d/r` feather
+  (measured: mean error +0.0052 → −0.0013 against the path's distance transform). The boundary
+  pass is `masks_outline.c`, one function for both shapes; the shared detector, the polygon's
+  own, and `dt_masks_skip_ranges_build()` are gone. Circle and ellipse need none of this: their
+  borders are concentric or enlarged curves, never a normal offset, and cannot fold.
 
 ### The mouse wheel edits the property the user mapped it to; shapes never read modifiers
 
@@ -1181,6 +1198,36 @@ the cursor is what the next click acts on. Two traps when editing them: a node's
 ctrl+click only work once that node is *selected* (a mere hover gets the shorter message), and
 `dt_hinter_set_message()` joins `\n` into `, `, so each line must read as a clause of one
 sentence.
+
+### A right click targets, it never drags — and the context menu leans on that
+
+`_apply_gui_button_pressed_state()` (`masks_gui.c`) does two things, and they answer to different
+buttons. It rebuilds the fine-grained selection from the current hover target — for the LEFT and
+the RIGHT button both, so that every `_selected` flag names what the cursor is on — and it then
+arms a drag, which is the **left button's alone**: `dt_masks_gui_set_dragging()` sits behind
+`if(button != 1) return;` and is that function's only caller anywhere. So no right-button motion
+can move a node, a segment, a handle, a shape or a clone source; the per-shape `mouse_moved()`
+handlers never read `which` at all, they branch on the `*_dragging` flags only. The one other
+place a `*_dragging` flag is written is `polygon.c`'s creation path, itself under `which == 1`.
+
+Rebuilding the selection on both buttons is what keeps ONE state instead of two. Three of those
+flags — `form_selected`, `border_selected`, `source_selected` — are written by `update_hover()`
+and follow the cursor whatever the button; had the node/segment/handle ones stayed on the left
+button, they would still hold wherever the last left click landed, which says nothing about where
+the right click that opened a menu went. The context menu is the one consumer reading both
+families at once, and is where such a split shows. One user-visible consequence is deliberate: a
+right click on a node makes it the selected node, so the wheel then edits that node alone
+(`dt_masks_gui_change_affects_selected_node_or_all()`) rather than the whole shape.
+
+The context menu is what makes this load-bearing rather than cosmetic. Its title names
+`gui->node_hovered` / `gui->seg_hovered` and its node entries gate on `node_hovered >= 0`, while
+polygon's and brush's "Add a node here" gates on `seg_selected` — which says the same thing only
+because the right click rebuilt it. Put the rebuild back behind `button != 1` and that entry
+silently leaves the menu for any segment the user has not left-clicked first, while the title goes
+on announcing the segment; the whole menu then reads as the shape's. Gating it on `seg_hovered`
+instead would survive that, since `dt_masks_gui_selected_segment_index()` (`masks_gui.h`) returns
+`seg_hovered` outright and consults no selection flag — but two spellings of one question is what
+this section exists to prevent, so the flags are kept honest at the source instead.
 
 ### A shape toolbar's pressed button is a view on the creation state, not a state of its own
 
@@ -1241,6 +1288,120 @@ are now refcounted (`dt_masks_form_t.refcount`, `src/develop/masks/masks_history
   (`iop/retouch.c`, read-only), so no COW gate is needed on that side — `dt_masks_cow_touch`
   already guarantees a GUI-side edit clones instead of mutating a form an in-flight pipeline run
   is holding.
+
+### Each module owns its mask group; what modules share is a shape
+
+`blend_params->mask_id` lives inside each module's own params blob, so several modules naming the
+same group is *representable* — but it is not what anything builds, and code here should not
+create it. A module owns ONE mask group of its own, named "Mask <module>", and a shape or shape
+group used by several modules is nested as a member of each of their masks.
+
+That separation is what keeps the modules independent. A module's own mask carries its own combine
+operators, opacities and member order, so attaching the same shape group to a second module cannot
+disturb the first, and detaching it from one removes the membership from that module's mask alone.
+Pointing several modules at one mask group would make every one of those settings — and every
+detach — common to all of them. `_tree_row_assign_to_modules()` (`libs/shape_manager.c`) is the
+path that creates a module's mask when it has none, and `dt_iop_gui_blend_set_drawn_mask_group()`
+(`develop/blend_gui.h`) is the one that points `mask_id` at it, raises `DEVELOP_MASK_ENABLED |
+DEVELOP_MASK_SHAPE`, refreshes the raster-mask source table and repaints whatever of the blend GUI
+exists. It tolerates a module the user has never expanded (no `dt_iop_gui_blend_data_t`) and
+commits nothing, so a caller wiring several modules commits per module and once for the forms.
+
+There is no back-reference from a group to the modules using it, and there must not be one: the
+answer is derived by walking `dev->iop`, which is what `_modules_owning_group()` does. Caching it
+would buy nothing over ~80 modules and would cost an invalidation problem, since `dev->iop` is
+rebuilt on module add/remove and on history navigation — stored raw module pointers would dangle.
+`_module_owning_group()` returns the first of them, which is all a tree row storing one module can
+show; anything asking *who renders this group* wants the list.
+
+### The same shape applied twice in one mask is legal, and not always a no-op
+
+A module renders one group, that group can nest others, and nothing stops a shape from sitting in
+both. Whether the second application changes anything depends entirely on the combine operator
+(`develop/masks/group.c`): union is `max(dst, src·opacity)` and intersection `min(b1, b2·opacity)`,
+both idempotent — but difference is `b1·(1−b2)`, so applying it twice gives `b1·(1−b2)²`, and
+exclusion does not settle either. **So a duplicate instance must never be greyed out or refused as
+redundant**: the panel would claim an absence of effect the pipeline does not honour. Mark it and
+leave it alone. `dt_masks_group_first_use()` answers which application the later ones are read
+against, walking in compositing order — a group's members in their own order, descending into a
+member group at the position that group sits at.
+
+Compositing order is that walk, forward: `dt_masks_group_get_mask()` fills its buffers walking
+`points` forward and folds them in the same index order, so the topmost member is the base and each
+later one combines onto the result of those above it. A list that does not show that order does not
+show what the mask does — which is why the Drawn tab's mask tree is built in one pass
+(`_blendop_masks_group_tree_append`). Its *available shapes* list below deliberately keeps groups
+first instead: that one is a catalogue to pick from, not a rendering order.
+
+Note `nb_ok` is only incremented for members that actually rasterize something: a shape that draws
+nothing (`DT_MASKS_RASTER_EMPTY`) occupies a row in the list but no rank in the composition, so the
+displayed rank and the effective one can differ by one.
+
+### The shape manager's two lists, and the graph questions behind them
+
+`libs/shape_manager.c` shows the forms in two trees, split by one question: is this group some
+module's drawn mask, or nobody's yet? The left list is the inventory — every shape and every
+group, module masks included — and the right one is the assignment, holding only the groups a
+module actually renders. A module mask is therefore listed in BOTH: once in the inventory, where
+it can be picked up like any other group (nested into another mask through the "+", or attached
+to more modules through the chooser) and reused, and once in the assignment, under the module that
+renders it. A shape a module uses appears in both for the same reason, once as itself and once as
+a member — the arrangement the Drawn tab already uses. Membership is derived per rebuild by
+`_group_is_module_mask()`, never stored, so a group's assignment-list row appears or disappears the
+moment a module claims or releases it — which is why both stores are always rebuilt together.
+
+Every tree handler is handed a `dt_shape_manager_list_t`, not the module, because the first thing
+each needs to know is which tree the gesture came from. **That includes the context menu items**:
+connecting them with the module instead is what once made every menu action dereference arbitrary
+memory.
+
+A module mask is shown FLAT in the inventory -- one row, no expander, its members not appended
+under it -- and expandable in the module list, which is where that subtree belongs. `_tree_row_t`
+carries the `flat` flag that stops `_shape_manager_list_recurs()` after the row itself.
+
+Both lists order module masks by **reverse `iop_order`**, walking `dev->iop` from `g_list_last()`
+backwards -- the "bottom of the stack first" convention the module chooser and the module groups
+panel's Pipeline tab already use, so a mask sits where its module does everywhere else. That walk
+is scoped like `_modules_owning_group()`, every module in `dev->iop` rather than only the ones
+`dt_iop_module_is_in_pipeline()` shows: the "unclaimed groups" pass afterwards skips anything
+`_group_is_module_mask()` claims, so a narrower scope here would drop a hidden instance's mask
+from both passes.
+
+**Three GTK behaviours here were measured offscreen, not reasoned about, and each one contradicted
+the obvious guess:**
+
+- **Names carry no `ellipsize`, and that is what guarantees they are never compressed.** A
+  `GtkTreeView` with no ellipsize reports its true full-content preferred width, that width
+  propagates through a `GTK_POLICY_NEVER` scrolled window (a `min-content-width` smaller than the
+  content does NOT lower it), and `gtk_window_resize()` -- which restores the persisted panel
+  width -- cannot force a window below its content minimum: GTK clamps it back up. So the width
+  floor is structural, not something the panel has to compute.
+- **A `GtkPaned` with `resize=TRUE` on both children splits new width between them**, drifting the
+  divider on every window resize. The inventory is packed `resize=FALSE` so the divider holds and
+  the module list absorbs the growth; a manual drag still repositions it.
+- **Of two renderers packed with `gtk_tree_view_column_pack_end()`, the FIRST packed lands at the
+  true right edge**, each later one closer to the content. The "used by" icon is therefore packed
+  BEFORE the note text to end up to its right.
+
+**`_shape_manager_selection_change_in()` must reveal by path, never `gtk_tree_view_expand_all()`.**
+The recursive search walks the MODEL, which holds every row whatever the view has collapsed, so it
+needs nothing expanded; expanding everything was only about making the match visible afterwards,
+and it blew every unrelated group open to do it -- visible as "creating a shape expands all the
+groups". `gtk_tree_view_expand_to_path()` on the found row does the same job. The paired
+`collapse_all()` on the not-found branch went with it: without an `expand_all()` to undo, it would
+have destroyed the user's own expansions on any selection event that missed.
+
+**`dev->form_gui` can be NULL while this panel is open.** It is allocated on entering darkroom and
+freed back to NULL on leaving it (`views/darkroom.c`, `views/studio_capture.c`), and this panel is
+a standalone toplevel that outlives that. `dt_masks_change_form_gui()` is NULL-safe throughout and
+does NOT allocate one, so a caller cannot assume it has one afterwards -- `_tree_selection_change()`
+dereferenced it unguarded and crashed (SIGSEGV, observed live).
+
+The graph questions live in `develop/masks_group.h`, id-keyed and by value like the rest of that
+header — `dt_masks_group_contains()` (cycle guard: wiring a group into one that already holds it
+makes every walk non-terminating), `dt_masks_group_covers_shapes()`, `dt_masks_group_first_use()`.
+They walk `->points` where `->points` belongs. Asking them from `libs/` by hand is what
+`tools/check_module_boundaries.sh` section 9 counts and refuses.
 
 ### The unused-shape sweep's used-set is not a subset of the snapshot it sweeps
 
@@ -1537,6 +1698,41 @@ when previewing a wavelet scale (`return_layer > 0`) *and* something reads alpha
 Fixed by saving `img_src[i+3]` before the round trip and restoring it after. Any other per-pixel
 loop in this codebase that round-trips through these color conversion primitives on a buffer whose
 4th channel is meaningful (alpha, a mask, anything other than padding) has the same exposure.
+
+### toneequal: the GUI samples a pipeline buffer whose size it does not choose
+
+The luminance mask every GUI reader consumes — the cursor exposure readout, the on-canvas exposure
+cursor, the histogram, the colour picker — is the module's own pipeline buffer, published in the
+shared pixelpipe cache under `dt_hash(piece->global_hash, "toneequal:luminance")`. Two properties
+of that arrangement are not visible from the GUI code, and each one is a way to read the wrong
+pixels.
+
+**The mask's dimensions are the ROI the pipe planned, which is NOT the preview size.**
+`iop/finalscale.c` enables itself whenever `darkroom/render_size != 1` (render at 1:1, downscale
+at the very end) and then requests `roi_in = roi_out / roi_out.scale` — the full sensor resolution
+— so every module above it runs full-resolution *in the preview pipe too*. Measured on a
+7979x5319 raw with `render_size = 0`: the preview pipe's ROI is 1003x669 while `piece->roi_in` at
+tone equalizer is 7979x5319 and the luminance mask is 170 MB. The same module runs at 1003x669 the
+moment `finalscale` disables itself (zoom exactly 1:1, or `render_size == 1`) — one zoom step
+away. The cursor is therefore stored NORMALIZED (`g->cursor_pos_x/y` in [0, 1[) and resolved
+against the dimensions of whichever buffer is attached, through `get_luminance_at_norm()` — the
+convention `_sample_picker_luminance_mask()` already uses for the picker's box and point. Storing
+preview pixels instead samples the top-left ~12% of the image in full-resolution mode; storing
+full-resolution pixels reads far out of bounds in the other.
+
+**A hash says nothing about a buffer's size.** `dt_dev_pixelpipe_cache_get()` ignores its `size`
+argument on a hit, and the GUI attach paths resolve the cacheline by hash alone while reading the
+dimensions from a separate look at `piece->roi_in`. The worker thread replans that piece between
+two such reads, so one plan's hash gets paired with another plan's dimensions — and across the
+`finalscale` toggle the two plans differ by a factor of 8 per axis, i.e. a 170 MB read into a
+2.7 MB buffer, off the end of the cache arena. So every attach site (`process()`, `gui_focus()`,
+the `DT_SIGNAL_HISTORY_RESYNC` callback, the cacheline-ready callback) takes the hash and the
+dimensions from ONE call to `_current_preview_luminance_hash()`, and refuses any entry that cannot
+hold `width * height` floats (`luminance_entry_fits()`, over `dt_pixel_cache_entry_get_size()`).
+That check is what makes the geometry an invariant of `g->thumb_preview_entry` /
+`g->thumb_preview_buf_width` / `_height`, so the samplers can trust the triple under the GUI lock
+without re-deriving it. Any new GUI reader of a cacheline resolved by hash owes the same check:
+the hash identifies the content, never the size.
 
 ---
 
@@ -1868,6 +2064,104 @@ Fixed by giving widget shortcuts a real closure too (`_widget_shortcut_callback(
 shortcut type already uses. Any future direct caller of `gtk_widget_add_accelerator()` for a
 keyboard shortcut in this codebase has the same problem: it needs a closure the internal
 dispatcher can invoke, not just a GTK-level accelerator that no window will ever activate.
+
+### A weak pointer must be removed before the struct holding it is freed
+
+`dt_shortcut_set_closure()` (`src/widgets/accelerators.c`) registers `&pc->widget` — the third
+member of a 24-byte `PayloadClosure` — with `g_object_add_weak_pointer()`, so that a widget
+destroyed while its closure is still listed reads back as NULL rather than as a dangling pointer.
+That registration is a live write permission GObject holds on those eight bytes, and it must be
+withdrawn before the bytes go back to the allocator.
+
+The struct has **two** teardown paths and only one honoured that. `_g_list_closure_unref()`, the
+`GDestroyNotify` handed to `g_list_free_full()`, drops the weak pointer first and carries the
+comment saying why. `dt_shortcut_remove_closure()` open-coded the same teardown a hundred lines
+below and left that one line out. Any future third path has the same obligation: call the
+destructor, do not re-spell it.
+
+The two ends of the bug meet inside a single function, seventy lines apart:
+`dt_iop_gui_cleanup_module()` (`develop/imageop_gui.c`) removes the module's accels at :1101 —
+freeing the payload — and destroys the widget tree at :1170, at which point GObject fires
+`g_nullify_pointer()` and writes NULL sixteen bytes into a freed twenty-four-byte block. That
+lands on glibc's chunk metadata, and the process dies at the next `malloc()` large enough to
+trigger `malloc_consolidate()` — in a different, innocent caller every run
+(`dt_preset_repository_list_for_upgrade`, `dt_image_from_stmt` and `dt_image_repository_load`
+were all observed). It fires from `_init_module_so()`'s startup probe loop, which builds and
+tears down every module's GUI once to register accelerators, so it presented as a plain
+startup crash: the packaged build aborted four times in a row on the same library.
+
+**AddressSanitizer cannot see this class of bug, and its silence means nothing here.** ASAN only
+instruments code compiled with it; the faulting store executes inside libglib's
+`g_nullify_pointer()`. A full ASAN startup reports zero errors while glibc aborts reliably —
+ASAN also replaces the allocator outright, so the metadata checks that *were* catching it no
+longer run. `valgrind --tool=memcheck` instruments the system libraries too and named the
+allocation, the free and the write in a single pass; it was the only invalid write in the whole
+startup. Reach for memcheck, not ASAN, whenever a corruption's likely writer is inside GTK,
+GObject, GLib or sqlite3.
+
+**`malloc_trim()` probes do NOT localise a heap overflow.** Breaking on a per-module function and
+calling `malloc_trim(0)` looks like a clean bisect and is not one: `malloc_consolidate()` walks
+**free** chunks only, so it fires when the *victim* is freed, not when the overflow happens.
+Successive runs of the identical script blamed `atrous`, then `bilateral`, then `colorbalancergb`.
+The module such a probe names tracks the heap layout, not the bug. For the same reason a hardware
+watchpoint on the corrupted address does not survive a re-run: the worker threads make the layout
+differ every time.
+
+The reproduction trigger is worth keeping too, because the crash otherwise looks intermittent.
+`dt_gui_presets_init()` (`gui/presets.c`) re-enables preset auto-generation whenever
+`<version>|<UI language>` differs from `ui_last/presets_autogen_signature`, and that signature
+only reaches `anselrc` on a **clean** exit — so a crash during startup loses it and every
+relaunch replays the same path. Forcing that conf key to a bogus value in a throwaway
+`--configdir` reproduces the whole startup on demand without touching the user's library.
+
+### A pointer event's modifier state must reach the handlers whole
+
+`_button_pressed()`, `_button_released()` and `_mouse_moved()` (`gui/application.c`) pass
+`event->state` to `dt_control_button_pressed()` / `_released()` / `dt_control_mouse_moved()`
+without narrowing it, and `_scrolled()` does the same. That is not incidental tidiness: masking
+the state to its low four bits keeps SHIFT, LOCK, CONTROL and MOD1 — every modifier that
+matters on X11 and Win32, and none of the one that matters on Quartz. A physical Cmd is
+reported there as `GDK_MOD2_MASK` (0x10), on button and motion events exactly as on key events
+(`get_keyboard_modifiers_from_ns_flags()` in GDK's own `gdkevents-quartz.c`), and that bit is
+what `DT_PRIMARY_MASK` resolves to and what every shortcut is registered and matched against.
+Drop it and every primary+click and primary+drag gesture in the application is unreachable on
+macOS — inserting a mask node, constraining a shape — while the same code keeps working
+everywhere else, because CONTROL survives such a mask. It is a whole-platform failure with no
+error anywhere, and it looks like a bug in whatever feature is reported first.
+
+Nothing downstream reads those bits raw. Every consumer goes through `dt_modifier_is()` /
+`dt_modifiers_include()` (`widgets/widget_settings.h`), which mask with
+`gtk_accelerator_get_default_mod_mask()` — the button bits a drag adds are not in it, and
+neither is `GDK_MOD2_MASK` on X11, where that bit is NumLock. So the narrowing buys nothing the
+consumers do not already do correctly per platform. Note the modifier state travels as the
+parameter spelled `which` on the `mouse_moved` chain (`dt_control_mouse_moved()` through every
+IOP's `mouse_moved()`); it is modifiers there too, not a button number — `iop/vignette.c` reads
+it with `dt_modifier_is(which, DT_PRIMARY_MASK)`.
+
+### The `-d input` keystroke trace hooks the generic `event` signal, and spells the primary modifier itself
+
+`_log_key_event()` (`gui/application.c`) is a GTK emission hook, installed by `dt_gui_gtk_init()`
+only when that channel is on. It is on **`GtkWidget::event`, not `key-press-event`**: a widget
+emits the generic signal first and the specific one only if nothing handled it, and
+`dt_accels_dispatch()` is connected to `event` on the main window and returns TRUE for every
+keystroke that fires a shortcut — so a hook on `key-press-event` prints every key the program
+ignores and none of the ones it acts on. An emission hook is also what makes the trace global:
+keys go to whichever toplevel has the focus, each handles its own, and no single handler sees
+them all. One keystroke reaches the hook several times as `gtk_propagate_event()` walks the focus
+chain with the same `GdkEvent`, so the first emission is printed and the repeats are skipped.
+
+Two things about a key event that the trace has to state rather than pass through:
+
+- **`state` holds the modifiers as they were BEFORE the event**, so a modifier key's own press
+  carries none of its bit and its release carries it, with the same keyval either way. That is
+  why the primary modifier is announced from the KEY (`Control_L`/`Control_R`, `Meta_L`/`Meta_R`
+  on Quartz — Cmd is reported as the Meta keysym) and not from the state.
+- **The primary token comes from `DT_PRIMARY_MASK`, not from `gtk_accelerator_name()`.** On
+  Quartz one physical Cmd sets `GDK_MOD2_MASK` — the bit every shortcut is registered and matched
+  against — plus GDK's virtual `GDK_META_MASK` duplicate, and GTK names the pair as two separate
+  modifiers (`<Primary><Mod2>`), spelling one keystroke twice. Both bits come out before naming
+  and `<Primary>` is printed once, the same duplicate `_accels_keys_decode()` and
+  `dt_modifier_is()` drop before matching. The raw `state` is printed alongside, in hex.
 
 ---
 

@@ -235,6 +235,7 @@ FILE(GLOB SOURCE_FILES
   "develop/masks/masks_debug.c"
   "develop/masks/masks_gui.c"
   "develop/masks/masks_history.c"
+  "develop/masks/masks_outline.c"
   "develop/masks/polygon.c"
   "develop/format.c"
   "pixel/format.c"
@@ -954,7 +955,7 @@ if(HAVE_OPENCL)
   # have a small test program, to be run as root on some systems to enable the driver to run cl stuff
   add_subdirectory(apps/ansel-cltest)
   # three-way parity of the .anselnn executor: torch fixture vs CPU vs OpenCL. The GPU half
-  # needs a compiled program number, so unlike src/tests/nn_model_test.c it cannot be built
+  # needs a compiled program number, so unlike tests/nn_model_test.c it cannot be built
   # standalone and has to link lib_ansel.
   add_subdirectory(apps/ansel-nn-parity)
 endif(HAVE_OPENCL)
@@ -976,11 +977,6 @@ endif()
 if(BUILD_CMSTEST)
   add_subdirectory(apps/ansel-cmstest)
 endif(BUILD_CMSTEST)
-
-# have some test programs for unit testing, ...
-if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
-  add_subdirectory(tests)
-endif()
 
 add_library(help_menu "gui/actions/help.c")
 add_dependencies(help_menu generate_authors_h)

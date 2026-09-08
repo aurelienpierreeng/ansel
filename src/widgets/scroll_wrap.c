@@ -537,7 +537,7 @@ static void _widget_auto_height_free(gpointer data)
  * @param config_str conf key persisting the user-chosen height (copied internally)
  * @param mode DT_UI_RESIZE_DYNAMIC (auto-fit) or DT_UI_RESIZE_STATIC (fixed height)
  */
-GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str, dt_ui_resize_mode_t mode)
+GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, const char *config_str, dt_ui_resize_mode_t mode)
 {
   GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -614,6 +614,11 @@ GtkWidget *dt_ui_scroll_wrap_get_scrolled_window(GtkWidget *wrapper)
   }
   g_list_free(children);
   return sw;
+}
+
+gint dt_ui_scroll_wrap_row_height(GtkWidget *content_widget)
+{
+  return _get_container_row_heigth(content_widget);
 }
 
 static void _resizable_area_free(gpointer data)

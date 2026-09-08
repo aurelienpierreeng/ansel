@@ -252,9 +252,16 @@ typedef struct dt_iop_toneequalizer_gui_data_t
   int max_histogram;
   int buf_width;
   int buf_height;
-  int cursor_pos_x;
-  int cursor_pos_y;
   int pipe_order;
+
+  // Cursor position over the image, NORMALIZED in [0, 1[. The luminance mask the GUI samples is
+  // the pipeline's own buffer, so its size is whatever ROI the pipe planned for this module:
+  // the preview size when darkroom renders scaled, the full sensor resolution when it renders
+  // at 1:1 (`darkroom/render_size`). Storing pixel coordinates of one of those two spaces
+  // sampled the wrong pixels in the other. Every sampler resolves these against the dimensions
+  // of the buffer it just attached, the way the color picker already resolves its own box.
+  float cursor_pos_x;
+  float cursor_pos_y;
 
   // Preview luminance cache state shared with the GUI.
   // The GUI never owns raw luminance buffers directly anymore: it only keeps the
@@ -703,6 +710,48 @@ static float get_luminance_from_buffer(const float *const buffer,
 }
 
 
+/**
+ * @brief Sample the luminance mask at a NORMALIZED image position.
+ *
+ * @details
+ * The mask is the pipeline buffer this module computed, so its dimensions are the ROI the pipe
+ * planned for this run and nothing else -- the preview size when darkroom renders scaled, the
+ * full sensor resolution when `darkroom/render_size` asks for 1:1. The cursor is therefore
+ * carried normalized and resolved here against the buffer actually attached.
+ */
+static inline float get_luminance_at_norm(const float *const buffer,
+                                          const size_t width, const size_t height,
+                                          const float norm_x, const float norm_y)
+{
+  if(IS_NULL_PTR(buffer) || width < 1 || height < 1) return NAN;
+  if(!(norm_x >= 0.f) || !(norm_y >= 0.f) || norm_x >= 1.f || norm_y >= 1.f) return NAN;
+
+  const size_t x = MIN((size_t)(norm_x * (float)width), width - 1);
+  const size_t y = MIN((size_t)(norm_y * (float)height), height - 1);
+  return get_luminance_from_buffer(buffer, width, height, x, y);
+}
+
+
+/**
+ * @brief Tell whether a cache entry can hold a `width` x `height` luminance mask.
+ *
+ * @details
+ * The GUI resolves its luminance cacheline by hash alone, and a hash carries no size: the
+ * pixelpipe cache hands back whatever entry answers to it. The dimensions come from a separate
+ * read of the pipe piece, so the two can describe different runs whenever the pipe replans in
+ * between -- and toneequal's ROI genuinely changes size when `finalscale` enables or disables
+ * itself, which is a plain zoom away. Attaching only what fits is what keeps every sampler in
+ * bounds; the dimensions alone are never enough to trust a buffer.
+ */
+static inline gboolean luminance_entry_fits(dt_pixel_cache_entry_t *entry,
+                                            const size_t width, const size_t height)
+{
+  if(IS_NULL_PTR(entry) || width < 1 || height < 1) return FALSE;
+  if(width > SIZE_MAX / height) return FALSE;
+  return dt_pixel_cache_entry_get_size(entry) >= width * height * sizeof(float);
+}
+
+
 /***
  * Exposure compensation computation
  *
@@ -1076,7 +1125,8 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
     apply_toneequalizer(in, luminance, out, roi_in, roi_out, ch, d);
   }
 
-  if(preview_output && self->dev->gui_attached && !IS_NULL_PTR(g) && luminance_entry)
+  if(preview_output && self->dev->gui_attached && !IS_NULL_PTR(g)
+     && luminance_entry_fits(luminance_entry, width, height))
   {
     dt_pixel_cache_entry_t *old_entry = NULL;
     gboolean keep_process_ref = FALSE;
@@ -1890,21 +1940,18 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     return 0;
   }
 
-  const int wd = dt_dev_roi_request_preview_width(dev);
-  const int ht = dt_dev_roi_request_preview_height(dev);
-
   if(IS_NULL_PTR(g)) return 0;
-  if(wd < 1 || ht < 1) return 0;
 
+  // Stop at the normalized image coordinates: they describe the position on the picture itself,
+  // which is the only space both the preview-sized and the full-resolution luminance mask share.
   float pzxpy[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
-  dt_dev_coordinates_image_norm_to_preview_abs(dev, pzxpy, 1);
 
-  const int x_pointer = pzxpy[0];
-  const int y_pointer = pzxpy[1];
+  const float x_pointer = pzxpy[0];
+  const float y_pointer = pzxpy[1];
 
   // Cursor is valid if it's inside the picture frame
-  if(x_pointer >= 0 && x_pointer < wd && y_pointer >= 0 && y_pointer < ht)
+  if(x_pointer >= 0.f && x_pointer < 1.f && y_pointer >= 0.f && y_pointer < 1.f)
   {
     g->cursor_valid = TRUE;
     g->cursor_pos_x = x_pointer;
@@ -1913,8 +1960,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   else
   {
     g->cursor_valid = FALSE;
-    g->cursor_pos_x = 0;
-    g->cursor_pos_y = 0;
+    g->cursor_pos_x = 0.f;
+    g->cursor_pos_y = 0.f;
   }
 
   // Store the current preview exposure too, to spare recomputing it in the UI callbacks.
@@ -1941,9 +1988,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       dt_dev_pixelpipe_cache_rdlock_entry(TRUE, preview_entry);
       const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
       const float cursor_exposure
-          = preview_buf ? log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
-                                                          (size_t)x_pointer, (size_t)y_pointer))
-                        : NAN;
+          = log2f(get_luminance_at_norm(preview_buf, preview_width, preview_height,
+                                        x_pointer, y_pointer));
       dt_dev_pixelpipe_cache_rdlock_entry(FALSE, preview_entry);
 
       if(!isnan(cursor_exposure))
@@ -2057,8 +2103,8 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   dt_pixel_cache_entry_t *preview_entry = NULL;
   size_t preview_width = 0;
   size_t preview_height = 0;
-  int cursor_x = 0;
-  int cursor_y = 0;
+  float cursor_x = 0.f;
+  float cursor_y = 0.f;
 
   // Copy the cursor sample source while holding the GUI state lock, then keep the
   // cacheline alive with an explicit ref until the sampling read lock is released.
@@ -2086,9 +2132,8 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     dt_dev_pixelpipe_cache_rdlock_entry(TRUE, preview_entry);
     const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
     const float cursor_exposure
-        = preview_buf ? log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
-                                                        (size_t)cursor_x, (size_t)cursor_y))
-                      : NAN;
+        = log2f(get_luminance_at_norm(preview_buf, preview_width, preview_height,
+                                      cursor_x, cursor_y));
     dt_dev_pixelpipe_cache_rdlock_entry(FALSE, preview_entry);
 
     if(!isnan(cursor_exposure))
@@ -2227,9 +2272,13 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(!g->graph_valid)
     if(!_init_drawing(self, self->gui->widget, g)) return;
 
-  // Get coordinates
-  const float x_pointer = g->cursor_pos_x;
-  const float y_pointer = g->cursor_pos_y;
+  // Get coordinates. The cursor is stored normalized: sampling resolves it against the luminance
+  // mask's own size below, while the on-canvas cursor is drawn in the preview-pixel space
+  // dt_dev_rescale_roi() establishes.
+  const float norm_x = g->cursor_pos_x;
+  const float norm_y = g->cursor_pos_y;
+  const float x_pointer = norm_x * (float)dt_dev_roi_request_preview_width(dev);
+  const float y_pointer = norm_y * (float)dt_dev_roi_request_preview_height(dev);
   dt_pixel_cache_entry_t *preview_entry = NULL;
   size_t preview_width = 0;
   size_t preview_height = 0;
@@ -2264,8 +2313,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
     if(!IS_NULL_PTR(preview_buf))
     {
-      exposure_in = log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
-                                                    (size_t)x_pointer, (size_t)y_pointer));
+      exposure_in = log2f(get_luminance_at_norm(preview_buf, preview_width, preview_height,
+                                                norm_x, norm_y));
       luminance_in = exp2f(exposure_in);
       correction = log2f(pixel_correction(exposure_in, factors, sigma));
       exposure_out = exposure_in + correction;
@@ -2411,22 +2460,31 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
     if(self->enabled && self->dev && self->dev->preview_pipe && !self->dev->preview_pipe->processing)
     {
-      dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
-      if(!IS_NULL_PTR(piece) && piece->enabled && piece->roi_in.width > 0 && piece->roi_in.height > 0)
+      // Opening the module can happen after preview processing already finished.
+      // In that case the preview pipe may stay idle because darkroom can reuse an
+      // existing backbuffer, so reattach to the existing luminance cacheline here
+      // instead of waiting for process() to run again. This was tested by opening
+      // tone equalizer on a fresh darkroom image with no pending recompute.
+      //
+      // Hash AND dimensions come from ONE read of the pipe piece: the worker thread replans that
+      // piece between two reads, and toneequal's ROI genuinely changes size across such a replan
+      // (`finalscale` enables or disables itself on zoom, which moves this module between the
+      // full-resolution and the preview-sized half of the pipe). Two reads therefore describe two
+      // different runs, and pairing one run's hash with the other's dimensions is what let the
+      // GUI sample a preview-sized cacheline as if it were the full-resolution one.
+      size_t preview_width = 0;
+      size_t preview_height = 0;
+      const uint64_t preview_hash = _current_preview_luminance_hash(self, &preview_width, &preview_height);
+
+      if(preview_hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
       {
-        // Opening the module can happen after preview processing already finished.
-        // In that case the preview pipe may stay idle because darkroom can reuse an
-        // existing backbuffer, so reattach to the existing luminance cacheline here
-        // instead of waiting for process() to run again. This was tested by opening
-        // tone equalizer on a fresh darkroom image with no pending recompute.
-        static const char cache_tag[] = "toneequal:luminance";
-        const uint64_t preview_hash = dt_hash(piece->global_hash, cache_tag, sizeof(cache_tag));
         void *preview_buf = NULL;
         dt_pixel_cache_entry_t *preview_entry = NULL;
 
         gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(preview_hash,
                                                                           &preview_buf, &preview_entry);
-        if(preview_ready && (IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry)))
+        if(preview_ready && (IS_NULL_PTR(preview_buf)
+                             || !luminance_entry_fits(preview_entry, preview_width, preview_height)))
         {
           if(!IS_NULL_PTR(preview_entry))
             dt_dev_pixelpipe_cache_ref_count_entry(FALSE, preview_entry);
@@ -2439,15 +2497,15 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
           gboolean keep_new_entry = FALSE;
           dt_iop_gui_enter_critical_section(self);
           if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
-             || g->thumb_preview_buf_width != piece->roi_in.width
-             || g->thumb_preview_buf_height != piece->roi_in.height || !g->luminance_valid)
+             || g->thumb_preview_buf_width != preview_width
+             || g->thumb_preview_buf_height != preview_height || !g->luminance_valid)
           {
             old_entry = g->thumb_preview_entry;
             g->thumb_preview_entry = preview_entry;
             g->thumb_preview_hash = preview_hash;
             g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-            g->thumb_preview_buf_width = piece->roi_in.width;
-            g->thumb_preview_buf_height = piece->roi_in.height;
+            g->thumb_preview_buf_width = preview_width;
+            g->thumb_preview_buf_height = preview_height;
             g->luminance_valid = TRUE;
             g->histogram_valid = FALSE;
             keep_new_entry = TRUE;
@@ -3025,7 +3083,13 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return;
 
-  const uint64_t preview_hash = _current_preview_luminance_hash(self, NULL, NULL);
+  // One read of the pipe piece for both the hash and the dimensions it describes: this callback
+  // answers DT_SIGNAL_HISTORY_RESYNC, i.e. it runs while the worker is replanning the pipes, and
+  // a second read would routinely land on a different plan. See gui_focus() for what pairing two
+  // plans costs.
+  size_t preview_width = 0;
+  size_t preview_height = 0;
+  const uint64_t preview_hash = _current_preview_luminance_hash(self, &preview_width, &preview_height);
   if(preview_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
     dt_iop_gui_enter_critical_section(self);
@@ -3051,7 +3115,8 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
     dt_pixel_cache_entry_t *preview_entry = NULL;
     gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(preview_hash,
                                                                       &preview_buf, &preview_entry);
-    if(preview_ready && (IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry)))
+    if(preview_ready && (IS_NULL_PTR(preview_buf)
+                         || !luminance_entry_fits(preview_entry, preview_width, preview_height)))
     {
       if(!IS_NULL_PTR(preview_entry))
         dt_dev_pixelpipe_cache_ref_count_entry(FALSE, preview_entry);
@@ -3060,10 +3125,6 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
 
     if(preview_ready)
     {
-      size_t preview_width = 0;
-      size_t preview_height = 0;
-      (void)_current_preview_luminance_hash(self, &preview_width, &preview_height);
-
       dt_pixel_cache_entry_t *old_entry = NULL;
       gboolean keep_new_entry = FALSE;
       dt_iop_gui_enter_critical_section(self);
@@ -3125,7 +3186,8 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
   dt_pixel_cache_entry_t *preview_entry = NULL;
   const gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(preview_hash,
                                                                           &preview_buf, &preview_entry);
-  if(!preview_ready || IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry))
+  if(!preview_ready || IS_NULL_PTR(preview_buf)
+     || !luminance_entry_fits(preview_entry, preview_width, preview_height))
   {
     if(!IS_NULL_PTR(preview_entry))
       dt_dev_pixelpipe_cache_ref_count_entry(FALSE, preview_entry);

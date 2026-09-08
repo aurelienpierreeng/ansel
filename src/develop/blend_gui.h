@@ -200,6 +200,28 @@ void dt_iop_gui_blending_reload_defaults(dt_iop_module_t *module);
  * implement and could not have, since every widget it drives is private to this one. */
 void dt_iop_gui_blend_masks_update(dt_iop_module_t *module);
 
+/** Make `group` the module's drawn mask and switch drawn blending on.
+ *
+ * The sequence a module needs to start using a drawn mask -- point blend_params->mask_id at the
+ * group, raise DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE, refresh the raster-mask source table,
+ * and repaint whatever of the blend GUI exists -- lived only inside this file's own widget
+ * callbacks, so anything else wanting to attach a mask had to write blend_params by hand. It is
+ * one function now, and the blend GUI's own callbacks are not its only caller.
+ *
+ * The module's blend GUI need not have been built: a module the user has never expanded has no
+ * dt_iop_gui_blend_data_t, and this only refreshes the widgets that exist.
+ *
+ * Nothing is committed to history -- a caller attaching one group to several modules commits
+ * once, at the end.
+ *
+ * Takes the group's id rather than the group: a caller outside develop/masks has no business
+ * reaching into a dt_masks_form_t to read one, and the id is what blend_params stores anyway.
+ *
+ * @return TRUE if anything actually changed, FALSE if the module already used that group with
+ * drawn blending on, or if it cannot carry a drawn mask at all.
+ */
+gboolean dt_iop_gui_blend_set_drawn_mask_group(dt_iop_module_t *module, int group_id);
+
 gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt_dev_pixelpipe_t *pipe,
                                   dt_dev_pixelpipe_iop_t *piece);
 

@@ -114,7 +114,7 @@ How to add a new benchmark
 
 1. open an image in darktable and apply whatever processing you desire
 
-2. copy the generated .xmp sidecar into src/tests/benchmark under the
+2. copy the generated .xmp sidecar into tests/benchmark under the
    name 'ansel-bench-XYZ.xmp'
 
 3. run

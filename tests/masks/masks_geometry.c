@@ -852,40 +852,21 @@ typedef struct _brush_case_t
   int h;
 } _brush_case_t;
 
-/** Run one brush through both consumers and measure the raster against the disc union in
- * both directions. Takes ownership of @p nodes. */
-static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const _brush_case_t *const c)
+/* Everything that judges a rendered mask against its two maps and reports it: the raster in
+ * both directions, the drawn outline against the same maps, the renders, the baselines, and
+ * the artefacts a failure needs. The brush and the polygon differ only in how the maps are
+ * built, so this is where both meet. */
+static void _judge_raster(dt_develop_t *dev, dt_masks_form_t *form, const _brush_case_t *const c,
+                          const float *const mask, const uint8_t *const owed, const uint8_t *const permitted)
 {
-  _set_frame(dev, c->w, c->h);
-  dt_masks_form_t form = { 0 };
-  form.type = DT_MASKS_BRUSH;
-  form.functions = &dt_masks_functions_brush;
-  form.version = 6;
-  form.formid = 900;
-  g_strlcpy(form.name, c->name, sizeof(form.name));
-  form.points = nodes;
-
-  float *mask = dt_masks_debug_rasterise(dev, &form, c->w, c->h);
-  if(IS_NULL_PTR(mask))
-  {
-    printf("[FAIL] %-22s rasterisation returned nothing\n", c->name);
-    failures++;
-    g_list_free_full(form.points, free);
-    return;
-  }
-
-  uint8_t *owed = (uint8_t *)malloc((size_t)c->w * c->h);
-  uint8_t *permitted = (uint8_t *)malloc((size_t)c->w * c->h);
   _runs_t missing = { 0, 0, -1, -1 };
   _runs_t excess = { 0, 0, -1, -1 };
   _band_t band = { 0 };
   if(!IS_NULL_PTR(owed) && !IS_NULL_PTR(permitted))
   {
-    _brush_disc_union(form.points, c->w, c->h, DISC_OWED, owed);
     _coverage_runs(mask, owed, c->w, c->h, RUNS_MISSING, &missing);
-    _brush_disc_union(form.points, c->w, c->h, DISC_PERMITTED, permitted);
     _coverage_runs(mask, permitted, c->w, c->h, RUNS_EXCESS, &excess);
-    band = _outline_band_check(dev, &form, owed, permitted, c->w, c->h);
+    band = _outline_band_check(dev, form, owed, permitted, c->w, c->h);
   }
 
   char *alpha_path = g_strdup_printf("%s/%s-alpha.png", c->dir, c->name);
@@ -894,8 +875,8 @@ static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const _brush_ca
       = { .width = c->w, .height = c->h, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = FALSE };
   const dt_masks_debug_request_t over_req
       = { .width = c->w, .height = c->h, .backdrop = DT_MASKS_DEBUG_BACKDROP_RASTER, .draw_overlay = TRUE };
-  dt_masks_debug_write_png(dev, &form, &alpha_req, alpha_path);
-  dt_masks_debug_write_png(dev, &form, &over_req, over_path);
+  dt_masks_debug_write_png(dev, form, &alpha_req, alpha_path);
+  dt_masks_debug_write_png(dev, form, &over_req, over_path);
 
   char *alpha_name = g_strdup_printf("%s-alpha", c->name);
   char *over_name = g_strdup_printf("%s-overlay", c->name);
@@ -915,7 +896,7 @@ static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const _brush_ca
   if(disagreement || !IS_NULL_PTR(g_getenv("MASKS_DUMP_OUTLINE")))
   {
     char *csv = g_strdup_printf("%s/%s-outline.csv", c->dir, c->name);
-    dt_masks_debug_write_outline_csv(dev, &form, csv);
+    dt_masks_debug_write_outline_csv(dev, form, csv);
     g_free(csv);
   }
 
@@ -930,11 +911,267 @@ static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const _brush_ca
          band.kept, band.inside, band.outside, 1000.0 * band.seconds, c->budget_px, alpha_path);
   if(!ok) failures++;
 
+  g_free(alpha_path);
+  g_free(over_path);
+}
+
+/* The oracle for a polygon.
+ *
+ * A polygon's mask is its path's interior, filled, plus the union of a disc of the local radius
+ * over every point of the path -- the feather. Both maps take the interior whole (the fill is
+ * exact to the pixel) and the discs at the segment's smaller radius shrunk two pixels (OWED)
+ * or its larger one grown three (PERMITTED), for the reasons the brush's oracle gives. The
+ * interior is an even-odd scanline over the same dense samples the discs are stamped from.
+ *
+ * Judging a polygon in both directions is what the previous, holes-only measure could not do:
+ * a fold of the outer border filled as shape is coverage nobody owes, and a feather spoke sent
+ * to the wrong sample is coverage that goes missing -- neither is a hole. */
+#define PATH_SAMPLES_PER_SEGMENT 2001
+
+/* The dense closed path into (px, py), stamping the feather discs as it goes. Returns the
+ * sample count. */
+static int _path_dense_samples(const GList *const nodes, const int w, const int h, const _disc_pick_t pick,
+                               float *const px, float *const py, int32_t *const diff)
+{
+  const size_t stride = (size_t)w + 1;
+  const float radius_scale = (float)MIN(w, h);
+  int count = 0;
+  for(const GList *l = nodes; l; l = l->next)
+  {
+    const dt_masks_node_polygon_t *const n0 = (const dt_masks_node_polygon_t *)l->data;
+    const dt_masks_node_polygon_t *const n1 = (const dt_masks_node_polygon_t *)(l->next ? l->next : nodes)->data;
+    const float p0x = n0->node[0] * w;
+    const float p0y = n0->node[1] * h;
+    const float p1x = n0->ctrl2[0] * w;
+    const float p1y = n0->ctrl2[1] * h;
+    const float p2x = n1->ctrl1[0] * w;
+    const float p2y = n1->ctrl1[1] * h;
+    const float p3x = n1->node[0] * w;
+    const float p3y = n1->node[1] * h;
+    const float r_out = n0->border[1] * radius_scale;
+    const float r_in = n1->border[0] * radius_scale;
+    const float r = (pick == DISC_OWED) ? MIN(r_out, r_in) : MAX(r_out, r_in);
+    const int r_i = (pick == DISC_OWED) ? MAX((int)floorf(r) - 2, 0) : (int)ceilf(r) + 3;
+    for(int k = 0; k < PATH_SAMPLES_PER_SEGMENT; k++)
+    {
+      const float t = (float)k / (float)(PATH_SAMPLES_PER_SEGMENT - 1);
+      const float u = 1.0f - t;
+      const float bx = u*u*u*p0x + 3*u*u*t*p1x + 3*u*t*t*p2x + t*t*t*p3x;
+      const float by = u*u*u*p0y + 3*u*u*t*p1y + 3*u*t*t*p2y + t*t*t*p3y;
+      px[count] = bx;
+      py[count] = by;
+      count++;
+      _stamp_disc_rows(diff, stride, w, h, (int)lrintf(bx), (int)lrintf(by), r_i);
+    }
+  }
+  return count;
+}
+
+/* The per-row crossing table: how many crossings each row has, where each row's run starts in
+ * @p xs, and how many entries @p xs can hold at all. */
+typedef struct _row_table_t
+{
+  int *count;
+  const int *at;
+  float *xs;   /* NULL while only counting */
+  int capacity;
+} _row_table_t;
+
+/* One crossing into row @p y: counted always, written only while filling and only inside the
+ * table's capacity. FALSE when the table refused it. */
+static inline gboolean _row_table_put(const _row_table_t *const t, const int y, const float x)
+{
+  if(!IS_NULL_PTR(t->xs))
+  {
+    const int at = t->at[y] + t->count[y];
+    if(at < 0 || at >= t->capacity) return FALSE;
+    t->xs[at] = x;
+  }
+  t->count[y]++;
+  return TRUE;
+}
+
+/* Where the closed path crosses each row, sampled at the row's centre. Two passes: with
+ * @p t->xs NULL only the per-row counts are taken; with it, the crossings are written at the
+ * row offsets, never outside [0, capacity), and the counts rebuilt from what was written. The
+ * two passes walk the same edges and agree, but the bound is what makes that a property of the
+ * code rather than of the reader. */
+static void _path_row_crossings(const float *const px, const float *const py, const int count, const int h,
+                                const _row_table_t *const t)
+{
+  memset(t->count, 0, sizeof(int) * (size_t)h);
+  for(int i = 0; i < count; i++)
+  {
+    const int j = (i + 1) % count;
+    float x0 = px[i];
+    float y0 = py[i];
+    float x1 = px[j];
+    float y1 = py[j];
+    if(y0 == y1) continue;
+    if(y0 > y1)
+    {
+      const float sx = x0;
+      const float sy = y0;
+      x0 = x1;
+      y0 = y1;
+      x1 = sx;
+      y1 = sy;
+    }
+    /* a row y is crossed if y0 <= y + 0.5 < y1 */
+    const int ya = MAX((int)ceilf(y0 - 0.5f), 0);
+    const int yb = MIN((int)ceilf(y1 - 0.5f), h);
+    for(int y = ya; y < yb; y++)
+      _row_table_put(t, y, x0 + (x1 - x0) * (((float)y + 0.5f) - y0) / (y1 - y0));
+  }
+}
+
+/* The interior of the closed dense path, even-odd, into the row difference array. */
+static void _path_interior(const float *const px, const float *const py, const int count, const int w, const int h,
+                           int32_t *const diff, const size_t stride)
+{
+  int *row_count = (int *)calloc((size_t)h + 1, sizeof(int));
+  int *row_at = (int *)calloc((size_t)h + 1, sizeof(int));
+  if(IS_NULL_PTR(row_count) || IS_NULL_PTR(row_at))
+  {
+    free(row_count);
+    free(row_at);
+    return;
+  }
+  const _row_table_t counting = { .count = row_count, .at = row_at, .xs = NULL, .capacity = 0 };
+  _path_row_crossings(px, py, count, h, &counting);
+  int total = 0;
+  for(int y = 0; y < h; y++)
+  {
+    row_at[y] = total;
+    total += row_count[y];
+  }
+  /* zeroed, so that nothing the bound refused to write is ever read as a crossing */
+  float *xs = (float *)calloc((size_t)total + 1, sizeof(float));
+  if(IS_NULL_PTR(xs))
+  {
+    free(row_count);
+    free(row_at);
+    return;
+  }
+  const _row_table_t filling = { .count = row_count, .at = row_at, .xs = xs, .capacity = total };
+  _path_row_crossings(px, py, count, h, &filling);
+
+  for(int y = 0; y < h; y++)
+  {
+    float *const row = xs + row_at[y];
+    const int m = MIN(row_count[y], total - row_at[y]);
+    /* insertion sort: a row rarely has more than a handful of crossings */
+    for(int a = 1; a < m; a++)
+    {
+      const float v = row[a];
+      int b = a - 1;
+      while(b >= 0 && row[b] > v)
+      {
+        row[b + 1] = row[b];
+        b--;
+      }
+      row[b + 1] = v;
+    }
+    for(int a = 0; a + 1 < m; a += 2)
+    {
+      const int xa = MAX((int)ceilf(row[a] - 0.5f), 0);
+      const int xb = MIN((int)ceilf(row[a + 1] - 0.5f), w);   /* half-open */
+      if(xa >= xb) continue;
+      diff[(size_t)y * stride + xa] += 1;
+      diff[(size_t)y * stride + xb] -= 1;
+    }
+  }
+  free(xs);
+  free(row_count);
+  free(row_at);
+}
+
+static void _polygon_disc_union(const GList *const nodes, const int w, const int h, const _disc_pick_t pick,
+                                uint8_t *const map)
+{
+  memset(map, 0, (size_t)w * h);
+  int n = 0;
+  for(const GList *l = nodes; l; l = l->next) n++;
+  if(n < 3) return;
+
+  const size_t stride = (size_t)w + 1;
+  int32_t *diff = (int32_t *)calloc(stride * h, sizeof(int32_t));
+  float *px = (float *)malloc(sizeof(float) * (size_t)n * PATH_SAMPLES_PER_SEGMENT);
+  float *py = (float *)malloc(sizeof(float) * (size_t)n * PATH_SAMPLES_PER_SEGMENT);
+  if(!IS_NULL_PTR(diff) && !IS_NULL_PTR(px) && !IS_NULL_PTR(py))
+  {
+    const int count = _path_dense_samples(nodes, w, h, pick, px, py, diff);
+    _path_interior(px, py, count, w, h, diff, stride);
+    for(int y = 0; y < h; y++)
+    {
+      int32_t running = 0;
+      for(int x = 0; x < w; x++)
+      {
+        running += diff[(size_t)y * stride + x];
+        map[(size_t)y * w + x] = (running > 0) ? 1 : 0;
+      }
+    }
+  }
+  free(diff);
+  free(px);
+  free(py);
+}
+
+/** Run one polygon through both consumers and judge it. The form is the caller's. */
+static void _run_polygon_form_at(dt_develop_t *dev, dt_masks_form_t *form, const _brush_case_t *const c)
+{
+  _set_frame(dev, c->w, c->h);
+  float *mask = dt_masks_debug_rasterise(dev, form, c->w, c->h);
+  if(IS_NULL_PTR(mask))
+  {
+    printf("[FAIL] %-22s rasterisation returned nothing\n", c->name);
+    failures++;
+    return;
+  }
+  uint8_t *owed = (uint8_t *)malloc((size_t)c->w * c->h);
+  uint8_t *permitted = (uint8_t *)malloc((size_t)c->w * c->h);
+  if(!IS_NULL_PTR(owed) && !IS_NULL_PTR(permitted))
+  {
+    _polygon_disc_union(form->points, c->w, c->h, DISC_OWED, owed);
+    _polygon_disc_union(form->points, c->w, c->h, DISC_PERMITTED, permitted);
+  }
+  _judge_raster(dev, form, c, mask, owed, permitted);
   free(owed);
   free(permitted);
   dt_free_align(mask);
-  g_free(alpha_path);
-  g_free(over_path);
+}
+
+/** Run one brush through both consumers and judge it. Takes ownership of @p nodes. */
+static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const _brush_case_t *const c)
+{
+  _set_frame(dev, c->w, c->h);
+  dt_masks_form_t form = { 0 };
+  form.type = DT_MASKS_BRUSH;
+  form.functions = &dt_masks_functions_brush;
+  form.version = 6;
+  form.formid = 900;
+  g_strlcpy(form.name, c->name, sizeof(form.name));
+  form.points = nodes;
+
+  float *mask = dt_masks_debug_rasterise(dev, &form, c->w, c->h);
+  if(IS_NULL_PTR(mask))
+  {
+    printf("[FAIL] %-22s rasterisation returned nothing\n", c->name);
+    failures++;
+    g_list_free_full(form.points, free);
+    return;
+  }
+  uint8_t *owed = (uint8_t *)malloc((size_t)c->w * c->h);
+  uint8_t *permitted = (uint8_t *)malloc((size_t)c->w * c->h);
+  if(!IS_NULL_PTR(owed) && !IS_NULL_PTR(permitted))
+  {
+    _brush_disc_union(form.points, c->w, c->h, DISC_OWED, owed);
+    _brush_disc_union(form.points, c->w, c->h, DISC_PERMITTED, permitted);
+  }
+  _judge_raster(dev, &form, c, mask, owed, permitted);
+  free(owed);
+  free(permitted);
+  dt_free_align(mask);
   g_list_free_full(form.points, free);
 }
 
@@ -1201,7 +1438,8 @@ int main(int argc, char *argv[])
                                                         (dt_masks_points_states_t)(int)r[7]));
       }
       char *nm = g_strdup_printf("polygon-1788045925-%dx%d", poly_frames[f][0], poly_frames[f][1]);
-      _run_case_at(&dev, &form, nm, dir, 0, 0, poly_frames[f][0], poly_frames[f][1]);
+      const _brush_case_t c = { nm, dir, 0, poly_frames[f][0], poly_frames[f][1] };
+      _run_polygon_form_at(&dev, &form, &c);
       g_free(nm);
       g_list_free_full(form.points, free);
     }
@@ -1228,7 +1466,8 @@ int main(int argc, char *argv[])
     }
     form.points = g_list_append(form.points, _polygon_node(0.80f, 0.78f, 0.80f, 0.78f, 0.80f, 0.78f, radius));
     form.points = g_list_append(form.points, _polygon_node(0.20f, 0.78f, 0.20f, 0.78f, 0.20f, 0.78f, radius));
-    _run_case(&dev, &form, "polygon-comb", dir, 0, 0);
+    const _brush_case_t c = { "polygon-comb", dir, 0, IMG_W, IMG_H };
+    _run_polygon_form_at(&dev, &form, &c);
     g_list_free_full(form.points, free);
   }
 

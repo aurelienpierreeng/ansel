@@ -153,11 +153,57 @@ dt_masks_result_t dt_masks_group_get_member(struct dt_develop_t *dev, int group_
                                             dt_masks_member_t *out);
 
 /**
+ * @brief Whether @p container_id holds @p needle_id, at any depth (and trivially when they are
+ * the same id).
+ *
+ * The question every caller wiring one group into another has to ask first: closing a cycle in
+ * the membership graph makes every walk over it non-terminating, the tree builds included.
+ *
+ * @return DT_MASKS_OK when it does, DT_MASKS_NOT_FOUND when it does not, DT_MASKS_INVALID for a
+ *         NULL dev. A @p container_id that names no group, or names a shape, is NOT_FOUND.
+ */
+dt_masks_result_t dt_masks_group_contains(struct dt_develop_t *dev, int container_id, int needle_id);
+
+/**
+ * @brief Whether every shape @p group_id ultimately holds is also held by @p target_id.
+ *
+ * Leaf by leaf and at any depth on both sides, so it answers for a group of groups too. What it
+ * means is that nesting @p group_id into @p target_id would add no shape the target does not
+ * already apply -- NOT that it would change nothing, which is a different question the combine
+ * operators answer (a shape applied twice in difference or exclusion does change the mask).
+ *
+ * @param has_shapes (may be NULL) set to TRUE as soon as a leaf shape is met, so a caller can
+ *                   tell "all covered" from "there was nothing in it to cover".
+ * @return DT_MASKS_OK when every leaf is covered, DT_MASKS_NOT_FOUND when one is not,
+ *         DT_MASKS_INVALID for a NULL dev.
+ */
+dt_masks_result_t dt_masks_group_covers_shapes(struct dt_develop_t *dev, int group_id, int target_id,
+                                               gboolean *has_shapes);
+
+/**
+ * @brief Where the mask rooted at @p root_id FIRST applies @p formid.
+ *
+ * Walked in compositing order: a group's members in their own order, descending into a member
+ * group at the position that group sits at. A shape can legitimately appear more than once in one
+ * mask -- union and intersection are idempotent, difference and exclusion are not -- so this
+ * answers which application the later ones are read against, not which ones are redundant.
+ *
+ * @param holder_id (may be NULL) the group directly holding that first use.
+ * @param index (may be NULL) its position inside that group, i.e. its compositing rank.
+ * @param holder_name (may be NULL) copied, not borrowed, like dt_masks_form_get_info()'s name.
+ * @return DT_MASKS_OK when found, DT_MASKS_NOT_FOUND when the mask does not apply it at all,
+ *         DT_MASKS_INVALID for a NULL dev.
+ */
+dt_masks_result_t dt_masks_group_first_use(struct dt_develop_t *dev, int root_id, int formid,
+                                           int *holder_id, guint *index,
+                                           char *holder_name, size_t holder_name_size);
+
+/**
  * @brief Which group references @p formid, searching every group in dev->forms depth-first.
  *
  * A shape's own dt_masks_form_t does not record who holds it, and the row's parentid records where
  * it was AUTHORED, not where it currently lives -- so a caller holding only a shape id, as the
- * mask-manager tree does when it lists shapes at top level, has to search. Returns the first
+ * shape manager's tree does when it lists shapes at top level, has to search. Returns the first
  * holder found; a shape referenced by two groups has no single answer, and the caller wanting a
  * specific one already knows which.
  *

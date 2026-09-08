@@ -89,6 +89,7 @@
 #include "develop/blend.h"
 #include "develop/blend_gui.h"
 #include "develop/develop.h"
+#include "develop/dev_history.h"   // dt_dev_history_get_last_item_by_module(), dt_dev_get_history_end_ext()
 #include "pixel/format.h"
 #include "develop/masks.h"
 #include "develop/tiling.h"
@@ -735,6 +736,57 @@ gboolean dt_iop_so_is_hidden(dt_iop_module_so_t *module)
 gboolean dt_iop_is_hidden(dt_iop_module_t *module)
 {
   return dt_iop_so_is_hidden(module->so);
+}
+
+gboolean dt_iop_module_instance_exists(dt_iop_module_t *iop)
+{
+  if(IS_NULL_PTR(iop)) return FALSE;
+  if(iop->multi_priority == 0) return TRUE;
+
+  dt_develop_t *const dev = iop->dev;
+  if(IS_NULL_PTR(dev)) return FALSE;
+
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
+  const gboolean exists = !IS_NULL_PTR(
+      dt_dev_history_get_last_item_by_module(dev->history, iop, dt_dev_get_history_end_ext(dev)));
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+
+  return exists;
+}
+
+/* Whether any history item at all names the module, regardless of where the history cursor sits.
+ * That is a different question from dt_iop_module_instance_exists(): a module the user has
+ * touched and then undone past is still part of the pipeline they are working on. */
+static gboolean _module_carries_history(dt_iop_module_t *module)
+{
+  dt_develop_t *const dev = module->dev;
+  if(IS_NULL_PTR(dev)) return FALSE;
+
+  gboolean found = FALSE;
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
+  for(const GList *history = g_list_last(dev->history); history && !found;
+      history = g_list_previous(history))
+  {
+    const dt_dev_history_item_t *item = (const dt_dev_history_item_t *)history->data;
+    found = (item->module == module);
+  }
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+
+  return found;
+}
+
+gboolean dt_iop_module_is_in_pipeline(dt_iop_module_t *iop)
+{
+  if(IS_NULL_PTR(iop) || dt_iop_is_hidden(iop)) return FALSE;
+  if(!iop->enabled && !_module_carries_history(iop)) return FALSE;
+  return dt_iop_module_instance_exists(iop);
+}
+
+gboolean dt_iop_module_supports_drawn_mask(dt_iop_module_t *iop)
+{
+  if(IS_NULL_PTR(iop) || IS_NULL_PTR(iop->blend_params)) return FALSE;
+  const int flags = iop->flags();
+  return (flags & IOP_FLAGS_SUPPORTS_BLENDING) && !(flags & IOP_FLAGS_NO_MASKS);
 }
 
 void dt_iop_reload_defaults(dt_iop_module_t *module)

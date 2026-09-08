@@ -22,7 +22,7 @@
  * reference within the stated absolute tolerance.
  *
  * Standalone build (no ansel build system needed):
- *   gcc -O2 -fopenmp -Isrc src/common/nn_model.c src/tests/nn_model_test.c \
+ *   gcc -O2 -fopenmp -Isrc src/common/nn_model.c tests/nn_model_test.c \
  *       $(pkg-config --cflags --libs json-glib-1.0) -lm -o nn_model_test
  * Usage: nn_model_test <model.anselnn> <fixture-dir> [N] [--xtrans]
  *   N defaults to 96. --xtrans selects the 6-px superpixel bin for a fixture
