@@ -214,6 +214,31 @@ callers: every segment end was evaluated at radius zero, every cap collapsed int
 through its centre, and the result read for an hour like a cap defect the tilt had exposed.
 Trace the helper's inputs before theorising about its geometry.
 
+## A copy of a boundary stretch is not a boundary sample
+
+The walk stamps a full disc at a node whose radius steps, in both passes, and bridges every
+joint with an arc about the node at the same radius. On a flaring node all of those trace the
+same circle, and the boundary pass kept them all: a copy is not strictly inside any disc. Each
+copy is stroked as its own run with its own dash phase, so the copies fill each other's gaps and
+the circle comes out as a near-solid line — `_MG_1074.CR2` brush #4, reported as a missing
+dashed border: 4,020 kept samples on a 2,114 px circumference.
+
+`_outline_sample_repeats()` drops a sample that repeats an earlier one: the same spine point to
+a hundredth of a pixel, a border position within three quarters of a pixel, and at least sixteen
+samples earlier along the walk. The other side of the stroke, which the backward pass lays on
+the very same spine points, is a diameter away and never matches; polygons, which bridge each
+joint once, and constant-radius brushes are bit-identical.
+
+Three corpus rounds shaped the clauses. Keyed on the disc rather than the sample's spine point
+the rule never fired, because a disc's centre is its first sample's and a stamp's samples merge
+into the disc the last moving sample opened, half a pixel off and differently in each pass. With
+half a pixel of centre tolerance it fused consecutive discs of a segment, which the builder
+separates by exactly that much, and thinned every segment to fragments. Without the index
+exclusion a dense arc filler matched its own predecessor and shredded every arc. The
+measurements that told those apart were the harness's skipped-sample counts per case — 2,821
+ranges on the zigzag against 4 — and the kept-sample count on the node's circle: 4,020, then
+3,980, then 1,804.
+
 ## What is unified, and what is not
 
 The API did not change shape: `dt_masks_functions_t.get_points_border` still returns

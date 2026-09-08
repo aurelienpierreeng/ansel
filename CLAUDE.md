@@ -1150,6 +1150,25 @@ rules that were each paid for by a reported defect:
   spoke with its range) — and an argument added to the evaluator by regex landed before the
   radius instead of after it on two of five callers, which zeroed every segment end's spoke,
   killed every cap, and read for an hour like a cap defect the tilt had exposed.
+- **A copy of a boundary stretch is not a boundary sample.** The walk stamps a full disc at a
+  node whose radius steps in BOTH passes and bridges joints with arcs about the same node, so a
+  flaring node's circle was traced two or three times, each copy dashed from its own phase, and
+  the copies filled each other's gaps: a near-solid line (`_MG_1074.CR2` brush #4, 4,020 kept
+  samples on a 2,114 px circumference). `_outline_sample_repeats()` drops a sample that repeats
+  an earlier one: the same SPINE POINT to a hundredth of a pixel, a border position within three
+  quarters of a pixel, and at least sixteen samples earlier along the walk. Each clause was paid
+  for by a corpus round: keyed on the disc instead of the spine point it never fired (a disc's
+  centre is its first sample's, half a pixel off and differently per pass); at half a pixel of
+  centre tolerance it fused consecutive segment discs and thinned every segment; without the
+  index exclusion a dense arc filler matched its own predecessor and shredded every arc. The
+  other side of the stroke, which the backward pass lays on the same spine points, is a diameter
+  away and never matches. Polygons and constant-radius brushes stay bit-identical.
+- **`ansel-test-masks-geometry --time-overlay` renders at fit zoom; `MASKS_OVERLAY_VIEW=
+  "scale,ox,oy[,ppd]"` renders the view the darkroom shows**, in user units with the surface's
+  device scale, which is how the 1074 report was reproduced at 100% on a 2x screen. When adding
+  a comparison surface to that harness, give it the same device scale: the first leftover check
+  at ppd 2 compared a scaled frame against an unscaled one and reported 50,000 ghost pixels that
+  were the harness's own.
 
 The corpus (`tests/masks/masks_geometry.c`) judges a brush and a polygon in **both directions** — owed
 coverage missing, and coverage no disc owes — and judges the drawn outline against the same
