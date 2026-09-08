@@ -330,7 +330,7 @@ static void _plane_stamp_dashed(_plane_t *const plane, const _segment_t *const s
 }
 
 static void _polyline_stamp(_plane_t *const plane, const double *xy, const int count, const dt_stroke_style_t *style,
-                            const double reach, const gboolean closed)
+                            const double reach, const gboolean closed, _dash_t *const dash)
 {
   const gboolean caps = style->round_caps;
   if(count == 1)
@@ -341,7 +341,6 @@ static void _polyline_stamp(_plane_t *const plane, const double *xy, const int c
     return;
   }
   const gboolean dashed = style->dash_on > 0.0 && style->dash_off > 0.0;
-  _dash_t dash = { .on = TRUE, .left = style->dash_on, .fresh = TRUE };
   const int last = count - 1;
   for(int i = 0; i < last; i++)
   {
@@ -355,10 +354,17 @@ static void _polyline_stamp(_plane_t *const plane, const double *xy, const int c
                              .cap_a = caps || !starts_line,
                              .cap_b = caps || !ends_line };
     if(dashed)
-      _plane_stamp_dashed(plane, &seg, style, reach, &dash);
+      _plane_stamp_dashed(plane, &seg, style, reach, dash);
     else
       _plane_stamp_capsule(plane, &seg, reach);
   }
+}
+
+/* The dash pattern at the start of a stroke: a dash, with its whole length ahead. */
+static _dash_t _dash_start(const dt_stroke_style_t *const style)
+{
+  const _dash_t dash = { .on = TRUE, .left = style->dash_on, .fresh = TRUE };
+  return dash;
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -472,8 +478,13 @@ static void _plane_composite_and_clear(_plane_t *const plane, cairo_surface_t *s
 /* ---------------------------------------------------------------------------------------------
  * A polyline, and a path's worth of them. */
 
+/* Stroke one polyline; @p dash is the pattern's state, carried across the sub-paths of one
+ * stroke so that a dash is a function of the arc length along everything drawn and not of
+ * where a sub-path happened to start. An outline is many sub-paths -- one per run between the
+ * stretches the boundary pass hides -- and restarting the pattern at each bunched and stretched
+ * the dashes at every run boundary. */
 static gboolean _stroke_polyline(cairo_surface_t *surface, const double *xy, const int count,
-                                 const dt_stroke_style_t *style, const gboolean closed)
+                                 const dt_stroke_style_t *style, const gboolean closed, _dash_t *const dash)
 {
   if(count < 1) return FALSE;
   const double widest = MAX(style->dark.width, style->bright.width);
@@ -504,7 +515,7 @@ static gboolean _stroke_polyline(cairo_surface_t *surface, const double *xy, con
 
   _plane_t plane;
   if(!_plane_acquire(surface, &plane, x0, y0, x1 - x0 + 1, y1 - y0 + 1)) return FALSE;
-  _polyline_stamp(&plane, xy, count, style, reach, closed);
+  _polyline_stamp(&plane, xy, count, style, reach, closed, dash);
   _plane_composite_and_clear(&plane, surface, style, reach);
   return TRUE;
 }
@@ -513,7 +524,8 @@ gboolean dt_stroke_raster_polyline(cairo_surface_t *surface, const double *xy, i
                                    const dt_stroke_style_t *style)
 {
   if(!dt_stroke_raster_can_paint(surface) || !xy || !style || count < 1) return FALSE;
-  return _stroke_polyline(surface, xy, count, style, FALSE);
+  _dash_t dash = _dash_start(style);
+  return _stroke_polyline(surface, xy, count, style, FALSE, &dash);
 }
 
 /* How much cr's matrix scales a length, taken as the geometric mean of the two axes so an
@@ -552,10 +564,11 @@ typedef struct _gather_t
   double offset_y;
 } _gather_t;
 
-static void _gather_flush(_gather_t *const g, cairo_surface_t *surface, const dt_stroke_style_t *style)
+static void _gather_flush(_gather_t *const g, cairo_surface_t *surface, const dt_stroke_style_t *style,
+                          _dash_t *const dash)
 {
   if(g->vertices->len >= 2)
-    _stroke_polyline(surface, (const double *)g->vertices->data, (int)(g->vertices->len / 2), style, g->closed);
+    _stroke_polyline(surface, (const double *)g->vertices->data, (int)(g->vertices->len / 2), style, g->closed, dash);
   g_array_set_size(g->vertices, 0);
   g->closed = FALSE;
 }
@@ -605,6 +618,7 @@ gboolean dt_stroke_raster_path(cairo_t *cr, const dt_stroke_style_t *style)
   device_style.bright.width *= scale;
   device_style.dash_on *= scale;
   device_style.dash_off *= scale;
+  _dash_t dash = _dash_start(&device_style);   /* one pattern for the whole path */
 
   for(int i = 0; i < path->num_data; i += path->data[i].header.length)
   {
@@ -612,7 +626,7 @@ gboolean dt_stroke_raster_path(cairo_t *cr, const dt_stroke_style_t *style)
     switch(element->header.type)
     {
       case CAIRO_PATH_MOVE_TO:
-        _gather_flush(&gather, surface, &device_style);
+        _gather_flush(&gather, surface, &device_style, &dash);
         _gather_point(&gather, cr, &element[1]);
         break;
       case CAIRO_PATH_LINE_TO:
@@ -630,7 +644,7 @@ gboolean dt_stroke_raster_path(cairo_t *cr, const dt_stroke_style_t *style)
         break;   /* a flattened path has no curves */
     }
   }
-  _gather_flush(&gather, surface, &device_style);
+  _gather_flush(&gather, surface, &device_style, &dash);
 
   g_array_free(gather.vertices, TRUE);
   cairo_path_destroy(path);
