@@ -4243,6 +4243,26 @@ static void _canvas_end(cairo_t *cr, const _canvas_frame_t *frame, const cairo_r
   _canvas_clear(frame->canvas, &painted);
 }
 
+/* The skip range that hides border sample @p i of @p pts, or -1. */
+static int _overlay_skip_of(const dt_masks_form_gui_points_t *const pts, const int i)
+{
+  for(int k = 0; k < pts->border_skip_count; k++)
+    if(i >= pts->border_skips[k].jump_from && i < pts->border_skips[k].resume_at) return k;
+  return -1;
+}
+
+/* One cached outline as the harness dumps it: index, border, the skip range hiding it, spine. */
+static void _overlay_dump_outline(const dt_masks_form_gui_points_t *const pts, const char *path)
+{
+  FILE *f = g_fopen(path, "w");
+  if(IS_NULL_PTR(f)) return;
+  const int count = MIN(pts->points_count, pts->border_count);
+  for(int i = 0; i < count; i++)
+    fprintf(f, "%d %.2f %.2f %d %.2f %.2f\n", i, pts->border[2 * i], pts->border[2 * i + 1], _overlay_skip_of(pts, i),
+            pts->points[2 * i], pts->points[2 * i + 1]);
+  fclose(f);
+}
+
 /* MASKS_DUMP_OVERLAY=<dir>: write what this frame drew -- the canvas before it is composited
  * and cleared, and every outline in the GUI cache with its skip ranges -- so a darkroom that
  * shows something the harness does not can be read from the files it leaves behind. Overwritten
@@ -4271,19 +4291,8 @@ static void _overlay_dump(const _canvas_frame_t *const frame, const dt_masks_for
     const dt_masks_form_gui_points_t *const pts = (const dt_masks_form_gui_points_t *)node->data;
     if(IS_NULL_PTR(pts) || IS_NULL_PTR(pts->border) || IS_NULL_PTR(pts->points)) continue;
     path = g_strdup_printf("%s/outline-%d.txt", dir, index);
-    FILE *f = g_fopen(path, "w");
+    _overlay_dump_outline(pts, path);
     g_free(path);
-    if(IS_NULL_PTR(f)) continue;
-    const int count = MIN(pts->points_count, pts->border_count);
-    for(int i = 0; i < count; i++)
-    {
-      int skip = -1;
-      for(int k = 0; k < pts->border_skip_count; k++)
-        if(i >= pts->border_skips[k].jump_from && i < pts->border_skips[k].resume_at) skip = k;
-      fprintf(f, "%d %.2f %.2f %d %.2f %.2f\n", i, pts->border[2 * i], pts->border[2 * i + 1], skip,
-              pts->points[2 * i], pts->points[2 * i + 1]);
-    }
-    fclose(f);
   }
 }
 
