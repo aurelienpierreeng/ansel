@@ -127,8 +127,27 @@ next item (#1391).
 | a zoom or pan while the main pipe catches up | ~320 ms | ~10 ms |
 
 The overlay itself -- the outlines rasterised directly, see `doc/overlay-raster.md` -- costs
-1 to 8 ms per shape at fit zoom and is now the largest term of a motion frame, which is where
-the next work belongs.
+1 to 8 ms per shape at fit zoom; a group's unselected members live in a static layer (below),
+so a frame strokes one shape.
+
+A drag motion also REBUILDS the dragged shape's outline, throttled to 60 Hz and 2 px: the
+whole walk, its distortion transform and the boundary pass, and on a large brush that was the
+frame, not the drawing. Two changes in `doc/brush-boundary.md`: the boundary pass streams
+sqrt-free disc arrays in bounded blocks and keeps its copy test in a sample hash (2-3x), and
+the outline is sampled at the density the screen shows instead of at one image pixel (another
+2-5x at fit zoom, in the build, the transform, the stroke and the hit test alike). Measured,
+first frame after a rebuild of the selected shape, corpus at 2560x1440:
+
+| shape | before, step 1 | after, 1:1 (step 1) | after, fit (step 2) | after, quarter (step 4) |
+| --- | ---: | ---: | ---: | ---: |
+| brush-1313-cusp | 29 ms | 18 ms | 4.7 ms | 2.9 ms |
+| brush-1074-flare | 103 ms | 33 ms | 12.9 ms | 5.4 ms |
+| brush-1360-pressure-ramp | 69 ms | 39 ms | 13.6 ms | 6.2 ms |
+| polygon-comb | 49 ms | 28 ms | 15.6 ms | 6.1 ms |
+| group of 11, every member | 459 ms | 218 ms | 80 ms | 30 ms |
+
+`-d masks -d perf` prints `[masks] boundary pass: ... probed in N ms` per rebuild, and
+`[masks] outline cache: held for geometry G at step S` says why a frame rebuilt.
 
 ## Reading it
 

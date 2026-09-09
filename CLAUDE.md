@@ -1182,6 +1182,37 @@ rules that were each paid for by a reported defect:
   away along it. The other side of the stroke, which the backward pass lays on the same spine
   points, is a diameter away and never matches; `_outline_keep_specks()` keeps a dropped run of
   one or two samples between kept ones, since hiding it changes nothing and cuts the run.
+- **The boundary pass is counted, not computed, and its window is a length of walk.** A disc can
+  hide a border sample only if the two centres are within two radii in the plane, hence within
+  two radii along the spine; the near window is that much WALK either side of the sample's own
+  disc, found by bisection on the walk to each disc's centre. It used to be a count of discs
+  (four times the largest radius, plus eight), which is a different length wherever the radius
+  steps and was ten times too wide once outlines were sampled at the screen's density. The discs
+  are flat arrays (centre x, centre y, squared radius less the tolerance) tested by squared
+  distance in blocks of eight, each block carrying its centres' box and largest radius; the copy
+  test lives in a hash of the samples by pixel cell and reads nine cells, where it used to walk
+  the samples of every disc whose circle passed near the probe, with a hypot per disc. Measured:
+  the same skip ranges to the sample on the whole corpus, 4.5 ns per disc test to 2.5, the pass
+  on the 1313 cusp 19 ms to 7. `-d masks -d perf` prints `[masks] boundary pass: ...` per build.
+- **The GUI outline is sampled at the density the screen shows, not at one image pixel.** The
+  expose reads what one device pixel spans (`dt_draw_min_emit_step()` on the transformed
+  context) and publishes it with `dt_masks_gui_set_outline_density()`; `dt_masks_distort_for_gui()`
+  reads it back through `dt_masks_gui_outline_step(dev)`, so every build -- a drag's, an
+  expose's, the creation session's -- composes at the density in force without its caller
+  knowing it, and `outline_step_built` is part of the outline cache key beside the geometry
+  generation. At fit zoom on a 24 Mpx raw the old fixed step was five samples per device pixel
+  (the recursion stops on integer parts, so it lays several around every integer crossing):
+  53,917 samples for a border 10,000 px long, each paid in the transform, the boundary pass, the
+  stroke and the hit test. The pipe's walk is untouched -- its arcs and stamps stay one sample
+  per pixel through the walk's own `arc_step`, whatever spoke budget it was given -- so no
+  raster changes under a preference; the polygon's pixel threshold stays pinned at 1 for the
+  pipe's scanline fill and follows the density for the GUI. Measured, the first frame after a
+  rebuild of the selected shape: the 1074 flare 103 ms -> 33 at 1:1, 13 at fit, 5 at quarter;
+  a group of 11 members 459 -> 218 / 80 / 30. `MASKS_OUTLINE_STEP=<n>` runs the corpus's band
+  check at that density (0 inside / 0 outside at 3 and 5); the baselines are step-1 pictures
+  and are not compared at any other step. The corpus dev has no expose, so the harness
+  re-applies its density before every build: the overlay it writes beside each case goes
+  through the darkroom's expose at full resolution, which publishes 1.
 - **The dash phase is the arc length along the whole stroke, not along each sub-path.** An
   outline is one cairo path of many sub-paths, one per kept run between skips, and cairo (and
   the rasteriser, at first) restarts the dash pattern at every sub-path, so dashes bunched and

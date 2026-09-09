@@ -122,24 +122,41 @@ answer as the skip ranges every consumer of the outline already reads
 and the shared detector is no longer called for a brush.
 
 Two searches, because the discs that can hide a sample come from two places, and what
-separates them is their **index** along the walk, not their position:
+separates them is where they sit **along the walk**, not where they sit in the plane:
 
-- **Near.** A disc within twice the largest radius of the sample's own spine position can
-  contain it and no other can, so a window of discs either side of the sample's own is
-  exhaustive for folds, joints and caps. Consecutive discs move at most a step, so the
-  window is scanned in blocks of eight and a block whose first disc is out of reach is
-  skipped whole.
-- **Far.** A hairpin, a crossing or a spiral brings discs from any distance along the walk
-  to within one radius in the plane. A bucket grid of one reach per cell finds them, and
-  each bucket holds its discs as *runs* of consecutive indices: a run inside the window is
-  the near part, already answered, dismissed in one comparison; only runs from far along
-  the walk are tested disc by disc.
+- **Near.** A disc can contain a border sample only if its centre is within its own radius
+  of it, and the sample is one radius from its own spine point, so the two centres are
+  within two radii of each other in the plane and, the spine being a continuous line,
+  within two radii of each other along it. That much walk either side of the sample's own
+  disc is exhaustive for folds, joints and caps. The window is a *length* of walk, found by
+  bisection on the walk to each disc's centre, never a count of discs: a disc is made
+  wherever the spine moves half a pixel *or the radius steps*, so a count is a different
+  length at every sampling density and at every flare, and the count this used to be —
+  four times the largest radius, plus eight — was ten times too wide once the outline was
+  sampled at the density the screen shows.
+- **Far.** A hairpin, a crossing or a spiral — and the brush's own second pass down the
+  other side — brings discs from any distance along the walk to within one radius in the
+  plane. A bucket grid of one reach per cell finds them, and each bucket holds its discs as
+  *runs* of consecutive indices: a run inside the window is the near part, already
+  answered, dismissed in one comparison; only runs from far along the walk are tested disc
+  by disc.
+
+The test itself is arranged to be counted rather than computed. The discs are flat arrays —
+centre x, centre y, and the squared radius less the tolerance, negative for a disc the
+tolerance leaves nothing of — so a probe is one squared distance against each, no square
+root anywhere, in blocks of eight the compiler can vectorise; and each block carries the
+box its centres span and its largest radius, so a block that cannot reach the probe costs
+four comparisons. The previous test took a hypot per disc for the copy test below, and
+dismissed a block on its first disc's distance against a reach padded by the largest step
+between discs. Measured on the corpus, per probe: 430 disc tests at 4.5 ns each became 126
+to 470 at about 2.5 ns, and the pass on the cusp went from 19 ms to 7.
 
 Cost is bounded by decimation, not by the sample count: consecutive samples closer than
 half a pixel with the same radius are one disc, and a sample is only *probed* when it has
 moved half a pixel from the last probe, the samples between two agreeing probes taking
 their answer. Measured on the corpus, the probed version produces the same skip ranges to
-the sample as probing everything, at a third of the probes.
+the sample as probing everything, at a third of the probes. `-d masks -d perf` prints what
+a pass cost and how many discs it tested.
 
 A first version used a coarse occupancy map of the union for the far part. It was
 conservative, so it left every sample within a few pixels of a far boundary undecided,
@@ -148,21 +165,68 @@ within a few pixels of its *own* stroke's interior. Position cannot tell near fr
 the index can. Measured: 30 ms → 250 ms with the map and its band, back to 3–32 ms with
 the runs.
 
-| case | kept samples | inside the union | outside the permitted region | build |
-|---|---|---|---|---|
-| brush-1313-cusp (5184×3888) | 33,753 | 0 | 0 | 12 ms |
-| brush-cusp | 45,009 | 0 | 0 | 14 ms |
-| brush-hairpin | 41,629 | 0 | 0 | 19 ms |
-| brush-zigzag | 88,011 | 0 | 0 | 24 ms |
-| brush-selfcross | 70,833 | 0 | 0 | 24 ms |
-| brush-concave | 62,264 | 0 | 0 | 18 ms |
-| brush-1360-pressure-ramp | 36,927 | 0 | 0 | 32 ms |
-| brush-1352-radius-step | 18,822 | 0 | 0 | 5 ms |
+| case | kept samples | inside the union | outside the permitted region | build at step 1 | kept at step 3 | build at step 3 |
+|---|---|---|---|---|---|---|
+| brush-1313-cusp (5184×3888) | 44,549 | 0 | 0 | 11 ms | 2,057 | 1.3 ms |
+| brush-cusp | 45,000 | 0 | 0 | 14 ms | 3,989 | 2.3 ms |
+| brush-hairpin | 41,612 | 0 | 0 | 20 ms | 5,584 | 4.0 ms |
+| brush-zigzag | 87,969 | 0 | 0 | 25 ms | 7,172 | 3.6 ms |
+| brush-selfcross | 70,707 | 0 | 0 | 24 ms | 6,217 | 3.7 ms |
+| brush-concave | 62,058 | 0 | 0 | 21 ms | 5,605 | 3.8 ms |
+| brush-1360-pressure-ramp | 36,682 | 0 | 0 | 34 ms | 2,187 | 5.3 ms |
+| brush-1352-radius-step | 20,319 | 0 | 0 | 5 ms | 1,111 | 0.9 ms |
+| brush-1074-flare | 27,432 | 0 | 0 | 26 ms | 2,475 | 4.9 ms |
 
 "Build" is the whole GUI-side call, `dt_masks_get_points_border()`: producer, transform
-and boundary pass. Before the rework, kept outline samples that sat two to five pixels
-inside the union numbered 47 to 206 per case; the old display cut through self-crossings
-without stopping at all.
+and boundary pass; the step is the density the outline is sampled at, see the next section.
+At every step the band check reads the same: zero kept samples inside the union, zero
+outside the permitted region. Before the rework, kept outline samples that sat two to five
+pixels inside the union numbered 47 to 206 per case; the old display cut through
+self-crossings without stopping at all.
+
+## The outline is built at the density the screen shows
+
+The GUI outline used to be sampled at one image pixel whatever the zoom: "pixel-accurate",
+which at fit zoom on a 24 Mpx raw in a 2560 px window is five samples per device pixel —
+and the recursion that places them stops on integer parts, so it lays several samples
+around every integer crossing and a 1313 cusp came to 53,917 samples for a border some
+10,000 px long. Everything downstream is paid per sample: the distortion transform, the
+boundary pass, the stroke, and the hit test that walks every sample on every pointer
+motion.
+
+The step is now the view's. The expose reads what one device pixel spans in image pixels
+from the transformed context (`dt_draw_min_emit_step()`, the same measure the circle already
+decimated its strokes by) and publishes it through `dt_masks_gui_set_outline_density()`;
+`dt_masks_form_gui_t::outline_step` is the density in force and `outline_step_built` the one
+the cached outlines were built at, and a difference between the two is a rebuild, exactly
+like a geometry move. `dt_masks_distort_for_gui()`, the GUI supplier every outline build
+composes through, reads the density back with `dt_masks_gui_outline_step(dev)` — so a
+drag's rebuild, an expose's and the creation session's all sample at the density in force
+without their callers knowing it. The brush and the polygon sample their curves, their arcs
+and their stamps at it; the pipe's walk is untouched,
+its arcs and stamps still one sample per pixel whatever spoke budget it was given (the walk
+carries a separate `arc_step`), so no raster changes under a preference. The polygon used to
+pin its threshold at one pixel for the pipe's scanline fill, which needs every row crossed;
+the GUI fills nothing.
+
+What a step buys, measured with `ansel-test-masks-geometry --time-overlay` on the corpus,
+the first frame after a rebuild of the selected shape:
+
+| view | step | cusp-1313 | flare | pressure ramp | comb (polygon) | group of 11, all |
+|---|---|---|---|---|---|---|
+| 1:1 | 1 | 18 ms | 33 ms | 39 ms | 28 ms | 218 ms |
+| fit, 2560×1440 | 2 | 4.7 ms | 12.9 ms | 13.6 ms | 15.6 ms | 80 ms |
+| quarter | 4 | 2.9 ms | 5.4 ms | 6.2 ms | 6.1 ms | 30 ms |
+
+Before both changes the same first frames read 29, 103, 69, 49 and 459 ms at step 1, which
+was the only step there was. On a HiDPI screen the device pixels are the physical ones, so a
+2x screen at fit zoom sits one step below a 1x one.
+
+The corpus judges pixel-accurate outlines by default and `MASKS_OUTLINE_STEP=<n>` has it
+judge the outline every n pixels against the same full-resolution maps: at 3 and at 5 every
+case still reads zero inside, zero outside. The baselines are step-1 pictures and are not
+compared at any other step; the timing run takes its density from its view
+(`MASKS_OVERLAY_VIEW`), the way the darkroom does.
 
 ## The border sample is on the envelope, not on the normal
 
@@ -229,7 +293,10 @@ dashed border: 4,020 kept samples on a 2,114 px circumference.
 
 `_outline_sample_repeats()` drops a sample within three quarters of a pixel of an earlier one
 that lies at least four pixels of border behind it along the walk, whatever discs the two belong
-to: for drawing, two boundary samples that close are one line. The other side of the stroke,
+to: for drawing, two boundary samples that close are one line. The samples are hashed by pixel
+cell and the test reads the nine cells around the probe; it used to ride inside the disc test,
+walking the samples of every disc whose circle passed near the probe, which is what put a
+square root in that loop. The other side of the stroke,
 which the backward pass lays on the very same spine points, is a diameter away and never
 matches. The same rule takes the stretch where a segment leaves a stamped node, whose envelope
 runs within the boundary tolerance of the node's circle for tens of pixels — a second dash over
