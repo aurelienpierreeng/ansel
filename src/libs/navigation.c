@@ -245,7 +245,7 @@ void gui_reset(dt_lib_module_t *self)
 /* Everything the picture this widget shows depends on, folded into one key: the preview frame,
  * the widget's size, the image, the viewport (zoom, pan, box, border) and the preview's plan.
  * Equal keys are equal pictures. */
-static uint64_t _lib_navigation_picture_key(dt_develop_t *dev, const int width, const int height,
+static uint64_t _lib_navigation_picture_key(const dt_develop_t *dev, const int width, const int height,
                                             const gboolean has_preview_image)
 {
   uint64_t key = has_preview_image ? dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf) : 0;
