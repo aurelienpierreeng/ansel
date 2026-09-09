@@ -87,6 +87,7 @@ typedef enum dt_view_flags_t
 {
   VIEW_FLAGS_NONE = 0,
   VIEW_FLAGS_HIDDEN = 1 << 0,       // Hide the view from userinterface
+  VIEW_FLAGS_PAINTS_WHOLE_AREA = 1 << 1,   // its expose paints every pixel of the centre: no background fill needed
 } dt_view_flags_t;
 
 typedef enum dt_darkroom_layout_t
@@ -282,6 +283,9 @@ const char *dt_view_manager_name(dt_view_manager_t *vm);
 int dt_view_manager_switch(dt_view_manager_t *vm, const char *view_name);
 int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *new_view);
 /** expose current module. */
+/** the current view's flags(), or 0 when there is no view */
+uint32_t dt_view_manager_current_flags(const dt_view_manager_t *vm);
+
 void dt_view_manager_expose(dt_view_manager_t *vm, cairo_t *cr, int32_t width, int32_t height,
                             int32_t pointerx, int32_t pointery);
 /** reset current view. */

@@ -189,12 +189,8 @@ static gboolean _configure(GtkWidget *da, GdkEventConfigure *event, gpointer use
 
 static gboolean _draw(GtkWidget *da, cairo_t *cr, gpointer user_data)
 {
-  dt_control_expose(NULL);
-  if(darktable.gui->surface)
-  {
-    cairo_set_source_surface(cr, darktable.gui->surface, 0, 0);
-    cairo_paint(cr);
-  }
+  /* cr is GTK's double buffer, clipped to what was invalidated; the centre paints into it */
+  dt_control_expose(cr, gtk_widget_get_allocated_width(da), gtk_widget_get_allocated_height(da));
   return TRUE;
 }
 
@@ -331,26 +327,8 @@ static gboolean _configure(GtkWidget *da, GdkEventConfigure *event, gpointer use
 {
   static int oldw = 0;
   static int oldh = 0;
-  // make our selves a properly sized pixmap if our window has been resized
   if(oldw != event->width || oldh != event->height)
   {
-    // create our new pixmap with the correct size.
-    cairo_surface_t *tmpsurface
-        = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, event->width, event->height);
-    // copy the contents of the old pixmap to the new pixmap.  This keeps ugly uninitialized
-    // pixmaps from being painted upon resize
-    //     int minw = oldw, minh = oldh;
-    //     if(event->width  < minw) minw = event->width;
-    //     if(event->height < minh) minh = event->height;
-
-    cairo_t *cr = cairo_create(tmpsurface);
-    cairo_set_source_surface(cr, darktable.gui->surface, 0, 0);
-    cairo_paint(cr);
-    cairo_destroy(cr);
-
-    // we're done with our old pixmap, so we can get rid of it and replace it with our properly-sized one.
-    cairo_surface_destroy(darktable.gui->surface);
-    darktable.gui->surface = tmpsurface;
     // maybe we are on another screen now with > 50% of the area
     _update_display_profile();
   }
@@ -1243,7 +1221,6 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
 
   GtkWidget *widget;
   gui->ui = g_malloc0(sizeof(dt_ui_t));
-  gui->surface = NULL;
   gui->center_tooltip = 0;
   gui->culling_mode = FALSE;
   gui->presets_popup_menu = NULL;
@@ -1441,14 +1418,6 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui)
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
 
-  if(darktable.gui->surface)
-  {
-    cairo_surface_destroy(darktable.gui->surface);
-    darktable.gui->surface = NULL;
-  }
-
-  darktable.gui->surface
-      = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
   /* Pre-configure the views so a draw arriving before the first configure-event has a valid
    * size to work with.
    *
@@ -1475,11 +1444,6 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui)
   /* start the event loop */
   gtk_main();
 
-  if (darktable.gui->surface)
-  {
-    cairo_surface_destroy(darktable.gui->surface);
-    darktable.gui->surface = NULL;
-  }
   dt_cleanup();
 }
 
