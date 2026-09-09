@@ -4411,6 +4411,28 @@ static void _overlay_damage_record(cairo_t *cr, const _canvas_frame_t *const fra
     gtk_widget_queue_draw_area(dt_gui_center_widget(), damage.x, damage.y, damage.width, damage.height);
 }
 
+/* Map the canvas context to input space: from the viewport, or from the caller's own mapping
+ * when it supplied one (see dt_masks_overlay_transform_t: the viewport path needs GUI state).
+ * Returns FALSE when the viewport cannot be mapped, in which case nothing can be drawn. */
+static gboolean _overlay_apply_transform(cairo_t *mask_draw, dt_develop_t *develop,
+                                         const dt_masks_overlay_transform_t *transform, const int width,
+                                         const int height)
+{
+  if(IS_NULL_PTR(transform)) return dt_dev_rescale_roi_to_input(develop, mask_draw, width, height) == 0;
+  cairo_translate(mask_draw, transform->offset_x, transform->offset_y);
+  cairo_scale(mask_draw, transform->scale, transform->scale);
+  return TRUE;
+}
+
+/* Composite what the frame painted and remember it; a headless caller has no widget to ask a
+ * redraw of, so only the darkroom's own frames are recorded. */
+static void _overlay_finish(cairo_t *cr, const _canvas_frame_t *const frame, const cairo_rectangle_int_t *dirty,
+                            const gboolean darkroom_frame)
+{
+  if(!IS_NULL_PTR(dirty)) _canvas_end(cr, frame, dirty);
+  if(darkroom_frame) _overlay_damage_record(cr, frame, dirty);
+}
+
 /* Draw the visible form: a group member by member, anything else through its own drawer. */
 static void _overlay_draw_form(cairo_t *cr, const float zoom_scale, dt_masks_form_t *mask_form,
                                dt_masks_form_gui_t *mask_gui)
@@ -4497,21 +4519,11 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
 
   cairo_save(mask_draw);
 
-  // We rescale to input space -- from the viewport, or from the caller's own mapping when it
-  // supplied one (see dt_masks_overlay_transform_t: the viewport path needs GUI state).
-  if(IS_NULL_PTR(transform))
+  if(!_overlay_apply_transform(mask_draw, develop, transform, width, height))
   {
-    if(dt_dev_rescale_roi_to_input(develop, mask_draw, width, height))
-    {
-      cairo_restore(mask_draw);
-      cairo_destroy(mask_draw);   // nothing was drawn
-      return;
-    }
-  }
-  else
-  {
-    cairo_translate(mask_draw, transform->offset_x, transform->offset_y);
-    cairo_scale(mask_draw, transform->scale, transform->scale);
+    cairo_restore(mask_draw);
+    cairo_destroy(mask_draw);   // nothing was drawn
+    return;
   }
 
   // We update the form if needed
@@ -4553,9 +4565,7 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
     dt_show_times(&draw_start, "[masks] overlay drawn");
 
   const double composite_start = dt_get_wtime();
-  if(any) _canvas_end(cr, &frame, &dirty);
-  /* the darkroom's own frames only: a headless caller has no widget to invalidate */
-  if(IS_NULL_PTR(transform)) _overlay_damage_record(cr, &frame, any ? &dirty : NULL);
+  _overlay_finish(cr, &frame, any ? &dirty : NULL, IS_NULL_PTR(transform));
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks] overlay composited (%dx%d of %dx%d) in %0.04f sec\n",
              any ? dirty.width : 0, any ? dirty.height : 0, frame.width, frame.height,
