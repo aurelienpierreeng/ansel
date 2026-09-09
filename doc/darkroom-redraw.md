@@ -149,6 +149,28 @@ first frame after a rebuild of the selected shape, corpus at 2560x1440:
 `-d masks -d perf` prints `[masks] boundary pass: ... probed in N ms` per rebuild, and
 `[masks] outline cache: held for geometry G at step S` says why a frame rebuilt.
 
+A pointer motion also HIT-TESTS the selected shape -- its nodes and handles, then every sample
+through the shape's `get_distance` -- and a button press hit-tests every member of the group
+to choose one. #1391's third item put that at a million distance tests per motion; measured
+with `ansel-test-masks-geometry --time-overlay`, which sweeps a 20x20 grid of positions over
+the image and times both events (`[HIT]` lines), that was a PRESS at the old raw density. After
+the density change a motion cost 0.01-0.17 ms at fit and 0.09-0.78 ms at 1:1 (the comb
+polygon), a press on the 11-member group 0.56 and 3.6 ms. Each cache entry now carries the box
+its samples span (`dt_masks_form_gui_points_t::bbox`, filled with the outline), and every
+sample-walking hit test asks it first (`dt_masks_gui_points_reach()`, the cursor grown by twice
+its radius): four comparisons answer "nothing here" for a shape the cursor is not near, which
+on a press is most of the group.
+
+| event | before, fit | after, fit | before, 1:1 | after, 1:1 |
+| --- | ---: | ---: | ---: | ---: |
+| motion, 1313 cusp selected | 0.017 ms | 0.003 ms | 0.166 ms | 0.029 ms |
+| motion, comb polygon selected | 0.165 ms | 0.099 ms | 0.78 ms | 0.51 ms |
+| press, group of 11 | 0.56 ms | 0.26 ms | 3.6 ms | 1.6 ms |
+
+The same positions hit the same shapes before and after. What remains is the shape the cursor
+IS near, walked at the screen's density; the comb spans most of the frame, so its box prunes
+little.
+
 ## Reading it
 
 `-d perf` prints `[darkroom] surface prepared / image painted / overlay predicates / overlays

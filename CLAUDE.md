@@ -1213,6 +1213,20 @@ rules that were each paid for by a reported defect:
   and are not compared at any other step. The corpus dev has no expose, so the harness
   re-applies its density before every build: the overlay it writes beside each case goes
   through the darkroom's expose at full resolution, which publishes 1.
+- **A hit test asks the shape's box before walking a sample.** A motion hit-tests the SELECTED
+  member only (nodes, handles, then every sample through `get_distance`), throttled to half a
+  cursor radius; a press hit-tests every member to choose one. #1391's "a million distance tests
+  per motion" was a press at the raw density; measured with `--time-overlay`'s `[HIT]` sweep
+  (20x20 positions), a motion after the density change is 0.01-0.8 ms and a press on 11 members
+  0.6-3.6 ms. `dt_masks_form_gui_points_t::bbox` spans points, border and source, filled by
+  `dt_masks_gui_points_update_bbox()` when `dt_masks_gui_form_create()` builds the entry and
+  emptied by `dt_masks_gui_form_remove()`; the four sample-walking hit tests (brush, polygon,
+  circle, ellipse) return their initialised "nothing" answers when `dt_masks_gui_points_reach()`
+  says the cursor, grown by twice its radius, cannot touch the box -- twice because the ellipse
+  tests its border at 1.5 radii. Those answers are exactly the walk's for such a cursor, which
+  is why every consumer reads the flags and none the distance. The gradient walks no samples and
+  has no box test. Measured: a motion 0.003-0.5 ms, a press on the group 0.26 ms at fit and
+  1.6 at 1:1, the same hits at every position.
 - **The dash phase is the arc length along the whole stroke, not along each sub-path.** An
   outline is one cairo path of many sub-paths, one per kept run between skips, and cairo (and
   the rasteriser, at first) restarts the dash pattern at every sub-path, so dashes bunched and

@@ -43,6 +43,7 @@
 #include "develop/masks_debug.h"
 #include "develop/masks/masks_functions.h"
 #include "develop/masks/masks_distort.h"
+#include "widgets/widget_settings.h"
 #include "math/math.h"
 #include "system/mem_alloc.h"
 
@@ -1481,6 +1482,75 @@ static void _overlay_report(dt_develop_t *dev, const char *name, const int img_w
          dt_masks_gui_outline_step(dev), points, border, skipped, skip_ranges);
 }
 
+/* THE HIT TEST, timed. A pointer motion hit-tests the selected member only -- its nodes and
+ * handles, then its samples through get_distance -- and a button press hit-tests every member
+ * to choose one; both walk the outlines at the density they were built at. A grid of positions
+ * over the whole image says what each costs per event, and how many positions find a shape. */
+static void _time_hit_test(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const int img_w,
+                           const int img_h)
+{
+  dt_masks_form_gui_t *gui = dev->form_gui;
+  const int per_axis = 20;
+  const float radius = 10.0f;
+  dt_widget_set_mouse_radius(radius, radius);
+  gui->group_selected = 0;
+  /* nothing is being dragged: a drag index of 0 would answer every motion with "node 0" */
+  dt_masks_gui_reset_dragging(gui);
+
+  GList *members = NULL;
+  if(form->type & DT_MASKS_GROUP)
+  {
+    for(const GList *node = form->points; node; node = g_list_next(node))
+    {
+      const dt_masks_form_group_t *entry = (const dt_masks_form_group_t *)node->data;
+      dt_masks_form_t *member = dt_masks_get_from_id(dev, entry->formid);
+      if(!IS_NULL_PTR(member)) members = g_list_append(members, member);
+    }
+  }
+  else
+    members = g_list_append(members, form);
+  if(IS_NULL_PTR(members)) return;
+  dt_masks_form_t *selected = (dt_masks_form_t *)members->data;
+
+  double hover_seconds = 0.0;
+  double press_seconds = 0.0;
+  int hits = 0;
+  const int positions = per_axis * per_axis;
+  for(int p = 0; p < positions; p++)
+  {
+    gui->pos[0] = (float)img_w * ((float)(p % per_axis) + 0.5f) / (float)per_axis;
+    gui->pos[1] = (float)img_h * ((float)(p / per_axis) + 0.5f) / (float)per_axis;
+    gui->raw_pos[0] = gui->pos[0];
+    gui->raw_pos[1] = gui->pos[1];
+
+    double t0 = dt_get_wtime();
+    if(!IS_NULL_PTR(selected->functions->update_hover)) selected->functions->update_hover(selected, gui, 0);
+    hover_seconds += dt_get_wtime() - t0;
+
+    t0 = dt_get_wtime();
+    int index = 0;
+    for(const GList *node = members; node; node = g_list_next(node), index++)
+    {
+      dt_masks_form_t *member = (dt_masks_form_t *)node->data;
+      if(IS_NULL_PTR(member->functions->get_distance)) continue;
+      int inside = 0;
+      int inside_border = 0;
+      int near_handle = -1;
+      int inside_source = 0;
+      float dist = FLT_MAX;
+      member->functions->get_distance(gui->pos[0], gui->pos[1], radius, gui, index, g_list_length(member->points),
+                                      &inside, &inside_border, &near_handle, &inside_source, &dist);
+      if(inside || inside_border || near_handle >= 0 || inside_source) hits++;
+    }
+    press_seconds += dt_get_wtime() - t0;
+  }
+  printf("[HIT]  %-26s hover %.3f ms/motion (%s), press %.3f ms/click (%d members), %d hits over %d positions,"
+         " at step %d\n",
+         name, 1000.0 * hover_seconds / positions, selected->name, 1000.0 * press_seconds / positions,
+         g_list_length(members), hits, positions, dt_masks_gui_outline_step(dev));
+  g_list_free(members);
+}
+
 static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const char *dir,
                                const int img_w, const int img_h, const int frames)
 {
@@ -1560,6 +1630,7 @@ static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const c
       failures++;
     }
   }
+  _time_hit_test(dev, form, name, img_w, img_h);
   cairo_surface_destroy(surface);
 }
 

@@ -66,6 +66,10 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
 
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(IS_NULL_PTR(gpt)) return;
+  /* Nothing to walk when the cursor cannot reach a sample: the box every sample spans, grown by
+   * the cursor's reach, answers for the whole shape in four comparisons, and every answer
+   * initialised above is what the walk would have given -- nothing inside, nothing near. */
+  if(!dt_masks_gui_points_reach(gpt, x, y, 2.0f * as)) return;
 
   // we first check if we are inside the source form
   const float pt[2] = { x, y };
