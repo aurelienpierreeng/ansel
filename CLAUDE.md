@@ -2007,6 +2007,16 @@ the context's default source before the surface replaced it. Four rules now:
 - **The overlay canvas is sized to the view, never to `cr`'s clip**, which a rectangle redraw
   narrows; and a creation session's frame is bounded to the session's box and the live shape,
   where it was the whole window before.
+- **A group's unselected members live in the static layer** (`_static_layer_ensure()`,
+  `masks_gui.c`): stroked once into a view-sized surface, composited under the live canvas with
+  one clipped blit, keyed on the view matrix, the group, the selection, the overlay colours and
+  every other member's outline signature (counts plus every 32nd sample). Only the selected member
+  is stroked per frame. A rebuild marks the whole frame dirty, so a selection change under a small
+  invalidation gets its one full repaint. Cairo's bound covers the selected member's header alone,
+  since that is all cairo draws for a group. Measured on the harness's 11-member group: 14.1 → 4.0
+  ms a full frame with nothing selected, 16.4 → 5.7 with one selected. The harness's `group-11`
+  case is the regression check; its "build" column, 340 ms, is the outline rebuild and is #1391's
+  next item.
 
 The views are plugins: `ninja ansel` does NOT compile `src/views/*.c`. Build every target
 (`ninja`) before trusting a darkroom edit; a use of an undeclared variable in `darkroom.c`

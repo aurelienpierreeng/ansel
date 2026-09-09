@@ -841,6 +841,12 @@ float dt_masks_apply_increment(float current, float amount, dt_masks_increment_t
 float dt_masks_apply_increment_precomputed(float current, float amount, float scale_amount, float offset_amount,
                                             dt_masks_increment_t increment);
 
+/** Draw every member of @p form but the one at @p except_pos, in the group's order. */
+void dt_group_events_post_expose_except(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
+                                        dt_masks_form_gui_t *gui, int except_pos);
+/** Draw the member of @p form at @p pos alone; nothing for a position the group has not. */
+void dt_group_events_post_expose_only(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
+                                      dt_masks_form_gui_t *gui, int pos);
 void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
                                  dt_masks_form_gui_t *gui);
 

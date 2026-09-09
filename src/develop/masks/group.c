@@ -161,6 +161,21 @@ static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_mas
   }
 }
 
+void dt_group_events_post_expose_except(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
+                                        dt_masks_form_gui_t *gui, const int except_pos)
+{
+  int pos = 0;
+  for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts), pos++)
+    if(pos != except_pos) _group_events_post_expose_draw(cr, zoom_scale, form, gui, pos);
+}
+
+void dt_group_events_post_expose_only(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
+                                      dt_masks_form_gui_t *gui, const int pos)
+{
+  if(pos < 0 || pos >= (int)g_list_length(form->points)) return;
+  _group_events_post_expose_draw(cr, zoom_scale, form, gui, pos);
+}
+
 void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
                                  dt_masks_form_gui_t *gui)
 {

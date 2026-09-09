@@ -87,6 +87,37 @@ the session's box and the live shape's now. The session's box covers the borders
 spines alone, which is also what a brush's dashed border, a radius outside its spine, needed
 from the pattern's clip after a pan.
 
+## The static layer: the members that did not change are not stroked again
+
+After the four rules a pipe frame still re-stroked every member of the visible group: 1 to
+8 ms a shape at fit zoom, and a drag makes a pipe frame per motion, so a mask-heavy edit paid
+tens of milliseconds of GUI thread per motion for shapes that had not moved. The members that
+are not the selected one are now stroked once into a view-sized surface, `_static_layer` in
+`masks_gui.c`, and composited under the live canvas with one blit, clipped to what the redraw
+asked for. Its key is the view matrix, the group, the selection, the overlay colours and a
+signature of every other member's outline -- its counts and every 32nd sample -- so a member
+an undo moved is caught, while the selected member, which a drag rebuilds on every motion, is
+not in it at all. A pan, a zoom or a change of selection pays one full stroke of the others,
+which is what every frame paid before; a rebuild also marks the whole frame dirty, so a
+selection change under a small invalidation gets its one full repaint.
+
+With it, cairo's own drawing -- nodes, handles, arrows -- is bounded to the selected member's
+header alone, which is all cairo draws for a group: bounding every member's header had made
+a spread-out group's dirty rectangle the whole window on every frame, and with it the
+composite, the clear and the rectangle a motion asks a redraw of.
+
+Measured by the harness's `group-11` case, every brush and polygon of the corpus in one group
+at fit zoom on a 2560x1440 surface, RelWithDebInfo, per frame, of which about 1.8 ms is the
+harness's own background paint:
+
+| group of 11, per full frame | before | after |
+| --- | ---: | ---: |
+| nothing selected | 14.1 ms | 4.0 ms |
+| one member selected | 16.4 ms | 5.7 ms |
+
+The first frame of that group, 340 ms, is the rebuild of every member's outline and is the
+next item (#1391).
+
 ## What a frame costs now
 
 | frame | before, 2x | after, 2x |
