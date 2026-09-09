@@ -1621,6 +1621,107 @@ static void _time_overlay_brush(dt_develop_t *dev, GList *nodes, const char *nam
   g_list_free_full(form.points, free);
 }
 
+/* A refcounted form the group can find in dev->forms, from a node list the harness built. */
+static dt_masks_form_t *_group_member(dt_develop_t *dev, const dt_masks_type_t type,
+                                      const dt_masks_functions_t *functions, GList *nodes, const int formid,
+                                      const char *name)
+{
+  dt_masks_form_t *form = dt_masks_create(type);
+  if(IS_NULL_PTR(form)) return NULL;
+  form->functions = functions;
+  form->version = 6;
+  form->formid = formid;
+  g_strlcpy(form->name, name, sizeof(form->name));
+  form->points = nodes;
+  dt_masks_append_form(dev, form);
+  return form;
+}
+
+/* The darkroom's actual frame: a group of many members, one of them selected, every one of
+ * them stroked on every full frame. The single-shape cases price a shape; this prices what a
+ * pipe frame pays for a mask-heavy edit, and what a static layer for the members that did not
+ * change saves. Eleven members: every brush and polygon of the corpus in one group. */
+static void _time_overlay_group(dt_develop_t *dev, const char *dir, const int frames)
+{
+  GList *members = NULL;
+  int id = 1000;
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_1313, 11), id++, "brush-1313-cusp"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_cusp_tbl, 3), id++, "brush-cusp"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_hairpin_tbl, 3), id++, "brush-hairpin"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_zigzag_tbl, 6), id++, "brush-zigzag"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_selfcross_tbl, 5), id++, "brush-selfcross"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_concave_tbl, 5), id++, "brush-concave"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table11(_brush_1360, 43), id++, "brush-1360"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table11(_brush_1352, 7), id++, "brush-1352"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table11(_brush_1074b, 8), id++, "brush-1074b"));
+  {
+    GList *nodes = NULL;
+    for(int i = 0; i < 15; i++)
+    {
+      const float *r = _polygon_1788045925[i];
+      nodes = g_list_append(nodes, _polygon_node(r[0], r[1], r[2], r[3], r[4], r[5], r[6]));
+    }
+    members = g_list_append(members, _group_member(dev, DT_MASKS_POLYGON, &dt_masks_functions_polygon, nodes, id++,
+                                                   "polygon-1788045925"));
+  }
+  {
+    GList *nodes = NULL;
+    const float radius = 0.028f;
+    for(int i = 0; i < 5; i++)
+    {
+      const float x = 0.20f + 0.13f * i;
+      nodes = g_list_append(nodes, _polygon_node(x, 0.35f, x, 0.35f, x, 0.35f, radius));
+      nodes = g_list_append(nodes, _polygon_node(x + 0.05f, 0.62f, x + 0.05f, 0.62f, x + 0.05f, 0.62f, radius));
+    }
+    nodes = g_list_append(nodes, _polygon_node(0.80f, 0.78f, 0.80f, 0.78f, 0.80f, 0.78f, radius));
+    nodes = g_list_append(nodes, _polygon_node(0.20f, 0.78f, 0.20f, 0.78f, 0.20f, 0.78f, radius));
+    members = g_list_append(members, _group_member(dev, DT_MASKS_POLYGON, &dt_masks_functions_polygon, nodes, id++,
+                                                   "polygon-comb"));
+  }
+
+  dt_masks_form_t *group = dt_masks_create(DT_MASKS_GROUP);
+  if(IS_NULL_PTR(group)) return;
+  group->formid = 999;
+  g_strlcpy(group->name, "group-11", sizeof(group->name));
+  int count = 0;
+  for(const GList *node = members; node; node = g_list_next(node))
+  {
+    const dt_masks_form_t *member = (const dt_masks_form_t *)node->data;
+    if(IS_NULL_PTR(member)) continue;
+    dt_masks_form_group_t *entry = (dt_masks_form_group_t *)calloc(1, sizeof(dt_masks_form_group_t));
+    entry->formid = member->formid;
+    entry->parentid = group->formid;
+    entry->state = DT_MASKS_STATE_USE | DT_MASKS_STATE_SHOW;
+    entry->opacity = 1.0f;
+    group->points = g_list_append(group->points, entry);
+    count++;
+  }
+  char name[64];
+  g_snprintf(name, sizeof(name), "group-%d", count);
+  _time_overlay_form(dev, group, name, dir, IMG_W, IMG_H, frames);
+
+  /* the members leave dev->forms with the list's own references; the harness's follow */
+  for(const GList *node = members; node; node = g_list_next(node))
+  {
+    dt_masks_form_t *member = (dt_masks_form_t *)node->data;
+    if(IS_NULL_PTR(member)) continue;
+    dev->forms = g_list_remove(dev->forms, member);
+    dt_masks_form_unref(member);   /* dev->forms's claim */
+    dt_masks_form_unref(member);   /* the harness's */
+  }
+  g_list_free(members);
+  dt_masks_form_unref(group);
+}
+
 static void _time_overlay_all(dt_develop_t *dev, const char *dir, const int frames)
 {
   printf("overlay timing: %dx%d screen, fit zoom, %d frames per measurement\n", OVERLAY_SCREEN_W,
@@ -1673,6 +1774,7 @@ static void _time_overlay_all(dt_develop_t *dev, const char *dir, const int fram
     _check_hidpi_placement(dev, &form, "polygon-comb", IMG_W, IMG_H);
     g_list_free_full(form.points, free);
   }
+  _time_overlay_group(dev, dir, frames);
 }
 
 int main(int argc, char *argv[])
