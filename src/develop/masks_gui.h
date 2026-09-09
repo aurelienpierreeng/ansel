@@ -573,6 +573,11 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
                                       int32_t width, int32_t height, int32_t pointerx, int32_t pointery,
                                       const dt_masks_overlay_transform_t *transform);
 
+/** Ask the centre widget for a redraw of what the last overlay frame touched, grown by the
+ * pointer's motion since, instead of the whole widget: for a motion the masks handled and
+ * nothing else did. Falls back to the whole widget when no frame has been recorded. */
+void dt_masks_overlay_queue_redraw(GtkWidget *widget);
+
 void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery);
 int dt_masks_events_mouse_leave(struct dt_iop_module_t *module);
