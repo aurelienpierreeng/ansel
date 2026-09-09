@@ -1980,6 +1980,38 @@ did not, was correct on every 1x screen and every unit test, and drew the whole 
 size in the top-left quadrant of a HiDPI darkroom; `test_stroke_raster` and the harness's
 `hidpi placement` check now paint on device-scaled surfaces.
 
+### The darkroom centre paints into GTK's buffer, once per source frame, and a mask motion repaints a rectangle
+
+`doc/darkroom-redraw.md` prices every pass of the repaint path with cairo at a 2560x1440
+window at device scale 1 and 2. Before it, every centre repaint allocated and freed a
+full-window surface, filled two full-window backgrounds and blitted the window three times
+through two intermediate surfaces, whatever had changed: about 10 ms at 1x and 59 ms at 2x
+per frame before any overlay, and a zoom or pan while the main pipe caught up scaled the
+preview with cairo's default filter, 262 ms at 2x, because `CAIRO_FILTER_NEAREST` was set on
+the context's default source before the surface replaced it. Four rules now:
+
+- **`dt_control_expose(cr, w, h)` paints into GTK's own `cr`**, which is a double buffer
+  already and arrives clipped to what was invalidated. No intermediate surface, no pixmap.
+  A view that paints every pixel returns `VIEW_FLAGS_PAINTS_WHOLE_AREA` from `flags()` and
+  the toplevel skips its background fill under it.
+- **The darkroom composes `dev->image_surface` once per (source hash, viewport, colours,
+  border, size) key** (`_darkroom_compose_locked()` / `_darkroom_compose_fallback()`), fills
+  the background as the four bands around the image and the ISO 12646 frame as a ring, and
+  sets a scaling filter on the pattern that scales. Set `cairo_pattern_set_filter()` AFTER
+  `cairo_set_source_surface()`, never on the context's default source.
+- **A motion the masks handled invalidates a rectangle**: `dt_masks_overlay_queue_redraw()`
+  asks for the last composited overlay rectangle grown by the pointer's motion, and
+  `_overlay_damage_record()` asks for whatever a frame painted outside the expose's clip, so
+  an under-estimate costs one more small frame and never an unpainted overlay. A module's own
+  overlay knows no rectangle and keeps the full redraw.
+- **The overlay canvas is sized to the view, never to `cr`'s clip**, which a rectangle redraw
+  narrows; and a creation session's frame is bounded to the session's box and the live shape,
+  where it was the whole window before.
+
+The views are plugins: `ninja ansel` does NOT compile `src/views/*.c`. Build every target
+(`ninja`) before trusting a darkroom edit; a use of an undeclared variable in `darkroom.c`
+survived an `ansel` build here.
+
 ### A rotated GtkLabel sizes the column it sits in
 
 A `GtkLabel` with `gtk_label_set_angle()` requests the width of its *slanted* bounding box, so a
