@@ -1171,6 +1171,10 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
   if(IS_NULL_PTR(gui_points)) return;
+  /* Nothing to walk when the cursor cannot reach a sample: the box every sample spans, grown by
+   * the cursor's reach, answers for the whole shape in four comparisons, and every answer
+   * initialised above is what the walk would have given -- nothing inside, nothing near. */
+  if(!dt_masks_gui_points_reach(gui_points, point_x, point_y, 2.0f * radius)) return;
 
   float min_dist_pixel = FLT_MAX;
 

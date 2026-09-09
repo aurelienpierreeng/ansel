@@ -72,7 +72,23 @@ typedef struct dt_masks_form_gui_points_t
   float *source;   // source point in absolute coordinates in output image space
   int source_count;
   gboolean clockwise;
+  /* The box every sample above spans -- points, border and source alike, in the same space --
+   * so a hit test can answer "nothing here" without walking them: minx, maxx, miny, maxy; empty
+   * (min above max) when there is no sample. dt_masks_gui_points_update_bbox() fills it. */
+  float bbox[4];
 } dt_masks_form_gui_points_t;
+
+/** Can a cursor at (x, y), reaching @p reach around itself, touch a sample of @p gp at all:
+ * the box test every hit test runs before walking the samples. An empty box reaches nothing. */
+static inline gboolean dt_masks_gui_points_reach(const dt_masks_form_gui_points_t *gp, const float x,
+                                                 const float y, const float reach)
+{
+  return x >= gp->bbox[0] - reach && x <= gp->bbox[1] + reach && y >= gp->bbox[2] - reach
+         && y <= gp->bbox[3] + reach;
+}
+
+/** Recompute ::bbox from the samples @p gp holds. */
+void dt_masks_gui_points_update_bbox(dt_masks_form_gui_points_t *gp);
 
 
 /** structure used to display a form */

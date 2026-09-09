@@ -1962,6 +1962,7 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
          != DT_MASKS_RASTER_OK)
         return;
     }
+    dt_masks_gui_points_update_bbox(gui_points);
     mask_gui->geometry_generation = dt_geometry_chain_generation(mask_gui->dev->geometry_chain);
     mask_gui->outline_step_built = dt_masks_gui_outline_step(mask_gui->dev);
     mask_gui->formid = mask_form->formid;
@@ -2404,6 +2405,31 @@ gboolean dt_masks_gui_remove(struct dt_iop_module_t *module, dt_masks_form_t *ma
   return FALSE;
 }
 
+static void _gui_points_bbox_extend(float *const bbox, const float *const samples, const int count)
+{
+  for(int i = 0; i < count; i++)
+  {
+    const float x = samples[2 * i];
+    const float y = samples[2 * i + 1];
+    bbox[0] = fminf(bbox[0], x);
+    bbox[1] = fmaxf(bbox[1], x);
+    bbox[2] = fminf(bbox[2], y);
+    bbox[3] = fmaxf(bbox[3], y);
+  }
+}
+
+void dt_masks_gui_points_update_bbox(dt_masks_form_gui_points_t *gp)
+{
+  if(IS_NULL_PTR(gp)) return;
+  gp->bbox[0] = FLT_MAX;
+  gp->bbox[1] = -FLT_MAX;
+  gp->bbox[2] = FLT_MAX;
+  gp->bbox[3] = -FLT_MAX;
+  if(!IS_NULL_PTR(gp->points)) _gui_points_bbox_extend(gp->bbox, gp->points, gp->points_count);
+  if(!IS_NULL_PTR(gp->border)) _gui_points_bbox_extend(gp->bbox, gp->border, gp->border_count);
+  if(!IS_NULL_PTR(gp->source)) _gui_points_bbox_extend(gp->bbox, gp->source, gp->source_count);
+}
+
 void dt_masks_gui_form_remove(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, int form_index)
 {
   dt_masks_form_gui_points_t *gui_points
@@ -2423,6 +2449,7 @@ void dt_masks_gui_form_remove(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
     gui_points->border_skips = NULL;
     dt_pixelpipe_cache_free_align(gui_points->source);
     gui_points->source = NULL;
+    dt_masks_gui_points_update_bbox(gui_points);   /* empty */
   }
 }
 
