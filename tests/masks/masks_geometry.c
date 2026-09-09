@@ -42,6 +42,7 @@
 #include "develop/masks.h"
 #include "develop/masks_debug.h"
 #include "develop/masks/masks_functions.h"
+#include "develop/masks/masks_distort.h"
 #include "math/math.h"
 #include "system/mem_alloc.h"
 
@@ -681,6 +682,31 @@ static void _surface_diff(cairo_surface_t *const a, cairo_surface_t *const b,
 }
 
 static const char *baseline_dir = NULL;
+
+/* MASKS_OUTLINE_STEP=<n> has the corpus build every GUI outline every n image pixels -- the
+ * density the darkroom shows a zoomed-out image at -- so the band check judges what a user sees
+ * at fit zoom; unset, the corpus judges pixel-accurate outlines. The baselines are step-1
+ * pictures and are not compared at any other step. --time-overlay takes its density from its
+ * view (MASKS_OVERLAY_VIEW), the way the darkroom does: the expose publishes it from the
+ * transformed context, which is also why the corpus re-applies its own before every build --
+ * the overlay it writes beside each case is drawn at full resolution and publishes 1. */
+static int _outline_step_override = 0;
+
+/* Give @p dev a GUI state with the density its outlines are built at: the override when set,
+ * else @p image_px_per_device_px. */
+static void _outline_density_apply(dt_develop_t *dev, const double image_px_per_device_px)
+{
+  if(IS_NULL_PTR(dev->form_gui))
+  {
+    dev->form_gui = (dt_masks_form_gui_t *)calloc(1, sizeof(dt_masks_form_gui_t));
+    if(IS_NULL_PTR(dev->form_gui)) return;
+    dt_masks_init_form_gui(dev, dev->form_gui);
+  }
+  dt_masks_gui_set_outline_density(dev->form_gui, (_outline_step_override > 0) ? (double)_outline_step_override
+                                                                                 : image_px_per_device_px);
+}
+
+
 static gboolean baseline_update = FALSE;
 static gboolean time_overlay = FALSE;
 static int time_overlay_frames = 30;
@@ -691,6 +717,11 @@ static int baseline_missing = 0;
 static gboolean _baseline_check(const char *path, const char *name)
 {
   if(IS_NULL_PTR(baseline_dir)) return TRUE;
+  if(_outline_step_override > 1)
+  {
+    printf("      baseline: not compared, the outline is sampled every %d px\n", _outline_step_override);
+    return TRUE;
+  }
 
   char *base = g_strdup_printf("%s/%s.png", baseline_dir, name);
 
@@ -849,6 +880,7 @@ static _band_t _outline_band_check(dt_develop_t *dev, dt_masks_form_t *form, con
   int skip_count = 0;
   dt_masks_skip_range_t *skips = NULL;
 
+  _outline_density_apply(dev, 1.0);
   const double t0 = dt_get_wtime();
   const dt_masks_raster_result_t st = dt_masks_get_points_border(dev, form, &points, &points_count, &border,
                                                                  &border_count, &skips, &skip_count, 0, NULL);
@@ -1443,10 +1475,10 @@ static void _overlay_report(dt_develop_t *dev, const char *name, const int img_w
     _overlay_skipped(gp, &skipped, &skip_ranges);
     if(selected) _overlay_dump_skips(gp, name, transform);
   }
-  printf("[TIME] %-26s %5dx%-4d %-8s %7.2f ms/frame  (first frame incl. build %7.2f ms;"
+  printf("[TIME] %-26s %5dx%-4d %-8s %7.2f ms/frame  (first frame incl. build %7.2f ms at step %d;"
          " %d outline samples, %d border samples, %d skipped in %d ranges)\n",
-         name, img_w, img_h, selected ? "selected" : "member", timing->per_frame_ms, timing->build_ms, points, border,
-         skipped, skip_ranges);
+         name, img_w, img_h, selected ? "selected" : "member", timing->per_frame_ms, timing->build_ms,
+         dt_masks_gui_outline_step(dev), points, border, skipped, skip_ranges);
 }
 
 static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const char *dir,
@@ -1890,6 +1922,11 @@ int main(int argc, char *argv[])
   dt_geometry_chain_rebuild(&dev);
   printf("geometry chain authoritative: %s\n",
          dt_geometry_chain_authoritative(dev.geometry_chain) ? "yes" : "NO -- outlines will be empty");
+
+  const char *step_env = g_getenv("MASKS_OUTLINE_STEP");
+  if(!IS_NULL_PTR(step_env)) _outline_step_override = MAX(0, atoi(step_env));
+  if(!time_overlay && _outline_step_override > 0)
+    printf("GUI outlines sampled every %d px\n", _outline_step_override);
 
   if(time_overlay)
   {

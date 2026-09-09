@@ -526,9 +526,9 @@ static void _brush_init_ctrl_points(dt_masks_form_t *mask_form)
 
 /** fill the gap between 2 points with an arc of circle */
 /** this function is here because we can have gap in border, esp. if the corner is very sharp */
-static void _brush_points_recurs_border_gaps(float *cmax, float *bmin, float *bmin2, float *bmax,
+static void _brush_points_recurs_border_gaps(float *cmax, float *bmin, float *bmax,
                                              dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder,
-                                             gboolean clockwise)
+                                             gboolean clockwise, const int step)
 {
   // we want to find the start and end angles
   float a1 = atan2f(bmin[1] - cmax[1], bmin[0] - cmax[0]);
@@ -550,8 +550,8 @@ static void _brush_points_recurs_border_gaps(float *cmax, float *bmin, float *bm
   float r1 = dt_fast_hypotf(bmin[1] - cmax[1], bmin[0] - cmax[0]);
   float r2 = dt_fast_hypotf(bmax[1] - cmax[1], bmax[0] - cmax[0]);
 
-  // and the max length of the circle arc
-  const int l = fabsf(a2 - a1) * fmaxf(r1, r2);
+  // and the max length of the circle arc, in samples
+  const int l = fabsf(a2 - a1) * fmaxf(r1, r2) / (float)step;
   if(l < 2) return;
 
   // and now we add the points
@@ -592,8 +592,9 @@ static void _brush_points_recurs_border_gaps(float *cmax, float *bmin, float *bm
 /** fill small gap between 2 points with an arc of circle */
 /** in contrast to the previous function it will always run the shortest path (max. PI) and does not consider
  * clock or anti-clockwise action */
-static void _brush_points_recurs_border_small_gaps(float *cmax, float *bmin, float *bmin2, float *bmax,
-                                                   dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder)
+static void _brush_points_recurs_border_small_gaps(float *cmax, float *bmin, float *bmax,
+                                                   dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder,
+                                                   const int step)
 {
   // we want to find the start and end angles
   const float a1 = fmodf(atan2f(bmin[1] - cmax[1], bmin[0] - cmax[0]) + 2.0f * M_PI, 2.0f * M_PI);
@@ -609,8 +610,8 @@ static void _brush_points_recurs_border_small_gaps(float *cmax, float *bmin, flo
   float delta = a2 - a1;
   if(fabsf(delta) > M_PI) delta = delta - copysignf(2.0f * M_PI, delta);
 
-  // get the max length of the circle arc
-  const int l = fabsf(delta) * fmaxf(r1, r2);
+  // get the max length of the circle arc, in samples
+  const int l = fabsf(delta) * fmaxf(r1, r2) / (float)step;
   if(l < 2) return;
 
   // and now we add the points
@@ -662,12 +663,12 @@ static void _brush_points_recurs_border_small_gaps(float *cmax, float *bmin, flo
  * @p from_border only chooses the start angle, so the first sample continues from the border
  * sample the caller just wrote; any angle is geometrically right. */
 static void _brush_points_stamp(const float *const centre, const float *const from_border, const float radius,
-                                dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder)
+                                dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder, const int step)
 {
   const float a1 = atan2f(from_border[1] - centre[1], from_border[0] - centre[0]);
 
-  // determine the max length of the circle arc
-  const int l = 2.0f * M_PI * radius;
+  // determine the max length of the circle arc, in samples
+  const int l = 2.0f * M_PI * radius / (float)step;
   if(l < 2) return;
 
   // and now we add the points
@@ -755,86 +756,6 @@ static inline void _brush_leaf_borrow_border(float *const border_min, float *con
   dt_masks_outline_offset_along(centre, chord[1], -chord[0], radius, border_max);
 }
 
-/** recursive function to get all points of the brush AND all point of the border */
-/** the function takes care to avoid big gaps between points */
-/* @p have_min / @p have_max say whether the caller already evaluated that endpoint, and
- * @p have_border_min / @p have_border_max whether a border point came with it. They used to be
- * read out of the arrays as NaN -- "not computed" and "no border" sharing one representation
- * with each other and with real geometry. Which of the three a NaN meant depended on where you
- * were standing, and the arrays are the same ones that end up in the outline. A leaf always
- * writes a border now (see _brush_leaf_borrow_border()), so @p out_have_border reports TRUE
- * whenever a border is being built at all. */
-static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax, float *points_min,
-                                 float *points_max, float *border_min, float *border_max, float *rpoints,
-                                 float *rborder, float *rpayload, dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder,
-                                 dt_masks_dynbuf_t *dpayload, const int pixel_threshold,
-                                 const gboolean have_min, const gboolean have_max,
-                                 gboolean have_border_min, gboolean have_border_max,
-                                 gboolean *out_have_border)
-{
-  const gboolean withborder = (!IS_NULL_PTR(dborder));
-
-  // we calculate points if needed
-  if(!have_min)
-    have_border_min = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmin,
-                                           _brush_radius_at(p1[4], p2[4], tmin),
-                                           _brush_radius_rate_at(p1[4], p2[4], tmin), points_min,
-                                           points_min + 1, border_min, border_min + 1);
-  if(!have_max)
-    have_border_max = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmax,
-                                           _brush_radius_at(p1[4], p2[4], tmax),
-                                           _brush_radius_rate_at(p1[4], p2[4], tmax), points_max,
-                                           points_max + 1, border_max, border_max + 1);
-
-  if(!_brush_span_is_leaf(tmin, tmax, points_min, points_max, withborder ? border_min : NULL, border_max,
-                          pixel_threshold))
-  {
-    // we split in two part
-    const double tx = (tmin + tmax) / 2.0;
-    float c[2] = { 0.0f, 0.0f };
-    float b[2] = { 0.0f, 0.0f };
-    float rc[2];
-    float rb[2];
-    float rp[2];
-    /* the left half inherits our min end and computes the midpoint; the right half is then handed
-     * that midpoint already evaluated, and inherits our max end */
-    _brush_points_recurs(p1, p2, tmin, tx, points_min, c, border_min, b, rc, rb, rp, dpoints, dborder, dpayload,
-                         pixel_threshold, have_min, FALSE, have_border_min, FALSE, NULL);
-    _brush_points_recurs(p1, p2, tx, tmax, rc, points_max, rb, border_max, rpoints, rborder, rpayload, dpoints,
-                         dborder, dpayload, pixel_threshold, TRUE, have_max, TRUE, have_border_max,
-                         out_have_border);
-    return;
-  }
-
-  // the leaf: one sample, at the far end of the span
-  rpoints[0] = points_max[0];
-  rpoints[1] = points_max[1];
-  dt_masks_dynbuf_add_2(dpoints, rpoints[0], rpoints[1]);
-
-  if(withborder)
-  {
-    const float radius = _brush_radius_at(p1[4], p2[4], tmax);
-    const float chord[2] = { p2[0] - p1[0], p2[1] - p1[1] };
-    _brush_leaf_borrow_border(border_min, border_max, have_border_min, have_border_max, points_max, chord, radius);
-
-    // we check gaps in the border (sharp edges)
-    if(abs((int)border_max[0] - (int)border_min[0]) > 2 || abs((int)border_max[1] - (int)border_min[1]) > 2)
-      _brush_points_recurs_border_small_gaps(points_max, border_min, NULL, border_max, dpoints, dborder);
-
-    rborder[0] = border_max[0];
-    rborder[1] = border_max[1];
-    if(!IS_NULL_PTR(out_have_border)) *out_have_border = TRUE;
-    dt_masks_dynbuf_add_2(dborder, rborder[0], rborder[1]);
-  }
-
-  if(!IS_NULL_PTR(dpayload))
-  {
-    rpayload[0] = p1[5] + tmax * (p2[5] - p1[5]);
-    rpayload[1] = p1[6] + tmax * (p2[6] - p1[6]);
-    _brush_payload_sync(dpayload, dpoints, rpayload[0], rpayload[1]);
-  }
-}
-
 /* The frame the walk works in: the image size the normalised node coordinates scale to, and
  * the shift that moves a clone source's outline onto its target. */
 typedef struct _brush_frame_t
@@ -844,6 +765,151 @@ typedef struct _brush_frame_t
   float dx;
   float dy;
 } _brush_frame_t;
+
+/* THE WALK.
+ *
+ * A brush is the union of a disc of the local radius over every point of its centreline, and
+ * the rasteriser paints that union as spokes: from every centreline sample out to its border
+ * sample, on both sides. So the centreline is walked twice, forward with the border on the
+ * right and backward with the border on the right again -- the other side -- and the two
+ * sides are joined by a cap at each end. Where the direction, the radius or the payload jumps
+ * at a node, the spokes of the two segments meeting there leave a wedge; a disc or an arc,
+ * centred on that node at that node's radius, fills it.
+ *
+ * Everything a joint or a cap needs is taken from the two segment END SAMPLES that meet
+ * there, and from the node data. Nothing is read back out of the buffers. The previous walk
+ * took "the last centreline sample and the last border sample written" as the centre and
+ * radius of every cap, arc and stamp, on the assumption that they belonged to one spoke; a
+ * degenerate segment broke that assumption once and the damage compounded through every
+ * later joint of the stroke (issue #1360: a circle 2058 px across, centred on the stroke,
+ * grown from a border sample that was the image origin).
+ *
+ * A DEGENERATE segment -- its four control points one point, which is what a pen resting
+ * under rising pressure produces -- has no direction and so no spokes, and contributes
+ * nothing: its disc is the cap of whichever neighbour has a direction. The walk skips it and
+ * joins the segments either side of it as if it were not there, which for the disc union is
+ * exactly right. */
+typedef struct _brush_walk_t
+{
+  dt_masks_node_brush_t **nodes;
+  int node_count;
+  _brush_frame_t frame;
+  int pixel_threshold;
+  /* Image pixels between consecutive samples of an arc or a stamp. The GUI's outline takes the
+   * density it is shown at, like its curves; the pipe keeps one per pixel whatever spoke
+   * budget it was given, so its raster does not change under a preference. */
+  int arc_step;
+  dt_masks_dynbuf_t *dpoints;
+  dt_masks_dynbuf_t *dborder;   /* NULL when no border is wanted */
+  dt_masks_dynbuf_t *dpayload;  /* NULL when no payload is wanted */
+} _brush_walk_t;
+
+/* One span [tmin, tmax] of a segment and what is known at its ends: the spine and border
+ * samples there, whether each end was evaluated already, and whether a border came with it.
+ * Those flags used to be read out of the arrays as NaN -- "not computed" and "no border"
+ * sharing one representation with each other and with real geometry. Which of the three a NaN
+ * meant depended on where you were standing, and the arrays are the same ones that end up in
+ * the outline. A leaf always writes a border now (see _brush_leaf_borrow_border()). */
+typedef struct _brush_span_t
+{
+  double tmin;
+  double tmax;
+  float *points_min;
+  float *points_max;
+  float *border_min;
+  float *border_max;
+  gboolean have_min;
+  gboolean have_max;
+  gboolean have_border_min;
+  gboolean have_border_max;
+} _brush_span_t;
+
+/* The sample a span's far end resolved to: the next span's near end, and the segment's end
+ * sample for the walk. have_border is TRUE whenever a border is being built at all. */
+typedef struct _brush_sample_t
+{
+  float point[2];
+  float border[2];
+  float payload[2];
+  gboolean have_border;
+} _brush_sample_t;
+
+/** recursive function to get all points of the brush AND all point of the border */
+/** the function takes care to avoid big gaps between points */
+static void _brush_points_recurs(const float *const p1, const float *const p2, const _brush_span_t *const span,
+                                 const _brush_walk_t *const w, _brush_sample_t *const out)
+{
+  dt_masks_dynbuf_t *const dpoints = w->dpoints;
+  dt_masks_dynbuf_t *const dborder = w->dborder;
+  dt_masks_dynbuf_t *const dpayload = w->dpayload;
+  const gboolean withborder = (!IS_NULL_PTR(dborder));
+  float *const points_min = span->points_min;
+  float *const points_max = span->points_max;
+  float *const border_min = span->border_min;
+  float *const border_max = span->border_max;
+  gboolean have_border_min = span->have_border_min;
+  gboolean have_border_max = span->have_border_max;
+
+  // we calculate points if needed
+  if(!span->have_min)
+    have_border_min = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], span->tmin,
+                                           _brush_radius_at(p1[4], p2[4], span->tmin),
+                                           _brush_radius_rate_at(p1[4], p2[4], span->tmin), points_min,
+                                           points_min + 1, border_min, border_min + 1);
+  if(!span->have_max)
+    have_border_max = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], span->tmax,
+                                           _brush_radius_at(p1[4], p2[4], span->tmax),
+                                           _brush_radius_rate_at(p1[4], p2[4], span->tmax), points_max,
+                                           points_max + 1, border_max, border_max + 1);
+
+  if(!_brush_span_is_leaf(span->tmin, span->tmax, points_min, points_max, withborder ? border_min : NULL,
+                          border_max, w->pixel_threshold))
+  {
+    // we split in two part
+    const double tx = (span->tmin + span->tmax) / 2.0;
+    float c[2] = { 0.0f, 0.0f };
+    float b[2] = { 0.0f, 0.0f };
+    _brush_sample_t mid = { 0 };
+    /* the left half inherits our min end, now evaluated, and computes the midpoint; the right
+     * half is then handed that midpoint already evaluated, and inherits our max end */
+    const _brush_span_t left = { span->tmin, tx, points_min, c, border_min, b, TRUE, FALSE, have_border_min, FALSE };
+    _brush_points_recurs(p1, p2, &left, w, &mid);
+    const _brush_span_t right
+        = { tx, span->tmax, mid.point, points_max, mid.border, border_max, TRUE, TRUE, TRUE, have_border_max };
+    _brush_points_recurs(p1, p2, &right, w, out);
+    return;
+  }
+
+  // the leaf: one sample, at the far end of the span
+  out->point[0] = points_max[0];
+  out->point[1] = points_max[1];
+  out->have_border = FALSE;
+  dt_masks_dynbuf_add_2(dpoints, out->point[0], out->point[1]);
+
+  if(withborder)
+  {
+    const float radius = _brush_radius_at(p1[4], p2[4], span->tmax);
+    const float chord[2] = { p2[0] - p1[0], p2[1] - p1[1] };
+    _brush_leaf_borrow_border(border_min, border_max, have_border_min, have_border_max, points_max, chord, radius);
+
+    // we check gaps in the border (sharp edges), at the density the arc will be sampled at
+    const int gap = 2 * w->arc_step;
+    if(abs((int)border_max[0] - (int)border_min[0]) > gap || abs((int)border_max[1] - (int)border_min[1]) > gap)
+      _brush_points_recurs_border_small_gaps(points_max, border_min, border_max, dpoints, dborder, w->arc_step);
+
+    out->border[0] = border_max[0];
+    out->border[1] = border_max[1];
+    out->have_border = TRUE;
+    dt_masks_dynbuf_add_2(dborder, out->border[0], out->border[1]);
+  }
+
+  if(!IS_NULL_PTR(dpayload))
+  {
+    out->payload[0] = p1[5] + span->tmax * (p2[5] - p1[5]);
+    out->payload[1] = p1[6] + span->tmax * (p2[6] - p1[6]);
+    _brush_payload_sync(dpayload, dpoints, out->payload[0], out->payload[1]);
+  }
+}
 
 /* The two ends of one segment of the walk, in image pixels: node, the control point that
  * faces the other end, radius, fading, density. Travelling forward the segment leaves node
@@ -879,48 +945,15 @@ static void _brush_segment_load(const dt_masks_node_brush_t *const from, const d
 /* The arc that bridges a joint, the short way round; at a cusp the pass's rotation decides
  * (see dt_masks_outline_short_way()). The filler is the brush's own. */
 static void _brush_joint_arc(const float *const centre, const float *const from, const float *const to,
-                             const gboolean forward, dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder)
+                             const gboolean forward, dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder,
+                             const int step)
 {
   const gboolean clockwise = dt_masks_outline_short_way(centre, from, to, forward);
   float f[2] = { from[0], from[1] };
   float t[2] = { to[0], to[1] };
   float c[2] = { centre[0], centre[1] };
-  _brush_points_recurs_border_gaps(c, f, NULL, t, dpoints, dborder, clockwise);
+  _brush_points_recurs_border_gaps(c, f, t, dpoints, dborder, clockwise, step);
 }
-
-/* THE WALK.
- *
- * A brush is the union of a disc of the local radius over every point of its centreline, and
- * the rasteriser paints that union as spokes: from every centreline sample out to its border
- * sample, on both sides. So the centreline is walked twice, forward with the border on the
- * right and backward with the border on the right again -- the other side -- and the two
- * sides are joined by a cap at each end. Where the direction, the radius or the payload jumps
- * at a node, the spokes of the two segments meeting there leave a wedge; a disc or an arc,
- * centred on that node at that node's radius, fills it.
- *
- * Everything a joint or a cap needs is taken from the two segment END SAMPLES that meet
- * there, and from the node data. Nothing is read back out of the buffers. The previous walk
- * took "the last centreline sample and the last border sample written" as the centre and
- * radius of every cap, arc and stamp, on the assumption that they belonged to one spoke; a
- * degenerate segment broke that assumption once and the damage compounded through every
- * later joint of the stroke (issue #1360: a circle 2058 px across, centred on the stroke,
- * grown from a border sample that was the image origin).
- *
- * A DEGENERATE segment -- its four control points one point, which is what a pen resting
- * under rising pressure produces -- has no direction and so no spokes, and contributes
- * nothing: its disc is the cap of whichever neighbour has a direction. The walk skips it and
- * joins the segments either side of it as if it were not there, which for the disc union is
- * exactly right. */
-typedef struct _brush_walk_t
-{
-  dt_masks_node_brush_t **nodes;
-  int node_count;
-  _brush_frame_t frame;
-  int pixel_threshold;
-  dt_masks_dynbuf_t *dpoints;
-  dt_masks_dynbuf_t *dborder;   /* NULL when no border is wanted */
-  dt_masks_dynbuf_t *dpayload;  /* NULL when no payload is wanted */
-} _brush_walk_t;
 
 /* The walk at the node the next segment starts from: the end sample of the previous
  * non-degenerate segment of this pass. */
@@ -955,7 +988,7 @@ static void _brush_walk_node(const _brush_walk_t *const w, const _brush_walk_sta
   const gboolean radius_step = (fabsf(p1[4] - p2[4]) > 0.0001f || fabsf(s->r - p1[4]) > 0.0001f);
   if(payload_step || radius_step)
   {
-    _brush_points_stamp(s->c, s->b, fmaxf(s->r, p1[4]), w->dpoints, w->dborder);
+    _brush_points_stamp(s->c, s->b, fmaxf(s->r, p1[4]), w->dpoints, w->dborder, w->arc_step);
     _brush_walk_sync_payload(w, s->payload);
   }
 
@@ -968,7 +1001,7 @@ static void _brush_walk_node(const _brush_walk_t *const w, const _brush_walk_sta
    * them from the outline. */
   if(fabsf(b0[0] - s->b[0]) > 1.0f || fabsf(b0[1] - s->b[1]) > 1.0f)
   {
-    _brush_joint_arc(c0, s->b, b0, forward, w->dpoints, w->dborder);
+    _brush_joint_arc(c0, s->b, b0, forward, w->dpoints, w->dborder, w->arc_step);
     _brush_walk_sync_payload(w, s->payload);
   }
 }
@@ -997,33 +1030,31 @@ static gboolean _brush_walk_segment(const _brush_walk_t *const w, _brush_walk_st
 
   if(s->have_prev) _brush_walk_node(w, s, p1, p2, c0, b0, forward);
 
-  float rc[2];
-  float rb[2];
-  float rp[2];
   float bmin[2] = { b0[0], b0[1] };
   float bmax[2] = { b1[0], b1[1] };
   float cmin[2] = { c0[0], c0[1] };
   float cmax[2] = { c1[0], c1[1] };
-  gboolean have_rb = FALSE;
-  _brush_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, rp, w->dpoints, w->dborder, w->dpayload,
-                       w->pixel_threshold, TRUE, TRUE, TRUE, TRUE, &have_rb);
+  const _brush_span_t span = { 0.0, 1.0, cmin, cmax, bmin, bmax, TRUE, TRUE, TRUE, TRUE };
+  _brush_sample_t end = { 0 };
+  _brush_points_recurs(p1, p2, &span, w, &end);
 
-  dt_masks_dynbuf_add_2(w->dpoints, rc[0], rc[1]);
-  if(!IS_NULL_PTR(w->dpayload)) dt_masks_dynbuf_add_2(w->dpayload, rp[0], rp[1]);
+  dt_masks_dynbuf_add_2(w->dpoints, end.point[0], end.point[1]);
+  if(!IS_NULL_PTR(w->dpayload)) dt_masks_dynbuf_add_2(w->dpayload, end.payload[0], end.payload[1]);
   if(!IS_NULL_PTR(w->dborder))
   {
-    if(!have_rb) dt_masks_outline_offset_along(rc, b1[0] - c1[0], b1[1] - c1[1], p2[4], rb);
-    dt_masks_dynbuf_add_2(w->dborder, rb[0], rb[1]);
+    if(!end.have_border)
+      dt_masks_outline_offset_along(end.point, b1[0] - c1[0], b1[1] - c1[1], p2[4], end.border);
+    dt_masks_dynbuf_add_2(w->dborder, end.border[0], end.border[1]);
   }
 
-  s->c[0] = rc[0];
-  s->c[1] = rc[1];
-  s->b[0] = rb[0];
-  s->b[1] = rb[1];
+  s->c[0] = end.point[0];
+  s->c[1] = end.point[1];
+  s->b[0] = end.border[0];
+  s->b[1] = end.border[1];
   s->r = p2[4];
 
-  s->payload[0] = rp[0];
-  s->payload[1] = rp[1];
+  s->payload[0] = end.payload[0];
+  s->payload[1] = end.payload[1];
   s->have_prev = TRUE;
   return TRUE;
 }
@@ -1036,7 +1067,7 @@ static void _brush_walk_cap(const _brush_walk_t *const w, const _brush_walk_stat
   float centre[2] = { s->c[0], s->c[1] };
   float from[2] = { s->b[0], s->b[1] };
   float opposite[2] = { 2.0f * s->c[0] - s->b[0], 2.0f * s->c[1] - s->b[1] };
-  _brush_points_recurs_border_gaps(centre, from, NULL, opposite, w->dpoints, w->dborder, TRUE);
+  _brush_points_recurs_border_gaps(centre, from, opposite, w->dpoints, w->dborder, TRUE, w->arc_step);
   _brush_walk_sync_payload(w, s->payload);
 }
 
@@ -1068,7 +1099,7 @@ static void _brush_walk_single_dab(const _brush_walk_t *const w)
   if(!IS_NULL_PTR(w->dborder))
   {
     dt_masks_dynbuf_add_2(w->dborder, from[0], from[1]);
-    _brush_points_stamp(centre, from, radius, w->dpoints, w->dborder);
+    _brush_points_stamp(centre, from, radius, w->dpoints, w->dborder, w->arc_step);
   }
   const float payload[2] = { n0->fading, n0->density };
   _brush_walk_sync_payload(w, payload);
@@ -1247,6 +1278,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
                                .node_count = (int)node_count,
                                .frame = { iwd, iht, dx, dy },
                                .pixel_threshold = pixel_threshold,
+                               .arc_step = IS_NULL_PTR(dist->pipe) ? pixel_threshold : 1,
                                .dpoints = dpoints,
                                .dborder = dborder,
                                .dpayload = dpayload };

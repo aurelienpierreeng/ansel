@@ -339,7 +339,7 @@ static gboolean _polygon_is_clockwise(dt_masks_form_t *mask_form)
 static void _polygon_points_recurs_border_gaps(const float *const center_max, const float *const border_min,
                                                const float *const border_max, dt_masks_dynbuf_t *draw_points,
                                                dt_masks_dynbuf_t *draw_border,
-                                               gboolean clockwise)
+                                               gboolean clockwise, const int step)
 {
   // we want to find the start and end angles
   double angle_start = atan2f(border_min[1] - center_max[1], border_min[0] - center_max[0]);
@@ -362,12 +362,12 @@ static void _polygon_points_recurs_border_gaps(const float *const center_max, co
   const float radius_end = sqrtf((border_max[1] - center_max[1]) * (border_max[1] - center_max[1])
                                  + (border_max[0] - center_max[0]) * (border_max[0] - center_max[0]));
 
-  // and the max length of the circle arc
+  // and the max length of the circle arc, in samples
   int step_count = 0;
   if(angle_end > angle_start)
-    step_count = (angle_end - angle_start) * fmaxf(radius_start, radius_end);
+    step_count = (angle_end - angle_start) * fmaxf(radius_start, radius_end) / (float)step;
   else
-    step_count = (angle_start - angle_end) * fmaxf(radius_start, radius_end);
+    step_count = (angle_start - angle_end) * fmaxf(radius_start, radius_end) / (float)step;
   if(step_count < 2) return;
 
   // and now we add the points
@@ -587,7 +587,7 @@ static void _polygon_joint_arc(const _polygon_walk_t *const w, const float *cons
 {
   if(fabsf(to[0] - from[0]) <= 1.0f && fabsf(to[1] - from[1]) <= 1.0f) return;
   const gboolean clockwise = dt_masks_outline_short_way(centre, from, to, w->clockwise);
-  _polygon_points_recurs_border_gaps(centre, from, to, w->dpoints, w->dborder, clockwise);
+  _polygon_points_recurs_border_gaps(centre, from, to, w->dpoints, w->dborder, clockwise, w->pixel_threshold);
 }
 
 /* One segment of the walk: the joint at its start node, then every sample within a pixel of
@@ -689,10 +689,10 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   const float input_width = dist->iwidth;
   const float input_height = dist->iheight;
 
-  /* Fixed at one pixel: the interior fill is a scanline over these samples and needs every
-   * row crossed; the pipe's mask_rasterization_step is a spoke-spacing budget, not a
-   * scanline one. */
-  const int pixel_threshold = 1;
+  /* The pipe's is fixed at one pixel: its interior fill is a scanline over these samples and
+   * needs every row crossed, and its mask_rasterization_step is a spoke-spacing budget, not a
+   * scanline one. The GUI fills nothing and samples at the density it shows. */
+  const int pixel_threshold = IS_NULL_PTR(dist->pipe) ? dist->rasterization_step : 1;
   const int node_count = (int)g_list_length(mask_form->points);
 
   dt_masks_dynbuf_t *dpoints = dt_masks_dynbuf_init(1000000, "polygon dpoints");
