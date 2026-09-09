@@ -2767,8 +2767,29 @@ static void _dt_masks_events_set_current_pos(const double x, const double y, dt_
 static int _dt_masks_events_mouse_moved(dt_develop_t *dev, struct dt_iop_module_t *module, double x,
                                        double y, double pressure, int which);
 
+/* How far the pointer moved since the motion before, in the view's coordinates: with the
+ * rectangle the last overlay frame touched, it says which rectangle of the view a motion the
+ * masks handled can have changed. */
+static double _overlay_pointer[2] = { 0.0, 0.0 };
+static double _overlay_pointer_delta[2] = { 0.0, 0.0 };
+static gboolean _overlay_pointer_valid = FALSE;
+
 int dt_masks_events_mouse_moved(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, double pressure, int which)
 {
+  if(_overlay_pointer_valid)
+  {
+    _overlay_pointer_delta[0] = x - _overlay_pointer[0];
+    _overlay_pointer_delta[1] = y - _overlay_pointer[1];
+  }
+  else
+  {
+    _overlay_pointer_delta[0] = 0.0;
+    _overlay_pointer_delta[1] = 0.0;
+  }
+  _overlay_pointer[0] = x;
+  _overlay_pointer[1] = y;
+  _overlay_pointer_valid = TRUE;
+
   /* Timed because it is the other thing that scales with the number of shapes and is not part of
    * the expose: hit-testing walks every shape in the group and, for a brush, every point of it.
    * The #1158 logs show the darkroom redraw growing to 400 ms with only 1.5 ms of mask overlay in
@@ -3672,33 +3693,41 @@ static int _session_sigs_take(const dt_masks_form_gui_t *gui, _session_outline_s
 }
 
 /** @brief Union of the cached outlines, or FALSE when there is nothing to bound. */
+static void _bbox_include_array(const float *const array, const int count, double bbox[4], gboolean *any)
+{
+  if(IS_NULL_PTR(array) || count <= 0) return;
+  for(int i = 0; i < count; i++)
+  {
+    const double x = array[2 * i];
+    const double y = array[2 * i + 1];
+    if(!*any)
+    {
+      bbox[0] = x;
+      bbox[2] = x;
+      bbox[1] = y;
+      bbox[3] = y;
+      *any = TRUE;
+      continue;
+    }
+    bbox[0] = fmin(bbox[0], x);
+    bbox[1] = fmin(bbox[1], y);
+    bbox[2] = fmax(bbox[2], x);
+    bbox[3] = fmax(bbox[3], y);
+  }
+}
+
+/* The box of everything the session draws: the spines AND the borders. It held the spines
+ * alone, and a brush's dashed border lies a radius outside its spine, further than the clip's
+ * margin; the pattern was clipped to it on a cache hit after a pan or zoom. */
 static gboolean _session_bbox_from_points(const dt_masks_form_gui_t *gui, double bbox[4])
 {
   gboolean any = FALSE;
   for(const GList *node = gui->points; node; node = g_list_next(node))
   {
     const dt_masks_form_gui_points_t *const pts = (const dt_masks_form_gui_points_t *)node->data;
-    if(IS_NULL_PTR(pts) || IS_NULL_PTR(pts->points) || pts->points_count <= 0) continue;
-
-    for(int i = 0; i < pts->points_count; i++)
-    {
-      const double x = pts->points[2 * i];
-      const double y = pts->points[2 * i + 1];
-
-      if(!any)
-      {
-        bbox[0] = bbox[2] = x;
-        bbox[1] = bbox[3] = y;
-        any = TRUE;
-      }
-      else
-      {
-        bbox[0] = fmin(bbox[0], x);
-        bbox[1] = fmin(bbox[1], y);
-        bbox[2] = fmax(bbox[2], x);
-        bbox[3] = fmax(bbox[3], y);
-      }
-    }
+    if(IS_NULL_PTR(pts)) continue;
+    _bbox_include_array(pts->points, pts->points_count, bbox, &any);
+    _bbox_include_array(pts->border, pts->border_count, bbox, &any);
   }
   return any;
 }
@@ -4141,13 +4170,47 @@ static void _canvas_cairo_bound(cairo_t *canvas_cr, const dt_masks_form_gui_t *g
   rect->height += 2 * margin;
 }
 
-/* Bound what cairo may paint on top of the outlines and clip the canvas context to it. A
- * creation session paints through its own cached pattern and keeps @p bound as the caller set
- * it, the whole canvas, unclipped. Returns whether @p bound holds a rectangle at all. */
-static gboolean _overlay_clip_to_bound(cairo_t *mask_draw, const dt_masks_form_gui_t *gui,
-                                       const _canvas_frame_t *const frame, cairo_rectangle_int_t *bound)
+/* Grow @p rect to the session's box, taken through the canvas context to pixels, with the
+ * margin the session clip uses. */
+static void _session_bound_include(cairo_t *canvas_cr, const float zoom_scale, cairo_rectangle_int_t *rect,
+                                   gboolean *any)
 {
-  if(gui->creation || !IS_NULL_PTR(gui->creation_formids)) return TRUE;
+  if(!_session_bbox_valid) return;
+  const double scale = _canvas_device_scale(canvas_cr);
+  const double margin = (zoom_scale > 1e-6f) ? (16.0 / zoom_scale) : 0.0;
+  const double xs[2] = { _session_bbox[0] - margin, _session_bbox[2] + margin };
+  const double ys[2] = { _session_bbox[1] - margin, _session_bbox[3] + margin };
+  for(int c = 0; c < 4; c++)
+  {
+    double x = xs[c & 1];
+    double y = ys[c >> 1];
+    cairo_user_to_device(canvas_cr, &x, &y);
+    _rect_include(rect, any, x * scale, y * scale, 2);
+  }
+}
+
+/* Bound what cairo may paint on top of the outlines and clip the canvas context to it.
+ *
+ * A creation session is bounded but not clipped: the pattern of the saved strokes is rebuilt
+ * inside a group cairo sizes to the clip, and a group cut to a stale box truncated a new stroke
+ * for the rest of the session. Its bound is the session's box and the live shape's, which is
+ * what the composite and the clear then span. Before, a session took @p bound as the caller
+ * set it, the whole canvas: a full-window composite and a full-window memset on every frame
+ * drawn, 11.6 ms of a frame at a 2560x1440 window on a 2x screen. Returns whether @p bound
+ * holds a rectangle at all. */
+static gboolean _overlay_clip_to_bound(cairo_t *mask_draw, const dt_masks_form_gui_t *gui,
+                                       const _canvas_frame_t *const frame, cairo_rectangle_int_t *bound,
+                                       const float zoom_scale)
+{
+  if(gui->creation || !IS_NULL_PTR(gui->creation_formids))
+  {
+    cairo_rectangle_int_t session = { 0 };
+    gboolean session_bounded = FALSE;
+    _canvas_cairo_bound(mask_draw, gui, &session, &session_bounded);
+    _session_bound_include(mask_draw, zoom_scale, &session, &session_bounded);
+    if(session_bounded) *bound = session;
+    return TRUE;
+  }
   gboolean bounded = FALSE;
   _canvas_cairo_bound(mask_draw, gui, bound, &bounded);
   if(!bounded) return FALSE;
@@ -4162,17 +4225,16 @@ static gboolean _overlay_clip_to_bound(cairo_t *mask_draw, const dt_masks_form_g
 
 /* Open a frame covering cr's clip. Returns FALSE with nothing to draw into when the clip is
  * empty or the canvas cannot be had. */
-static gboolean _canvas_begin(cairo_t *cr, _canvas_frame_t *frame)
+static gboolean _canvas_begin(cairo_t *cr, const int width, const int height, _canvas_frame_t *frame)
 {
-  double clip_x0 = 0.0;
-  double clip_y0 = 0.0;
-  double clip_x1 = 0.0;
-  double clip_y1 = 0.0;
-  cairo_clip_extents(cr, &clip_x0, &clip_y0, &clip_x1, &clip_y1);
-  double device_x0 = clip_x0;
-  double device_y0 = clip_y0;
-  double device_x1 = clip_x1;
-  double device_y1 = clip_y1;
+  /* The frame is the view, not cr's clip. A redraw asked for a rectangle narrows the clip to
+   * what moved, and a canvas sized to the clip would be reallocated on every such frame and
+   * hold nothing beyond it. The canvas covers the view and stays; what reaches the target is
+   * the composite, and cairo clips that. */
+  double device_x0 = 0.0;
+  double device_y0 = 0.0;
+  double device_x1 = width;
+  double device_y1 = height;
   cairo_user_to_device(cr, &device_x0, &device_y0);
   cairo_user_to_device(cr, &device_x1, &device_y1);
 
@@ -4296,6 +4358,59 @@ static void _overlay_dump(const _canvas_frame_t *const frame, const dt_masks_for
   }
 }
 
+/* What the last overlay frame composited onto the view, in the view's coordinates, and how far
+ * the pointer moved since the motion before (see _overlay_pointer_delta): together they say
+ * which rectangle of the view a motion the masks handled can have changed. Every such motion
+ * used to invalidate the whole centre widget, which repainted the whole image under an overlay
+ * that had moved by a few pixels. */
+static cairo_rectangle_int_t _overlay_damage = { 0, 0, 0, 0 };
+static gboolean _overlay_damage_valid = FALSE;
+
+void dt_masks_overlay_queue_redraw(GtkWidget *widget)
+{
+  if(IS_NULL_PTR(widget)) return;
+  if(!_overlay_damage_valid)
+  {
+    gtk_widget_queue_draw(widget);
+    return;
+  }
+  /* the last frame's rectangle, grown by the pointer's motion: a dragged shape moves with the
+   * pointer, a hovered one does not move at all. Where a frame lands outside this,
+   * _overlay_damage_record() asks for the rest. */
+  const int grow_x = (int)ceil(fabs(_overlay_pointer_delta[0])) + 4;
+  const int grow_y = (int)ceil(fabs(_overlay_pointer_delta[1])) + 4;
+  gtk_widget_queue_draw_area(widget, _overlay_damage.x - grow_x, _overlay_damage.y - grow_y,
+                             _overlay_damage.width + 2 * grow_x, _overlay_damage.height + 2 * grow_y);
+}
+
+/* Record the rectangle the frame composited, in the view's coordinates, and ask for whatever
+ * of it the clip of this expose did not cover: the invalidation was an estimate made before the
+ * frame was drawn, and a frame that outgrew it is painted in full by the next, small one. */
+static void _overlay_damage_record(cairo_t *cr, const _canvas_frame_t *const frame, const cairo_rectangle_int_t *dirty)
+{
+  if(IS_NULL_PTR(dirty))
+  {
+    _overlay_damage_valid = FALSE;
+    return;
+  }
+  const double s = frame->device_scale;
+  const cairo_rectangle_int_t damage = { (int)floor(dirty->x / s), (int)floor(dirty->y / s),
+                                         (int)ceil((dirty->x + dirty->width) / s) - (int)floor(dirty->x / s),
+                                         (int)ceil((dirty->y + dirty->height) / s) - (int)floor(dirty->y / s) };
+  _overlay_damage = damage;
+  _overlay_damage_valid = TRUE;
+
+  double clip_x0 = 0.0;
+  double clip_y0 = 0.0;
+  double clip_x1 = 0.0;
+  double clip_y1 = 0.0;
+  cairo_clip_extents(cr, &clip_x0, &clip_y0, &clip_x1, &clip_y1);
+  const gboolean covered = damage.x >= floor(clip_x0) && damage.y >= floor(clip_y0)
+                           && damage.x + damage.width <= ceil(clip_x1) && damage.y + damage.height <= ceil(clip_y1);
+  if(!covered)
+    gtk_widget_queue_draw_area(dt_gui_center_widget(), damage.x, damage.y, damage.width, damage.height);
+}
+
 /* Draw the visible form: a group member by member, anything else through its own drawer. */
 static void _overlay_draw_form(cairo_t *cr, const float zoom_scale, dt_masks_form_t *mask_form,
                                dt_masks_form_gui_t *mask_gui)
@@ -4374,7 +4489,7 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
     dt_print(DT_DEBUG_MASKS, "[masks] overlay preamble took %0.04f sec\n", group_start - post_expose_start);
 
   _canvas_frame_t frame = { 0 };
-  if(!_canvas_begin(cr, &frame)) return;
+  if(!_canvas_begin(cr, width, height, &frame)) return;
   cairo_t *const mask_draw = frame.cr;
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks] overlay canvas %dx%d ready in %0.04f sec\n", frame.width, frame.height,
@@ -4409,7 +4524,7 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
 
   /* The rectangle cairo may paint in, and the clip that holds it to that. */
   cairo_rectangle_int_t cairo_bound = { 0, 0, frame.width, frame.height };
-  const gboolean cairo_bounded = _overlay_clip_to_bound(mask_draw, mask_gui, &frame, &cairo_bound);
+  const gboolean cairo_bounded = _overlay_clip_to_bound(mask_draw, mask_gui, &frame, &cairo_bound, zoom_scale);
 
   if(dt_get_debug_flags() & DT_DEBUG_MASKS)
     dt_show_times(&rebuild_start, "[masks] overlay outline refresh");
@@ -4439,6 +4554,8 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
 
   const double composite_start = dt_get_wtime();
   if(any) _canvas_end(cr, &frame, &dirty);
+  /* the darkroom's own frames only: a headless caller has no widget to invalidate */
+  if(IS_NULL_PTR(transform)) _overlay_damage_record(cr, &frame, any ? &dirty : NULL);
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks] overlay composited (%dx%d of %dx%d) in %0.04f sec\n",
              any ? dirty.width : 0, any ? dirty.height : 0, frame.width, frame.height,

@@ -2617,6 +2617,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   // change cursor appearance by default
   _darkroom_set_default_cursor(self, x, y);
   gboolean handled = FALSE;
+  gboolean masks_handled = FALSE;
 
   if(picker_active && dt_control_button_down(1))
   {
@@ -2672,6 +2673,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   else if(dt_masks_get_visible_form(dev)
           && dt_masks_events_mouse_moved(dev, dev->gui_module, x, y, pressure, which))
   {
+    masks_handled = TRUE;
     // There is no shape dragging in creation mode, so no need to commit history.
     if(!dev->form_gui->creation)
     {
@@ -2756,7 +2758,12 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
   if(handled)
   {
-    dt_control_queue_redraw_center();
+    /* a motion the masks handled changed the overlay and nothing else: repaint what it touched,
+     * not the image under the whole window */
+    if(masks_handled)
+      dt_masks_overlay_queue_redraw(dt_gui_center_widget());
+    else
+      dt_control_queue_redraw_center();
     return;
   }
 
