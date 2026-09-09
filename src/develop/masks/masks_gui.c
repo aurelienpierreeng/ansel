@@ -2436,22 +2436,21 @@ void dt_masks_gui_form_test_create(dt_masks_form_t *mask_form, dt_masks_form_gui
   const gboolean stale = (mask_gui->geometry_generation != live_generation)
                          || (mask_gui->outline_step_built != live_step);
   if(dt_get_debug_flags() & DT_DEBUG_MASKS)
+  {
+    const char *verdict = "reuse";
+    if(mask_gui->geometry_generation == 0) verdict = "REBUILD (nothing cached)";
+    else if(stale) verdict = "REBUILD (geometry or density moved)";
     dt_print(DT_DEBUG_MASKS, "[masks] outline cache: held for geometry %lu at step %d, live %lu at step %d -> %s\n",
              (unsigned long)mask_gui->geometry_generation, mask_gui->outline_step_built,
-             (unsigned long)live_generation, live_step,
-             (mask_gui->geometry_generation == 0)
-                 ? "REBUILD (nothing cached)"
-                 : (stale ? "REBUILD (geometry or density moved)" : "reuse"));
+             (unsigned long)live_generation, live_step, verdict);
+  }
 
-  if(mask_gui->geometry_generation != 0)
+  if(mask_gui->geometry_generation != 0 && stale)
   {
-    if(stale)
-    {
-      mask_gui->geometry_generation = 0;
-      mask_gui->formid = 0;
-      g_list_free_full(mask_gui->points, dt_masks_form_gui_points_free);
-      mask_gui->points = NULL;
-    }
+    mask_gui->geometry_generation = 0;
+    mask_gui->formid = 0;
+    g_list_free_full(mask_gui->points, dt_masks_form_gui_points_free);
+    mask_gui->points = NULL;
   }
 
   // we create the form if needed

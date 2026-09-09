@@ -205,23 +205,41 @@ typedef struct _outline_disc_grid_t
   float miny;
 } _outline_disc_grid_t;
 
-/* Everything the per-sample test needs. */
-typedef struct _outline_boundary_t
+/* The discs, decimated, as the flat arrays the containment test streams through. */
+typedef struct _outline_discs_t
 {
-  /* the discs, decimated, as the flat arrays the containment test streams through */
   float *cx;
   float *cy;
   float *rin2;          /* (radius - eps)^2, or -1 for a disc the tolerance leaves nothing of */
   float *dwalk;         /* per disc, the length of spine walked to its centre */
-  int ndisc;
-  /* per block of OUTLINE_BLOCK discs: the box its centres span, and how far past it the
-   * largest disc reaches -- zero when none of them can contain anything */
-  float *bminx;
-  float *bmaxx;
-  float *bminy;
-  float *bmaxy;
-  float *breach;
-  int nblock;
+  int count;
+} _outline_discs_t;
+
+/* Per block of OUTLINE_BLOCK discs: the box its centres span, and how far past it the largest
+ * disc reaches -- zero when none of them can contain anything. */
+typedef struct _outline_blocks_t
+{
+  float *minx;
+  float *maxx;
+  float *miny;
+  float *maxy;
+  float *reach;
+  int count;
+} _outline_blocks_t;
+
+/* The samples hashed by pixel cell, for the copy test. */
+typedef struct _outline_cells_t
+{
+  int *head;
+  int *next;
+  unsigned mask;
+} _outline_cells_t;
+
+/* Everything the per-sample test needs. */
+typedef struct _outline_boundary_t
+{
+  _outline_discs_t discs;
+  _outline_blocks_t blocks;
   int *disc_of;         /* per sample, the disc it belongs to */
   const float *border_h;   /* the border samples, past the header */
   float *walk;          /* per sample, the length of border walked to reach it */
@@ -229,10 +247,7 @@ typedef struct _outline_boundary_t
   float eps;            /* boundary tolerance, in pixels */
   _outline_disc_grid_t grid;
   gboolean have_grid;
-  /* the samples hashed by pixel cell, for the copy test */
-  int *cell_head;
-  int *cell_next;
-  unsigned cell_mask;
+  _outline_cells_t cells;
   /* what the pass did, for the perf trace */
   long probes;
   long disc_tests;
@@ -245,23 +260,23 @@ typedef struct _outline_boundary_t
 
 static void _outline_boundary_free(_outline_boundary_t *const b)
 {
-  dt_free_align(b->cx);
-  dt_free_align(b->cy);
-  dt_free_align(b->rin2);
-  dt_free_align(b->dwalk);
-  dt_free_align(b->bminx);
-  dt_free_align(b->bmaxx);
-  dt_free_align(b->bminy);
-  dt_free_align(b->bmaxy);
-  dt_free_align(b->breach);
+  dt_free_align(b->discs.cx);
+  dt_free_align(b->discs.cy);
+  dt_free_align(b->discs.rin2);
+  dt_free_align(b->discs.dwalk);
+  dt_free_align(b->blocks.minx);
+  dt_free_align(b->blocks.maxx);
+  dt_free_align(b->blocks.miny);
+  dt_free_align(b->blocks.maxy);
+  dt_free_align(b->blocks.reach);
   dt_free_align(b->disc_of);
   dt_free_align(b->walk);
   dt_free_align(b->grid.bucket_head);
   dt_free_align(b->grid.run_start);
   dt_free_align(b->grid.run_end);
   dt_free_align(b->grid.run_next);
-  dt_free_align(b->cell_head);
-  dt_free_align(b->cell_next);
+  dt_free_align(b->cells.head);
+  dt_free_align(b->cells.next);
   memset(b, 0, sizeof(*b));
 }
 
@@ -269,20 +284,20 @@ static void _outline_boundary_free(_outline_boundary_t *const b)
 static gboolean _outline_boundary_alloc(_outline_boundary_t *const b, const int n)
 {
   const int nblock = n / OUTLINE_BLOCK + 1;
-  b->cx = dt_alloc_align((size_t)n * sizeof(float));
-  b->cy = dt_alloc_align((size_t)n * sizeof(float));
-  b->rin2 = dt_alloc_align((size_t)n * sizeof(float));
-  b->dwalk = dt_alloc_align((size_t)n * sizeof(float));
-  b->bminx = dt_alloc_align((size_t)nblock * sizeof(float));
-  b->bmaxx = dt_alloc_align((size_t)nblock * sizeof(float));
-  b->bminy = dt_alloc_align((size_t)nblock * sizeof(float));
-  b->bmaxy = dt_alloc_align((size_t)nblock * sizeof(float));
-  b->breach = dt_alloc_align((size_t)nblock * sizeof(float));
+  b->discs.cx = dt_alloc_align((size_t)n * sizeof(float));
+  b->discs.cy = dt_alloc_align((size_t)n * sizeof(float));
+  b->discs.rin2 = dt_alloc_align((size_t)n * sizeof(float));
+  b->discs.dwalk = dt_alloc_align((size_t)n * sizeof(float));
+  b->blocks.minx = dt_alloc_align((size_t)nblock * sizeof(float));
+  b->blocks.maxx = dt_alloc_align((size_t)nblock * sizeof(float));
+  b->blocks.miny = dt_alloc_align((size_t)nblock * sizeof(float));
+  b->blocks.maxy = dt_alloc_align((size_t)nblock * sizeof(float));
+  b->blocks.reach = dt_alloc_align((size_t)nblock * sizeof(float));
   b->disc_of = dt_alloc_align((size_t)n * sizeof(int));
   b->walk = dt_alloc_align((size_t)n * sizeof(float));
-  const gboolean ok = !IS_NULL_PTR(b->cx) && !IS_NULL_PTR(b->cy) && !IS_NULL_PTR(b->rin2)
-                      && !IS_NULL_PTR(b->dwalk) && !IS_NULL_PTR(b->bminx) && !IS_NULL_PTR(b->bmaxx)
-                      && !IS_NULL_PTR(b->bminy) && !IS_NULL_PTR(b->bmaxy) && !IS_NULL_PTR(b->breach)
+  const gboolean ok = !IS_NULL_PTR(b->discs.cx) && !IS_NULL_PTR(b->discs.cy) && !IS_NULL_PTR(b->discs.rin2)
+                      && !IS_NULL_PTR(b->discs.dwalk) && !IS_NULL_PTR(b->blocks.minx) && !IS_NULL_PTR(b->blocks.maxx)
+                      && !IS_NULL_PTR(b->blocks.miny) && !IS_NULL_PTR(b->blocks.maxy) && !IS_NULL_PTR(b->blocks.reach)
                       && !IS_NULL_PTR(b->disc_of) && !IS_NULL_PTR(b->walk);
   if(!ok) _outline_boundary_free(b);
   return ok;
@@ -300,27 +315,42 @@ static gboolean _outline_cells_build(_outline_boundary_t *const b, const int n)
 {
   unsigned size = 1;
   while(size < 2u * (unsigned)n) size <<= 1;
-  b->cell_head = dt_alloc_align((size_t)size * sizeof(int));
-  b->cell_next = dt_alloc_align((size_t)n * sizeof(int));
-  if(IS_NULL_PTR(b->cell_head) || IS_NULL_PTR(b->cell_next))
+  b->cells.head = dt_alloc_align((size_t)size * sizeof(int));
+  b->cells.next = dt_alloc_align((size_t)n * sizeof(int));
+  if(IS_NULL_PTR(b->cells.head) || IS_NULL_PTR(b->cells.next))
   {
-    dt_free_align(b->cell_head);
-    dt_free_align(b->cell_next);
-    b->cell_head = NULL;
-    b->cell_next = NULL;
+    dt_free_align(b->cells.head);
+    dt_free_align(b->cells.next);
+    b->cells.head = NULL;
+    b->cells.next = NULL;
     return FALSE;
   }
-  memset(b->cell_head, 0xff, (size_t)size * sizeof(int));   /* every head -1 */
-  b->cell_mask = size - 1;
+  memset(b->cells.head, 0xff, (size_t)size * sizeof(int));   /* every head -1 */
+  b->cells.mask = size - 1;
   for(int i = 0; i < n; i++)
   {
     const int cx = (int)floorf(b->border_h[2 * i]);
     const int cy = (int)floorf(b->border_h[2 * i + 1]);
-    const unsigned h = _outline_cell_hash(cx, cy) & b->cell_mask;
-    b->cell_next[i] = b->cell_head[h];
-    b->cell_head[h] = i;
+    const unsigned h = _outline_cell_hash(cx, cy) & b->cells.mask;
+    b->cells.next[i] = b->cells.head[h];
+    b->cells.head[h] = i;
   }
   return TRUE;
+}
+
+/* Is there, in the hashed cell @p h, a sample within three quarters of a pixel of (bx, by) that
+ * lies at least OUTLINE_REPEAT_MIN_WALK before the probe along the border (@p walk_limit). */
+static inline gboolean _outline_cell_repeats(const _outline_boundary_t *const b, const unsigned h, const float bx,
+                                             const float by, const float walk_limit)
+{
+  for(int k = b->cells.head[h]; k >= 0; k = b->cells.next[k])
+  {
+    if(b->walk[k] > walk_limit) continue;
+    const float ex = b->border_h[2 * k] - bx;
+    const float ey = b->border_h[2 * k + 1] - by;
+    if(ex * ex + ey * ey <= 0.5625f) return TRUE;
+  }
+  return FALSE;
 }
 
 /* Does the sample at (bx, by), reached after @p walk of border, repeat an earlier one: a
@@ -329,23 +359,14 @@ static gboolean _outline_cells_build(_outline_boundary_t *const b, const int n)
 static inline gboolean _outline_sample_repeats(const _outline_boundary_t *const b, const float bx, const float by,
                                                const float walk)
 {
-  if(IS_NULL_PTR(b->cell_head)) return FALSE;
+  if(IS_NULL_PTR(b->cells.head)) return FALSE;
   const float walk_limit = walk - OUTLINE_REPEAT_MIN_WALK;
   const int cx = (int)floorf(bx);
   const int cy = (int)floorf(by);
-  for(int dy = -1; dy <= 1; dy++)
+  for(int neighbour = 0; neighbour < 9; neighbour++)
   {
-    for(int dx = -1; dx <= 1; dx++)
-    {
-      const unsigned h = _outline_cell_hash(cx + dx, cy + dy) & b->cell_mask;
-      for(int k = b->cell_head[h]; k >= 0; k = b->cell_next[k])
-      {
-        if(b->walk[k] > walk_limit) continue;
-        const float ex = b->border_h[2 * k] - bx;
-        const float ey = b->border_h[2 * k + 1] - by;
-        if(ex * ex + ey * ey <= 0.5625f) return TRUE;
-      }
-    }
+    const unsigned h = _outline_cell_hash(cx - 1 + neighbour % 3, cy - 1 + neighbour / 3) & b->cells.mask;
+    if(_outline_cell_repeats(b, h, bx, by, walk_limit)) return TRUE;
   }
   return FALSE;
 }
@@ -360,10 +381,10 @@ static inline gboolean _outline_discs_contain(_outline_boundary_t *const b, cons
   const int blk_hi = hi / OUTLINE_BLOCK;
   for(int blk = blk_lo; blk <= blk_hi; blk++)
   {
-    const float reach = b->breach[blk];
+    const float reach = b->blocks.reach[blk];
     if(reach <= 0.0f) continue;
-    if(bx < b->bminx[blk] - reach || bx > b->bmaxx[blk] + reach || by < b->bminy[blk] - reach
-       || by > b->bmaxy[blk] + reach)
+    if(bx < b->blocks.minx[blk] - reach || bx > b->blocks.maxx[blk] + reach || by < b->blocks.miny[blk] - reach
+       || by > b->blocks.maxy[blk] + reach)
       continue;
     const int j0 = MAX(lo, blk * OUTLINE_BLOCK);
     const int j1 = MIN(hi, blk * OUTLINE_BLOCK + OUTLINE_BLOCK - 1);
@@ -371,9 +392,9 @@ static inline gboolean _outline_discs_contain(_outline_boundary_t *const b, cons
     int hit = 0;
     for(int j = j0; j <= j1; j++)
     {
-      const float ex = b->cx[j] - bx;
-      const float ey = b->cy[j] - by;
-      hit |= (ex * ex + ey * ey < b->rin2[j]);
+      const float ex = b->discs.cx[j] - bx;
+      const float ey = b->discs.cy[j] - by;
+      hit |= (ex * ex + ey * ey < b->discs.rin2[j]);
     }
     if(hit) return TRUE;
   }
@@ -399,9 +420,9 @@ static gboolean _outline_grid_build(_outline_boundary_t *const b, const float *c
   g->bw = (int)((bbox[1] - bbox[0]) / g->bucket) + 3;
   g->bh = (int)((bbox[3] - bbox[2]) / g->bucket) + 3;
   g->bucket_head = dt_alloc_align((size_t)g->bw * g->bh * sizeof(int));
-  g->run_start = dt_alloc_align((size_t)b->ndisc * sizeof(int));
-  g->run_end = dt_alloc_align((size_t)b->ndisc * sizeof(int));
-  g->run_next = dt_alloc_align((size_t)b->ndisc * sizeof(int));
+  g->run_start = dt_alloc_align((size_t)b->discs.count * sizeof(int));
+  g->run_end = dt_alloc_align((size_t)b->discs.count * sizeof(int));
+  g->run_next = dt_alloc_align((size_t)b->discs.count * sizeof(int));
   if(IS_NULL_PTR(g->bucket_head) || IS_NULL_PTR(g->run_start) || IS_NULL_PTR(g->run_end)
      || IS_NULL_PTR(g->run_next))
     return FALSE;
@@ -409,9 +430,9 @@ static gboolean _outline_grid_build(_outline_boundary_t *const b, const float *c
   for(int cell = 0; cell < g->bw * g->bh; cell++) g->bucket_head[cell] = -1;
   int nruns = 0;
   int last_cell = -1;
-  for(int d = 0; d < b->ndisc; d++)
+  for(int d = 0; d < b->discs.count; d++)
   {
-    const int cell = _outline_grid_cell(g, b->cx[d], b->cy[d]);
+    const int cell = _outline_grid_cell(g, b->discs.cx[d], b->discs.cy[d]);
     if(cell == last_cell)
     {
       g->run_end[nruns - 1] = d;   /* the walk is still in this bucket: extend its latest run */
@@ -457,24 +478,24 @@ static inline gboolean _outline_far_contains(_outline_boundary_t *const b, const
  * monotone along the discs, so both ends are a bisection. */
 static inline void _outline_window(const _outline_boundary_t *const b, const int d0, int *const lo, int *const hi)
 {
-  const float w0 = b->dwalk[d0];
+  const float w0 = b->discs.dwalk[d0];
   const float w_lo = w0 - b->window;
   int l = 0;
   int h = d0;
   while(l < h)
   {
     const int m = (l + h) / 2;
-    if(b->dwalk[m] < w_lo) l = m + 1;
+    if(b->discs.dwalk[m] < w_lo) l = m + 1;
     else h = m;
   }
   *lo = l;
   const float w_hi = w0 + b->window;
   l = d0;
-  h = b->ndisc - 1;
+  h = b->discs.count - 1;
   while(l < h)
   {
     const int m = (l + h + 1) / 2;
-    if(b->dwalk[m] > w_hi) h = m - 1;
+    if(b->discs.dwalk[m] > w_hi) h = m - 1;
     else l = m;
   }
   *hi = l;
@@ -553,26 +574,26 @@ static float _outline_discs_from_outline(const float *const points_h, const floa
     {
       walked += moved;
       const float rin = r - b->eps;
-      b->cx[ndisc] = px;
-      b->cy[ndisc] = py;
-      b->rin2[ndisc] = (rin > 0.0f) ? rin * rin : -1.0f;
-      b->dwalk[ndisc] = walked;
+      b->discs.cx[ndisc] = px;
+      b->discs.cy[ndisc] = py;
+      b->discs.rin2[ndisc] = (rin > 0.0f) ? rin * rin : -1.0f;
+      b->discs.dwalk[ndisc] = walked;
       const int blk = ndisc / OUTLINE_BLOCK;
       if(ndisc % OUTLINE_BLOCK == 0)
       {
-        b->bminx[blk] = px;
-        b->bmaxx[blk] = px;
-        b->bminy[blk] = py;
-        b->bmaxy[blk] = py;
-        b->breach[blk] = fmaxf(rin, 0.0f);
+        b->blocks.minx[blk] = px;
+        b->blocks.maxx[blk] = px;
+        b->blocks.miny[blk] = py;
+        b->blocks.maxy[blk] = py;
+        b->blocks.reach[blk] = fmaxf(rin, 0.0f);
       }
       else
       {
-        b->bminx[blk] = fminf(b->bminx[blk], px);
-        b->bmaxx[blk] = fmaxf(b->bmaxx[blk], px);
-        b->bminy[blk] = fminf(b->bminy[blk], py);
-        b->bmaxy[blk] = fmaxf(b->bmaxy[blk], py);
-        b->breach[blk] = fmaxf(b->breach[blk], rin);
+        b->blocks.minx[blk] = fminf(b->blocks.minx[blk], px);
+        b->blocks.maxx[blk] = fmaxf(b->blocks.maxx[blk], px);
+        b->blocks.miny[blk] = fminf(b->blocks.miny[blk], py);
+        b->blocks.maxy[blk] = fmaxf(b->blocks.maxy[blk], py);
+        b->blocks.reach[blk] = fmaxf(b->blocks.reach[blk], rin);
       }
       ndisc++;
       r_max = fmaxf(r_max, r);
@@ -582,8 +603,8 @@ static float _outline_discs_from_outline(const float *const points_h, const floa
     }
     b->disc_of[i] = ndisc - 1;
   }
-  b->ndisc = ndisc;
-  b->nblock = (ndisc + OUTLINE_BLOCK - 1) / OUTLINE_BLOCK;
+  b->discs.count = ndisc;
+  b->blocks.count = (ndisc + OUTLINE_BLOCK - 1) / OUTLINE_BLOCK;
   b->border_h = border_h;
   /* the sample is one radius from its spine point, the hiding disc's centre one radius from
    * the sample, and each of them half a pixel from its disc's centre */
@@ -747,7 +768,7 @@ int dt_masks_outline_boundary_skips(const float *const points, const float *cons
     dt_print(DT_DEBUG_MASKS,
              "[masks] boundary pass: %d samples, %d discs, radius %.0f, %ld probes, %ld disc tests, %d dropped;"
              " prepared in %.1f ms, probed in %.1f ms\n",
-             n, b.ndisc, r_max, b.probes, b.disc_tests, ndropped, 1000.0 * (prepared - start),
+             n, b.discs.count, r_max, b.probes, b.disc_tests, ndropped, 1000.0 * (prepared - start),
              1000.0 * (dt_get_wtime() - prepared));
   _outline_boundary_free(&b);
 
