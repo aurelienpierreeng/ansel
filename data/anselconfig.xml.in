@@ -2863,4 +2863,137 @@
     <shortdescription>height of the collect list</shortdescription>
     <longdescription>maximum height the collect list in lighttable will grow to before scrolling</longdescription>
   </dtconfig>
+  <dtconfig prefs="views" section="otherviews" restart="true">
+    <name>/views/canvas/enable</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>Enable the canvas view</shortdescription>
+    <longdescription>Check to enable the Canvas atelier, where images are laid out freely to prepare books, exhibitions and series. (needs a restart)</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/grid_size</name>
+    <type min="5" max="1000">int</type>
+    <default>50</default>
+    <shortdescription>canvas grid spacing, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/grid_visible</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>show the canvas grid dots</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/grid_snap</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>snap canvas frames to the grid</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/border_width</name>
+    <type min="0" max="200">float</type>
+    <default>0</default>
+    <shortdescription>default border width of canvas frames, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/border_color</name>
+    <type>string</type>
+    <default>#ffffffff</default>
+    <shortdescription>default border colour of canvas frames, #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/background_color</name>
+    <type>string</type>
+    <default>#2e2e2eff</default>
+    <shortdescription>background colour of a new canvas, #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/default_font</name>
+    <type>string</type>
+    <default>Sans 12</default>
+    <shortdescription>font of canvas text frames without a font of their own</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/image_long_edge</name>
+    <type min="256" max="8192">int</type>
+    <default>2048</default>
+    <shortdescription>long edge, in pixels, of the JPEG stored for each canvas image</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/jpeg_quality</name>
+    <type min="50" max="100">int</type>
+    <default>92</default>
+    <shortdescription>JPEG quality of canvas image renders</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/auto_refresh</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>re-render stale canvas images from the library automatically when a canvas is opened</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/surface_cache_mb</name>
+    <type min="64" max="8192">int</type>
+    <default>512</default>
+    <shortdescription>memory budget for decoded canvas images, in MB</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/layout_gap</name>
+    <type min="0" max="1000">int</type>
+    <default>40</default>
+    <shortdescription>spacing between frames when a canvas layout is applied, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/masonry_columns</name>
+    <type min="1" max="20">int</type>
+    <default>3</default>
+    <shortdescription>columns of the canvas masonry layout</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/last_directory</name>
+    <type>string</type>
+    <default></default>
+    <shortdescription>folder the last canvas was opened from or saved to</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/paper</name>
+    <type>string</type>
+    <default>a4</default>
+    <shortdescription>paper size of the canvas PDF export</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/landscape</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>landscape orientation of the canvas PDF export</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/dpi</name>
+    <type min="72" max="1200">int</type>
+    <default>300</default>
+    <shortdescription>resolution of the canvas PDF export</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/margin_mm</name>
+    <type min="0" max="100">float</type>
+    <default>10</default>
+    <shortdescription>page margin of the canvas PDF export, in mm</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/icc_type</name>
+    <type>int</type>
+    <default>1</default>
+    <shortdescription>output profile type of the canvas PDF export (dt_colorspaces_color_profile_type_t)</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/icc_filename</name>
+    <type>string</type>
+    <default></default>
+    <shortdescription>output profile file of the canvas PDF export, when the type is a file</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/intent</name>
+    <type min="0" max="3">int</type>
+    <default>0</default>
+    <shortdescription>rendering intent of the canvas PDF export</shortdescription>
+  </dtconfig>
 </dtconfiglist>

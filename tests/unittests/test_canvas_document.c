@@ -1,0 +1,396 @@
+/*
+    This file is part of Ansel,
+    Copyright (C) 2026 Aurélien PIERRE.
+
+    Ansel is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Ansel is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include "canvas/canvas.h"
+#include "canvas/canvas_format.h"
+
+#include <glib.h>
+#include <glib/gstdio.h>
+#include <math.h>
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include <cmocka.h>
+
+static dt_canvas_t *_populated_canvas(void)
+{
+  dt_canvas_t *canvas = dt_canvas_new();
+  g_strlcpy(canvas->title, "Exhibition 2026", sizeof(canvas->title));
+  canvas->grid_size = 25.0f;
+  canvas->grid_flags = DT_CANVAS_GRID_VISIBLE | DT_CANVAS_GRID_SNAP;
+  canvas->border_width = 3.0f;
+  canvas->border_color = dt_canvas_color(1.0f, 0.5f, 0.25f, 1.0f);
+  canvas->reserved[7] = 0xAB;
+
+  dt_canvas_object_t *image = dt_canvas_add_image(canvas, 100.0, 200.0, 6000, 4000);
+  image->image.imgid = 42;
+  image->image.version = 1;
+  image->image.film_id = 7;
+  g_strlcpy(image->image.folder, "/home/someone/Pictures/2026", sizeof(image->image.folder));
+  g_strlcpy(image->image.filename, "DSC_0001.NEF", sizeof(image->image.filename));
+  g_strlcpy(image->image.exif_maker, "Nikon", sizeof(image->image.exif_maker));
+  image->image.exif_iso = 400.0f;
+  image->image.exif_datetime_taken = 1700000000000000LL;
+  image->rotation = 0.25;
+  image->flags = DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  image->border_width = 9.0f;
+  const char jpeg_stand_in[] = "\xff\xd8not really a jpeg\xff\xd9";
+  GBytes *jpeg = g_bytes_new(jpeg_stand_in, sizeof(jpeg_stand_in));
+  dt_canvas_image_set_render(canvas, image, jpeg, 2048, 1365, 0x1234567890ABCDEFULL, 1725000000LL);
+  g_bytes_unref(jpeg);
+
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, -300.0, 50.0, 400.0, 150.0, "# Title\n\nSome *emphasis*.");
+  g_strlcpy(text->text.font, "Serif Bold 14", sizeof(text->text.font));
+
+  dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, text->id, image->id);
+  assert_non_null(connector);
+  return canvas;
+}
+
+static void _index_round_trip_keeps_every_field(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = _populated_canvas();
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  assert_non_null(index);
+
+  dt_canvas_t *restored = dt_canvas_new();
+  GError *error = NULL;
+  assert_true(dt_canvas_format_read_index(restored, index, &error));
+  assert_null(error);
+  g_bytes_unref(index);
+
+  assert_string_equal(restored->title, "Exhibition 2026");
+  assert_float_equal(restored->grid_size, 25.0f, 1e-6);
+  assert_int_equal(restored->grid_flags, DT_CANVAS_GRID_VISIBLE | DT_CANVAS_GRID_SNAP);
+  assert_float_equal(restored->border_color.green, 0.5f, 1e-6);
+  assert_int_equal(restored->reserved[7], 0xAB);
+  assert_int_equal(dt_canvas_object_count(restored), 3);
+  assert_int_equal(restored->next_id, canvas->next_id);
+
+  const dt_canvas_object_t *image = dt_canvas_find_object(restored, 1);
+  assert_non_null(image);
+  assert_int_equal(image->kind, DT_CANVAS_OBJECT_IMAGE);
+  assert_int_equal(image->image.imgid, 42);
+  assert_int_equal(image->image.film_id, 7);
+  assert_string_equal(image->image.folder, "/home/someone/Pictures/2026");
+  assert_string_equal(image->image.filename, "DSC_0001.NEF");
+  assert_string_equal(image->image.exif_maker, "Nikon");
+  assert_float_equal(image->image.exif_iso, 400.0f, 1e-6);
+  assert_true(image->image.exif_datetime_taken == 1700000000000000LL);
+  assert_true(image->image.history_hash == 0x1234567890ABCDEFULL);
+  assert_int_equal(image->image.pixel_width, 2048);
+  assert_float_equal(image->rotation, 0.25, 1e-12);
+  assert_int_equal(image->flags, DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE);
+  assert_float_equal(image->border_width, 9.0f, 1e-6);
+  // The JPEG is a separate archive entry, not an index field.
+  assert_null(image->image.jpeg);
+
+  const dt_canvas_object_t *text = dt_canvas_find_object(restored, 2);
+  assert_non_null(text);
+  assert_string_equal(text->text.font, "Serif Bold 14");
+
+  const dt_canvas_object_t *connector = dt_canvas_find_object(restored, 3);
+  assert_non_null(connector);
+  assert_int_equal(connector->connector.from_id, 2);
+  assert_int_equal(connector->connector.to_id, 1);
+
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+}
+
+static void _a_record_from_a_later_version_is_skipped_by_its_size(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "a");
+  dt_canvas_add_text(canvas, 10.0, 10.0, 100.0, 100.0, "b");
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  gsize size = 0;
+  const uint8_t *data = g_bytes_get_data(index, &size);
+
+  // Grow the first record by 16 bytes of "future fields" and patch its record_size.
+  const uint32_t header_size = data[8 + 4] | (data[8 + 5] << 8) | (data[8 + 6] << 16) | ((uint32_t)data[8 + 7] << 24);
+  const uint8_t *first = data + header_size;
+  const uint32_t first_size = first[4] | (first[5] << 8) | (first[6] << 16) | ((uint32_t)first[7] << 24);
+  GByteArray *grown = g_byte_array_new();
+  g_byte_array_append(grown, data, header_size + first_size);
+  const uint8_t future[16] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+  g_byte_array_append(grown, future, sizeof(future));
+  g_byte_array_append(grown, data + header_size + first_size, size - header_size - first_size);
+  const uint32_t new_size = first_size + sizeof(future);
+  grown->data[header_size + 4] = (uint8_t)(new_size & 0xFF);
+  grown->data[header_size + 5] = (uint8_t)((new_size >> 8) & 0xFF);
+  grown->data[header_size + 6] = (uint8_t)((new_size >> 16) & 0xFF);
+  grown->data[header_size + 7] = (uint8_t)((new_size >> 24) & 0xFF);
+  g_bytes_unref(index);
+  GBytes *grown_bytes = g_byte_array_free_to_bytes(grown);
+
+  dt_canvas_t *restored = dt_canvas_new();
+  assert_true(dt_canvas_format_read_index(restored, grown_bytes, NULL));
+  assert_int_equal(dt_canvas_object_count(restored), 2);
+  assert_non_null(dt_canvas_find_object(restored, 1));
+  assert_non_null(dt_canvas_find_object(restored, 2));
+  assert_float_equal(dt_canvas_find_object(restored, 2)->x, 10.0, 1e-12);
+  g_bytes_unref(grown_bytes);
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+}
+
+static void _a_newer_format_and_a_truncated_index_are_refused(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "a");
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  gsize size = 0;
+  const uint8_t *data = g_bytes_get_data(index, &size);
+
+  uint8_t *newer = g_memdup2(data, size);
+  newer[8] = 99;
+  GBytes *newer_bytes = g_bytes_new_take(newer, size);
+  dt_canvas_t *restored = dt_canvas_new();
+  GError *error = NULL;
+  assert_false(dt_canvas_format_read_index(restored, newer_bytes, &error));
+  assert_non_null(error);
+  assert_int_equal(error->code, DT_CANVAS_ERROR_VERSION);
+  g_clear_error(&error);
+  g_bytes_unref(newer_bytes);
+  dt_canvas_free(restored);
+
+  GBytes *truncated = g_bytes_new(data, size - 40);
+  restored = dt_canvas_new();
+  assert_false(dt_canvas_format_read_index(restored, truncated, &error));
+  assert_int_equal(error->code, DT_CANVAS_ERROR_CORRUPT);
+  g_clear_error(&error);
+  g_bytes_unref(truncated);
+  dt_canvas_free(restored);
+
+  GBytes *garbage = g_bytes_new_static("PK garbage that is not an index", 31);
+  restored = dt_canvas_new();
+  assert_false(dt_canvas_format_read_index(restored, garbage, &error));
+  assert_int_equal(error->code, DT_CANVAS_ERROR_NOT_A_CANVAS);
+  g_clear_error(&error);
+  g_bytes_unref(garbage);
+  dt_canvas_free(restored);
+
+  g_bytes_unref(index);
+  dt_canvas_free(canvas);
+}
+
+static void _archive_round_trip_carries_jpegs_and_markdown(void **state)
+{
+  (void)state;
+  char *path = g_build_filename(g_get_tmp_dir(), "ansel-test-canvas-document" DT_CANVAS_FILE_EXTENSION, NULL);
+  g_unlink(path);
+  dt_canvas_t *canvas = _populated_canvas();
+  GError *error = NULL;
+  assert_true(dt_canvas_save(canvas, path, &error));
+  assert_null(error);
+  assert_false(canvas->dirty);
+  assert_string_equal(canvas->path, path);
+
+  dt_canvas_t *loaded = dt_canvas_load(path, &error);
+  assert_non_null(loaded);
+  assert_null(error);
+  assert_int_equal(dt_canvas_object_count(loaded), 3);
+  const dt_canvas_object_t *image = dt_canvas_find_object(loaded, 1);
+  assert_non_null(image->image.jpeg);
+  assert_int_equal(g_bytes_get_size(image->image.jpeg), g_bytes_get_size(dt_canvas_find_object(canvas, 1)->image.jpeg));
+  const dt_canvas_object_t *text = dt_canvas_find_object(loaded, 2);
+  assert_string_equal(dt_canvas_text_get_markdown(text), "# Title\n\nSome *emphasis*.");
+  assert_false(loaded->dirty);
+  dt_canvas_free(loaded);
+
+  assert_null(dt_canvas_load("/nonexistent/x" DT_CANVAS_FILE_EXTENSION, &error));
+  assert_non_null(error);
+  g_clear_error(&error);
+
+  g_unlink(path);
+  g_free(path);
+  dt_canvas_free(canvas);
+}
+
+static void _removing_a_frame_takes_its_connectors_and_unlinks_sidecars(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = _populated_canvas();
+  dt_canvas_object_t *sidecar = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "note");
+  sidecar->text.source = DT_CANVAS_TEXT_SOURCE_SIDECAR;
+  sidecar->text.linked_object = 1;
+  assert_int_equal(dt_canvas_object_count(canvas), 4);
+  assert_true(dt_canvas_remove_object(canvas, 1));
+  assert_int_equal(dt_canvas_object_count(canvas), 2);
+  assert_null(dt_canvas_find_object(canvas, 3));
+  assert_int_equal(sidecar->text.linked_object, 0);
+  assert_int_equal(sidecar->text.source, DT_CANVAS_TEXT_SOURCE_MARKDOWN);
+  assert_false(dt_canvas_remove_object(canvas, 1));
+  dt_canvas_free(canvas);
+}
+
+static void _snapshot_restore_round_trips_the_objects(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = _populated_canvas();
+  dt_canvas_t *snapshot = dt_canvas_copy(canvas);
+  assert_true(dt_canvas_remove_object(canvas, 2));
+  assert_int_equal(dt_canvas_object_count(canvas), 1);
+  dt_canvas_restore(canvas, snapshot);
+  assert_int_equal(dt_canvas_object_count(canvas), 3);
+  assert_string_equal(dt_canvas_text_get_markdown(dt_canvas_find_object(canvas, 2)), "# Title\n\nSome *emphasis*.");
+  // The snapshot is untouched by the restore and by the later edit.
+  dt_canvas_text_set_markdown(canvas, dt_canvas_find_object(canvas, 2), "changed");
+  assert_string_equal(dt_canvas_text_get_markdown(dt_canvas_find_object(snapshot, 2)), "# Title\n\nSome *emphasis*.");
+  dt_canvas_free(snapshot);
+  dt_canvas_free(canvas);
+}
+
+static void _draw_order_edits_keep_the_list_sorted(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *first = dt_canvas_add_text(canvas, 0.0, 0.0, 10.0, 10.0, "1");
+  dt_canvas_object_t *second = dt_canvas_add_text(canvas, 0.0, 0.0, 10.0, 10.0, "2");
+  dt_canvas_object_t *third = dt_canvas_add_text(canvas, 0.0, 0.0, 10.0, 10.0, "3");
+  assert_ptr_equal(dt_canvas_object_at(canvas, 2), third);
+  dt_canvas_object_to_front(canvas, first->id);
+  assert_ptr_equal(dt_canvas_object_at(canvas, 2), first);
+  dt_canvas_object_to_back(canvas, first->id);
+  assert_ptr_equal(dt_canvas_object_at(canvas, 0), first);
+  dt_canvas_object_raise(canvas, first->id);
+  assert_ptr_equal(dt_canvas_object_at(canvas, 1), first);
+  assert_ptr_equal(dt_canvas_object_at(canvas, 0), second);
+  dt_canvas_object_lower(canvas, first->id);
+  assert_ptr_equal(dt_canvas_object_at(canvas, 0), first);
+  // The frontmost object under a point wins the pick.
+  assert_ptr_equal(dt_canvas_pick(canvas, 0.0, 0.0, 0.0), third);
+  dt_canvas_free(canvas);
+}
+
+static void _rotated_frames_answer_hit_tests_and_bounds(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 100.0, 100.0, 200.0, 100.0, "");
+  frame->rotation = M_PI / 2.0; // now 100 wide and 200 tall on screen
+  assert_true(dt_canvas_object_contains(canvas, frame, 100.0, 190.0, 0.0));
+  assert_false(dt_canvas_object_contains(canvas, frame, 190.0, 100.0, 0.0));
+  const dt_canvas_rect_t bounds = dt_canvas_object_bounds(frame);
+  assert_float_equal(bounds.width, 100.0, 1e-9);
+  assert_float_equal(bounds.height, 200.0, 1e-9);
+  assert_float_equal(bounds.x, 50.0, 1e-9);
+
+  dt_canvas_object_t *other = dt_canvas_add_text(canvas, 500.0, 100.0, 100.0, 100.0, "");
+  dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, frame->id, other->id);
+  double from_x = 0.0;
+  double from_y = 0.0;
+  double to_x = 0.0;
+  double to_y = 0.0;
+  assert_true(dt_canvas_connector_endpoints(canvas, connector, &from_x, &from_y, &to_x, &to_y));
+  assert_float_equal(from_x, 150.0, 1e-9); // leaves the rotated frame's right edge
+  assert_float_equal(to_x, 450.0, 1e-9);   // enters the other frame's left edge
+  assert_true(dt_canvas_object_contains(canvas, connector, 300.0, 100.0, 1.0));
+  assert_false(dt_canvas_object_contains(canvas, connector, 300.0, 140.0, 1.0));
+
+  // Self links and links to connectors are refused.
+  assert_null(dt_canvas_add_connector(canvas, frame->id, frame->id));
+  assert_null(dt_canvas_add_connector(canvas, frame->id, connector->id));
+  dt_canvas_free(canvas);
+}
+
+static void _layouts_arrange_without_moving_the_group(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *frames[4];
+  for(int idx = 0; idx < 4; idx++)
+  {
+    frames[idx] = dt_canvas_add_image(canvas, 1000.0 + idx * 7.0, 2000.0 - idx * 3.0, 3000, 2000);
+  }
+  const dt_canvas_rect_t before = dt_canvas_bounds(canvas);
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_GRID, 0, 20.0);
+  const dt_canvas_rect_t after = dt_canvas_bounds(canvas);
+  assert_float_equal(after.x, before.x, 1e-9);
+  assert_float_equal(after.y, before.y, 1e-9);
+  // Two columns of two: the second frame sits to the right of the first, the third below it.
+  assert_true(frames[1]->x > frames[0]->x);
+  assert_float_equal(frames[1]->y, frames[0]->y, 1e-9);
+  assert_float_equal(frames[2]->x, frames[0]->x, 1e-9);
+  assert_true(frames[2]->y > frames[0]->y);
+
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_ROW, 0, 20.0);
+  for(int idx = 1; idx < 4; idx++)
+  {
+    assert_float_equal(frames[idx]->y, frames[0]->y, 1e-9);
+    assert_true(frames[idx]->x > frames[idx - 1]->x);
+  }
+
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_MASONRY, 3, 20.0);
+  assert_float_equal(frames[0]->width, frames[3]->width, 1e-9);
+  assert_true(frames[3]->y > frames[0]->y); // the fourth wraps under the first column
+
+  // Snapping rounds to the grid only when enabled.
+  canvas->grid_size = 50.0f;
+  assert_float_equal(dt_canvas_snap(canvas, 74.0), 74.0, 1e-9);
+  canvas->grid_flags |= DT_CANVAS_GRID_SNAP;
+  assert_float_equal(dt_canvas_snap(canvas, 74.0), 50.0, 1e-9);
+  assert_float_equal(dt_canvas_snap(canvas, 76.0), 100.0, 1e-9);
+  dt_canvas_free(canvas);
+}
+
+static void _colours_parse_and_format(void **state)
+{
+  (void)state;
+  dt_canvas_color_t color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.0f);
+  assert_true(dt_canvas_color_parse("#ff8040", &color));
+  assert_float_equal(color.red, 1.0f, 1e-6);
+  assert_float_equal(color.green, 128.0f / 255.0f, 1e-6);
+  assert_float_equal(color.alpha, 1.0f, 1e-6);
+  assert_true(dt_canvas_color_parse("#00000080", &color));
+  assert_float_equal(color.alpha, 128.0f / 255.0f, 1e-6);
+  assert_false(dt_canvas_color_parse("ff8040", &color));
+  assert_false(dt_canvas_color_parse("#zz8040", &color));
+  char text[16];
+  dt_canvas_color_format(&color, text, sizeof(text));
+  assert_string_equal(text, "#00000080");
+}
+
+int main(void)
+{
+  const struct CMUnitTest tests[] = {
+    cmocka_unit_test(_index_round_trip_keeps_every_field),
+    cmocka_unit_test(_a_record_from_a_later_version_is_skipped_by_its_size),
+    cmocka_unit_test(_a_newer_format_and_a_truncated_index_are_refused),
+    cmocka_unit_test(_archive_round_trip_carries_jpegs_and_markdown),
+    cmocka_unit_test(_removing_a_frame_takes_its_connectors_and_unlinks_sidecars),
+    cmocka_unit_test(_snapshot_restore_round_trips_the_objects),
+    cmocka_unit_test(_draw_order_edits_keep_the_list_sorted),
+    cmocka_unit_test(_rotated_frames_answer_hit_tests_and_bounds),
+    cmocka_unit_test(_layouts_arrange_without_moving_the_group),
+    cmocka_unit_test(_colours_parse_and_format),
+  };
+  return cmocka_run_group_tests(tests, NULL, NULL);
+}
+
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+// vim: shiftwidth=2 expandtab tabstop=2 cindent
+// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on
