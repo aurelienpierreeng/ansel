@@ -29,6 +29,7 @@
 
 // an arbitrary flag bit with no side meaning in these tests
 #define TEST_FLAG 2048
+#define TEST_TIMESTAMP_2100 INT64_C(4102444800)
 
 static void test_flag_among_multi_image(void **state)
 {
@@ -107,9 +108,53 @@ static void test_write_timestamp_is_64bit(void **state)
 
   // 2100-01-01: overflows a 32-bit time_t. The caller this setter replaced bound the
   // timestamp with sqlite3_bind_int(), which truncates in 2038.
-  const int64_t year2100 = 4102444800LL;
-  assert_true(dt_image_repository_set_write_timestamp(a, year2100));
-  assert_true(dt_image_repository_get_write_timestamp(a) == year2100);
+  assert_true(dt_image_repository_set_write_timestamp(a, TEST_TIMESTAMP_2100));
+  assert_true(dt_image_repository_get_write_timestamp(a) == TEST_TIMESTAMP_2100);
+}
+
+typedef struct path_rows_t
+{
+  int count;
+  gboolean found_null_timestamp;
+  gboolean found_zero_timestamp;
+  gboolean found_64bit_timestamp;
+} path_rows_t;
+
+static void collect_path_row(const int32_t imgid,
+                             const int64_t write_timestamp,
+                             const gboolean write_timestamp_present,
+                             const int version,
+                             const char *image_path,
+                             const int flags,
+                             void *user_data)
+{
+  if(!g_str_has_prefix(image_path, "/testdb/nullable-timestamp/")) return;
+
+  path_rows_t *rows = (path_rows_t *)user_data;
+  rows->count++;
+  if(!write_timestamp_present) rows->found_null_timestamp = TRUE;
+  if(write_timestamp_present && write_timestamp == 0) rows->found_zero_timestamp = TRUE;
+  if(write_timestamp_present && write_timestamp == TEST_TIMESTAMP_2100) rows->found_64bit_timestamp = TRUE;
+}
+
+static void test_foreach_with_path_preserves_nullable_write_timestamp(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/nullable-timestamp");
+  const int32_t null_timestamp = testdb_make_image(film, "null.raw");
+  const int32_t zero_timestamp = testdb_make_image(film, "zero.raw");
+  const int32_t timestamp_64bit = testdb_make_image(film, "64bit.raw");
+  assert_true(null_timestamp > 0 && zero_timestamp > 0 && timestamp_64bit > 0);
+  assert_true(dt_image_repository_set_write_timestamp(zero_timestamp, 0));
+  assert_true(dt_image_repository_set_write_timestamp(timestamp_64bit, TEST_TIMESTAMP_2100));
+
+  path_rows_t rows = { 0 };
+  dt_image_repository_foreach_with_path(collect_path_row, &rows);
+
+  assert_int_equal(rows.count, 3);
+  assert_true(rows.found_null_timestamp);
+  assert_true(rows.found_zero_timestamp);
+  assert_true(rows.found_64bit_timestamp);
 }
 
 static void test_group_member_rows(void **state)
@@ -164,6 +209,7 @@ int main(void)
     cmocka_unit_test(test_full_paths),
     cmocka_unit_test(test_id_range),
     cmocka_unit_test(test_write_timestamp_is_64bit),
+    cmocka_unit_test(test_foreach_with_path_preserves_nullable_write_timestamp),
     cmocka_unit_test(test_group_member_rows),
     cmocka_unit_test(test_count_distinct_fields),
   };

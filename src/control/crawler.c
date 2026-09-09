@@ -64,6 +64,7 @@ typedef enum dt_control_crawler_cols_t
   DT_CONTROL_CRAWLER_COL_TS_DB,
   DT_CONTROL_CRAWLER_COL_TS_XMP_INT, // new timestamp to db
   DT_CONTROL_CRAWLER_COL_TS_DB_INT,
+  DT_CONTROL_CRAWLER_COL_TS_DB_PRESENT,
   DT_CONTROL_CRAWLER_COL_REPORT,
   DT_CONTROL_CRAWLER_COL_TIME_DELTA,
   DT_CONTROL_CRAWLER_NUM_COLS
@@ -74,6 +75,7 @@ typedef struct dt_control_crawler_result_t
   int id;
   int64_t timestamp_xmp;
   int64_t timestamp_db;
+  gboolean timestamp_db_present;
   char *image_path, *xmp_path;
 } dt_control_crawler_result_t;
 
@@ -127,6 +129,7 @@ static void _set_modification_time(char *filename,
  * main.images joined to main.film_rolls, with a second statement writing the flags back. */
 static void _crawl_image(const int32_t id,
                          const int64_t timestamp,
+                         const gboolean timestamp_present,
                          const int version,
                          const char *image_path,
                          const int flags,
@@ -176,13 +179,14 @@ static void _crawl_image(const int32_t id,
   // step 1: check if the xmp is newer than our db entry
   // FIXME: allow for a few seconds difference?
   const time_t timestamp_xmp = statbuf.st_mtime;
-  if(timestamp < timestamp_xmp)
+  if(!timestamp_present || timestamp < timestamp_xmp)
   {
     dt_control_crawler_result_t *item
         = (dt_control_crawler_result_t *)malloc(sizeof(dt_control_crawler_result_t));
     item->id = id;
     item->timestamp_xmp = timestamp_xmp;
     item->timestamp_db = timestamp;
+    item->timestamp_db_present = timestamp_present;
     item->image_path = g_strdup(image_path);
     item->xmp_path = g_strdup(xmp_path);
 
@@ -344,6 +348,7 @@ static void _get_crawler_entry_from_model(GtkTreeModel *model,
                      DT_CONTROL_CRAWLER_COL_ID,         &entry->id,
                      DT_CONTROL_CRAWLER_COL_XMP_PATH,   &entry->xmp_path,
                      DT_CONTROL_CRAWLER_COL_TS_DB_INT,  &timestamp_db,
+                     DT_CONTROL_CRAWLER_COL_TS_DB_PRESENT, &entry->timestamp_db_present,
                      DT_CONTROL_CRAWLER_COL_TS_XMP_INT, &timestamp_xmp, -1);
   entry->timestamp_db = timestamp_db;
   entry->timestamp_xmp = timestamp_xmp;
@@ -427,7 +432,7 @@ static void sync_db_to_xmp(GtkTreeModel *model,
 
   if(result == DT_IMAGE_WRITE_SIDECAR_OK)
   {
-    _set_modification_time(entry.xmp_path, entry.timestamp_db);
+    if(entry.timestamp_db_present) _set_modification_time(entry.xmp_path, entry.timestamp_db);
     _append_row_to_remove(model, path, &gui->rows_to_remove);
     _log_synchronization(gui, _("SUCCESS: %s synced DB \342\206\222 XMP"), entry.image_path);
   }
@@ -450,6 +455,13 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
   dt_control_crawler_result_t entry = { 0 };
   _get_crawler_entry_from_model(model, iter, &entry);
+
+  if(!entry.timestamp_db_present)
+  {
+    _log_synchronization(gui, _("SKIPPED: %s has no database timestamp"), entry.image_path);
+    _free_crawler_result(&entry);
+    return;
+  }
 
   int error = 0;
 
@@ -519,6 +531,14 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
   dt_control_crawler_result_t entry = { 0 };
   _get_crawler_entry_from_model(model, iter, &entry);
+
+  if(!entry.timestamp_db_present)
+  {
+    _log_synchronization(gui, _("SKIPPED: %s has no database timestamp"), entry.image_path);
+    _free_crawler_result(&entry);
+    return;
+  }
+
   int error = 0;
 
   if(entry.timestamp_xmp < entry.timestamp_db)
@@ -663,6 +683,7 @@ void dt_control_crawler_show_image_list(GList *images)
                                            G_TYPE_STRING, // timestamp from db
                                            G_TYPE_INT64,  // timestamp to db
                                            G_TYPE_INT64,
+                                           G_TYPE_BOOLEAN,
                                            G_TYPE_STRING, // report: newer version
                                            G_TYPE_STRING);// time delta
 
@@ -674,19 +695,33 @@ void dt_control_crawler_show_image_list(GList *images)
     dt_control_crawler_result_t *item = list_iter->data;
     char timestamp_db[64] = { 0 }, timestamp_xmp[64] = { 0 };
     struct tm tm_stamp;
-    const time_t timestamp_db_time = (time_t)item->timestamp_db;
     const time_t timestamp_xmp_time = (time_t)item->timestamp_xmp;
-    if(localtime_r(&timestamp_db_time, &tm_stamp))
-      strftime(timestamp_db, sizeof(timestamp_db), "%c", &tm_stamp);
+    if(item->timestamp_db_present)
+    {
+      const time_t timestamp_db_time = (time_t)item->timestamp_db;
+      if(localtime_r(&timestamp_db_time, &tm_stamp))
+        strftime(timestamp_db, sizeof(timestamp_db), "%c", &tm_stamp);
+    }
+    else
+    {
+      g_strlcpy(timestamp_db, "-", sizeof(timestamp_db));
+    }
     if(localtime_r(&timestamp_xmp_time, &tm_stamp))
       strftime(timestamp_xmp, sizeof(timestamp_xmp), "%c", &tm_stamp);
 
-    const uint64_t time_delta = item->timestamp_db >= item->timestamp_xmp
-                                   ? (uint64_t)item->timestamp_db - (uint64_t)item->timestamp_xmp
-                                   : (uint64_t)item->timestamp_xmp - (uint64_t)item->timestamp_db;
     const gint64 timestamp_xmp_int = (gint64)item->timestamp_xmp;
     const gint64 timestamp_db_int = (gint64)item->timestamp_db;
-    gchar *timestamp_delta = str_time_delta(time_delta);
+    gchar *timestamp_delta = g_strdup("-");
+    const char *report = "-";
+    if(item->timestamp_db_present)
+    {
+      const uint64_t time_delta = item->timestamp_db >= item->timestamp_xmp
+                                    ? (uint64_t)item->timestamp_db - (uint64_t)item->timestamp_xmp
+                                    : (uint64_t)item->timestamp_xmp - (uint64_t)item->timestamp_db;
+      dt_free(timestamp_delta);
+      timestamp_delta = str_time_delta(time_delta);
+      report = item->timestamp_xmp > item->timestamp_db ? _("XMP") : _("database");
+    }
 
     gtk_list_store_append(store, &iter);
     gtk_list_store_set
@@ -696,11 +731,10 @@ void dt_control_crawler_show_image_list(GList *images)
        DT_CONTROL_CRAWLER_COL_XMP_PATH, item->xmp_path,
        DT_CONTROL_CRAWLER_COL_TS_XMP, timestamp_xmp,
        DT_CONTROL_CRAWLER_COL_TS_DB, timestamp_db,
-        DT_CONTROL_CRAWLER_COL_TS_XMP_INT, timestamp_xmp_int,
-        DT_CONTROL_CRAWLER_COL_TS_DB_INT, timestamp_db_int,
-       DT_CONTROL_CRAWLER_COL_REPORT, (item->timestamp_xmp > item->timestamp_db)
-                                      ? _("XMP")
-                                      : _("database"),
+       DT_CONTROL_CRAWLER_COL_TS_XMP_INT, timestamp_xmp_int,
+       DT_CONTROL_CRAWLER_COL_TS_DB_INT, timestamp_db_int,
+       DT_CONTROL_CRAWLER_COL_TS_DB_PRESENT, item->timestamp_db_present,
+       DT_CONTROL_CRAWLER_COL_REPORT, report,
        DT_CONTROL_CRAWLER_COL_TIME_DELTA, timestamp_delta,
        -1);
     _free_crawler_result(item);

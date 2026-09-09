@@ -756,6 +756,7 @@ void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, v
     // No lock is held here on purpose: cb() writes back through this repository.
     cb(sqlite3_column_int(stmt, 0),
        sqlite3_column_int64(stmt, 1),
+       sqlite3_column_type(stmt, 1) != SQLITE_NULL,
        sqlite3_column_int(stmt, 2),
        (const char *)sqlite3_column_text(stmt, 3),
        sqlite3_column_int(stmt, 4),
