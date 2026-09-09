@@ -89,8 +89,9 @@ typedef struct dt_control_pointer_input_t
   guint32 time_ms;
 } dt_control_pointer_input_t;
 
-// called from gui
-void *dt_control_expose(void *voidptr);
+// called from gui: paint the centre area into @p cr, which is GTK's own double buffer, clipped to
+// the region GTK asked for. Nothing is painted anywhere else and nothing is copied afterwards.
+void dt_control_expose(cairo_t *cr, int width, int height);
 void dt_control_button_pressed(double x, double y, double pressure, int which, int type, uint32_t state);
 
 /** Message painted over the main preview while the pipeline is working. Written by the

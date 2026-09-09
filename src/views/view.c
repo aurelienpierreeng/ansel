@@ -441,6 +441,12 @@ const char *dt_view_manager_name(dt_view_manager_t *vm)
     return vm->current_view->module_name;
 }
 
+uint32_t dt_view_manager_current_flags(const dt_view_manager_t *vm)
+{
+  if(IS_NULL_PTR(vm) || IS_NULL_PTR(vm->current_view) || IS_NULL_PTR(vm->current_view->flags)) return 0;
+  return vm->current_view->flags();
+}
+
 void dt_view_manager_expose(dt_view_manager_t *vm, cairo_t *cr, int32_t width, int32_t height,
                             int32_t pointerx, int32_t pointery)
 {

@@ -1908,11 +1908,6 @@ void dt_cleanup()
     if(!IS_NULL_PTR(darktable.gui->ui))
       dt_ui_cleanup_titlebar(darktable.gui->ui);
 
-    if(darktable.gui->surface)
-    {
-      cairo_surface_destroy(darktable.gui->surface);
-      darktable.gui->surface = NULL;
-    }
 
     // hide main window and do rest of the cleanup in the background
     gtk_widget_hide(dt_ui_main_window(darktable.gui->ui));
