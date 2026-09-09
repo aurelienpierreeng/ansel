@@ -144,6 +144,7 @@ typedef struct dt_accels_t
   GtkAccelGroup *map_accels;        // map-specific accels
   GtkAccelGroup *print_accels;      // print-specific accels
   GtkAccelGroup *slideshow_accels;  // slideshow-specific accels
+  GtkAccelGroup *canvas_accels;     // canvas-specific accels
 
   // reference to the above group currently loaded in the main window. don't init,
   // don't free, only update

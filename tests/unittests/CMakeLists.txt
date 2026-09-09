@@ -47,6 +47,9 @@ set(LIB_ANSEL_UNIT_TESTS
   test_stroke_raster
   test_drawlayer_batch_raster
   test_import_jobs
+  test_canvas_zip
+  test_canvas_document
+  test_canvas_markdown
 )
 
 foreach(test ${LIB_ANSEL_UNIT_TESTS})
