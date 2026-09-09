@@ -1040,7 +1040,20 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
   const dt_iop_roi_t gui_roi = { .x = 0, .y = 0, .width = wd, .height = ht, .scale = 1.0f };
   dt_iop_roi_t pipe_roi = { 0 };
   dt_dev_convert_roi(dev, &gui_roi, &pipe_roi, DT_DEV_ROI_GUI_LOGICAL, DT_DEV_ROI_PIPELINE);
-  dt_dev_viewport_set_box(dev, pipe_roi.width, pipe_roi.height);
+
+  /* A configure that changes nothing does nothing. GTK delivers a configure-event to the centre
+   * whenever its window is allocated again, and a layout pass runs whenever any widget's size
+   * request changes -- the theme gives every hovered tab and button a heavier font weight, so
+   * that is every hover. The box is what the pipes plan from; when it comes back the same as
+   * the one already published there is nothing to re-plan, no thumbnail size to recompute, and
+   * no reason to redraw the whole window (every panel, the navigation, the scopes). Only the
+   * first configure and a real size, border or zoom change get past this. */
+  if(!dt_dev_viewport_set_box(dev, pipe_roi.width, pipe_roi.height))
+  {
+    dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px widget -> %i×%i px raster preview, unchanged\n",
+             wd, ht, dt_dev_viewport_box_width(dev), dt_dev_viewport_box_height(dev));
+    return;
+  }
 
   dt_print(DT_DEBUG_DEV,
            "[pixelpipe] Darkroom requested a %i×%i px widget -> %i×%i px raster preview\n",

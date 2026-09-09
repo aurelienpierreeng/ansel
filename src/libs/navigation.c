@@ -47,6 +47,7 @@
 #include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/times.h"
+#include "common/hash.h"
 #include "control/control.h"
 #include "caches/pixelpipe_cache.h"
 #include "develop/dev_pixelpipe.h"
@@ -69,7 +70,18 @@ typedef struct dt_lib_navigation_t
   GtkWidget *area;    // the drawing area (self->widget is the resizable wrapper around it)
   int dragging;
   int zoom_w, zoom_h; // size of the zoom button
-  cairo_surface_t *image_surface;
+  cairo_surface_t *image_surface;   // the preview frame, scaled to the widget
+  /* The whole picture this widget shows -- background, thumbnail, viewport box, zoom label,
+   * arrow -- composed once per state and blitted on every later expose. Keyed on everything it
+   * depends on (_lib_navigation_picture_key()): an expose that changes none of it costs one
+   * blit, where it used to cost a fresh full-size surface, a background render, a pango layout
+   * and the thumbnail copy. Such exposes are the rule, not the exception: the resize grip
+   * floating over this area is translucent, so GTK repaints what lies under it every time the
+   * grip is hovered, and a panel that moved redraws the whole window with it. */
+  cairo_surface_t *composed;
+  uint64_t composed_key;
+  int composed_width;
+  int composed_height;
   dt_dev_pixelpipe_cache_wait_t preview_wait;
 } dt_lib_navigation_t;
 
@@ -217,6 +229,8 @@ void gui_cleanup(dt_lib_module_t *self)
 
   if(!IS_NULL_PTR(d->image_surface)) cairo_surface_destroy(d->image_surface);
   d->image_surface = NULL;
+  if(!IS_NULL_PTR(d->composed)) cairo_surface_destroy(d->composed);
+  d->composed = NULL;
 
   dt_free(self->data);
 }
@@ -228,16 +242,37 @@ void gui_reset(dt_lib_module_t *self)
   d->image_surface = NULL;
 }
 
-static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, gpointer user_data)
+/* Everything the picture this widget shows depends on, folded into one key: the preview frame,
+ * the widget's size, the image, the viewport (zoom, pan, box, border) and the preview's plan.
+ * Equal keys are equal pictures. */
+static uint64_t _lib_navigation_picture_key(dt_develop_t *dev, const int width, const int height,
+                                            const gboolean has_preview_image)
 {
-  dt_times_t start;
-  dt_get_times(&start);
+  uint64_t key = has_preview_image ? dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf) : 0;
+  key = dt_hash(key, (const char *)&width, sizeof(width));
+  key = dt_hash(key, (const char *)&height, sizeof(height));
+  key = dt_hash(key, (const char *)&has_preview_image, sizeof(has_preview_image));
+  const int32_t imgid = dev->image_storage.id;
+  key = dt_hash(key, (const char *)&imgid, sizeof(imgid));
+  // padding-free, hashed whole the way the darkroom keys its own composition
+  const dt_dev_viewport_state_t viewport = dt_dev_viewport_get(dev);
+  key = dt_hash(key, (const char *)&viewport, sizeof(viewport));
+  const float natural_scale = dt_dev_roi_request_natural_scale(dev);
+  key = dt_hash(key, (const char *)&natural_scale, sizeof(natural_scale));
+  const int preview_width = dt_dev_roi_request_preview_width(dev);
+  const int preview_height = dt_dev_roi_request_preview_height(dev);
+  key = dt_hash(key, (const char *)&preview_width, sizeof(preview_width));
+  key = dt_hash(key, (const char *)&preview_height, sizeof(preview_height));
+  return key;
+}
 
-  dt_develop_t *dev = dt_dev_get_global();
-  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+/* Compose the picture for @p key into a fresh surface and make it the current one. Returns
+ * FALSE, leaving the previous picture in place, when the preview frame cannot be read yet. */
+static gboolean _lib_navigation_compose(GtkWidget *widget, dt_lib_module_t *self, dt_develop_t *dev,
+                                        const int width, const int height, const gboolean has_preview_image,
+                                        const uint64_t key)
+{
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
-
-  const gboolean has_preview_image = dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe);
 
   static uint64_t image_hash = -1;
   static int wd = 0;
@@ -245,18 +280,12 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   static float scale = 1.f;
   static int32_t imgid = UNKNOWN_IMAGE;
 
-  GtkAllocation allocation;
-  gtk_widget_get_allocation(widget, &allocation);
-  static int width = 0;
-  static int height = 0;
-  gboolean changed = (width != allocation.width) || (height != allocation.height);
-  width = allocation.width;
-  height = allocation.height;
+  const gboolean changed = (d->composed_width != width) || (d->composed_height != height);
 
-  cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-  cairo_t *cr = cairo_create(cst);
+  cairo_surface_t *target = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+  cairo_t *cr = cairo_create(target);
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
-  gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
+  gtk_render_background(context, cr, 0, 0, width, height);
   cairo_save(cr);
   
   if(has_preview_image
@@ -272,7 +301,13 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     dt_dev_pixelpipe_cache_wait_set_owner(&d->preview_wait, "navigation-preview", self);
     if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, NULL, &data, &cache_entry, &d->preview_wait,
                                         _lib_navigation_restart_cache_wait, self))
-      return TRUE;
+    {
+      /* the frame is not published yet: the wait above redraws when it is, and until then the
+       * previous picture stands (this used to return with the surface and its context leaked) */
+      cairo_destroy(cr);
+      cairo_surface_destroy(target);
+      return FALSE;
+    }
 
     dt_dev_pixelpipe_cache_rdlock_entry(TRUE, cache_entry);
 
@@ -301,7 +336,9 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
        || dt_pixel_cache_entry_get_data(cache_entry) != data)
     {
       dt_dev_pixelpipe_cache_rdlock_entry(FALSE, cache_entry);
-      return TRUE;
+      cairo_destroy(cr);
+      cairo_surface_destroy(target);
+      return FALSE;
     }
 
     scale = fminf(width / (float)wd, height / (float)ht);
@@ -463,13 +500,56 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   cairo_line_to(cr, width - 0.5 * arrow_h, -0.1 * arrow_h - 2);
   cairo_fill(cr);
 
-  /* blit memsurface into widget */
-  cairo_destroy(cr);
-  cairo_set_source_surface(crf, cst, 0, 0);
-  cairo_paint(crf);
-  cairo_surface_destroy(cst);
 
-  dt_show_times_f(&start, "[navigation]", "redraw");
+  cairo_destroy(cr);
+  if(!IS_NULL_PTR(d->composed)) cairo_surface_destroy(d->composed);
+  d->composed = target;
+  d->composed_key = key;
+  d->composed_width = width;
+  d->composed_height = height;
+  return TRUE;
+}
+
+static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, gpointer user_data)
+{
+  dt_times_t start;
+  dt_get_times(&start);
+
+  dt_develop_t *dev = dt_dev_get_global();
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
+
+  GtkAllocation allocation;
+  gtk_widget_get_allocation(widget, &allocation);
+  const int width = allocation.width;
+  const int height = allocation.height;
+
+  const gboolean has_preview_image = dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe);
+  const uint64_t key = _lib_navigation_picture_key(dev, width, height, has_preview_image);
+
+  gboolean composed = FALSE;
+  if(IS_NULL_PTR(d->composed) || d->composed_key != key || d->composed_width != width
+     || d->composed_height != height)
+    composed = _lib_navigation_compose(widget, self, dev, width, height, has_preview_image, key);
+
+  if(!IS_NULL_PTR(d->composed))
+  {
+    cairo_set_source_surface(crf, d->composed, 0, 0);
+    cairo_paint(crf);
+  }
+
+  /* The clip says who asked: the whole widget is a request of this module's own, a strip along
+   * an edge is the grip floating over it, hovered. */
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
+  {
+    double x1 = 0.0;
+    double y1 = 0.0;
+    double x2 = 0.0;
+    double y2 = 0.0;
+    cairo_clip_extents(crf, &x1, &y1, &x2, &y2);
+    dt_show_times_f(&start, "[navigation]", "redraw: %s, clip %.0fx%.0f at %.0f,%.0f of %dx%d",
+                    composed ? "composed" : "cached", x2 - x1, y2 - y1, x1, y1, width, height);
+  }
 
   return TRUE;
 }

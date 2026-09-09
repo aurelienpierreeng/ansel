@@ -2053,6 +2053,30 @@ The views are plugins: `ninja ansel` does NOT compile `src/views/*.c`. Build eve
 (`ninja`) before trusting a darkroom edit; a use of an undeclared variable in `darkroom.c`
 survived an `ansel` build here.
 
+### A widget under a translucent overlay is repainted whenever the overlay is, so its draw must be cheap
+
+The resize grips (`widgets/resize_handle.c`) are GtkEventBox overlay children floating over
+the area they resize, invisible until hovered. GTK3 composites overlay children over the main
+child, so invalidating the grip -- its `:hover` state, its cursor, its redraw on enter and
+leave -- exposes the main child under it with a clip of the grip's strip, and the main child's
+`draw` handler runs. The navigation thumbnail answered every such expose with a fresh full-size
+surface, a background render, the thumbnail copy and a pango layout (`libs/navigation.c`); it
+now composes once per state (`_lib_navigation_picture_key()`: preview hash, size, image,
+viewport, preview plan) and blits the composed surface on any expose with an equal key. Any
+draw handler placed under an overlay owes the same: paint from a cache keyed on its inputs,
+never re-derive per expose. `-d perf` prints the clip with each navigation redraw, which is
+how a grip's expose is told from a request of the module's own.
+
+The other way a hover reaches every widget is a layout pass: the theme gives every hovered
+tab and button `font-weight: 500`, which changes the widget's size request, and GTK then
+allocates the whole window again. The centre's `configure-event` used to re-plan both pipes,
+recompute the thumbnail size and raise `DT_SIGNAL_CONTROL_REDRAW_ALL` on every allocation;
+`dt_dev_configure_real()` now returns when the viewport box it publishes comes back unchanged
+(`dt_dev_viewport_set_box()` reports it), so only the first configure and a real size, border
+or zoom change do any of that. `ansel -d signal --d-signal-act raise,print-trace --d-signal
+DT_SIGNAL_CONTROL_REDRAW_ALL` backtraces every raise, which is the tool for the next report of
+"X redraws when I hover Y".
+
 ### A rotated GtkLabel sizes the column it sits in
 
 A `GtkLabel` with `gtk_label_set_angle()` requests the width of its *slanted* bounding box, so a

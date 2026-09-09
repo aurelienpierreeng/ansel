@@ -149,6 +149,37 @@ first frame after a rebuild of the selected shape, corpus at 2560x1440:
 `-d masks -d perf` prints `[masks] boundary pass: ... probed in N ms` per rebuild, and
 `[masks] outline cache: held for geometry G at step S` says why a frame rebuilt.
 
+## The navigation thumbnail, and a configure that changes nothing
+
+Two more sources of GUI-thread work that a pointer motion over an unrelated widget could
+reach, found when the navigation thumbnail was seen repainting on every hover over a
+notebook tab or a panel edge:
+
+- **The navigation composes its picture once per state.** `libs/navigation.c` used to answer
+  every expose with a fresh full-size surface, a background render, the thumbnail copy, a
+  pango layout for the zoom label and the arrow, then a blit. Exposes it did not ask for are
+  the rule: the resize grip floating over the area is a translucent overlay, so GTK repaints
+  what lies under it every time the grip is hovered (the clip is then a strip along the edge),
+  and a whole-window redraw reaches it like any other widget. The picture is now keyed on
+  everything it depends on -- the preview frame's hash, the widget's size, the image, the
+  viewport state and the preview's plan -- and an expose with an equal key is one blit.
+  `-d perf` prints `[navigation] redraw: cached|composed, clip WxH at x,y of WxH`, which also
+  says who asked: the whole widget is a request of the module's own, a strip is the grip.
+- **A configure that changes nothing does nothing.** `dt_dev_configure_real()` used to re-plan
+  both pipes, recompute the thumbnail size and raise `DT_SIGNAL_CONTROL_REDRAW_ALL` -- every
+  panel, the navigation, the scopes -- on every configure-event of the centre. GTK allocates
+  the centre again whenever a layout pass runs, and the theme gives every hovered tab and
+  button a heavier font weight (`font-weight: 500` under `:hover`), so a layout pass is every
+  hover; when the allocation comes back unchanged the box the pipes plan from is unchanged too,
+  and the setter already says so. Only the first configure and a real size, border or zoom
+  change get past it. `-d dev` prints the request either way, `unchanged` appended when it was.
+
+To find out who asked for a redraw, the signal layer traces its raisers:
+`ansel -d signal --d-signal-act raise,print-trace --d-signal <name>` prints a backtrace for
+every raise of that signal (`DT_SIGNAL_CONTROL_REDRAW_ALL`, `DT_SIGNAL_CONTROL_NAVIGATION_REDRAW`,
+`DT_SIGNAL_HISTORY_RESYNC` are the ones that reach the navigation). A redraw with no signal
+behind it is GTK's own: an overlay exposed, or an allocation that moved.
+
 ## Reading it
 
 `-d perf` prints `[darkroom] surface prepared / image painted / overlay predicates / overlays
