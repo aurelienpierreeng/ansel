@@ -2449,3 +2449,33 @@ cacheable.
 Since every data flow in the software is a pipeline, issues should be tracked to their root
 cause by climbing the call tree up until the source is found, instead of being fixed where
 they are visible.
+
+---
+
+## Canvas atelier (`src/canvas`, `src/views/canvas.c`)
+
+`doc/canvas.md` is the design. The rules that are not visible from the code:
+
+- **The canvas is a file, never a database row.** Nothing in `src/canvas/` writes to the
+  library; an image frame carries its own identity (id, version, folder, file name, history
+  hash, EXIF) so `dt_canvas_render_locate_source()` can find the original again, and the
+  sync status (current / stale / missing) is a runtime comparison of history hashes, not
+  stored.
+- **The index has reserved bytes and size-prefixed records, and that is the migration
+  strategy.** Add a field by taking reserved bytes (or appending after them and bumping
+  nothing): an old reader skips what it does not know by `record_size`, a new reader gets
+  zeros from an old file. Bump `DT_CANVAS_FORMAT_VERSION` only when an existing field changes
+  meaning. `test_canvas_document` pins the skip.
+- **A render job never touches the canvas.** It gets a library id and an object id, delivers
+  on the GUI thread with the token the view issued for the open document, and the view drops
+  results whose token is stale. Do not hand it a `dt_canvas_t *`.
+- **One painter for the screen and the PDF**, differing only in the colour target: the atelier
+  converts to the display profile, the export keeps sRGB and converts the whole page with
+  LCMS. Every colour the canvas draws goes through `dt_canvas_render_color()`, so borders match
+  their pictures.
+- **The toolbar owns no state.** It asks the view through `proxy.canvas` and refills from
+  the document on `DT_SIGNAL_CANVAS_CHANGED` with its handlers blocked. A control that wrote
+  back during a refill would loop.
+- **The ZIP is ours** (`canvas_zip.c`, store + deflate, no ZIP64) because no archive library
+  is linked and zlib is. `unzip -t` is run on the writer's output in the unit test when
+  available; keep it passing.

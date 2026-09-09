@@ -6,8 +6,9 @@ include(module-manifest)
 add_definitions(-include common/module_api.h)
 add_definitions(-include views/view_api.h)
 
-set(MODULES darkroom lighttable slideshow studio_capture)
+set(MODULES canvas darkroom lighttable slideshow studio_capture)
 
+add_library(canvas MODULE "canvas.c")
 add_library(darkroom MODULE "darkroom.c")
 add_library(lighttable MODULE "lighttable.c")
 add_library(slideshow MODULE "slideshow.c")

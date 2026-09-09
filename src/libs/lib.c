@@ -739,6 +739,11 @@ static void dt_lib_init_module(void *m)
         accel_group = dt_gui_get_accels()->slideshow_accels;
         label = g_strdup("Slideshow/Toolboxes");
       }
+      else if(!g_strcmp0(*view, "canvas"))
+      {
+        accel_group = dt_gui_get_accels()->canvas_accels;
+        label = g_strdup("Canvas/Toolboxes");
+      }
 
       if(accel_group && label)
         dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_plugin_focus_accel, m, NULL,

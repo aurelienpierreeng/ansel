@@ -68,6 +68,13 @@ FILE(GLOB SOURCE_FILES
   "pixel/bilateralcl.c"
   "pixel/box_filters.c"
   "caches/cache.c"
+  "canvas/canvas.c"
+  "canvas/canvas_format.c"
+  "canvas/canvas_markdown.c"
+  "canvas/canvas_paint.c"
+  "canvas/canvas_pdf.c"
+  "canvas/canvas_render.c"
+  "canvas/canvas_zip.c"
   "math/calculator.c"
   "common/collection.c"
   "common/color_picker.c"
@@ -362,6 +369,8 @@ pkg_check_modules(LIBXML2 REQUIRED IMPORTED_TARGET libxml-2.0)
 find_package(LCMS2 REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(PNG REQUIRED)
+# zlib arrives through libpng anyway; named here because common/pdf.c and canvas/canvas_zip.c use it directly.
+find_package(ZLIB REQUIRED)
 find_package(TIFF REQUIRED)
 find_package(Sqlite3 3.24 REQUIRED)
 # Exiv2 is normally the bundled submodule, already configured by external/CMakeLists.txt
@@ -387,6 +396,7 @@ find_package(CURL REQUIRED)
 target_include_directories(ansel_deps INTERFACE
   LCMS2::LCMS2
   PNG::PNG
+  ZLIB::ZLIB
   JPEG::JPEG
   TIFF::TIFF
   Sqlite3::Sqlite3
@@ -402,6 +412,7 @@ target_link_libraries(ansel_deps INTERFACE
   PkgConfig::LIBXML2
   LCMS2::LCMS2
   PNG::PNG
+  ZLIB::ZLIB
   JPEG::JPEG
   TIFF::TIFF
   Sqlite3::Sqlite3

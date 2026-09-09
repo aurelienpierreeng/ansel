@@ -80,6 +80,7 @@ typedef enum
   DT_VIEW_MAP = 1 << 3,
   DT_VIEW_SLIDESHOW = 1 << 4,
   DT_VIEW_PRINT = 1 << 5,
+  DT_VIEW_CANVAS = 1 << 6,
 } dt_view_type_flags_t;
 
 // flags that a view can set in flags()
@@ -139,7 +140,7 @@ typedef struct dt_view_image_surface_fetcher_t
 
 #define DT_VIEW_ALL                                                                                   \
   (DT_VIEW_LIGHTTABLE | DT_VIEW_STUDIO_CAPTURE | DT_VIEW_DARKROOM | DT_VIEW_MAP | DT_VIEW_SLIDESHOW | \
-   DT_VIEW_PRINT)
+   DT_VIEW_PRINT | DT_VIEW_CANVAS)
 
 /* maximum zoom factor for the lighttable */
 #define DT_LIGHTTABLE_MAX_ZOOM 12
@@ -264,6 +265,17 @@ typedef struct dt_view_manager_t
       void (*print_settings)(const dt_view_t *view, dt_print_info_t *pinfo, dt_images_box *imgs);
     } print;
 #endif
+
+    /* canvas view proxy object: the toolbar lib asks the view for canvas-level actions
+     * and reads the open document through it. `action` takes a dt_canvas_action_t. */
+    struct
+    {
+      struct dt_view_t *view;
+      void (*action)(struct dt_view_t *view, int action);
+      const struct dt_canvas_t *(*document)(struct dt_view_t *view);
+      void (*set_grid_size)(struct dt_view_t *view, float size);
+      void (*set_border)(struct dt_view_t *view, const float *rgba, float width);
+    } canvas;
   } proxy;
 
 

@@ -203,6 +203,8 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
     FALSE }, // DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED
   { "dt-image-import", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__INT, 1, int_arg, NULL,
     FALSE }, // DT_SIGNAL_IMAGE_IMPORT
+  { "dt-canvas-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
+    FALSE }, // DT_SIGNAL_CANVAS_CHANGED
   { "dt-image-export-tmpfile", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 6, image_export_arg, NULL,
     TRUE }, // DT_SIGNAL_IMAGE_EXPORT_TMPFILE
   { "dt-imageio-storage-change", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
