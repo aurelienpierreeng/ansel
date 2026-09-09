@@ -155,6 +155,10 @@ dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const modu
                                                dt_masks_form_t *const form, const dt_iop_roi_t *roi,
                                                float *buffer, dt_iop_roi_t *touched);
 
+/* The outline is sampled at the density the dev's GUI shows -- dt_masks_gui_outline_step(),
+ * read by dt_masks_distort_for_gui() -- so that it is built at the density it is drawn and
+ * hit-tested at. The brush and the polygon sample their curves, arcs and stamps at it; the
+ * circle, the ellipse and the gradient have their own sampling. */
 dt_masks_raster_result_t dt_masks_get_points_border(struct dt_develop_t *dev, dt_masks_form_t *form,
                                float **points, int *points_count,
                                float **border, int *border_count,

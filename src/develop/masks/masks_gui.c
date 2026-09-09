@@ -38,6 +38,7 @@
 #include "develop/masks_debug.h"
 #include "develop/masks_gui.h"
 #include "develop/masks_group.h"
+#include "develop/masks/masks_distort.h"
 #include "develop/masks/masks_functions.h"
 #include "widgets/stroke_raster.h"
 #include "widgets/bauhaus.h"
@@ -1848,6 +1849,7 @@ void dt_masks_init_form_gui(dt_develop_t *dev, dt_masks_form_gui_t *mask_gui)
   memset(mask_gui, 0, sizeof(dt_masks_form_gui_t));
 
   mask_gui->dev = dev;
+  mask_gui->outline_step = 1;
   mask_gui->pos[0] = mask_gui->pos[1] = -1.0f;
   mask_gui->rel_pos[0] = mask_gui->rel_pos[1] = -1.0f;
   mask_gui->raw_pos[0] = mask_gui->raw_pos[1] = -1.0f;
@@ -1894,6 +1896,19 @@ void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *mask_gui)
   mask_gui->last_rebuild_pos[0] = mask_gui->last_rebuild_pos[1] = 0.0f;
   mask_gui->rebuild_pending = FALSE;
   mask_gui->last_hit_test_pos[0] = mask_gui->last_hit_test_pos[1] = -1.0f;
+}
+
+void dt_masks_gui_set_outline_density(dt_masks_form_gui_t *mask_gui, const double image_px_per_device_px)
+{
+  if(IS_NULL_PTR(mask_gui)) return;
+  const double span = isfinite(image_px_per_device_px) ? floor(image_px_per_device_px) : 1.0;
+  mask_gui->outline_step = (span > 1.0) ? (int)span : 1;
+}
+
+int dt_masks_gui_outline_step(const dt_develop_t *dev)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->form_gui)) return 1;
+  return MAX(1, dev->form_gui->outline_step);
 }
 
 void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui,
@@ -1948,6 +1963,7 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
         return;
     }
     mask_gui->geometry_generation = dt_geometry_chain_generation(mask_gui->dev->geometry_chain);
+    mask_gui->outline_step_built = dt_masks_gui_outline_step(mask_gui->dev);
     mask_gui->formid = mask_form->formid;
     mask_gui->type = mask_form->type;
 
@@ -2413,18 +2429,23 @@ void dt_masks_gui_form_remove(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
 void dt_masks_gui_form_test_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui,
                                    dt_iop_module_t *module)
 {
-  // we test if the geometry the cached outlines were built against has moved
+  // we test if the geometry the cached outlines were built against has moved, or the density
+  // the view shows them at
   const uint64_t live_generation = dt_geometry_chain_generation(mask_gui->dev->geometry_chain);
+  const int live_step = dt_masks_gui_outline_step(mask_gui->dev);
+  const gboolean stale = (mask_gui->geometry_generation != live_generation)
+                         || (mask_gui->outline_step_built != live_step);
   if(dt_get_debug_flags() & DT_DEBUG_MASKS)
-    dt_print(DT_DEBUG_MASKS, "[masks] outline cache: held for geometry %lu, live %lu -> %s\n",
-             (unsigned long)mask_gui->geometry_generation, (unsigned long)live_generation,
+    dt_print(DT_DEBUG_MASKS, "[masks] outline cache: held for geometry %lu at step %d, live %lu at step %d -> %s\n",
+             (unsigned long)mask_gui->geometry_generation, mask_gui->outline_step_built,
+             (unsigned long)live_generation, live_step,
              (mask_gui->geometry_generation == 0)
                  ? "REBUILD (nothing cached)"
-                 : ((mask_gui->geometry_generation != live_generation) ? "REBUILD (geometry moved)" : "reuse"));
+                 : (stale ? "REBUILD (geometry or density moved)" : "reuse"));
 
   if(mask_gui->geometry_generation != 0)
   {
-    if(mask_gui->geometry_generation != live_generation)
+    if(stale)
     {
       mask_gui->geometry_generation = 0;
       mask_gui->formid = 0;
@@ -3837,10 +3858,11 @@ static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_mod
   _session_gui.edit_mode = creation_gui->edit_mode;
   _session_gui.group_selected = -1;
 
-  /* Rebuild only when the composed geometry moved or the session gained a shape -- the same rule
-   * the mask group's outlines follow. A shape's own content changing commits history, which
-   * rebuilds the chain, which advances the generation. */
-  const gboolean rebuild = (_session_gui_generation != live_generation) || (_session_gui_count != count);
+  /* Rebuild only when the composed geometry moved, the view's density changed or the session
+   * gained a shape -- the same rule the mask group's outlines follow. A shape's own content
+   * changing commits history, which rebuilds the chain, which advances the generation. */
+  const gboolean rebuild = (_session_gui_generation != live_generation) || (_session_gui_count != count)
+                           || (_session_gui.outline_step_built != dt_masks_gui_outline_step(develop));
   if(rebuild)
   {
     g_list_free_full(_session_gui.points, dt_masks_form_gui_points_free);
@@ -4664,6 +4686,10 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
     cairo_destroy(mask_draw);   // nothing was drawn
     return;
   }
+  /* The density the outlines are built at is what this context shows: the transform is on,
+   * so one device pixel spans this many image pixels. Read before the cache is tested, since
+   * a change is a rebuild. */
+  dt_masks_gui_set_outline_density(mask_gui, dt_draw_min_emit_step(mask_draw));
 
   // We update the form if needed
   // Add preview when creating a circle, ellipse and gradient

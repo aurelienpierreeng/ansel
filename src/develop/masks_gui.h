@@ -182,10 +182,26 @@ typedef struct dt_masks_form_gui_t
    * the outlines of every shape in the group rebuilt on every mouse move, and the 1/60 s throttle
    * in dt_masks_gui_form_create_throttled() bypassed by its own force_rebuild clause. */
   uint64_t geometry_generation;
+  /* The sampling density of the outlines, in image pixels between consecutive samples. The
+   * expose publishes the density the view shows, from what one device pixel spans, into the
+   * dev's own GUI state (dt_masks_gui_set_outline_density()), and every build reads it from
+   * there through dt_masks_gui_outline_step() -- so on any other GUI state, the creation
+   * session's for one, ::outline_step is not consulted. ::outline_step_built is the density the
+   * outlines in ::points were built at, on every state that holds outlines; a difference from
+   * the density in force is a rebuild, like a geometry move. An outline sampled finer than the
+   * screen can show costs its whole build, its transform, its boundary pass and its hit test for
+   * nothing: at fit zoom on a 24 Mpx raw that was five samples per device pixel. */
+  int outline_step;
+  int outline_step_built;
 } dt_masks_form_gui_t;
 
 /** Reset a form GUI state and bind it to its owning develop instance (gui->dev). */
 void dt_masks_init_form_gui(dt_develop_t *dev, dt_masks_form_gui_t *gui);
+/** Publish the density the view shows into the dev's GUI state: @p image_px_per_device_px is
+ * what one device pixel spans in image pixels (dt_draw_min_emit_step() on the transformed
+ * context). The outlines are sampled at whole image pixels, never finer than one.
+ * dt_masks_gui_outline_step() (masks/masks_distort.h) reads it back. */
+void dt_masks_gui_set_outline_density(dt_masks_form_gui_t *gui, double image_px_per_device_px);
 dt_masks_form_t *dt_masks_get_visible_form(const struct dt_develop_t *dev);
 void dt_masks_set_visible_form(struct dt_develop_t *dev, dt_masks_form_t *form);
 void dt_masks_gui_init(struct dt_develop_t *dev);

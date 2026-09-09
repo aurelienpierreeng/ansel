@@ -91,17 +91,30 @@ static inline dt_masks_distort_t dt_masks_distort_for_pipe(dt_dev_pixelpipe_t *p
 }
 
 /**
- * @brief The GUI supplier: compose through the geometry service, at full resolution, one pixel
- * at a time.
+ * @brief The density the dev's GUI shows its outlines at, in image pixels between consecutive
+ * samples: what the view published through dt_masks_gui_set_outline_density(), 1 for a dev with
+ * no GUI state. Implemented in masks_gui.c, which owns that state; declared here because the
+ * GUI supplier below is what reads it.
+ */
+int dt_masks_gui_outline_step(const dt_develop_t *dev);
+
+/**
+ * @brief The GUI supplier: compose through the geometry service, at full resolution, sampled
+ * at the density the view shows.
  *
- * @details The step is 1 because that is what the GUI has always had: the pixel-less pipe this
- * replaces was never given a rasterisation step, so it kept the one its init set, and outlines
- * the user drags are drawn pixel-accurate. The size is the raw geometry, which is what that
- * pipe's input was set from.
+ * @details The step is the view's: what one device pixel spans in image pixels, never less than
+ * one (dt_masks_gui_outline_step()). It used to be pinned at 1 because that is what the GUI had
+ * always had -- the pixel-less pipe this replaces was never given a rasterisation step, so it
+ * kept the one its init set -- and at fit zoom on a 24 Mpx raw that sampled the outline five
+ * times per device pixel: five times the build, the transform, the boundary pass and the hit
+ * test, for a line the screen shows at one sample per pixel either way. Read here rather than
+ * passed in, so that every GUI outline build -- a drag's, an expose's, the creation session's --
+ * composes at the density in force without its caller having to know it. The size is the raw
+ * geometry, which is what that pipe's input was set from.
  */
 static inline dt_masks_distort_t dt_masks_distort_for_gui(dt_develop_t *dev)
 {
-  dt_masks_distort_t d = { NULL, dev, 0, 0, 1 };
+  dt_masks_distort_t d = { NULL, dev, 0, 0, dt_masks_gui_outline_step(dev) };
   int32_t raw_width = 0;
   int32_t raw_height = 0;
   if(dt_dev_geometry_get_raw_size(dev, &raw_width, &raw_height))
