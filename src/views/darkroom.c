@@ -817,33 +817,52 @@ static inline void _darkroom_reset_expose_state(darkroom_expose_state_t *state)
   state->composed_key = 0;
 }
 
+/* One expose's composition: the context of the image surface, the frame and the colours it
+ * is composed for, and the state that remembers what it holds. */
+typedef struct _darkroom_compose_t
+{
+  cairo_t *cr;
+  const dt_develop_t *dev;
+  darkroom_expose_state_t *state;
+  int width;
+  int height;
+  int border;
+  uint64_t zoom_hash;
+  const float *bg_color;
+} _darkroom_compose_t;
+
+static uint64_t _darkroom_compose_key_of(const _darkroom_compose_t *const c, const uint64_t source_hash)
+{
+  return _darkroom_compose_key(source_hash, c->zoom_hash, c->bg_color, c->border, c->dev->iso_12646.enabled,
+                               c->width, c->height);
+}
+
+static gboolean _darkroom_composed_already(const _darkroom_compose_t *const c, const uint64_t key)
+{
+  return c->state->composed_key == key && c->state->image_surface_imgid == c->dev->image_storage.id;
+}
+
 /* Compose @p locked into the image surface unless the frame it would compose is already
  * there. */
-static gboolean _darkroom_compose_locked(cairo_t *cr, const dt_develop_t *dev, dt_dev_locked_surface_t *locked,
-                                         const int width, const int height, const int border,
-                                         const dt_aligned_pixel_t bg_color, darkroom_expose_state_t *state,
-                                         const uint64_t zoom_hash)
+static gboolean _darkroom_compose_locked(const _darkroom_compose_t *const c, dt_dev_locked_surface_t *locked)
 {
   if(IS_NULL_PTR(locked) || IS_NULL_PTR(locked->surface)) return FALSE;
-  const uint64_t key
-      = _darkroom_compose_key(locked->hash, zoom_hash, bg_color, border, dev->iso_12646.enabled, width, height);
-  if(state->composed_key == key && state->image_surface_imgid == dev->image_storage.id) return TRUE;
-  if(!dt_dev_render_locked_surface(cr, dev, locked, width, height, border, bg_color)) return FALSE;
-  state->composed_key = key;
+  const uint64_t key = _darkroom_compose_key_of(c, locked->hash);
+  if(_darkroom_composed_already(c, key)) return TRUE;
+  if(!dt_dev_render_locked_surface(c->cr, c->dev, locked, c->width, c->height, c->border, c->bg_color)) return FALSE;
+  c->state->composed_key = key;
   return TRUE;
 }
 
 /* Copy the cached fallback into the image surface unless it is already the frame there. */
-static gboolean _darkroom_compose_fallback(cairo_t *cr, const dt_develop_t *dev, const int width, const int height,
-                                           const int border, const dt_aligned_pixel_t bg_color,
-                                           darkroom_expose_state_t *state, const uint64_t zoom_hash)
+static gboolean _darkroom_compose_fallback(const _darkroom_compose_t *const c)
 {
   /* salted: a fallback is not the same frame as a main backbuf that happened to hash alike */
-  const uint64_t source = _darkroom_preview_fallback_backbuf_hash ^ 0x9e3779b97f4a7c15ull;
-  const uint64_t key = _darkroom_compose_key(source, zoom_hash, bg_color, border, dev->iso_12646.enabled, width, height);
-  if(state->composed_key == key && state->image_surface_imgid == dev->image_storage.id) return TRUE;
-  if(!_render_preview_fallback_surface(cr)) return FALSE;
-  state->composed_key = key;
+  const uint64_t source = _darkroom_preview_fallback_backbuf_hash ^ 0x9e3779b97f4a7c15ULL;
+  const uint64_t key = _darkroom_compose_key_of(c, source);
+  if(_darkroom_composed_already(c, key)) return TRUE;
+  if(!_render_preview_fallback_surface(c->cr)) return FALSE;
+  c->state->composed_key = key;
   return TRUE;
 }
 
@@ -953,6 +972,9 @@ void expose(
   gboolean drawn_from_main = FALSE;
 
   dt_dev_get_background_color(dev, bg_color);
+  const _darkroom_compose_t compose = { .cr = cr, .dev = dev, .state = &expose_state, .width = width,
+                                        .height = height, .border = border, .zoom_hash = zoom_hash,
+                                        .bg_color = bg_color };
 
   /* Selection policy, kept intentionally linear:
    * 1. Prefer the main pipe whenever it already has the backbuf for the
@@ -981,8 +1003,7 @@ void expose(
   {
     if(dt_dev_lock_pipe_surface(dev, dev->pipe, &_darkroom_main_locked, &_darkroom_main_wait, "darkroom-main", FALSE)
        && _darkroom_main_locked.surface
-       && _darkroom_compose_locked(cr, dev, &_darkroom_main_locked, width, height, border, bg_color, &expose_state,
-                                   zoom_hash))
+       && _darkroom_compose_locked(&compose, &_darkroom_main_locked))
     {
       expose_state.main_zoom_hash = zoom_hash;
       expose_state.image_surface_imgid = dev->image_storage.id;
@@ -1015,8 +1036,7 @@ void expose(
     if(dt_dev_lock_pipe_surface(dev, dev->preview_pipe, &_darkroom_preview_locked, &_darkroom_preview_wait,
                                 "darkroom-preview", FALSE)
        && _darkroom_preview_locked.surface
-       && _darkroom_compose_locked(cr, dev, &_darkroom_preview_locked, width, height, border, bg_color,
-                                   &expose_state, zoom_hash))
+       && _darkroom_compose_locked(&compose, &_darkroom_preview_locked))
     {
       // This frame validates the composed image, not the locked main surface. Keep main_zoom_hash
       // unchanged so the old main backbuffer cannot be reused as if it had been rendered at fit.
@@ -1038,7 +1058,7 @@ void expose(
     if(dt_dev_lock_pipe_surface(dev, dev->preview_pipe, &_darkroom_preview_locked, &_darkroom_preview_wait,
                                 "darkroom-preview", TRUE)
        && _build_preview_fallback_surface(dev, width, height, border, bg_color, zoom_hash)
-       && _darkroom_compose_fallback(cr, dev, width, height, border, bg_color, &expose_state, zoom_hash))
+       && _darkroom_compose_fallback(&compose))
     {
       expose_state.image_surface_imgid = dev->image_storage.id;
       expose_state.image_surface_has_main = FALSE;
@@ -1054,7 +1074,7 @@ void expose(
    * is still catching up. */
   if(!drawn && roi_changed && !full_image_backbuf_ready
      && _darkroom_preview_fallback_valid(dev, width, height, zoom_hash)
-     && _darkroom_compose_fallback(cr, dev, width, height, border, bg_color, &expose_state, zoom_hash))
+     && _darkroom_compose_fallback(&compose))
   {
     expose_state.image_surface_imgid = dev->image_storage.id;
     expose_state.image_surface_has_main = FALSE;
@@ -1068,8 +1088,7 @@ void expose(
    * the same zoom/pan. History-only changes should not glitch to preview or
    * background while the new main backbuf is still being produced. */
   if(!drawn && _darkroom_locked_main_valid_for_zoom(&expose_state, zoom_hash)
-     && _darkroom_compose_locked(cr, dev, &_darkroom_main_locked, width, height, border, bg_color, &expose_state,
-                                 zoom_hash))
+     && _darkroom_compose_locked(&compose, &_darkroom_main_locked))
   {
     expose_state.image_surface_imgid = dev->image_storage.id;
     expose_state.image_surface_has_main = TRUE;
