@@ -538,9 +538,18 @@ static void _render_done(uint32_t object_id, uint64_t token, GBytes *jpeg, int32
   if(IS_NULL_PTR(object)) return;
   if(object->kind == DT_CANVAS_OBJECT_MAP)
   {
-    dt_canvas_map_set_render(view->canvas, object, jpeg, pixel_width, pixel_height,
-                             (int64_t)g_get_real_time() / G_USEC_PER_SEC);
-    if(IS_NULL_PTR(jpeg)) dt_control_log(_("the canvas could not fetch the map tiles"));
+    if(IS_NULL_PTR(jpeg))
+    {
+      // Keep whatever the frame showed: a failed provider must not blank a map that was fine.
+      object->map.sync_status = DT_CANVAS_SYNC_MISSING;
+      dt_control_log(_("the canvas could not fetch the map tiles from %s"),
+                     dt_canvas_map_source_name(dt_canvas_map_source_index(object->map.source)));
+    }
+    else
+    {
+      dt_canvas_map_set_render(view->canvas, object, jpeg, pixel_width, pixel_height,
+                               (int64_t)g_get_real_time() / G_USEC_PER_SEC);
+    }
     dt_control_queue_redraw_center();
     return;
   }
@@ -1018,11 +1027,13 @@ static dt_canvas_object_t *_add_map(dt_view_t *self, const double x, const doubl
                                     const double longitude)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  // The stored preference may name a provider this build does not have: fall back to the first one.
+  const uint32_t source
+      = dt_canvas_map_source_id(dt_canvas_map_source_index((uint32_t)dt_conf_get_int("canvas/map_source")));
   dt_canvas_t *before = _begin_edit(view);
   dt_canvas_object_t *map = dt_canvas_add_map(view->canvas, dt_canvas_snap(view->canvas, x),
                                               dt_canvas_snap(view->canvas, y), latitude, longitude,
-                                              dt_conf_get_int("canvas/map_zoom"),
-                                              (uint32_t)dt_conf_get_int("canvas/map_source"));
+                                              dt_conf_get_int("canvas/map_zoom"), source);
   dt_conf_set_float("canvas/map_latitude", (float)latitude);
   dt_conf_set_float("canvas/map_longitude", (float)longitude);
   _select_only(view, map->id);
