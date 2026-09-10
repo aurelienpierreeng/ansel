@@ -70,10 +70,10 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 1020 ///< 1024 at format 1, minus the gutter
+#define DT_CANVAS_HEADER_RESERVED 992 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8)
 #define DT_CANVAS_OBJECT_RESERVED 256
 #define DT_CANVAS_IMAGE_RESERVED 512
-#define DT_CANVAS_TEXT_RESERVED 256
+#define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
 #define DT_CANVAS_CONNECTOR_RESERVED 96 ///< 128 at format 1, minus the anchors and routing (12) and the waypoint (20)
 
 /** An sRGB colour with straight alpha, each channel in [0, 1]. */
@@ -170,14 +170,24 @@ typedef enum dt_canvas_text_source_t
   DT_CANVAS_TEXT_SOURCE_SIDECAR = 1,  ///< the `.txt` sidecar of `linked_object`'s source image
 } dt_canvas_text_source_t;
 
+typedef enum dt_canvas_text_align_t
+{
+  DT_CANVAS_ALIGN_START = 0,   ///< left, or top
+  DT_CANVAS_ALIGN_CENTER = 1,
+  DT_CANVAS_ALIGN_END = 2,     ///< right, or bottom
+  DT_CANVAS_ALIGN_JUSTIFY = 3, ///< horizontal only
+} dt_canvas_text_align_t;
+
 typedef struct dt_canvas_text_t
 {
   char font[DT_CANVAS_FONT_LEN];  ///< a Pango font description, empty for the canvas default
   dt_canvas_color_t text_color;
-  dt_canvas_color_t background;
+  dt_canvas_color_t background;   ///< alpha 0 is a transparent frame
   uint32_t source;                ///< dt_canvas_text_source_t
   uint32_t linked_object;         ///< image object id for a sidecar frame, 0 otherwise
   float padding;                  ///< inner margin in canvas units
+  uint32_t align_h;               ///< dt_canvas_text_align_t
+  uint32_t align_v;               ///< dt_canvas_text_align_t, never JUSTIFY
   uint8_t reserved[DT_CANVAS_TEXT_RESERVED];
 
   /* runtime: the Markdown travels as its own archive entry */
@@ -280,6 +290,25 @@ typedef struct dt_canvas_object_t
   };
 } dt_canvas_object_t;
 
+/** What the plane is painted with. */
+typedef enum dt_canvas_background_t
+{
+  DT_CANVAS_BACKGROUND_PLAIN = 0,       ///< the background colour
+  DT_CANVAS_BACKGROUND_MOLESKINE = 1,   ///< ivory notebook paper, soft texture
+  DT_CANVAS_BACKGROUND_WATERCOLOUR = 2, ///< white watercolour paper, thick texture
+} dt_canvas_background_t;
+
+/** The paper the canvas is divided into, for printing. One canvas unit is one point (1/72 inch). */
+typedef enum dt_canvas_paper_t
+{
+  DT_CANVAS_PAPER_NONE = 0,
+  DT_CANVAS_PAPER_A2 = 1,
+  DT_CANVAS_PAPER_A3 = 2,
+  DT_CANVAS_PAPER_A4 = 3,
+  DT_CANVAS_PAPER_A5 = 4,
+  DT_CANVAS_PAPER_A6 = 5,
+} dt_canvas_paper_t;
+
 typedef struct dt_canvas_t
 {
   uint32_t format_version;
@@ -290,6 +319,10 @@ typedef struct dt_canvas_t
   float grid_size;                  ///< canvas units between grid lines
   uint32_t grid_flags;              ///< dt_canvas_grid_flags_t bits
   float gutter;                     ///< the margin frames keep from each other when snapped side by side or laid out
+  uint32_t background_style;        ///< dt_canvas_background_t
+  dt_canvas_color_t grid_color;     ///< the grid dots and the page outlines
+  uint32_t paper_size;              ///< dt_canvas_paper_t
+  uint32_t paper_landscape;         ///< 0 portrait, 1 landscape
   double view_zoom;                 ///< the viewport the canvas was saved with
   double view_x;                    ///< canvas point shown at the centre of the view
   double view_y;
@@ -479,13 +512,25 @@ gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas
                                       double *delta_y);
 
 /**
- * @brief Snap a size to another frame's width or height.
- * @details The same-size rule: the nearest other frame's width within `threshold` replaces
- * `*width`, and likewise for `*height`, each axis on its own.
+ * @brief Snap a size to another frame's width or height, or to a run of frames.
+ * @details The same-size rule: the nearest candidate within `threshold` replaces `*width`, and
+ * likewise for `*height`, each axis on its own. Candidates are every other frame's box and
+ * every run of frames stacked one gutter apart (masonry style), so a frame beside two stacked
+ * ones can take their combined height.
+ * @param width_reference receives the box the width was taken from, for a guide; may be NULL.
  * @return TRUE when at least one dimension snapped.
  */
 gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, double threshold, double *width,
-                             double *height);
+                             double *height, dt_canvas_rect_t *width_reference, dt_canvas_rect_t *height_reference);
+
+/**
+ * @brief The paper's size in canvas units (points), as oriented.
+ * @return FALSE when the canvas has no paper.
+ */
+gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, double *height);
+
+/** @brief The page rectangle at column `col`, row `row` of the paper tiling, from the origin. */
+dt_canvas_rect_t dt_canvas_page_rect(const dt_canvas_t *canvas, int col, int row);
 
 /** @brief Put a waypoint on a connector, at the middle of its current route. */
 void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connector);

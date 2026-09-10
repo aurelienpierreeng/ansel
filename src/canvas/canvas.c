@@ -141,6 +141,10 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->grid_size = CANVAS_DEFAULT_GRID_SIZE;
   canvas->grid_flags = DT_CANVAS_GRID_VISIBLE;
   canvas->gutter = CANVAS_DEFAULT_GUTTER;
+  canvas->background_style = DT_CANVAS_BACKGROUND_PLAIN;
+  canvas->grid_color = dt_canvas_color(0.5f, 0.5f, 0.5f, 1.0f);
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  canvas->paper_landscape = 0;
   canvas->view_zoom = 1.0;
   canvas->view_x = 0.0;
   canvas->view_y = 0.0;
@@ -368,6 +372,8 @@ dt_canvas_object_t *dt_canvas_add_text(dt_canvas_t *canvas, double x, double y, 
   object->text.source = DT_CANVAS_TEXT_SOURCE_MARKDOWN;
   object->text.linked_object = 0;
   object->text.padding = CANVAS_DEFAULT_TEXT_PADDING;
+  object->text.align_h = DT_CANVAS_ALIGN_START;
+  object->text.align_v = DT_CANVAS_ALIGN_START;
   object->text.markdown = g_strdup(IS_NULL_PTR(markdown) ? "" : markdown);
   return object;
 }
@@ -1086,25 +1092,136 @@ gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas
   return found_x || found_y;
 }
 
+typedef struct dt_canvas_size_candidate_t
+{
+  double *best_delta;
+  gboolean *found;
+  dt_canvas_rect_t *reference;
+} dt_canvas_size_candidate_t;
+
+static void _snap_size_axis(const double current, const double candidate, const double threshold,
+                            const dt_canvas_rect_t *box, dt_canvas_size_candidate_t *axis)
+{
+  const gboolean was_found = *axis->found;
+  const double previous = *axis->best_delta;
+  _snap_axis(current, candidate, threshold, axis->best_delta, axis->found);
+  if(*axis->found && (!was_found || *axis->best_delta != previous) && !IS_NULL_PTR(axis->reference))
+    *axis->reference = *box;
+}
+
+#define CANVAS_RUN_MAX 8
+#define CANVAS_RUN_TOLERANCE 2.0
+
+static gboolean _ranges_overlap(const double start_a, const double end_a, const double start_b, const double end_b)
+{
+  return start_a < end_b && start_b < end_a;
+}
+
+/**
+ * Every run of frames stacked one gutter apart, starting at `start`, as a growing box: the
+ * masonry candidates. `vertical` walks downwards, else rightwards.
+ */
+static void _snap_size_runs(const dt_canvas_t *canvas, const GArray *exclude, const dt_canvas_rect_t *start,
+                            const gboolean vertical, const double current, const double threshold,
+                            dt_canvas_size_candidate_t *axis)
+{
+  const double gutter = canvas->gutter > 0.0f ? canvas->gutter : 0.0;
+  dt_canvas_rect_t span = *start;
+  for(int step = 0; step < CANVAS_RUN_MAX; step++)
+  {
+    gboolean extended = FALSE;
+    for(guint idx = 0; idx < canvas->objects->len && !extended; idx++)
+    {
+      const dt_canvas_object_t *other = g_ptr_array_index(canvas->objects, idx);
+      if(!dt_canvas_object_is_frame(other) || (other->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
+      if(_excluded(exclude, other->id)) continue;
+      const dt_canvas_rect_t bounds = dt_canvas_object_bounds(other);
+      if(vertical)
+      {
+        if(fabs(bounds.y - (span.y + span.height + gutter)) > CANVAS_RUN_TOLERANCE) continue;
+        if(!_ranges_overlap(span.x, span.x + span.width, bounds.x, bounds.x + bounds.width)) continue;
+        const double left = fmin(span.x, bounds.x);
+        const double right = fmax(span.x + span.width, bounds.x + bounds.width);
+        span.x = left;
+        span.width = right - left;
+        span.height = bounds.y + bounds.height - span.y;
+      }
+      else
+      {
+        if(fabs(bounds.x - (span.x + span.width + gutter)) > CANVAS_RUN_TOLERANCE) continue;
+        if(!_ranges_overlap(span.y, span.y + span.height, bounds.y, bounds.y + bounds.height)) continue;
+        const double top = fmin(span.y, bounds.y);
+        const double bottom = fmax(span.y + span.height, bounds.y + bounds.height);
+        span.y = top;
+        span.height = bottom - top;
+        span.width = bounds.x + bounds.width - span.x;
+      }
+      extended = TRUE;
+    }
+    if(!extended) return;
+    _snap_size_axis(current, vertical ? span.height : span.width, threshold, &span, axis);
+  }
+}
+
 gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, double threshold, double *width,
-                             double *height)
+                             double *height, dt_canvas_rect_t *width_reference, dt_canvas_rect_t *height_reference)
 {
   if(IS_NULL_PTR(canvas)) return FALSE;
   gboolean found_width = FALSE;
   gboolean found_height = FALSE;
   double best_width = 0.0;
   double best_height = 0.0;
+  dt_canvas_size_candidate_t width_axis = { &best_width, &found_width, width_reference };
+  dt_canvas_size_candidate_t height_axis = { &best_height, &found_height, height_reference };
   for(guint idx = 0; idx < canvas->objects->len; idx++)
   {
     const dt_canvas_object_t *other = g_ptr_array_index(canvas->objects, idx);
     if(!dt_canvas_object_is_frame(other) || (other->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
     if(_excluded(exclude, other->id)) continue;
-    if(!IS_NULL_PTR(width)) _snap_axis(*width, other->width, threshold, &best_width, &found_width);
-    if(!IS_NULL_PTR(height)) _snap_axis(*height, other->height, threshold, &best_height, &found_height);
+    const dt_canvas_rect_t bounds = dt_canvas_object_bounds(other);
+    if(!IS_NULL_PTR(width))
+    {
+      _snap_size_axis(*width, bounds.width, threshold, &bounds, &width_axis);
+      _snap_size_runs(canvas, exclude, &bounds, FALSE, *width, threshold, &width_axis);
+    }
+    if(!IS_NULL_PTR(height))
+    {
+      _snap_size_axis(*height, bounds.height, threshold, &bounds, &height_axis);
+      _snap_size_runs(canvas, exclude, &bounds, TRUE, *height, threshold, &height_axis);
+    }
   }
   if(found_width) *width += best_width;
   if(found_height) *height += best_height;
   return found_width || found_height;
+}
+
+/* --- paper ------------------------------------------------------------------- */
+
+gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, double *height)
+{
+  if(IS_NULL_PTR(canvas)) return FALSE;
+  // ISO A sizes in points, portrait.
+  static const double sizes[][2] = { { 0.0, 0.0 },       { 1191.0, 1684.0 }, { 842.0, 1191.0 },
+                                     { 595.0, 842.0 },   { 420.0, 595.0 },   { 298.0, 420.0 } };
+  if(canvas->paper_size == DT_CANVAS_PAPER_NONE || canvas->paper_size > DT_CANVAS_PAPER_A6) return FALSE;
+  const double portrait_width = sizes[canvas->paper_size][0];
+  const double portrait_height = sizes[canvas->paper_size][1];
+  if(!IS_NULL_PTR(width)) *width = canvas->paper_landscape ? portrait_height : portrait_width;
+  if(!IS_NULL_PTR(height)) *height = canvas->paper_landscape ? portrait_width : portrait_height;
+  return TRUE;
+}
+
+dt_canvas_rect_t dt_canvas_page_rect(const dt_canvas_t *canvas, int col, int row)
+{
+  dt_canvas_rect_t rect = { 0.0, 0.0, 0.0, 0.0 };
+  double width = 0.0;
+  double height = 0.0;
+  if(!dt_canvas_paper_dimensions(canvas, &width, &height)) return rect;
+  rect.x = col * width;
+  rect.y = row * height;
+  rect.width = width;
+  rect.height = height;
+  return rect;
 }
 
 /* --- layout ----------------------------------------------------------------- */

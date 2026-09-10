@@ -122,6 +122,8 @@ static void _write_text(GByteArray *out, const dt_canvas_text_t *text)
   _w_u32(out, text->source);
   _w_u32(out, text->linked_object);
   _w_f32(out, text->padding);
+  _w_u32(out, text->align_h);
+  _w_u32(out, text->align_v);
   _w_bytes(out, text->reserved, sizeof(text->reserved));
 }
 
@@ -202,6 +204,10 @@ GBytes *dt_canvas_format_write_index(const dt_canvas_t *canvas)
   _w_i32(out, canvas->jpeg_quality);
   _w_u32(out, canvas->next_id);
   _w_f32(out, canvas->gutter);
+  _w_u32(out, canvas->background_style);
+  _w_color(out, &canvas->grid_color);
+  _w_u32(out, canvas->paper_size);
+  _w_u32(out, canvas->paper_landscape);
   _w_bytes(out, canvas->reserved, sizeof(canvas->reserved));
   const uint32_t header_size = out->len;
   uint8_t *size_field = out->data + CANVAS_MAGIC_LEN + 4;
@@ -346,6 +352,8 @@ static void _read_text(dt_canvas_cursor_t *cursor, dt_canvas_text_t *text)
   text->source = _r_u32(cursor);
   text->linked_object = _r_u32(cursor);
   text->padding = _r_f32(cursor);
+  text->align_h = _r_u32(cursor);
+  text->align_v = _r_u32(cursor);
   _r_bytes(cursor, text->reserved, sizeof(text->reserved));
   text->markdown = NULL;
 }
@@ -458,6 +466,10 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
   canvas->jpeg_quality = _r_i32(&cursor);
   canvas->next_id = _r_u32(&cursor);
   canvas->gutter = _r_f32(&cursor);
+  canvas->background_style = _r_u32(&cursor);
+  canvas->grid_color = _r_color(&cursor);
+  canvas->paper_size = _r_u32(&cursor);
+  canvas->paper_landscape = _r_u32(&cursor);
   _r_bytes(&cursor, canvas->reserved, sizeof(canvas->reserved));
   cursor.pos = header_size;
   cursor.limit = cursor.size;

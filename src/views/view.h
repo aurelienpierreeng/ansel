@@ -278,6 +278,9 @@ typedef struct dt_view_manager_t
       gboolean (*is_connecting)(struct dt_view_t *view);
       void (*set_gutter)(struct dt_view_t *view, float gutter);
       void (*set_snap_mode)(struct dt_view_t *view, int mode); ///< dt_canvas_grid_flags_t snap bits
+      void (*set_background)(struct dt_view_t *view, const float *rgba, int style); ///< NULL / -1 leave one alone
+      void (*set_grid_color)(struct dt_view_t *view, const float *rgba);
+      void (*set_paper)(struct dt_view_t *view, int paper, int landscape);        ///< -1 leaves one alone
     } canvas;
   } proxy;
 
