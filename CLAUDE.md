@@ -2469,9 +2469,9 @@ they are visible.
 - **A render job never touches the canvas.** It gets a library id and an object id, delivers
   on the GUI thread with the token the view issued for the open document, and the view drops
   results whose token is stale. Do not hand it a `dt_canvas_t *`.
-- **One painter for the screen and the PDF**, differing only in the colour target: the atelier
-  converts to the display profile, the export keeps Adobe RGB and converts the whole page with
-  LCMS. Every colour the canvas draws goes through `dt_canvas_render_color()`, so borders match
+- **One painter for the screen and the export**, differing only in the colour target: the
+  atelier converts to the display profile, the export keeps Adobe RGB and converts the whole
+  page with LCMS. Every colour the canvas draws goes through `dt_canvas_render_color()`, so borders match
   their pictures.
 - **The toolbar owns no state.** It asks the view through `proxy.canvas` and refills from
   the document on `DT_SIGNAL_CANVAS_CHANGED` with its handlers blocked. A control that wrote
@@ -2574,3 +2574,20 @@ they are visible.
   free and recreate documents at the same address with the same generation, and were handed
   the previous test's frame. It serves paints that carry a surface cache only, because a test
   that edits the struct by hand between two paints bumps no generation.
+- **A page size is an index into one appended-only table** (`dt_canvas_paper_points()`), and
+  the GUI reads the table rather than repeating it. Insert a size in the middle and every
+  saved document changes page. One canvas unit is one point, so a screen format is its pixel
+  size read as points: exported at 72 dpi it lands on exactly the pixels it is named for.
+- **The export's page is the document's, never the dialog's.** Page size and orientation are
+  the canvas's; the dialog asks only for format, resolution, bleed, quality and profile. The
+  bleed grows the sheet and the canvas rectangle it shows, so a frame a page break cut in two
+  keeps going: it is not a margin and moves nothing.
+- **A rasterised PDF page is heavy because of its stream, not its pixel count.** The raster is
+  already exactly dpi x physical size; what cost 87 MB on a six-page A3 book was a lossless
+  Flate stream over photographs. `dt_pdf_add_image_jpeg()` writes a `/DCTDecode` stream
+  instead. Measure a claim of oversampling before acting on it -- `/Width` and `/Height` in
+  the file answer it in one grep.
+- **A property with a canvas default has no toggle on the property bar: -1 in its spin button
+  is the "inherit" code** (`CANVAS_BAR_INHERIT`), rendered as `default` through the spin's
+  `output` signal, and leaving it seeds the object from the effective property. Colours carry
+  their own alpha, so nothing has a "Transparent" button either.

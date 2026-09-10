@@ -39,7 +39,7 @@ typedef enum dt_canvas_action_t
   DT_CANVAS_ACTION_OPEN,
   DT_CANVAS_ACTION_SAVE,
   DT_CANVAS_ACTION_SAVE_AS,
-  DT_CANVAS_ACTION_EXPORT_PDF,
+  DT_CANVAS_ACTION_EXPORT,
   DT_CANVAS_ACTION_ADD_TEXT,
   DT_CANVAS_ACTION_ADD_NOTES, ///< the .txt notes of the selected images, as linked text frames
   DT_CANVAS_ACTION_ADD_MAP,   ///< a map frame at the centre of the view

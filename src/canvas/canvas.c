@@ -23,6 +23,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
+#include <glib/gi18n.h>
 #include <math.h>
 #include <stdio.h>
 #include <stddef.h>
@@ -1529,15 +1530,60 @@ gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, d
 
 /* --- paper ------------------------------------------------------------------- */
 
+/**
+ * Every page size, portrait, in points. The order IS the stored value, so entries are only
+ * ever appended. A screen format is its pixel size read as points: at 72 dpi the export comes
+ * out at exactly the pixels the format is named for, at 144 dpi at twice that, and so on.
+ */
+static const struct
+{
+  const char *name;
+  double width;
+  double height;
+} _paper_sizes[] = {
+  { N_("None"), 0.0, 0.0 },
+  { "A2", 1191.0, 1684.0 },
+  { "A3", 842.0, 1191.0 },
+  { "A4", 595.0, 842.0 },
+  { "A5", 420.0, 595.0 },
+  { "A6", 298.0, 420.0 },
+  { N_("US Letter"), 612.0, 792.0 },
+  { N_("Instagram square"), 1080.0, 1080.0 },
+  { N_("Instagram portrait"), 1080.0, 1350.0 },
+  { N_("Story, reel, Short"), 1080.0, 1920.0 },
+  { N_("Facebook post"), 1200.0, 630.0 },
+  { N_("Facebook cover"), 851.0, 315.0 },
+  { N_("YouTube thumbnail"), 1280.0, 720.0 },
+  { N_("YouTube banner"), 2560.0, 1440.0 },
+};
+
+int dt_canvas_paper_count(void)
+{
+  return (int)(sizeof(_paper_sizes) / sizeof(_paper_sizes[0]));
+}
+
+const char *dt_canvas_paper_name(const int paper)
+{
+  if(paper < 0 || paper >= dt_canvas_paper_count()) return NULL;
+  // A2 through A6 are the same word in every language and are not in the catalogue.
+  return paper >= DT_CANVAS_PAPER_A2 && paper <= DT_CANVAS_PAPER_A6 ? _paper_sizes[paper].name
+                                                                    : _(_paper_sizes[paper].name);
+}
+
+gboolean dt_canvas_paper_points(const int paper, double *width, double *height)
+{
+  if(paper <= DT_CANVAS_PAPER_NONE || paper >= dt_canvas_paper_count()) return FALSE;
+  if(!IS_NULL_PTR(width)) *width = _paper_sizes[paper].width;
+  if(!IS_NULL_PTR(height)) *height = _paper_sizes[paper].height;
+  return TRUE;
+}
+
 gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, double *height)
 {
   if(IS_NULL_PTR(canvas)) return FALSE;
-  // ISO A sizes in points, portrait.
-  static const double sizes[][2] = { { 0.0, 0.0 },       { 1191.0, 1684.0 }, { 842.0, 1191.0 },
-                                     { 595.0, 842.0 },   { 420.0, 595.0 },   { 298.0, 420.0 } };
-  if(canvas->paper_size == DT_CANVAS_PAPER_NONE || canvas->paper_size > DT_CANVAS_PAPER_A6) return FALSE;
-  const double portrait_width = sizes[canvas->paper_size][0];
-  const double portrait_height = sizes[canvas->paper_size][1];
+  double portrait_width = 0.0;
+  double portrait_height = 0.0;
+  if(!dt_canvas_paper_points((int)canvas->paper_size, &portrait_width, &portrait_height)) return FALSE;
   if(!IS_NULL_PTR(width)) *width = canvas->paper_landscape ? portrait_height : portrait_width;
   if(!IS_NULL_PTR(height)) *height = canvas->paper_landscape ? portrait_width : portrait_height;
   return TRUE;

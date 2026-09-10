@@ -352,7 +352,7 @@ static void _refill(dt_lib_module_t *self)
   _rgba_to(toolbar->grid_color, &canvas->grid_color, TRUE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->page_show), (flags & DT_CANVAS_PAGE_VISIBLE) != 0);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->page_snap), (flags & DT_CANVAS_SNAP_PAGE) != 0);
-  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_size), CLAMP((int)canvas->paper_size, 0, 5));
+  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_size), CLAMP((int)canvas->paper_size, 0, dt_canvas_paper_count() - 1));
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_orientation), canvas->paper_landscape ? 1 : 0);
   _rgba_to(toolbar->page_color, &canvas->page_color, TRUE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->gutter_snap), (flags & DT_CANVAS_SNAP_GUTTER) != 0);
@@ -528,14 +528,11 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   toolbar->page_show = _guide_check(self, grid, 3, 0, _("Show"), DT_CANVAS_PAGE_VISIBLE);
   toolbar->page_snap = _guide_check(self, grid, 3, 1, _("Snap"), DT_CANVAS_SNAP_PAGE);
   toolbar->page_size = gtk_combo_box_text_new();
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_size), _("None"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_size), "A2");
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_size), "A3");
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_size), "A4");
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_size), "A5");
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_size), "A6");
+  for(int idx = 0; idx < dt_canvas_paper_count(); idx++)
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_size), dt_canvas_paper_name(idx));
   gtk_widget_set_tooltip_text(toolbar->page_size,
-                              _("Divide the canvas into pages of this paper, one PDF page each; one canvas unit is one point"));
+                              _("Divide the canvas into pages of this size, one exported page each. One canvas unit is one "
+                                "point, so a print size is its size in points and a screen size is its size in pixels at 72 dpi."));
   g_signal_connect(toolbar->page_size, "changed", G_CALLBACK(_page_changed), self);
   _labelled(grid, 3, 2, _("Size"), toolbar->page_size);
   toolbar->page_color = gtk_color_button_new();
@@ -685,7 +682,7 @@ void gui_init(dt_lib_module_t *self)
   _action_item(canvas_menu, _("Save"), DT_CANVAS_ACTION_SAVE);
   _action_item(canvas_menu, _("Save as..."), DT_CANVAS_ACTION_SAVE_AS);
   gtk_menu_shell_append(GTK_MENU_SHELL(canvas_menu), gtk_separator_menu_item_new());
-  _action_item(canvas_menu, _("Export as PDF..."), DT_CANVAS_ACTION_EXPORT_PDF);
+  _action_item(canvas_menu, _("Export..."), DT_CANVAS_ACTION_EXPORT);
   _menu_button(box, _("Canvas"), _("New, open, save and export the canvas"), canvas_menu);
 
   GtkWidget *object_menu = gtk_menu_new();

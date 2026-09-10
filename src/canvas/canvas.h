@@ -399,7 +399,15 @@ typedef enum dt_canvas_background_t
   DT_CANVAS_BACKGROUND_LAST = 5,
 } dt_canvas_background_t;
 
-/** The paper the canvas is divided into, for printing. One canvas unit is one point (1/72 inch). */
+/**
+ * The page the canvas is divided into. One canvas unit is one point (1/72 inch), so a print
+ * size is its size in points and a screen size is its size in pixels at 72 dpi -- export such
+ * a page at 72 dpi and it comes out at exactly the pixel size it is named for.
+ *
+ * The stored value is this index: NEW SIZES ARE APPENDED, never inserted, or every saved
+ * document changes page size. `dt_canvas_paper_name()` and `dt_canvas_paper_points()` are the
+ * one table behind it, and the GUI reads its list from there.
+ */
 typedef enum dt_canvas_paper_t
 {
   DT_CANVAS_PAPER_NONE = 0,
@@ -408,6 +416,15 @@ typedef enum dt_canvas_paper_t
   DT_CANVAS_PAPER_A4 = 3,
   DT_CANVAS_PAPER_A5 = 4,
   DT_CANVAS_PAPER_A6 = 5,
+  DT_CANVAS_PAPER_LETTER = 6,             ///< US Letter, 8.5 x 11 in
+  DT_CANVAS_PAPER_INSTAGRAM_SQUARE = 7,   ///< 1080 x 1080 px
+  DT_CANVAS_PAPER_INSTAGRAM_PORTRAIT = 8, ///< 1080 x 1350 px
+  DT_CANVAS_PAPER_STORY = 9,              ///< reels and stories, 1080 x 1920 px
+  DT_CANVAS_PAPER_FACEBOOK_POST = 10,     ///< 1200 x 630 px
+  DT_CANVAS_PAPER_FACEBOOK_COVER = 11,    ///< 851 x 315 px
+  DT_CANVAS_PAPER_YOUTUBE_THUMBNAIL = 12, ///< 1280 x 720 px
+  DT_CANVAS_PAPER_YOUTUBE_BANNER = 13,    ///< channel art, 2560 x 1440 px
+  DT_CANVAS_PAPER_LAST = 14,
 } dt_canvas_paper_t;
 
 typedef struct dt_canvas_t
@@ -689,6 +706,19 @@ gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, d
  * @return FALSE when the canvas has no paper.
  */
 gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, double *height);
+
+/** @brief How many page sizes there are, DT_CANVAS_PAPER_NONE included. */
+int dt_canvas_paper_count(void);
+
+/** @brief The page size's name, translated, or NULL past the end. "None" is the first. */
+const char *dt_canvas_paper_name(int paper);
+
+/**
+ * @brief The page size in points, portrait. FALSE for DT_CANVAS_PAPER_NONE and past the end.
+ * @note A pixel-defined size (a story, a banner) is that many points, which is that many
+ * pixels at 72 dpi.
+ */
+gboolean dt_canvas_paper_points(int paper, double *width, double *height);
 
 /** @brief The page rectangle at column `col`, row `row` of the paper tiling, from the origin. */
 dt_canvas_rect_t dt_canvas_page_rect(const dt_canvas_t *canvas, int col, int row);

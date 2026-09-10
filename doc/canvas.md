@@ -22,7 +22,7 @@ which it needs to render, below `views/` and `libs/`, which are its only consume
 | `canvas_render.h/.c` | the library boundary: identity, sync status, the render job, decoding |
 | `canvas_paint.h/.c` | drawing a canvas into a cairo context |
 | `canvas_markdown.h/.c` | Markdown to Pango markup |
-| `canvas_pdf.h/.c` | the one-page, colour-managed PDF |
+| `canvas_export.h/.c` | the pages, colour-managed, as PDF, PNG, JPEG or TIFF |
 | `canvas_actions.h` | the action vocabulary shared by the view and its toolbar |
 
 Four kinds of object share one struct, `dt_canvas_object_t`: an **image frame** (a
@@ -253,8 +253,15 @@ Euclidean distance transform of the support (`dt_canvas_render_mask_band()`) -- 
 inside the support, so the band is solid and never mixed with the fall-off. A rectangular
 frame keeps its border inside its edge with the content inset and the background under the
 content, as before; both are the same rule seen from the shape's edge. The three rasters are
-read by the compositor's own bilinear sampler, never through `cairo_mask_surface()`: cairo
-scales a mask on one core, and did so three times per cut frame per frame.
+read by the compositor's own sampler, never through `cairo_mask_surface()`: cairo scales a
+mask on one core, and did so three times per cut frame per frame. The raster's longer side is
+the power of two at or above the frame's size on screen, so it is between one and two raster
+pixels per layer pixel -- and four at the half resolution a gesture paints at, since the
+gesture reuses the full frame's raster rather than rasterising every cutout again. Reading
+such a raster at each pixel's centre alone throws away every other sample along an edge, so
+the sampler averages it over the pixel's footprint, two a side and no more: a 2x2 box is what
+the quantisation leaves over, and sixteen reads a pixel on a frame nobody is looking at yet
+is not worth its cost.
 
 ### Gutter frames
 
@@ -297,13 +304,23 @@ it reads on any background colour or paper and over a picture.
 ### The floating property bar
 
 The bar is one vertical box of rows, one per topic, so the bars of two kinds differ only by
-their first row: the kind's own properties (font, colour and alignment; route, arrows and
+their first row: the kind's own properties (font, alignment and colour; route, arrows and
 waypoint; place, zoom and provider), then **Geometry** (centre, size, angle), **Opacity**
-with the background colour, **Border** (a connector's is its **Line**: width, dashes,
-colour), **Shadow**, and **Cutout**. The border and the shadow rows open with a "Canvas
-default" toggle; while it is on, the custom controls are hidden, and turning it off starts
-the object's own values from the canvas's. Rows a kind has no use for are hidden at refill;
-every row keeps a 70-pixel topic label so the controls line up from row to row.
+with the background colour, **Frame** (border width, corner radius, colour -- a connector's
+is its **Line**: width, dashes, colour), **Shadow** (the two offsets, the blur, the colour),
+and **Cutout**. Rows a kind has no use for are hidden at refill; every row keeps a
+70-pixel topic label so the controls line up from row to row, and where a row carries a
+colour it is the last control on it.
+
+**A property with a canvas-wide default has no toggle: the value is the switch.** The border
+width, the corner radius and the shadow's blur read `default` at -1, which is the object
+inheriting the canvas's; any other value is the object's own. Leaving the sentinel seeds the
+object with the property that was on screen -- the colour and the offsets come across with
+it -- so an edit starts from what the user was looking at rather than from zero. It is the
+same shape as the shadow's radius, which has always been its own on/off at 0, and it is why
+there is no "Canvas default" button anywhere on the bar. **Nor is there a "Transparent"
+button**: every colour on the bar is an alpha-capable picker, so an alpha of zero is how a
+background, a border or a text is made to disappear.
 
 While a cutout is being edited, the context menu opens on the shape's properties as sliders
 -- feather, opacity, size, rotation, extent and curvature, whichever the shape has -- the way
@@ -395,16 +412,46 @@ anchored to the canvas origin so it does not shimmer under a pan.
 The grid dots have a colour of their own and a radius that is a fraction of the grid step,
 so they scale with the zoom too, floored at three quarters of a pixel so they never vanish.
 
-A canvas may be divided into **pages** of an ISO A paper (A2 to A6, portrait or landscape),
-tiled from the origin and outlined with dashed lines in their own colour: one line per
+A canvas may be divided into **pages** -- ISO A2 to A6, US Letter, or one of the screen
+formats a picture is made for (Instagram square and portrait, a story/reel/Short, a Facebook
+post or cover, a YouTube thumbnail or channel banner), portrait or landscape -- tiled from
+the origin and outlined with dashed lines in their own colour: one line per
 border, never one rectangle per page -- a shared edge stroked twice with two dash phases
 fills its own gaps and reads as solid -- each line starting on a multiple of the dash
 period from the origin, so the dashes neither crawl under a pan nor differ between the
 horizontal and the vertical. Page borders are a snapping rule of their own, applied after
-the gutter and before the size. One canvas unit is
-one point, so an A4 page is 595 by 842 units. The PDF export then writes one PDF page per
-canvas page that holds a frame, skipping empty ones, at the requested resolution; without
-paper it fits the frames' box on the page the dialog chooses, as before.
+the gutter and before the size.
+
+**One canvas unit is one point**, so an A4 page is 595 by 842 units and a print size is its
+size in points. A screen format is the same number read as pixels: a story page is 1080 by
+1920 units, and exported at 72 dpi it comes out at exactly 1080 by 1920 pixels, at 144 dpi at
+twice that. `dt_canvas_paper_name()` and `dt_canvas_paper_points()` are the one table behind
+the list, and the toolbar reads it rather than repeating it. **The stored value is the
+index**, so a new size is appended and never inserted, or every saved document changes page.
+
+### Exporting
+
+`dt_canvas_export()` writes the canvas's pages as a PDF, a TIFF (both hold every page in the
+one file) or a series of PNG or JPEG files numbered from the name given (`book_01.png`); a
+single page keeps the name itself. **The page is the document's, never the exporter's**: a
+canvas divided into pages gives one page per page that holds a frame, empty ones skipped, at
+that size; a canvas without gives one page around every frame. Page size and orientation are
+set in the atelier, so what was laid out is what comes out, and the dialog does not ask again.
+
+**A page is rasterised at exactly the resolution asked for times its own physical size** --
+an A3 page at 300 dpi is 4962 by 3508 pixels -- and the whole raster goes through LCMS into
+the output profile, which is embedded. What used to make the file heavy was not the raster
+but the stream: a lossless Flate stream over a page of photographs kept every code of a
+picture that was already a lossy JPEG on the way in. A PDF page is therefore carried as a
+`/DCTDecode` stream at the quality asked for (`dt_pdf_add_image_jpeg()`), which took a
+six-page A3 book from 87 MB to 14.5 MB and halved the time; quality 100 keeps the lossless
+stream for anyone who wants every code. PNG and TIFF are always lossless.
+
+**The bleed** grows every sheet by the amount asked for on all four sides -- in centimetres,
+inches or pixels at the export resolution -- and grows the canvas rectangle with it, so a
+frame a page break cut in two carries on into the bleed on both sheets. That is what a
+binding folds around and a trim cuts into. **It is not a margin**: nothing is moved and no
+room is kept clear, the sheet is simply larger than the page.
 
 ### Text frames
 
@@ -449,10 +496,11 @@ and is never printed.
 Frames are Adobe RGB JPEGs with the profile embedded, and every colour the canvas draws --
 borders, text, backgrounds, grid dots -- is put into that encoding by
 `dt_canvas_render_color()`, so a border matches its picture. On screen the finished 8-bit
-canvas goes through the module's prepared Adobe-RGB-to-display transform; the PDF export
-keeps the raster in Adobe RGB and converts the whole page to the chosen output profile with
-LCMS, embedding that profile; the intent is the user's. Text and connectors are therefore
-pixels in the PDF, not vectors: a trade for having one painter and one colour path for the
+canvas goes through the module's prepared Adobe-RGB-to-display transform; an export keeps the
+raster in Adobe RGB and converts the whole page to the chosen output profile with LCMS,
+embedding that profile in the file it writes -- an `/ICCBased` colour space in a PDF, an
+`iCCP` chunk in a PNG, an APP2 marker in a JPEG, the ICC tag in a TIFF; the intent is the
+user's. Text and connectors are therefore pixels in an export, not vectors: a trade for having one painter and one colour path for the
 screen and the print. The compositor above runs on both targets; only the last step differs.
 
 ## Instrumentation and performance
@@ -582,4 +630,4 @@ layer in `tools/include_graph.py`.
 - Sidecar text frames are refreshed on "Refresh", not watched.
 - The image render is one size per canvas (`image_long_edge`), chosen when the canvas is
   created; changing it takes a "Refresh all".
-- No multi-page PDF: a book is one canvas per spread today.
+- The bleed is uniform on all four sides; a binding usually wants more on the spine.

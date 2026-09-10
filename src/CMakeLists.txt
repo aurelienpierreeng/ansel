@@ -72,7 +72,7 @@ FILE(GLOB SOURCE_FILES
   "canvas/canvas_format.c"
   "canvas/canvas_markdown.c"
   "canvas/canvas_paint.c"
-  "canvas/canvas_pdf.c"
+  "canvas/canvas_export.c"
   "canvas/canvas_render.c"
   "canvas/canvas_zip.c"
   "math/calculator.c"
