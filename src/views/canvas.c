@@ -198,6 +198,8 @@ typedef struct dt_canvas_view_t
   GtkWidget *border_custom;
   GtkWidget *object_border_width;
   GtkWidget *object_border_color;
+  GtkWidget *corner_default;
+  GtkWidget *object_corner_radius;
   GtkWidget *row_line;
   GtkWidget *connector_width;
   GtkWidget *connector_dashed;
@@ -468,6 +470,7 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   canvas->texture_detail = dt_conf_get_float("canvas/texture_detail");
   canvas->texture_scale = dt_conf_get_float("canvas/texture_scale");
   canvas->texture_grain = dt_conf_get_float("canvas/texture_grain");
+  canvas->corner_radius = dt_conf_get_float("canvas/corner_radius");
   canvas->dirty = FALSE;
 }
 
@@ -2152,6 +2155,28 @@ static void _bar_border_default_toggled(GtkToggleButton *toggle, gpointer data)
   _bars_refresh(self, TRUE);
 }
 
+static void _bar_corner_default_toggled(GtkToggleButton *toggle, gpointer data)
+{
+  BAR_EDIT_BEGIN_FRAME()
+  if(gtk_toggle_button_get_active(toggle))
+    object->flags &= ~DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  else
+  {
+    object->corner_radius = (float)dt_canvas_object_effective_corner_radius(view->canvas, object);
+    object->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  }
+  BAR_EDIT_END()
+  _bars_refresh(self, TRUE);
+}
+
+static void _bar_corner_changed(GtkSpinButton *spin, gpointer data)
+{
+  BAR_EDIT_BEGIN_FRAME()
+  object->corner_radius = (float)fmax(gtk_spin_button_get_value(spin), 0.0);
+  object->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  BAR_EDIT_END()
+}
+
 static void _bar_opacity_changed(GtkSpinButton *spin, gpointer data)
 {
   BAR_EDIT_BEGIN_ANY()
@@ -2515,6 +2540,12 @@ static void _bars_create(dt_view_t *self)
                                         G_CALLBACK(_bar_border_width_changed), self);
   view->object_border_color = _bar_color_button(view->border_custom, _("Border colour and opacity"),
                                                 G_CALLBACK(_bar_border_color_set), self);
+  GtkWidget *corners = _bar_group(view->row_border, _("Corners"));
+  view->corner_default = _bar_toggle(corners, _("Canvas default"), _("Use the canvas's default corner radius"),
+                                     G_CALLBACK(_bar_corner_default_toggled), self);
+  view->object_corner_radius = _bar_spin(corners, 0.0, 5000.0, 1.0, 0,
+                                         _("Radius of the frame's rounded corners, in canvas units; 0 is square"),
+                                         G_CALLBACK(_bar_corner_changed), self);
   view->row_line = _bar_row(bar, _("Line"));
   GtkWidget *line_width = _bar_group(view->row_line, _("Width"));
   view->connector_width = _bar_spin(line_width, 1.0, 40.0, 1.0, 0, _("Line width, in canvas units"),
@@ -2722,6 +2753,11 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
         _color_to_button(view->object_border_color, &border_color);
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->border_default),
                                      !(object->flags & DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE));
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->corner_default),
+                                     !(object->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE));
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_corner_radius),
+                                  dt_canvas_object_effective_corner_radius(view->canvas, object));
+        gtk_widget_set_visible(view->object_corner_radius, (object->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE) != 0);
       }
       if(connector)
       {
@@ -4651,6 +4687,16 @@ static void _proxy_set_background(dt_view_t *self, const float *rgba, int style)
   dt_control_queue_redraw_center();
 }
 
+static void _proxy_set_corner_radius(dt_view_t *self, float radius)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  view->canvas->corner_radius = fmaxf(radius, 0.0f);
+  dt_conf_set_float("canvas/corner_radius", view->canvas->corner_radius);
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
 static void _proxy_set_texture(dt_view_t *self, float contrast, float detail, float scale, float grain)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -4911,6 +4957,7 @@ void init(dt_view_t *self)
   manager->proxy.canvas.set_gutter_color = _proxy_set_gutter_color;
   manager->proxy.canvas.set_shadow = _proxy_set_shadow;
   manager->proxy.canvas.set_texture = _proxy_set_texture;
+  manager->proxy.canvas.set_corner_radius = _proxy_set_corner_radius;
 }
 
 void gui_init(dt_view_t *self)

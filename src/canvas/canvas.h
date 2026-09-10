@@ -70,8 +70,8 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 916 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16), texture (16)
-#define DT_CANVAS_OBJECT_RESERVED 172 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16)
+#define DT_CANVAS_HEADER_RESERVED 912 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16), texture (16), corners (4)
+#define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
 #define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
 #define DT_CANVAS_MAP_RESERVED 256
@@ -113,6 +113,8 @@ typedef enum dt_canvas_object_flags_t
   DT_CANVAS_OBJECT_FLAG_HIDDEN = 1 << 2,
   /** The object's own `shadow` applies instead of the canvas default. */
   DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE = 1 << 3,
+  /** The object's own `corner_radius` applies instead of the canvas default. */
+  DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE = 1 << 4,
 } dt_canvas_object_flags_t;
 
 typedef enum dt_canvas_grid_flags_t
@@ -375,6 +377,7 @@ typedef struct dt_canvas_object_t
   float transparency; ///< 0 opaque, 1 invisible; stored this way so an older file's zeros mean opaque
   dt_canvas_mask_t mask;
   dt_canvas_color_t background; ///< under the content, filling the frame or the cutout's whole shape; alpha 0 is none. A text frame keeps its own.
+  float corner_radius; ///< the frame's rounded corners, canvas units; applies with DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE
   uint8_t reserved[DT_CANVAS_OBJECT_RESERVED];
   union
   {
@@ -428,6 +431,7 @@ typedef struct dt_canvas_t
   float texture_detail;             ///< its fine structure: fibres, pores, wrinkles, the mesh
   float texture_scale;              ///< the size of its features
   float texture_grain;              ///< the dither that finishes it
+  float corner_radius;              ///< default rounded corners of the frames, canvas units; 0 is square
   double view_zoom;                 ///< the viewport the canvas was saved with
   double view_x;                    ///< canvas point shown at the centre of the view
   double view_y;
@@ -571,6 +575,9 @@ dt_canvas_color_t dt_canvas_background_tint(uint32_t style);
 
 /** @brief Whether a shadow draws anything at all: a radius other than zero and some strength. */
 gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow);
+
+/** @brief The corner radius a frame is drawn with, in canvas units, never past half its shorter side. */
+double dt_canvas_object_effective_corner_radius(const dt_canvas_t *canvas, const dt_canvas_object_t *object);
 
 /** @brief The colour under an object's content: a text frame's own, else the object's. */
 dt_canvas_color_t dt_canvas_object_background(const dt_canvas_object_t *object);

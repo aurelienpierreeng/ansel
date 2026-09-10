@@ -288,6 +288,7 @@ typedef struct dt_view_manager_t
       void (*set_shadow)(struct dt_view_t *view, const float *rgba, float offset_x, float offset_y, float blur);
       /** The paper texture's multipliers: contrast, detail, feature scale, grain; 1 is the paper as designed. */
       void (*set_texture)(struct dt_view_t *view, float contrast, float detail, float scale, float grain);
+      void (*set_corner_radius)(struct dt_view_t *view, float radius); ///< the frames' default rounded corners
     } canvas;
   } proxy;
 

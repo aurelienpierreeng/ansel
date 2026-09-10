@@ -2519,7 +2519,11 @@ they are visible.
   applied in `_mask_raster_fine()`), so the border dilated from it ends at the frame's edge,
   exactly like a rectangular frame's inset stroke. The first version grew the raster past the
   frame instead, and a gradient cutout, which covers the frame, grew a border outside it
-  where an uncut frame had none. Only shadows reach past the frame. Every mask surface is
+  where an uncut frame had none. Only shadows reach past the frame. **Dilate the band from the
+  shape as described, not from the confined shape**: a disc dilation of the confined rectangle
+  rounds its corners, which is how a gradient cutout came back with rounded corners; the band
+  is stopped at the frame afterwards (`_mask_clip_rounded()`, which is also how every frame's
+  corner radius reaches a cut frame). Every mask surface is
   rasterised at 3x (2x past a megapixel) and box-filtered, the band's distance transform
   included: that is where the anti-aliasing of cutouts and their borders comes from. The masks
   module's own rasterisers are hard-edged.
