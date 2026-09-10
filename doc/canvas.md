@@ -193,12 +193,17 @@ The layouts space frames by the gutter too.
 The canvas is painted with its background colour or with one of two procedural papers:
 **Moleskine** (ivory, a soft mottle) and **watercolour** (pure white, a thick tooth that only
 darkens, so the paper is white at its peaks). Both are random fields synthesised in the
-frequency domain on a 512-unit tile: white Gaussian noise from a seeded generator, shaped by
-a radial filter (a plateau below a knee frequency, a power-law fall-off above it) and
-transformed back with a small radix-2 FFT of our own. The discrete transform is periodic by
-construction, so the tile wraps without a seam. The base tile is synthesised once per style;
-a copy scaled to the current zoom is cached and repeated in device space at an integer
-offset, cairo's fast repeat path, rather than through a transformed pattern on every frame.
+frequency domain: white noise shaped by a radial filter (a plateau below a knee frequency, a
+power-law fall-off above it) and transformed back with a small radix-2 FFT of our own. The
+discrete transform is periodic by construction, so a sprite wraps without a seam. One sprite
+repeated shows its period, so four are synthesised per paper and blended, over a margin,
+towards one shared boundary: any two abut without a seam, and every 512-unit cell of the
+plane picks its sprite from a hash of its coordinates. Every spectral coefficient is drawn
+from a hash of its frequency, so a sprite synthesised at a higher resolution keeps the same
+broad features and only adds finer ones: the grain sharpens as the zoom grows (256 to 1024
+pixels per sprite) instead of the same texture being enlarged. Sprites are kept per
+resolution, and the scaled, colour-managed copies per target; the plane is filled cell by
+cell in device space at integer offsets, cairo's fastest blit.
 The grid dots have a colour of their own and a radius that is a fraction of the grid step,
 so they scale with the zoom too, floored at three quarters of a pixel so they never vanish.
 
