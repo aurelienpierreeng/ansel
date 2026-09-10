@@ -195,9 +195,10 @@ The layouts space frames by the gutter too.
 The canvas is painted with its background colour or with one of four procedural papers:
 **Moleskine** (cream, fine soft clouds and short fibres in every direction), **watercolour**
 (white, a tooth that only darkens so the paper is white at its peaks, rounded pores),
-**embossed** (a wove sheet dried on a metallic mesh: a faint mottle and fibres, and the mesh's
+**embossed** (a wove sheet dried on a metallic mesh: a mottle and fibres, and the mesh's
 grooves stamped over the blended field in absolute coordinates, so it stays one mesh across
-placements) and **Japanese** (washi: large soft clouds and long wrinkles, the zero crossings
+placements; the weft threads closer and deeper than the warp, and the sheet's own relief
+bending the threads and varying their pressure) and **Japanese** (washi: large soft clouds and long wrinkles, the zero crossings
 of a low-frequency field lit as ridges, the same lines at every zoom). Both are random fields synthesised in the
 frequency domain: white noise shaped by a radial filter (a plateau below a knee frequency, a
 power-law fall-off above it) and transformed back with a small radix-2 FFT of our own. The
