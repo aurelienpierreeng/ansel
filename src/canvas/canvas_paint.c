@@ -1593,9 +1593,18 @@ static void _box_blur(float *plane, float *scratch, const int width, const int h
  * approximate a Gaussian of that sigma closely enough for a shadow. The caller frees it.
  */
 static float *_shadow_plane(const float *layer_rgba, const dt_canvas_box_t *layer_box, const dt_canvas_shadow_t *shadow,
-                            const double pixels_per_unit)
+                            const double pixels_per_unit, int *pad)
 {
-  const size_t count = (size_t)layer_box->width * layer_box->height;
+  const gboolean inset = shadow->blur < 0.0f;
+  const int radius = (int)lround(fabs(shadow->blur) * pixels_per_unit);
+  // An inset plane is padded with ones: past the layer's box the world is uncovered, and the
+  // blur's zero padding would read it as covered and thin the shadow wherever the shape comes
+  // near its own box. Three passes of radius r reach 3r, so that much padding keeps the blur
+  // honest all the way to the box's edge. An outset plane pads with zeros: nothing casts there.
+  *pad = inset ? 3 * radius : 0;
+  const int width = layer_box->width + 2 * *pad;
+  const int height = layer_box->height + 2 * *pad;
+  const size_t count = (size_t)width * height;
   float *alpha = dt_alloc_align_float(count);
   float *scratch = dt_alloc_align_float(count);
   if(IS_NULL_PTR(alpha) || IS_NULL_PTR(scratch))
@@ -1604,13 +1613,17 @@ static float *_shadow_plane(const float *layer_rgba, const dt_canvas_box_t *laye
     dt_free_align(scratch);
     return NULL;
   }
-  const gboolean inset = shadow->blur < 0.0f;
-  for(size_t idx = 0; idx < count; idx++)
-    alpha[idx] = inset ? 1.0f - layer_rgba[4 * idx + 3] : layer_rgba[4 * idx + 3];
-  const int radius = (int)lround(fabs(shadow->blur) * pixels_per_unit);
+  for(size_t idx = 0; idx < count; idx++) alpha[idx] = inset ? 1.0f : 0.0f;
+  for(int row = 0; row < layer_box->height; row++)
+  {
+    const float *source = layer_rgba + (size_t)row * layer_box->width * 4;
+    float *target = alpha + (size_t)(row + *pad) * width + *pad;
+    for(int col = 0; col < layer_box->width; col++)
+      target[col] = inset ? 1.0f - source[4 * col + 3] : source[4 * col + 3];
+  }
   if(radius >= 1)
   {
-    for(int pass = 0; pass < 3; pass++) _box_blur(alpha, scratch, layer_box->width, layer_box->height, radius);
+    for(int pass = 0; pass < 3; pass++) _box_blur(alpha, scratch, width, height, radius);
   }
   dt_free_align(scratch);
   return alpha;
@@ -1625,7 +1638,8 @@ static void _canvas_shadow(float *canvas_rgba, const dt_canvas_box_t *canvas_box
                            const dt_canvas_box_t *layer_box, const dt_canvas_box_t *area,
                            const dt_canvas_shadow_t *shadow, const double pixels_per_unit)
 {
-  float *alpha = _shadow_plane(layer_rgba, layer_box, shadow, pixels_per_unit);
+  int pad = 0;
+  float *alpha = _shadow_plane(layer_rgba, layer_box, shadow, pixels_per_unit, &pad);
   if(IS_NULL_PTR(alpha)) return;
   float tint[3];
   _color_to_working(&shadow->color, tint);
@@ -1666,7 +1680,8 @@ static void _canvas_shadow(float *canvas_rgba, const dt_canvas_box_t *canvas_box
 static void _layer_inset_shadow(float *layer_rgba, const dt_canvas_box_t *layer_box, const dt_canvas_shadow_t *shadow,
                                 const double pixels_per_unit)
 {
-  float *alpha = _shadow_plane(layer_rgba, layer_box, shadow, pixels_per_unit);
+  int pad = 0;
+  float *alpha = _shadow_plane(layer_rgba, layer_box, shadow, pixels_per_unit, &pad);
   if(IS_NULL_PTR(alpha)) return;
   float tint[3];
   _color_to_working(&shadow->color, tint);
@@ -1675,6 +1690,8 @@ static void _layer_inset_shadow(float *layer_rgba, const dt_canvas_box_t *layer_
   const int offset_y = (int)lround(shadow->offset_y * pixels_per_unit);
   const int rows = layer_box->height;
   const int cols = layer_box->width;
+  const int plane_width = cols + 2 * pad;
+  const int plane_height = rows + 2 * pad;
 #ifdef _OPENMP
 #pragma omp parallel for default(firstprivate) schedule(static)
 #endif
@@ -1687,10 +1704,12 @@ static void _layer_inset_shadow(float *layer_rgba, const dt_canvas_box_t *layer_
       const float own = target[4 * col + 3];
       if(own <= 0.0f) continue;
       const int source_x = col - offset_x;
-      // Beyond the layer's box the uncovered plane is whole: the shadow falls at full strength.
-      const float outside = (source_y < 0 || source_y >= rows || source_x < 0 || source_x >= cols)
+      // Past the padded plane the uncovered world is whole: the shadow falls at full strength.
+      const int plane_x = source_x + pad;
+      const int plane_y = source_y + pad;
+      const float outside = (plane_y < 0 || plane_y >= plane_height || plane_x < 0 || plane_x >= plane_width)
                                 ? 1.0f
-                                : alpha[(size_t)source_y * cols + source_x];
+                                : alpha[(size_t)plane_y * plane_width + plane_x];
       const float coverage = outside * strength * own;
       if(coverage <= 0.0f) continue;
       const float keep = 1.0f - coverage;
