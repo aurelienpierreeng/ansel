@@ -633,18 +633,25 @@ static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_dis
     cache->fields[field_log2] = _paper_pixels((dt_canvas_background_t)style, sprite_size);
   const uint8_t *base = cache->fields[field_log2];
 
-  // Colour-manage the field once per target, then scale it to what the zoom shows.
+  // The field is sRGB: into the layer encoding once, then scaled to what the zoom shows.
   const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, field_size);
   uint8_t *bgra = g_malloc((size_t)stride * field_size);
-  if(!for_display || !dt_colorprofiles_rgba8_to_display_bgra8(base, bgra, field_size, field_size, DT_COLORSPACE_SRGB))
+  (void)for_display;
+  for(size_t idx = 0; idx < (size_t)field_size * field_size; idx++)
   {
-    for(size_t idx = 0; idx < (size_t)field_size * field_size; idx++)
-    {
-      bgra[4 * idx + 0] = base[4 * idx + 2];
-      bgra[4 * idx + 1] = base[4 * idx + 1];
-      bgra[4 * idx + 2] = base[4 * idx + 0];
-      bgra[4 * idx + 3] = 255;
-    }
+    bgra[4 * idx + 0] = base[4 * idx + 2];
+    bgra[4 * idx + 1] = base[4 * idx + 1];
+    bgra[4 * idx + 2] = base[4 * idx + 0];
+    bgra[4 * idx + 3] = 255;
+  }
+  // BGRA: the converter reads red first, so it is handed the bytes back to front and told 4 wide.
+  for(size_t idx = 0; idx < (size_t)field_size * field_size; idx++)
+  {
+    uint8_t rgb[3] = { bgra[4 * idx + 2], bgra[4 * idx + 1], bgra[4 * idx + 0] };
+    dt_canvas_render_srgb8_to_layer8(rgb, 1, 3);
+    bgra[4 * idx + 2] = rgb[0];
+    bgra[4 * idx + 1] = rgb[1];
+    bgra[4 * idx + 0] = rgb[2];
   }
   cairo_surface_t *unscaled = cairo_image_surface_create_for_data(bgra, CAIRO_FORMAT_RGB24, field_size, field_size, stride);
   cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, scaled_size, scaled_size);
@@ -869,7 +876,9 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   }
   else
   {
-    owned = dt_canvas_render_decode(dt_canvas_object_raster(object), options->for_display);
+    owned = dt_canvas_render_decode(dt_canvas_object_raster(object),
+                                    object->kind == DT_CANVAS_OBJECT_IMAGE ? object->image.colorspace
+                                                                            : DT_CANVAS_COLORSPACE_SRGB);
     surface = owned;
   }
   _paint_border(cr, canvas, object, options);
@@ -1150,19 +1159,20 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
  * translucent pixels, since an opaque pixel decodes and re-encodes to the very code it held.
  * The export keeps sRGB throughout and is converted to the output profile afterwards. */
 
-/* The working space is linear Rec2020: every layer is decoded from sRGB into it, the blends
- * happen there, and the finished canvas leaves it for the display profile (through XYZ, D50 as
- * the colour module's XYZ profile is) or for sRGB on export. The matrices are the standard
- * ones; Rec2020 to XYZ carries the Bradford adaptation from D65 to D50. */
-static const float _srgb_to_working[9] = { 0.627501f, 0.329276f, 0.043302f,
-                                           0.069109f, 0.919519f, 0.011360f,
-                                           0.016395f, 0.088011f, 0.895381f };
-static const float _working_to_srgb[9] = { 1.660491f, -0.587641f, -0.072850f,
-                                           -0.124550f, 1.132900f, -0.008349f,
-                                           -0.018151f, -0.100579f, 1.118730f };
-static const float _working_to_xyz_d50[9] = { 0.673422f, 0.165641f, 0.125128f,
-                                              0.279017f, 0.675340f, 0.045637f,
-                                              -0.001930f, 0.029979f, 0.797333f };
+/* The working space is linear Adobe RGB (1998): every layer cairo paints is already in Adobe
+ * RGB's encoding (the renders leave the pipeline in it, everything sRGB is converted on the
+ * way in), so a layer is decoded through the 563/256 gamma alone, the blends happen in the
+ * linear space, and the finished canvas leaves it for the display profile (through XYZ, D50 as
+ * the colour module's XYZ profile is: the matrix is the specification's Bradford-adapted one)
+ * or re-encoded, still Adobe RGB, for the export. Wider than sRGB and what a print can use;
+ * wider still would buy nothing in eight bits. */
+#define WORKING_GAMMA (563.0f / 256.0f)
+static const float _working_to_xyz_d50[9] = { 0.6097559f, 0.2052401f, 0.1492240f,
+                                              0.3111242f, 0.6256560f, 0.0632197f,
+                                              0.0194811f, 0.0608902f, 0.7448387f };
+static const float _xyz_d50_to_working[9] = { 1.9624274f, -0.6105343f, -0.3413404f,
+                                              -0.9787684f, 1.9161415f, 0.0334540f,
+                                              0.0286869f, -0.1406752f, 1.3487655f };
 
 static inline void _matrix_apply(const float *matrix, const float in[3], float out[3])
 {
@@ -1171,7 +1181,7 @@ static inline void _matrix_apply(const float *matrix, const float in[3], float o
   out[2] = matrix[6] * in[0] + matrix[7] * in[1] + matrix[8] * in[2];
 }
 
-#define COMPOSE_OETF_STEPS 16384
+#define COMPOSE_OETF_STEPS 16383
 #define COMPOSE_BAND_MAX_PIXELS (24 * 1024 * 1024) ///< a band of the float canvas: 384 MB of RGBA floats
 #define COMPOSE_MASK_MAX_PIXELS 3072              ///< a cutout raster's longer side
 #define COMPOSE_SHADOW_SIGMAS 3.0                 ///< how far a shadow reaches past its blur
@@ -1180,27 +1190,23 @@ static float _eotf_lut[256];
 static uint8_t _oetf_lut[COMPOSE_OETF_STEPS + 1];
 static gsize _luts_ready = 0;
 
-static float _srgb_eotf(const float value)
+static float _working_eotf(const float value)
 {
-  return value <= 0.04045f ? value / 12.92f : powf((value + 0.055f) / 1.055f, 2.4f);
+  return powf(CLAMP(value, 0.0f, 1.0f), WORKING_GAMMA);
 }
 
-static float _srgb_oetf(const float value)
-{
-  return value <= 0.0031308f ? value * 12.92f : 1.055f * powf(value, 1.0f / 2.4f) - 0.055f;
-}
-
-/* The decode table is exact per code; the encode table is dense enough that every code
- * round-trips to itself: its step, 1/16384 in linear light, is below half a code everywhere. */
+/* The decode table is exact per code. The encode table is indexed by the square root of the
+ * value, which packs its steps at the dark end where a gamma curve is steepest -- a uniform
+ * table would miss the first codes by whole steps -- so every code round-trips to itself. */
 static void _luts_init(void)
 {
   if(g_once_init_enter(&_luts_ready))
   {
-    for(int idx = 0; idx < 256; idx++) _eotf_lut[idx] = _srgb_eotf((float)idx / 255.0f);
+    for(int idx = 0; idx < 256; idx++) _eotf_lut[idx] = _working_eotf((float)idx / 255.0f);
     for(int idx = 0; idx <= COMPOSE_OETF_STEPS; idx++)
     {
-      const float encoded = _srgb_oetf((float)idx / (float)COMPOSE_OETF_STEPS);
-      _oetf_lut[idx] = (uint8_t)lrintf(CLAMP(encoded, 0.0f, 1.0f) * 255.0f);
+      const float root = (float)idx / (float)COMPOSE_OETF_STEPS;
+      _oetf_lut[idx] = (uint8_t)lrintf(powf(root * root, 1.0f / WORKING_GAMMA) * 255.0f);
     }
     g_once_init_leave(&_luts_ready, 1);
   }
@@ -1208,16 +1214,17 @@ static void _luts_init(void)
 
 static inline uint8_t _encode(const float linear)
 {
-  return _oetf_lut[(int)lrintf(CLAMP(linear, 0.0f, 1.0f) * (float)COMPOSE_OETF_STEPS)];
+  return _oetf_lut[(int)lrintf(sqrtf(CLAMP(linear, 0.0f, 1.0f)) * (float)COMPOSE_OETF_STEPS)];
 }
 
-/** A canvas colour in the working space. */
+/** A canvas colour in the working space: the layer encoding, decoded. */
 static void _color_to_working(const dt_canvas_color_t *color, float working[3])
 {
   double rgb[3] = { 0.0, 0.0, 0.0 };
   dt_canvas_render_color(color, FALSE, rgb);
-  const float linear[3] = { _srgb_eotf((float)rgb[0]), _srgb_eotf((float)rgb[1]), _srgb_eotf((float)rgb[2]) };
-  _matrix_apply(_srgb_to_working, linear, working);
+  working[0] = _working_eotf((float)rgb[0]);
+  working[1] = _working_eotf((float)rgb[1]);
+  working[2] = _working_eotf((float)rgb[2]);
 }
 
 /** An integer box in device pixels. */
@@ -1340,7 +1347,7 @@ static void _layer_linearise(cairo_surface_t *surface, const float opacity, floa
   const int width = cairo_image_surface_get_width(surface);
   const int height = cairo_image_surface_get_height(surface);
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) shared(_eotf_lut, _srgb_to_working) schedule(static)
+#pragma omp parallel for default(firstprivate) shared(_eotf_lut) schedule(static)
 #endif
   for(int row = 0; row < height; row++)
   {
@@ -1373,17 +1380,14 @@ static void _layer_linearise(cairo_surface_t *surface, const float opacity, floa
       }
       else
       {
-        linear_red = _srgb_eotf(fminf((float)red / (float)alpha, 1.0f));
-        linear_green = _srgb_eotf(fminf((float)green / (float)alpha, 1.0f));
-        linear_blue = _srgb_eotf(fminf((float)blue / (float)alpha, 1.0f));
+        linear_red = _working_eotf((float)red / (float)alpha);
+        linear_green = _working_eotf((float)green / (float)alpha);
+        linear_blue = _working_eotf((float)blue / (float)alpha);
       }
       const float weight = coverage * opacity;
-      const float linear[3] = { linear_red, linear_green, linear_blue };
-      float working[3];
-      _matrix_apply(_srgb_to_working, linear, working);
-      target[4 * col + 0] = working[0] * weight;
-      target[4 * col + 1] = working[1] * weight;
-      target[4 * col + 2] = working[2] * weight;
+      target[4 * col + 0] = linear_red * weight;
+      target[4 * col + 1] = linear_green * weight;
+      target[4 * col + 2] = linear_blue * weight;
       target[4 * col + 3] = weight;
     }
   }
@@ -1392,7 +1396,8 @@ static void _layer_linearise(cairo_surface_t *surface, const float opacity, floa
 /**
  * Leave the working space: the finished canvas, opaque, into an RGB24 cairo surface. For the
  * display it goes through XYZ to the display profile, in floats, by the colour module; for
- * an export it is sRGB, encoded through the table. The float canvas is consumed either way.
+ * an export it is re-encoded, Adobe RGB still, through the table. The float canvas is
+ * consumed either way.
  */
 static void _canvas_encode(float *rgba, cairo_surface_t *surface, const gboolean for_display)
 {
@@ -1424,12 +1429,9 @@ static void _canvas_encode(float *rgba, cairo_surface_t *surface, const gboolean
       cairo_surface_mark_dirty(surface);
       return;
     }
-    // No colour module behind us: XYZ back to the working space and out as sRGB, below.
-    static const float xyz_to_working[9] = { 1.647330f, -0.393516f, -0.236019f,
-                                             -0.682534f, 1.647585f, 0.012818f,
-                                             0.029651f, -0.062896f, 1.253133f };
+    // No colour module behind us: XYZ back to the working space and out re-encoded, below.
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
+#pragma omp parallel for default(firstprivate) shared(_xyz_d50_to_working) schedule(static)
 #endif
     for(int row = 0; row < height; row++)
     {
@@ -1437,7 +1439,7 @@ static void _canvas_encode(float *rgba, cairo_surface_t *surface, const gboolean
       for(int col = 0; col < width; col++)
       {
         float working[3];
-        _matrix_apply(xyz_to_working, pixel + 4 * col, working);
+        _matrix_apply(_xyz_d50_to_working, pixel + 4 * col, working);
         pixel[4 * col + 0] = working[0];
         pixel[4 * col + 1] = working[1];
         pixel[4 * col + 2] = working[2];
@@ -1445,7 +1447,7 @@ static void _canvas_encode(float *rgba, cairo_surface_t *surface, const gboolean
     }
   }
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) shared(_oetf_lut, _working_to_srgb) schedule(static)
+#pragma omp parallel for default(firstprivate) shared(_oetf_lut) schedule(static)
 #endif
   for(int row = 0; row < height; row++)
   {
@@ -1454,11 +1456,9 @@ static void _canvas_encode(float *rgba, cairo_surface_t *surface, const gboolean
     for(int col = 0; col < width; col++)
     {
       // What is left transparent shows black: the background under everything is opaque anyway.
-      float linear[3];
-      _matrix_apply(_working_to_srgb, source + 4 * col, linear);
-      const uint32_t red = _encode(linear[0]);
-      const uint32_t green = _encode(linear[1]);
-      const uint32_t blue = _encode(linear[2]);
+      const uint32_t red = _encode(source[4 * col + 0]);
+      const uint32_t green = _encode(source[4 * col + 1]);
+      const uint32_t blue = _encode(source[4 * col + 2]);
       target[col] = 0xFF000000u | (red << 16) | (green << 8) | blue;
     }
   }
