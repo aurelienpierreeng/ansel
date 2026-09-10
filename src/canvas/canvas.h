@@ -74,7 +74,7 @@ extern "C" {
 #define DT_CANVAS_OBJECT_RESERVED 256
 #define DT_CANVAS_IMAGE_RESERVED 512
 #define DT_CANVAS_TEXT_RESERVED 256
-#define DT_CANVAS_CONNECTOR_RESERVED 128
+#define DT_CANVAS_CONNECTOR_RESERVED 116 ///< 128 at format 1, minus the 12 bytes the anchors and routing took
 
 /** An sRGB colour with straight alpha, each channel in [0, 1]. */
 typedef struct dt_canvas_color_t
@@ -179,15 +179,61 @@ typedef enum dt_canvas_connector_style_t
   DT_CANVAS_CONNECTOR_DASHED = 1 << 2,
 } dt_canvas_connector_style_t;
 
+/** Where on a frame a connector attaches. The cardinal points are the frame's own, so
+ * they rotate with it; AUTO picks, of the four, the one nearest the other end's frame. */
+typedef enum dt_canvas_anchor_t
+{
+  DT_CANVAS_ANCHOR_AUTO = 0,
+  DT_CANVAS_ANCHOR_NORTH = 1,
+  DT_CANVAS_ANCHOR_EAST = 2,
+  DT_CANVAS_ANCHOR_SOUTH = 3,
+  DT_CANVAS_ANCHOR_WEST = 4,
+} dt_canvas_anchor_t;
+
+/** How a connector travels between its anchors. */
+typedef enum dt_canvas_routing_t
+{
+  DT_CANVAS_ROUTING_STRAIGHT = 0, ///< one segment
+  DT_CANVAS_ROUTING_SQUARE = 1,   ///< leaves each anchor along its normal, then horizontal and vertical legs
+  DT_CANVAS_ROUTING_CUBIC = 2,    ///< a cubic Bezier tangent to each anchor's normal
+} dt_canvas_routing_t;
+
 typedef struct dt_canvas_connector_t
 {
-  uint32_t from_id;   ///< object id the line starts at
-  uint32_t to_id;     ///< object id the line ends at
-  uint32_t style;     ///< dt_canvas_connector_style_t bits
+  uint32_t from_id;     ///< object id the line starts at
+  uint32_t to_id;       ///< object id the line ends at
+  uint32_t style;       ///< dt_canvas_connector_style_t bits
   dt_canvas_color_t color;
   float line_width;
+  uint32_t from_anchor; ///< dt_canvas_anchor_t
+  uint32_t to_anchor;   ///< dt_canvas_anchor_t
+  uint32_t routing;     ///< dt_canvas_routing_t
   uint8_t reserved[DT_CANVAS_CONNECTOR_RESERVED];
 } dt_canvas_connector_t;
+
+/** The most points a routed connector is flattened to, cubic included. */
+#define DT_CANVAS_ROUTE_MAX_POINTS 40
+
+/** A connector resolved to geometry: its ends, the normals it leaves them along, the
+ * cubic's control points, and the polyline every routing is flattened to for hit tests. */
+typedef struct dt_canvas_route_t
+{
+  uint32_t routing;
+  double from_x;
+  double from_y;
+  double to_x;
+  double to_y;
+  double from_normal_x; ///< unit vector leaving the start frame
+  double from_normal_y;
+  double to_normal_x;   ///< unit vector leaving the end frame
+  double to_normal_y;
+  double control1_x;    ///< cubic control points; unused by the other routings
+  double control1_y;
+  double control2_x;
+  double control2_y;
+  int point_count;
+  double points[2 * DT_CANVAS_ROUTE_MAX_POINTS]; ///< x0,y0,x1,y1..., start to end
+} dt_canvas_route_t;
 
 typedef struct dt_canvas_object_t
 {
@@ -363,7 +409,21 @@ void dt_canvas_object_to_local(const dt_canvas_object_t *object, double x, doubl
                                double *local_y);
 
 /**
- * @brief The two ends of a connector: where its line leaves each frame's edge.
+ * @brief A frame's cardinal point and the outward normal there.
+ * @param anchor which point; AUTO picks the one nearest (target_x, target_y).
+ */
+void dt_canvas_object_anchor_point(const dt_canvas_object_t *frame, dt_canvas_anchor_t anchor, double target_x,
+                                   double target_y, double *x, double *y, double *normal_x, double *normal_y);
+
+/**
+ * @brief Resolve a connector to its geometry.
+ * @return FALSE when either end is missing.
+ */
+gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
+                                   dt_canvas_route_t *route);
+
+/**
+ * @brief The two ends of a connector: its anchor points.
  * @return FALSE when either end is missing.
  */
 gboolean dt_canvas_connector_endpoints(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,

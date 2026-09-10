@@ -382,6 +382,9 @@ dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_i
   object->connector.style = DT_CANVAS_CONNECTOR_ARROW_END;
   object->connector.color = dt_canvas_color(0.85f, 0.85f, 0.85f, 1.0f);
   object->connector.line_width = CANVAS_CONNECTOR_LINE_WIDTH;
+  object->connector.from_anchor = DT_CANVAS_ANCHOR_AUTO;
+  object->connector.to_anchor = DT_CANVAS_ANCHOR_AUTO;
+  object->connector.routing = DT_CANVAS_ROUTING_STRAIGHT;
   return object;
 }
 
@@ -659,12 +662,17 @@ gboolean dt_canvas_object_contains(const dt_canvas_t *canvas, const dt_canvas_ob
   if(IS_NULL_PTR(object)) return FALSE;
   if(object->kind == DT_CANVAS_OBJECT_CONNECTOR)
   {
-    double from_x = 0.0;
-    double from_y = 0.0;
-    double to_x = 0.0;
-    double to_y = 0.0;
-    if(!dt_canvas_connector_endpoints(canvas, object, &from_x, &from_y, &to_x, &to_y)) return FALSE;
-    return _segment_distance(x, y, from_x, from_y, to_x, to_y) <= tolerance + object->connector.line_width;
+    dt_canvas_route_t route;
+    if(!dt_canvas_connector_route(canvas, object, &route)) return FALSE;
+    const double reach = tolerance + object->connector.line_width;
+    for(int idx = 0; idx + 1 < route.point_count; idx++)
+    {
+      if(_segment_distance(x, y, route.points[2 * idx], route.points[2 * idx + 1], route.points[2 * idx + 2],
+                           route.points[2 * idx + 3])
+         <= reach)
+        return TRUE;
+    }
+    return FALSE;
   }
   double local_x = 0.0;
   double local_y = 0.0;
@@ -672,44 +680,196 @@ gboolean dt_canvas_object_contains(const dt_canvas_t *canvas, const dt_canvas_ob
   return fabs(local_x) <= object->width * 0.5 + tolerance && fabs(local_y) <= object->height * 0.5 + tolerance;
 }
 
-/** Where the ray from a frame's centre towards (target_x, target_y) leaves the rotated frame. */
-static void _frame_edge_point(const dt_canvas_object_t *frame, const double target_x, const double target_y,
-                              double *edge_x, double *edge_y)
+/* --- connectors: anchors and routes -------------------------------------------- */
+
+static void _anchor_local(const dt_canvas_anchor_t anchor, const double width, const double height, double *local_x,
+                          double *local_y, double *normal_x, double *normal_y)
+{
+  *local_x = 0.0;
+  *local_y = 0.0;
+  *normal_x = 0.0;
+  *normal_y = 0.0;
+  switch(anchor)
+  {
+    case DT_CANVAS_ANCHOR_EAST:
+      *local_x = width * 0.5;
+      *normal_x = 1.0;
+      break;
+    case DT_CANVAS_ANCHOR_SOUTH:
+      *local_y = height * 0.5;
+      *normal_y = 1.0;
+      break;
+    case DT_CANVAS_ANCHOR_WEST:
+      *local_x = -width * 0.5;
+      *normal_x = -1.0;
+      break;
+    case DT_CANVAS_ANCHOR_NORTH:
+    default:
+      *local_y = -height * 0.5;
+      *normal_y = -1.0;
+      break;
+  }
+}
+
+static void _anchor_world(const dt_canvas_object_t *frame, const dt_canvas_anchor_t anchor, double *x, double *y,
+                          double *normal_x, double *normal_y)
 {
   double local_x = 0.0;
   double local_y = 0.0;
-  dt_canvas_object_to_local(frame, target_x, target_y, &local_x, &local_y);
-  const double half_width = frame->width * 0.5;
-  const double half_height = frame->height * 0.5;
-  double scale = 1.0;
-  if(fabs(local_x) > 1e-9 || fabs(local_y) > 1e-9)
+  double local_normal_x = 0.0;
+  double local_normal_y = 0.0;
+  _anchor_local(anchor, frame->width, frame->height, &local_x, &local_y, &local_normal_x, &local_normal_y);
+  const double cos_r = cos(frame->rotation);
+  const double sin_r = sin(frame->rotation);
+  *x = frame->x + local_x * cos_r - local_y * sin_r;
+  *y = frame->y + local_x * sin_r + local_y * cos_r;
+  *normal_x = local_normal_x * cos_r - local_normal_y * sin_r;
+  *normal_y = local_normal_x * sin_r + local_normal_y * cos_r;
+}
+
+void dt_canvas_object_anchor_point(const dt_canvas_object_t *frame, dt_canvas_anchor_t anchor, double target_x,
+                                   double target_y, double *x, double *y, double *normal_x, double *normal_y)
+{
+  if(IS_NULL_PTR(frame)) return;
+  if(anchor != DT_CANVAS_ANCHOR_AUTO)
   {
-    const double scale_x = fabs(local_x) > 1e-9 ? half_width / fabs(local_x) : INFINITY;
-    const double scale_y = fabs(local_y) > 1e-9 ? half_height / fabs(local_y) : INFINITY;
-    scale = fmin(scale_x, scale_y);
-    if(scale > 1.0) scale = 1.0; // the target is inside the frame: stop at the target
+    _anchor_world(frame, anchor, x, y, normal_x, normal_y);
+    return;
+  }
+  // AUTO: the cardinal point nearest the other end's centre.
+  static const dt_canvas_anchor_t candidates[4]
+      = { DT_CANVAS_ANCHOR_NORTH, DT_CANVAS_ANCHOR_EAST, DT_CANVAS_ANCHOR_SOUTH, DT_CANVAS_ANCHOR_WEST };
+  double best_distance = INFINITY;
+  for(int idx = 0; idx < 4; idx++)
+  {
+    double candidate_x = 0.0;
+    double candidate_y = 0.0;
+    double candidate_normal_x = 0.0;
+    double candidate_normal_y = 0.0;
+    _anchor_world(frame, candidates[idx], &candidate_x, &candidate_y, &candidate_normal_x, &candidate_normal_y);
+    const double distance = hypot(candidate_x - target_x, candidate_y - target_y);
+    if(distance < best_distance)
+    {
+      best_distance = distance;
+      *x = candidate_x;
+      *y = candidate_y;
+      *normal_x = candidate_normal_x;
+      *normal_y = candidate_normal_y;
+    }
+  }
+}
+
+static void _route_add_point(dt_canvas_route_t *route, const double x, const double y)
+{
+  if(route->point_count >= DT_CANVAS_ROUTE_MAX_POINTS) return;
+  route->points[2 * route->point_count] = x;
+  route->points[2 * route->point_count + 1] = y;
+  route->point_count++;
+}
+
+/** Square routing: a stub along each normal, then legs that are horizontal or vertical. */
+static void _route_square(dt_canvas_route_t *route)
+{
+  const double distance = hypot(route->to_x - route->from_x, route->to_y - route->from_y);
+  const double stub = CLAMP(distance * 0.25, 20.0, 60.0);
+  const double start_x = route->from_x + route->from_normal_x * stub;
+  const double start_y = route->from_y + route->from_normal_y * stub;
+  const double end_x = route->to_x + route->to_normal_x * stub;
+  const double end_y = route->to_y + route->to_normal_y * stub;
+  const gboolean from_horizontal = fabs(route->from_normal_x) >= fabs(route->from_normal_y);
+  const gboolean to_horizontal = fabs(route->to_normal_x) >= fabs(route->to_normal_y);
+  _route_add_point(route, route->from_x, route->from_y);
+  _route_add_point(route, start_x, start_y);
+  if(from_horizontal && to_horizontal)
+  {
+    const double mid_x = (start_x + end_x) * 0.5;
+    _route_add_point(route, mid_x, start_y);
+    _route_add_point(route, mid_x, end_y);
+  }
+  else if(!from_horizontal && !to_horizontal)
+  {
+    const double mid_y = (start_y + end_y) * 0.5;
+    _route_add_point(route, start_x, mid_y);
+    _route_add_point(route, end_x, mid_y);
+  }
+  else if(from_horizontal)
+  {
+    _route_add_point(route, end_x, start_y);
   }
   else
   {
-    scale = 0.0;
+    _route_add_point(route, start_x, end_y);
   }
-  const double edge_local_x = local_x * scale;
-  const double edge_local_y = local_y * scale;
-  const double cos_r = cos(frame->rotation);
-  const double sin_r = sin(frame->rotation);
-  *edge_x = frame->x + edge_local_x * cos_r - edge_local_y * sin_r;
-  *edge_y = frame->y + edge_local_x * sin_r + edge_local_y * cos_r;
+  _route_add_point(route, end_x, end_y);
+  _route_add_point(route, route->to_x, route->to_y);
+}
+
+/** Cubic routing: control points along the normals, flattened for hit tests. */
+static void _route_cubic(dt_canvas_route_t *route)
+{
+  const double distance = hypot(route->to_x - route->from_x, route->to_y - route->from_y);
+  const double reach = fmax(40.0, distance * 0.4);
+  route->control1_x = route->from_x + route->from_normal_x * reach;
+  route->control1_y = route->from_y + route->from_normal_y * reach;
+  route->control2_x = route->to_x + route->to_normal_x * reach;
+  route->control2_y = route->to_y + route->to_normal_y * reach;
+  const int segments = DT_CANVAS_ROUTE_MAX_POINTS - 1;
+  for(int idx = 0; idx <= segments; idx++)
+  {
+    const double parameter = (double)idx / (double)segments;
+    const double remaining = 1.0 - parameter;
+    const double weight0 = remaining * remaining * remaining;
+    const double weight1 = 3.0 * remaining * remaining * parameter;
+    const double weight2 = 3.0 * remaining * parameter * parameter;
+    const double weight3 = parameter * parameter * parameter;
+    _route_add_point(route,
+                     weight0 * route->from_x + weight1 * route->control1_x + weight2 * route->control2_x
+                         + weight3 * route->to_x,
+                     weight0 * route->from_y + weight1 * route->control1_y + weight2 * route->control2_y
+                         + weight3 * route->to_y);
+  }
+}
+
+gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
+                                   dt_canvas_route_t *route)
+{
+  if(IS_NULL_PTR(connector) || IS_NULL_PTR(route) || connector->kind != DT_CANVAS_OBJECT_CONNECTOR) return FALSE;
+  const dt_canvas_object_t *from = dt_canvas_find_object(canvas, connector->connector.from_id);
+  const dt_canvas_object_t *to = dt_canvas_find_object(canvas, connector->connector.to_id);
+  if(!dt_canvas_object_is_frame(from) || !dt_canvas_object_is_frame(to)) return FALSE;
+  memset(route, 0, sizeof(*route));
+  route->routing = connector->connector.routing;
+  dt_canvas_object_anchor_point(from, (dt_canvas_anchor_t)connector->connector.from_anchor, to->x, to->y,
+                                &route->from_x, &route->from_y, &route->from_normal_x, &route->from_normal_y);
+  dt_canvas_object_anchor_point(to, (dt_canvas_anchor_t)connector->connector.to_anchor, from->x, from->y,
+                                &route->to_x, &route->to_y, &route->to_normal_x, &route->to_normal_y);
+  switch(route->routing)
+  {
+    case DT_CANVAS_ROUTING_SQUARE:
+      _route_square(route);
+      break;
+    case DT_CANVAS_ROUTING_CUBIC:
+      _route_cubic(route);
+      break;
+    case DT_CANVAS_ROUTING_STRAIGHT:
+    default:
+      route->routing = DT_CANVAS_ROUTING_STRAIGHT;
+      _route_add_point(route, route->from_x, route->from_y);
+      _route_add_point(route, route->to_x, route->to_y);
+      break;
+  }
+  return route->point_count >= 2;
 }
 
 gboolean dt_canvas_connector_endpoints(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
                                        double *from_x, double *from_y, double *to_x, double *to_y)
 {
-  if(IS_NULL_PTR(connector) || connector->kind != DT_CANVAS_OBJECT_CONNECTOR) return FALSE;
-  const dt_canvas_object_t *from = dt_canvas_find_object(canvas, connector->connector.from_id);
-  const dt_canvas_object_t *to = dt_canvas_find_object(canvas, connector->connector.to_id);
-  if(!dt_canvas_object_is_frame(from) || !dt_canvas_object_is_frame(to)) return FALSE;
-  _frame_edge_point(from, to->x, to->y, from_x, from_y);
-  _frame_edge_point(to, from->x, from->y, to_x, to_y);
+  dt_canvas_route_t route;
+  if(!dt_canvas_connector_route(canvas, connector, &route)) return FALSE;
+  *from_x = route.from_x;
+  *from_y = route.from_y;
+  *to_x = route.to_x;
+  *to_y = route.to_y;
   return TRUE;
 }
 
