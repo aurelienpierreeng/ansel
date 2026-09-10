@@ -416,6 +416,26 @@ static void _the_compositor_blends_in_linear_light_and_round_trips_opaque_codes(
   const uint32_t inner = _painted_pixel(canvas, 200, 54, 54);
   assert_true((inner & 0xFF) < 0xFF);
   assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0xFFFFFFu);
+  // With no offset, the shadow along an edge is as deep at the frame's own edge as it is on
+  // a cutout's edge well inside the frame: the world past the frame is uncovered, and the
+  // blur must not read it as covered. A pixel two in from the left edge, mid-height...
+  frame->shadow.offset_x = 0.0f;
+  frame->shadow.offset_y = 0.0f;
+  const uint32_t at_frame_edge = _painted_pixel(canvas, 200, 52, 100);
+  // ...against the same distance inside a square cutout's straight edge, 25 in from the frame
+  // (a curved edge would legitimately differ: more uncovered world around it).
+  const float square[4 * DT_CANVAS_MASK_NODE_FLOATS] = { 0.25f, 0.25f, 0.25f, 0.25f, 0.25f, 0.25f, 0.0f, 0.0f,
+                                                         0.75f, 0.25f, 0.75f, 0.25f, 0.75f, 0.25f, 0.0f, 0.0f,
+                                                         0.75f, 0.75f, 0.75f, 0.75f, 0.75f, 0.75f, 0.0f, 0.0f,
+                                                         0.25f, 0.75f, 0.25f, 0.75f, 0.25f, 0.75f, 0.0f, 0.0f };
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_POLYGON);
+  dt_canvas_mask_set_nodes(canvas, frame, square, 4);
+  frame->mask.feather = 0.0f;
+  const uint32_t at_shape_edge = _painted_pixel(canvas, 200, 77, 100);
+  assert_true(abs((int)(at_frame_edge & 0xFF) - (int)(at_shape_edge & 0xFF)) <= 3);
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_NONE);
+  frame->shadow.offset_x = 20.0f;
+  frame->shadow.offset_y = 20.0f;
   dt_canvas_free(canvas);
 }
 

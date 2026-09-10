@@ -2534,6 +2534,12 @@ they are visible.
   the paper's tint through the style-only branch of `set_background()` -- the toolbar's combo
   sends NULL for the colour and the colour patch sends -1 for the style, so one never
   overwrites the other.
+- **An inset shadow's plane must be padded with ONES before the blur.** `_box_blur()` pads with
+  zeros, which for the uncovered plane means "covered": the shadow thinned wherever an ellipse
+  cutout came near its bounding box. `_shadow_plane()` grows the inset plane by three radii of
+  ones and the sampler offsets into it. The test compares two STRAIGHT edges (the frame's and a
+  square cutout's); a curved edge legitimately reads deeper, since more uncovered world
+  surrounds it.
 - **A shadow's radius is signed and is its own switch**: positive outset, negative inset (the
   uncovered plane blurred and laid over the object within its coverage), zero none. Do not
   reintroduce an enable flag; `dt_canvas_shadow_visible()` reads the radius.
