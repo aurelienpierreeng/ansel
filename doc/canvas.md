@@ -138,12 +138,12 @@ renders leave the pipeline in it, with the profile embedded in each JPEG
 when decoded, as a map's sRGB tiles are); every colour cairo paints goes through
 `dt_canvas_render_color()` into it, and the paper fields through
 `dt_canvas_render_srgb8_to_layer8()`. So every layer decodes through the 563/256 gamma alone,
-with no matrix, and colour management happens once, at the end: the finished canvas leaves
-the working space for the display profile -- through XYZ (D50, the colour module's own, with
-the specification's Bradford-adapted matrix) and `dt_colorprofiles_xyza_to_display_bgra8()`,
-in floats -- or is re-encoded, still Adobe RGB, for the PDF exporter, which converts the page
-to the output profile from an Adobe RGB source. Wider than sRGB and what a print can use;
-Rec2020 would buy nothing in eight bits.
+with no matrix, and colour management happens once, at the end: the finished canvas is
+encoded back to 8-bit Adobe RGB and, for the screen, converted in place to the display
+profile by `dt_colorprofiles_adobergb_bgrx8_to_display()` -- the module's prepared 8-bit
+transform, row-parallel, a fraction of what the same conversion cost in floats -- or left as
+it is for the PDF exporter, which converts the page to the output profile from an Adobe RGB
+source. Wider than sRGB and what a print can use; Rec2020 would buy nothing in eight bits.
 
 The float canvas is sized in the surface's own PIXELS, not cairo's device units: cairo's
 device space stops short of the surface's device scale, so on a 2x screen a layer sized
@@ -156,22 +156,24 @@ float canvas; a page at print resolution is cut into bands of at most 24 million
 the floats fit in memory, and a layer keeps a shadow's reach past its band so a blur at the
 band's edge is whole. The background, the grid and the pages go into a base layer with
 cairo and are decoded into the canvas. Then every object, back to front: cairo paints it
-into a layer of its own, sized to its device box (its shadow's reach included); its cutout
-multiplies the layer's alpha (`CAIRO_OPERATOR_DEST_IN` with the mask as the source, under
-the frame's transform); the layer is decoded -- unpremultiplied, through the sRGB curve,
-premultiplied again, scaled by the object's opacity; its shadow is the layer's alpha, blurred
-by three box blurs of the shadow's sigma and offset, tinted, laid "over" the canvas first;
-then the layer goes over. The finished canvas is encoded back to 8 bits through a table
-indexed by the square root of the value, dense at the dark end where a gamma curve is
-steepest, so every code round-trips to itself: an opaque pixel comes back as the code it
-held, which `test_canvas_cutout` pins, along with the 186 that half of white over black must
-give under that gamma.
+into an 8-bit layer of its own, sized to its device box (its shadow's reach included). A
+plain frame -- no cutout, no shadow -- goes straight from that layer over the float canvas,
+decoded on the way: unpremultiplied in 8 bits (all the precision the layer ever had), through
+the gamma table, premultiplied again, scaled by the object's opacity. A cut or shadowed
+frame is decoded into a float layer first; its cutout is composited there in one parallel
+pass (`_cut_compose()`: the background over the shape's support, the content through the
+feathered shape, the border band over both, each read where the layer's pixel lands in the
+mask's raster through the inverse of the frame's transform); its shadow is the layer's
+alpha, blurred by three box blurs of the shadow's sigma and offset, tinted, laid "over" the
+canvas first; then the layer goes over. The finished canvas is encoded back to 8 bits
+through a table indexed by the square root of the value, dense at the dark end where a
+gamma curve is steepest, so every code round-trips to itself: an opaque pixel comes back as
+the code it held, which `test_canvas_cutout` pins, along with the 186 that half of white
+over black must give under that gamma.
 
-The conversion loops are OpenMP-parallel and the float canvas lives in a scratch buffer the
-surface cache keeps between frames, so a repaint does not page in a fresh allocation.
-Nothing is display-managed before the composite any more: `dt_canvas_render_decode()` and
-`dt_canvas_render_color()` keep sRGB whatever the target, so what blends is one space and
-not one per input, and the per-frame surface cache holds sRGB pixels.
+Nothing is display-managed before the composite: `dt_canvas_render_decode()` and
+`dt_canvas_render_color()` keep the working encoding whatever the target, so what blends is
+one space and not one per input.
 
 ### Shadows
 
@@ -240,16 +242,19 @@ computes, and the view draws the same curve. The context menu offers the shapes,
 inverting, and the node actions for the node or edge under the pointer. Every drag and
 every wheel step is one undo record.
 
-A cut-out frame is three layers over each other in linear light. Its **background** (every
-object has one, alpha 0 for none; a text frame keeps its own field) fills the shape's whole
-support -- everywhere the cutout has any coverage, hard-edged, out to the feather's outer
-edge (`dt_canvas_render_mask_support()`) -- so the content's feather dissolves into that
-colour, or into nothing. Its **content** is feathered by the shape. Its **border** starts
-where the feather ends: the support dilated outward by the border width -- a disc, through
-the Euclidean distance transform of the support (`dt_canvas_render_mask_band()`) -- and
-nothing inside the support, so the band is solid and never mixed with the fall-off. A
-rectangular frame keeps its border inside its edge with the content inset and the background
-under the content, as before; both are the same rule seen from the shape's edge.
+A cut-out frame is three layers over each other in linear light, composited in one pass
+over the frame's float layer. Its **background** (every object has one, alpha 0 for none; a
+text frame keeps its own field) fills the shape's whole support -- everywhere the cutout has
+any coverage, hard-edged, out to the feather's outer edge
+(`dt_canvas_render_mask_support()`) -- so the content's feather dissolves into that colour,
+or into nothing. Its **content** is feathered by the shape. Its **border** starts where the
+feather ends: the support dilated outward by the border width -- a disc, through the
+Euclidean distance transform of the support (`dt_canvas_render_mask_band()`) -- and nothing
+inside the support, so the band is solid and never mixed with the fall-off. A rectangular
+frame keeps its border inside its edge with the content inset and the background under the
+content, as before; both are the same rule seen from the shape's edge. The three rasters are
+read by the compositor's own bilinear sampler, never through `cairo_mask_surface()`: cairo
+scales a mask on one core, and did so three times per cut frame per frame.
 
 ### Gutter frames
 
@@ -441,22 +446,71 @@ and is never printed.
 
 ### Colour management
 
-Frames are sRGB JPEGs. On screen they go through the module's prepared sRGB-to-display
-transform, and so does every colour the canvas draws -- borders, text, backgrounds, grid
-dots -- through `dt_canvas_render_color()`, one pixel through the same transform, so a border
-matches its picture. The PDF export rasterises the page in sRGB and converts the whole raster
-to the chosen output profile with LCMS, embedding that profile; the intent is the user's.
-Text and connectors are therefore pixels in the PDF, not vectors: a trade for having one
-painter and one colour path for the screen and the print. The compositor above runs on both
-targets; only the layers' encoding differs.
+Frames are Adobe RGB JPEGs with the profile embedded, and every colour the canvas draws --
+borders, text, backgrounds, grid dots -- is put into that encoding by
+`dt_canvas_render_color()`, so a border matches its picture. On screen the finished 8-bit
+canvas goes through the module's prepared Adobe-RGB-to-display transform; the PDF export
+keeps the raster in Adobe RGB and converts the whole page to the chosen output profile with
+LCMS, embedding that profile; the intent is the user's. Text and connectors are therefore
+pixels in the PDF, not vectors: a trade for having one painter and one colour path for the
+screen and the print. The compositor above runs on both targets; only the last step differs.
 
-## Instrumentation
+## Instrumentation and performance
 
 `dt_canvas_paint()` times its phases -- the base layer, the objects (cairo painting and
 decoding, shadows), the encode -- and prints them under `-d perf` as one line per paint,
 with the pixel count and the number of objects, layers and shadows;
-`dt_canvas_paint_last_stats()` returns the same numbers for tuning. This is the baseline
-for whatever the profiling finds worth cutting.
+`dt_canvas_paint_last_stats()` returns the same numbers for tuning.
+`tests/unittests/bench_canvas_paint` paints a document (`CANVAS_BENCH_FILE`) at 2560x1440
+and device scale 2 -- cold, cached, panned, at half quality, zoomed, for export -- and prints
+those lines; `CANVAS_BENCH_WARM_LOOPS=n` repeats the warm frame for a profiler, since the
+cold frame's paper and cutout synthesis otherwise dominates every sample. Profile the main
+thread alone and with children (`perf report --tid <main> --children`): the OpenMP workers'
+samples are mostly barrier spin, and what the wall clock waits for is whatever runs on one
+core between the parallel regions.
+
+On the maintainer's test document (14 frames, four of them cut, three shadowed, embossed
+paper, 14.8 million pixels at 2x, 8 cores) a warm frame went from about 1.8 s to about
+0.25 s, in this order of yield:
+
+- **Cairo's scaled compositing was the serial bottleneck**, 40% of the main thread: every
+  picture scaled onto its frame with the separable convolution `CAIRO_FILTER_GOOD` runs, and
+  every cutout applied three times through `cairo_mask_surface()` with a scaled mask. Now a
+  picture is rescaled once per size the screen shows (`dt_canvas_surface_cache_get_scaled()`,
+  two sizes kept per frame, area-averaged when shrinking) and blitted pixel for pixel with
+  `CAIRO_FILTER_NEAREST` under an identity matrix -- the sprite is a pixel larger than the
+  box so the frame's clip, not the sprite's edge, ends the picture -- and a cutout is
+  composited in float by the painter's own loop.
+- **The encode goes to 8 bits before colour management**: the float XYZ-to-display
+  conversion was 700-900 ms; the 8-bit Adobe-RGB-to-display transform is about 50.
+- **Working buffers are kept between frames** (`dt_canvas_scratch_slot_t` in the surface
+  cache: the float canvas, one 8-bit layer, one float layer, the shadow plane and its blur;
+  the encoded frame and the one before it in the painter). A 60 to 240 MB allocation is
+  returned to the kernel on free, so every frame paid its page faults again -- a cost no
+  profile attributes to a symbol. One 8-bit layer serves the base and every object in turn.
+- **A plain frame is decoded straight onto the canvas**, no float layer of its own; a partly
+  covered pixel is unpremultiplied in 8 bits and read through the gamma table, where it used
+  to take three `powf()` calls.
+- **The same frame is not composited twice**: the encoded frame is kept with its key (the
+  document's serial and generation, the display generation, the view matrix, the box, the
+  quality) and blitted again on a hit, which is what a context menu or a hover costs -- 7 ms
+  against a full paint. The key is the document's `serial`, never its address: a freed
+  document's address is reused, its serial is not. The cache serves the atelier only (paints
+  with a surface cache); an export, or a test editing the struct by hand between two paints,
+  always composites.
+- **Frames mid-gesture are composited at half the resolution** (`options.quality`; the view
+  sets `interacting` on every pan, zoom, drag and flower press, a 180 ms idle brings the full
+  frame) and scaled up bilinearly: a quarter of the pixels, about 100 ms. Such a frame asks
+  for the cutout rasters at the FULL frame's size (`_mask_geometry()` divides by the quality)
+  and cairo scales them down, so the gesture's first frame does not rasterise every cutout
+  again; the mask cache keeps two rasters per frame for the same reason.
+- **The cutout rasteriser is parallel** (the clip, the downsample, the alpha surface, the
+  distance transform's two passes with per-thread scratch), which is what the first full
+  frame after a zoom step that crosses a power of two pays.
+
+Still on the table, for the record: the base layer's round trip through 8 bits (about 60 ms:
+cairo's paper blit, the decode, the dither), the 8-bit display transform (about 50 ms), and
+the cutout re-rasterisation at each power of two (about 100 ms per cut frame on 8 cores).
 
 ## The view
 

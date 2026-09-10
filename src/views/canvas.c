@@ -219,6 +219,8 @@ typedef struct dt_canvas_view_t
   GtkWidget *object_cutout_invert;
   GtkWidget *object_cutout_edit;
   dt_canvas_t *menu_snapshot;           ///< the document when a slider menu opened, for one undo record on close
+  gboolean interacting;                 ///< a gesture is in flight: frames are composited at half the resolution
+  guint interaction_timeout;            ///< the full-quality repaint once the gesture pauses
   gulong bars_position_handler;         ///< the overlay's get-child-position hook
   // same-size guides, shown while a resize snaps to a neighbour's size
   gboolean guide_width_valid;
@@ -275,6 +277,32 @@ uint32_t view(const dt_view_t *self)
 uint32_t flags(void)
 {
   return VIEW_FLAGS_PAINTS_WHOLE_AREA;
+}
+
+/* --- interaction quality ----------------------------------------------------------- */
+
+#define CANVAS_INTERACTION_IDLE_MS 180
+
+static gboolean _interaction_settled(gpointer data)
+{
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  view->interaction_timeout = 0;
+  view->interacting = FALSE;
+  dt_control_queue_redraw_center();
+  return G_SOURCE_REMOVE;
+}
+
+/**
+ * A gesture moved the view or an object: the frames until it pauses are composited at half
+ * the resolution and scaled up, then one full frame follows. Every motion re-arms the pause.
+ */
+static void _interaction_touch(dt_view_t *self)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  view->interacting = TRUE;
+  if(view->interaction_timeout != 0) g_source_remove(view->interaction_timeout);
+  view->interaction_timeout = g_timeout_add(CANVAS_INTERACTION_IDLE_MS, _interaction_settled, self);
 }
 
 /* --- coordinates --------------------------------------------------------------- */
@@ -2931,6 +2959,7 @@ static dt_canvas_flower_part_t _flower_hit(const dt_canvas_view_t *view, const d
 
 static void _flower_activate(dt_canvas_view_t *view, const dt_canvas_flower_part_t part)
 {
+  _interaction_touch(dt_view_manager_get_global()->proxy.canvas.view);
   const double pan_x = view->width * CANVAS_FLOWER_PAN_FRACTION / view->zoom;
   const double pan_y = view->height * CANVAS_FLOWER_PAN_FRACTION / view->zoom;
   switch(part)
@@ -3514,6 +3543,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   cairo_scale(cr, view->zoom, view->zoom);
   cairo_translate(cr, -view->center_x, -view->center_y);
   dt_canvas_paint_options_t options = dt_canvas_paint_options_display(view->cache, 1.0 / view->zoom, _visible_rect(view));
+  options.quality = view->interacting ? 0.5 : 1.0;
   dt_canvas_paint(cr, view->canvas, &options);
 
   for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
@@ -4275,6 +4305,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   switch(view->drag)
   {
     case DT_CANVAS_DRAG_PAN:
+      _interaction_touch(self);
       view->center_x -= delta_x;
       view->center_y -= delta_y;
       // The pan changed the mapping: recompute where the pointer is now.
@@ -4285,6 +4316,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
          && hypot(x - view->press_screen_x, y - view->press_screen_y) < CANVAS_DRAG_THRESHOLD_PIXELS)
         break;
       view->drag_moved = TRUE;
+      _interaction_touch(self);
       _move_selection(view, delta_x, delta_y);
       if(view->selection->len > 0) _snap_selection(view, g_array_index(view->selection, uint32_t, 0));
       break;
@@ -4294,6 +4326,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       if(!IS_NULL_PTR(object))
       {
         view->drag_moved = TRUE;
+        _interaction_touch(self);
         _scale_object(view, object, canvas_x, canvas_y);
       }
       break;
@@ -4304,6 +4337,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       if(!IS_NULL_PTR(object))
       {
         view->drag_moved = TRUE;
+        _interaction_touch(self);
         const double angle = atan2(canvas_y - object->y, canvas_x - object->x);
         double rotation = view->gesture_start_rotation + angle - view->gesture_start_angle;
         // Shift snaps to 15 degree steps.
@@ -4367,6 +4401,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       if(dt_canvas_object_is_frame(object) && object->mask.shape != DT_CANVAS_MASK_NONE)
       {
         view->drag_moved = TRUE;
+        _interaction_touch(self);
         _mask_drag(view, object, canvas_x, canvas_y);
       }
       break;
@@ -4478,6 +4513,7 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
       return 1;
     }
   }
+  _interaction_touch(self);
   if(dt_modifier_is(state, GDK_SHIFT_MASK))
   {
     // Shift + wheel pans sideways, plain wheel zooms: a plane has no natural scroll direction.
@@ -5035,6 +5071,15 @@ void enter(dt_view_t *self)
 
 void leave(dt_view_t *self)
 {
+  {
+    dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+    if(view->interaction_timeout != 0)
+    {
+      g_source_remove(view->interaction_timeout);
+      view->interaction_timeout = 0;
+    }
+    view->interacting = FALSE;
+  }
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_filmstrip_drag_begin), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_profile_changed), self);

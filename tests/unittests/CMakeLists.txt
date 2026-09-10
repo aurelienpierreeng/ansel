@@ -49,6 +49,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_canvas_document
   test_canvas_markdown
   test_canvas_cutout
+  bench_canvas_paint
 )
 
 foreach(test ${LIB_ANSEL_UNIT_TESTS})
