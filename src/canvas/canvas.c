@@ -54,6 +54,11 @@ static void _object_free(gpointer data)
   {
     dt_free(object->text.markdown);
   }
+  if(object->kind == DT_CANVAS_OBJECT_MAP && !IS_NULL_PTR(object->map.jpeg))
+  {
+    g_bytes_unref(object->map.jpeg);
+    object->map.jpeg = NULL;
+  }
   dt_free(object);
 }
 
@@ -68,6 +73,10 @@ static dt_canvas_object_t *_object_copy(const dt_canvas_object_t *source)
   if(copy->kind == DT_CANVAS_OBJECT_TEXT)
   {
     copy->text.markdown = g_strdup(IS_NULL_PTR(source->text.markdown) ? "" : source->text.markdown);
+  }
+  if(copy->kind == DT_CANVAS_OBJECT_MAP && !IS_NULL_PTR(copy->map.jpeg))
+  {
+    copy->map.jpeg = g_bytes_ref(copy->map.jpeg);
   }
   return copy;
 }
@@ -246,6 +255,12 @@ dt_canvas_t *dt_canvas_load(const char *path, GError **error)
       object->image.jpeg = dt_canvas_zip_reader_get(reader, entry);
       object->image.sync_status = DT_CANVAS_SYNC_UNKNOWN;
     }
+    else if(object->kind == DT_CANVAS_OBJECT_MAP)
+    {
+      snprintf(entry, sizeof(entry), DT_CANVAS_ENTRY_MAP_PATTERN, object->id);
+      object->map.jpeg = dt_canvas_zip_reader_get(reader, entry);
+      object->map.sync_status = IS_NULL_PTR(object->map.jpeg) ? DT_CANVAS_SYNC_STALE : DT_CANVAS_SYNC_CURRENT;
+    }
     else if(object->kind == DT_CANVAS_OBJECT_TEXT)
     {
       snprintf(entry, sizeof(entry), DT_CANVAS_ENTRY_TEXT_PATTERN, object->id);
@@ -308,6 +323,13 @@ gboolean dt_canvas_save(dt_canvas_t *canvas, const char *path, GError **error)
       snprintf(entry, sizeof(entry), DT_CANVAS_ENTRY_IMAGE_PATTERN, object->id);
       gsize jpeg_size = 0;
       const void *jpeg_data = g_bytes_get_data(object->image.jpeg, &jpeg_size);
+      ok = dt_canvas_zip_writer_add(writer, entry, jpeg_data, jpeg_size, FALSE);
+    }
+    else if(object->kind == DT_CANVAS_OBJECT_MAP && !IS_NULL_PTR(object->map.jpeg))
+    {
+      snprintf(entry, sizeof(entry), DT_CANVAS_ENTRY_MAP_PATTERN, object->id);
+      gsize jpeg_size = 0;
+      const void *jpeg_data = g_bytes_get_data(object->map.jpeg, &jpeg_size);
       ok = dt_canvas_zip_writer_add(writer, entry, jpeg_data, jpeg_size, FALSE);
     }
     else if(object->kind == DT_CANVAS_OBJECT_TEXT)
@@ -378,6 +400,43 @@ dt_canvas_object_t *dt_canvas_add_text(dt_canvas_t *canvas, double x, double y, 
   object->text.align_v = DT_CANVAS_ALIGN_START;
   object->text.markdown = g_strdup(IS_NULL_PTR(markdown) ? "" : markdown);
   return object;
+}
+
+dt_canvas_object_t *dt_canvas_add_map(dt_canvas_t *canvas, double x, double y, double latitude, double longitude,
+                                      int32_t zoom, uint32_t source)
+{
+  if(IS_NULL_PTR(canvas)) return NULL;
+  dt_canvas_object_t *object = _object_new(canvas, DT_CANVAS_OBJECT_MAP, x, y, CANVAS_DEFAULT_IMAGE_LONG_EDGE_UNITS,
+                                           CANVAS_DEFAULT_IMAGE_LONG_EDGE_UNITS * 0.75);
+  object->map.latitude = CLAMP(latitude, -85.0, 85.0);
+  object->map.longitude = CLAMP(longitude, -180.0, 180.0);
+  object->map.zoom = CLAMP(zoom, 1, 19);
+  object->map.source = source;
+  object->map.jpeg = NULL;
+  object->map.sync_status = DT_CANVAS_SYNC_UNKNOWN;
+  return object;
+}
+
+void dt_canvas_map_set_render(dt_canvas_t *canvas, dt_canvas_object_t *object, GBytes *jpeg, int32_t pixel_width,
+                              int32_t pixel_height, int64_t rendered_at)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_MAP) return;
+  GBytes *previous = object->map.jpeg;
+  object->map.jpeg = IS_NULL_PTR(jpeg) ? NULL : g_bytes_ref(jpeg);
+  if(!IS_NULL_PTR(previous)) g_bytes_unref(previous);
+  object->map.pixel_width = pixel_width;
+  object->map.pixel_height = pixel_height;
+  object->map.rendered_at = rendered_at;
+  object->map.sync_status = IS_NULL_PTR(jpeg) ? DT_CANVAS_SYNC_MISSING : DT_CANVAS_SYNC_CURRENT;
+  dt_canvas_touch(canvas);
+}
+
+GBytes *dt_canvas_object_raster(const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object)) return NULL;
+  if(object->kind == DT_CANVAS_OBJECT_IMAGE) return object->image.jpeg;
+  if(object->kind == DT_CANVAS_OBJECT_MAP) return object->map.jpeg;
+  return NULL;
 }
 
 dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_id, uint32_t to_id)
@@ -599,7 +658,8 @@ void dt_canvas_object_effective_border(const dt_canvas_t *canvas, const dt_canva
 gboolean dt_canvas_object_is_frame(const dt_canvas_object_t *object)
 {
   if(IS_NULL_PTR(object)) return FALSE;
-  return object->kind == DT_CANVAS_OBJECT_IMAGE || object->kind == DT_CANVAS_OBJECT_TEXT;
+  return object->kind == DT_CANVAS_OBJECT_IMAGE || object->kind == DT_CANVAS_OBJECT_TEXT
+         || object->kind == DT_CANVAS_OBJECT_MAP;
 }
 
 void dt_canvas_object_corners(const dt_canvas_object_t *object, double corners[8])
