@@ -49,7 +49,7 @@ typedef struct dt_lib_canvas_toolbar_t
 {
   GtkWidget *connect_toggle;
   GtkWidget *grid_toggle;
-  GtkWidget *snap_toggle;
+  GtkWidget *snap_mode;
   GtkWidget *grid_size;
   GtkWidget *gutter;
   GtkWidget *border_width;
@@ -121,9 +121,27 @@ static void _toggle_toggled(GtkToggleButton *button, gpointer user_data)
   if(GTK_WIDGET(button) == toolbar->grid_toggle
      && gtk_toggle_button_get_active(button) != ((canvas->grid_flags & DT_CANVAS_GRID_VISIBLE) != 0))
     _ask(DT_CANVAS_ACTION_TOGGLE_GRID);
-  else if(GTK_WIDGET(button) == toolbar->snap_toggle
-          && gtk_toggle_button_get_active(button) != ((canvas->grid_flags & DT_CANVAS_GRID_SNAP) != 0))
-    _ask(DT_CANVAS_ACTION_TOGGLE_SNAP);
+}
+
+/** The snapping chooser's rows, in order: each is a set of dt_canvas_grid_flags_t snap bits. */
+static const uint32_t _snap_modes[] = { 0,
+                                        DT_CANVAS_GRID_SNAP,
+                                        DT_CANVAS_SNAP_GUTTER,
+                                        DT_CANVAS_SNAP_SIZE,
+                                        DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_GUTTER,
+                                        DT_CANVAS_SNAP_GUTTER | DT_CANVAS_SNAP_SIZE,
+                                        DT_CANVAS_SNAP_ALL };
+
+static void _snap_mode_changed(GtkComboBox *combo, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  if(toolbar->refilling) return;
+  dt_view_t *view = _canvas_view();
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_snap_mode)) return;
+  const int row = gtk_combo_box_get_active(combo);
+  if(row < 0 || row >= (int)G_N_ELEMENTS(_snap_modes)) return;
+  dt_view_manager_get_global()->proxy.canvas.set_snap_mode(view, (int)_snap_modes[row]);
 }
 
 static void _grid_size_changed(GtkSpinButton *spin, gpointer user_data)
@@ -220,7 +238,13 @@ static void _refill(dt_lib_module_t *self)
                               && dt_view_manager_get_global()->proxy.canvas.is_connecting(view);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->connect_toggle), connecting);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->grid_toggle), (canvas->grid_flags & DT_CANVAS_GRID_VISIBLE) != 0);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->snap_toggle), (canvas->grid_flags & DT_CANVAS_GRID_SNAP) != 0);
+  const uint32_t snap = canvas->grid_flags & DT_CANVAS_SNAP_ALL;
+  int snap_row = 0;
+  for(size_t idx = 0; idx < G_N_ELEMENTS(_snap_modes); idx++)
+  {
+    if(_snap_modes[idx] == snap) snap_row = (int)idx;
+  }
+  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->snap_mode), snap_row);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->grid_size), canvas->grid_size);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->gutter), canvas->gutter);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->border_width), canvas->border_width);
@@ -297,10 +321,18 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->grid_toggle, _("Show the grid dots"));
   g_signal_connect(toolbar->grid_toggle, "toggled", G_CALLBACK(_toggle_toggled), self);
   gtk_box_pack_start(GTK_BOX(box), toolbar->grid_toggle, FALSE, FALSE, 0);
-  toolbar->snap_toggle = gtk_toggle_button_new_with_label(_("Snap"));
-  gtk_widget_set_tooltip_text(toolbar->snap_toggle, _("Snap frames to the grid when moving or scaling them"));
-  g_signal_connect(toolbar->snap_toggle, "toggled", G_CALLBACK(_toggle_toggled), self);
-  gtk_box_pack_start(GTK_BOX(box), toolbar->snap_toggle, FALSE, FALSE, 0);
+  toolbar->snap_mode = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->snap_mode), _("No snapping"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->snap_mode), _("Snap to the grid"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->snap_mode), _("Snap to the gutter"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->snap_mode), _("Snap to the same size"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->snap_mode), _("Grid and gutter"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->snap_mode), _("Gutter and same size"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->snap_mode), _("Grid, gutter and same size"));
+  gtk_widget_set_tooltip_text(toolbar->snap_mode,
+                              _("What moving and resizing frames snaps to, applied in that order: the grid, a neighbour one gutter away or in line, a neighbour's size"));
+  g_signal_connect(toolbar->snap_mode, "changed", G_CALLBACK(_snap_mode_changed), self);
+  gtk_box_pack_start(GTK_BOX(box), toolbar->snap_mode, FALSE, FALSE, 0);
   toolbar->grid_size = gtk_spin_button_new_with_range(5.0, 1000.0, 5.0);
   gtk_widget_set_tooltip_text(toolbar->grid_size, _("Grid spacing, in canvas units"));
   g_signal_connect(toolbar->grid_size, "value-changed", G_CALLBACK(_grid_size_changed), self);

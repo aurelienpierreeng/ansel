@@ -372,7 +372,7 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
 {
   canvas->grid_size = (float)dt_conf_get_int("canvas/grid_size");
   canvas->grid_flags = (dt_conf_get_bool("canvas/grid_visible") ? DT_CANVAS_GRID_VISIBLE : 0)
-                       | (dt_conf_get_bool("canvas/grid_snap") ? DT_CANVAS_GRID_SNAP : 0);
+                       | ((uint32_t)dt_conf_get_int("canvas/snap_mode") & DT_CANVAS_SNAP_ALL);
   canvas->border_width = dt_conf_get_float("canvas/border_width");
   canvas->gutter = dt_conf_get_float("canvas/gutter");
   const char *border = dt_conf_get_string_const("canvas/border_color");
@@ -1736,8 +1736,12 @@ static void _bar_place(dt_canvas_view_t *view, GtkWidget *bar, const dt_canvas_o
   double max_x = 0.0;
   double max_y = 0.0;
   if(!_object_screen_box(view, object, &min_x, &min_y, &max_x, &max_y)) return;
+  // The preferred size includes the widget's margins, and the margins are where the bar was
+  // last put: measuring them in made every placement flip between below and above.
   GtkRequisition natural;
   gtk_widget_get_preferred_size(bar, NULL, &natural);
+  natural.width -= gtk_widget_get_margin_start(bar) + gtk_widget_get_margin_end(bar);
+  natural.height -= gtk_widget_get_margin_top(bar) + gtk_widget_get_margin_bottom(bar);
   const int spacing = DT_PIXEL_APPLY_DPI(6);
   int left = (int)lround(min_x);
   int top = (int)lround(max_y) + spacing;
@@ -2289,38 +2293,44 @@ static void _move_selection(dt_canvas_view_t *view, const double delta_x, const 
 }
 
 /**
- * Snap the dragged frame, moving the rest of the selection with it: next to or in line with a
- * neighbour one gutter away when one is within reach, else to the grid when snapping is on.
+ * Snap the dragged frame, moving the rest of the selection with it, in the canvas's order of
+ * rules: the grid first, then a neighbour one gutter away or in line, which wins when within reach.
  */
 static void _snap_selection(dt_canvas_view_t *view, const uint32_t leader_id)
 {
   const dt_canvas_object_t *leader = dt_canvas_find_object(view->canvas, leader_id);
   if(!dt_canvas_object_is_frame(leader)) return;
-  const dt_canvas_rect_t bounds = dt_canvas_object_bounds(leader);
+  const uint32_t rules = view->canvas->grid_flags;
+  dt_canvas_rect_t bounds = dt_canvas_object_bounds(leader);
   double delta_x = 0.0;
   double delta_y = 0.0;
-  const gboolean neighbour = dt_canvas_snap_to_neighbours(view->canvas, &bounds, view->selection,
-                                                          CANVAS_NEIGHBOUR_SNAP_PIXELS / view->zoom, &delta_x, &delta_y);
-  if(view->canvas->grid_flags & DT_CANVAS_GRID_SNAP)
+  if(rules & DT_CANVAS_GRID_SNAP)
   {
-    if(delta_x == 0.0) delta_x = dt_canvas_snap(view->canvas, bounds.x) - bounds.x;
-    if(delta_y == 0.0) delta_y = dt_canvas_snap(view->canvas, bounds.y) - bounds.y;
+    delta_x = dt_canvas_snap(view->canvas, bounds.x) - bounds.x;
+    delta_y = dt_canvas_snap(view->canvas, bounds.y) - bounds.y;
   }
-  else if(!neighbour)
+  if(rules & DT_CANVAS_SNAP_GUTTER)
   {
-    return;
+    double gutter_x = 0.0;
+    double gutter_y = 0.0;
+    dt_canvas_snap_to_neighbours(view->canvas, &bounds, view->selection, CANVAS_NEIGHBOUR_SNAP_PIXELS / view->zoom,
+                                 DT_CANVAS_EDGE_ALL, &gutter_x, &gutter_y);
+    if(gutter_x != 0.0) delta_x = gutter_x;
+    if(gutter_y != 0.0) delta_y = gutter_y;
   }
-  _move_selection(view, delta_x, delta_y);
+  if(delta_x != 0.0 || delta_y != 0.0) _move_selection(view, delta_x, delta_y);
 }
 
 static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, const double x, const double y)
 {
-  // The dragged corner follows the pointer; the opposite corner stays put; the aspect ratio holds.
+  // The dragged corner follows the pointer; the opposite corner stays put. An image keeps its
+  // aspect ratio, a text frame resizes freely.
   double local_x = 0.0;
   double local_y = 0.0;
   dt_canvas_object_to_local(object, x, y, &local_x, &local_y);
   const double sign_x = (view->scale_corner == 1 || view->scale_corner == 2) ? 1.0 : -1.0;
   const double sign_y = (view->scale_corner == 2 || view->scale_corner == 3) ? 1.0 : -1.0;
+  const gboolean proportional = object->kind == DT_CANVAS_OBJECT_IMAGE;
   const double old_width = object->width;
   const double old_height = object->height;
   const double ratio = old_height > 0.0 ? old_width / old_height : 1.0;
@@ -2328,16 +2338,66 @@ static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, co
   const double span_x = fmax((local_x * sign_x) + old_width * 0.5, 20.0);
   const double span_y = fmax((local_y * sign_y) + old_height * 0.5, 20.0);
   double new_width = span_x;
-  double new_height = span_x / ratio;
-  if(span_y * ratio > span_x)
+  double new_height = span_y;
+  if(proportional)
   {
-    new_height = span_y;
-    new_width = span_y * ratio;
+    new_height = span_x / ratio;
+    if(span_y * ratio > span_x)
+    {
+      new_height = span_y;
+      new_width = span_y * ratio;
+    }
   }
-  if(view->canvas->grid_flags & DT_CANVAS_GRID_SNAP)
+
+  // Snapping, in the canvas's order of rules: the grid, then the gutter, then a neighbour's size.
+  // Each later rule that triggers replaces the earlier answer; a proportional frame follows its width.
+  const uint32_t rules = view->canvas->grid_flags;
+  const double threshold = CANVAS_NEIGHBOUR_SNAP_PIXELS / view->zoom;
+  if(rules & DT_CANVAS_GRID_SNAP)
   {
     new_width = fmax(dt_canvas_snap(view->canvas, new_width), 20.0);
-    new_height = new_width / ratio;
+    new_height = proportional ? new_width / ratio : fmax(dt_canvas_snap(view->canvas, new_height), 20.0);
+  }
+  if(rules & DT_CANVAS_SNAP_GUTTER)
+  {
+    // Only the dragged edges may snap; the box is the frame as it would be, unrotated.
+    dt_canvas_rect_t box;
+    box.width = new_width;
+    box.height = new_height;
+    box.x = object->x + (sign_x > 0.0 ? -old_width * 0.5 : old_width * 0.5 - new_width);
+    box.y = object->y + (sign_y > 0.0 ? -old_height * 0.5 : old_height * 0.5 - new_height);
+    const uint32_t edges = (sign_x > 0.0 ? DT_CANVAS_EDGE_RIGHT : DT_CANVAS_EDGE_LEFT)
+                           | (sign_y > 0.0 ? DT_CANVAS_EDGE_BOTTOM : DT_CANVAS_EDGE_TOP);
+    double delta_x = 0.0;
+    double delta_y = 0.0;
+    if(dt_canvas_snap_to_neighbours(view->canvas, &box, view->selection, threshold, edges, &delta_x, &delta_y))
+    {
+      if(delta_x != 0.0) new_width = fmax(new_width + delta_x * sign_x, 20.0);
+      if(delta_y != 0.0) new_height = fmax(new_height + delta_y * sign_y, 20.0);
+      if(proportional) new_height = new_width / ratio;
+    }
+  }
+  if(rules & DT_CANVAS_SNAP_SIZE)
+  {
+    double snapped_width = new_width;
+    double snapped_height = new_height;
+    if(dt_canvas_snap_size(view->canvas, view->selection, threshold, &snapped_width, &snapped_height))
+    {
+      if(proportional)
+      {
+        // Match the width when it snapped, else the height; the other follows the ratio.
+        if(snapped_width != new_width)
+          new_width = snapped_width;
+        else
+          new_width = snapped_height * ratio;
+        new_height = new_width / ratio;
+      }
+      else
+      {
+        new_width = snapped_width;
+        new_height = snapped_height;
+      }
+    }
   }
   // Keep the opposite corner fixed: the centre moves by half the size change along the diagonal.
   const double shift_x = (new_width - old_width) * 0.5 * sign_x;
@@ -2854,8 +2914,14 @@ static void _proxy_action(dt_view_t *self, int action)
       dt_canvas_touch(view->canvas);
       break;
     case DT_CANVAS_ACTION_TOGGLE_SNAP:
-      view->canvas->grid_flags ^= DT_CANVAS_GRID_SNAP;
-      dt_conf_set_bool("canvas/grid_snap", (view->canvas->grid_flags & DT_CANVAS_GRID_SNAP) != 0);
+      // The shortcut cycles: nothing, grid, all.
+      if(!(view->canvas->grid_flags & DT_CANVAS_SNAP_ALL))
+        view->canvas->grid_flags |= DT_CANVAS_GRID_SNAP;
+      else if((view->canvas->grid_flags & DT_CANVAS_SNAP_ALL) == DT_CANVAS_GRID_SNAP)
+        view->canvas->grid_flags |= DT_CANVAS_SNAP_ALL;
+      else
+        view->canvas->grid_flags &= ~(uint32_t)DT_CANVAS_SNAP_ALL;
+      dt_conf_set_int("canvas/snap_mode", (int)(view->canvas->grid_flags & DT_CANVAS_SNAP_ALL));
       dt_canvas_touch(view->canvas);
       break;
     case DT_CANVAS_ACTION_UNDO:
@@ -2872,6 +2938,17 @@ static void _proxy_action(dt_view_t *self, int action)
   }
   _bars_request(self);
   _announce_document(self);
+}
+
+static void _proxy_set_snap_mode(dt_view_t *self, int mode)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  view->canvas->grid_flags = (view->canvas->grid_flags & ~(uint32_t)DT_CANVAS_SNAP_ALL)
+                             | ((uint32_t)mode & DT_CANVAS_SNAP_ALL);
+  dt_conf_set_int("canvas/snap_mode", (int)(view->canvas->grid_flags & DT_CANVAS_SNAP_ALL));
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
 }
 
 static void _proxy_set_gutter(dt_view_t *self, float gutter)
@@ -3010,6 +3087,7 @@ void init(dt_view_t *self)
   manager->proxy.canvas.set_border = _proxy_set_border;
   manager->proxy.canvas.is_connecting = _proxy_is_connecting;
   manager->proxy.canvas.set_gutter = _proxy_set_gutter;
+  manager->proxy.canvas.set_snap_mode = _proxy_set_snap_mode;
 }
 
 void gui_init(dt_view_t *self)

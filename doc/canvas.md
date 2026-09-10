@@ -169,10 +169,15 @@ inside the edge and the picture (or the text) is inset by it, so widening a bord
 the picture and never grows the frame, and the anchors, which sit on the frame's edge, stay
 on the outer border.
 
-The canvas carries a **gutter**, the margin frames keep from each other. Dragging a frame
-snaps it, within eight screen pixels, next to a neighbour one gutter away or in line with a
-neighbour's edge (`dt_canvas_snap_to_neighbours()`); only when no neighbour is within reach
-does the grid, when snapping is on, take over. The layouts space frames by the gutter too.
+The canvas carries a **gutter**, the margin frames keep from each other, and a **snapping
+mode** chosen in the toolbar: any combination of three rules, applied in this order to a
+move and to a resize, each later rule that triggers replacing the earlier answer. The grid
+rounds positions and sizes to the grid step. The gutter lands an edge next to a neighbour
+one gutter away or in line with a neighbour's edge, within eight screen pixels
+(`dt_canvas_snap_to_neighbours()`; on a resize only the dragged edges may snap). Same size
+gives a resized frame a neighbour's width or height within reach (`dt_canvas_snap_size()`).
+An image frame resizes proportionally and follows its width; a text frame resizes freely.
+The layouts space frames by the gutter too.
 
 ### Waypoints
 
