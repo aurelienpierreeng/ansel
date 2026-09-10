@@ -181,16 +181,17 @@ static void _the_object_mask_surface_matches_the_raster(void **state)
   const int edge = pixels[50 * stride + 145];
   assert_true(edge > 0 && edge < 255);
   cairo_surface_destroy(surface);
-  // A margin grows the raster on every side and keeps the shape where it was.
-  cairo_surface_t *grown = dt_canvas_render_mask(frame, 200, 100, 10);
-  assert_non_null(grown);
-  assert_int_equal(cairo_image_surface_get_width(grown), 220);
-  assert_int_equal(cairo_image_surface_get_height(grown), 120);
-  const int grown_stride = cairo_image_surface_get_stride(grown);
-  const uint8_t *grown_pixels = cairo_image_surface_get_data(grown);
-  assert_int_equal(grown_pixels[60 * grown_stride + 110], 255);
-  assert_int_equal(grown_pixels[60 * grown_stride + 185], 0);
-  cairo_surface_destroy(grown);
+  // An inset keeps the shape clear of the frame's edges by that much: the circle reaches
+  // y = 5 on its own, and with ten pixels of inset its top is gone.
+  cairo_surface_t *kept_in = dt_canvas_render_mask(frame, 200, 100, 10);
+  assert_non_null(kept_in);
+  assert_int_equal(cairo_image_surface_get_width(kept_in), 200);
+  const int kept_stride = cairo_image_surface_get_stride(kept_in);
+  const uint8_t *kept_pixels = cairo_image_surface_get_data(kept_in);
+  assert_int_equal(kept_pixels[7 * kept_stride + 100], 0);
+  assert_int_equal(kept_pixels[15 * kept_stride + 100], 255);
+  assert_int_equal(kept_pixels[50 * kept_stride + 100], 255);
+  cairo_surface_destroy(kept_in);
   // A hash keyed cache answers the same surface for the same mask and size, another after an edit.
   dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64 * 1024 * 1024);
   cairo_surface_t *first = dt_canvas_surface_cache_get_mask(cache, frame, 200, 100, 0);

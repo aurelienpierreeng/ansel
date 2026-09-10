@@ -175,6 +175,10 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->shadow.offset_y = CANVAS_DEFAULT_SHADOW_OFFSET;
   canvas->shadow.blur = 0.0f; // off until asked for
   canvas->gutter_color = dt_canvas_color(1.0f, 0.65f, 0.2f, 0.8f);
+  canvas->texture_contrast = 1.0f;
+  canvas->texture_detail = 1.0f;
+  canvas->texture_scale = 1.0f;
+  canvas->texture_grain = 1.0f;
   canvas->view_zoom = 1.0;
   canvas->view_x = 0.0;
   canvas->view_y = 0.0;
@@ -683,6 +687,38 @@ void dt_canvas_object_effective_shadow(const dt_canvas_t *canvas, const dt_canva
   if(!IS_NULL_PTR(canvas)) effective = canvas->shadow;
   if(!IS_NULL_PTR(object) && (object->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE)) effective = object->shadow;
   if(!IS_NULL_PTR(shadow)) *shadow = effective;
+}
+
+void dt_canvas_texture_get(const dt_canvas_t *canvas, float *contrast, float *detail, float *scale, float *grain)
+{
+  const float values[4] = { IS_NULL_PTR(canvas) ? 1.0f : canvas->texture_contrast,
+                            IS_NULL_PTR(canvas) ? 1.0f : canvas->texture_detail,
+                            IS_NULL_PTR(canvas) ? 1.0f : canvas->texture_scale,
+                            IS_NULL_PTR(canvas) ? 1.0f : canvas->texture_grain };
+  float *targets[4] = { contrast, detail, scale, grain };
+  for(int idx = 0; idx < 4; idx++)
+  {
+    if(IS_NULL_PTR(targets[idx])) continue;
+    // A file from before the fields holds zeros, and a zero multiplier means nothing: the paper as designed.
+    *targets[idx] = values[idx] > 0.0f ? values[idx] : 1.0f;
+  }
+}
+
+dt_canvas_color_t dt_canvas_background_tint(const uint32_t style)
+{
+  switch(style)
+  {
+    case DT_CANVAS_BACKGROUND_MOLESKINE:
+      return dt_canvas_color(0.961f, 0.941f, 0.886f, 1.0f); // a pale cream
+    case DT_CANVAS_BACKGROUND_WATERCOLOUR:
+      return dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+    case DT_CANVAS_BACKGROUND_EMBOSSED:
+      return dt_canvas_color(0.965f, 0.962f, 0.950f, 1.0f);
+    case DT_CANVAS_BACKGROUND_JAPANESE:
+      return dt_canvas_color(0.972f, 0.962f, 0.935f, 1.0f);
+    default:
+      return dt_canvas_color(0.18f, 0.18f, 0.18f, 1.0f);
+  }
 }
 
 gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow)

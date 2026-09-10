@@ -20,6 +20,8 @@
 
 #include "canvas/canvas_markdown.h"
 #include "colorprofiles/colorspaces.h"
+#include "common/logging.h"
+#include "common/times.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
@@ -365,19 +367,31 @@ static gboolean _is_paper(const uint32_t style)
   return style >= DT_CANVAS_BACKGROUND_MOLESKINE && style < DT_CANVAS_BACKGROUND_LAST;
 }
 
-/** One sprite's relief, `size` square, before the colour: the paper's random components combined. */
-static double *_paper_relief(const dt_canvas_background_t style, const int size, const int variant)
+/**
+ * One sprite's relief, `size` square, before the colour, in two parts the user weighs
+ * separately: `low`, the paper's body -- its mottle, tooth or clouds, what "contrast"
+ * scales -- and `high`, its fine structure -- fibres, pores, grain, wrinkles, what "detail"
+ * scales. `scale` sizes the features: every knee is divided by it, so 2 makes them twice as
+ * large. Both are zero-mean modulations of the paper's colour.
+ */
+static void _paper_relief(const dt_canvas_background_t style, const int size, const int variant, const double scale,
+                          double **low, double **high)
 {
   const guint32 seed = 1000u * (guint32)(variant + 1);
-  double *relief = g_new0(double, (size_t)size * size);
+  const size_t count = (size_t)size * size;
+  *low = g_new0(double, count);
+  *high = g_new0(double, count);
   if(style == DT_CANVAS_BACKGROUND_MOLESKINE)
   {
     // Fine, soft clouds; short fibres in every direction, that show as the zoom lets them; a whisper of grain.
-    double *mottle = _paper_field(size, 40.0, 2.0, seed + 101u);
+    double *mottle = _paper_field(size, 40.0 / scale, 2.0, seed + 101u);
     double *fibres = _paper_fibres(size, seed + 105u);
-    double *grain = _paper_field(size, 160.0, 1.1, seed + 103u);
-    for(size_t idx = 0; idx < (size_t)size * size; idx++)
-      relief[idx] = mottle[idx] * 0.011 + fibres[idx] * 0.012 + grain[idx] * 0.0025;
+    double *grain = _paper_field(size, 160.0 / scale, 1.1, seed + 103u);
+    for(size_t idx = 0; idx < count; idx++)
+    {
+      (*low)[idx] = mottle[idx] * 0.011;
+      (*high)[idx] = fibres[idx] * 0.012 + grain[idx] * 0.0025;
+    }
     dt_free(mottle);
     dt_free(fibres);
     dt_free(grain);
@@ -387,13 +401,14 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
     // A tooth of shallow hollows between peaks -- paper is white at its peaks, so the tooth
     // only carves, and no deeper than the saturation allows -- a band of rounded pores, and
     // a fine, quiet grain.
-    double *tooth = _paper_field(size, 45.0, 1.8, seed + 201u);
-    double *pores = _paper_field_band(size, 320.0, 2.5, 110.0, seed + 205u);
-    double *grain = _paper_field(size, 200.0, 1.0, seed + 203u);
-    for(size_t idx = 0; idx < (size_t)size * size; idx++)
+    double *tooth = _paper_field(size, 45.0 / scale, 1.8, seed + 201u);
+    double *pores = _paper_field_band(size, 320.0 / scale, 2.5, 110.0 / scale, seed + 205u);
+    double *grain = _paper_field(size, 200.0 / scale, 1.0, seed + 203u);
+    for(size_t idx = 0; idx < count; idx++)
     {
       const double hollow = fmin(tooth[idx], 0.0);
-      relief[idx] = -0.06 * (1.0 - exp(-hollow * hollow * 0.5)) + pores[idx] * 0.008 + grain[idx] * 0.003;
+      (*low)[idx] = -0.06 * (1.0 - exp(-hollow * hollow * 0.5));
+      (*high)[idx] = pores[idx] * 0.008 + grain[idx] * 0.003;
     }
     dt_free(tooth);
     dt_free(pores);
@@ -403,9 +418,13 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
   {
     // The random part of a wove sheet: a mottle and fibres; the mesh comes after the blend,
     // and takes its wobble from this very relief.
-    double *mottle = _paper_field(size, 36.0, 2.0, seed + 301u);
+    double *mottle = _paper_field(size, 36.0 / scale, 2.0, seed + 301u);
     double *fibres = _paper_fibres(size, seed + 305u);
-    for(size_t idx = 0; idx < (size_t)size * size; idx++) relief[idx] = mottle[idx] * 0.01 + fibres[idx] * 0.009;
+    for(size_t idx = 0; idx < count; idx++)
+    {
+      (*low)[idx] = mottle[idx] * 0.01;
+      (*high)[idx] = fibres[idx] * 0.009;
+    }
     dt_free(mottle);
     dt_free(fibres);
   }
@@ -414,19 +433,19 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
     // Large soft clouds, a little more contrast than watercolour, and long wrinkles: the
     // zero crossings of a low-frequency field are long curved lines, lit as ridges, and
     // the same lines at every resolution.
-    double *clouds = _paper_field(size, 9.0, 2.2, seed + 401u);
-    double *wrinkle_field = _paper_field(size, 14.0, 2.5, seed + 405u);
-    double *grain = _paper_field(size, 180.0, 1.0, seed + 403u);
-    for(size_t idx = 0; idx < (size_t)size * size; idx++)
+    double *clouds = _paper_field(size, 9.0 / scale, 2.2, seed + 401u);
+    double *wrinkle_field = _paper_field(size, 14.0 / scale, 2.5, seed + 405u);
+    double *grain = _paper_field(size, 180.0 / scale, 1.0, seed + 403u);
+    for(size_t idx = 0; idx < count; idx++)
     {
       const double ridge = exp(-wrinkle_field[idx] * wrinkle_field[idx] * 80.0);
-      relief[idx] = clouds[idx] * 0.018 + ridge * 0.1 + grain[idx] * 0.002;
+      (*low)[idx] = clouds[idx] * 0.018;
+      (*high)[idx] = ridge * 0.1 + grain[idx] * 0.002;
     }
     dt_free(clouds);
     dt_free(wrinkle_field);
     dt_free(grain);
   }
-  return relief;
 }
 
 #define PAPER_WEFT_PITCH 6.0  ///< the mesh's weft threads, across the sheet: close and pressed in deep
@@ -494,10 +513,8 @@ static double _paper_sample(const double *sprite, const int size, const int orie
  * and divided out, so however the placements stray the blend is exact: neither a seam, nor a
  * border band, nor the lattice of window centres a regular grid leaves for a trained eye.
  */
-static double *_paper_compose(const dt_canvas_background_t style, const int sprite_size)
+static double *_paper_compose(double **sprites, const int sprite_size)
 {
-  double *sprites[PAPER_SPRITES];
-  for(int variant = 0; variant < PAPER_SPRITES; variant++) sprites[variant] = _paper_relief(style, sprite_size, variant);
   const int total = PAPER_CELLS * sprite_size;
   double *field = g_new0(double, (size_t)total * total);
   double *weights = g_new0(double, (size_t)total * total);
@@ -540,103 +557,125 @@ static double *_paper_compose(const dt_canvas_background_t style, const int spri
   }
   dt_free(weights);
   dt_free(window);
-  for(int variant = 0; variant < PAPER_SPRITES; variant++) dt_free(sprites[variant]);
   return field;
 }
 
-/** The composed paper's sRGB pixels, PAPER_CELLS * sprite_size square. */
-static uint8_t *_paper_pixels(const dt_canvas_background_t style, const int sprite_size)
+/** Both composed fields of a paper, PAPER_CELLS * sprite_size square, at a feature scale. */
+static void _paper_fields(const dt_canvas_background_t style, const int sprite_size, const double scale, double **low,
+                          double **high)
 {
-  double base_r = 1.0;
-  double base_g = 1.0;
-  double base_b = 1.0;
-  if(style == DT_CANVAS_BACKGROUND_MOLESKINE)
+  double *low_sprites[PAPER_SPRITES];
+  double *high_sprites[PAPER_SPRITES];
+  for(int variant = 0; variant < PAPER_SPRITES; variant++)
+    _paper_relief(style, sprite_size, variant, scale, &low_sprites[variant], &high_sprites[variant]);
+  *low = _paper_compose(low_sprites, sprite_size);
+  *high = _paper_compose(high_sprites, sprite_size);
+  for(int variant = 0; variant < PAPER_SPRITES; variant++)
   {
-    // A pale cream, sRGB; the display transform takes it from there, so a wide-gamut screen
-    // does not show the raw numbers, which read far yellower.
-    base_r = 0.961;
-    base_g = 0.941;
-    base_b = 0.886;
+    dt_free(low_sprites[variant]);
+    dt_free(high_sprites[variant]);
   }
-  else if(style == DT_CANVAS_BACKGROUND_EMBOSSED)
-  {
-    base_r = 0.965;
-    base_g = 0.962;
-    base_b = 0.950;
-  }
-  else if(style == DT_CANVAS_BACKGROUND_JAPANESE)
-  {
-    base_r = 0.972;
-    base_g = 0.962;
-    base_b = 0.935;
-  }
+}
+
+/**
+ * The composed paper's sRGB pixels, PAPER_CELLS * sprite_size square: the canvas's background
+ * colour is the paper's colour -- the fundamental the relief modulates around -- and the
+ * relief, its two parts weighed by `contrast` and `detail`, moves every channel by the same
+ * fraction of it, so a coloured paper stays that colour in its hollows and on its peaks.
+ */
+static uint8_t *_paper_pixels(const dt_canvas_background_t style, const int sprite_size, const dt_canvas_color_t *color,
+                              const double contrast, const double detail, const double *low, const double *high)
+{
+  const double base[3] = { CLAMP(color->red, 0.0f, 1.0f), CLAMP(color->green, 0.0f, 1.0f), CLAMP(color->blue, 0.0f, 1.0f) };
   const int total = PAPER_CELLS * sprite_size;
   const double pixels_per_unit = (double)sprite_size / PAPER_TILE;
-  double *field = _paper_compose(style, sprite_size);
   uint8_t *pixels = g_malloc((size_t)total * total * 4);
   for(size_t idx = 0; idx < (size_t)total * total; idx++)
   {
-    double relief = field[idx];
+    double relief = contrast * low[idx] + detail * high[idx];
     // The mesh is stamped over the blended field in absolute coordinates, so it stays one
     // mesh across placements whatever their phase and jitter; its pitch divides the period.
     if(style == DT_CANVAS_BACKGROUND_EMBOSSED)
-      relief += _paper_mesh((idx % total) / pixels_per_unit, (idx / total) / pixels_per_unit, field[idx]);
-    pixels[4 * idx + 0] = (uint8_t)lround(CLAMP(base_r + relief, 0.0, 1.0) * 255.0);
-    pixels[4 * idx + 1] = (uint8_t)lround(CLAMP(base_g + relief, 0.0, 1.0) * 255.0);
-    pixels[4 * idx + 2] = (uint8_t)lround(CLAMP(base_b + relief, 0.0, 1.0) * 255.0);
+      relief += detail * _paper_mesh((idx % total) / pixels_per_unit, (idx / total) / pixels_per_unit, low[idx] + high[idx]);
+    for(int channel = 0; channel < 3; channel++)
+      pixels[4 * idx + channel] = (uint8_t)lround(CLAMP(base[channel] * (1.0 + relief), 0.0, 1.0) * 255.0);
     pixels[4 * idx + 3] = 255;
   }
-  dt_free(field);
   return pixels;
 }
 
 typedef struct dt_paper_cache_t
 {
-  uint8_t *fields[PAPER_FIELD_MAX_LOG2 + 1]; ///< the composed sRGB paper per sprite resolution
-  cairo_surface_t *tile[2];                  ///< scaled, colour-managed, per target
-  uint64_t generation[2];
-  int size[2];
+  double *low[PAPER_FIELD_MAX_LOG2 + 1];  ///< the composed relief per sprite resolution, its two parts
+  double *high[PAPER_FIELD_MAX_LOG2 + 1];
+  double scale[PAPER_FIELD_MAX_LOG2 + 1]; ///< the feature scale the fields were built at
+  cairo_surface_t *tile;                  ///< coloured, weighed, scaled to what the zoom shows
+  uint64_t key;                           ///< the colour, the weights and the size the tile was built for
 } dt_paper_cache_t;
 
-/**
- * The composed paper as one seamless tile, PAPER_CELLS sprites wide, in display or sRGB
- * colours, at the size it shows on screen. The sprites are synthesised at the smallest
- * power of two holding the sprite's on-screen size, so zooming in reveals finer grain;
- * kept per resolution, and the scaled, colour-managed tile per style, target and display
- * profile generation.
- */
-static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_display, const int sprite_scaled)
+/** A key over what the tile depends on: the colour, the two weights and the size on screen. */
+static uint64_t _paper_key(const dt_canvas_color_t *color, const double contrast, const double detail,
+                           const double scale, const int scaled_size)
 {
+  uint64_t hash = 1469598103934665603ULL;
+  const float values[7] = { color->red, color->green, color->blue, (float)contrast, (float)detail, (float)scale,
+                            (float)scaled_size };
+  const uint8_t *bytes = (const uint8_t *)values;
+  for(size_t idx = 0; idx < sizeof(values); idx++)
+  {
+    hash ^= bytes[idx];
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
+/**
+ * The composed paper as one seamless tile, PAPER_CELLS sprites wide, in the layer encoding,
+ * at the size it shows on screen. The sprites are synthesised at the smallest power of two
+ * holding the sprite's on-screen size, so zooming in reveals finer grain; the two relief
+ * fields are kept per resolution and feature scale, the coloured and weighed tile per key,
+ * so the colour and the weights are cheap to change and only the scale rebuilds the fields.
+ */
+static cairo_surface_t *_paper_tile(const dt_canvas_t *canvas, const int sprite_scaled)
+{
+  const uint32_t style = canvas->background_style;
   if(!_is_paper(style)) return NULL;
   static dt_paper_cache_t caches[DT_CANVAS_BACKGROUND_LAST];
   static GMutex lock;
   dt_paper_cache_t *cache = &caches[style];
-  dt_colorprofiles_settings_t settings;
-  dt_colorprofiles_get_settings(&settings);
-  const uint64_t generation = for_display ? settings.generation + 1 : 1;
-  const int target = for_display ? 1 : 0;
+  float contrast = 1.0f;
+  float detail = 1.0f;
+  float scale = 1.0f;
+  dt_canvas_texture_get(canvas, &contrast, &detail, &scale, NULL);
   // Never above the field's own resolution: past it, the painter scales each cell up instead
   // of a tile that would grow with the square of the zoom.
   const int scaled_size = MIN(PAPER_CELLS * sprite_scaled, PAPER_CELLS * (1 << PAPER_FIELD_MAX_LOG2));
+  const uint64_t key = _paper_key(&canvas->background, contrast, detail, scale, scaled_size);
 
   g_mutex_lock(&lock);
-  if(!IS_NULL_PTR(cache->tile[target]) && cache->generation[target] == generation && cache->size[target] == scaled_size)
+  if(!IS_NULL_PTR(cache->tile) && cache->key == key)
   {
     g_mutex_unlock(&lock);
-    return cache->tile[target];
+    return cache->tile;
   }
   int field_log2 = PAPER_FIELD_MIN_LOG2;
   while(field_log2 < PAPER_FIELD_MAX_LOG2 && (1 << field_log2) < sprite_scaled) field_log2++;
   const int sprite_size = 1 << field_log2;
   const int field_size = PAPER_CELLS * sprite_size;
-  if(IS_NULL_PTR(cache->fields[field_log2]))
-    cache->fields[field_log2] = _paper_pixels((dt_canvas_background_t)style, sprite_size);
-  const uint8_t *base = cache->fields[field_log2];
+  if(IS_NULL_PTR(cache->low[field_log2]) || cache->scale[field_log2] != scale)
+  {
+    dt_free(cache->low[field_log2]);
+    dt_free(cache->high[field_log2]);
+    _paper_fields((dt_canvas_background_t)style, sprite_size, scale, &cache->low[field_log2], &cache->high[field_log2]);
+    cache->scale[field_log2] = scale;
+  }
+  uint8_t *base = _paper_pixels((dt_canvas_background_t)style, sprite_size, &canvas->background, contrast, detail,
+                                cache->low[field_log2], cache->high[field_log2]);
 
-  // The field is sRGB: into the layer encoding once, then scaled to what the zoom shows.
+  // The field is sRGB: into the layer encoding, then scaled to what the zoom shows.
   const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, field_size);
   uint8_t *bgra = g_malloc((size_t)stride * field_size);
-  (void)for_display;
+  dt_canvas_render_srgb8_to_layer8(base, (size_t)field_size * field_size, 4);
   for(size_t idx = 0; idx < (size_t)field_size * field_size; idx++)
   {
     bgra[4 * idx + 0] = base[4 * idx + 2];
@@ -644,36 +683,26 @@ static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_dis
     bgra[4 * idx + 2] = base[4 * idx + 0];
     bgra[4 * idx + 3] = 255;
   }
-  // BGRA: the converter reads red first, so it is handed the bytes back to front and told 4 wide.
-  for(size_t idx = 0; idx < (size_t)field_size * field_size; idx++)
-  {
-    uint8_t rgb[3] = { bgra[4 * idx + 2], bgra[4 * idx + 1], bgra[4 * idx + 0] };
-    dt_canvas_render_srgb8_to_layer8(rgb, 1, 3);
-    bgra[4 * idx + 2] = rgb[0];
-    bgra[4 * idx + 1] = rgb[1];
-    bgra[4 * idx + 0] = rgb[2];
-  }
+  dt_free(base);
   cairo_surface_t *unscaled = cairo_image_surface_create_for_data(bgra, CAIRO_FORMAT_RGB24, field_size, field_size, stride);
   cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, scaled_size, scaled_size);
   cairo_t *cr = cairo_create(tile);
-  const double scale = (double)scaled_size / field_size;
-  cairo_scale(cr, scale, scale);
+  cairo_scale(cr, (double)scaled_size / field_size, (double)scaled_size / field_size);
   cairo_set_source_surface(cr, unscaled, 0.0, 0.0);
   cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
-  cairo_pattern_set_filter(cairo_get_source(cr), scale < 1.0 ? CAIRO_FILTER_GOOD : CAIRO_FILTER_BILINEAR);
+  cairo_pattern_set_filter(cairo_get_source(cr), scaled_size == field_size ? CAIRO_FILTER_NEAREST : CAIRO_FILTER_GOOD);
   cairo_paint(cr);
   cairo_destroy(cr);
   cairo_surface_destroy(unscaled);
   dt_free(bgra);
-  if(!IS_NULL_PTR(cache->tile[target])) cairo_surface_destroy(cache->tile[target]);
-  cache->tile[target] = tile;
-  cache->generation[target] = generation;
-  cache->size[target] = scaled_size;
+  if(!IS_NULL_PTR(cache->tile)) cairo_surface_destroy(cache->tile);
+  cache->tile = tile;
+  cache->key = key;
   g_mutex_unlock(&lock);
   return tile;
 }
 
-#define PAPER_DITHER_TILE 256
+#define PAPER_DITHER_TILE 256   ///< the dither tile, repeated in device space
 #define PAPER_DITHER_SIGMA 0.008 ///< at zoom 1, the standard deviation of the multiplicative noise
 
 /**
@@ -757,8 +786,7 @@ static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
 {
   const double pixels_per_unit = 1.0 / options->units_per_pixel;
   const int sprite_scaled = CLAMP((int)lround(PAPER_TILE * pixels_per_unit), 8, 2048);
-  // sRGB whatever the target: the compositor manages the finished canvas.
-  cairo_surface_t *tile = _paper_tile(canvas->background_style, FALSE, sprite_scaled);
+  cairo_surface_t *tile = _paper_tile(canvas, sprite_scaled);
   if(IS_NULL_PTR(tile)) return;
   if(options->clip.width <= 0.0 || options->clip.height <= 0.0) return;
   const double cell = (double)PAPER_CELLS * PAPER_TILE;
@@ -805,8 +833,10 @@ static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     }
   }
   cairo_restore(cr);
-  // Washi is grainier to the eye than the western sheets: twice the dither.
-  _paint_dither(cr, options, canvas->background_style == DT_CANVAS_BACKGROUND_JAPANESE ? 2.0 : 1.0);
+  // Washi is grainier to the eye than the western sheets: twice the dither; the user's grain on top.
+  float grain = 1.0f;
+  dt_canvas_texture_get(canvas, NULL, NULL, NULL, &grain);
+  _paint_dither(cr, options, (canvas->background_style == DT_CANVAS_BACKGROUND_JAPANESE ? 2.0 : 1.0) * grain);
 }
 
 /* --- frames ----------------------------------------------------------------- */
@@ -1225,6 +1255,15 @@ static void _color_to_working(const dt_canvas_color_t *color, float working[3])
   working[0] = _working_eotf((float)rgb[0]);
   working[1] = _working_eotf((float)rgb[1]);
   working[2] = _working_eotf((float)rgb[2]);
+}
+
+/* Timings of the last paint, for `-d perf` and for tuning: what each phase of the compositor
+ * cost, accumulated over the bands of one dt_canvas_paint() call. */
+static dt_canvas_paint_stats_t _stats;
+
+dt_canvas_paint_stats_t dt_canvas_paint_last_stats(void)
+{
+  return _stats;
 }
 
 /** An integer box in device pixels. */
@@ -1667,16 +1706,17 @@ static void _paint_object_pixels(cairo_t *cr, const dt_canvas_t *canvas, const d
 }
 
 /**
- * How a cutout is rasterised: the frame's size on screen, capped, plus a margin on every
- * side for what reaches past the frame -- the shape itself, its feather and its border --
- * so that nothing of a cut frame is ever clipped by its rectangle.
+ * How a cutout is rasterised: the frame's size on screen, capped, the shape confined to the
+ * frame less the border's width on every side. One rule for every frame: the frame is the
+ * object's outer size, border included; a rectangular frame's border sits inside its edge
+ * with the content inset, a cut frame's content stops the border's width short of the edge
+ * and the border, dilated from it, ends at the edge. Only a shadow may reach past the frame.
  */
 typedef struct dt_canvas_mask_geometry_t
 {
-  int width;           ///< the frame's raster, pixels
+  int width;  ///< the frame's raster, pixels
   int height;
-  int margin;          ///< pixels added on every side
-  double margin_units; ///< the same, in canvas units
+  int inset;  ///< pixels of border the shape is kept clear of, on every side
 } dt_canvas_mask_geometry_t;
 
 static dt_canvas_mask_geometry_t _mask_geometry(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
@@ -1696,15 +1736,12 @@ static dt_canvas_mask_geometry_t _mask_geometry(const dt_canvas_t *canvas, const
   dt_canvas_color_t color;
   float border = 0.0f;
   dt_canvas_object_effective_border(canvas, object, &color, &border);
-  const double side = fmin(object->width, object->height);
-  geometry.margin_units = fmax(border, 0.0) + object->mask.feather * side + 2.0 / fmax(pixels_per_unit, 1e-6);
   const double raster_per_unit = geometry.width / object->width;
-  geometry.margin = (int)ceil(geometry.margin_units * raster_per_unit);
-  geometry.margin_units = geometry.margin / raster_per_unit;
+  geometry.inset = border > 0.0f && color.alpha > 0.0f ? (int)lround(border * raster_per_unit) : 0;
   return geometry;
 }
 
-/** Paint an alpha surface in the cutout's raster space over the frame and its margin, with the given operator. */
+/** Paint an alpha surface in the cutout's raster space over the frame, with the given operator. */
 static void _paint_frame_alpha(cairo_t *cr, const dt_canvas_object_t *object, cairo_surface_t *alpha,
                                const dt_canvas_mask_geometry_t *geometry, const cairo_operator_t operator)
 {
@@ -1713,7 +1750,7 @@ static void _paint_frame_alpha(cairo_t *cr, const dt_canvas_object_t *object, ca
   cairo_translate(cr, object->x, object->y);
   cairo_rotate(cr, object->rotation);
   cairo_scale(cr, object->width / geometry->width, object->height / geometry->height);
-  cairo_translate(cr, -(geometry->width * 0.5 + geometry->margin), -(geometry->height * 0.5 + geometry->margin));
+  cairo_translate(cr, -geometry->width * 0.5, -geometry->height * 0.5);
   if(operator == CAIRO_OPERATOR_DEST_IN)
   {
     cairo_set_source_surface(cr, alpha, 0.0, 0.0);
@@ -1742,13 +1779,13 @@ static void _apply_cutout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canva
   cairo_surface_t *owned = NULL;
   if(!IS_NULL_PTR(options->cache))
     mask = support ? dt_canvas_surface_cache_get_mask_support(options->cache, object, geometry.width, geometry.height,
-                                                              geometry.margin)
+                                                              geometry.inset)
                    : dt_canvas_surface_cache_get_mask(options->cache, object, geometry.width, geometry.height,
-                                                      geometry.margin);
+                                                      geometry.inset);
   else
   {
-    owned = support ? dt_canvas_render_mask_support(object, geometry.width, geometry.height, geometry.margin)
-                    : dt_canvas_render_mask(object, geometry.width, geometry.height, geometry.margin);
+    owned = support ? dt_canvas_render_mask_support(object, geometry.width, geometry.height, geometry.inset)
+                    : dt_canvas_render_mask(object, geometry.width, geometry.height, geometry.inset);
     mask = owned;
   }
   if(IS_NULL_PTR(mask)) return;
@@ -1756,23 +1793,16 @@ static void _apply_cutout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canva
   if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
 }
 
-/**
- * The object's background over its frame and the cutout's margin: a cut-out frame's fill,
- * clipped to the shape's support afterwards, wherever the shape reaches.
- */
-static void _paint_fill(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
-                        const dt_canvas_paint_options_t *options, const double pixels_per_unit)
+/** The object's background over its whole frame: a cut-out frame's fill, clipped to the shape's support afterwards. */
+static void _paint_fill(cairo_t *cr, const dt_canvas_object_t *object, const dt_canvas_paint_options_t *options)
 {
   const dt_canvas_color_t background = dt_canvas_object_background(object);
   if(background.alpha <= 0.0f) return;
-  const dt_canvas_mask_geometry_t geometry = _mask_geometry(canvas, object, pixels_per_unit);
-  const double grow = geometry.margin_units;
   cairo_save(cr);
   cairo_translate(cr, object->x, object->y);
   cairo_rotate(cr, object->rotation);
   _set_color(cr, &background, options->for_display);
-  cairo_rectangle(cr, -object->width * 0.5 - grow, -object->height * 0.5 - grow, object->width + 2.0 * grow,
-                  object->height + 2.0 * grow);
+  cairo_rectangle(cr, -object->width * 0.5, -object->height * 0.5, object->width, object->height);
   cairo_fill(cr);
   cairo_restore(cr);
 }
@@ -1797,10 +1827,10 @@ static gboolean _paint_cut_border(cairo_t *cr, const dt_canvas_t *canvas, const 
   cairo_surface_t *owned = NULL;
   if(!IS_NULL_PTR(options->cache))
     band = dt_canvas_surface_cache_get_mask_band(options->cache, object, geometry.width, geometry.height,
-                                                 geometry.margin, radius);
+                                                 geometry.inset, radius);
   else
   {
-    owned = dt_canvas_render_mask_band(object, geometry.width, geometry.height, geometry.margin, radius);
+    owned = dt_canvas_render_mask_band(object, geometry.width, geometry.height, geometry.inset, radius);
     band = owned;
   }
   if(IS_NULL_PTR(band)) return FALSE;
@@ -1846,12 +1876,6 @@ static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas
     const double reach = (line_width + PAINT_ARROW_LENGTH * fmax(line_width / 2.0, 1.0)) * pixels_per_unit;
     box = _box_of_points(matrix, route.points, route.point_count, reach);
   }
-  if(_object_cut(object))
-  {
-    // The cutout's margin: the shape, its feather and its border may all reach past the frame.
-    const dt_canvas_mask_geometry_t geometry = _mask_geometry(canvas, object, pixels_per_unit);
-    box = _box_grow(&box, (int)ceil(geometry.margin_units * pixels_per_unit) + 1);
-  }
   if(dt_canvas_shadow_visible(shadow) && shadow->blur > 0.0f)
   {
     const double reach = (fabs(shadow->offset_x) + fabs(shadow->offset_y) + COMPOSE_SHADOW_SIGMAS * shadow->blur)
@@ -1871,6 +1895,8 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   local.clip = _box_to_user(matrix, band);
   cairo_font_options_t *font_options = cairo_font_options_create();
   cairo_get_font_options(cr, font_options);
+  double clock = dt_get_wtime();
+  _stats.pixels += (int64_t)band->width * band->height;
 
   // 1. The background, the grid and the pages: cairo, into the base layer.
   cairo_surface_t *base = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, band->width, band->height);
@@ -1911,6 +1937,8 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   }
   _layer_linearise(base, 1.0f, canvas_rgba);
   cairo_surface_destroy(base);
+  _stats.background_seconds += dt_get_wtime() - clock;
+  clock = dt_get_wtime();
 
   // 2. Every object, back to front: its own layer, its cutout, its shadow, then over the canvas.
   for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
@@ -1940,9 +1968,13 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
       continue;
     }
     const gboolean cut = _object_cut(object);
+    _stats.objects++;
+    _stats.layers += cut ? 3 : 1;
+    if(shadowed) _stats.shadows++;
+    const double object_clock = dt_get_wtime();
     cairo_t *layer_cr = _layer_context(layer, matrix, &layer_box, font_options);
     if(cut)
-      _paint_fill(layer_cr, canvas, object, &local, pixels_per_unit);
+      _paint_fill(layer_cr, object, &local);
     else
       _paint_object_pixels(layer_cr, canvas, object, &local);
     _apply_cutout(layer_cr, canvas, object, &local, pixels_per_unit, TRUE);
@@ -1957,6 +1989,7 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     }
     _layer_linearise(layer, opacity, layer_rgba);
     cairo_surface_destroy(layer);
+    _stats.paint_seconds += dt_get_wtime() - object_clock;
 
     // A cut-out frame is three layers over each other in linear light: its background filling
     // the shape's whole support, its content feathered by the shape, its border past the feather.
@@ -1992,11 +2025,16 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
         cairo_surface_destroy(extra);
       }
     }
+    const double shadow_clock = dt_get_wtime();
     if(shadowed && shadow.blur < 0.0f) _layer_inset_shadow(layer_rgba, &layer_box, &shadow, pixels_per_unit);
     if(shadowed && shadow.blur > 0.0f) _canvas_shadow(canvas_rgba, band, layer_rgba, &layer_box, &area, &shadow, pixels_per_unit);
+    _stats.shadow_seconds += dt_get_wtime() - shadow_clock;
     _canvas_over(canvas_rgba, band, layer_rgba, &layer_box, &area);
     dt_free_align(layer_rgba);
   }
+
+  _stats.objects_seconds += dt_get_wtime() - clock;
+  clock = dt_get_wtime();
 
   // 3. Back to 8 bits, and onto the context, pixel for pixel: the band is in the surface's
   //    own pixels, so the device scale is undone on the way.
@@ -2016,6 +2054,7 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   cairo_surface_destroy(encoded);
   cairo_font_options_destroy(font_options);
   if(canvas_owned) dt_free_align(canvas_rgba);
+  _stats.encode_seconds += dt_get_wtime() - clock;
 }
 
 /** The gutter frames: one gutter out from every frame, over everything, as a guide. */
@@ -2065,6 +2104,8 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
 {
   if(IS_NULL_PTR(cr) || IS_NULL_PTR(canvas) || IS_NULL_PTR(options)) return;
   _luts_init();
+  memset(&_stats, 0, sizeof(_stats));
+  const double start = dt_get_wtime();
   // User space to the surface's PIXELS: cairo's device space stops short of the surface's own
   // device scale, and on a 2x screen a layer sized in device units is half the resolution.
   cairo_matrix_t matrix;
@@ -2107,6 +2148,13 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
     _paint_band(cr, canvas, options, &matrix, &band, scale_x, scale_y);
   }
   if(options->draw_grid) _paint_gutters(cr, canvas, options);
+  _stats.total_seconds = dt_get_wtime() - start;
+  dt_print(DT_DEBUG_PERF,
+           "[canvas paint] %" G_GINT64_FORMAT " px, %d objects (%d layers, %d shadows): background %.1f ms, objects %.1f ms "
+           "(cairo %.1f, shadows %.1f), encode %.1f ms, total %.1f ms\n",
+           _stats.pixels, _stats.objects, _stats.layers, _stats.shadows, _stats.background_seconds * 1000.0,
+           _stats.objects_seconds * 1000.0, _stats.paint_seconds * 1000.0, _stats.shadow_seconds * 1000.0,
+           _stats.encode_seconds * 1000.0, _stats.total_seconds * 1000.0);
 }
 
 // clang-format off
