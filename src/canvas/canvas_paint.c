@@ -872,11 +872,19 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     cairo_save(cr);
     cairo_rectangle(cr, -inner_width * 0.5, -inner_height * 0.5, inner_width, inner_height);
     cairo_clip(cr);
-    cairo_translate(cr, -inner_width * 0.5, -inner_height * 0.5);
-    cairo_scale(cr, inner_width / surface_width, inner_height / surface_height);
+    double scale_x = inner_width / surface_width;
+    double scale_y = inner_height / surface_height;
+    if(object->kind == DT_CANVAS_OBJECT_MAP)
+    {
+      // A map keeps its own ratio: it covers the frame, centred, and is cropped by it.
+      scale_x = fmax(scale_x, scale_y);
+      scale_y = scale_x;
+    }
+    cairo_translate(cr, -surface_width * scale_x * 0.5, -surface_height * scale_y * 0.5);
+    cairo_scale(cr, scale_x, scale_y);
     cairo_set_source_surface(cr, surface, 0.0, 0.0);
     // Set AFTER cairo_set_source_surface(): the filter belongs to the pattern that scales.
-    const double downscale = (inner_width / surface_width) / options->units_per_pixel;
+    const double downscale = scale_x / options->units_per_pixel;
     cairo_pattern_set_filter(cairo_get_source(cr), downscale < 0.5 ? CAIRO_FILTER_GOOD : CAIRO_FILTER_BILINEAR);
     cairo_paint(cr);
     cairo_restore(cr);
