@@ -57,16 +57,17 @@ static uint8_t *_page_to_output(const uint8_t *bgra, const int width, const int 
   if(IS_NULL_PTR(rgb)) return NULL;
 
   cmsHTRANSFORM transform = NULL;
-  const dt_colorspaces_color_profile_t *srgb = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_ROLE_OUTPUT);
-  if(!IS_NULL_PTR(output) && !IS_NULL_PTR(srgb) && output != srgb)
+  // The painter's page is in the canvas's own encoding, Adobe RGB (1998).
+  const dt_colorspaces_color_profile_t *source = dt_colorspaces_get_profile(DT_COLORSPACE_ADOBERGB, "", DT_PROFILE_ROLE_OUTPUT);
+  if(!IS_NULL_PTR(output) && !IS_NULL_PTR(source) && output != source)
   {
     // The transform does not retain the profiles, so the locks span its creation only.
-    dt_colorspaces_lock_profile(srgb);
+    dt_colorspaces_lock_profile(source);
     dt_colorspaces_lock_profile(output);
-    if(!IS_NULL_PTR(srgb->profile) && !IS_NULL_PTR(output->profile))
-      transform = cmsCreateTransform(srgb->profile, TYPE_BGRA_8, output->profile, TYPE_RGB_8, (cmsUInt32Number)intent, 0);
+    if(!IS_NULL_PTR(source->profile) && !IS_NULL_PTR(output->profile))
+      transform = cmsCreateTransform(source->profile, TYPE_BGRA_8, output->profile, TYPE_RGB_8, (cmsUInt32Number)intent, 0);
     dt_colorspaces_unlock_profile(output);
-    dt_colorspaces_unlock_profile(srgb);
+    dt_colorspaces_unlock_profile(source);
   }
 
   for(int y = 0; y < height; y++)

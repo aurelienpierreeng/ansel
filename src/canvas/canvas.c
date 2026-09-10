@@ -608,9 +608,10 @@ void dt_canvas_object_lower(dt_canvas_t *canvas, uint32_t id)
 }
 
 void dt_canvas_image_set_render(dt_canvas_t *canvas, dt_canvas_object_t *object, GBytes *jpeg, int32_t pixel_width,
-                                int32_t pixel_height, uint64_t history_hash, int64_t rendered_at)
+                                int32_t pixel_height, uint64_t history_hash, int64_t rendered_at, uint32_t colorspace)
 {
   if(IS_NULL_PTR(canvas) || IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_IMAGE) return;
+  object->image.colorspace = colorspace;
   GBytes *previous = object->image.jpeg;
   object->image.jpeg = IS_NULL_PTR(jpeg) ? NULL : g_bytes_ref(jpeg);
   if(!IS_NULL_PTR(previous)) g_bytes_unref(previous);

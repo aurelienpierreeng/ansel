@@ -131,13 +131,19 @@ the same layout.
 Cairo paints in the encoding its sources arrive in, and blends there: half of white over
 black comes out as code 128, which is a quarter of the light. Feathered cutouts,
 translucent frames and drop shadows are all blends, so the painter composites the whole
-canvas itself, in linear Rec2020 with premultiplied alpha, in 32-bit floats, and hands cairo
-one finished image. Colour management happens once, at the end: every input is sRGB (the
-renders, the drawn colours, the papers), every layer is decoded through the sRGB curve and
-the sRGB-to-Rec2020 matrix, and the finished canvas leaves the working space for the display
-profile -- through XYZ (D50, the colour module's own, with the Bradford adaptation folded into
-the matrix) and `dt_colorprofiles_xyza_to_display_bgra8()`, in floats -- or for sRGB on
-export, which the PDF exporter then converts to the output profile as before.
+canvas itself, in linear Adobe RGB (1998) with premultiplied alpha, in 32-bit floats, and
+hands cairo one finished image. Adobe RGB is the canvas's own encoding end to end: the
+renders leave the pipeline in it, with the profile embedded in each JPEG
+(`dt_canvas_image_t.colorspace` records it; a file from before says sRGB and is converted
+when decoded, as a map's sRGB tiles are); every colour cairo paints goes through
+`dt_canvas_render_color()` into it, and the paper fields through
+`dt_canvas_render_srgb8_to_layer8()`. So every layer decodes through the 563/256 gamma alone,
+with no matrix, and colour management happens once, at the end: the finished canvas leaves
+the working space for the display profile -- through XYZ (D50, the colour module's own, with
+the specification's Bradford-adapted matrix) and `dt_colorprofiles_xyza_to_display_bgra8()`,
+in floats -- or is re-encoded, still Adobe RGB, for the PDF exporter, which converts the page
+to the output profile from an Adobe RGB source. Wider than sRGB and what a print can use;
+Rec2020 would buy nothing in eight bits.
 
 The float canvas is sized in the surface's own PIXELS, not cairo's device units: cairo's
 device space stops short of the surface's device scale, so on a 2x screen a layer sized
@@ -155,10 +161,11 @@ multiplies the layer's alpha (`CAIRO_OPERATOR_DEST_IN` with the mask as the sour
 the frame's transform); the layer is decoded -- unpremultiplied, through the sRGB curve,
 premultiplied again, scaled by the object's opacity; its shadow is the layer's alpha, blurred
 by three box blurs of the shadow's sigma and offset, tinted, laid "over" the canvas first;
-then the layer goes over. The finished canvas is encoded back to 8 bits through a 16384-step
-table dense enough that every code round-trips to itself: an opaque pixel comes back as the
-code it held, which `test_canvas_cutout` pins, along with the 188 that half of white over
-black must give.
+then the layer goes over. The finished canvas is encoded back to 8 bits through a table
+indexed by the square root of the value, dense at the dark end where a gamma curve is
+steepest, so every code round-trips to itself: an opaque pixel comes back as the code it
+held, which `test_canvas_cutout` pins, along with the 186 that half of white over black must
+give under that gamma.
 
 The conversion loops are OpenMP-parallel and the float canvas lives in a scratch buffer the
 surface cache keeps between frames, so a repaint does not page in a fresh allocation.

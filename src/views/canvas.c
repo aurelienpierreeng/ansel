@@ -606,8 +606,9 @@ static void _render_done(uint32_t object_id, uint64_t token, GBytes *jpeg, int32
   }
   else
   {
+    // The render job leaves the pipeline in Adobe RGB, the canvas's own encoding.
     dt_canvas_image_set_render(view->canvas, object, jpeg, pixel_width, pixel_height, history_hash,
-                               (int64_t)g_get_real_time() / G_USEC_PER_SEC);
+                               (int64_t)g_get_real_time() / G_USEC_PER_SEC, DT_CANVAS_COLORSPACE_ADOBERGB);
   }
   dt_control_queue_redraw_center();
 }

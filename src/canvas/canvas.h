@@ -72,10 +72,17 @@ extern "C" {
 /** Reserved bytes per record, see the file comment. */
 #define DT_CANVAS_HEADER_RESERVED 932 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16)
 #define DT_CANVAS_OBJECT_RESERVED 172 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16)
-#define DT_CANVAS_IMAGE_RESERVED 512
+#define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
 #define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
 #define DT_CANVAS_MAP_RESERVED 256
 #define DT_CANVAS_CONNECTOR_RESERVED 72 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24)
+
+/** The colour space a stored JPEG is encoded in. A file from before the field says 0: sRGB. */
+typedef enum dt_canvas_colorspace_t
+{
+  DT_CANVAS_COLORSPACE_SRGB = 0,
+  DT_CANVAS_COLORSPACE_ADOBERGB = 1, ///< what the renders leave the pipeline in
+} dt_canvas_colorspace_t;
 
 /** An sRGB colour with straight alpha, each channel in [0, 1]. */
 typedef struct dt_canvas_color_t
@@ -164,6 +171,7 @@ typedef struct dt_canvas_image_t
   float exif_focal_length;
   float exif_exposure_bias;
   int64_t exif_datetime_taken; ///< GTimeSpan, microseconds since the epoch
+  uint32_t colorspace;     ///< dt_canvas_colorspace_t of the JPEG
   uint8_t reserved[DT_CANVAS_IMAGE_RESERVED];
 
   /* runtime, not serialised as fields: the JPEG travels as its own archive entry */
@@ -532,7 +540,7 @@ void dt_canvas_object_lower(dt_canvas_t *canvas, uint32_t id);
 
 /** @brief Give the image frame its render. Takes a reference on `jpeg`. */
 void dt_canvas_image_set_render(dt_canvas_t *canvas, dt_canvas_object_t *object, GBytes *jpeg, int32_t pixel_width,
-                                int32_t pixel_height, uint64_t history_hash, int64_t rendered_at);
+                                int32_t pixel_height, uint64_t history_hash, int64_t rendered_at, uint32_t colorspace);
 
 /** @brief Replace a text frame's Markdown. Copied; NULL means empty. */
 void dt_canvas_text_set_markdown(dt_canvas_t *canvas, dt_canvas_object_t *object, const char *markdown);

@@ -32,10 +32,44 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <cmocka.h>
 
 #define SIZE 100
+
+/**
+ * The code an sRGB colour lands on in the canvas's layer encoding, Adobe RGB (1998), the way
+ * the painter's own path would not compute it: the sRGB curve out, the standard matrix, the
+ * 563/256 gamma in, then cairo's quantisation (sixteen bits, rounded, then the high byte).
+ */
+static uint32_t _layer_code(const double red, const double green, const double blue)
+{
+  const double srgb[3] = { red, green, blue };
+  double linear[3];
+  for(int channel = 0; channel < 3; channel++)
+    linear[channel] = srgb[channel] <= 0.04045 ? srgb[channel] / 12.92 : pow((srgb[channel] + 0.055) / 1.055, 2.4);
+  const double adobe[3] = { 0.7151658 * linear[0] + 0.2848342 * linear[1], linear[1],
+                            0.0411705 * linear[1] + 0.9588295 * linear[2] };
+  uint32_t codes[3];
+  for(int channel = 0; channel < 3; channel++)
+  {
+    const double encoded = pow(fmin(fmax(adobe[channel], 0.0), 1.0), 256.0 / 563.0);
+    codes[channel] = (uint32_t)floor(encoded * 65535.0 + 0.5) >> 8;
+  }
+  return (codes[0] << 16) | (codes[1] << 8) | codes[2];
+}
+
+static gboolean _within(const uint32_t pixel, const uint32_t expected, const int tolerance)
+{
+  for(int shift = 0; shift <= 16; shift += 8)
+  {
+    const int got = (int)((pixel >> shift) & 0xFF);
+    const int wanted = (int)((expected >> shift) & 0xFF);
+    if(abs(got - wanted) > tolerance) return FALSE;
+  }
+  return TRUE;
+}
 
 static float _at(const float *raster, const int x, const int y)
 {
@@ -217,9 +251,11 @@ static void _a_cut_frames_border_follows_the_cutout_outward(void **state)
   frame->border_width = 10.0f;
   frame->border_color = dt_canvas_color(1.0f, 0.0f, 0.0f, 1.0f);
   frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  const uint32_t red = _layer_code(1.0, 0.0, 0.0);
+  const uint32_t blue = _layer_code(0.0, 0.0, 1.0);
   // Rectangular: the border sits inside the edge, the content within it.
   assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0xFFFFFFu);
-  assert_int_equal(_painted_pixel(canvas, 200, 53, 100), 0xFF0000u);
+  assert_true(_within(_painted_pixel(canvas, 200, 53, 100), red, 1));
   assert_int_equal(_painted_pixel(canvas, 200, 47, 100), 0x000000u);
   // Cut to a circle of radius 25: the content fills the circle, the border is the ring
   // 25 to 35 out from the centre, and past the ring is the background.
@@ -228,23 +264,23 @@ static void _a_cut_frames_border_follows_the_cutout_outward(void **state)
   frame->mask.feather = 0.0f;
   assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0xFFFFFFu);
   assert_int_equal(_painted_pixel(canvas, 200, 120, 100), 0xFFFFFFu);
-  assert_int_equal(_painted_pixel(canvas, 200, 130, 100), 0xFF0000u);
-  assert_int_equal(_painted_pixel(canvas, 200, 100, 130), 0xFF0000u);
-  assert_int_equal(_painted_pixel(canvas, 200, 122, 122), 0xFF0000u); // 31 out along the diagonal: a disc, not a square
+  assert_true(_within(_painted_pixel(canvas, 200, 130, 100), red, 1));
+  assert_true(_within(_painted_pixel(canvas, 200, 100, 130), red, 1));
+  assert_true(_within(_painted_pixel(canvas, 200, 122, 122), red, 1)); // 31 out along the diagonal: a disc, not a square
   assert_int_equal(_painted_pixel(canvas, 200, 138, 100), 0x000000u);
   assert_int_equal(_painted_pixel(canvas, 200, 53, 53), 0x000000u);
   // Feathered by 10: the border starts where the feather ends, at 35, not where the shape's
   // edge is, and the background fills the shape's whole support, feather included, solid.
   frame->mask.feather = 0.1f;
   frame->text.background = dt_canvas_color(0.0f, 0.0f, 1.0f, 1.0f);
-  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0x0000FFu);
-  assert_int_equal(_painted_pixel(canvas, 200, 130, 100), 0x0000FFu);
-  assert_int_equal(_painted_pixel(canvas, 200, 140, 100), 0xFF0000u);
+  assert_true(_within(_painted_pixel(canvas, 200, 100, 100), blue, 1));
+  assert_true(_within(_painted_pixel(canvas, 200, 130, 100), blue, 1));
+  assert_true(_within(_painted_pixel(canvas, 200, 140, 100), red, 1));
   assert_int_equal(_painted_pixel(canvas, 200, 148, 100), 0x000000u);
   // Without a background the feather dissolves into nothing; the border still starts past it.
   frame->text.background.alpha = 0.0f;
   assert_int_equal(_painted_pixel(canvas, 200, 130, 100), 0x000000u);
-  assert_int_equal(_painted_pixel(canvas, 200, 140, 100), 0xFF0000u);
+  assert_true(_within(_painted_pixel(canvas, 200, 140, 100), red, 1));
   dt_canvas_free(canvas);
 }
 
@@ -263,7 +299,7 @@ static void _a_background_fills_the_frame_under_a_missing_render(void **state)
   // No render and no background: nothing but the canvas.
   assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0x000000u);
   image->background = dt_canvas_color(0.0f, 1.0f, 0.0f, 1.0f);
-  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0x00FF00u);
+  assert_true(_within(_painted_pixel(canvas, 200, 100, 100), _layer_code(0.0, 1.0, 0.0), 1));
   assert_int_equal(_painted_pixel(canvas, 200, 5, 5), 0x000000u);
   dt_canvas_free(canvas);
 }
@@ -281,22 +317,20 @@ static void _the_compositor_blends_in_linear_light_and_round_trips_opaque_codes(
   frame->border_width = 0.0f;
   frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
   frame->transparency = 0.5f;
-  // 187.5 is what the maths gives, so either neighbour is right; the working space's matrices
-  // and their inverse decide which, channel by channel.
+  // Half the light, re-encoded with the 563/256 gamma: 0.5 ^ (256/563) is 0.7297, code 186.
   const uint32_t inside = _painted_pixel(canvas, 200, 100, 100);
   for(int shift = 0; shift <= 16; shift += 8)
   {
     const int code = (int)((inside >> shift) & 0xFF);
-    assert_true(code >= 186 && code <= 189);
+    assert_true(code >= 185 && code <= 187);
   }
   // Outside the frame the background comes back as the exact code it was given.
   assert_int_equal(_painted_pixel(canvas, 200, 5, 5), 0x000000u);
-  // Codes cairo lands on exactly (multiples of 1/255), so the round trip is judged and not cairo's rounding.
+  // An opaque colour comes back as the code cairo painted it in the layer encoding: the
+  // decode and the encode are exact inverses on every code.
   canvas->background = dt_canvas_color(0.2f, 0.6f, 0.8f, 1.0f);
   const uint32_t background = _painted_pixel(canvas, 200, 5, 5);
-  assert_int_equal((background >> 16) & 0xFF, 51);
-  assert_int_equal((background >> 8) & 0xFF, 153);
-  assert_int_equal(background & 0xFF, 204);
+  assert_true(_within(background, _layer_code(0.2, 0.6, 0.8), 1));
   // Fully opaque, the frame's white comes back as white.
   frame->transparency = 0.0f;
   assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0xFFFFFFu);

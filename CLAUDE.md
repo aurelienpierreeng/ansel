@@ -2502,13 +2502,18 @@ they are visible.
   matrix and divide it out at the blit, and hand every layer context the target's font
   options. `test_canvas_cutout` paints on a device-scale-2 surface and checks the edges land
   on the doubled pixels.
-- **The working space is linear Rec2020 and colour management is the LAST step.** Nothing is
-  display-managed before the composite (`dt_canvas_render_decode()` and
-  `dt_canvas_render_color()` keep sRGB on every target); the finished canvas goes to the display
-  through XYZ with `dt_colorprofiles_xyza_to_display_bgra8()`, a bulk float transform added to
-  the colour module for it. The colour module's XYZ is D50, so the Rec2020-to-XYZ matrix in the
-  painter carries the Bradford adaptation; half of white over black now lands on the 187.5
-  boundary, so the test accepts 186..189 per channel and no longer asks the channels to agree.
+- **The working space is linear Adobe RGB (1998) and colour management is the LAST step.**
+  Adobe RGB is the layer encoding end to end: the renders leave the pipeline in it (profile
+  embedded, `image.colorspace` records it; older sRGB JPEGs and map tiles are converted at
+  decode), `dt_canvas_render_color()` converts every drawn colour into it, and the paper fields
+  go through `dt_canvas_render_srgb8_to_layer8()`. A layer therefore decodes through the 563/256
+  gamma with no matrix. The finished canvas goes to the display through XYZ with
+  `dt_colorprofiles_xyza_to_display_bgra8()`, a bulk float transform added to the colour module
+  for it; the module's XYZ is D50, so the painter carries the specification's Bradford-adapted
+  matrix. The PDF page is Adobe RGB and the exporter's source profile says so. The encode table
+  must be indexed by sqrt(value): a uniform 16384-step table misses the first codes of a 2.2
+  gamma by whole steps. Tests compute expected codes with an independent sRGB-to-Adobe helper
+  and cairo's own quantisation (16 bits rounded, then the high byte).
 - **A shadow's radius is signed and is its own switch**: positive outset, negative inset (the
   uncovered plane blurred and laid over the object within its coverage), zero none. Do not
   reintroduce an enable flag; `dt_canvas_shadow_visible()` reads the radius.
