@@ -296,6 +296,9 @@ typedef enum dt_canvas_background_t
   DT_CANVAS_BACKGROUND_PLAIN = 0,       ///< the background colour
   DT_CANVAS_BACKGROUND_MOLESKINE = 1,   ///< ivory notebook paper, soft texture
   DT_CANVAS_BACKGROUND_WATERCOLOUR = 2, ///< white watercolour paper, thick texture
+  DT_CANVAS_BACKGROUND_EMBOSSED = 3,    ///< paper dried on a metallic mesh, its imprint in the fibres
+  DT_CANVAS_BACKGROUND_JAPANESE = 4,    ///< washi: large soft clouds and long wrinkles
+  DT_CANVAS_BACKGROUND_LAST = 5,
 } dt_canvas_background_t;
 
 /** The paper the canvas is divided into, for printing. One canvas unit is one point (1/72 inch). */

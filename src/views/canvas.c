@@ -386,7 +386,7 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
                        | ((uint32_t)dt_conf_get_int("canvas/snap_mode") & DT_CANVAS_SNAP_ALL);
   canvas->border_width = dt_conf_get_float("canvas/border_width");
   canvas->gutter = dt_conf_get_float("canvas/gutter");
-  canvas->background_style = (uint32_t)CLAMP(dt_conf_get_int("canvas/background_style"), 0, 2);
+  canvas->background_style = (uint32_t)CLAMP(dt_conf_get_int("canvas/background_style"), 0, DT_CANVAS_BACKGROUND_LAST - 1);
   const char *grid_color = dt_conf_get_string_const("canvas/grid_color");
   dt_canvas_color_parse(grid_color, &canvas->grid_color);
   canvas->paper_size = (uint32_t)CLAMP(dt_conf_get_int("canvas/paper_size"), 0, 5);
@@ -2421,11 +2421,12 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     background[1] = 0.941;
     background[2] = 0.886;
   }
-  else if(view->canvas->background_style == DT_CANVAS_BACKGROUND_WATERCOLOUR)
+  else if(view->canvas->background_style >= DT_CANVAS_BACKGROUND_WATERCOLOUR
+          && view->canvas->background_style < DT_CANVAS_BACKGROUND_LAST)
   {
-    background[0] = 1.0;
-    background[1] = 1.0;
-    background[2] = 1.0;
+    background[0] = 0.97;
+    background[1] = 0.96;
+    background[2] = 0.94;
   }
   else
   {
@@ -3183,7 +3184,7 @@ static void _proxy_set_background(dt_view_t *self, const float *rgba, int style)
   }
   if(style >= 0)
   {
-    view->canvas->background_style = (uint32_t)CLAMP(style, 0, 2);
+    view->canvas->background_style = (uint32_t)CLAMP(style, 0, DT_CANVAS_BACKGROUND_LAST - 1);
     dt_conf_set_int("canvas/background_style", (int)view->canvas->background_style);
   }
   dt_canvas_touch(view->canvas);
