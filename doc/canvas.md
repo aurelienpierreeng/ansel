@@ -155,8 +155,14 @@ Selecting exactly one object floats an opaque bar immediately below it (above, w
 no room below) with that object's properties: a text frame's font family and size, text
 colour and background; an image frame's border width and colour and a "Canvas default"
 button that drops its override; a connector's route, arrow heads, direction, width, dashes,
-colour and waypoint. One bar per kind, overlay children of the centre. Placement is never
-done from the draw path -- moving an overlay child from inside a draw glitches -- but from
+colour and waypoint; text and image bars carry the border width, colour with opacity, and a
+button back to the canvas's uniform border. One bar per kind, overlay children of the centre,
+positioned through the overlay's `get-child-position` signal from a stored position, so a
+move is one allocation pass of the overlay rather than a margin change, which is a resize
+that climbs to the toplevel and lays the whole window out again -- what made panning and
+clicking sluggish. They are hidden for the length of a drag, placed at its end, and a click
+on the background dismisses them at once. Placement is never done from the draw path --
+moving an overlay child from inside a draw glitches -- but from
 an idle scheduled by every event that moves the object or the viewport; the bar is refilled
 only when the selection or the document changed (a signature of both), with its handlers
 blocked during a refill so a refill never writes back. The canvas-level defaults (grid,
@@ -186,9 +192,13 @@ The layouts space frames by the gutter too.
 
 The canvas is painted with its background colour or with one of two procedural papers:
 **Moleskine** (ivory, a soft mottle) and **watercolour** (pure white, a thick tooth that only
-darkens, so the paper is white at its peaks). Both are periodic value noise on a 256-unit
-tile, seamless by construction, generated once per style and colour target and repeated as
-a cairo pattern in canvas units, so the texture scales with the zoom like everything else.
+darkens, so the paper is white at its peaks). Both are random fields synthesised in the
+frequency domain on a 512-unit tile: white Gaussian noise from a seeded generator, shaped by
+a radial filter (a plateau below a knee frequency, a power-law fall-off above it) and
+transformed back with a small radix-2 FFT of our own. The discrete transform is periodic by
+construction, so the tile wraps without a seam. The base tile is synthesised once per style;
+a copy scaled to the current zoom is cached and repeated in device space at an integer
+offset, cairo's fast repeat path, rather than through a transformed pattern on every frame.
 The grid dots have a colour of their own and a radius that is a fraction of the grid step,
 so they scale with the zoom too, floored at three quarters of a pixel so they never vanish.
 
