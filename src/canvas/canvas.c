@@ -25,6 +25,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <string.h>
 
 #define CANVAS_DEFAULT_GRID_SIZE 50.0f
@@ -38,6 +39,9 @@
 #define CANVAS_DEFAULT_IMAGE_LONG_EDGE_UNITS 600.0
 #define CANVAS_DUPLICATE_OFFSET 40.0
 #define CANVAS_CONNECTOR_LINE_WIDTH 2.0f
+#define CANVAS_DEFAULT_SHADOW_OFFSET 8.0f
+#define CANVAS_DEFAULT_SHADOW_BLUR 12.0f
+#define CANVAS_MASK_MAX_NODES 512u
 
 /* --- objects: allocation ---------------------------------------------------- */
 
@@ -59,6 +63,7 @@ static void _object_free(gpointer data)
     g_bytes_unref(object->map.jpeg);
     object->map.jpeg = NULL;
   }
+  dt_canvas_mask_clear(object);
   dt_free(object);
 }
 
@@ -77,6 +82,16 @@ static dt_canvas_object_t *_object_copy(const dt_canvas_object_t *source)
   if(copy->kind == DT_CANVAS_OBJECT_MAP && !IS_NULL_PTR(copy->map.jpeg))
   {
     copy->map.jpeg = g_bytes_ref(copy->map.jpeg);
+  }
+  // The nodes are the copy's own: the source keeps its array.
+  copy->mask.nodes = NULL;
+  copy->mask.node_count = 0;
+  if(source->mask.node_count > 0 && !IS_NULL_PTR(source->mask.nodes))
+  {
+    const size_t floats = (size_t)source->mask.node_count * DT_CANVAS_MASK_NODE_FLOATS;
+    copy->mask.nodes = g_new(float, floats);
+    memcpy(copy->mask.nodes, source->mask.nodes, floats * sizeof(float));
+    copy->mask.node_count = source->mask.node_count;
   }
   return copy;
 }
@@ -156,6 +171,11 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->paper_landscape = 0;
   canvas->page_color = dt_canvas_color(0.35f, 0.6f, 1.0f, 1.0f);
   canvas->grid_flags |= DT_CANVAS_PAGE_VISIBLE;
+  canvas->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.0f);
+  canvas->shadow.offset_x = CANVAS_DEFAULT_SHADOW_OFFSET;
+  canvas->shadow.offset_y = CANVAS_DEFAULT_SHADOW_OFFSET;
+  canvas->shadow.blur = CANVAS_DEFAULT_SHADOW_BLUR;
+  canvas->gutter_color = dt_canvas_color(1.0f, 0.65f, 0.2f, 0.8f);
   canvas->view_zoom = 1.0;
   canvas->view_x = 0.0;
   canvas->view_y = 0.0;
@@ -654,6 +674,169 @@ void dt_canvas_object_effective_border(const dt_canvas_t *canvas, const dt_canva
 }
 
 /* --- geometry --------------------------------------------------------------- */
+
+void dt_canvas_object_effective_shadow(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                       dt_canvas_shadow_t *shadow)
+{
+  dt_canvas_shadow_t effective;
+  memset(&effective, 0, sizeof(effective));
+  if(!IS_NULL_PTR(canvas)) effective = canvas->shadow;
+  if(!IS_NULL_PTR(object) && (object->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE)) effective = object->shadow;
+  if(!IS_NULL_PTR(shadow)) *shadow = effective;
+}
+
+gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow)
+{
+  return !IS_NULL_PTR(shadow) && shadow->color.alpha > 0.0f;
+}
+
+/* --- cutout masks ------------------------------------------------------------------- */
+
+void dt_canvas_mask_clear(dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object)) return;
+  dt_free(object->mask.nodes);
+  object->mask.nodes = NULL;
+  object->mask.node_count = 0;
+}
+
+void dt_canvas_mask_set_nodes(dt_canvas_t *canvas, dt_canvas_object_t *object, const float *nodes, uint32_t count)
+{
+  if(IS_NULL_PTR(object)) return;
+  dt_canvas_mask_clear(object);
+  if(count > CANVAS_MASK_MAX_NODES) count = CANVAS_MASK_MAX_NODES;
+  if(count > 0 && !IS_NULL_PTR(nodes))
+  {
+    const size_t floats = (size_t)count * DT_CANVAS_MASK_NODE_FLOATS;
+    object->mask.nodes = g_new(float, floats);
+    memcpy(object->mask.nodes, nodes, floats * sizeof(float));
+    object->mask.node_count = count;
+  }
+  dt_canvas_touch(canvas);
+}
+
+/** A corner node at a unit-square point: control points on the node, not smoothed. */
+static void _mask_node_init(float *node, const float x, const float y)
+{
+  node[0] = x;
+  node[1] = y;
+  node[2] = x;
+  node[3] = y;
+  node[4] = x;
+  node[5] = y;
+  node[6] = 0.0f;
+  node[7] = 0.0f;
+}
+
+void dt_canvas_mask_set_shape(dt_canvas_t *canvas, dt_canvas_object_t *object, uint32_t shape)
+{
+  if(IS_NULL_PTR(object)) return;
+  if(shape > DT_CANVAS_MASK_GRADIENT) shape = DT_CANVAS_MASK_NONE;
+  if(object->mask.shape == shape) return;
+  dt_canvas_mask_clear(object);
+  object->mask.shape = shape;
+  object->mask.center_x = 0.5f;
+  object->mask.center_y = 0.5f;
+  object->mask.rotation = 0.0f;
+  object->mask.spare = 0.0f;
+  if(object->mask.feather <= 0.0f) object->mask.feather = 0.05f;
+  // Radii are fractions of the shorter side, so the default shape fits every aspect ratio.
+  const double longer = fmax(object->width, object->height);
+  const double shorter = fmax(fmin(object->width, object->height), 1.0);
+  const float wide = (float)(longer / shorter);
+  switch(shape)
+  {
+    case DT_CANVAS_MASK_CIRCLE:
+      object->mask.radius_x = 0.45f;
+      object->mask.radius_y = 0.45f;
+      break;
+    case DT_CANVAS_MASK_ELLIPSE:
+      object->mask.radius_x = object->width >= object->height ? 0.45f * wide : 0.45f;
+      object->mask.radius_y = object->width >= object->height ? 0.45f : 0.45f * wide;
+      break;
+    case DT_CANVAS_MASK_GRADIENT:
+      object->mask.radius_x = 0.25f; // the extent
+      object->mask.radius_y = 0.0f;  // the curvature
+      object->mask.rotation = 0.0f;
+      object->mask.center_y = 0.6f;
+      break;
+    case DT_CANVAS_MASK_POLYGON:
+    {
+      // A hexagon, inset a little, corners at the frame's edges.
+      float nodes[6 * DT_CANVAS_MASK_NODE_FLOATS];
+      const float inset = 0.06f;
+      _mask_node_init(nodes + 0 * DT_CANVAS_MASK_NODE_FLOATS, 0.25f, inset);
+      _mask_node_init(nodes + 1 * DT_CANVAS_MASK_NODE_FLOATS, 0.75f, inset);
+      _mask_node_init(nodes + 2 * DT_CANVAS_MASK_NODE_FLOATS, 1.0f - inset, 0.5f);
+      _mask_node_init(nodes + 3 * DT_CANVAS_MASK_NODE_FLOATS, 0.75f, 1.0f - inset);
+      _mask_node_init(nodes + 4 * DT_CANVAS_MASK_NODE_FLOATS, 0.25f, 1.0f - inset);
+      _mask_node_init(nodes + 5 * DT_CANVAS_MASK_NODE_FLOATS, inset, 0.5f);
+      dt_canvas_mask_set_nodes(canvas, object, nodes, 6);
+      break;
+    }
+    default:
+      object->mask.shape = DT_CANVAS_MASK_NONE;
+      object->mask.flags = 0;
+      break;
+  }
+  dt_canvas_touch(canvas);
+}
+
+gboolean dt_canvas_mask_insert_node(dt_canvas_t *canvas, dt_canvas_object_t *object, uint32_t index, float x, float y)
+{
+  if(IS_NULL_PTR(object) || object->mask.shape != DT_CANVAS_MASK_POLYGON) return FALSE;
+  if(object->mask.node_count >= CANVAS_MASK_MAX_NODES) return FALSE;
+  if(index > object->mask.node_count) index = object->mask.node_count;
+  const uint32_t count = object->mask.node_count + 1;
+  float *nodes = g_new(float, (size_t)count * DT_CANVAS_MASK_NODE_FLOATS);
+  const size_t node_bytes = DT_CANVAS_MASK_NODE_FLOATS * sizeof(float);
+  if(index > 0) memcpy(nodes, object->mask.nodes, index * node_bytes);
+  _mask_node_init(nodes + (size_t)index * DT_CANVAS_MASK_NODE_FLOATS, x, y);
+  if(index < object->mask.node_count)
+    memcpy(nodes + (size_t)(index + 1) * DT_CANVAS_MASK_NODE_FLOATS,
+           object->mask.nodes + (size_t)index * DT_CANVAS_MASK_NODE_FLOATS,
+           (object->mask.node_count - index) * node_bytes);
+  dt_free(object->mask.nodes);
+  object->mask.nodes = nodes;
+  object->mask.node_count = count;
+  dt_canvas_touch(canvas);
+  return TRUE;
+}
+
+gboolean dt_canvas_mask_remove_node(dt_canvas_t *canvas, dt_canvas_object_t *object, uint32_t index)
+{
+  if(IS_NULL_PTR(object) || object->mask.shape != DT_CANVAS_MASK_POLYGON) return FALSE;
+  if(object->mask.node_count <= 3 || index >= object->mask.node_count) return FALSE;
+  const size_t node_bytes = DT_CANVAS_MASK_NODE_FLOATS * sizeof(float);
+  memmove(object->mask.nodes + (size_t)index * DT_CANVAS_MASK_NODE_FLOATS,
+          object->mask.nodes + (size_t)(index + 1) * DT_CANVAS_MASK_NODE_FLOATS,
+          (object->mask.node_count - index - 1) * node_bytes);
+  object->mask.node_count--;
+  dt_canvas_touch(canvas);
+  return TRUE;
+}
+
+uint64_t dt_canvas_mask_hash(const dt_canvas_mask_t *mask)
+{
+  if(IS_NULL_PTR(mask) || mask->shape == DT_CANVAS_MASK_NONE) return 0;
+  // FNV-1a over the fixed fields then the nodes: cheap, and any bit moved changes the raster.
+  uint64_t hash = 1469598103934665603ULL;
+  const uint8_t *bytes = (const uint8_t *)mask;
+  const size_t fixed = offsetof(dt_canvas_mask_t, node_count);
+  for(size_t idx = 0; idx < fixed; idx++)
+  {
+    hash ^= bytes[idx];
+    hash *= 1099511628211ULL;
+  }
+  const size_t node_bytes = (size_t)mask->node_count * DT_CANVAS_MASK_NODE_FLOATS * sizeof(float);
+  const uint8_t *node_data = (const uint8_t *)mask->nodes;
+  for(size_t idx = 0; idx < node_bytes && !IS_NULL_PTR(node_data); idx++)
+  {
+    hash ^= node_data[idx];
+    hash *= 1099511628211ULL;
+  }
+  return hash == 0 ? 1 : hash;
+}
 
 gboolean dt_canvas_object_is_frame(const dt_canvas_object_t *object)
 {

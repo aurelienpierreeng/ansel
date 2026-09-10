@@ -2479,3 +2479,25 @@ they are visible.
 - **The ZIP is ours** (`canvas_zip.c`, store + deflate, no ZIP64) because no archive library
   is linked and zlib is. `unzip -t` is run on the writer's output in the unit test when
   available; keep it passing.
+- **The painter composites in linear light itself.** Cairo blends in the encoding of its
+  sources, so every object is painted into its own 8-bit layer, decoded through the sRGB
+  curve into premultiplied linear floats, masked, shadowed and laid over a float canvas that
+  is encoded back once. The decode table is per code and the encode table has 16384 steps,
+  which is what makes an opaque pixel round-trip to the exact code it held -- do not "save"
+  the table's size. `test_canvas_cutout` pins the round trip and the 188 that half of white
+  over black must give.
+- **The cutouts are the darkroom's shapes, asked for through `develop/masks_cutout.h`.** That
+  entry lives inside `src/develop/masks` on purpose: the canvas never names a
+  `dt_masks_form_t`, and the enclosure ratchet in `tools/check_module_boundaries.sh` stays
+  where it is. Two things the masks code does not say: a polygon node's `border[2]` is a pair
+  of feather RADII (either side of the node), not a border point, and the shapes take their
+  scratch from the pixelpipe cache's arena, so a headless consumer must have run
+  `dt_dev_pixelpipe_cache_init()` (the test does, in its group setup). `dt_masks_create()`
+  also sanitises conf and tells the supervisor; `dt_masks_form_new_silent()` is the
+  side-effect-free constructor for consumers with neither.
+- **Variable-length data follows an object's record as tagged chunks** (tag, size, bytes), so
+  a reader steps over what it does not know; the polygon's nodes are the first. Fixed
+  additions keep taking reserved bytes.
+- **An include inside an `#ifdef` needs `// conditional-ok: <reason>`** on its line
+  (`tools/check_conditional_includes.sh`, run on pull requests only, so a local build cannot
+  show it): the osm-gps-map header in `canvas_render.c` is one.

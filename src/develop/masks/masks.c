@@ -828,7 +828,7 @@ int dt_masks_legacy_params(dt_develop_t *develop, void *params, const int old_ve
 
 static int form_id_seed = 0;
 
-dt_masks_form_t *dt_masks_create(dt_masks_type_t type)
+dt_masks_form_t *dt_masks_form_new_silent(dt_masks_type_t type)
 {
   dt_masks_form_t *mask_form = (dt_masks_form_t *)calloc(1, sizeof(dt_masks_form_t));
   if(IS_NULL_PTR(mask_form)) return NULL;
@@ -853,6 +853,14 @@ dt_masks_form_t *dt_masks_create(dt_masks_type_t type)
     mask_form->functions = &dt_masks_functions_gradient;
   else if (type & DT_MASKS_GROUP)
     mask_form->functions = &dt_masks_functions_group;
+
+  return mask_form;
+}
+
+dt_masks_form_t *dt_masks_create(dt_masks_type_t type)
+{
+  dt_masks_form_t *mask_form = dt_masks_form_new_silent(type);
+  if(IS_NULL_PTR(mask_form)) return NULL;
 
   if (mask_form->functions && mask_form->functions->sanitize_config)
     mask_form->functions->sanitize_config(type);

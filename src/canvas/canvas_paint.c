@@ -1105,21 +1105,384 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
   cairo_restore(cr);
 }
 
-/* --- entry points ------------------------------------------------------------- */
+/* --- the compositor ----------------------------------------------------------------- */
 
-void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
-                            const dt_canvas_paint_options_t *options)
+/* Everything the canvas shows is composited here, in linear light with premultiplied alpha, in
+ * 32-bit floats: cairo paints each object into its own 8-bit layer, in the encoding it
+ * arrived in; the layer is decoded through the sRGB curve into linear premultiplied RGBA,
+ * scaled by the object's opacity, its shadow is derived from its alpha and laid under it, and
+ * both go "over" the float canvas. The finished canvas is encoded back to 8 bits with the
+ * inverse curve and handed to cairo as one image. Feathered cutouts, semi-transparent frames
+ * and shadows therefore blend in linear light, where a 50% mix is half the light and not half
+ * the code value.
+ *
+ * On screen the layers hold display-encoded colours (each render is colour-managed when it
+ * is decoded), so the curve stands in for the display's own transfer function; that is exact
+ * for an sRGB display, and for any other it only shapes the blending at feathered and
+ * translucent pixels, since an opaque pixel decodes and re-encodes to the very code it held.
+ * The export keeps sRGB throughout and is converted to the output profile afterwards. */
+
+#define COMPOSE_OETF_STEPS 16384
+#define COMPOSE_BAND_MAX_PIXELS (24 * 1024 * 1024) ///< a band of the float canvas: 384 MB of RGBA floats
+#define COMPOSE_MASK_MAX_PIXELS 3072              ///< a cutout raster's longer side
+#define COMPOSE_SHADOW_SIGMAS 3.0                 ///< how far a shadow reaches past its blur
+
+static float _eotf_lut[256];
+static uint8_t _oetf_lut[COMPOSE_OETF_STEPS + 1];
+static gsize _luts_ready = 0;
+
+static float _srgb_eotf(const float value)
 {
-  if(IS_NULL_PTR(cr) || IS_NULL_PTR(canvas) || IS_NULL_PTR(object) || IS_NULL_PTR(options)) return;
-  if(object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN) return;
+  return value <= 0.04045f ? value / 12.92f : powf((value + 0.055f) / 1.055f, 2.4f);
+}
+
+static float _srgb_oetf(const float value)
+{
+  return value <= 0.0031308f ? value * 12.92f : 1.055f * powf(value, 1.0f / 2.4f) - 0.055f;
+}
+
+/* The decode table is exact per code; the encode table is dense enough that every code
+ * round-trips to itself: its step, 1/16384 in linear light, is below half a code everywhere. */
+static void _luts_init(void)
+{
+  if(g_once_init_enter(&_luts_ready))
+  {
+    for(int idx = 0; idx < 256; idx++) _eotf_lut[idx] = _srgb_eotf((float)idx / 255.0f);
+    for(int idx = 0; idx <= COMPOSE_OETF_STEPS; idx++)
+    {
+      const float encoded = _srgb_oetf((float)idx / (float)COMPOSE_OETF_STEPS);
+      _oetf_lut[idx] = (uint8_t)lrintf(CLAMP(encoded, 0.0f, 1.0f) * 255.0f);
+    }
+    g_once_init_leave(&_luts_ready, 1);
+  }
+}
+
+static inline uint8_t _encode(const float linear)
+{
+  return _oetf_lut[(int)lrintf(CLAMP(linear, 0.0f, 1.0f) * (float)COMPOSE_OETF_STEPS)];
+}
+
+/** An integer box in device pixels. */
+typedef struct dt_canvas_box_t
+{
+  int x;
+  int y;
+  int width;
+  int height;
+} dt_canvas_box_t;
+
+static gboolean _box_empty(const dt_canvas_box_t *box)
+{
+  return box->width <= 0 || box->height <= 0;
+}
+
+static dt_canvas_box_t _box_intersect(const dt_canvas_box_t *first, const dt_canvas_box_t *second)
+{
+  dt_canvas_box_t box;
+  box.x = MAX(first->x, second->x);
+  box.y = MAX(first->y, second->y);
+  box.width = MIN(first->x + first->width, second->x + second->width) - box.x;
+  box.height = MIN(first->y + first->height, second->y + second->height) - box.y;
+  return box;
+}
+
+static dt_canvas_box_t _box_grow(const dt_canvas_box_t *box, const int margin)
+{
+  dt_canvas_box_t grown = { box->x - margin, box->y - margin, box->width + 2 * margin, box->height + 2 * margin };
+  return grown;
+}
+
+/** Device pixels per canvas unit under a transform. */
+static double _matrix_scale(const cairo_matrix_t *matrix)
+{
+  return sqrt(fabs(matrix->xx * matrix->yy - matrix->xy * matrix->yx));
+}
+
+/** The device box holding user-space points, grown by a margin in device pixels. */
+static dt_canvas_box_t _box_of_points(const cairo_matrix_t *matrix, const double *points, const int count,
+                                      const double margin)
+{
+  double min_x = INFINITY;
+  double min_y = INFINITY;
+  double max_x = -INFINITY;
+  double max_y = -INFINITY;
+  for(int idx = 0; idx < count; idx++)
+  {
+    double x = points[2 * idx];
+    double y = points[2 * idx + 1];
+    cairo_matrix_transform_point(matrix, &x, &y);
+    min_x = fmin(min_x, x);
+    max_x = fmax(max_x, x);
+    min_y = fmin(min_y, y);
+    max_y = fmax(max_y, y);
+  }
+  dt_canvas_box_t box = { 0, 0, 0, 0 };
+  if(count <= 0 || !isfinite(min_x) || !isfinite(max_x)) return box;
+  box.x = (int)floor(min_x - margin - 1.0);
+  box.y = (int)floor(min_y - margin - 1.0);
+  box.width = (int)ceil(max_x + margin + 1.0) - box.x;
+  box.height = (int)ceil(max_y + margin + 1.0) - box.y;
+  return box;
+}
+
+/** The user-space rectangle a device box covers, for the painters that clip in canvas units. */
+static dt_canvas_rect_t _box_to_user(const cairo_matrix_t *matrix, const dt_canvas_box_t *box)
+{
+  cairo_matrix_t inverse = *matrix;
+  dt_canvas_rect_t rect = { 0.0, 0.0, 0.0, 0.0 };
+  if(cairo_matrix_invert(&inverse) != CAIRO_STATUS_SUCCESS) return rect;
+  const double corners[8] = { (double)box->x, (double)box->y, (double)(box->x + box->width), (double)box->y,
+                              (double)(box->x + box->width), (double)(box->y + box->height), (double)box->x,
+                              (double)(box->y + box->height) };
+  double min_x = INFINITY;
+  double min_y = INFINITY;
+  double max_x = -INFINITY;
+  double max_y = -INFINITY;
+  for(int idx = 0; idx < 4; idx++)
+  {
+    double x = corners[2 * idx];
+    double y = corners[2 * idx + 1];
+    cairo_matrix_transform_point(&inverse, &x, &y);
+    min_x = fmin(min_x, x);
+    max_x = fmax(max_x, x);
+    min_y = fmin(min_y, y);
+    max_y = fmax(max_y, y);
+  }
+  rect.x = min_x;
+  rect.y = min_y;
+  rect.width = max_x - min_x;
+  rect.height = max_y - min_y;
+  return rect;
+}
+
+/** A cairo context painting user space, under `matrix`, into a surface whose origin is `box`. */
+static cairo_t *_layer_context(cairo_surface_t *surface, const cairo_matrix_t *matrix, const dt_canvas_box_t *box)
+{
+  cairo_t *cr = cairo_create(surface);
+  cairo_translate(cr, -box->x, -box->y);
+  cairo_transform(cr, matrix);
+  return cr;
+}
+
+/**
+ * Decode an 8-bit premultiplied cairo layer into linear premultiplied RGBA floats, scaled by
+ * an opacity. An opaque pixel goes through the table; a translucent one is unpremultiplied
+ * first, so the curve is applied to the colour and not to the coverage.
+ */
+static void _layer_linearise(cairo_surface_t *surface, const float opacity, float *rgba)
+{
+  cairo_surface_flush(surface);
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  const int width = cairo_image_surface_get_width(surface);
+  const int height = cairo_image_surface_get_height(surface);
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) shared(_eotf_lut) schedule(static)
+#endif
+  for(int row = 0; row < height; row++)
+  {
+    const uint32_t *source = (const uint32_t *)(pixels + (size_t)row * stride);
+    float *target = rgba + (size_t)row * width * 4;
+    for(int col = 0; col < width; col++)
+    {
+      const uint32_t pixel = source[col];
+      const uint32_t alpha = pixel >> 24;
+      if(alpha == 0)
+      {
+        target[4 * col + 0] = 0.0f;
+        target[4 * col + 1] = 0.0f;
+        target[4 * col + 2] = 0.0f;
+        target[4 * col + 3] = 0.0f;
+        continue;
+      }
+      const uint32_t red = (pixel >> 16) & 0xFF;
+      const uint32_t green = (pixel >> 8) & 0xFF;
+      const uint32_t blue = pixel & 0xFF;
+      const float coverage = (float)alpha / 255.0f;
+      float linear_red = 0.0f;
+      float linear_green = 0.0f;
+      float linear_blue = 0.0f;
+      if(alpha == 255)
+      {
+        linear_red = _eotf_lut[red];
+        linear_green = _eotf_lut[green];
+        linear_blue = _eotf_lut[blue];
+      }
+      else
+      {
+        linear_red = _srgb_eotf(fminf((float)red / (float)alpha, 1.0f));
+        linear_green = _srgb_eotf(fminf((float)green / (float)alpha, 1.0f));
+        linear_blue = _srgb_eotf(fminf((float)blue / (float)alpha, 1.0f));
+      }
+      const float weight = coverage * opacity;
+      target[4 * col + 0] = linear_red * weight;
+      target[4 * col + 1] = linear_green * weight;
+      target[4 * col + 2] = linear_blue * weight;
+      target[4 * col + 3] = weight;
+    }
+  }
+}
+
+/** Encode a linear premultiplied float canvas, opaque, into an RGB24 cairo surface. */
+static void _canvas_encode(const float *rgba, cairo_surface_t *surface)
+{
+  cairo_surface_flush(surface);
+  uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  const int width = cairo_image_surface_get_width(surface);
+  const int height = cairo_image_surface_get_height(surface);
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) shared(_oetf_lut) schedule(static)
+#endif
+  for(int row = 0; row < height; row++)
+  {
+    const float *source = rgba + (size_t)row * width * 4;
+    uint32_t *target = (uint32_t *)(pixels + (size_t)row * stride);
+    for(int col = 0; col < width; col++)
+    {
+      // What is left transparent shows black: the background under everything is opaque anyway.
+      const uint32_t red = _encode(source[4 * col + 0]);
+      const uint32_t green = _encode(source[4 * col + 1]);
+      const uint32_t blue = _encode(source[4 * col + 2]);
+      target[col] = 0xFF000000u | (red << 16) | (green << 8) | blue;
+    }
+  }
+  cairo_surface_mark_dirty(surface);
+}
+
+/** Source-over of a layer onto the canvas, both premultiplied, over the pixels they share. */
+static void _canvas_over(float *canvas_rgba, const dt_canvas_box_t *canvas_box, const float *layer_rgba,
+                         const dt_canvas_box_t *layer_box, const dt_canvas_box_t *area)
+{
+  const int rows = area->height;
+  const int cols = area->width;
+  if(rows <= 0 || cols <= 0) return;
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int row = 0; row < rows; row++)
+  {
+    const int y = area->y + row;
+    float *target = canvas_rgba + ((size_t)(y - canvas_box->y) * canvas_box->width + (area->x - canvas_box->x)) * 4;
+    const float *source = layer_rgba + ((size_t)(y - layer_box->y) * layer_box->width + (area->x - layer_box->x)) * 4;
+    for(int col = 0; col < cols; col++)
+    {
+      const float keep = 1.0f - source[4 * col + 3];
+      target[4 * col + 0] = source[4 * col + 0] + target[4 * col + 0] * keep;
+      target[4 * col + 1] = source[4 * col + 1] + target[4 * col + 1] * keep;
+      target[4 * col + 2] = source[4 * col + 2] + target[4 * col + 2] * keep;
+      target[4 * col + 3] = source[4 * col + 3] + target[4 * col + 3] * keep;
+    }
+  }
+}
+
+/** One box-blur pass along rows then columns, zero outside the plane; three make a Gaussian. */
+static void _box_blur(float *plane, float *scratch, const int width, const int height, const int radius)
+{
+  const float norm = 1.0f / (float)(2 * radius + 1);
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int row = 0; row < height; row++)
+  {
+    const float *source = plane + (size_t)row * width;
+    float *target = scratch + (size_t)row * width;
+    float sum = 0.0f;
+    for(int col = 0; col <= radius && col < width; col++) sum += source[col];
+    for(int col = 0; col < width; col++)
+    {
+      target[col] = sum * norm;
+      const int leaving = col - radius;
+      const int entering = col + radius + 1;
+      if(leaving >= 0) sum -= source[leaving];
+      if(entering < width) sum += source[entering];
+    }
+  }
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int col = 0; col < width; col++)
+  {
+    float sum = 0.0f;
+    for(int row = 0; row <= radius && row < height; row++) sum += scratch[(size_t)row * width + col];
+    for(int row = 0; row < height; row++)
+    {
+      plane[(size_t)row * width + col] = sum * norm;
+      const int leaving = row - radius;
+      const int entering = row + radius + 1;
+      if(leaving >= 0) sum -= scratch[(size_t)leaving * width + col];
+      if(entering < height) sum += scratch[(size_t)entering * width + col];
+    }
+  }
+}
+
+/**
+ * The shadow of a layer: its alpha, blurred and offset, tinted, laid "over" the canvas. The
+ * layer box was grown by the shadow's reach, so the blur has room on every side.
+ */
+static void _canvas_shadow(float *canvas_rgba, const dt_canvas_box_t *canvas_box, const float *layer_rgba,
+                           const dt_canvas_box_t *layer_box, const dt_canvas_box_t *area,
+                           const dt_canvas_shadow_t *shadow, const double pixels_per_unit, const gboolean for_display)
+{
+  const size_t count = (size_t)layer_box->width * layer_box->height;
+  float *alpha = dt_alloc_align_float(count);
+  float *scratch = dt_alloc_align_float(count);
+  if(IS_NULL_PTR(alpha) || IS_NULL_PTR(scratch))
+  {
+    dt_free_align(alpha);
+    dt_free_align(scratch);
+    return;
+  }
+  for(size_t idx = 0; idx < count; idx++) alpha[idx] = layer_rgba[4 * idx + 3];
+  const double sigma = shadow->blur * pixels_per_unit;
+  // Three box blurs of radius sigma approximate a Gaussian of that sigma closely enough for a shadow.
+  const int radius = (int)lround(sigma);
+  if(radius >= 1)
+  {
+    for(int pass = 0; pass < 3; pass++) _box_blur(alpha, scratch, layer_box->width, layer_box->height, radius);
+  }
+  double rgb[3] = { 0.0, 0.0, 0.0 };
+  dt_canvas_render_color(&shadow->color, for_display, rgb);
+  const float tint[3] = { _srgb_eotf((float)rgb[0]), _srgb_eotf((float)rgb[1]), _srgb_eotf((float)rgb[2]) };
+  const float strength = CLAMP(shadow->color.alpha, 0.0f, 1.0f);
+  const int offset_x = (int)lround(shadow->offset_x * pixels_per_unit);
+  const int offset_y = (int)lround(shadow->offset_y * pixels_per_unit);
+  const int rows = area->height;
+  const int cols = area->width;
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int row = 0; row < rows; row++)
+  {
+    const int y = area->y + row;
+    const int source_y = y - offset_y - layer_box->y;
+    float *target = canvas_rgba + ((size_t)(y - canvas_box->y) * canvas_box->width + (area->x - canvas_box->x)) * 4;
+    for(int col = 0; col < cols; col++)
+    {
+      const int source_x = area->x + col - offset_x - layer_box->x;
+      if(source_y < 0 || source_y >= layer_box->height || source_x < 0 || source_x >= layer_box->width) continue;
+      const float coverage = alpha[(size_t)source_y * layer_box->width + source_x] * strength;
+      if(coverage <= 0.0f) continue;
+      const float keep = 1.0f - coverage;
+      target[4 * col + 0] = tint[0] * coverage + target[4 * col + 0] * keep;
+      target[4 * col + 1] = tint[1] * coverage + target[4 * col + 1] * keep;
+      target[4 * col + 2] = tint[2] * coverage + target[4 * col + 2] * keep;
+      target[4 * col + 3] = coverage + target[4 * col + 3] * keep;
+    }
+  }
+  dt_free_align(alpha);
+  dt_free_align(scratch);
+}
+
+/** Paint one object's own pixels, in user space: what it looked like before this compositor existed. */
+static void _paint_object_pixels(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                 const dt_canvas_paint_options_t *options)
+{
   if(object->kind == DT_CANVAS_OBJECT_CONNECTOR)
   {
     _paint_connector(cr, canvas, object, options);
     return;
   }
-  const dt_canvas_rect_t bounds = dt_canvas_object_bounds(object);
-  if(!_rect_intersects(&options->clip, &bounds)) return;
-
   cairo_save(cr);
   cairo_translate(cr, object->x, object->y);
   cairo_rotate(cr, object->rotation);
@@ -1130,34 +1493,257 @@ void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_can
   cairo_restore(cr);
 }
 
+/** Multiply the layer's alpha by the object's cutout, rasterised at the frame's size on screen. */
+static void _apply_cutout(cairo_t *cr, const dt_canvas_object_t *object, const dt_canvas_paint_options_t *options,
+                          const double pixels_per_unit)
+{
+  if(!dt_canvas_object_is_frame(object) || object->mask.shape == DT_CANVAS_MASK_NONE) return;
+  int mask_width = (int)lround(object->width * pixels_per_unit);
+  int mask_height = (int)lround(object->height * pixels_per_unit);
+  if(mask_width > COMPOSE_MASK_MAX_PIXELS || mask_height > COMPOSE_MASK_MAX_PIXELS)
+  {
+    const double shrink = (double)COMPOSE_MASK_MAX_PIXELS / (double)MAX(mask_width, mask_height);
+    mask_width = (int)lround(mask_width * shrink);
+    mask_height = (int)lround(mask_height * shrink);
+  }
+  mask_width = MAX(mask_width, 2);
+  mask_height = MAX(mask_height, 2);
+  cairo_surface_t *mask = NULL;
+  cairo_surface_t *owned = NULL;
+  if(!IS_NULL_PTR(options->cache))
+    mask = dt_canvas_surface_cache_get_mask(options->cache, object, mask_width, mask_height);
+  else
+  {
+    owned = dt_canvas_render_mask(object, mask_width, mask_height);
+    mask = owned;
+  }
+  if(IS_NULL_PTR(mask)) return;
+  cairo_save(cr);
+  cairo_set_operator(cr, CAIRO_OPERATOR_DEST_IN);
+  cairo_translate(cr, object->x, object->y);
+  cairo_rotate(cr, object->rotation);
+  cairo_scale(cr, object->width / mask_width, object->height / mask_height);
+  cairo_translate(cr, -mask_width * 0.5, -mask_height * 0.5);
+  cairo_set_source_surface(cr, mask, 0.0, 0.0);
+  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+  cairo_paint(cr);
+  cairo_restore(cr);
+  if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
+}
+
+/** The device box an object touches, its shadow included. */
+static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas_t *canvas,
+                                   const dt_canvas_object_t *object, const dt_canvas_shadow_t *shadow,
+                                   const double pixels_per_unit)
+{
+  dt_canvas_box_t box = { 0, 0, 0, 0 };
+  if(dt_canvas_object_is_frame(object))
+  {
+    double corners[8];
+    dt_canvas_object_corners(object, corners);
+    box = _box_of_points(matrix, corners, 4, 1.0);
+  }
+  else
+  {
+    dt_canvas_route_t route;
+    if(!dt_canvas_connector_route(canvas, object, &route) || route.point_count <= 0) return box;
+    const double line_width = object->connector.line_width > 0.0f ? object->connector.line_width : 2.0;
+    const double reach = (line_width + PAINT_ARROW_LENGTH * fmax(line_width / 2.0, 1.0)) * pixels_per_unit;
+    box = _box_of_points(matrix, route.points, route.point_count, reach);
+  }
+  if(dt_canvas_shadow_visible(shadow))
+  {
+    const double reach = (fabs(shadow->offset_x) + fabs(shadow->offset_y) + COMPOSE_SHADOW_SIGMAS * shadow->blur)
+                         * pixels_per_unit;
+    box = _box_grow(&box, (int)ceil(reach) + 1);
+  }
+  return box;
+}
+
+/** Composite one band of the device plane and hand it to the context. */
+static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options,
+                        const cairo_matrix_t *matrix, const dt_canvas_box_t *band)
+{
+  const double pixels_per_unit = _matrix_scale(matrix);
+  dt_canvas_paint_options_t local = *options;
+  local.clip = _box_to_user(matrix, band);
+
+  // 1. The background, the grid and the pages: cairo, into the base layer.
+  cairo_surface_t *base = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, band->width, band->height);
+  if(cairo_surface_status(base) != CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_destroy(base);
+    return;
+  }
+  cairo_t *base_cr = _layer_context(base, matrix, band);
+  if(local.draw_background && _is_paper(canvas->background_style))
+  {
+    _paint_paper(base_cr, canvas, &local);
+  }
+  else if(local.draw_background)
+  {
+    _set_color(base_cr, &canvas->background, local.for_display);
+    cairo_paint(base_cr);
+  }
+  if(local.draw_grid) _paint_grid(base_cr, canvas, &local);
+  if(local.draw_grid) _paint_pages(base_cr, canvas, &local);
+  cairo_destroy(base_cr);
+
+  const size_t canvas_floats = (size_t)band->width * band->height * 4;
+  float *canvas_rgba = NULL;
+  gboolean canvas_owned = FALSE;
+  if(!IS_NULL_PTR(local.cache)) canvas_rgba = dt_canvas_surface_cache_scratch(local.cache, canvas_floats * sizeof(float));
+  if(IS_NULL_PTR(canvas_rgba))
+  {
+    canvas_rgba = dt_alloc_align_float(canvas_floats);
+    canvas_owned = TRUE;
+  }
+  if(IS_NULL_PTR(canvas_rgba))
+  {
+    cairo_surface_destroy(base);
+    return;
+  }
+  _layer_linearise(base, 1.0f, canvas_rgba);
+  cairo_surface_destroy(base);
+
+  // 2. Every object, back to front: its own layer, its cutout, its shadow, then over the canvas.
+  for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
+  {
+    const dt_canvas_object_t *object = dt_canvas_object_at(canvas, idx);
+    if(IS_NULL_PTR(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
+    const float opacity = 1.0f - CLAMP(object->transparency, 0.0f, 1.0f);
+    if(opacity <= 0.0f) continue;
+    dt_canvas_shadow_t shadow;
+    dt_canvas_object_effective_shadow(canvas, object, &shadow);
+    const gboolean shadowed = dt_canvas_shadow_visible(&shadow);
+    dt_canvas_box_t object_box = _object_box(matrix, canvas, object, &shadow, pixels_per_unit);
+    if(_box_empty(&object_box)) continue;
+    // The layer keeps the shadow's reach beyond the band, so a blur at the band's edge is whole.
+    const int reach = shadowed ? (int)ceil((fabs(shadow.offset_x) + fabs(shadow.offset_y)
+                                             + COMPOSE_SHADOW_SIGMAS * shadow.blur) * pixels_per_unit) + 1
+                               : 0;
+    const dt_canvas_box_t band_reach = _box_grow(band, reach);
+    const dt_canvas_box_t layer_box = _box_intersect(&object_box, &band_reach);
+    const dt_canvas_box_t area = _box_intersect(&layer_box, band);
+    if(_box_empty(&layer_box) || _box_empty(&area)) continue;
+
+    cairo_surface_t *layer = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, layer_box.width, layer_box.height);
+    if(cairo_surface_status(layer) != CAIRO_STATUS_SUCCESS)
+    {
+      cairo_surface_destroy(layer);
+      continue;
+    }
+    cairo_t *layer_cr = _layer_context(layer, matrix, &layer_box);
+    _paint_object_pixels(layer_cr, canvas, object, &local);
+    _apply_cutout(layer_cr, object, &local, pixels_per_unit);
+    cairo_destroy(layer_cr);
+
+    float *layer_rgba = dt_alloc_align_float((size_t)layer_box.width * layer_box.height * 4);
+    if(IS_NULL_PTR(layer_rgba))
+    {
+      cairo_surface_destroy(layer);
+      continue;
+    }
+    _layer_linearise(layer, opacity, layer_rgba);
+    cairo_surface_destroy(layer);
+    if(shadowed) _canvas_shadow(canvas_rgba, band, layer_rgba, &layer_box, &area, &shadow, pixels_per_unit, local.for_display);
+    _canvas_over(canvas_rgba, band, layer_rgba, &layer_box, &area);
+    dt_free_align(layer_rgba);
+  }
+
+  // 3. Back to 8 bits, and onto the context in device space.
+  cairo_surface_t *encoded = cairo_image_surface_create(CAIRO_FORMAT_RGB24, band->width, band->height);
+  if(cairo_surface_status(encoded) == CAIRO_STATUS_SUCCESS)
+  {
+    _canvas_encode(canvas_rgba, encoded);
+    cairo_save(cr);
+    cairo_identity_matrix(cr);
+    cairo_set_source_surface(cr, encoded, band->x, band->y);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_rectangle(cr, band->x, band->y, band->width, band->height);
+    cairo_fill(cr);
+    cairo_restore(cr);
+  }
+  cairo_surface_destroy(encoded);
+  if(canvas_owned) dt_free_align(canvas_rgba);
+}
+
+/** The gutter frames: one gutter out from every frame, over everything, as a guide. */
+static void _paint_gutters(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
+{
+  if(!(canvas->grid_flags & DT_CANVAS_GUTTER_VISIBLE) || canvas->gutter <= 0.0f) return;
+  if(canvas->gutter_color.alpha <= 0.0f) return;
+  cairo_save(cr);
+  _set_color(cr, &canvas->gutter_color, options->for_display);
+  cairo_set_line_width(cr, options->units_per_pixel);
+  for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
+  {
+    const dt_canvas_object_t *object = dt_canvas_object_at(canvas, idx);
+    if(!dt_canvas_object_is_frame(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
+    const dt_canvas_rect_t bounds = dt_canvas_object_bounds(object);
+    const dt_canvas_rect_t reach = { bounds.x - canvas->gutter, bounds.y - canvas->gutter,
+                                     bounds.width + 2.0 * canvas->gutter, bounds.height + 2.0 * canvas->gutter };
+    if(!_rect_intersects(&options->clip, &reach)) continue;
+    // Gutters overlap between neighbours one gutter apart: they are what the snapping keeps clear, not a margin.
+    cairo_save(cr);
+    cairo_translate(cr, object->x, object->y);
+    cairo_rotate(cr, object->rotation);
+    cairo_rectangle(cr, -object->width * 0.5 - canvas->gutter, -object->height * 0.5 - canvas->gutter,
+                    object->width + 2.0 * canvas->gutter, object->height + 2.0 * canvas->gutter);
+    cairo_restore(cr);
+    cairo_stroke(cr);
+  }
+  cairo_restore(cr);
+}
+
+/* --- entry points ------------------------------------------------------------- */
+
+void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                            const dt_canvas_paint_options_t *options)
+{
+  if(IS_NULL_PTR(cr) || IS_NULL_PTR(canvas) || IS_NULL_PTR(object) || IS_NULL_PTR(options)) return;
+  if(object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN) return;
+  if(object->kind != DT_CANVAS_OBJECT_CONNECTOR)
+  {
+    const dt_canvas_rect_t bounds = dt_canvas_object_bounds(object);
+    if(!_rect_intersects(&options->clip, &bounds)) return;
+  }
+  _paint_object_pixels(cr, canvas, object, options);
+}
+
 void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
 {
   if(IS_NULL_PTR(cr) || IS_NULL_PTR(canvas) || IS_NULL_PTR(options)) return;
-  if(options->draw_background && _is_paper(canvas->background_style))
+  _luts_init();
+  cairo_matrix_t matrix;
+  cairo_get_matrix(cr, &matrix);
+
+  // The device box to composite: the context's clip, narrowed to the area the caller asked for.
+  double clip_x1 = 0.0;
+  double clip_y1 = 0.0;
+  double clip_x2 = 0.0;
+  double clip_y2 = 0.0;
+  cairo_clip_extents(cr, &clip_x1, &clip_y1, &clip_x2, &clip_y2);
+  const double clip_corners[8] = { clip_x1, clip_y1, clip_x2, clip_y1, clip_x2, clip_y2, clip_x1, clip_y2 };
+  dt_canvas_box_t box = _box_of_points(&matrix, clip_corners, 4, 0.0);
+  if(options->clip.width > 0.0 && options->clip.height > 0.0)
   {
-    _paint_paper(cr, canvas, options);
+    const double asked[8] = { options->clip.x, options->clip.y, options->clip.x + options->clip.width, options->clip.y,
+                              options->clip.x + options->clip.width, options->clip.y + options->clip.height,
+                              options->clip.x, options->clip.y + options->clip.height };
+    const dt_canvas_box_t asked_box = _box_of_points(&matrix, asked, 4, 0.0);
+    box = _box_intersect(&box, &asked_box);
   }
-  else if(options->draw_background)
+  if(_box_empty(&box)) return;
+
+  // A page at print resolution can outgrow memory as floats: composite it in bands.
+  const int rows_per_band = MAX(1, COMPOSE_BAND_MAX_PIXELS / MAX(box.width, 1));
+  for(int top = box.y; top < box.y + box.height; top += rows_per_band)
   {
-    cairo_save(cr);
-    _set_color(cr, &canvas->background, options->for_display);
-    if(options->clip.width > 0.0 && options->clip.height > 0.0)
-    {
-      cairo_rectangle(cr, options->clip.x, options->clip.y, options->clip.width, options->clip.height);
-      cairo_fill(cr);
-    }
-    else
-    {
-      cairo_paint(cr);
-    }
-    cairo_restore(cr);
+    const dt_canvas_box_t band = { box.x, top, box.width, MIN(rows_per_band, box.y + box.height - top) };
+    _paint_band(cr, canvas, options, &matrix, &band);
   }
-  if(options->draw_grid) _paint_grid(cr, canvas, options);
-  if(options->draw_grid) _paint_pages(cr, canvas, options);
-  for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
-  {
-    dt_canvas_paint_object(cr, canvas, dt_canvas_object_at(canvas, idx), options);
-  }
+  if(options->draw_grid) _paint_gutters(cr, canvas, options);
 }
 
 // clang-format off

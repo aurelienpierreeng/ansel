@@ -283,6 +283,9 @@ typedef struct dt_view_manager_t
       void (*set_paper)(struct dt_view_t *view, int paper, int landscape);        ///< -1 leaves one alone
       void (*set_guides)(struct dt_view_t *view, int mask, int value);            ///< dt_canvas_grid_flags_t bits
       void (*set_page_color)(struct dt_view_t *view, const float *rgba);
+      void (*set_gutter_color)(struct dt_view_t *view, const float *rgba);
+      /** The default drop shadow; an alpha of 0 in `rgba` is no shadow. Offsets and blur in canvas units. */
+      void (*set_shadow)(struct dt_view_t *view, const float *rgba, float offset_x, float offset_y, float blur);
     } canvas;
   } proxy;
 
