@@ -723,7 +723,23 @@ typedef enum dt_canvas_layout_t
  * anchored at the top-left of the box the frames currently occupy, so applying a layout does
  * not move the group elsewhere; with snapping on, that anchor and every cell land on the grid.
  */
-void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_layout_t layout, int columns);
+/** The order frames are laid out in: the canvas's own draw order, or a key of the images, the lighttable's way. */
+typedef enum dt_canvas_sort_t
+{
+  DT_CANVAS_SORT_CANVAS = 0,   ///< draw order, back to front
+  DT_CANVAS_SORT_FILENAME = 1,
+  DT_CANVAS_SORT_DATETIME = 2, ///< capture time
+  DT_CANVAS_SORT_ID = 3,       ///< library id: import order
+  DT_CANVAS_SORT_PATH = 4,     ///< folder then file name
+  DT_CANVAS_SORT_LAST = 5,
+} dt_canvas_sort_t;
+
+/**
+ * @brief Arrange frames -- `ids`, or every frame when NULL -- in a layout, in the order `sort`
+ * gives; frames that are not images keep their draw order after the images.
+ */
+void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_layout_t layout, int columns,
+                            dt_canvas_sort_t sort);
 
 /* --- colours ---------------------------------------------------------------- */
 

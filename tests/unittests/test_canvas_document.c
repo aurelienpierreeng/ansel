@@ -654,7 +654,7 @@ static void _layouts_arrange_without_moving_the_group(void **state)
   const dt_canvas_rect_t before = dt_canvas_bounds(canvas);
   canvas->grid_size = 50.0f;
   canvas->gutter = 30.0f;
-  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_GRID, 0);
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_GRID, 0, DT_CANVAS_SORT_CANVAS);
   const dt_canvas_rect_t after = dt_canvas_bounds(canvas);
   assert_float_equal(after.x, before.x, 1e-9);
   assert_float_equal(after.y, before.y, 1e-9);
@@ -666,14 +666,14 @@ static void _layouts_arrange_without_moving_the_group(void **state)
   assert_float_equal(frames[2]->x, frames[0]->x, 1e-9);
   assert_true(frames[2]->y > frames[0]->y);
 
-  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_ROW, 0);
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_ROW, 0, DT_CANVAS_SORT_CANVAS);
   for(int idx = 1; idx < 4; idx++)
   {
     assert_float_equal(frames[idx]->y, frames[0]->y, 1e-9);
     assert_true(frames[idx]->x > frames[idx - 1]->x);
   }
 
-  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_MASONRY, 3);
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_MASONRY, 3, DT_CANVAS_SORT_CANVAS);
   assert_float_equal(frames[0]->width, frames[3]->width, 1e-9);
   assert_true(frames[3]->y > frames[0]->y); // the fourth wraps under the first column
 
@@ -690,7 +690,7 @@ static void _layouts_arrange_without_moving_the_group(void **state)
       = { DT_CANVAS_LAYOUT_GRID, DT_CANVAS_LAYOUT_MASONRY, DT_CANVAS_LAYOUT_ROW, DT_CANVAS_LAYOUT_COLUMN };
   for(size_t layout = 0; layout < G_N_ELEMENTS(layouts); layout++)
   {
-    dt_canvas_layout_apply(canvas, NULL, layouts[layout], 2);
+    dt_canvas_layout_apply(canvas, NULL, layouts[layout], 2, DT_CANVAS_SORT_CANVAS);
     for(int idx = 0; idx < 4; idx++)
     {
       const dt_canvas_rect_t bounds = dt_canvas_object_bounds(frames[idx]);
@@ -698,6 +698,38 @@ static void _layouts_arrange_without_moving_the_group(void **state)
       assert_float_equal(fmod(bounds.y, 50.0), 0.0, 1e-6);
     }
   }
+  dt_canvas_free(canvas);
+}
+
+static void _a_layout_sorts_images_by_a_key_and_keeps_the_rest_after(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->grid_flags = 0;
+  // Three images in draw order c, a, b by file name, and a text frame first of all.
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  dt_canvas_object_t *image_c = dt_canvas_add_image(canvas, 0.0, 0.0, 100, 100);
+  dt_canvas_object_t *image_a = dt_canvas_add_image(canvas, 0.0, 0.0, 100, 100);
+  dt_canvas_object_t *image_b = dt_canvas_add_image(canvas, 0.0, 0.0, 100, 100);
+  g_strlcpy(image_c->image.filename, "c.nef", sizeof(image_c->image.filename));
+  g_strlcpy(image_a->image.filename, "a.nef", sizeof(image_a->image.filename));
+  g_strlcpy(image_b->image.filename, "b.nef", sizeof(image_b->image.filename));
+  image_c->image.exif_datetime_taken = 30;
+  image_a->image.exif_datetime_taken = 20;
+  image_b->image.exif_datetime_taken = 10;
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_ROW, 0, DT_CANVAS_SORT_FILENAME);
+  // A row lays frames out left to right: a, b, c, then the text frame.
+  assert_true(image_a->x < image_b->x);
+  assert_true(image_b->x < image_c->x);
+  assert_true(image_c->x < text->x);
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_ROW, 0, DT_CANVAS_SORT_DATETIME);
+  assert_true(image_b->x < image_a->x);
+  assert_true(image_a->x < image_c->x);
+  assert_true(image_c->x < text->x);
+  // The canvas's own order is the draw order: the text frame first.
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_ROW, 0, DT_CANVAS_SORT_CANVAS);
+  assert_true(text->x < image_c->x);
+  assert_true(image_c->x < image_a->x);
   dt_canvas_free(canvas);
 }
 
@@ -734,6 +766,7 @@ int main(void)
     cmocka_unit_test(_frames_snap_next_to_their_neighbours_one_gutter_apart),
     cmocka_unit_test(_paper_tiles_the_plane_from_the_origin),
     cmocka_unit_test(_layouts_arrange_without_moving_the_group),
+    cmocka_unit_test(_a_layout_sorts_images_by_a_key_and_keeps_the_rest_after),
     cmocka_unit_test(_colours_parse_and_format),
   };
   return cmocka_run_group_tests(tests, NULL, NULL);

@@ -1722,7 +1722,46 @@ static void _layout_column(const dt_canvas_t *canvas, GPtrArray *frames, const d
   }
 }
 
-void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_layout_t layout, int columns)
+/* Sorting frames for a layout. Images compare on the chosen key, then on their draw order so
+ * the sort is stable; a frame that is not an image comes after every image, in draw order. */
+static gint _layout_compare(gconstpointer first, gconstpointer second, gpointer user_data)
+{
+  const dt_canvas_object_t *object_a = *(const dt_canvas_object_t *const *)first;
+  const dt_canvas_object_t *object_b = *(const dt_canvas_object_t *const *)second;
+  const dt_canvas_sort_t sort = (dt_canvas_sort_t)GPOINTER_TO_INT(user_data);
+  const gboolean image_a = object_a->kind == DT_CANVAS_OBJECT_IMAGE;
+  const gboolean image_b = object_b->kind == DT_CANVAS_OBJECT_IMAGE;
+  if(image_a != image_b) return image_a ? -1 : 1;
+  int order = 0;
+  if(image_a && image_b)
+  {
+    switch(sort)
+    {
+      case DT_CANVAS_SORT_FILENAME:
+        order = g_utf8_collate(object_a->image.filename, object_b->image.filename);
+        break;
+      case DT_CANVAS_SORT_DATETIME:
+        order = object_a->image.exif_datetime_taken < object_b->image.exif_datetime_taken
+                    ? -1
+                    : (object_a->image.exif_datetime_taken > object_b->image.exif_datetime_taken ? 1 : 0);
+        break;
+      case DT_CANVAS_SORT_ID:
+        order = object_a->image.imgid < object_b->image.imgid ? -1 : (object_a->image.imgid > object_b->image.imgid ? 1 : 0);
+        break;
+      case DT_CANVAS_SORT_PATH:
+        order = g_utf8_collate(object_a->image.folder, object_b->image.folder);
+        if(order == 0) order = g_utf8_collate(object_a->image.filename, object_b->image.filename);
+        break;
+      default:
+        break;
+    }
+  }
+  if(order != 0) return order;
+  return _object_compare_z(first, second);
+}
+
+void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_layout_t layout, int columns,
+                            dt_canvas_sort_t sort)
 {
   if(IS_NULL_PTR(canvas)) return;
   GPtrArray *frames = _layout_frames(canvas, ids);
@@ -1731,6 +1770,7 @@ void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_la
     g_ptr_array_free(frames, TRUE);
     return;
   }
+  if(sort != DT_CANVAS_SORT_CANVAS) g_ptr_array_sort_with_data(frames, _layout_compare, GINT_TO_POINTER(sort));
   double anchor_x = 0.0;
   double anchor_y = 0.0;
   _layout_anchor(frames, &anchor_x, &anchor_y);

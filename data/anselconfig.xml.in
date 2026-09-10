@@ -3081,6 +3081,12 @@
     <shortdescription>default shadow radius of a new canvas, in canvas units: 0 none, positive outside the objects, negative inside</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>canvas/layout_sort</name>
+    <type min="0" max="4">int</type>
+    <default>0</default>
+    <shortdescription>the order canvas frames are arranged in: 0 canvas order, 1 filename, 2 capture time, 3 id, 4 full path</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>canvas/corner_radius</name>
     <type min="0" max="5000">float</type>
     <default>0</default>

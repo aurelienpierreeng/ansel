@@ -460,7 +460,13 @@ for whatever the profiling finds worth cutting.
 
 ## The view
 
-The toolbar (`libs/tools/canvas_toolbar.c`) is three menus and a row of controls: **Canvas**
+The toolbar (`libs/tools/canvas_toolbar.c`) reads left to right as labelled groups: the
+three flat menus (Canvas, Object, Guides, each ending in an ellipsis), **Add** (Text, Notes,
+Map, Connector), **Background** (style, colour, Texture), **Frames** (Borders, Shadows),
+**Zoom** (Fit, 1:1) and **Arrange** (the layout, a "Sort by" like the lighttable's --
+canvas order, filename, captured, id, full path -- and Auto to apply). The sort is a
+`dt_canvas_sort_t` handed to `dt_canvas_layout_apply()`: images compare on the key, then on
+their draw order, and frames that are not images follow in draw order. Historically: **Canvas**
 (new, open, save, save as, export as PDF), **Object** (check against the library, refresh
 the stale images and notes, refresh every image), **Guides** (a popover: the grid's show,
 snap, size and colour; the page borders' show, snap, size, orientation and colour; the
