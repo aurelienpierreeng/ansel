@@ -196,9 +196,12 @@ darkens, so the paper is white at its peaks). Both are random fields synthesised
 frequency domain: white noise shaped by a radial filter (a plateau below a knee frequency, a
 power-law fall-off above it) and transformed back with a small radix-2 FFT of our own. The
 discrete transform is periodic by construction, so a sprite wraps without a seam. One sprite
-repeated shows its period, so four are synthesised per paper and blended, over a margin,
-towards one shared boundary: any two abut without a seam, and every 512-unit cell of the
-plane picks its sprite from a hash of its coordinates. Every spectral coefficient is drawn
+repeated shows its period, and sprites sharing a border repeat that border, so four sprites
+per paper are laid on a half-overlapping grid, each placement a random sprite in one of eight
+orientations at a random phase, blended by two-dimensional Hann windows that sum to one, into
+a field four sprites (2048 units) wide that is itself periodic: no seam, no border band. The
+watercolour tooth saturates at three percent, so a deep hollow is a shallow shadow, not a
+pit. Every spectral coefficient is drawn
 from a hash of its frequency, so a sprite synthesised at a higher resolution keeps the same
 broad features and only adds finer ones: the grain sharpens as the zoom grows (256 to 1024
 pixels per sprite) instead of the same texture being enlarged. Sprites are kept per
