@@ -147,7 +147,9 @@ automatically -- and the mode ends with the connector selected. Escape or a righ
 leaves it.
 
 Selection handles, hover outlines, the rubber band, the connector being drawn, the status
-line and the navigation flower are the view's and are painted after the document.
+line and the navigation flower are the view's and are painted after the document. The status
+line is inked dark or light against the plane's luminance, with a halo of the opposite, so
+it reads on any background colour or paper and over a picture.
 
 ### The floating property bar
 
@@ -196,12 +198,16 @@ darkens, so the paper is white at its peaks). Both are random fields synthesised
 frequency domain: white noise shaped by a radial filter (a plateau below a knee frequency, a
 power-law fall-off above it) and transformed back with a small radix-2 FFT of our own. The
 discrete transform is periodic by construction, so a sprite wraps without a seam. One sprite
-repeated shows its period, and sprites sharing a border repeat that border, so four sprites
+repeated shows its period, and sprites sharing a border repeat that border, so six sprites
 per paper are laid on a half-overlapping grid, each placement a random sprite in one of eight
-orientations at a random phase, blended by two-dimensional Hann windows that sum to one, into
-a field four sprites (2048 units) wide that is itself periodic: no seam, no border band. The
-watercolour tooth saturates at three percent, so a deep hollow is a shallow shadow, not a
-pit. Every spectral coefficient is drawn
+orientations at a random phase, its centre jittered off the cell's, blended by
+two-dimensional Hann windows whose summed weights are divided out, into a field six sprites
+(3072 units) wide that is itself periodic: no seam, no border band, and no lattice of window
+centres either. The Moleskine carries a band-passed layer of short, sharp fibres over its
+clouds; the watercolour tooth saturates at four and a half percent, so a deep hollow is a
+shallow shadow, not a pit. The composed field is kept at up to 512 pixels per sprite;
+zoomed past that, the painter scales each cell up rather than growing a tile with the square
+of the zoom. Every spectral coefficient is drawn
 from a hash of its frequency, so a sprite synthesised at a higher resolution keeps the same
 broad features and only adds finer ones: the grain sharpens as the zoom grows (256 to 1024
 pixels per sprite) instead of the same texture being enlarged. Sprites are kept per

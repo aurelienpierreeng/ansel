@@ -2413,11 +2413,39 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
                              view->canvas->dirty ? "*" : "", (int)lround(view->zoom * 100.0));
   else
     status = g_strdup_printf("%s%s — %d%%", file_name, view->canvas->dirty ? "*" : "", (int)lround(view->zoom * 100.0));
-  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.6);
+  // Ink against the plane's luminance, and a halo of the opposite so it reads over a picture too.
+  double background[3] = { 0.2, 0.2, 0.2 };
+  if(view->canvas->background_style == DT_CANVAS_BACKGROUND_MOLESKINE)
+  {
+    background[0] = 0.961;
+    background[1] = 0.941;
+    background[2] = 0.886;
+  }
+  else if(view->canvas->background_style == DT_CANVAS_BACKGROUND_WATERCOLOUR)
+  {
+    background[0] = 1.0;
+    background[1] = 1.0;
+    background[2] = 1.0;
+  }
+  else
+  {
+    background[0] = view->canvas->background.red;
+    background[1] = view->canvas->background.green;
+    background[2] = view->canvas->background.blue;
+  }
+  const double luminance = 0.2126 * background[0] + 0.7152 * background[1] + 0.0722 * background[2];
+  const double ink = luminance > 0.5 ? 0.1 : 0.9;
+  const double halo = luminance > 0.5 ? 1.0 : 0.0;
   cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
   cairo_set_font_size(cr, DT_PIXEL_APPLY_DPI(11));
   cairo_move_to(cr, DT_PIXEL_APPLY_DPI(8), height - DT_PIXEL_APPLY_DPI(8));
-  cairo_show_text(cr, status);
+  cairo_text_path(cr, status);
+  cairo_set_source_rgba(cr, halo, halo, halo, 0.55);
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.5));
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+  cairo_stroke_preserve(cr);
+  cairo_set_source_rgba(cr, ink, ink, ink, 0.85);
+  cairo_fill(cr);
   dt_free(status);
   cairo_restore(cr);
 
