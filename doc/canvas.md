@@ -179,7 +179,11 @@ A `dt_canvas_shadow_t` is a colour whose alpha is the strength, an offset and a 
 radius, in canvas units. The radius is the blur's sigma and its sign says where the shadow
 falls: positive drops it outside the object, negative casts it inside along the object's
 edges (what the object leaves uncovered, blurred and offset, laid over the object within its
-own coverage), and zero is no shadow at all -- there is no on/off toggle, the radius is it. The canvas carries a default one, set from the toolbar's
+own coverage), and zero is no shadow at all -- there is no on/off toggle, the radius is it.
+The inset plane is padded with ones past the layer's box before it is blurred: the world
+outside the frame is uncovered, and a zero padding read it as covered and thinned the shadow
+wherever a cutout came near its own frame. An outset plane pads with zeros: nothing casts
+there. The canvas carries a default one, set from the toolbar's
 Shadow popover, and an object overrides it with its own under
 `DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE`, from its bar -- the same shape as the borders, and
 `dt_canvas_object_effective_shadow()` resolves it the same way. Connectors get shadows too.
