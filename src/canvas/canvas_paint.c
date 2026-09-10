@@ -1913,6 +1913,69 @@ static dt_canvas_mask_geometry_t _mask_geometry(const dt_canvas_t *canvas, const
   return geometry;
 }
 
+typedef struct dt_canvas_alpha_raster_t
+{
+  const uint8_t *pixels;
+  int stride;
+  int width;
+  int height;
+} dt_canvas_alpha_raster_t;
+
+static dt_canvas_alpha_raster_t _alpha_raster(cairo_surface_t *surface)
+{
+  dt_canvas_alpha_raster_t raster = { NULL, 0, 0, 0 };
+  if(IS_NULL_PTR(surface)) return raster;
+  cairo_surface_flush(surface);
+  raster.pixels = cairo_image_surface_get_data(surface);
+  raster.stride = cairo_image_surface_get_stride(surface);
+  raster.width = cairo_image_surface_get_width(surface);
+  raster.height = cairo_image_surface_get_height(surface);
+  return raster;
+}
+
+/**
+ * How one layer pixel is read out of a mask raster. The raster's longer side is the power of
+ * two at or above the frame's size on screen, so it is between one and two raster pixels per
+ * layer pixel -- and reading such a raster at the pixel's centre alone THROWS AWAY every other
+ * sample along an edge, which is a stair-stepped cutout. The footprint is covered by a grid of
+ * bilinear reads instead, `steps` a side, which is the box filter cairo used to apply when it
+ * scaled the mask down for us.
+ */
+typedef struct dt_canvas_mask_probe_t
+{
+  int steps_x;
+  int steps_y;
+  double first_u;   ///< the first sample's offset from the pixel's centre, raster pixels
+  double first_v;
+  double step_u_x;  ///< what one sub-step along the layer's x costs in raster pixels
+  double step_v_x;
+  double step_u_y;
+  double step_v_y;
+  float norm;
+} dt_canvas_mask_probe_t;
+
+static dt_canvas_mask_probe_t _mask_probe(const cairo_matrix_t *layer_to_raster)
+{
+  dt_canvas_mask_probe_t probe;
+  // One layer pixel spans this much raster along each of its own axes.
+  const double span_x = hypot(layer_to_raster->xx, layer_to_raster->yx);
+  const double span_y = hypot(layer_to_raster->xy, layer_to_raster->yy);
+  // Two a side and no more: a 2x2 box catches what the quantisation leaves over, and a
+  // gesture's frame -- where the raster is finest against the pixels, and the least worth
+  // spending on -- would otherwise pay sixteen reads a pixel.
+  probe.steps_x = CLAMP((int)ceil(span_x), 1, 2);
+  probe.steps_y = CLAMP((int)ceil(span_y), 1, 2);
+  // The sub-grid covers the layer pixel: offsets (k + 0.5) / steps - 0.5 along each axis.
+  probe.step_u_x = layer_to_raster->xx / probe.steps_x;
+  probe.step_v_x = layer_to_raster->yx / probe.steps_x;
+  probe.step_u_y = layer_to_raster->xy / probe.steps_y;
+  probe.step_v_y = layer_to_raster->yy / probe.steps_y;
+  probe.first_u = (0.5 / probe.steps_x - 0.5) * layer_to_raster->xx + (0.5 / probe.steps_y - 0.5) * layer_to_raster->xy;
+  probe.first_v = (0.5 / probe.steps_x - 0.5) * layer_to_raster->yx + (0.5 / probe.steps_y - 0.5) * layer_to_raster->yy;
+  probe.norm = 1.0f / (float)(probe.steps_x * probe.steps_y);
+  return probe;
+}
+
 /** One bilinear read of an A8 raster at (u, v) in its pixels, 0 past its edges. */
 static inline float _sample_alpha(const uint8_t *pixels, const int stride, const int width, const int height,
                                   const float u, const float v)
@@ -1937,24 +2000,26 @@ static inline float _sample_alpha(const uint8_t *pixels, const int stride, const
   return (rows[0] * (1.0f - fy) + rows[1] * fy) * (1.0f / 255.0f);
 }
 
-typedef struct dt_canvas_alpha_raster_t
+/** The raster over one layer pixel's footprint, at (u, v) the pixel's centre in raster pixels. */
+static inline float _sample_alpha_box(const dt_canvas_alpha_raster_t *raster, const dt_canvas_mask_probe_t *probe,
+                                      const double u, const double v)
 {
-  const uint8_t *pixels;
-  int stride;
-  int width;
-  int height;
-} dt_canvas_alpha_raster_t;
-
-static dt_canvas_alpha_raster_t _alpha_raster(cairo_surface_t *surface)
-{
-  dt_canvas_alpha_raster_t raster = { NULL, 0, 0, 0 };
-  if(IS_NULL_PTR(surface)) return raster;
-  cairo_surface_flush(surface);
-  raster.pixels = cairo_image_surface_get_data(surface);
-  raster.stride = cairo_image_surface_get_stride(surface);
-  raster.width = cairo_image_surface_get_width(surface);
-  raster.height = cairo_image_surface_get_height(surface);
-  return raster;
+  if(probe->steps_x == 1 && probe->steps_y == 1)
+    return _sample_alpha(raster->pixels, raster->stride, raster->width, raster->height, (float)u, (float)v);
+  float sum = 0.0f;
+  for(int row = 0; row < probe->steps_y; row++)
+  {
+    double sample_u = u + probe->first_u + row * probe->step_u_y;
+    double sample_v = v + probe->first_v + row * probe->step_v_y;
+    for(int col = 0; col < probe->steps_x; col++)
+    {
+      sum += _sample_alpha(raster->pixels, raster->stride, raster->width, raster->height, (float)sample_u,
+                           (float)sample_v);
+      sample_u += probe->step_u_x;
+      sample_v += probe->step_v_x;
+    }
+  }
+  return sum * probe->norm;
 }
 
 /**
@@ -2017,6 +2082,7 @@ static void _cut_compose(const dt_canvas_paint_options_t *options, float *layer_
     cairo_matrix_t layer_to_raster = raster_to_layer;
     if(cairo_matrix_invert(&layer_to_raster) == CAIRO_STATUS_SUCCESS)
     {
+      const dt_canvas_mask_probe_t probe = _mask_probe(&layer_to_raster);
       const dt_canvas_alpha_raster_t shape = _alpha_raster(mask);
       const dt_canvas_alpha_raster_t whole = _alpha_raster(support);
       const dt_canvas_alpha_raster_t edge = _alpha_raster(band);
@@ -2047,13 +2113,13 @@ static void _cut_compose(const dt_canvas_paint_options_t *options, float *layer_
           double u = col + 0.5;
           double v = row + 0.5;
           cairo_matrix_transform_point(&layer_to_raster, &u, &v);
-          const float coverage = _sample_alpha(shape.pixels, shape.stride, shape.width, shape.height, (float)u, (float)v);
+          const float coverage = _sample_alpha_box(&shape, &probe, u, v);
           float *pixel = target + 4 * col;
           // The background over the shape's whole support, then the content feathered by the shape.
           float out[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
           if(fill[3] > 0.0f)
           {
-            const float reach = _sample_alpha(whole.pixels, whole.stride, whole.width, whole.height, (float)u, (float)v);
+            const float reach = _sample_alpha_box(&whole, &probe, u, v);
             for(int channel = 0; channel < 4; channel++) out[channel] = fill[channel] * reach;
           }
           const float keep = 1.0f - pixel[3] * coverage;
@@ -2061,7 +2127,7 @@ static void _cut_compose(const dt_canvas_paint_options_t *options, float *layer_
           // The border past the feather, over both.
           if(border[3] > 0.0f)
           {
-            const float ring = _sample_alpha(edge.pixels, edge.stride, edge.width, edge.height, (float)u, (float)v);
+            const float ring = _sample_alpha_box(&edge, &probe, u, v);
             if(ring > 0.0f)
             {
               const float keep_under = 1.0f - border[3] * ring;

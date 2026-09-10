@@ -201,7 +201,7 @@ end:
 #undef SKIP_SPACES
 
 
-static const char *stream_encoder_filters[] = {"/ASCIIHexDecode", "/FlateDecode"};
+static const char *stream_encoder_filters[] = {"/ASCIIHexDecode", "/FlateDecode", "/DCTDecode"};
 
 static void _pdf_set_offset(dt_pdf_t *pdf, int id, size_t offset)
 {
@@ -309,6 +309,10 @@ static size_t _pdf_write_stream(dt_pdf_t *pdf, dt_pdf_stream_encoder_t encoder, 
       break;
     case DT_PDF_STREAM_ENCODER_FLATE:
       stream_size = _pdf_stream_encoder_Flate(pdf, data, len);
+      break;
+    case DT_PDF_STREAM_ENCODER_DCT:
+      // The bytes are already a JPEG: dt_pdf_add_image_jpeg() writes them itself, and this
+      // path is never asked for them.
       break;
   }
   return stream_size;
@@ -447,6 +451,63 @@ dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int 
                                     "%" G_GSIZE_FORMAT "\n"
                                     "endobj\n",
                            length_id, stream_size);
+
+  pdf->bytes_written += bytes_written;
+  pdf_image->size = bytes_written;
+
+  return pdf_image;
+}
+
+dt_pdf_image_t *dt_pdf_add_image_jpeg(dt_pdf_t *pdf, const unsigned char *jpeg, size_t jpeg_size, int width, int height, int icc_id, float border)
+{
+  size_t bytes_written = 0;
+
+  dt_pdf_image_t *pdf_image = calloc(1, sizeof(dt_pdf_image_t));
+  if(IS_NULL_PTR(pdf_image)) return NULL;
+
+  pdf_image->width = width;
+  pdf_image->height = height;
+  pdf_image->outline_mode = (IS_NULL_PTR(jpeg) || jpeg_size == 0);
+  pdf_image->bb_x = border;
+  pdf_image->bb_y = border;
+  pdf_image->bb_width = pdf->page_width - (2 * border);
+  pdf_image->bb_height = pdf->page_height - (2 * border);
+  if(pdf_image->outline_mode) return pdf_image;
+
+  pdf_image->object_id = pdf->next_id++;
+  pdf_image->name_id = pdf->next_image++;
+
+  _pdf_set_offset(pdf, pdf_image->object_id, pdf->bytes_written + bytes_written);
+  bytes_written += fprintf(pdf->fd,
+    "%d 0 obj\n"
+    "<<\n"
+    "/Type /XObject\n"
+    "/Subtype /Image\n"
+    "/Name /Im%d\n"
+    "/Filter [ /DCTDecode ]\n"
+    "/Width %d\n"
+    "/Height %d\n",
+    pdf_image->object_id, pdf_image->name_id, width, height
+  );
+  if(icc_id > 0)
+    bytes_written += fprintf(pdf->fd, "/ColorSpace [ /ICCBased %d 0 R ]\n", icc_id);
+  else
+    bytes_written += fprintf(pdf->fd, "/ColorSpace /DeviceRGB\n");
+  // The length is known before the stream is written, so it needs no indirect object.
+  bytes_written += fprintf(pdf->fd,
+    "/BitsPerComponent 8\n"
+    "/Intent /Perceptual\n"
+    "/Length %" G_GSIZE_FORMAT "\n"
+    ">>\n"
+    "stream\n",
+    jpeg_size
+  );
+  bytes_written += fwrite(jpeg, 1, jpeg_size, pdf->fd);
+  bytes_written += fprintf(pdf->fd,
+    "\n"
+    "endstream\n"
+    "endobj\n"
+  );
 
   pdf->bytes_written += bytes_written;
   pdf_image->size = bytes_written;
