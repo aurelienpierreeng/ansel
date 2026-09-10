@@ -85,6 +85,10 @@ static dt_canvas_t *_populated_canvas(void)
   canvas->shadow.offset_y = -7.0f;
   canvas->shadow.blur = 5.5f;
   canvas->gutter_color = dt_canvas_color(0.9f, 0.8f, 0.7f, 0.6f);
+  canvas->texture_contrast = 1.5f;
+  canvas->texture_detail = 0.5f;
+  canvas->texture_scale = 2.0f;
+  canvas->texture_grain = 0.0f;
   canvas->grid_flags |= DT_CANVAS_GUTTER_VISIBLE;
 
   // The image gets a shadow of its own, some transparency and a polygon cutout with four nodes.
@@ -191,6 +195,11 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(restored->shadow.offset_y, -7.0f, 1e-6);
   assert_float_equal(restored->shadow.blur, 5.5f, 1e-6);
   assert_float_equal(restored->gutter_color.red, 0.9f, 1e-6);
+  assert_float_equal(restored->texture_contrast, 1.5f, 1e-6);
+  assert_float_equal(restored->texture_scale, 2.0f, 1e-6);
+  float grain = -1.0f;
+  dt_canvas_texture_get(restored, NULL, NULL, NULL, &grain);
+  assert_float_equal(grain, 1.0f, 1e-6); // an unset weight reads as the paper as designed
   assert_true((restored->grid_flags & DT_CANVAS_GUTTER_VISIBLE) != 0);
 
   const dt_canvas_object_t *text = dt_canvas_find_object(restored, 2);

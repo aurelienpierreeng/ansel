@@ -3081,6 +3081,30 @@
     <shortdescription>default shadow radius of a new canvas, in canvas units: 0 none, positive outside the objects, negative inside</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>canvas/texture_contrast</name>
+    <type min="0.05" max="8">float</type>
+    <default>1</default>
+    <shortdescription>weight of the paper relief's body on a new canvas; 1 is the paper as designed</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/texture_detail</name>
+    <type min="0" max="8">float</type>
+    <default>1</default>
+    <shortdescription>weight of the paper's fine structure on a new canvas</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/texture_scale</name>
+    <type min="0.1" max="8">float</type>
+    <default>1</default>
+    <shortdescription>size of the paper's features on a new canvas</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/texture_grain</name>
+    <type min="0" max="8">float</type>
+    <default>1</default>
+    <shortdescription>the paper's finishing grain on a new canvas</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>canvas/gutter_visible</name>
     <type>bool</type>
     <default>false</default>

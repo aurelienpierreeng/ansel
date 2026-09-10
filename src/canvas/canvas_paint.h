@@ -38,6 +38,7 @@
 
 #include <cairo.h>
 #include <glib.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,6 +65,23 @@ dt_canvas_paint_options_t dt_canvas_paint_options_export(dt_canvas_surface_cache
 
 /** @brief Paint the whole canvas. */
 void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options);
+
+/** What the last dt_canvas_paint() cost, phase by phase: printed under `-d perf`, and there for tuning. */
+typedef struct dt_canvas_paint_stats_t
+{
+  int64_t pixels;            ///< composited, over every band
+  int objects;               ///< drawn
+  int layers;                ///< cairo layers painted (a cut frame is three)
+  int shadows;
+  double background_seconds; ///< the base layer, painted and decoded
+  double objects_seconds;    ///< every object, from its cairo layer to its composite
+  double paint_seconds;      ///< of which cairo painting and decoding the main layer
+  double shadow_seconds;     ///< of which the shadows' blur and composite
+  double encode_seconds;     ///< the finished canvas to 8 bits and to the display
+  double total_seconds;
+} dt_canvas_paint_stats_t;
+
+dt_canvas_paint_stats_t dt_canvas_paint_last_stats(void);
 
 /** @brief Paint one object. */
 void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,

@@ -150,35 +150,35 @@ void dt_canvas_surface_cache_clear(dt_canvas_surface_cache_t *cache);
  * mask's hash and size. NULL when the object has no cutout or it cannot be rasterised.
  */
 cairo_surface_t *dt_canvas_surface_cache_get_mask(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
-                                                  int width, int height, int margin);
+                                                  int width, int height, int inset);
 
 /**
  * @brief Rasterise an object's cutout into a new 8-bit alpha surface; the caller owns it.
- * `width` x `height` is the frame's raster; the surface is grown by `margin` pixels on every
- * side, since a shape, its feather and its border may reach past the frame. Anti-aliased by
- * supersampling.
+ * `width` x `height` is the frame's raster; the shape is confined to the frame less `inset`
+ * pixels on every side -- the border's room, so the frame stays the object's outer size.
+ * Anti-aliased by supersampling.
  */
-cairo_surface_t *dt_canvas_render_mask(const dt_canvas_object_t *object, int width, int height, int margin);
+cairo_surface_t *dt_canvas_render_mask(const dt_canvas_object_t *object, int width, int height, int inset);
 
 /**
  * @brief The cutout's border band: its edge dilated outward by `radius` pixels (a disc), less
  * the cutout itself. A new 8-bit alpha surface; the caller owns it.
  */
-cairo_surface_t *dt_canvas_render_mask_band(const dt_canvas_object_t *object, int width, int height, int margin,
+cairo_surface_t *dt_canvas_render_mask_band(const dt_canvas_object_t *object, int width, int height, int inset,
                                             int radius);
 
 /** @brief Where the cutout has any coverage, hard-edged: the shape out to its feather's outer edge. */
-cairo_surface_t *dt_canvas_render_mask_support(const dt_canvas_object_t *object, int width, int height, int margin);
+cairo_surface_t *dt_canvas_render_mask_support(const dt_canvas_object_t *object, int width, int height, int inset);
 
 /** @brief The support of dt_canvas_render_mask_support(), cached beside the mask; owned by the cache. */
 cairo_surface_t *dt_canvas_surface_cache_get_mask_support(dt_canvas_surface_cache_t *cache,
                                                           const dt_canvas_object_t *object, int width, int height,
-                                                          int margin);
+                                                          int inset);
 
 /** @brief The band of dt_canvas_render_mask_band(), cached beside the mask; owned by the cache. */
 cairo_surface_t *dt_canvas_surface_cache_get_mask_band(dt_canvas_surface_cache_t *cache,
                                                        const dt_canvas_object_t *object, int width, int height,
-                                                       int margin, int radius);
+                                                       int inset, int radius);
 
 /**
  * @brief A working buffer of at least `bytes`, kept between frames so a repaint does not page in

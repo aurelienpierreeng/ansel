@@ -202,16 +202,19 @@ a `dt_masks_form_t`; the entry is inside the module, so the ratchet stays where 
 The polygon's nodes are variable-length and follow the object's record as a tagged chunk
 (`CANVAS_CHUNK_MASK_NODES`), eight floats per node: position, two control points, a smooth
 flag. The fixed fields (shape, flags, feather, centre, radii, rotation) took reserved bytes.
-The raster is cached in the surface cache by the mask's hash, size and margin
+The raster is cached in the surface cache by the mask's hash, size and inset
 (`dt_canvas_surface_cache_get_mask()`), as an 8-bit alpha surface at the frame's size on
-screen, capped at 3072 pixels a side, grown by a margin on every side for what reaches past
-the frame -- the shape itself, its feather and its border -- so a cut frame is never clipped
-by its rectangle: the fill covers the grown rectangle and the object's device box grows with
-it. The shape is described in the frame's unit square and re-described in the grown raster's
-(`_mask_raster_fine()`). Every mask surface -- the feathered shape, its support, its border
-band -- is rasterised at three times the resolution (two past a megapixel) and box-filtered
-down, which is the anti-aliasing of their edges; the band's distance transform runs at the
-fine resolution, so its two edges are anti-aliased too.
+screen, capped at 3072 pixels a side. **One rule sizes every frame: the frame is the
+object's outer size, border included.** A rectangular frame's border sits inside its edge
+with the content inset; a cut frame's shape is confined to the frame less the border's width
+on every side (`dt_canvas_mask_geometry_t.inset`, applied in `_mask_raster_fine()`), so the
+shape stops where the border must begin and the border, dilated from it, ends exactly at the
+frame's edge -- a gradient cutout, which covers the whole frame, gets the same border as an
+uncut frame. Only a shadow reaches past the frame, and the object's device box grows for it
+alone. Every mask surface -- the feathered shape, its support, its border band -- is
+rasterised at three times the resolution (two past a megapixel) and box-filtered down, which
+is the anti-aliasing of their edges; the band's distance transform runs at the fine
+resolution, so its two edges are anti-aliased too.
 
 The view edits a cutout with handles over the frame when the bar's Edit toggle is on: the
 centre or anchor, the radius or radii (the ellipse's first radius handle also sets its
@@ -329,6 +332,17 @@ The layouts space frames by the gutter too.
 
 ### The plane: background, grid, paper
 
+The canvas's background colour is the paper's colour too: the relief is a zero-mean
+modulation of it -- the colour is the fundamental the texture rides on -- so choosing a paper
+sets the background to the colour that paper is sold in (`dt_canvas_background_tint()`) and
+the colour patch stays live to recolour it. The relief comes in two parts the user weighs
+from the Texture popover, in `dt_canvas_t.texture_*`: **contrast** scales the body (mottle,
+tooth, clouds), **detail** the fine structure (fibres, pores, grain, wrinkles, the mesh),
+**scale** the size of every feature (every knee divided by it; the only one that rebuilds
+the fields), **grain** the finishing dither. 1 everywhere is the paper as designed and an
+unset weight (a file from before) reads as 1 (`dt_canvas_texture_get()`). The two composed
+fields are kept per resolution and scale, the coloured and weighed tile per key.
+
 The canvas is painted with its background colour or with one of four procedural papers:
 **Moleskine** (cream, fine soft clouds and short fibres in every direction), **watercolour**
 (white, a tooth that only darkens so the paper is white at its peaks, rounded pores),
@@ -422,6 +436,14 @@ to the chosen output profile with LCMS, embedding that profile; the intent is th
 Text and connectors are therefore pixels in the PDF, not vectors: a trade for having one
 painter and one colour path for the screen and the print. The compositor above runs on both
 targets; only the layers' encoding differs.
+
+## Instrumentation
+
+`dt_canvas_paint()` times its phases -- the base layer, the objects (cairo painting and
+decoding, shadows), the encode -- and prints them under `-d perf` as one line per paint,
+with the pixel count and the number of objects, layers and shadows;
+`dt_canvas_paint_last_stats()` returns the same numbers for tuning. This is the baseline
+for whatever the profiling finds worth cutting.
 
 ## The view
 
