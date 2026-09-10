@@ -452,12 +452,12 @@ typedef enum dt_canvas_layout_t
  * @brief Arrange frames.
  * @param ids the object ids to arrange, in the order they should flow; NULL arranges every frame.
  * @param columns column count for masonry; ignored by the other layouts.
- * @param gap spacing between frames, canvas units.
- * @details Rotations are reset. The arrangement is anchored at the top-left of the box the
- * frames currently occupy, so applying a layout does not move the group elsewhere.
+ * @details Rotations are reset. The gap between frames is the grid size. The arrangement is
+ * anchored at the top-left of the box the frames currently occupy, so applying a layout does
+ * not move the group elsewhere; with snapping on, that anchor, every cell and every frame's
+ * top-left corner land on the grid.
  */
-void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_layout_t layout, int columns,
-                            double gap);
+void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_layout_t layout, int columns);
 
 /* --- colours ---------------------------------------------------------------- */
 

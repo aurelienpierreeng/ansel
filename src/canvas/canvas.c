@@ -966,7 +966,23 @@ static void _layout_anchor(GPtrArray *frames, double *anchor_x, double *anchor_y
   }
 }
 
-static void _layout_grid(GPtrArray *frames, const double anchor_x, const double anchor_y, const double gap)
+/** Round a size UP to the grid when snapping is on, so a cell holds its frame and stays on the grid. */
+static double _layout_ceil(const dt_canvas_t *canvas, const double value)
+{
+  if(!(canvas->grid_flags & DT_CANVAS_GRID_SNAP) || canvas->grid_size <= 0.0f) return value;
+  return ceil(value / canvas->grid_size - 1e-9) * canvas->grid_size;
+}
+
+/** Frames sit top-left in their cell: with the cell on the grid, so is the frame's corner. */
+static void _layout_place(dt_canvas_object_t *frame, const double cell_x, const double cell_y)
+{
+  frame->rotation = 0.0;
+  frame->x = cell_x + frame->width * 0.5;
+  frame->y = cell_y + frame->height * 0.5;
+}
+
+static void _layout_grid(const dt_canvas_t *canvas, GPtrArray *frames, const double anchor_x, const double anchor_y,
+                         const double gap)
 {
   double cell_width = 0.0;
   double cell_height = 0.0;
@@ -976,20 +992,20 @@ static void _layout_grid(GPtrArray *frames, const double anchor_x, const double 
     cell_width = fmax(cell_width, frame->width);
     cell_height = fmax(cell_height, frame->height);
   }
+  cell_width = _layout_ceil(canvas, cell_width);
+  cell_height = _layout_ceil(canvas, cell_height);
   const guint columns = (guint)ceil(sqrt((double)frames->len));
   for(guint idx = 0; idx < frames->len; idx++)
   {
     dt_canvas_object_t *frame = g_ptr_array_index(frames, idx);
     const guint col = idx % columns;
     const guint row = idx / columns;
-    frame->rotation = 0.0;
-    frame->x = anchor_x + col * (cell_width + gap) + cell_width * 0.5;
-    frame->y = anchor_y + row * (cell_height + gap) + cell_height * 0.5;
+    _layout_place(frame, anchor_x + col * (cell_width + gap), anchor_y + row * (cell_height + gap));
   }
 }
 
-static void _layout_masonry(GPtrArray *frames, const double anchor_x, const double anchor_y, const double gap,
-                            const int column_count)
+static void _layout_masonry(const dt_canvas_t *canvas, GPtrArray *frames, const double anchor_x,
+                            const double anchor_y, const double gap, const int column_count)
 {
   const int columns = column_count < 1 ? 1 : column_count;
   double column_width = 0.0;
@@ -998,6 +1014,7 @@ static void _layout_masonry(GPtrArray *frames, const double anchor_x, const doub
     const dt_canvas_object_t *frame = g_ptr_array_index(frames, idx);
     column_width = fmax(column_width, frame->width);
   }
+  column_width = _layout_ceil(canvas, column_width);
   double *column_heights = g_new0(double, columns);
   for(guint idx = 0; idx < frames->len; idx++)
   {
@@ -1008,17 +1025,17 @@ static void _layout_masonry(GPtrArray *frames, const double anchor_x, const doub
       if(column_heights[col] < column_heights[shortest]) shortest = col;
     }
     const double ratio = frame->height > 0.0 ? frame->width / frame->height : 1.0;
-    frame->rotation = 0.0;
     frame->width = column_width;
     frame->height = column_width / ratio;
-    frame->x = anchor_x + shortest * (column_width + gap) + column_width * 0.5;
-    frame->y = anchor_y + column_heights[shortest] + frame->height * 0.5;
-    column_heights[shortest] += frame->height + gap;
+    _layout_place(frame, anchor_x + shortest * (column_width + gap), anchor_y + column_heights[shortest]);
+    // The next frame in this column starts on the grid, whatever height this one scaled to.
+    column_heights[shortest] = _layout_ceil(canvas, column_heights[shortest] + frame->height) + gap;
   }
   dt_free(column_heights);
 }
 
-static void _layout_row(GPtrArray *frames, const double anchor_x, const double anchor_y, const double gap)
+static void _layout_row(const dt_canvas_t *canvas, GPtrArray *frames, const double anchor_x, const double anchor_y,
+                        const double gap)
 {
   double row_height = 0.0;
   for(guint idx = 0; idx < frames->len; idx++)
@@ -1026,21 +1043,21 @@ static void _layout_row(GPtrArray *frames, const double anchor_x, const double a
     const dt_canvas_object_t *frame = g_ptr_array_index(frames, idx);
     row_height = fmax(row_height, frame->height);
   }
+  row_height = _layout_ceil(canvas, row_height);
   double cursor_x = anchor_x;
   for(guint idx = 0; idx < frames->len; idx++)
   {
     dt_canvas_object_t *frame = g_ptr_array_index(frames, idx);
     const double ratio = frame->height > 0.0 ? frame->width / frame->height : 1.0;
-    frame->rotation = 0.0;
     frame->height = row_height;
     frame->width = row_height * ratio;
-    frame->x = cursor_x + frame->width * 0.5;
-    frame->y = anchor_y + row_height * 0.5;
-    cursor_x += frame->width + gap;
+    _layout_place(frame, cursor_x, anchor_y);
+    cursor_x = _layout_ceil(canvas, cursor_x + frame->width) + gap;
   }
 }
 
-static void _layout_column(GPtrArray *frames, const double anchor_x, const double anchor_y, const double gap)
+static void _layout_column(const dt_canvas_t *canvas, GPtrArray *frames, const double anchor_x,
+                           const double anchor_y, const double gap)
 {
   double column_width = 0.0;
   for(guint idx = 0; idx < frames->len; idx++)
@@ -1048,22 +1065,20 @@ static void _layout_column(GPtrArray *frames, const double anchor_x, const doubl
     const dt_canvas_object_t *frame = g_ptr_array_index(frames, idx);
     column_width = fmax(column_width, frame->width);
   }
+  column_width = _layout_ceil(canvas, column_width);
   double cursor_y = anchor_y;
   for(guint idx = 0; idx < frames->len; idx++)
   {
     dt_canvas_object_t *frame = g_ptr_array_index(frames, idx);
     const double ratio = frame->height > 0.0 ? frame->width / frame->height : 1.0;
-    frame->rotation = 0.0;
     frame->width = column_width;
     frame->height = column_width / ratio;
-    frame->x = anchor_x + column_width * 0.5;
-    frame->y = cursor_y + frame->height * 0.5;
-    cursor_y += frame->height + gap;
+    _layout_place(frame, anchor_x, cursor_y);
+    cursor_y = _layout_ceil(canvas, cursor_y + frame->height) + gap;
   }
 }
 
-void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_layout_t layout, int columns,
-                            double gap)
+void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_layout_t layout, int columns)
 {
   if(IS_NULL_PTR(canvas)) return;
   GPtrArray *frames = _layout_frames(canvas, ids);
@@ -1075,21 +1090,24 @@ void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_la
   double anchor_x = 0.0;
   double anchor_y = 0.0;
   _layout_anchor(frames, &anchor_x, &anchor_y);
-  if(gap < 0.0) gap = 0.0;
+  // The gap between frames is the grid, and the whole arrangement starts on it when snapping.
+  const double gap = canvas->grid_size > 0.0f ? canvas->grid_size : CANVAS_DEFAULT_GRID_SIZE;
+  anchor_x = dt_canvas_snap(canvas, anchor_x);
+  anchor_y = dt_canvas_snap(canvas, anchor_y);
   switch(layout)
   {
     case DT_CANVAS_LAYOUT_MASONRY:
-      _layout_masonry(frames, anchor_x, anchor_y, gap, columns);
+      _layout_masonry(canvas, frames, anchor_x, anchor_y, gap, columns);
       break;
     case DT_CANVAS_LAYOUT_ROW:
-      _layout_row(frames, anchor_x, anchor_y, gap);
+      _layout_row(canvas, frames, anchor_x, anchor_y, gap);
       break;
     case DT_CANVAS_LAYOUT_COLUMN:
-      _layout_column(frames, anchor_x, anchor_y, gap);
+      _layout_column(canvas, frames, anchor_x, anchor_y, gap);
       break;
     case DT_CANVAS_LAYOUT_GRID:
     default:
-      _layout_grid(frames, anchor_x, anchor_y, gap);
+      _layout_grid(canvas, frames, anchor_x, anchor_y, gap);
       break;
   }
   g_ptr_array_free(frames, TRUE);

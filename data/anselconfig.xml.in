@@ -2937,12 +2937,6 @@
     <shortdescription>memory budget for decoded canvas images, in MB</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/layout_gap</name>
-    <type min="0" max="1000">int</type>
-    <default>40</default>
-    <shortdescription>spacing between frames when a canvas layout is applied, in canvas units</shortdescription>
-  </dtconfig>
-  <dtconfig>
     <name>canvas/masonry_columns</name>
     <type min="1" max="20">int</type>
     <default>3</default>

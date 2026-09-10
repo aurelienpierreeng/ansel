@@ -36,6 +36,10 @@ Coordinates are canvas units: one unit is one screen pixel at zoom 1, the origin
 centre of the plane, y grows downwards. The view converts through `_to_canvas()` and nothing
 else, so the document never learns what a pixel is.
 
+The four layouts space frames by the grid size and, with snapping on, put every frame's
+top-left corner on the grid: cells are rounded up to whole grid steps and frames sit
+top-left in their cell.
+
 ### The file
 
 A `.anselcanvas` is a ZIP archive:
@@ -132,12 +136,29 @@ and a polyline. Three **routings**: straight (one segment); square (a stub along
 normal, then horizontal and vertical legs, with a middle leg when both normals point the
 same way); cubic (a Bezier whose control points lie along the normals, drawn with
 `cairo_curve_to()` and flattened to 40 points for the hit test). Arrow heads sit on the
-anchor and point along the normal into the frame, at the end, the start, both, or neither
-(a flat line); "Reverse the direction" swaps the ends and their anchors. All of it is in
-the connector's context menu, with dashes, colour and width.
+anchor and point along the route's last leg -- the chord itself for a straight connector --
+at the end, the start, both, or neither (a flat line); "Reverse the direction" swaps the
+ends and their anchors. All of it is in the toolbar's **Connector** menu, applied to the
+selected connectors, with dashes, colour and width.
+
+Connectors are drawn from the toolbar's **Connect** button (or C): in that mode the frame
+under the pointer shows its four cardinal anchor dots, the first click picks the source
+anchor, the second the target anchor -- the user chooses the anchors, nothing is resolved
+automatically -- and the mode ends with the connector selected. Escape or a right click
+leaves it.
 
 Selection handles, hover outlines, the rubber band, the connector being drawn, the status
 line and the navigation flower are the view's and are painted after the document.
+
+### The floating property bars
+
+Selecting a text frame floats a small bar above it with its font family and size, text
+colour and background colour; selecting image frames floats one with the border width and
+colour and a "Canvas default" button that drops their override. The bars are overlay
+children of the centre, placed from the selection's screen box on every expose and moved
+only when the position changed, refilled only when the selection or the document changed
+(a signature of both), with their handlers blocked during a refill so a refill never writes
+back. The canvas-level defaults stay in the toolbar.
 
 ### The navigation flower
 
@@ -157,6 +178,12 @@ Text and connectors are therefore pixels in the PDF, not vectors: a trade for ha
 painter and one colour path for the screen and the print.
 
 ## The view
+
+The toolbar (`libs/tools/canvas_toolbar.c`) is two menus and a row of controls: **Canvas**
+(new, open, save, save as, export as PDF), **Object** (check against the library, refresh
+the stale images and notes, refresh every image), then Text, Notes, the Connect toggle and
+the Connector menu, the grid toggles and size, the default border, Fit and 1:1, the layout
+chooser.
 
 `src/views/canvas.c` owns one document and everything about editing it. It registers the
 `canvas` accelerator group, exposes its actions through `proxy.canvas` for the toolbar
