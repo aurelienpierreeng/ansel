@@ -29,6 +29,7 @@
 
 #include "canvas/canvas.h"
 #include "canvas/canvas_actions.h"
+#include "common/conf.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "gui/window_manager.h"
@@ -79,6 +80,7 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *border_color;
   GtkWidget *corner_radius;
   GtkWidget *layout;
+  GtkWidget *sort;
   gboolean refilling; ///< handlers ignore changes while the controls are refilled from the document
 } dt_lib_canvas_toolbar_t;
 
@@ -312,6 +314,11 @@ static void _corner_changed(GtkSpinButton *spin, gpointer user_data)
   if(!_live((dt_lib_module_t *)user_data, &view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_corner_radius)) return;
   dt_view_manager_get_global()->proxy.canvas.set_corner_radius(view, (float)gtk_spin_button_get_value(spin));
+}
+
+static void _sort_changed(GtkComboBox *combo, gpointer user_data)
+{
+  dt_conf_set_int("canvas/layout_sort", CLAMP(gtk_combo_box_get_active(combo), 0, DT_CANVAS_SORT_LAST - 1));
 }
 
 static void _layout_apply(GtkWidget *widget, gpointer user_data)
@@ -704,6 +711,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(box), toolbar->connect_toggle, FALSE, FALSE, 0);
   _separator(box);
 
+  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Background")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
   toolbar->background_style = gtk_combo_box_text_new();
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Plain colour"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Moleskine paper"));
@@ -720,14 +728,17 @@ void gui_init(dt_lib_module_t *self)
   _popover_button(box, _("Texture"), _("The paper's relief, detail, scale and grain"), _texture_popover(self));
   _separator(box);
 
+  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Frames")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
   _popover_button(box, _("Borders"), _("The uniform border of every frame without one of its own"), _borders_popover(self));
   _popover_button(box, _("Shadows"), _("The default shadow of every object without one of its own"), _shadow_popover(self));
   _separator(box);
 
+  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Zoom")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
   _button(box, _("Fit"), _("Fit the view to the canvas"), DT_CANVAS_ACTION_ZOOM_FIT);
   _button(box, _("1:1"), _("Zoom to 100%"), DT_CANVAS_ACTION_ZOOM_100);
   _separator(box);
 
+  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Arrange")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
   toolbar->layout = gtk_combo_box_text_new();
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->layout), _("Square grid"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->layout), _("Masonry"));
@@ -736,8 +747,20 @@ void gui_init(dt_lib_module_t *self)
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->layout), 0);
   gtk_widget_set_tooltip_text(toolbar->layout, _("How to arrange the selected frames, or all of them"));
   gtk_box_pack_start(GTK_BOX(box), toolbar->layout, FALSE, FALSE, 0);
-  GtkWidget *arrange = gtk_button_new_with_label(_("Arrange"));
-  gtk_widget_set_tooltip_text(arrange, _("Apply the chosen layout"));
+  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Sort by")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
+  toolbar->sort = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->sort), _("canvas order"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->sort), _("filename"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->sort), _("captured"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->sort), _("id"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->sort), _("full path"));
+  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->sort), CLAMP(dt_conf_get_int("canvas/layout_sort"), 0, DT_CANVAS_SORT_LAST - 1));
+  gtk_widget_set_tooltip_text(toolbar->sort,
+                              _("The order the frames are arranged in: the canvas's own, or a key of the images as in the lighttable; frames that are not images follow"));
+  g_signal_connect(toolbar->sort, "changed", G_CALLBACK(_sort_changed), self);
+  gtk_box_pack_start(GTK_BOX(box), toolbar->sort, FALSE, FALSE, 0);
+  GtkWidget *arrange = gtk_button_new_with_label(_("Auto"));
+  gtk_widget_set_tooltip_text(arrange, _("Arrange the frames in the chosen layout and order"));
   g_signal_connect(arrange, "clicked", G_CALLBACK(_layout_apply), self);
   gtk_box_pack_start(GTK_BOX(box), arrange, FALSE, FALSE, 0);
 
