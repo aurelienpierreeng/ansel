@@ -2502,6 +2502,19 @@ they are visible.
   matrix and divide it out at the blit, and hand every layer context the target's font
   options. `test_canvas_cutout` paints on a device-scale-2 surface and checks the edges land
   on the doubled pixels.
+- **The working space is linear Rec2020 and colour management is the LAST step.** Nothing is
+  display-managed before the composite (`dt_canvas_render_decode()` and
+  `dt_canvas_render_color()` keep sRGB on every target); the finished canvas goes to the display
+  through XYZ with `dt_colorprofiles_xyza_to_display_bgra8()`, a bulk float transform added to
+  the colour module for it. The colour module's XYZ is D50, so the Rec2020-to-XYZ matrix in the
+  painter carries the Bradford adaptation; half of white over black now lands on the 187.5
+  boundary, so the test accepts 186..189 per channel and no longer asks the channels to agree.
+- **A shadow's radius is signed and is its own switch**: positive outset, negative inset (the
+  uncovered plane blurred and laid over the object within its coverage), zero none. Do not
+  reintroduce an enable flag; `dt_canvas_shadow_visible()` reads the radius.
+- **`far` and `near` are macros on Windows** (minwindef.h defines them empty), and the local
+  MinGW syntax check skips `canvas_render.c` for its curl header, so a local of that name
+  compiles everywhere but CI. Name it something else.
 - **A cut-out frame's border is a band, not a stroke**: the cutout's half-level edge dilated by
   the border width through a Euclidean distance transform (a disc, so the band is as thick on
   the diagonal as on the axes; a separable max filter is a square and was 41% thicker there),

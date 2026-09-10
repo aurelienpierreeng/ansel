@@ -3057,12 +3057,6 @@
     <shortdescription>rendering intent of the canvas PDF export</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/shadow_enabled</name>
-    <type>bool</type>
-    <default>false</default>
-    <shortdescription>whether a new canvas drops a shadow under every object</shortdescription>
-  </dtconfig>
-  <dtconfig>
     <name>canvas/shadow_color</name>
     <type>string</type>
     <default>#00000080</default>
@@ -3081,10 +3075,10 @@
     <shortdescription>default shadow offset downwards, in canvas units</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/shadow_blur</name>
-    <type min="0" max="500">float</type>
-    <default>12</default>
-    <shortdescription>default shadow blur, in canvas units</shortdescription>
+    <name>canvas/shadow_radius</name>
+    <type min="-500" max="500">float</type>
+    <default>0</default>
+    <shortdescription>default shadow radius of a new canvas, in canvas units: 0 none, positive outside the objects, negative inside</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/gutter_visible</name>

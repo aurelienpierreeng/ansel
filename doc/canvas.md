@@ -131,8 +131,13 @@ the same layout.
 Cairo paints in the encoding its sources arrive in, and blends there: half of white over
 black comes out as code 128, which is a quarter of the light. Feathered cutouts,
 translucent frames and drop shadows are all blends, so the painter composites the whole
-canvas itself, in linear light with premultiplied alpha, in 32-bit floats, and hands cairo
-one finished image.
+canvas itself, in linear Rec2020 with premultiplied alpha, in 32-bit floats, and hands cairo
+one finished image. Colour management happens once, at the end: every input is sRGB (the
+renders, the drawn colours, the papers), every layer is decoded through the sRGB curve and
+the sRGB-to-Rec2020 matrix, and the finished canvas leaves the working space for the display
+profile -- through XYZ (D50, the colour module's own, with the Bradford adaptation folded into
+the matrix) and `dt_colorprofiles_xyza_to_display_bgra8()`, in floats -- or for sRGB on
+export, which the PDF exporter then converts to the output profile as before.
 
 The float canvas is sized in the surface's own PIXELS, not cairo's device units: cairo's
 device space stops short of the surface's device scale, so on a 2x screen a layer sized
@@ -157,21 +162,23 @@ black must give.
 
 The conversion loops are OpenMP-parallel and the float canvas lives in a scratch buffer the
 surface cache keeps between frames, so a repaint does not page in a fresh allocation.
-On screen the layers hold display-encoded colours (each render is colour-managed as it is
-decoded), so the sRGB curve stands in for the display's own transfer function: exact on an
-sRGB display, and on any other it only shapes the blending at feathered and translucent
-pixels, since opaque ones decode and re-encode to the code they held. The export keeps sRGB
-throughout and is converted to the output profile afterwards, as before.
+Nothing is display-managed before the composite any more: `dt_canvas_render_decode()` and
+`dt_canvas_render_color()` keep sRGB whatever the target, so what blends is one space and
+not one per input, and the per-frame surface cache holds sRGB pixels.
 
 ### Shadows
 
-A `dt_canvas_shadow_t` is a colour whose alpha is the strength (0 is no shadow), an offset
-and a blur, in canvas units. The canvas carries a default one, set from the toolbar's
+A `dt_canvas_shadow_t` is a colour whose alpha is the strength, an offset and a signed
+radius, in canvas units. The radius is the blur's sigma and its sign says where the shadow
+falls: positive drops it outside the object, negative casts it inside along the object's
+edges (what the object leaves uncovered, blurred and offset, laid over the object within its
+own coverage), and zero is no shadow at all -- there is no on/off toggle, the radius is it. The canvas carries a default one, set from the toolbar's
 Shadow popover, and an object overrides it with its own under
 `DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE`, from its bar -- the same shape as the borders, and
 `dt_canvas_object_effective_shadow()` resolves it the same way. Connectors get shadows too.
-The shadow is derived from the object's alpha after its cutout and opacity, so a feathered
-frame casts a feathered shadow and a translucent one a fainter one.
+The shadow is derived from the object's alpha after its cutout, its border and its opacity,
+so it starts at the solid border, a feathered frame casts a feathered shadow and a translucent
+one a fainter one.
 
 ### Cutouts
 
@@ -203,12 +210,16 @@ computes, and the view draws the same curve. The context menu offers the shapes,
 inverting, and the node actions for the node or edge under the pointer. Every drag and
 every wheel step is one undo record.
 
-A cut-out frame's border follows the cutout instead of the rectangle: the cutout's half-level
-edge dilated outward by the border width -- a disc, through the Euclidean distance transform
-of the shape (`dt_canvas_render_mask_band()`) -- less the cutout itself, so the band fills in
-where the content's feather fades. It is painted in the border colour into a layer of its own
-and laid over the content in linear light. A rectangular frame keeps its border inside its
-edge with the content inset, as before; both are the same rule seen from the shape's edge.
+A cut-out frame is three layers over each other in linear light. Its **background** (every
+object has one, alpha 0 for none; a text frame keeps its own field) fills the shape's whole
+support -- everywhere the cutout has any coverage, hard-edged, out to the feather's outer
+edge (`dt_canvas_render_mask_support()`) -- so the content's feather dissolves into that
+colour, or into nothing. Its **content** is feathered by the shape. Its **border** starts
+where the feather ends: the support dilated outward by the border width -- a disc, through
+the Euclidean distance transform of the support (`dt_canvas_render_mask_band()`) -- and
+nothing inside the support, so the band is solid and never mixed with the fall-off. A
+rectangular frame keeps its border inside its edge with the content inset and the background
+under the content, as before; both are the same rule seen from the shape's edge.
 
 ### Gutter frames
 
@@ -251,10 +262,19 @@ it reads on any background colour or paper and over a picture.
 ### The floating property bar
 
 The bar is one vertical box of rows, one per topic, so the bars of two kinds differ only by
-their first row: the kind's own properties (font, colours and alignment; route, arrows, line
-and waypoint; place, zoom and provider), then **Geometry** (centre, size, angle), then
-**Border**, shadow and opacity, then **Cutout**. Rows a kind has no use for are hidden at
-refill; every row keeps a 70-pixel topic label so the controls line up from row to row.
+their first row: the kind's own properties (font, colour and alignment; route, arrows and
+waypoint; place, zoom and provider), then **Geometry** (centre, size, angle), **Opacity**
+with the background colour, **Border** (a connector's is its **Line**: width, dashes,
+colour), **Shadow**, and **Cutout**. The border and the shadow rows open with a "Canvas
+default" toggle; while it is on, the custom controls are hidden, and turning it off starts
+the object's own values from the canvas's. Rows a kind has no use for are hidden at refill;
+every row keeps a 70-pixel topic label so the controls line up from row to row.
+
+While a cutout is being edited, the context menu opens on the shape's properties as sliders
+-- feather, opacity, size, rotation, extent and curvature, whichever the shape has -- the way
+the darkroom's mask menu does: a scale inside a menu item, the item's pointer events
+forwarded to it, its activation blocked so the menu stays open, and one undo record for the
+whole menu taken when it opens and written when it closes if anything moved.
 
 Selecting exactly one object floats an opaque bar immediately below it (above, when there is
 no room below) with that object's properties: a text frame's font family and size, text

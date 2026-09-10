@@ -604,6 +604,15 @@ gboolean dt_colorprofiles_bgra8_to_adobergb_rgba8(const uint8_t *const in, uint8
  * purpose: a per-thread allocation that could fail would put the worksharing loop behind
  * a condition some threads take and others do not, which hangs.
  */
+/**
+ * @brief Convert a float XYZA raster to the display profile, as 8-bit BGRA rows.
+ * @param xyza width * height * 4 floats, XYZ (D50, as the module's XYZ profile) and an alpha
+ *        the transform carries through; @param bgra the output rows, `bgra_stride` bytes apart,
+ *        alpha set to 255. Falls back to sRGB when no display transform is prepared.
+ */
+gboolean dt_colorprofiles_xyza_to_display_bgra8(const float *const xyza, uint8_t *const bgra, const int width,
+                                                const int height, const int bgra_stride);
+
 gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const int width, const int height,
                                                   const int rowstride, const int n_channels,
                                                   const gboolean has_alpha);
