@@ -61,6 +61,9 @@ static dt_canvas_t *_populated_canvas(void)
 
   dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, text->id, image->id);
   assert_non_null(connector);
+  connector->connector.from_anchor = DT_CANVAS_ANCHOR_SOUTH;
+  connector->connector.to_anchor = DT_CANVAS_ANCHOR_WEST;
+  connector->connector.routing = DT_CANVAS_ROUTING_CUBIC;
   return canvas;
 }
 
@@ -111,6 +114,9 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_non_null(connector);
   assert_int_equal(connector->connector.from_id, 2);
   assert_int_equal(connector->connector.to_id, 1);
+  assert_int_equal(connector->connector.from_anchor, DT_CANVAS_ANCHOR_SOUTH);
+  assert_int_equal(connector->connector.to_anchor, DT_CANVAS_ANCHOR_WEST);
+  assert_int_equal(connector->connector.routing, DT_CANVAS_ROUTING_CUBIC);
 
   dt_canvas_free(restored);
   dt_canvas_free(canvas);
@@ -315,6 +321,68 @@ static void _rotated_frames_answer_hit_tests_and_bounds(void **state)
   dt_canvas_free(canvas);
 }
 
+static void _connectors_route_between_cardinal_anchors(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *left = dt_canvas_add_text(canvas, 0.0, 0.0, 200.0, 100.0, "");
+  dt_canvas_object_t *right = dt_canvas_add_text(canvas, 600.0, 400.0, 200.0, 100.0, "");
+  dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, left->id, right->id);
+  dt_canvas_route_t route;
+
+  // Automatic anchors face each other: the left frame's right edge, the right frame's left edge.
+  assert_true(dt_canvas_connector_route(canvas, connector, &route));
+  assert_int_equal(route.routing, DT_CANVAS_ROUTING_STRAIGHT);
+  assert_int_equal(route.point_count, 2);
+  assert_float_equal(route.from_x, 100.0, 1e-9);
+  assert_float_equal(route.from_y, 0.0, 1e-9);
+  assert_float_equal(route.from_normal_x, 1.0, 1e-9);
+  assert_float_equal(route.to_x, 500.0, 1e-9);
+  assert_float_equal(route.to_normal_x, -1.0, 1e-9);
+
+  // Explicit anchors are the frame's own cardinal points, and rotate with it.
+  connector->connector.from_anchor = DT_CANVAS_ANCHOR_SOUTH;
+  connector->connector.to_anchor = DT_CANVAS_ANCHOR_NORTH;
+  assert_true(dt_canvas_connector_route(canvas, connector, &route));
+  assert_float_equal(route.from_y, 50.0, 1e-9);
+  assert_float_equal(route.from_normal_y, 1.0, 1e-9);
+  assert_float_equal(route.to_y, 350.0, 1e-9);
+  left->rotation = M_PI / 2.0;
+  assert_true(dt_canvas_connector_route(canvas, connector, &route));
+  assert_float_equal(route.from_x, -50.0, 1e-9); // south, turned a quarter clockwise, now faces west
+  assert_float_equal(route.from_normal_x, -1.0, 1e-9);
+  left->rotation = 0.0;
+
+  // Square routing leaves each anchor along its normal and travels in horizontal and vertical legs.
+  connector->connector.routing = DT_CANVAS_ROUTING_SQUARE;
+  assert_true(dt_canvas_connector_route(canvas, connector, &route));
+  assert_true(route.point_count >= 4);
+  for(int idx = 0; idx + 1 < route.point_count; idx++)
+  {
+    const double delta_x = fabs(route.points[2 * idx + 2] - route.points[2 * idx]);
+    const double delta_y = fabs(route.points[2 * idx + 3] - route.points[2 * idx + 1]);
+    assert_true(delta_x < 1e-9 || delta_y < 1e-9);
+  }
+  assert_float_equal(route.points[2], route.from_x, 1e-9); // first leg goes straight down from the south anchor
+  assert_true(route.points[3] > route.from_y);
+
+  // Cubic routing: control points along the normals, ends on the anchors, flattened for hit tests.
+  connector->connector.routing = DT_CANVAS_ROUTING_CUBIC;
+  assert_true(dt_canvas_connector_route(canvas, connector, &route));
+  assert_int_equal(route.point_count, DT_CANVAS_ROUTE_MAX_POINTS);
+  assert_float_equal(route.control1_x, route.from_x, 1e-9);
+  assert_true(route.control1_y > route.from_y);
+  assert_true(route.control2_y < route.to_y);
+  assert_float_equal(route.points[0], route.from_x, 1e-9);
+  assert_float_equal(route.points[2 * route.point_count - 1], route.to_y, 1e-9);
+  // The curve's middle is where a hit test finds it, well off the straight chord.
+  const double middle_x = route.points[DT_CANVAS_ROUTE_MAX_POINTS];
+  const double middle_y = route.points[DT_CANVAS_ROUTE_MAX_POINTS + 1];
+  assert_true(dt_canvas_object_contains(canvas, connector, middle_x, middle_y, 1.0));
+  assert_false(dt_canvas_object_contains(canvas, connector, 100.0, 300.0, 1.0));
+  dt_canvas_free(canvas);
+}
+
 static void _layouts_arrange_without_moving_the_group(void **state)
 {
   (void)state;
@@ -383,6 +451,7 @@ int main(void)
     cmocka_unit_test(_snapshot_restore_round_trips_the_objects),
     cmocka_unit_test(_draw_order_edits_keep_the_list_sorted),
     cmocka_unit_test(_rotated_frames_answer_hit_tests_and_bounds),
+    cmocka_unit_test(_connectors_route_between_cardinal_anchors),
     cmocka_unit_test(_layouts_arrange_without_moving_the_group),
     cmocka_unit_test(_colours_parse_and_format),
   };

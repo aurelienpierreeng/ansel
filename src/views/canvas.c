@@ -82,6 +82,25 @@ DT_MODULE(1)
 #define CANVAS_FIT_MARGIN 0.9
 #define CANVAS_BADGE_PIXELS 7.0
 #define CANVAS_RECOVERY_FILE "canvas-recovery" DT_CANVAS_FILE_EXTENSION
+#define CANVAS_FLOWER_RADIUS 46.0
+#define CANVAS_FLOWER_INNER_RADIUS 25.0
+#define CANVAS_FLOWER_CENTER_RADIUS 9.0
+#define CANVAS_FLOWER_MARGIN 22.0
+#define CANVAS_FLOWER_PAN_FRACTION 0.25
+#define CANVAS_FLOWER_ZOOM_STEP 1.5
+
+/** The parts of the navigation flower, floating at the bottom right of the view. */
+typedef enum dt_canvas_flower_part_t
+{
+  DT_CANVAS_FLOWER_NONE = -1,
+  DT_CANVAS_FLOWER_PAN_UP = 0,
+  DT_CANVAS_FLOWER_PAN_RIGHT,
+  DT_CANVAS_FLOWER_PAN_DOWN,
+  DT_CANVAS_FLOWER_PAN_LEFT,
+  DT_CANVAS_FLOWER_ZOOM_IN,
+  DT_CANVAS_FLOWER_ZOOM_OUT,
+  DT_CANVAS_FLOWER_FIT,
+} dt_canvas_flower_part_t;
 
 typedef enum dt_canvas_drag_t
 {
@@ -125,6 +144,7 @@ typedef struct dt_canvas_view_t
   uint32_t connect_from;                ///< pending connector source, 0 when none
   uint32_t hover;                       ///< object under the pointer, 0 when none
   gboolean pointer_inside;
+  dt_canvas_flower_part_t flower_hover;  ///< the flower part under the pointer
 
   gboolean dnd_connected;
 } dt_canvas_view_t;
@@ -893,11 +913,28 @@ static gboolean _load_sidecar_text(dt_canvas_view_t *view, dt_canvas_object_t *t
   return loaded;
 }
 
-static void _show_sidecar_note(dt_view_t *self, dt_canvas_object_t *image)
+/** The text frame already showing an image frame's note, if any. */
+static dt_canvas_object_t *_note_frame_of(const dt_canvas_view_t *view, const uint32_t image_id)
 {
-  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  if(IS_NULL_PTR(image) || image->kind != DT_CANVAS_OBJECT_IMAGE) return;
-  dt_canvas_t *before = _begin_edit(view);
+  for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
+  {
+    dt_canvas_object_t *object = dt_canvas_object_at(view->canvas, idx);
+    if(object->kind == DT_CANVAS_OBJECT_TEXT && object->text.source == DT_CANVAS_TEXT_SOURCE_SIDECAR
+       && object->text.linked_object == image_id)
+      return object;
+  }
+  return NULL;
+}
+
+/**
+ * Add a text frame under an image frame showing its `.txt` note.
+ * @param require_note when TRUE and the image has no note file, nothing is added.
+ * @return the new frame, or NULL when nothing was added.
+ */
+static dt_canvas_object_t *_add_sidecar_note(dt_canvas_view_t *view, dt_canvas_object_t *image,
+                                             const gboolean require_note)
+{
+  if(IS_NULL_PTR(image) || image->kind != DT_CANVAS_OBJECT_IMAGE) return NULL;
   const dt_canvas_rect_t bounds = dt_canvas_object_bounds(image);
   dt_canvas_object_t *text = dt_canvas_add_text(view->canvas, image->x, bounds.y + bounds.height + 120.0,
                                                 fmax(image->width, 200.0), 200.0, "");
@@ -905,10 +942,69 @@ static void _show_sidecar_note(dt_view_t *self, dt_canvas_object_t *image)
   text->text.linked_object = image->id;
   if(!_load_sidecar_text(view, text))
   {
+    if(require_note)
+    {
+      dt_canvas_remove_object(view->canvas, text->id);
+      return NULL;
+    }
     dt_canvas_text_set_markdown(view->canvas, text, _("*No text note found for this image.*"));
+  }
+  return text;
+}
+
+static void _show_sidecar_note(dt_view_t *self, dt_canvas_object_t *image)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(image) || image->kind != DT_CANVAS_OBJECT_IMAGE) return;
+  dt_canvas_object_t *existing = _note_frame_of(view, image->id);
+  if(!IS_NULL_PTR(existing))
+  {
+    _select_only(view, existing->id);
+    dt_control_queue_redraw_center();
+    return;
+  }
+  dt_canvas_t *before = _begin_edit(view);
+  dt_canvas_object_t *text = _add_sidecar_note(view, image, FALSE);
+  if(IS_NULL_PTR(text))
+  {
+    dt_canvas_free(before);
+    return;
   }
   _select_only(view, text->id);
   _record_undo(self, before);
+  dt_control_queue_redraw_center();
+}
+
+/** Add the notes of the selected image frames -- of every image frame when none is selected. */
+static void _add_notes(dt_view_t *self)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  GArray *targets = g_array_new(FALSE, FALSE, sizeof(uint32_t));
+  for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
+  {
+    const dt_canvas_object_t *object = dt_canvas_object_at(view->canvas, idx);
+    if(object->kind != DT_CANVAS_OBJECT_IMAGE) continue;
+    if(view->selection->len > 0 && !_is_selected(view, object->id)) continue;
+    if(!IS_NULL_PTR(_note_frame_of(view, object->id))) continue;
+    g_array_append_val(targets, object->id);
+  }
+  dt_canvas_t *before = _begin_edit(view);
+  int added = 0;
+  g_array_set_size(view->selection, 0);
+  for(guint idx = 0; idx < targets->len; idx++)
+  {
+    dt_canvas_object_t *image = dt_canvas_find_object(view->canvas, g_array_index(targets, uint32_t, idx));
+    dt_canvas_object_t *text = _add_sidecar_note(view, image, TRUE);
+    if(IS_NULL_PTR(text)) continue;
+    g_array_append_val(view->selection, text->id);
+    added++;
+  }
+  g_array_free(targets, TRUE);
+  if(added > 0)
+    _record_undo(self, before);
+  else
+    dt_canvas_free(before);
+  dt_control_log(ngettext("added %d text note", "added %d text notes", added), added);
   dt_control_queue_redraw_center();
 }
 
@@ -1194,6 +1290,104 @@ static void _menu_connector_style(GtkWidget *widget, gpointer data)
   dt_control_queue_redraw_center();
 }
 
+/** value: (which << 8) | anchor, which = 0 start, 1 end. */
+static void _menu_connector_anchor(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return;
+  dt_canvas_t *before = _begin_edit(view);
+  const uint32_t anchor = (uint32_t)(context->value & 0xFF);
+  if((context->value >> 8) == 0)
+    object->connector.from_anchor = anchor;
+  else
+    object->connector.to_anchor = anchor;
+  dt_canvas_touch(view->canvas);
+  _record_undo(context->self, before);
+  dt_control_queue_redraw_center();
+}
+
+static void _menu_connector_routing(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return;
+  dt_canvas_t *before = _begin_edit(view);
+  object->connector.routing = (uint32_t)context->value;
+  dt_canvas_touch(view->canvas);
+  _record_undo(context->self, before);
+  dt_control_queue_redraw_center();
+}
+
+/** value: the arrow bits to set, replacing the current ones. */
+static void _menu_connector_arrows(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return;
+  dt_canvas_t *before = _begin_edit(view);
+  object->connector.style &= ~(uint32_t)(DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START);
+  object->connector.style |= (uint32_t)context->value;
+  dt_canvas_touch(view->canvas);
+  _record_undo(context->self, before);
+  dt_control_queue_redraw_center();
+}
+
+static void _menu_connector_reverse(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return;
+  dt_canvas_t *before = _begin_edit(view);
+  const uint32_t from_id = object->connector.from_id;
+  const uint32_t from_anchor = object->connector.from_anchor;
+  object->connector.from_id = object->connector.to_id;
+  object->connector.from_anchor = object->connector.to_anchor;
+  object->connector.to_id = from_id;
+  object->connector.to_anchor = from_anchor;
+  dt_canvas_touch(view->canvas);
+  _record_undo(context->self, before);
+  dt_control_queue_redraw_center();
+}
+
+static void _menu_connector_width(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return;
+  dt_canvas_t *before = _begin_edit(view);
+  object->connector.line_width = (float)context->value;
+  dt_canvas_touch(view->canvas);
+  _record_undo(context->self, before);
+  dt_control_queue_redraw_center();
+}
+
+static void _anchor_submenu(dt_view_t *self, GtkWidget *menu, const char *label, const uint32_t id, const double x,
+                            const double y, const int which)
+{
+  GtkWidget *item = gtk_menu_item_new_with_label(label);
+  GtkWidget *submenu = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
+  static const struct
+  {
+    const char *label;
+    dt_canvas_anchor_t anchor;
+  } anchors[] = { { N_("Automatic"), DT_CANVAS_ANCHOR_AUTO }, { N_("Top"), DT_CANVAS_ANCHOR_NORTH },
+                  { N_("Right"), DT_CANVAS_ANCHOR_EAST },    { N_("Bottom"), DT_CANVAS_ANCHOR_SOUTH },
+                  { N_("Left"), DT_CANVAS_ANCHOR_WEST } };
+  for(size_t idx = 0; idx < G_N_ELEMENTS(anchors); idx++)
+  {
+    _menu_item(submenu, _(anchors[idx].label), _menu_connector_anchor,
+               _menu_context(self, id, x, y, (which << 8) | (int)anchors[idx].anchor));
+  }
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+}
+
 static void _menu_connector_color(GtkWidget *widget, gpointer data)
 {
   dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
@@ -1252,12 +1446,40 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
   }
   else if(object->kind == DT_CANVAS_OBJECT_CONNECTOR)
   {
-    _menu_check_item(menu, _("Arrow head at the end"), _menu_connector_style,
-                     _menu_context(self, id, x, y, DT_CANVAS_CONNECTOR_ARROW_END),
-                     object->connector.style & DT_CANVAS_CONNECTOR_ARROW_END);
-    _menu_check_item(menu, _("Arrow head at the start"), _menu_connector_style,
-                     _menu_context(self, id, x, y, DT_CANVAS_CONNECTOR_ARROW_START),
-                     object->connector.style & DT_CANVAS_CONNECTOR_ARROW_START);
+    GtkWidget *route_item = gtk_menu_item_new_with_label(_("Route"));
+    GtkWidget *route_menu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(route_item), route_menu);
+    _menu_item(route_menu, _("Straight"), _menu_connector_routing, _menu_context(self, id, x, y, DT_CANVAS_ROUTING_STRAIGHT));
+    _menu_item(route_menu, _("Square"), _menu_connector_routing, _menu_context(self, id, x, y, DT_CANVAS_ROUTING_SQUARE));
+    _menu_item(route_menu, _("Cubic spline"), _menu_connector_routing, _menu_context(self, id, x, y, DT_CANVAS_ROUTING_CUBIC));
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), route_item);
+
+    GtkWidget *arrows_item = gtk_menu_item_new_with_label(_("Arrows"));
+    GtkWidget *arrows_menu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(arrows_item), arrows_menu);
+    _menu_item(arrows_menu, _("None (flat line)"), _menu_connector_arrows, _menu_context(self, id, x, y, 0));
+    _menu_item(arrows_menu, _("At the end"), _menu_connector_arrows, _menu_context(self, id, x, y, DT_CANVAS_CONNECTOR_ARROW_END));
+    _menu_item(arrows_menu, _("At the start"), _menu_connector_arrows, _menu_context(self, id, x, y, DT_CANVAS_CONNECTOR_ARROW_START));
+    _menu_item(arrows_menu, _("Both ends"), _menu_connector_arrows,
+               _menu_context(self, id, x, y, DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START));
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), arrows_item);
+    _menu_item(menu, _("Reverse the direction"), _menu_connector_reverse, _menu_context(self, id, x, y, 0));
+
+    _anchor_submenu(self, menu, _("Start anchor"), id, x, y, 0);
+    _anchor_submenu(self, menu, _("End anchor"), id, x, y, 1);
+
+    GtkWidget *width_item = gtk_menu_item_new_with_label(_("Line width"));
+    GtkWidget *width_menu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(width_item), width_menu);
+    static const int line_widths[] = { 1, 2, 4, 8, 12 };
+    for(size_t idx = 0; idx < G_N_ELEMENTS(line_widths); idx++)
+    {
+      gchar *label = g_strdup_printf("%d", line_widths[idx]);
+      _menu_item(width_menu, label, _menu_connector_width, _menu_context(self, id, x, y, line_widths[idx]));
+      dt_free(label);
+    }
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), width_item);
+
     _menu_check_item(menu, _("Dashed"), _menu_connector_style,
                      _menu_context(self, id, x, y, DT_CANVAS_CONNECTOR_DASHED),
                      object->connector.style & DT_CANVAS_CONNECTOR_DASHED);
@@ -1399,6 +1621,164 @@ static void _profile_changed(gpointer instance, gpointer user_data)
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   dt_canvas_surface_cache_clear(view->cache);
   dt_control_queue_redraw_center();
+}
+
+/* --- the navigation flower --------------------------------------------------------- */
+
+static void _flower_center(const dt_canvas_view_t *view, double *center_x, double *center_y)
+{
+  *center_x = view->width - DT_PIXEL_APPLY_DPI(CANVAS_FLOWER_MARGIN + CANVAS_FLOWER_RADIUS);
+  *center_y = view->height - DT_PIXEL_APPLY_DPI(CANVAS_FLOWER_MARGIN + CANVAS_FLOWER_RADIUS);
+}
+
+/** Which part of the flower is under a screen point. */
+static dt_canvas_flower_part_t _flower_hit(const dt_canvas_view_t *view, const double screen_x, const double screen_y)
+{
+  if(view->width <= 0 || view->height <= 0) return DT_CANVAS_FLOWER_NONE;
+  double center_x = 0.0;
+  double center_y = 0.0;
+  _flower_center(view, &center_x, &center_y);
+  const double offset_x = screen_x - center_x;
+  const double offset_y = screen_y - center_y;
+  const double distance = hypot(offset_x, offset_y);
+  if(distance > DT_PIXEL_APPLY_DPI(CANVAS_FLOWER_RADIUS)) return DT_CANVAS_FLOWER_NONE;
+  if(distance <= DT_PIXEL_APPLY_DPI(CANVAS_FLOWER_CENTER_RADIUS)) return DT_CANVAS_FLOWER_FIT;
+  if(distance <= DT_PIXEL_APPLY_DPI(CANVAS_FLOWER_INNER_RADIUS))
+    return offset_y < 0.0 ? DT_CANVAS_FLOWER_ZOOM_IN : DT_CANVAS_FLOWER_ZOOM_OUT;
+  // The outer ring is four petals, split on the diagonals.
+  const double angle = atan2(offset_y, offset_x);
+  if(angle >= -3.0 * M_PI / 4.0 && angle < -M_PI / 4.0) return DT_CANVAS_FLOWER_PAN_UP;
+  if(angle >= -M_PI / 4.0 && angle < M_PI / 4.0) return DT_CANVAS_FLOWER_PAN_RIGHT;
+  if(angle >= M_PI / 4.0 && angle < 3.0 * M_PI / 4.0) return DT_CANVAS_FLOWER_PAN_DOWN;
+  return DT_CANVAS_FLOWER_PAN_LEFT;
+}
+
+static void _flower_activate(dt_canvas_view_t *view, const dt_canvas_flower_part_t part)
+{
+  const double pan_x = view->width * CANVAS_FLOWER_PAN_FRACTION / view->zoom;
+  const double pan_y = view->height * CANVAS_FLOWER_PAN_FRACTION / view->zoom;
+  switch(part)
+  {
+    case DT_CANVAS_FLOWER_PAN_UP:
+      view->center_y -= pan_y;
+      break;
+    case DT_CANVAS_FLOWER_PAN_DOWN:
+      view->center_y += pan_y;
+      break;
+    case DT_CANVAS_FLOWER_PAN_LEFT:
+      view->center_x -= pan_x;
+      break;
+    case DT_CANVAS_FLOWER_PAN_RIGHT:
+      view->center_x += pan_x;
+      break;
+    case DT_CANVAS_FLOWER_ZOOM_IN:
+      _zoom_around(view, view->width * 0.5, view->height * 0.5, CANVAS_FLOWER_ZOOM_STEP);
+      break;
+    case DT_CANVAS_FLOWER_ZOOM_OUT:
+      _zoom_around(view, view->width * 0.5, view->height * 0.5, 1.0 / CANVAS_FLOWER_ZOOM_STEP);
+      break;
+    case DT_CANVAS_FLOWER_FIT:
+      _zoom_fit(view);
+      break;
+    default:
+      break;
+  }
+  dt_control_queue_redraw_center();
+}
+
+static void _flower_petal(cairo_t *cr, const double center_x, const double center_y, const double inner,
+                          const double outer, const double start_angle, const gboolean hovered)
+{
+  const double gap = 0.035;
+  cairo_new_path(cr);
+  cairo_arc(cr, center_x, center_y, outer, start_angle + gap, start_angle + M_PI / 2.0 - gap);
+  cairo_arc_negative(cr, center_x, center_y, inner, start_angle + M_PI / 2.0 - gap, start_angle + gap);
+  cairo_close_path(cr);
+  cairo_set_source_rgba(cr, 0.15, 0.15, 0.15, hovered ? 0.95 : 0.7);
+  cairo_fill_preserve(cr);
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, hovered ? 0.9 : 0.35);
+  cairo_set_line_width(cr, 1.0);
+  cairo_stroke(cr);
+}
+
+static void _flower_triangle(cairo_t *cr, const double tip_x, const double tip_y, const double direction_x,
+                             const double direction_y, const double size)
+{
+  const double base_x = tip_x - direction_x * size;
+  const double base_y = tip_y - direction_y * size;
+  const double side_x = -direction_y * size * 0.6;
+  const double side_y = direction_x * size * 0.6;
+  cairo_move_to(cr, tip_x, tip_y);
+  cairo_line_to(cr, base_x + side_x, base_y + side_y);
+  cairo_line_to(cr, base_x - side_x, base_y - side_y);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+}
+
+static void _paint_flower(cairo_t *cr, const dt_canvas_view_t *view)
+{
+  if(view->width <= 0 || view->height <= 0) return;
+  double center_x = 0.0;
+  double center_y = 0.0;
+  _flower_center(view, &center_x, &center_y);
+  const double outer = DT_PIXEL_APPLY_DPI(CANVAS_FLOWER_RADIUS);
+  const double inner = DT_PIXEL_APPLY_DPI(CANVAS_FLOWER_INNER_RADIUS);
+  const double core = DT_PIXEL_APPLY_DPI(CANVAS_FLOWER_CENTER_RADIUS);
+  const dt_canvas_flower_part_t hover = view->flower_hover;
+
+  cairo_save(cr);
+  // Four petals, starting at the top-left diagonal and going clockwise: up, right, down, left.
+  static const dt_canvas_flower_part_t petals[4]
+      = { DT_CANVAS_FLOWER_PAN_UP, DT_CANVAS_FLOWER_PAN_RIGHT, DT_CANVAS_FLOWER_PAN_DOWN, DT_CANVAS_FLOWER_PAN_LEFT };
+  for(int idx = 0; idx < 4; idx++)
+  {
+    const double start_angle = -3.0 * M_PI / 4.0 + idx * M_PI / 2.0;
+    _flower_petal(cr, center_x, center_y, inner + 2.0, outer, start_angle, hover == petals[idx]);
+  }
+  // Inner disc: zoom in above, zoom out below, fit at the core.
+  cairo_new_path(cr);
+  cairo_arc(cr, center_x, center_y, inner, M_PI, 2.0 * M_PI);
+  cairo_close_path(cr);
+  cairo_set_source_rgba(cr, 0.15, 0.15, 0.15, hover == DT_CANVAS_FLOWER_ZOOM_IN ? 0.95 : 0.7);
+  cairo_fill(cr);
+  cairo_new_path(cr);
+  cairo_arc(cr, center_x, center_y, inner, 0.0, M_PI);
+  cairo_close_path(cr);
+  cairo_set_source_rgba(cr, 0.15, 0.15, 0.15, hover == DT_CANVAS_FLOWER_ZOOM_OUT ? 0.95 : 0.7);
+  cairo_fill(cr);
+  cairo_new_path(cr);
+  cairo_arc(cr, center_x, center_y, inner, 0.0, 2.0 * M_PI);
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.35);
+  cairo_set_line_width(cr, 1.0);
+  cairo_stroke(cr);
+  cairo_move_to(cr, center_x - inner, center_y);
+  cairo_line_to(cr, center_x + inner, center_y);
+  cairo_stroke(cr);
+  cairo_new_path(cr);
+  cairo_arc(cr, center_x, center_y, core, 0.0, 2.0 * M_PI);
+  cairo_set_source_rgba(cr, hover == DT_CANVAS_FLOWER_FIT ? 0.9 : 0.55, 0.55, 0.55, 0.95);
+  cairo_fill(cr);
+
+  // Glyphs: arrows on the petals, + and - on the disc.
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.9);
+  const double glyph_radius = (inner + outer) * 0.5;
+  const double glyph = DT_PIXEL_APPLY_DPI(9.0);
+  _flower_triangle(cr, center_x, center_y - glyph_radius - glyph * 0.5, 0.0, -1.0, glyph);
+  _flower_triangle(cr, center_x + glyph_radius + glyph * 0.5, center_y, 1.0, 0.0, glyph);
+  _flower_triangle(cr, center_x, center_y + glyph_radius + glyph * 0.5, 0.0, 1.0, glyph);
+  _flower_triangle(cr, center_x - glyph_radius - glyph * 0.5, center_y, -1.0, 0.0, glyph);
+  const double sign = DT_PIXEL_APPLY_DPI(5.0);
+  const double sign_y_in = center_y - (inner + core) * 0.5;
+  const double sign_y_out = center_y + (inner + core) * 0.5;
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0));
+  cairo_move_to(cr, center_x - sign, sign_y_in);
+  cairo_line_to(cr, center_x + sign, sign_y_in);
+  cairo_move_to(cr, center_x, sign_y_in - sign);
+  cairo_line_to(cr, center_x, sign_y_in + sign);
+  cairo_move_to(cr, center_x - sign, sign_y_out);
+  cairo_line_to(cr, center_x + sign, sign_y_out);
+  cairo_stroke(cr);
+  cairo_restore(cr);
 }
 
 /* --- painting ---------------------------------------------------------------------- */
@@ -1553,7 +1933,13 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
       cairo_set_line_width(cr, 2.0 / view->zoom);
       const double dashes[2] = { 8.0 / view->zoom, 6.0 / view->zoom };
       cairo_set_dash(cr, dashes, 2, 0.0);
-      cairo_move_to(cr, from->x, from->y);
+      double anchor_x = 0.0;
+      double anchor_y = 0.0;
+      double normal_x = 0.0;
+      double normal_y = 0.0;
+      dt_canvas_object_anchor_point(from, DT_CANVAS_ANCHOR_AUTO, view->pointer_x, view->pointer_y, &anchor_x,
+                                    &anchor_y, &normal_x, &normal_y);
+      cairo_move_to(cr, anchor_x, anchor_y);
       cairo_line_to(cr, view->pointer_x, view->pointer_y);
       cairo_stroke(cr);
       cairo_restore(cr);
@@ -1577,6 +1963,8 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   cairo_show_text(cr, status);
   dt_free(status);
   cairo_restore(cr);
+
+  _paint_flower(cr, view);
 }
 
 /* --- gestures ---------------------------------------------------------------------- */
@@ -1718,6 +2106,14 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   const gboolean primary = dt_modifier_is(state, DT_PRIMARY_MASK);
   const gboolean shift = dt_modifier_is(state, GDK_SHIFT_MASK);
   const double tolerance = CANVAS_PICK_TOLERANCE_PIXELS / view->zoom;
+
+  // The flower floats over the plane: a press on it is navigation, never a pick.
+  const dt_canvas_flower_part_t flower_part = _flower_hit(view, x, y);
+  if(flower_part != DT_CANVAS_FLOWER_NONE)
+  {
+    if(which == 1) _flower_activate(view, flower_part);
+    return 1;
+  }
 
   if(which == 2 || (which == 1 && dt_modifier_is(state, GDK_MOD1_MASK)))
   {
@@ -1869,8 +2265,15 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       break;
     default:
     {
+      const dt_canvas_flower_part_t flower_part = _flower_hit(view, x, y);
+      if(flower_part != view->flower_hover)
+      {
+        view->flower_hover = flower_part;
+        dt_control_queue_redraw_center();
+      }
       const double tolerance = CANVAS_PICK_TOLERANCE_PIXELS / view->zoom;
-      const dt_canvas_object_t *object = dt_canvas_pick(view->canvas, canvas_x, canvas_y, tolerance);
+      const dt_canvas_object_t *object
+          = flower_part == DT_CANVAS_FLOWER_NONE ? dt_canvas_pick(view->canvas, canvas_x, canvas_y, tolerance) : NULL;
       const uint32_t hover = IS_NULL_PTR(object) ? 0 : object->id;
       if(hover != view->hover)
       {
@@ -1904,9 +2307,10 @@ void mouse_leave(dt_view_t *self)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   view->pointer_inside = FALSE;
-  if(view->hover != 0)
+  if(view->hover != 0 || view->flower_hover != DT_CANVAS_FLOWER_NONE)
   {
     view->hover = 0;
+    view->flower_hover = DT_CANVAS_FLOWER_NONE;
     dt_control_queue_redraw_center();
   }
 }
@@ -2004,6 +2408,9 @@ static void _proxy_action(dt_view_t *self, int action)
       break;
     case DT_CANVAS_ACTION_ADD_TEXT:
       _add_text_frame(self, view->center_x, view->center_y);
+      break;
+    case DT_CANVAS_ACTION_ADD_NOTES:
+      _add_notes(self);
       break;
     case DT_CANVAS_ACTION_ZOOM_FIT:
       _zoom_fit(view);
@@ -2126,6 +2533,7 @@ static const dt_canvas_accel_t _accels[] = {
   { N_("Save the canvas as"), DT_CANVAS_ACTION_SAVE_AS, GDK_KEY_s, DT_PRIMARY_MASK | GDK_SHIFT_MASK },
   { N_("Export the canvas as PDF"), DT_CANVAS_ACTION_EXPORT_PDF, GDK_KEY_p, DT_PRIMARY_MASK },
   { N_("Add a text frame"), DT_CANVAS_ACTION_ADD_TEXT, GDK_KEY_t, 0 },
+  { N_("Add the text notes of the selected images"), DT_CANVAS_ACTION_ADD_NOTES, GDK_KEY_t, GDK_SHIFT_MASK },
   { N_("Fit the view to the canvas"), DT_CANVAS_ACTION_ZOOM_FIT, GDK_KEY_0, DT_PRIMARY_MASK },
   { N_("Zoom to 100%"), DT_CANVAS_ACTION_ZOOM_100, GDK_KEY_1, DT_PRIMARY_MASK },
   { N_("Toggle the grid"), DT_CANVAS_ACTION_TOGGLE_GRID, GDK_KEY_g, 0 },
@@ -2161,6 +2569,7 @@ void init(dt_view_t *self)
                                                       * 1024u * 1024u);
   view->zoom = 1.0;
   view->token = 1;
+  view->flower_hover = DT_CANVAS_FLOWER_NONE;
 
   // A canvas left dirty at the last exit comes back, whatever the reason the exit happened.
   char recovery[DT_PATH_MAX] = { 0 };

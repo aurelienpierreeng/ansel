@@ -259,50 +259,41 @@ static void _paint_arrow_head(cairo_t *cr, const double tip_x, const double tip_
 static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                              const dt_canvas_paint_options_t *options)
 {
-  double from_x = 0.0;
-  double from_y = 0.0;
-  double to_x = 0.0;
-  double to_y = 0.0;
-  if(!dt_canvas_connector_endpoints(canvas, object, &from_x, &from_y, &to_x, &to_y)) return;
+  dt_canvas_route_t route;
+  if(!dt_canvas_connector_route(canvas, object, &route)) return;
   const double line_width = object->connector.line_width > 0.0f ? object->connector.line_width : 2.0;
   // Arrow heads are sized to the line, so a thick connector gets a proportionate head.
   const double head_scale = fmax(line_width / 2.0, 1.0);
-  const double head_length = PAINT_ARROW_LENGTH * head_scale;
-  const double length = hypot(to_x - from_x, to_y - from_y);
-  if(length < 1e-6) return;
-  const double unit_x = (to_x - from_x) / length;
-  const double unit_y = (to_y - from_y) / length;
-  double line_from_x = from_x;
-  double line_from_y = from_y;
-  double line_to_x = to_x;
-  double line_to_y = to_y;
-  if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_END)
-  {
-    line_to_x -= unit_x * head_length * 0.6;
-    line_to_y -= unit_y * head_length * 0.6;
-  }
-  if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_START)
-  {
-    line_from_x += unit_x * head_length * 0.6;
-    line_from_y += unit_y * head_length * 0.6;
-  }
 
   cairo_save(cr);
   _set_color(cr, &object->connector.color, options->for_display);
   cairo_set_line_width(cr, line_width);
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
   if(object->connector.style & DT_CANVAS_CONNECTOR_DASHED)
   {
     const double dashes[2] = { 4.0 * line_width, 3.0 * line_width };
     cairo_set_dash(cr, dashes, 2, 0.0);
   }
-  cairo_move_to(cr, line_from_x, line_from_y);
-  cairo_line_to(cr, line_to_x, line_to_y);
+  cairo_move_to(cr, route.from_x, route.from_y);
+  if(route.routing == DT_CANVAS_ROUTING_CUBIC)
+  {
+    cairo_curve_to(cr, route.control1_x, route.control1_y, route.control2_x, route.control2_y, route.to_x, route.to_y);
+  }
+  else
+  {
+    for(int idx = 1; idx < route.point_count; idx++) cairo_line_to(cr, route.points[2 * idx], route.points[2 * idx + 1]);
+  }
   cairo_stroke(cr);
   cairo_set_dash(cr, NULL, 0, 0.0);
-  if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_END) _paint_arrow_head(cr, to_x, to_y, from_x, from_y, head_scale);
+
+  // A head points along the route's tangent at its end: the normal it left the frame by.
+  if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_END)
+    _paint_arrow_head(cr, route.to_x, route.to_y, route.to_x + route.to_normal_x, route.to_y + route.to_normal_y,
+                      head_scale);
   if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_START)
-    _paint_arrow_head(cr, from_x, from_y, to_x, to_y, head_scale);
+    _paint_arrow_head(cr, route.from_x, route.from_y, route.from_x + route.from_normal_x,
+                      route.from_y + route.from_normal_y, head_scale);
   cairo_restore(cr);
 }
 
