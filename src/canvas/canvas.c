@@ -726,6 +726,15 @@ gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow)
   return !IS_NULL_PTR(shadow) && shadow->color.alpha > 0.0f && shadow->blur != 0.0f;
 }
 
+double dt_canvas_object_effective_corner_radius(const dt_canvas_t *canvas, const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object)) return 0.0;
+  double radius = IS_NULL_PTR(canvas) ? 0.0 : canvas->corner_radius;
+  if(object->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE) radius = object->corner_radius;
+  const double limit = fmin(object->width, object->height) * 0.5;
+  return CLAMP(radius, 0.0, fmax(limit, 0.0));
+}
+
 dt_canvas_color_t dt_canvas_object_background(const dt_canvas_object_t *object)
 {
   if(IS_NULL_PTR(object)) return dt_canvas_color(0.0f, 0.0f, 0.0f, 0.0f);

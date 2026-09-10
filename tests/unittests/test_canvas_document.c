@@ -89,6 +89,9 @@ static dt_canvas_t *_populated_canvas(void)
   canvas->texture_detail = 0.5f;
   canvas->texture_scale = 2.0f;
   canvas->texture_grain = 0.0f;
+  canvas->corner_radius = 14.0f;
+  image->corner_radius = 7.0f;
+  image->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
   canvas->grid_flags |= DT_CANVAS_GUTTER_VISIBLE;
 
   // The image gets a shadow of its own, some transparency and a polygon cutout with four nodes.
@@ -169,7 +172,8 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_int_equal(image->image.pixel_width, 2048);
   assert_int_equal(image->image.colorspace, DT_CANVAS_COLORSPACE_ADOBERGB);
   assert_float_equal(image->rotation, 0.25, 1e-12);
-  assert_int_equal(image->flags, DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE);
+  assert_int_equal(image->flags, DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE
+                                     | DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE);
   assert_float_equal(image->border_width, 9.0f, 1e-6);
   // The JPEG is a separate archive entry, not an index field.
   assert_null(image->image.jpeg);
@@ -197,6 +201,9 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(restored->gutter_color.red, 0.9f, 1e-6);
   assert_float_equal(restored->texture_contrast, 1.5f, 1e-6);
   assert_float_equal(restored->texture_scale, 2.0f, 1e-6);
+  assert_float_equal(restored->corner_radius, 14.0f, 1e-6);
+  assert_float_equal(image->corner_radius, 7.0f, 1e-6);
+  assert_true((image->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE) != 0);
   float grain = -1.0f;
   dt_canvas_texture_get(restored, NULL, NULL, NULL, &grain);
   assert_float_equal(grain, 1.0f, 1e-6); // an unset weight reads as the paper as designed

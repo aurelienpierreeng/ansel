@@ -3081,6 +3081,12 @@
     <shortdescription>default shadow radius of a new canvas, in canvas units: 0 none, positive outside the objects, negative inside</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>canvas/corner_radius</name>
+    <type min="0" max="5000">float</type>
+    <default>0</default>
+    <shortdescription>default radius of the rounded corners of a new canvas's frames, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>canvas/texture_contrast</name>
     <type min="0.05" max="8">float</type>
     <default>1</default>

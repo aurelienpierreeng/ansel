@@ -841,6 +841,27 @@ static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
 
 /* --- frames ----------------------------------------------------------------- */
 
+/** The frame's outline, inset by `inset` on every side, with the frame's corners rounded less the inset. */
+static void _frame_path(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object, const double inset)
+{
+  const double width = fmax(object->width - 2.0 * inset, 0.0);
+  const double height = fmax(object->height - 2.0 * inset, 0.0);
+  const double left = -object->width * 0.5 + inset;
+  const double top = -object->height * 0.5 + inset;
+  const double radius = CLAMP(dt_canvas_object_effective_corner_radius(canvas, object) - inset, 0.0, 0.5 * fmin(width, height));
+  if(radius <= 0.0)
+  {
+    cairo_rectangle(cr, left, top, width, height);
+    return;
+  }
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, left + width - radius, top + radius, radius, -M_PI / 2.0, 0.0);
+  cairo_arc(cr, left + width - radius, top + height - radius, radius, 0.0, M_PI / 2.0);
+  cairo_arc(cr, left + radius, top + height - radius, radius, M_PI / 2.0, M_PI);
+  cairo_arc(cr, left + radius, top + radius, radius, M_PI, 3.0 * M_PI / 2.0);
+  cairo_close_path(cr);
+}
+
 /** A cut-out frame's border follows the cutout, dilated outward, and is composited, not stroked. */
 static gboolean _object_cut(const dt_canvas_object_t *object)
 {
@@ -869,23 +890,23 @@ static void _paint_border(cairo_t *cr, const dt_canvas_t *canvas, const dt_canva
   cairo_save(cr);
   _set_color(cr, &color, options->for_display);
   cairo_set_line_width(cr, width);
-  cairo_rectangle(cr, -object->width * 0.5 + width * 0.5, -object->height * 0.5 + width * 0.5,
-                  fmax(object->width - width, 0.0), fmax(object->height - width, 0.0));
+  _frame_path(cr, canvas, object, width * 0.5);
   cairo_stroke(cr);
   cairo_restore(cr);
 }
 
-static void _paint_placeholder(cairo_t *cr, const dt_canvas_object_t *object, const dt_canvas_paint_options_t *options)
+static void _paint_placeholder(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                               const dt_canvas_paint_options_t *options)
 {
   const double half_width = object->width * 0.5;
   const double half_height = object->height * 0.5;
   cairo_save(cr);
   cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.35);
-  cairo_rectangle(cr, -half_width, -half_height, object->width, object->height);
+  _frame_path(cr, canvas, object, 0.0);
   cairo_fill(cr);
   cairo_set_source_rgba(cr, 0.8, 0.8, 0.8, 0.6);
   cairo_set_line_width(cr, 1.5 * options->units_per_pixel);
-  cairo_rectangle(cr, -half_width, -half_height, object->width, object->height);
+  _frame_path(cr, canvas, object, 0.0);
   cairo_stroke(cr);
   cairo_move_to(cr, -half_width, -half_height);
   cairo_line_to(cr, half_width, half_height);
@@ -916,17 +937,15 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   if(background.alpha > 0.0f && !_object_cut(object))
   {
     // Under the picture, inside the border: what shows through a translucent or missing render.
-    const double inset = _border_inset(canvas, object);
     cairo_save(cr);
     _set_color(cr, &background, options->for_display);
-    cairo_rectangle(cr, -object->width * 0.5 + inset, -object->height * 0.5 + inset,
-                    fmax(object->width - 2.0 * inset, 0.0), fmax(object->height - 2.0 * inset, 0.0));
+    _frame_path(cr, canvas, object, _border_inset(canvas, object));
     cairo_fill(cr);
     cairo_restore(cr);
   }
   if(IS_NULL_PTR(surface))
   {
-    if(options->draw_placeholders) _paint_placeholder(cr, object, options);
+    if(options->draw_placeholders) _paint_placeholder(cr, canvas, object, options);
     return;
   }
   const double surface_width = cairo_image_surface_get_width(surface);
@@ -937,7 +956,7 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   if(surface_width > 0.0 && surface_height > 0.0)
   {
     cairo_save(cr);
-    cairo_rectangle(cr, -inner_width * 0.5, -inner_height * 0.5, inner_width, inner_height);
+    _frame_path(cr, canvas, object, border_width);
     cairo_clip(cr);
     double scale_x = inner_width / surface_width;
     double scale_y = inner_height / surface_height;
@@ -1030,16 +1049,14 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   if(object->text.background.alpha > 0.0f && !_object_cut(object))
   {
     // The background fills the frame inside its border, so the border is not painted over.
-    const double inset = _border_inset(canvas, object);
     cairo_save(cr);
     _set_color(cr, &object->text.background, options->for_display);
-    cairo_rectangle(cr, -half_width + inset, -half_height + inset, fmax(object->width - 2.0 * inset, 0.0),
-                    fmax(object->height - 2.0 * inset, 0.0));
+    _frame_path(cr, canvas, object, _border_inset(canvas, object));
     cairo_fill(cr);
     cairo_restore(cr);
   }
   cairo_save(cr);
-  cairo_rectangle(cr, -half_width, -half_height, object->width, object->height);
+  _frame_path(cr, canvas, object, 0.0);
   cairo_clip(cr);
   const double padding = _text_inset(canvas, object);
   PangoLayout *layout = _text_layout(cr, canvas, object);
@@ -1717,6 +1734,7 @@ typedef struct dt_canvas_mask_geometry_t
   int width;  ///< the frame's raster, pixels
   int height;
   int inset;  ///< pixels of border the shape is kept clear of, on every side
+  int corner; ///< the frame's corner radius, pixels
 } dt_canvas_mask_geometry_t;
 
 static dt_canvas_mask_geometry_t _mask_geometry(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
@@ -1738,6 +1756,7 @@ static dt_canvas_mask_geometry_t _mask_geometry(const dt_canvas_t *canvas, const
   dt_canvas_object_effective_border(canvas, object, &color, &border);
   const double raster_per_unit = geometry.width / object->width;
   geometry.inset = border > 0.0f && color.alpha > 0.0f ? (int)lround(border * raster_per_unit) : 0;
+  geometry.corner = (int)lround(dt_canvas_object_effective_corner_radius(canvas, object) * raster_per_unit);
   return geometry;
 }
 
@@ -1779,13 +1798,13 @@ static void _apply_cutout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canva
   cairo_surface_t *owned = NULL;
   if(!IS_NULL_PTR(options->cache))
     mask = support ? dt_canvas_surface_cache_get_mask_support(options->cache, object, geometry.width, geometry.height,
-                                                              geometry.inset)
+                                                              geometry.inset, geometry.corner)
                    : dt_canvas_surface_cache_get_mask(options->cache, object, geometry.width, geometry.height,
-                                                      geometry.inset);
+                                                      geometry.inset, geometry.corner);
   else
   {
-    owned = support ? dt_canvas_render_mask_support(object, geometry.width, geometry.height, geometry.inset)
-                    : dt_canvas_render_mask(object, geometry.width, geometry.height, geometry.inset);
+    owned = support ? dt_canvas_render_mask_support(object, geometry.width, geometry.height, geometry.inset, geometry.corner)
+                    : dt_canvas_render_mask(object, geometry.width, geometry.height, geometry.inset, geometry.corner);
     mask = owned;
   }
   if(IS_NULL_PTR(mask)) return;
@@ -1794,7 +1813,8 @@ static void _apply_cutout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canva
 }
 
 /** The object's background over its whole frame: a cut-out frame's fill, clipped to the shape's support afterwards. */
-static void _paint_fill(cairo_t *cr, const dt_canvas_object_t *object, const dt_canvas_paint_options_t *options)
+static void _paint_fill(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                        const dt_canvas_paint_options_t *options)
 {
   const dt_canvas_color_t background = dt_canvas_object_background(object);
   if(background.alpha <= 0.0f) return;
@@ -1802,7 +1822,7 @@ static void _paint_fill(cairo_t *cr, const dt_canvas_object_t *object, const dt_
   cairo_translate(cr, object->x, object->y);
   cairo_rotate(cr, object->rotation);
   _set_color(cr, &background, options->for_display);
-  cairo_rectangle(cr, -object->width * 0.5, -object->height * 0.5, object->width, object->height);
+  _frame_path(cr, canvas, object, 0.0);
   cairo_fill(cr);
   cairo_restore(cr);
 }
@@ -1827,10 +1847,10 @@ static gboolean _paint_cut_border(cairo_t *cr, const dt_canvas_t *canvas, const 
   cairo_surface_t *owned = NULL;
   if(!IS_NULL_PTR(options->cache))
     band = dt_canvas_surface_cache_get_mask_band(options->cache, object, geometry.width, geometry.height,
-                                                 geometry.inset, radius);
+                                                 geometry.inset, geometry.corner, radius);
   else
   {
-    owned = dt_canvas_render_mask_band(object, geometry.width, geometry.height, geometry.inset, radius);
+    owned = dt_canvas_render_mask_band(object, geometry.width, geometry.height, geometry.inset, geometry.corner, radius);
     band = owned;
   }
   if(IS_NULL_PTR(band)) return FALSE;
@@ -1974,7 +1994,7 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     const double object_clock = dt_get_wtime();
     cairo_t *layer_cr = _layer_context(layer, matrix, &layer_box, font_options);
     if(cut)
-      _paint_fill(layer_cr, object, &local);
+      _paint_fill(layer_cr, canvas, object, &local);
     else
       _paint_object_pixels(layer_cr, canvas, object, &local);
     _apply_cutout(layer_cr, canvas, object, &local, pixels_per_unit, TRUE);

@@ -169,7 +169,7 @@ static void _the_object_mask_surface_matches_the_raster(void **state)
   dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 200.0, 100.0, "");
   dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_CIRCLE);
   frame->mask.feather = 0.0f;
-  cairo_surface_t *surface = dt_canvas_render_mask(frame, 200, 100, 0);
+  cairo_surface_t *surface = dt_canvas_render_mask(frame, 200, 100, 0, 0);
   assert_non_null(surface);
   assert_int_equal(cairo_image_surface_get_format(surface), CAIRO_FORMAT_A8);
   const uint8_t *pixels = cairo_image_surface_get_data(surface);
@@ -183,7 +183,7 @@ static void _the_object_mask_surface_matches_the_raster(void **state)
   cairo_surface_destroy(surface);
   // An inset keeps the shape clear of the frame's edges by that much: the circle reaches
   // y = 5 on its own, and with ten pixels of inset its top is gone.
-  cairo_surface_t *kept_in = dt_canvas_render_mask(frame, 200, 100, 10);
+  cairo_surface_t *kept_in = dt_canvas_render_mask(frame, 200, 100, 10, 0);
   assert_non_null(kept_in);
   assert_int_equal(cairo_image_surface_get_width(kept_in), 200);
   const int kept_stride = cairo_image_surface_get_stride(kept_in);
@@ -194,10 +194,10 @@ static void _the_object_mask_surface_matches_the_raster(void **state)
   cairo_surface_destroy(kept_in);
   // A hash keyed cache answers the same surface for the same mask and size, another after an edit.
   dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64 * 1024 * 1024);
-  cairo_surface_t *first = dt_canvas_surface_cache_get_mask(cache, frame, 200, 100, 0);
-  assert_ptr_equal(first, dt_canvas_surface_cache_get_mask(cache, frame, 200, 100, 0));
+  cairo_surface_t *first = dt_canvas_surface_cache_get_mask(cache, frame, 200, 100, 0, 0);
+  assert_ptr_equal(first, dt_canvas_surface_cache_get_mask(cache, frame, 200, 100, 0, 0));
   frame->mask.radius_x = 0.2f;
-  assert_ptr_not_equal(first, dt_canvas_surface_cache_get_mask(cache, frame, 200, 100, 0));
+  assert_ptr_not_equal(first, dt_canvas_surface_cache_get_mask(cache, frame, 200, 100, 0, 0));
   dt_canvas_surface_cache_free(cache);
   dt_canvas_free(canvas);
 }
@@ -295,6 +295,43 @@ static void _a_cut_frames_border_follows_the_cutout_outward(void **state)
   frame->text.background.alpha = 0.0f;
   assert_int_equal(_painted_pixel(canvas, 200, 130, 100), 0x000000u);
   assert_true(_within(_painted_pixel(canvas, 200, 140, 100), red, 1));
+  // A gradient covers the whole frame: its border is the frame's own ring, square corners
+  // and all -- the band is dilated from the shape and stopped at the frame, not rounded.
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_GRADIENT);
+  frame->text.background = dt_canvas_color(0.0f, 0.0f, 1.0f, 1.0f);
+  assert_true(_within(_painted_pixel(canvas, 200, 53, 53), red, 1));
+  assert_true(_within(_painted_pixel(canvas, 200, 146, 53), red, 1));
+  assert_int_equal(_painted_pixel(canvas, 200, 47, 47), 0x000000u);
+  dt_canvas_free(canvas);
+}
+
+static void _rounded_corners_round_the_frame_and_its_border(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  canvas->corner_radius = 20.0f;
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  frame->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  frame->border_width = 0.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  // The frame spans 50..150; the corner's arc is centred 20 in: (52, 52) is outside it, (60, 60) inside.
+  assert_int_equal(_painted_pixel(canvas, 200, 52, 52), 0x000000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 60, 60), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 52), 0xFFFFFFu);
+  // The object's own radius overrides the canvas's: square again.
+  frame->corner_radius = 0.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  assert_int_equal(_painted_pixel(canvas, 200, 52, 52), 0xFFFFFFu);
+  // A cut frame's border follows the rounded frame too: a gradient cutout with a border.
+  frame->flags &= ~DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  frame->border_width = 10.0f;
+  frame->border_color = dt_canvas_color(1.0f, 0.0f, 0.0f, 1.0f);
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_GRADIENT);
+  assert_int_equal(_painted_pixel(canvas, 200, 52, 52), 0x000000u);
+  assert_true(_within(_painted_pixel(canvas, 200, 100, 53), _layer_code(1.0, 0.0, 0.0), 1));
   dt_canvas_free(canvas);
 }
 
@@ -408,6 +445,7 @@ int main(void)
     cmocka_unit_test(_the_compositor_paints_the_surfaces_own_pixels_on_a_scaled_surface),
     cmocka_unit_test(_a_cut_frames_border_follows_the_cutout_outward),
     cmocka_unit_test(_a_background_fills_the_frame_under_a_missing_render),
+    cmocka_unit_test(_rounded_corners_round_the_frame_and_its_border),
   };
   return cmocka_run_group_tests(tests, _group_setup, _group_teardown);
 }

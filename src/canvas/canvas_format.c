@@ -198,6 +198,7 @@ static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
   _w_f32(out, object->mask.rotation);
   _w_f32(out, object->mask.spare);
   _w_color(out, &object->background);
+  _w_f32(out, object->corner_radius);
   _w_bytes(out, object->reserved, sizeof(object->reserved));
   switch(object->kind)
   {
@@ -267,6 +268,7 @@ GBytes *dt_canvas_format_write_index(const dt_canvas_t *canvas)
   _w_f32(out, canvas->texture_detail);
   _w_f32(out, canvas->texture_scale);
   _w_f32(out, canvas->texture_grain);
+  _w_f32(out, canvas->corner_radius);
   _w_bytes(out, canvas->reserved, sizeof(canvas->reserved));
   const uint32_t header_size = out->len;
   uint8_t *size_field = out->data + CANVAS_MAGIC_LEN + 4;
@@ -496,6 +498,7 @@ static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *obj
   object->mask.node_count = 0;
   object->mask.nodes = NULL;
   object->background = _r_color(cursor);
+  object->corner_radius = _r_f32(cursor);
   _r_bytes(cursor, object->reserved, sizeof(object->reserved));
   switch(object->kind)
   {
@@ -604,6 +607,7 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
   canvas->texture_detail = _r_f32(&cursor);
   canvas->texture_scale = _r_f32(&cursor);
   canvas->texture_grain = _r_f32(&cursor);
+  canvas->corner_radius = _r_f32(&cursor);
   _r_bytes(&cursor, canvas->reserved, sizeof(canvas->reserved));
   cursor.pos = header_size;
   cursor.limit = cursor.size;
