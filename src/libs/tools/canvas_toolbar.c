@@ -303,7 +303,8 @@ static void _refill(dt_lib_module_t *self)
   gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(toolbar->grid_color), &grid_rgba);
   GdkRGBA background_rgba = { canvas->background.red, canvas->background.green, canvas->background.blue, 1.0 };
   gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(toolbar->background_color), &background_rgba);
-  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->background_style), CLAMP((int)canvas->background_style, 0, 2));
+  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->background_style),
+                           CLAMP((int)canvas->background_style, 0, DT_CANVAS_BACKGROUND_LAST - 1));
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->paper), CLAMP((int)canvas->paper_size, 0, 5));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->landscape), canvas->paper_landscape != 0);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->border_width), canvas->border_width);
@@ -428,6 +429,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Plain colour"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Moleskine paper"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Watercolour paper"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Embossed paper"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Japanese paper"));
   gtk_widget_set_tooltip_text(toolbar->background_style, _("What the canvas is painted with"));
   g_signal_connect(toolbar->background_style, "changed", G_CALLBACK(_background_changed), self);
   gtk_box_pack_start(GTK_BOX(box), toolbar->background_style, FALSE, FALSE, 0);

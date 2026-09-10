@@ -2950,9 +2950,9 @@
   </dtconfig>
   <dtconfig>
     <name>canvas/background_style</name>
-    <type min="0" max="2">int</type>
+    <type min="0" max="4">int</type>
     <default>0</default>
-    <shortdescription>what a new canvas is painted with: 0 plain colour, 1 Moleskine paper, 2 watercolour paper</shortdescription>
+    <shortdescription>what a new canvas is painted with: 0 plain colour, 1 Moleskine, 2 watercolour, 3 embossed, 4 Japanese paper</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/paper_size</name>

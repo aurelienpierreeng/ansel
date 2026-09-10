@@ -348,7 +348,12 @@ static double *_paper_fibres(const int size, const guint32 seed)
   return field;
 }
 
-/** One sprite's relief, `size` square, before the colour: the paper's components combined. */
+static gboolean _is_paper(const uint32_t style)
+{
+  return style >= DT_CANVAS_BACKGROUND_MOLESKINE && style < DT_CANVAS_BACKGROUND_LAST;
+}
+
+/** One sprite's relief, `size` square, before the colour: the paper's random components combined. */
 static double *_paper_relief(const dt_canvas_background_t style, const int size, const int variant)
 {
   const guint32 seed = 1000u * (guint32)(variant + 1);
@@ -356,7 +361,7 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
   if(style == DT_CANVAS_BACKGROUND_MOLESKINE)
   {
     // Fine, soft clouds; short fibres in every direction, that show as the zoom lets them; a whisper of grain.
-    double *mottle = _paper_field(size, 24.0, 2.0, seed + 101u);
+    double *mottle = _paper_field(size, 40.0, 2.0, seed + 101u);
     double *fibres = _paper_fibres(size, seed + 105u);
     double *grain = _paper_field(size, 160.0, 1.1, seed + 103u);
     for(size_t idx = 0; idx < (size_t)size * size; idx++)
@@ -365,24 +370,60 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
     dt_free(fibres);
     dt_free(grain);
   }
-  else
+  else if(style == DT_CANVAS_BACKGROUND_WATERCOLOUR)
   {
     // A tooth of shallow hollows between peaks -- paper is white at its peaks, so the tooth
     // only carves, and no deeper than the saturation allows -- a band of rounded pores, and
     // a fine, quiet grain.
-    double *tooth = _paper_field(size, 30.0, 1.8, seed + 201u);
+    double *tooth = _paper_field(size, 45.0, 1.8, seed + 201u);
     double *pores = _paper_field_band(size, 320.0, 2.5, 110.0, seed + 205u);
     double *grain = _paper_field(size, 200.0, 1.0, seed + 203u);
     for(size_t idx = 0; idx < (size_t)size * size; idx++)
     {
       const double hollow = fmin(tooth[idx], 0.0);
-      relief[idx] = -0.045 * (1.0 - exp(-hollow * hollow * 0.5)) + pores[idx] * 0.006 + grain[idx] * 0.003;
+      relief[idx] = -0.06 * (1.0 - exp(-hollow * hollow * 0.5)) + pores[idx] * 0.008 + grain[idx] * 0.003;
     }
     dt_free(tooth);
     dt_free(pores);
     dt_free(grain);
   }
+  else if(style == DT_CANVAS_BACKGROUND_EMBOSSED)
+  {
+    // The random part of a wove sheet: a faint mottle and fibres; the mesh comes after the blend.
+    double *mottle = _paper_field(size, 36.0, 2.0, seed + 301u);
+    double *fibres = _paper_fibres(size, seed + 305u);
+    for(size_t idx = 0; idx < (size_t)size * size; idx++) relief[idx] = mottle[idx] * 0.008 + fibres[idx] * 0.007;
+    dt_free(mottle);
+    dt_free(fibres);
+  }
+  else if(style == DT_CANVAS_BACKGROUND_JAPANESE)
+  {
+    // Large soft clouds, a little more contrast than watercolour, and long wrinkles: the
+    // zero crossings of a low-frequency field are long curved lines, lit as ridges, and
+    // the same lines at every resolution.
+    double *clouds = _paper_field(size, 9.0, 2.2, seed + 401u);
+    double *wrinkle_field = _paper_field(size, 14.0, 2.5, seed + 405u);
+    double *grain = _paper_field(size, 180.0, 1.0, seed + 403u);
+    for(size_t idx = 0; idx < (size_t)size * size; idx++)
+    {
+      const double ridge = exp(-wrinkle_field[idx] * wrinkle_field[idx] * 60.0);
+      relief[idx] = clouds[idx] * 0.03 + ridge * 0.04 + grain[idx] * 0.002;
+    }
+    dt_free(clouds);
+    dt_free(wrinkle_field);
+    dt_free(grain);
+  }
   return relief;
+}
+
+#define PAPER_MESH_PITCH 8.0 ///< the embossing mesh's wire spacing, in canvas units
+
+/** The mesh's imprint at a point of the composed field, in canvas units: a groove along each wire. */
+static double _paper_mesh(const double unit_x, const double unit_y)
+{
+  const double along_x = fmax(cos(2.0 * M_PI * unit_x / PAPER_MESH_PITCH), 0.0);
+  const double along_y = fmax(cos(2.0 * M_PI * unit_y / PAPER_MESH_PITCH), 0.0);
+  return -0.035 * (pow(along_x, 4.0) + pow(along_y, 4.0));
 }
 
 #define PAPER_CELLS 6       ///< sprites per side of the composed field: its period is PAPER_CELLS sprites
@@ -495,12 +536,29 @@ static uint8_t *_paper_pixels(const dt_canvas_background_t style, const int spri
     base_g = 0.941;
     base_b = 0.886;
   }
+  else if(style == DT_CANVAS_BACKGROUND_EMBOSSED)
+  {
+    base_r = 0.965;
+    base_g = 0.962;
+    base_b = 0.950;
+  }
+  else if(style == DT_CANVAS_BACKGROUND_JAPANESE)
+  {
+    base_r = 0.972;
+    base_g = 0.962;
+    base_b = 0.935;
+  }
   const int total = PAPER_CELLS * sprite_size;
+  const double pixels_per_unit = (double)sprite_size / PAPER_TILE;
   double *field = _paper_compose(style, sprite_size);
   uint8_t *pixels = g_malloc((size_t)total * total * 4);
   for(size_t idx = 0; idx < (size_t)total * total; idx++)
   {
-    const double relief = field[idx];
+    double relief = field[idx];
+    // The mesh is stamped over the blended field in absolute coordinates, so it stays one
+    // mesh across placements whatever their phase and jitter; its pitch divides the period.
+    if(style == DT_CANVAS_BACKGROUND_EMBOSSED)
+      relief += _paper_mesh((idx % total) / pixels_per_unit, (idx / total) / pixels_per_unit);
     pixels[4 * idx + 0] = (uint8_t)lround(CLAMP(base_r + relief, 0.0, 1.0) * 255.0);
     pixels[4 * idx + 1] = (uint8_t)lround(CLAMP(base_g + relief, 0.0, 1.0) * 255.0);
     pixels[4 * idx + 2] = (uint8_t)lround(CLAMP(base_b + relief, 0.0, 1.0) * 255.0);
@@ -527,8 +585,8 @@ typedef struct dt_paper_cache_t
  */
 static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_display, const int sprite_scaled)
 {
-  if(style != DT_CANVAS_BACKGROUND_MOLESKINE && style != DT_CANVAS_BACKGROUND_WATERCOLOUR) return NULL;
-  static dt_paper_cache_t caches[3];
+  if(!_is_paper(style)) return NULL;
+  static dt_paper_cache_t caches[DT_CANVAS_BACKGROUND_LAST];
   static GMutex lock;
   dt_paper_cache_t *cache = &caches[style];
   dt_colorprofiles_settings_t settings;
@@ -902,8 +960,7 @@ void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_can
 void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
 {
   if(IS_NULL_PTR(cr) || IS_NULL_PTR(canvas) || IS_NULL_PTR(options)) return;
-  if(options->draw_background && (canvas->background_style == DT_CANVAS_BACKGROUND_MOLESKINE
-                                  || canvas->background_style == DT_CANVAS_BACKGROUND_WATERCOLOUR))
+  if(options->draw_background && _is_paper(canvas->background_style))
   {
     _paint_paper(cr, canvas, options);
   }
