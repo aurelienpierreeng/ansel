@@ -241,6 +241,7 @@ FILE(GLOB SOURCE_FILES
   "develop/masks/ellipse.c"
   "develop/masks/gradient.c"
   "develop/masks/masks.c"
+  "develop/masks/masks_cutout.c"
   "develop/masks/masks_debug.c"
   "develop/masks/masks_gui.c"
   "develop/masks/masks_history.c"

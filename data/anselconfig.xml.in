@@ -3056,4 +3056,46 @@
     <default>0</default>
     <shortdescription>rendering intent of the canvas PDF export</shortdescription>
   </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_enabled</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>whether a new canvas drops a shadow under every object</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_color</name>
+    <type>string</type>
+    <default>#00000080</default>
+    <shortdescription>default shadow colour and strength of a new canvas, #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_offset_x</name>
+    <type min="-500" max="500">float</type>
+    <default>8</default>
+    <shortdescription>default shadow offset to the right, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_offset_y</name>
+    <type min="-500" max="500">float</type>
+    <default>8</default>
+    <shortdescription>default shadow offset downwards, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_blur</name>
+    <type min="0" max="500">float</type>
+    <default>12</default>
+    <shortdescription>default shadow blur, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/gutter_visible</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>whether a new canvas draws the gutter frames around its frames</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/gutter_color</name>
+    <type>string</type>
+    <default>#ffa633cc</default>
+    <shortdescription>colour of the gutter frames of a new canvas, #rrggbbaa</shortdescription>
+  </dtconfig>
 </dtconfiglist>

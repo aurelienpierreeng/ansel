@@ -60,7 +60,15 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *page_color;
   GtkWidget *gutter_snap;
   GtkWidget *gutter_size;
+  GtkWidget *gutter_show;
+  GtkWidget *gutter_color;
   GtkWidget *size_snap;
+  // the shadow popover
+  GtkWidget *shadow_enable;
+  GtkWidget *shadow_offset_x;
+  GtkWidget *shadow_offset_y;
+  GtkWidget *shadow_blur;
+  GtkWidget *shadow_color;
   // the rest of the row
   GtkWidget *background_color;
   GtkWidget *background_style;
@@ -203,6 +211,36 @@ static void _page_color_set(GtkWidget *button, gpointer user_data)
   dt_view_manager_get_global()->proxy.canvas.set_page_color(view, rgba);
 }
 
+static void _gutter_color_set(GtkWidget *button, gpointer user_data)
+{
+  dt_view_t *view = NULL;
+  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_gutter_color)) return;
+  float rgba[4];
+  _rgba_of(button, rgba);
+  dt_view_manager_get_global()->proxy.canvas.set_gutter_color(view, rgba);
+}
+
+/** Any shadow control: the whole shadow is read back and applied as the canvas default. */
+static void _shadow_changed(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  dt_view_t *view = NULL;
+  if(!_live(self, &view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_shadow)) return;
+  float rgba[4];
+  _rgba_of(toolbar->shadow_color, rgba);
+  if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(toolbar->shadow_enable)))
+    rgba[3] = 0.0f;
+  else if(rgba[3] <= 0.0f)
+    rgba[3] = 0.5f;
+  dt_view_manager_get_global()->proxy.canvas.set_shadow(
+      view, rgba, (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_x)),
+      (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_y)),
+      (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->shadow_blur)));
+}
+
 static void _page_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
@@ -276,12 +314,22 @@ static void _refill(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->gutter_snap), (flags & DT_CANVAS_SNAP_GUTTER) != 0);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->gutter_size), canvas->gutter);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->size_snap), (flags & DT_CANVAS_SNAP_SIZE) != 0);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->gutter_show), (flags & DT_CANVAS_GUTTER_VISIBLE) != 0);
+  _rgba_to(toolbar->gutter_color, &canvas->gutter_color, TRUE);
+
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->shadow_enable), dt_canvas_shadow_visible(&canvas->shadow));
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_x), canvas->shadow.offset_x);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_y), canvas->shadow.offset_y);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_blur), canvas->shadow.blur);
+  if(dt_canvas_shadow_visible(&canvas->shadow)) _rgba_to(toolbar->shadow_color, &canvas->shadow.color, TRUE);
 
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->border_width), canvas->border_width);
   _rgba_to(toolbar->border_color, &canvas->border_color, TRUE);
   _rgba_to(toolbar->background_color, &canvas->background, FALSE);
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->background_style),
                            CLAMP((int)canvas->background_style, 0, DT_CANVAS_BACKGROUND_LAST - 1));
+  // A paper has its own colour: the patch only means something for the plain background.
+  gtk_widget_set_visible(toolbar->background_color, canvas->background_style == DT_CANVAS_BACKGROUND_PLAIN);
   toolbar->refilling = FALSE;
 }
 
@@ -414,14 +462,60 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   _labelled(grid, 4, 2, _("Orientation"), toolbar->page_orientation);
 
   _section_label(grid, 5, _("Gutters"));
+  toolbar->gutter_show = _guide_check(self, grid, 6, 0, _("Show"), DT_CANVAS_GUTTER_VISIBLE);
+  gtk_widget_set_tooltip_text(toolbar->gutter_show,
+                              _("Draw a frame one gutter out around every frame. Neighbours one gutter apart share it: it is what the snapping keeps clear, not a margin."));
   toolbar->gutter_snap = _guide_check(self, grid, 6, 1, _("Snap"), DT_CANVAS_SNAP_GUTTER);
   toolbar->gutter_size = gtk_spin_button_new_with_range(0.0, 500.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->gutter_size,
                               _("Margin frames keep from each other when snapped side by side or arranged, in canvas units"));
   g_signal_connect(toolbar->gutter_size, "value-changed", G_CALLBACK(_gutter_changed), self);
   _labelled(grid, 6, 2, _("Size"), toolbar->gutter_size);
-  toolbar->size_snap = _guide_check(self, grid, 6, 3, _("Snap sizes to neighbours"), DT_CANVAS_SNAP_SIZE);
+  toolbar->gutter_color = gtk_color_button_new();
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->gutter_color), TRUE);
+  gtk_widget_set_tooltip_text(toolbar->gutter_color, _("Colour of the gutter frames"));
+  g_signal_connect(toolbar->gutter_color, "color-set", G_CALLBACK(_gutter_color_set), self);
+  _labelled(grid, 6, 3, _("Colour"), toolbar->gutter_color);
+  toolbar->size_snap = _guide_check(self, grid, 7, 0, _("Snap sizes to neighbours"), DT_CANVAS_SNAP_SIZE);
+  gtk_widget_set_hexpand(toolbar->size_snap, TRUE);
 
+  GtkWidget *popover = gtk_popover_new(NULL);
+  gtk_container_add(GTK_CONTAINER(popover), grid);
+  gtk_widget_show_all(grid);
+  return popover;
+}
+
+/** The shadow popover: the default drop shadow of every object that has no shadow of its own. */
+static GtkWidget *_shadow_popover(dt_lib_module_t *self)
+{
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(4));
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(10));
+  gtk_container_set_border_width(GTK_CONTAINER(grid), DT_PIXEL_APPLY_DPI(10));
+  _section_label(grid, 0, _("Drop shadow"));
+  toolbar->shadow_enable = gtk_check_button_new_with_label(_("Enable"));
+  gtk_widget_set_tooltip_text(toolbar->shadow_enable,
+                              _("Drop a shadow under every object; an object's own bar can override it"));
+  g_signal_connect(toolbar->shadow_enable, "toggled", G_CALLBACK(_shadow_changed), self);
+  gtk_grid_attach(GTK_GRID(grid), toolbar->shadow_enable, 0, 1, 1, 1);
+  toolbar->shadow_offset_x = gtk_spin_button_new_with_range(-500.0, 500.0, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->shadow_offset_x, _("Offset to the right, in canvas units"));
+  g_signal_connect(toolbar->shadow_offset_x, "value-changed", G_CALLBACK(_shadow_changed), self);
+  _labelled(grid, 1, 1, _("Right"), toolbar->shadow_offset_x);
+  toolbar->shadow_offset_y = gtk_spin_button_new_with_range(-500.0, 500.0, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->shadow_offset_y, _("Offset downwards, in canvas units"));
+  g_signal_connect(toolbar->shadow_offset_y, "value-changed", G_CALLBACK(_shadow_changed), self);
+  _labelled(grid, 1, 2, _("Down"), toolbar->shadow_offset_y);
+  toolbar->shadow_blur = gtk_spin_button_new_with_range(0.0, 500.0, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->shadow_blur, _("Blur, in canvas units"));
+  g_signal_connect(toolbar->shadow_blur, "value-changed", G_CALLBACK(_shadow_changed), self);
+  _labelled(grid, 2, 1, _("Blur"), toolbar->shadow_blur);
+  toolbar->shadow_color = gtk_color_button_new();
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->shadow_color), TRUE);
+  gtk_widget_set_tooltip_text(toolbar->shadow_color, _("Colour and strength of the shadow"));
+  g_signal_connect(toolbar->shadow_color, "color-set", G_CALLBACK(_shadow_changed), self);
+  _labelled(grid, 2, 2, _("Colour"), toolbar->shadow_color);
   GtkWidget *popover = gtk_popover_new(NULL);
   gtk_container_add(GTK_CONTAINER(popover), grid);
   gtk_widget_show_all(grid);
@@ -496,6 +590,11 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->border_color, _("Default border colour of the frames"));
   g_signal_connect(toolbar->border_color, "color-set", G_CALLBACK(_border_changed), self);
   gtk_box_pack_start(GTK_BOX(box), toolbar->border_color, FALSE, FALSE, 0);
+  GtkWidget *shadow_button = gtk_menu_button_new();
+  gtk_button_set_label(GTK_BUTTON(shadow_button), _("Shadow"));
+  gtk_widget_set_tooltip_text(shadow_button, _("The default drop shadow of every object"));
+  gtk_menu_button_set_popover(GTK_MENU_BUTTON(shadow_button), _shadow_popover(self));
+  gtk_box_pack_start(GTK_BOX(box), shadow_button, FALSE, FALSE, 0);
   _separator(box);
 
   _button(box, _("Fit"), _("Fit the view to the canvas"), DT_CANVAS_ACTION_ZOOM_FIT);
@@ -516,6 +615,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(box), arrange, FALSE, FALSE, 0);
 
   gtk_widget_show_all(box);
+  gtk_widget_set_no_show_all(toolbar->background_color, TRUE);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED,
                                   G_CALLBACK(_canvas_changed), self);
   _refill(self);

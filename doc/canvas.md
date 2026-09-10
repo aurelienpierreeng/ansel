@@ -119,12 +119,84 @@ profile through `dt_colorprofiles_rgba8_to_display_bgra8()`; the PDF export's ke
 `canvas_paint.h` draws a canvas into a cairo context whose user space is already canvas
 units. The same painter serves the centre view and the PDF, so what is printed is what
 was shown; the options differ only in the colour target, the grid and the placeholders.
-Borders are stroked outside the frame so they never cover the picture; the image pattern's
-filter is set after `cairo_set_source_surface()`, on the pattern that scales (the trap
-`doc/darkroom-redraw.md` records). Grid dots halve their density until they are at least
-six pixels apart. Text frames are laid out with PangoCairo from the converted Markdown at
-the frame's inner width and clipped to the frame; "fit the frame to the text" measures the
-same layout.
+Borders are stroked inside the frame's edge and the content is inset by them; the image
+pattern's filter is set after `cairo_set_source_surface()`, on the pattern that scales (the
+trap `doc/darkroom-redraw.md` records). Grid dots halve their density until they are at
+least six pixels apart. Text frames are laid out with PangoCairo from the converted Markdown
+at the frame's inner width and clipped to the frame; "fit the frame to the text" measures
+the same layout.
+
+### The compositor
+
+Cairo paints in the encoding its sources arrive in, and blends there: half of white over
+black comes out as code 128, which is a quarter of the light. Feathered cutouts,
+translucent frames and drop shadows are all blends, so the painter composites the whole
+canvas itself, in linear light with premultiplied alpha, in 32-bit floats, and hands cairo
+one finished image.
+
+The device box being painted (the context's clip, narrowed to the area asked for) is the
+float canvas; a page at print resolution is cut into bands of at most 24 million pixels so
+the floats fit in memory, and a layer keeps a shadow's reach past its band so a blur at the
+band's edge is whole. The background, the grid and the pages go into a base layer with
+cairo and are decoded into the canvas. Then every object, back to front: cairo paints it
+into a layer of its own, sized to its device box (its shadow's reach included); its cutout
+multiplies the layer's alpha (`CAIRO_OPERATOR_DEST_IN` with the mask as the source, under
+the frame's transform); the layer is decoded -- unpremultiplied, through the sRGB curve,
+premultiplied again, scaled by the object's opacity; its shadow is the layer's alpha, blurred
+by three box blurs of the shadow's sigma and offset, tinted, laid "over" the canvas first;
+then the layer goes over. The finished canvas is encoded back to 8 bits through a 16384-step
+table dense enough that every code round-trips to itself: an opaque pixel comes back as the
+code it held, which `test_canvas_cutout` pins, along with the 188 that half of white over
+black must give.
+
+The conversion loops are OpenMP-parallel and the float canvas lives in a scratch buffer the
+surface cache keeps between frames, so a repaint does not page in a fresh allocation.
+On screen the layers hold display-encoded colours (each render is colour-managed as it is
+decoded), so the sRGB curve stands in for the display's own transfer function: exact on an
+sRGB display, and on any other it only shapes the blending at feathered and translucent
+pixels, since opaque ones decode and re-encode to the code they held. The export keeps sRGB
+throughout and is converted to the output profile afterwards, as before.
+
+### Shadows
+
+A `dt_canvas_shadow_t` is a colour whose alpha is the strength (0 is no shadow), an offset
+and a blur, in canvas units. The canvas carries a default one, set from the toolbar's
+Shadow popover, and an object overrides it with its own under
+`DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE`, from its bar -- the same shape as the borders, and
+`dt_canvas_object_effective_shadow()` resolves it the same way. Connectors get shadows too.
+The shadow is derived from the object's alpha after its cutout and opacity, so a feathered
+frame casts a feathered shadow and a translucent one a fainter one.
+
+### Cutouts
+
+A frame can be cut out of its rectangle by a drawn-mask shape: a circle, an ellipse, a
+polygon or a gradient, with a feather past the edge and an invert flag, in `object->mask`.
+The shapes, their fall-off and their parameters are the darkroom's own: `src/develop/masks`
+rasterises them through `dt_masks_cutout_rasterise()` (`develop/masks_cutout.h`), a headless
+entry that describes a shape in the frame's unit square -- (0, 0) the top-left corner,
+(1, 1) the bottom-right, radii and feather as fractions of the shorter side -- builds the
+form the darkroom would build and rasterises it against a throwaway dev whose only geometry
+is the raster's size. The masks module is being enclosed and the canvas never reaches into
+a `dt_masks_form_t`; the entry is inside the module, so the ratchet stays where it is.
+
+The polygon's nodes are variable-length and follow the object's record as a tagged chunk
+(`CANVAS_CHUNK_MASK_NODES`), eight floats per node: position, two control points, a smooth
+flag. The fixed fields (shape, flags, feather, centre, radii, rotation) took reserved bytes.
+The raster is cached in the surface cache by the mask's hash and size
+(`dt_canvas_surface_cache_get_mask()`), as an 8-bit alpha surface at the frame's size on
+screen, capped at 3072 pixels a side.
+
+The view edits a cutout with handles over the frame when the bar's Edit toggle is on: the
+centre or anchor, the radius or radii (the ellipse's first radius handle also sets its
+rotation), the gradient's reach across its line, and the polygon's nodes; Ctrl+click on an
+edge inserts a node, Shift+click on a node removes it. Every drag is one undo record.
+
+### Gutter frames
+
+`DT_CANVAS_GUTTER_VISIBLE` draws a frame one gutter out around every frame, in the canvas's
+gutter colour, over everything -- a guide, so it is drawn with the grid and not exported.
+Two neighbours one gutter apart share it: the gutter is what the snapping keeps clear, not a
+margin each frame owns, so the frames overlap where the frames meet.
 
 ### Connectors
 
@@ -289,7 +361,8 @@ dots -- through `dt_canvas_render_color()`, one pixel through the same transform
 matches its picture. The PDF export rasterises the page in sRGB and converts the whole raster
 to the chosen output profile with LCMS, embedding that profile; the intent is the user's.
 Text and connectors are therefore pixels in the PDF, not vectors: a trade for having one
-painter and one colour path for the screen and the print.
+painter and one colour path for the screen and the print. The compositor above runs on both
+targets; only the layers' encoding differs.
 
 ## The view
 

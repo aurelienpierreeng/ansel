@@ -80,12 +80,23 @@ static void _w_bytes(GByteArray *out, const uint8_t *bytes, const size_t len)
   g_byte_array_append(out, bytes, len);
 }
 
+/** Tags of the chunks that follow an object's fixed part. */
+#define CANVAS_CHUNK_MASK_NODES 1u
+
 static void _w_color(GByteArray *out, const dt_canvas_color_t *color)
 {
   _w_f32(out, color->red);
   _w_f32(out, color->green);
   _w_f32(out, color->blue);
   _w_f32(out, color->alpha);
+}
+
+static void _w_shadow(GByteArray *out, const dt_canvas_shadow_t *shadow)
+{
+  _w_color(out, &shadow->color);
+  _w_f32(out, shadow->offset_x);
+  _w_f32(out, shadow->offset_y);
+  _w_f32(out, shadow->blur);
 }
 
 static void _write_image(GByteArray *out, const dt_canvas_image_t *image)
@@ -174,6 +185,17 @@ static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
   _w_u32(out, object->flags);
   _w_color(out, &object->border_color);
   _w_f32(out, object->border_width);
+  _w_shadow(out, &object->shadow);
+  _w_f32(out, object->transparency);
+  _w_u32(out, object->mask.shape);
+  _w_u32(out, object->mask.flags);
+  _w_f32(out, object->mask.feather);
+  _w_f32(out, object->mask.center_x);
+  _w_f32(out, object->mask.center_y);
+  _w_f32(out, object->mask.radius_x);
+  _w_f32(out, object->mask.radius_y);
+  _w_f32(out, object->mask.rotation);
+  _w_f32(out, object->mask.spare);
   _w_bytes(out, object->reserved, sizeof(object->reserved));
   switch(object->kind)
   {
@@ -191,6 +213,15 @@ static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
       break;
     default:
       break;
+  }
+  // Variable-length data follows the fixed part as tagged chunks; a reader skips any tag it does not know.
+  if(object->mask.node_count > 0 && !IS_NULL_PTR(object->mask.nodes))
+  {
+    const uint32_t floats = object->mask.node_count * DT_CANVAS_MASK_NODE_FLOATS;
+    _w_u32(out, CANVAS_CHUNK_MASK_NODES);
+    _w_u32(out, 4 + floats * 4);
+    _w_u32(out, object->mask.node_count);
+    for(uint32_t idx = 0; idx < floats; idx++) _w_f32(out, object->mask.nodes[idx]);
   }
   const uint32_t record_size = out->len - start;
   uint8_t *size_field = out->data + start + 4;
@@ -228,6 +259,8 @@ GBytes *dt_canvas_format_write_index(const dt_canvas_t *canvas)
   _w_u32(out, canvas->paper_size);
   _w_u32(out, canvas->paper_landscape);
   _w_color(out, &canvas->page_color);
+  _w_shadow(out, &canvas->shadow);
+  _w_color(out, &canvas->gutter_color);
   _w_bytes(out, canvas->reserved, sizeof(canvas->reserved));
   const uint32_t header_size = out->len;
   uint8_t *size_field = out->data + CANVAS_MAGIC_LEN + 4;
@@ -336,6 +369,16 @@ static dt_canvas_color_t _r_color(dt_canvas_cursor_t *cursor)
   return color;
 }
 
+static dt_canvas_shadow_t _r_shadow(dt_canvas_cursor_t *cursor)
+{
+  dt_canvas_shadow_t shadow;
+  shadow.color = _r_color(cursor);
+  shadow.offset_x = _r_f32(cursor);
+  shadow.offset_y = _r_f32(cursor);
+  shadow.blur = _r_f32(cursor);
+  return shadow;
+}
+
 static void _read_image(dt_canvas_cursor_t *cursor, dt_canvas_image_t *image)
 {
   image->imgid = _r_i32(cursor);
@@ -432,6 +475,19 @@ static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *obj
   object->flags = _r_u32(cursor);
   object->border_color = _r_color(cursor);
   object->border_width = _r_f32(cursor);
+  object->shadow = _r_shadow(cursor);
+  object->transparency = _r_f32(cursor);
+  object->mask.shape = _r_u32(cursor);
+  object->mask.flags = _r_u32(cursor);
+  object->mask.feather = _r_f32(cursor);
+  object->mask.center_x = _r_f32(cursor);
+  object->mask.center_y = _r_f32(cursor);
+  object->mask.radius_x = _r_f32(cursor);
+  object->mask.radius_y = _r_f32(cursor);
+  object->mask.rotation = _r_f32(cursor);
+  object->mask.spare = _r_f32(cursor);
+  object->mask.node_count = 0;
+  object->mask.nodes = NULL;
   _r_bytes(cursor, object->reserved, sizeof(object->reserved));
   switch(object->kind)
   {
@@ -450,6 +506,28 @@ static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *obj
     default:
       // A kind this version does not know: keep its place in the file, draw nothing.
       break;
+  }
+  // The chunks: each is a tag and a size, so an unknown one is stepped over whole.
+  while(!cursor->overrun && cursor->pos + 8 <= cursor->limit)
+  {
+    const uint32_t tag = _r_u32(cursor);
+    const uint32_t size = _r_u32(cursor);
+    const size_t chunk_start = cursor->pos;
+    if(size > cursor->limit - chunk_start) break;
+    if(tag == CANVAS_CHUNK_MASK_NODES && size >= 4)
+    {
+      const uint32_t count = _r_u32(cursor);
+      const uint32_t floats = count * DT_CANVAS_MASK_NODE_FLOATS;
+      if(count > 0 && count <= 4096 && floats * 4 <= size - 4)
+      {
+        float *nodes = g_new(float, floats);
+        for(uint32_t idx = 0; idx < floats; idx++) nodes[idx] = _r_f32(cursor);
+        dt_canvas_mask_clear(object);
+        object->mask.nodes = nodes;
+        object->mask.node_count = count;
+      }
+    }
+    cursor->pos = chunk_start + size;
   }
   // Whatever this version did not read of the record is a later version's fields: skip them.
   cursor->pos = record_start + record_size;
@@ -512,6 +590,8 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
   canvas->paper_size = _r_u32(&cursor);
   canvas->paper_landscape = _r_u32(&cursor);
   canvas->page_color = _r_color(&cursor);
+  canvas->shadow = _r_shadow(&cursor);
+  canvas->gutter_color = _r_color(&cursor);
   _r_bytes(&cursor, canvas->reserved, sizeof(canvas->reserved));
   cursor.pos = header_size;
   cursor.limit = cursor.size;

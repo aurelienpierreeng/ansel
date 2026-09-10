@@ -146,6 +146,22 @@ cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, c
 void dt_canvas_surface_cache_clear(dt_canvas_surface_cache_t *cache);
 
 /**
+ * @brief The object's cutout as an 8-bit alpha surface of width x height pixels, cached by the
+ * mask's hash and size. NULL when the object has no cutout or it cannot be rasterised.
+ */
+cairo_surface_t *dt_canvas_surface_cache_get_mask(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
+                                                  int width, int height);
+
+/** @brief Rasterise an object's cutout into a new 8-bit alpha surface; the caller owns it. */
+cairo_surface_t *dt_canvas_render_mask(const dt_canvas_object_t *object, int width, int height);
+
+/**
+ * @brief A working buffer of at least `bytes`, kept between frames so a repaint does not page in
+ * a fresh allocation each time. Owned by the cache; valid until the next call.
+ */
+void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, size_t bytes);
+
+/**
  * @brief Decode a JPEG into a cairo RGB24 surface.
  * @param for_display convert to the display profile, else keep the JPEG's sRGB values.
  * @return a new surface the caller destroys, or NULL.

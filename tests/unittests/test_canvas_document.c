@@ -79,6 +79,32 @@ static dt_canvas_t *_populated_canvas(void)
   connector->connector.via_tangent_x = 40.0;
   connector->connector.via_tangent_y = -10.0;
   canvas->page_color = dt_canvas_color(0.5f, 0.6f, 0.7f, 0.8f);
+  canvas->shadow.color = dt_canvas_color(0.1f, 0.2f, 0.3f, 0.6f);
+  canvas->shadow.offset_x = 11.0f;
+  canvas->shadow.offset_y = -7.0f;
+  canvas->shadow.blur = 5.5f;
+  canvas->gutter_color = dt_canvas_color(0.9f, 0.8f, 0.7f, 0.6f);
+  canvas->grid_flags |= DT_CANVAS_GUTTER_VISIBLE;
+
+  // The image gets a shadow of its own, some transparency and a polygon cutout with four nodes.
+  image->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.4f);
+  image->shadow.offset_x = 3.0f;
+  image->shadow.offset_y = 4.0f;
+  image->shadow.blur = 2.0f;
+  image->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  image->transparency = 0.25f;
+  dt_canvas_mask_set_shape(canvas, image, DT_CANVAS_MASK_POLYGON);
+  const float nodes[4 * DT_CANVAS_MASK_NODE_FLOATS] = { 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.0f, 0.0f,
+                                                        0.9f, 0.1f, 0.9f, 0.1f, 0.9f, 0.1f, 0.0f, 0.0f,
+                                                        0.9f, 0.9f, 0.9f, 0.9f, 0.9f, 0.9f, 1.0f, 0.0f,
+                                                        0.1f, 0.9f, 0.1f, 0.9f, 0.1f, 0.9f, 0.0f, 0.0f };
+  dt_canvas_mask_set_nodes(canvas, image, nodes, 4);
+  image->mask.feather = 0.12f;
+  image->mask.flags = DT_CANVAS_MASK_INVERT;
+  // The text gets an ellipse: no nodes, only the fixed fields.
+  dt_canvas_mask_set_shape(canvas, text, DT_CANVAS_MASK_ELLIPSE);
+  text->mask.center_x = 0.4f;
+  text->mask.rotation = 30.0f;
 
   dt_canvas_object_t *map = dt_canvas_add_map(canvas, 700.0, 700.0, 45.1885, 5.7245, 13, 1);
   const char map_stand_in[] = "\xff\xd8map\xff\xd9";
@@ -103,7 +129,7 @@ static void _index_round_trip_keeps_every_field(void **state)
 
   assert_string_equal(restored->title, "Exhibition 2026");
   assert_float_equal(restored->grid_size, 25.0f, 1e-6);
-  assert_int_equal(restored->grid_flags, DT_CANVAS_GRID_VISIBLE | DT_CANVAS_GRID_SNAP);
+  assert_int_equal(restored->grid_flags, DT_CANVAS_GRID_VISIBLE | DT_CANVAS_GRID_SNAP | DT_CANVAS_GUTTER_VISIBLE);
   assert_float_equal(restored->border_color.green, 0.5f, 1e-6);
   assert_float_equal(restored->gutter, 35.0f, 1e-6);
   assert_int_equal(restored->background_style, DT_CANVAS_BACKGROUND_WATERCOLOUR);
@@ -136,10 +162,31 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_true(image->image.history_hash == 0x1234567890ABCDEFULL);
   assert_int_equal(image->image.pixel_width, 2048);
   assert_float_equal(image->rotation, 0.25, 1e-12);
-  assert_int_equal(image->flags, DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE);
+  assert_int_equal(image->flags, DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE);
   assert_float_equal(image->border_width, 9.0f, 1e-6);
   // The JPEG is a separate archive entry, not an index field.
   assert_null(image->image.jpeg);
+  // The shadow, the transparency and the cutout: fixed fields taken from the reserved bytes,
+  // and the polygon's nodes from a chunk after the record.
+  assert_float_equal(image->shadow.color.alpha, 0.4f, 1e-6);
+  assert_float_equal(image->shadow.offset_x, 3.0f, 1e-6);
+  assert_float_equal(image->shadow.offset_y, 4.0f, 1e-6);
+  assert_float_equal(image->shadow.blur, 2.0f, 1e-6);
+  assert_float_equal(image->transparency, 0.25f, 1e-6);
+  assert_int_equal(image->mask.shape, DT_CANVAS_MASK_POLYGON);
+  assert_int_equal(image->mask.flags, DT_CANVAS_MASK_INVERT);
+  assert_float_equal(image->mask.feather, 0.12f, 1e-6);
+  assert_int_equal(image->mask.node_count, 4);
+  assert_non_null(image->mask.nodes);
+  assert_float_equal(image->mask.nodes[1 * DT_CANVAS_MASK_NODE_FLOATS + 0], 0.9f, 1e-6);
+  assert_float_equal(image->mask.nodes[2 * DT_CANVAS_MASK_NODE_FLOATS + 1], 0.9f, 1e-6);
+  assert_float_equal(image->mask.nodes[2 * DT_CANVAS_MASK_NODE_FLOATS + 6], 1.0f, 1e-6);
+  assert_float_equal(restored->shadow.color.alpha, 0.6f, 1e-6);
+  assert_float_equal(restored->shadow.offset_x, 11.0f, 1e-6);
+  assert_float_equal(restored->shadow.offset_y, -7.0f, 1e-6);
+  assert_float_equal(restored->shadow.blur, 5.5f, 1e-6);
+  assert_float_equal(restored->gutter_color.red, 0.9f, 1e-6);
+  assert_true((restored->grid_flags & DT_CANVAS_GUTTER_VISIBLE) != 0);
 
   const dt_canvas_object_t *text = dt_canvas_find_object(restored, 2);
   assert_non_null(text);
@@ -147,6 +194,11 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_int_equal(text->text.align_h, DT_CANVAS_ALIGN_JUSTIFY);
   assert_int_equal(text->text.align_v, DT_CANVAS_ALIGN_END);
   assert_float_equal(text->text.background.alpha, 0.0f, 1e-6);
+  assert_int_equal(text->mask.shape, DT_CANVAS_MASK_ELLIPSE);
+  assert_float_equal(text->mask.center_x, 0.4f, 1e-6);
+  assert_float_equal(text->mask.rotation, 30.0f, 1e-6);
+  assert_int_equal(text->mask.node_count, 0);
+  assert_null(text->mask.nodes);
 
   const dt_canvas_object_t *connector = dt_canvas_find_object(restored, 3);
   assert_non_null(connector);
