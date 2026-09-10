@@ -2495,6 +2495,20 @@ they are visible.
   `dt_dev_pixelpipe_cache_init()` (the test does, in its group setup). `dt_masks_create()`
   also sanitises conf and tells the supervisor; `dt_masks_form_new_silent()` is the
   side-effect-free constructor for consumers with neither.
+- **The compositor works in the surface's own pixels.** `cairo_get_matrix()` stops at cairo's
+  device space; the surface's device scale comes after it, so a layer sized from that matrix
+  on a 2x screen is half the resolution and the blit upsamples it -- blurred AND aliased text
+  was the report. Fold `cairo_surface_get_device_scale(cairo_get_group_target(cr))` into the
+  matrix and divide it out at the blit, and hand every layer context the target's font
+  options. `test_canvas_cutout` paints on a device-scale-2 surface and checks the edges land
+  on the doubled pixels.
+- **A cut-out frame's border is a band, not a stroke**: the cutout's half-level edge dilated by
+  the border width through a Euclidean distance transform (a disc, so the band is as thick on
+  the diagonal as on the axes; a separable max filter is a square and was 41% thicker there),
+  less the cutout, painted through as a mask into its own layer and composited over the
+  content in linear light. A rectangular frame keeps the inset stroke. A text frame's
+  background must fill INSIDE its border, or it paints the border over -- it did, for as long
+  as text frames had backgrounds.
 - **Variable-length data follows an object's record as tagged chunks** (tag, size, bytes), so
   a reader steps over what it does not know; the polygon's nodes are the first. Fixed
   additions keep taking reserved bytes.
