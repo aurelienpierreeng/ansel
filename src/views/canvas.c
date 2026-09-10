@@ -2925,6 +2925,10 @@ static void _end_gesture(dt_view_t *self)
       dt_canvas_touch(view->canvas);
       _record_undo(self, view->drag_snapshot);
       view->drag_snapshot = NULL;
+      // A resized map is fetched again at its new size, so the crop it shows is at full detail.
+      dt_canvas_object_t *resized = _single_selected(view);
+      if(view->drag == DT_CANVAS_DRAG_SCALE && !IS_NULL_PTR(resized) && resized->kind == DT_CANVAS_OBJECT_MAP)
+        _start_map_render(self, resized);
     }
   }
   else if(view->drag == DT_CANVAS_DRAG_RUBBERBAND)

@@ -262,7 +262,9 @@ their URI templates), OpenStreetMap otherwise; the provider's attribution is pai
 the frame's bottom edge, as its terms ask. The toolbar's Map button adds one at the centre
 of the view at the last place used; an image's context menu adds one of where it was taken,
 from its geotag; the frame's floating bar edits the place, the zoom and the provider, each
-change fetching the tiles again.
+change fetching the tiles again. A map keeps its own ratio: it covers the frame, centred,
+and is cropped by it rather than stretched, and a resized frame fetches again at its new
+size so the crop it shows is at full detail.
 
 ### Waypoints
 
