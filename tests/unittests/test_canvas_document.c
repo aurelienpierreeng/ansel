@@ -393,33 +393,49 @@ static void _layouts_arrange_without_moving_the_group(void **state)
     frames[idx] = dt_canvas_add_image(canvas, 1000.0 + idx * 7.0, 2000.0 - idx * 3.0, 3000, 2000);
   }
   const dt_canvas_rect_t before = dt_canvas_bounds(canvas);
-  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_GRID, 0, 20.0);
+  canvas->grid_size = 50.0f;
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_GRID, 0);
   const dt_canvas_rect_t after = dt_canvas_bounds(canvas);
   assert_float_equal(after.x, before.x, 1e-9);
   assert_float_equal(after.y, before.y, 1e-9);
+  // The gap is the grid: the second column starts one cell plus one grid step after the first.
+  assert_float_equal(frames[1]->x - frames[0]->x, frames[0]->width + 50.0, 1e-9);
   // Two columns of two: the second frame sits to the right of the first, the third below it.
   assert_true(frames[1]->x > frames[0]->x);
   assert_float_equal(frames[1]->y, frames[0]->y, 1e-9);
   assert_float_equal(frames[2]->x, frames[0]->x, 1e-9);
   assert_true(frames[2]->y > frames[0]->y);
 
-  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_ROW, 0, 20.0);
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_ROW, 0);
   for(int idx = 1; idx < 4; idx++)
   {
     assert_float_equal(frames[idx]->y, frames[0]->y, 1e-9);
     assert_true(frames[idx]->x > frames[idx - 1]->x);
   }
 
-  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_MASONRY, 3, 20.0);
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_MASONRY, 3);
   assert_float_equal(frames[0]->width, frames[3]->width, 1e-9);
   assert_true(frames[3]->y > frames[0]->y); // the fourth wraps under the first column
 
   // Snapping rounds to the grid only when enabled.
-  canvas->grid_size = 50.0f;
   assert_float_equal(dt_canvas_snap(canvas, 74.0), 74.0, 1e-9);
   canvas->grid_flags |= DT_CANVAS_GRID_SNAP;
   assert_float_equal(dt_canvas_snap(canvas, 74.0), 50.0, 1e-9);
   assert_float_equal(dt_canvas_snap(canvas, 76.0), 100.0, 1e-9);
+
+  // With snapping on, every layout puts every frame's top-left corner on the grid.
+  static const dt_canvas_layout_t layouts[]
+      = { DT_CANVAS_LAYOUT_GRID, DT_CANVAS_LAYOUT_MASONRY, DT_CANVAS_LAYOUT_ROW, DT_CANVAS_LAYOUT_COLUMN };
+  for(size_t layout = 0; layout < G_N_ELEMENTS(layouts); layout++)
+  {
+    dt_canvas_layout_apply(canvas, NULL, layouts[layout], 2);
+    for(int idx = 0; idx < 4; idx++)
+    {
+      const dt_canvas_rect_t bounds = dt_canvas_object_bounds(frames[idx]);
+      assert_float_equal(fmod(bounds.x, 50.0), 0.0, 1e-6);
+      assert_float_equal(fmod(bounds.y, 50.0), 0.0, 1e-6);
+    }
+  }
   dt_canvas_free(canvas);
 }
 

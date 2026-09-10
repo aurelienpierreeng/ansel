@@ -47,6 +47,7 @@ DT_MODULE(1)
 
 typedef struct dt_lib_canvas_toolbar_t
 {
+  GtkWidget *connect_toggle;
   GtkWidget *grid_toggle;
   GtkWidget *snap_toggle;
   GtkWidget *grid_size;
@@ -159,6 +160,69 @@ static void _layout_apply(GtkWidget *widget, gpointer user_data)
   _ask(layouts[choice]);
 }
 
+static void _connect_toggled(GtkToggleButton *button, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  if(toolbar->refilling) return;
+  dt_view_t *view = _canvas_view();
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.is_connecting)) return;
+  if(gtk_toggle_button_get_active(button) != dt_view_manager_get_global()->proxy.canvas.is_connecting(view))
+    _ask(DT_CANVAS_ACTION_CONNECT_MODE);
+}
+
+/** A Connector menu item: property in "connector-property", value in "connector-value". */
+static void _connector_item_activated(GtkWidget *item, gpointer user_data)
+{
+  dt_view_t *view = _canvas_view();
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_connector)) return;
+  const int property = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item), "connector-property"));
+  const int value = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item), "connector-value"));
+  dt_view_manager_get_global()->proxy.canvas.set_connector(view, property, value);
+}
+
+static GtkWidget *_menu_entry(GtkWidget *menu, const char *label, GCallback callback, gpointer data)
+{
+  GtkWidget *item = gtk_menu_item_new_with_label(label);
+  g_signal_connect(item, "activate", callback, data);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+  return item;
+}
+
+static void _action_item(GtkWidget *menu, const char *label, const dt_canvas_action_t action)
+{
+  _menu_entry(menu, label, G_CALLBACK(_action_clicked), GINT_TO_POINTER(action));
+}
+
+static void _connector_item(GtkWidget *menu, const char *label, const dt_canvas_connector_property_t property,
+                            const int value)
+{
+  GtkWidget *item = _menu_entry(menu, label, G_CALLBACK(_connector_item_activated), NULL);
+  g_object_set_data(G_OBJECT(item), "connector-property", GINT_TO_POINTER(property));
+  g_object_set_data(G_OBJECT(item), "connector-value", GINT_TO_POINTER(value));
+}
+
+static GtkWidget *_submenu(GtkWidget *menu, const char *label)
+{
+  GtkWidget *item = gtk_menu_item_new_with_label(label);
+  GtkWidget *submenu = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+  return submenu;
+}
+
+/** A toolbar button that drops a menu. */
+static GtkWidget *_menu_button(GtkWidget *box, const char *label, const char *tooltip, GtkWidget *menu)
+{
+  GtkWidget *button = gtk_menu_button_new();
+  gtk_button_set_label(GTK_BUTTON(button), label);
+  gtk_widget_set_tooltip_text(button, tooltip);
+  gtk_widget_show_all(menu);
+  gtk_menu_button_set_popup(GTK_MENU_BUTTON(button), menu);
+  gtk_box_pack_start(GTK_BOX(box), button, FALSE, FALSE, 0);
+  return button;
+}
+
 /* --- refilling from the document --------------------------------------------------------- */
 
 static void _refill(dt_lib_module_t *self)
@@ -167,6 +231,10 @@ static void _refill(dt_lib_module_t *self)
   const dt_canvas_t *canvas = _document();
   if(IS_NULL_PTR(canvas) || IS_NULL_PTR(toolbar)) return;
   toolbar->refilling = TRUE;
+  dt_view_t *view = _canvas_view();
+  const gboolean connecting = !IS_NULL_PTR(view) && !IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.is_connecting)
+                              && dt_view_manager_get_global()->proxy.canvas.is_connecting(view);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->connect_toggle), connecting);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->grid_toggle), (canvas->grid_flags & DT_CANVAS_GRID_VISIBLE) != 0);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->snap_toggle), (canvas->grid_flags & DT_CANVAS_GRID_SNAP) != 0);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->grid_size), canvas->grid_size);
@@ -213,15 +281,56 @@ void gui_init(dt_lib_module_t *self)
   self->widget = box;
   dt_gui_add_class(box, "dt-canvas-toolbar");
 
-  _button(box, _("New"), _("Start an empty canvas"), DT_CANVAS_ACTION_NEW);
-  _button(box, _("Open"), _("Open a saved canvas"), DT_CANVAS_ACTION_OPEN);
-  _button(box, _("Save"), _("Save the canvas"), DT_CANVAS_ACTION_SAVE);
-  _button(box, _("Save as"), _("Save the canvas under another name"), DT_CANVAS_ACTION_SAVE_AS);
-  _button(box, _("PDF"), _("Export the canvas as a colour-managed PDF"), DT_CANVAS_ACTION_EXPORT_PDF);
+  GtkWidget *canvas_menu = gtk_menu_new();
+  _action_item(canvas_menu, _("New"), DT_CANVAS_ACTION_NEW);
+  _action_item(canvas_menu, _("Open..."), DT_CANVAS_ACTION_OPEN);
+  _action_item(canvas_menu, _("Save"), DT_CANVAS_ACTION_SAVE);
+  _action_item(canvas_menu, _("Save as..."), DT_CANVAS_ACTION_SAVE_AS);
+  gtk_menu_shell_append(GTK_MENU_SHELL(canvas_menu), gtk_separator_menu_item_new());
+  _action_item(canvas_menu, _("Export as PDF..."), DT_CANVAS_ACTION_EXPORT_PDF);
+  _menu_button(box, _("Canvas"), _("New, open, save and export the canvas"), canvas_menu);
+
+  GtkWidget *object_menu = gtk_menu_new();
+  _action_item(object_menu, _("Check against the library"), DT_CANVAS_ACTION_SYNC_CHECK);
+  _action_item(object_menu, _("Refresh the stale images and the notes"), DT_CANVAS_ACTION_SYNC_REFRESH_STALE);
+  _action_item(object_menu, _("Refresh every image"), DT_CANVAS_ACTION_SYNC_REFRESH_ALL);
+  _menu_button(box, _("Object"), _("Keep the images and notes in step with the library"), object_menu);
   _separator(box);
+
   _button(box, _("Text"), _("Add a text frame at the centre of the view"), DT_CANVAS_ACTION_ADD_TEXT);
   _button(box, _("Notes"), _("Add the .txt notes of the selected images as text frames (of every image when none is selected)"),
           DT_CANVAS_ACTION_ADD_NOTES);
+  toolbar->connect_toggle = gtk_toggle_button_new_with_label(_("Connect"));
+  gtk_widget_set_tooltip_text(toolbar->connect_toggle,
+                              _("Draw a connector: click an anchor point on one frame, then on another"));
+  g_signal_connect(toolbar->connect_toggle, "toggled", G_CALLBACK(_connect_toggled), self);
+  gtk_box_pack_start(GTK_BOX(box), toolbar->connect_toggle, FALSE, FALSE, 0);
+
+  GtkWidget *connector_menu = gtk_menu_new();
+  GtkWidget *route_menu = _submenu(connector_menu, _("Route"));
+  _connector_item(route_menu, _("Straight"), DT_CANVAS_CONNECTOR_SET_ROUTING, DT_CANVAS_ROUTING_STRAIGHT);
+  _connector_item(route_menu, _("Square"), DT_CANVAS_CONNECTOR_SET_ROUTING, DT_CANVAS_ROUTING_SQUARE);
+  _connector_item(route_menu, _("Cubic spline"), DT_CANVAS_CONNECTOR_SET_ROUTING, DT_CANVAS_ROUTING_CUBIC);
+  GtkWidget *arrows_menu = _submenu(connector_menu, _("Arrows"));
+  _connector_item(arrows_menu, _("None (flat line)"), DT_CANVAS_CONNECTOR_SET_ARROWS, 0);
+  _connector_item(arrows_menu, _("At the end"), DT_CANVAS_CONNECTOR_SET_ARROWS, DT_CANVAS_CONNECTOR_ARROW_END);
+  _connector_item(arrows_menu, _("At the start"), DT_CANVAS_CONNECTOR_SET_ARROWS, DT_CANVAS_CONNECTOR_ARROW_START);
+  _connector_item(arrows_menu, _("Both ends"), DT_CANVAS_CONNECTOR_SET_ARROWS,
+                  DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START);
+  _connector_item(connector_menu, _("Reverse the direction"), DT_CANVAS_CONNECTOR_SET_REVERSE, 0);
+  GtkWidget *width_menu = _submenu(connector_menu, _("Line width"));
+  static const int line_widths[] = { 1, 2, 4, 8, 12 };
+  for(size_t idx = 0; idx < G_N_ELEMENTS(line_widths); idx++)
+  {
+    gchar *label = g_strdup_printf("%d", line_widths[idx]);
+    _connector_item(width_menu, label, DT_CANVAS_CONNECTOR_SET_WIDTH, line_widths[idx]);
+    dt_free(label);
+  }
+  GtkWidget *dash_menu = _submenu(connector_menu, _("Line style"));
+  _connector_item(dash_menu, _("Solid"), DT_CANVAS_CONNECTOR_SET_DASHED, 0);
+  _connector_item(dash_menu, _("Dashed"), DT_CANVAS_CONNECTOR_SET_DASHED, 1);
+  _connector_item(connector_menu, _("Colour..."), DT_CANVAS_CONNECTOR_SET_COLOR, 0);
+  _menu_button(box, _("Connector"), _("Properties of the selected connectors"), connector_menu);
   _separator(box);
 
   toolbar->grid_toggle = gtk_toggle_button_new_with_label(_("Grid"));
@@ -267,12 +376,6 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(arrange, _("Apply the chosen layout"));
   g_signal_connect(arrange, "clicked", G_CALLBACK(_layout_apply), self);
   gtk_box_pack_start(GTK_BOX(box), arrange, FALSE, FALSE, 0);
-  _separator(box);
-
-  _button(box, _("Check"), _("Compare every image with the library"), DT_CANVAS_ACTION_SYNC_CHECK);
-  _button(box, _("Refresh"), _("Re-render the images whose development changed, and reload text notes"),
-          DT_CANVAS_ACTION_SYNC_REFRESH_STALE);
-  _button(box, _("Refresh all"), _("Re-render every image from the library"), DT_CANVAS_ACTION_SYNC_REFRESH_ALL);
 
   gtk_widget_show_all(box);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED,

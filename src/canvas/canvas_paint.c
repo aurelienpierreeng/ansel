@@ -287,13 +287,13 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
   cairo_stroke(cr);
   cairo_set_dash(cr, NULL, 0, 0.0);
 
-  // A head points along the route's tangent at its end: the normal it left the frame by.
+  // A head points along the line it ends: the last leg of the route, which for a straight
+  // connector is the chord itself and for the others the stub or tangent at that anchor.
+  const int last = route.point_count - 1;
   if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_END)
-    _paint_arrow_head(cr, route.to_x, route.to_y, route.to_x + route.to_normal_x, route.to_y + route.to_normal_y,
-                      head_scale);
+    _paint_arrow_head(cr, route.to_x, route.to_y, route.points[2 * last - 2], route.points[2 * last - 1], head_scale);
   if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_START)
-    _paint_arrow_head(cr, route.from_x, route.from_y, route.from_x + route.from_normal_x,
-                      route.from_y + route.from_normal_y, head_scale);
+    _paint_arrow_head(cr, route.from_x, route.from_y, route.points[2], route.points[3], head_scale);
   cairo_restore(cr);
 }
 
