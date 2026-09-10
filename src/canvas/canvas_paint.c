@@ -145,9 +145,11 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
  * gives each paper its character rather than a lattice of interpolated corners, which
  * reads as a mosaic.
  *
- * One sprite repeated shows its period. So several sprites are synthesised and blended,
- * over a margin, towards one shared boundary: any two then abut without a seam, and each
- * cell of the plane picks its sprite from a hash of its coordinates.
+ * One sprite repeated shows its period, and sprites sharing a border repeat that border.
+ * So several sprites are laid on a half-overlapping grid, each a random sprite in a random
+ * orientation at a random phase, blended by Hann windows that sum to one, into a field
+ * four sprites wide that is itself periodic: no seam, no border band, and a period four
+ * times the sprite's.
  *
  * Every coefficient is drawn from a hash of its frequency, so a sprite synthesised at a
  * higher resolution keeps the same broad features and only adds finer ones: the grain
@@ -158,7 +160,6 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
 #define PAPER_SPRITES 4
 #define PAPER_FIELD_MIN_LOG2 8  ///< 256 pixels: the base resolution
 #define PAPER_FIELD_MAX_LOG2 10 ///< 1024 pixels: the finest grain, past which the transform costs a pause
-#define PAPER_MARGIN 0.12       ///< the fraction of a sprite blended to the shared boundary
 
 typedef struct dt_paper_complex_t
 {
@@ -293,20 +294,20 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
     // Fine, soft clouds and a whisper of fibre.
     double *mottle = _paper_field(size, 24.0, 2.0, seed + 101u);
     double *grain = _paper_field(size, 160.0, 1.1, seed + 103u);
-    for(size_t idx = 0; idx < (size_t)size * size; idx++) relief[idx] = mottle[idx] * 0.013 + grain[idx] * 0.004;
+    for(size_t idx = 0; idx < (size_t)size * size; idx++) relief[idx] = mottle[idx] * 0.011 + grain[idx] * 0.0035;
     dt_free(mottle);
     dt_free(grain);
   }
   else
   {
-    // A tooth of hollows between peaks -- paper is white at its peaks, so the tooth only
-    // carves, the deeper the rarer -- and a fine, quiet grain.
+    // A tooth of shallow hollows between peaks -- paper is white at its peaks, so the tooth
+    // only carves, and no deeper than the saturation allows -- and a fine, quiet grain.
     double *tooth = _paper_field(size, 30.0, 1.8, seed + 201u);
     double *grain = _paper_field(size, 200.0, 1.0, seed + 203u);
     for(size_t idx = 0; idx < (size_t)size * size; idx++)
     {
       const double hollow = fmin(tooth[idx], 0.0);
-      relief[idx] = -(hollow * hollow) * 0.045 + grain[idx] * 0.005;
+      relief[idx] = -0.03 * (1.0 - exp(-hollow * hollow * 0.5)) + grain[idx] * 0.003;
     }
     dt_free(tooth);
     dt_free(grain);
@@ -314,75 +315,130 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
   return relief;
 }
 
-/** Blend every sprite towards the first over a margin along its border: one boundary for all. */
-static void _paper_share_boundary(double **reliefs, const int size)
+#define PAPER_CELLS 4 ///< sprites per side of the composed field: its period is PAPER_CELLS sprites
+
+/** A placement's random choices, from a hash of its cell: stable across resolutions. */
+static void _paper_placement(const int col, const int row, int *variant, int *orientation, double *phase_x,
+                             double *phase_y)
 {
-  const int margin = (int)lround(size * PAPER_MARGIN);
-  if(margin < 1) return;
-  for(int variant = 1; variant < PAPER_SPRITES; variant++)
+  guint32 hash = (guint32)col * 2654435761u ^ (guint32)row * 2246822519u ^ 0x9E3779B9u;
+  hash = (hash ^ (hash >> 15)) * 1274126177u;
+  hash ^= hash >> 13;
+  *variant = (int)(hash % PAPER_SPRITES);
+  *orientation = (int)((hash >> 4) % 8);
+  *phase_x = ((hash >> 8) & 0xFFF) / 4096.0;
+  *phase_y = ((hash >> 20) & 0xFFF) / 4096.0;
+}
+
+/** A sprite sample at (x, y) after the placement's orientation and phase, wrapping. */
+static double _paper_sample(const double *sprite, const int size, const int orientation, const int phase_x,
+                            const int phase_y, int x, int y)
+{
+  // Eight orientations: four quarter turns, each with or without a mirror.
+  if(orientation & 1)
   {
-    for(int row = 0; row < size; row++)
+    const int swap = x;
+    x = y;
+    y = swap;
+  }
+  if(orientation & 2) x = size - 1 - x;
+  if(orientation & 4) y = size - 1 - y;
+  x = ((x + phase_x) % size + size) % size;
+  y = ((y + phase_y) % size + size) % size;
+  return sprite[(size_t)y * size + x];
+}
+
+/**
+ * The composed field, PAPER_CELLS sprites square and periodic: sprites twice a cell wide,
+ * one per cell centre, each a random sprite in a random orientation at a random phase,
+ * weighted by a two-dimensional Hann window. Windows twice the cell pitch sum to one, so
+ * the sprites blend into a field with neither a seam nor a border band to repeat.
+ */
+static double *_paper_compose(const dt_canvas_background_t style, const int sprite_size)
+{
+  double *sprites[PAPER_SPRITES];
+  for(int variant = 0; variant < PAPER_SPRITES; variant++) sprites[variant] = _paper_relief(style, sprite_size, variant);
+  const int total = PAPER_CELLS * sprite_size;
+  double *field = g_new0(double, (size_t)total * total);
+  double *window = g_new(double, 2 * (size_t)sprite_size);
+  for(int idx = 0; idx < 2 * sprite_size; idx++)
+    window[idx] = 0.5 * (1.0 - cos(2.0 * M_PI * (idx + 0.5) / (2.0 * sprite_size)));
+
+  for(int row = 0; row < PAPER_CELLS; row++)
+  {
+    for(int col = 0; col < PAPER_CELLS; col++)
     {
-      const int distance_y = MIN(row, size - 1 - row);
-      for(int col = 0; col < size; col++)
+      int variant = 0;
+      int orientation = 0;
+      double phase_x = 0.0;
+      double phase_y = 0.0;
+      _paper_placement(col, row, &variant, &orientation, &phase_x, &phase_y);
+      const int shift_x = (int)(phase_x * sprite_size);
+      const int shift_y = (int)(phase_y * sprite_size);
+      const int origin_x = col * sprite_size - sprite_size / 2;
+      const int origin_y = row * sprite_size - sprite_size / 2;
+      for(int y = 0; y < 2 * sprite_size; y++)
       {
-        const int distance_x = MIN(col, size - 1 - col);
-        const int distance = MIN(distance_x, distance_y);
-        if(distance >= margin) continue;
-        const double edge = 1.0 - (double)distance / margin;
-        const double weight = edge * edge * (3.0 - 2.0 * edge);
-        const size_t idx = (size_t)row * size + col;
-        reliefs[variant][idx] += (reliefs[0][idx] - reliefs[variant][idx]) * weight;
+        const int field_y = ((origin_y + y) % total + total) % total;
+        for(int x = 0; x < 2 * sprite_size; x++)
+        {
+          const int field_x = ((origin_x + x) % total + total) % total;
+          field[(size_t)field_y * total + field_x]
+              += window[x] * window[y] * _paper_sample(sprites[variant], sprite_size, orientation, shift_x, shift_y, x, y);
+        }
       }
     }
   }
+  dt_free(window);
+  for(int variant = 0; variant < PAPER_SPRITES; variant++) dt_free(sprites[variant]);
+  return field;
 }
 
-/** The sprites' sRGB pixels, `size` square each, for one resolution. */
-static void _paper_sprites(const dt_canvas_background_t style, const int size, uint8_t *pixels[PAPER_SPRITES])
+/** The composed paper's sRGB pixels, PAPER_CELLS * sprite_size square. */
+static uint8_t *_paper_pixels(const dt_canvas_background_t style, const int sprite_size)
 {
   double base_r = 1.0;
   double base_g = 1.0;
   double base_b = 1.0;
   if(style == DT_CANVAS_BACKGROUND_MOLESKINE)
   {
-    base_r = 0.957;
-    base_g = 0.925;
-    base_b = 0.847;
+    // A pale cream, sRGB; the display transform takes it from there, so a wide-gamut screen
+    // does not show the raw numbers, which read far yellower.
+    base_r = 0.961;
+    base_g = 0.941;
+    base_b = 0.886;
   }
-  double *reliefs[PAPER_SPRITES];
-  for(int variant = 0; variant < PAPER_SPRITES; variant++) reliefs[variant] = _paper_relief(style, size, variant);
-  _paper_share_boundary(reliefs, size);
-  for(int variant = 0; variant < PAPER_SPRITES; variant++)
+  const int total = PAPER_CELLS * sprite_size;
+  double *field = _paper_compose(style, sprite_size);
+  uint8_t *pixels = g_malloc((size_t)total * total * 4);
+  for(size_t idx = 0; idx < (size_t)total * total; idx++)
   {
-    pixels[variant] = g_malloc((size_t)size * size * 4);
-    for(size_t idx = 0; idx < (size_t)size * size; idx++)
-    {
-      const double relief = reliefs[variant][idx];
-      pixels[variant][4 * idx + 0] = (uint8_t)lround(CLAMP(base_r + relief, 0.0, 1.0) * 255.0);
-      pixels[variant][4 * idx + 1] = (uint8_t)lround(CLAMP(base_g + relief, 0.0, 1.0) * 255.0);
-      pixels[variant][4 * idx + 2] = (uint8_t)lround(CLAMP(base_b + relief, 0.0, 1.0) * 255.0);
-      pixels[variant][4 * idx + 3] = 255;
-    }
-    dt_free(reliefs[variant]);
+    const double relief = field[idx];
+    pixels[4 * idx + 0] = (uint8_t)lround(CLAMP(base_r + relief, 0.0, 1.0) * 255.0);
+    pixels[4 * idx + 1] = (uint8_t)lround(CLAMP(base_g + relief, 0.0, 1.0) * 255.0);
+    pixels[4 * idx + 2] = (uint8_t)lround(CLAMP(base_b + relief, 0.0, 1.0) * 255.0);
+    pixels[4 * idx + 3] = 255;
   }
+  dt_free(field);
+  return pixels;
 }
 
 typedef struct dt_paper_cache_t
 {
-  uint8_t *fields[PAPER_FIELD_MAX_LOG2 + 1][PAPER_SPRITES]; ///< sRGB sprites per resolution
-  cairo_surface_t *tiles[2][PAPER_SPRITES];                 ///< scaled, colour-managed, per target
+  uint8_t *fields[PAPER_FIELD_MAX_LOG2 + 1]; ///< the composed sRGB paper per sprite resolution
+  cairo_surface_t *tile[2];                  ///< scaled, colour-managed, per target
   uint64_t generation[2];
   int size[2];
 } dt_paper_cache_t;
 
 /**
- * The paper's sprites as seamless tiles, in display or sRGB colours, at the size a sprite
- * shows on screen. The sprites are synthesised at the smallest power of two holding that
- * size, so zooming in reveals finer grain; kept per resolution, and the scaled,
- * colour-managed tiles per style, target and display profile generation.
+ * The composed paper as one seamless tile, PAPER_CELLS sprites wide, in display or sRGB
+ * colours, at the size it shows on screen. The sprites are synthesised at the smallest
+ * power of two holding the sprite's on-screen size, so zooming in reveals finer grain;
+ * kept per resolution, and the scaled, colour-managed tile per style, target and display
+ * profile generation.
  */
-static cairo_surface_t *const *_paper_tiles(const uint32_t style, const gboolean for_display, const int scaled_size)
+static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_display, const int sprite_scaled)
 {
   if(style != DT_CANVAS_BACKGROUND_MOLESKINE && style != DT_CANVAS_BACKGROUND_WATERCOLOUR) return NULL;
   static dt_paper_cache_t caches[3];
@@ -392,79 +448,68 @@ static cairo_surface_t *const *_paper_tiles(const uint32_t style, const gboolean
   dt_colorprofiles_get_settings(&settings);
   const uint64_t generation = for_display ? settings.generation + 1 : 1;
   const int target = for_display ? 1 : 0;
+  const int scaled_size = PAPER_CELLS * sprite_scaled;
 
   g_mutex_lock(&lock);
-  if(!IS_NULL_PTR(cache->tiles[target][0]) && cache->generation[target] == generation
-     && cache->size[target] == scaled_size)
+  if(!IS_NULL_PTR(cache->tile[target]) && cache->generation[target] == generation && cache->size[target] == scaled_size)
   {
     g_mutex_unlock(&lock);
-    return cache->tiles[target];
+    return cache->tile[target];
   }
   int field_log2 = PAPER_FIELD_MIN_LOG2;
-  while(field_log2 < PAPER_FIELD_MAX_LOG2 && (1 << field_log2) < scaled_size) field_log2++;
-  const int field_size = 1 << field_log2;
-  if(IS_NULL_PTR(cache->fields[field_log2][0]))
-    _paper_sprites((dt_canvas_background_t)style, field_size, cache->fields[field_log2]);
+  while(field_log2 < PAPER_FIELD_MAX_LOG2 && (1 << field_log2) < sprite_scaled) field_log2++;
+  const int sprite_size = 1 << field_log2;
+  const int field_size = PAPER_CELLS * sprite_size;
+  if(IS_NULL_PTR(cache->fields[field_log2]))
+    cache->fields[field_log2] = _paper_pixels((dt_canvas_background_t)style, sprite_size);
+  const uint8_t *base = cache->fields[field_log2];
 
+  // Colour-manage the field once per target, then scale it to what the zoom shows.
   const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, field_size);
   uint8_t *bgra = g_malloc((size_t)stride * field_size);
-  for(int variant = 0; variant < PAPER_SPRITES; variant++)
+  if(!for_display || !dt_colorprofiles_rgba8_to_display_bgra8(base, bgra, field_size, field_size, DT_COLORSPACE_SRGB))
   {
-    const uint8_t *base = cache->fields[field_log2][variant];
-    // Colour-manage the sprite once per target, then scale it to what the zoom shows.
-    if(!for_display || !dt_colorprofiles_rgba8_to_display_bgra8(base, bgra, field_size, field_size, DT_COLORSPACE_SRGB))
+    for(size_t idx = 0; idx < (size_t)field_size * field_size; idx++)
     {
-      for(size_t idx = 0; idx < (size_t)field_size * field_size; idx++)
-      {
-        bgra[4 * idx + 0] = base[4 * idx + 2];
-        bgra[4 * idx + 1] = base[4 * idx + 1];
-        bgra[4 * idx + 2] = base[4 * idx + 0];
-        bgra[4 * idx + 3] = 255;
-      }
+      bgra[4 * idx + 0] = base[4 * idx + 2];
+      bgra[4 * idx + 1] = base[4 * idx + 1];
+      bgra[4 * idx + 2] = base[4 * idx + 0];
+      bgra[4 * idx + 3] = 255;
     }
-    cairo_surface_t *unscaled
-        = cairo_image_surface_create_for_data(bgra, CAIRO_FORMAT_RGB24, field_size, field_size, stride);
-    cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, scaled_size, scaled_size);
-    cairo_t *cr = cairo_create(tile);
-    const double scale = (double)scaled_size / field_size;
-    cairo_scale(cr, scale, scale);
-    cairo_set_source_surface(cr, unscaled, 0.0, 0.0);
-    cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
-    cairo_pattern_set_filter(cairo_get_source(cr), scale < 1.0 ? CAIRO_FILTER_GOOD : CAIRO_FILTER_BILINEAR);
-    cairo_paint(cr);
-    cairo_destroy(cr);
-    cairo_surface_destroy(unscaled);
-    if(!IS_NULL_PTR(cache->tiles[target][variant])) cairo_surface_destroy(cache->tiles[target][variant]);
-    cache->tiles[target][variant] = tile;
   }
+  cairo_surface_t *unscaled = cairo_image_surface_create_for_data(bgra, CAIRO_FORMAT_RGB24, field_size, field_size, stride);
+  cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, scaled_size, scaled_size);
+  cairo_t *cr = cairo_create(tile);
+  const double scale = (double)scaled_size / field_size;
+  cairo_scale(cr, scale, scale);
+  cairo_set_source_surface(cr, unscaled, 0.0, 0.0);
+  cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
+  cairo_pattern_set_filter(cairo_get_source(cr), scale < 1.0 ? CAIRO_FILTER_GOOD : CAIRO_FILTER_BILINEAR);
+  cairo_paint(cr);
+  cairo_destroy(cr);
+  cairo_surface_destroy(unscaled);
   dt_free(bgra);
+  if(!IS_NULL_PTR(cache->tile[target])) cairo_surface_destroy(cache->tile[target]);
+  cache->tile[target] = tile;
   cache->generation[target] = generation;
   cache->size[target] = scaled_size;
   g_mutex_unlock(&lock);
-  return cache->tiles[target];
-}
-
-/** Which sprite a cell of the plane shows: a hash of the cell, stable across frames and zooms. */
-static int _paper_variant_of(const int col, const int row)
-{
-  guint32 hash = (guint32)col * 2654435761u ^ (guint32)row * 2246822519u ^ 0x9E3779B9u;
-  hash = (hash ^ (hash >> 15)) * 1274126177u;
-  hash ^= hash >> 13;
-  return (int)(hash % PAPER_SPRITES);
+  return tile;
 }
 
 /** Fill the clip with the paper, cell by cell in device space at integer offsets: cairo's fastest blit. */
 static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
 {
   const double pixels_per_unit = 1.0 / options->units_per_pixel;
-  const int scaled_size = CLAMP((int)lround(PAPER_TILE * pixels_per_unit), 16, 8192);
-  cairo_surface_t *const *tiles = _paper_tiles(canvas->background_style, options->for_display, scaled_size);
-  if(IS_NULL_PTR(tiles)) return;
+  const int sprite_scaled = CLAMP((int)lround(PAPER_TILE * pixels_per_unit), 8, 2048);
+  cairo_surface_t *tile = _paper_tile(canvas->background_style, options->for_display, sprite_scaled);
+  if(IS_NULL_PTR(tile)) return;
   if(options->clip.width <= 0.0 || options->clip.height <= 0.0) return;
-  const int first_col = (int)floor(options->clip.x / PAPER_TILE);
-  const int last_col = (int)floor((options->clip.x + options->clip.width) / PAPER_TILE);
-  const int first_row = (int)floor(options->clip.y / PAPER_TILE);
-  const int last_row = (int)floor((options->clip.y + options->clip.height) / PAPER_TILE);
+  const double cell = (double)PAPER_CELLS * PAPER_TILE;
+  const int first_col = (int)floor(options->clip.x / cell);
+  const int last_col = (int)floor((options->clip.x + options->clip.width) / cell);
+  const int first_row = (int)floor(options->clip.y / cell);
+  const int last_row = (int)floor((options->clip.y + options->clip.height) / cell);
   if((double)(last_col - first_col + 1) * (double)(last_row - first_row + 1) > 65536.0) return;
 
   cairo_save(cr);
@@ -478,15 +523,15 @@ static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     for(int col = first_col; col <= last_col; col++)
     {
       // The cell's device box, from its canvas corners, so neighbours share their edges exactly.
-      double left = col * (double)PAPER_TILE;
-      double top = row * (double)PAPER_TILE;
-      double right = (col + 1) * (double)PAPER_TILE;
-      double bottom = (row + 1) * (double)PAPER_TILE;
+      double left = col * cell;
+      double top = row * cell;
+      double right = (col + 1) * cell;
+      double bottom = (row + 1) * cell;
       cairo_matrix_transform_point(&user_to_device, &left, &top);
       cairo_matrix_transform_point(&user_to_device, &right, &bottom);
       const double cell_x = floor(left);
       const double cell_y = floor(top);
-      cairo_set_source_surface(cr, tiles[_paper_variant_of(col, row)], cell_x, cell_y);
+      cairo_set_source_surface(cr, tile, cell_x, cell_y);
       cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_PAD);
       cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
       cairo_rectangle(cr, cell_x, cell_y, floor(right) - cell_x, floor(bottom) - cell_y);
