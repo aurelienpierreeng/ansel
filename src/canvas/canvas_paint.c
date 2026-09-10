@@ -30,12 +30,11 @@
 #define PAINT_GRID_MIN_PIXEL_SPACING 6.0
 #define PAINT_GRID_DOT_FRACTION 0.03   ///< dot radius as a fraction of the grid step: it scales with the zoom
 #define PAINT_GRID_DOT_MIN_PIXELS 0.75 ///< but never vanishes
-#define PAINT_PAPER_TILE 256
 #define PAINT_ARROW_LENGTH 14.0
 #define PAINT_ARROW_HALF_WIDTH 5.0
 
 static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options);
-static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_display);
+static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options);
 
 dt_canvas_paint_options_t dt_canvas_paint_options_display(dt_canvas_surface_cache_t *cache, double units_per_pixel,
                                                           dt_canvas_rect_t clip)
@@ -139,70 +138,198 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
 
 /* --- paper textures ------------------------------------------------------------ */
 
-/** Periodic value noise on a lattice of `period` cells over the tile: seamless by construction. */
-static double _periodic_noise(const int x, const int y, const int period, const uint32_t seed)
+/*
+ * A paper is a random field with a chosen spectrum, synthesised in the frequency domain:
+ * white Gaussian noise, transformed, shaped by a radial amplitude filter, transformed back.
+ * The discrete Fourier transform is periodic by construction, so the tile wraps without a
+ * seam, and the shaping is what gives each paper its character rather than a lattice of
+ * interpolated corners, which is what reads as a mosaic.
+ */
+
+#define PAPER_TILE_LOG2 9
+#define PAPER_TILE (1 << PAPER_TILE_LOG2)
+
+typedef struct dt_paper_complex_t
 {
-  const double cell = (double)PAINT_PAPER_TILE / period;
-  const double fx = x / cell;
-  const double fy = y / cell;
-  const int ix = (int)floor(fx);
-  const int iy = (int)floor(fy);
-  const double tx = fx - ix;
-  const double ty = fy - iy;
-  const double sx = tx * tx * (3.0 - 2.0 * tx);
-  const double sy = ty * ty * (3.0 - 2.0 * ty);
-  double corners[4];
-  for(int idx = 0; idx < 4; idx++)
+  double real;
+  double imag;
+} dt_paper_complex_t;
+
+/** In-place radix-2 FFT of `count` samples (a power of two), stride `stride`, inverse when `inverse`. */
+static void _fft_1d(dt_paper_complex_t *data, const int count, const int stride, const gboolean inverse)
+{
+  // Bit reversal.
+  for(int idx = 1, reversed = 0; idx < count; idx++)
   {
-    const uint32_t lattice_x = (uint32_t)((ix + (idx & 1)) % period);
-    const uint32_t lattice_y = (uint32_t)((iy + (idx >> 1)) % period);
-    uint32_t hash = seed ^ (lattice_x * 374761393u) ^ (lattice_y * 668265263u);
-    hash = (hash ^ (hash >> 13)) * 1274126177u;
-    hash ^= hash >> 16;
-    corners[idx] = (hash & 0xFFFF) / 65535.0;
+    int bit = count >> 1;
+    for(; reversed & bit; bit >>= 1) reversed ^= bit;
+    reversed ^= bit;
+    if(idx < reversed)
+    {
+      const dt_paper_complex_t swap = data[idx * stride];
+      data[idx * stride] = data[reversed * stride];
+      data[reversed * stride] = swap;
+    }
   }
-  const double top = corners[0] + (corners[1] - corners[0]) * sx;
-  const double bottom = corners[2] + (corners[3] - corners[2]) * sx;
-  return top + (bottom - top) * sy;
+  for(int length = 2; length <= count; length <<= 1)
+  {
+    const double angle = 2.0 * M_PI / length * (inverse ? 1.0 : -1.0);
+    const double root_real = cos(angle);
+    const double root_imag = sin(angle);
+    for(int start = 0; start < count; start += length)
+    {
+      double twiddle_real = 1.0;
+      double twiddle_imag = 0.0;
+      for(int idx = 0; idx < length / 2; idx++)
+      {
+        dt_paper_complex_t *even = &data[(start + idx) * stride];
+        dt_paper_complex_t *odd = &data[(start + idx + length / 2) * stride];
+        const double product_real = odd->real * twiddle_real - odd->imag * twiddle_imag;
+        const double product_imag = odd->real * twiddle_imag + odd->imag * twiddle_real;
+        odd->real = even->real - product_real;
+        odd->imag = even->imag - product_imag;
+        even->real += product_real;
+        even->imag += product_imag;
+        const double next_real = twiddle_real * root_real - twiddle_imag * root_imag;
+        twiddle_imag = twiddle_real * root_imag + twiddle_imag * root_real;
+        twiddle_real = next_real;
+      }
+    }
+  }
+  if(inverse)
+  {
+    for(int idx = 0; idx < count; idx++)
+    {
+      data[idx * stride].real /= count;
+      data[idx * stride].imag /= count;
+    }
+  }
 }
 
-static void _paper_pixel(const dt_canvas_background_t style, const int x, const int y, uint8_t rgba[4])
+static void _fft_2d(dt_paper_complex_t *data, const int size, const gboolean inverse)
+{
+  for(int row = 0; row < size; row++) _fft_1d(data + (size_t)row * size, size, 1, inverse);
+  for(int col = 0; col < size; col++) _fft_1d(data + col, size, size, inverse);
+}
+
+/** A Gaussian deviate from a seeded generator, so a paper is the same paper every time. */
+static double _paper_gaussian(GRand *generator)
+{
+  const double uniform_a = fmax(g_rand_double(generator), 1e-12);
+  const double uniform_b = g_rand_double(generator);
+  return sqrt(-2.0 * log(uniform_a)) * cos(2.0 * M_PI * uniform_b);
+}
+
+/**
+ * A periodic random field of unit variance, `size` square: white noise shaped by
+ * 1 / (1 + (k / knee)^slope), a plateau below the knee and a power-law fall-off above it.
+ * The knee sets the size of the features, the slope how soft they are.
+ */
+static double *_paper_field(const int size, const double knee, const double slope, const guint32 seed)
+{
+  dt_paper_complex_t *spectrum = g_new0(dt_paper_complex_t, (size_t)size * size);
+  GRand *generator = g_rand_new_with_seed(seed);
+  for(size_t idx = 0; idx < (size_t)size * size; idx++) spectrum[idx].real = _paper_gaussian(generator);
+  g_rand_free(generator);
+  _fft_2d(spectrum, size, FALSE);
+  for(int row = 0; row < size; row++)
+  {
+    const double frequency_y = row <= size / 2 ? row : row - size;
+    for(int col = 0; col < size; col++)
+    {
+      const double frequency_x = col <= size / 2 ? col : col - size;
+      const double frequency = hypot(frequency_x, frequency_y);
+      const double gain = 1.0 / (1.0 + pow(frequency / knee, slope));
+      spectrum[(size_t)row * size + col].real *= gain;
+      spectrum[(size_t)row * size + col].imag *= gain;
+    }
+  }
+  spectrum[0].real = 0.0; // no mean: the base colour carries it
+  spectrum[0].imag = 0.0;
+  _fft_2d(spectrum, size, TRUE);
+  double *field = g_new(double, (size_t)size * size);
+  double variance = 0.0;
+  for(size_t idx = 0; idx < (size_t)size * size; idx++)
+  {
+    field[idx] = spectrum[idx].real;
+    variance += field[idx] * field[idx];
+  }
+  dt_free(spectrum);
+  const double deviation = sqrt(variance / ((double)size * size));
+  if(deviation > 0.0)
+  {
+    for(size_t idx = 0; idx < (size_t)size * size; idx++) field[idx] /= deviation;
+  }
+  return field;
+}
+
+/** The paper's sRGB pixels, `size` square. */
+static uint8_t *_paper_pixels(const dt_canvas_background_t style, const int size)
 {
   double base_r = 1.0;
   double base_g = 1.0;
   double base_b = 1.0;
-  double relief = 0.0;
+  double *mottle = NULL;
+  double *tooth = NULL;
+  double *grain = NULL;
+  double mottle_amplitude = 0.0;
+  double tooth_amplitude = 0.0;
+  double grain_amplitude = 0.0;
   if(style == DT_CANVAS_BACKGROUND_MOLESKINE)
   {
-    // Ivory, a soft mottle: two gentle octaves.
+    // Ivory; soft, broad clouds and a whisper of fibre.
     base_r = 0.957;
     base_g = 0.925;
     base_b = 0.847;
-    relief = (_periodic_noise(x, y, 8, 11u) - 0.5) * 0.035 + (_periodic_noise(x, y, 32, 23u) - 0.5) * 0.02;
+    mottle = _paper_field(size, size / 40.0, 2.2, 1101u);
+    grain = _paper_field(size, size / 3.0, 1.2, 1103u);
+    mottle_amplitude = 0.018;
+    grain_amplitude = 0.006;
   }
-  else if(style == DT_CANVAS_BACKGROUND_WATERCOLOUR)
+  else
   {
-    // Pure white, a thick tooth: a coarse octave, a fine one, and grain.
-    relief = (_periodic_noise(x, y, 6, 31u) - 0.5) * 0.05 + (_periodic_noise(x, y, 24, 47u) - 0.5) * 0.045
-             + (_periodic_noise(x, y, 128, 59u) - 0.5) * 0.02;
-    // The tooth darkens only: paper is white at its peaks.
-    relief = fmin(relief, 0.0) * 1.6;
+    // Pure white; a thick tooth of hollows between peaks, and a fine grain.
+    tooth = _paper_field(size, size / 18.0, 1.7, 2201u);
+    grain = _paper_field(size, size / 2.5, 1.0, 2203u);
+    tooth_amplitude = 0.075;
+    grain_amplitude = 0.012;
   }
-  rgba[0] = (uint8_t)lround(CLAMP(base_r + relief, 0.0, 1.0) * 255.0);
-  rgba[1] = (uint8_t)lround(CLAMP(base_g + relief, 0.0, 1.0) * 255.0);
-  rgba[2] = (uint8_t)lround(CLAMP(base_b + relief, 0.0, 1.0) * 255.0);
-  rgba[3] = 255;
+  uint8_t *rgba = g_malloc((size_t)size * size * 4);
+  for(size_t idx = 0; idx < (size_t)size * size; idx++)
+  {
+    double relief = 0.0;
+    if(!IS_NULL_PTR(mottle)) relief += mottle[idx] * mottle_amplitude;
+    if(!IS_NULL_PTR(tooth))
+    {
+      // Paper is white at its peaks: the tooth only carves hollows, the deeper the rarer.
+      const double hollow = fmin(tooth[idx], 0.0);
+      relief += -(hollow * hollow) * tooth_amplitude;
+    }
+    if(!IS_NULL_PTR(grain)) relief += grain[idx] * grain_amplitude;
+    rgba[4 * idx + 0] = (uint8_t)lround(CLAMP(base_r + relief, 0.0, 1.0) * 255.0);
+    rgba[4 * idx + 1] = (uint8_t)lround(CLAMP(base_g + relief, 0.0, 1.0) * 255.0);
+    rgba[4 * idx + 2] = (uint8_t)lround(CLAMP(base_b + relief, 0.0, 1.0) * 255.0);
+    rgba[4 * idx + 3] = 255;
+  }
+  dt_free(mottle);
+  dt_free(tooth);
+  dt_free(grain);
+  return rgba;
 }
 
 /**
- * A seamless tile of the paper, in display or sRGB colours. Cached per style, target and
- * display profile generation; the tile is small, the generation seldom moves.
+ * The paper as a seamless tile, in display or sRGB colours, at the size it shows on screen.
+ * The base tile is synthesised once per style; a version scaled to the current zoom is cached
+ * per style, target and display profile generation, so the plane is filled with an unscaled
+ * repeat -- cairo's fast path -- rather than a transformed one on every frame.
  */
-static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_display)
+static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_display, const int scaled_size)
 {
   if(style != DT_CANVAS_BACKGROUND_MOLESKINE && style != DT_CANVAS_BACKGROUND_WATERCOLOUR) return NULL;
+  static uint8_t *base[3] = { NULL, NULL, NULL };
   static cairo_surface_t *cached[3][2] = { { NULL, NULL }, { NULL, NULL }, { NULL, NULL } };
   static uint64_t cached_generation[3][2] = { { 0, 0 }, { 0, 0 }, { 0, 0 } };
+  static int cached_size[3][2] = { { 0, 0 }, { 0, 0 }, { 0, 0 } };
   static GMutex lock;
   dt_colorprofiles_settings_t settings;
   dt_colorprofiles_get_settings(&settings);
@@ -210,43 +337,77 @@ static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_dis
   const int target = for_display ? 1 : 0;
 
   g_mutex_lock(&lock);
-  if(!IS_NULL_PTR(cached[style][target]) && cached_generation[style][target] == generation)
+  if(!IS_NULL_PTR(cached[style][target]) && cached_generation[style][target] == generation
+     && cached_size[style][target] == scaled_size)
   {
     cairo_surface_t *tile = cached[style][target];
     g_mutex_unlock(&lock);
     return tile;
   }
-  const int size = PAINT_PAPER_TILE;
-  uint8_t *rgba = g_malloc((size_t)size * size * 4);
-  for(int y = 0; y < size; y++)
+  if(IS_NULL_PTR(base[style])) base[style] = _paper_pixels((dt_canvas_background_t)style, PAPER_TILE);
+
+  // Colour-manage the base once per target, then scale it to what the zoom shows.
+  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, PAPER_TILE);
+  uint8_t *bgra = g_malloc((size_t)stride * PAPER_TILE);
+  if(!for_display || !dt_colorprofiles_rgba8_to_display_bgra8(base[style], bgra, PAPER_TILE, PAPER_TILE, DT_COLORSPACE_SRGB))
   {
-    for(int x = 0; x < size; x++)
+    for(size_t idx = 0; idx < (size_t)PAPER_TILE * PAPER_TILE; idx++)
     {
-      _paper_pixel((dt_canvas_background_t)style, x, y, rgba + ((size_t)y * size + x) * 4);
-    }
-  }
-  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, size);
-  uint8_t *bgra = g_malloc((size_t)stride * size);
-  if(!for_display || !dt_colorprofiles_rgba8_to_display_bgra8(rgba, bgra, size, size, DT_COLORSPACE_SRGB))
-  {
-    for(size_t idx = 0; idx < (size_t)size * size; idx++)
-    {
-      bgra[4 * idx + 0] = rgba[4 * idx + 2];
-      bgra[4 * idx + 1] = rgba[4 * idx + 1];
-      bgra[4 * idx + 2] = rgba[4 * idx + 0];
+      bgra[4 * idx + 0] = base[style][4 * idx + 2];
+      bgra[4 * idx + 1] = base[style][4 * idx + 1];
+      bgra[4 * idx + 2] = base[style][4 * idx + 0];
       bgra[4 * idx + 3] = 255;
     }
   }
-  dt_free(rgba);
-  cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, size, size);
-  memcpy(cairo_image_surface_get_data(tile), bgra, (size_t)stride * size);
-  cairo_surface_mark_dirty(tile);
+  cairo_surface_t *unscaled = cairo_image_surface_create_for_data(bgra, CAIRO_FORMAT_RGB24, PAPER_TILE, PAPER_TILE, stride);
+  cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, scaled_size, scaled_size);
+  cairo_t *cr = cairo_create(tile);
+  const double scale = (double)scaled_size / PAPER_TILE;
+  cairo_scale(cr, scale, scale);
+  cairo_set_source_surface(cr, unscaled, 0.0, 0.0);
+  cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
+  cairo_pattern_set_filter(cairo_get_source(cr), scale < 1.0 ? CAIRO_FILTER_GOOD : CAIRO_FILTER_BILINEAR);
+  cairo_paint(cr);
+  cairo_destroy(cr);
+  cairo_surface_destroy(unscaled);
   dt_free(bgra);
+
   if(!IS_NULL_PTR(cached[style][target])) cairo_surface_destroy(cached[style][target]);
   cached[style][target] = tile;
   cached_generation[style][target] = generation;
+  cached_size[style][target] = scaled_size;
   g_mutex_unlock(&lock);
   return tile;
+}
+
+/** Fill the clip with the paper: in device space, at an integer offset, the repeat cairo does fastest. */
+static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
+{
+  const double pixels_per_unit = 1.0 / options->units_per_pixel;
+  const int scaled_size = CLAMP((int)lround(PAPER_TILE * pixels_per_unit), 32, 8192);
+  cairo_surface_t *tile = _paper_tile(canvas->background_style, options->for_display, scaled_size);
+  if(IS_NULL_PTR(tile)) return;
+  // Where the canvas origin lands in device pixels, so the paper stays put under a pan.
+  double origin_x = 0.0;
+  double origin_y = 0.0;
+  cairo_user_to_device(cr, &origin_x, &origin_y);
+  cairo_save(cr);
+  if(options->clip.width > 0.0 && options->clip.height > 0.0)
+  {
+    cairo_rectangle(cr, options->clip.x, options->clip.y, options->clip.width, options->clip.height);
+    cairo_clip(cr);
+  }
+  cairo_identity_matrix(cr);
+  cairo_pattern_t *pattern = cairo_pattern_create_for_surface(tile);
+  cairo_pattern_set_extend(pattern, CAIRO_EXTEND_REPEAT);
+  cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
+  cairo_matrix_t matrix;
+  cairo_matrix_init_translate(&matrix, -floor(origin_x), -floor(origin_y));
+  cairo_pattern_set_matrix(pattern, &matrix);
+  cairo_set_source(cr, pattern);
+  cairo_pattern_destroy(pattern);
+  cairo_paint(cr);
+  cairo_restore(cr);
 }
 
 /* --- frames ----------------------------------------------------------------- */
@@ -511,21 +672,15 @@ void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_can
 void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
 {
   if(IS_NULL_PTR(cr) || IS_NULL_PTR(canvas) || IS_NULL_PTR(options)) return;
-  if(options->draw_background)
+  if(options->draw_background && (canvas->background_style == DT_CANVAS_BACKGROUND_MOLESKINE
+                                  || canvas->background_style == DT_CANVAS_BACKGROUND_WATERCOLOUR))
+  {
+    _paint_paper(cr, canvas, options);
+  }
+  else if(options->draw_background)
   {
     cairo_save(cr);
-    cairo_surface_t *paper = _paper_tile(canvas->background_style, options->for_display);
-    if(!IS_NULL_PTR(paper))
-    {
-      cairo_pattern_t *pattern = cairo_pattern_create_for_surface(paper);
-      cairo_pattern_set_extend(pattern, CAIRO_EXTEND_REPEAT);
-      cairo_set_source(cr, pattern);
-      cairo_pattern_destroy(pattern);
-    }
-    else
-    {
-      _set_color(cr, &canvas->background, options->for_display);
-    }
+    _set_color(cr, &canvas->background, options->for_display);
     if(options->clip.width > 0.0 && options->clip.height > 0.0)
     {
       cairo_rectangle(cr, options->clip.x, options->clip.y, options->clip.width, options->clip.height);

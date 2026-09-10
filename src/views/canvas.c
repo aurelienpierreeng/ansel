@@ -164,6 +164,9 @@ typedef struct dt_canvas_view_t
   GtkWidget *text_no_background;
   GtkWidget *text_align_h;
   GtkWidget *text_align_v;
+  GtkWidget *text_border_width;
+  GtkWidget *text_border_color;
+  gulong bars_position_handler;         ///< the overlay's get-child-position hook
   // same-size guides, shown while a resize snaps to a neighbour's size
   gboolean guide_width_valid;
   dt_canvas_rect_t guide_width;
@@ -1540,9 +1543,18 @@ static void _bar_text_align_changed(GtkComboBox *combo, gpointer data)
   BAR_EDIT_END()
 }
 
+/** The border handlers serve the image bar and the text bar alike: any frame. */
+#define BAR_EDIT_BEGIN_FRAME()                                                                             \
+  dt_view_t *self = (dt_view_t *)data;                                                                     \
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;                                                 \
+  if(view->bars_refilling) return;                                                                         \
+  dt_canvas_object_t *object = _bar_target(view);                                                          \
+  if(!dt_canvas_object_is_frame(object)) return;                                                           \
+  dt_canvas_t *before = _begin_edit(view);
+
 static void _bar_border_width_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_IMAGE)
+  BAR_EDIT_BEGIN_FRAME()
   dt_canvas_color_t color;
   float width = 0.0f;
   dt_canvas_object_effective_border(view->canvas, object, &color, &width);
@@ -1554,7 +1566,7 @@ static void _bar_border_width_changed(GtkSpinButton *spin, gpointer data)
 
 static void _bar_border_color_set(GtkColorButton *button, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_IMAGE)
+  BAR_EDIT_BEGIN_FRAME()
   dt_canvas_color_t color;
   float width = 0.0f;
   dt_canvas_object_effective_border(view->canvas, object, &color, &width);
@@ -1566,7 +1578,7 @@ static void _bar_border_color_set(GtkColorButton *button, gpointer data)
 
 static void _bar_border_default_clicked(GtkWidget *button, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_IMAGE)
+  BAR_EDIT_BEGIN_FRAME()
   object->flags &= ~DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
   BAR_EDIT_END()
   _bars_refresh(self, TRUE);
@@ -1650,6 +1662,7 @@ static void _bar_finish(GtkWidget *bar)
 {
   gtk_widget_show_all(bar);
   gtk_widget_hide(bar);
+  g_object_set_data(G_OBJECT(bar), "canvas-bar", GINT_TO_POINTER(1));
   g_object_set_data(G_OBJECT(bar), "bar-left", GINT_TO_POINTER(-1));
   g_object_set_data(G_OBJECT(bar), "bar-top", GINT_TO_POINTER(-1));
 }
@@ -1664,11 +1677,45 @@ static GtkWidget *_bar_color_button(GtkWidget *bar, const char *tooltip, GCallba
   return button;
 }
 
+/** Border width, colour with opacity, and the button back to the canvas border. */
+static void _bar_add_border_controls(dt_view_t *self, GtkWidget *bar, GtkWidget **width, GtkWidget **color)
+{
+  gtk_box_pack_start(GTK_BOX(bar), gtk_label_new(_("Border")), FALSE, FALSE, 0);
+  *width = gtk_spin_button_new_with_range(0.0, 200.0, 1.0);
+  gtk_widget_set_tooltip_text(*width, _("Border width, in canvas units. The border is part of the frame: the content shrinks inside it."));
+  g_signal_connect(*width, "value-changed", G_CALLBACK(_bar_border_width_changed), self);
+  gtk_box_pack_start(GTK_BOX(bar), *width, FALSE, FALSE, 0);
+  *color = _bar_color_button(bar, _("Border colour and opacity"), G_CALLBACK(_bar_border_color_set), self);
+  GtkWidget *default_button = gtk_button_new_with_label(_("Canvas border"));
+  gtk_widget_set_tooltip_text(default_button, _("Use the canvas's uniform border for this frame"));
+  g_signal_connect(default_button, "clicked", G_CALLBACK(_bar_border_default_clicked), self);
+  gtk_box_pack_start(GTK_BOX(bar), default_button, FALSE, FALSE, 0);
+}
+
+/**
+ * Where an overlay child goes: the position a placement stored on it. Answering the
+ * overlay's own question is what keeps a move to a re-allocation of the overlay, where
+ * a margin change is a resize that climbs to the toplevel and lays the window out again.
+ */
+static gboolean _bars_child_position(GtkOverlay *overlay, GtkWidget *widget, GdkRectangle *allocation,
+                                     gpointer user_data)
+{
+  if(!GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "canvas-bar"))) return FALSE;
+  GtkRequisition natural;
+  gtk_widget_get_preferred_size(widget, NULL, &natural);
+  allocation->x = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "bar-left"));
+  allocation->y = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "bar-top"));
+  allocation->width = natural.width;
+  allocation->height = natural.height;
+  return TRUE;
+}
+
 static void _bars_create(dt_view_t *self)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(!IS_NULL_PTR(view->text_bar)) return;
   GtkWidget *base = dt_ui_center_base(dt_gui_get_ui());
+  view->bars_position_handler = g_signal_connect(base, "get-child-position", G_CALLBACK(_bars_child_position), self);
 
   view->text_bar = _bar_new(base);
   view->text_font = gtk_font_button_new();
@@ -1698,20 +1745,11 @@ static void _bars_create(dt_view_t *self)
   gtk_widget_set_tooltip_text(view->text_align_v, _("Vertical alignment"));
   g_signal_connect(view->text_align_v, "changed", G_CALLBACK(_bar_text_align_changed), self);
   gtk_box_pack_start(GTK_BOX(view->text_bar), view->text_align_v, FALSE, FALSE, 0);
+  _bar_add_border_controls(self, view->text_bar, &view->text_border_width, &view->text_border_color);
   _bar_finish(view->text_bar);
 
   view->image_bar = _bar_new(base);
-  gtk_box_pack_start(GTK_BOX(view->image_bar), gtk_label_new(_("Border")), FALSE, FALSE, 0);
-  view->image_border_width = gtk_spin_button_new_with_range(0.0, 200.0, 1.0);
-  gtk_widget_set_tooltip_text(view->image_border_width,
-                              _("Border width, in canvas units. The border is part of the frame: the picture shrinks inside it."));
-  g_signal_connect(view->image_border_width, "value-changed", G_CALLBACK(_bar_border_width_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->image_bar), view->image_border_width, FALSE, FALSE, 0);
-  view->image_border_color = _bar_color_button(view->image_bar, _("Border colour"), G_CALLBACK(_bar_border_color_set), self);
-  GtkWidget *default_button = gtk_button_new_with_label(_("Canvas default"));
-  gtk_widget_set_tooltip_text(default_button, _("Use the canvas border"));
-  g_signal_connect(default_button, "clicked", G_CALLBACK(_bar_border_default_clicked), self);
-  gtk_box_pack_start(GTK_BOX(view->image_bar), default_button, FALSE, FALSE, 0);
+  _bar_add_border_controls(self, view->image_bar, &view->image_border_width, &view->image_border_color);
   _bar_finish(view->image_bar);
 
   view->connector_bar = _bar_new(base);
@@ -1761,6 +1799,11 @@ static void _bars_destroy(dt_view_t *self)
   if(!IS_NULL_PTR(view->text_bar)) gtk_container_remove(GTK_CONTAINER(base), view->text_bar);
   if(!IS_NULL_PTR(view->image_bar)) gtk_container_remove(GTK_CONTAINER(base), view->image_bar);
   if(!IS_NULL_PTR(view->connector_bar)) gtk_container_remove(GTK_CONTAINER(base), view->connector_bar);
+  if(view->bars_position_handler != 0)
+  {
+    g_signal_handler_disconnect(base, view->bars_position_handler);
+    view->bars_position_handler = 0;
+  }
   view->text_bar = NULL;
   view->image_bar = NULL;
   view->connector_bar = NULL;
@@ -1806,12 +1849,8 @@ static void _bar_place(dt_canvas_view_t *view, GtkWidget *bar, const dt_canvas_o
   double max_x = 0.0;
   double max_y = 0.0;
   if(!_object_screen_box(view, object, &min_x, &min_y, &max_x, &max_y)) return;
-  // The preferred size includes the widget's margins, and the margins are where the bar was
-  // last put: measuring them in made every placement flip between below and above.
   GtkRequisition natural;
   gtk_widget_get_preferred_size(bar, NULL, &natural);
-  natural.width -= gtk_widget_get_margin_start(bar) + gtk_widget_get_margin_end(bar);
-  natural.height -= gtk_widget_get_margin_top(bar) + gtk_widget_get_margin_bottom(bar);
   const int spacing = DT_PIXEL_APPLY_DPI(6);
   int left = (int)lround(min_x);
   int top = (int)lround(max_y) + spacing;
@@ -1824,16 +1863,27 @@ static void _bar_place(dt_canvas_view_t *view, GtkWidget *bar, const dt_canvas_o
   {
     g_object_set_data(G_OBJECT(bar), "bar-left", GINT_TO_POINTER(left));
     g_object_set_data(G_OBJECT(bar), "bar-top", GINT_TO_POINTER(top));
-    gtk_widget_set_margin_start(bar, left);
-    gtk_widget_set_margin_top(bar, top);
+    gtk_widget_queue_allocate(dt_ui_center_base(dt_gui_get_ui()));
   }
+}
+
+/** Hide the bars at once, without waiting for the idle: a click on the background dismisses them. */
+static void _bars_hide_now(dt_canvas_view_t *view)
+{
+  if(IS_NULL_PTR(view->text_bar)) return;
+  gtk_widget_hide(view->text_bar);
+  gtk_widget_hide(view->image_bar);
+  gtk_widget_hide(view->connector_bar);
+  view->bars_signature = 0;
 }
 
 static void _bars_refresh(dt_view_t *self, gboolean force)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view->text_bar) || IS_NULL_PTR(view->image_bar) || IS_NULL_PTR(view->connector_bar)) return;
-  const dt_canvas_object_t *object = view->connecting ? NULL : _bar_target(view);
+  // No bar while a gesture is running: it would follow every motion through a re-allocation.
+  const gboolean dragging = view->drag != DT_CANVAS_DRAG_NONE;
+  const dt_canvas_object_t *object = (view->connecting || dragging) ? NULL : _bar_target(view);
   const uint32_t kind = IS_NULL_PTR(object) ? DT_CANVAS_OBJECT_NONE : object->kind;
   const uint64_t signature = view->canvas->generation * 131u + (IS_NULL_PTR(object) ? 0u : object->id) * 7u + kind;
   if(force || signature != view->bars_signature)
@@ -1848,6 +1898,11 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_no_background), object->text.background.alpha <= 0.0f);
       gtk_combo_box_set_active(GTK_COMBO_BOX(view->text_align_h), CLAMP((int)object->text.align_h, 0, 3));
       gtk_combo_box_set_active(GTK_COMBO_BOX(view->text_align_v), CLAMP((int)object->text.align_v, 0, 2));
+      dt_canvas_color_t border_color;
+      float border_width = 0.0f;
+      dt_canvas_object_effective_border(view->canvas, object, &border_color, &border_width);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_border_width), border_width);
+      _color_to_button(view->text_border_color, &border_color);
     }
     else if(kind == DT_CANVAS_OBJECT_IMAGE)
     {
@@ -2624,6 +2679,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   if(which == 2 || (which == 1 && dt_modifier_is(state, GDK_MOD1_MASK)))
   {
     view->drag = DT_CANVAS_DRAG_PAN;
+    _bars_hide_now(view);
     dt_control_change_cursor(GDK_FLEUR);
     return 1;
   }
@@ -2643,6 +2699,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       _select_only(view, via_owner->id);
       view->drag_snapshot = _begin_edit(view);
       view->drag = DT_CANVAS_DRAG_VIA;
+      _bars_hide_now(view);
       dt_control_change_cursor(GDK_FLEUR);
       return 1;
     }
@@ -2654,6 +2711,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       if(handle < 0) continue;
       _select_only(view, object->id);
       view->drag_snapshot = _begin_edit(view);
+      _bars_hide_now(view);
       if(handle == 4)
       {
         view->drag = DT_CANVAS_DRAG_ROTATE;
@@ -2688,6 +2746,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       {
         view->drag = DT_CANVAS_DRAG_MOVE;
         view->drag_snapshot = _begin_edit(view);
+        _bars_hide_now(view);
         dt_control_change_cursor(GDK_FLEUR);
       }
       _bars_request(self);
@@ -2695,7 +2754,9 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       return 1;
     }
 
+    // The background: the selection and its bar go at once, before the rubber band starts.
     if(!primary && !shift) g_array_set_size(view->selection, 0);
+    _bars_hide_now(view);
     view->drag = DT_CANVAS_DRAG_RUBBERBAND;
     _bars_request(self);
     dt_control_queue_redraw_center();
@@ -2872,8 +2933,6 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   view->pointer_y = canvas_y;
   view->last_x = canvas_x;
   view->last_y = canvas_y;
-  // Every drag moves either the object the bar sits under or the viewport under the bar.
-  _bars_request(self);
   dt_control_queue_redraw_center();
 }
 
