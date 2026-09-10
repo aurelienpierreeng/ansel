@@ -27,7 +27,7 @@ which it needs to render, below `views/` and `libs/`, which are its only consume
 
 Three kinds of object share one struct, `dt_canvas_object_t`: an **image frame** (a
 library render), a **text frame** (Markdown, or the `.txt` sidecar of an image frame) and a
-**connector** (an arrow from one frame to another). Every object has an id unique within
+**connector** (a line from one frame to another, see below). Every object has an id unique within
 the canvas, never reused, which is what connectors and sidecar links refer to. Frames have
 a centre, a size, a rotation, a draw order and an optional border of their own; the canvas
 carries the default border, the grid, the background and the saved viewport.
@@ -60,6 +60,9 @@ and checks the next one still parses. The fields that ARE stored for an image fr
 what a library needs to find the original again: id, version, film roll id, folder, file
 name, history hash, source dimensions, orientation, and the EXIF a caption needs (maker,
 model, lens, exposure, aperture, ISO, focal length, exposure bias, date taken).
+
+The connector's anchors and routing are the first fields added this way: 12 bytes taken
+from the front of its 128 reserved bytes, the record size unchanged, no version bump.
 
 `DT_CANVAS_FORMAT_VERSION` is bumped only when an existing field changes meaning. A newer
 version's file is refused with `DT_CANVAS_ERROR_VERSION`; an older one reads, with its
@@ -119,8 +122,29 @@ six pixels apart. Text frames are laid out with PangoCairo from the converted Ma
 the frame's inner width and clipped to the frame; "fit the frame to the text" measures the
 same layout.
 
-Selection handles, hover outlines, the rubber band, the connector being drawn and the
-status line are the view's and are painted after the document, in the same transform.
+### Connectors
+
+A connector joins two frames at **anchors**: each frame's own cardinal points (top, right,
+bottom, left), which rotate with it, or `AUTO`, which picks of the four the one nearest the
+other end's frame. `dt_canvas_connector_route()` resolves a connector to its geometry once,
+for the painter and the hit test alike: the two anchor points, the outward normal at each,
+and a polyline. Three **routings**: straight (one segment); square (a stub along each
+normal, then horizontal and vertical legs, with a middle leg when both normals point the
+same way); cubic (a Bezier whose control points lie along the normals, drawn with
+`cairo_curve_to()` and flattened to 40 points for the hit test). Arrow heads sit on the
+anchor and point along the normal into the frame, at the end, the start, both, or neither
+(a flat line); "Reverse the direction" swaps the ends and their anchors. All of it is in
+the connector's context menu, with dashes, colour and width.
+
+Selection handles, hover outlines, the rubber band, the connector being drawn, the status
+line and the navigation flower are the view's and are painted after the document.
+
+### The navigation flower
+
+Bottom right of the view, painted in screen space and hit-tested before anything on the
+plane: four petals pan by a quarter of the view, the inner disc zooms in (upper half) and
+out (lower half) about the view centre, the core fits the view to the canvas. It hovers
+and is never printed.
 
 ### Colour management
 
@@ -153,8 +177,15 @@ records, not the pixels. A drag records its undo on release, and Escape mid-drag
 the pre-press snapshot.
 
 Drops from the filmstrip arrive on the centre widget as the `image-id` target (the same
-payload the map view reads): each id becomes an image frame at the drop point, staggered so
-a multi-drop is not one pile, and a render is started for each.
+payload the map view reads), with `GDK_ACTION_MOVE` -- the only action the filmstrip offers,
+so the destination must accept it or GTK refuses every drop without a word: each id becomes
+an image frame at the drop point, staggered so a multi-drop is not one pile, and a render is
+started for each.
+
+The **Notes** toolbar button (or Shift+T) adds, under each selected image frame -- every
+image frame when none is selected -- a text frame linked to it, showing the `.txt` note the
+library keeps next to the raw; images without a note are skipped, and an image whose note is
+already on the canvas is not duplicated. "Refresh" reloads the linked notes.
 
 The document outlives a view switch. A dirty untitled canvas is written to
 `<configdir>/canvas-recovery.anselcanvas` at exit and read back, still dirty, at the next

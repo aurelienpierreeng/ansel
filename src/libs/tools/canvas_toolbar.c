@@ -220,6 +220,8 @@ void gui_init(dt_lib_module_t *self)
   _button(box, _("PDF"), _("Export the canvas as a colour-managed PDF"), DT_CANVAS_ACTION_EXPORT_PDF);
   _separator(box);
   _button(box, _("Text"), _("Add a text frame at the centre of the view"), DT_CANVAS_ACTION_ADD_TEXT);
+  _button(box, _("Notes"), _("Add the .txt notes of the selected images as text frames (of every image when none is selected)"),
+          DT_CANVAS_ACTION_ADD_NOTES);
   _separator(box);
 
   toolbar->grid_toggle = gtk_toggle_button_new_with_label(_("Grid"));

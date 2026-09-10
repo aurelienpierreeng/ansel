@@ -132,6 +132,9 @@ static void _write_connector(GByteArray *out, const dt_canvas_connector_t *conne
   _w_u32(out, connector->style);
   _w_color(out, &connector->color);
   _w_f32(out, connector->line_width);
+  _w_u32(out, connector->from_anchor);
+  _w_u32(out, connector->to_anchor);
+  _w_u32(out, connector->routing);
   _w_bytes(out, connector->reserved, sizeof(connector->reserved));
 }
 
@@ -350,6 +353,9 @@ static void _read_connector(dt_canvas_cursor_t *cursor, dt_canvas_connector_t *c
   connector->style = _r_u32(cursor);
   connector->color = _r_color(cursor);
   connector->line_width = _r_f32(cursor);
+  connector->from_anchor = _r_u32(cursor);
+  connector->to_anchor = _r_u32(cursor);
+  connector->routing = _r_u32(cursor);
   _r_bytes(cursor, connector->reserved, sizeof(connector->reserved));
 }
 
