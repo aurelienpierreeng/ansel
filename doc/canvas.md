@@ -203,9 +203,11 @@ per paper are laid on a half-overlapping grid, each placement a random sprite in
 orientations at a random phase, its centre jittered off the cell's, blended by
 two-dimensional Hann windows whose summed weights are divided out, into a field six sprites
 (3072 units) wide that is itself periodic: no seam, no border band, and no lattice of window
-centres either. The Moleskine carries a band-passed layer of short, sharp fibres over its
-clouds; the watercolour tooth saturates at four and a half percent, so a deep hollow is a
-shallow shadow, not a pit. The composed field is kept at up to 512 pixels per sprite;
+centres either. The Moleskine carries short fibres in random directions over its clouds:
+segments stamped at random positions, angles and lengths, defined in the sprite's units so a
+fibre is the same fibre at every zoom and only sharper. The watercolour carries a band-passed
+layer of rounded pores, and its tooth saturates at four and a half percent, so a deep hollow
+is a shallow shadow, not a pit. The composed field is kept at up to 512 pixels per sprite;
 zoomed past that, the painter scales each cell up rather than growing a tile with the square
 of the zoom. Every spectral coefficient is drawn
 from a hash of its frequency, so a sprite synthesised at a higher resolution keeps the same
