@@ -147,6 +147,18 @@ static void _write_connector(GByteArray *out, const dt_canvas_connector_t *conne
   _w_bytes(out, connector->reserved, sizeof(connector->reserved));
 }
 
+static void _write_map(GByteArray *out, const dt_canvas_map_t *map)
+{
+  _w_f64(out, map->latitude);
+  _w_f64(out, map->longitude);
+  _w_i32(out, map->zoom);
+  _w_u32(out, map->source);
+  _w_i32(out, map->pixel_width);
+  _w_i32(out, map->pixel_height);
+  _w_i64(out, map->rendered_at);
+  _w_bytes(out, map->reserved, sizeof(map->reserved));
+}
+
 static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
 {
   const guint start = out->len;
@@ -173,6 +185,9 @@ static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
       break;
     case DT_CANVAS_OBJECT_CONNECTOR:
       _write_connector(out, &object->connector);
+      break;
+    case DT_CANVAS_OBJECT_MAP:
+      _write_map(out, &object->map);
       break;
     default:
       break;
@@ -383,6 +398,20 @@ static void _read_connector(dt_canvas_cursor_t *cursor, dt_canvas_connector_t *c
   _r_bytes(cursor, connector->reserved, sizeof(connector->reserved));
 }
 
+static void _read_map(dt_canvas_cursor_t *cursor, dt_canvas_map_t *map)
+{
+  map->latitude = _r_f64(cursor);
+  map->longitude = _r_f64(cursor);
+  map->zoom = _r_i32(cursor);
+  map->source = _r_u32(cursor);
+  map->pixel_width = _r_i32(cursor);
+  map->pixel_height = _r_i32(cursor);
+  map->rendered_at = _r_i64(cursor);
+  _r_bytes(cursor, map->reserved, sizeof(map->reserved));
+  map->jpeg = NULL;
+  map->sync_status = DT_CANVAS_SYNC_UNKNOWN;
+}
+
 static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *object)
 {
   const size_t record_start = cursor->pos;
@@ -414,6 +443,9 @@ static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *obj
       break;
     case DT_CANVAS_OBJECT_CONNECTOR:
       _read_connector(cursor, &object->connector);
+      break;
+    case DT_CANVAS_OBJECT_MAP:
+      _read_map(cursor, &object->map);
       break;
     default:
       // A kind this version does not know: keep its place in the file, draw nothing.

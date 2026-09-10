@@ -2979,6 +2979,30 @@
     <shortdescription>show the canvas page borders</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>canvas/map_zoom</name>
+    <type min="1" max="19">int</type>
+    <default>12</default>
+    <shortdescription>zoom level of a new canvas map frame</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/map_source</name>
+    <type>int</type>
+    <default>0</default>
+    <shortdescription>tile provider of a new canvas map frame (an OsmGpsMapSource_t value, 0 for OpenStreetMap)</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/map_latitude</name>
+    <type min="-85" max="85">float</type>
+    <default>48.8566</default>
+    <shortdescription>latitude of the last canvas map frame</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/map_longitude</name>
+    <type min="-180" max="180">float</type>
+    <default>2.3522</default>
+    <shortdescription>longitude of the last canvas map frame</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>canvas/masonry_columns</name>
     <type min="1" max="20">int</type>
     <default>3</default>

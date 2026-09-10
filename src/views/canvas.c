@@ -186,6 +186,11 @@ typedef struct dt_canvas_view_t
   GtkWidget *connector_dashed;
   GtkWidget *connector_color;
   GtkWidget *connector_via;
+  GtkWidget *map_bar;
+  GtkWidget *map_latitude;
+  GtkWidget *map_longitude;
+  GtkWidget *map_zoom;
+  GtkWidget *map_source;
   gboolean bars_refilling;
   uint64_t bars_signature;              ///< selection + document state the bars were last filled for
   guint bars_idle;                      ///< pending placement, scheduled off the draw path
@@ -213,6 +218,7 @@ static void _paint_tangent_handle(cairo_t *cr, const dt_canvas_view_t *view, con
                                   const double anchor_y, const double handle_x, const double handle_y);
 static void _render_done(uint32_t object_id, uint64_t token, GBytes *jpeg, int32_t pixel_width, int32_t pixel_height,
                          uint64_t history_hash, gpointer user_data);
+static gboolean _start_map_render(dt_view_t *self, dt_canvas_object_t *object);
 
 /* --- module identity ---------------------------------------------------------- */
 
@@ -476,6 +482,20 @@ static gboolean _start_render(dt_view_t *self, dt_canvas_object_t *object, const
   return queued;
 }
 
+/** Fetch a map frame's tiles at twice its size on the canvas, so it stays sharp when zoomed. */
+static gboolean _start_map_render(dt_view_t *self, dt_canvas_object_t *object)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_MAP) return FALSE;
+  const int32_t width = (int32_t)CLAMP(lround(object->width * 2.0), 256, 2048);
+  const int32_t height = (int32_t)CLAMP(lround(object->height * 2.0), 256, 2048);
+  const gboolean queued = dt_canvas_render_map_start(object->id, view->token, object->map.latitude,
+                                                     object->map.longitude, object->map.zoom, object->map.source,
+                                                     width, height, view->canvas->jpeg_quality, _render_done, self);
+  if(queued) object->map.sync_status = DT_CANVAS_SYNC_RENDERING;
+  return queued;
+}
+
 /** Re-render every image frame whose status is `only` (or every one when `only` is UNKNOWN). */
 static int _refresh_images(dt_view_t *self, const dt_canvas_sync_status_t only)
 {
@@ -484,6 +504,14 @@ static int _refresh_images(dt_view_t *self, const dt_canvas_sync_status_t only)
   for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
   {
     dt_canvas_object_t *object = dt_canvas_object_at(view->canvas, idx);
+    if(object->kind == DT_CANVAS_OBJECT_MAP)
+    {
+      // A map is refreshed with everything, or when it has no render yet.
+      if(object->map.sync_status == DT_CANVAS_SYNC_RENDERING) continue;
+      if(only != DT_CANVAS_SYNC_UNKNOWN && !IS_NULL_PTR(object->map.jpeg)) continue;
+      if(_start_map_render(self, object)) started++;
+      continue;
+    }
     if(object->kind != DT_CANVAS_OBJECT_IMAGE) continue;
     if(object->image.sync_status == DT_CANVAS_SYNC_RENDERING) continue;
     if(only != DT_CANVAS_SYNC_UNKNOWN && object->image.sync_status != only) continue;
@@ -507,7 +535,16 @@ static void _render_done(uint32_t object_id, uint64_t token, GBytes *jpeg, int32
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || token != view->token) return;
   dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, object_id);
-  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_IMAGE) return;
+  if(IS_NULL_PTR(object)) return;
+  if(object->kind == DT_CANVAS_OBJECT_MAP)
+  {
+    dt_canvas_map_set_render(view->canvas, object, jpeg, pixel_width, pixel_height,
+                             (int64_t)g_get_real_time() / G_USEC_PER_SEC);
+    if(IS_NULL_PTR(jpeg)) dt_control_log(_("the canvas could not fetch the map tiles"));
+    dt_control_queue_redraw_center();
+    return;
+  }
+  if(object->kind != DT_CANVAS_OBJECT_IMAGE) return;
   if(IS_NULL_PTR(jpeg))
   {
     object->image.sync_status = IS_NULL_PTR(object->image.jpeg) ? DT_CANVAS_SYNC_MISSING : DT_CANVAS_SYNC_STALE;
@@ -976,6 +1013,26 @@ static gboolean _load_sidecar_text(dt_canvas_view_t *view, dt_canvas_object_t *t
   return loaded;
 }
 
+/** Add a map frame at a point, of a place; starts fetching its tiles. */
+static dt_canvas_object_t *_add_map(dt_view_t *self, const double x, const double y, const double latitude,
+                                    const double longitude)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  dt_canvas_t *before = _begin_edit(view);
+  dt_canvas_object_t *map = dt_canvas_add_map(view->canvas, dt_canvas_snap(view->canvas, x),
+                                              dt_canvas_snap(view->canvas, y), latitude, longitude,
+                                              dt_conf_get_int("canvas/map_zoom"),
+                                              (uint32_t)dt_conf_get_int("canvas/map_source"));
+  dt_conf_set_float("canvas/map_latitude", (float)latitude);
+  dt_conf_set_float("canvas/map_longitude", (float)longitude);
+  _select_only(view, map->id);
+  _record_undo(self, before);
+  _start_map_render(self, map);
+  _bars_request(self);
+  dt_control_queue_redraw_center();
+  return map;
+}
+
 /** The text frame already showing an image frame's note, if any. */
 static dt_canvas_object_t *_note_frame_of(const dt_canvas_view_t *view, const uint32_t image_id)
 {
@@ -1179,6 +1236,12 @@ static void _menu_refresh_image(GtkWidget *widget, gpointer data)
 {
   dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
   dt_canvas_object_t *object = _menu_object(context);
+  if(!IS_NULL_PTR(object) && object->kind == DT_CANVAS_OBJECT_MAP)
+  {
+    _start_map_render(context->self, object);
+    dt_control_queue_redraw_center();
+    return;
+  }
   if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_IMAGE) return;
   const int32_t imgid = dt_canvas_render_locate_source(&object->image);
   if(imgid <= 0)
@@ -1190,6 +1253,33 @@ static void _menu_refresh_image(GtkWidget *widget, gpointer data)
   dt_canvas_render_describe_source(imgid, &object->image);
   _start_render(context->self, object, imgid);
   dt_control_queue_redraw_center();
+}
+
+static void _menu_map_of_image(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *image = _menu_object(context);
+  if(IS_NULL_PTR(image) || image->kind != DT_CANVAS_OBJECT_IMAGE) return;
+  const int32_t imgid = dt_canvas_render_locate_source(&image->image);
+  if(imgid <= 0)
+  {
+    dt_control_log(_("`%s' is not in the library"), image->image.filename);
+    return;
+  }
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(img)) return;
+  const double latitude = img->geoloc.latitude;
+  const double longitude = img->geoloc.longitude;
+  dt_image_cache_read_release(img);
+  if(isnan(latitude) || isnan(longitude))
+  {
+    dt_control_log(_("`%s' carries no location"), image->image.filename);
+    return;
+  }
+  const dt_canvas_rect_t bounds = dt_canvas_object_bounds(image);
+  _add_map(context->self, image->x, bounds.y + bounds.height + view->canvas->gutter + image->height * 0.375,
+           latitude, longitude);
 }
 
 static void _menu_show_note(GtkWidget *widget, gpointer data)
@@ -1299,11 +1389,16 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
       if(object->text.source == DT_CANVAS_TEXT_SOURCE_SIDECAR)
         _menu_item(menu, _("Reload the image's text note"), _menu_reload_sidecar, _menu_context(self, id, x, y, 0));
     }
+    else if(object->kind == DT_CANVAS_OBJECT_MAP)
+    {
+      _menu_item(menu, _("Fetch the map again"), _menu_refresh_image, _menu_context(self, id, x, y, 0));
+    }
     else
     {
       _menu_item(menu, _("Open in the darkroom"), _menu_open_darkroom, _menu_context(self, id, x, y, 0));
       _menu_item(menu, _("Refresh from the library"), _menu_refresh_image, _menu_context(self, id, x, y, 0));
       _menu_item(menu, _("Show the image's text note"), _menu_show_note, _menu_context(self, id, x, y, 0));
+      _menu_item(menu, _("Add a map of where it was taken"), _menu_map_of_image, _menu_context(self, id, x, y, 0));
     }
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
@@ -1659,6 +1754,31 @@ static void _bar_connector_via_toggled(GtkToggleButton *toggle, gpointer data)
   BAR_EDIT_END()
 }
 
+static void _bar_map_changed(GtkWidget *widget, gpointer data)
+{
+  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_MAP)
+  object->map.latitude = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->map_latitude));
+  object->map.longitude = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->map_longitude));
+  object->map.zoom = (int32_t)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->map_zoom));
+  object->map.source = dt_canvas_map_source_id(gtk_combo_box_get_active(GTK_COMBO_BOX(view->map_source)));
+  dt_conf_set_int("canvas/map_zoom", object->map.zoom);
+  dt_conf_set_int("canvas/map_source", (int)object->map.source);
+  dt_conf_set_float("canvas/map_latitude", (float)object->map.latitude);
+  dt_conf_set_float("canvas/map_longitude", (float)object->map.longitude);
+  BAR_EDIT_END()
+  _start_map_render(self, object);
+}
+
+static void _bar_map_refresh_clicked(GtkWidget *button, gpointer data)
+{
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  dt_canvas_object_t *object = _bar_target(view);
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_MAP) return;
+  _start_map_render(self, object);
+  dt_control_queue_redraw_center();
+}
+
 static GtkWidget *_bar_new(GtkWidget *base)
 {
   GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
@@ -1797,6 +1917,33 @@ static void _bars_create(dt_view_t *self)
   g_signal_connect(view->connector_via, "toggled", G_CALLBACK(_bar_connector_via_toggled), self);
   gtk_box_pack_start(GTK_BOX(view->connector_bar), view->connector_via, FALSE, FALSE, 0);
   _bar_finish(view->connector_bar);
+
+  view->map_bar = _bar_new(base);
+  view->map_latitude = gtk_spin_button_new_with_range(-85.0, 85.0, 0.0001);
+  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(view->map_latitude), 5);
+  gtk_widget_set_tooltip_text(view->map_latitude, _("Latitude, degrees"));
+  g_signal_connect(view->map_latitude, "value-changed", G_CALLBACK(_bar_map_changed), self);
+  gtk_box_pack_start(GTK_BOX(view->map_bar), view->map_latitude, FALSE, FALSE, 0);
+  view->map_longitude = gtk_spin_button_new_with_range(-180.0, 180.0, 0.0001);
+  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(view->map_longitude), 5);
+  gtk_widget_set_tooltip_text(view->map_longitude, _("Longitude, degrees"));
+  g_signal_connect(view->map_longitude, "value-changed", G_CALLBACK(_bar_map_changed), self);
+  gtk_box_pack_start(GTK_BOX(view->map_bar), view->map_longitude, FALSE, FALSE, 0);
+  view->map_zoom = gtk_spin_button_new_with_range(1.0, 19.0, 1.0);
+  gtk_widget_set_tooltip_text(view->map_zoom, _("Zoom level, 1 (the world) to 19 (a street)"));
+  g_signal_connect(view->map_zoom, "value-changed", G_CALLBACK(_bar_map_changed), self);
+  gtk_box_pack_start(GTK_BOX(view->map_bar), view->map_zoom, FALSE, FALSE, 0);
+  view->map_source = gtk_combo_box_text_new();
+  for(int idx = 0; idx < dt_canvas_map_source_count(); idx++)
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->map_source), dt_canvas_map_source_name(idx));
+  gtk_widget_set_tooltip_text(view->map_source, _("Map style and provider"));
+  g_signal_connect(view->map_source, "changed", G_CALLBACK(_bar_map_changed), self);
+  gtk_box_pack_start(GTK_BOX(view->map_bar), view->map_source, FALSE, FALSE, 0);
+  GtkWidget *map_refresh = gtk_button_new_with_label(_("Fetch"));
+  gtk_widget_set_tooltip_text(map_refresh, _("Fetch the tiles again"));
+  g_signal_connect(map_refresh, "clicked", G_CALLBACK(_bar_map_refresh_clicked), self);
+  gtk_box_pack_start(GTK_BOX(view->map_bar), map_refresh, FALSE, FALSE, 0);
+  _bar_finish(view->map_bar);
 }
 
 static void _bars_destroy(dt_view_t *self)
@@ -1811,6 +1958,7 @@ static void _bars_destroy(dt_view_t *self)
   if(!IS_NULL_PTR(view->text_bar)) gtk_container_remove(GTK_CONTAINER(base), view->text_bar);
   if(!IS_NULL_PTR(view->image_bar)) gtk_container_remove(GTK_CONTAINER(base), view->image_bar);
   if(!IS_NULL_PTR(view->connector_bar)) gtk_container_remove(GTK_CONTAINER(base), view->connector_bar);
+  if(!IS_NULL_PTR(view->map_bar)) gtk_container_remove(GTK_CONTAINER(base), view->map_bar);
   if(view->bars_position_handler != 0)
   {
     g_signal_handler_disconnect(base, view->bars_position_handler);
@@ -1819,6 +1967,7 @@ static void _bars_destroy(dt_view_t *self)
   view->text_bar = NULL;
   view->image_bar = NULL;
   view->connector_bar = NULL;
+  view->map_bar = NULL;
   view->bars_signature = 0;
 }
 
@@ -1886,13 +2035,16 @@ static void _bars_hide_now(dt_canvas_view_t *view)
   gtk_widget_hide(view->text_bar);
   gtk_widget_hide(view->image_bar);
   gtk_widget_hide(view->connector_bar);
+  gtk_widget_hide(view->map_bar);
   view->bars_signature = 0;
 }
 
 static void _bars_refresh(dt_view_t *self, gboolean force)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  if(IS_NULL_PTR(view->text_bar) || IS_NULL_PTR(view->image_bar) || IS_NULL_PTR(view->connector_bar)) return;
+  if(IS_NULL_PTR(view->text_bar) || IS_NULL_PTR(view->image_bar) || IS_NULL_PTR(view->connector_bar)
+     || IS_NULL_PTR(view->map_bar))
+    return;
   // No bar while a gesture is running: it would follow every motion through a re-allocation.
   const gboolean dragging = view->drag != DT_CANVAS_DRAG_NONE;
   const dt_canvas_object_t *object = (view->connecting || dragging) ? NULL : _bar_target(view);
@@ -1940,14 +2092,23 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       _color_to_button(view->connector_color, &object->connector.color);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->connector_via), object->connector.via_count > 0);
     }
+    else if(kind == DT_CANVAS_OBJECT_MAP)
+    {
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->map_latitude), object->map.latitude);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->map_longitude), object->map.longitude);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->map_zoom), object->map.zoom);
+      gtk_combo_box_set_active(GTK_COMBO_BOX(view->map_source), dt_canvas_map_source_index(object->map.source));
+    }
     view->bars_refilling = FALSE;
     gtk_widget_set_visible(view->text_bar, kind == DT_CANVAS_OBJECT_TEXT);
     gtk_widget_set_visible(view->image_bar, kind == DT_CANVAS_OBJECT_IMAGE);
     gtk_widget_set_visible(view->connector_bar, kind == DT_CANVAS_OBJECT_CONNECTOR);
+    gtk_widget_set_visible(view->map_bar, kind == DT_CANVAS_OBJECT_MAP);
   }
   if(kind == DT_CANVAS_OBJECT_TEXT) _bar_place(view, view->text_bar, object);
   if(kind == DT_CANVAS_OBJECT_IMAGE) _bar_place(view, view->image_bar, object);
   if(kind == DT_CANVAS_OBJECT_CONNECTOR) _bar_place(view, view->connector_bar, object);
+  if(kind == DT_CANVAS_OBJECT_MAP) _bar_place(view, view->map_bar, object);
 }
 
 static gboolean _bars_idle(gpointer data)
@@ -2261,11 +2422,11 @@ static void _paint_handles(cairo_t *cr, const dt_canvas_view_t *view, const dt_c
 
 static void _paint_badge(cairo_t *cr, const dt_canvas_view_t *view, const dt_canvas_object_t *object)
 {
-  if(object->kind != DT_CANVAS_OBJECT_IMAGE) return;
+  if(object->kind != DT_CANVAS_OBJECT_IMAGE && object->kind != DT_CANVAS_OBJECT_MAP) return;
   double red = 0.0;
   double green = 0.0;
   double blue = 0.0;
-  switch(object->image.sync_status)
+  switch(object->kind == DT_CANVAS_OBJECT_MAP ? object->map.sync_status : object->image.sync_status)
   {
     case DT_CANVAS_SYNC_STALE:
       red = 1.0;
@@ -3259,6 +3420,10 @@ static void _proxy_action(dt_view_t *self, int action)
     case DT_CANVAS_ACTION_ADD_NOTES:
       _add_notes(self);
       break;
+    case DT_CANVAS_ACTION_ADD_MAP:
+      _add_map(self, view->center_x, view->center_y, dt_conf_get_float("canvas/map_latitude"),
+               dt_conf_get_float("canvas/map_longitude"));
+      break;
     case DT_CANVAS_ACTION_ZOOM_FIT:
       _zoom_fit(view);
       break;
@@ -3492,6 +3657,7 @@ static const dt_canvas_accel_t _accels[] = {
   { N_("Export the canvas as PDF"), DT_CANVAS_ACTION_EXPORT_PDF, GDK_KEY_p, DT_PRIMARY_MASK },
   { N_("Add a text frame"), DT_CANVAS_ACTION_ADD_TEXT, GDK_KEY_t, 0 },
   { N_("Add the text notes of the selected images"), DT_CANVAS_ACTION_ADD_NOTES, GDK_KEY_t, GDK_SHIFT_MASK },
+  { N_("Add a map"), DT_CANVAS_ACTION_ADD_MAP, GDK_KEY_m, 0 },
   { N_("Fit the view to the canvas"), DT_CANVAS_ACTION_ZOOM_FIT, GDK_KEY_0, DT_PRIMARY_MASK },
   { N_("Zoom to 100%"), DT_CANVAS_ACTION_ZOOM_100, GDK_KEY_1, DT_PRIMARY_MASK },
   { N_("Toggle the grid"), DT_CANVAS_ACTION_TOGGLE_GRID, GDK_KEY_g, 0 },

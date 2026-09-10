@@ -99,6 +99,28 @@ gboolean dt_canvas_render_start(int32_t imgid, uint32_t object_id, uint64_t toke
 /** @brief Ask every render still running or queued to stop as soon as it can. */
 void dt_canvas_render_cancel_all(void);
 
+/* --- maps ------------------------------------------------------------------- */
+
+/** @brief How many tile providers are available. */
+int dt_canvas_map_source_count(void);
+/** @brief The provider at `index`: its stable id (stored in the frame) and its name. */
+uint32_t dt_canvas_map_source_id(int index);
+const char *dt_canvas_map_source_name(int index);
+/** @brief The index of a stored provider id, or 0 (the default) when it is not available. */
+int dt_canvas_map_source_index(uint32_t source);
+/** @brief The attribution a provider requires, shown on the frame. */
+const char *dt_canvas_map_source_attribution(uint32_t source);
+
+/**
+ * @brief Queue a render of a slippy map around a point, `pixel_width` x `pixel_height` pixels.
+ * @details Tiles are fetched over HTTP into a disk cache under the user's cache directory,
+ * composed, and delivered like an image render, as an sRGB JPEG through `done`. The
+ * `history_hash` of the callback is 0 for a map.
+ */
+gboolean dt_canvas_render_map_start(uint32_t object_id, uint64_t token, double latitude, double longitude,
+                                    int32_t zoom, uint32_t source, int32_t pixel_width, int32_t pixel_height,
+                                    int32_t quality, dt_canvas_render_done_t done, gpointer user_data);
+
 /* --- decoding --------------------------------------------------------------- */
 
 typedef struct dt_canvas_surface_cache_t dt_canvas_surface_cache_t;

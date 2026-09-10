@@ -462,6 +462,8 @@ void gui_init(dt_lib_module_t *self)
   _button(box, _("Text"), _("Add a text frame at the centre of the view"), DT_CANVAS_ACTION_ADD_TEXT);
   _button(box, _("Notes"), _("Add the .txt notes of the selected images as text frames (of every image when none is selected)"),
           DT_CANVAS_ACTION_ADD_NOTES);
+  _button(box, _("Map"), _("Add a map frame at the centre of the view; an image's context menu adds a map of where it was taken"),
+          DT_CANVAS_ACTION_ADD_MAP);
   toolbar->connect_toggle = gtk_toggle_button_new_with_label(_("Connect"));
   gtk_widget_set_tooltip_text(toolbar->connect_toggle,
                               _("Draw a connector: click an anchor point on one frame, then on another"));
