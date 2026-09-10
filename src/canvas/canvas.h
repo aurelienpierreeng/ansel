@@ -70,11 +70,11 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 992 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8)
+#define DT_CANVAS_HEADER_RESERVED 976 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16)
 #define DT_CANVAS_OBJECT_RESERVED 256
 #define DT_CANVAS_IMAGE_RESERVED 512
 #define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
-#define DT_CANVAS_CONNECTOR_RESERVED 96 ///< 128 at format 1, minus the anchors and routing (12) and the waypoint (20)
+#define DT_CANVAS_CONNECTOR_RESERVED 72 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24)
 
 /** An sRGB colour with straight alpha, each channel in [0, 1]. */
 typedef struct dt_canvas_color_t
@@ -111,7 +111,9 @@ typedef enum dt_canvas_grid_flags_t
   DT_CANVAS_GRID_SNAP = 1 << 1,     ///< positions and sizes round to the grid
   DT_CANVAS_SNAP_GUTTER = 1 << 2,   ///< edges land one gutter from a neighbour, or in line with it
   DT_CANVAS_SNAP_SIZE = 1 << 3,     ///< a resized frame takes a neighbour's width or height
-  DT_CANVAS_SNAP_ALL = DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_GUTTER | DT_CANVAS_SNAP_SIZE,
+  DT_CANVAS_PAGE_VISIBLE = 1 << 4,  ///< the page borders are drawn
+  DT_CANVAS_SNAP_PAGE = 1 << 5,     ///< edges land on a page border
+  DT_CANVAS_SNAP_ALL = DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_GUTTER | DT_CANVAS_SNAP_SIZE | DT_CANVAS_SNAP_PAGE,
 } dt_canvas_grid_flags_t;
 
 /** Which edges of a moving box may snap: all four for a move, the dragged ones for a resize. */
@@ -234,6 +236,10 @@ typedef struct dt_canvas_connector_t
   uint32_t via_count;   ///< 0, or 1 when the route passes by (via_x, via_y)
   double via_x;         ///< the waypoint, canvas units
   double via_y;
+  float from_reach;     ///< length of the start's tangent handle, along the anchor's normal; 0 is automatic
+  float to_reach;       ///< the same at the end
+  double via_tangent_x; ///< the waypoint's tangent handle, direction and length; (0, 0) is automatic
+  double via_tangent_y;
   uint8_t reserved[DT_CANVAS_CONNECTOR_RESERVED];
 } dt_canvas_connector_t;
 
@@ -323,9 +329,10 @@ typedef struct dt_canvas_t
   uint32_t grid_flags;              ///< dt_canvas_grid_flags_t bits
   float gutter;                     ///< the margin frames keep from each other when snapped side by side or laid out
   uint32_t background_style;        ///< dt_canvas_background_t
-  dt_canvas_color_t grid_color;     ///< the grid dots and the page outlines
+  dt_canvas_color_t grid_color;     ///< the grid dots
   uint32_t paper_size;              ///< dt_canvas_paper_t
   uint32_t paper_landscape;         ///< 0 portrait, 1 landscape
+  dt_canvas_color_t page_color;     ///< the page borders
   double view_zoom;                 ///< the viewport the canvas was saved with
   double view_x;                    ///< canvas point shown at the centre of the view
   double view_y;
@@ -534,6 +541,14 @@ gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, do
 
 /** @brief The page rectangle at column `col`, row `row` of the paper tiling, from the origin. */
 dt_canvas_rect_t dt_canvas_page_rect(const dt_canvas_t *canvas, int col, int row);
+
+/**
+ * @brief Snap a moving box's edges onto the page borders.
+ * @details The page rule; ignores the canvas's snap flags, the caller consults them.
+ * @return TRUE when at least one axis snapped.
+ */
+gboolean dt_canvas_snap_to_pages(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving, double threshold,
+                                 uint32_t edges, double *delta_x, double *delta_y);
 
 /** @brief Put a waypoint on a connector, at the middle of its current route. */
 void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connector);

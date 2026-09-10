@@ -119,18 +119,30 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   const int first_row = (int)floor(options->clip.y / page_height);
   const int last_row = (int)floor((options->clip.y + options->clip.height) / page_height);
   if((double)(last_col - first_col + 1) * (double)(last_row - first_row + 1) > 4096.0) return;
+  if(!(canvas->grid_flags & DT_CANVAS_PAGE_VISIBLE)) return;
   cairo_save(cr);
-  _set_color(cr, &canvas->grid_color, options->for_display);
+  _set_color(cr, &canvas->page_color, options->for_display);
   cairo_set_line_width(cr, 1.0 * options->units_per_pixel);
+  // One line per border, not one rectangle per page: a shared edge stroked twice with two
+  // dash phases fills its own gaps and reads as solid. Each line starts on a multiple of
+  // the dash period from the origin, so the dashes neither crawl under a pan nor differ
+  // between the horizontal and the vertical.
   const double dashes[2] = { 8.0 * options->units_per_pixel, 6.0 * options->units_per_pixel };
+  const double period = dashes[0] + dashes[1];
   cairo_set_dash(cr, dashes, 2, 0.0);
-  for(int row = first_row; row <= last_row; row++)
+  const double start_x = floor(options->clip.x / period) * period;
+  const double end_x = options->clip.x + options->clip.width;
+  const double start_y = floor(options->clip.y / period) * period;
+  const double end_y = options->clip.y + options->clip.height;
+  for(int col = first_col; col <= last_col + 1; col++)
   {
-    for(int col = first_col; col <= last_col; col++)
-    {
-      const dt_canvas_rect_t page = dt_canvas_page_rect(canvas, col, row);
-      cairo_rectangle(cr, page.x, page.y, page.width, page.height);
-    }
+    cairo_move_to(cr, col * page_width, start_y);
+    cairo_line_to(cr, col * page_width, end_y);
+  }
+  for(int row = first_row; row <= last_row + 1; row++)
+  {
+    cairo_move_to(cr, start_x, row * page_height);
+    cairo_line_to(cr, end_x, row * page_height);
   }
   cairo_stroke(cr);
   cairo_restore(cr);
@@ -996,6 +1008,26 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
     const double dashes[2] = { 4.0 * line_width, 3.0 * line_width };
     cairo_set_dash(cr, dashes, 2, 0.0);
   }
+  // The line stops short of an arrow's tip: a disc of the head's length around each
+  // arrowed end is cut out of the stroke, so the tip is the triangle's alone and stays sharp.
+  const double head_length = PAINT_ARROW_LENGTH * head_scale;
+  if(object->connector.style & (DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START))
+  {
+    cairo_new_path(cr);
+    cairo_rectangle(cr, -1e7, -1e7, 2e7, 2e7);
+    if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_END)
+    {
+      cairo_new_sub_path(cr);
+      cairo_arc_negative(cr, route.to_x, route.to_y, head_length * 0.9, 2.0 * M_PI, 0.0);
+    }
+    if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_START)
+    {
+      cairo_new_sub_path(cr);
+      cairo_arc_negative(cr, route.from_x, route.from_y, head_length * 0.9, 2.0 * M_PI, 0.0);
+    }
+    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+    cairo_clip(cr);
+  }
   cairo_move_to(cr, route.from_x, route.from_y);
   if(route.routing == DT_CANVAS_ROUTING_CUBIC && route.segment_count == 2)
   {
@@ -1012,6 +1044,7 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
   }
   cairo_stroke(cr);
   cairo_set_dash(cr, NULL, 0, 0.0);
+  cairo_reset_clip(cr);
 
   // A head points along the line it ends: the last leg of the route, which for a straight
   // connector is the chord itself and for the others the stub or tangent at that anchor.
