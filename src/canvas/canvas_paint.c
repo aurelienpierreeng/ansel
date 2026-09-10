@@ -298,6 +298,56 @@ static double *_paper_field(const int size, const double knee, const double slop
   return _paper_field_band(size, knee, slope, 0.0, seed);
 }
 
+#define PAPER_FIBRES_PER_SPRITE 5000
+
+/**
+ * Short fibres in random directions, as a periodic field: segments stamped at random
+ * positions, angles and lengths, half darker and half lighter than the sheet, antialiased
+ * across their width. Defined in the sprite's own units, so a fibre is the same fibre at
+ * every resolution and only sharper at a higher one.
+ */
+static double *_paper_fibres(const int size, const guint32 seed)
+{
+  double *field = g_new0(double, (size_t)size * size);
+  const double pixels_per_unit = (double)size / PAPER_TILE;
+  for(int fibre = 0; fibre < PAPER_FIBRES_PER_SPRITE; fibre++)
+  {
+    double uniform_a = 0.0;
+    double uniform_b = 0.0;
+    double uniform_c = 0.0;
+    double uniform_d = 0.0;
+    _paper_hash_uniforms(seed, fibre, 1, &uniform_a, &uniform_b);
+    _paper_hash_uniforms(seed, fibre, 2, &uniform_c, &uniform_d);
+    const double center_x = uniform_a * size;
+    const double center_y = uniform_b * size;
+    const double angle = uniform_c * M_PI;
+    // 6 to 22 units long, about a unit wide, as dark as light on average.
+    const double half_length = (6.0 + 16.0 * uniform_d) * 0.5 * pixels_per_unit;
+    const double half_width = fmax(0.55 * pixels_per_unit, 0.6);
+    const double sign = (fibre & 1) ? 1.0 : -1.0;
+    const double direction_x = cos(angle);
+    const double direction_y = sin(angle);
+    const int reach = (int)ceil(half_length + half_width + 1.0);
+    for(int y = (int)floor(center_y) - reach; y <= (int)ceil(center_y) + reach; y++)
+    {
+      for(int x = (int)floor(center_x) - reach; x <= (int)ceil(center_x) + reach; x++)
+      {
+        // Distance from the pixel centre to the segment.
+        const double offset_x = x + 0.5 - center_x;
+        const double offset_y = y + 0.5 - center_y;
+        const double along = CLAMP(offset_x * direction_x + offset_y * direction_y, -half_length, half_length);
+        const double distance = hypot(offset_x - along * direction_x, offset_y - along * direction_y);
+        const double coverage = CLAMP(half_width + 0.5 - distance, 0.0, 1.0);
+        if(coverage <= 0.0) continue;
+        const int wrapped_x = ((x % size) + size) % size;
+        const int wrapped_y = ((y % size) + size) % size;
+        field[(size_t)wrapped_y * size + wrapped_x] += sign * coverage;
+      }
+    }
+  }
+  return field;
+}
+
 /** One sprite's relief, `size` square, before the colour: the paper's components combined. */
 static double *_paper_relief(const dt_canvas_background_t style, const int size, const int variant)
 {
@@ -305,12 +355,12 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
   double *relief = g_new0(double, (size_t)size * size);
   if(style == DT_CANVAS_BACKGROUND_MOLESKINE)
   {
-    // Fine, soft clouds; a band of fibres, sharp and short, that shows as the zoom lets it; a whisper of grain.
+    // Fine, soft clouds; short fibres in every direction, that show as the zoom lets them; a whisper of grain.
     double *mottle = _paper_field(size, 24.0, 2.0, seed + 101u);
-    double *fibres = _paper_field_band(size, 320.0, 2.5, 110.0, seed + 105u);
+    double *fibres = _paper_fibres(size, seed + 105u);
     double *grain = _paper_field(size, 160.0, 1.1, seed + 103u);
     for(size_t idx = 0; idx < (size_t)size * size; idx++)
-      relief[idx] = mottle[idx] * 0.011 + fibres[idx] * 0.006 + grain[idx] * 0.003;
+      relief[idx] = mottle[idx] * 0.011 + fibres[idx] * 0.012 + grain[idx] * 0.0025;
     dt_free(mottle);
     dt_free(fibres);
     dt_free(grain);
@@ -318,15 +368,18 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
   else
   {
     // A tooth of shallow hollows between peaks -- paper is white at its peaks, so the tooth
-    // only carves, and no deeper than the saturation allows -- and a fine, quiet grain.
+    // only carves, and no deeper than the saturation allows -- a band of rounded pores, and
+    // a fine, quiet grain.
     double *tooth = _paper_field(size, 30.0, 1.8, seed + 201u);
+    double *pores = _paper_field_band(size, 320.0, 2.5, 110.0, seed + 205u);
     double *grain = _paper_field(size, 200.0, 1.0, seed + 203u);
     for(size_t idx = 0; idx < (size_t)size * size; idx++)
     {
       const double hollow = fmin(tooth[idx], 0.0);
-      relief[idx] = -0.045 * (1.0 - exp(-hollow * hollow * 0.5)) + grain[idx] * 0.004;
+      relief[idx] = -0.045 * (1.0 - exp(-hollow * hollow * 0.5)) + pores[idx] * 0.006 + grain[idx] * 0.003;
     }
     dt_free(tooth);
+    dt_free(pores);
     dt_free(grain);
   }
   return relief;
