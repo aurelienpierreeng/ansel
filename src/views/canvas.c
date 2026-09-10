@@ -1380,7 +1380,9 @@ static void _drag_data_received(GtkWidget *widget, GdkDragContext *context, gint
 
 static gboolean _drag_motion(GtkWidget *widget, GdkDragContext *context, gint x, gint y, guint time, gpointer data)
 {
-  gdk_drag_status(context, GDK_ACTION_COPY, time);
+  // GTK_DEST_DEFAULT_MOTION has already matched the targets and answered the source with
+  // the action they share. Answering here with a different one -- COPY, which the filmstrip
+  // does not offer, it drags as a MOVE -- is what made every drop silently refused.
   return TRUE;
 }
 
@@ -2239,7 +2241,9 @@ void enter(dt_view_t *self)
 
   GtkWidget *center = dt_gui_center_widget();
   gtk_widget_show(center);
-  gtk_drag_dest_set(center, GTK_DEST_DEFAULT_ALL, target_list_internal, n_targets_internal, GDK_ACTION_COPY);
+  // The filmstrip drags with GDK_ACTION_MOVE and the full target list: the destination
+  // must accept that action or GTK never delivers the drop (the print view does the same).
+  gtk_drag_dest_set(center, GTK_DEST_DEFAULT_ALL, target_list_all, n_targets_all, GDK_ACTION_MOVE);
   g_signal_connect(center, "drag-data-received", G_CALLBACK(_drag_data_received), self);
   g_signal_connect(center, "drag-motion", G_CALLBACK(_drag_motion), self);
   view->dnd_connected = TRUE;
