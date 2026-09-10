@@ -202,9 +202,16 @@ a `dt_masks_form_t`; the entry is inside the module, so the ratchet stays where 
 The polygon's nodes are variable-length and follow the object's record as a tagged chunk
 (`CANVAS_CHUNK_MASK_NODES`), eight floats per node: position, two control points, a smooth
 flag. The fixed fields (shape, flags, feather, centre, radii, rotation) took reserved bytes.
-The raster is cached in the surface cache by the mask's hash and size
+The raster is cached in the surface cache by the mask's hash, size and margin
 (`dt_canvas_surface_cache_get_mask()`), as an 8-bit alpha surface at the frame's size on
-screen, capped at 3072 pixels a side.
+screen, capped at 3072 pixels a side, grown by a margin on every side for what reaches past
+the frame -- the shape itself, its feather and its border -- so a cut frame is never clipped
+by its rectangle: the fill covers the grown rectangle and the object's device box grows with
+it. The shape is described in the frame's unit square and re-described in the grown raster's
+(`_mask_raster_fine()`). Every mask surface -- the feathered shape, its support, its border
+band -- is rasterised at three times the resolution (two past a megapixel) and box-filtered
+down, which is the anti-aliasing of their edges; the band's distance transform runs at the
+fine resolution, so its two edges are anti-aliased too.
 
 The view edits a cutout with handles over the frame when the bar's Edit toggle is on: the
 centre or anchor, the radius or radii (the ellipse's first radius handle also sets its

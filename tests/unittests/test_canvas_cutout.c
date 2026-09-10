@@ -169,21 +169,34 @@ static void _the_object_mask_surface_matches_the_raster(void **state)
   dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 200.0, 100.0, "");
   dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_CIRCLE);
   frame->mask.feather = 0.0f;
-  cairo_surface_t *surface = dt_canvas_render_mask(frame, 200, 100);
+  cairo_surface_t *surface = dt_canvas_render_mask(frame, 200, 100, 0);
   assert_non_null(surface);
   assert_int_equal(cairo_image_surface_get_format(surface), CAIRO_FORMAT_A8);
   const uint8_t *pixels = cairo_image_surface_get_data(surface);
   const int stride = cairo_image_surface_get_stride(surface);
-  // Radius 0.45 of the shorter side (100): the centre is in, 60 px to the right is out.
+  // Radius 0.45 of the shorter side (100): the centre is in, 60 px to the right is out, and the
+  // edge itself, 45 px out, is part-covered: the alpha is anti-aliased, not a step.
   assert_int_equal(pixels[50 * stride + 100], 255);
   assert_int_equal(pixels[50 * stride + 175], 0);
+  const int edge = pixels[50 * stride + 145];
+  assert_true(edge > 0 && edge < 255);
   cairo_surface_destroy(surface);
+  // A margin grows the raster on every side and keeps the shape where it was.
+  cairo_surface_t *grown = dt_canvas_render_mask(frame, 200, 100, 10);
+  assert_non_null(grown);
+  assert_int_equal(cairo_image_surface_get_width(grown), 220);
+  assert_int_equal(cairo_image_surface_get_height(grown), 120);
+  const int grown_stride = cairo_image_surface_get_stride(grown);
+  const uint8_t *grown_pixels = cairo_image_surface_get_data(grown);
+  assert_int_equal(grown_pixels[60 * grown_stride + 110], 255);
+  assert_int_equal(grown_pixels[60 * grown_stride + 185], 0);
+  cairo_surface_destroy(grown);
   // A hash keyed cache answers the same surface for the same mask and size, another after an edit.
   dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64 * 1024 * 1024);
-  cairo_surface_t *first = dt_canvas_surface_cache_get_mask(cache, frame, 200, 100);
-  assert_ptr_equal(first, dt_canvas_surface_cache_get_mask(cache, frame, 200, 100));
+  cairo_surface_t *first = dt_canvas_surface_cache_get_mask(cache, frame, 200, 100, 0);
+  assert_ptr_equal(first, dt_canvas_surface_cache_get_mask(cache, frame, 200, 100, 0));
   frame->mask.radius_x = 0.2f;
-  assert_ptr_not_equal(first, dt_canvas_surface_cache_get_mask(cache, frame, 200, 100));
+  assert_ptr_not_equal(first, dt_canvas_surface_cache_get_mask(cache, frame, 200, 100, 0));
   dt_canvas_surface_cache_free(cache);
   dt_canvas_free(canvas);
 }

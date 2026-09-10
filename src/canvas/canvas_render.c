@@ -925,8 +925,9 @@ typedef struct dt_canvas_cached_surface_t
 typedef struct dt_canvas_cached_mask_t
 {
   uint64_t hash;
-  int width;
+  int width;   ///< the frame's raster size, without the margin
   int height;
+  int margin;
   cairo_surface_t *surface;
   int band_radius;        ///< the border band's dilation, pixels; 0 when there is none
   cairo_surface_t *band;
@@ -1005,24 +1006,87 @@ void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, const si
   return cache->scratch;
 }
 
-/** The cutout as floats, through the masks module. */
-static float *_mask_raster(const dt_canvas_object_t *object, const int width, const int height)
+/**
+ * The cutout as floats, through the masks module, over the frame grown by `margin` pixels on
+ * every side -- a shape may reach past the frame, and its border and feather do -- and at
+ * `factor` times the resolution, for the anti-aliasing the box filter below makes of it. The
+ * shape is described in the frame's unit square; here it is re-described in the grown
+ * raster's: positions shifted and scaled, radii scaled by the ratio of the shorter sides.
+ */
+static float *_mask_raster_fine(const dt_canvas_object_t *object, const int width, const int height, const int margin,
+                                const int factor, int *fine_width, int *fine_height)
 {
   if(IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE || width <= 0 || height <= 0) return NULL;
+  const double grown_width = width + 2.0 * margin;
+  const double grown_height = height + 2.0 * margin;
+  const double radius_scale = (double)MIN(width, height) / MIN(grown_width, grown_height);
   dt_masks_cutout_t cutout;
   memset(&cutout, 0, sizeof(cutout));
   cutout.shape = (dt_masks_cutout_shape_t)object->mask.shape;
-  cutout.center[0] = object->mask.center_x;
-  cutout.center[1] = object->mask.center_y;
-  cutout.radius[0] = object->mask.radius_x;
-  cutout.radius[1] = object->mask.radius_y;
+  cutout.center[0] = (float)((object->mask.center_x * width + margin) / grown_width);
+  cutout.center[1] = (float)((object->mask.center_y * height + margin) / grown_height);
+  cutout.radius[0] = (float)(object->mask.radius_x * radius_scale);
+  // The ellipse's second radius is a length; the gradient's "curvature" is not.
+  cutout.radius[1] = object->mask.shape == DT_CANVAS_MASK_GRADIENT ? object->mask.radius_y
+                                                                    : (float)(object->mask.radius_y * radius_scale);
   cutout.rotation = object->mask.rotation;
-  cutout.feather = object->mask.feather;
+  cutout.feather = (float)(object->mask.feather * radius_scale);
   cutout.invert = (object->mask.flags & DT_CANVAS_MASK_INVERT) != 0;
-  cutout.node_count = object->mask.node_count;
-  cutout.node_stride = DT_CANVAS_MASK_NODE_FLOATS;
-  cutout.nodes = object->mask.nodes;
-  return dt_masks_cutout_rasterise(&cutout, width, height);
+  float *nodes = NULL;
+  if(object->mask.shape == DT_CANVAS_MASK_POLYGON && object->mask.node_count > 0 && !IS_NULL_PTR(object->mask.nodes))
+  {
+    const size_t floats = (size_t)object->mask.node_count * DT_CANVAS_MASK_NODE_FLOATS;
+    nodes = g_new(float, floats);
+    memcpy(nodes, object->mask.nodes, floats * sizeof(float));
+    for(uint32_t idx = 0; idx < object->mask.node_count; idx++)
+    {
+      float *node = nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
+      for(int point = 0; point < 3; point++)
+      {
+        node[2 * point] = (float)((node[2 * point] * width + margin) / grown_width);
+        node[2 * point + 1] = (float)((node[2 * point + 1] * height + margin) / grown_height);
+      }
+    }
+    cutout.node_count = object->mask.node_count;
+    cutout.node_stride = DT_CANVAS_MASK_NODE_FLOATS;
+    cutout.nodes = nodes;
+  }
+  *fine_width = (int)lround(grown_width) * factor;
+  *fine_height = (int)lround(grown_height) * factor;
+  float *raster = dt_masks_cutout_rasterise(&cutout, *fine_width, *fine_height);
+  dt_free(nodes);
+  return raster;
+}
+
+/** How many samples per pixel a raster of this size gets: three where it is cheap, two otherwise. */
+static int _mask_factor(const int width, const int height, const int margin)
+{
+  const double pixels = (double)(width + 2 * margin) * (height + 2 * margin);
+  return pixels <= 1024.0 * 1024.0 ? 3 : 2;
+}
+
+/** Box-filter a fine raster down by `factor`: the anti-aliasing of every mask surface. */
+static float *_mask_downsample(const float *fine, const int fine_width, const int fine_height, const int factor)
+{
+  const int width = fine_width / factor;
+  const int height = fine_height / factor;
+  float *coarse = dt_alloc_align_float((size_t)width * height);
+  if(IS_NULL_PTR(coarse)) return NULL;
+  const float norm = 1.0f / (float)(factor * factor);
+  for(int row = 0; row < height; row++)
+  {
+    for(int col = 0; col < width; col++)
+    {
+      float sum = 0.0f;
+      for(int sub_row = 0; sub_row < factor; sub_row++)
+      {
+        const float *source = fine + (size_t)(row * factor + sub_row) * fine_width + (size_t)col * factor;
+        for(int sub_col = 0; sub_col < factor; sub_col++) sum += source[sub_col];
+      }
+      coarse[(size_t)row * width + col] = sum * norm;
+    }
+  }
+  return coarse;
 }
 
 /** Floats in [0, 1] to an 8-bit alpha surface. */
@@ -1047,27 +1111,47 @@ static cairo_surface_t *_alpha_surface(const float *raster, const int width, con
   return surface;
 }
 
-cairo_surface_t *dt_canvas_render_mask(const dt_canvas_object_t *object, const int width, const int height)
-{
-  float *raster = _mask_raster(object, width, height);
-  if(IS_NULL_PTR(raster)) return NULL;
-  cairo_surface_t *surface = _alpha_surface(raster, width, height);
-  dt_masks_cutout_free(raster);
-  return surface;
-}
-
 /** Any coverage at all: the feather's outer edge is where the shape's support ends. */
 #define CANVAS_MASK_SUPPORT_THRESHOLD 0.002f
 
-cairo_surface_t *dt_canvas_render_mask_support(const dt_canvas_object_t *object, const int width, const int height)
+/** A fine raster, thresholded in place to the shape's support. */
+static void _mask_threshold(float *fine, const size_t count)
 {
-  float *raster = _mask_raster(object, width, height);
-  if(IS_NULL_PTR(raster)) return NULL;
-  const size_t count = (size_t)width * height;
-  for(size_t idx = 0; idx < count; idx++) raster[idx] = raster[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 1.0f : 0.0f;
-  cairo_surface_t *surface = _alpha_surface(raster, width, height);
-  dt_masks_cutout_free(raster);
+  for(size_t idx = 0; idx < count; idx++) fine[idx] = fine[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 1.0f : 0.0f;
+}
+
+/** The fine raster to an anti-aliased alpha surface at the frame's resolution. */
+static cairo_surface_t *_mask_finish(float *fine, const int fine_width, const int fine_height, const int factor)
+{
+  float *coarse = _mask_downsample(fine, fine_width, fine_height, factor);
+  dt_masks_cutout_free(fine);
+  if(IS_NULL_PTR(coarse)) return NULL;
+  cairo_surface_t *surface = _alpha_surface(coarse, fine_width / factor, fine_height / factor);
+  dt_free_align(coarse);
   return surface;
+}
+
+cairo_surface_t *dt_canvas_render_mask(const dt_canvas_object_t *object, const int width, const int height,
+                                       const int margin)
+{
+  const int factor = _mask_factor(width, height, margin);
+  int fine_width = 0;
+  int fine_height = 0;
+  float *fine = _mask_raster_fine(object, width, height, margin, factor, &fine_width, &fine_height);
+  if(IS_NULL_PTR(fine)) return NULL;
+  return _mask_finish(fine, fine_width, fine_height, factor);
+}
+
+cairo_surface_t *dt_canvas_render_mask_support(const dt_canvas_object_t *object, const int width, const int height,
+                                               const int margin)
+{
+  const int factor = _mask_factor(width, height, margin);
+  int fine_width = 0;
+  int fine_height = 0;
+  float *fine = _mask_raster_fine(object, width, height, margin, factor, &fine_width, &fine_height);
+  if(IS_NULL_PTR(fine)) return NULL;
+  _mask_threshold(fine, (size_t)fine_width * fine_height);
+  return _mask_finish(fine, fine_width, fine_height, factor);
 }
 
 /* One dimension of Felzenszwalb and Huttenlocher's squared Euclidean distance transform:
@@ -1105,19 +1189,22 @@ static void _distance_1d(const float *f, float *out, int *vertices, float *bound
 }
 
 /**
- * The border band of a cutout: the mask's half-level edge pushed out by `radius` pixels on
- * every side -- a disc dilation, through the Euclidean distance to the shape -- less the
- * mask itself, so the band fills in where the content's feather fades. NULL when there is
- * no shape.
+ * The border band of a cutout: the shape's support pushed out by `radius` pixels on every
+ * side -- a disc dilation, through the Euclidean distance to the support, at the fine
+ * resolution -- and nothing inside the support, so the band is solid and starts where the
+ * feather ends. NULL when there is no shape.
  */
 cairo_surface_t *dt_canvas_render_mask_band(const dt_canvas_object_t *object, const int width, const int height,
-                                            const int radius)
+                                            const int margin, const int radius)
 {
-  float *raster = _mask_raster(object, width, height);
-  if(IS_NULL_PTR(raster)) return NULL;
-  const size_t count = (size_t)width * height;
+  const int factor = _mask_factor(width, height, margin);
+  int fine_width = 0;
+  int fine_height = 0;
+  float *fine = _mask_raster_fine(object, width, height, margin, factor, &fine_width, &fine_height);
+  if(IS_NULL_PTR(fine)) return NULL;
+  const size_t count = (size_t)fine_width * fine_height;
   float *distance = dt_alloc_align_float(count);
-  const int longest = MAX(width, height);
+  const int longest = MAX(fine_width, fine_height);
   float *line = dt_alloc_align_float((size_t)longest);
   float *line_out = dt_alloc_align_float((size_t)longest);
   int *vertices = g_new(int, longest);
@@ -1125,48 +1212,49 @@ cairo_surface_t *dt_canvas_render_mask_band(const dt_canvas_object_t *object, co
   cairo_surface_t *surface = NULL;
   if(!IS_NULL_PTR(distance) && !IS_NULL_PTR(line) && !IS_NULL_PTR(line_out))
   {
-    // Squared distance to the nearest pixel of the shape's support -- the feather's outer edge, so
-    // the band starts where the fall-off ends: 0 inside, "infinite" outside, then the two passes.
+    // Squared distance to the nearest pixel of the support: 0 inside, "infinite" outside, then the two passes.
     const float unreached = (float)longest * longest * 4.0f; // not `far`: a Windows macro
     for(size_t idx = 0; idx < count; idx++)
-      distance[idx] = raster[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 0.0f : unreached;
-    for(int row = 0; row < height; row++)
+      distance[idx] = fine[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 0.0f : unreached;
+    for(int row = 0; row < fine_height; row++)
     {
-      _distance_1d(distance + (size_t)row * width, line_out, vertices, boundaries, width);
-      memcpy(distance + (size_t)row * width, line_out, (size_t)width * sizeof(float));
+      _distance_1d(distance + (size_t)row * fine_width, line_out, vertices, boundaries, fine_width);
+      memcpy(distance + (size_t)row * fine_width, line_out, (size_t)fine_width * sizeof(float));
     }
-    for(int col = 0; col < width; col++)
+    for(int col = 0; col < fine_width; col++)
     {
-      for(int row = 0; row < height; row++) line[row] = distance[(size_t)row * width + col];
-      _distance_1d(line, line_out, vertices, boundaries, height);
-      for(int row = 0; row < height; row++) distance[(size_t)row * width + col] = line_out[row];
+      for(int row = 0; row < fine_height; row++) line[row] = distance[(size_t)row * fine_width + col];
+      _distance_1d(line, line_out, vertices, boundaries, fine_height);
+      for(int row = 0; row < fine_height; row++) distance[(size_t)row * fine_width + col] = line_out[row];
     }
-    // The band: within the radius of the support and outside it, solid.
+    const float fine_radius = (float)radius * factor;
     for(size_t idx = 0; idx < count; idx++)
     {
-      const float reach = CLAMP((float)radius + 0.5f - sqrtf(distance[idx]), 0.0f, 1.0f);
-      raster[idx] = raster[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 0.0f : reach;
+      const float reach = CLAMP(fine_radius + 0.5f - sqrtf(distance[idx]), 0.0f, 1.0f);
+      fine[idx] = fine[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 0.0f : reach;
     }
-    surface = _alpha_surface(raster, width, height);
+    surface = _mask_finish(fine, fine_width, fine_height, factor);
+    fine = NULL;
   }
   dt_free(vertices);
   dt_free(boundaries);
   dt_free_align(line_out);
   dt_free_align(line);
   dt_free_align(distance);
-  dt_masks_cutout_free(raster);
+  dt_masks_cutout_free(fine);
   return surface;
 }
 
 cairo_surface_t *dt_canvas_surface_cache_get_mask(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
-                                                  const int width, const int height)
+                                                  const int width, const int height, const int margin)
 {
   if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE) return NULL;
   const uint64_t hash = dt_canvas_mask_hash(&object->mask);
   dt_canvas_cached_mask_t *entry = g_hash_table_lookup(cache->masks, GUINT_TO_POINTER(object->id));
-  if(!IS_NULL_PTR(entry) && entry->hash == hash && entry->width == width && entry->height == height)
+  if(!IS_NULL_PTR(entry) && entry->hash == hash && entry->width == width && entry->height == height
+     && entry->margin == margin)
     return entry->surface;
-  cairo_surface_t *surface = dt_canvas_render_mask(object, width, height);
+  cairo_surface_t *surface = dt_canvas_render_mask(object, width, height, margin);
   if(IS_NULL_PTR(surface))
   {
     g_hash_table_remove(cache->masks, GUINT_TO_POINTER(object->id));
@@ -1176,6 +1264,7 @@ cairo_surface_t *dt_canvas_surface_cache_get_mask(dt_canvas_surface_cache_t *cac
   entry->hash = hash;
   entry->width = width;
   entry->height = height;
+  entry->margin = margin;
   entry->surface = surface;
   g_hash_table_insert(cache->masks, GUINT_TO_POINTER(object->id), entry);
   return surface;
@@ -1183,28 +1272,28 @@ cairo_surface_t *dt_canvas_surface_cache_get_mask(dt_canvas_surface_cache_t *cac
 
 cairo_surface_t *dt_canvas_surface_cache_get_mask_support(dt_canvas_surface_cache_t *cache,
                                                           const dt_canvas_object_t *object, const int width,
-                                                          const int height)
+                                                          const int height, const int margin)
 {
   if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE) return NULL;
-  if(IS_NULL_PTR(dt_canvas_surface_cache_get_mask(cache, object, width, height))) return NULL;
+  if(IS_NULL_PTR(dt_canvas_surface_cache_get_mask(cache, object, width, height, margin))) return NULL;
   dt_canvas_cached_mask_t *entry = g_hash_table_lookup(cache->masks, GUINT_TO_POINTER(object->id));
   if(IS_NULL_PTR(entry)) return NULL;
-  if(IS_NULL_PTR(entry->support)) entry->support = dt_canvas_render_mask_support(object, width, height);
+  if(IS_NULL_PTR(entry->support)) entry->support = dt_canvas_render_mask_support(object, width, height, margin);
   return entry->support;
 }
 
 cairo_surface_t *dt_canvas_surface_cache_get_mask_band(dt_canvas_surface_cache_t *cache,
                                                        const dt_canvas_object_t *object, const int width,
-                                                       const int height, const int radius)
+                                                       const int height, const int margin, const int radius)
 {
   if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE || radius <= 0) return NULL;
   // The mask entry is the band's home: getting it first settles the hash and the size.
-  if(IS_NULL_PTR(dt_canvas_surface_cache_get_mask(cache, object, width, height))) return NULL;
+  if(IS_NULL_PTR(dt_canvas_surface_cache_get_mask(cache, object, width, height, margin))) return NULL;
   dt_canvas_cached_mask_t *entry = g_hash_table_lookup(cache->masks, GUINT_TO_POINTER(object->id));
   if(IS_NULL_PTR(entry)) return NULL;
   if(!IS_NULL_PTR(entry->band) && entry->band_radius == radius) return entry->band;
   if(!IS_NULL_PTR(entry->band)) cairo_surface_destroy(entry->band);
-  entry->band = dt_canvas_render_mask_band(object, width, height, radius);
+  entry->band = dt_canvas_render_mask_band(object, width, height, margin, radius);
   entry->band_radius = IS_NULL_PTR(entry->band) ? 0 : radius;
   return entry->band;
 }
