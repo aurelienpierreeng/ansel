@@ -1032,9 +1032,14 @@ static void _snap_axis(const double current, const double candidate, const doubl
 }
 
 gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving,
-                                      const GArray *exclude, double threshold, double *delta_x, double *delta_y)
+                                      const GArray *exclude, double threshold, uint32_t edges, double *delta_x,
+                                      double *delta_y)
 {
   if(IS_NULL_PTR(canvas) || IS_NULL_PTR(moving)) return FALSE;
+  const gboolean snap_left = (edges & DT_CANVAS_EDGE_LEFT) != 0;
+  const gboolean snap_right = (edges & DT_CANVAS_EDGE_RIGHT) != 0;
+  const gboolean snap_top = (edges & DT_CANVAS_EDGE_TOP) != 0;
+  const gboolean snap_bottom = (edges & DT_CANVAS_EDGE_BOTTOM) != 0;
   const double gutter = canvas->gutter > 0.0f ? canvas->gutter : 0.0;
   const double left = moving->x;
   const double right = moving->x + moving->width;
@@ -1054,20 +1059,52 @@ gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas
     const double other_right = bounds.x + bounds.width;
     const double other_top = bounds.y;
     const double other_bottom = bounds.y + bounds.height;
-    // Side by side, one gutter apart.
-    _snap_axis(left, other_right + gutter, threshold, &best_x, &found_x);
-    _snap_axis(right, other_left - gutter, threshold, &best_x, &found_x);
-    _snap_axis(top, other_bottom + gutter, threshold, &best_y, &found_y);
-    _snap_axis(bottom, other_top - gutter, threshold, &best_y, &found_y);
-    // In line: edges aligned.
-    _snap_axis(left, other_left, threshold, &best_x, &found_x);
-    _snap_axis(right, other_right, threshold, &best_x, &found_x);
-    _snap_axis(top, other_top, threshold, &best_y, &found_y);
-    _snap_axis(bottom, other_bottom, threshold, &best_y, &found_y);
+    // Side by side, one gutter apart, and in line: edges aligned.
+    if(snap_left)
+    {
+      _snap_axis(left, other_right + gutter, threshold, &best_x, &found_x);
+      _snap_axis(left, other_left, threshold, &best_x, &found_x);
+    }
+    if(snap_right)
+    {
+      _snap_axis(right, other_left - gutter, threshold, &best_x, &found_x);
+      _snap_axis(right, other_right, threshold, &best_x, &found_x);
+    }
+    if(snap_top)
+    {
+      _snap_axis(top, other_bottom + gutter, threshold, &best_y, &found_y);
+      _snap_axis(top, other_top, threshold, &best_y, &found_y);
+    }
+    if(snap_bottom)
+    {
+      _snap_axis(bottom, other_top - gutter, threshold, &best_y, &found_y);
+      _snap_axis(bottom, other_bottom, threshold, &best_y, &found_y);
+    }
   }
   if(!IS_NULL_PTR(delta_x)) *delta_x = found_x ? best_x : 0.0;
   if(!IS_NULL_PTR(delta_y)) *delta_y = found_y ? best_y : 0.0;
   return found_x || found_y;
+}
+
+gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, double threshold, double *width,
+                             double *height)
+{
+  if(IS_NULL_PTR(canvas)) return FALSE;
+  gboolean found_width = FALSE;
+  gboolean found_height = FALSE;
+  double best_width = 0.0;
+  double best_height = 0.0;
+  for(guint idx = 0; idx < canvas->objects->len; idx++)
+  {
+    const dt_canvas_object_t *other = g_ptr_array_index(canvas->objects, idx);
+    if(!dt_canvas_object_is_frame(other) || (other->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
+    if(_excluded(exclude, other->id)) continue;
+    if(!IS_NULL_PTR(width)) _snap_axis(*width, other->width, threshold, &best_width, &found_width);
+    if(!IS_NULL_PTR(height)) _snap_axis(*height, other->height, threshold, &best_height, &found_height);
+  }
+  if(found_width) *width += best_width;
+  if(found_height) *height += best_height;
+  return found_width || found_height;
 }
 
 /* --- layout ----------------------------------------------------------------- */

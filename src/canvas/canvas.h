@@ -108,8 +108,21 @@ typedef enum dt_canvas_grid_flags_t
 {
   DT_CANVAS_GRID_NONE = 0,
   DT_CANVAS_GRID_VISIBLE = 1 << 0,
-  DT_CANVAS_GRID_SNAP = 1 << 1,
+  DT_CANVAS_GRID_SNAP = 1 << 1,     ///< positions and sizes round to the grid
+  DT_CANVAS_SNAP_GUTTER = 1 << 2,   ///< edges land one gutter from a neighbour, or in line with it
+  DT_CANVAS_SNAP_SIZE = 1 << 3,     ///< a resized frame takes a neighbour's width or height
+  DT_CANVAS_SNAP_ALL = DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_GUTTER | DT_CANVAS_SNAP_SIZE,
 } dt_canvas_grid_flags_t;
+
+/** Which edges of a moving box may snap: all four for a move, the dragged ones for a resize. */
+typedef enum dt_canvas_edges_t
+{
+  DT_CANVAS_EDGE_LEFT = 1 << 0,
+  DT_CANVAS_EDGE_RIGHT = 1 << 1,
+  DT_CANVAS_EDGE_TOP = 1 << 2,
+  DT_CANVAS_EDGE_BOTTOM = 1 << 3,
+  DT_CANVAS_EDGE_ALL = 0xF,
+} dt_canvas_edges_t;
 
 /** How an image frame's render relates to the library. Runtime only, never saved. */
 typedef enum dt_canvas_sync_status_t
@@ -453,14 +466,26 @@ dt_canvas_object_t *dt_canvas_pick(const dt_canvas_t *canvas, double x, double y
  * @brief Snap a moving box next to, or in line with, the other frames.
  * @details Candidates are the other frames' edges plus or minus the gutter (side by side with
  * the canvas margin) and their edges themselves (aligned). The nearest candidate within
- * `threshold` wins per axis.
+ * `threshold` wins per axis. This is the gutter rule; it ignores the canvas's snap flags,
+ * the caller consults them.
  * @param moving the box being moved, canvas units.
  * @param exclude object ids not to snap against (the selection itself); may be NULL.
+ * @param edges which of the box's edges are moving and may snap (dt_canvas_edges_t bits).
  * @param delta_x receives the shift to apply on x, 0 when nothing is within reach.
  * @return TRUE when at least one axis snapped.
  */
 gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving,
-                                      const GArray *exclude, double threshold, double *delta_x, double *delta_y);
+                                      const GArray *exclude, double threshold, uint32_t edges, double *delta_x,
+                                      double *delta_y);
+
+/**
+ * @brief Snap a size to another frame's width or height.
+ * @details The same-size rule: the nearest other frame's width within `threshold` replaces
+ * `*width`, and likewise for `*height`, each axis on its own.
+ * @return TRUE when at least one dimension snapped.
+ */
+gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, double threshold, double *width,
+                             double *height);
 
 /** @brief Put a waypoint on a connector, at the middle of its current route. */
 void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connector);
