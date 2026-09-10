@@ -70,8 +70,8 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 976 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16)
-#define DT_CANVAS_OBJECT_RESERVED 256
+#define DT_CANVAS_HEADER_RESERVED 932 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16)
+#define DT_CANVAS_OBJECT_RESERVED 188 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36)
 #define DT_CANVAS_IMAGE_RESERVED 512
 #define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
 #define DT_CANVAS_MAP_RESERVED 256
@@ -104,6 +104,8 @@ typedef enum dt_canvas_object_flags_t
   DT_CANVAS_OBJECT_FLAG_LOCKED = 1 << 1,
   /** The object is kept but not drawn. */
   DT_CANVAS_OBJECT_FLAG_HIDDEN = 1 << 2,
+  /** The object's own `shadow` applies instead of the canvas default. */
+  DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE = 1 << 3,
 } dt_canvas_object_flags_t;
 
 typedef enum dt_canvas_grid_flags_t
@@ -115,6 +117,7 @@ typedef enum dt_canvas_grid_flags_t
   DT_CANVAS_SNAP_SIZE = 1 << 3,     ///< a resized frame takes a neighbour's width or height
   DT_CANVAS_PAGE_VISIBLE = 1 << 4,  ///< the page borders are drawn
   DT_CANVAS_SNAP_PAGE = 1 << 5,     ///< edges land on a page border
+  DT_CANVAS_GUTTER_VISIBLE = 1 << 6, ///< a frame one gutter out is drawn around every frame
   DT_CANVAS_SNAP_ALL = DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_GUTTER | DT_CANVAS_SNAP_SIZE | DT_CANVAS_SNAP_PAGE,
 } dt_canvas_grid_flags_t;
 
@@ -293,6 +296,58 @@ typedef struct dt_canvas_map_t
   dt_canvas_sync_status_t sync_status; ///< RENDERING while the tiles are fetched, MISSING when they could not be
 } dt_canvas_map_t;
 
+/**
+ * A drop shadow: the object's silhouette, blurred, offset and tinted, composited under it.
+ * An alpha of 0 is no shadow. Offsets and blur are canvas units.
+ */
+typedef struct dt_canvas_shadow_t
+{
+  dt_canvas_color_t color;
+  float offset_x;
+  float offset_y;
+  float blur;   ///< the blur's standard deviation
+} dt_canvas_shadow_t;
+
+/** The drawn-mask shape that cuts an object out of its rectangle. */
+typedef enum dt_canvas_mask_shape_t
+{
+  DT_CANVAS_MASK_NONE = 0,
+  DT_CANVAS_MASK_CIRCLE = 1,
+  DT_CANVAS_MASK_ELLIPSE = 2,
+  DT_CANVAS_MASK_POLYGON = 3,
+  DT_CANVAS_MASK_GRADIENT = 4,
+} dt_canvas_mask_shape_t;
+
+typedef enum dt_canvas_mask_flags_t
+{
+  DT_CANVAS_MASK_INVERT = 1 << 0, ///< keep what is outside the shape
+} dt_canvas_mask_flags_t;
+
+/** Floats per polygon node: x, y, first control point x, y, second control point x, y, smooth, unused. */
+#define DT_CANVAS_MASK_NODE_FLOATS 8
+
+/**
+ * A cutout, in the object's own unit square: (0, 0) is the top-left corner of the unrotated
+ * frame and (1, 1) its bottom-right, whatever its size. Radii and the feather are fractions
+ * of the frame's shorter side, the way the darkroom's drawn masks measure theirs. The
+ * polygon's nodes live in `nodes`, saved after the object's record.
+ */
+typedef struct dt_canvas_mask_t
+{
+  uint32_t shape;     ///< dt_canvas_mask_shape_t
+  uint32_t flags;     ///< dt_canvas_mask_flags_t bits
+  float feather;      ///< the fall-off's extent
+  float center_x;     ///< circle, ellipse: the centre; gradient: the anchor
+  float center_y;
+  float radius_x;     ///< circle: the radius; ellipse: the horizontal radius; gradient: the extent
+  float radius_y;     ///< ellipse: the vertical radius; gradient: the curvature
+  float rotation;     ///< ellipse, gradient: degrees
+  float spare;
+  /* runtime */
+  uint32_t node_count;
+  float *nodes;       ///< node_count * DT_CANVAS_MASK_NODE_FLOATS
+} dt_canvas_mask_t;
+
 typedef struct dt_canvas_object_t
 {
   uint32_t id;        ///< unique within the canvas, never reused
@@ -306,6 +361,9 @@ typedef struct dt_canvas_object_t
   uint32_t flags;     ///< dt_canvas_object_flags_t bits
   dt_canvas_color_t border_color;
   float border_width; ///< canvas units
+  dt_canvas_shadow_t shadow;  ///< applies with DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE
+  float transparency; ///< 0 opaque, 1 invisible; stored this way so an older file's zeros mean opaque
+  dt_canvas_mask_t mask;
   uint8_t reserved[DT_CANVAS_OBJECT_RESERVED];
   union
   {
@@ -353,6 +411,8 @@ typedef struct dt_canvas_t
   uint32_t paper_size;              ///< dt_canvas_paper_t
   uint32_t paper_landscape;         ///< 0 portrait, 1 landscape
   dt_canvas_color_t page_color;     ///< the page borders
+  dt_canvas_shadow_t shadow;        ///< default shadow for objects without an override
+  dt_canvas_color_t gutter_color;   ///< the gutter frames, when DT_CANVAS_GUTTER_VISIBLE
   double view_zoom;                 ///< the viewport the canvas was saved with
   double view_x;                    ///< canvas point shown at the centre of the view
   double view_y;
@@ -483,6 +543,34 @@ const char *dt_canvas_text_effective_font(const dt_canvas_t *canvas, const dt_ca
 /** @brief The border a frame is drawn with: its own when overridden, the canvas default otherwise. */
 void dt_canvas_object_effective_border(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                                        dt_canvas_color_t *color, float *width);
+
+/** @brief The shadow an object is drawn with: its own with the override flag, else the canvas default. */
+void dt_canvas_object_effective_shadow(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                       dt_canvas_shadow_t *shadow);
+
+/** @brief Whether a shadow draws anything at all. */
+gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow);
+
+/**
+ * @brief Give an object a cutout of a shape, at a sensible default geometry; NONE removes it.
+ * A shape already of that kind is kept as it is.
+ */
+void dt_canvas_mask_set_shape(dt_canvas_t *canvas, dt_canvas_object_t *object, uint32_t shape);
+
+/** @brief Replace the polygon's nodes; `nodes` holds count * DT_CANVAS_MASK_NODE_FLOATS floats. */
+void dt_canvas_mask_set_nodes(dt_canvas_t *canvas, dt_canvas_object_t *object, const float *nodes, uint32_t count);
+
+/** @brief Insert a corner node at `index` (0..count), at the unit-square point. */
+gboolean dt_canvas_mask_insert_node(dt_canvas_t *canvas, dt_canvas_object_t *object, uint32_t index, float x, float y);
+
+/** @brief Remove a node; refused when three would not remain. */
+gboolean dt_canvas_mask_remove_node(dt_canvas_t *canvas, dt_canvas_object_t *object, uint32_t index);
+
+/** @brief Drop the nodes; called by the object's owner before freeing it. */
+void dt_canvas_mask_clear(dt_canvas_object_t *object);
+
+/** @brief A hash of everything that changes the mask's raster: the key of a cached raster. */
+uint64_t dt_canvas_mask_hash(const dt_canvas_mask_t *mask);
 
 /* --- geometry --------------------------------------------------------------- */
 

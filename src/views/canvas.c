@@ -117,6 +117,11 @@ typedef enum dt_canvas_drag_t
   DT_CANVAS_DRAG_HANDLE_FROM,   ///< the start's tangent handle: its length along the normal
   DT_CANVAS_DRAG_HANDLE_TO,     ///< the end's
   DT_CANVAS_DRAG_HANDLE_VIA,    ///< the waypoint's tangent handle, either side
+  DT_CANVAS_DRAG_MASK_CENTER,   ///< a cutout's centre, or the gradient's anchor
+  DT_CANVAS_DRAG_MASK_RADIUS_X, ///< the circle's radius, the ellipse's first radius and its rotation
+  DT_CANVAS_DRAG_MASK_RADIUS_Y, ///< the ellipse's second radius
+  DT_CANVAS_DRAG_MASK_REACH,    ///< the gradient's extent and rotation
+  DT_CANVAS_DRAG_MASK_NODE,     ///< one polygon node, `mask_handle`
 } dt_canvas_drag_t;
 
 typedef struct dt_canvas_view_t
@@ -168,8 +173,6 @@ typedef struct dt_canvas_view_t
   GtkWidget *text_no_background;
   GtkWidget *text_align_h;
   GtkWidget *text_align_v;
-  GtkWidget *text_border_width;
-  GtkWidget *text_border_color;
   gulong bars_position_handler;         ///< the overlay's get-child-position hook
   // same-size guides, shown while a resize snaps to a neighbour's size
   gboolean guide_width_valid;
@@ -177,8 +180,6 @@ typedef struct dt_canvas_view_t
   gboolean guide_height_valid;
   dt_canvas_rect_t guide_height;
   GtkWidget *image_bar;
-  GtkWidget *image_border_width;
-  GtkWidget *image_border_color;
   GtkWidget *connector_bar;
   GtkWidget *connector_route;
   GtkWidget *connector_arrows;
@@ -191,6 +192,26 @@ typedef struct dt_canvas_view_t
   GtkWidget *map_longitude;
   GtkWidget *map_zoom;
   GtkWidget *map_source;
+  // the object bar: what every object has, shown under the kind's own bar
+  GtkWidget *object_bar;
+  GtkWidget *object_rotate_toggle;
+  GtkWidget *object_rotation;
+  GtkWidget *object_border_box;
+  GtkWidget *object_border_width;
+  GtkWidget *object_border_color;
+  GtkWidget *object_shadow_toggle;
+  GtkWidget *object_shadow_offset_x;
+  GtkWidget *object_shadow_offset_y;
+  GtkWidget *object_shadow_blur;
+  GtkWidget *object_shadow_color;
+  GtkWidget *object_opacity;
+  GtkWidget *object_cutout_box;
+  GtkWidget *object_cutout_shape;
+  GtkWidget *object_cutout_feather;
+  GtkWidget *object_cutout_invert;
+  GtkWidget *object_cutout_edit;
+  gboolean mask_editing;                ///< the cutout's handles are shown and take the pointer
+  int mask_handle;                      ///< the polygon node being dragged
   gboolean bars_refilling;
   uint64_t bars_signature;              ///< selection + document state the bars were last filled for
   guint bars_idle;                      ///< pending placement, scheduled off the draw path
@@ -417,6 +438,16 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   if(!IS_NULL_PTR(font) && font[0] != '\0') g_strlcpy(canvas->default_font, font, sizeof(canvas->default_font));
   canvas->image_long_edge = dt_conf_get_int("canvas/image_long_edge");
   canvas->jpeg_quality = dt_conf_get_int("canvas/jpeg_quality");
+  const char *shadow_color = dt_conf_get_string_const("canvas/shadow_color");
+  dt_canvas_color_parse(shadow_color, &canvas->shadow.color);
+  if(!dt_conf_get_bool("canvas/shadow_enabled")) canvas->shadow.color.alpha = 0.0f;
+  canvas->shadow.offset_x = dt_conf_get_float("canvas/shadow_offset_x");
+  canvas->shadow.offset_y = dt_conf_get_float("canvas/shadow_offset_y");
+  canvas->shadow.blur = dt_conf_get_float("canvas/shadow_blur");
+  const char *gutter_color = dt_conf_get_string_const("canvas/gutter_color");
+  dt_canvas_color_parse(gutter_color, &canvas->gutter_color);
+  if(dt_conf_get_bool("canvas/gutter_visible")) canvas->grid_flags |= DT_CANVAS_GUTTER_VISIBLE;
+  else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_GUTTER_VISIBLE;
   canvas->dirty = FALSE;
 }
 
@@ -1388,7 +1419,16 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
   }
   else if(object->kind == DT_CANVAS_OBJECT_CONNECTOR)
   {
-    // Its properties live in the toolbar's Connector menu, applied to the selection.
+    // Its properties live in its floating bar; here is what it shares with the frames.
+    GtkWidget *order_item = gtk_menu_item_new_with_label(_("Order"));
+    GtkWidget *order_menu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(order_item), order_menu);
+    _menu_item(order_menu, _("Bring to front"), _menu_z_order, _menu_context(self, id, x, y, 0));
+    _menu_item(order_menu, _("Bring forward"), _menu_z_order, _menu_context(self, id, x, y, 1));
+    _menu_item(order_menu, _("Send backward"), _menu_z_order, _menu_context(self, id, x, y, 2));
+    _menu_item(order_menu, _("Send to back"), _menu_z_order, _menu_context(self, id, x, y, 3));
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), order_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
     _menu_item(menu, _("Delete"), _menu_delete, _menu_context(self, id, x, y, 0));
   }
   else
@@ -1702,6 +1742,113 @@ static void _bar_border_default_clicked(GtkWidget *button, gpointer data)
   _bars_refresh(self, TRUE);
 }
 
+/** The object bar's other handlers serve every kind: frames and connectors alike. */
+#define BAR_EDIT_BEGIN_ANY()                                                                               \
+  dt_view_t *self = (dt_view_t *)data;                                                                     \
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;                                                 \
+  if(view->bars_refilling) return;                                                                         \
+  dt_canvas_object_t *object = _bar_target(view);                                                          \
+  if(IS_NULL_PTR(object)) return;                                                                          \
+  dt_canvas_t *before = _begin_edit(view);
+
+static void _bar_rotate_toggled(GtkToggleButton *button, gpointer data)
+{
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  gtk_widget_set_visible(view->object_rotation, gtk_toggle_button_get_active(button));
+  _bars_request(self);
+}
+
+static void _bar_rotation_changed(GtkSpinButton *spin, gpointer data)
+{
+  BAR_EDIT_BEGIN_FRAME()
+  object->rotation = gtk_spin_button_get_value(spin) * M_PI / 180.0;
+  BAR_EDIT_END()
+}
+
+/** Read the shadow widgets into the object's own shadow, and make it the one that applies. */
+static void _bar_shadow_apply(dt_canvas_view_t *view, dt_canvas_object_t *object, const gboolean enabled)
+{
+  dt_canvas_shadow_t shadow;
+  dt_canvas_object_effective_shadow(view->canvas, object, &shadow);
+  shadow.color = _color_from_button(view->object_shadow_color);
+  shadow.offset_x = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_shadow_offset_x));
+  shadow.offset_y = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_shadow_offset_y));
+  shadow.blur = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_shadow_blur));
+  if(!enabled)
+    shadow.color.alpha = 0.0f;
+  else if(shadow.color.alpha <= 0.0f)
+    shadow.color.alpha = 0.5f;
+  object->shadow = shadow;
+  object->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+}
+
+static void _bar_shadow_toggled(GtkToggleButton *button, gpointer data)
+{
+  BAR_EDIT_BEGIN_ANY()
+  _bar_shadow_apply(view, object, gtk_toggle_button_get_active(button));
+  BAR_EDIT_END()
+}
+
+static void _bar_shadow_changed(GtkWidget *widget, gpointer data)
+{
+  BAR_EDIT_BEGIN_ANY()
+  _bar_shadow_apply(view, object, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(view->object_shadow_toggle)));
+  BAR_EDIT_END()
+}
+
+static void _bar_shadow_default_clicked(GtkWidget *button, gpointer data)
+{
+  BAR_EDIT_BEGIN_ANY()
+  object->flags &= ~DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  BAR_EDIT_END()
+  _bars_refresh(self, TRUE);
+}
+
+static void _bar_opacity_changed(GtkSpinButton *spin, gpointer data)
+{
+  BAR_EDIT_BEGIN_ANY()
+  object->transparency = 1.0f - (float)CLAMP(gtk_spin_button_get_value(spin) / 100.0, 0.0, 1.0);
+  BAR_EDIT_END()
+}
+
+static void _bar_cutout_shape_changed(GtkComboBox *combo, gpointer data)
+{
+  BAR_EDIT_BEGIN_FRAME()
+  const int shape = gtk_combo_box_get_active(combo);
+  dt_canvas_mask_set_shape(view->canvas, object, (uint32_t)CLAMP(shape, 0, DT_CANVAS_MASK_GRADIENT));
+  if(object->mask.shape == DT_CANVAS_MASK_NONE) view->mask_editing = FALSE;
+  else view->mask_editing = TRUE;
+  BAR_EDIT_END()
+  _bars_refresh(self, TRUE);
+}
+
+static void _bar_cutout_feather_changed(GtkSpinButton *spin, gpointer data)
+{
+  BAR_EDIT_BEGIN_FRAME()
+  object->mask.feather = (float)CLAMP(gtk_spin_button_get_value(spin) / 100.0, 0.0, 1.0);
+  BAR_EDIT_END()
+}
+
+static void _bar_cutout_invert_toggled(GtkToggleButton *button, gpointer data)
+{
+  BAR_EDIT_BEGIN_FRAME()
+  if(gtk_toggle_button_get_active(button))
+    object->mask.flags |= DT_CANVAS_MASK_INVERT;
+  else
+    object->mask.flags &= ~(uint32_t)DT_CANVAS_MASK_INVERT;
+  BAR_EDIT_END()
+}
+
+static void _bar_cutout_edit_toggled(GtkToggleButton *button, gpointer data)
+{
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(view->bars_refilling) return;
+  view->mask_editing = gtk_toggle_button_get_active(button);
+  dt_control_queue_redraw_center();
+}
+
 static void _bar_connector_route_changed(GtkComboBox *combo, gpointer data)
 {
   BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_CONNECTOR)
@@ -1820,19 +1967,99 @@ static GtkWidget *_bar_color_button(GtkWidget *bar, const char *tooltip, GCallba
   return button;
 }
 
-/** Border width, colour with opacity, and the button back to the canvas border. */
-static void _bar_add_border_controls(dt_view_t *self, GtkWidget *bar, GtkWidget **width, GtkWidget **color)
+static GtkWidget *_bar_spin(GtkWidget *bar, const double low, const double high, const double step,
+                            const char *tooltip, GCallback callback, gpointer data)
 {
-  gtk_box_pack_start(GTK_BOX(bar), gtk_label_new(_("Border")), FALSE, FALSE, 0);
-  *width = gtk_spin_button_new_with_range(0.0, 200.0, 1.0);
-  gtk_widget_set_tooltip_text(*width, _("Border width, in canvas units. The border is part of the frame: the content shrinks inside it."));
-  g_signal_connect(*width, "value-changed", G_CALLBACK(_bar_border_width_changed), self);
-  gtk_box_pack_start(GTK_BOX(bar), *width, FALSE, FALSE, 0);
-  *color = _bar_color_button(bar, _("Border colour and opacity"), G_CALLBACK(_bar_border_color_set), self);
-  GtkWidget *default_button = gtk_button_new_with_label(_("Canvas border"));
-  gtk_widget_set_tooltip_text(default_button, _("Use the canvas's uniform border for this frame"));
-  g_signal_connect(default_button, "clicked", G_CALLBACK(_bar_border_default_clicked), self);
-  gtk_box_pack_start(GTK_BOX(bar), default_button, FALSE, FALSE, 0);
+  GtkWidget *spin = gtk_spin_button_new_with_range(low, high, step);
+  gtk_widget_set_tooltip_text(spin, tooltip);
+  g_signal_connect(spin, "value-changed", callback, data);
+  gtk_box_pack_start(GTK_BOX(bar), spin, FALSE, FALSE, 0);
+  return spin;
+}
+
+static GtkWidget *_bar_section(GtkWidget *bar, const char *label)
+{
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
+  if(!IS_NULL_PTR(label)) gtk_box_pack_start(GTK_BOX(box), gtk_label_new(label), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(bar), box, FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
+  return box;
+}
+
+/**
+ * The object bar: what every object has, under the kind's own bar. Rotation, border,
+ * shadow, opacity and the cutout; a connector hides the sections it has no use for.
+ */
+static void _bar_create_object_bar(dt_view_t *self, GtkWidget *base)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  view->object_bar = _bar_new(base);
+
+  GtkWidget *rotate = _bar_section(view->object_bar, NULL);
+  view->object_rotate_toggle = gtk_toggle_button_new_with_label(_("Rotate"));
+  gtk_widget_set_tooltip_text(view->object_rotate_toggle, _("Show the rotation angle"));
+  g_signal_connect(view->object_rotate_toggle, "toggled", G_CALLBACK(_bar_rotate_toggled), self);
+  gtk_box_pack_start(GTK_BOX(rotate), view->object_rotate_toggle, FALSE, FALSE, 0);
+  view->object_rotation = _bar_spin(rotate, -360.0, 360.0, 1.0, _("Rotation, degrees clockwise"),
+                                    G_CALLBACK(_bar_rotation_changed), self);
+  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(view->object_rotation), 1);
+  gtk_spin_button_set_wrap(GTK_SPIN_BUTTON(view->object_rotation), TRUE);
+
+  view->object_border_box = _bar_section(view->object_bar, _("Border"));
+  view->object_border_width
+      = _bar_spin(view->object_border_box, 0.0, 200.0, 1.0,
+                  _("Border width, in canvas units. The border is part of the frame: the content shrinks inside it."),
+                  G_CALLBACK(_bar_border_width_changed), self);
+  view->object_border_color = _bar_color_button(view->object_border_box, _("Border colour and opacity"),
+                                                G_CALLBACK(_bar_border_color_set), self);
+  GtkWidget *border_default = gtk_button_new_with_label(_("Canvas border"));
+  gtk_widget_set_tooltip_text(border_default, _("Use the canvas's uniform border for this frame"));
+  g_signal_connect(border_default, "clicked", G_CALLBACK(_bar_border_default_clicked), self);
+  gtk_box_pack_start(GTK_BOX(view->object_border_box), border_default, FALSE, FALSE, 0);
+
+  GtkWidget *shadow = _bar_section(view->object_bar, NULL);
+  view->object_shadow_toggle = gtk_toggle_button_new_with_label(_("Shadow"));
+  gtk_widget_set_tooltip_text(view->object_shadow_toggle, _("Drop a shadow under this object"));
+  g_signal_connect(view->object_shadow_toggle, "toggled", G_CALLBACK(_bar_shadow_toggled), self);
+  gtk_box_pack_start(GTK_BOX(shadow), view->object_shadow_toggle, FALSE, FALSE, 0);
+  view->object_shadow_offset_x = _bar_spin(shadow, -500.0, 500.0, 1.0, _("Shadow offset to the right, in canvas units"),
+                                           G_CALLBACK(_bar_shadow_changed), self);
+  view->object_shadow_offset_y = _bar_spin(shadow, -500.0, 500.0, 1.0, _("Shadow offset downwards, in canvas units"),
+                                           G_CALLBACK(_bar_shadow_changed), self);
+  view->object_shadow_blur = _bar_spin(shadow, 0.0, 500.0, 1.0, _("Shadow blur, in canvas units"),
+                                       G_CALLBACK(_bar_shadow_changed), self);
+  view->object_shadow_color = _bar_color_button(shadow, _("Shadow colour and strength"), G_CALLBACK(_bar_shadow_changed), self);
+  GtkWidget *shadow_default = gtk_button_new_with_label(_("Canvas shadow"));
+  gtk_widget_set_tooltip_text(shadow_default, _("Use the canvas's default shadow for this object"));
+  g_signal_connect(shadow_default, "clicked", G_CALLBACK(_bar_shadow_default_clicked), self);
+  gtk_box_pack_start(GTK_BOX(shadow), shadow_default, FALSE, FALSE, 0);
+
+  GtkWidget *opacity = _bar_section(view->object_bar, _("Opacity"));
+  view->object_opacity = _bar_spin(opacity, 0.0, 100.0, 5.0, _("Opacity, percent"), G_CALLBACK(_bar_opacity_changed), self);
+
+  view->object_cutout_box = _bar_section(view->object_bar, _("Cutout"));
+  view->object_cutout_shape = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("None"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Circle"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Ellipse"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Polygon"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Gradient"));
+  gtk_widget_set_tooltip_text(view->object_cutout_shape,
+                              _("A drawn shape that cuts the frame out of its rectangle, with a fall-off past its edge"));
+  g_signal_connect(view->object_cutout_shape, "changed", G_CALLBACK(_bar_cutout_shape_changed), self);
+  gtk_box_pack_start(GTK_BOX(view->object_cutout_box), view->object_cutout_shape, FALSE, FALSE, 0);
+  view->object_cutout_feather = _bar_spin(view->object_cutout_box, 0.0, 100.0, 1.0,
+                                          _("Fall-off past the shape's edge, percent of the frame's shorter side"),
+                                          G_CALLBACK(_bar_cutout_feather_changed), self);
+  view->object_cutout_invert = gtk_toggle_button_new_with_label(_("Invert"));
+  gtk_widget_set_tooltip_text(view->object_cutout_invert, _("Keep what is outside the shape"));
+  g_signal_connect(view->object_cutout_invert, "toggled", G_CALLBACK(_bar_cutout_invert_toggled), self);
+  gtk_box_pack_start(GTK_BOX(view->object_cutout_box), view->object_cutout_invert, FALSE, FALSE, 0);
+  view->object_cutout_edit = gtk_toggle_button_new_with_label(_("Edit"));
+  gtk_widget_set_tooltip_text(view->object_cutout_edit,
+                              _("Show the shape's handles. Drag them; on a polygon, Ctrl+click an edge to add a node and Shift+click a node to remove it."));
+  g_signal_connect(view->object_cutout_edit, "toggled", G_CALLBACK(_bar_cutout_edit_toggled), self);
+  gtk_box_pack_start(GTK_BOX(view->object_cutout_box), view->object_cutout_edit, FALSE, FALSE, 0);
+  _bar_finish(view->object_bar);
 }
 
 /**
@@ -1888,11 +2115,11 @@ static void _bars_create(dt_view_t *self)
   gtk_widget_set_tooltip_text(view->text_align_v, _("Vertical alignment"));
   g_signal_connect(view->text_align_v, "changed", G_CALLBACK(_bar_text_align_changed), self);
   gtk_box_pack_start(GTK_BOX(view->text_bar), view->text_align_v, FALSE, FALSE, 0);
-  _bar_add_border_controls(self, view->text_bar, &view->text_border_width, &view->text_border_color);
   _bar_finish(view->text_bar);
 
   view->image_bar = _bar_new(base);
-  _bar_add_border_controls(self, view->image_bar, &view->image_border_width, &view->image_border_color);
+  GtkWidget *image_hint = gtk_label_new(_("Image"));
+  gtk_box_pack_start(GTK_BOX(view->image_bar), image_hint, FALSE, FALSE, 0);
   _bar_finish(view->image_bar);
 
   view->connector_bar = _bar_new(base);
@@ -1955,6 +2182,8 @@ static void _bars_create(dt_view_t *self)
   g_signal_connect(map_refresh, "clicked", G_CALLBACK(_bar_map_refresh_clicked), self);
   gtk_box_pack_start(GTK_BOX(view->map_bar), map_refresh, FALSE, FALSE, 0);
   _bar_finish(view->map_bar);
+
+  _bar_create_object_bar(self, base);
 }
 
 static void _bars_destroy(dt_view_t *self)
@@ -1970,6 +2199,7 @@ static void _bars_destroy(dt_view_t *self)
   if(!IS_NULL_PTR(view->image_bar)) gtk_container_remove(GTK_CONTAINER(base), view->image_bar);
   if(!IS_NULL_PTR(view->connector_bar)) gtk_container_remove(GTK_CONTAINER(base), view->connector_bar);
   if(!IS_NULL_PTR(view->map_bar)) gtk_container_remove(GTK_CONTAINER(base), view->map_bar);
+  if(!IS_NULL_PTR(view->object_bar)) gtk_container_remove(GTK_CONTAINER(base), view->object_bar);
   if(view->bars_position_handler != 0)
   {
     g_signal_handler_disconnect(base, view->bars_position_handler);
@@ -1977,6 +2207,7 @@ static void _bars_destroy(dt_view_t *self)
   }
   view->text_bar = NULL;
   view->image_bar = NULL;
+  view->object_bar = NULL;
   view->connector_bar = NULL;
   view->map_bar = NULL;
   view->bars_signature = 0;
@@ -2013,8 +2244,11 @@ static gboolean _object_screen_box(const dt_canvas_view_t *view, const dt_canvas
   return TRUE;
 }
 
-/** Place a bar immediately below the object, above it when there is no room below. */
-static void _bar_place(dt_canvas_view_t *view, GtkWidget *bar, const dt_canvas_object_t *object)
+/**
+ * Place a bar immediately below the object, above it when there is no room below; a second
+ * bar goes under the first, or above it when the first was pushed above the object.
+ */
+static void _bar_place(dt_canvas_view_t *view, GtkWidget *bar, const dt_canvas_object_t *object, GtkWidget *under)
 {
   double min_x = 0.0;
   double min_y = 0.0;
@@ -2026,7 +2260,19 @@ static void _bar_place(dt_canvas_view_t *view, GtkWidget *bar, const dt_canvas_o
   const int spacing = DT_PIXEL_APPLY_DPI(6);
   int left = (int)lround(min_x);
   int top = (int)lround(max_y) + spacing;
-  if(top + natural.height > view->height - spacing) top = (int)lround(min_y) - natural.height - spacing;
+  if(!IS_NULL_PTR(under) && gtk_widget_get_visible(under))
+  {
+    GtkRequisition under_natural;
+    gtk_widget_get_preferred_size(under, NULL, &under_natural);
+    const int under_top = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(under), "bar-top"));
+    left = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(under), "bar-left"));
+    top = under_top >= (int)lround(max_y) ? under_top + under_natural.height + spacing / 2
+                                          : under_top - natural.height - spacing / 2;
+  }
+  else if(top + natural.height > view->height - spacing)
+  {
+    top = (int)lround(min_y) - natural.height - spacing;
+  }
   left = CLAMP(left, spacing, MAX(spacing, view->width - natural.width - spacing));
   top = CLAMP(top, spacing, MAX(spacing, view->height - natural.height - spacing));
   const int last_left = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(bar), "bar-left"));
@@ -2047,6 +2293,7 @@ static void _bars_hide_now(dt_canvas_view_t *view)
   gtk_widget_hide(view->image_bar);
   gtk_widget_hide(view->connector_bar);
   gtk_widget_hide(view->map_bar);
+  gtk_widget_hide(view->object_bar);
   view->bars_signature = 0;
 }
 
@@ -2054,7 +2301,7 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view->text_bar) || IS_NULL_PTR(view->image_bar) || IS_NULL_PTR(view->connector_bar)
-     || IS_NULL_PTR(view->map_bar))
+     || IS_NULL_PTR(view->map_bar) || IS_NULL_PTR(view->object_bar))
     return;
   // No bar while a gesture is running: it would follow every motion through a re-allocation.
   const gboolean dragging = view->drag != DT_CANVAS_DRAG_NONE;
@@ -2073,19 +2320,6 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_no_background), object->text.background.alpha <= 0.0f);
       gtk_combo_box_set_active(GTK_COMBO_BOX(view->text_align_h), CLAMP((int)object->text.align_h, 0, 3));
       gtk_combo_box_set_active(GTK_COMBO_BOX(view->text_align_v), CLAMP((int)object->text.align_v, 0, 2));
-      dt_canvas_color_t border_color;
-      float border_width = 0.0f;
-      dt_canvas_object_effective_border(view->canvas, object, &border_color, &border_width);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_border_width), border_width);
-      _color_to_button(view->text_border_color, &border_color);
-    }
-    else if(kind == DT_CANVAS_OBJECT_IMAGE)
-    {
-      dt_canvas_color_t color;
-      float width = 0.0f;
-      dt_canvas_object_effective_border(view->canvas, object, &color, &width);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->image_border_width), width);
-      _color_to_button(view->image_border_color, &color);
     }
     else if(kind == DT_CANVAS_OBJECT_CONNECTOR)
     {
@@ -2110,16 +2344,52 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->map_zoom), object->map.zoom);
       gtk_combo_box_set_active(GTK_COMBO_BOX(view->map_source), dt_canvas_map_source_index(object->map.source));
     }
+    if(!IS_NULL_PTR(object))
+    {
+      const gboolean frame = dt_canvas_object_is_frame(object);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_rotation), object->rotation * 180.0 / M_PI);
+      dt_canvas_color_t border_color;
+      float border_width = 0.0f;
+      dt_canvas_object_effective_border(view->canvas, object, &border_color, &border_width);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_border_width), border_width);
+      _color_to_button(view->object_border_color, &border_color);
+      dt_canvas_shadow_t shadow;
+      dt_canvas_object_effective_shadow(view->canvas, object, &shadow);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->object_shadow_toggle), dt_canvas_shadow_visible(&shadow));
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_shadow_offset_x), shadow.offset_x);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_shadow_offset_y), shadow.offset_y);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_shadow_blur), shadow.blur);
+      _color_to_button(view->object_shadow_color, &shadow.color);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_opacity), (1.0 - CLAMP(object->transparency, 0.0f, 1.0f)) * 100.0);
+      gtk_combo_box_set_active(GTK_COMBO_BOX(view->object_cutout_shape), CLAMP((int)object->mask.shape, 0, DT_CANVAS_MASK_GRADIENT));
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_cutout_feather), object->mask.feather * 100.0);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->object_cutout_invert), (object->mask.flags & DT_CANVAS_MASK_INVERT) != 0);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->object_cutout_edit), view->mask_editing);
+      gtk_widget_set_visible(view->object_rotate_toggle, frame);
+      gtk_widget_set_visible(view->object_rotation, frame && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(view->object_rotate_toggle)));
+      gtk_widget_set_visible(view->object_border_box, frame);
+      gtk_widget_set_visible(view->object_cutout_box, frame);
+      gtk_widget_set_visible(view->object_cutout_feather, frame && object->mask.shape != DT_CANVAS_MASK_NONE);
+      gtk_widget_set_visible(view->object_cutout_invert, frame && object->mask.shape != DT_CANVAS_MASK_NONE);
+      gtk_widget_set_visible(view->object_cutout_edit, frame && object->mask.shape != DT_CANVAS_MASK_NONE);
+    }
     view->bars_refilling = FALSE;
     gtk_widget_set_visible(view->text_bar, kind == DT_CANVAS_OBJECT_TEXT);
     gtk_widget_set_visible(view->image_bar, kind == DT_CANVAS_OBJECT_IMAGE);
     gtk_widget_set_visible(view->connector_bar, kind == DT_CANVAS_OBJECT_CONNECTOR);
     gtk_widget_set_visible(view->map_bar, kind == DT_CANVAS_OBJECT_MAP);
+    gtk_widget_set_visible(view->object_bar, !IS_NULL_PTR(object));
   }
-  if(kind == DT_CANVAS_OBJECT_TEXT) _bar_place(view, view->text_bar, object);
-  if(kind == DT_CANVAS_OBJECT_IMAGE) _bar_place(view, view->image_bar, object);
-  if(kind == DT_CANVAS_OBJECT_CONNECTOR) _bar_place(view, view->connector_bar, object);
-  if(kind == DT_CANVAS_OBJECT_MAP) _bar_place(view, view->map_bar, object);
+  GtkWidget *kind_bar = NULL;
+  if(kind == DT_CANVAS_OBJECT_TEXT) kind_bar = view->text_bar;
+  if(kind == DT_CANVAS_OBJECT_IMAGE) kind_bar = view->image_bar;
+  if(kind == DT_CANVAS_OBJECT_CONNECTOR) kind_bar = view->connector_bar;
+  if(kind == DT_CANVAS_OBJECT_MAP) kind_bar = view->map_bar;
+  if(!IS_NULL_PTR(kind_bar))
+  {
+    _bar_place(view, kind_bar, object, NULL);
+    _bar_place(view, view->object_bar, object, kind_bar);
+  }
 }
 
 static gboolean _bars_idle(gpointer data)
@@ -2431,6 +2701,284 @@ static void _paint_handles(cairo_t *cr, const dt_canvas_view_t *view, const dt_c
   cairo_restore(cr);
 }
 
+/* --- cutout handles ------------------------------------------------------------------ */
+
+/** The frame's shorter side, the unit of a cutout's radii and feather. */
+static double _mask_side(const dt_canvas_object_t *object)
+{
+  return fmax(fmin(object->width, object->height), 1.0);
+}
+
+/** A cutout's unit-square point in the frame's local units, origin at its centre. */
+static void _mask_to_local(const dt_canvas_object_t *object, const double u, const double v, double *local_x,
+                           double *local_y)
+{
+  *local_x = (u - 0.5) * object->width;
+  *local_y = (v - 0.5) * object->height;
+}
+
+/**
+ * The cutout's handles in local units: [0] the centre or anchor, [1] the radius (circle), the
+ * first radius (ellipse) or the reach (gradient), [2] the ellipse's second radius.
+ * @return how many there are; a polygon's nodes are its own handles.
+ */
+static int _mask_handle_points(const dt_canvas_object_t *object, double points[6])
+{
+  const dt_canvas_mask_t *mask = &object->mask;
+  const double side = _mask_side(object);
+  double center_x = 0.0;
+  double center_y = 0.0;
+  _mask_to_local(object, mask->center_x, mask->center_y, &center_x, &center_y);
+  points[0] = center_x;
+  points[1] = center_y;
+  const double angle = mask->rotation * M_PI / 180.0;
+  switch(mask->shape)
+  {
+    case DT_CANVAS_MASK_CIRCLE:
+      points[2] = center_x + mask->radius_x * side;
+      points[3] = center_y;
+      return 2;
+    case DT_CANVAS_MASK_ELLIPSE:
+      points[2] = center_x + cos(angle) * mask->radius_x * side;
+      points[3] = center_y + sin(angle) * mask->radius_x * side;
+      points[4] = center_x - sin(angle) * mask->radius_y * side;
+      points[5] = center_y + cos(angle) * mask->radius_y * side;
+      return 3;
+    case DT_CANVAS_MASK_GRADIENT:
+      // The reach handle sits across the line, on the side the fall-off goes.
+      points[2] = center_x - sin(angle) * mask->radius_x * side;
+      points[3] = center_y + cos(angle) * mask->radius_x * side;
+      return 2;
+    default:
+      return mask->shape == DT_CANVAS_MASK_NONE ? 0 : 1;
+  }
+}
+
+static void _paint_dot(cairo_t *cr, const double x, const double y, const double radius, const double hairline)
+{
+  cairo_arc(cr, x, y, radius, 0.0, 2.0 * M_PI);
+  cairo_set_source_rgba(cr, 1.0, 0.85, 0.3, 0.95);
+  cairo_fill_preserve(cr);
+  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.8);
+  cairo_set_line_width(cr, hairline);
+  cairo_stroke(cr);
+}
+
+/** The cutout's outline, its fall-off and its handles, over the selected frame. */
+static void _paint_mask_handles(cairo_t *cr, const dt_canvas_view_t *view, const dt_canvas_object_t *object)
+{
+  const dt_canvas_mask_t *mask = &object->mask;
+  if(mask->shape == DT_CANVAS_MASK_NONE) return;
+  const double hairline = 1.0 / view->zoom;
+  const double handle = CANVAS_HANDLE_PIXELS * 0.6 / view->zoom;
+  const double side = _mask_side(object);
+  const double dashes[2] = { 4.0 * hairline, 4.0 * hairline };
+  cairo_save(cr);
+  cairo_translate(cr, object->x, object->y);
+  cairo_rotate(cr, object->rotation);
+  cairo_set_line_width(cr, hairline * 1.5);
+  double points[6] = { 0.0 };
+  const int count = _mask_handle_points(object, points);
+  const double angle = mask->rotation * M_PI / 180.0;
+  cairo_set_source_rgba(cr, 1.0, 0.85, 0.3, 0.9);
+  switch(mask->shape)
+  {
+    case DT_CANVAS_MASK_CIRCLE:
+      cairo_arc(cr, points[0], points[1], mask->radius_x * side, 0.0, 2.0 * M_PI);
+      cairo_stroke(cr);
+      cairo_set_dash(cr, dashes, 2, 0.0);
+      cairo_arc(cr, points[0], points[1], (mask->radius_x + mask->feather) * side, 0.0, 2.0 * M_PI);
+      cairo_stroke(cr);
+      cairo_set_dash(cr, NULL, 0, 0.0);
+      break;
+    case DT_CANVAS_MASK_ELLIPSE:
+      for(int pass = 0; pass < 2; pass++)
+      {
+        const double grow = pass == 0 ? 0.0 : mask->feather;
+        cairo_save(cr);
+        cairo_translate(cr, points[0], points[1]);
+        cairo_rotate(cr, angle);
+        cairo_scale(cr, fmax((mask->radius_x + grow) * side, 1e-3), fmax((mask->radius_y + grow) * side, 1e-3));
+        cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, 2.0 * M_PI);
+        cairo_restore(cr);
+        if(pass == 1) cairo_set_dash(cr, dashes, 2, 0.0);
+        cairo_stroke(cr);
+        cairo_set_dash(cr, NULL, 0, 0.0);
+      }
+      break;
+    case DT_CANVAS_MASK_GRADIENT:
+    {
+      // The line the fall-off starts from, and where it ends.
+      const double reach = hypot(object->width, object->height);
+      const double dir_x = cos(angle);
+      const double dir_y = sin(angle);
+      cairo_move_to(cr, points[0] - dir_x * reach, points[1] - dir_y * reach);
+      cairo_line_to(cr, points[0] + dir_x * reach, points[1] + dir_y * reach);
+      cairo_stroke(cr);
+      cairo_set_dash(cr, dashes, 2, 0.0);
+      cairo_move_to(cr, points[2] - dir_x * reach, points[3] - dir_y * reach);
+      cairo_line_to(cr, points[2] + dir_x * reach, points[3] + dir_y * reach);
+      cairo_stroke(cr);
+      cairo_set_dash(cr, NULL, 0, 0.0);
+      break;
+    }
+    case DT_CANVAS_MASK_POLYGON:
+      for(uint32_t idx = 0; idx < mask->node_count; idx++)
+      {
+        const float *node = mask->nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
+        double local_x = 0.0;
+        double local_y = 0.0;
+        _mask_to_local(object, node[0], node[1], &local_x, &local_y);
+        if(idx == 0)
+          cairo_move_to(cr, local_x, local_y);
+        else
+          cairo_line_to(cr, local_x, local_y);
+      }
+      cairo_close_path(cr);
+      cairo_stroke(cr);
+      for(uint32_t idx = 0; idx < mask->node_count; idx++)
+      {
+        const float *node = mask->nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
+        double local_x = 0.0;
+        double local_y = 0.0;
+        _mask_to_local(object, node[0], node[1], &local_x, &local_y);
+        cairo_rectangle(cr, local_x - handle, local_y - handle, 2.0 * handle, 2.0 * handle);
+        cairo_set_source_rgba(cr, 1.0, 0.85, 0.3, 0.95);
+        cairo_fill_preserve(cr);
+        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.8);
+        cairo_set_line_width(cr, hairline);
+        cairo_stroke(cr);
+      }
+      break;
+    default:
+      break;
+  }
+  for(int idx = 0; idx < count; idx++) _paint_dot(cr, points[2 * idx], points[2 * idx + 1], handle, hairline);
+  cairo_restore(cr);
+}
+
+/** Which cutout handle is under a canvas point, when the cutout is being edited. */
+static dt_canvas_drag_t _mask_handle_at(const dt_canvas_view_t *view, const dt_canvas_object_t *object,
+                                        const double x, const double y, int *index)
+{
+  *index = -1;
+  if(!view->mask_editing || !dt_canvas_object_is_frame(object) || object->mask.shape == DT_CANVAS_MASK_NONE)
+    return DT_CANVAS_DRAG_NONE;
+  if(view->selection->len != 1) return DT_CANVAS_DRAG_NONE;
+  double local_x = 0.0;
+  double local_y = 0.0;
+  dt_canvas_object_to_local(object, x, y, &local_x, &local_y);
+  const double reach = CANVAS_HANDLE_PIXELS / view->zoom;
+  if(object->mask.shape == DT_CANVAS_MASK_POLYGON)
+  {
+    for(uint32_t idx = 0; idx < object->mask.node_count; idx++)
+    {
+      const float *node = object->mask.nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
+      double node_x = 0.0;
+      double node_y = 0.0;
+      _mask_to_local(object, node[0], node[1], &node_x, &node_y);
+      if(fabs(local_x - node_x) <= reach && fabs(local_y - node_y) <= reach)
+      {
+        *index = (int)idx;
+        return DT_CANVAS_DRAG_MASK_NODE;
+      }
+    }
+    return DT_CANVAS_DRAG_NONE;
+  }
+  double points[6] = { 0.0 };
+  const int count = _mask_handle_points(object, points);
+  // The outer handles first: with a small shape they sit over the centre.
+  for(int idx = count - 1; idx >= 0; idx--)
+  {
+    if(hypot(local_x - points[2 * idx], local_y - points[2 * idx + 1]) > reach) continue;
+    if(idx == 0) return DT_CANVAS_DRAG_MASK_CENTER;
+    if(idx == 2) return DT_CANVAS_DRAG_MASK_RADIUS_Y;
+    return object->mask.shape == DT_CANVAS_MASK_GRADIENT ? DT_CANVAS_DRAG_MASK_REACH : DT_CANVAS_DRAG_MASK_RADIUS_X;
+  }
+  return DT_CANVAS_DRAG_NONE;
+}
+
+/** The polygon edge under a canvas point: the index of the node it starts at, or -1. */
+static int _mask_segment_at(const dt_canvas_view_t *view, const dt_canvas_object_t *object, const double x,
+                            const double y)
+{
+  if(!dt_canvas_object_is_frame(object) || object->mask.shape != DT_CANVAS_MASK_POLYGON) return -1;
+  double local_x = 0.0;
+  double local_y = 0.0;
+  dt_canvas_object_to_local(object, x, y, &local_x, &local_y);
+  const double reach = CANVAS_HANDLE_PIXELS / view->zoom;
+  for(uint32_t idx = 0; idx < object->mask.node_count; idx++)
+  {
+    const float *from = object->mask.nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
+    const float *to = object->mask.nodes + (size_t)((idx + 1) % object->mask.node_count) * DT_CANVAS_MASK_NODE_FLOATS;
+    double from_x = 0.0;
+    double from_y = 0.0;
+    double to_x = 0.0;
+    double to_y = 0.0;
+    _mask_to_local(object, from[0], from[1], &from_x, &from_y);
+    _mask_to_local(object, to[0], to[1], &to_x, &to_y);
+    const double edge_x = to_x - from_x;
+    const double edge_y = to_y - from_y;
+    const double length2 = edge_x * edge_x + edge_y * edge_y;
+    const double t = length2 > 0.0 ? CLAMP(((local_x - from_x) * edge_x + (local_y - from_y) * edge_y) / length2, 0.0, 1.0)
+                                   : 0.0;
+    if(hypot(local_x - (from_x + t * edge_x), local_y - (from_y + t * edge_y)) <= reach) return (int)idx;
+  }
+  return -1;
+}
+
+/** Apply a cutout drag: the handle follows the pointer, in the frame's own unit square. */
+static void _mask_drag(dt_canvas_view_t *view, dt_canvas_object_t *object, const double x, const double y)
+{
+  dt_canvas_mask_t *mask = &object->mask;
+  double local_x = 0.0;
+  double local_y = 0.0;
+  dt_canvas_object_to_local(object, x, y, &local_x, &local_y);
+  const double side = _mask_side(object);
+  const double u = local_x / object->width + 0.5;
+  const double v = local_y / object->height + 0.5;
+  double center_x = 0.0;
+  double center_y = 0.0;
+  _mask_to_local(object, mask->center_x, mask->center_y, &center_x, &center_y);
+  const double delta_x = local_x - center_x;
+  const double delta_y = local_y - center_y;
+  const double distance = hypot(delta_x, delta_y);
+  const double angle = mask->rotation * M_PI / 180.0;
+  switch(view->drag)
+  {
+    case DT_CANVAS_DRAG_MASK_CENTER:
+      mask->center_x = (float)u;
+      mask->center_y = (float)v;
+      break;
+    case DT_CANVAS_DRAG_MASK_RADIUS_X:
+      mask->radius_x = (float)fmax(distance / side, 0.005);
+      if(mask->shape == DT_CANVAS_MASK_ELLIPSE) mask->rotation = (float)(atan2(delta_y, delta_x) * 180.0 / M_PI);
+      break;
+    case DT_CANVAS_DRAG_MASK_RADIUS_Y:
+      mask->radius_y = (float)fmax(fabs(-sin(angle) * delta_x + cos(angle) * delta_y) / side, 0.005);
+      break;
+    case DT_CANVAS_DRAG_MASK_REACH:
+      mask->radius_x = (float)CLAMP(distance / side, 0.0005, 1.0);
+      mask->rotation = (float)(atan2(delta_y, delta_x) * 180.0 / M_PI - 90.0);
+      break;
+    case DT_CANVAS_DRAG_MASK_NODE:
+      if(view->mask_handle >= 0 && (uint32_t)view->mask_handle < mask->node_count)
+      {
+        float *node = mask->nodes + (size_t)view->mask_handle * DT_CANVAS_MASK_NODE_FLOATS;
+        node[0] = (float)u;
+        node[1] = (float)v;
+        node[2] = node[0];
+        node[3] = node[1];
+        node[4] = node[0];
+        node[5] = node[1];
+      }
+      break;
+    default:
+      break;
+  }
+  dt_canvas_touch(view->canvas);
+}
+
 static void _paint_badge(cairo_t *cr, const dt_canvas_view_t *view, const dt_canvas_object_t *object)
 {
   if(object->kind != DT_CANVAS_OBJECT_IMAGE && object->kind != DT_CANVAS_OBJECT_MAP) return;
@@ -2495,7 +3043,11 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   for(guint idx = 0; idx < view->selection->len; idx++)
   {
     const dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, g_array_index(view->selection, uint32_t, idx));
-    if(dt_canvas_object_is_frame(object)) _paint_handles(cr, view, object);
+    if(dt_canvas_object_is_frame(object))
+    {
+      _paint_handles(cr, view, object);
+      if(view->mask_editing && view->selection->len == 1) _paint_mask_handles(cr, view, object);
+    }
     dt_canvas_route_t route;
     if(_connector_handles(view, object, &route))
     {
@@ -2929,7 +3481,8 @@ static void _end_gesture(dt_view_t *self)
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(view->drag == DT_CANVAS_DRAG_MOVE || view->drag == DT_CANVAS_DRAG_SCALE || view->drag == DT_CANVAS_DRAG_ROTATE
      || view->drag == DT_CANVAS_DRAG_VIA || view->drag == DT_CANVAS_DRAG_HANDLE_FROM
-     || view->drag == DT_CANVAS_DRAG_HANDLE_TO || view->drag == DT_CANVAS_DRAG_HANDLE_VIA)
+     || view->drag == DT_CANVAS_DRAG_HANDLE_TO || view->drag == DT_CANVAS_DRAG_HANDLE_VIA
+     || view->drag >= DT_CANVAS_DRAG_MASK_CENTER)
   {
     if(view->drag_moved)
     {
@@ -3016,6 +3569,47 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
   if(which == 1)
   {
+    // The cutout's handles, when it is being edited: they sit over the frame they cut.
+    dt_canvas_object_t *mask_owner = _single_selected(view);
+    int mask_index = -1;
+    const dt_canvas_drag_t mask_drag = _mask_handle_at(view, mask_owner, canvas_x, canvas_y, &mask_index);
+    if(mask_drag != DT_CANVAS_DRAG_NONE)
+    {
+      if(mask_drag == DT_CANVAS_DRAG_MASK_NODE && shift)
+      {
+        dt_canvas_t *before = _begin_edit(view);
+        if(dt_canvas_mask_remove_node(view->canvas, mask_owner, (uint32_t)mask_index))
+          _record_undo(self, before);
+        else
+          dt_canvas_free(before);
+        dt_control_queue_redraw_center();
+        return 1;
+      }
+      view->drag_snapshot = _begin_edit(view);
+      view->drag = mask_drag;
+      view->mask_handle = mask_index;
+      _bars_hide_now(view);
+      dt_control_change_cursor(GDK_FLEUR);
+      return 1;
+    }
+    if(primary && view->mask_editing && !IS_NULL_PTR(mask_owner))
+    {
+      const int segment = _mask_segment_at(view, mask_owner, canvas_x, canvas_y);
+      if(segment >= 0)
+      {
+        double local_x = 0.0;
+        double local_y = 0.0;
+        dt_canvas_object_to_local(mask_owner, canvas_x, canvas_y, &local_x, &local_y);
+        dt_canvas_t *before = _begin_edit(view);
+        if(dt_canvas_mask_insert_node(view->canvas, mask_owner, (uint32_t)segment + 1,
+                                      (float)(local_x / mask_owner->width + 0.5), (float)(local_y / mask_owner->height + 0.5)))
+          _record_undo(self, before);
+        else
+          dt_canvas_free(before);
+        dt_control_queue_redraw_center();
+        return 1;
+      }
+    }
     dt_canvas_object_t *handle_owner = NULL;
     int handle_sign = 1;
     const dt_canvas_drag_t handle_drag = _tangent_handle_at(view, canvas_x, canvas_y, &handle_owner, &handle_sign);
@@ -3128,6 +3722,10 @@ static void _queue_cursor_for(dt_view_t *self, const double screen_x, const doub
   else if(view->connecting)
   {
     cursor = view->anchor_hover != DT_CANVAS_ANCHOR_AUTO ? GDK_CROSSHAIR : GDK_LEFT_PTR;
+  }
+  else if(_mask_handle_at(view, _single_selected(view), x, y, &(int){ -1 }) != DT_CANVAS_DRAG_NONE)
+  {
+    cursor = GDK_FLEUR;
   }
   else if(!IS_NULL_PTR(_via_handle_at(view, x, y)))
   {
@@ -3258,6 +3856,20 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
         view->drag_moved = TRUE;
         connector->connector.via_tangent_x = (canvas_x - connector->connector.via_x) * view->handle_sign;
         connector->connector.via_tangent_y = (canvas_y - connector->connector.via_y) * view->handle_sign;
+      }
+      break;
+    }
+    case DT_CANVAS_DRAG_MASK_CENTER:
+    case DT_CANVAS_DRAG_MASK_RADIUS_X:
+    case DT_CANVAS_DRAG_MASK_RADIUS_Y:
+    case DT_CANVAS_DRAG_MASK_REACH:
+    case DT_CANVAS_DRAG_MASK_NODE:
+    {
+      dt_canvas_object_t *object = _single_selected(view);
+      if(dt_canvas_object_is_frame(object) && object->mask.shape != DT_CANVAS_MASK_NONE)
+      {
+        view->drag_moved = TRUE;
+        _mask_drag(view, object, canvas_x, canvas_y);
       }
       break;
     }
@@ -3576,6 +4188,7 @@ static void _proxy_set_guides(dt_view_t *self, int mask, int value)
   view->canvas->grid_flags = (view->canvas->grid_flags & ~(uint32_t)mask) | ((uint32_t)value & (uint32_t)mask);
   dt_conf_set_bool("canvas/grid_visible", (view->canvas->grid_flags & DT_CANVAS_GRID_VISIBLE) != 0);
   dt_conf_set_bool("canvas/page_visible", (view->canvas->grid_flags & DT_CANVAS_PAGE_VISIBLE) != 0);
+  dt_conf_set_bool("canvas/gutter_visible", (view->canvas->grid_flags & DT_CANVAS_GUTTER_VISIBLE) != 0);
   dt_conf_set_int("canvas/snap_mode", (int)(view->canvas->grid_flags & DT_CANVAS_SNAP_ALL));
   dt_canvas_touch(view->canvas);
   dt_control_queue_redraw_center();
@@ -3590,6 +4203,42 @@ static void _proxy_set_page_color(dt_view_t *self, const float *rgba)
   dt_canvas_color_format(&view->canvas->page_color, text, sizeof(text));
   dt_conf_set_string("canvas/page_color", text);
   dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
+static void _proxy_set_gutter_color(dt_view_t *self, const float *rgba)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(rgba)) return;
+  view->canvas->gutter_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  char text[16];
+  dt_canvas_color_format(&view->canvas->gutter_color, text, sizeof(text));
+  dt_conf_set_string("canvas/gutter_color", text);
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
+static void _proxy_set_shadow(dt_view_t *self, const float *rgba, float offset_x, float offset_y, float blur)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(rgba)) return;
+  dt_canvas_t *before = _begin_edit(view);
+  view->canvas->shadow.color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  view->canvas->shadow.offset_x = offset_x;
+  view->canvas->shadow.offset_y = offset_y;
+  view->canvas->shadow.blur = fmaxf(blur, 0.0f);
+  dt_conf_set_bool("canvas/shadow_enabled", rgba[3] > 0.0f);
+  if(rgba[3] > 0.0f)
+  {
+    char text[16];
+    dt_canvas_color_format(&view->canvas->shadow.color, text, sizeof(text));
+    dt_conf_set_string("canvas/shadow_color", text);
+  }
+  dt_conf_set_float("canvas/shadow_offset_x", offset_x);
+  dt_conf_set_float("canvas/shadow_offset_y", offset_y);
+  dt_conf_set_float("canvas/shadow_blur", view->canvas->shadow.blur);
+  dt_canvas_touch(view->canvas);
+  _record_undo(self, before);
   dt_control_queue_redraw_center();
 }
 
@@ -3747,6 +4396,8 @@ void init(dt_view_t *self)
   manager->proxy.canvas.set_paper = _proxy_set_paper;
   manager->proxy.canvas.set_guides = _proxy_set_guides;
   manager->proxy.canvas.set_page_color = _proxy_set_page_color;
+  manager->proxy.canvas.set_gutter_color = _proxy_set_gutter_color;
+  manager->proxy.canvas.set_shadow = _proxy_set_shadow;
 }
 
 void gui_init(dt_view_t *self)

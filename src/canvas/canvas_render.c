@@ -18,6 +18,8 @@
 
 #include "canvas/canvas_render.h"
 
+#include "develop/masks_cutout.h"
+
 #include "caches/image_cache.h"
 #include "colorprofiles/colorspaces.h"
 #include "common/image.h"
@@ -36,7 +38,7 @@
 #include <glib/gstdio.h>
 #include <lcms2.h>
 #ifdef HAVE_MAP
-#include <osm-gps-map.h>
+#include <osm-gps-map.h> // conditional-ok: the provider table below is inside the same HAVE_MAP block
 #endif
 #include "common/file_location.h"
 #include "common/logging.h"
@@ -877,6 +879,22 @@ typedef struct dt_canvas_cached_surface_t
   uint64_t last_use;
 } dt_canvas_cached_surface_t;
 
+typedef struct dt_canvas_cached_mask_t
+{
+  uint64_t hash;
+  int width;
+  int height;
+  cairo_surface_t *surface;
+} dt_canvas_cached_mask_t;
+
+static void _cached_mask_free(gpointer data)
+{
+  dt_canvas_cached_mask_t *entry = (dt_canvas_cached_mask_t *)data;
+  if(IS_NULL_PTR(entry)) return;
+  if(!IS_NULL_PTR(entry->surface)) cairo_surface_destroy(entry->surface);
+  dt_free(entry);
+}
+
 struct dt_canvas_surface_cache_t
 {
   gboolean for_display;
@@ -884,6 +902,9 @@ struct dt_canvas_surface_cache_t
   size_t used;
   uint64_t clock;
   GHashTable *entries; ///< object id -> dt_canvas_cached_surface_t
+  GHashTable *masks;   ///< object id -> dt_canvas_cached_mask_t
+  void *scratch;
+  size_t scratch_bytes;
 };
 
 static void _cached_surface_free(gpointer data)
@@ -901,6 +922,7 @@ dt_canvas_surface_cache_t *dt_canvas_surface_cache_new(gboolean for_display, siz
   cache->for_display = for_display;
   cache->budget = budget_bytes;
   cache->entries = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _cached_surface_free);
+  cache->masks = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _cached_mask_free);
   return cache;
 }
 
@@ -908,6 +930,8 @@ void dt_canvas_surface_cache_free(dt_canvas_surface_cache_t *cache)
 {
   if(IS_NULL_PTR(cache)) return;
   g_hash_table_destroy(cache->entries);
+  g_hash_table_destroy(cache->masks);
+  dt_free_align(cache->scratch);
   dt_free(cache);
 }
 
@@ -915,7 +939,84 @@ void dt_canvas_surface_cache_clear(dt_canvas_surface_cache_t *cache)
 {
   if(IS_NULL_PTR(cache)) return;
   g_hash_table_remove_all(cache->entries);
+  g_hash_table_remove_all(cache->masks);
   cache->used = 0;
+}
+
+void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, const size_t bytes)
+{
+  if(IS_NULL_PTR(cache)) return NULL;
+  if(cache->scratch_bytes < bytes || IS_NULL_PTR(cache->scratch))
+  {
+    dt_free_align(cache->scratch);
+    // Grow in steps: a viewport resized by a pixel must not reallocate every frame.
+    const size_t granted = bytes + bytes / 4;
+    cache->scratch = dt_alloc_align(granted);
+    cache->scratch_bytes = IS_NULL_PTR(cache->scratch) ? 0 : granted;
+  }
+  return cache->scratch;
+}
+
+cairo_surface_t *dt_canvas_render_mask(const dt_canvas_object_t *object, const int width, const int height)
+{
+  if(IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE || width <= 0 || height <= 0) return NULL;
+  dt_masks_cutout_t cutout;
+  memset(&cutout, 0, sizeof(cutout));
+  cutout.shape = (dt_masks_cutout_shape_t)object->mask.shape;
+  cutout.center[0] = object->mask.center_x;
+  cutout.center[1] = object->mask.center_y;
+  cutout.radius[0] = object->mask.radius_x;
+  cutout.radius[1] = object->mask.radius_y;
+  cutout.rotation = object->mask.rotation;
+  cutout.feather = object->mask.feather;
+  cutout.invert = (object->mask.flags & DT_CANVAS_MASK_INVERT) != 0;
+  cutout.node_count = object->mask.node_count;
+  cutout.node_stride = DT_CANVAS_MASK_NODE_FLOATS;
+  cutout.nodes = object->mask.nodes;
+  float *raster = dt_masks_cutout_rasterise(&cutout, width, height);
+  if(IS_NULL_PTR(raster)) return NULL;
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_A8, width, height);
+  if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_destroy(surface);
+    dt_masks_cutout_free(raster);
+    return NULL;
+  }
+  cairo_surface_flush(surface);
+  uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  for(int row = 0; row < height; row++)
+  {
+    const float *source = raster + (size_t)row * width;
+    uint8_t *target = pixels + (size_t)row * stride;
+    for(int col = 0; col < width; col++) target[col] = (uint8_t)lrintf(CLAMP(source[col], 0.0f, 1.0f) * 255.0f);
+  }
+  cairo_surface_mark_dirty(surface);
+  dt_masks_cutout_free(raster);
+  return surface;
+}
+
+cairo_surface_t *dt_canvas_surface_cache_get_mask(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
+                                                  const int width, const int height)
+{
+  if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE) return NULL;
+  const uint64_t hash = dt_canvas_mask_hash(&object->mask);
+  dt_canvas_cached_mask_t *entry = g_hash_table_lookup(cache->masks, GUINT_TO_POINTER(object->id));
+  if(!IS_NULL_PTR(entry) && entry->hash == hash && entry->width == width && entry->height == height)
+    return entry->surface;
+  cairo_surface_t *surface = dt_canvas_render_mask(object, width, height);
+  if(IS_NULL_PTR(surface))
+  {
+    g_hash_table_remove(cache->masks, GUINT_TO_POINTER(object->id));
+    return NULL;
+  }
+  entry = g_new0(dt_canvas_cached_mask_t, 1);
+  entry->hash = hash;
+  entry->width = width;
+  entry->height = height;
+  entry->surface = surface;
+  g_hash_table_insert(cache->masks, GUINT_TO_POINTER(object->id), entry);
+  return surface;
 }
 
 static uint64_t _display_generation(void)
