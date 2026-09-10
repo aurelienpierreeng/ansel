@@ -184,7 +184,18 @@ void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, size_t b
  * @param for_display convert to the display profile, else keep the JPEG's sRGB values.
  * @return a new surface the caller destroys, or NULL.
  */
-cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, gboolean for_display);
+/**
+ * @brief Decode a stored JPEG into a cairo surface in the canvas's LAYER ENCODING, Adobe RGB
+ * (1998): a render already is, an sRGB JPEG (a map's tiles, a render from before the change)
+ * is converted on the way. `colorspace` is a dt_canvas_colorspace_t.
+ */
+cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, uint32_t colorspace);
+
+/**
+ * @brief Convert 8-bit sRGB pixels to the layer encoding in place, `channels` bytes per pixel
+ * (3 or 4; a fourth is left alone). What every sRGB thing cairo paints goes through.
+ */
+void dt_canvas_render_srgb8_to_layer8(uint8_t *pixels, size_t count, int channels);
 
 /**
  * @brief An sRGB colour as the display should show it.

@@ -58,7 +58,8 @@ static dt_canvas_t *_populated_canvas(void)
   image->border_width = 9.0f;
   const char jpeg_stand_in[] = "\xff\xd8not really a jpeg\xff\xd9";
   GBytes *jpeg = g_bytes_new(jpeg_stand_in, sizeof(jpeg_stand_in));
-  dt_canvas_image_set_render(canvas, image, jpeg, 2048, 1365, 0x1234567890ABCDEFULL, 1725000000LL);
+  dt_canvas_image_set_render(canvas, image, jpeg, 2048, 1365, 0x1234567890ABCDEFULL, 1725000000LL,
+                             DT_CANVAS_COLORSPACE_ADOBERGB);
   g_bytes_unref(jpeg);
 
   dt_canvas_object_t *text = dt_canvas_add_text(canvas, -300.0, 50.0, 400.0, 150.0, "# Title\n\nSome *emphasis*.");
@@ -162,6 +163,7 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_true(image->image.exif_datetime_taken == 1700000000000000LL);
   assert_true(image->image.history_hash == 0x1234567890ABCDEFULL);
   assert_int_equal(image->image.pixel_width, 2048);
+  assert_int_equal(image->image.colorspace, DT_CANVAS_COLORSPACE_ADOBERGB);
   assert_float_equal(image->rotation, 0.25, 1e-12);
   assert_int_equal(image->flags, DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE);
   assert_float_equal(image->border_width, 9.0f, 1e-6);

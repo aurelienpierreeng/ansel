@@ -122,6 +122,7 @@ static void _write_image(GByteArray *out, const dt_canvas_image_t *image)
   _w_f32(out, image->exif_focal_length);
   _w_f32(out, image->exif_exposure_bias);
   _w_i64(out, image->exif_datetime_taken);
+  _w_u32(out, image->colorspace);
   _w_bytes(out, image->reserved, sizeof(image->reserved));
 }
 
@@ -403,6 +404,7 @@ static void _read_image(dt_canvas_cursor_t *cursor, dt_canvas_image_t *image)
   image->exif_focal_length = _r_f32(cursor);
   image->exif_exposure_bias = _r_f32(cursor);
   image->exif_datetime_taken = _r_i64(cursor);
+  image->colorspace = _r_u32(cursor);
   _r_bytes(cursor, image->reserved, sizeof(image->reserved));
   image->jpeg = NULL;
   image->sync_status = DT_CANVAS_SYNC_UNKNOWN;

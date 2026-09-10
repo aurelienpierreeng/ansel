@@ -227,10 +227,10 @@ static void _jpeg_write_icc(j_compress_ptr cinfo, const uint8_t *icc_data, uint3
   }
 }
 
-static uint8_t *_srgb_profile_bytes(uint32_t *length)
+static uint8_t *_profile_bytes(const dt_colorspaces_color_profile_type_t type, uint32_t *length)
 {
   *length = 0;
-  const dt_colorspaces_color_profile_t *entry = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_ROLE_OUTPUT);
+  const dt_colorspaces_color_profile_t *entry = dt_colorspaces_get_profile(type, "", DT_PROFILE_ROLE_OUTPUT);
   if(IS_NULL_PTR(entry)) return NULL;
   uint8_t *bytes = NULL;
   dt_colorspaces_lock_profile(entry);
@@ -251,7 +251,8 @@ static uint8_t *_srgb_profile_bytes(uint32_t *length)
   return bytes;
 }
 
-static GBytes *_encode_jpeg(const uint8_t *rgba, const int width, const int height, const int quality)
+static GBytes *_encode_jpeg(const uint8_t *rgba, const int width, const int height, const int quality,
+                            const dt_colorspaces_color_profile_type_t profile_type)
 {
   dt_canvas_jpeg_error_t error;
   struct jpeg_compress_struct cinfo;
@@ -259,7 +260,7 @@ static GBytes *_encode_jpeg(const uint8_t *rgba, const int width, const int heig
   unsigned long out_size = 0;
   JSAMPROW row = NULL;
   uint32_t icc_length = 0;
-  uint8_t *icc = _srgb_profile_bytes(&icc_length);
+  uint8_t *icc = _profile_bytes(profile_type, &icc_length);
 
   cinfo.err = jpeg_std_error(&error.pub);
   error.pub.error_exit = _jpeg_error_exit;
@@ -379,11 +380,13 @@ static int32_t _render_job_run(dt_job_t *job)
   const gboolean is_scaling = FALSE;
   const int status = dt_imageio_export_with_flags(params->imgid, "unused", &format, (dt_imageio_module_data_t *)&data,
                                                   TRUE, FALSE, high_quality, is_scaling, FALSE, NULL, FALSE, FALSE,
-                                                  DT_COLORSPACE_SRGB, "", DT_INTENT_PERCEPTUAL, NULL, NULL, 1, 1,
+                                                  DT_COLORSPACE_ADOBERGB, "", DT_INTENT_PERCEPTUAL, NULL, NULL, 1, 1,
                                                   NULL, &_cancel_requested);
   if(status == 0 && !IS_NULL_PTR(data.pixels) && data.head.width > 0 && data.head.height > 0)
   {
-    params->jpeg = _encode_jpeg(data.pixels, data.head.width, data.head.height, params->quality);
+    // Adobe RGB, the canvas's own encoding: wider than sRGB and what a print can use; the
+    // profile travels in the JPEG so the file stands on its own.
+    params->jpeg = _encode_jpeg(data.pixels, data.head.width, data.head.height, params->quality, DT_COLORSPACE_ADOBERGB);
     params->pixel_width = data.head.width;
     params->pixel_height = data.head.height;
   }
@@ -731,7 +734,8 @@ static int32_t _map_job_run(dt_job_t *job)
           out[3] = 255;
         }
       }
-      result->jpeg = _encode_jpeg(rgba, width, height, params->quality);
+      // Tiles are sRGB and stay so: they are converted when decoded, like any older render.
+      result->jpeg = _encode_jpeg(rgba, width, height, params->quality, DT_COLORSPACE_SRGB);
       result->pixel_width = width;
       result->pixel_height = height;
       dt_free(rgba);
@@ -807,7 +811,56 @@ static void _surface_data_free(void *data)
   g_free(data);
 }
 
-cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, gboolean for_display)
+/* sRGB to the layer encoding, Adobe RGB (1998): the sRGB curve out, the standard matrix
+ * (both spaces share the D65 white), the 563/256 gamma in. The decode table is per code; the
+ * encode table is indexed by the square root of the value, dense at the dark end where the
+ * gamma curve is steepest, so every code of a neutral round trip lands where it started. */
+#define LAYER_GAMMA (563.0f / 256.0f)
+#define LAYER_OETF_STEPS 16383
+static float _srgb_eotf_lut[256];
+static uint8_t _layer_oetf_lut[LAYER_OETF_STEPS + 1];
+static gsize _layer_luts_ready = 0;
+
+static void _layer_luts_init(void)
+{
+  if(g_once_init_enter(&_layer_luts_ready))
+  {
+    for(int idx = 0; idx < 256; idx++)
+    {
+      const float value = (float)idx / 255.0f;
+      _srgb_eotf_lut[idx] = value <= 0.04045f ? value / 12.92f : powf((value + 0.055f) / 1.055f, 2.4f);
+    }
+    for(int idx = 0; idx <= LAYER_OETF_STEPS; idx++)
+    {
+      const float root = (float)idx / (float)LAYER_OETF_STEPS;
+      _layer_oetf_lut[idx] = (uint8_t)lrintf(powf(root * root, 1.0f / LAYER_GAMMA) * 255.0f);
+    }
+    g_once_init_leave(&_layer_luts_ready, 1);
+  }
+}
+
+static inline uint8_t _layer_encode(const float linear)
+{
+  return _layer_oetf_lut[(int)lrintf(sqrtf(CLAMP(linear, 0.0f, 1.0f)) * (float)LAYER_OETF_STEPS)];
+}
+
+void dt_canvas_render_srgb8_to_layer8(uint8_t *pixels, const size_t count, const int channels)
+{
+  if(IS_NULL_PTR(pixels) || channels < 3) return;
+  _layer_luts_init();
+  for(size_t idx = 0; idx < count; idx++)
+  {
+    uint8_t *pixel = pixels + idx * channels;
+    const float red = _srgb_eotf_lut[pixel[0]];
+    const float green = _srgb_eotf_lut[pixel[1]];
+    const float blue = _srgb_eotf_lut[pixel[2]];
+    pixel[0] = _layer_encode(0.715166f * red + 0.284837f * green);
+    pixel[1] = _layer_encode(green);
+    pixel[2] = _layer_encode(0.041171f * green + 0.958829f * blue);
+  }
+}
+
+cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, const uint32_t colorspace)
 {
   if(IS_NULL_PTR(jpeg)) return NULL;
   int width = 0;
@@ -824,9 +877,9 @@ cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, gboolean for_display)
   }
   const size_t pixels = (size_t)width * height;
   // cairo's RGB24 stride for a 4-byte pixel is 4 * width, so a packed conversion lands in place.
-  // The render stays sRGB whatever the target: the compositor manages colour once, on the
-  // finished canvas, so what blends is one space and not one per input.
-  (void)for_display;
+  // Every surface is in the layer encoding: the compositor manages colour once, on the finished
+  // canvas, so what blends is one space and not one per input.
+  if(colorspace != DT_CANVAS_COLORSPACE_ADOBERGB) dt_canvas_render_srgb8_to_layer8(rgba, pixels, 4);
   _rgba_to_bgra(rgba, bgra, pixels);
   dt_free(rgba);
 
@@ -845,11 +898,16 @@ cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, gboolean for_display)
 void dt_canvas_render_color(const dt_canvas_color_t *color, gboolean for_display, double out[3])
 {
   if(IS_NULL_PTR(color) || IS_NULL_PTR(out)) return;
-  out[0] = CLAMP(color->red, 0.0f, 1.0f);
-  out[1] = CLAMP(color->green, 0.0f, 1.0f);
-  out[2] = CLAMP(color->blue, 0.0f, 1.0f);
-  // sRGB on every target: the compositor converts the finished canvas to the display.
+  // The colour as cairo must paint it: in the layer encoding, whatever the target. Doubles, not
+  // codes: cairo quantises for itself, and the encode goes through the same curve as the tables.
   (void)for_display;
+  const float srgb[3] = { CLAMP(color->red, 0.0f, 1.0f), CLAMP(color->green, 0.0f, 1.0f), CLAMP(color->blue, 0.0f, 1.0f) };
+  float linear[3];
+  for(int channel = 0; channel < 3; channel++)
+    linear[channel] = srgb[channel] <= 0.04045f ? srgb[channel] / 12.92f : powf((srgb[channel] + 0.055f) / 1.055f, 2.4f);
+  const float working[3] = { 0.715166f * linear[0] + 0.284837f * linear[1], linear[1],
+                             0.041171f * linear[1] + 0.958829f * linear[2] };
+  for(int channel = 0; channel < 3; channel++) out[channel] = pow(CLAMP(working[channel], 0.0f, 1.0f), 1.0 / LAYER_GAMMA);
 }
 
 /* --- the surface cache -------------------------------------------------------- */
@@ -1198,7 +1256,8 @@ cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, c
     g_hash_table_remove(cache->entries, GUINT_TO_POINTER(object->id));
   }
 
-  cairo_surface_t *surface = dt_canvas_render_decode(jpeg, cache->for_display);
+  const uint32_t colorspace = object->kind == DT_CANVAS_OBJECT_IMAGE ? object->image.colorspace : DT_CANVAS_COLORSPACE_SRGB;
+  cairo_surface_t *surface = dt_canvas_render_decode(jpeg, colorspace);
   if(IS_NULL_PTR(surface)) return NULL;
   entry = g_new0(dt_canvas_cached_surface_t, 1);
   entry->object_id = object->id;
