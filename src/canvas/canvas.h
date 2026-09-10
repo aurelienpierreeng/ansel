@@ -446,6 +446,7 @@ typedef struct dt_canvas_t
   char *path;           ///< where it was loaded from or last saved, NULL for a new canvas
   gboolean dirty;       ///< unsaved changes
   uint64_t generation;  ///< bumps on every mutation
+  uint64_t serial;      ///< names this document for the life of the process: a freed document's address is reused, its serial never is
 } dt_canvas_t;
 
 /** An axis-aligned rectangle in canvas units. */

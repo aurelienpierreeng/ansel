@@ -912,15 +912,24 @@ void dt_canvas_render_color(const dt_canvas_color_t *color, gboolean for_display
 
 /* --- the surface cache -------------------------------------------------------- */
 
+#define CANVAS_SPRITE_SLOTS 2
 typedef struct dt_canvas_cached_surface_t
 {
   uint32_t object_id;
   GBytes *jpeg;              ///< a reference, so identity comparison stays valid
   uint64_t profile_generation;
   cairo_surface_t *surface;
-  size_t bytes;
+  size_t bytes;              ///< the decoded render and every sprite
   uint64_t last_use;
+  cairo_surface_t *sprite[CANVAS_SPRITE_SLOTS]; ///< the render at a size the screen showed
+  uint64_t sprite_use[CANVAS_SPRITE_SLOTS];
 } dt_canvas_cached_surface_t;
+
+static size_t _surface_bytes(cairo_surface_t *surface)
+{
+  if(IS_NULL_PTR(surface)) return 0;
+  return (size_t)cairo_image_surface_get_stride(surface) * cairo_image_surface_get_height(surface);
+}
 
 typedef struct dt_canvas_cached_mask_t
 {
@@ -933,15 +942,31 @@ typedef struct dt_canvas_cached_mask_t
   int band_radius;        ///< the border band's dilation, pixels; 0 when there is none
   cairo_surface_t *band;
   cairo_surface_t *support; ///< where the cutout has any coverage at all, hard-edged
+  uint64_t last_use;
 } dt_canvas_cached_mask_t;
 
-static void _cached_mask_free(gpointer data)
+/* Two rasters per object: a frame mid-gesture is composited at half the resolution and the
+ * one after it at full, and both must find theirs, or every gesture would rasterise the
+ * cutouts twice over. The older slot is the one replaced. */
+#define CANVAS_MASK_SLOTS 2
+typedef struct dt_canvas_cached_masks_t
 {
-  dt_canvas_cached_mask_t *entry = (dt_canvas_cached_mask_t *)data;
-  if(IS_NULL_PTR(entry)) return;
+  dt_canvas_cached_mask_t slots[CANVAS_MASK_SLOTS];
+} dt_canvas_cached_masks_t;
+
+static void _cached_mask_clear(dt_canvas_cached_mask_t *entry)
+{
   if(!IS_NULL_PTR(entry->surface)) cairo_surface_destroy(entry->surface);
   if(!IS_NULL_PTR(entry->band)) cairo_surface_destroy(entry->band);
   if(!IS_NULL_PTR(entry->support)) cairo_surface_destroy(entry->support);
+  memset(entry, 0, sizeof(*entry));
+}
+
+static void _cached_masks_free(gpointer data)
+{
+  dt_canvas_cached_masks_t *entry = (dt_canvas_cached_masks_t *)data;
+  if(IS_NULL_PTR(entry)) return;
+  for(int slot = 0; slot < CANVAS_MASK_SLOTS; slot++) _cached_mask_clear(&entry->slots[slot]);
   dt_free(entry);
 }
 
@@ -952,9 +977,9 @@ struct dt_canvas_surface_cache_t
   size_t used;
   uint64_t clock;
   GHashTable *entries; ///< object id -> dt_canvas_cached_surface_t
-  GHashTable *masks;   ///< object id -> dt_canvas_cached_mask_t
-  void *scratch;
-  size_t scratch_bytes;
+  GHashTable *masks;   ///< object id -> dt_canvas_cached_masks_t
+  void *scratch[DT_CANVAS_SCRATCH_COUNT];
+  size_t scratch_bytes[DT_CANVAS_SCRATCH_COUNT];
 };
 
 static void _cached_surface_free(gpointer data)
@@ -962,6 +987,8 @@ static void _cached_surface_free(gpointer data)
   dt_canvas_cached_surface_t *entry = (dt_canvas_cached_surface_t *)data;
   if(IS_NULL_PTR(entry)) return;
   if(!IS_NULL_PTR(entry->surface)) cairo_surface_destroy(entry->surface);
+  for(int slot = 0; slot < CANVAS_SPRITE_SLOTS; slot++)
+    if(!IS_NULL_PTR(entry->sprite[slot])) cairo_surface_destroy(entry->sprite[slot]);
   if(!IS_NULL_PTR(entry->jpeg)) g_bytes_unref(entry->jpeg);
   dt_free(entry);
 }
@@ -972,7 +999,7 @@ dt_canvas_surface_cache_t *dt_canvas_surface_cache_new(gboolean for_display, siz
   cache->for_display = for_display;
   cache->budget = budget_bytes;
   cache->entries = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _cached_surface_free);
-  cache->masks = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _cached_mask_free);
+  cache->masks = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _cached_masks_free);
   return cache;
 }
 
@@ -981,7 +1008,7 @@ void dt_canvas_surface_cache_free(dt_canvas_surface_cache_t *cache)
   if(IS_NULL_PTR(cache)) return;
   g_hash_table_destroy(cache->entries);
   g_hash_table_destroy(cache->masks);
-  dt_free_align(cache->scratch);
+  for(int slot = 0; slot < DT_CANVAS_SCRATCH_COUNT; slot++) dt_free_align(cache->scratch[slot]);
   dt_free(cache);
 }
 
@@ -993,18 +1020,24 @@ void dt_canvas_surface_cache_clear(dt_canvas_surface_cache_t *cache)
   cache->used = 0;
 }
 
-void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, const size_t bytes)
+void *dt_canvas_surface_cache_scratch_slot(dt_canvas_surface_cache_t *cache, const dt_canvas_scratch_slot_t slot,
+                                           const size_t bytes)
 {
-  if(IS_NULL_PTR(cache)) return NULL;
-  if(cache->scratch_bytes < bytes || IS_NULL_PTR(cache->scratch))
+  if(IS_NULL_PTR(cache) || slot >= DT_CANVAS_SCRATCH_COUNT || bytes == 0) return NULL;
+  if(cache->scratch_bytes[slot] < bytes || IS_NULL_PTR(cache->scratch[slot]))
   {
-    dt_free_align(cache->scratch);
+    dt_free_align(cache->scratch[slot]);
     // Grow in steps: a viewport resized by a pixel must not reallocate every frame.
     const size_t granted = bytes + bytes / 4;
-    cache->scratch = dt_alloc_align(granted);
-    cache->scratch_bytes = IS_NULL_PTR(cache->scratch) ? 0 : granted;
+    cache->scratch[slot] = dt_alloc_align(granted);
+    cache->scratch_bytes[slot] = IS_NULL_PTR(cache->scratch[slot]) ? 0 : granted;
   }
-  return cache->scratch;
+  return cache->scratch[slot];
+}
+
+void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, const size_t bytes)
+{
+  return dt_canvas_surface_cache_scratch_slot(cache, DT_CANVAS_SCRATCH_CANVAS, bytes);
 }
 
 /**
@@ -1019,6 +1052,9 @@ static void _mask_clip_rounded(float *fine, const int fine_width, const int fine
   const double right = fine_width - inset;
   const double bottom = fine_height - inset;
   const double corner = CLAMP(radius, 0.0, 0.5 * fmin(right - left, bottom - top));
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
   for(int row = 0; row < fine_height; row++)
   {
     float *line = fine + (size_t)row * fine_width;
@@ -1101,6 +1137,9 @@ static float *_mask_downsample(const float *fine, const int fine_width, const in
   float *coarse = dt_alloc_align_float((size_t)width * height);
   if(IS_NULL_PTR(coarse)) return NULL;
   const float norm = 1.0f / (float)(factor * factor);
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
   for(int row = 0; row < height; row++)
   {
     for(int col = 0; col < width; col++)
@@ -1129,6 +1168,9 @@ static cairo_surface_t *_alpha_surface(const float *raster, const int width, con
   cairo_surface_flush(surface);
   uint8_t *pixels = cairo_image_surface_get_data(surface);
   const int stride = cairo_image_surface_get_stride(surface);
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
   for(int row = 0; row < height; row++)
   {
     const float *source = raster + (size_t)row * width;
@@ -1145,6 +1187,9 @@ static cairo_surface_t *_alpha_surface(const float *raster, const int width, con
 /** A fine raster, thresholded in place to the shape's support. */
 static void _mask_threshold(float *fine, const size_t count)
 {
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
   for(size_t idx = 0; idx < count; idx++) fine[idx] = fine[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 1.0f : 0.0f;
 }
 
@@ -1216,6 +1261,82 @@ static void _distance_1d(const float *f, float *out, int *vertices, float *bound
   }
 }
 
+/* The rows of the distance transform, each thread with its own scratch. FALSE when one could not get it. */
+static gboolean _distance_rows(float *distance, const int width, const int height)
+{
+  gboolean ok = TRUE;
+#ifdef _OPENMP
+#pragma omp parallel default(firstprivate) shared(ok, distance)
+#endif
+  {
+    float *line_out = dt_alloc_align_float((size_t)width);
+    int *vertices = g_new(int, width);
+    float *boundaries = g_new(float, width + 1);
+    if(IS_NULL_PTR(line_out) || IS_NULL_PTR(vertices) || IS_NULL_PTR(boundaries))
+    {
+#ifdef _OPENMP
+#pragma omp atomic write
+#endif
+      ok = FALSE;
+    }
+    else
+    {
+#ifdef _OPENMP
+#pragma omp for schedule(static)
+#endif
+      for(int row = 0; row < height; row++)
+      {
+        float *line = distance + (size_t)row * width;
+        _distance_1d(line, line_out, vertices, boundaries, width);
+        memcpy(line, line_out, (size_t)width * sizeof(float));
+      }
+    }
+    dt_free(vertices);
+    dt_free(boundaries);
+    dt_free_align(line_out);
+  }
+  return ok;
+}
+
+/* The columns, gathered and scattered through a per-thread line. */
+static gboolean _distance_columns(float *distance, const int width, const int height)
+{
+  gboolean ok = TRUE;
+#ifdef _OPENMP
+#pragma omp parallel default(firstprivate) shared(ok, distance)
+#endif
+  {
+    float *line = dt_alloc_align_float((size_t)height);
+    float *line_out = dt_alloc_align_float((size_t)height);
+    int *vertices = g_new(int, height);
+    float *boundaries = g_new(float, height + 1);
+    if(IS_NULL_PTR(line) || IS_NULL_PTR(line_out) || IS_NULL_PTR(vertices) || IS_NULL_PTR(boundaries))
+    {
+#ifdef _OPENMP
+#pragma omp atomic write
+#endif
+      ok = FALSE;
+    }
+    else
+    {
+#ifdef _OPENMP
+#pragma omp for schedule(static)
+#endif
+      for(int col = 0; col < width; col++)
+      {
+        for(int row = 0; row < height; row++) line[row] = distance[(size_t)row * width + col];
+        _distance_1d(line, line_out, vertices, boundaries, height);
+        for(int row = 0; row < height; row++) distance[(size_t)row * width + col] = line_out[row];
+      }
+    }
+    dt_free(vertices);
+    dt_free(boundaries);
+    dt_free_align(line_out);
+    dt_free_align(line);
+  }
+  return ok;
+}
+
 /**
  * The border band of a cutout: the shape's support pushed out by `radius` pixels on every
  * side -- a disc dilation, through the Euclidean distance to the support, at the fine
@@ -1243,103 +1364,40 @@ cairo_surface_t *dt_canvas_render_mask_band(const dt_canvas_object_t *object, co
   _mask_clip_rounded(confined, fine_width, fine_height, inset * factor, (double)MAX(corner - inset, 0) * factor);
   const size_t count = (size_t)fine_width * fine_height;
   float *distance = dt_alloc_align_float(count);
-  const int longest = MAX(fine_width, fine_height);
-  float *line = dt_alloc_align_float((size_t)longest);
-  float *line_out = dt_alloc_align_float((size_t)longest);
-  int *vertices = g_new(int, longest);
-  float *boundaries = g_new(float, longest + 1);
   cairo_surface_t *surface = NULL;
-  if(!IS_NULL_PTR(distance) && !IS_NULL_PTR(line) && !IS_NULL_PTR(line_out))
+  if(!IS_NULL_PTR(distance))
   {
     // Squared distance to the nearest pixel of the support: 0 inside, "infinite" outside, then the two passes.
+    const int longest = MAX(fine_width, fine_height);
     const float unreached = (float)longest * longest * 4.0f; // not `far`: a Windows macro
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
     for(size_t idx = 0; idx < count; idx++)
       distance[idx] = fine[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 0.0f : unreached;
-    for(int row = 0; row < fine_height; row++)
+    const gboolean transformed = _distance_rows(distance, fine_width, fine_height)
+                                 && _distance_columns(distance, fine_width, fine_height);
+    if(transformed)
     {
-      _distance_1d(distance + (size_t)row * fine_width, line_out, vertices, boundaries, fine_width);
-      memcpy(distance + (size_t)row * fine_width, line_out, (size_t)fine_width * sizeof(float));
+      const float fine_radius = (float)radius * factor;
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+      for(size_t idx = 0; idx < count; idx++)
+      {
+        const float reach = CLAMP(fine_radius + 0.5f - sqrtf(distance[idx]), 0.0f, 1.0f);
+        fine[idx] = confined[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 0.0f : reach;
+      }
+      // Stopped at the frame, its corners included.
+      _mask_clip_rounded(fine, fine_width, fine_height, 0, (double)corner * factor);
+      surface = _mask_finish(fine, fine_width, fine_height, factor);
+      fine = NULL;
     }
-    for(int col = 0; col < fine_width; col++)
-    {
-      for(int row = 0; row < fine_height; row++) line[row] = distance[(size_t)row * fine_width + col];
-      _distance_1d(line, line_out, vertices, boundaries, fine_height);
-      for(int row = 0; row < fine_height; row++) distance[(size_t)row * fine_width + col] = line_out[row];
-    }
-    const float fine_radius = (float)radius * factor;
-    for(size_t idx = 0; idx < count; idx++)
-    {
-      const float reach = CLAMP(fine_radius + 0.5f - sqrtf(distance[idx]), 0.0f, 1.0f);
-      fine[idx] = confined[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 0.0f : reach;
-    }
-    // Stopped at the frame, its corners included.
-    _mask_clip_rounded(fine, fine_width, fine_height, 0, (double)corner * factor);
-    surface = _mask_finish(fine, fine_width, fine_height, factor);
-    fine = NULL;
   }
-  dt_free(vertices);
-  dt_free(boundaries);
-  dt_free_align(line_out);
-  dt_free_align(line);
   dt_free_align(distance);
   dt_free_align(confined);
   dt_masks_cutout_free(fine);
   return surface;
-}
-
-cairo_surface_t *dt_canvas_surface_cache_get_mask(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
-                                                  const int width, const int height, const int inset, const int corner)
-{
-  if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE) return NULL;
-  const uint64_t hash = dt_canvas_mask_hash(&object->mask);
-  dt_canvas_cached_mask_t *entry = g_hash_table_lookup(cache->masks, GUINT_TO_POINTER(object->id));
-  if(!IS_NULL_PTR(entry) && entry->hash == hash && entry->width == width && entry->height == height
-     && entry->inset == inset && entry->corner == corner)
-    return entry->surface;
-  cairo_surface_t *surface = dt_canvas_render_mask(object, width, height, inset, corner);
-  if(IS_NULL_PTR(surface))
-  {
-    g_hash_table_remove(cache->masks, GUINT_TO_POINTER(object->id));
-    return NULL;
-  }
-  entry = g_new0(dt_canvas_cached_mask_t, 1);
-  entry->hash = hash;
-  entry->width = width;
-  entry->height = height;
-  entry->inset = inset;
-  entry->corner = corner;
-  entry->surface = surface;
-  g_hash_table_insert(cache->masks, GUINT_TO_POINTER(object->id), entry);
-  return surface;
-}
-
-cairo_surface_t *dt_canvas_surface_cache_get_mask_support(dt_canvas_surface_cache_t *cache,
-                                                          const dt_canvas_object_t *object, const int width,
-                                                          const int height, const int inset, const int corner)
-{
-  if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE) return NULL;
-  if(IS_NULL_PTR(dt_canvas_surface_cache_get_mask(cache, object, width, height, inset, corner))) return NULL;
-  dt_canvas_cached_mask_t *entry = g_hash_table_lookup(cache->masks, GUINT_TO_POINTER(object->id));
-  if(IS_NULL_PTR(entry)) return NULL;
-  if(IS_NULL_PTR(entry->support)) entry->support = dt_canvas_render_mask_support(object, width, height, inset, corner);
-  return entry->support;
-}
-
-cairo_surface_t *dt_canvas_surface_cache_get_mask_band(dt_canvas_surface_cache_t *cache,
-                                                       const dt_canvas_object_t *object, const int width,
-                                                       const int height, const int inset, const int corner,
-                                                       const int radius)
-{
-  if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE || radius <= 0) return NULL;
-  // The mask entry is the band's home: getting it first settles the hash and the size.
-  if(IS_NULL_PTR(dt_canvas_surface_cache_get_mask(cache, object, width, height, inset, corner))) return NULL;
-  dt_canvas_cached_mask_t *entry = g_hash_table_lookup(cache->masks, GUINT_TO_POINTER(object->id));
-  if(IS_NULL_PTR(entry)) return NULL;
-  if(!IS_NULL_PTR(entry->band) && entry->band_radius == radius) return entry->band;
-  if(!IS_NULL_PTR(entry->band)) cairo_surface_destroy(entry->band);
-  entry->band = dt_canvas_render_mask_band(object, width, height, inset, corner, radius);
-  entry->band_radius = IS_NULL_PTR(entry->band) ? 0 : radius;
-  return entry->band;
 }
 
 static uint64_t _display_generation(void)
@@ -1397,12 +1455,275 @@ cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, c
   entry->jpeg = g_bytes_ref(jpeg);
   entry->profile_generation = generation;
   entry->surface = surface;
-  entry->bytes = (size_t)cairo_image_surface_get_stride(surface) * cairo_image_surface_get_height(surface);
+  entry->bytes = _surface_bytes(surface);
   entry->last_use = cache->clock;
   g_hash_table_insert(cache->entries, GUINT_TO_POINTER(object->id), entry);
   cache->used += entry->bytes;
   _cache_evict_to_budget(cache, object->id);
   return surface;
+}
+
+cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
+                                                    const int width, const int height)
+{
+  if(width <= 0 || height <= 0) return NULL;
+  cairo_surface_t *source = dt_canvas_surface_cache_get(cache, object);
+  if(IS_NULL_PTR(source)) return NULL;
+  dt_canvas_cached_surface_t *entry = g_hash_table_lookup(cache->entries, GUINT_TO_POINTER(object->id));
+  if(IS_NULL_PTR(entry)) return NULL;
+  if(cairo_image_surface_get_width(source) == width && cairo_image_surface_get_height(source) == height) return source;
+  int oldest = 0;
+  for(int slot = 0; slot < CANVAS_SPRITE_SLOTS; slot++)
+  {
+    cairo_surface_t *sprite = entry->sprite[slot];
+    if(!IS_NULL_PTR(sprite) && cairo_image_surface_get_width(sprite) == width
+       && cairo_image_surface_get_height(sprite) == height)
+    {
+      entry->sprite_use[slot] = ++cache->clock;
+      return sprite;
+    }
+    if(IS_NULL_PTR(sprite))
+    {
+      oldest = slot;
+      break;
+    }
+    if(entry->sprite_use[slot] < entry->sprite_use[oldest]) oldest = slot;
+  }
+  cairo_surface_t *sprite = dt_canvas_render_rescale(source, width, height);
+  if(IS_NULL_PTR(sprite)) return NULL;
+  if(!IS_NULL_PTR(entry->sprite[oldest]))
+  {
+    const size_t gone = _surface_bytes(entry->sprite[oldest]);
+    cairo_surface_destroy(entry->sprite[oldest]);
+    entry->bytes -= gone;
+    cache->used -= gone;
+  }
+  entry->sprite[oldest] = sprite;
+  entry->sprite_use[oldest] = ++cache->clock;
+  const size_t added = _surface_bytes(sprite);
+  entry->bytes += added;
+  cache->used += added;
+  _cache_evict_to_budget(cache, object->id);
+  return sprite;
+}
+
+/* One axis of the rescale: for each target index, the source span it covers and the weights. */
+typedef struct dt_canvas_span_t
+{
+  int first;
+  int count;
+} dt_canvas_span_t;
+
+static dt_canvas_span_t _span(const int target, const int target_size, const int source_size)
+{
+  dt_canvas_span_t span;
+  const int first = (int)floor((double)target * source_size / target_size);
+  int last = (int)floor((double)(target + 1) * source_size / target_size);
+  if(last <= first) last = first + 1;
+  span.first = CLAMP(first, 0, source_size - 1);
+  span.count = CLAMP(last, span.first + 1, source_size) - span.first;
+  return span;
+}
+
+cairo_surface_t *dt_canvas_render_rescale(cairo_surface_t *source, const int width, const int height)
+{
+  if(IS_NULL_PTR(source) || width <= 0 || height <= 0) return NULL;
+  const int source_width = cairo_image_surface_get_width(source);
+  const int source_height = cairo_image_surface_get_height(source);
+  if(source_width <= 0 || source_height <= 0) return NULL;
+  cairo_surface_flush(source);
+  const uint8_t *pixels = cairo_image_surface_get_data(source);
+  const int source_stride = cairo_image_surface_get_stride(source);
+  cairo_surface_t *target = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+  if(cairo_surface_status(target) != CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_destroy(target);
+    return NULL;
+  }
+  // Rows first, at the source's height: the horizontal pass writes floats, the vertical one bytes.
+  float *rows = dt_alloc_align_float((size_t)width * source_height * 3);
+  if(IS_NULL_PTR(rows))
+  {
+    cairo_surface_destroy(target);
+    return NULL;
+  }
+  const gboolean shrink_x = width < source_width;
+  const gboolean shrink_y = height < source_height;
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int row = 0; row < source_height; row++)
+  {
+    const uint32_t *line = (const uint32_t *)(pixels + (size_t)row * source_stride);
+    float *out = rows + (size_t)row * width * 3;
+    for(int col = 0; col < width; col++)
+    {
+      float sum[3] = { 0.0f, 0.0f, 0.0f };
+      if(shrink_x)
+      {
+        const dt_canvas_span_t span = _span(col, width, source_width);
+        for(int idx = 0; idx < span.count; idx++)
+        {
+          const uint32_t pixel = line[span.first + idx];
+          sum[0] += (float)((pixel >> 16) & 0xFF);
+          sum[1] += (float)((pixel >> 8) & 0xFF);
+          sum[2] += (float)(pixel & 0xFF);
+        }
+        const float norm = 1.0f / (float)span.count;
+        out[3 * col + 0] = sum[0] * norm;
+        out[3 * col + 1] = sum[1] * norm;
+        out[3 * col + 2] = sum[2] * norm;
+      }
+      else
+      {
+        const double position = ((double)col + 0.5) * source_width / width - 0.5;
+        const int left = CLAMP((int)floor(position), 0, source_width - 1);
+        const int right = MIN(left + 1, source_width - 1);
+        const float weight = (float)CLAMP(position - left, 0.0, 1.0);
+        const uint32_t a = line[left];
+        const uint32_t b = line[right];
+        out[3 * col + 0] = (float)((a >> 16) & 0xFF) * (1.0f - weight) + (float)((b >> 16) & 0xFF) * weight;
+        out[3 * col + 1] = (float)((a >> 8) & 0xFF) * (1.0f - weight) + (float)((b >> 8) & 0xFF) * weight;
+        out[3 * col + 2] = (float)(a & 0xFF) * (1.0f - weight) + (float)(b & 0xFF) * weight;
+      }
+    }
+  }
+  cairo_surface_flush(target);
+  uint8_t *target_pixels = cairo_image_surface_get_data(target);
+  const int target_stride = cairo_image_surface_get_stride(target);
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int row = 0; row < height; row++)
+  {
+    uint32_t *line = (uint32_t *)(target_pixels + (size_t)row * target_stride);
+    if(shrink_y)
+    {
+      const dt_canvas_span_t span = _span(row, height, source_height);
+      const float norm = 1.0f / (float)span.count;
+      for(int col = 0; col < width; col++)
+      {
+        float sum[3] = { 0.0f, 0.0f, 0.0f };
+        for(int idx = 0; idx < span.count; idx++)
+        {
+          const float *in = rows + ((size_t)(span.first + idx) * width + col) * 3;
+          sum[0] += in[0];
+          sum[1] += in[1];
+          sum[2] += in[2];
+        }
+        const uint32_t red = (uint32_t)lrintf(CLAMP(sum[0] * norm, 0.0f, 255.0f));
+        const uint32_t green = (uint32_t)lrintf(CLAMP(sum[1] * norm, 0.0f, 255.0f));
+        const uint32_t blue = (uint32_t)lrintf(CLAMP(sum[2] * norm, 0.0f, 255.0f));
+        line[col] = 0xFF000000u | (red << 16) | (green << 8) | blue;
+      }
+    }
+    else
+    {
+      const double position = ((double)row + 0.5) * source_height / height - 0.5;
+      const int top = CLAMP((int)floor(position), 0, source_height - 1);
+      const int bottom = MIN(top + 1, source_height - 1);
+      const float weight = (float)CLAMP(position - top, 0.0, 1.0);
+      const float *above = rows + (size_t)top * width * 3;
+      const float *below = rows + (size_t)bottom * width * 3;
+      for(int col = 0; col < width; col++)
+      {
+        const uint32_t red = (uint32_t)lrintf(CLAMP(above[3 * col + 0] * (1.0f - weight) + below[3 * col + 0] * weight, 0.0f, 255.0f));
+        const uint32_t green = (uint32_t)lrintf(CLAMP(above[3 * col + 1] * (1.0f - weight) + below[3 * col + 1] * weight, 0.0f, 255.0f));
+        const uint32_t blue = (uint32_t)lrintf(CLAMP(above[3 * col + 2] * (1.0f - weight) + below[3 * col + 2] * weight, 0.0f, 255.0f));
+        line[col] = 0xFF000000u | (red << 16) | (green << 8) | blue;
+      }
+    }
+  }
+  dt_free_align(rows);
+  cairo_surface_mark_dirty(target);
+  return target;
+}
+
+/** The slot holding this object's raster at this size and inset, or NULL. */
+static dt_canvas_cached_mask_t *_mask_slot_find(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
+                                                const int width, const int height, const int inset, const int corner)
+{
+  dt_canvas_cached_masks_t *entry = g_hash_table_lookup(cache->masks, GUINT_TO_POINTER(object->id));
+  if(IS_NULL_PTR(entry)) return NULL;
+  const uint64_t hash = dt_canvas_mask_hash(&object->mask);
+  for(int slot = 0; slot < CANVAS_MASK_SLOTS; slot++)
+  {
+    dt_canvas_cached_mask_t *candidate = &entry->slots[slot];
+    if(!IS_NULL_PTR(candidate->surface) && candidate->hash == hash && candidate->width == width
+       && candidate->height == height && candidate->inset == inset && candidate->corner == corner)
+    {
+      candidate->last_use = ++cache->clock;
+      return candidate;
+    }
+  }
+  return NULL;
+}
+
+/** The slot to (re)build this object's raster in: an empty one, else the least recently used. */
+static dt_canvas_cached_mask_t *_mask_slot_claim(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object)
+{
+  dt_canvas_cached_masks_t *entry = g_hash_table_lookup(cache->masks, GUINT_TO_POINTER(object->id));
+  if(IS_NULL_PTR(entry))
+  {
+    entry = g_new0(dt_canvas_cached_masks_t, 1);
+    g_hash_table_insert(cache->masks, GUINT_TO_POINTER(object->id), entry);
+  }
+  dt_canvas_cached_mask_t *oldest = &entry->slots[0];
+  for(int slot = 0; slot < CANVAS_MASK_SLOTS; slot++)
+  {
+    if(IS_NULL_PTR(entry->slots[slot].surface)) return &entry->slots[slot];
+    if(entry->slots[slot].last_use < oldest->last_use) oldest = &entry->slots[slot];
+  }
+  _cached_mask_clear(oldest);
+  return oldest;
+}
+
+cairo_surface_t *dt_canvas_surface_cache_get_mask(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
+                                                  const int width, const int height, const int inset, const int corner)
+{
+  if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE) return NULL;
+  dt_canvas_cached_mask_t *found = _mask_slot_find(cache, object, width, height, inset, corner);
+  if(!IS_NULL_PTR(found)) return found->surface;
+  cairo_surface_t *surface = dt_canvas_render_mask(object, width, height, inset, corner);
+  if(IS_NULL_PTR(surface)) return NULL;
+  dt_canvas_cached_mask_t *slot = _mask_slot_claim(cache, object);
+  slot->hash = dt_canvas_mask_hash(&object->mask);
+  slot->width = width;
+  slot->height = height;
+  slot->inset = inset;
+  slot->corner = corner;
+  slot->surface = surface;
+  slot->last_use = ++cache->clock;
+  return surface;
+}
+
+cairo_surface_t *dt_canvas_surface_cache_get_mask_support(dt_canvas_surface_cache_t *cache,
+                                                          const dt_canvas_object_t *object, const int width,
+                                                          const int height, const int inset, const int corner)
+{
+  if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE) return NULL;
+  if(IS_NULL_PTR(dt_canvas_surface_cache_get_mask(cache, object, width, height, inset, corner))) return NULL;
+  dt_canvas_cached_mask_t *slot = _mask_slot_find(cache, object, width, height, inset, corner);
+  if(IS_NULL_PTR(slot)) return NULL;
+  if(IS_NULL_PTR(slot->support)) slot->support = dt_canvas_render_mask_support(object, width, height, inset, corner);
+  return slot->support;
+}
+
+cairo_surface_t *dt_canvas_surface_cache_get_mask_band(dt_canvas_surface_cache_t *cache,
+                                                       const dt_canvas_object_t *object, const int width,
+                                                       const int height, const int inset, const int corner,
+                                                       const int radius)
+{
+  if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->mask.shape == DT_CANVAS_MASK_NONE || radius <= 0) return NULL;
+  // The mask slot is the band's home: getting it first settles the hash and the size.
+  if(IS_NULL_PTR(dt_canvas_surface_cache_get_mask(cache, object, width, height, inset, corner))) return NULL;
+  dt_canvas_cached_mask_t *slot = _mask_slot_find(cache, object, width, height, inset, corner);
+  if(IS_NULL_PTR(slot)) return NULL;
+  if(!IS_NULL_PTR(slot->band) && slot->band_radius == radius) return slot->band;
+  if(!IS_NULL_PTR(slot->band)) cairo_surface_destroy(slot->band);
+  slot->band = dt_canvas_render_mask_band(object, width, height, inset, corner, radius);
+  slot->band_radius = IS_NULL_PTR(slot->band) ? 0 : radius;
+  return slot->band;
 }
 
 // clang-format off

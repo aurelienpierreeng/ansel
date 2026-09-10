@@ -154,9 +154,16 @@ static dt_canvas_object_t *_object_new(dt_canvas_t *canvas, const dt_canvas_obje
 
 /* --- lifecycle -------------------------------------------------------------- */
 
+static uint64_t _next_serial(void)
+{
+  static gint serial = 0;
+  return (uint64_t)g_atomic_int_add(&serial, 1) + 1u;
+}
+
 dt_canvas_t *dt_canvas_new(void)
 {
   dt_canvas_t *canvas = g_new0(dt_canvas_t, 1);
+  canvas->serial = _next_serial();
   canvas->format_version = DT_CANVAS_FORMAT_VERSION;
   canvas->background = dt_canvas_color(0.18f, 0.18f, 0.18f, 1.0f);
   canvas->border_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
@@ -207,6 +214,7 @@ dt_canvas_t *dt_canvas_copy(const dt_canvas_t *canvas)
   if(IS_NULL_PTR(canvas)) return NULL;
   dt_canvas_t *copy = g_new(dt_canvas_t, 1);
   memcpy(copy, canvas, sizeof(dt_canvas_t));
+  copy->serial = _next_serial();
   copy->objects = g_ptr_array_new_with_free_func(_object_free);
   for(guint idx = 0; idx < canvas->objects->len; idx++)
   {
@@ -222,8 +230,10 @@ void dt_canvas_restore(dt_canvas_t *canvas, const dt_canvas_t *snapshot)
   GPtrArray *old_objects = canvas->objects;
   char *path = canvas->path;
   const uint64_t generation = canvas->generation;
+  const uint64_t serial = canvas->serial;
   memcpy(canvas, snapshot, sizeof(dt_canvas_t));
   canvas->path = path;
+  canvas->serial = serial;
   canvas->objects = g_ptr_array_new_with_free_func(_object_free);
   for(guint idx = 0; idx < snapshot->objects->len; idx++)
   {

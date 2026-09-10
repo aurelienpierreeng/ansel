@@ -142,6 +142,20 @@ void dt_canvas_surface_cache_free(dt_canvas_surface_cache_t *cache);
  */
 cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object);
 
+/**
+ * @brief The object's render scaled to exactly `width` x `height` pixels, built once per size
+ * and kept -- two sizes per object, so a gesture's reduced frames and the full frame after it
+ * both keep theirs -- for the painter to blit pixel for pixel. NULL when there is no render.
+ */
+cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
+                                                    int width, int height);
+
+/**
+ * @brief An RGB24 surface rescaled to `width` x `height`: the average of the source pixels each
+ * target pixel covers when shrinking, bilinear when enlarging. NULL on failure.
+ */
+cairo_surface_t *dt_canvas_render_rescale(cairo_surface_t *source, int width, int height);
+
 /** @brief Drop every surface, e.g. when the display profile changed. */
 void dt_canvas_surface_cache_clear(dt_canvas_surface_cache_t *cache);
 
@@ -182,9 +196,29 @@ cairo_surface_t *dt_canvas_surface_cache_get_mask_band(dt_canvas_surface_cache_t
                                                        int inset, int corner, int radius);
 
 /**
- * @brief A working buffer of at least `bytes`, kept between frames so a repaint does not page in
- * a fresh allocation each time. Owned by the cache; valid until the next call.
+ * The painter's working buffers, one slot each. A frame allocates hundreds of megabytes of
+ * float layers, and a block that size goes back to the kernel on free, so every frame paid
+ * the page faults again: kept here, they are paid once per viewport size.
  */
+typedef enum dt_canvas_scratch_slot_t
+{
+  DT_CANVAS_SCRATCH_CANVAS = 0, ///< the float canvas of the band
+  DT_CANVAS_SCRATCH_PIXELS,     ///< one 8-bit cairo layer at a time: the base, an object, its extras
+  DT_CANVAS_SCRATCH_LAYER,      ///< an object's float layer
+  DT_CANVAS_SCRATCH_SHADOW,     ///< a shadow's coverage plane
+  DT_CANVAS_SCRATCH_BLUR,       ///< the blur's ping-pong
+  DT_CANVAS_SCRATCH_COUNT
+} dt_canvas_scratch_slot_t;
+
+/**
+ * @brief A working buffer of at least `bytes` in `slot`, kept between frames so a repaint does
+ * not page in a fresh allocation each time. Owned by the cache; valid until the next call for
+ * the same slot.
+ */
+void *dt_canvas_surface_cache_scratch_slot(dt_canvas_surface_cache_t *cache, dt_canvas_scratch_slot_t slot,
+                                           size_t bytes);
+
+/** @brief The DT_CANVAS_SCRATCH_CANVAS slot. */
 void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, size_t bytes);
 
 /**
