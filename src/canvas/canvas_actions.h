@@ -57,8 +57,21 @@ typedef enum dt_canvas_action_t
   DT_CANVAS_ACTION_TOGGLE_SNAP,
   DT_CANVAS_ACTION_UNDO,
   DT_CANVAS_ACTION_REDO,
+  DT_CANVAS_ACTION_CONNECT_MODE, ///< toggle the connector-drawing mode
   DT_CANVAS_ACTION_LAST
 } dt_canvas_action_t;
+
+/** A property of the selected connectors the toolbar's Connector menu sets through
+ * `proxy.canvas.set_connector(view, property, value)`. */
+typedef enum dt_canvas_connector_property_t
+{
+  DT_CANVAS_CONNECTOR_SET_ROUTING = 0, ///< value: dt_canvas_routing_t
+  DT_CANVAS_CONNECTOR_SET_ARROWS,      ///< value: the arrow bits of dt_canvas_connector_style_t
+  DT_CANVAS_CONNECTOR_SET_REVERSE,     ///< value ignored
+  DT_CANVAS_CONNECTOR_SET_WIDTH,       ///< value: line width in canvas units
+  DT_CANVAS_CONNECTOR_SET_DASHED,      ///< value: 0 or 1
+  DT_CANVAS_CONNECTOR_SET_COLOR,       ///< value ignored: opens the colour chooser
+} dt_canvas_connector_property_t;
 
 #ifdef __cplusplus
 }

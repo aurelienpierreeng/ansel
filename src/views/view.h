@@ -275,6 +275,8 @@ typedef struct dt_view_manager_t
       const struct dt_canvas_t *(*document)(struct dt_view_t *view);
       void (*set_grid_size)(struct dt_view_t *view, float size);
       void (*set_border)(struct dt_view_t *view, const float *rgba, float width);
+      gboolean (*is_connecting)(struct dt_view_t *view);
+      void (*set_connector)(struct dt_view_t *view, int property, int value);
     } canvas;
   } proxy;
 
