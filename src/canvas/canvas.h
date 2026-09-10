@@ -70,7 +70,7 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 932 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16)
+#define DT_CANVAS_HEADER_RESERVED 916 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16), texture (16)
 #define DT_CANVAS_OBJECT_RESERVED 172 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
 #define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
@@ -424,6 +424,10 @@ typedef struct dt_canvas_t
   dt_canvas_color_t page_color;     ///< the page borders
   dt_canvas_shadow_t shadow;        ///< default shadow for objects without an override
   dt_canvas_color_t gutter_color;   ///< the gutter frames, when DT_CANVAS_GUTTER_VISIBLE
+  float texture_contrast;           ///< the paper's relief: multipliers, 1 is the paper as designed; 0 reads as 1
+  float texture_detail;             ///< its fine structure: fibres, pores, wrinkles, the mesh
+  float texture_scale;              ///< the size of its features
+  float texture_grain;              ///< the dither that finishes it
   double view_zoom;                 ///< the viewport the canvas was saved with
   double view_x;                    ///< canvas point shown at the centre of the view
   double view_y;
@@ -558,6 +562,12 @@ void dt_canvas_object_effective_border(const dt_canvas_t *canvas, const dt_canva
 /** @brief The shadow an object is drawn with: its own with the override flag, else the canvas default. */
 void dt_canvas_object_effective_shadow(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                                        dt_canvas_shadow_t *shadow);
+
+/** @brief The paper texture's four multipliers, an unset (zero) one read as 1. */
+void dt_canvas_texture_get(const dt_canvas_t *canvas, float *contrast, float *detail, float *scale, float *grain);
+
+/** @brief The colour a paper is traditionally sold in: what the background takes when a paper is chosen. */
+dt_canvas_color_t dt_canvas_background_tint(uint32_t style);
 
 /** @brief Whether a shadow draws anything at all: a radius other than zero and some strength. */
 gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow);

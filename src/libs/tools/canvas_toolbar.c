@@ -64,6 +64,10 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *gutter_color;
   GtkWidget *size_snap;
   // the shadow popover
+  GtkWidget *texture_contrast;
+  GtkWidget *texture_detail;
+  GtkWidget *texture_scale;
+  GtkWidget *texture_grain;
   GtkWidget *shadow_offset_x;
   GtkWidget *shadow_offset_y;
   GtkWidget *shadow_blur;
@@ -247,6 +251,7 @@ static void _page_changed(GtkWidget *widget, gpointer user_data)
                                                      gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->page_orientation)));
 }
 
+/** The background's colour, or its style: each sends only what it owns, so a paper can bring its own colour. */
 static void _background_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
@@ -254,10 +259,38 @@ static void _background_changed(GtkWidget *widget, gpointer user_data)
   dt_view_t *view = NULL;
   if(!_live(self, &view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_background)) return;
+  if(widget == toolbar->background_style)
+  {
+    dt_view_manager_get_global()->proxy.canvas.set_background(
+        view, NULL, gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->background_style)));
+    return;
+  }
   float rgba[4];
   _rgba_of(toolbar->background_color, rgba);
-  dt_view_manager_get_global()->proxy.canvas.set_background(
-      view, rgba, gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->background_style)));
+  dt_view_manager_get_global()->proxy.canvas.set_background(view, rgba, -1);
+}
+
+static void _texture_changed(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  dt_view_t *view = NULL;
+  if(!_live(self, &view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_texture)) return;
+  dt_view_manager_get_global()->proxy.canvas.set_texture(
+      view, (float)gtk_range_get_value(GTK_RANGE(toolbar->texture_contrast)),
+      (float)gtk_range_get_value(GTK_RANGE(toolbar->texture_detail)),
+      (float)gtk_range_get_value(GTK_RANGE(toolbar->texture_scale)),
+      (float)gtk_range_get_value(GTK_RANGE(toolbar->texture_grain)));
+}
+
+static void _texture_reset(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_view_t *view = NULL;
+  if(!_live(self, &view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_texture)) return;
+  dt_view_manager_get_global()->proxy.canvas.set_texture(view, 1.0f, 1.0f, 1.0f, 1.0f);
 }
 
 static void _border_changed(GtkWidget *widget, gpointer user_data)
@@ -322,8 +355,15 @@ static void _refill(dt_lib_module_t *self)
   _rgba_to(toolbar->background_color, &canvas->background, FALSE);
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->background_style),
                            CLAMP((int)canvas->background_style, 0, DT_CANVAS_BACKGROUND_LAST - 1));
-  // A paper has its own colour: the patch only means something for the plain background.
-  gtk_widget_set_visible(toolbar->background_color, canvas->background_style == DT_CANVAS_BACKGROUND_PLAIN);
+  float contrast = 1.0f;
+  float detail = 1.0f;
+  float scale = 1.0f;
+  float grain = 1.0f;
+  dt_canvas_texture_get(canvas, &contrast, &detail, &scale, &grain);
+  gtk_range_set_value(GTK_RANGE(toolbar->texture_contrast), contrast);
+  gtk_range_set_value(GTK_RANGE(toolbar->texture_detail), detail);
+  gtk_range_set_value(GTK_RANGE(toolbar->texture_scale), scale);
+  gtk_range_set_value(GTK_RANGE(toolbar->texture_grain), grain);
   toolbar->refilling = FALSE;
 }
 
@@ -365,15 +405,52 @@ static void _action_item(GtkWidget *menu, const char *label, const dt_canvas_act
 }
 
 /** A toolbar button that drops a menu. */
-static GtkWidget *_menu_button(GtkWidget *box, const char *label, const char *tooltip, GtkWidget *menu)
+/** A menu button styled as a text label with an ellipsis: what opens something else, not an action. */
+static GtkWidget *_flat_menu_button(GtkWidget *box, const char *label, const char *tooltip)
 {
   GtkWidget *button = gtk_menu_button_new();
-  gtk_button_set_label(GTK_BUTTON(button), label);
+  gchar *text = g_strdup_printf("%s\xe2\x80\xa6", label);
+  gtk_button_set_label(GTK_BUTTON(button), text);
+  dt_free(text);
+  gtk_button_set_relief(GTK_BUTTON(button), GTK_RELIEF_NONE);
   gtk_widget_set_tooltip_text(button, tooltip);
-  gtk_widget_show_all(menu);
-  gtk_menu_button_set_popup(GTK_MENU_BUTTON(button), menu);
   gtk_box_pack_start(GTK_BOX(box), button, FALSE, FALSE, 0);
   return button;
+}
+
+static GtkWidget *_menu_button(GtkWidget *box, const char *label, const char *tooltip, GtkWidget *menu)
+{
+  GtkWidget *button = _flat_menu_button(box, label, tooltip);
+  gtk_widget_show_all(menu);
+  gtk_menu_button_set_popup(GTK_MENU_BUTTON(button), menu);
+  return button;
+}
+
+static GtkWidget *_popover_button(GtkWidget *box, const char *label, const char *tooltip, GtkWidget *popover)
+{
+  GtkWidget *button = _flat_menu_button(box, label, tooltip);
+  gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), popover);
+  return button;
+}
+
+/** A slider row of a popover: a label, a scale, its value. */
+static GtkWidget *_popover_slider(GtkWidget *grid, const int row, const char *label, const double low,
+                                  const double high, const double step, const char *tooltip, GCallback callback,
+                                  gpointer data)
+{
+  GtkWidget *name = gtk_label_new(label);
+  gtk_widget_set_halign(name, GTK_ALIGN_START);
+  gtk_grid_attach(GTK_GRID(grid), name, 0, row, 1, 1);
+  GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, low, high, step);
+  gtk_scale_set_draw_value(GTK_SCALE(scale), TRUE);
+  gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_RIGHT);
+  gtk_scale_set_digits(GTK_SCALE(scale), 2);
+  gtk_widget_set_size_request(scale, DT_PIXEL_APPLY_DPI(220), -1);
+  gtk_widget_set_hexpand(scale, TRUE);
+  gtk_widget_set_tooltip_text(scale, tooltip);
+  g_signal_connect(scale, "value-changed", callback, data);
+  gtk_grid_attach(GTK_GRID(grid), scale, 1, row, 3, 1);
+  return scale;
 }
 
 /** A guides checkbox bound to one flag bit. */
@@ -512,6 +589,65 @@ static GtkWidget *_shadow_popover(dt_lib_module_t *self)
   return popover;
 }
 
+/** The borders popover: the uniform border of every frame that has none of its own. */
+static GtkWidget *_borders_popover(dt_lib_module_t *self)
+{
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(4));
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(10));
+  gtk_container_set_border_width(GTK_CONTAINER(grid), DT_PIXEL_APPLY_DPI(10));
+  _section_label(grid, 0, _("Borders"));
+  toolbar->border_width = gtk_spin_button_new_with_range(0.0, 200.0, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->border_width, _("Default border width of the frames, in canvas units"));
+  g_signal_connect(toolbar->border_width, "value-changed", G_CALLBACK(_border_changed), self);
+  _labelled(grid, 1, 0, _("Width"), toolbar->border_width);
+  toolbar->border_color = gtk_color_button_new();
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->border_color), TRUE);
+  gtk_widget_set_tooltip_text(toolbar->border_color, _("Default border colour of the frames"));
+  g_signal_connect(toolbar->border_color, "color-set", G_CALLBACK(_border_changed), self);
+  _labelled(grid, 1, 1, _("Colour"), toolbar->border_color);
+  GtkWidget *popover = gtk_popover_new(NULL);
+  gtk_container_add(GTK_CONTAINER(popover), grid);
+  gtk_widget_show_all(grid);
+  return popover;
+}
+
+/**
+ * The texture popover: the four degrees of freedom every paper answers to. Contrast weighs
+ * the body of the relief, detail its fine structure, scale sizes its features, grain the
+ * dither that finishes it; 1 everywhere is the paper as designed.
+ */
+static GtkWidget *_texture_popover(dt_lib_module_t *self)
+{
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(4));
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(10));
+  gtk_container_set_border_width(GTK_CONTAINER(grid), DT_PIXEL_APPLY_DPI(10));
+  _section_label(grid, 0, _("Paper texture"));
+  toolbar->texture_contrast = _popover_slider(grid, 1, _("Contrast"), 0.05, 4.0, 0.05,
+                                              _("The relief's body: the mottle, the tooth, the clouds. 1 is the paper as designed."),
+                                              G_CALLBACK(_texture_changed), self);
+  toolbar->texture_detail = _popover_slider(grid, 2, _("Detail"), 0.0, 4.0, 0.05,
+                                            _("The fine structure: fibres, pores, wrinkles, the mesh's imprint. 0 leaves only the body."),
+                                            G_CALLBACK(_texture_changed), self);
+  toolbar->texture_scale = _popover_slider(grid, 3, _("Scale"), 0.25, 4.0, 0.05,
+                                           _("The size of the features: 2 makes them twice as large. Rebuilds the paper."),
+                                           G_CALLBACK(_texture_changed), self);
+  toolbar->texture_grain = _popover_slider(grid, 4, _("Grain"), 0.0, 4.0, 0.05,
+                                           _("The pixel-level grain that finishes the paper, scaled with the zoom"),
+                                           G_CALLBACK(_texture_changed), self);
+  GtkWidget *reset = gtk_button_new_with_label(_("Reset"));
+  gtk_widget_set_tooltip_text(reset, _("The paper as designed"));
+  g_signal_connect(reset, "clicked", G_CALLBACK(_texture_reset), self);
+  gtk_grid_attach(GTK_GRID(grid), reset, 3, 5, 1, 1);
+  GtkWidget *popover = gtk_popover_new(NULL);
+  gtk_container_add(GTK_CONTAINER(popover), grid);
+  gtk_widget_show_all(grid);
+  return popover;
+}
+
 void gui_init(dt_lib_module_t *self)
 {
   dt_lib_canvas_toolbar_t *toolbar = g_new0(dt_lib_canvas_toolbar_t, 1);
@@ -536,19 +672,17 @@ void gui_init(dt_lib_module_t *self)
   _action_item(object_menu, _("Refresh every image"), DT_CANVAS_ACTION_SYNC_REFRESH_ALL);
   _menu_button(box, _("Object"), _("Keep the images and notes in step with the library"), object_menu);
 
-  GtkWidget *guides_button = gtk_menu_button_new();
-  gtk_button_set_label(GTK_BUTTON(guides_button), _("Guides"));
-  gtk_widget_set_tooltip_text(guides_button, _("The grid, the page borders and the gutters: what shows and what snaps"));
-  gtk_menu_button_set_popover(GTK_MENU_BUTTON(guides_button), _guides_popover(self));
-  gtk_box_pack_start(GTK_BOX(box), guides_button, FALSE, FALSE, 0);
+  _popover_button(box, _("Guides"), _("The grid, the page borders and the gutters: what shows and what snaps"),
+                  _guides_popover(self));
   _separator(box);
 
+  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Add")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
   _button(box, _("Text"), _("Add a text frame at the centre of the view"), DT_CANVAS_ACTION_ADD_TEXT);
   _button(box, _("Notes"), _("Add the .txt notes of the selected images as text frames (of every image when none is selected)"),
           DT_CANVAS_ACTION_ADD_NOTES);
   _button(box, _("Map"), _("Add a map frame at the centre of the view; an image's context menu adds a map of where it was taken"),
           DT_CANVAS_ACTION_ADD_MAP);
-  toolbar->connect_toggle = gtk_toggle_button_new_with_label(_("Connect"));
+  toolbar->connect_toggle = gtk_toggle_button_new_with_label(_("Connector"));
   gtk_widget_set_tooltip_text(toolbar->connect_toggle,
                               _("Draw a connector: click an anchor point on one frame, then on another"));
   g_signal_connect(toolbar->connect_toggle, "toggled", G_CALLBACK(_connect_toggled), self);
@@ -565,26 +699,14 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(toolbar->background_style, "changed", G_CALLBACK(_background_changed), self);
   gtk_box_pack_start(GTK_BOX(box), toolbar->background_style, FALSE, FALSE, 0);
   toolbar->background_color = gtk_color_button_new();
-  gtk_widget_set_tooltip_text(toolbar->background_color, _("Background colour, for the plain background"));
+  gtk_widget_set_tooltip_text(toolbar->background_color, _("Background colour: the plain colour, or the paper's own"));
   g_signal_connect(toolbar->background_color, "color-set", G_CALLBACK(_background_changed), self);
   gtk_box_pack_start(GTK_BOX(box), toolbar->background_color, FALSE, FALSE, 0);
+  _popover_button(box, _("Texture"), _("The paper's relief, detail, scale and grain"), _texture_popover(self));
   _separator(box);
 
-  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Border")), FALSE, FALSE, 0);
-  toolbar->border_width = gtk_spin_button_new_with_range(0.0, 200.0, 1.0);
-  gtk_widget_set_tooltip_text(toolbar->border_width, _("Default border width of the frames, in canvas units"));
-  g_signal_connect(toolbar->border_width, "value-changed", G_CALLBACK(_border_changed), self);
-  gtk_box_pack_start(GTK_BOX(box), toolbar->border_width, FALSE, FALSE, 0);
-  toolbar->border_color = gtk_color_button_new();
-  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->border_color), TRUE);
-  gtk_widget_set_tooltip_text(toolbar->border_color, _("Default border colour of the frames"));
-  g_signal_connect(toolbar->border_color, "color-set", G_CALLBACK(_border_changed), self);
-  gtk_box_pack_start(GTK_BOX(box), toolbar->border_color, FALSE, FALSE, 0);
-  GtkWidget *shadow_button = gtk_menu_button_new();
-  gtk_button_set_label(GTK_BUTTON(shadow_button), _("Shadow"));
-  gtk_widget_set_tooltip_text(shadow_button, _("The default drop shadow of every object"));
-  gtk_menu_button_set_popover(GTK_MENU_BUTTON(shadow_button), _shadow_popover(self));
-  gtk_box_pack_start(GTK_BOX(box), shadow_button, FALSE, FALSE, 0);
+  _popover_button(box, _("Borders"), _("The uniform border of every frame without one of its own"), _borders_popover(self));
+  _popover_button(box, _("Shadows"), _("The default shadow of every object without one of its own"), _shadow_popover(self));
   _separator(box);
 
   _button(box, _("Fit"), _("Fit the view to the canvas"), DT_CANVAS_ACTION_ZOOM_FIT);
@@ -605,7 +727,6 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(box), arrange, FALSE, FALSE, 0);
 
   gtk_widget_show_all(box);
-  gtk_widget_set_no_show_all(toolbar->background_color, TRUE);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED,
                                   G_CALLBACK(_canvas_changed), self);
   _refill(self);

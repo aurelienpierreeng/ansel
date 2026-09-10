@@ -2514,13 +2514,22 @@ they are visible.
   must be indexed by sqrt(value): a uniform 16384-step table misses the first codes of a 2.2
   gamma by whole steps. Tests compute expected codes with an independent sRGB-to-Adobe helper
   and cairo's own quantisation (16 bits rounded, then the high byte).
-- **A cut frame's mask raster is grown past the frame and supersampled.** The shape, its
-  feather and its border can all reach past the frame rectangle, so the raster carries a
-  margin (`dt_canvas_mask_geometry_t`, border + feather + two pixels) and the unit-square
-  description is re-mapped into it; the fill, the alpha paint and the device box all use the
-  grown rectangle. Every mask surface is rasterised at 3x (2x past a megapixel) and
-  box-filtered, the band's distance transform included: that is where the anti-aliasing of
-  cutouts and their borders comes from. The masks module's own rasterisers are hard-edged.
+- **The frame is every object's outer size, border included -- cut or not.** A cut frame's
+  shape is confined to the frame less the border's width (`dt_canvas_mask_geometry_t.inset`,
+  applied in `_mask_raster_fine()`), so the border dilated from it ends at the frame's edge,
+  exactly like a rectangular frame's inset stroke. The first version grew the raster past the
+  frame instead, and a gradient cutout, which covers the frame, grew a border outside it
+  where an uncut frame had none. Only shadows reach past the frame. Every mask surface is
+  rasterised at 3x (2x past a megapixel) and box-filtered, the band's distance transform
+  included: that is where the anti-aliasing of cutouts and their borders comes from. The masks
+  module's own rasterisers are hard-edged.
+- **The papers are coloured by the canvas background**, a zero-mean relief around it, in two
+  parts weighed by `texture_contrast`/`texture_detail`; `texture_scale` divides every knee and
+  is the only weight that rebuilds the composed fields (`_paper_fields()`), the others only
+  rebuild the coloured tile (`_paper_key()`). Choosing a paper style sets the background to
+  the paper's tint through the style-only branch of `set_background()` -- the toolbar's combo
+  sends NULL for the colour and the colour patch sends -1 for the style, so one never
+  overwrites the other.
 - **A shadow's radius is signed and is its own switch**: positive outset, negative inset (the
   uncovered plane blurred and laid over the object within its coverage), zero none. Do not
   reintroduce an enable flag; `dt_canvas_shadow_visible()` reads the radius.

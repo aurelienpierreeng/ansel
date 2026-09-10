@@ -464,6 +464,10 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   dt_canvas_color_parse(gutter_color, &canvas->gutter_color);
   if(dt_conf_get_bool("canvas/gutter_visible")) canvas->grid_flags |= DT_CANVAS_GUTTER_VISIBLE;
   else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_GUTTER_VISIBLE;
+  canvas->texture_contrast = dt_conf_get_float("canvas/texture_contrast");
+  canvas->texture_detail = dt_conf_get_float("canvas/texture_detail");
+  canvas->texture_scale = dt_conf_get_float("canvas/texture_scale");
+  canvas->texture_grain = dt_conf_get_float("canvas/texture_grain");
   canvas->dirty = FALSE;
 }
 
@@ -4631,9 +4635,34 @@ static void _proxy_set_background(dt_view_t *self, const float *rgba, int style)
   }
   if(style >= 0)
   {
-    view->canvas->background_style = (uint32_t)CLAMP(style, 0, DT_CANVAS_BACKGROUND_LAST - 1);
+    const uint32_t chosen = (uint32_t)CLAMP(style, 0, DT_CANVAS_BACKGROUND_LAST - 1);
+    // A paper comes in its own colour: choosing one sets it, and the colour patch stays live to recolour it.
+    if(chosen != view->canvas->background_style && chosen != DT_CANVAS_BACKGROUND_PLAIN && IS_NULL_PTR(rgba))
+    {
+      view->canvas->background = dt_canvas_background_tint(chosen);
+      char text[16];
+      dt_canvas_color_format(&view->canvas->background, text, sizeof(text));
+      dt_conf_set_string("canvas/background_color", text);
+    }
+    view->canvas->background_style = chosen;
     dt_conf_set_int("canvas/background_style", (int)view->canvas->background_style);
   }
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
+static void _proxy_set_texture(dt_view_t *self, float contrast, float detail, float scale, float grain)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  view->canvas->texture_contrast = CLAMP(contrast, 0.05f, 8.0f);
+  view->canvas->texture_detail = CLAMP(detail, 0.0f, 8.0f);
+  view->canvas->texture_scale = CLAMP(scale, 0.1f, 8.0f);
+  view->canvas->texture_grain = CLAMP(grain, 0.0f, 8.0f);
+  dt_conf_set_float("canvas/texture_contrast", view->canvas->texture_contrast);
+  dt_conf_set_float("canvas/texture_detail", view->canvas->texture_detail);
+  dt_conf_set_float("canvas/texture_scale", view->canvas->texture_scale);
+  dt_conf_set_float("canvas/texture_grain", view->canvas->texture_grain);
   dt_canvas_touch(view->canvas);
   dt_control_queue_redraw_center();
 }
@@ -4881,6 +4910,7 @@ void init(dt_view_t *self)
   manager->proxy.canvas.set_page_color = _proxy_set_page_color;
   manager->proxy.canvas.set_gutter_color = _proxy_set_gutter_color;
   manager->proxy.canvas.set_shadow = _proxy_set_shadow;
+  manager->proxy.canvas.set_texture = _proxy_set_texture;
 }
 
 void gui_init(dt_view_t *self)
