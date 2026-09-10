@@ -140,6 +140,10 @@ static void _write_connector(GByteArray *out, const dt_canvas_connector_t *conne
   _w_u32(out, connector->via_count);
   _w_f64(out, connector->via_x);
   _w_f64(out, connector->via_y);
+  _w_f32(out, connector->from_reach);
+  _w_f32(out, connector->to_reach);
+  _w_f64(out, connector->via_tangent_x);
+  _w_f64(out, connector->via_tangent_y);
   _w_bytes(out, connector->reserved, sizeof(connector->reserved));
 }
 
@@ -208,6 +212,7 @@ GBytes *dt_canvas_format_write_index(const dt_canvas_t *canvas)
   _w_color(out, &canvas->grid_color);
   _w_u32(out, canvas->paper_size);
   _w_u32(out, canvas->paper_landscape);
+  _w_color(out, &canvas->page_color);
   _w_bytes(out, canvas->reserved, sizeof(canvas->reserved));
   const uint32_t header_size = out->len;
   uint8_t *size_field = out->data + CANVAS_MAGIC_LEN + 4;
@@ -371,6 +376,10 @@ static void _read_connector(dt_canvas_cursor_t *cursor, dt_canvas_connector_t *c
   connector->via_count = _r_u32(cursor);
   connector->via_x = _r_f64(cursor);
   connector->via_y = _r_f64(cursor);
+  connector->from_reach = _r_f32(cursor);
+  connector->to_reach = _r_f32(cursor);
+  connector->via_tangent_x = _r_f64(cursor);
+  connector->via_tangent_y = _r_f64(cursor);
   _r_bytes(cursor, connector->reserved, sizeof(connector->reserved));
 }
 
@@ -470,6 +479,7 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
   canvas->grid_color = _r_color(&cursor);
   canvas->paper_size = _r_u32(&cursor);
   canvas->paper_landscape = _r_u32(&cursor);
+  canvas->page_color = _r_color(&cursor);
   _r_bytes(&cursor, canvas->reserved, sizeof(canvas->reserved));
   cursor.pos = header_size;
   cursor.limit = cursor.size;

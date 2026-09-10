@@ -281,6 +281,8 @@ typedef struct dt_view_manager_t
       void (*set_background)(struct dt_view_t *view, const float *rgba, int style); ///< NULL / -1 leave one alone
       void (*set_grid_color)(struct dt_view_t *view, const float *rgba);
       void (*set_paper)(struct dt_view_t *view, int paper, int landscape);        ///< -1 leaves one alone
+      void (*set_guides)(struct dt_view_t *view, int mask, int value);            ///< dt_canvas_grid_flags_t bits
+      void (*set_page_color)(struct dt_view_t *view, const float *rgba);
     } canvas;
   } proxy;
 

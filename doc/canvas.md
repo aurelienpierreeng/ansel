@@ -137,8 +137,13 @@ same way); cubic (a Bezier whose control points lie along the normals, drawn wit
 `cairo_curve_to()` and flattened to 40 points for the hit test). Arrow heads sit on the
 anchor and point along the route's last leg -- the chord itself for a straight connector --
 at the end, the start, both, or neither (a flat line); "Reverse the direction" swaps the
-ends and their anchors. All of it is in the toolbar's **Connector** menu, applied to the
-selected connectors, with dashes, colour and width.
+ends and their anchors. A new connector is a cubic spline, and a selected cubic connector
+shows its **tangent handles**: one at each end, held on the anchor's normal (orthogonal to
+the frame's edge) so only its length is dragged, and two about the waypoint, whose direction
+and length are free; a handle left alone stays automatic. The line stops short of an arrow's
+tip: a disc of the head's length around the arrowed end is cut out of the stroke, so the tip
+is the triangle's alone and stays sharp. All of it is in the connector's floating bar, with
+dashes, colour and width.
 
 Connectors are drawn from the toolbar's **Connect** button (or C): in that mode the frame
 under the pointer shows its four cardinal anchor dots, the first click picks the source
@@ -227,7 +232,12 @@ The grid dots have a colour of their own and a radius that is a fraction of the 
 so they scale with the zoom too, floored at three quarters of a pixel so they never vanish.
 
 A canvas may be divided into **pages** of an ISO A paper (A2 to A6, portrait or landscape),
-tiled from the origin and outlined with dashed lines in the grid colour. One canvas unit is
+tiled from the origin and outlined with dashed lines in their own colour: one line per
+border, never one rectangle per page -- a shared edge stroked twice with two dash phases
+fills its own gaps and reads as solid -- each line starting on a multiple of the dash
+period from the origin, so the dashes neither crawl under a pan nor differ between the
+horizontal and the vertical. Page borders are a snapping rule of their own, applied after
+the gutter and before the size. One canvas unit is
 one point, so an A4 page is 595 by 842 units. The PDF export then writes one PDF page per
 canvas page that holds a frame, skipping empty ones, at the requested resolution; without
 paper it fits the frames' box on the page the dialog chooses, as before.
@@ -265,10 +275,12 @@ painter and one colour path for the screen and the print.
 
 ## The view
 
-The toolbar (`libs/tools/canvas_toolbar.c`) is two menus and a row of controls: **Canvas**
+The toolbar (`libs/tools/canvas_toolbar.c`) is three menus and a row of controls: **Canvas**
 (new, open, save, save as, export as PDF), **Object** (check against the library, refresh
-the stale images and notes, refresh every image), then Text, Notes, the Connect toggle,
-the grid toggles, grid size and gutter, the default border, Fit and 1:1, the layout chooser.
+the stale images and notes, refresh every image), **Guides** (a popover: the grid's show,
+snap, size and colour; the page borders' show, snap, size, orientation and colour; the
+gutters' snap and size, and snapping sizes to neighbours), then Text, Notes, the Connect
+toggle, the background, the default border, Fit and 1:1, the layout chooser.
 
 `src/views/canvas.c` owns one document and everything about editing it. It registers the
 `canvas` accelerator group, exposes its actions through `proxy.canvas` for the toolbar

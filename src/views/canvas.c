@@ -114,6 +114,9 @@ typedef enum dt_canvas_drag_t
   DT_CANVAS_DRAG_ROTATE,
   DT_CANVAS_DRAG_RUBBERBAND,
   DT_CANVAS_DRAG_VIA,
+  DT_CANVAS_DRAG_HANDLE_FROM,   ///< the start's tangent handle: its length along the normal
+  DT_CANVAS_DRAG_HANDLE_TO,     ///< the end's
+  DT_CANVAS_DRAG_HANDLE_VIA,    ///< the waypoint's tangent handle, either side
 } dt_canvas_drag_t;
 
 typedef struct dt_canvas_view_t
@@ -143,6 +146,7 @@ typedef struct dt_canvas_view_t
   gboolean drag_moved;
   dt_canvas_t *drag_snapshot;           ///< the document before the gesture, for undo
   int scale_corner;                     ///< 0..3, the corner being dragged
+  int handle_sign;                      ///< +1 or -1: which side of the waypoint's tangent is dragged
   double gesture_start_rotation;
   double gesture_start_angle;
   gboolean connecting;                  ///< connector-drawing mode, armed from the toolbar
@@ -203,6 +207,10 @@ static gboolean _proxy_is_connecting(dt_view_t *self);
 static void _bars_refresh(dt_view_t *self, gboolean force);
 static void _bars_request(dt_view_t *self);
 static void _connect_mode_set(dt_view_t *self, gboolean on);
+static gboolean _connector_handles(const dt_canvas_view_t *view, const dt_canvas_object_t *connector,
+                                   dt_canvas_route_t *route);
+static void _paint_tangent_handle(cairo_t *cr, const dt_canvas_view_t *view, const double anchor_x,
+                                  const double anchor_y, const double handle_x, const double handle_y);
 static void _render_done(uint32_t object_id, uint64_t token, GBytes *jpeg, int32_t pixel_width, int32_t pixel_height,
                          uint64_t history_hash, gpointer user_data);
 
@@ -391,6 +399,10 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   dt_canvas_color_parse(grid_color, &canvas->grid_color);
   canvas->paper_size = (uint32_t)CLAMP(dt_conf_get_int("canvas/paper_size"), 0, 5);
   canvas->paper_landscape = dt_conf_get_bool("canvas/paper_landscape") ? 1u : 0u;
+  const char *page_color = dt_conf_get_string_const("canvas/page_color");
+  dt_canvas_color_parse(page_color, &canvas->page_color);
+  if(dt_conf_get_bool("canvas/page_visible")) canvas->grid_flags |= DT_CANVAS_PAGE_VISIBLE;
+  else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_PAGE_VISIBLE;
   const char *border = dt_conf_get_string_const("canvas/border_color");
   dt_canvas_color_parse(border, &canvas->border_color);
   const char *background = dt_conf_get_string_const("canvas/background_color");
@@ -2312,6 +2324,24 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   {
     const dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, g_array_index(view->selection, uint32_t, idx));
     if(dt_canvas_object_is_frame(object)) _paint_handles(cr, view, object);
+    dt_canvas_route_t route;
+    if(_connector_handles(view, object, &route))
+    {
+      // The tangent handles: one per end along its anchor's normal, two about the waypoint.
+      cairo_save(cr);
+      _paint_tangent_handle(cr, view, route.from_x, route.from_y, route.control1_x, route.control1_y);
+      if(route.segment_count == 2)
+      {
+        _paint_tangent_handle(cr, view, route.via_x, route.via_y, route.control2_x, route.control2_y);
+        _paint_tangent_handle(cr, view, route.via_x, route.via_y, route.control3_x, route.control3_y);
+        _paint_tangent_handle(cr, view, route.to_x, route.to_y, route.control4_x, route.control4_y);
+      }
+      else
+      {
+        _paint_tangent_handle(cr, view, route.to_x, route.to_y, route.control2_x, route.control2_y);
+      }
+      cairo_restore(cr);
+    }
     if(!IS_NULL_PTR(object) && object->kind == DT_CANVAS_OBJECT_CONNECTOR && object->connector.via_count > 0)
     {
       // The waypoint, as a diamond the pointer can take hold of.
@@ -2476,6 +2506,66 @@ static int _handle_at(const dt_canvas_view_t *view, const dt_canvas_object_t *ob
   return -1;
 }
 
+/** The tangent handles of a selected cubic connector, in canvas units: control points of its route. */
+static gboolean _connector_handles(const dt_canvas_view_t *view, const dt_canvas_object_t *connector,
+                                   dt_canvas_route_t *route)
+{
+  if(IS_NULL_PTR(connector) || connector->kind != DT_CANVAS_OBJECT_CONNECTOR) return FALSE;
+  if(connector->connector.routing != DT_CANVAS_ROUTING_CUBIC) return FALSE;
+  return dt_canvas_connector_route(view->canvas, connector, route);
+}
+
+/** Which tangent handle of a selected connector is under the canvas point, and on which connector. */
+static dt_canvas_drag_t _tangent_handle_at(const dt_canvas_view_t *view, const double x, const double y,
+                                           dt_canvas_object_t **owner, int *sign)
+{
+  const double reach = (CANVAS_VIA_HANDLE_PIXELS + 3.0) / view->zoom;
+  for(guint idx = 0; idx < view->selection->len; idx++)
+  {
+    dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, g_array_index(view->selection, uint32_t, idx));
+    dt_canvas_route_t route;
+    if(!_connector_handles(view, object, &route)) continue;
+    *owner = object;
+    if(hypot(route.control1_x - x, route.control1_y - y) <= reach) return DT_CANVAS_DRAG_HANDLE_FROM;
+    if(route.segment_count == 2)
+    {
+      if(hypot(route.control2_x - x, route.control2_y - y) <= reach)
+      {
+        *sign = -1;
+        return DT_CANVAS_DRAG_HANDLE_VIA;
+      }
+      if(hypot(route.control3_x - x, route.control3_y - y) <= reach)
+      {
+        *sign = 1;
+        return DT_CANVAS_DRAG_HANDLE_VIA;
+      }
+      if(hypot(route.control4_x - x, route.control4_y - y) <= reach) return DT_CANVAS_DRAG_HANDLE_TO;
+    }
+    else if(hypot(route.control2_x - x, route.control2_y - y) <= reach)
+    {
+      return DT_CANVAS_DRAG_HANDLE_TO;
+    }
+  }
+  *owner = NULL;
+  return DT_CANVAS_DRAG_NONE;
+}
+
+static void _paint_tangent_handle(cairo_t *cr, const dt_canvas_view_t *view, const double anchor_x,
+                                  const double anchor_y, const double handle_x, const double handle_y)
+{
+  const double radius = (CANVAS_VIA_HANDLE_PIXELS - 2.0) / view->zoom;
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.6);
+  cairo_set_line_width(cr, 1.0 / view->zoom);
+  cairo_move_to(cr, anchor_x, anchor_y);
+  cairo_line_to(cr, handle_x, handle_y);
+  cairo_stroke(cr);
+  cairo_arc(cr, handle_x, handle_y, radius, 0.0, 2.0 * M_PI);
+  cairo_set_source_rgba(cr, 0.3, 0.75, 1.0, 0.95);
+  cairo_fill_preserve(cr);
+  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.8);
+  cairo_stroke(cr);
+}
+
 /** Is the canvas point on a selected connector's waypoint handle? */
 static dt_canvas_object_t *_via_handle_at(const dt_canvas_view_t *view, const double x, const double y)
 {
@@ -2525,6 +2615,15 @@ static void _snap_selection(dt_canvas_view_t *view, const uint32_t leader_id)
                                  DT_CANVAS_EDGE_ALL, &gutter_x, &gutter_y);
     if(gutter_x != 0.0) delta_x = gutter_x;
     if(gutter_y != 0.0) delta_y = gutter_y;
+  }
+  if(rules & DT_CANVAS_SNAP_PAGE)
+  {
+    double page_x = 0.0;
+    double page_y = 0.0;
+    dt_canvas_snap_to_pages(view->canvas, &bounds, CANVAS_NEIGHBOUR_SNAP_PIXELS / view->zoom, DT_CANVAS_EDGE_ALL,
+                            &page_x, &page_y);
+    if(page_x != 0.0) delta_x = page_x;
+    if(page_y != 0.0) delta_y = page_y;
   }
   if(delta_x != 0.0 || delta_y != 0.0) _move_selection(view, delta_x, delta_y);
 }
@@ -2585,6 +2684,24 @@ static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, co
       if(proportional) new_height = new_width / ratio;
     }
   }
+  if(rules & DT_CANVAS_SNAP_PAGE)
+  {
+    dt_canvas_rect_t box;
+    box.width = new_width;
+    box.height = new_height;
+    box.x = object->x + (sign_x > 0.0 ? -old_width * 0.5 : old_width * 0.5 - new_width);
+    box.y = object->y + (sign_y > 0.0 ? -old_height * 0.5 : old_height * 0.5 - new_height);
+    const uint32_t edges = (sign_x > 0.0 ? DT_CANVAS_EDGE_RIGHT : DT_CANVAS_EDGE_LEFT)
+                           | (sign_y > 0.0 ? DT_CANVAS_EDGE_BOTTOM : DT_CANVAS_EDGE_TOP);
+    double delta_x = 0.0;
+    double delta_y = 0.0;
+    if(dt_canvas_snap_to_pages(view->canvas, &box, threshold, edges, &delta_x, &delta_y))
+    {
+      if(delta_x != 0.0) new_width = fmax(new_width + delta_x * sign_x, 20.0);
+      if(delta_y != 0.0) new_height = fmax(new_height + delta_y * sign_y, 20.0);
+      if(proportional) new_height = new_width / ratio;
+    }
+  }
   view->guide_width_valid = FALSE;
   view->guide_height_valid = FALSE;
   if(rules & DT_CANVAS_SNAP_SIZE)
@@ -2639,7 +2756,8 @@ static void _end_gesture(dt_view_t *self)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(view->drag == DT_CANVAS_DRAG_MOVE || view->drag == DT_CANVAS_DRAG_SCALE || view->drag == DT_CANVAS_DRAG_ROTATE
-     || view->drag == DT_CANVAS_DRAG_VIA)
+     || view->drag == DT_CANVAS_DRAG_VIA || view->drag == DT_CANVAS_DRAG_HANDLE_FROM
+     || view->drag == DT_CANVAS_DRAG_HANDLE_TO || view->drag == DT_CANVAS_DRAG_HANDLE_VIA)
   {
     if(view->drag_moved)
     {
@@ -2722,6 +2840,19 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
   if(which == 1)
   {
+    dt_canvas_object_t *handle_owner = NULL;
+    int handle_sign = 1;
+    const dt_canvas_drag_t handle_drag = _tangent_handle_at(view, canvas_x, canvas_y, &handle_owner, &handle_sign);
+    if(handle_drag != DT_CANVAS_DRAG_NONE)
+    {
+      _select_only(view, handle_owner->id);
+      view->drag_snapshot = _begin_edit(view);
+      view->drag = handle_drag;
+      view->handle_sign = handle_sign;
+      _bars_hide_now(view);
+      dt_control_change_cursor(GDK_FLEUR);
+      return 1;
+    }
     dt_canvas_object_t *via_owner = _via_handle_at(view, canvas_x, canvas_y);
     if(!IS_NULL_PTR(via_owner))
     {
@@ -2826,6 +2957,10 @@ static void _queue_cursor_for(dt_view_t *self, const double screen_x, const doub
   {
     cursor = GDK_FLEUR;
   }
+  else if(_tangent_handle_at(view, x, y, &(dt_canvas_object_t *){ NULL }, &(int){ 1 }) != DT_CANVAS_DRAG_NONE)
+  {
+    cursor = GDK_FLEUR;
+  }
   else
   {
     gboolean on_handle = FALSE;
@@ -2914,6 +3049,39 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
         view->drag_moved = TRUE;
         connector->connector.via_x = dt_canvas_snap(view->canvas, canvas_x);
         connector->connector.via_y = dt_canvas_snap(view->canvas, canvas_y);
+      }
+      break;
+    }
+    case DT_CANVAS_DRAG_HANDLE_FROM:
+    case DT_CANVAS_DRAG_HANDLE_TO:
+    {
+      // The handle stays on the anchor's normal, orthogonal to the frame's edge: only its length moves.
+      dt_canvas_object_t *connector = _single_selected(view);
+      dt_canvas_route_t route;
+      if(_connector_handles(view, connector, &route))
+      {
+        view->drag_moved = TRUE;
+        const gboolean start = view->drag == DT_CANVAS_DRAG_HANDLE_FROM;
+        const double anchor_x = start ? route.from_x : route.to_x;
+        const double anchor_y = start ? route.from_y : route.to_y;
+        const double normal_x = start ? route.from_normal_x : route.to_normal_x;
+        const double normal_y = start ? route.from_normal_y : route.to_normal_y;
+        const double reach = fmax((canvas_x - anchor_x) * normal_x + (canvas_y - anchor_y) * normal_y, 10.0);
+        if(start)
+          connector->connector.from_reach = (float)reach;
+        else
+          connector->connector.to_reach = (float)reach;
+      }
+      break;
+    }
+    case DT_CANVAS_DRAG_HANDLE_VIA:
+    {
+      dt_canvas_object_t *connector = _single_selected(view);
+      if(!IS_NULL_PTR(connector) && connector->kind == DT_CANVAS_OBJECT_CONNECTOR && connector->connector.via_count > 0)
+      {
+        view->drag_moved = TRUE;
+        connector->connector.via_tangent_x = (canvas_x - connector->connector.via_x) * view->handle_sign;
+        connector->connector.via_tangent_y = (canvas_y - connector->connector.via_y) * view->handle_sign;
       }
       break;
     }
@@ -3221,6 +3389,30 @@ static void _proxy_set_paper(dt_view_t *self, int paper, int landscape)
   dt_control_queue_redraw_center();
 }
 
+static void _proxy_set_guides(dt_view_t *self, int mask, int value)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  view->canvas->grid_flags = (view->canvas->grid_flags & ~(uint32_t)mask) | ((uint32_t)value & (uint32_t)mask);
+  dt_conf_set_bool("canvas/grid_visible", (view->canvas->grid_flags & DT_CANVAS_GRID_VISIBLE) != 0);
+  dt_conf_set_bool("canvas/page_visible", (view->canvas->grid_flags & DT_CANVAS_PAGE_VISIBLE) != 0);
+  dt_conf_set_int("canvas/snap_mode", (int)(view->canvas->grid_flags & DT_CANVAS_SNAP_ALL));
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
+static void _proxy_set_page_color(dt_view_t *self, const float *rgba)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(rgba)) return;
+  view->canvas->page_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  char text[16];
+  dt_canvas_color_format(&view->canvas->page_color, text, sizeof(text));
+  dt_conf_set_string("canvas/page_color", text);
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
 static void _proxy_set_snap_mode(dt_view_t *self, int mode)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -3372,6 +3564,8 @@ void init(dt_view_t *self)
   manager->proxy.canvas.set_background = _proxy_set_background;
   manager->proxy.canvas.set_grid_color = _proxy_set_grid_color;
   manager->proxy.canvas.set_paper = _proxy_set_paper;
+  manager->proxy.canvas.set_guides = _proxy_set_guides;
+  manager->proxy.canvas.set_page_color = _proxy_set_page_color;
 }
 
 void gui_init(dt_view_t *self)

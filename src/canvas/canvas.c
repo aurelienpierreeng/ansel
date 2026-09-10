@@ -145,6 +145,8 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->grid_color = dt_canvas_color(0.5f, 0.5f, 0.5f, 1.0f);
   canvas->paper_size = DT_CANVAS_PAPER_NONE;
   canvas->paper_landscape = 0;
+  canvas->page_color = dt_canvas_color(0.35f, 0.6f, 1.0f, 1.0f);
+  canvas->grid_flags |= DT_CANVAS_PAGE_VISIBLE;
   canvas->view_zoom = 1.0;
   canvas->view_x = 0.0;
   canvas->view_y = 0.0;
@@ -392,8 +394,12 @@ dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_i
   object->connector.line_width = CANVAS_CONNECTOR_LINE_WIDTH;
   object->connector.from_anchor = DT_CANVAS_ANCHOR_AUTO;
   object->connector.to_anchor = DT_CANVAS_ANCHOR_AUTO;
-  object->connector.routing = DT_CANVAS_ROUTING_STRAIGHT;
+  object->connector.routing = DT_CANVAS_ROUTING_CUBIC;
   object->connector.via_count = 0;
+  object->connector.from_reach = 0.0f;
+  object->connector.to_reach = 0.0f;
+  object->connector.via_tangent_x = 0.0;
+  object->connector.via_tangent_y = 0.0;
   return object;
 }
 
@@ -845,27 +851,35 @@ static void _route_flatten_cubic(dt_canvas_route_t *route, const double start_x,
 }
 
 /** Cubic routing: control points along the normals, flattened for hit tests. */
-static void _route_cubic(dt_canvas_route_t *route)
+static void _route_cubic(dt_canvas_route_t *route, const dt_canvas_connector_t *connector)
 {
   if(route->segment_count == 2)
   {
-    // Two curves meeting at the waypoint with one tangent: the direction from start to end.
-    double tangent_x = route->to_x - route->from_x;
-    double tangent_y = route->to_y - route->from_y;
-    const double tangent_length = hypot(tangent_x, tangent_y);
-    if(tangent_length > 1e-9)
+    // Two curves meeting at the waypoint with one tangent: the waypoint's own handle, or
+    // the direction from start to end.
+    double tangent_x = connector->via_tangent_x;
+    double tangent_y = connector->via_tangent_y;
+    const double reach1_auto = fmax(40.0, hypot(route->via_x - route->from_x, route->via_y - route->from_y) * 0.4);
+    const double reach2_auto = fmax(40.0, hypot(route->to_x - route->via_x, route->to_y - route->via_y) * 0.4);
+    const double reach1 = connector->from_reach > 0.0f ? connector->from_reach : reach1_auto;
+    const double reach2 = connector->to_reach > 0.0f ? connector->to_reach : reach2_auto;
+    if(hypot(tangent_x, tangent_y) < 1e-9)
     {
-      tangent_x /= tangent_length;
-      tangent_y /= tangent_length;
+      tangent_x = route->to_x - route->from_x;
+      tangent_y = route->to_y - route->from_y;
+      const double tangent_length = hypot(tangent_x, tangent_y);
+      if(tangent_length > 1e-9)
+      {
+        tangent_x *= reach1_auto / tangent_length;
+        tangent_y *= reach1_auto / tangent_length;
+      }
     }
-    const double reach1 = fmax(40.0, hypot(route->via_x - route->from_x, route->via_y - route->from_y) * 0.4);
-    const double reach2 = fmax(40.0, hypot(route->to_x - route->via_x, route->to_y - route->via_y) * 0.4);
     route->control1_x = route->from_x + route->from_normal_x * reach1;
     route->control1_y = route->from_y + route->from_normal_y * reach1;
-    route->control2_x = route->via_x - tangent_x * reach1;
-    route->control2_y = route->via_y - tangent_y * reach1;
-    route->control3_x = route->via_x + tangent_x * reach2;
-    route->control3_y = route->via_y + tangent_y * reach2;
+    route->control2_x = route->via_x - tangent_x;
+    route->control2_y = route->via_y - tangent_y;
+    route->control3_x = route->via_x + tangent_x;
+    route->control3_y = route->via_y + tangent_y;
     route->control4_x = route->to_x + route->to_normal_x * reach2;
     route->control4_y = route->to_y + route->to_normal_y * reach2;
     const int segments = (DT_CANVAS_ROUTE_MAX_POINTS - 1) / 2;
@@ -876,11 +890,13 @@ static void _route_cubic(dt_canvas_route_t *route)
     return;
   }
   const double distance = hypot(route->to_x - route->from_x, route->to_y - route->from_y);
-  const double reach = fmax(40.0, distance * 0.4);
-  route->control1_x = route->from_x + route->from_normal_x * reach;
-  route->control1_y = route->from_y + route->from_normal_y * reach;
-  route->control2_x = route->to_x + route->to_normal_x * reach;
-  route->control2_y = route->to_y + route->to_normal_y * reach;
+  const double reach_auto = fmax(40.0, distance * 0.4);
+  const double reach1 = connector->from_reach > 0.0f ? connector->from_reach : reach_auto;
+  const double reach2 = connector->to_reach > 0.0f ? connector->to_reach : reach_auto;
+  route->control1_x = route->from_x + route->from_normal_x * reach1;
+  route->control1_y = route->from_y + route->from_normal_y * reach1;
+  route->control2_x = route->to_x + route->to_normal_x * reach2;
+  route->control2_y = route->to_y + route->to_normal_y * reach2;
   _route_flatten_cubic(route, route->from_x, route->from_y, route->control1_x, route->control1_y, route->control2_x,
                        route->control2_y, route->to_x, route->to_y, DT_CANVAS_ROUTE_MAX_POINTS - 1, FALSE);
 }
@@ -907,7 +923,7 @@ gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_ob
       _route_square(route);
       break;
     case DT_CANVAS_ROUTING_CUBIC:
-      _route_cubic(route);
+      _route_cubic(route, &connector->connector);
       break;
     case DT_CANVAS_ROUTING_STRAIGHT:
     default:
@@ -926,14 +942,25 @@ void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connec
   dt_canvas_route_t route;
   connector->connector.via_count = 0;
   if(!dt_canvas_connector_route(canvas, connector, &route)) return;
-  // The middle of the current route, so adding a waypoint changes nothing until it is moved.
-  const int middle = route.point_count / 2;
-  connector->connector.via_x = route.points[2 * middle];
-  connector->connector.via_y = route.points[2 * middle + 1];
-  if(route.point_count == 2)
+  // The middle of the current route by arc length, so adding a waypoint changes nothing
+  // until it is moved, whatever the routing and however many points it was flattened to.
+  double total = 0.0;
+  for(int idx = 0; idx + 1 < route.point_count; idx++)
+    total += hypot(route.points[2 * idx + 2] - route.points[2 * idx], route.points[2 * idx + 3] - route.points[2 * idx + 1]);
+  double walked = 0.0;
+  connector->connector.via_x = (route.from_x + route.to_x) * 0.5;
+  connector->connector.via_y = (route.from_y + route.to_y) * 0.5;
+  for(int idx = 0; idx + 1 < route.point_count; idx++)
   {
-    connector->connector.via_x = (route.from_x + route.to_x) * 0.5;
-    connector->connector.via_y = (route.from_y + route.to_y) * 0.5;
+    const double segment = hypot(route.points[2 * idx + 2] - route.points[2 * idx], route.points[2 * idx + 3] - route.points[2 * idx + 1]);
+    if(walked + segment >= total * 0.5 && segment > 0.0)
+    {
+      const double fraction = (total * 0.5 - walked) / segment;
+      connector->connector.via_x = route.points[2 * idx] + (route.points[2 * idx + 2] - route.points[2 * idx]) * fraction;
+      connector->connector.via_y = route.points[2 * idx + 1] + (route.points[2 * idx + 3] - route.points[2 * idx + 1]) * fraction;
+      break;
+    }
+    walked += segment;
   }
   connector->connector.via_count = 1;
   dt_canvas_touch(canvas);
@@ -1222,6 +1249,33 @@ dt_canvas_rect_t dt_canvas_page_rect(const dt_canvas_t *canvas, int col, int row
   rect.width = width;
   rect.height = height;
   return rect;
+}
+
+gboolean dt_canvas_snap_to_pages(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving, double threshold,
+                                 uint32_t edges, double *delta_x, double *delta_y)
+{
+  if(!IS_NULL_PTR(delta_x)) *delta_x = 0.0;
+  if(!IS_NULL_PTR(delta_y)) *delta_y = 0.0;
+  double page_width = 0.0;
+  double page_height = 0.0;
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(moving) || !dt_canvas_paper_dimensions(canvas, &page_width, &page_height))
+    return FALSE;
+  gboolean found_x = FALSE;
+  gboolean found_y = FALSE;
+  double best_x = 0.0;
+  double best_y = 0.0;
+  const double xs[2] = { moving->x, moving->x + moving->width };
+  const uint32_t x_edges[2] = { DT_CANVAS_EDGE_LEFT, DT_CANVAS_EDGE_RIGHT };
+  const double ys[2] = { moving->y, moving->y + moving->height };
+  const uint32_t y_edges[2] = { DT_CANVAS_EDGE_TOP, DT_CANVAS_EDGE_BOTTOM };
+  for(int idx = 0; idx < 2; idx++)
+  {
+    if(edges & x_edges[idx]) _snap_axis(xs[idx], round(xs[idx] / page_width) * page_width, threshold, &best_x, &found_x);
+    if(edges & y_edges[idx]) _snap_axis(ys[idx], round(ys[idx] / page_height) * page_height, threshold, &best_y, &found_y);
+  }
+  if(!IS_NULL_PTR(delta_x)) *delta_x = found_x ? best_x : 0.0;
+  if(!IS_NULL_PTR(delta_y)) *delta_y = found_y ? best_y : 0.0;
+  return found_x || found_y;
 }
 
 /* --- layout ----------------------------------------------------------------- */
