@@ -408,7 +408,7 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
     for(size_t idx = 0; idx < (size_t)size * size; idx++)
     {
       const double ridge = exp(-wrinkle_field[idx] * wrinkle_field[idx] * 80.0);
-      relief[idx] = clouds[idx] * 0.018 + ridge * 0.065 + grain[idx] * 0.002;
+      relief[idx] = clouds[idx] * 0.018 + ridge * 0.1 + grain[idx] * 0.002;
     }
     dt_free(clouds);
     dt_free(wrinkle_field);
@@ -708,10 +708,10 @@ static cairo_surface_t *_paper_dither_tile(const double sigma)
  * grain is interpolated, gets a little more of it. Anchored to the canvas origin, so it does
  * not shimmer under a pan.
  */
-static void _paint_dither(cairo_t *cr, const dt_canvas_paint_options_t *options)
+static void _paint_dither(cairo_t *cr, const dt_canvas_paint_options_t *options, const double strength)
 {
   const double zoom = 1.0 / options->units_per_pixel;
-  const double sigma = PAPER_DITHER_SIGMA * CLAMP(sqrt(zoom), 0.5, 2.0);
+  const double sigma = PAPER_DITHER_SIGMA * strength * CLAMP(sqrt(zoom), 0.5, 2.0);
   cairo_surface_t *tile = _paper_dither_tile(sigma);
   double origin_x = 0.0;
   double origin_y = 0.0;
@@ -785,7 +785,8 @@ static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     }
   }
   cairo_restore(cr);
-  _paint_dither(cr, options);
+  // Washi is grainier to the eye than the western sheets: twice the dither.
+  _paint_dither(cr, options, canvas->background_style == DT_CANVAS_BACKGROUND_JAPANESE ? 2.0 : 1.0);
 }
 
 /* --- frames ----------------------------------------------------------------- */
