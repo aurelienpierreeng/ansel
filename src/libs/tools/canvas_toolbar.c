@@ -51,6 +51,7 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *grid_toggle;
   GtkWidget *snap_toggle;
   GtkWidget *grid_size;
+  GtkWidget *gutter;
   GtkWidget *border_width;
   GtkWidget *border_color;
   GtkWidget *layout;
@@ -135,6 +136,16 @@ static void _grid_size_changed(GtkSpinButton *spin, gpointer user_data)
   dt_view_manager_get_global()->proxy.canvas.set_grid_size(view, (float)gtk_spin_button_get_value(spin));
 }
 
+static void _gutter_changed(GtkSpinButton *spin, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  if(toolbar->refilling) return;
+  dt_view_t *view = _canvas_view();
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_gutter)) return;
+  dt_view_manager_get_global()->proxy.canvas.set_gutter(view, (float)gtk_spin_button_get_value(spin));
+}
+
 static void _border_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
@@ -171,16 +182,6 @@ static void _connect_toggled(GtkToggleButton *button, gpointer user_data)
     _ask(DT_CANVAS_ACTION_CONNECT_MODE);
 }
 
-/** A Connector menu item: property in "connector-property", value in "connector-value". */
-static void _connector_item_activated(GtkWidget *item, gpointer user_data)
-{
-  dt_view_t *view = _canvas_view();
-  if(IS_NULL_PTR(view) || IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_connector)) return;
-  const int property = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item), "connector-property"));
-  const int value = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item), "connector-value"));
-  dt_view_manager_get_global()->proxy.canvas.set_connector(view, property, value);
-}
-
 static GtkWidget *_menu_entry(GtkWidget *menu, const char *label, GCallback callback, gpointer data)
 {
   GtkWidget *item = gtk_menu_item_new_with_label(label);
@@ -192,23 +193,6 @@ static GtkWidget *_menu_entry(GtkWidget *menu, const char *label, GCallback call
 static void _action_item(GtkWidget *menu, const char *label, const dt_canvas_action_t action)
 {
   _menu_entry(menu, label, G_CALLBACK(_action_clicked), GINT_TO_POINTER(action));
-}
-
-static void _connector_item(GtkWidget *menu, const char *label, const dt_canvas_connector_property_t property,
-                            const int value)
-{
-  GtkWidget *item = _menu_entry(menu, label, G_CALLBACK(_connector_item_activated), NULL);
-  g_object_set_data(G_OBJECT(item), "connector-property", GINT_TO_POINTER(property));
-  g_object_set_data(G_OBJECT(item), "connector-value", GINT_TO_POINTER(value));
-}
-
-static GtkWidget *_submenu(GtkWidget *menu, const char *label)
-{
-  GtkWidget *item = gtk_menu_item_new_with_label(label);
-  GtkWidget *submenu = gtk_menu_new();
-  gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-  return submenu;
 }
 
 /** A toolbar button that drops a menu. */
@@ -238,6 +222,7 @@ static void _refill(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->grid_toggle), (canvas->grid_flags & DT_CANVAS_GRID_VISIBLE) != 0);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->snap_toggle), (canvas->grid_flags & DT_CANVAS_GRID_SNAP) != 0);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->grid_size), canvas->grid_size);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->gutter), canvas->gutter);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->border_width), canvas->border_width);
   GdkRGBA rgba;
   rgba.red = canvas->border_color.red;
@@ -306,31 +291,6 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(toolbar->connect_toggle, "toggled", G_CALLBACK(_connect_toggled), self);
   gtk_box_pack_start(GTK_BOX(box), toolbar->connect_toggle, FALSE, FALSE, 0);
 
-  GtkWidget *connector_menu = gtk_menu_new();
-  GtkWidget *route_menu = _submenu(connector_menu, _("Route"));
-  _connector_item(route_menu, _("Straight"), DT_CANVAS_CONNECTOR_SET_ROUTING, DT_CANVAS_ROUTING_STRAIGHT);
-  _connector_item(route_menu, _("Square"), DT_CANVAS_CONNECTOR_SET_ROUTING, DT_CANVAS_ROUTING_SQUARE);
-  _connector_item(route_menu, _("Cubic spline"), DT_CANVAS_CONNECTOR_SET_ROUTING, DT_CANVAS_ROUTING_CUBIC);
-  GtkWidget *arrows_menu = _submenu(connector_menu, _("Arrows"));
-  _connector_item(arrows_menu, _("None (flat line)"), DT_CANVAS_CONNECTOR_SET_ARROWS, 0);
-  _connector_item(arrows_menu, _("At the end"), DT_CANVAS_CONNECTOR_SET_ARROWS, DT_CANVAS_CONNECTOR_ARROW_END);
-  _connector_item(arrows_menu, _("At the start"), DT_CANVAS_CONNECTOR_SET_ARROWS, DT_CANVAS_CONNECTOR_ARROW_START);
-  _connector_item(arrows_menu, _("Both ends"), DT_CANVAS_CONNECTOR_SET_ARROWS,
-                  DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START);
-  _connector_item(connector_menu, _("Reverse the direction"), DT_CANVAS_CONNECTOR_SET_REVERSE, 0);
-  GtkWidget *width_menu = _submenu(connector_menu, _("Line width"));
-  static const int line_widths[] = { 1, 2, 4, 8, 12 };
-  for(size_t idx = 0; idx < G_N_ELEMENTS(line_widths); idx++)
-  {
-    gchar *label = g_strdup_printf("%d", line_widths[idx]);
-    _connector_item(width_menu, label, DT_CANVAS_CONNECTOR_SET_WIDTH, line_widths[idx]);
-    dt_free(label);
-  }
-  GtkWidget *dash_menu = _submenu(connector_menu, _("Line style"));
-  _connector_item(dash_menu, _("Solid"), DT_CANVAS_CONNECTOR_SET_DASHED, 0);
-  _connector_item(dash_menu, _("Dashed"), DT_CANVAS_CONNECTOR_SET_DASHED, 1);
-  _connector_item(connector_menu, _("Colour..."), DT_CANVAS_CONNECTOR_SET_COLOR, 0);
-  _menu_button(box, _("Connector"), _("Properties of the selected connectors"), connector_menu);
   _separator(box);
 
   toolbar->grid_toggle = gtk_toggle_button_new_with_label(_("Grid"));
@@ -345,6 +305,11 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->grid_size, _("Grid spacing, in canvas units"));
   g_signal_connect(toolbar->grid_size, "value-changed", G_CALLBACK(_grid_size_changed), self);
   gtk_box_pack_start(GTK_BOX(box), toolbar->grid_size, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Gutter")), FALSE, FALSE, 0);
+  toolbar->gutter = gtk_spin_button_new_with_range(0.0, 500.0, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->gutter, _("Margin frames keep from each other when snapped side by side or arranged, in canvas units"));
+  g_signal_connect(toolbar->gutter, "value-changed", G_CALLBACK(_gutter_changed), self);
+  gtk_box_pack_start(GTK_BOX(box), toolbar->gutter, FALSE, FALSE, 0);
   _separator(box);
 
   GtkWidget *border_label = gtk_label_new(_("Border"));

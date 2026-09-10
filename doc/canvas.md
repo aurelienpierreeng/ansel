@@ -36,9 +36,8 @@ Coordinates are canvas units: one unit is one screen pixel at zoom 1, the origin
 centre of the plane, y grows downwards. The view converts through `_to_canvas()` and nothing
 else, so the document never learns what a pixel is.
 
-The four layouts space frames by the grid size and, with snapping on, put every frame's
-top-left corner on the grid: cells are rounded up to whole grid steps and frames sit
-top-left in their cell.
+The four layouts space frames by the gutter and, with snapping on, start on the grid and
+round every cell up to whole grid steps, frames sitting top-left in their cell.
 
 ### The file
 
@@ -150,15 +149,38 @@ leaves it.
 Selection handles, hover outlines, the rubber band, the connector being drawn, the status
 line and the navigation flower are the view's and are painted after the document.
 
-### The floating property bars
+### The floating property bar
 
-Selecting a text frame floats a small bar above it with its font family and size, text
-colour and background colour; selecting image frames floats one with the border width and
-colour and a "Canvas default" button that drops their override. The bars are overlay
-children of the centre, placed from the selection's screen box on every expose and moved
-only when the position changed, refilled only when the selection or the document changed
-(a signature of both), with their handlers blocked during a refill so a refill never writes
-back. The canvas-level defaults stay in the toolbar.
+Selecting exactly one object floats an opaque bar immediately below it (above, when there is
+no room below) with that object's properties: a text frame's font family and size, text
+colour and background; an image frame's border width and colour and a "Canvas default"
+button that drops its override; a connector's route, arrow heads, direction, width, dashes,
+colour and waypoint. One bar per kind, overlay children of the centre. Placement is never
+done from the draw path -- moving an overlay child from inside a draw glitches -- but from
+an idle scheduled by every event that moves the object or the viewport; the bar is refilled
+only when the selection or the document changed (a signature of both), with its handlers
+blocked during a refill so a refill never writes back. The canvas-level defaults (grid,
+gutter, border) stay in the toolbar.
+
+### Borders, the gutter, and snapping to neighbours
+
+A frame's width and height are its outer size, border included: the border is stroked
+inside the edge and the picture (or the text) is inset by it, so widening a border shrinks
+the picture and never grows the frame, and the anchors, which sit on the frame's edge, stay
+on the outer border.
+
+The canvas carries a **gutter**, the margin frames keep from each other. Dragging a frame
+snaps it, within eight screen pixels, next to a neighbour one gutter away or in line with a
+neighbour's edge (`dt_canvas_snap_to_neighbours()`); only when no neighbour is within reach
+does the grid, when snapping is on, take over. The layouts space frames by the gutter too.
+
+### Waypoints
+
+A connector may pass by one point, to go around other frames: the bar's "Waypoint" toggle
+adds it at the middle of the current route, so nothing moves until it is dragged; it is drawn
+as a diamond on the selected connector. Straight routes bend at it, square routes reach it
+with one elbow and leave it with another, cubic routes become two curves sharing a tangent
+there. It took 20 more of the connector record's reserved bytes, again without a format bump.
 
 ### The navigation flower
 
@@ -181,9 +203,8 @@ painter and one colour path for the screen and the print.
 
 The toolbar (`libs/tools/canvas_toolbar.c`) is two menus and a row of controls: **Canvas**
 (new, open, save, save as, export as PDF), **Object** (check against the library, refresh
-the stale images and notes, refresh every image), then Text, Notes, the Connect toggle and
-the Connector menu, the grid toggles and size, the default border, Fit and 1:1, the layout
-chooser.
+the stale images and notes, refresh every image), then Text, Notes, the Connect toggle,
+the grid toggles, grid size and gutter, the default border, Fit and 1:1, the layout chooser.
 
 `src/views/canvas.c` owns one document and everything about editing it. It registers the
 `canvas` accelerator group, exposes its actions through `proxy.canvas` for the toolbar
@@ -191,8 +212,13 @@ chooser.
 document is replaced, saved or reconfigured, so the toolbar refills its grid and border
 controls from the document -- with its handlers blocked, so a refill never writes back.
 
-Gestures: drag a frame to move it (the whole selection follows; snapping moves the dragged
-frame's top-left corner onto the grid), drag a corner handle to scale it around the
+The cursor names the action under the pointer: a hand over a frame or a connector, a corner
+cursor over a scale handle (turned with the frame), the exchange cursor over the rotation
+handle, a crosshair over an anchor in connect mode, a hand over the flower, a cross-arrows
+cursor over a waypoint and while moving.
+
+Gestures: drag a frame to move it (the whole selection follows; snapping puts it next to a
+neighbour one gutter away, in line with a neighbour, or on the grid), drag a corner handle to scale it around the
 opposite corner keeping its aspect ratio, drag the handle above it to rotate (Shift snaps to
 15°), drag on empty space for a rubber band, middle button or Alt-drag to pan, wheel to
 zoom about the pointer, Shift-wheel to pan sideways. Double-click opens a text frame's

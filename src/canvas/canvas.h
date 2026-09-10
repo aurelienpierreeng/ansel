@@ -70,11 +70,11 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 1024
+#define DT_CANVAS_HEADER_RESERVED 1020 ///< 1024 at format 1, minus the gutter
 #define DT_CANVAS_OBJECT_RESERVED 256
 #define DT_CANVAS_IMAGE_RESERVED 512
 #define DT_CANVAS_TEXT_RESERVED 256
-#define DT_CANVAS_CONNECTOR_RESERVED 116 ///< 128 at format 1, minus the 12 bytes the anchors and routing took
+#define DT_CANVAS_CONNECTOR_RESERVED 96 ///< 128 at format 1, minus the anchors and routing (12) and the waypoint (20)
 
 /** An sRGB colour with straight alpha, each channel in [0, 1]. */
 typedef struct dt_canvas_color_t
@@ -208,6 +208,9 @@ typedef struct dt_canvas_connector_t
   uint32_t from_anchor; ///< dt_canvas_anchor_t
   uint32_t to_anchor;   ///< dt_canvas_anchor_t
   uint32_t routing;     ///< dt_canvas_routing_t
+  uint32_t via_count;   ///< 0, or 1 when the route passes by (via_x, via_y)
+  double via_x;         ///< the waypoint, canvas units
+  double via_y;
   uint8_t reserved[DT_CANVAS_CONNECTOR_RESERVED];
 } dt_canvas_connector_t;
 
@@ -227,10 +230,17 @@ typedef struct dt_canvas_route_t
   double from_normal_y;
   double to_normal_x;   ///< unit vector leaving the end frame
   double to_normal_y;
-  double control1_x;    ///< cubic control points; unused by the other routings
+  int segment_count;    ///< 1, or 2 when the route passes by a waypoint
+  double via_x;         ///< the waypoint, when segment_count is 2
+  double via_y;
+  double control1_x;    ///< cubic control points of the first segment; unused by the other routings
   double control1_y;
   double control2_x;
   double control2_y;
+  double control3_x;    ///< cubic control points of the second segment
+  double control3_y;
+  double control4_x;
+  double control4_y;
   int point_count;
   double points[2 * DT_CANVAS_ROUTE_MAX_POINTS]; ///< x0,y0,x1,y1..., start to end
 } dt_canvas_route_t;
@@ -266,6 +276,7 @@ typedef struct dt_canvas_t
   float border_width;
   float grid_size;                  ///< canvas units between grid lines
   uint32_t grid_flags;              ///< dt_canvas_grid_flags_t bits
+  float gutter;                     ///< the margin frames keep from each other when snapped side by side or laid out
   double view_zoom;                 ///< the viewport the canvas was saved with
   double view_x;                    ///< canvas point shown at the centre of the view
   double view_y;
@@ -438,6 +449,24 @@ double dt_canvas_snap(const dt_canvas_t *canvas, double value);
 /** @brief The object whose frame is under the point, frontmost first. NULL when none. */
 dt_canvas_object_t *dt_canvas_pick(const dt_canvas_t *canvas, double x, double y, double tolerance);
 
+/**
+ * @brief Snap a moving box next to, or in line with, the other frames.
+ * @details Candidates are the other frames' edges plus or minus the gutter (side by side with
+ * the canvas margin) and their edges themselves (aligned). The nearest candidate within
+ * `threshold` wins per axis.
+ * @param moving the box being moved, canvas units.
+ * @param exclude object ids not to snap against (the selection itself); may be NULL.
+ * @param delta_x receives the shift to apply on x, 0 when nothing is within reach.
+ * @return TRUE when at least one axis snapped.
+ */
+gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving,
+                                      const GArray *exclude, double threshold, double *delta_x, double *delta_y);
+
+/** @brief Put a waypoint on a connector, at the middle of its current route. */
+void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connector);
+/** @brief Remove a connector's waypoint. */
+void dt_canvas_connector_remove_via(dt_canvas_t *canvas, dt_canvas_object_t *connector);
+
 /* --- layout ----------------------------------------------------------------- */
 
 typedef enum dt_canvas_layout_t
@@ -452,10 +481,9 @@ typedef enum dt_canvas_layout_t
  * @brief Arrange frames.
  * @param ids the object ids to arrange, in the order they should flow; NULL arranges every frame.
  * @param columns column count for masonry; ignored by the other layouts.
- * @details Rotations are reset. The gap between frames is the grid size. The arrangement is
+ * @details Rotations are reset. The gap between frames is the canvas gutter. The arrangement is
  * anchored at the top-left of the box the frames currently occupy, so applying a layout does
- * not move the group elsewhere; with snapping on, that anchor, every cell and every frame's
- * top-left corner land on the grid.
+ * not move the group elsewhere; with snapping on, that anchor and every cell land on the grid.
  */
 void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_layout_t layout, int columns);
 
