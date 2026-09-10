@@ -1037,7 +1037,8 @@ static void _apply_layout(dt_view_t *self, const dt_canvas_layout_t layout)
   const int columns = dt_conf_get_int("canvas/masonry_columns");
   // A single selected frame is not a group to arrange: lay the whole canvas out instead.
   const GArray *ids = view->selection->len > 1 ? view->selection : NULL;
-  dt_canvas_layout_apply(view->canvas, ids, layout, columns);
+  const dt_canvas_sort_t sort = (dt_canvas_sort_t)CLAMP(dt_conf_get_int("canvas/layout_sort"), 0, DT_CANVAS_SORT_LAST - 1);
+  dt_canvas_layout_apply(view->canvas, ids, layout, columns, sort);
   _record_undo(self, before);
   dt_control_queue_redraw_center();
 }
