@@ -161,6 +161,14 @@ typedef struct dt_canvas_view_t
   GtkWidget *text_font;
   GtkWidget *text_color;
   GtkWidget *text_background;
+  GtkWidget *text_no_background;
+  GtkWidget *text_align_h;
+  GtkWidget *text_align_v;
+  // same-size guides, shown while a resize snaps to a neighbour's size
+  gboolean guide_width_valid;
+  dt_canvas_rect_t guide_width;
+  gboolean guide_height_valid;
+  dt_canvas_rect_t guide_height;
   GtkWidget *image_bar;
   GtkWidget *image_border_width;
   GtkWidget *image_border_color;
@@ -375,6 +383,11 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
                        | ((uint32_t)dt_conf_get_int("canvas/snap_mode") & DT_CANVAS_SNAP_ALL);
   canvas->border_width = dt_conf_get_float("canvas/border_width");
   canvas->gutter = dt_conf_get_float("canvas/gutter");
+  canvas->background_style = (uint32_t)CLAMP(dt_conf_get_int("canvas/background_style"), 0, 2);
+  const char *grid_color = dt_conf_get_string_const("canvas/grid_color");
+  dt_canvas_color_parse(grid_color, &canvas->grid_color);
+  canvas->paper_size = (uint32_t)CLAMP(dt_conf_get_int("canvas/paper_size"), 0, 5);
+  canvas->paper_landscape = dt_conf_get_bool("canvas/paper_landscape") ? 1u : 0u;
   const char *border = dt_conf_get_string_const("canvas/border_color");
   dt_canvas_color_parse(border, &canvas->border_color);
   const char *background = dt_conf_get_string_const("canvas/background_color");
@@ -664,6 +677,19 @@ static void _export_pdf(dt_view_t *self)
   gtk_container_set_border_width(GTK_CONTAINER(grid), DT_PIXEL_APPLY_DPI(12));
   gtk_box_pack_start(GTK_BOX(content), grid, TRUE, TRUE, 0);
 
+  double canvas_paper_width = 0.0;
+  double canvas_paper_height = 0.0;
+  const gboolean canvas_has_paper = dt_canvas_paper_dimensions(view->canvas, &canvas_paper_width, &canvas_paper_height);
+  if(canvas_has_paper)
+  {
+    gchar *note = g_strdup_printf(_("One PDF page per canvas page of %.0f x %.0f mm; empty pages are skipped."),
+                                  dt_pdf_point_to_mm(canvas_paper_width), dt_pdf_point_to_mm(canvas_paper_height));
+    GtkWidget *note_label = gtk_label_new(note);
+    gtk_label_set_line_wrap(GTK_LABEL(note_label), TRUE);
+    gtk_widget_set_halign(note_label, GTK_ALIGN_START);
+    gtk_grid_attach(GTK_GRID(grid), note_label, 0, 6, 2, 1);
+    dt_free(note);
+  }
   dt_canvas_pdf_dialog_t widgets;
   memset(&widgets, 0, sizeof(widgets));
   widgets.paper = gtk_combo_box_text_new();
@@ -712,6 +738,13 @@ static void _export_pdf(dt_view_t *self)
   _labelled_row(grid, 5, _("Rendering intent"), widgets.intent);
 
   gtk_widget_show_all(dialog);
+  if(canvas_has_paper)
+  {
+    // The canvas's paper is the page; the margin means nothing on a page that IS the canvas page.
+    gtk_widget_hide(widgets.paper);
+    gtk_widget_hide(widgets.landscape);
+    gtk_widget_hide(widgets.margin);
+  }
   const gint response = gtk_dialog_run(GTK_DIALOG(dialog));
   dt_canvas_pdf_options_t options = dt_canvas_pdf_options_default();
   gboolean proceed = response == GTK_RESPONSE_OK;
@@ -1489,6 +1522,24 @@ static void _bar_text_color_set(GtkColorButton *button, gpointer data)
   BAR_EDIT_END()
 }
 
+static void _bar_text_no_background_toggled(GtkToggleButton *toggle, gpointer data)
+{
+  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
+  object->text.background.alpha = gtk_toggle_button_get_active(toggle) ? 0.0f : 1.0f;
+  BAR_EDIT_END()
+}
+
+static void _bar_text_align_changed(GtkComboBox *combo, gpointer data)
+{
+  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
+  const int choice = gtk_combo_box_get_active(combo);
+  if(GTK_WIDGET(combo) == view->text_align_h)
+    object->text.align_h = (uint32_t)CLAMP(choice, 0, 3);
+  else
+    object->text.align_v = (uint32_t)CLAMP(choice, 0, 2);
+  BAR_EDIT_END()
+}
+
 static void _bar_border_width_changed(GtkSpinButton *spin, gpointer data)
 {
   BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_IMAGE)
@@ -1628,6 +1679,25 @@ static void _bars_create(dt_view_t *self)
   view->text_color = _bar_color_button(view->text_bar, _("Text colour"), G_CALLBACK(_bar_text_color_set), self);
   view->text_background
       = _bar_color_button(view->text_bar, _("Background colour"), G_CALLBACK(_bar_text_color_set), self);
+  view->text_no_background = gtk_toggle_button_new_with_label(_("Transparent"));
+  gtk_widget_set_tooltip_text(view->text_no_background, _("No background: the canvas shows through"));
+  g_signal_connect(view->text_no_background, "toggled", G_CALLBACK(_bar_text_no_background_toggled), self);
+  gtk_box_pack_start(GTK_BOX(view->text_bar), view->text_no_background, FALSE, FALSE, 0);
+  view->text_align_h = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_h), _("Left"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_h), _("Centred"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_h), _("Right"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_h), _("Justified"));
+  gtk_widget_set_tooltip_text(view->text_align_h, _("Horizontal alignment"));
+  g_signal_connect(view->text_align_h, "changed", G_CALLBACK(_bar_text_align_changed), self);
+  gtk_box_pack_start(GTK_BOX(view->text_bar), view->text_align_h, FALSE, FALSE, 0);
+  view->text_align_v = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_v), _("Top"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_v), _("Middle"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_v), _("Bottom"));
+  gtk_widget_set_tooltip_text(view->text_align_v, _("Vertical alignment"));
+  g_signal_connect(view->text_align_v, "changed", G_CALLBACK(_bar_text_align_changed), self);
+  gtk_box_pack_start(GTK_BOX(view->text_bar), view->text_align_v, FALSE, FALSE, 0);
   _bar_finish(view->text_bar);
 
   view->image_bar = _bar_new(base);
@@ -1775,6 +1845,9 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_font_chooser_set_font(GTK_FONT_CHOOSER(view->text_font), dt_canvas_text_effective_font(view->canvas, object));
       _color_to_button(view->text_color, &object->text.text_color);
       _color_to_button(view->text_background, &object->text.background);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_no_background), object->text.background.alpha <= 0.0f);
+      gtk_combo_box_set_active(GTK_COMBO_BOX(view->text_align_h), CLAMP((int)object->text.align_h, 0, 3));
+      gtk_combo_box_set_active(GTK_COMBO_BOX(view->text_align_v), CLAMP((int)object->text.align_v, 0, 2));
     }
     else if(kind == DT_CANVAS_OBJECT_IMAGE)
     {
@@ -2028,18 +2101,25 @@ static void _paint_flower(cairo_t *cr, const dt_canvas_view_t *view)
   cairo_close_path(cr);
   cairo_set_source_rgba(cr, 0.15, 0.15, 0.15, hover == DT_CANVAS_FLOWER_ZOOM_OUT ? 0.95 : 0.7);
   cairo_fill(cr);
-  cairo_new_path(cr);
-  cairo_arc(cr, center_x, center_y, inner, 0.0, 2.0 * M_PI);
-  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.35);
+  // Outlines: the hovered half or the hovered core gets the petals' bright stroke.
   cairo_set_line_width(cr, 1.0);
+  cairo_new_path(cr);
+  cairo_arc(cr, center_x, center_y, inner, M_PI, 2.0 * M_PI);
+  cairo_close_path(cr);
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, hover == DT_CANVAS_FLOWER_ZOOM_IN ? 0.9 : 0.35);
   cairo_stroke(cr);
-  cairo_move_to(cr, center_x - inner, center_y);
-  cairo_line_to(cr, center_x + inner, center_y);
+  cairo_new_path(cr);
+  cairo_arc(cr, center_x, center_y, inner, 0.0, M_PI);
+  cairo_close_path(cr);
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, hover == DT_CANVAS_FLOWER_ZOOM_OUT ? 0.9 : 0.35);
   cairo_stroke(cr);
   cairo_new_path(cr);
   cairo_arc(cr, center_x, center_y, core, 0.0, 2.0 * M_PI);
-  cairo_set_source_rgba(cr, hover == DT_CANVAS_FLOWER_FIT ? 0.9 : 0.55, 0.55, 0.55, 0.95);
-  cairo_fill(cr);
+  const double core_grey = hover == DT_CANVAS_FLOWER_FIT ? 0.9 : 0.55;
+  cairo_set_source_rgba(cr, core_grey, core_grey, core_grey, 0.95);
+  cairo_fill_preserve(cr);
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, hover == DT_CANVAS_FLOWER_FIT ? 0.9 : 0.35);
+  cairo_stroke(cr);
 
   // Glyphs: arrows on the petals, + and - on the disc.
   cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.9);
@@ -2210,6 +2290,50 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
       cairo_restore(cr);
     }
   }
+  if(view->drag == DT_CANVAS_DRAG_SCALE && (view->guide_width_valid || view->guide_height_valid))
+  {
+    // The frame(s) the size was taken from, and a line along the matched dimension on both.
+    const dt_canvas_object_t *resized = _single_selected(view);
+    cairo_save(cr);
+    cairo_set_source_rgba(cr, 0.3, 0.75, 1.0, 0.95);
+    cairo_set_line_width(cr, 1.5 / view->zoom);
+    const double dashes[2] = { 6.0 / view->zoom, 4.0 / view->zoom };
+    cairo_set_dash(cr, dashes, 2, 0.0);
+    if(view->guide_width_valid)
+    {
+      const dt_canvas_rect_t reference = view->guide_width;
+      cairo_rectangle(cr, reference.x, reference.y, reference.width, reference.height);
+      cairo_stroke(cr);
+      cairo_set_dash(cr, NULL, 0, 0.0);
+      cairo_move_to(cr, reference.x, reference.y - 8.0 / view->zoom);
+      cairo_line_to(cr, reference.x + reference.width, reference.y - 8.0 / view->zoom);
+      if(!IS_NULL_PTR(resized))
+      {
+        const dt_canvas_rect_t bounds = dt_canvas_object_bounds(resized);
+        cairo_move_to(cr, bounds.x, bounds.y - 8.0 / view->zoom);
+        cairo_line_to(cr, bounds.x + bounds.width, bounds.y - 8.0 / view->zoom);
+      }
+      cairo_stroke(cr);
+      cairo_set_dash(cr, dashes, 2, 0.0);
+    }
+    if(view->guide_height_valid)
+    {
+      const dt_canvas_rect_t reference = view->guide_height;
+      cairo_rectangle(cr, reference.x, reference.y, reference.width, reference.height);
+      cairo_stroke(cr);
+      cairo_set_dash(cr, NULL, 0, 0.0);
+      cairo_move_to(cr, reference.x - 8.0 / view->zoom, reference.y);
+      cairo_line_to(cr, reference.x - 8.0 / view->zoom, reference.y + reference.height);
+      if(!IS_NULL_PTR(resized))
+      {
+        const dt_canvas_rect_t bounds = dt_canvas_object_bounds(resized);
+        cairo_move_to(cr, bounds.x - 8.0 / view->zoom, bounds.y);
+        cairo_line_to(cr, bounds.x - 8.0 / view->zoom, bounds.y + bounds.height);
+      }
+      cairo_stroke(cr);
+    }
+    cairo_restore(cr);
+  }
   if(view->drag == DT_CANVAS_DRAG_RUBBERBAND)
   {
     cairo_save(cr);
@@ -2377,16 +2501,23 @@ static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, co
       if(proportional) new_height = new_width / ratio;
     }
   }
+  view->guide_width_valid = FALSE;
+  view->guide_height_valid = FALSE;
   if(rules & DT_CANVAS_SNAP_SIZE)
   {
     double snapped_width = new_width;
     double snapped_height = new_height;
-    if(dt_canvas_snap_size(view->canvas, view->selection, threshold, &snapped_width, &snapped_height))
+    dt_canvas_rect_t width_reference = { 0.0, 0.0, 0.0, 0.0 };
+    dt_canvas_rect_t height_reference = { 0.0, 0.0, 0.0, 0.0 };
+    if(dt_canvas_snap_size(view->canvas, view->selection, threshold, &snapped_width, &snapped_height,
+                           &width_reference, &height_reference))
     {
+      const gboolean width_snapped = snapped_width != new_width;
+      const gboolean height_snapped = snapped_height != new_height;
       if(proportional)
       {
         // Match the width when it snapped, else the height; the other follows the ratio.
-        if(snapped_width != new_width)
+        if(width_snapped)
           new_width = snapped_width;
         else
           new_width = snapped_height * ratio;
@@ -2396,6 +2527,16 @@ static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, co
       {
         new_width = snapped_width;
         new_height = snapped_height;
+      }
+      if(width_snapped)
+      {
+        view->guide_width_valid = TRUE;
+        view->guide_width = width_reference;
+      }
+      if(height_snapped && (!proportional || !width_snapped))
+      {
+        view->guide_height_valid = TRUE;
+        view->guide_height = height_reference;
       }
     }
   }
@@ -2445,6 +2586,8 @@ static void _end_gesture(dt_view_t *self)
   view->drag_snapshot = NULL;
   view->drag = DT_CANVAS_DRAG_NONE;
   view->drag_moved = FALSE;
+  view->guide_width_valid = FALSE;
+  view->guide_height_valid = FALSE;
   view->cursor = GDK_LEFT_PTR;
   dt_control_change_cursor(GDK_LEFT_PTR);
   _bars_request(self);
@@ -2940,6 +3083,56 @@ static void _proxy_action(dt_view_t *self, int action)
   _announce_document(self);
 }
 
+static void _proxy_set_background(dt_view_t *self, const float *rgba, int style)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  if(!IS_NULL_PTR(rgba))
+  {
+    view->canvas->background = dt_canvas_color(rgba[0], rgba[1], rgba[2], 1.0f);
+    char text[16];
+    dt_canvas_color_format(&view->canvas->background, text, sizeof(text));
+    dt_conf_set_string("canvas/background_color", text);
+  }
+  if(style >= 0)
+  {
+    view->canvas->background_style = (uint32_t)CLAMP(style, 0, 2);
+    dt_conf_set_int("canvas/background_style", (int)view->canvas->background_style);
+  }
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
+static void _proxy_set_grid_color(dt_view_t *self, const float *rgba)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(rgba)) return;
+  view->canvas->grid_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  char text[16];
+  dt_canvas_color_format(&view->canvas->grid_color, text, sizeof(text));
+  dt_conf_set_string("canvas/grid_color", text);
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
+static void _proxy_set_paper(dt_view_t *self, int paper, int landscape)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  if(paper >= 0)
+  {
+    view->canvas->paper_size = (uint32_t)CLAMP(paper, 0, 5);
+    dt_conf_set_int("canvas/paper_size", (int)view->canvas->paper_size);
+  }
+  if(landscape >= 0)
+  {
+    view->canvas->paper_landscape = landscape ? 1u : 0u;
+    dt_conf_set_bool("canvas/paper_landscape", landscape != 0);
+  }
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
 static void _proxy_set_snap_mode(dt_view_t *self, int mode)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -3088,6 +3281,9 @@ void init(dt_view_t *self)
   manager->proxy.canvas.is_connecting = _proxy_is_connecting;
   manager->proxy.canvas.set_gutter = _proxy_set_gutter;
   manager->proxy.canvas.set_snap_mode = _proxy_set_snap_mode;
+  manager->proxy.canvas.set_background = _proxy_set_background;
+  manager->proxy.canvas.set_grid_color = _proxy_set_grid_color;
+  manager->proxy.canvas.set_paper = _proxy_set_paper;
 }
 
 void gui_init(dt_view_t *self)

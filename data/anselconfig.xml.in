@@ -2943,6 +2943,30 @@
     <shortdescription>margin canvas frames keep from each other when snapped side by side or arranged, in canvas units</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>canvas/grid_color</name>
+    <type>string</type>
+    <default>#808080ff</default>
+    <shortdescription>colour of the canvas grid dots and page outlines, #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/background_style</name>
+    <type min="0" max="2">int</type>
+    <default>0</default>
+    <shortdescription>what a new canvas is painted with: 0 plain colour, 1 Moleskine paper, 2 watercolour paper</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/paper_size</name>
+    <type min="0" max="5">int</type>
+    <default>0</default>
+    <shortdescription>paper a new canvas is divided into: 0 none, 1 A2, 2 A3, 3 A4, 4 A5, 5 A6</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/paper_landscape</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>landscape pages on a new canvas</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>canvas/masonry_columns</name>
     <type min="1" max="20">int</type>
     <default>3</default>

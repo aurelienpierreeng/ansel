@@ -19,16 +19,23 @@
 #include "canvas/canvas_paint.h"
 
 #include "canvas/canvas_markdown.h"
+#include "colorprofiles/colorspaces.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
 #include <math.h>
 #include <pango/pangocairo.h>
+#include <string.h>
 
 #define PAINT_GRID_MIN_PIXEL_SPACING 6.0
-#define PAINT_GRID_DOT_PIXELS 1.5
+#define PAINT_GRID_DOT_FRACTION 0.03   ///< dot radius as a fraction of the grid step: it scales with the zoom
+#define PAINT_GRID_DOT_MIN_PIXELS 0.75 ///< but never vanishes
+#define PAINT_PAPER_TILE 256
 #define PAINT_ARROW_LENGTH 14.0
 #define PAINT_ARROW_HALF_WIDTH 5.0
+
+static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options);
+static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_display);
 
 dt_canvas_paint_options_t dt_canvas_paint_options_display(dt_canvas_surface_cache_t *cache, double units_per_pixel,
                                                           dt_canvas_rect_t clip)
@@ -77,7 +84,8 @@ static void _paint_grid(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   double step = canvas->grid_size;
   // Too dense on screen: show every nth crossing instead of a grey wash.
   while(step / options->units_per_pixel < PAINT_GRID_MIN_PIXEL_SPACING) step *= 2.0;
-  const double radius = PAINT_GRID_DOT_PIXELS * options->units_per_pixel;
+  const double radius = fmax(canvas->grid_size * PAINT_GRID_DOT_FRACTION,
+                             PAINT_GRID_DOT_MIN_PIXELS * options->units_per_pixel);
   const double first_x = floor(options->clip.x / step) * step;
   const double first_y = floor(options->clip.y / step) * step;
   const double last_x = options->clip.x + options->clip.width;
@@ -88,11 +96,7 @@ static void _paint_grid(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   if(columns * rows > 250000.0) return;
 
   cairo_save(cr);
-  const dt_canvas_color_t background = canvas->background;
-  const float luminance = 0.2126f * background.red + 0.7152f * background.green + 0.0722f * background.blue;
-  const float dot = luminance > 0.5f ? luminance - 0.25f : luminance + 0.25f;
-  const dt_canvas_color_t dot_color = dt_canvas_color(dot, dot, dot, 1.0f);
-  _set_color(cr, &dot_color, options->for_display);
+  _set_color(cr, &canvas->grid_color, options->for_display);
   for(double y = first_y; y <= last_y; y += step)
   {
     for(double x = first_x; x <= last_x; x += step)
@@ -102,6 +106,147 @@ static void _paint_grid(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     }
   }
   cairo_restore(cr);
+}
+
+/** The pages of the paper tiling that cross the clip, as dashed outlines. */
+static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
+{
+  double page_width = 0.0;
+  double page_height = 0.0;
+  if(!dt_canvas_paper_dimensions(canvas, &page_width, &page_height)) return;
+  if(options->clip.width <= 0.0 || options->clip.height <= 0.0) return;
+  const int first_col = (int)floor(options->clip.x / page_width);
+  const int last_col = (int)floor((options->clip.x + options->clip.width) / page_width);
+  const int first_row = (int)floor(options->clip.y / page_height);
+  const int last_row = (int)floor((options->clip.y + options->clip.height) / page_height);
+  if((double)(last_col - first_col + 1) * (double)(last_row - first_row + 1) > 4096.0) return;
+  cairo_save(cr);
+  _set_color(cr, &canvas->grid_color, options->for_display);
+  cairo_set_line_width(cr, 1.0 * options->units_per_pixel);
+  const double dashes[2] = { 8.0 * options->units_per_pixel, 6.0 * options->units_per_pixel };
+  cairo_set_dash(cr, dashes, 2, 0.0);
+  for(int row = first_row; row <= last_row; row++)
+  {
+    for(int col = first_col; col <= last_col; col++)
+    {
+      const dt_canvas_rect_t page = dt_canvas_page_rect(canvas, col, row);
+      cairo_rectangle(cr, page.x, page.y, page.width, page.height);
+    }
+  }
+  cairo_stroke(cr);
+  cairo_restore(cr);
+}
+
+/* --- paper textures ------------------------------------------------------------ */
+
+/** Periodic value noise on a lattice of `period` cells over the tile: seamless by construction. */
+static double _periodic_noise(const int x, const int y, const int period, const uint32_t seed)
+{
+  const double cell = (double)PAINT_PAPER_TILE / period;
+  const double fx = x / cell;
+  const double fy = y / cell;
+  const int ix = (int)floor(fx);
+  const int iy = (int)floor(fy);
+  const double tx = fx - ix;
+  const double ty = fy - iy;
+  const double sx = tx * tx * (3.0 - 2.0 * tx);
+  const double sy = ty * ty * (3.0 - 2.0 * ty);
+  double corners[4];
+  for(int idx = 0; idx < 4; idx++)
+  {
+    const uint32_t lattice_x = (uint32_t)((ix + (idx & 1)) % period);
+    const uint32_t lattice_y = (uint32_t)((iy + (idx >> 1)) % period);
+    uint32_t hash = seed ^ (lattice_x * 374761393u) ^ (lattice_y * 668265263u);
+    hash = (hash ^ (hash >> 13)) * 1274126177u;
+    hash ^= hash >> 16;
+    corners[idx] = (hash & 0xFFFF) / 65535.0;
+  }
+  const double top = corners[0] + (corners[1] - corners[0]) * sx;
+  const double bottom = corners[2] + (corners[3] - corners[2]) * sx;
+  return top + (bottom - top) * sy;
+}
+
+static void _paper_pixel(const dt_canvas_background_t style, const int x, const int y, uint8_t rgba[4])
+{
+  double base_r = 1.0;
+  double base_g = 1.0;
+  double base_b = 1.0;
+  double relief = 0.0;
+  if(style == DT_CANVAS_BACKGROUND_MOLESKINE)
+  {
+    // Ivory, a soft mottle: two gentle octaves.
+    base_r = 0.957;
+    base_g = 0.925;
+    base_b = 0.847;
+    relief = (_periodic_noise(x, y, 8, 11u) - 0.5) * 0.035 + (_periodic_noise(x, y, 32, 23u) - 0.5) * 0.02;
+  }
+  else if(style == DT_CANVAS_BACKGROUND_WATERCOLOUR)
+  {
+    // Pure white, a thick tooth: a coarse octave, a fine one, and grain.
+    relief = (_periodic_noise(x, y, 6, 31u) - 0.5) * 0.05 + (_periodic_noise(x, y, 24, 47u) - 0.5) * 0.045
+             + (_periodic_noise(x, y, 128, 59u) - 0.5) * 0.02;
+    // The tooth darkens only: paper is white at its peaks.
+    relief = fmin(relief, 0.0) * 1.6;
+  }
+  rgba[0] = (uint8_t)lround(CLAMP(base_r + relief, 0.0, 1.0) * 255.0);
+  rgba[1] = (uint8_t)lround(CLAMP(base_g + relief, 0.0, 1.0) * 255.0);
+  rgba[2] = (uint8_t)lround(CLAMP(base_b + relief, 0.0, 1.0) * 255.0);
+  rgba[3] = 255;
+}
+
+/**
+ * A seamless tile of the paper, in display or sRGB colours. Cached per style, target and
+ * display profile generation; the tile is small, the generation seldom moves.
+ */
+static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_display)
+{
+  if(style != DT_CANVAS_BACKGROUND_MOLESKINE && style != DT_CANVAS_BACKGROUND_WATERCOLOUR) return NULL;
+  static cairo_surface_t *cached[3][2] = { { NULL, NULL }, { NULL, NULL }, { NULL, NULL } };
+  static uint64_t cached_generation[3][2] = { { 0, 0 }, { 0, 0 }, { 0, 0 } };
+  static GMutex lock;
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+  const uint64_t generation = for_display ? settings.generation + 1 : 1;
+  const int target = for_display ? 1 : 0;
+
+  g_mutex_lock(&lock);
+  if(!IS_NULL_PTR(cached[style][target]) && cached_generation[style][target] == generation)
+  {
+    cairo_surface_t *tile = cached[style][target];
+    g_mutex_unlock(&lock);
+    return tile;
+  }
+  const int size = PAINT_PAPER_TILE;
+  uint8_t *rgba = g_malloc((size_t)size * size * 4);
+  for(int y = 0; y < size; y++)
+  {
+    for(int x = 0; x < size; x++)
+    {
+      _paper_pixel((dt_canvas_background_t)style, x, y, rgba + ((size_t)y * size + x) * 4);
+    }
+  }
+  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, size);
+  uint8_t *bgra = g_malloc((size_t)stride * size);
+  if(!for_display || !dt_colorprofiles_rgba8_to_display_bgra8(rgba, bgra, size, size, DT_COLORSPACE_SRGB))
+  {
+    for(size_t idx = 0; idx < (size_t)size * size; idx++)
+    {
+      bgra[4 * idx + 0] = rgba[4 * idx + 2];
+      bgra[4 * idx + 1] = rgba[4 * idx + 1];
+      bgra[4 * idx + 2] = rgba[4 * idx + 0];
+      bgra[4 * idx + 3] = 255;
+    }
+  }
+  dt_free(rgba);
+  cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, size, size);
+  memcpy(cairo_image_surface_get_data(tile), bgra, (size_t)stride * size);
+  cairo_surface_mark_dirty(tile);
+  dt_free(bgra);
+  if(!IS_NULL_PTR(cached[style][target])) cairo_surface_destroy(cached[style][target]);
+  cached[style][target] = tile;
+  cached_generation[style][target] = generation;
+  g_mutex_unlock(&lock);
+  return tile;
 }
 
 /* --- frames ----------------------------------------------------------------- */
@@ -207,6 +352,20 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
   const double text_width = fmax(object->width - 2.0 * padding, 1.0);
   pango_layout_set_width(layout, (int)(text_width * PANGO_SCALE));
   pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+  switch(object->text.align_h)
+  {
+    case DT_CANVAS_ALIGN_CENTER:
+      pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
+      break;
+    case DT_CANVAS_ALIGN_END:
+      pango_layout_set_alignment(layout, PANGO_ALIGN_RIGHT);
+      break;
+    case DT_CANVAS_ALIGN_JUSTIFY:
+      pango_layout_set_justify(layout, TRUE);
+      break;
+    default:
+      break;
+  }
   gchar *markup = dt_canvas_markdown_to_pango(dt_canvas_text_get_markdown(object));
   pango_layout_set_markup(layout, markup, -1);
   dt_free(markup);
@@ -231,8 +390,16 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   cairo_rectangle(cr, -half_width, -half_height, object->width, object->height);
   cairo_clip(cr);
   const double padding = _text_inset(canvas, object);
-  cairo_translate(cr, -half_width + padding, -half_height + padding);
   PangoLayout *layout = _text_layout(cr, canvas, object);
+  // Vertical alignment: the layout's height against the inner height.
+  int layout_width = 0;
+  int layout_height = 0;
+  pango_layout_get_pixel_size(layout, &layout_width, &layout_height);
+  const double inner_height = fmax(object->height - 2.0 * padding, 0.0);
+  double offset_y = 0.0;
+  if(object->text.align_v == DT_CANVAS_ALIGN_CENTER) offset_y = (inner_height - layout_height) * 0.5;
+  else if(object->text.align_v == DT_CANVAS_ALIGN_END) offset_y = inner_height - layout_height;
+  cairo_translate(cr, -half_width + padding, -half_height + padding + fmax(offset_y, 0.0));
   _set_color(cr, &object->text.text_color, options->for_display);
   pango_cairo_update_layout(cr, layout);
   pango_cairo_show_layout(cr, layout);
@@ -347,7 +514,18 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
   if(options->draw_background)
   {
     cairo_save(cr);
-    _set_color(cr, &canvas->background, options->for_display);
+    cairo_surface_t *paper = _paper_tile(canvas->background_style, options->for_display);
+    if(!IS_NULL_PTR(paper))
+    {
+      cairo_pattern_t *pattern = cairo_pattern_create_for_surface(paper);
+      cairo_pattern_set_extend(pattern, CAIRO_EXTEND_REPEAT);
+      cairo_set_source(cr, pattern);
+      cairo_pattern_destroy(pattern);
+    }
+    else
+    {
+      _set_color(cr, &canvas->background, options->for_display);
+    }
     if(options->clip.width > 0.0 && options->clip.height > 0.0)
     {
       cairo_rectangle(cr, options->clip.x, options->clip.y, options->clip.width, options->clip.height);
@@ -360,6 +538,7 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
     cairo_restore(cr);
   }
   if(options->draw_grid) _paint_grid(cr, canvas, options);
+  if(options->draw_grid) _paint_pages(cr, canvas, options);
   for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
   {
     dt_canvas_paint_object(cr, canvas, dt_canvas_object_at(canvas, idx), options);
