@@ -75,6 +75,10 @@ static dt_canvas_t *_populated_canvas(void)
   connector->connector.via_count = 1;
   connector->connector.via_x = -120.0;
   connector->connector.via_y = 300.0;
+  connector->connector.from_reach = 77.0f;
+  connector->connector.via_tangent_x = 40.0;
+  connector->connector.via_tangent_y = -10.0;
+  canvas->page_color = dt_canvas_color(0.5f, 0.6f, 0.7f, 0.8f);
   return canvas;
 }
 
@@ -139,6 +143,9 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_int_equal(connector->connector.via_count, 1);
   assert_float_equal(connector->connector.via_x, -120.0, 1e-9);
   assert_float_equal(connector->connector.via_y, 300.0, 1e-9);
+  assert_float_equal(connector->connector.from_reach, 77.0f, 1e-6);
+  assert_float_equal(connector->connector.via_tangent_x, 40.0, 1e-9);
+  assert_float_equal(restored->page_color.blue, 0.7f, 1e-6);
 
   dt_canvas_free(restored);
   dt_canvas_free(canvas);
@@ -352,6 +359,11 @@ static void _connectors_route_between_cardinal_anchors(void **state)
   dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, left->id, right->id);
   dt_canvas_route_t route;
 
+  // A new connector is a cubic spline; its handles are automatic until dragged.
+  assert_int_equal(connector->connector.routing, DT_CANVAS_ROUTING_CUBIC);
+  assert_float_equal(connector->connector.from_reach, 0.0f, 1e-6);
+  connector->connector.routing = DT_CANVAS_ROUTING_STRAIGHT;
+
   // Automatic anchors face each other: the left frame's right edge, the right frame's left edge.
   assert_true(dt_canvas_connector_route(canvas, connector, &route));
   assert_int_equal(route.routing, DT_CANVAS_ROUTING_STRAIGHT);
@@ -395,6 +407,13 @@ static void _connectors_route_between_cardinal_anchors(void **state)
   assert_float_equal(route.control1_x, route.from_x, 1e-9);
   assert_true(route.control1_y > route.from_y);
   assert_true(route.control2_y < route.to_y);
+  // A dragged handle sets the control point's distance along the normal, and nothing else.
+  connector->connector.from_reach = 123.0f;
+  assert_true(dt_canvas_connector_route(canvas, connector, &route));
+  assert_float_equal(route.control1_x, route.from_x, 1e-9);
+  assert_float_equal(route.control1_y, route.from_y + 123.0, 1e-6);
+  connector->connector.from_reach = 0.0f;
+  assert_true(dt_canvas_connector_route(canvas, connector, &route));
   assert_float_equal(route.points[0], route.from_x, 1e-9);
   assert_float_equal(route.points[2 * route.point_count - 1], route.to_y, 1e-9);
   // The curve's middle is where a hit test finds it, well off the straight chord.
@@ -521,6 +540,14 @@ static void _paper_tiles_the_plane_from_the_origin(void **state)
   assert_float_equal(page.x, -842.0, 1e-9);
   assert_float_equal(page.y, 1190.0, 1e-9);
   assert_float_equal(page.width, 842.0, 1e-9);
+  // Edges snap onto the nearest page border within reach.
+  dt_canvas_rect_t box = { 836.0, 100.0, 100.0, 100.0 };
+  double delta_x = 0.0;
+  double delta_y = 0.0;
+  assert_true(dt_canvas_snap_to_pages(canvas, &box, 8.0, DT_CANVAS_EDGE_ALL, &delta_x, &delta_y));
+  assert_float_equal(delta_x, 6.0, 1e-9);
+  assert_float_equal(delta_y, 0.0, 1e-9);
+  assert_false(dt_canvas_snap_to_pages(canvas, &box, 8.0, DT_CANVAS_EDGE_RIGHT, &delta_x, &delta_y));
   dt_canvas_free(canvas);
 }
 
