@@ -74,6 +74,7 @@ extern "C" {
 #define DT_CANVAS_OBJECT_RESERVED 256
 #define DT_CANVAS_IMAGE_RESERVED 512
 #define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
+#define DT_CANVAS_MAP_RESERVED 256
 #define DT_CANVAS_CONNECTOR_RESERVED 72 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24)
 
 /** An sRGB colour with straight alpha, each channel in [0, 1]. */
@@ -91,6 +92,7 @@ typedef enum dt_canvas_object_kind_t
   DT_CANVAS_OBJECT_IMAGE = 1,
   DT_CANVAS_OBJECT_TEXT = 2,
   DT_CANVAS_OBJECT_CONNECTOR = 3,
+  DT_CANVAS_OBJECT_MAP = 4,
 } dt_canvas_object_kind_t;
 
 typedef enum dt_canvas_object_flags_t
@@ -274,6 +276,23 @@ typedef struct dt_canvas_route_t
   double points[2 * DT_CANVAS_ROUTE_MAX_POINTS]; ///< x0,y0,x1,y1..., start to end
 } dt_canvas_route_t;
 
+/** A map frame: a rendered slippy map around a point, kept as a JPEG like an image frame. */
+typedef struct dt_canvas_map_t
+{
+  double latitude;         ///< degrees
+  double longitude;        ///< degrees
+  int32_t zoom;            ///< slippy zoom level, 1..19
+  uint32_t source;         ///< the tile provider: an OsmGpsMapSource_t value, 0 for the default
+  int32_t pixel_width;     ///< the render's dimensions, 0 when there is none yet
+  int32_t pixel_height;
+  int64_t rendered_at;     ///< unix time of the render, 0 when never rendered
+  uint8_t reserved[DT_CANVAS_MAP_RESERVED];
+
+  /* runtime: the JPEG travels as its own archive entry */
+  GBytes *jpeg;
+  dt_canvas_sync_status_t sync_status; ///< RENDERING while the tiles are fetched, MISSING when they could not be
+} dt_canvas_map_t;
+
 typedef struct dt_canvas_object_t
 {
   uint32_t id;        ///< unique within the canvas, never reused
@@ -293,6 +312,7 @@ typedef struct dt_canvas_object_t
     dt_canvas_image_t image;
     dt_canvas_text_t text;
     dt_canvas_connector_t connector;
+    dt_canvas_map_t map;
   };
 } dt_canvas_object_t;
 
@@ -409,6 +429,17 @@ dt_canvas_object_t *dt_canvas_add_image(dt_canvas_t *canvas, double x, double y,
 dt_canvas_object_t *dt_canvas_add_text(dt_canvas_t *canvas, double x, double y, double width, double height,
                                        const char *markdown);
 
+/** @brief Add a map frame around a point, not rendered yet. */
+dt_canvas_object_t *dt_canvas_add_map(dt_canvas_t *canvas, double x, double y, double latitude, double longitude,
+                                      int32_t zoom, uint32_t source);
+
+/** @brief Give the map frame its render. Takes a reference on `jpeg`. */
+void dt_canvas_map_set_render(dt_canvas_t *canvas, dt_canvas_object_t *object, GBytes *jpeg, int32_t pixel_width,
+                              int32_t pixel_height, int64_t rendered_at);
+
+/** @brief The raster a frame shows: an image frame's or a map frame's JPEG, NULL for the others or when unrendered. */
+GBytes *dt_canvas_object_raster(const dt_canvas_object_t *object);
+
 /** @brief Add a connector between two objects. Refuses self-links and unknown ids. */
 dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_id, uint32_t to_id);
 
@@ -455,7 +486,7 @@ void dt_canvas_object_effective_border(const dt_canvas_t *canvas, const dt_canva
 
 /* --- geometry --------------------------------------------------------------- */
 
-/** @brief Is this object a frame (image or text) rather than a connector? */
+/** @brief Is this object a frame (image, text or map) rather than a connector? */
 gboolean dt_canvas_object_is_frame(const dt_canvas_object_t *object);
 
 /**

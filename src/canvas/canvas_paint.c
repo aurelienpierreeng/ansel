@@ -851,7 +851,7 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   }
   else
   {
-    owned = dt_canvas_render_decode(object->image.jpeg, options->for_display);
+    owned = dt_canvas_render_decode(dt_canvas_object_raster(object), options->for_display);
     surface = owned;
   }
   _paint_border(cr, canvas, object, options);
@@ -882,6 +882,31 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     cairo_restore(cr);
   }
   if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
+  if(object->kind == DT_CANVAS_OBJECT_MAP)
+  {
+    // The provider's attribution, in a strip along the bottom edge, as its terms ask.
+    const char *attribution = dt_canvas_map_source_attribution(object->map.source);
+    if(!IS_NULL_PTR(attribution) && attribution[0] != '\0')
+    {
+      cairo_save(cr);
+      cairo_rectangle(cr, -inner_width * 0.5, -inner_height * 0.5, inner_width, inner_height);
+      cairo_clip(cr);
+      const double font_size = CLAMP(inner_height * 0.035, 6.0, 14.0);
+      cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+      cairo_set_font_size(cr, font_size);
+      cairo_text_extents_t extents;
+      cairo_text_extents(cr, attribution, &extents);
+      const double strip_height = font_size * 1.6;
+      cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.7);
+      cairo_rectangle(cr, inner_width * 0.5 - extents.x_advance - font_size, inner_height * 0.5 - strip_height,
+                      extents.x_advance + font_size, strip_height);
+      cairo_fill(cr);
+      cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 0.9);
+      cairo_move_to(cr, inner_width * 0.5 - extents.x_advance - font_size * 0.5, inner_height * 0.5 - font_size * 0.45);
+      cairo_show_text(cr, attribution);
+      cairo_restore(cr);
+    }
+  }
 }
 
 /** The text sits inside the border and the padding. */
@@ -1010,11 +1035,27 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
   }
   // The line stops short of an arrow's tip: a disc of the head's length around each
   // arrowed end is cut out of the stroke, so the tip is the triangle's alone and stays sharp.
+  // The cut-out is bounded to the route's own box: cairo's coordinates are 24.8 fixed point,
+  // and a "whole plane" rectangle overflows them under the zoom and clips everything away.
   const double head_length = PAINT_ARROW_LENGTH * head_scale;
+  cairo_save(cr);
   if(object->connector.style & (DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START))
   {
+    double box_left = route.points[0];
+    double box_top = route.points[1];
+    double box_right = route.points[0];
+    double box_bottom = route.points[1];
+    for(int idx = 1; idx < route.point_count; idx++)
+    {
+      box_left = fmin(box_left, route.points[2 * idx]);
+      box_right = fmax(box_right, route.points[2 * idx]);
+      box_top = fmin(box_top, route.points[2 * idx + 1]);
+      box_bottom = fmax(box_bottom, route.points[2 * idx + 1]);
+    }
+    const double margin = head_length * 2.0 + line_width * 4.0;
     cairo_new_path(cr);
-    cairo_rectangle(cr, -1e7, -1e7, 2e7, 2e7);
+    cairo_rectangle(cr, box_left - margin, box_top - margin, box_right - box_left + 2.0 * margin,
+                    box_bottom - box_top + 2.0 * margin);
     if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_END)
     {
       cairo_new_sub_path(cr);
@@ -1044,7 +1085,7 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
   }
   cairo_stroke(cr);
   cairo_set_dash(cr, NULL, 0, 0.0);
-  cairo_reset_clip(cr);
+  cairo_restore(cr);
 
   // A head points along the line it ends: the last leg of the route, which for a straight
   // connector is the chord itself and for the others the stub or tangent at that anchor.
@@ -1074,7 +1115,7 @@ void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_can
   cairo_save(cr);
   cairo_translate(cr, object->x, object->y);
   cairo_rotate(cr, object->rotation);
-  if(object->kind == DT_CANVAS_OBJECT_IMAGE)
+  if(object->kind == DT_CANVAS_OBJECT_IMAGE || object->kind == DT_CANVAS_OBJECT_MAP)
     _paint_image(cr, canvas, object, options);
   else if(object->kind == DT_CANVAS_OBJECT_TEXT)
     _paint_text(cr, canvas, object, options);

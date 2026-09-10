@@ -54,6 +54,7 @@ extern "C" {
 /** printf patterns taking the object id. */
 #define DT_CANVAS_ENTRY_IMAGE_PATTERN "images/%u.jpg"
 #define DT_CANVAS_ENTRY_TEXT_PATTERN "texts/%u.md"
+#define DT_CANVAS_ENTRY_MAP_PATTERN "maps/%u.jpg"
 
 #define DT_CANVAS_ERROR (dt_canvas_error_quark())
 GQuark dt_canvas_error_quark(void);

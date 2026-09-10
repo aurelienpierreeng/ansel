@@ -25,9 +25,10 @@ which it needs to render, below `views/` and `libs/`, which are its only consume
 | `canvas_pdf.h/.c` | the one-page, colour-managed PDF |
 | `canvas_actions.h` | the action vocabulary shared by the view and its toolbar |
 
-Three kinds of object share one struct, `dt_canvas_object_t`: an **image frame** (a
-library render), a **text frame** (Markdown, or the `.txt` sidecar of an image frame) and a
-**connector** (a line from one frame to another, see below). Every object has an id unique within
+Four kinds of object share one struct, `dt_canvas_object_t`: an **image frame** (a
+library render), a **text frame** (Markdown, or the `.txt` sidecar of an image frame), a
+**connector** (a line from one frame to another, see below) and a **map frame** (a slippy
+map around a point, see below). Every object has an id unique within
 the canvas, never reused, which is what connectors and sidecar links refer to. Frames have
 a centre, a size, a rotation, a draw order and an optional border of their own; the canvas
 carries the default border, the grid, the background and the saved viewport.
@@ -247,6 +248,21 @@ paper it fits the frames' box on the page the dialog chooses, as before.
 A text frame has a font, a text colour, a background that can be transparent, and a
 horizontal (left, centred, right, justified) and vertical (top, middle, bottom) alignment,
 all in its floating bar.
+
+### Map frames
+
+A map frame holds a latitude, a longitude, a slippy zoom level and a tile provider, and its
+render travels in the archive as a JPEG like an image's (`maps/<id>.jpg`), so the canvas
+opens with its maps and needs the network only to fetch them again. Fetching is a
+background job (`dt_canvas_render_map_start()`): the tiles covering twice the frame's size
+on the canvas are pulled over HTTP with libcurl into a disk cache under the user's cache
+directory, composed in Web Mercator, and delivered through the same callback as an image
+render. Providers are the map view's when it is built (`osm-gps-map`'s valid sources and
+their URI templates), OpenStreetMap otherwise; the provider's attribution is painted along
+the frame's bottom edge, as its terms ask. The toolbar's Map button adds one at the centre
+of the view at the last place used; an image's context menu adds one of where it was taken,
+from its geotag; the frame's floating bar edits the place, the zoom and the provider, each
+change fetching the tiles again.
 
 ### Waypoints
 

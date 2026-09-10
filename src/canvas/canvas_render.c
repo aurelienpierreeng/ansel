@@ -30,8 +30,17 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
+#include <curl/curl.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib/gi18n.h>
+#include <glib/gstdio.h>
 #include <lcms2.h>
+#ifdef HAVE_MAP
+#include <osm-gps-map.h>
+#endif
+#include "common/file_location.h"
+#include "common/logging.h"
+#include "config.h"
 #include <setjmp.h>
 #include <stdio.h>
 #include <string.h>
@@ -408,6 +417,339 @@ void dt_canvas_render_cancel_all(void)
   dt_atomic_set_int(&_cancel_requested, 1);
 }
 
+/* --- maps: providers ---------------------------------------------------------- */
+
+#define MAP_TILE_SIZE 256
+#define MAP_MAX_TILES 64
+#define MAP_DEFAULT_URI "https://tile.openstreetmap.org/#Z/#X/#Y.png"
+
+typedef struct dt_canvas_map_provider_t
+{
+  uint32_t id;
+  const char *name;
+  const char *uri;   ///< with #X, #Y, #Z (and #R for a random server) placeholders
+  const char *attribution;
+  int max_zoom;
+} dt_canvas_map_provider_t;
+
+/** The providers: OpenStreetMap always, and the map view's when it is built. */
+static int _map_providers(dt_canvas_map_provider_t *providers, const int capacity)
+{
+  int count = 0;
+#ifdef HAVE_MAP
+  for(int source = 1; source < OSM_GPS_MAP_SOURCE_LAST && count < capacity; source++)
+  {
+    if(!osm_gps_map_source_is_valid(source)) continue;
+    const char *uri = osm_gps_map_source_get_repo_uri(source);
+    if(IS_NULL_PTR(uri) || IS_NULL_PTR(strstr(uri, "#X"))) continue;
+    providers[count].id = (uint32_t)source;
+    providers[count].name = osm_gps_map_source_get_friendly_name(source);
+    providers[count].uri = uri;
+    providers[count].attribution = strstr(uri, "openstreetmap") != NULL ? "© OpenStreetMap contributors"
+                                                                        : osm_gps_map_source_get_friendly_name(source);
+    providers[count].max_zoom = osm_gps_map_source_get_max_zoom(source);
+    count++;
+  }
+#endif
+  if(count == 0 && capacity > 0)
+  {
+    providers[0].id = 0;
+    providers[0].name = "OpenStreetMap";
+    providers[0].uri = MAP_DEFAULT_URI;
+    providers[0].attribution = "© OpenStreetMap contributors";
+    providers[0].max_zoom = 19;
+    count = 1;
+  }
+  return count;
+}
+
+int dt_canvas_map_source_count(void)
+{
+  dt_canvas_map_provider_t providers[64];
+  return _map_providers(providers, 64);
+}
+
+uint32_t dt_canvas_map_source_id(int index)
+{
+  dt_canvas_map_provider_t providers[64];
+  const int count = _map_providers(providers, 64);
+  return (index >= 0 && index < count) ? providers[index].id : providers[0].id;
+}
+
+const char *dt_canvas_map_source_name(int index)
+{
+  dt_canvas_map_provider_t providers[64];
+  const int count = _map_providers(providers, 64);
+  return (index >= 0 && index < count) ? providers[index].name : providers[0].name;
+}
+
+int dt_canvas_map_source_index(uint32_t source)
+{
+  dt_canvas_map_provider_t providers[64];
+  const int count = _map_providers(providers, 64);
+  for(int idx = 0; idx < count; idx++)
+  {
+    if(providers[idx].id == source) return idx;
+  }
+  return 0;
+}
+
+const char *dt_canvas_map_source_attribution(uint32_t source)
+{
+  dt_canvas_map_provider_t providers[64];
+  const int count = _map_providers(providers, 64);
+  for(int idx = 0; idx < count; idx++)
+  {
+    if(providers[idx].id == source) return providers[idx].attribution;
+  }
+  return providers[0].attribution;
+}
+
+/* --- maps: tiles ----------------------------------------------------------------- */
+
+static size_t _curl_to_string(char *data, size_t size, size_t count, void *user)
+{
+  GString *body = (GString *)user;
+  const size_t bytes = size * count;
+  if(body->len + bytes > 8 * 1024 * 1024) return 0;
+  g_string_append_len(body, data, bytes);
+  return bytes;
+}
+
+/** Replace every `placeholder` in `text` by `value`. (GLib's own arrives in 2.68; the tree pins 2.64.) */
+static gchar *_replace_all(const gchar *text, const gchar *placeholder, const gchar *value)
+{
+  gchar **parts = g_strsplit(text, placeholder, -1);
+  gchar *joined = g_strjoinv(value, parts);
+  g_strfreev(parts);
+  return joined;
+}
+
+/** A tile's URL from the provider's template. */
+static gchar *_tile_url(const dt_canvas_map_provider_t *provider, const int zoom, const int x, const int y)
+{
+  const struct
+  {
+    const char *placeholder;
+    int value;
+  } fields[] = { { "#Z", zoom }, { "#X", x }, { "#Y", y }, { "#R", (x + y) % 4 }, { "#S", 17 - zoom } };
+  gchar *url = g_strdup(provider->uri);
+  for(size_t idx = 0; idx < G_N_ELEMENTS(fields); idx++)
+  {
+    gchar *value = g_strdup_printf("%d", fields[idx].value);
+    gchar *next = _replace_all(url, fields[idx].placeholder, value);
+    dt_free(value);
+    dt_free(url);
+    url = next;
+  }
+  return url;
+}
+
+/** Fetch one tile, from the disk cache when it is there, else over HTTP and into the cache. */
+static GdkPixbuf *_tile_fetch(const dt_canvas_map_provider_t *provider, const int zoom, const int x, const int y)
+{
+  char cache_dir[DT_PATH_MAX] = { 0 };
+  dt_loc_get_user_cache_dir(cache_dir, sizeof(cache_dir));
+  gchar *directory = g_strdup_printf("%s/canvas-maps/%u/%d/%d", cache_dir, provider->id, zoom, x);
+  gchar *path = g_strdup_printf("%s/%d.tile", directory, y);
+  GdkPixbuf *pixbuf = NULL;
+  if(g_file_test(path, G_FILE_TEST_IS_REGULAR)) pixbuf = gdk_pixbuf_new_from_file(path, NULL);
+  if(IS_NULL_PTR(pixbuf))
+  {
+    gchar *url = _tile_url(provider, zoom, x, y);
+    GString *body = g_string_sized_new(64 * 1024);
+    char agent[128];
+    snprintf(agent, sizeof(agent), "Ansel/%s (canvas)", darktable_package_version);
+    CURL *curl = curl_easy_init();
+    if(!IS_NULL_PTR(curl))
+    {
+      curl_easy_setopt(curl, CURLOPT_URL, url);
+      curl_easy_setopt(curl, CURLOPT_USERAGENT, agent);
+      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+      curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _curl_to_string);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
+#if defined(_WIN32) && defined(CURLSSLOPT_NATIVE_CA)
+      curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
+#endif
+      const CURLcode result = curl_easy_perform(curl);
+      long status = 0;
+      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+      curl_easy_cleanup(curl);
+      if(result == CURLE_OK && status == 200 && body->len > 0)
+      {
+        GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
+        if(gdk_pixbuf_loader_write(loader, (const guchar *)body->str, body->len, NULL)
+           && gdk_pixbuf_loader_close(loader, NULL))
+        {
+          pixbuf = gdk_pixbuf_loader_get_pixbuf(loader);
+          if(!IS_NULL_PTR(pixbuf)) g_object_ref(pixbuf);
+        }
+        g_object_unref(loader);
+        if(!IS_NULL_PTR(pixbuf))
+        {
+          g_mkdir_with_parents(directory, 0755);
+          g_file_set_contents(path, body->str, body->len, NULL);
+        }
+      }
+      else
+      {
+        dt_print(DT_DEBUG_CONTROL, "[canvas] tile %s failed: %s (HTTP %ld)\n", url,
+                 result == CURLE_OK ? "unexpected status" : curl_easy_strerror(result), status);
+      }
+    }
+    g_string_free(body, TRUE);
+    dt_free(url);
+  }
+  dt_free(path);
+  dt_free(directory);
+  return pixbuf;
+}
+
+typedef struct dt_canvas_map_job_t
+{
+  uint32_t object_id;
+  uint64_t token;
+  double latitude;
+  double longitude;
+  int32_t zoom;
+  uint32_t source;
+  int32_t pixel_width;
+  int32_t pixel_height;
+  int32_t quality;
+  dt_canvas_render_done_t done;
+  gpointer user_data;
+} dt_canvas_map_job_t;
+
+static int32_t _map_job_run(dt_job_t *job)
+{
+  dt_canvas_map_job_t *params = dt_control_job_get_params(job);
+  if(IS_NULL_PTR(params)) return 1;
+  dt_canvas_render_job_t *result = g_new0(dt_canvas_render_job_t, 1);
+  result->object_id = params->object_id;
+  result->token = params->token;
+  result->done = params->done;
+  result->user_data = params->user_data;
+
+  dt_canvas_map_provider_t providers[64];
+  const int count = _map_providers(providers, 64);
+  const dt_canvas_map_provider_t *provider = &providers[0];
+  for(int idx = 0; idx < count; idx++)
+  {
+    if(providers[idx].id == params->source) provider = &providers[idx];
+  }
+  const int zoom = CLAMP(params->zoom, 1, provider->max_zoom > 0 ? provider->max_zoom : 19);
+  dt_control_job_set_progress_message(job, _("fetching map tiles for the canvas"));
+
+  // Web Mercator: the centre in pixels of the world at this zoom.
+  const double scale = (double)(1 << zoom) * MAP_TILE_SIZE;
+  const double latitude = CLAMP(params->latitude, -85.0511, 85.0511) * M_PI / 180.0;
+  const double center_x = (params->longitude + 180.0) / 360.0 * scale;
+  const double center_y = (1.0 - log(tan(latitude) + 1.0 / cos(latitude)) / M_PI) / 2.0 * scale;
+  const int width = CLAMP(params->pixel_width, 64, 4096);
+  const int height = CLAMP(params->pixel_height, 64, 4096);
+  const double left = center_x - width * 0.5;
+  const double top = center_y - height * 0.5;
+  const int first_tile_x = (int)floor(left / MAP_TILE_SIZE);
+  const int first_tile_y = (int)floor(top / MAP_TILE_SIZE);
+  const int last_tile_x = (int)floor((left + width) / MAP_TILE_SIZE);
+  const int last_tile_y = (int)floor((top + height) / MAP_TILE_SIZE);
+  const int tiles = (last_tile_x - first_tile_x + 1) * (last_tile_y - first_tile_y + 1);
+
+  gboolean ok = tiles <= MAP_MAX_TILES && !dt_atomic_get_int(&_cancel_requested);
+  cairo_surface_t *surface = ok ? cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height) : NULL;
+  if(!IS_NULL_PTR(surface) && cairo_surface_status(surface) == CAIRO_STATUS_SUCCESS)
+  {
+    cairo_t *cr = cairo_create(surface);
+    cairo_set_source_rgb(cr, 0.85, 0.85, 0.85);
+    cairo_paint(cr);
+    const int tile_count_max = 1 << zoom;
+    int fetched = 0;
+    for(int tile_y = first_tile_y; tile_y <= last_tile_y && ok; tile_y++)
+    {
+      for(int tile_x = first_tile_x; tile_x <= last_tile_x && ok; tile_x++)
+      {
+        if(dt_atomic_get_int(&_cancel_requested) || dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED)
+        {
+          ok = FALSE;
+          break;
+        }
+        if(tile_y < 0 || tile_y >= tile_count_max) continue;
+        const int wrapped_x = ((tile_x % tile_count_max) + tile_count_max) % tile_count_max;
+        GdkPixbuf *pixbuf = _tile_fetch(provider, zoom, wrapped_x, tile_y);
+        if(IS_NULL_PTR(pixbuf)) continue;
+        cairo_save(cr);
+        cairo_translate(cr, tile_x * MAP_TILE_SIZE - left, tile_y * MAP_TILE_SIZE - top);
+        const double tile_scale = (double)MAP_TILE_SIZE / gdk_pixbuf_get_width(pixbuf);
+        cairo_scale(cr, tile_scale, tile_scale);
+        gdk_cairo_set_source_pixbuf(cr, pixbuf, 0.0, 0.0);
+        cairo_paint(cr);
+        cairo_restore(cr);
+        g_object_unref(pixbuf);
+        fetched++;
+        dt_control_job_set_progress(job, (double)fetched / tiles);
+      }
+    }
+    cairo_destroy(cr);
+    cairo_surface_flush(surface);
+    if(ok && fetched > 0)
+    {
+      // BGRx to RGBA for the encoder.
+      const uint8_t *bgra = cairo_image_surface_get_data(surface);
+      const int stride = cairo_image_surface_get_stride(surface);
+      uint8_t *rgba = g_malloc((size_t)width * height * 4);
+      for(int y = 0; y < height; y++)
+      {
+        for(int x = 0; x < width; x++)
+        {
+          const uint8_t *pixel = bgra + (size_t)y * stride + (size_t)x * 4;
+          uint8_t *out = rgba + ((size_t)y * width + x) * 4;
+          out[0] = pixel[2];
+          out[1] = pixel[1];
+          out[2] = pixel[0];
+          out[3] = 255;
+        }
+      }
+      result->jpeg = _encode_jpeg(rgba, width, height, params->quality);
+      result->pixel_width = width;
+      result->pixel_height = height;
+      dt_free(rgba);
+    }
+  }
+  if(!IS_NULL_PTR(surface)) cairo_surface_destroy(surface);
+  dt_control_job_set_progress(job, 1.0);
+  g_main_context_invoke(NULL, _render_deliver, result);
+  dt_free(params);
+  return 0;
+}
+
+gboolean dt_canvas_render_map_start(uint32_t object_id, uint64_t token, double latitude, double longitude,
+                                    int32_t zoom, uint32_t source, int32_t pixel_width, int32_t pixel_height,
+                                    int32_t quality, dt_canvas_render_done_t done, gpointer user_data)
+{
+  if(IS_NULL_PTR(done)) return FALSE;
+  dt_job_t *job = dt_control_job_create(&_map_job_run, "canvas map %u", object_id);
+  if(IS_NULL_PTR(job)) return FALSE;
+  dt_canvas_map_job_t *params = g_new0(dt_canvas_map_job_t, 1);
+  params->object_id = object_id;
+  params->token = token;
+  params->latitude = latitude;
+  params->longitude = longitude;
+  params->zoom = zoom;
+  params->source = source;
+  params->pixel_width = pixel_width;
+  params->pixel_height = pixel_height;
+  params->quality = quality > 0 ? quality : 92;
+  params->done = done;
+  params->user_data = user_data;
+  dt_control_job_set_params(job, params, NULL);
+  dt_atomic_set_int(&_cancel_requested, 0);
+  dt_control_job_add_progress(job, _("canvas map"), TRUE);
+  return dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job) == 0;
+}
+
 /* --- decoding --------------------------------------------------------------- */
 
 static uint8_t *_decode_rgba(GBytes *jpeg, int *width, int *height)
@@ -589,15 +931,16 @@ static void _cache_evict_to_budget(dt_canvas_surface_cache_t *cache, const uint3
 
 cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object)
 {
-  if(IS_NULL_PTR(cache) || IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_IMAGE) return NULL;
-  if(IS_NULL_PTR(object->image.jpeg)) return NULL;
+  if(IS_NULL_PTR(cache) || IS_NULL_PTR(object)) return NULL;
+  GBytes *jpeg = dt_canvas_object_raster(object);
+  if(IS_NULL_PTR(jpeg)) return NULL;
   const uint64_t generation = cache->for_display ? _display_generation() : 0;
   cache->clock++;
 
   dt_canvas_cached_surface_t *entry = g_hash_table_lookup(cache->entries, GUINT_TO_POINTER(object->id));
   if(!IS_NULL_PTR(entry))
   {
-    if(entry->jpeg == object->image.jpeg && entry->profile_generation == generation)
+    if(entry->jpeg == jpeg && entry->profile_generation == generation)
     {
       entry->last_use = cache->clock;
       return entry->surface;
@@ -606,11 +949,11 @@ cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, c
     g_hash_table_remove(cache->entries, GUINT_TO_POINTER(object->id));
   }
 
-  cairo_surface_t *surface = dt_canvas_render_decode(object->image.jpeg, cache->for_display);
+  cairo_surface_t *surface = dt_canvas_render_decode(jpeg, cache->for_display);
   if(IS_NULL_PTR(surface)) return NULL;
   entry = g_new0(dt_canvas_cached_surface_t, 1);
   entry->object_id = object->id;
-  entry->jpeg = g_bytes_ref(object->image.jpeg);
+  entry->jpeg = g_bytes_ref(jpeg);
   entry->profile_generation = generation;
   entry->surface = surface;
   entry->bytes = (size_t)cairo_image_surface_get_stride(surface) * cairo_image_surface_get_height(surface);

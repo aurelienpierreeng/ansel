@@ -79,6 +79,12 @@ static dt_canvas_t *_populated_canvas(void)
   connector->connector.via_tangent_x = 40.0;
   connector->connector.via_tangent_y = -10.0;
   canvas->page_color = dt_canvas_color(0.5f, 0.6f, 0.7f, 0.8f);
+
+  dt_canvas_object_t *map = dt_canvas_add_map(canvas, 700.0, 700.0, 45.1885, 5.7245, 13, 1);
+  const char map_stand_in[] = "\xff\xd8map\xff\xd9";
+  GBytes *map_jpeg = g_bytes_new(map_stand_in, sizeof(map_stand_in));
+  dt_canvas_map_set_render(canvas, map, map_jpeg, 600, 450, 1725000001LL);
+  g_bytes_unref(map_jpeg);
   return canvas;
 }
 
@@ -105,8 +111,17 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_int_equal(restored->paper_size, DT_CANVAS_PAPER_A4);
   assert_int_equal(restored->paper_landscape, 1);
   assert_int_equal(restored->reserved[7], 0xAB);
-  assert_int_equal(dt_canvas_object_count(restored), 3);
+  assert_int_equal(dt_canvas_object_count(restored), 4);
   assert_int_equal(restored->next_id, canvas->next_id);
+  const dt_canvas_object_t *map = dt_canvas_find_object(restored, 4);
+  assert_non_null(map);
+  assert_int_equal(map->kind, DT_CANVAS_OBJECT_MAP);
+  assert_float_equal(map->map.latitude, 45.1885, 1e-9);
+  assert_float_equal(map->map.longitude, 5.7245, 1e-9);
+  assert_int_equal(map->map.zoom, 13);
+  assert_int_equal(map->map.source, 1);
+  assert_int_equal(map->map.pixel_width, 600);
+  assert_null(map->map.jpeg); // its raster is an archive entry of its own
 
   const dt_canvas_object_t *image = dt_canvas_find_object(restored, 1);
   assert_non_null(image);
@@ -245,7 +260,10 @@ static void _archive_round_trip_carries_jpegs_and_markdown(void **state)
   dt_canvas_t *loaded = dt_canvas_load(path, &error);
   assert_non_null(loaded);
   assert_null(error);
-  assert_int_equal(dt_canvas_object_count(loaded), 3);
+  assert_int_equal(dt_canvas_object_count(loaded), 4);
+  assert_non_null(dt_canvas_object_raster(dt_canvas_find_object(loaded, 4)));
+  assert_int_equal(g_bytes_get_size(dt_canvas_object_raster(dt_canvas_find_object(loaded, 4))),
+                   g_bytes_get_size(dt_canvas_object_raster(dt_canvas_find_object(canvas, 4))));
   const dt_canvas_object_t *image = dt_canvas_find_object(loaded, 1);
   assert_non_null(image->image.jpeg);
   assert_int_equal(g_bytes_get_size(image->image.jpeg), g_bytes_get_size(dt_canvas_find_object(canvas, 1)->image.jpeg));
@@ -270,9 +288,9 @@ static void _removing_a_frame_takes_its_connectors_and_unlinks_sidecars(void **s
   dt_canvas_object_t *sidecar = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "note");
   sidecar->text.source = DT_CANVAS_TEXT_SOURCE_SIDECAR;
   sidecar->text.linked_object = 1;
-  assert_int_equal(dt_canvas_object_count(canvas), 4);
+  assert_int_equal(dt_canvas_object_count(canvas), 5);
   assert_true(dt_canvas_remove_object(canvas, 1));
-  assert_int_equal(dt_canvas_object_count(canvas), 2);
+  assert_int_equal(dt_canvas_object_count(canvas), 3);
   assert_null(dt_canvas_find_object(canvas, 3));
   assert_int_equal(sidecar->text.linked_object, 0);
   assert_int_equal(sidecar->text.source, DT_CANVAS_TEXT_SOURCE_MARKDOWN);
@@ -286,9 +304,9 @@ static void _snapshot_restore_round_trips_the_objects(void **state)
   dt_canvas_t *canvas = _populated_canvas();
   dt_canvas_t *snapshot = dt_canvas_copy(canvas);
   assert_true(dt_canvas_remove_object(canvas, 2));
-  assert_int_equal(dt_canvas_object_count(canvas), 1);
+  assert_int_equal(dt_canvas_object_count(canvas), 2);
   dt_canvas_restore(canvas, snapshot);
-  assert_int_equal(dt_canvas_object_count(canvas), 3);
+  assert_int_equal(dt_canvas_object_count(canvas), 4);
   assert_string_equal(dt_canvas_text_get_markdown(dt_canvas_find_object(canvas, 2)), "# Title\n\nSome *emphasis*.");
   // The snapshot is untouched by the restore and by the later edit.
   dt_canvas_text_set_markdown(canvas, dt_canvas_find_object(canvas, 2), "changed");
