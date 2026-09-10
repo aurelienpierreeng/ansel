@@ -77,6 +77,7 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *background_style;
   GtkWidget *border_width;
   GtkWidget *border_color;
+  GtkWidget *corner_radius;
   GtkWidget *layout;
   gboolean refilling; ///< handlers ignore changes while the controls are refilled from the document
 } dt_lib_canvas_toolbar_t;
@@ -305,6 +306,14 @@ static void _border_changed(GtkWidget *widget, gpointer user_data)
   dt_view_manager_get_global()->proxy.canvas.set_border(view, rgba, (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->border_width)));
 }
 
+static void _corner_changed(GtkSpinButton *spin, gpointer user_data)
+{
+  dt_view_t *view = NULL;
+  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_corner_radius)) return;
+  dt_view_manager_get_global()->proxy.canvas.set_corner_radius(view, (float)gtk_spin_button_get_value(spin));
+}
+
 static void _layout_apply(GtkWidget *widget, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
@@ -352,6 +361,7 @@ static void _refill(dt_lib_module_t *self)
 
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->border_width), canvas->border_width);
   _rgba_to(toolbar->border_color, &canvas->border_color, TRUE);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->corner_radius), canvas->corner_radius);
   _rgba_to(toolbar->background_color, &canvas->background, FALSE);
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->background_style),
                            CLAMP((int)canvas->background_style, 0, DT_CANVAS_BACKGROUND_LAST - 1));
@@ -607,6 +617,11 @@ static GtkWidget *_borders_popover(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->border_color, _("Default border colour of the frames"));
   g_signal_connect(toolbar->border_color, "color-set", G_CALLBACK(_border_changed), self);
   _labelled(grid, 1, 1, _("Colour"), toolbar->border_color);
+  toolbar->corner_radius = gtk_spin_button_new_with_range(0.0, 5000.0, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->corner_radius,
+                              _("Default radius of the frames' rounded corners, in canvas units; 0 is square"));
+  g_signal_connect(toolbar->corner_radius, "value-changed", G_CALLBACK(_corner_changed), self);
+  _labelled(grid, 2, 0, _("Corners"), toolbar->corner_radius);
   GtkWidget *popover = gtk_popover_new(NULL);
   gtk_container_add(GTK_CONTAINER(popover), grid);
   gtk_widget_show_all(grid);

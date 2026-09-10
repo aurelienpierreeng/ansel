@@ -210,8 +210,17 @@ with the content inset; a cut frame's shape is confined to the frame less the bo
 on every side (`dt_canvas_mask_geometry_t.inset`, applied in `_mask_raster_fine()`), so the
 shape stops where the border must begin and the border, dilated from it, ends exactly at the
 frame's edge -- a gradient cutout, which covers the whole frame, gets the same border as an
-uncut frame. Only a shadow reaches past the frame, and the object's device box grows for it
-alone. Every mask surface -- the feathered shape, its support, its border band -- is
+uncut frame. The band is dilated from the shape AS DESCRIBED and then stopped at the frame,
+never from the confined shape: a disc dilation of the confined rectangle would round its
+corners, and a shape that fills its frame must get the frame's own corners. Only a shadow
+reaches past the frame, and the object's device box grows for it alone.
+
+Every frame has **rounded corners** as a parameter: `dt_canvas_t.corner_radius` is the
+default, an object overrides it under `DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE`, and
+`dt_canvas_object_effective_corner_radius()` clamps it to half the shorter side. A
+rectangular frame's outline, border, background and content clip all follow `_frame_path()`,
+the radius shrinking with the inset; a cut frame's room and its band's stop are the same
+rounded rectangles, in the raster (`_mask_clip_rounded()`). Every mask surface -- the feathered shape, its support, its border band -- is
 rasterised at three times the resolution (two past a megapixel) and box-filtered down, which
 is the anti-aliasing of their edges; the band's distance transform runs at the fine
 resolution, so its two edges are anti-aliased too.
