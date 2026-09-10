@@ -442,22 +442,34 @@ static void _frames_snap_next_to_their_neighbours_one_gutter_apart(void **state)
 
   // Its left edge 6 units short of one gutter past the fixed frame's right edge: pulled there.
   dt_canvas_rect_t box = { 224.0, 300.0, 100.0, 100.0 };
-  assert_true(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, &delta_x, &delta_y));
+  assert_true(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, DT_CANVAS_EDGE_ALL, &delta_x, &delta_y));
   assert_float_equal(delta_x, 6.0, 1e-9);
   assert_float_equal(delta_y, 0.0, 1e-9); // nothing within reach on y
+  // Only the dragged edges may snap: with the left edge held still, nothing pulls on x.
+  assert_false(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, DT_CANVAS_EDGE_RIGHT | DT_CANVAS_EDGE_BOTTOM,
+                                            &delta_x, &delta_y));
   // Its top edge close to the fixed frame's top: aligned.
   box.y = 53.0;
-  assert_true(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, &delta_x, &delta_y));
+  assert_true(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, DT_CANVAS_EDGE_ALL, &delta_x, &delta_y));
   assert_float_equal(delta_y, -3.0, 1e-9);
   // Far from everything: nothing.
   box.x = 1000.0;
   box.y = 1000.0;
-  assert_false(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, &delta_x, &delta_y));
+  assert_false(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, DT_CANVAS_EDGE_ALL, &delta_x, &delta_y));
   // The excluded frame never attracts itself.
   const dt_canvas_rect_t self_box = dt_canvas_object_bounds(moving);
   dt_canvas_rect_t nudged = self_box;
   nudged.x += 2.0;
-  assert_false(dt_canvas_snap_to_neighbours(canvas, &nudged, exclude, 8.0, &delta_x, &delta_y));
+  assert_false(dt_canvas_snap_to_neighbours(canvas, &nudged, exclude, 8.0, DT_CANVAS_EDGE_ALL, &delta_x, &delta_y));
+
+  // Same size: a width within reach of the fixed frame's takes it, a height far off is left alone.
+  double width = 196.0;
+  double height = 300.0;
+  assert_true(dt_canvas_snap_size(canvas, exclude, 8.0, &width, &height));
+  assert_float_equal(width, 200.0, 1e-9);
+  assert_float_equal(height, 300.0, 1e-9);
+  width = 150.0;
+  assert_false(dt_canvas_snap_size(canvas, exclude, 8.0, &width, &height));
   (void)fixed;
   g_array_free(exclude, TRUE);
   dt_canvas_free(canvas);
