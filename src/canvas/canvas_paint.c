@@ -157,9 +157,9 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
  */
 
 #define PAPER_TILE 512          ///< a sprite's extent in canvas units, whatever resolution it is synthesised at
-#define PAPER_SPRITES 4
+#define PAPER_SPRITES 6
 #define PAPER_FIELD_MIN_LOG2 8  ///< 256 pixels: the base resolution
-#define PAPER_FIELD_MAX_LOG2 10 ///< 1024 pixels: the finest grain, past which the transform costs a pause
+#define PAPER_FIELD_MAX_LOG2 9  ///< 512 pixels per sprite: the finest grain the composed field is kept at
 
 typedef struct dt_paper_complex_t
 {
@@ -244,7 +244,16 @@ static void _paper_hash_uniforms(const guint32 seed, const int frequency_x, cons
  * The amplitude is normalised against the power a 256-pixel field holds, so a finer field
  * adds detail without changing the broad features' contrast.
  */
-static double *_paper_field(const int size, const double knee, const double slope, const guint32 seed)
+/** The radial gain: a plateau below `knee`, a power-law fall-off above; with `low_cut` > 0, a band above it. */
+static double _paper_gain(const double frequency, const double knee, const double slope, const double low_cut)
+{
+  double gain = 1.0 / (1.0 + pow(frequency / knee, slope));
+  if(low_cut > 0.0) gain *= 1.0 - 1.0 / (1.0 + pow(frequency / low_cut, slope));
+  return gain;
+}
+
+static double *_paper_field_band(const int size, const double knee, const double slope, const double low_cut,
+                                 const guint32 seed)
 {
   double base_power = 0.0;
   for(int row = -128; row < 128; row++)
@@ -252,7 +261,7 @@ static double *_paper_field(const int size, const double knee, const double slop
     for(int col = -128; col < 128; col++)
     {
       if(row == 0 && col == 0) continue;
-      const double gain = 1.0 / (1.0 + pow(hypot(col, row) / knee, slope));
+      const double gain = _paper_gain(hypot(col, row), knee, slope, low_cut);
       base_power += gain * gain;
     }
   }
@@ -270,7 +279,7 @@ static double *_paper_field(const int size, const double knee, const double slop
       double uniform_b = 0.0;
       _paper_hash_uniforms(seed, frequency_x, frequency_y, &uniform_a, &uniform_b);
       const double magnitude = sqrt(-2.0 * log(uniform_a));
-      const double gain = normalisation / (1.0 + pow(hypot(frequency_x, frequency_y) / knee, slope));
+      const double gain = normalisation * _paper_gain(hypot(frequency_x, frequency_y), knee, slope, low_cut);
       spectrum[(size_t)row * size + col].real = magnitude * cos(2.0 * M_PI * uniform_b) * gain;
       spectrum[(size_t)row * size + col].imag = magnitude * sin(2.0 * M_PI * uniform_b) * gain;
     }
@@ -284,6 +293,11 @@ static double *_paper_field(const int size, const double knee, const double slop
   return field;
 }
 
+static double *_paper_field(const int size, const double knee, const double slope, const guint32 seed)
+{
+  return _paper_field_band(size, knee, slope, 0.0, seed);
+}
+
 /** One sprite's relief, `size` square, before the colour: the paper's components combined. */
 static double *_paper_relief(const dt_canvas_background_t style, const int size, const int variant)
 {
@@ -291,11 +305,14 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
   double *relief = g_new0(double, (size_t)size * size);
   if(style == DT_CANVAS_BACKGROUND_MOLESKINE)
   {
-    // Fine, soft clouds and a whisper of fibre.
+    // Fine, soft clouds; a band of fibres, sharp and short, that shows as the zoom lets it; a whisper of grain.
     double *mottle = _paper_field(size, 24.0, 2.0, seed + 101u);
+    double *fibres = _paper_field_band(size, 320.0, 2.5, 110.0, seed + 105u);
     double *grain = _paper_field(size, 160.0, 1.1, seed + 103u);
-    for(size_t idx = 0; idx < (size_t)size * size; idx++) relief[idx] = mottle[idx] * 0.011 + grain[idx] * 0.0035;
+    for(size_t idx = 0; idx < (size_t)size * size; idx++)
+      relief[idx] = mottle[idx] * 0.011 + fibres[idx] * 0.006 + grain[idx] * 0.003;
     dt_free(mottle);
+    dt_free(fibres);
     dt_free(grain);
   }
   else
@@ -307,7 +324,7 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
     for(size_t idx = 0; idx < (size_t)size * size; idx++)
     {
       const double hollow = fmin(tooth[idx], 0.0);
-      relief[idx] = -0.03 * (1.0 - exp(-hollow * hollow * 0.5)) + grain[idx] * 0.003;
+      relief[idx] = -0.045 * (1.0 - exp(-hollow * hollow * 0.5)) + grain[idx] * 0.004;
     }
     dt_free(tooth);
     dt_free(grain);
@@ -315,19 +332,25 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
   return relief;
 }
 
-#define PAPER_CELLS 4 ///< sprites per side of the composed field: its period is PAPER_CELLS sprites
+#define PAPER_CELLS 6       ///< sprites per side of the composed field: its period is PAPER_CELLS sprites
+#define PAPER_JITTER 0.35   ///< how far, in cells, a placement may stray from its cell centre
 
 /** A placement's random choices, from a hash of its cell: stable across resolutions. */
 static void _paper_placement(const int col, const int row, int *variant, int *orientation, double *phase_x,
-                             double *phase_y)
+                             double *phase_y, double *jitter_x, double *jitter_y)
 {
   guint32 hash = (guint32)col * 2654435761u ^ (guint32)row * 2246822519u ^ 0x9E3779B9u;
   hash = (hash ^ (hash >> 15)) * 1274126177u;
   hash ^= hash >> 13;
+  guint32 second = hash * 2246822519u + 3266489917u;
+  second = (second ^ (second >> 15)) * 2654435761u;
+  second ^= second >> 13;
   *variant = (int)(hash % PAPER_SPRITES);
   *orientation = (int)((hash >> 4) % 8);
   *phase_x = ((hash >> 8) & 0xFFF) / 4096.0;
   *phase_y = ((hash >> 20) & 0xFFF) / 4096.0;
+  *jitter_x = (((second) & 0xFFF) / 4096.0 - 0.5) * 2.0 * PAPER_JITTER;
+  *jitter_y = (((second >> 12) & 0xFFF) / 4096.0 - 0.5) * 2.0 * PAPER_JITTER;
 }
 
 /** A sprite sample at (x, y) after the placement's orientation and phase, wrapping. */
@@ -350,9 +373,10 @@ static double _paper_sample(const double *sprite, const int size, const int orie
 
 /**
  * The composed field, PAPER_CELLS sprites square and periodic: sprites twice a cell wide,
- * one per cell centre, each a random sprite in a random orientation at a random phase,
- * weighted by a two-dimensional Hann window. Windows twice the cell pitch sum to one, so
- * the sprites blend into a field with neither a seam nor a border band to repeat.
+ * one per cell, each a random sprite in a random orientation at a random phase, its centre
+ * jittered off the cell's, weighted by a two-dimensional Hann window. The weights are summed
+ * and divided out, so however the placements stray the blend is exact: neither a seam, nor a
+ * border band, nor the lattice of window centres a regular grid leaves for a trained eye.
  */
 static double *_paper_compose(const dt_canvas_background_t style, const int sprite_size)
 {
@@ -360,6 +384,7 @@ static double *_paper_compose(const dt_canvas_background_t style, const int spri
   for(int variant = 0; variant < PAPER_SPRITES; variant++) sprites[variant] = _paper_relief(style, sprite_size, variant);
   const int total = PAPER_CELLS * sprite_size;
   double *field = g_new0(double, (size_t)total * total);
+  double *weights = g_new0(double, (size_t)total * total);
   double *window = g_new(double, 2 * (size_t)sprite_size);
   for(int idx = 0; idx < 2 * sprite_size; idx++)
     window[idx] = 0.5 * (1.0 - cos(2.0 * M_PI * (idx + 0.5) / (2.0 * sprite_size)));
@@ -372,23 +397,32 @@ static double *_paper_compose(const dt_canvas_background_t style, const int spri
       int orientation = 0;
       double phase_x = 0.0;
       double phase_y = 0.0;
-      _paper_placement(col, row, &variant, &orientation, &phase_x, &phase_y);
+      double jitter_x = 0.0;
+      double jitter_y = 0.0;
+      _paper_placement(col, row, &variant, &orientation, &phase_x, &phase_y, &jitter_x, &jitter_y);
       const int shift_x = (int)(phase_x * sprite_size);
       const int shift_y = (int)(phase_y * sprite_size);
-      const int origin_x = col * sprite_size - sprite_size / 2;
-      const int origin_y = row * sprite_size - sprite_size / 2;
+      const int origin_x = col * sprite_size - sprite_size / 2 + (int)lround(jitter_x * sprite_size);
+      const int origin_y = row * sprite_size - sprite_size / 2 + (int)lround(jitter_y * sprite_size);
       for(int y = 0; y < 2 * sprite_size; y++)
       {
         const int field_y = ((origin_y + y) % total + total) % total;
         for(int x = 0; x < 2 * sprite_size; x++)
         {
           const int field_x = ((origin_x + x) % total + total) % total;
+          const double weight = window[x] * window[y];
           field[(size_t)field_y * total + field_x]
-              += window[x] * window[y] * _paper_sample(sprites[variant], sprite_size, orientation, shift_x, shift_y, x, y);
+              += weight * _paper_sample(sprites[variant], sprite_size, orientation, shift_x, shift_y, x, y);
+          weights[(size_t)field_y * total + field_x] += weight;
         }
       }
     }
   }
+  for(size_t idx = 0; idx < (size_t)total * total; idx++)
+  {
+    if(weights[idx] > 1e-6) field[idx] /= weights[idx];
+  }
+  dt_free(weights);
   dt_free(window);
   for(int variant = 0; variant < PAPER_SPRITES; variant++) dt_free(sprites[variant]);
   return field;
@@ -448,7 +482,9 @@ static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_dis
   dt_colorprofiles_get_settings(&settings);
   const uint64_t generation = for_display ? settings.generation + 1 : 1;
   const int target = for_display ? 1 : 0;
-  const int scaled_size = PAPER_CELLS * sprite_scaled;
+  // Never above the field's own resolution: past it, the painter scales each cell up instead
+  // of a tile that would grow with the square of the zoom.
+  const int scaled_size = MIN(PAPER_CELLS * sprite_scaled, PAPER_CELLS * (1 << PAPER_FIELD_MAX_LOG2));
 
   g_mutex_lock(&lock);
   if(!IS_NULL_PTR(cache->tile[target]) && cache->generation[target] == generation && cache->size[target] == scaled_size)
@@ -531,11 +567,21 @@ static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
       cairo_matrix_transform_point(&user_to_device, &right, &bottom);
       const double cell_x = floor(left);
       const double cell_y = floor(top);
-      cairo_set_source_surface(cr, tile, cell_x, cell_y);
+      const double cell_width = floor(right) - cell_x;
+      const double cell_height = floor(bottom) - cell_y;
+      const double tile_size = cairo_image_surface_get_width(tile);
+      cairo_save(cr);
+      cairo_rectangle(cr, cell_x, cell_y, cell_width, cell_height);
+      cairo_clip(cr);
+      cairo_translate(cr, cell_x, cell_y);
+      // At one pixel per tile pixel this is a plain blit; zoomed past the field, a bilinear scale.
+      const gboolean upscaled = fabs(cell_width - tile_size) > 1.0;
+      if(upscaled) cairo_scale(cr, cell_width / tile_size, cell_height / tile_size);
+      cairo_set_source_surface(cr, tile, 0.0, 0.0);
       cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_PAD);
-      cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-      cairo_rectangle(cr, cell_x, cell_y, floor(right) - cell_x, floor(bottom) - cell_y);
-      cairo_fill(cr);
+      cairo_pattern_set_filter(cairo_get_source(cr), upscaled ? CAIRO_FILTER_BILINEAR : CAIRO_FILTER_NEAREST);
+      cairo_paint(cr);
+      cairo_restore(cr);
     }
   }
   cairo_restore(cr);
