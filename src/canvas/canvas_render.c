@@ -545,7 +545,41 @@ static gchar *_tile_url(const dt_canvas_map_provider_t *provider, const int zoom
   return url;
 }
 
-/** Fetch one tile, from the disk cache when it is there, else over HTTP and into the cache. */
+/** One HTTP GET into `body`. TRUE on a 200 with content. */
+static gboolean _http_get(const char *url, GString *body)
+{
+  char agent[128];
+  snprintf(agent, sizeof(agent), "Ansel/%s (canvas)", darktable_package_version);
+  CURL *curl = curl_easy_init();
+  if(IS_NULL_PTR(curl)) return FALSE;
+  g_string_truncate(body, 0);
+  curl_easy_setopt(curl, CURLOPT_URL, url);
+  curl_easy_setopt(curl, CURLOPT_USERAGENT, agent);
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+  curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
+  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+  curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _curl_to_string);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
+#if defined(_WIN32) && defined(CURLSSLOPT_NATIVE_CA)
+  curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
+#endif
+  const CURLcode result = curl_easy_perform(curl);
+  long status = 0;
+  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+  curl_easy_cleanup(curl);
+  const gboolean ok = result == CURLE_OK && status == 200 && body->len > 0;
+  if(!ok)
+    dt_print(DT_DEBUG_CONTROL, "[canvas] tile %s failed: %s (HTTP %ld)\n", url,
+             result == CURLE_OK ? "unexpected status" : curl_easy_strerror(result), status);
+  return ok;
+}
+
+/**
+ * Fetch one tile, from the disk cache when it is there, else over HTTP and into the cache.
+ * The providers' templates are old and spell plain http; the servers have since moved to
+ * TLS and several refuse plain connections outright, so https is tried first.
+ */
 static GdkPixbuf *_tile_fetch(const dt_canvas_map_provider_t *provider, const int zoom, const int x, const int y)
 {
   char cache_dir[DT_PATH_MAX] = { 0 };
@@ -558,46 +592,28 @@ static GdkPixbuf *_tile_fetch(const dt_canvas_map_provider_t *provider, const in
   {
     gchar *url = _tile_url(provider, zoom, x, y);
     GString *body = g_string_sized_new(64 * 1024);
-    char agent[128];
-    snprintf(agent, sizeof(agent), "Ansel/%s (canvas)", darktable_package_version);
-    CURL *curl = curl_easy_init();
-    if(!IS_NULL_PTR(curl))
+    gboolean fetched = FALSE;
+    if(g_str_has_prefix(url, "http://"))
     {
-      curl_easy_setopt(curl, CURLOPT_URL, url);
-      curl_easy_setopt(curl, CURLOPT_USERAGENT, agent);
-      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-      curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
-      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
-      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
-      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _curl_to_string);
-      curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
-#if defined(_WIN32) && defined(CURLSSLOPT_NATIVE_CA)
-      curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
-#endif
-      const CURLcode result = curl_easy_perform(curl);
-      long status = 0;
-      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
-      curl_easy_cleanup(curl);
-      if(result == CURLE_OK && status == 200 && body->len > 0)
+      gchar *secure = g_strconcat("https://", url + strlen("http://"), NULL);
+      fetched = _http_get(secure, body);
+      dt_free(secure);
+    }
+    if(!fetched) fetched = _http_get(url, body);
+    if(fetched)
+    {
+      GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
+      if(gdk_pixbuf_loader_write(loader, (const guchar *)body->str, body->len, NULL)
+         && gdk_pixbuf_loader_close(loader, NULL))
       {
-        GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
-        if(gdk_pixbuf_loader_write(loader, (const guchar *)body->str, body->len, NULL)
-           && gdk_pixbuf_loader_close(loader, NULL))
-        {
-          pixbuf = gdk_pixbuf_loader_get_pixbuf(loader);
-          if(!IS_NULL_PTR(pixbuf)) g_object_ref(pixbuf);
-        }
-        g_object_unref(loader);
-        if(!IS_NULL_PTR(pixbuf))
-        {
-          g_mkdir_with_parents(directory, 0755);
-          g_file_set_contents(path, body->str, body->len, NULL);
-        }
+        pixbuf = gdk_pixbuf_loader_get_pixbuf(loader);
+        if(!IS_NULL_PTR(pixbuf)) g_object_ref(pixbuf);
       }
-      else
+      g_object_unref(loader);
+      if(!IS_NULL_PTR(pixbuf))
       {
-        dt_print(DT_DEBUG_CONTROL, "[canvas] tile %s failed: %s (HTTP %ld)\n", url,
-                 result == CURLE_OK ? "unexpected status" : curl_easy_strerror(result), status);
+        g_mkdir_with_parents(directory, 0755);
+        g_file_set_contents(path, body->str, body->len, NULL);
       }
     }
     g_string_free(body, TRUE);
