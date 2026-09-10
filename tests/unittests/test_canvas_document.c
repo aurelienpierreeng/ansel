@@ -38,6 +38,10 @@ static dt_canvas_t *_populated_canvas(void)
   canvas->border_width = 3.0f;
   canvas->border_color = dt_canvas_color(1.0f, 0.5f, 0.25f, 1.0f);
   canvas->gutter = 35.0f;
+  canvas->background_style = DT_CANVAS_BACKGROUND_WATERCOLOUR;
+  canvas->grid_color = dt_canvas_color(0.1f, 0.2f, 0.3f, 0.4f);
+  canvas->paper_size = DT_CANVAS_PAPER_A4;
+  canvas->paper_landscape = 1;
   canvas->reserved[7] = 0xAB;
 
   dt_canvas_object_t *image = dt_canvas_add_image(canvas, 100.0, 200.0, 6000, 4000);
@@ -59,6 +63,9 @@ static dt_canvas_t *_populated_canvas(void)
 
   dt_canvas_object_t *text = dt_canvas_add_text(canvas, -300.0, 50.0, 400.0, 150.0, "# Title\n\nSome *emphasis*.");
   g_strlcpy(text->text.font, "Serif Bold 14", sizeof(text->text.font));
+  text->text.align_h = DT_CANVAS_ALIGN_JUSTIFY;
+  text->text.align_v = DT_CANVAS_ALIGN_END;
+  text->text.background.alpha = 0.0f;
 
   dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, text->id, image->id);
   assert_non_null(connector);
@@ -89,6 +96,10 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_int_equal(restored->grid_flags, DT_CANVAS_GRID_VISIBLE | DT_CANVAS_GRID_SNAP);
   assert_float_equal(restored->border_color.green, 0.5f, 1e-6);
   assert_float_equal(restored->gutter, 35.0f, 1e-6);
+  assert_int_equal(restored->background_style, DT_CANVAS_BACKGROUND_WATERCOLOUR);
+  assert_float_equal(restored->grid_color.alpha, 0.4f, 1e-6);
+  assert_int_equal(restored->paper_size, DT_CANVAS_PAPER_A4);
+  assert_int_equal(restored->paper_landscape, 1);
   assert_int_equal(restored->reserved[7], 0xAB);
   assert_int_equal(dt_canvas_object_count(restored), 3);
   assert_int_equal(restored->next_id, canvas->next_id);
@@ -114,6 +125,9 @@ static void _index_round_trip_keeps_every_field(void **state)
   const dt_canvas_object_t *text = dt_canvas_find_object(restored, 2);
   assert_non_null(text);
   assert_string_equal(text->text.font, "Serif Bold 14");
+  assert_int_equal(text->text.align_h, DT_CANVAS_ALIGN_JUSTIFY);
+  assert_int_equal(text->text.align_v, DT_CANVAS_ALIGN_END);
+  assert_float_equal(text->text.background.alpha, 0.0f, 1e-6);
 
   const dt_canvas_object_t *connector = dt_canvas_find_object(restored, 3);
   assert_non_null(connector);
@@ -462,16 +476,51 @@ static void _frames_snap_next_to_their_neighbours_one_gutter_apart(void **state)
   nudged.x += 2.0;
   assert_false(dt_canvas_snap_to_neighbours(canvas, &nudged, exclude, 8.0, DT_CANVAS_EDGE_ALL, &delta_x, &delta_y));
 
-  // Same size: a width within reach of the fixed frame's takes it, a height far off is left alone.
+  // Same size: a width within reach of the fixed frame's takes it, a height far off is left alone,
+  // and the reference names the frame the width came from.
   double width = 196.0;
   double height = 300.0;
-  assert_true(dt_canvas_snap_size(canvas, exclude, 8.0, &width, &height));
+  dt_canvas_rect_t width_reference = { 0.0, 0.0, 0.0, 0.0 };
+  dt_canvas_rect_t height_reference = { 0.0, 0.0, 0.0, 0.0 };
+  assert_true(dt_canvas_snap_size(canvas, exclude, 8.0, &width, &height, &width_reference, &height_reference));
   assert_float_equal(width, 200.0, 1e-9);
   assert_float_equal(height, 300.0, 1e-9);
+  assert_float_equal(width_reference.x, 0.0, 1e-9);
+  assert_float_equal(width_reference.width, 200.0, 1e-9);
   width = 150.0;
-  assert_false(dt_canvas_snap_size(canvas, exclude, 8.0, &width, &height));
+  assert_false(dt_canvas_snap_size(canvas, exclude, 8.0, &width, &height, NULL, NULL));
+
+  // Masonry: two frames stacked one gutter apart offer their combined height.
+  dt_canvas_object_t *below = dt_canvas_add_text(canvas, 100.0, 150.0 + 30.0 + 40.0, 200.0, 80.0, ""); // y 180..260
+  height = 205.0;
+  assert_true(dt_canvas_snap_size(canvas, exclude, 8.0, NULL, &height, NULL, &height_reference));
+  assert_float_equal(height, 210.0, 1e-9); // 50..260
+  assert_float_equal(height_reference.y, 50.0, 1e-9);
+  assert_float_equal(height_reference.height, 210.0, 1e-9);
+  (void)below;
   (void)fixed;
   g_array_free(exclude, TRUE);
+  dt_canvas_free(canvas);
+}
+
+static void _paper_tiles_the_plane_from_the_origin(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  double width = 0.0;
+  double height = 0.0;
+  assert_false(dt_canvas_paper_dimensions(canvas, &width, &height));
+  canvas->paper_size = DT_CANVAS_PAPER_A4;
+  assert_true(dt_canvas_paper_dimensions(canvas, &width, &height));
+  assert_float_equal(width, 595.0, 1e-9);
+  assert_float_equal(height, 842.0, 1e-9);
+  canvas->paper_landscape = 1;
+  assert_true(dt_canvas_paper_dimensions(canvas, &width, &height));
+  assert_float_equal(width, 842.0, 1e-9);
+  const dt_canvas_rect_t page = dt_canvas_page_rect(canvas, -1, 2);
+  assert_float_equal(page.x, -842.0, 1e-9);
+  assert_float_equal(page.y, 1190.0, 1e-9);
+  assert_float_equal(page.width, 842.0, 1e-9);
   dt_canvas_free(canvas);
 }
 
@@ -565,6 +614,7 @@ int main(void)
     cmocka_unit_test(_connectors_route_between_cardinal_anchors),
     cmocka_unit_test(_a_waypoint_bends_every_routing_through_it),
     cmocka_unit_test(_frames_snap_next_to_their_neighbours_one_gutter_apart),
+    cmocka_unit_test(_paper_tiles_the_plane_from_the_origin),
     cmocka_unit_test(_layouts_arrange_without_moving_the_group),
     cmocka_unit_test(_colours_parse_and_format),
   };

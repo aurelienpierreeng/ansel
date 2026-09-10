@@ -175,9 +175,34 @@ move and to a resize, each later rule that triggers replacing the earlier answer
 rounds positions and sizes to the grid step. The gutter lands an edge next to a neighbour
 one gutter away or in line with a neighbour's edge, within eight screen pixels
 (`dt_canvas_snap_to_neighbours()`; on a resize only the dragged edges may snap). Same size
-gives a resized frame a neighbour's width or height within reach (`dt_canvas_snap_size()`).
+gives a resized frame a neighbour's width or height within reach (`dt_canvas_snap_size()`),
+or the combined width or height of a run of neighbours stacked one gutter apart (masonry
+style); while it snaps, the frame(s) the size was taken from are outlined and a guide line
+runs along the matched dimension on both.
 An image frame resizes proportionally and follows its width; a text frame resizes freely.
 The layouts space frames by the gutter too.
+
+### The plane: background, grid, paper
+
+The canvas is painted with its background colour or with one of two procedural papers:
+**Moleskine** (ivory, a soft mottle) and **watercolour** (pure white, a thick tooth that only
+darkens, so the paper is white at its peaks). Both are periodic value noise on a 256-unit
+tile, seamless by construction, generated once per style and colour target and repeated as
+a cairo pattern in canvas units, so the texture scales with the zoom like everything else.
+The grid dots have a colour of their own and a radius that is a fraction of the grid step,
+so they scale with the zoom too, floored at three quarters of a pixel so they never vanish.
+
+A canvas may be divided into **pages** of an ISO A paper (A2 to A6, portrait or landscape),
+tiled from the origin and outlined with dashed lines in the grid colour. One canvas unit is
+one point, so an A4 page is 595 by 842 units. The PDF export then writes one PDF page per
+canvas page that holds a frame, skipping empty ones, at the requested resolution; without
+paper it fits the frames' box on the page the dialog chooses, as before.
+
+### Text frames
+
+A text frame has a font, a text colour, a background that can be transparent, and a
+horizontal (left, centred, right, justified) and vertical (top, middle, bottom) alignment,
+all in its floating bar.
 
 ### Waypoints
 

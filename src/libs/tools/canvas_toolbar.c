@@ -52,6 +52,11 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *snap_mode;
   GtkWidget *grid_size;
   GtkWidget *gutter;
+  GtkWidget *grid_color;
+  GtkWidget *background_color;
+  GtkWidget *background_style;
+  GtkWidget *paper;
+  GtkWidget *landscape;
   GtkWidget *border_width;
   GtkWidget *border_color;
   GtkWidget *layout;
@@ -164,6 +169,53 @@ static void _gutter_changed(GtkSpinButton *spin, gpointer user_data)
   dt_view_manager_get_global()->proxy.canvas.set_gutter(view, (float)gtk_spin_button_get_value(spin));
 }
 
+static void _rgba_of(GtkWidget *button, float rgba[4])
+{
+  GdkRGBA color;
+  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(button), &color);
+  rgba[0] = (float)color.red;
+  rgba[1] = (float)color.green;
+  rgba[2] = (float)color.blue;
+  rgba[3] = (float)color.alpha;
+}
+
+static void _grid_color_set(GtkWidget *button, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  if(toolbar->refilling) return;
+  dt_view_t *view = _canvas_view();
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_grid_color)) return;
+  float rgba[4];
+  _rgba_of(button, rgba);
+  dt_view_manager_get_global()->proxy.canvas.set_grid_color(view, rgba);
+}
+
+static void _background_changed(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  if(toolbar->refilling) return;
+  dt_view_t *view = _canvas_view();
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_background)) return;
+  float rgba[4];
+  _rgba_of(toolbar->background_color, rgba);
+  dt_view_manager_get_global()->proxy.canvas.set_background(
+      view, rgba, gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->background_style)));
+}
+
+static void _paper_changed(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  if(toolbar->refilling) return;
+  dt_view_t *view = _canvas_view();
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_paper)) return;
+  dt_view_manager_get_global()->proxy.canvas.set_paper(
+      view, gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->paper)),
+      gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(toolbar->landscape)) ? 1 : 0);
+}
+
 static void _border_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
@@ -247,6 +299,13 @@ static void _refill(dt_lib_module_t *self)
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->snap_mode), snap_row);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->grid_size), canvas->grid_size);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->gutter), canvas->gutter);
+  GdkRGBA grid_rgba = { canvas->grid_color.red, canvas->grid_color.green, canvas->grid_color.blue, canvas->grid_color.alpha };
+  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(toolbar->grid_color), &grid_rgba);
+  GdkRGBA background_rgba = { canvas->background.red, canvas->background.green, canvas->background.blue, 1.0 };
+  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(toolbar->background_color), &background_rgba);
+  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->background_style), CLAMP((int)canvas->background_style, 0, 2));
+  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->paper), CLAMP((int)canvas->paper_size, 0, 5));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->landscape), canvas->paper_landscape != 0);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->border_width), canvas->border_width);
   GdkRGBA rgba;
   rgba.red = canvas->border_color.red;
@@ -342,6 +401,40 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->gutter, _("Margin frames keep from each other when snapped side by side or arranged, in canvas units"));
   g_signal_connect(toolbar->gutter, "value-changed", G_CALLBACK(_gutter_changed), self);
   gtk_box_pack_start(GTK_BOX(box), toolbar->gutter, FALSE, FALSE, 0);
+  toolbar->grid_color = gtk_color_button_new();
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->grid_color), TRUE);
+  gtk_widget_set_tooltip_text(toolbar->grid_color, _("Colour of the grid dots and the page outlines"));
+  g_signal_connect(toolbar->grid_color, "color-set", G_CALLBACK(_grid_color_set), self);
+  gtk_box_pack_start(GTK_BOX(box), toolbar->grid_color, FALSE, FALSE, 0);
+  _separator(box);
+
+  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Paper")), FALSE, FALSE, 0);
+  toolbar->paper = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->paper), _("None"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->paper), "A2");
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->paper), "A3");
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->paper), "A4");
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->paper), "A5");
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->paper), "A6");
+  gtk_widget_set_tooltip_text(toolbar->paper, _("Divide the canvas into pages of this paper, one PDF page each; one canvas unit is one point"));
+  g_signal_connect(toolbar->paper, "changed", G_CALLBACK(_paper_changed), self);
+  gtk_box_pack_start(GTK_BOX(box), toolbar->paper, FALSE, FALSE, 0);
+  toolbar->landscape = gtk_toggle_button_new_with_label(_("Landscape"));
+  g_signal_connect(toolbar->landscape, "toggled", G_CALLBACK(_paper_changed), self);
+  gtk_box_pack_start(GTK_BOX(box), toolbar->landscape, FALSE, FALSE, 0);
+  _separator(box);
+
+  toolbar->background_style = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Plain colour"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Moleskine paper"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Watercolour paper"));
+  gtk_widget_set_tooltip_text(toolbar->background_style, _("What the canvas is painted with"));
+  g_signal_connect(toolbar->background_style, "changed", G_CALLBACK(_background_changed), self);
+  gtk_box_pack_start(GTK_BOX(box), toolbar->background_style, FALSE, FALSE, 0);
+  toolbar->background_color = gtk_color_button_new();
+  gtk_widget_set_tooltip_text(toolbar->background_color, _("Background colour, for the plain background"));
+  g_signal_connect(toolbar->background_color, "color-set", G_CALLBACK(_background_changed), self);
+  gtk_box_pack_start(GTK_BOX(box), toolbar->background_color, FALSE, FALSE, 0);
   _separator(box);
 
   GtkWidget *border_label = gtk_label_new(_("Border"));
