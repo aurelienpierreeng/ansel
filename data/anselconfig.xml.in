@@ -2937,6 +2937,12 @@
     <shortdescription>memory budget for decoded canvas images, in MB</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>canvas/gutter</name>
+    <type min="0" max="500">float</type>
+    <default>20</default>
+    <shortdescription>margin canvas frames keep from each other when snapped side by side or arranged, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>canvas/masonry_columns</name>
     <type min="1" max="20">int</type>
     <default>3</default>

@@ -1842,3 +1842,11 @@ textview text selection {
 .iop_drop_after {
   border-top: 2.4em solid @plugin_bg_color;
 }
+
+/* Canvas atelier: the property bar floating under the selected object must read over any picture. */
+.dt-canvas-floating {
+  background-color: @bg_color;
+  border: 1px solid @grey_30;
+  border-radius: 4px;
+  padding: 4px;
+}

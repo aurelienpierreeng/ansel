@@ -113,12 +113,12 @@ static void _paint_border(cairo_t *cr, const dt_canvas_t *canvas, const dt_canva
   float width = 0.0f;
   dt_canvas_object_effective_border(canvas, object, &color, &width);
   if(width <= 0.0f || color.alpha <= 0.0f) return;
-  // The border sits outside the frame, so it never covers the picture.
+  // The border is part of the frame: it sits inside its edge, and the content is inset by it.
   cairo_save(cr);
   _set_color(cr, &color, options->for_display);
   cairo_set_line_width(cr, width);
-  cairo_rectangle(cr, -object->width * 0.5 - width * 0.5, -object->height * 0.5 - width * 0.5,
-                  object->width + width, object->height + width);
+  cairo_rectangle(cr, -object->width * 0.5 + width * 0.5, -object->height * 0.5 + width * 0.5,
+                  fmax(object->width - width, 0.0), fmax(object->height - width, 0.0));
   cairo_stroke(cr);
   cairo_restore(cr);
 }
@@ -165,21 +165,36 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   }
   const double surface_width = cairo_image_surface_get_width(surface);
   const double surface_height = cairo_image_surface_get_height(surface);
+  dt_canvas_color_t border_color;
+  float border_width = 0.0f;
+  dt_canvas_object_effective_border(canvas, object, &border_color, &border_width);
+  const double inner_width = fmax(object->width - 2.0 * border_width, 1.0);
+  const double inner_height = fmax(object->height - 2.0 * border_width, 1.0);
   if(surface_width > 0.0 && surface_height > 0.0)
   {
     cairo_save(cr);
-    cairo_rectangle(cr, -object->width * 0.5, -object->height * 0.5, object->width, object->height);
+    cairo_rectangle(cr, -inner_width * 0.5, -inner_height * 0.5, inner_width, inner_height);
     cairo_clip(cr);
-    cairo_translate(cr, -object->width * 0.5, -object->height * 0.5);
-    cairo_scale(cr, object->width / surface_width, object->height / surface_height);
+    cairo_translate(cr, -inner_width * 0.5, -inner_height * 0.5);
+    cairo_scale(cr, inner_width / surface_width, inner_height / surface_height);
     cairo_set_source_surface(cr, surface, 0.0, 0.0);
     // Set AFTER cairo_set_source_surface(): the filter belongs to the pattern that scales.
-    const double downscale = (object->width / surface_width) / options->units_per_pixel;
+    const double downscale = (inner_width / surface_width) / options->units_per_pixel;
     cairo_pattern_set_filter(cairo_get_source(cr), downscale < 0.5 ? CAIRO_FILTER_GOOD : CAIRO_FILTER_BILINEAR);
     cairo_paint(cr);
     cairo_restore(cr);
   }
   if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
+}
+
+/** The text sits inside the border and the padding. */
+static double _text_inset(const dt_canvas_t *canvas, const dt_canvas_object_t *object)
+{
+  dt_canvas_color_t border_color;
+  float border_width = 0.0f;
+  dt_canvas_object_effective_border(canvas, object, &border_color, &border_width);
+  const double padding = object->text.padding > 0.0f ? object->text.padding : 0.0;
+  return padding + border_width;
 }
 
 static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object)
@@ -188,7 +203,7 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
   PangoFontDescription *font = pango_font_description_from_string(dt_canvas_text_effective_font(canvas, object));
   pango_layout_set_font_description(layout, font);
   pango_font_description_free(font);
-  const double padding = object->text.padding > 0.0f ? object->text.padding : 0.0;
+  const double padding = _text_inset(canvas, object);
   const double text_width = fmax(object->width - 2.0 * padding, 1.0);
   pango_layout_set_width(layout, (int)(text_width * PANGO_SCALE));
   pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
@@ -215,7 +230,7 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   cairo_save(cr);
   cairo_rectangle(cr, -half_width, -half_height, object->width, object->height);
   cairo_clip(cr);
-  const double padding = object->text.padding > 0.0f ? object->text.padding : 0.0;
+  const double padding = _text_inset(canvas, object);
   cairo_translate(cr, -half_width + padding, -half_height + padding);
   PangoLayout *layout = _text_layout(cr, canvas, object);
   _set_color(cr, &object->text.text_color, options->for_display);
@@ -233,8 +248,7 @@ double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canva
   int layout_height = 0;
   pango_layout_get_pixel_size(layout, &layout_width, &layout_height);
   g_object_unref(layout);
-  const double padding = object->text.padding > 0.0f ? object->text.padding : 0.0;
-  return layout_height + 2.0 * padding;
+  return layout_height + 2.0 * _text_inset(canvas, object);
 }
 
 /* --- connectors --------------------------------------------------------------- */
@@ -276,7 +290,12 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
     cairo_set_dash(cr, dashes, 2, 0.0);
   }
   cairo_move_to(cr, route.from_x, route.from_y);
-  if(route.routing == DT_CANVAS_ROUTING_CUBIC)
+  if(route.routing == DT_CANVAS_ROUTING_CUBIC && route.segment_count == 2)
+  {
+    cairo_curve_to(cr, route.control1_x, route.control1_y, route.control2_x, route.control2_y, route.via_x, route.via_y);
+    cairo_curve_to(cr, route.control3_x, route.control3_y, route.control4_x, route.control4_y, route.to_x, route.to_y);
+  }
+  else if(route.routing == DT_CANVAS_ROUTING_CUBIC)
   {
     cairo_curve_to(cr, route.control1_x, route.control1_y, route.control2_x, route.control2_y, route.to_x, route.to_y);
   }
@@ -310,15 +329,7 @@ void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_can
     return;
   }
   const dt_canvas_rect_t bounds = dt_canvas_object_bounds(object);
-  dt_canvas_color_t border_color;
-  float border_width = 0.0f;
-  dt_canvas_object_effective_border(canvas, object, &border_color, &border_width);
-  dt_canvas_rect_t reach = bounds;
-  reach.x -= border_width;
-  reach.y -= border_width;
-  reach.width += 2.0 * border_width;
-  reach.height += 2.0 * border_width;
-  if(!_rect_intersects(&options->clip, &reach)) return;
+  if(!_rect_intersects(&options->clip, &bounds)) return;
 
   cairo_save(cr);
   cairo_translate(cr, object->x, object->y);

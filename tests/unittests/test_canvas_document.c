@@ -37,6 +37,7 @@ static dt_canvas_t *_populated_canvas(void)
   canvas->grid_flags = DT_CANVAS_GRID_VISIBLE | DT_CANVAS_GRID_SNAP;
   canvas->border_width = 3.0f;
   canvas->border_color = dt_canvas_color(1.0f, 0.5f, 0.25f, 1.0f);
+  canvas->gutter = 35.0f;
   canvas->reserved[7] = 0xAB;
 
   dt_canvas_object_t *image = dt_canvas_add_image(canvas, 100.0, 200.0, 6000, 4000);
@@ -64,6 +65,9 @@ static dt_canvas_t *_populated_canvas(void)
   connector->connector.from_anchor = DT_CANVAS_ANCHOR_SOUTH;
   connector->connector.to_anchor = DT_CANVAS_ANCHOR_WEST;
   connector->connector.routing = DT_CANVAS_ROUTING_CUBIC;
+  connector->connector.via_count = 1;
+  connector->connector.via_x = -120.0;
+  connector->connector.via_y = 300.0;
   return canvas;
 }
 
@@ -84,6 +88,7 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(restored->grid_size, 25.0f, 1e-6);
   assert_int_equal(restored->grid_flags, DT_CANVAS_GRID_VISIBLE | DT_CANVAS_GRID_SNAP);
   assert_float_equal(restored->border_color.green, 0.5f, 1e-6);
+  assert_float_equal(restored->gutter, 35.0f, 1e-6);
   assert_int_equal(restored->reserved[7], 0xAB);
   assert_int_equal(dt_canvas_object_count(restored), 3);
   assert_int_equal(restored->next_id, canvas->next_id);
@@ -117,6 +122,9 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_int_equal(connector->connector.from_anchor, DT_CANVAS_ANCHOR_SOUTH);
   assert_int_equal(connector->connector.to_anchor, DT_CANVAS_ANCHOR_WEST);
   assert_int_equal(connector->connector.routing, DT_CANVAS_ROUTING_CUBIC);
+  assert_int_equal(connector->connector.via_count, 1);
+  assert_float_equal(connector->connector.via_x, -120.0, 1e-9);
+  assert_float_equal(connector->connector.via_y, 300.0, 1e-9);
 
   dt_canvas_free(restored);
   dt_canvas_free(canvas);
@@ -383,6 +391,78 @@ static void _connectors_route_between_cardinal_anchors(void **state)
   dt_canvas_free(canvas);
 }
 
+static void _a_waypoint_bends_every_routing_through_it(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *left = dt_canvas_add_text(canvas, 0.0, 0.0, 200.0, 100.0, "");
+  dt_canvas_object_t *right = dt_canvas_add_text(canvas, 600.0, 0.0, 200.0, 100.0, "");
+  dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, left->id, right->id);
+  dt_canvas_route_t route;
+
+  // Added at the middle of the current route, the waypoint changes nothing yet.
+  dt_canvas_connector_add_via(canvas, connector);
+  assert_int_equal(connector->connector.via_count, 1);
+  assert_float_equal(connector->connector.via_x, 300.0, 1e-9);
+  assert_float_equal(connector->connector.via_y, 0.0, 1e-9);
+
+  // Moved, every routing passes through it.
+  connector->connector.via_x = 300.0;
+  connector->connector.via_y = 250.0;
+  static const dt_canvas_routing_t routings[]
+      = { DT_CANVAS_ROUTING_STRAIGHT, DT_CANVAS_ROUTING_SQUARE, DT_CANVAS_ROUTING_CUBIC };
+  for(size_t idx = 0; idx < G_N_ELEMENTS(routings); idx++)
+  {
+    connector->connector.routing = routings[idx];
+    assert_true(dt_canvas_connector_route(canvas, connector, &route));
+    assert_int_equal(route.segment_count, 2);
+    assert_true(dt_canvas_object_contains(canvas, connector, 300.0, 250.0, 1.0));
+    assert_float_equal(route.points[0], 100.0, 1e-9);
+    assert_float_equal(route.points[2 * route.point_count - 2], 500.0, 1e-9);
+  }
+  // Straight: two segments, the chord's middle is no longer on the line.
+  connector->connector.routing = DT_CANVAS_ROUTING_STRAIGHT;
+  assert_false(dt_canvas_object_contains(canvas, connector, 300.0, 0.0, 1.0));
+  dt_canvas_connector_remove_via(canvas, connector);
+  assert_true(dt_canvas_object_contains(canvas, connector, 300.0, 0.0, 1.0));
+  dt_canvas_free(canvas);
+}
+
+static void _frames_snap_next_to_their_neighbours_one_gutter_apart(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->gutter = 30.0f;
+  dt_canvas_object_t *fixed = dt_canvas_add_text(canvas, 100.0, 100.0, 200.0, 100.0, ""); // spans x 0..200, y 50..150
+  dt_canvas_object_t *moving = dt_canvas_add_text(canvas, 400.0, 400.0, 100.0, 100.0, "");
+  GArray *exclude = g_array_new(FALSE, FALSE, sizeof(uint32_t));
+  g_array_append_val(exclude, moving->id);
+  double delta_x = 0.0;
+  double delta_y = 0.0;
+
+  // Its left edge 6 units short of one gutter past the fixed frame's right edge: pulled there.
+  dt_canvas_rect_t box = { 224.0, 300.0, 100.0, 100.0 };
+  assert_true(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, &delta_x, &delta_y));
+  assert_float_equal(delta_x, 6.0, 1e-9);
+  assert_float_equal(delta_y, 0.0, 1e-9); // nothing within reach on y
+  // Its top edge close to the fixed frame's top: aligned.
+  box.y = 53.0;
+  assert_true(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, &delta_x, &delta_y));
+  assert_float_equal(delta_y, -3.0, 1e-9);
+  // Far from everything: nothing.
+  box.x = 1000.0;
+  box.y = 1000.0;
+  assert_false(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, &delta_x, &delta_y));
+  // The excluded frame never attracts itself.
+  const dt_canvas_rect_t self_box = dt_canvas_object_bounds(moving);
+  dt_canvas_rect_t nudged = self_box;
+  nudged.x += 2.0;
+  assert_false(dt_canvas_snap_to_neighbours(canvas, &nudged, exclude, 8.0, &delta_x, &delta_y));
+  (void)fixed;
+  g_array_free(exclude, TRUE);
+  dt_canvas_free(canvas);
+}
+
 static void _layouts_arrange_without_moving_the_group(void **state)
 {
   (void)state;
@@ -394,12 +474,13 @@ static void _layouts_arrange_without_moving_the_group(void **state)
   }
   const dt_canvas_rect_t before = dt_canvas_bounds(canvas);
   canvas->grid_size = 50.0f;
+  canvas->gutter = 30.0f;
   dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_GRID, 0);
   const dt_canvas_rect_t after = dt_canvas_bounds(canvas);
   assert_float_equal(after.x, before.x, 1e-9);
   assert_float_equal(after.y, before.y, 1e-9);
-  // The gap is the grid: the second column starts one cell plus one grid step after the first.
-  assert_float_equal(frames[1]->x - frames[0]->x, frames[0]->width + 50.0, 1e-9);
+  // The gap is the gutter: the second column starts one cell plus one gutter after the first.
+  assert_float_equal(frames[1]->x - frames[0]->x, frames[0]->width + 30.0, 1e-9);
   // Two columns of two: the second frame sits to the right of the first, the third below it.
   assert_true(frames[1]->x > frames[0]->x);
   assert_float_equal(frames[1]->y, frames[0]->y, 1e-9);
@@ -423,7 +504,9 @@ static void _layouts_arrange_without_moving_the_group(void **state)
   assert_float_equal(dt_canvas_snap(canvas, 74.0), 50.0, 1e-9);
   assert_float_equal(dt_canvas_snap(canvas, 76.0), 100.0, 1e-9);
 
-  // With snapping on, every layout puts every frame's top-left corner on the grid.
+  // With snapping on and a gutter that is a grid multiple, every layout puts every frame's
+  // top-left corner on the grid.
+  canvas->gutter = 50.0f;
   static const dt_canvas_layout_t layouts[]
       = { DT_CANVAS_LAYOUT_GRID, DT_CANVAS_LAYOUT_MASONRY, DT_CANVAS_LAYOUT_ROW, DT_CANVAS_LAYOUT_COLUMN };
   for(size_t layout = 0; layout < G_N_ELEMENTS(layouts); layout++)
@@ -468,6 +551,8 @@ int main(void)
     cmocka_unit_test(_draw_order_edits_keep_the_list_sorted),
     cmocka_unit_test(_rotated_frames_answer_hit_tests_and_bounds),
     cmocka_unit_test(_connectors_route_between_cardinal_anchors),
+    cmocka_unit_test(_a_waypoint_bends_every_routing_through_it),
+    cmocka_unit_test(_frames_snap_next_to_their_neighbours_one_gutter_apart),
     cmocka_unit_test(_layouts_arrange_without_moving_the_group),
     cmocka_unit_test(_colours_parse_and_format),
   };
