@@ -654,6 +654,85 @@ static cairo_surface_t *_paper_tile(const uint32_t style, const gboolean for_dis
   return tile;
 }
 
+#define PAPER_DITHER_TILE 256
+#define PAPER_DITHER_SIGMA 0.008 ///< at zoom 1, the standard deviation of the multiplicative noise
+
+/**
+ * A tile of achromatic Gaussian noise around one, for a multiply blend: pixel values of
+ * 1 - sigma - sigma * g, so the mean factor is 1 - sigma and a multiply cannot exceed one.
+ * Cached per sigma, which is quantised so a smooth zoom does not regenerate it every frame.
+ */
+static cairo_surface_t *_paper_dither_tile(const double sigma)
+{
+  static cairo_surface_t *cached = NULL;
+  static int cached_key = -1;
+  static GMutex lock;
+  const int key = (int)lround(sigma * 4096.0);
+  g_mutex_lock(&lock);
+  if(!IS_NULL_PTR(cached) && cached_key == key)
+  {
+    cairo_surface_t *tile = cached;
+    g_mutex_unlock(&lock);
+    return tile;
+  }
+  cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, PAPER_DITHER_TILE, PAPER_DITHER_TILE);
+  uint8_t *data = cairo_image_surface_get_data(tile);
+  const int stride = cairo_image_surface_get_stride(tile);
+  for(int y = 0; y < PAPER_DITHER_TILE; y++)
+  {
+    for(int x = 0; x < PAPER_DITHER_TILE; x++)
+    {
+      double uniform_a = 0.0;
+      double uniform_b = 0.0;
+      _paper_hash_uniforms(0xD17Eu, x, y, &uniform_a, &uniform_b);
+      const double gaussian = sqrt(-2.0 * log(uniform_a)) * cos(2.0 * M_PI * uniform_b);
+      const uint8_t value = (uint8_t)lround(CLAMP(1.0 - sigma - sigma * gaussian, 0.0, 1.0) * 255.0);
+      uint8_t *pixel = data + (size_t)y * stride + (size_t)x * 4;
+      pixel[0] = value;
+      pixel[1] = value;
+      pixel[2] = value;
+      pixel[3] = 255;
+    }
+  }
+  cairo_surface_mark_dirty(tile);
+  if(!IS_NULL_PTR(cached)) cairo_surface_destroy(cached);
+  cached = tile;
+  cached_key = key;
+  g_mutex_unlock(&lock);
+  return tile;
+}
+
+/**
+ * Finish the paper with a gentle multiplicative dither, one device pixel wide at every zoom:
+ * its deviation grows with the square root of the zoom, so a magnified paper, whose own
+ * grain is interpolated, gets a little more of it. Anchored to the canvas origin, so it does
+ * not shimmer under a pan.
+ */
+static void _paint_dither(cairo_t *cr, const dt_canvas_paint_options_t *options)
+{
+  const double zoom = 1.0 / options->units_per_pixel;
+  const double sigma = PAPER_DITHER_SIGMA * CLAMP(sqrt(zoom), 0.5, 2.0);
+  cairo_surface_t *tile = _paper_dither_tile(sigma);
+  double origin_x = 0.0;
+  double origin_y = 0.0;
+  cairo_user_to_device(cr, &origin_x, &origin_y);
+  cairo_save(cr);
+  cairo_rectangle(cr, options->clip.x, options->clip.y, options->clip.width, options->clip.height);
+  cairo_clip(cr);
+  cairo_identity_matrix(cr);
+  cairo_pattern_t *pattern = cairo_pattern_create_for_surface(tile);
+  cairo_pattern_set_extend(pattern, CAIRO_EXTEND_REPEAT);
+  cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
+  cairo_matrix_t matrix;
+  cairo_matrix_init_translate(&matrix, -floor(origin_x), -floor(origin_y));
+  cairo_pattern_set_matrix(pattern, &matrix);
+  cairo_set_source(cr, pattern);
+  cairo_pattern_destroy(pattern);
+  cairo_set_operator(cr, CAIRO_OPERATOR_MULTIPLY);
+  cairo_paint(cr);
+  cairo_restore(cr);
+}
+
 /** Fill the clip with the paper, cell by cell in device space at integer offsets: cairo's fastest blit. */
 static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
 {
@@ -706,6 +785,7 @@ static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     }
   }
   cairo_restore(cr);
+  _paint_dither(cr, options);
 }
 
 /* --- frames ----------------------------------------------------------------- */

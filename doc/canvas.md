@@ -219,7 +219,10 @@ from a hash of its frequency, so a sprite synthesised at a higher resolution kee
 broad features and only adds finer ones: the grain sharpens as the zoom grows (256 to 1024
 pixels per sprite) instead of the same texture being enlarged. Sprites are kept per
 resolution, and the scaled, colour-managed copies per target; the plane is filled cell by
-cell in device space at integer offsets, cairo's fastest blit.
+cell in device space at integer offsets, cairo's fastest blit, then finished with a gentle
+achromatic multiplicative dither, one device pixel wide at every zoom, whose deviation grows
+with the square root of the zoom: a repeated noise tile blended with the multiply operator,
+anchored to the canvas origin so it does not shimmer under a pan.
 The grid dots have a colour of their own and a radius that is a fraction of the grid step,
 so they scale with the zoom too, floored at three quarters of a pixel so they never vanish.
 
