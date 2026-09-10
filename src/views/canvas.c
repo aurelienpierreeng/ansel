@@ -212,6 +212,8 @@ typedef struct dt_canvas_view_t
   GtkWidget *row_cutout;
   GtkWidget *object_cutout_shape;
   GtkWidget *object_cutout_feather;
+  GtkWidget *object_cutout_size_x;
+  GtkWidget *object_cutout_size_y;
   GtkWidget *object_cutout_invert;
   GtkWidget *object_cutout_edit;
   dt_canvas_t *menu_snapshot;           ///< the document when a slider menu opened, for one undo record on close
@@ -1761,7 +1763,23 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
         _menu_slider(menu, _("Curvature"), -2.0, 2.0, 0.05, object->mask.radius_y,
                      _menu_context(self, id, x, y, DT_CANVAS_MENU_CURVATURE));
       }
-      gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+      // A polygon's nodes: the node or the edge under the pointer, right here in the menu.
+      if(object->mask.shape == DT_CANVAS_MASK_POLYGON)
+      {
+        const int segment = hovered == DT_CANVAS_DRAG_NONE ? _mask_segment_at(canvas_view, object, x, y) : -1;
+        if(hovered == DT_CANVAS_DRAG_MASK_NODE)
+        {
+          const float *node = object->mask.nodes + (size_t)hovered_index * DT_CANVAS_MASK_NODE_FLOATS;
+          _menu_item(menu, node[6] != 0.0f ? _("Make this node a cusp") : _("Make this node smooth"),
+                     _menu_cutout_smooth_node, _menu_context(self, id, x, y, hovered_index));
+          _menu_item(menu, _("Remove this node"), _menu_cutout_remove_node, _menu_context(self, id, x, y, hovered_index));
+        }
+        else if(segment >= 0)
+        {
+          _menu_item(menu, _("Add a node here"), _menu_cutout_add_node, _menu_context(self, id, x, y, segment));
+        }
+        gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+      }
     }
     if(object->mask.shape != DT_CANVAS_MASK_NONE)
     {
@@ -2171,6 +2189,22 @@ static void _bar_cutout_feather_changed(GtkSpinButton *spin, gpointer data)
   BAR_EDIT_END()
 }
 
+/** The shape's size: the circle's radius, the ellipse's two radii, the gradient's extent; percent of the shorter side. */
+static void _bar_cutout_size_changed(GtkSpinButton *spin, gpointer data)
+{
+  BAR_EDIT_BEGIN_FRAME()
+  const double size_x = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_cutout_size_x)) / 100.0;
+  const double size_y = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_cutout_size_y)) / 100.0;
+  if(object->mask.shape == DT_CANVAS_MASK_GRADIENT)
+    object->mask.radius_x = (float)CLAMP(size_x, 0.0005, 1.0);
+  else
+  {
+    object->mask.radius_x = (float)CLAMP(size_x, 0.005, 2.0);
+    if(object->mask.shape == DT_CANVAS_MASK_ELLIPSE) object->mask.radius_y = (float)CLAMP(size_y, 0.005, 2.0);
+  }
+  BAR_EDIT_END()
+}
+
 static void _bar_cutout_invert_toggled(GtkToggleButton *button, gpointer data)
 {
   BAR_EDIT_BEGIN_FRAME()
@@ -2517,6 +2551,13 @@ static void _bars_create(dt_view_t *self)
   view->object_cutout_feather = _bar_spin(feather, 0.0, 100.0, 1.0, 0,
                                           _("Fall-off past the shape's edge, percent of the frame's shorter side. The wheel over the frame changes it while editing."),
                                           G_CALLBACK(_bar_cutout_feather_changed), self);
+  GtkWidget *cutout_size = _bar_group(view->row_cutout, _("Size"));
+  view->object_cutout_size_x = _bar_spin(cutout_size, 0.5, 200.0, 0.5, 1,
+                                         _("The circle's radius, the ellipse's horizontal radius or the gradient's extent, percent of the frame's shorter side"),
+                                         G_CALLBACK(_bar_cutout_size_changed), self);
+  view->object_cutout_size_y = _bar_spin(cutout_size, 0.5, 200.0, 0.5, 1,
+                                         _("The ellipse's vertical radius, percent of the frame's shorter side"),
+                                         G_CALLBACK(_bar_cutout_size_changed), self);
   view->object_cutout_invert = _bar_toggle(view->row_cutout, _("Invert"), _("Keep what is outside the shape"),
                                            G_CALLBACK(_bar_cutout_invert_toggled), self);
   view->object_cutout_edit = _bar_toggle(view->row_cutout, _("Edit"),
@@ -2696,6 +2737,8 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       _color_to_button(view->object_shadow_color, &shadow.color);
       gtk_combo_box_set_active(GTK_COMBO_BOX(view->object_cutout_shape), CLAMP((int)object->mask.shape, 0, DT_CANVAS_MASK_GRADIENT));
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_cutout_feather), object->mask.feather * 100.0);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_cutout_size_x), object->mask.radius_x * 100.0);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_cutout_size_y), object->mask.radius_y * 100.0);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->object_cutout_invert), (object->mask.flags & DT_CANVAS_MASK_INVERT) != 0);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->object_cutout_edit), view->mask_editing);
       const gboolean cut = frame && object->mask.shape != DT_CANVAS_MASK_NONE;
@@ -2710,6 +2753,8 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_widget_set_visible(view->shadow_custom, (object->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE) != 0);
       gtk_widget_set_visible(view->row_cutout, frame);
       gtk_widget_set_visible(gtk_widget_get_parent(view->object_cutout_feather), cut && object->mask.shape != DT_CANVAS_MASK_GRADIENT);
+      gtk_widget_set_visible(gtk_widget_get_parent(view->object_cutout_size_x), cut && object->mask.shape != DT_CANVAS_MASK_POLYGON);
+      gtk_widget_set_visible(view->object_cutout_size_y, cut && object->mask.shape == DT_CANVAS_MASK_ELLIPSE);
       gtk_widget_set_visible(view->object_cutout_invert, cut);
       gtk_widget_set_visible(view->object_cutout_edit, cut);
     }

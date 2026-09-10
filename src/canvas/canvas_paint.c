@@ -1666,9 +1666,23 @@ static void _paint_object_pixels(cairo_t *cr, const dt_canvas_t *canvas, const d
   cairo_restore(cr);
 }
 
-/** The size a cutout is rasterised at: the frame's size on screen, capped. */
-static void _mask_size(const dt_canvas_object_t *object, const double pixels_per_unit, int *width, int *height)
+/**
+ * How a cutout is rasterised: the frame's size on screen, capped, plus a margin on every
+ * side for what reaches past the frame -- the shape itself, its feather and its border --
+ * so that nothing of a cut frame is ever clipped by its rectangle.
+ */
+typedef struct dt_canvas_mask_geometry_t
 {
+  int width;           ///< the frame's raster, pixels
+  int height;
+  int margin;          ///< pixels added on every side
+  double margin_units; ///< the same, in canvas units
+} dt_canvas_mask_geometry_t;
+
+static dt_canvas_mask_geometry_t _mask_geometry(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                                const double pixels_per_unit)
+{
+  dt_canvas_mask_geometry_t geometry;
   int mask_width = (int)lround(object->width * pixels_per_unit);
   int mask_height = (int)lround(object->height * pixels_per_unit);
   if(mask_width > COMPOSE_MASK_MAX_PIXELS || mask_height > COMPOSE_MASK_MAX_PIXELS)
@@ -1677,20 +1691,29 @@ static void _mask_size(const dt_canvas_object_t *object, const double pixels_per
     mask_width = (int)lround(mask_width * shrink);
     mask_height = (int)lround(mask_height * shrink);
   }
-  *width = MAX(mask_width, 2);
-  *height = MAX(mask_height, 2);
+  geometry.width = MAX(mask_width, 2);
+  geometry.height = MAX(mask_height, 2);
+  dt_canvas_color_t color;
+  float border = 0.0f;
+  dt_canvas_object_effective_border(canvas, object, &color, &border);
+  const double side = fmin(object->width, object->height);
+  geometry.margin_units = fmax(border, 0.0) + object->mask.feather * side + 2.0 / fmax(pixels_per_unit, 1e-6);
+  const double raster_per_unit = geometry.width / object->width;
+  geometry.margin = (int)ceil(geometry.margin_units * raster_per_unit);
+  geometry.margin_units = geometry.margin / raster_per_unit;
+  return geometry;
 }
 
-/** Paint an alpha surface in the cutout's raster space over the frame, with the given operator. */
+/** Paint an alpha surface in the cutout's raster space over the frame and its margin, with the given operator. */
 static void _paint_frame_alpha(cairo_t *cr, const dt_canvas_object_t *object, cairo_surface_t *alpha,
-                               const int mask_width, const int mask_height, const cairo_operator_t operator)
+                               const dt_canvas_mask_geometry_t *geometry, const cairo_operator_t operator)
 {
   cairo_save(cr);
   cairo_set_operator(cr, operator);
   cairo_translate(cr, object->x, object->y);
   cairo_rotate(cr, object->rotation);
-  cairo_scale(cr, object->width / mask_width, object->height / mask_height);
-  cairo_translate(cr, -mask_width * 0.5, -mask_height * 0.5);
+  cairo_scale(cr, object->width / geometry->width, object->height / geometry->height);
+  cairo_translate(cr, -(geometry->width * 0.5 + geometry->margin), -(geometry->height * 0.5 + geometry->margin));
   if(operator == CAIRO_OPERATOR_DEST_IN)
   {
     cairo_set_source_surface(cr, alpha, 0.0, 0.0);
@@ -1709,39 +1732,47 @@ static void _paint_frame_alpha(cairo_t *cr, const dt_canvas_object_t *object, ca
  * Multiply the layer's alpha by the object's cutout, rasterised at the frame's size on screen:
  * the feathered shape for the content, or its hard-edged support for what fills the shape.
  */
-static void _apply_cutout(cairo_t *cr, const dt_canvas_object_t *object, const dt_canvas_paint_options_t *options,
-                          const double pixels_per_unit, const gboolean support)
+static void _apply_cutout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                          const dt_canvas_paint_options_t *options, const double pixels_per_unit,
+                          const gboolean support)
 {
   if(!_object_cut(object)) return;
-  int mask_width = 0;
-  int mask_height = 0;
-  _mask_size(object, pixels_per_unit, &mask_width, &mask_height);
+  const dt_canvas_mask_geometry_t geometry = _mask_geometry(canvas, object, pixels_per_unit);
   cairo_surface_t *mask = NULL;
   cairo_surface_t *owned = NULL;
   if(!IS_NULL_PTR(options->cache))
-    mask = support ? dt_canvas_surface_cache_get_mask_support(options->cache, object, mask_width, mask_height)
-                   : dt_canvas_surface_cache_get_mask(options->cache, object, mask_width, mask_height);
+    mask = support ? dt_canvas_surface_cache_get_mask_support(options->cache, object, geometry.width, geometry.height,
+                                                              geometry.margin)
+                   : dt_canvas_surface_cache_get_mask(options->cache, object, geometry.width, geometry.height,
+                                                      geometry.margin);
   else
   {
-    owned = support ? dt_canvas_render_mask_support(object, mask_width, mask_height)
-                    : dt_canvas_render_mask(object, mask_width, mask_height);
+    owned = support ? dt_canvas_render_mask_support(object, geometry.width, geometry.height, geometry.margin)
+                    : dt_canvas_render_mask(object, geometry.width, geometry.height, geometry.margin);
     mask = owned;
   }
   if(IS_NULL_PTR(mask)) return;
-  _paint_frame_alpha(cr, object, mask, mask_width, mask_height, CAIRO_OPERATOR_DEST_IN);
+  _paint_frame_alpha(cr, object, mask, &geometry, CAIRO_OPERATOR_DEST_IN);
   if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
 }
 
-/** The object's background over its whole frame: a cut-out frame's fill, clipped to the shape's support later. */
-static void _paint_fill(cairo_t *cr, const dt_canvas_object_t *object, const dt_canvas_paint_options_t *options)
+/**
+ * The object's background over its frame and the cutout's margin: a cut-out frame's fill,
+ * clipped to the shape's support afterwards, wherever the shape reaches.
+ */
+static void _paint_fill(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                        const dt_canvas_paint_options_t *options, const double pixels_per_unit)
 {
   const dt_canvas_color_t background = dt_canvas_object_background(object);
   if(background.alpha <= 0.0f) return;
+  const dt_canvas_mask_geometry_t geometry = _mask_geometry(canvas, object, pixels_per_unit);
+  const double grow = geometry.margin_units;
   cairo_save(cr);
   cairo_translate(cr, object->x, object->y);
   cairo_rotate(cr, object->rotation);
   _set_color(cr, &background, options->for_display);
-  cairo_rectangle(cr, -object->width * 0.5, -object->height * 0.5, object->width, object->height);
+  cairo_rectangle(cr, -object->width * 0.5 - grow, -object->height * 0.5 - grow, object->width + 2.0 * grow,
+                  object->height + 2.0 * grow);
   cairo_fill(cr);
   cairo_restore(cr);
 }
@@ -1759,23 +1790,22 @@ static gboolean _paint_cut_border(cairo_t *cr, const dt_canvas_t *canvas, const 
   float width = 0.0f;
   dt_canvas_object_effective_border(canvas, object, &color, &width);
   if(width <= 0.0f || color.alpha <= 0.0f) return FALSE;
-  int mask_width = 0;
-  int mask_height = 0;
-  _mask_size(object, pixels_per_unit, &mask_width, &mask_height);
+  const dt_canvas_mask_geometry_t geometry = _mask_geometry(canvas, object, pixels_per_unit);
   // The band's radius in the cutout's raster pixels, which may be coarser than the screen's.
-  const int radius = MAX(1, (int)lround(width * mask_width / object->width));
+  const int radius = MAX(1, (int)lround(width * geometry.width / object->width));
   cairo_surface_t *band = NULL;
   cairo_surface_t *owned = NULL;
   if(!IS_NULL_PTR(options->cache))
-    band = dt_canvas_surface_cache_get_mask_band(options->cache, object, mask_width, mask_height, radius);
+    band = dt_canvas_surface_cache_get_mask_band(options->cache, object, geometry.width, geometry.height,
+                                                 geometry.margin, radius);
   else
   {
-    owned = dt_canvas_render_mask_band(object, mask_width, mask_height, radius);
+    owned = dt_canvas_render_mask_band(object, geometry.width, geometry.height, geometry.margin, radius);
     band = owned;
   }
   if(IS_NULL_PTR(band)) return FALSE;
   _set_color(cr, &color, options->for_display);
-  _paint_frame_alpha(cr, object, band, mask_width, mask_height, CAIRO_OPERATOR_OVER);
+  _paint_frame_alpha(cr, object, band, &geometry, CAIRO_OPERATOR_OVER);
   if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
   return TRUE;
 }
@@ -1818,10 +1848,9 @@ static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas
   }
   if(_object_cut(object))
   {
-    dt_canvas_color_t color;
-    float width = 0.0f;
-    dt_canvas_object_effective_border(canvas, object, &color, &width);
-    if(width > 0.0f) box = _box_grow(&box, (int)ceil(width * pixels_per_unit) + 1);
+    // The cutout's margin: the shape, its feather and its border may all reach past the frame.
+    const dt_canvas_mask_geometry_t geometry = _mask_geometry(canvas, object, pixels_per_unit);
+    box = _box_grow(&box, (int)ceil(geometry.margin_units * pixels_per_unit) + 1);
   }
   if(dt_canvas_shadow_visible(shadow) && shadow->blur > 0.0f)
   {
@@ -1913,10 +1942,10 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     const gboolean cut = _object_cut(object);
     cairo_t *layer_cr = _layer_context(layer, matrix, &layer_box, font_options);
     if(cut)
-      _paint_fill(layer_cr, object, &local);
+      _paint_fill(layer_cr, canvas, object, &local, pixels_per_unit);
     else
       _paint_object_pixels(layer_cr, canvas, object, &local);
-    _apply_cutout(layer_cr, object, &local, pixels_per_unit, TRUE);
+    _apply_cutout(layer_cr, canvas, object, &local, pixels_per_unit, TRUE);
     cairo_destroy(layer_cr);
 
     const size_t layer_pixels = (size_t)layer_box.width * layer_box.height;
@@ -1946,7 +1975,7 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
         if(part == 0)
         {
           _paint_object_pixels(extra_cr, canvas, object, &local);
-          _apply_cutout(extra_cr, object, &local, pixels_per_unit, FALSE);
+          _apply_cutout(extra_cr, canvas, object, &local, pixels_per_unit, FALSE);
         }
         else
         {
