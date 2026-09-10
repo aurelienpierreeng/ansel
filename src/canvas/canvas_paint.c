@@ -389,10 +389,11 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
   }
   else if(style == DT_CANVAS_BACKGROUND_EMBOSSED)
   {
-    // The random part of a wove sheet: a faint mottle and fibres; the mesh comes after the blend.
+    // The random part of a wove sheet: a mottle and fibres; the mesh comes after the blend,
+    // and takes its wobble from this very relief.
     double *mottle = _paper_field(size, 36.0, 2.0, seed + 301u);
     double *fibres = _paper_fibres(size, seed + 305u);
-    for(size_t idx = 0; idx < (size_t)size * size; idx++) relief[idx] = mottle[idx] * 0.008 + fibres[idx] * 0.007;
+    for(size_t idx = 0; idx < (size_t)size * size; idx++) relief[idx] = mottle[idx] * 0.01 + fibres[idx] * 0.009;
     dt_free(mottle);
     dt_free(fibres);
   }
@@ -406,8 +407,8 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
     double *grain = _paper_field(size, 180.0, 1.0, seed + 403u);
     for(size_t idx = 0; idx < (size_t)size * size; idx++)
     {
-      const double ridge = exp(-wrinkle_field[idx] * wrinkle_field[idx] * 60.0);
-      relief[idx] = clouds[idx] * 0.03 + ridge * 0.04 + grain[idx] * 0.002;
+      const double ridge = exp(-wrinkle_field[idx] * wrinkle_field[idx] * 80.0);
+      relief[idx] = clouds[idx] * 0.018 + ridge * 0.065 + grain[idx] * 0.002;
     }
     dt_free(clouds);
     dt_free(wrinkle_field);
@@ -416,14 +417,22 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
   return relief;
 }
 
-#define PAPER_MESH_PITCH 8.0 ///< the embossing mesh's wire spacing, in canvas units
+#define PAPER_WEFT_PITCH 6.0  ///< the mesh's weft threads, across the sheet: close and pressed in deep
+#define PAPER_WARP_PITCH 12.0 ///< its warp threads, along the sheet: sparser and fainter
 
-/** The mesh's imprint at a point of the composed field, in canvas units: a groove along each wire. */
-static double _paper_mesh(const double unit_x, const double unit_y)
+/**
+ * The mesh's imprint at a point of the composed field, in canvas units: a groove along each
+ * thread, the weft closer and deeper than the warp. `wobble` -- the sheet's own relief at
+ * that point, fibres included -- bends the threads and varies their pressure, so the
+ * imprint is that of fibres pressed on a mesh rather than a print of the mesh itself.
+ */
+static double _paper_mesh(const double unit_x, const double unit_y, const double wobble)
 {
-  const double along_x = fmax(cos(2.0 * M_PI * unit_x / PAPER_MESH_PITCH), 0.0);
-  const double along_y = fmax(cos(2.0 * M_PI * unit_y / PAPER_MESH_PITCH), 0.0);
-  return -0.035 * (pow(along_x, 4.0) + pow(along_y, 4.0));
+  const double bend = wobble * 40.0;
+  const double pressure = CLAMP(1.0 + wobble * 18.0, 0.4, 1.6);
+  const double weft = fmax(cos(2.0 * M_PI * (unit_y + bend) / PAPER_WEFT_PITCH), 0.0);
+  const double warp = fmax(cos(2.0 * M_PI * (unit_x - bend) / PAPER_WARP_PITCH), 0.0);
+  return -pressure * (0.045 * pow(weft, 4.0) + 0.02 * pow(warp, 4.0));
 }
 
 #define PAPER_CELLS 6       ///< sprites per side of the composed field: its period is PAPER_CELLS sprites
@@ -558,7 +567,7 @@ static uint8_t *_paper_pixels(const dt_canvas_background_t style, const int spri
     // The mesh is stamped over the blended field in absolute coordinates, so it stays one
     // mesh across placements whatever their phase and jitter; its pitch divides the period.
     if(style == DT_CANVAS_BACKGROUND_EMBOSSED)
-      relief += _paper_mesh((idx % total) / pixels_per_unit, (idx / total) / pixels_per_unit);
+      relief += _paper_mesh((idx % total) / pixels_per_unit, (idx / total) / pixels_per_unit, field[idx]);
     pixels[4 * idx + 0] = (uint8_t)lround(CLAMP(base_r + relief, 0.0, 1.0) * 255.0);
     pixels[4 * idx + 1] = (uint8_t)lround(CLAMP(base_g + relief, 0.0, 1.0) * 255.0);
     pixels[4 * idx + 2] = (uint8_t)lround(CLAMP(base_b + relief, 0.0, 1.0) * 255.0);
