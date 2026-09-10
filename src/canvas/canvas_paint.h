@@ -53,6 +53,7 @@ typedef struct dt_canvas_paint_options_t
   gboolean draw_placeholders;        ///< a frame with no render yet gets a placeholder box
   double units_per_pixel;            ///< canvas units per device pixel, for hairlines and dots
   dt_canvas_rect_t clip;             ///< the canvas area being painted; width 0 means everything
+  double quality;                    ///< 1 composites every pixel; 0.5 composites at half the resolution and scales up, for a frame mid-gesture
 } dt_canvas_paint_options_t;
 
 /** @brief Options suited to the atelier: display colours, grid, placeholders. */
@@ -69,7 +70,8 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
 /** What the last dt_canvas_paint() cost, phase by phase: printed under `-d perf`, and there for tuning. */
 typedef struct dt_canvas_paint_stats_t
 {
-  int64_t pixels;            ///< composited, over every band
+  int64_t pixels;            ///< composited, over every band; 0 when the last frame was served from the cache
+  gboolean cached;           ///< the frame was the previous one, blitted
   int objects;               ///< drawn
   int layers;                ///< cairo layers painted (a cut frame is three)
   int shadows;

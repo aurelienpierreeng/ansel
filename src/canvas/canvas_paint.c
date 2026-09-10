@@ -49,6 +49,7 @@ dt_canvas_paint_options_t dt_canvas_paint_options_display(dt_canvas_surface_cach
   options.draw_placeholders = TRUE;
   options.units_per_pixel = units_per_pixel > 0.0 ? units_per_pixel : 1.0;
   options.clip = clip;
+  options.quality = 1.0;
   return options;
 }
 
@@ -613,13 +614,13 @@ typedef struct dt_paper_cache_t
   uint64_t key;                           ///< the colour, the weights and the size the tile was built for
 } dt_paper_cache_t;
 
-/** A key over what the tile depends on: the colour, the two weights and the size on screen. */
+/** A key over what the tile depends on: the colour, the two weights and the field's resolution. */
 static uint64_t _paper_key(const dt_canvas_color_t *color, const double contrast, const double detail,
-                           const double scale, const int scaled_size)
+                           const double scale, const int field_log2)
 {
   uint64_t hash = 1469598103934665603ULL;
   const float values[7] = { color->red, color->green, color->blue, (float)contrast, (float)detail, (float)scale,
-                            (float)scaled_size };
+                            (float)field_log2 };
   const uint8_t *bytes = (const uint8_t *)values;
   for(size_t idx = 0; idx < sizeof(values); idx++)
   {
@@ -647,10 +648,14 @@ static cairo_surface_t *_paper_tile(const dt_canvas_t *canvas, const int sprite_
   float detail = 1.0f;
   float scale = 1.0f;
   dt_canvas_texture_get(canvas, &contrast, &detail, &scale, NULL);
-  // Never above the field's own resolution: past it, the painter scales each cell up instead
-  // of a tile that would grow with the square of the zoom.
-  const int scaled_size = MIN(PAPER_CELLS * sprite_scaled, PAPER_CELLS * (1 << PAPER_FIELD_MAX_LOG2));
-  const uint64_t key = _paper_key(&canvas->background, contrast, detail, scale, scaled_size);
+  // The tile is the coloured field at its own resolution, the smallest power of two holding
+  // the sprite's size on screen; the painter scales each cell onto the screen, so a zoom step
+  // costs nothing here until it crosses a power of two.
+  int field_log2 = PAPER_FIELD_MIN_LOG2;
+  while(field_log2 < PAPER_FIELD_MAX_LOG2 && (1 << field_log2) < sprite_scaled) field_log2++;
+  const int sprite_size = 1 << field_log2;
+  const int field_size = PAPER_CELLS * sprite_size;
+  const uint64_t key = _paper_key(&canvas->background, contrast, detail, scale, field_log2);
 
   g_mutex_lock(&lock);
   if(!IS_NULL_PTR(cache->tile) && cache->key == key)
@@ -658,10 +663,6 @@ static cairo_surface_t *_paper_tile(const dt_canvas_t *canvas, const int sprite_
     g_mutex_unlock(&lock);
     return cache->tile;
   }
-  int field_log2 = PAPER_FIELD_MIN_LOG2;
-  while(field_log2 < PAPER_FIELD_MAX_LOG2 && (1 << field_log2) < sprite_scaled) field_log2++;
-  const int sprite_size = 1 << field_log2;
-  const int field_size = PAPER_CELLS * sprite_size;
   if(IS_NULL_PTR(cache->low[field_log2]) || cache->scale[field_log2] != scale)
   {
     dt_free(cache->low[field_log2]);
@@ -684,16 +685,10 @@ static cairo_surface_t *_paper_tile(const dt_canvas_t *canvas, const int sprite_
     bgra[4 * idx + 3] = 255;
   }
   dt_free(base);
-  cairo_surface_t *unscaled = cairo_image_surface_create_for_data(bgra, CAIRO_FORMAT_RGB24, field_size, field_size, stride);
-  cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, scaled_size, scaled_size);
-  cairo_t *cr = cairo_create(tile);
-  cairo_scale(cr, (double)scaled_size / field_size, (double)scaled_size / field_size);
-  cairo_set_source_surface(cr, unscaled, 0.0, 0.0);
-  cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
-  cairo_pattern_set_filter(cairo_get_source(cr), scaled_size == field_size ? CAIRO_FILTER_NEAREST : CAIRO_FILTER_GOOD);
-  cairo_paint(cr);
-  cairo_destroy(cr);
-  cairo_surface_destroy(unscaled);
+  cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, field_size, field_size);
+  cairo_surface_flush(tile);
+  memcpy(cairo_image_surface_get_data(tile), bgra, (size_t)stride * field_size);
+  cairo_surface_mark_dirty(tile);
   dt_free(bgra);
   if(!IS_NULL_PTR(cache->tile)) cairo_surface_destroy(cache->tile);
   cache->tile = tile;
@@ -702,83 +697,70 @@ static cairo_surface_t *_paper_tile(const dt_canvas_t *canvas, const int sprite_
   return tile;
 }
 
-#define PAPER_DITHER_TILE 256   ///< the dither tile, repeated in device space
+#define PAPER_DITHER_TILE 256    ///< the noise tile, repeated in device space
 #define PAPER_DITHER_SIGMA 0.008 ///< at zoom 1, the standard deviation of the multiplicative noise
 
-/**
- * A tile of achromatic Gaussian noise around one, for a multiply blend: pixel values of
- * 1 - sigma - sigma * g, so the mean factor is 1 - sigma and a multiply cannot exceed one.
- * Cached per sigma, which is quantised so a smooth zoom does not regenerate it every frame.
- */
-static cairo_surface_t *_paper_dither_tile(const double sigma)
+/** A tile of unit gaussian noise, one draw for the process: the dither is the same every frame. */
+static const float *_dither_noise(void)
 {
-  static cairo_surface_t *cached = NULL;
-  static int cached_key = -1;
-  static GMutex lock;
-  const int key = (int)lround(sigma * 4096.0);
-  g_mutex_lock(&lock);
-  if(!IS_NULL_PTR(cached) && cached_key == key)
+  static float noise[PAPER_DITHER_TILE * PAPER_DITHER_TILE];
+  static gsize ready = 0;
+  if(g_once_init_enter(&ready))
   {
-    cairo_surface_t *tile = cached;
-    g_mutex_unlock(&lock);
-    return tile;
-  }
-  cairo_surface_t *tile = cairo_image_surface_create(CAIRO_FORMAT_RGB24, PAPER_DITHER_TILE, PAPER_DITHER_TILE);
-  uint8_t *data = cairo_image_surface_get_data(tile);
-  const int stride = cairo_image_surface_get_stride(tile);
-  for(int y = 0; y < PAPER_DITHER_TILE; y++)
-  {
-    for(int x = 0; x < PAPER_DITHER_TILE; x++)
+    GRand *rand = g_rand_new_with_seed(0x5EED);
+    for(size_t idx = 0; idx < (size_t)PAPER_DITHER_TILE * PAPER_DITHER_TILE; idx += 2)
     {
-      double uniform_a = 0.0;
-      double uniform_b = 0.0;
-      _paper_hash_uniforms(0xD17Eu, x, y, &uniform_a, &uniform_b);
-      const double gaussian = sqrt(-2.0 * log(uniform_a)) * cos(2.0 * M_PI * uniform_b);
-      const uint8_t value = (uint8_t)lround(CLAMP(1.0 - sigma - sigma * gaussian, 0.0, 1.0) * 255.0);
-      uint8_t *pixel = data + (size_t)y * stride + (size_t)x * 4;
-      pixel[0] = value;
-      pixel[1] = value;
-      pixel[2] = value;
-      pixel[3] = 255;
+      // Box-Muller: two gaussians from two uniforms.
+      const double u1 = fmax(g_rand_double(rand), 1e-12);
+      const double u2 = g_rand_double(rand);
+      const double magnitude = sqrt(-2.0 * log(u1));
+      noise[idx] = (float)(magnitude * cos(2.0 * M_PI * u2));
+      noise[idx + 1] = (float)(magnitude * sin(2.0 * M_PI * u2));
     }
+    g_rand_free(rand);
+    g_once_init_leave(&ready, 1);
   }
-  cairo_surface_mark_dirty(tile);
-  if(!IS_NULL_PTR(cached)) cairo_surface_destroy(cached);
-  cached = tile;
-  cached_key = key;
-  g_mutex_unlock(&lock);
-  return tile;
+  return noise;
 }
 
-/**
- * Finish the paper with a gentle multiplicative dither, one device pixel wide at every zoom:
- * its deviation grows with the square root of the zoom, so a magnified paper, whose own
- * grain is interpolated, gets a little more of it. Anchored to the canvas origin, so it does
- * not shimmer under a pan.
- */
-static void _paint_dither(cairo_t *cr, const dt_canvas_paint_options_t *options, const double strength)
+/** An integer box in device pixels. */
+typedef struct dt_canvas_box_t
 {
-  const double zoom = 1.0 / options->units_per_pixel;
-  const double sigma = PAPER_DITHER_SIGMA * strength * CLAMP(sqrt(zoom), 0.5, 2.0);
-  cairo_surface_t *tile = _paper_dither_tile(sigma);
-  double origin_x = 0.0;
-  double origin_y = 0.0;
-  cairo_user_to_device(cr, &origin_x, &origin_y);
-  cairo_save(cr);
-  cairo_rectangle(cr, options->clip.x, options->clip.y, options->clip.width, options->clip.height);
-  cairo_clip(cr);
-  cairo_identity_matrix(cr);
-  cairo_pattern_t *pattern = cairo_pattern_create_for_surface(tile);
-  cairo_pattern_set_extend(pattern, CAIRO_EXTEND_REPEAT);
-  cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
-  cairo_matrix_t matrix;
-  cairo_matrix_init_translate(&matrix, -floor(origin_x), -floor(origin_y));
-  cairo_pattern_set_matrix(pattern, &matrix);
-  cairo_set_source(cr, pattern);
-  cairo_pattern_destroy(pattern);
-  cairo_set_operator(cr, CAIRO_OPERATOR_MULTIPLY);
-  cairo_paint(cr);
-  cairo_restore(cr);
+  int x;
+  int y;
+  int width;
+  int height;
+} dt_canvas_box_t;
+
+/**
+ * Finish the paper with a gentle multiplicative dither, one device pixel wide at every zoom,
+ * on the float canvas: its deviation grows with the square root of the zoom, so a magnified
+ * paper, whose own grain is interpolated, gets a little more of it. Anchored to the device
+ * pixel, so it does not shimmer under a pan.
+ */
+static void _dither_canvas(float *canvas_rgba, const dt_canvas_box_t *box, const double units_per_pixel,
+                           const double strength)
+{
+  const double zoom = 1.0 / units_per_pixel;
+  const float sigma = (float)(PAPER_DITHER_SIGMA * strength * CLAMP(sqrt(zoom), 0.5, 2.0));
+  if(sigma <= 0.0f) return;
+  const float *noise = _dither_noise();
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int row = 0; row < box->height; row++)
+  {
+    float *pixel = canvas_rgba + (size_t)row * box->width * 4;
+    const int noise_row = ((box->y + row) % PAPER_DITHER_TILE + PAPER_DITHER_TILE) % PAPER_DITHER_TILE;
+    for(int col = 0; col < box->width; col++)
+    {
+      const int noise_col = ((box->x + col) % PAPER_DITHER_TILE + PAPER_DITHER_TILE) % PAPER_DITHER_TILE;
+      const float gain = 1.0f + sigma * noise[noise_row * PAPER_DITHER_TILE + noise_col];
+      pixel[4 * col + 0] *= gain;
+      pixel[4 * col + 1] *= gain;
+      pixel[4 * col + 2] *= gain;
+    }
+  }
 }
 
 /** Fill the clip with the paper, cell by cell in device space at integer offsets: cairo's fastest blit. */
@@ -822,21 +804,18 @@ static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
       cairo_rectangle(cr, cell_x, cell_y, cell_width, cell_height);
       cairo_clip(cr);
       cairo_translate(cr, cell_x, cell_y);
-      // At one pixel per tile pixel this is a plain blit; zoomed past the field, a bilinear scale.
-      const gboolean upscaled = fabs(cell_width - tile_size) > 1.0;
-      if(upscaled) cairo_scale(cr, cell_width / tile_size, cell_height / tile_size);
+      // At one pixel per tile pixel this is a plain blit; otherwise a scale, bilinear either way
+      // (the field is never more than twice the cell, so no better filter is worth its cost).
+      const gboolean scaled = fabs(cell_width - tile_size) > 1.0;
+      if(scaled) cairo_scale(cr, cell_width / tile_size, cell_height / tile_size);
       cairo_set_source_surface(cr, tile, 0.0, 0.0);
       cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_PAD);
-      cairo_pattern_set_filter(cairo_get_source(cr), upscaled ? CAIRO_FILTER_BILINEAR : CAIRO_FILTER_NEAREST);
+      cairo_pattern_set_filter(cairo_get_source(cr), scaled ? CAIRO_FILTER_BILINEAR : CAIRO_FILTER_NEAREST);
       cairo_paint(cr);
       cairo_restore(cr);
     }
   }
   cairo_restore(cr);
-  // Washi is grainier to the eye than the western sheets: twice the dither; the user's grain on top.
-  float grain = 1.0f;
-  dt_canvas_texture_get(canvas, NULL, NULL, NULL, &grain);
-  _paint_dither(cr, options, (canvas->background_style == DT_CANVAS_BACKGROUND_JAPANESE ? 2.0 : 1.0) * grain);
 }
 
 /* --- frames ----------------------------------------------------------------- */
@@ -966,13 +945,46 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
       scale_x = fmax(scale_x, scale_y);
       scale_y = scale_x;
     }
-    cairo_translate(cr, -surface_width * scale_x * 0.5, -surface_height * scale_y * 0.5);
-    cairo_scale(cr, scale_x, scale_y);
-    cairo_set_source_surface(cr, surface, 0.0, 0.0);
-    // Set AFTER cairo_set_source_surface(): the filter belongs to the pattern that scales.
-    const double downscale = scale_x / options->units_per_pixel;
-    cairo_pattern_set_filter(cairo_get_source(cr), downscale < 0.5 ? CAIRO_FILTER_GOOD : CAIRO_FILTER_BILINEAR);
-    cairo_paint(cr);
+    // The picture's box in the layer's pixels. Unrotated, with a cache to keep it, the render is
+    // scaled to that box once per size and blitted pixel for pixel: cairo's own scaling ran a
+    // separable convolution over every picture on every frame. The sprite is a pixel larger
+    // than the box so the clip, not the sprite's edge, ends the picture.
+    gboolean blitted = FALSE;
+    if(!IS_NULL_PTR(options->cache) && object->rotation == 0.0)
+    {
+      double corner_x = -surface_width * scale_x * 0.5;
+      double corner_y = -surface_height * scale_y * 0.5;
+      double extent_x = surface_width * scale_x;
+      double extent_y = surface_height * scale_y;
+      cairo_user_to_device(cr, &corner_x, &corner_y);
+      cairo_user_to_device_distance(cr, &extent_x, &extent_y);
+      if(extent_x > 0.0 && extent_y > 0.0)
+      {
+        const double left = floor(corner_x);
+        const double top = floor(corner_y);
+        const int sprite_width = (int)(ceil(corner_x + extent_x) - left);
+        const int sprite_height = (int)(ceil(corner_y + extent_y) - top);
+        cairo_surface_t *sprite = dt_canvas_surface_cache_get_scaled(options->cache, object, sprite_width, sprite_height);
+        if(!IS_NULL_PTR(sprite))
+        {
+          cairo_identity_matrix(cr);
+          cairo_set_source_surface(cr, sprite, left, top);
+          cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+          cairo_paint(cr);
+          blitted = TRUE;
+        }
+      }
+    }
+    if(!blitted)
+    {
+      cairo_translate(cr, -surface_width * scale_x * 0.5, -surface_height * scale_y * 0.5);
+      cairo_scale(cr, scale_x, scale_y);
+      cairo_set_source_surface(cr, surface, 0.0, 0.0);
+      // Set AFTER cairo_set_source_surface(): the filter belongs to the pattern that scales.
+      const double downscale = scale_x / options->units_per_pixel;
+      cairo_pattern_set_filter(cairo_get_source(cr), downscale < 0.5 ? CAIRO_FILTER_GOOD : CAIRO_FILTER_BILINEAR);
+      cairo_paint(cr);
+    }
     cairo_restore(cr);
   }
   if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
@@ -1214,23 +1226,10 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
  * or re-encoded, still Adobe RGB, for the export. Wider than sRGB and what a print can use;
  * wider still would buy nothing in eight bits. */
 #define WORKING_GAMMA (563.0f / 256.0f)
-static const float _working_to_xyz_d50[9] = { 0.6097559f, 0.2052401f, 0.1492240f,
-                                              0.3111242f, 0.6256560f, 0.0632197f,
-                                              0.0194811f, 0.0608902f, 0.7448387f };
-static const float _xyz_d50_to_working[9] = { 1.9624274f, -0.6105343f, -0.3413404f,
-                                              -0.9787684f, 1.9161415f, 0.0334540f,
-                                              0.0286869f, -0.1406752f, 1.3487655f };
-
-static inline void _matrix_apply(const float *matrix, const float in[3], float out[3])
-{
-  out[0] = matrix[0] * in[0] + matrix[1] * in[1] + matrix[2] * in[2];
-  out[1] = matrix[3] * in[0] + matrix[4] * in[1] + matrix[5] * in[2];
-  out[2] = matrix[6] * in[0] + matrix[7] * in[1] + matrix[8] * in[2];
-}
 
 #define COMPOSE_OETF_STEPS 16383
 #define COMPOSE_BAND_MAX_PIXELS (24 * 1024 * 1024) ///< a band of the float canvas: 384 MB of RGBA floats
-#define COMPOSE_MASK_MAX_PIXELS 3072              ///< a cutout raster's longer side
+#define COMPOSE_MASK_MAX_PIXELS 2048              ///< a cutout raster's longer side
 #define COMPOSE_SHADOW_SIGMAS 3.0                 ///< how far a shadow reaches past its blur
 
 static float _eotf_lut[256];
@@ -1278,19 +1277,74 @@ static void _color_to_working(const dt_canvas_color_t *color, float working[3])
  * cost, accumulated over the bands of one dt_canvas_paint() call. */
 static dt_canvas_paint_stats_t _stats;
 
-dt_canvas_paint_stats_t dt_canvas_paint_last_stats(void)
+/* The last frame, kept: a redraw of the same view of the same document -- a hover, a menu, a
+ * handle -- is a blit. One frame for the process: the atelier shows one canvas at a time and
+ * an export never asks for the same page twice. */
+typedef struct dt_canvas_composite_key_t
 {
-  return _stats;
-}
-
-/** An integer box in device pixels. */
-typedef struct dt_canvas_box_t
-{
+  uint64_t serial; ///< the document's, never reused in this process
+  uint64_t generation;
+  uint64_t display_generation;
+  cairo_matrix_t matrix;
   int x;
   int y;
   int width;
   int height;
-} dt_canvas_box_t;
+  double quality;
+  gboolean for_display;
+  gboolean draw_grid;
+} dt_canvas_composite_key_t;
+
+static struct
+{
+  dt_canvas_composite_key_t key;
+  cairo_surface_t *surface;
+  cairo_surface_t *spare; ///< the frame before the kept one, its pages still mapped, for the next encode
+  GMutex lock;
+} _composite;
+
+/** An RGB24 surface for a band's encode: the spare when it is the right size, else a new one. */
+static cairo_surface_t *_encoded_surface(const int width, const int height)
+{
+  cairo_surface_t *surface = NULL;
+  g_mutex_lock(&_composite.lock);
+  if(!IS_NULL_PTR(_composite.spare) && cairo_image_surface_get_width(_composite.spare) == width
+     && cairo_image_surface_get_height(_composite.spare) == height)
+  {
+    surface = _composite.spare;
+    _composite.spare = NULL;
+  }
+  g_mutex_unlock(&_composite.lock);
+  if(IS_NULL_PTR(surface)) surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+  return surface;
+}
+
+/** The band's encode is done with: keep it as the frame, or as the spare, or let it go. */
+static void _encoded_surface_done(cairo_surface_t *encoded, const dt_canvas_composite_key_t *keep_as)
+{
+  g_mutex_lock(&_composite.lock);
+  if(!IS_NULL_PTR(keep_as))
+  {
+    if(!IS_NULL_PTR(_composite.spare)) cairo_surface_destroy(_composite.spare);
+    _composite.spare = _composite.surface;
+    _composite.surface = encoded;
+    _composite.key = *keep_as;
+  }
+  else if(IS_NULL_PTR(_composite.spare))
+  {
+    _composite.spare = encoded;
+  }
+  else
+  {
+    cairo_surface_destroy(encoded);
+  }
+  g_mutex_unlock(&_composite.lock);
+}
+
+dt_canvas_paint_stats_t dt_canvas_paint_last_stats(void)
+{
+  return _stats;
+}
 
 static gboolean _box_empty(const dt_canvas_box_t *box)
 {
@@ -1395,6 +1449,91 @@ static cairo_t *_layer_context(cairo_surface_t *surface, const cairo_matrix_t *m
  * an opacity. An opaque pixel goes through the table; a translucent one is unpremultiplied
  * first, so the curve is applied to the colour and not to the coverage.
  */
+/* --- working buffers --------------------------------------------------------------------- */
+
+/**
+ * A buffer of `bytes` from the cache's slot when the paint has a cache, else a fresh one the
+ * caller owns: `owned` says which, and _scratch_release() takes either.
+ */
+static void *_scratch(const dt_canvas_paint_options_t *options, const dt_canvas_scratch_slot_t slot,
+                      const size_t bytes, gboolean *owned)
+{
+  *owned = FALSE;
+  void *memory = dt_canvas_surface_cache_scratch_slot(options->cache, slot, bytes);
+  if(IS_NULL_PTR(memory))
+  {
+    memory = dt_alloc_align(bytes);
+    *owned = TRUE;
+  }
+  return memory;
+}
+
+static void _scratch_release(void *memory, const gboolean owned)
+{
+  if(owned) dt_free_align(memory);
+}
+
+static const cairo_user_data_key_t _scratch_pixels_key;
+
+/**
+ * A transparent ARGB32 surface of this size on the 8-bit slot, so one cairo layer at a time
+ * costs a clear and no page faults. Destroying it frees the pixels only when they were not the
+ * cache's.
+ */
+static cairo_surface_t *_scratch_surface(const dt_canvas_paint_options_t *options, const int width, const int height)
+{
+  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, width);
+  if(stride <= 0 || height <= 0) return NULL;
+  const size_t bytes = (size_t)stride * height;
+  gboolean owned = FALSE;
+  uint8_t *pixels = _scratch(options, DT_CANVAS_SCRATCH_PIXELS, bytes, &owned);
+  if(IS_NULL_PTR(pixels)) return NULL;
+  memset(pixels, 0, bytes);
+  cairo_surface_t *surface = cairo_image_surface_create_for_data(pixels, CAIRO_FORMAT_ARGB32, width, height, stride);
+  if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_destroy(surface);
+    _scratch_release(pixels, owned);
+    return NULL;
+  }
+  if(owned) cairo_surface_set_user_data(surface, &_scratch_pixels_key, pixels, dt_free_align_ptr);
+  return surface;
+}
+
+/* --- from cairo's bytes to linear light ---------------------------------------------------- */
+
+/**
+ * One ARGB32 pixel to premultiplied linear light at `opacity`. Cairo premultiplies, so a
+ * partly covered pixel is divided back in 8 bits -- all the precision the layer ever had -- and
+ * read through the same table as an opaque one.
+ */
+static inline void _decode_pixel(const uint32_t pixel, const float opacity, float *out)
+{
+  const uint32_t alpha = pixel >> 24;
+  if(alpha == 0)
+  {
+    out[0] = 0.0f;
+    out[1] = 0.0f;
+    out[2] = 0.0f;
+    out[3] = 0.0f;
+    return;
+  }
+  uint32_t red = (pixel >> 16) & 0xFF;
+  uint32_t green = (pixel >> 8) & 0xFF;
+  uint32_t blue = pixel & 0xFF;
+  if(alpha != 255)
+  {
+    red = MIN(255u, (red * 255u + alpha / 2) / alpha);
+    green = MIN(255u, (green * 255u + alpha / 2) / alpha);
+    blue = MIN(255u, (blue * 255u + alpha / 2) / alpha);
+  }
+  const float weight = (float)alpha * (1.0f / 255.0f) * opacity;
+  out[0] = _eotf_lut[red] * weight;
+  out[1] = _eotf_lut[green] * weight;
+  out[2] = _eotf_lut[blue] * weight;
+  out[3] = weight;
+}
+
 static void _layer_linearise(cairo_surface_t *surface, const float opacity, float *rgba)
 {
   cairo_surface_flush(surface);
@@ -1409,99 +1548,59 @@ static void _layer_linearise(cairo_surface_t *surface, const float opacity, floa
   {
     const uint32_t *source = (const uint32_t *)(pixels + (size_t)row * stride);
     float *target = rgba + (size_t)row * width * 4;
-    for(int col = 0; col < width; col++)
+    for(int col = 0; col < width; col++) _decode_pixel(source[col], opacity, target + 4 * col);
+  }
+}
+
+/**
+ * A cairo layer straight over the float canvas, decoded on the way: a plain frame never
+ * needs a float layer of its own.
+ */
+static void _canvas_over_surface(float *canvas_rgba, const dt_canvas_box_t *canvas_box, cairo_surface_t *surface,
+                                 const float opacity, const dt_canvas_box_t *layer_box, const dt_canvas_box_t *area)
+{
+  const int rows = area->height;
+  const int cols = area->width;
+  if(rows <= 0 || cols <= 0) return;
+  cairo_surface_flush(surface);
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) shared(_eotf_lut) schedule(static)
+#endif
+  for(int row = 0; row < rows; row++)
+  {
+    const int y = area->y + row;
+    float *target = canvas_rgba + ((size_t)(y - canvas_box->y) * canvas_box->width + (area->x - canvas_box->x)) * 4;
+    const uint32_t *source = (const uint32_t *)(pixels + (size_t)(y - layer_box->y) * stride) + (area->x - layer_box->x);
+    for(int col = 0; col < cols; col++)
     {
-      const uint32_t pixel = source[col];
-      const uint32_t alpha = pixel >> 24;
-      if(alpha == 0)
-      {
-        target[4 * col + 0] = 0.0f;
-        target[4 * col + 1] = 0.0f;
-        target[4 * col + 2] = 0.0f;
-        target[4 * col + 3] = 0.0f;
-        continue;
-      }
-      const uint32_t red = (pixel >> 16) & 0xFF;
-      const uint32_t green = (pixel >> 8) & 0xFF;
-      const uint32_t blue = pixel & 0xFF;
-      const float coverage = (float)alpha / 255.0f;
-      float linear_red = 0.0f;
-      float linear_green = 0.0f;
-      float linear_blue = 0.0f;
-      if(alpha == 255)
-      {
-        linear_red = _eotf_lut[red];
-        linear_green = _eotf_lut[green];
-        linear_blue = _eotf_lut[blue];
-      }
-      else
-      {
-        linear_red = _working_eotf((float)red / (float)alpha);
-        linear_green = _working_eotf((float)green / (float)alpha);
-        linear_blue = _working_eotf((float)blue / (float)alpha);
-      }
-      const float weight = coverage * opacity;
-      target[4 * col + 0] = linear_red * weight;
-      target[4 * col + 1] = linear_green * weight;
-      target[4 * col + 2] = linear_blue * weight;
-      target[4 * col + 3] = weight;
+      if((source[col] >> 24) == 0) continue;
+      float above[4];
+      _decode_pixel(source[col], opacity, above);
+      const float keep = 1.0f - above[3];
+      target[4 * col + 0] = above[0] + target[4 * col + 0] * keep;
+      target[4 * col + 1] = above[1] + target[4 * col + 1] * keep;
+      target[4 * col + 2] = above[2] + target[4 * col + 2] * keep;
+      target[4 * col + 3] = above[3] + target[4 * col + 3] * keep;
     }
   }
 }
 
 /**
- * Leave the working space: the finished canvas, opaque, into an RGB24 cairo surface. For the
- * display it goes through XYZ to the display profile, in floats, by the colour module; for
- * an export it is re-encoded, Adobe RGB still, through the table. The float canvas is
- * consumed either way.
+ * Leave the working space: the finished canvas, opaque, re-encoded through the table into an
+ * RGB24 cairo surface, Adobe RGB still -- the export's page as it is -- and, for the display,
+ * through the colour module's prepared 8-bit Adobe RGB to display transform, row-parallel. An
+ * 8-bit transform is what LCMS optimises into table lookups; the float transform it replaced
+ * cost 25 times the encode over the same pixels.
  */
-static void _canvas_encode(float *rgba, cairo_surface_t *surface, const gboolean for_display)
+static void _canvas_encode(const float *rgba, cairo_surface_t *surface, const gboolean for_display)
 {
   cairo_surface_flush(surface);
   uint8_t *pixels = cairo_image_surface_get_data(surface);
   const int stride = cairo_image_surface_get_stride(surface);
   const int width = cairo_image_surface_get_width(surface);
   const int height = cairo_image_surface_get_height(surface);
-  if(for_display)
-  {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) shared(_working_to_xyz_d50) schedule(static)
-#endif
-    for(int row = 0; row < height; row++)
-    {
-      float *pixel = rgba + (size_t)row * width * 4;
-      for(int col = 0; col < width; col++)
-      {
-        float xyz[3];
-        _matrix_apply(_working_to_xyz_d50, pixel + 4 * col, xyz);
-        pixel[4 * col + 0] = xyz[0];
-        pixel[4 * col + 1] = xyz[1];
-        pixel[4 * col + 2] = xyz[2];
-        pixel[4 * col + 3] = 1.0f;
-      }
-    }
-    if(dt_colorprofiles_xyza_to_display_bgra8(rgba, pixels, width, height, stride))
-    {
-      cairo_surface_mark_dirty(surface);
-      return;
-    }
-    // No colour module behind us: XYZ back to the working space and out re-encoded, below.
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) shared(_xyz_d50_to_working) schedule(static)
-#endif
-    for(int row = 0; row < height; row++)
-    {
-      float *pixel = rgba + (size_t)row * width * 4;
-      for(int col = 0; col < width; col++)
-      {
-        float working[3];
-        _matrix_apply(_xyz_d50_to_working, pixel + 4 * col, working);
-        pixel[4 * col + 0] = working[0];
-        pixel[4 * col + 1] = working[1];
-        pixel[4 * col + 2] = working[2];
-      }
-    }
-  }
 #ifdef _OPENMP
 #pragma omp parallel for default(firstprivate) shared(_oetf_lut) schedule(static)
 #endif
@@ -1518,6 +1617,7 @@ static void _canvas_encode(float *rgba, cairo_surface_t *surface, const gboolean
       target[col] = 0xFF000000u | (red << 16) | (green << 8) | blue;
     }
   }
+  if(for_display) dt_colorprofiles_adobergb_bgrx8_to_display(pixels, width, height, stride);
   cairo_surface_mark_dirty(surface);
 }
 
@@ -1569,22 +1669,32 @@ static void _box_blur(float *plane, float *scratch, const int width, const int h
       if(entering < width) sum += source[entering];
     }
   }
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
-  for(int col = 0; col < width; col++)
+  // The column pass walks rows, a running sum per column, so the memory is read in order;
+  // striding down the columns one at a time was a cache miss per sample.
+  float *column_sums = g_new0(float, width);
+  for(int row = 0; row <= radius && row < height; row++)
   {
-    float sum = 0.0f;
-    for(int row = 0; row <= radius && row < height; row++) sum += scratch[(size_t)row * width + col];
-    for(int row = 0; row < height; row++)
+    const float *line = scratch + (size_t)row * width;
+    for(int col = 0; col < width; col++) column_sums[col] += line[col];
+  }
+  for(int row = 0; row < height; row++)
+  {
+    float *target = plane + (size_t)row * width;
+    for(int col = 0; col < width; col++) target[col] = column_sums[col] * norm;
+    const int leaving = row - radius;
+    const int entering = row + radius + 1;
+    if(leaving >= 0)
     {
-      plane[(size_t)row * width + col] = sum * norm;
-      const int leaving = row - radius;
-      const int entering = row + radius + 1;
-      if(leaving >= 0) sum -= scratch[(size_t)leaving * width + col];
-      if(entering < height) sum += scratch[(size_t)entering * width + col];
+      const float *line = scratch + (size_t)leaving * width;
+      for(int col = 0; col < width; col++) column_sums[col] -= line[col];
+    }
+    if(entering < height)
+    {
+      const float *line = scratch + (size_t)entering * width;
+      for(int col = 0; col < width; col++) column_sums[col] += line[col];
     }
   }
+  dt_free(column_sums);
 }
 
 /**
@@ -1592,8 +1702,9 @@ static void _box_blur(float *plane, float *scratch, const int width, const int h
  * the layer leaves uncovered (an inset one), through three box blurs of the radius, which
  * approximate a Gaussian of that sigma closely enough for a shadow. The caller frees it.
  */
-static float *_shadow_plane(const float *layer_rgba, const dt_canvas_box_t *layer_box, const dt_canvas_shadow_t *shadow,
-                            const double pixels_per_unit, int *pad)
+static float *_shadow_plane(const dt_canvas_paint_options_t *options, const float *layer_rgba,
+                            const dt_canvas_box_t *layer_box, const dt_canvas_shadow_t *shadow,
+                            const double pixels_per_unit, int *pad, gboolean *owned)
 {
   const gboolean inset = shadow->blur < 0.0f;
   const int radius = (int)lround(fabs(shadow->blur) * pixels_per_unit);
@@ -1605,27 +1716,42 @@ static float *_shadow_plane(const float *layer_rgba, const dt_canvas_box_t *laye
   const int width = layer_box->width + 2 * *pad;
   const int height = layer_box->height + 2 * *pad;
   const size_t count = (size_t)width * height;
-  float *alpha = dt_alloc_align_float(count);
-  float *scratch = dt_alloc_align_float(count);
+  gboolean scratch_owned = FALSE;
+  float *alpha = _scratch(options, DT_CANVAS_SCRATCH_SHADOW, count * sizeof(float), owned);
+  float *scratch = _scratch(options, DT_CANVAS_SCRATCH_BLUR, count * sizeof(float), &scratch_owned);
   if(IS_NULL_PTR(alpha) || IS_NULL_PTR(scratch))
   {
-    dt_free_align(alpha);
-    dt_free_align(scratch);
+    _scratch_release(alpha, *owned);
+    _scratch_release(scratch, scratch_owned);
     return NULL;
   }
-  for(size_t idx = 0; idx < count; idx++) alpha[idx] = inset ? 1.0f : 0.0f;
-  for(int row = 0; row < layer_box->height; row++)
+  const float padding = inset ? 1.0f : 0.0f;
+  const int layer_height = layer_box->height;
+  const int layer_width = layer_box->width;
+  const int margin = *pad;
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int row = 0; row < height; row++)
   {
-    const float *source = layer_rgba + (size_t)row * layer_box->width * 4;
-    float *target = alpha + (size_t)(row + *pad) * width + *pad;
-    for(int col = 0; col < layer_box->width; col++)
-      target[col] = inset ? 1.0f - source[4 * col + 3] : source[4 * col + 3];
+    float *target = alpha + (size_t)row * width;
+    const int source_row = row - margin;
+    if(source_row < 0 || source_row >= layer_height)
+    {
+      for(int col = 0; col < width; col++) target[col] = padding;
+      continue;
+    }
+    const float *source = layer_rgba + (size_t)source_row * layer_width * 4;
+    for(int col = 0; col < margin; col++) target[col] = padding;
+    for(int col = 0; col < layer_width; col++)
+      target[margin + col] = inset ? 1.0f - source[4 * col + 3] : source[4 * col + 3];
+    for(int col = margin + layer_width; col < width; col++) target[col] = padding;
   }
   if(radius >= 1)
   {
     for(int pass = 0; pass < 3; pass++) _box_blur(alpha, scratch, width, height, radius);
   }
-  dt_free_align(scratch);
+  _scratch_release(scratch, scratch_owned);
   return alpha;
 }
 
@@ -1634,12 +1760,14 @@ static float *_shadow_plane(const float *layer_rgba, const dt_canvas_box_t *laye
  * canvas before the layer itself. The layer box was grown by the shadow's reach, so the blur
  * has room on every side.
  */
-static void _canvas_shadow(float *canvas_rgba, const dt_canvas_box_t *canvas_box, const float *layer_rgba,
+static void _canvas_shadow(const dt_canvas_paint_options_t *options, float *canvas_rgba,
+                           const dt_canvas_box_t *canvas_box, const float *layer_rgba,
                            const dt_canvas_box_t *layer_box, const dt_canvas_box_t *area,
                            const dt_canvas_shadow_t *shadow, const double pixels_per_unit)
 {
   int pad = 0;
-  float *alpha = _shadow_plane(layer_rgba, layer_box, shadow, pixels_per_unit, &pad);
+  gboolean owned = FALSE;
+  float *alpha = _shadow_plane(options, layer_rgba, layer_box, shadow, pixels_per_unit, &pad, &owned);
   if(IS_NULL_PTR(alpha)) return;
   float tint[3];
   _color_to_working(&shadow->color, tint);
@@ -1669,7 +1797,7 @@ static void _canvas_shadow(float *canvas_rgba, const dt_canvas_box_t *canvas_box
       target[4 * col + 3] = coverage + target[4 * col + 3] * keep;
     }
   }
-  dt_free_align(alpha);
+  _scratch_release(alpha, owned);
 }
 
 /**
@@ -1677,11 +1805,13 @@ static void _canvas_shadow(float *canvas_rgba, const dt_canvas_box_t *canvas_box
  * inside its own edges -- the shadow the object would cast on itself were it a hole. Laid
  * over the layer, within the layer's own coverage, before the layer goes over the canvas.
  */
-static void _layer_inset_shadow(float *layer_rgba, const dt_canvas_box_t *layer_box, const dt_canvas_shadow_t *shadow,
+static void _layer_inset_shadow(const dt_canvas_paint_options_t *options, float *layer_rgba,
+                                const dt_canvas_box_t *layer_box, const dt_canvas_shadow_t *shadow,
                                 const double pixels_per_unit)
 {
   int pad = 0;
-  float *alpha = _shadow_plane(layer_rgba, layer_box, shadow, pixels_per_unit, &pad);
+  gboolean owned = FALSE;
+  float *alpha = _shadow_plane(options, layer_rgba, layer_box, shadow, pixels_per_unit, &pad, &owned);
   if(IS_NULL_PTR(alpha)) return;
   float tint[3];
   _color_to_working(&shadow->color, tint);
@@ -1719,7 +1849,7 @@ static void _layer_inset_shadow(float *layer_rgba, const dt_canvas_box_t *layer_
       target[4 * col + 3] = coverage + target[4 * col + 3] * keep;
     }
   }
-  dt_free_align(alpha);
+  _scratch_release(alpha, owned);
 }
 
 /** Paint one object's own pixels, in user space: what it looked like before this compositor existed. */
@@ -1757,19 +1887,23 @@ typedef struct dt_canvas_mask_geometry_t
 } dt_canvas_mask_geometry_t;
 
 static dt_canvas_mask_geometry_t _mask_geometry(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
-                                                const double pixels_per_unit)
+                                                const dt_canvas_paint_options_t *options, const double screen_pixels_per_unit)
 {
   dt_canvas_mask_geometry_t geometry;
-  int mask_width = (int)lround(object->width * pixels_per_unit);
-  int mask_height = (int)lround(object->height * pixels_per_unit);
-  if(mask_width > COMPOSE_MASK_MAX_PIXELS || mask_height > COMPOSE_MASK_MAX_PIXELS)
-  {
-    const double shrink = (double)COMPOSE_MASK_MAX_PIXELS / (double)MAX(mask_width, mask_height);
-    mask_width = (int)lround(mask_width * shrink);
-    mask_height = (int)lround(mask_height * shrink);
-  }
-  geometry.width = MAX(mask_width, 2);
-  geometry.height = MAX(mask_height, 2);
+  // A frame mid-gesture is composited at a fraction of the resolution, and asks for the raster
+  // the full frame before it built, scaled down onto its smaller frame: the gesture's first
+  // frame must not rasterise every cutout again.
+  const double quality = CLAMP(options->quality > 0.0 ? options->quality : 1.0, 0.125, 1.0);
+  const double pixels_per_unit = screen_pixels_per_unit / quality;
+  // The raster's longer side is the power of two at or above the frame's size on screen, capped:
+  // a zoom step then keeps the raster it has (cairo scales it onto the frame) instead of
+  // rasterising every cutout again, supersampled, at each notch.
+  const double screen_longer = fmax(object->width, object->height) * pixels_per_unit;
+  int longer = 64;
+  while(longer < screen_longer && longer < COMPOSE_MASK_MAX_PIXELS) longer *= 2;
+  const double scale = (double)longer / fmax(fmax(object->width, object->height), 1.0);
+  geometry.width = MAX((int)lround(object->width * scale), 2);
+  geometry.height = MAX((int)lround(object->height * scale), 2);
   dt_canvas_color_t color;
   float border = 0.0f;
   dt_canvas_object_effective_border(canvas, object, &color, &border);
@@ -1779,122 +1913,176 @@ static dt_canvas_mask_geometry_t _mask_geometry(const dt_canvas_t *canvas, const
   return geometry;
 }
 
-/** Paint an alpha surface in the cutout's raster space over the frame, with the given operator. */
-static void _paint_frame_alpha(cairo_t *cr, const dt_canvas_object_t *object, cairo_surface_t *alpha,
-                               const dt_canvas_mask_geometry_t *geometry, const cairo_operator_t operator)
+/** One bilinear read of an A8 raster at (u, v) in its pixels, 0 past its edges. */
+static inline float _sample_alpha(const uint8_t *pixels, const int stride, const int width, const int height,
+                                  const float u, const float v)
 {
-  cairo_save(cr);
-  cairo_set_operator(cr, operator);
-  cairo_translate(cr, object->x, object->y);
-  cairo_rotate(cr, object->rotation);
-  cairo_scale(cr, object->width / geometry->width, object->height / geometry->height);
-  cairo_translate(cr, -geometry->width * 0.5, -geometry->height * 0.5);
-  if(operator == CAIRO_OPERATOR_DEST_IN)
+  const float x = u - 0.5f;
+  const float y = v - 0.5f;
+  if(x <= -1.0f || y <= -1.0f || x >= (float)width || y >= (float)height) return 0.0f;
+  const int x0 = (int)floorf(x);
+  const int y0 = (int)floorf(y);
+  const float fx = x - (float)x0;
+  const float fy = y - (float)y0;
+  float rows[2] = { 0.0f, 0.0f };
+  for(int dy = 0; dy < 2; dy++)
   {
-    cairo_set_source_surface(cr, alpha, 0.0, 0.0);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
-    cairo_paint(cr);
+    const int yy = y0 + dy;
+    if(yy < 0 || yy >= height) continue;
+    const uint8_t *line = pixels + (size_t)yy * stride;
+    const float left = x0 >= 0 && x0 < width ? (float)line[x0] : 0.0f;
+    const float right = x0 + 1 >= 0 && x0 + 1 < width ? (float)line[x0 + 1] : 0.0f;
+    rows[dy] = left * (1.0f - fx) + right * fx;
   }
-  else
-  {
-    // The source is already set: the alpha is the mask it paints through.
-    cairo_mask_surface(cr, alpha, 0.0, 0.0);
-  }
-  cairo_restore(cr);
+  return (rows[0] * (1.0f - fy) + rows[1] * fy) * (1.0f / 255.0f);
+}
+
+typedef struct dt_canvas_alpha_raster_t
+{
+  const uint8_t *pixels;
+  int stride;
+  int width;
+  int height;
+} dt_canvas_alpha_raster_t;
+
+static dt_canvas_alpha_raster_t _alpha_raster(cairo_surface_t *surface)
+{
+  dt_canvas_alpha_raster_t raster = { NULL, 0, 0, 0 };
+  if(IS_NULL_PTR(surface)) return raster;
+  cairo_surface_flush(surface);
+  raster.pixels = cairo_image_surface_get_data(surface);
+  raster.stride = cairo_image_surface_get_stride(surface);
+  raster.width = cairo_image_surface_get_width(surface);
+  raster.height = cairo_image_surface_get_height(surface);
+  return raster;
 }
 
 /**
- * Multiply the layer's alpha by the object's cutout, rasterised at the frame's size on screen:
- * the feathered shape for the content, or its hard-edged support for what fills the shape.
+ * A cut frame, composited in linear light in one pass over its layer: the frame's background
+ * wherever the shape has any coverage, the content feathered by the shape over it, the border
+ * band past the feather over both. The three rasters are read where each layer pixel lands in
+ * the cutout's raster, so nothing goes through cairo's scaled compositing.
  */
-static void _apply_cutout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
-                          const dt_canvas_paint_options_t *options, const double pixels_per_unit,
-                          const gboolean support)
+static void _cut_compose(const dt_canvas_paint_options_t *options, float *layer_rgba, const dt_canvas_box_t *layer_box,
+                         const dt_canvas_t *canvas, const dt_canvas_object_t *object, const cairo_matrix_t *matrix,
+                         const double pixels_per_unit, const float opacity)
 {
-  if(!_object_cut(object)) return;
-  const dt_canvas_mask_geometry_t geometry = _mask_geometry(canvas, object, pixels_per_unit);
+  const dt_canvas_mask_geometry_t geometry = _mask_geometry(canvas, object, options, pixels_per_unit);
+  dt_canvas_color_t border_color;
+  float border_width = 0.0f;
+  dt_canvas_object_effective_border(canvas, object, &border_color, &border_width);
+  const gboolean bordered = border_width > 0.0f && border_color.alpha > 0.0f;
+  const int radius = MAX(1, (int)lround(border_width * geometry.width / object->width));
+  const dt_canvas_color_t fill_color = dt_canvas_object_background(object);
+  const gboolean filled = fill_color.alpha > 0.0f;
+
   cairo_surface_t *mask = NULL;
-  cairo_surface_t *owned = NULL;
-  if(!IS_NULL_PTR(options->cache))
-    mask = support ? dt_canvas_surface_cache_get_mask_support(options->cache, object, geometry.width, geometry.height,
-                                                              geometry.inset, geometry.corner)
-                   : dt_canvas_surface_cache_get_mask(options->cache, object, geometry.width, geometry.height,
-                                                      geometry.inset, geometry.corner);
-  else
-  {
-    owned = support ? dt_canvas_render_mask_support(object, geometry.width, geometry.height, geometry.inset, geometry.corner)
-                    : dt_canvas_render_mask(object, geometry.width, geometry.height, geometry.inset, geometry.corner);
-    mask = owned;
-  }
-  if(IS_NULL_PTR(mask)) return;
-  _paint_frame_alpha(cr, object, mask, &geometry, CAIRO_OPERATOR_DEST_IN);
-  if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
-}
-
-/** The object's background over its whole frame: a cut-out frame's fill, clipped to the shape's support afterwards. */
-static void _paint_fill(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
-                        const dt_canvas_paint_options_t *options)
-{
-  const dt_canvas_color_t background = dt_canvas_object_background(object);
-  if(background.alpha <= 0.0f) return;
-  cairo_save(cr);
-  cairo_translate(cr, object->x, object->y);
-  cairo_rotate(cr, object->rotation);
-  _set_color(cr, &background, options->for_display);
-  _frame_path(cr, canvas, object, 0.0);
-  cairo_fill(cr);
-  cairo_restore(cr);
-}
-
-/**
- * A cut-out frame's border: the cutout's edge dilated outward by the border width, painted in
- * the border colour into a layer of its own, to go over the content in linear light.
- * @return whether anything was painted.
- */
-static gboolean _paint_cut_border(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
-                                  const dt_canvas_paint_options_t *options, const double pixels_per_unit)
-{
-  if(!_object_cut(object)) return FALSE;
-  dt_canvas_color_t color;
-  float width = 0.0f;
-  dt_canvas_object_effective_border(canvas, object, &color, &width);
-  if(width <= 0.0f || color.alpha <= 0.0f) return FALSE;
-  const dt_canvas_mask_geometry_t geometry = _mask_geometry(canvas, object, pixels_per_unit);
-  // The band's radius in the cutout's raster pixels, which may be coarser than the screen's.
-  const int radius = MAX(1, (int)lround(width * geometry.width / object->width));
+  cairo_surface_t *support = NULL;
   cairo_surface_t *band = NULL;
-  cairo_surface_t *owned = NULL;
-  if(!IS_NULL_PTR(options->cache))
-    band = dt_canvas_surface_cache_get_mask_band(options->cache, object, geometry.width, geometry.height,
-                                                 geometry.inset, geometry.corner, radius);
+  gboolean owned = IS_NULL_PTR(options->cache);
+  if(!owned)
+  {
+    mask = dt_canvas_surface_cache_get_mask(options->cache, object, geometry.width, geometry.height, geometry.inset,
+                                            geometry.corner);
+    if(filled)
+      support = dt_canvas_surface_cache_get_mask_support(options->cache, object, geometry.width, geometry.height,
+                                                         geometry.inset, geometry.corner);
+    if(bordered)
+      band = dt_canvas_surface_cache_get_mask_band(options->cache, object, geometry.width, geometry.height,
+                                                   geometry.inset, geometry.corner, radius);
+  }
   else
   {
-    owned = dt_canvas_render_mask_band(object, geometry.width, geometry.height, geometry.inset, geometry.corner, radius);
-    band = owned;
+    mask = dt_canvas_render_mask(object, geometry.width, geometry.height, geometry.inset, geometry.corner);
+    if(filled) support = dt_canvas_render_mask_support(object, geometry.width, geometry.height, geometry.inset, geometry.corner);
+    if(bordered)
+      band = dt_canvas_render_mask_band(object, geometry.width, geometry.height, geometry.inset, geometry.corner, radius);
   }
-  if(IS_NULL_PTR(band)) return FALSE;
-  _set_color(cr, &color, options->for_display);
-  _paint_frame_alpha(cr, object, band, &geometry, CAIRO_OPERATOR_OVER);
-  if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
-  return TRUE;
-}
-
-/** Source-over of one premultiplied float layer onto another of the same box. */
-static void _layer_over(float *below, const float *above, const size_t pixels)
-{
+  if(!IS_NULL_PTR(mask))
+  {
+    // Raster pixels to layer pixels, the way the frame is placed: centred on the object,
+    // rotated, scaled onto its frame, through the view onto the band's own origin.
+    cairo_matrix_t raster_to_layer;
+    cairo_matrix_t step;
+    cairo_matrix_init_translate(&raster_to_layer, -geometry.width * 0.5, -geometry.height * 0.5);
+    cairo_matrix_init_scale(&step, object->width / geometry.width, object->height / geometry.height);
+    cairo_matrix_multiply(&raster_to_layer, &raster_to_layer, &step);
+    cairo_matrix_init_rotate(&step, object->rotation);
+    cairo_matrix_multiply(&raster_to_layer, &raster_to_layer, &step);
+    cairo_matrix_init_translate(&step, object->x, object->y);
+    cairo_matrix_multiply(&raster_to_layer, &raster_to_layer, &step);
+    cairo_matrix_multiply(&raster_to_layer, &raster_to_layer, matrix);
+    cairo_matrix_init_translate(&step, -layer_box->x, -layer_box->y);
+    cairo_matrix_multiply(&raster_to_layer, &raster_to_layer, &step);
+    cairo_matrix_t layer_to_raster = raster_to_layer;
+    if(cairo_matrix_invert(&layer_to_raster) == CAIRO_STATUS_SUCCESS)
+    {
+      const dt_canvas_alpha_raster_t shape = _alpha_raster(mask);
+      const dt_canvas_alpha_raster_t whole = _alpha_raster(support);
+      const dt_canvas_alpha_raster_t edge = _alpha_raster(band);
+      float fill[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+      float border[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+      if(filled && !IS_NULL_PTR(whole.pixels))
+      {
+        _color_to_working(&fill_color, fill);
+        fill[3] = CLAMP(fill_color.alpha, 0.0f, 1.0f) * opacity;
+        for(int channel = 0; channel < 3; channel++) fill[channel] *= fill[3];
+      }
+      if(bordered && !IS_NULL_PTR(edge.pixels))
+      {
+        _color_to_working(&border_color, border);
+        border[3] = CLAMP(border_color.alpha, 0.0f, 1.0f) * opacity;
+        for(int channel = 0; channel < 3; channel++) border[channel] *= border[3];
+      }
+      const int rows = layer_box->height;
+      const int cols = layer_box->width;
 #ifdef _OPENMP
 #pragma omp parallel for default(firstprivate) schedule(static)
 #endif
-  for(size_t idx = 0; idx < pixels; idx++)
+      for(int row = 0; row < rows; row++)
+      {
+        float *target = layer_rgba + (size_t)row * cols * 4;
+        for(int col = 0; col < cols; col++)
+        {
+          double u = col + 0.5;
+          double v = row + 0.5;
+          cairo_matrix_transform_point(&layer_to_raster, &u, &v);
+          const float coverage = _sample_alpha(shape.pixels, shape.stride, shape.width, shape.height, (float)u, (float)v);
+          float *pixel = target + 4 * col;
+          // The background over the shape's whole support, then the content feathered by the shape.
+          float out[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+          if(fill[3] > 0.0f)
+          {
+            const float reach = _sample_alpha(whole.pixels, whole.stride, whole.width, whole.height, (float)u, (float)v);
+            for(int channel = 0; channel < 4; channel++) out[channel] = fill[channel] * reach;
+          }
+          const float keep = 1.0f - pixel[3] * coverage;
+          for(int channel = 0; channel < 4; channel++) out[channel] = pixel[channel] * coverage + out[channel] * keep;
+          // The border past the feather, over both.
+          if(border[3] > 0.0f)
+          {
+            const float ring = _sample_alpha(edge.pixels, edge.stride, edge.width, edge.height, (float)u, (float)v);
+            if(ring > 0.0f)
+            {
+              const float keep_under = 1.0f - border[3] * ring;
+              for(int channel = 0; channel < 4; channel++) out[channel] = border[channel] * ring + out[channel] * keep_under;
+            }
+          }
+          for(int channel = 0; channel < 4; channel++) pixel[channel] = out[channel];
+        }
+      }
+    }
+  }
+  if(owned)
   {
-    const float keep = 1.0f - above[4 * idx + 3];
-    below[4 * idx + 0] = above[4 * idx + 0] + below[4 * idx + 0] * keep;
-    below[4 * idx + 1] = above[4 * idx + 1] + below[4 * idx + 1] * keep;
-    below[4 * idx + 2] = above[4 * idx + 2] + below[4 * idx + 2] * keep;
-    below[4 * idx + 3] = above[4 * idx + 3] + below[4 * idx + 3] * keep;
+    if(!IS_NULL_PTR(mask)) cairo_surface_destroy(mask);
+    if(!IS_NULL_PTR(support)) cairo_surface_destroy(support);
+    if(!IS_NULL_PTR(band)) cairo_surface_destroy(band);
   }
 }
 
+
+/** Source-over of one premultiplied float layer onto another of the same box. */
 /** The device box an object touches, its shadow included. */
 static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas_t *canvas,
                                    const dt_canvas_object_t *object, const dt_canvas_shadow_t *shadow,
@@ -1927,7 +2115,7 @@ static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas
 /** Composite one band of the device plane and hand it to the context. */
 static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options,
                         const cairo_matrix_t *matrix, const dt_canvas_box_t *band, const double scale_x,
-                        const double scale_y)
+                        const double scale_y, const dt_canvas_composite_key_t *keep_as)
 {
   const double pixels_per_unit = _matrix_scale(matrix);
   dt_canvas_paint_options_t local = *options;
@@ -1938,10 +2126,9 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   _stats.pixels += (int64_t)band->width * band->height;
 
   // 1. The background, the grid and the pages: cairo, into the base layer.
-  cairo_surface_t *base = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, band->width, band->height);
-  if(cairo_surface_status(base) != CAIRO_STATUS_SUCCESS)
+  cairo_surface_t *base = _scratch_surface(&local, band->width, band->height);
+  if(IS_NULL_PTR(base))
   {
-    cairo_surface_destroy(base);
     cairo_font_options_destroy(font_options);
     return;
   }
@@ -1976,6 +2163,14 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   }
   _layer_linearise(base, 1.0f, canvas_rgba);
   cairo_surface_destroy(base);
+  if(local.draw_background && _is_paper(canvas->background_style))
+  {
+    // Washi is grainier to the eye than the western sheets: twice the dither; the user's grain on top.
+    float grain = 1.0f;
+    dt_canvas_texture_get(canvas, NULL, NULL, NULL, &grain);
+    _dither_canvas(canvas_rgba, band, options->units_per_pixel,
+                   (canvas->background_style == DT_CANVAS_BACKGROUND_JAPANESE ? 2.0 : 1.0) * grain);
+  }
   _stats.background_seconds += dt_get_wtime() - clock;
   clock = dt_get_wtime();
 
@@ -2000,27 +2195,29 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     const dt_canvas_box_t area = _box_intersect(&layer_box, band);
     if(_box_empty(&layer_box) || _box_empty(&area)) continue;
 
-    cairo_surface_t *layer = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, layer_box.width, layer_box.height);
-    if(cairo_surface_status(layer) != CAIRO_STATUS_SUCCESS)
-    {
-      cairo_surface_destroy(layer);
-      continue;
-    }
+    cairo_surface_t *layer = _scratch_surface(&local, layer_box.width, layer_box.height);
+    if(IS_NULL_PTR(layer)) continue;
     const gboolean cut = _object_cut(object);
     _stats.objects++;
-    _stats.layers += cut ? 3 : 1;
+    _stats.layers += cut ? 2 : 1;
     if(shadowed) _stats.shadows++;
     const double object_clock = dt_get_wtime();
     cairo_t *layer_cr = _layer_context(layer, matrix, &layer_box, font_options);
-    if(cut)
-      _paint_fill(layer_cr, canvas, object, &local);
-    else
-      _paint_object_pixels(layer_cr, canvas, object, &local);
-    _apply_cutout(layer_cr, canvas, object, &local, pixels_per_unit, TRUE);
+    _paint_object_pixels(layer_cr, canvas, object, &local);
     cairo_destroy(layer_cr);
 
+    // A plain frame goes straight over the canvas, decoded on the way.
+    if(!cut && !shadowed)
+    {
+      _canvas_over_surface(canvas_rgba, band, layer, opacity, &layer_box, &area);
+      cairo_surface_destroy(layer);
+      _stats.paint_seconds += dt_get_wtime() - object_clock;
+      continue;
+    }
+
     const size_t layer_pixels = (size_t)layer_box.width * layer_box.height;
-    float *layer_rgba = dt_alloc_align_float(layer_pixels * 4);
+    gboolean layer_owned = FALSE;
+    float *layer_rgba = _scratch(&local, DT_CANVAS_SCRATCH_LAYER, layer_pixels * 4 * sizeof(float), &layer_owned);
     if(IS_NULL_PTR(layer_rgba))
     {
       cairo_surface_destroy(layer);
@@ -2030,46 +2227,16 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     cairo_surface_destroy(layer);
     _stats.paint_seconds += dt_get_wtime() - object_clock;
 
-    // A cut-out frame is three layers over each other in linear light: its background filling
-    // the shape's whole support, its content feathered by the shape, its border past the feather.
-    if(cut)
-    {
-      for(int part = 0; part < 2; part++)
-      {
-        cairo_surface_t *extra = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, layer_box.width, layer_box.height);
-        if(cairo_surface_status(extra) != CAIRO_STATUS_SUCCESS)
-        {
-          cairo_surface_destroy(extra);
-          continue;
-        }
-        cairo_t *extra_cr = _layer_context(extra, matrix, &layer_box, font_options);
-        gboolean painted = TRUE;
-        if(part == 0)
-        {
-          _paint_object_pixels(extra_cr, canvas, object, &local);
-          _apply_cutout(extra_cr, canvas, object, &local, pixels_per_unit, FALSE);
-        }
-        else
-        {
-          painted = _paint_cut_border(extra_cr, canvas, object, &local, pixels_per_unit);
-        }
-        cairo_destroy(extra_cr);
-        float *extra_rgba = painted ? dt_alloc_align_float(layer_pixels * 4) : NULL;
-        if(!IS_NULL_PTR(extra_rgba))
-        {
-          _layer_linearise(extra, opacity, extra_rgba);
-          _layer_over(layer_rgba, extra_rgba, layer_pixels);
-          dt_free_align(extra_rgba);
-        }
-        cairo_surface_destroy(extra);
-      }
-    }
+    // A cut frame: its background under the shape's support, the content through the shape,
+    // the border band past the feather, in one pass in linear light.
+    if(cut) _cut_compose(&local, layer_rgba, &layer_box, canvas, object, matrix, pixels_per_unit, opacity);
     const double shadow_clock = dt_get_wtime();
-    if(shadowed && shadow.blur < 0.0f) _layer_inset_shadow(layer_rgba, &layer_box, &shadow, pixels_per_unit);
-    if(shadowed && shadow.blur > 0.0f) _canvas_shadow(canvas_rgba, band, layer_rgba, &layer_box, &area, &shadow, pixels_per_unit);
+    if(shadowed && shadow.blur < 0.0f) _layer_inset_shadow(&local, layer_rgba, &layer_box, &shadow, pixels_per_unit);
+    if(shadowed && shadow.blur > 0.0f)
+      _canvas_shadow(&local, canvas_rgba, band, layer_rgba, &layer_box, &area, &shadow, pixels_per_unit);
     _stats.shadow_seconds += dt_get_wtime() - shadow_clock;
     _canvas_over(canvas_rgba, band, layer_rgba, &layer_box, &area);
-    dt_free_align(layer_rgba);
+    _scratch_release(layer_rgba, layer_owned);
   }
 
   _stats.objects_seconds += dt_get_wtime() - clock;
@@ -2077,7 +2244,7 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
 
   // 3. Back to 8 bits, and onto the context, pixel for pixel: the band is in the surface's
   //    own pixels, so the device scale is undone on the way.
-  cairo_surface_t *encoded = cairo_image_surface_create(CAIRO_FORMAT_RGB24, band->width, band->height);
+  cairo_surface_t *encoded = _encoded_surface(band->width, band->height);
   if(cairo_surface_status(encoded) == CAIRO_STATUS_SUCCESS)
   {
     _canvas_encode(canvas_rgba, encoded, local.for_display);
@@ -2085,12 +2252,15 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     cairo_identity_matrix(cr);
     cairo_scale(cr, 1.0 / scale_x, 1.0 / scale_y);
     cairo_set_source_surface(cr, encoded, band->x, band->y);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_pattern_set_filter(cairo_get_source(cr), local.quality < 1.0 ? CAIRO_FILTER_BILINEAR : CAIRO_FILTER_NEAREST);
     cairo_rectangle(cr, band->x, band->y, band->width, band->height);
     cairo_fill(cr);
     cairo_restore(cr);
   }
-  cairo_surface_destroy(encoded);
+  if(cairo_surface_status(encoded) == CAIRO_STATUS_SUCCESS)
+    _encoded_surface_done(encoded, keep_as);
+  else
+    cairo_surface_destroy(encoded);
   cairo_font_options_destroy(font_options);
   if(canvas_owned) dt_free_align(canvas_rgba);
   _stats.encode_seconds += dt_get_wtime() - clock;
@@ -2147,6 +2317,7 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
   const double start = dt_get_wtime();
   // User space to the surface's PIXELS: cairo's device space stops short of the surface's own
   // device scale, and on a 2x screen a layer sized in device units is half the resolution.
+  // A quality below 1 composites that many times fewer pixels a side and scales the result up.
   cairo_matrix_t matrix;
   cairo_get_matrix(cr, &matrix);
   double scale_x = 1.0;
@@ -2157,6 +2328,9 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
     scale_x = 1.0;
     scale_y = 1.0;
   }
+  const double quality = CLAMP(options->quality > 0.0 ? options->quality : 1.0, 0.125, 1.0);
+  scale_x *= quality;
+  scale_y *= quality;
   cairo_matrix_t to_pixels;
   cairo_matrix_init_scale(&to_pixels, scale_x, scale_y);
   cairo_matrix_multiply(&matrix, &matrix, &to_pixels);
@@ -2179,12 +2353,59 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
   }
   if(_box_empty(&box)) return;
 
+  // The same frame as last time: blit it. The display's settings generation is part of the
+  // key, since the encode goes through the display profile.
+  uint64_t display_generation = 0;
+  if(options->for_display)
+  {
+    dt_colorprofiles_settings_t settings;
+    dt_colorprofiles_get_settings(&settings);
+    display_generation = settings.generation;
+  }
+  dt_canvas_composite_key_t key;
+  memset(&key, 0, sizeof(key));
+  key.serial = canvas->serial;
+  key.generation = canvas->generation;
+  key.display_generation = display_generation;
+  key.matrix = matrix;
+  key.x = box.x;
+  key.y = box.y;
+  key.width = box.width;
+  key.height = box.height;
+  key.quality = quality;
+  key.for_display = options->for_display;
+  key.draw_grid = options->draw_grid;
+  // The cache serves the atelier, which carries a surface cache and mutates the document
+  // through its API; an export, and a test editing the struct by hand, always composites.
+  const gboolean may_cache = !IS_NULL_PTR(options->cache);
+  g_mutex_lock(&_composite.lock);
+  const gboolean hit = may_cache && !IS_NULL_PTR(_composite.surface) && memcmp(&_composite.key, &key, sizeof(key)) == 0;
+  if(hit)
+  {
+    cairo_save(cr);
+    cairo_identity_matrix(cr);
+    cairo_scale(cr, 1.0 / scale_x, 1.0 / scale_y);
+    cairo_set_source_surface(cr, _composite.surface, box.x, box.y);
+    cairo_pattern_set_filter(cairo_get_source(cr), quality < 1.0 ? CAIRO_FILTER_BILINEAR : CAIRO_FILTER_NEAREST);
+    cairo_rectangle(cr, box.x, box.y, box.width, box.height);
+    cairo_fill(cr);
+    cairo_restore(cr);
+    g_mutex_unlock(&_composite.lock);
+    if(options->draw_grid) _paint_gutters(cr, canvas, options);
+    _stats.cached = TRUE;
+    _stats.total_seconds = dt_get_wtime() - start;
+    dt_print(DT_DEBUG_PERF, "[canvas paint] the previous frame, blitted: %.1f ms\n", _stats.total_seconds * 1000.0);
+    return;
+  }
+  g_mutex_unlock(&_composite.lock);
+
   // A page at print resolution can outgrow memory as floats: composite it in bands.
   const int rows_per_band = MAX(1, COMPOSE_BAND_MAX_PIXELS / MAX(box.width, 1));
+  const gboolean one_band = may_cache && box.height <= rows_per_band;
   for(int top = box.y; top < box.y + box.height; top += rows_per_band)
   {
     const dt_canvas_box_t band = { box.x, top, box.width, MIN(rows_per_band, box.y + box.height - top) };
-    _paint_band(cr, canvas, options, &matrix, &band, scale_x, scale_y);
+    _paint_band(cr, canvas, options, &matrix, &band, scale_x, scale_y, one_band ? &key : NULL);
   }
   if(options->draw_grid) _paint_gutters(cr, canvas, options);
   _stats.total_seconds = dt_get_wtime() - start;

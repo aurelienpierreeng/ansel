@@ -2470,7 +2470,7 @@ they are visible.
   on the GUI thread with the token the view issued for the open document, and the view drops
   results whose token is stale. Do not hand it a `dt_canvas_t *`.
 - **One painter for the screen and the PDF**, differing only in the colour target: the atelier
-  converts to the display profile, the export keeps sRGB and converts the whole page with
+  converts to the display profile, the export keeps Adobe RGB and converts the whole page with
   LCMS. Every colour the canvas draws goes through `dt_canvas_render_color()`, so borders match
   their pictures.
 - **The toolbar owns no state.** It asks the view through `proxy.canvas` and refills from
@@ -2507,10 +2507,10 @@ they are visible.
   embedded, `image.colorspace` records it; older sRGB JPEGs and map tiles are converted at
   decode), `dt_canvas_render_color()` converts every drawn colour into it, and the paper fields
   go through `dt_canvas_render_srgb8_to_layer8()`. A layer therefore decodes through the 563/256
-  gamma with no matrix. The finished canvas goes to the display through XYZ with
-  `dt_colorprofiles_xyza_to_display_bgra8()`, a bulk float transform added to the colour module
-  for it; the module's XYZ is D50, so the painter carries the specification's Bradford-adapted
-  matrix. The PDF page is Adobe RGB and the exporter's source profile says so. The encode table
+  gamma with no matrix. The finished canvas is encoded to 8-bit Adobe RGB and goes to the
+  display through `dt_colorprofiles_adobergb_bgrx8_to_display()`, the module's prepared 8-bit
+  transform (a float XYZ path cost 800 ms a frame). The PDF page is Adobe RGB and the
+  exporter's source profile says so. The encode table
   must be indexed by sqrt(value): a uniform 16384-step table misses the first codes of a 2.2
   gamma by whole steps. Tests compute expected codes with an independent sRGB-to-Adobe helper
   and cairo's own quantisation (16 bits rounded, then the high byte).
@@ -2559,3 +2559,18 @@ they are visible.
 - **An include inside an `#ifdef` needs `// conditional-ok: <reason>`** on its line
   (`tools/check_conditional_includes.sh`, run on pull requests only, so a local build cannot
   show it): the osm-gps-map header in `canvas_render.c` is one.
+- **The painter's serial bottleneck is cairo compositing a scaled source**, not the float
+  maths: a picture scaled onto its frame with `CAIRO_FILTER_GOOD`, a mask applied through
+  `cairo_mask_surface()` under a transform, each runs a separable convolution on one core
+  and was 40% of the main thread. Blit sprites 1:1 under an identity matrix
+  (`dt_canvas_surface_cache_get_scaled()`) and do masks in float in a parallel loop
+  (`_cut_compose()`). And profile the MAIN thread with children: the workers' samples are
+  barrier spin, and `perf` attributes page faults to nothing -- a 240 MB float layer
+  allocated per frame is returned to the kernel on free and faulted in again next frame,
+  which is why every working buffer is a slot in the surface cache
+  (`dt_canvas_scratch_slot_t`). `doc/canvas.md` "Instrumentation and performance" has the
+  numbers and `tests/unittests/bench_canvas_paint` reproduces them.
+- **The composite cache is keyed on `dt_canvas_t.serial`, never on the address**: the tests
+  free and recreate documents at the same address with the same generation, and were handed
+  the previous test's frame. It serves paints that carry a surface cache only, because a test
+  that edits the struct by hand between two paints bumps no generation.
