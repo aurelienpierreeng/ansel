@@ -40,7 +40,6 @@
 #define CANVAS_DUPLICATE_OFFSET 40.0
 #define CANVAS_CONNECTOR_LINE_WIDTH 2.0f
 #define CANVAS_DEFAULT_SHADOW_OFFSET 8.0f
-#define CANVAS_DEFAULT_SHADOW_BLUR 12.0f
 #define CANVAS_MASK_MAX_NODES 512u
 
 /* --- objects: allocation ---------------------------------------------------- */
@@ -171,10 +170,10 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->paper_landscape = 0;
   canvas->page_color = dt_canvas_color(0.35f, 0.6f, 1.0f, 1.0f);
   canvas->grid_flags |= DT_CANVAS_PAGE_VISIBLE;
-  canvas->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.0f);
+  canvas->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.5f);
   canvas->shadow.offset_x = CANVAS_DEFAULT_SHADOW_OFFSET;
   canvas->shadow.offset_y = CANVAS_DEFAULT_SHADOW_OFFSET;
-  canvas->shadow.blur = CANVAS_DEFAULT_SHADOW_BLUR;
+  canvas->shadow.blur = 0.0f; // off until asked for
   canvas->gutter_color = dt_canvas_color(1.0f, 0.65f, 0.2f, 0.8f);
   canvas->view_zoom = 1.0;
   canvas->view_x = 0.0;
@@ -687,7 +686,14 @@ void dt_canvas_object_effective_shadow(const dt_canvas_t *canvas, const dt_canva
 
 gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow)
 {
-  return !IS_NULL_PTR(shadow) && shadow->color.alpha > 0.0f;
+  return !IS_NULL_PTR(shadow) && shadow->color.alpha > 0.0f && shadow->blur != 0.0f;
+}
+
+dt_canvas_color_t dt_canvas_object_background(const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object)) return dt_canvas_color(0.0f, 0.0f, 0.0f, 0.0f);
+  if(object->kind == DT_CANVAS_OBJECT_TEXT) return object->text.background;
+  return object->background;
 }
 
 /* --- cutout masks ------------------------------------------------------------------- */

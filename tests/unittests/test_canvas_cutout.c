@@ -233,6 +233,38 @@ static void _a_cut_frames_border_follows_the_cutout_outward(void **state)
   assert_int_equal(_painted_pixel(canvas, 200, 122, 122), 0xFF0000u); // 31 out along the diagonal: a disc, not a square
   assert_int_equal(_painted_pixel(canvas, 200, 138, 100), 0x000000u);
   assert_int_equal(_painted_pixel(canvas, 200, 53, 53), 0x000000u);
+  // Feathered by 10: the border starts where the feather ends, at 35, not where the shape's
+  // edge is, and the background fills the shape's whole support, feather included, solid.
+  frame->mask.feather = 0.1f;
+  frame->text.background = dt_canvas_color(0.0f, 0.0f, 1.0f, 1.0f);
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0x0000FFu);
+  assert_int_equal(_painted_pixel(canvas, 200, 130, 100), 0x0000FFu);
+  assert_int_equal(_painted_pixel(canvas, 200, 140, 100), 0xFF0000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 148, 100), 0x000000u);
+  // Without a background the feather dissolves into nothing; the border still starts past it.
+  frame->text.background.alpha = 0.0f;
+  assert_int_equal(_painted_pixel(canvas, 200, 130, 100), 0x000000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 140, 100), 0xFF0000u);
+  dt_canvas_free(canvas);
+}
+
+static void _a_background_fills_the_frame_under_a_missing_render(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  dt_canvas_object_t *image = dt_canvas_add_image(canvas, 0.0, 0.0, 100, 100);
+  image->width = 100.0;
+  image->height = 100.0;
+  image->border_width = 0.0f;
+  image->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  // No render and no background: nothing but the canvas.
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0x000000u);
+  image->background = dt_canvas_color(0.0f, 1.0f, 0.0f, 1.0f);
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0x00FF00u);
+  assert_int_equal(_painted_pixel(canvas, 200, 5, 5), 0x000000u);
   dt_canvas_free(canvas);
 }
 
@@ -249,10 +281,14 @@ static void _the_compositor_blends_in_linear_light_and_round_trips_opaque_codes(
   frame->border_width = 0.0f;
   frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
   frame->transparency = 0.5f;
+  // 187.5 is what the maths gives, so either neighbour is right; the working space's matrices
+  // and their inverse decide which, channel by channel.
   const uint32_t inside = _painted_pixel(canvas, 200, 100, 100);
-  const int code = (int)(inside & 0xFF);
-  assert_true(code >= 186 && code <= 189);
-  assert_int_equal((inside >> 8) & 0xFF, code);
+  for(int shift = 0; shift <= 16; shift += 8)
+  {
+    const int code = (int)((inside >> shift) & 0xFF);
+    assert_true(code >= 186 && code <= 189);
+  }
   // Outside the frame the background comes back as the exact code it was given.
   assert_int_equal(_painted_pixel(canvas, 200, 5, 5), 0x000000u);
   // Codes cairo lands on exactly (multiples of 1/255), so the round trip is judged and not cairo's rounding.
@@ -278,12 +314,23 @@ static void _the_compositor_blends_in_linear_light_and_round_trips_opaque_codes(
   frame->shadow.offset_y = 20.0f;
   frame->shadow.blur = 0.0f;
   frame->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  // A radius of zero is no shadow at all.
+  assert_int_equal(_painted_pixel(canvas, 200, 160, 160), background);
+  // Hardly blurred, the shadow is where the frame's silhouette lands, offset.
+  frame->shadow.blur = 0.4f;
   assert_int_equal(_painted_pixel(canvas, 200, 160, 160), 0x000000u);
   assert_int_equal(_painted_pixel(canvas, 200, 175, 175), background);
   // Blurred, the same spot is a shade between the shadow and the background.
   frame->shadow.blur = 8.0f;
   const uint32_t soft = _painted_pixel(canvas, 200, 168, 168);
   assert_true((soft & 0xFF) > 0 && (soft & 0xFF) < (background & 0xFF));
+  // A negative radius casts the shadow inside the frame's own edges: the frame's corner
+  // opposite the offset darkens, its middle does not, and nothing lands outside.
+  frame->shadow.blur = -8.0f;
+  assert_int_equal(_painted_pixel(canvas, 200, 168, 168), background);
+  const uint32_t inner = _painted_pixel(canvas, 200, 54, 54);
+  assert_true((inner & 0xFF) < 0xFF);
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0xFFFFFFu);
   dt_canvas_free(canvas);
 }
 
@@ -312,6 +359,7 @@ int main(void)
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),
     cmocka_unit_test(_the_compositor_paints_the_surfaces_own_pixels_on_a_scaled_surface),
     cmocka_unit_test(_a_cut_frames_border_follows_the_cutout_outward),
+    cmocka_unit_test(_a_background_fills_the_frame_under_a_missing_render),
   };
   return cmocka_run_group_tests(tests, _group_setup, _group_teardown);
 }

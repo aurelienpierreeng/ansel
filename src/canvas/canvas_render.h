@@ -161,6 +161,13 @@ cairo_surface_t *dt_canvas_render_mask(const dt_canvas_object_t *object, int wid
  */
 cairo_surface_t *dt_canvas_render_mask_band(const dt_canvas_object_t *object, int width, int height, int radius);
 
+/** @brief Where the cutout has any coverage, hard-edged: the shape out to its feather's outer edge. */
+cairo_surface_t *dt_canvas_render_mask_support(const dt_canvas_object_t *object, int width, int height);
+
+/** @brief The support of dt_canvas_render_mask_support(), cached beside the mask; owned by the cache. */
+cairo_surface_t *dt_canvas_surface_cache_get_mask_support(dt_canvas_surface_cache_t *cache,
+                                                          const dt_canvas_object_t *object, int width, int height);
+
 /** @brief The band of dt_canvas_render_mask_band(), cached beside the mask; owned by the cache. */
 cairo_surface_t *dt_canvas_surface_cache_get_mask_band(dt_canvas_surface_cache_t *cache,
                                                        const dt_canvas_object_t *object, int width, int height,

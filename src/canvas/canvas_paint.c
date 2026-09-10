@@ -750,7 +750,8 @@ static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
 {
   const double pixels_per_unit = 1.0 / options->units_per_pixel;
   const int sprite_scaled = CLAMP((int)lround(PAPER_TILE * pixels_per_unit), 8, 2048);
-  cairo_surface_t *tile = _paper_tile(canvas->background_style, options->for_display, sprite_scaled);
+  // sRGB whatever the target: the compositor manages the finished canvas.
+  cairo_surface_t *tile = _paper_tile(canvas->background_style, FALSE, sprite_scaled);
   if(IS_NULL_PTR(tile)) return;
   if(options->clip.width <= 0.0 || options->clip.height <= 0.0) return;
   const double cell = (double)PAPER_CELLS * PAPER_TILE;
@@ -872,6 +873,18 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     surface = owned;
   }
   _paint_border(cr, canvas, object, options);
+  const dt_canvas_color_t background = dt_canvas_object_background(object);
+  if(background.alpha > 0.0f && !_object_cut(object))
+  {
+    // Under the picture, inside the border: what shows through a translucent or missing render.
+    const double inset = _border_inset(canvas, object);
+    cairo_save(cr);
+    _set_color(cr, &background, options->for_display);
+    cairo_rectangle(cr, -object->width * 0.5 + inset, -object->height * 0.5 + inset,
+                    fmax(object->width - 2.0 * inset, 0.0), fmax(object->height - 2.0 * inset, 0.0));
+    cairo_fill(cr);
+    cairo_restore(cr);
+  }
   if(IS_NULL_PTR(surface))
   {
     if(options->draw_placeholders) _paint_placeholder(cr, object, options);
@@ -975,7 +988,7 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   const double half_width = object->width * 0.5;
   const double half_height = object->height * 0.5;
   _paint_border(cr, canvas, object, options);
-  if(object->text.background.alpha > 0.0f)
+  if(object->text.background.alpha > 0.0f && !_object_cut(object))
   {
     // The background fills the frame inside its border, so the border is not painted over.
     const double inset = _border_inset(canvas, object);
@@ -1137,6 +1150,27 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
  * translucent pixels, since an opaque pixel decodes and re-encodes to the very code it held.
  * The export keeps sRGB throughout and is converted to the output profile afterwards. */
 
+/* The working space is linear Rec2020: every layer is decoded from sRGB into it, the blends
+ * happen there, and the finished canvas leaves it for the display profile (through XYZ, D50 as
+ * the colour module's XYZ profile is) or for sRGB on export. The matrices are the standard
+ * ones; Rec2020 to XYZ carries the Bradford adaptation from D65 to D50. */
+static const float _srgb_to_working[9] = { 0.627501f, 0.329276f, 0.043302f,
+                                           0.069109f, 0.919519f, 0.011360f,
+                                           0.016395f, 0.088011f, 0.895381f };
+static const float _working_to_srgb[9] = { 1.660491f, -0.587641f, -0.072850f,
+                                           -0.124550f, 1.132900f, -0.008349f,
+                                           -0.018151f, -0.100579f, 1.118730f };
+static const float _working_to_xyz_d50[9] = { 0.673422f, 0.165641f, 0.125128f,
+                                              0.279017f, 0.675340f, 0.045637f,
+                                              -0.001930f, 0.029979f, 0.797333f };
+
+static inline void _matrix_apply(const float *matrix, const float in[3], float out[3])
+{
+  out[0] = matrix[0] * in[0] + matrix[1] * in[1] + matrix[2] * in[2];
+  out[1] = matrix[3] * in[0] + matrix[4] * in[1] + matrix[5] * in[2];
+  out[2] = matrix[6] * in[0] + matrix[7] * in[1] + matrix[8] * in[2];
+}
+
 #define COMPOSE_OETF_STEPS 16384
 #define COMPOSE_BAND_MAX_PIXELS (24 * 1024 * 1024) ///< a band of the float canvas: 384 MB of RGBA floats
 #define COMPOSE_MASK_MAX_PIXELS 3072              ///< a cutout raster's longer side
@@ -1175,6 +1209,15 @@ static void _luts_init(void)
 static inline uint8_t _encode(const float linear)
 {
   return _oetf_lut[(int)lrintf(CLAMP(linear, 0.0f, 1.0f) * (float)COMPOSE_OETF_STEPS)];
+}
+
+/** A canvas colour in the working space. */
+static void _color_to_working(const dt_canvas_color_t *color, float working[3])
+{
+  double rgb[3] = { 0.0, 0.0, 0.0 };
+  dt_canvas_render_color(color, FALSE, rgb);
+  const float linear[3] = { _srgb_eotf((float)rgb[0]), _srgb_eotf((float)rgb[1]), _srgb_eotf((float)rgb[2]) };
+  _matrix_apply(_srgb_to_working, linear, working);
 }
 
 /** An integer box in device pixels. */
@@ -1297,7 +1340,7 @@ static void _layer_linearise(cairo_surface_t *surface, const float opacity, floa
   const int width = cairo_image_surface_get_width(surface);
   const int height = cairo_image_surface_get_height(surface);
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) shared(_eotf_lut) schedule(static)
+#pragma omp parallel for default(firstprivate) shared(_eotf_lut, _srgb_to_working) schedule(static)
 #endif
   for(int row = 0; row < height; row++)
   {
@@ -1335,24 +1378,74 @@ static void _layer_linearise(cairo_surface_t *surface, const float opacity, floa
         linear_blue = _srgb_eotf(fminf((float)blue / (float)alpha, 1.0f));
       }
       const float weight = coverage * opacity;
-      target[4 * col + 0] = linear_red * weight;
-      target[4 * col + 1] = linear_green * weight;
-      target[4 * col + 2] = linear_blue * weight;
+      const float linear[3] = { linear_red, linear_green, linear_blue };
+      float working[3];
+      _matrix_apply(_srgb_to_working, linear, working);
+      target[4 * col + 0] = working[0] * weight;
+      target[4 * col + 1] = working[1] * weight;
+      target[4 * col + 2] = working[2] * weight;
       target[4 * col + 3] = weight;
     }
   }
 }
 
-/** Encode a linear premultiplied float canvas, opaque, into an RGB24 cairo surface. */
-static void _canvas_encode(const float *rgba, cairo_surface_t *surface)
+/**
+ * Leave the working space: the finished canvas, opaque, into an RGB24 cairo surface. For the
+ * display it goes through XYZ to the display profile, in floats, by the colour module; for
+ * an export it is sRGB, encoded through the table. The float canvas is consumed either way.
+ */
+static void _canvas_encode(float *rgba, cairo_surface_t *surface, const gboolean for_display)
 {
   cairo_surface_flush(surface);
   uint8_t *pixels = cairo_image_surface_get_data(surface);
   const int stride = cairo_image_surface_get_stride(surface);
   const int width = cairo_image_surface_get_width(surface);
   const int height = cairo_image_surface_get_height(surface);
+  if(for_display)
+  {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) shared(_oetf_lut) schedule(static)
+#pragma omp parallel for default(firstprivate) shared(_working_to_xyz_d50) schedule(static)
+#endif
+    for(int row = 0; row < height; row++)
+    {
+      float *pixel = rgba + (size_t)row * width * 4;
+      for(int col = 0; col < width; col++)
+      {
+        float xyz[3];
+        _matrix_apply(_working_to_xyz_d50, pixel + 4 * col, xyz);
+        pixel[4 * col + 0] = xyz[0];
+        pixel[4 * col + 1] = xyz[1];
+        pixel[4 * col + 2] = xyz[2];
+        pixel[4 * col + 3] = 1.0f;
+      }
+    }
+    if(dt_colorprofiles_xyza_to_display_bgra8(rgba, pixels, width, height, stride))
+    {
+      cairo_surface_mark_dirty(surface);
+      return;
+    }
+    // No colour module behind us: XYZ back to the working space and out as sRGB, below.
+    static const float xyz_to_working[9] = { 1.647330f, -0.393516f, -0.236019f,
+                                             -0.682534f, 1.647585f, 0.012818f,
+                                             0.029651f, -0.062896f, 1.253133f };
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+    for(int row = 0; row < height; row++)
+    {
+      float *pixel = rgba + (size_t)row * width * 4;
+      for(int col = 0; col < width; col++)
+      {
+        float working[3];
+        _matrix_apply(xyz_to_working, pixel + 4 * col, working);
+        pixel[4 * col + 0] = working[0];
+        pixel[4 * col + 1] = working[1];
+        pixel[4 * col + 2] = working[2];
+      }
+    }
+  }
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) shared(_oetf_lut, _working_to_srgb) schedule(static)
 #endif
   for(int row = 0; row < height; row++)
   {
@@ -1361,9 +1454,11 @@ static void _canvas_encode(const float *rgba, cairo_surface_t *surface)
     for(int col = 0; col < width; col++)
     {
       // What is left transparent shows black: the background under everything is opaque anyway.
-      const uint32_t red = _encode(source[4 * col + 0]);
-      const uint32_t green = _encode(source[4 * col + 1]);
-      const uint32_t blue = _encode(source[4 * col + 2]);
+      float linear[3];
+      _matrix_apply(_working_to_srgb, source + 4 * col, linear);
+      const uint32_t red = _encode(linear[0]);
+      const uint32_t green = _encode(linear[1]);
+      const uint32_t blue = _encode(linear[2]);
       target[col] = 0xFF000000u | (red << 16) | (green << 8) | blue;
     }
   }
@@ -1437,12 +1532,12 @@ static void _box_blur(float *plane, float *scratch, const int width, const int h
 }
 
 /**
- * The shadow of a layer: its alpha, blurred and offset, tinted, laid "over" the canvas. The
- * layer box was grown by the shadow's reach, so the blur has room on every side.
+ * The blurred silhouette a shadow is made of: the layer's alpha (an outset shadow) or what
+ * the layer leaves uncovered (an inset one), through three box blurs of the radius, which
+ * approximate a Gaussian of that sigma closely enough for a shadow. The caller frees it.
  */
-static void _canvas_shadow(float *canvas_rgba, const dt_canvas_box_t *canvas_box, const float *layer_rgba,
-                           const dt_canvas_box_t *layer_box, const dt_canvas_box_t *area,
-                           const dt_canvas_shadow_t *shadow, const double pixels_per_unit, const gboolean for_display)
+static float *_shadow_plane(const float *layer_rgba, const dt_canvas_box_t *layer_box, const dt_canvas_shadow_t *shadow,
+                            const double pixels_per_unit)
 {
   const size_t count = (size_t)layer_box->width * layer_box->height;
   float *alpha = dt_alloc_align_float(count);
@@ -1451,19 +1546,33 @@ static void _canvas_shadow(float *canvas_rgba, const dt_canvas_box_t *canvas_box
   {
     dt_free_align(alpha);
     dt_free_align(scratch);
-    return;
+    return NULL;
   }
-  for(size_t idx = 0; idx < count; idx++) alpha[idx] = layer_rgba[4 * idx + 3];
-  const double sigma = shadow->blur * pixels_per_unit;
-  // Three box blurs of radius sigma approximate a Gaussian of that sigma closely enough for a shadow.
-  const int radius = (int)lround(sigma);
+  const gboolean inset = shadow->blur < 0.0f;
+  for(size_t idx = 0; idx < count; idx++)
+    alpha[idx] = inset ? 1.0f - layer_rgba[4 * idx + 3] : layer_rgba[4 * idx + 3];
+  const int radius = (int)lround(fabs(shadow->blur) * pixels_per_unit);
   if(radius >= 1)
   {
     for(int pass = 0; pass < 3; pass++) _box_blur(alpha, scratch, layer_box->width, layer_box->height, radius);
   }
-  double rgb[3] = { 0.0, 0.0, 0.0 };
-  dt_canvas_render_color(&shadow->color, for_display, rgb);
-  const float tint[3] = { _srgb_eotf((float)rgb[0]), _srgb_eotf((float)rgb[1]), _srgb_eotf((float)rgb[2]) };
+  dt_free_align(scratch);
+  return alpha;
+}
+
+/**
+ * An outset shadow: the layer's silhouette, blurred and offset, tinted, laid "over" the
+ * canvas before the layer itself. The layer box was grown by the shadow's reach, so the blur
+ * has room on every side.
+ */
+static void _canvas_shadow(float *canvas_rgba, const dt_canvas_box_t *canvas_box, const float *layer_rgba,
+                           const dt_canvas_box_t *layer_box, const dt_canvas_box_t *area,
+                           const dt_canvas_shadow_t *shadow, const double pixels_per_unit)
+{
+  float *alpha = _shadow_plane(layer_rgba, layer_box, shadow, pixels_per_unit);
+  if(IS_NULL_PTR(alpha)) return;
+  float tint[3];
+  _color_to_working(&shadow->color, tint);
   const float strength = CLAMP(shadow->color.alpha, 0.0f, 1.0f);
   const int offset_x = (int)lround(shadow->offset_x * pixels_per_unit);
   const int offset_y = (int)lround(shadow->offset_y * pixels_per_unit);
@@ -1491,7 +1600,51 @@ static void _canvas_shadow(float *canvas_rgba, const dt_canvas_box_t *canvas_box
     }
   }
   dt_free_align(alpha);
-  dt_free_align(scratch);
+}
+
+/**
+ * An inset shadow: what the layer leaves uncovered, blurred and offset, falls onto the layer
+ * inside its own edges -- the shadow the object would cast on itself were it a hole. Laid
+ * over the layer, within the layer's own coverage, before the layer goes over the canvas.
+ */
+static void _layer_inset_shadow(float *layer_rgba, const dt_canvas_box_t *layer_box, const dt_canvas_shadow_t *shadow,
+                                const double pixels_per_unit)
+{
+  float *alpha = _shadow_plane(layer_rgba, layer_box, shadow, pixels_per_unit);
+  if(IS_NULL_PTR(alpha)) return;
+  float tint[3];
+  _color_to_working(&shadow->color, tint);
+  const float strength = CLAMP(shadow->color.alpha, 0.0f, 1.0f);
+  const int offset_x = (int)lround(shadow->offset_x * pixels_per_unit);
+  const int offset_y = (int)lround(shadow->offset_y * pixels_per_unit);
+  const int rows = layer_box->height;
+  const int cols = layer_box->width;
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int row = 0; row < rows; row++)
+  {
+    float *target = layer_rgba + (size_t)row * cols * 4;
+    const int source_y = row - offset_y;
+    for(int col = 0; col < cols; col++)
+    {
+      const float own = target[4 * col + 3];
+      if(own <= 0.0f) continue;
+      const int source_x = col - offset_x;
+      // Beyond the layer's box the uncovered plane is whole: the shadow falls at full strength.
+      const float outside = (source_y < 0 || source_y >= rows || source_x < 0 || source_x >= cols)
+                                ? 1.0f
+                                : alpha[(size_t)source_y * cols + source_x];
+      const float coverage = outside * strength * own;
+      if(coverage <= 0.0f) continue;
+      const float keep = 1.0f - coverage;
+      target[4 * col + 0] = tint[0] * coverage + target[4 * col + 0] * keep;
+      target[4 * col + 1] = tint[1] * coverage + target[4 * col + 1] * keep;
+      target[4 * col + 2] = tint[2] * coverage + target[4 * col + 2] * keep;
+      target[4 * col + 3] = coverage + target[4 * col + 3] * keep;
+    }
+  }
+  dt_free_align(alpha);
 }
 
 /** Paint one object's own pixels, in user space: what it looked like before this compositor existed. */
@@ -1552,9 +1705,12 @@ static void _paint_frame_alpha(cairo_t *cr, const dt_canvas_object_t *object, ca
   cairo_restore(cr);
 }
 
-/** Multiply the layer's alpha by the object's cutout, rasterised at the frame's size on screen. */
+/**
+ * Multiply the layer's alpha by the object's cutout, rasterised at the frame's size on screen:
+ * the feathered shape for the content, or its hard-edged support for what fills the shape.
+ */
 static void _apply_cutout(cairo_t *cr, const dt_canvas_object_t *object, const dt_canvas_paint_options_t *options,
-                          const double pixels_per_unit)
+                          const double pixels_per_unit, const gboolean support)
 {
   if(!_object_cut(object)) return;
   int mask_width = 0;
@@ -1563,15 +1719,31 @@ static void _apply_cutout(cairo_t *cr, const dt_canvas_object_t *object, const d
   cairo_surface_t *mask = NULL;
   cairo_surface_t *owned = NULL;
   if(!IS_NULL_PTR(options->cache))
-    mask = dt_canvas_surface_cache_get_mask(options->cache, object, mask_width, mask_height);
+    mask = support ? dt_canvas_surface_cache_get_mask_support(options->cache, object, mask_width, mask_height)
+                   : dt_canvas_surface_cache_get_mask(options->cache, object, mask_width, mask_height);
   else
   {
-    owned = dt_canvas_render_mask(object, mask_width, mask_height);
+    owned = support ? dt_canvas_render_mask_support(object, mask_width, mask_height)
+                    : dt_canvas_render_mask(object, mask_width, mask_height);
     mask = owned;
   }
   if(IS_NULL_PTR(mask)) return;
   _paint_frame_alpha(cr, object, mask, mask_width, mask_height, CAIRO_OPERATOR_DEST_IN);
   if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
+}
+
+/** The object's background over its whole frame: a cut-out frame's fill, clipped to the shape's support later. */
+static void _paint_fill(cairo_t *cr, const dt_canvas_object_t *object, const dt_canvas_paint_options_t *options)
+{
+  const dt_canvas_color_t background = dt_canvas_object_background(object);
+  if(background.alpha <= 0.0f) return;
+  cairo_save(cr);
+  cairo_translate(cr, object->x, object->y);
+  cairo_rotate(cr, object->rotation);
+  _set_color(cr, &background, options->for_display);
+  cairo_rectangle(cr, -object->width * 0.5, -object->height * 0.5, object->width, object->height);
+  cairo_fill(cr);
+  cairo_restore(cr);
 }
 
 /**
@@ -1651,7 +1823,7 @@ static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas
     dt_canvas_object_effective_border(canvas, object, &color, &width);
     if(width > 0.0f) box = _box_grow(&box, (int)ceil(width * pixels_per_unit) + 1);
   }
-  if(dt_canvas_shadow_visible(shadow))
+  if(dt_canvas_shadow_visible(shadow) && shadow->blur > 0.0f)
   {
     const double reach = (fabs(shadow->offset_x) + fabs(shadow->offset_y) + COMPOSE_SHADOW_SIGMAS * shadow->blur)
                          * pixels_per_unit;
@@ -1725,7 +1897,7 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     if(_box_empty(&object_box)) continue;
     // The layer keeps the shadow's reach beyond the band, so a blur at the band's edge is whole.
     const int reach = shadowed ? (int)ceil((fabs(shadow.offset_x) + fabs(shadow.offset_y)
-                                             + COMPOSE_SHADOW_SIGMAS * shadow.blur) * pixels_per_unit) + 1
+                                             + COMPOSE_SHADOW_SIGMAS * fabs(shadow.blur)) * pixels_per_unit) + 1
                                : 0;
     const dt_canvas_box_t band_reach = _box_grow(band, reach);
     const dt_canvas_box_t layer_box = _box_intersect(&object_box, &band_reach);
@@ -1738,9 +1910,13 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
       cairo_surface_destroy(layer);
       continue;
     }
+    const gboolean cut = _object_cut(object);
     cairo_t *layer_cr = _layer_context(layer, matrix, &layer_box, font_options);
-    _paint_object_pixels(layer_cr, canvas, object, &local);
-    _apply_cutout(layer_cr, object, &local, pixels_per_unit);
+    if(cut)
+      _paint_fill(layer_cr, object, &local);
+    else
+      _paint_object_pixels(layer_cr, canvas, object, &local);
+    _apply_cutout(layer_cr, object, &local, pixels_per_unit, TRUE);
     cairo_destroy(layer_cr);
 
     const size_t layer_pixels = (size_t)layer_box.width * layer_box.height;
@@ -1753,26 +1929,42 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     _layer_linearise(layer, opacity, layer_rgba);
     cairo_surface_destroy(layer);
 
-    // A cut-out frame's border: its own layer, over the content in linear light.
-    if(_object_cut(object))
+    // A cut-out frame is three layers over each other in linear light: its background filling
+    // the shape's whole support, its content feathered by the shape, its border past the feather.
+    if(cut)
     {
-      cairo_surface_t *border = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, layer_box.width, layer_box.height);
-      if(cairo_surface_status(border) == CAIRO_STATUS_SUCCESS)
+      for(int part = 0; part < 2; part++)
       {
-        cairo_t *border_cr = _layer_context(border, matrix, &layer_box, font_options);
-        const gboolean painted = _paint_cut_border(border_cr, canvas, object, &local, pixels_per_unit);
-        cairo_destroy(border_cr);
-        float *border_rgba = painted ? dt_alloc_align_float(layer_pixels * 4) : NULL;
-        if(!IS_NULL_PTR(border_rgba))
+        cairo_surface_t *extra = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, layer_box.width, layer_box.height);
+        if(cairo_surface_status(extra) != CAIRO_STATUS_SUCCESS)
         {
-          _layer_linearise(border, opacity, border_rgba);
-          _layer_over(layer_rgba, border_rgba, layer_pixels);
-          dt_free_align(border_rgba);
+          cairo_surface_destroy(extra);
+          continue;
         }
+        cairo_t *extra_cr = _layer_context(extra, matrix, &layer_box, font_options);
+        gboolean painted = TRUE;
+        if(part == 0)
+        {
+          _paint_object_pixels(extra_cr, canvas, object, &local);
+          _apply_cutout(extra_cr, object, &local, pixels_per_unit, FALSE);
+        }
+        else
+        {
+          painted = _paint_cut_border(extra_cr, canvas, object, &local, pixels_per_unit);
+        }
+        cairo_destroy(extra_cr);
+        float *extra_rgba = painted ? dt_alloc_align_float(layer_pixels * 4) : NULL;
+        if(!IS_NULL_PTR(extra_rgba))
+        {
+          _layer_linearise(extra, opacity, extra_rgba);
+          _layer_over(layer_rgba, extra_rgba, layer_pixels);
+          dt_free_align(extra_rgba);
+        }
+        cairo_surface_destroy(extra);
       }
-      cairo_surface_destroy(border);
     }
-    if(shadowed) _canvas_shadow(canvas_rgba, band, layer_rgba, &layer_box, &area, &shadow, pixels_per_unit, local.for_display);
+    if(shadowed && shadow.blur < 0.0f) _layer_inset_shadow(layer_rgba, &layer_box, &shadow, pixels_per_unit);
+    if(shadowed && shadow.blur > 0.0f) _canvas_shadow(canvas_rgba, band, layer_rgba, &layer_box, &area, &shadow, pixels_per_unit);
     _canvas_over(canvas_rgba, band, layer_rgba, &layer_box, &area);
     dt_free_align(layer_rgba);
   }
@@ -1782,7 +1974,7 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   cairo_surface_t *encoded = cairo_image_surface_create(CAIRO_FORMAT_RGB24, band->width, band->height);
   if(cairo_surface_status(encoded) == CAIRO_STATUS_SUCCESS)
   {
-    _canvas_encode(canvas_rgba, encoded);
+    _canvas_encode(canvas_rgba, encoded, local.for_display);
     cairo_save(cr);
     cairo_identity_matrix(cr);
     cairo_scale(cr, 1.0 / scale_x, 1.0 / scale_y);

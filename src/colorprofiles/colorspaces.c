@@ -1653,6 +1653,52 @@ static void _srgb_to_display_row(const cmsHTRANSFORM transform, uint8_t *const s
   }
 }
 
+gboolean dt_colorprofiles_xyza_to_display_bgra8(const float *const xyza, uint8_t *const bgra, const int width,
+                                                const int height, const int bgra_stride)
+{
+  if(IS_NULL_PTR(xyza) || IS_NULL_PTR(bgra) || width <= 0 || height <= 0) return FALSE;
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  pthread_rwlock_rdlock(&_transforms_lock);
+  const cmsHTRANSFORM transform = self->transform_xyz_to_display;
+
+  // One float RGBA row per thread, allocated before the parallel region (see the strided sRGB path).
+  const size_t row_floats = (size_t)width * 4u;
+  const int nthreads = MAX(dt_get_num_openmp_threads(), 1);
+  float *const scratch = g_try_malloc((size_t)nthreads * row_floats * sizeof(float));
+  if(IS_NULL_PTR(scratch))
+  {
+    pthread_rwlock_unlock(&_transforms_lock);
+    return FALSE;
+  }
+
+  __OMP_PARALLEL__()
+  {
+    float *const row_rgba = scratch + (size_t)dt_get_thread_num() * row_floats;
+    __OMP_FOR__()
+    for(int y = 0; y < height; y++)
+    {
+      const float *const row_in = xyza + (size_t)y * row_floats;
+      uint8_t *const row_out = bgra + (size_t)y * bgra_stride;
+      if(!IS_NULL_PTR(transform))
+        cmsDoTransform(transform, row_in, row_rgba, width);
+      else
+        for(int x = 0; x < width; x++) dt_XYZ_to_sRGB(row_in + 4 * x, row_rgba + 4 * x);
+      for(int x = 0; x < width; x++)
+      {
+        row_out[4 * x + 0] = (uint8_t)lrintf(CLAMP(row_rgba[4 * x + 2], 0.0f, 1.0f) * 255.0f);
+        row_out[4 * x + 1] = (uint8_t)lrintf(CLAMP(row_rgba[4 * x + 1], 0.0f, 1.0f) * 255.0f);
+        row_out[4 * x + 2] = (uint8_t)lrintf(CLAMP(row_rgba[4 * x + 0], 0.0f, 1.0f) * 255.0f);
+        row_out[4 * x + 3] = 255;
+      }
+    }
+  }
+
+  g_free(scratch);
+  pthread_rwlock_unlock(&_transforms_lock);
+  return TRUE;
+}
+
 gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const int width, const int height,
                                                   const int rowstride, const int n_channels,
                                                   const gboolean has_alpha)

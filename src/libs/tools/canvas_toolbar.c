@@ -64,7 +64,6 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *gutter_color;
   GtkWidget *size_snap;
   // the shadow popover
-  GtkWidget *shadow_enable;
   GtkWidget *shadow_offset_x;
   GtkWidget *shadow_offset_y;
   GtkWidget *shadow_blur;
@@ -231,10 +230,6 @@ static void _shadow_changed(GtkWidget *widget, gpointer user_data)
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_shadow)) return;
   float rgba[4];
   _rgba_of(toolbar->shadow_color, rgba);
-  if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(toolbar->shadow_enable)))
-    rgba[3] = 0.0f;
-  else if(rgba[3] <= 0.0f)
-    rgba[3] = 0.5f;
   dt_view_manager_get_global()->proxy.canvas.set_shadow(
       view, rgba, (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_x)),
       (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_y)),
@@ -317,11 +312,10 @@ static void _refill(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->gutter_show), (flags & DT_CANVAS_GUTTER_VISIBLE) != 0);
   _rgba_to(toolbar->gutter_color, &canvas->gutter_color, TRUE);
 
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->shadow_enable), dt_canvas_shadow_visible(&canvas->shadow));
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_x), canvas->shadow.offset_x);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_y), canvas->shadow.offset_y);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_blur), canvas->shadow.blur);
-  if(dt_canvas_shadow_visible(&canvas->shadow)) _rgba_to(toolbar->shadow_color, &canvas->shadow.color, TRUE);
+  _rgba_to(toolbar->shadow_color, &canvas->shadow.color, TRUE);
 
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->border_width), canvas->border_width);
   _rgba_to(toolbar->border_color, &canvas->border_color, TRUE);
@@ -493,12 +487,7 @@ static GtkWidget *_shadow_popover(dt_lib_module_t *self)
   gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(4));
   gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(10));
   gtk_container_set_border_width(GTK_CONTAINER(grid), DT_PIXEL_APPLY_DPI(10));
-  _section_label(grid, 0, _("Drop shadow"));
-  toolbar->shadow_enable = gtk_check_button_new_with_label(_("Enable"));
-  gtk_widget_set_tooltip_text(toolbar->shadow_enable,
-                              _("Drop a shadow under every object; an object's own bar can override it"));
-  g_signal_connect(toolbar->shadow_enable, "toggled", G_CALLBACK(_shadow_changed), self);
-  gtk_grid_attach(GTK_GRID(grid), toolbar->shadow_enable, 0, 1, 1, 1);
+  _section_label(grid, 0, _("Shadow"));
   toolbar->shadow_offset_x = gtk_spin_button_new_with_range(-500.0, 500.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->shadow_offset_x, _("Offset to the right, in canvas units"));
   g_signal_connect(toolbar->shadow_offset_x, "value-changed", G_CALLBACK(_shadow_changed), self);
@@ -507,10 +496,11 @@ static GtkWidget *_shadow_popover(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->shadow_offset_y, _("Offset downwards, in canvas units"));
   g_signal_connect(toolbar->shadow_offset_y, "value-changed", G_CALLBACK(_shadow_changed), self);
   _labelled(grid, 1, 2, _("Down"), toolbar->shadow_offset_y);
-  toolbar->shadow_blur = gtk_spin_button_new_with_range(0.0, 500.0, 1.0);
-  gtk_widget_set_tooltip_text(toolbar->shadow_blur, _("Blur, in canvas units"));
+  toolbar->shadow_blur = gtk_spin_button_new_with_range(-500.0, 500.0, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->shadow_blur,
+                              _("Radius, in canvas units: 0 is no shadow, positive drops it outside every object, negative casts it inside along their edges. An object's own bar can override it."));
   g_signal_connect(toolbar->shadow_blur, "value-changed", G_CALLBACK(_shadow_changed), self);
-  _labelled(grid, 2, 1, _("Blur"), toolbar->shadow_blur);
+  _labelled(grid, 2, 1, _("Radius"), toolbar->shadow_blur);
   toolbar->shadow_color = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->shadow_color), TRUE);
   gtk_widget_set_tooltip_text(toolbar->shadow_color, _("Colour and strength of the shadow"));
