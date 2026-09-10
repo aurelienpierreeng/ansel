@@ -2514,6 +2514,13 @@ they are visible.
   must be indexed by sqrt(value): a uniform 16384-step table misses the first codes of a 2.2
   gamma by whole steps. Tests compute expected codes with an independent sRGB-to-Adobe helper
   and cairo's own quantisation (16 bits rounded, then the high byte).
+- **A cut frame's mask raster is grown past the frame and supersampled.** The shape, its
+  feather and its border can all reach past the frame rectangle, so the raster carries a
+  margin (`dt_canvas_mask_geometry_t`, border + feather + two pixels) and the unit-square
+  description is re-mapped into it; the fill, the alpha paint and the device box all use the
+  grown rectangle. Every mask surface is rasterised at 3x (2x past a megapixel) and
+  box-filtered, the band's distance transform included: that is where the anti-aliasing of
+  cutouts and their borders comes from. The masks module's own rasterisers are hard-edged.
 - **A shadow's radius is signed and is its own switch**: positive outset, negative inset (the
   uncovered plane blurred and laid over the object within its coverage), zero none. Do not
   reintroduce an enable flag; `dt_canvas_shadow_visible()` reads the radius.
