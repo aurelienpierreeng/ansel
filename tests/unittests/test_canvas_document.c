@@ -93,6 +93,7 @@ static dt_canvas_t *_populated_canvas(void)
   image->shadow.blur = 2.0f;
   image->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
   image->transparency = 0.25f;
+  image->background = dt_canvas_color(0.2f, 0.4f, 0.6f, 0.8f);
   dt_canvas_mask_set_shape(canvas, image, DT_CANVAS_MASK_POLYGON);
   const float nodes[4 * DT_CANVAS_MASK_NODE_FLOATS] = { 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.0f, 0.0f,
                                                         0.9f, 0.1f, 0.9f, 0.1f, 0.9f, 0.1f, 0.0f, 0.0f,
@@ -173,6 +174,8 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(image->shadow.offset_y, 4.0f, 1e-6);
   assert_float_equal(image->shadow.blur, 2.0f, 1e-6);
   assert_float_equal(image->transparency, 0.25f, 1e-6);
+  assert_float_equal(image->background.green, 0.4f, 1e-6);
+  assert_float_equal(image->background.alpha, 0.8f, 1e-6);
   assert_int_equal(image->mask.shape, DT_CANVAS_MASK_POLYGON);
   assert_int_equal(image->mask.flags, DT_CANVAS_MASK_INVERT);
   assert_float_equal(image->mask.feather, 0.12f, 1e-6);

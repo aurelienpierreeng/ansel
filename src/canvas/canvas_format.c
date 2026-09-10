@@ -196,6 +196,7 @@ static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
   _w_f32(out, object->mask.radius_y);
   _w_f32(out, object->mask.rotation);
   _w_f32(out, object->mask.spare);
+  _w_color(out, &object->background);
   _w_bytes(out, object->reserved, sizeof(object->reserved));
   switch(object->kind)
   {
@@ -488,6 +489,7 @@ static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *obj
   object->mask.spare = _r_f32(cursor);
   object->mask.node_count = 0;
   object->mask.nodes = NULL;
+  object->background = _r_color(cursor);
   _r_bytes(cursor, object->reserved, sizeof(object->reserved));
   switch(object->kind)
   {

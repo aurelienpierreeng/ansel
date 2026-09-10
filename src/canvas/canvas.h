@@ -71,7 +71,7 @@ extern "C" {
 
 /** Reserved bytes per record, see the file comment. */
 #define DT_CANVAS_HEADER_RESERVED 932 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16)
-#define DT_CANVAS_OBJECT_RESERVED 188 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36)
+#define DT_CANVAS_OBJECT_RESERVED 172 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16)
 #define DT_CANVAS_IMAGE_RESERVED 512
 #define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
 #define DT_CANVAS_MAP_RESERVED 256
@@ -297,15 +297,17 @@ typedef struct dt_canvas_map_t
 } dt_canvas_map_t;
 
 /**
- * A drop shadow: the object's silhouette, blurred, offset and tinted, composited under it.
- * An alpha of 0 is no shadow. Offsets and blur are canvas units.
+ * A shadow: the object's silhouette, blurred, offset and tinted. The radius is the blur's
+ * standard deviation and its sign says where the shadow falls: positive drops it outside the
+ * object, negative casts it inside along the object's edges, and zero is no shadow at all.
+ * The colour's alpha is the strength. Offsets and radius are canvas units.
  */
 typedef struct dt_canvas_shadow_t
 {
   dt_canvas_color_t color;
   float offset_x;
   float offset_y;
-  float blur;   ///< the blur's standard deviation
+  float blur;   ///< the signed radius; see above
 } dt_canvas_shadow_t;
 
 /** The drawn-mask shape that cuts an object out of its rectangle. */
@@ -364,6 +366,7 @@ typedef struct dt_canvas_object_t
   dt_canvas_shadow_t shadow;  ///< applies with DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE
   float transparency; ///< 0 opaque, 1 invisible; stored this way so an older file's zeros mean opaque
   dt_canvas_mask_t mask;
+  dt_canvas_color_t background; ///< under the content, filling the frame or the cutout's whole shape; alpha 0 is none. A text frame keeps its own.
   uint8_t reserved[DT_CANVAS_OBJECT_RESERVED];
   union
   {
@@ -548,8 +551,11 @@ void dt_canvas_object_effective_border(const dt_canvas_t *canvas, const dt_canva
 void dt_canvas_object_effective_shadow(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                                        dt_canvas_shadow_t *shadow);
 
-/** @brief Whether a shadow draws anything at all. */
+/** @brief Whether a shadow draws anything at all: a radius other than zero and some strength. */
 gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow);
+
+/** @brief The colour under an object's content: a text frame's own, else the object's. */
+dt_canvas_color_t dt_canvas_object_background(const dt_canvas_object_t *object);
 
 /**
  * @brief Give an object a cutout of a shape, at a sensible default geometry; NONE removes it.
