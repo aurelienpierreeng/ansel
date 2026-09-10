@@ -27,6 +27,7 @@
 
 #include <cairo.h>
 #include <glib.h>
+#include <jpeglib.h>
 #include <math.h>
 #include <setjmp.h>
 #include <stdarg.h>
@@ -253,6 +254,309 @@ static void _the_compositor_paints_the_surfaces_own_pixels_on_a_scaled_surface(v
   dt_canvas_free(canvas);
 }
 
+/**
+ * Paint at `zoom` pixels per canvas unit through a surface cache the caller keeps, and read a
+ * pixel back. The caches -- the cutout rasters, the pictures' sprites -- only engage when a
+ * paint carries one, and only a caller that paints the same document more than once through
+ * the same cache can catch one answering with the frame before.
+ */
+static uint32_t _painted_pixel_quality(const dt_canvas_t *canvas, dt_canvas_surface_cache_t *cache, const int size,
+                                       const double zoom, const double quality, const int x, const int y)
+{
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, size, size);
+  cairo_t *cr = cairo_create(surface);
+  cairo_translate(cr, size * 0.5, size * 0.5);
+  cairo_scale(cr, zoom, zoom);
+  const dt_canvas_rect_t whole = { -size * 0.5 / zoom, -size * 0.5 / zoom, size / zoom, size / zoom };
+  dt_canvas_paint_options_t options = dt_canvas_paint_options_export(cache, 1.0 / zoom, whole);
+  options.quality = quality;
+  dt_canvas_paint(cr, canvas, &options);
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  const uint32_t pixel = *(const uint32_t *)(pixels + (size_t)y * stride + (size_t)x * 4) & 0xFFFFFFu;
+  cairo_surface_destroy(surface);
+  return pixel;
+}
+
+static uint32_t _painted_pixel_cached(const dt_canvas_t *canvas, dt_canvas_surface_cache_t *cache, const int size,
+                                      const double zoom, const int x, const int y)
+{
+  return _painted_pixel_quality(canvas, cache, size, zoom, 1.0, x, y);
+}
+
+/** A flat sRGB JPEG of this size and colour, to hang on an image frame. */
+static GBytes *_flat_jpeg(const int width, const int height, const uint8_t red, const uint8_t green,
+                          const uint8_t blue)
+{
+  struct jpeg_compress_struct compress;
+  struct jpeg_error_mgr error;
+  compress.err = jpeg_std_error(&error);
+  jpeg_create_compress(&compress);
+  unsigned char *buffer = NULL;
+  unsigned long size = 0;
+  jpeg_mem_dest(&compress, &buffer, &size);
+  compress.image_width = width;
+  compress.image_height = height;
+  compress.input_components = 3;
+  compress.in_color_space = JCS_RGB;
+  jpeg_set_defaults(&compress);
+  jpeg_set_quality(&compress, 100, TRUE);
+  jpeg_start_compress(&compress, TRUE);
+  uint8_t *row = g_malloc((size_t)width * 3);
+  for(int col = 0; col < width; col++)
+  {
+    row[3 * col + 0] = red;
+    row[3 * col + 1] = green;
+    row[3 * col + 2] = blue;
+  }
+  while(compress.next_scanline < compress.image_height)
+  {
+    JSAMPROW pointer = row;
+    jpeg_write_scanlines(&compress, &pointer, 1);
+  }
+  jpeg_finish_compress(&compress);
+  jpeg_destroy_compress(&compress);
+  g_free(row);
+  GBytes *jpeg = g_bytes_new(buffer, size);
+  free(buffer);
+  return jpeg;
+}
+
+/**
+ * A picture fills its frame at every zoom. The painter blits a picture from a sprite scaled
+ * once per size the screen shows, under an identity matrix, inside the frame's clip: a sprite
+ * that does not reach the clip leaves a line of canvas along the frame's edge, and it comes
+ * and goes with the sub-pixel position, which is what a pan or a zoom changes.
+ */
+static void _a_picture_reaches_its_frames_every_edge(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(0.05f, 0.05f, 0.2f, 1.0f);
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  canvas->border_width = 0.0f;
+  dt_canvas_object_t *frame = dt_canvas_add_image(canvas, 0.0, 0.0, 64, 64);
+  frame->width = 100.0;
+  frame->height = 100.0;
+  frame->border_width = 0.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  GBytes *jpeg = _flat_jpeg(64, 64, 0, 0, 0);
+  dt_canvas_image_set_render(canvas, frame, jpeg, 64, 64, 0, 0, DT_CANVAS_COLORSPACE_SRGB);
+  g_bytes_unref(jpeg);
+  dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64u * 1024u * 1024u);
+  // The picture is black, the canvas white: any bright pixel well inside the frame is canvas
+  // showing through where the picture should be.
+  const double zooms[] = { 1.0, 1.5, 2.0, 0.75, 1.0, 2.5 };
+  for(size_t idx = 0; idx < sizeof(zooms) / sizeof(zooms[0]); idx++)
+  {
+    for(int step = 0; step <= 4; step++)
+    {
+      frame->x = step * 0.2;
+      dt_canvas_touch(canvas);
+      const int size = 300;
+      const double zoom = zooms[idx];
+      // Two pixels inside each edge of the frame, in the surface's own pixels.
+      const double half = 50.0 * zoom;
+      const int left = (int)ceil(size * 0.5 + (frame->x - 50.0) * zoom) + 2;
+      const int right = (int)floor(size * 0.5 + (frame->x + 50.0) * zoom) - 2;
+      const int top = (int)ceil(size * 0.5 - half) + 2;
+      const int bottom = (int)floor(size * 0.5 + half) - 2;
+      const int probes[4][2] = { { left, size / 2 }, { right, size / 2 }, { size / 2, top }, { size / 2, bottom } };
+      for(int probe = 0; probe < 4; probe++)
+      {
+        const uint32_t pixel = _painted_pixel_cached(canvas, cache, size, zoom, probes[probe][0], probes[probe][1]);
+        if(((pixel >> 16) & 0xFF) > 96)
+        {
+          print_error("zoom %.2f offset %.1f: (%d, %d) is %06x, canvas showing through the picture\n", zoom,
+                      frame->x, probes[probe][0], probes[probe][1], pixel);
+          fail();
+        }
+      }
+      // And no rim anywhere along the frame's edge: every pixel of the whole frame and the
+      // ring of canvas around it is one of the two, or a blend, never brighter than both.
+      const int span = (int)ceil(half) + 4;
+      for(int row = size / 2 - span; row <= size / 2 + span; row++)
+      {
+        for(int col = size / 2 - span; col <= size / 2 + span; col++)
+        {
+          if(row < 0 || col < 0 || row >= size || col >= size) continue;
+          const uint32_t pixel = _painted_pixel_cached(canvas, cache, size, zoom, col, row);
+          for(int channel = 0; channel < 3; channel++)
+          {
+            const int shade = (pixel >> (8 * channel)) & 0xFF;
+            if(shade > 0x40)
+            {
+              print_error("zoom %.2f offset %.1f: rim at (%d, %d) is %06x, brighter than the picture and the canvas\n",
+                          zoom, frame->x, col, row, pixel);
+              fail();
+            }
+          }
+        }
+      }
+    }
+  }
+  dt_canvas_surface_cache_free(cache);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * A cutout's edge is anti-aliased, at full resolution and at the reduced one a gesture paints
+ * at. The raster is sized for the FULL frame -- a gesture reuses it rather than rasterising
+ * every cutout again -- so at half quality it is four times finer than the pixels being
+ * painted, and reading it at each pixel's centre alone lands the edge wherever the sample
+ * happens to fall: whole rows step straight from one colour to the other, which is the
+ * stair-stepped edge. The compositor averages the raster over each pixel's footprint instead.
+ */
+static void _a_cutouts_edge_is_anti_aliased_at_every_quality(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  frame->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  frame->border_width = 0.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_CIRCLE);
+  frame->mask.radius_x = 0.4f;
+  frame->mask.feather = 0.0f;
+  dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64u * 1024u * 1024u);
+  const double qualities[] = { 1.0, 0.5 };
+  const double zooms[] = { 1.3, 2.1, 3.1 };
+  for(size_t quality = 0; quality < sizeof(qualities) / sizeof(qualities[0]); quality++)
+  {
+    for(size_t idx = 0; idx < sizeof(zooms) / sizeof(zooms[0]); idx++)
+    {
+      const double zoom = zooms[idx];
+      const int size = (int)lround(240.0 * zoom);
+      const int centre = size / 2;
+      // Down the circle's right flank: every row crosses the edge, so every row owes a pixel
+      // that is neither the frame nor the canvas.
+      int rows = 0;
+      int stepped = 0;
+      for(int row = centre - (int)lround(20.0 * zoom); row <= centre + (int)lround(20.0 * zoom); row++)
+      {
+        int intermediate = 0;
+        for(int col = centre + (int)lround(30.0 * zoom); col <= centre + (int)lround(44.0 * zoom); col++)
+        {
+          const uint32_t shade = _painted_pixel_quality(canvas, cache, size, zoom, qualities[quality], col, row) & 0xFFu;
+          if(shade > 8 && shade < 247) intermediate++;
+        }
+        rows++;
+        if(intermediate == 0) stepped++;
+      }
+      if(stepped * 10 > rows)
+      {
+        print_error("quality %.2f zoom %.2f: %d of %d rows step straight across the cutout's edge\n",
+                    qualities[quality], zoom, stepped, rows);
+        fail();
+      }
+    }
+  }
+  dt_canvas_surface_cache_free(cache);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * An edge between two colours is a blend of the two and can be neither brighter nor darker
+ * than both. Cairo hands the compositor a partly covered pixel PREMULTIPLIED in eight bits,
+ * so the decode divides the colour back out by a coverage that may be as low as 1/255 --
+ * where a rounded 1 becomes a full 255. That is a bright rim one pixel wide along every frame
+ * whose edge does not land on the pixel grid, which is why a pan or a zoom makes it come and go.
+ */
+static void _an_edge_pixel_stays_between_the_colours_it_blends(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(0.8f, 0.1f, 0.1f, 1.0f);
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  // Dark on bright: any rim brighter than the background is the decode's, not the picture's.
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  frame->text.background = dt_canvas_color(0.02f, 0.02f, 0.06f, 1.0f);
+  frame->border_width = 0.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64u * 1024u * 1024u);
+  const uint32_t ground = _painted_pixel_cached(canvas, cache, 200, 1.0, 5, 5);
+  // Walk the frame's edge across the pixel grid: at some offset it covers a pixel partly.
+  for(int step = 0; step <= 8; step++)
+  {
+    frame->x = step * 0.125;
+    dt_canvas_touch(canvas);
+    for(int y = 40; y < 160; y++)
+    {
+      for(int x = 40; x < 62; x++)
+      {
+        const uint32_t pixel = _painted_pixel_cached(canvas, cache, 200, 1.0, x, y);
+        for(int channel = 0; channel < 3; channel++)
+        {
+          const int shade = (pixel >> (8 * channel)) & 0xFF;
+          const int high = (ground >> (8 * channel)) & 0xFF;
+          if(shade > high + 1)
+          {
+            print_error("edge at (%d, %d) offset %.3f: channel %d is %d, above the %d it blends into\n", x, y,
+                        frame->x, channel, shade, high);
+            fail();
+          }
+        }
+      }
+    }
+  }
+  dt_canvas_surface_cache_free(cache);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * A cutout keeps the side it was told to keep at every zoom. The raster cache holds two
+ * sizes per frame, so a zoom out and back reads the raster built for the first zoom: it must
+ * be that frame's raster and not another's, and an inverted shape must not come back
+ * right side out.
+ */
+static void _a_cutout_keeps_its_side_through_the_raster_cache(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  frame->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  frame->border_width = 0.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_CIRCLE);
+  frame->mask.radius_x = 0.25f;
+  frame->mask.feather = 0.0f;
+  dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64u * 1024u * 1024u);
+
+  // Kept inside: the centre is the frame, a point outside the circle is the canvas.
+  const double zooms[] = { 1.0, 2.0, 1.0, 3.0, 1.0, 2.0 };
+  for(size_t idx = 0; idx < sizeof(zooms) / sizeof(zooms[0]); idx++)
+  {
+    const int size = (int)lround(200.0 * zooms[idx]);
+    const int centre = size / 2;
+    const int outside = centre + (int)lround(40.0 * zooms[idx]);
+    assert_int_equal(_painted_pixel_cached(canvas, cache, size, zooms[idx], centre, centre), 0xFFFFFFu);
+    assert_int_equal(_painted_pixel_cached(canvas, cache, size, zooms[idx], outside, centre), 0x000000u);
+  }
+  // Inverted: the same points swap, and stay swapped at every zoom the cache has seen.
+  frame->mask.flags |= DT_CANVAS_MASK_INVERT;
+  dt_canvas_touch(canvas);
+  for(size_t idx = 0; idx < sizeof(zooms) / sizeof(zooms[0]); idx++)
+  {
+    const int size = (int)lround(200.0 * zooms[idx]);
+    const int centre = size / 2;
+    const int outside = centre + (int)lround(40.0 * zooms[idx]);
+    assert_int_equal(_painted_pixel_cached(canvas, cache, size, zooms[idx], centre, centre), 0x000000u);
+    assert_int_equal(_painted_pixel_cached(canvas, cache, size, zooms[idx], outside, centre), 0xFFFFFFu);
+  }
+  dt_canvas_surface_cache_free(cache);
+  dt_canvas_free(canvas);
+}
+
 static void _a_cut_frames_border_follows_the_cutout_outward(void **state)
 {
   (void)state;
@@ -464,6 +768,10 @@ int main(void)
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),
     cmocka_unit_test(_the_compositor_paints_the_surfaces_own_pixels_on_a_scaled_surface),
     cmocka_unit_test(_a_cut_frames_border_follows_the_cutout_outward),
+    cmocka_unit_test(_a_cutout_keeps_its_side_through_the_raster_cache),
+    cmocka_unit_test(_an_edge_pixel_stays_between_the_colours_it_blends),
+    cmocka_unit_test(_a_picture_reaches_its_frames_every_edge),
+    cmocka_unit_test(_a_cutouts_edge_is_anti_aliased_at_every_quality),
     cmocka_unit_test(_a_background_fills_the_frame_under_a_missing_render),
     cmocka_unit_test(_rounded_corners_round_the_frame_and_its_border),
   };

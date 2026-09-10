@@ -36,7 +36,7 @@
 #include "canvas/canvas.h"
 #include "canvas/canvas_actions.h"
 #include "canvas/canvas_paint.h"
-#include "canvas/canvas_pdf.h"
+#include "canvas/canvas_export.h"
 #include "canvas/canvas_render.h"
 #include "colorprofiles/colorspaces.h"
 #include "common/conf.h"
@@ -192,21 +192,15 @@ typedef struct dt_canvas_view_t
   GtkWidget *row_opacity;
   GtkWidget *object_opacity;
   GtkWidget *object_background;
-  GtkWidget *object_no_background;
-  GtkWidget *row_border;
-  GtkWidget *border_default;
-  GtkWidget *border_custom;
+  GtkWidget *row_frame;
   GtkWidget *object_border_width;
   GtkWidget *object_border_color;
-  GtkWidget *corner_default;
   GtkWidget *object_corner_radius;
   GtkWidget *row_line;
   GtkWidget *connector_width;
   GtkWidget *connector_dashed;
   GtkWidget *connector_color;
   GtkWidget *row_shadow;
-  GtkWidget *shadow_default;
-  GtkWidget *shadow_custom;
   GtkWidget *object_shadow_offset_x;
   GtkWidget *object_shadow_offset_y;
   GtkWidget *object_shadow_blur;
@@ -471,7 +465,7 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   canvas->background_style = (uint32_t)CLAMP(dt_conf_get_int("canvas/background_style"), 0, DT_CANVAS_BACKGROUND_LAST - 1);
   const char *grid_color = dt_conf_get_string_const("canvas/grid_color");
   dt_canvas_color_parse(grid_color, &canvas->grid_color);
-  canvas->paper_size = (uint32_t)CLAMP(dt_conf_get_int("canvas/paper_size"), 0, 5);
+  canvas->paper_size = (uint32_t)CLAMP(dt_conf_get_int("canvas/paper_size"), 0, dt_canvas_paper_count() - 1);
   canvas->paper_landscape = dt_conf_get_bool("canvas/paper_landscape") ? 1u : 0u;
   const char *page_color = dt_conf_get_string_const("canvas/page_color");
   dt_canvas_color_parse(page_color, &canvas->page_color);
@@ -785,17 +779,18 @@ static void _open_canvas(dt_view_t *self)
 
 /* --- the PDF export dialog ------------------------------------------------------------ */
 
-typedef struct dt_canvas_pdf_dialog_t
+typedef struct dt_canvas_export_dialog_t
 {
-  GtkWidget *paper;
-  GtkWidget *landscape;
+  GtkWidget *format;
   GtkWidget *dpi;
-  GtkWidget *margin;
+  GtkWidget *bleed;
+  GtkWidget *bleed_unit;
+  GtkWidget *quality;
   GtkWidget *profile;
   GtkWidget *intent;
   dt_colorprofile_desc_t *profiles;
   size_t profile_count;
-} dt_canvas_pdf_dialog_t;
+} dt_canvas_export_dialog_t;
 
 static GtkWidget *_labelled_row(GtkWidget *grid, const int row, const char *label, GtkWidget *widget)
 {
@@ -807,13 +802,69 @@ static GtkWidget *_labelled_row(GtkWidget *grid, const int row, const char *labe
   return widget;
 }
 
-static void _export_pdf(dt_view_t *self)
+/** The bleed is typed in whatever unit suits the job; millimetres are what the exporter takes. */
+typedef enum dt_canvas_bleed_unit_t
+{
+  DT_CANVAS_BLEED_CM = 0,
+  DT_CANVAS_BLEED_INCH = 1,
+  DT_CANVAS_BLEED_PIXELS = 2,
+} dt_canvas_bleed_unit_t;
+
+static float _bleed_to_mm(const double value, const int unit, const double dpi)
+{
+  switch(unit)
+  {
+    case DT_CANVAS_BLEED_INCH:
+      return (float)(value * 25.4);
+    case DT_CANVAS_BLEED_PIXELS:
+      return (float)(dpi > 0.0 ? value / dpi * 25.4 : 0.0);
+    default:
+      return (float)(value * 10.0);
+  }
+}
+
+static double _bleed_from_mm(const double millimetres, const int unit, const double dpi)
+{
+  switch(unit)
+  {
+    case DT_CANVAS_BLEED_INCH:
+      return millimetres / 25.4;
+    case DT_CANVAS_BLEED_PIXELS:
+      return millimetres / 25.4 * dpi;
+    default:
+      return millimetres * 0.1;
+  }
+}
+
+/** The bleed's unit changed: keep the length it stands for and restate it in the new unit. */
+static void _export_bleed_unit_changed(GtkComboBox *combo, gpointer data)
+{
+  dt_canvas_export_dialog_t *widgets = (dt_canvas_export_dialog_t *)data;
+  const int unit = gtk_combo_box_get_active(combo);
+  const double dpi = gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets->dpi));
+  const int previous = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(combo), "bleed-unit"));
+  const double millimetres
+      = _bleed_to_mm(gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets->bleed)), previous, dpi);
+  g_object_set_data(G_OBJECT(combo), "bleed-unit", GINT_TO_POINTER(unit));
+  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(widgets->bleed), unit == DT_CANVAS_BLEED_PIXELS ? 0 : 2);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets->bleed), _bleed_from_mm(millimetres, unit, dpi));
+}
+
+/** Only the formats that compress lossily have a quality to set. */
+static void _export_format_changed(GtkComboBox *combo, gpointer data)
+{
+  dt_canvas_export_dialog_t *widgets = (dt_canvas_export_dialog_t *)data;
+  const int format = gtk_combo_box_get_active(combo);
+  const gboolean lossy = format == DT_CANVAS_EXPORT_JPEG || format == DT_CANVAS_EXPORT_PDF;
+  gtk_widget_set_sensitive(widgets->quality, lossy);
+}
+
+static void _export_canvas(dt_view_t *self)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   GtkWindow *parent = GTK_WINDOW(dt_ui_main_window(dt_gui_get_ui()));
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Export the canvas as PDF"), parent, GTK_DIALOG_MODAL,
-                                                  _("_Cancel"), GTK_RESPONSE_CANCEL, _("_Export"),
-                                                  GTK_RESPONSE_OK, NULL);
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Export the canvas"), parent, GTK_DIALOG_MODAL, _("_Cancel"),
+                                                  GTK_RESPONSE_CANCEL, _("_Export"), GTK_RESPONSE_OK, NULL);
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
   GtkWidget *grid = gtk_grid_new();
   gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(6));
@@ -821,42 +872,54 @@ static void _export_pdf(dt_view_t *self)
   gtk_container_set_border_width(GTK_CONTAINER(grid), DT_PIXEL_APPLY_DPI(12));
   gtk_box_pack_start(GTK_BOX(content), grid, TRUE, TRUE, 0);
 
-  double canvas_paper_width = 0.0;
-  double canvas_paper_height = 0.0;
-  const gboolean canvas_has_paper = dt_canvas_paper_dimensions(view->canvas, &canvas_paper_width, &canvas_paper_height);
-  if(canvas_has_paper)
-  {
-    gchar *note = g_strdup_printf(_("One PDF page per canvas page of %.0f x %.0f mm; empty pages are skipped."),
-                                  dt_pdf_point_to_mm(canvas_paper_width), dt_pdf_point_to_mm(canvas_paper_height));
-    GtkWidget *note_label = gtk_label_new(note);
-    gtk_label_set_line_wrap(GTK_LABEL(note_label), TRUE);
-    gtk_widget_set_halign(note_label, GTK_ALIGN_START);
-    gtk_grid_attach(GTK_GRID(grid), note_label, 0, 6, 2, 1);
-    dt_free(note);
-  }
-  dt_canvas_pdf_dialog_t widgets;
+  dt_canvas_export_dialog_t widgets;
   memset(&widgets, 0, sizeof(widgets));
-  widgets.paper = gtk_combo_box_text_new();
-  const char *paper_conf = dt_conf_get_string_const("canvas/pdf/paper");
-  for(int idx = 0; idx < dt_pdf_paper_sizes_n; idx++)
-  {
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.paper), _(dt_pdf_paper_sizes[idx].name));
-    if(!g_strcmp0(paper_conf, dt_pdf_paper_sizes[idx].name)) gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.paper), idx);
-  }
-  if(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.paper)) < 0) gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.paper), 0);
-  _labelled_row(grid, 0, _("Paper"), widgets.paper);
 
-  widgets.landscape = gtk_check_button_new_with_label(_("landscape"));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets.landscape), dt_conf_get_bool("canvas/pdf/landscape"));
-  _labelled_row(grid, 1, _("Orientation"), widgets.landscape);
+  widgets.format = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.format), _("PDF, every page in one file"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.format), _("PNG, one file per page"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.format), _("JPEG, one file per page"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.format), _("TIFF, every page in one file"));
+  gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.format),
+                           CLAMP(dt_conf_get_int("canvas/export/format"), 0, DT_CANVAS_EXPORT_LAST - 1));
+  g_signal_connect(widgets.format, "changed", G_CALLBACK(_export_format_changed), &widgets);
+  _labelled_row(grid, 0, _("Format"), widgets.format);
 
   widgets.dpi = gtk_spin_button_new_with_range(72.0, 1200.0, 1.0);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets.dpi), dt_conf_get_int("canvas/pdf/dpi"));
-  _labelled_row(grid, 2, _("Resolution (dpi)"), widgets.dpi);
+  gtk_widget_set_tooltip_text(widgets.dpi,
+                              _("A page is rasterised at exactly this many pixels per inch of its own size, and no more"));
+  _labelled_row(grid, 1, _("Resolution (dpi)"), widgets.dpi);
 
-  widgets.margin = gtk_spin_button_new_with_range(0.0, 100.0, 1.0);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets.margin), dt_conf_get_float("canvas/pdf/margin_mm"));
-  _labelled_row(grid, 3, _("Margin (mm)"), widgets.margin);
+  GtkWidget *bleed_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
+  widgets.bleed = gtk_spin_button_new_with_range(0.0, 200.0, 0.1);
+  gtk_widget_set_tooltip_text(widgets.bleed,
+                              _("How far past every page edge the picture keeps going. A frame a page break cuts in two "
+                                "carries on into the bleed on both sheets, which is what a binding folds around and a "
+                                "trim cuts into. Nothing is moved: the sheet is simply larger than the page."));
+  gtk_box_pack_start(GTK_BOX(bleed_box), widgets.bleed, TRUE, TRUE, 0);
+  widgets.bleed_unit = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.bleed_unit), _("cm"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.bleed_unit), _("in"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.bleed_unit), _("px"));
+  gtk_box_pack_start(GTK_BOX(bleed_box), widgets.bleed_unit, FALSE, FALSE, 0);
+  const int bleed_unit = CLAMP(dt_conf_get_int("canvas/export/bleed_unit"), 0, 2);
+  gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.bleed_unit), bleed_unit);
+  g_object_set_data(G_OBJECT(widgets.bleed_unit), "bleed-unit", GINT_TO_POINTER(bleed_unit));
+  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(widgets.bleed), bleed_unit == DT_CANVAS_BLEED_PIXELS ? 0 : 2);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets.bleed),
+                            _bleed_from_mm(dt_conf_get_float("canvas/export/bleed_mm"), bleed_unit,
+                                           gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.dpi))));
+  g_signal_connect(widgets.bleed_unit, "changed", G_CALLBACK(_export_bleed_unit_changed), &widgets);
+  _labelled_row(grid, 2, _("Bleed"), bleed_box);
+
+  widgets.quality = gtk_spin_button_new_with_range(50.0, 100.0, 1.0);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets.quality), CLAMP(dt_conf_get_int("canvas/export/quality"), 50, 100));
+  gtk_widget_set_tooltip_text(widgets.quality,
+                              _("How hard the pages are compressed. A PDF page is a photograph and is carried as one, "
+                                "which is what keeps the file from weighing what its pixels weigh; 100 keeps every code "
+                                "and makes it many times larger. PNG and TIFF are always lossless."));
+  _labelled_row(grid, 3, _("Quality"), widgets.quality);
 
   widgets.profile = gtk_combo_box_text_new();
   widgets.profile_count = dt_colorspaces_enumerate_profiles(DT_PROFILE_ROLE_OUTPUT, &widgets.profiles);
@@ -881,27 +944,37 @@ static void _export_pdf(dt_view_t *self)
   gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.intent), CLAMP(dt_conf_get_int("canvas/pdf/intent"), 0, 3));
   _labelled_row(grid, 5, _("Rendering intent"), widgets.intent);
 
+  // The page is the document's: say which one, so nobody looks for it here.
+  double canvas_paper_width = 0.0;
+  double canvas_paper_height = 0.0;
+  gchar *note = NULL;
+  if(dt_canvas_paper_dimensions(view->canvas, &canvas_paper_width, &canvas_paper_height))
+    note = g_strdup_printf(_("One page per canvas page of %.0f x %.0f mm, empty ones skipped. The page size and its "
+                             "orientation are the canvas's, under Guides in the toolbar."),
+                           dt_pdf_point_to_mm(canvas_paper_width), dt_pdf_point_to_mm(canvas_paper_height));
+  else
+    note = g_strdup(_("The canvas is not divided into pages, so this is one page around every frame. Give it a page "
+                      "size under Guides in the toolbar to export several."));
+  GtkWidget *note_label = gtk_label_new(note);
+  gtk_label_set_line_wrap(GTK_LABEL(note_label), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(note_label), 60);
+  gtk_widget_set_halign(note_label, GTK_ALIGN_START);
+  gtk_grid_attach(GTK_GRID(grid), note_label, 0, 6, 2, 1);
+  dt_free(note);
+
   gtk_widget_show_all(dialog);
-  if(canvas_has_paper)
-  {
-    // The canvas's paper is the page; the margin means nothing on a page that IS the canvas page.
-    gtk_widget_hide(widgets.paper);
-    gtk_widget_hide(widgets.landscape);
-    gtk_widget_hide(widgets.margin);
-  }
+  _export_format_changed(GTK_COMBO_BOX(widgets.format), &widgets);
   const gint response = gtk_dialog_run(GTK_DIALOG(dialog));
-  dt_canvas_pdf_options_t options = dt_canvas_pdf_options_default();
-  gboolean proceed = response == GTK_RESPONSE_OK;
+  dt_canvas_export_options_t options = dt_canvas_export_options_default();
+  const gboolean proceed = response == GTK_RESPONSE_OK;
   if(proceed)
   {
-    const int paper = CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.paper)), 0, dt_pdf_paper_sizes_n - 1);
-    const gboolean landscape = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widgets.landscape));
-    const float paper_width = dt_pdf_point_to_mm(dt_pdf_paper_sizes[paper].width);
-    const float paper_height = dt_pdf_point_to_mm(dt_pdf_paper_sizes[paper].height);
-    options.page_width_mm = landscape ? paper_height : paper_width;
-    options.page_height_mm = landscape ? paper_width : paper_height;
+    options.format = (dt_canvas_export_format_t)CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.format)), 0,
+                                                      DT_CANVAS_EXPORT_LAST - 1);
     options.dpi = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.dpi));
-    options.margin_mm = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.margin));
+    const int unit = CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.bleed_unit)), 0, 2);
+    options.bleed_mm = _bleed_to_mm(gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.bleed)), unit, options.dpi);
+    options.quality = (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.quality));
     options.intent = (dt_iop_color_intent_t)CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.intent)), 0, 3);
     const int profile = gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.profile));
     if(profile >= 0 && (size_t)profile < widgets.profile_count)
@@ -909,10 +982,11 @@ static void _export_pdf(dt_view_t *self)
       options.icc_type = widgets.profiles[profile].type;
       g_strlcpy(options.icc_filename, widgets.profiles[profile].filename, sizeof(options.icc_filename));
     }
-    dt_conf_set_string("canvas/pdf/paper", dt_pdf_paper_sizes[paper].name);
-    dt_conf_set_bool("canvas/pdf/landscape", landscape);
+    dt_conf_set_int("canvas/export/format", (int)options.format);
     dt_conf_set_int("canvas/pdf/dpi", (int)options.dpi);
-    dt_conf_set_float("canvas/pdf/margin_mm", options.margin_mm);
+    dt_conf_set_float("canvas/export/bleed_mm", options.bleed_mm);
+    dt_conf_set_int("canvas/export/bleed_unit", unit);
+    dt_conf_set_int("canvas/export/quality", options.quality);
     dt_conf_set_int("canvas/pdf/icc_type", options.icc_type);
     dt_conf_set_string("canvas/pdf/icc_filename", options.icc_filename);
     dt_conf_set_int("canvas/pdf/intent", options.intent);
@@ -922,26 +996,29 @@ static void _export_pdf(dt_view_t *self)
   dt_gui_refocus_parent(parent);
   if(!proceed) return;
 
+  const char *extension = dt_canvas_export_extension(options.format);
   GtkFileFilter *filter = gtk_file_filter_new();
-  gtk_file_filter_set_name(filter, _("PDF document"));
-  gtk_file_filter_add_pattern(filter, "*.pdf");
+  gchar *pattern = g_strconcat("*", extension, NULL);
+  gtk_file_filter_set_name(filter, extension + 1);
+  gtk_file_filter_add_pattern(filter, pattern);
+  dt_free(pattern);
   gchar *suggested = NULL;
   if(!IS_NULL_PTR(view->canvas->path))
   {
     gchar *base = g_path_get_basename(view->canvas->path);
     if(g_str_has_suffix(base, DT_CANVAS_FILE_EXTENSION)) base[strlen(base) - strlen(DT_CANVAS_FILE_EXTENSION)] = '\0';
-    suggested = g_strconcat(base, ".pdf", NULL);
+    suggested = g_strconcat(base, extension, NULL);
     dt_free(base);
   }
   else
   {
-    suggested = g_strdup("canvas.pdf");
+    suggested = g_strconcat("canvas", extension, NULL);
   }
-  gchar *path = _choose_file(_("Export the canvas as PDF"), GTK_FILE_CHOOSER_ACTION_SAVE, suggested, filter);
+  gchar *path = _choose_file(_("Export the canvas"), GTK_FILE_CHOOSER_ACTION_SAVE, suggested, filter);
   dt_free(suggested);
   if(IS_NULL_PTR(path)) return;
   GError *error = NULL;
-  if(dt_canvas_pdf_export(view->canvas, path, &options, &error))
+  if(dt_canvas_export(view->canvas, path, &options, &error))
   {
     dt_control_log(_("canvas exported to `%s'"), path);
   }
@@ -2040,6 +2117,28 @@ static void _color_to_button(GtkWidget *button, const dt_canvas_color_t *color)
   _bars_request(self);                                                                                     \
   dt_control_queue_redraw_center();
 
+/**
+ * A property with a canvas-wide default is edited by ONE spin button, and this value in it
+ * means "whatever the canvas says". There is no separate toggle: the number is the switch,
+ * the way a shadow's radius is its own on/off. Leaving the sentinel seeds the object with the
+ * effective property, so an edit starts from what was on screen rather than from zero.
+ */
+#define CANVAS_BAR_INHERIT (-1.0)
+
+static gboolean _bar_inherits(const double value)
+{
+  return lround(value) == lround(CANVAS_BAR_INHERIT);
+}
+
+/** The sentinel reads as a word, not as a number. */
+static gboolean _bar_inherit_output(GtkSpinButton *spin, gpointer data)
+{
+  (void)data;
+  if(!_bar_inherits(gtk_spin_button_get_value(spin))) return FALSE;
+  gtk_entry_set_text(GTK_ENTRY(spin), _("default"));
+  return TRUE;
+}
+
 static void _bar_text_font_set(GtkFontButton *button, gpointer data)
 {
   BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
@@ -2095,9 +2194,17 @@ static void _bar_border_width_changed(GtkSpinButton *spin, gpointer data)
   dt_canvas_color_t color;
   float width = 0.0f;
   dt_canvas_object_effective_border(view->canvas, object, &color, &width);
-  object->border_color = color;
-  object->border_width = (float)gtk_spin_button_get_value(spin);
-  object->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  const double asked = gtk_spin_button_get_value(spin);
+  if(_bar_inherits(asked))
+  {
+    object->flags &= ~DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  }
+  else
+  {
+    object->border_color = color;
+    object->border_width = (float)fmax(asked, 0.0);
+    object->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  }
   BAR_EDIT_END()
 }
 
@@ -2151,58 +2258,28 @@ static void _bar_shadow_apply(dt_canvas_view_t *view, dt_canvas_object_t *object
 static void _bar_shadow_changed(GtkWidget *widget, gpointer data)
 {
   BAR_EDIT_BEGIN_ANY()
-  _bar_shadow_apply(view, object);
-  BAR_EDIT_END()
-}
-
-/** "Canvas default" on: the object's own shadow is dropped; off: it starts as the canvas's. */
-static void _bar_shadow_default_toggled(GtkToggleButton *toggle, gpointer data)
-{
-  BAR_EDIT_BEGIN_ANY()
-  if(gtk_toggle_button_get_active(toggle))
+  // The blur is the whole shadow's switch: the sentinel gives it back to the canvas, and any
+  // other value -- or a move of an offset, or a colour -- makes the object's own.
+  if(_bar_inherits(gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_shadow_blur))))
     object->flags &= ~DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
   else
-  {
-    dt_canvas_object_effective_shadow(view->canvas, object, &object->shadow);
-    object->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
-  }
+    _bar_shadow_apply(view, object);
   BAR_EDIT_END()
-  _bars_refresh(self, TRUE);
-}
-
-static void _bar_border_default_toggled(GtkToggleButton *toggle, gpointer data)
-{
-  BAR_EDIT_BEGIN_FRAME()
-  if(gtk_toggle_button_get_active(toggle))
-    object->flags &= ~DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
-  else
-  {
-    dt_canvas_object_effective_border(view->canvas, object, &object->border_color, &object->border_width);
-    object->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
-  }
-  BAR_EDIT_END()
-  _bars_refresh(self, TRUE);
-}
-
-static void _bar_corner_default_toggled(GtkToggleButton *toggle, gpointer data)
-{
-  BAR_EDIT_BEGIN_FRAME()
-  if(gtk_toggle_button_get_active(toggle))
-    object->flags &= ~DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
-  else
-  {
-    object->corner_radius = (float)dt_canvas_object_effective_corner_radius(view->canvas, object);
-    object->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
-  }
-  BAR_EDIT_END()
-  _bars_refresh(self, TRUE);
 }
 
 static void _bar_corner_changed(GtkSpinButton *spin, gpointer data)
 {
   BAR_EDIT_BEGIN_FRAME()
-  object->corner_radius = (float)fmax(gtk_spin_button_get_value(spin), 0.0);
-  object->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  const double radius = gtk_spin_button_get_value(spin);
+  if(_bar_inherits(radius))
+  {
+    object->flags &= ~DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  }
+  else
+  {
+    object->corner_radius = (float)fmax(radius, 0.0);
+    object->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  }
   BAR_EDIT_END()
 }
 
@@ -2217,15 +2294,6 @@ static void _bar_background_set(GtkColorButton *button, gpointer data)
 {
   BAR_EDIT_BEGIN_FRAME()
   _object_set_background(object, _color_from_button(GTK_WIDGET(button)));
-  BAR_EDIT_END()
-}
-
-static void _bar_no_background_toggled(GtkToggleButton *toggle, gpointer data)
-{
-  BAR_EDIT_BEGIN_FRAME()
-  dt_canvas_color_t color = dt_canvas_object_background(object);
-  color.alpha = gtk_toggle_button_get_active(toggle) ? 0.0f : 1.0f;
-  _object_set_background(object, color);
   BAR_EDIT_END()
 }
 
@@ -2392,6 +2460,15 @@ static GtkWidget *_bar_spin(GtkWidget *row, const double low, const double high,
   return spin;
 }
 
+/** A spin button carrying the sentinel above. */
+static GtkWidget *_bar_inherit_spin(GtkWidget *row, const double low, const double high, const char *tooltip,
+                                    GCallback callback, gpointer data)
+{
+  GtkWidget *spin = _bar_spin(row, low, high, 1.0, 0, tooltip, callback, data);
+  g_signal_connect(spin, "output", G_CALLBACK(_bar_inherit_output), NULL);
+  return spin;
+}
+
 static GtkWidget *_bar_toggle(GtkWidget *row, const char *label, const char *tooltip, GCallback callback, gpointer data)
 {
   GtkWidget *toggle = gtk_toggle_button_new_with_label(label);
@@ -2479,7 +2556,6 @@ static void _bars_create(dt_view_t *self)
   gtk_widget_set_tooltip_text(view->text_font, _("Font family and size"));
   g_signal_connect(view->text_font, "font-set", G_CALLBACK(_bar_text_font_set), self);
   gtk_box_pack_start(GTK_BOX(view->row_text), view->text_font, FALSE, FALSE, 0);
-  view->text_color = _bar_color_button(view->row_text, _("Text colour"), G_CALLBACK(_bar_text_color_set), self);
   view->text_align_h = gtk_combo_box_text_new();
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_h), _("Left"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_h), _("Centred"));
@@ -2495,6 +2571,7 @@ static void _bars_create(dt_view_t *self)
   gtk_widget_set_tooltip_text(view->text_align_v, _("Vertical alignment"));
   g_signal_connect(view->text_align_v, "changed", G_CALLBACK(_bar_text_align_changed), self);
   gtk_box_pack_start(GTK_BOX(view->row_text), view->text_align_v, FALSE, FALSE, 0);
+  view->text_color = _bar_color_button(view->row_text, _("Text colour and opacity"), G_CALLBACK(_bar_text_color_set), self);
 
   view->row_connector = _bar_row(bar, _("Connector"));
   view->connector_route = gtk_combo_box_text_new();
@@ -2553,28 +2630,24 @@ static void _bars_create(dt_view_t *self)
                                    G_CALLBACK(_bar_opacity_changed), self);
   GtkWidget *background = _bar_group(view->row_opacity, _("Background"));
   view->object_background = _bar_color_button(background,
-                                              _("Colour under the content, filling the frame or the whole cutout: what a feather dissolves into"),
+                                              _("Colour under the content, filling the frame or the whole cutout: what a feather "
+                                                "dissolves into. Its own opacity, at zero, lets the canvas show through."),
                                               G_CALLBACK(_bar_background_set), self);
-  view->object_no_background = _bar_toggle(background, _("Transparent"), _("No background: the canvas shows through"),
-                                           G_CALLBACK(_bar_no_background_toggled), self);
 
-  // 4. The border, or a connector's line.
-  view->row_border = _bar_row(bar, _("Border"));
-  view->border_default = _bar_toggle(view->row_border, _("Canvas default"), _("Use the canvas's uniform border"),
-                                     G_CALLBACK(_bar_border_default_toggled), self);
-  view->border_custom = _bar_group(view->row_border, NULL);
-  GtkWidget *border_width = _bar_group(view->border_custom, _("Width"));
-  view->object_border_width = _bar_spin(border_width, 0.0, 200.0, 1.0, 0,
-                                        _("Border width, in canvas units. A rectangular frame's border sits inside its edge; a cut-out frame's starts past the feather, outward."),
-                                        G_CALLBACK(_bar_border_width_changed), self);
-  view->object_border_color = _bar_color_button(view->border_custom, _("Border colour and opacity"),
+  // 4. The frame: its border and its corners, the way the main toolbar groups them; or a connector's line.
+  view->row_frame = _bar_row(bar, _("Frame"));
+  GtkWidget *border_group = _bar_group(view->row_frame, _("Border"));
+  view->object_border_width = _bar_inherit_spin(border_group, CANVAS_BAR_INHERIT, 200.0,
+                                                _("Border width, in canvas units, or `default' for the canvas's own. A rectangular "
+                                                  "frame's border sits inside its edge; a cut-out frame's starts past the feather, outward."),
+                                                G_CALLBACK(_bar_border_width_changed), self);
+  GtkWidget *radius_group = _bar_group(view->row_frame, _("Radius"));
+  view->object_corner_radius = _bar_inherit_spin(radius_group, CANVAS_BAR_INHERIT, 5000.0,
+                                                 _("Radius of the frame's rounded corners, in canvas units: 0 is square, "
+                                                   "`default' takes the canvas's own"),
+                                                 G_CALLBACK(_bar_corner_changed), self);
+  view->object_border_color = _bar_color_button(view->row_frame, _("Border colour and opacity"),
                                                 G_CALLBACK(_bar_border_color_set), self);
-  GtkWidget *corners = _bar_group(view->row_border, _("Corners"));
-  view->corner_default = _bar_toggle(corners, _("Canvas default"), _("Use the canvas's default corner radius"),
-                                     G_CALLBACK(_bar_corner_default_toggled), self);
-  view->object_corner_radius = _bar_spin(corners, 0.0, 5000.0, 1.0, 0,
-                                         _("Radius of the frame's rounded corners, in canvas units; 0 is square"),
-                                         G_CALLBACK(_bar_corner_changed), self);
   view->row_line = _bar_row(bar, _("Line"));
   GtkWidget *line_width = _bar_group(view->row_line, _("Width"));
   view->connector_width = _bar_spin(line_width, 1.0, 40.0, 1.0, 0, _("Line width, in canvas units"),
@@ -2584,20 +2657,20 @@ static void _bars_create(dt_view_t *self)
 
   // 5. The shadow: a signed radius, outside the object when positive, inside when negative, none at zero.
   view->row_shadow = _bar_row(bar, _("Shadow"));
-  view->shadow_default = _bar_toggle(view->row_shadow, _("Canvas default"), _("Use the canvas's default shadow"),
-                                     G_CALLBACK(_bar_shadow_default_toggled), self);
-  view->shadow_custom = _bar_group(view->row_shadow, NULL);
-  GtkWidget *shadow_x = _bar_group(view->shadow_custom, _("X offset"));
-  view->object_shadow_offset_x = _bar_spin(shadow_x, -500.0, 500.0, 1.0, 0, _("Shadow offset to the right, in canvas units"),
+  view->object_shadow_offset_x = _bar_spin(view->row_shadow, -500.0, 500.0, 1.0, 0,
+                                           _("Shadow offset to the right, in canvas units"),
                                            G_CALLBACK(_bar_shadow_changed), self);
-  GtkWidget *shadow_y = _bar_group(view->shadow_custom, _("Y offset"));
-  view->object_shadow_offset_y = _bar_spin(shadow_y, -500.0, 500.0, 1.0, 0, _("Shadow offset downwards, in canvas units"),
+  view->object_shadow_offset_y = _bar_spin(view->row_shadow, -500.0, 500.0, 1.0, 0,
+                                           _("Shadow offset downwards, in canvas units"),
                                            G_CALLBACK(_bar_shadow_changed), self);
-  GtkWidget *shadow_radius = _bar_group(view->shadow_custom, _("Radius"));
-  view->object_shadow_blur = _bar_spin(shadow_radius, -500.0, 500.0, 1.0, 0,
-                                       _("Shadow radius, in canvas units: 0 is no shadow, positive drops it outside the object, negative casts it inside along the edges"),
-                                       G_CALLBACK(_bar_shadow_changed), self);
-  view->object_shadow_color = _bar_color_button(view->shadow_custom, _("Shadow colour and strength"), G_CALLBACK(_bar_shadow_changed), self);
+  GtkWidget *shadow_blur = _bar_group(view->row_shadow, _("Blur"));
+  view->object_shadow_blur = _bar_inherit_spin(shadow_blur, -500.0, 500.0,
+                                               _("Shadow radius, in canvas units: 0 is no shadow, positive drops it outside the "
+                                                 "object, past -1 casts it inside along the edges, and `default' takes the "
+                                                 "canvas's own shadow whole"),
+                                               G_CALLBACK(_bar_shadow_changed), self);
+  view->object_shadow_color = _bar_color_button(view->row_shadow, _("Shadow colour and strength"),
+                                                G_CALLBACK(_bar_shadow_changed), self);
 
   // 6. The cutout.
   view->row_cutout = _bar_row(bar, _("Cutout"));
@@ -2774,19 +2847,18 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_rotation), object->rotation * 180.0 / M_PI);
         const dt_canvas_color_t background = dt_canvas_object_background(object);
         _color_to_button(view->object_background, &background);
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->object_no_background), background.alpha <= 0.0f);
         dt_canvas_color_t border_color;
         float border_width = 0.0f;
         dt_canvas_object_effective_border(view->canvas, object, &border_color, &border_width);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_border_width), border_width);
+        // The colour shows the effective one; the sizes read the sentinel while they are inherited.
         _color_to_button(view->object_border_color, &border_color);
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->border_default),
-                                     !(object->flags & DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE));
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->corner_default),
-                                     !(object->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE));
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_border_width),
+                                  (object->flags & DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE) ? border_width
+                                                                                          : CANVAS_BAR_INHERIT);
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_corner_radius),
-                                  dt_canvas_object_effective_corner_radius(view->canvas, object));
-        gtk_widget_set_visible(view->object_corner_radius, (object->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE) != 0);
+                                  (object->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE)
+                                      ? dt_canvas_object_effective_corner_radius(view->canvas, object)
+                                      : CANVAS_BAR_INHERIT);
       }
       if(connector)
       {
@@ -2798,11 +2870,11 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_opacity), (1.0 - CLAMP(object->transparency, 0.0f, 1.0f)) * 100.0);
       dt_canvas_shadow_t shadow;
       dt_canvas_object_effective_shadow(view->canvas, object, &shadow);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->shadow_default),
-                                   !(object->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE));
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_shadow_offset_x), shadow.offset_x);
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_shadow_offset_y), shadow.offset_y);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_shadow_blur), shadow.blur);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_shadow_blur),
+                                (object->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE) ? shadow.blur
+                                                                                        : CANVAS_BAR_INHERIT);
       _color_to_button(view->object_shadow_color, &shadow.color);
       gtk_combo_box_set_active(GTK_COMBO_BOX(view->object_cutout_shape), CLAMP((int)object->mask.shape, 0, DT_CANVAS_MASK_GRADIENT));
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_cutout_feather), object->mask.feather * 100.0);
@@ -2816,10 +2888,8 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_widget_set_visible(view->row_map, kind == DT_CANVAS_OBJECT_MAP);
       gtk_widget_set_visible(view->row_geometry, frame);
       gtk_widget_set_visible(gtk_widget_get_parent(view->object_background), frame);
-      gtk_widget_set_visible(view->row_border, frame);
-      gtk_widget_set_visible(view->border_custom, frame && (object->flags & DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE));
+      gtk_widget_set_visible(view->row_frame, frame);
       gtk_widget_set_visible(view->row_line, connector);
-      gtk_widget_set_visible(view->shadow_custom, (object->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE) != 0);
       gtk_widget_set_visible(view->row_cutout, frame);
       gtk_widget_set_visible(gtk_widget_get_parent(view->object_cutout_feather), cut && object->mask.shape != DT_CANVAS_MASK_GRADIENT);
       gtk_widget_set_visible(gtk_widget_get_parent(view->object_cutout_size_x), cut && object->mask.shape != DT_CANVAS_MASK_POLYGON);
@@ -4602,8 +4672,8 @@ static void _proxy_action(dt_view_t *self, int action)
     case DT_CANVAS_ACTION_SAVE_AS:
       _save_as(self);
       break;
-    case DT_CANVAS_ACTION_EXPORT_PDF:
-      _export_pdf(self);
+    case DT_CANVAS_ACTION_EXPORT:
+      _export_canvas(self);
       break;
     case DT_CANVAS_ACTION_ADD_TEXT:
       _add_text_frame(self, view->center_x, view->center_y);
@@ -4768,7 +4838,7 @@ static void _proxy_set_paper(dt_view_t *self, int paper, int landscape)
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
   if(paper >= 0)
   {
-    view->canvas->paper_size = (uint32_t)CLAMP(paper, 0, 5);
+    view->canvas->paper_size = (uint32_t)CLAMP(paper, 0, dt_canvas_paper_count() - 1);
     dt_conf_set_int("canvas/paper_size", (int)view->canvas->paper_size);
   }
   if(landscape >= 0)
@@ -4913,7 +4983,7 @@ static const dt_canvas_accel_t _accels[] = {
   { N_("Open a canvas"), DT_CANVAS_ACTION_OPEN, GDK_KEY_o, DT_PRIMARY_MASK },
   { N_("Save the canvas"), DT_CANVAS_ACTION_SAVE, GDK_KEY_s, DT_PRIMARY_MASK },
   { N_("Save the canvas as"), DT_CANVAS_ACTION_SAVE_AS, GDK_KEY_s, DT_PRIMARY_MASK | GDK_SHIFT_MASK },
-  { N_("Export the canvas as PDF"), DT_CANVAS_ACTION_EXPORT_PDF, GDK_KEY_p, DT_PRIMARY_MASK },
+  { N_("Export the canvas..."), DT_CANVAS_ACTION_EXPORT, GDK_KEY_p, DT_PRIMARY_MASK },
   { N_("Add a text frame"), DT_CANVAS_ACTION_ADD_TEXT, GDK_KEY_t, 0 },
   { N_("Add the text notes of the selected images"), DT_CANVAS_ACTION_ADD_NOTES, GDK_KEY_t, GDK_SHIFT_MASK },
   { N_("Add a map"), DT_CANVAS_ACTION_ADD_MAP, GDK_KEY_m, 0 },
