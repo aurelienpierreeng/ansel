@@ -428,11 +428,12 @@ static double *_paper_relief(const dt_canvas_background_t style, const int size,
  */
 static double _paper_mesh(const double unit_x, const double unit_y, const double wobble)
 {
-  const double bend = wobble * 40.0;
-  const double pressure = CLAMP(1.0 + wobble * 18.0, 0.4, 1.6);
+  const double bend = wobble * 15.0;
+  const double pressure = CLAMP(1.0 + wobble * 8.0, 0.7, 1.3);
+  // A low power makes a wide groove: the weft is thick and deep, the warp thin and faint.
   const double weft = fmax(cos(2.0 * M_PI * (unit_y + bend) / PAPER_WEFT_PITCH), 0.0);
   const double warp = fmax(cos(2.0 * M_PI * (unit_x - bend) / PAPER_WARP_PITCH), 0.0);
-  return -pressure * (0.045 * pow(weft, 4.0) + 0.02 * pow(warp, 4.0));
+  return -pressure * (0.07 * pow(weft, 2.0) + 0.01 * pow(warp, 4.0));
 }
 
 #define PAPER_CELLS 6       ///< sprites per side of the composed field: its period is PAPER_CELLS sprites
