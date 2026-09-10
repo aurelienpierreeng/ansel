@@ -236,49 +236,115 @@ static void _bench(void **state)
     cairo_surface_destroy(plain_surface);
   }
 
-  // CANVAS_BENCH_CUTOUTS=1 reports, for every cut frame, what the paint puts at the shape's
-  // centre and at the frame's corner, at a sweep of zooms. A cutout keeps one side of its
-  // shape at every zoom, so those two must not trade places down the column.
+  // CANVAS_BENCH_CUTOUTS=1 reports every cut frame's raster on its own, at every size the
+  // quantisation can pick, as saved and turned inside out: the alpha at the shape's centre
+  // against the alpha at the frame's corner. Whichever side a shape keeps, it keeps at every
+  // size, so those two must not trade places down the column.
   if(!IS_NULL_PTR(g_getenv("CANVAS_BENCH_CUTOUTS")))
   {
     dt_canvas_surface_cache_t *probe_cache = dt_canvas_surface_cache_new(TRUE, 512u * 1024u * 1024u);
-    const double sweep[] = { 0.5, 0.7, 1.0, 1.4, 2.0, 2.8, 4.0 };
     for(guint object_idx = 0; object_idx < dt_canvas_object_count(canvas); object_idx++)
     {
       const dt_canvas_object_t *object = dt_canvas_object_at(canvas, object_idx);
       if(IS_NULL_PTR(object) || !dt_canvas_object_is_frame(object)) continue;
       if(object->mask.shape == DT_CANVAS_MASK_NONE) continue;
-      printf("cutout on object %u: shape %u, invert %d, feather %.3f\n", object->id, object->mask.shape,
-             (object->mask.flags & DT_CANVAS_MASK_INVERT) != 0, object->mask.feather);
+      printf("cutout on object %u: shape %u, invert %d, feather %.3f, frame %.0f x %.0f\n", object->id,
+             object->mask.shape, (object->mask.flags & DT_CANVAS_MASK_INVERT) != 0, object->mask.feather,
+             object->width, object->height);
+      // The raster on its own, at every size the quantisation can pick: alpha at the shape's
+      // centre against alpha at the frame's corner. Whichever side the shape keeps, it keeps
+      // it at every size -- the two must not trade places down this column.
+      for(int pass = 0; pass < 2; pass++)
+      {
+      // The second pass asks for the other side of the same shape: a shape and its inverse
+      // must answer with the same raster read the other way round, at every size.
+      dt_canvas_object_t probe_object = *object;
+      if(pass) probe_object.mask.flags |= DT_CANVAS_MASK_INVERT;
+      printf("  %s\n", pass ? "inverted:" : "as saved:");
+      for(int longer = 64; longer <= 2048; longer *= 2)
+      {
+        object = &probe_object;
+        const double raster_scale = (double)longer / fmax(object->width, object->height);
+        const int mask_width = MAX((int)lround(object->width * raster_scale), 2);
+        const int mask_height = MAX((int)lround(object->height * raster_scale), 2);
+        cairo_surface_t *raster = dt_canvas_render_mask(object, mask_width, mask_height, 0, 0);
+        if(IS_NULL_PTR(raster)) continue;
+        cairo_surface_flush(raster);
+        const uint8_t *alpha = cairo_image_surface_get_data(raster);
+        const int mask_stride = cairo_image_surface_get_stride(raster);
+        const int centre_col = (int)lround(object->mask.center_x * mask_width);
+        const int centre_row = (int)lround(object->mask.center_y * mask_height);
+        const uint8_t at_centre = alpha[(size_t)CLAMP(centre_row, 0, mask_height - 1) * mask_stride
+                                        + CLAMP(centre_col, 0, mask_width - 1)];
+        const uint8_t at_corner = alpha[(size_t)(mask_height / 40) * mask_stride + mask_width / 40];
+        printf("    raster %4d x %4d: centre alpha %3u, corner alpha %3u\n", mask_width, mask_height, at_centre,
+               at_corner);
+        cairo_surface_destroy(raster);
+      }
+      }
+      object = dt_canvas_object_at(canvas, object_idx);
+    }
+    dt_canvas_surface_cache_free(probe_cache);
+  }
+
+  // CANVAS_BENCH_INVERT=<object id> turns that frame's cutout inside out and paints the whole
+  // document at a sweep of resolutions, reporting what lands at the shape's centre and at the
+  // frame's corner. Which side a cutout keeps cannot depend on how far the view is zoomed in.
+  if(!IS_NULL_PTR(g_getenv("CANVAS_BENCH_INVERT")))
+  {
+    const uint32_t wanted = (uint32_t)atoi(g_getenv("CANVAS_BENCH_INVERT"));
+    dt_canvas_object_t *target = NULL;
+    for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
+    {
+      dt_canvas_object_t *candidate = dt_canvas_object_at(canvas, idx);
+      if(!IS_NULL_PTR(candidate) && candidate->id == wanted) target = candidate;
+    }
+    if(!IS_NULL_PTR(target))
+    {
+      target->mask.flags |= DT_CANVAS_MASK_INVERT;
+      dt_canvas_touch(canvas);
+      dt_canvas_surface_cache_t *invert_cache = dt_canvas_surface_cache_new(TRUE, 512u * 1024u * 1024u);
+      printf("object %u inverted, frame %.0f x %.0f, shape centre (%.3f, %.3f) radius %.3f\n", target->id,
+             target->width, target->height, target->mask.center_x, target->mask.center_y, target->mask.radius_x);
+      const double sweep[] = { 0.2, 0.4, 0.665, 1.0, 1.5, 2.0, 3.0, 4.167 };
       for(size_t idx = 0; idx < sizeof(sweep) / sizeof(sweep[0]); idx++)
       {
-        const double view_zoom = zoom * sweep[idx];
-        // The shape's centre, and a point just inside the frame's top-left corner.
-        const double centre_x = object->x + (object->mask.center_x - 0.5) * object->width;
-        const double centre_y = object->y + (object->mask.center_y - 0.5) * object->height;
-        const double corner_x = object->x - object->width * 0.45;
-        const double corner_y = object->y - object->height * 0.45;
+        const double view_zoom = sweep[idx];
+        const double centre_x = target->x + (target->mask.center_x - 0.5) * target->width;
+        const double centre_y = target->y + (target->mask.center_y - 0.5) * target->height;
         cairo_surface_t *probe = cairo_image_surface_create(CAIRO_FORMAT_RGB24, (int)(width * device_scale),
                                                             (int)(height * device_scale));
         cairo_surface_set_device_scale(probe, device_scale, device_scale);
-        _paint_once(probe, canvas, probe_cache, view_zoom, object->x, object->y, width, height, TRUE);
+        const double probe_quality = IS_NULL_PTR(g_getenv("CANVAS_BENCH_QUALITY"))
+                                         ? 1.0
+                                         : g_ascii_strtod(g_getenv("CANVAS_BENCH_QUALITY"), NULL);
+        _paint_once_quality(probe, canvas, invert_cache, view_zoom, centre_x, centre_y, width, height, TRUE,
+                            probe_quality);
         cairo_surface_flush(probe);
         const uint8_t *pixels = cairo_image_surface_get_data(probe);
         const int stride = cairo_image_surface_get_stride(probe);
-        uint32_t shades[2] = { 0, 0 };
-        const double points[2][2] = { { centre_x, centre_y }, { corner_x, corner_y } };
-        for(int point = 0; point < 2; point++)
+        const int centre_col = (int)lround(width * 0.5 * device_scale);
+        const int centre_row = (int)lround(height * 0.5 * device_scale);
+        // A point inside the frame but well outside the circle, along its longer side.
+        const int outer_col = centre_col + (int)lround(target->width * 0.45 * view_zoom * device_scale);
+        uint32_t at_centre = 0;
+        uint32_t at_outer = 0;
+        if(centre_col >= 0 && centre_col < (int)(width * device_scale))
+          at_centre = *(const uint32_t *)(pixels + (size_t)centre_row * stride + (size_t)centre_col * 4) & 0xFFFFFFu;
+        if(outer_col >= 0 && outer_col < (int)(width * device_scale))
+          at_outer = *(const uint32_t *)(pixels + (size_t)centre_row * stride + (size_t)outer_col * 4) & 0xFFFFFFu;
+        printf("    %.3f px/unit (frame %.0f px): hole %06x, ring %06x\n", view_zoom, target->width * view_zoom,
+               at_centre, at_outer);
+        if(!IS_NULL_PTR(g_getenv("CANVAS_BENCH_LOOK")))
         {
-          const int col = (int)lround(((points[point][0] - object->x) * view_zoom + width * 0.5) * device_scale);
-          const int row = (int)lround(((points[point][1] - object->y) * view_zoom + height * 0.5) * device_scale);
-          if(col < 0 || row < 0 || col >= (int)(width * device_scale) || row >= (int)(height * device_scale)) continue;
-          shades[point] = *(const uint32_t *)(pixels + (size_t)row * stride + (size_t)col * 4) & 0xFFFFFFu;
+          gchar *shot = g_strdup_printf("%s_%03d.png", g_getenv("CANVAS_BENCH_LOOK"), (int)lround(view_zoom * 100.0));
+          cairo_surface_write_to_png(probe, shot);
+          dt_free(shot);
         }
-        printf("    zoom x%.2f: shape centre %06x, frame corner %06x\n", sweep[idx], shades[0], shades[1]);
         cairo_surface_destroy(probe);
       }
+      dt_canvas_surface_cache_free(invert_cache);
     }
-    dt_canvas_surface_cache_free(probe_cache);
   }
 
   // CANVAS_BENCH_PDF=<path> exports the document too, and prints what the file weighs per
@@ -288,6 +354,8 @@ static void _bench(void **state)
   {
     dt_canvas_export_options_t pdf = dt_canvas_export_options_default();
     pdf.dpi = (float)(IS_NULL_PTR(g_getenv("CANVAS_BENCH_DPI")) ? 300 : atoi(g_getenv("CANVAS_BENCH_DPI")));
+    if(!IS_NULL_PTR(g_getenv("CANVAS_BENCH_FORMAT")))
+      pdf.format = (dt_canvas_export_format_t)CLAMP(atoi(g_getenv("CANVAS_BENCH_FORMAT")), 0, DT_CANVAS_EXPORT_LAST - 1);
     GError *pdf_error = NULL;
     const double pdf_start = dt_get_wtime();
     const gboolean pdf_ok = dt_canvas_export(canvas, pdf_path, &pdf, &pdf_error);
