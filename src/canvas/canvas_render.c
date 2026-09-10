@@ -1068,8 +1068,8 @@ cairo_surface_t *dt_canvas_render_mask_band(const dt_canvas_object_t *object, co
   if(!IS_NULL_PTR(distance) && !IS_NULL_PTR(line) && !IS_NULL_PTR(line_out))
   {
     // Squared distance to the nearest pixel inside the shape: 0 inside, "infinite" outside, then the two passes.
-    const float far = (float)longest * longest * 4.0f;
-    for(size_t idx = 0; idx < count; idx++) distance[idx] = raster[idx] >= 0.5f ? 0.0f : far;
+    const float unreached = (float)longest * longest * 4.0f; // not `far`: a Windows macro
+    for(size_t idx = 0; idx < count; idx++) distance[idx] = raster[idx] >= 0.5f ? 0.0f : unreached;
     for(int row = 0; row < height; row++)
     {
       _distance_1d(distance + (size_t)row * width, line_out, vertices, boundaries, width);
