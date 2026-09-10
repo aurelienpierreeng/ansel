@@ -156,6 +156,17 @@ cairo_surface_t *dt_canvas_surface_cache_get_mask(dt_canvas_surface_cache_t *cac
 cairo_surface_t *dt_canvas_render_mask(const dt_canvas_object_t *object, int width, int height);
 
 /**
+ * @brief The cutout's border band: its edge dilated outward by `radius` pixels (a disc), less
+ * the cutout itself. A new 8-bit alpha surface; the caller owns it.
+ */
+cairo_surface_t *dt_canvas_render_mask_band(const dt_canvas_object_t *object, int width, int height, int radius);
+
+/** @brief The band of dt_canvas_render_mask_band(), cached beside the mask; owned by the cache. */
+cairo_surface_t *dt_canvas_surface_cache_get_mask_band(dt_canvas_surface_cache_t *cache,
+                                                       const dt_canvas_object_t *object, int width, int height,
+                                                       int radius);
+
+/**
  * @brief A working buffer of at least `bytes`, kept between frames so a repaint does not page in
  * a fresh allocation each time. Owned by the cache; valid until the next call.
  */

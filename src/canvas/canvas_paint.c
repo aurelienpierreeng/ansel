@@ -803,9 +803,26 @@ static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
 
 /* --- frames ----------------------------------------------------------------- */
 
+/** A cut-out frame's border follows the cutout, dilated outward, and is composited, not stroked. */
+static gboolean _object_cut(const dt_canvas_object_t *object)
+{
+  return dt_canvas_object_is_frame(object) && object->mask.shape != DT_CANVAS_MASK_NONE;
+}
+
+/** How far the content sits inside the frame: the border, for a rectangular frame; nothing for a cut one. */
+static double _border_inset(const dt_canvas_t *canvas, const dt_canvas_object_t *object)
+{
+  if(_object_cut(object)) return 0.0;
+  dt_canvas_color_t color;
+  float width = 0.0f;
+  dt_canvas_object_effective_border(canvas, object, &color, &width);
+  return width;
+}
+
 static void _paint_border(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                           const dt_canvas_paint_options_t *options)
 {
+  if(_object_cut(object)) return;
   dt_canvas_color_t color;
   float width = 0.0f;
   dt_canvas_object_effective_border(canvas, object, &color, &width);
@@ -862,9 +879,7 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   }
   const double surface_width = cairo_image_surface_get_width(surface);
   const double surface_height = cairo_image_surface_get_height(surface);
-  dt_canvas_color_t border_color;
-  float border_width = 0.0f;
-  dt_canvas_object_effective_border(canvas, object, &border_color, &border_width);
+  const double border_width = _border_inset(canvas, object);
   const double inner_width = fmax(object->width - 2.0 * border_width, 1.0);
   const double inner_height = fmax(object->height - 2.0 * border_width, 1.0);
   if(surface_width > 0.0 && surface_height > 0.0)
@@ -920,11 +935,8 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
 /** The text sits inside the border and the padding. */
 static double _text_inset(const dt_canvas_t *canvas, const dt_canvas_object_t *object)
 {
-  dt_canvas_color_t border_color;
-  float border_width = 0.0f;
-  dt_canvas_object_effective_border(canvas, object, &border_color, &border_width);
   const double padding = object->text.padding > 0.0f ? object->text.padding : 0.0;
-  return padding + border_width;
+  return padding + _border_inset(canvas, object);
 }
 
 static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object)
@@ -965,9 +977,12 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   _paint_border(cr, canvas, object, options);
   if(object->text.background.alpha > 0.0f)
   {
+    // The background fills the frame inside its border, so the border is not painted over.
+    const double inset = _border_inset(canvas, object);
     cairo_save(cr);
     _set_color(cr, &object->text.background, options->for_display);
-    cairo_rectangle(cr, -half_width, -half_height, object->width, object->height);
+    cairo_rectangle(cr, -half_width + inset, -half_height + inset, fmax(object->width - 2.0 * inset, 0.0),
+                    fmax(object->height - 2.0 * inset, 0.0));
     cairo_fill(cr);
     cairo_restore(cr);
   }
@@ -1255,10 +1270,15 @@ static dt_canvas_rect_t _box_to_user(const cairo_matrix_t *matrix, const dt_canv
   return rect;
 }
 
-/** A cairo context painting user space, under `matrix`, into a surface whose origin is `box`. */
-static cairo_t *_layer_context(cairo_surface_t *surface, const cairo_matrix_t *matrix, const dt_canvas_box_t *box)
+/**
+ * A cairo context painting user space, under `matrix`, into a surface whose origin is `box`,
+ * with the target's font options: text hinted and antialiased the way the screen asks.
+ */
+static cairo_t *_layer_context(cairo_surface_t *surface, const cairo_matrix_t *matrix, const dt_canvas_box_t *box,
+                               const cairo_font_options_t *font_options)
 {
   cairo_t *cr = cairo_create(surface);
+  if(!IS_NULL_PTR(font_options)) cairo_set_font_options(cr, font_options);
   cairo_translate(cr, -box->x, -box->y);
   cairo_transform(cr, matrix);
   return cr;
@@ -1493,11 +1513,9 @@ static void _paint_object_pixels(cairo_t *cr, const dt_canvas_t *canvas, const d
   cairo_restore(cr);
 }
 
-/** Multiply the layer's alpha by the object's cutout, rasterised at the frame's size on screen. */
-static void _apply_cutout(cairo_t *cr, const dt_canvas_object_t *object, const dt_canvas_paint_options_t *options,
-                          const double pixels_per_unit)
+/** The size a cutout is rasterised at: the frame's size on screen, capped. */
+static void _mask_size(const dt_canvas_object_t *object, const double pixels_per_unit, int *width, int *height)
 {
-  if(!dt_canvas_object_is_frame(object) || object->mask.shape == DT_CANVAS_MASK_NONE) return;
   int mask_width = (int)lround(object->width * pixels_per_unit);
   int mask_height = (int)lround(object->height * pixels_per_unit);
   if(mask_width > COMPOSE_MASK_MAX_PIXELS || mask_height > COMPOSE_MASK_MAX_PIXELS)
@@ -1506,8 +1524,42 @@ static void _apply_cutout(cairo_t *cr, const dt_canvas_object_t *object, const d
     mask_width = (int)lround(mask_width * shrink);
     mask_height = (int)lround(mask_height * shrink);
   }
-  mask_width = MAX(mask_width, 2);
-  mask_height = MAX(mask_height, 2);
+  *width = MAX(mask_width, 2);
+  *height = MAX(mask_height, 2);
+}
+
+/** Paint an alpha surface in the cutout's raster space over the frame, with the given operator. */
+static void _paint_frame_alpha(cairo_t *cr, const dt_canvas_object_t *object, cairo_surface_t *alpha,
+                               const int mask_width, const int mask_height, const cairo_operator_t operator)
+{
+  cairo_save(cr);
+  cairo_set_operator(cr, operator);
+  cairo_translate(cr, object->x, object->y);
+  cairo_rotate(cr, object->rotation);
+  cairo_scale(cr, object->width / mask_width, object->height / mask_height);
+  cairo_translate(cr, -mask_width * 0.5, -mask_height * 0.5);
+  if(operator == CAIRO_OPERATOR_DEST_IN)
+  {
+    cairo_set_source_surface(cr, alpha, 0.0, 0.0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+    cairo_paint(cr);
+  }
+  else
+  {
+    // The source is already set: the alpha is the mask it paints through.
+    cairo_mask_surface(cr, alpha, 0.0, 0.0);
+  }
+  cairo_restore(cr);
+}
+
+/** Multiply the layer's alpha by the object's cutout, rasterised at the frame's size on screen. */
+static void _apply_cutout(cairo_t *cr, const dt_canvas_object_t *object, const dt_canvas_paint_options_t *options,
+                          const double pixels_per_unit)
+{
+  if(!_object_cut(object)) return;
+  int mask_width = 0;
+  int mask_height = 0;
+  _mask_size(object, pixels_per_unit, &mask_width, &mask_height);
   cairo_surface_t *mask = NULL;
   cairo_surface_t *owned = NULL;
   if(!IS_NULL_PTR(options->cache))
@@ -1518,17 +1570,58 @@ static void _apply_cutout(cairo_t *cr, const dt_canvas_object_t *object, const d
     mask = owned;
   }
   if(IS_NULL_PTR(mask)) return;
-  cairo_save(cr);
-  cairo_set_operator(cr, CAIRO_OPERATOR_DEST_IN);
-  cairo_translate(cr, object->x, object->y);
-  cairo_rotate(cr, object->rotation);
-  cairo_scale(cr, object->width / mask_width, object->height / mask_height);
-  cairo_translate(cr, -mask_width * 0.5, -mask_height * 0.5);
-  cairo_set_source_surface(cr, mask, 0.0, 0.0);
-  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
-  cairo_paint(cr);
-  cairo_restore(cr);
+  _paint_frame_alpha(cr, object, mask, mask_width, mask_height, CAIRO_OPERATOR_DEST_IN);
   if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
+}
+
+/**
+ * A cut-out frame's border: the cutout's edge dilated outward by the border width, painted in
+ * the border colour into a layer of its own, to go over the content in linear light.
+ * @return whether anything was painted.
+ */
+static gboolean _paint_cut_border(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                  const dt_canvas_paint_options_t *options, const double pixels_per_unit)
+{
+  if(!_object_cut(object)) return FALSE;
+  dt_canvas_color_t color;
+  float width = 0.0f;
+  dt_canvas_object_effective_border(canvas, object, &color, &width);
+  if(width <= 0.0f || color.alpha <= 0.0f) return FALSE;
+  int mask_width = 0;
+  int mask_height = 0;
+  _mask_size(object, pixels_per_unit, &mask_width, &mask_height);
+  // The band's radius in the cutout's raster pixels, which may be coarser than the screen's.
+  const int radius = MAX(1, (int)lround(width * mask_width / object->width));
+  cairo_surface_t *band = NULL;
+  cairo_surface_t *owned = NULL;
+  if(!IS_NULL_PTR(options->cache))
+    band = dt_canvas_surface_cache_get_mask_band(options->cache, object, mask_width, mask_height, radius);
+  else
+  {
+    owned = dt_canvas_render_mask_band(object, mask_width, mask_height, radius);
+    band = owned;
+  }
+  if(IS_NULL_PTR(band)) return FALSE;
+  _set_color(cr, &color, options->for_display);
+  _paint_frame_alpha(cr, object, band, mask_width, mask_height, CAIRO_OPERATOR_OVER);
+  if(!IS_NULL_PTR(owned)) cairo_surface_destroy(owned);
+  return TRUE;
+}
+
+/** Source-over of one premultiplied float layer onto another of the same box. */
+static void _layer_over(float *below, const float *above, const size_t pixels)
+{
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(size_t idx = 0; idx < pixels; idx++)
+  {
+    const float keep = 1.0f - above[4 * idx + 3];
+    below[4 * idx + 0] = above[4 * idx + 0] + below[4 * idx + 0] * keep;
+    below[4 * idx + 1] = above[4 * idx + 1] + below[4 * idx + 1] * keep;
+    below[4 * idx + 2] = above[4 * idx + 2] + below[4 * idx + 2] * keep;
+    below[4 * idx + 3] = above[4 * idx + 3] + below[4 * idx + 3] * keep;
+  }
 }
 
 /** The device box an object touches, its shadow included. */
@@ -1551,6 +1644,13 @@ static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas
     const double reach = (line_width + PAINT_ARROW_LENGTH * fmax(line_width / 2.0, 1.0)) * pixels_per_unit;
     box = _box_of_points(matrix, route.points, route.point_count, reach);
   }
+  if(_object_cut(object))
+  {
+    dt_canvas_color_t color;
+    float width = 0.0f;
+    dt_canvas_object_effective_border(canvas, object, &color, &width);
+    if(width > 0.0f) box = _box_grow(&box, (int)ceil(width * pixels_per_unit) + 1);
+  }
   if(dt_canvas_shadow_visible(shadow))
   {
     const double reach = (fabs(shadow->offset_x) + fabs(shadow->offset_y) + COMPOSE_SHADOW_SIGMAS * shadow->blur)
@@ -1562,20 +1662,24 @@ static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas
 
 /** Composite one band of the device plane and hand it to the context. */
 static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options,
-                        const cairo_matrix_t *matrix, const dt_canvas_box_t *band)
+                        const cairo_matrix_t *matrix, const dt_canvas_box_t *band, const double scale_x,
+                        const double scale_y)
 {
   const double pixels_per_unit = _matrix_scale(matrix);
   dt_canvas_paint_options_t local = *options;
   local.clip = _box_to_user(matrix, band);
+  cairo_font_options_t *font_options = cairo_font_options_create();
+  cairo_get_font_options(cr, font_options);
 
   // 1. The background, the grid and the pages: cairo, into the base layer.
   cairo_surface_t *base = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, band->width, band->height);
   if(cairo_surface_status(base) != CAIRO_STATUS_SUCCESS)
   {
     cairo_surface_destroy(base);
+    cairo_font_options_destroy(font_options);
     return;
   }
-  cairo_t *base_cr = _layer_context(base, matrix, band);
+  cairo_t *base_cr = _layer_context(base, matrix, band, font_options);
   if(local.draw_background && _is_paper(canvas->background_style))
   {
     _paint_paper(base_cr, canvas, &local);
@@ -1601,6 +1705,7 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   if(IS_NULL_PTR(canvas_rgba))
   {
     cairo_surface_destroy(base);
+    cairo_font_options_destroy(font_options);
     return;
   }
   _layer_linearise(base, 1.0f, canvas_rgba);
@@ -1633,12 +1738,13 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
       cairo_surface_destroy(layer);
       continue;
     }
-    cairo_t *layer_cr = _layer_context(layer, matrix, &layer_box);
+    cairo_t *layer_cr = _layer_context(layer, matrix, &layer_box, font_options);
     _paint_object_pixels(layer_cr, canvas, object, &local);
     _apply_cutout(layer_cr, object, &local, pixels_per_unit);
     cairo_destroy(layer_cr);
 
-    float *layer_rgba = dt_alloc_align_float((size_t)layer_box.width * layer_box.height * 4);
+    const size_t layer_pixels = (size_t)layer_box.width * layer_box.height;
+    float *layer_rgba = dt_alloc_align_float(layer_pixels * 4);
     if(IS_NULL_PTR(layer_rgba))
     {
       cairo_surface_destroy(layer);
@@ -1646,18 +1752,40 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     }
     _layer_linearise(layer, opacity, layer_rgba);
     cairo_surface_destroy(layer);
+
+    // A cut-out frame's border: its own layer, over the content in linear light.
+    if(_object_cut(object))
+    {
+      cairo_surface_t *border = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, layer_box.width, layer_box.height);
+      if(cairo_surface_status(border) == CAIRO_STATUS_SUCCESS)
+      {
+        cairo_t *border_cr = _layer_context(border, matrix, &layer_box, font_options);
+        const gboolean painted = _paint_cut_border(border_cr, canvas, object, &local, pixels_per_unit);
+        cairo_destroy(border_cr);
+        float *border_rgba = painted ? dt_alloc_align_float(layer_pixels * 4) : NULL;
+        if(!IS_NULL_PTR(border_rgba))
+        {
+          _layer_linearise(border, opacity, border_rgba);
+          _layer_over(layer_rgba, border_rgba, layer_pixels);
+          dt_free_align(border_rgba);
+        }
+      }
+      cairo_surface_destroy(border);
+    }
     if(shadowed) _canvas_shadow(canvas_rgba, band, layer_rgba, &layer_box, &area, &shadow, pixels_per_unit, local.for_display);
     _canvas_over(canvas_rgba, band, layer_rgba, &layer_box, &area);
     dt_free_align(layer_rgba);
   }
 
-  // 3. Back to 8 bits, and onto the context in device space.
+  // 3. Back to 8 bits, and onto the context, pixel for pixel: the band is in the surface's
+  //    own pixels, so the device scale is undone on the way.
   cairo_surface_t *encoded = cairo_image_surface_create(CAIRO_FORMAT_RGB24, band->width, band->height);
   if(cairo_surface_status(encoded) == CAIRO_STATUS_SUCCESS)
   {
     _canvas_encode(canvas_rgba, encoded);
     cairo_save(cr);
     cairo_identity_matrix(cr);
+    cairo_scale(cr, 1.0 / scale_x, 1.0 / scale_y);
     cairo_set_source_surface(cr, encoded, band->x, band->y);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_rectangle(cr, band->x, band->y, band->width, band->height);
@@ -1665,6 +1793,7 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     cairo_restore(cr);
   }
   cairo_surface_destroy(encoded);
+  cairo_font_options_destroy(font_options);
   if(canvas_owned) dt_free_align(canvas_rgba);
 }
 
@@ -1715,8 +1844,21 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
 {
   if(IS_NULL_PTR(cr) || IS_NULL_PTR(canvas) || IS_NULL_PTR(options)) return;
   _luts_init();
+  // User space to the surface's PIXELS: cairo's device space stops short of the surface's own
+  // device scale, and on a 2x screen a layer sized in device units is half the resolution.
   cairo_matrix_t matrix;
   cairo_get_matrix(cr, &matrix);
+  double scale_x = 1.0;
+  double scale_y = 1.0;
+  cairo_surface_get_device_scale(cairo_get_group_target(cr), &scale_x, &scale_y);
+  if(!(scale_x > 0.0) || !(scale_y > 0.0))
+  {
+    scale_x = 1.0;
+    scale_y = 1.0;
+  }
+  cairo_matrix_t to_pixels;
+  cairo_matrix_init_scale(&to_pixels, scale_x, scale_y);
+  cairo_matrix_multiply(&matrix, &matrix, &to_pixels);
 
   // The device box to composite: the context's clip, narrowed to the area the caller asked for.
   double clip_x1 = 0.0;
@@ -1741,7 +1883,7 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
   for(int top = box.y; top < box.y + box.height; top += rows_per_band)
   {
     const dt_canvas_box_t band = { box.x, top, box.width, MIN(rows_per_band, box.y + box.height - top) };
-    _paint_band(cr, canvas, options, &matrix, &band);
+    _paint_band(cr, canvas, options, &matrix, &band, scale_x, scale_y);
   }
   if(options->draw_grid) _paint_gutters(cr, canvas, options);
 }

@@ -134,7 +134,13 @@ translucent frames and drop shadows are all blends, so the painter composites th
 canvas itself, in linear light with premultiplied alpha, in 32-bit floats, and hands cairo
 one finished image.
 
-The device box being painted (the context's clip, narrowed to the area asked for) is the
+The float canvas is sized in the surface's own PIXELS, not cairo's device units: cairo's
+device space stops short of the surface's device scale, so on a 2x screen a layer sized
+in device units is half the resolution and comes back blurred and aliased (the trap
+`doc/overlay-raster.md` recorded first). The painter folds `cairo_surface_get_device_scale()`
+into its matrix and undoes it when the encoded image is blitted, pixel for pixel; every layer
+also carries the target's font options, so text is hinted and antialiased the way the screen
+asks. The device box being painted (the context's clip, narrowed to the area asked for) is the
 float canvas; a page at print resolution is cut into bands of at most 24 million pixels so
 the floats fit in memory, and a layer keeps a shadow's reach past its band so a blur at the
 band's edge is whole. The background, the grid and the pages go into a base layer with
@@ -188,8 +194,21 @@ screen, capped at 3072 pixels a side.
 
 The view edits a cutout with handles over the frame when the bar's Edit toggle is on: the
 centre or anchor, the radius or radii (the ellipse's first radius handle also sets its
-rotation), the gradient's reach across its line, and the polygon's nodes; Ctrl+click on an
-edge inserts a node, Shift+click on a node removes it. Every drag is one undo record.
+rotation), the feather on the circle's or the ellipse's dashed ring, the gradient's reach
+across its line, and the polygon's nodes. Over the frame, the wheel sets the feather, with
+Shift the opacity, with Ctrl the gradient's curvature or the ellipse's rotation. On a
+polygon, Ctrl+click on an edge inserts a node, Shift+click on a node removes it and a double
+click makes it smooth or sharp; a smooth node takes the Catmull-Rom tangent the masks module
+computes, and the view draws the same curve. The context menu offers the shapes, editing,
+inverting, and the node actions for the node or edge under the pointer. Every drag and
+every wheel step is one undo record.
+
+A cut-out frame's border follows the cutout instead of the rectangle: the cutout's half-level
+edge dilated outward by the border width -- a disc, through the Euclidean distance transform
+of the shape (`dt_canvas_render_mask_band()`) -- less the cutout itself, so the band fills in
+where the content's feather fades. It is painted in the border colour into a layer of its own
+and laid over the content in linear light. A rectangular frame keeps its border inside its
+edge with the content inset, as before; both are the same rule seen from the shape's edge.
 
 ### Gutter frames
 
@@ -230,6 +249,12 @@ line is inked dark or light against the plane's luminance, with a halo of the op
 it reads on any background colour or paper and over a picture.
 
 ### The floating property bar
+
+The bar is one vertical box of rows, one per topic, so the bars of two kinds differ only by
+their first row: the kind's own properties (font, colours and alignment; route, arrows, line
+and waypoint; place, zoom and provider), then **Geometry** (centre, size, angle), then
+**Border**, shadow and opacity, then **Cutout**. Rows a kind has no use for are hidden at
+refill; every row keeps a 70-pixel topic label so the controls line up from row to row.
 
 Selecting exactly one object floats an opaque bar immediately below it (above, when there is
 no room below) with that object's properties: a text frame's font family and size, text

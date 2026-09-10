@@ -154,10 +154,16 @@ static void _the_object_mask_surface_matches_the_raster(void **state)
   dt_canvas_free(canvas);
 }
 
-/** Paint a canvas at one pixel per unit into a square surface, and read a pixel back. */
-static uint32_t _painted_pixel(const dt_canvas_t *canvas, const int size, const int x, const int y)
+/**
+ * Paint a canvas at one pixel per unit into a square surface of `size` device units, and read
+ * a pixel back -- in the surface's own pixels, which a device scale of 2 doubles.
+ */
+static uint32_t _painted_pixel_scaled(const dt_canvas_t *canvas, const int size, const double device_scale,
+                                      const int x, const int y)
 {
-  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, size, size);
+  const int side = (int)(size * device_scale);
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, side, side);
+  cairo_surface_set_device_scale(surface, device_scale, device_scale);
   cairo_t *cr = cairo_create(surface);
   // Canvas (0, 0) at the middle of the surface.
   cairo_translate(cr, size * 0.5, size * 0.5);
@@ -171,6 +177,63 @@ static uint32_t _painted_pixel(const dt_canvas_t *canvas, const int size, const 
   const uint32_t pixel = *(const uint32_t *)(pixels + (size_t)y * stride + (size_t)x * 4) & 0xFFFFFFu;
   cairo_surface_destroy(surface);
   return pixel;
+}
+
+static uint32_t _painted_pixel(const dt_canvas_t *canvas, const int size, const int x, const int y)
+{
+  return _painted_pixel_scaled(canvas, size, 1.0, x, y);
+}
+
+static void _the_compositor_paints_the_surfaces_own_pixels_on_a_scaled_surface(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  // A white 100-unit frame centred on a 200-unit surface at device scale 2: its edge is at
+  // pixel 100 and 300, sharp, not at 50 and 150 blown up.
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  frame->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  frame->border_width = 0.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  assert_int_equal(_painted_pixel_scaled(canvas, 200, 2.0, 200, 200), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel_scaled(canvas, 200, 2.0, 101, 200), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel_scaled(canvas, 200, 2.0, 98, 200), 0x000000u);
+  assert_int_equal(_painted_pixel_scaled(canvas, 200, 2.0, 298, 200), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel_scaled(canvas, 200, 2.0, 301, 200), 0x000000u);
+  dt_canvas_free(canvas);
+}
+
+static void _a_cut_frames_border_follows_the_cutout_outward(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  frame->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  frame->border_width = 10.0f;
+  frame->border_color = dt_canvas_color(1.0f, 0.0f, 0.0f, 1.0f);
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  // Rectangular: the border sits inside the edge, the content within it.
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel(canvas, 200, 53, 100), 0xFF0000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 47, 100), 0x000000u);
+  // Cut to a circle of radius 25: the content fills the circle, the border is the ring
+  // 25 to 35 out from the centre, and past the ring is the background.
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_CIRCLE);
+  frame->mask.radius_x = 0.25f;
+  frame->mask.feather = 0.0f;
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel(canvas, 200, 120, 100), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel(canvas, 200, 130, 100), 0xFF0000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 130), 0xFF0000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 122, 122), 0xFF0000u); // 31 out along the diagonal: a disc, not a square
+  assert_int_equal(_painted_pixel(canvas, 200, 138, 100), 0x000000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 53, 53), 0x000000u);
+  dt_canvas_free(canvas);
 }
 
 static void _the_compositor_blends_in_linear_light_and_round_trips_opaque_codes(void **state)
@@ -247,6 +310,8 @@ int main(void)
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),
+    cmocka_unit_test(_the_compositor_paints_the_surfaces_own_pixels_on_a_scaled_surface),
+    cmocka_unit_test(_a_cut_frames_border_follows_the_cutout_outward),
   };
   return cmocka_run_group_tests(tests, _group_setup, _group_teardown);
 }

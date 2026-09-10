@@ -122,6 +122,7 @@ typedef enum dt_canvas_drag_t
   DT_CANVAS_DRAG_MASK_RADIUS_Y, ///< the ellipse's second radius
   DT_CANVAS_DRAG_MASK_REACH,    ///< the gradient's extent and rotation
   DT_CANVAS_DRAG_MASK_NODE,     ///< one polygon node, `mask_handle`
+  DT_CANVAS_DRAG_MASK_FEATHER,  ///< the circle's or the ellipse's fall-off, on its dashed ring
 } dt_canvas_drag_t;
 
 typedef struct dt_canvas_view_t
@@ -165,37 +166,35 @@ typedef struct dt_canvas_view_t
 
   gboolean dnd_connected;
 
-  // floating property bars, overlay children of the centre, shown under the one selected object
-  GtkWidget *text_bar;
+  // the floating property bar, an overlay child of the centre, shown under the one selected
+  // object: one row per topic, the kind's own row first, the others shared by every kind
+  GtkWidget *bar;
+  GtkWidget *row_text;
   GtkWidget *text_font;
   GtkWidget *text_color;
   GtkWidget *text_background;
   GtkWidget *text_no_background;
   GtkWidget *text_align_h;
   GtkWidget *text_align_v;
-  gulong bars_position_handler;         ///< the overlay's get-child-position hook
-  // same-size guides, shown while a resize snaps to a neighbour's size
-  gboolean guide_width_valid;
-  dt_canvas_rect_t guide_width;
-  gboolean guide_height_valid;
-  dt_canvas_rect_t guide_height;
-  GtkWidget *image_bar;
-  GtkWidget *connector_bar;
+  GtkWidget *row_connector;
   GtkWidget *connector_route;
   GtkWidget *connector_arrows;
   GtkWidget *connector_width;
   GtkWidget *connector_dashed;
   GtkWidget *connector_color;
   GtkWidget *connector_via;
-  GtkWidget *map_bar;
+  GtkWidget *row_map;
   GtkWidget *map_latitude;
   GtkWidget *map_longitude;
   GtkWidget *map_zoom;
   GtkWidget *map_source;
-  // the object bar: what every object has, shown under the kind's own bar
-  GtkWidget *object_bar;
-  GtkWidget *object_rotate_toggle;
-  GtkWidget *object_rotation;
+  GtkWidget *row_geometry;
+  GtkWidget *geometry_x;
+  GtkWidget *geometry_y;
+  GtkWidget *geometry_width;
+  GtkWidget *geometry_height;
+  GtkWidget *geometry_rotation;
+  GtkWidget *row_effects;
   GtkWidget *object_border_box;
   GtkWidget *object_border_width;
   GtkWidget *object_border_color;
@@ -205,11 +204,17 @@ typedef struct dt_canvas_view_t
   GtkWidget *object_shadow_blur;
   GtkWidget *object_shadow_color;
   GtkWidget *object_opacity;
-  GtkWidget *object_cutout_box;
+  GtkWidget *row_cutout;
   GtkWidget *object_cutout_shape;
   GtkWidget *object_cutout_feather;
   GtkWidget *object_cutout_invert;
   GtkWidget *object_cutout_edit;
+  gulong bars_position_handler;         ///< the overlay's get-child-position hook
+  // same-size guides, shown while a resize snaps to a neighbour's size
+  gboolean guide_width_valid;
+  dt_canvas_rect_t guide_width;
+  gboolean guide_height_valid;
+  dt_canvas_rect_t guide_height;
   gboolean mask_editing;                ///< the cutout's handles are shown and take the pointer
   int mask_handle;                      ///< the polygon node being dragged
   gboolean bars_refilling;
@@ -240,6 +245,10 @@ static void _paint_tangent_handle(cairo_t *cr, const dt_canvas_view_t *view, con
 static void _render_done(uint32_t object_id, uint64_t token, GBytes *jpeg, int32_t pixel_width, int32_t pixel_height,
                          uint64_t history_hash, gpointer user_data);
 static gboolean _start_map_render(dt_view_t *self, dt_canvas_object_t *object);
+static dt_canvas_drag_t _mask_handle_at(const dt_canvas_view_t *view, const dt_canvas_object_t *object,
+                                        const double x, const double y, int *index);
+static int _mask_segment_at(const dt_canvas_view_t *view, const dt_canvas_object_t *object, const double x,
+                            const double y);
 
 /* --- module identity ---------------------------------------------------------- */
 
@@ -1354,6 +1363,90 @@ static void _menu_z_order(GtkWidget *widget, gpointer data)
   dt_control_queue_redraw_center();
 }
 
+static void _menu_cutout_shape(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(!dt_canvas_object_is_frame(object)) return;
+  dt_canvas_t *before = _begin_edit(view);
+  dt_canvas_mask_set_shape(view->canvas, object, (uint32_t)CLAMP(context->value, 0, DT_CANVAS_MASK_GRADIENT));
+  view->mask_editing = object->mask.shape != DT_CANVAS_MASK_NONE;
+  _record_undo(context->self, before);
+  _bars_refresh(context->self, TRUE);
+  dt_control_queue_redraw_center();
+}
+
+static void _menu_cutout_edit(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  view->mask_editing = context->value != 0;
+  _bars_refresh(context->self, TRUE);
+  dt_control_queue_redraw_center();
+}
+
+static void _menu_cutout_invert(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(!dt_canvas_object_is_frame(object)) return;
+  dt_canvas_t *before = _begin_edit(view);
+  object->mask.flags ^= DT_CANVAS_MASK_INVERT;
+  dt_canvas_touch(view->canvas);
+  _record_undo(context->self, before);
+  dt_control_queue_redraw_center();
+}
+
+/** Polygon nodes from the menu: `value` is the node (or the edge's first node) the menu was opened on. */
+static void _menu_cutout_add_node(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(!dt_canvas_object_is_frame(object)) return;
+  double local_x = 0.0;
+  double local_y = 0.0;
+  dt_canvas_object_to_local(object, context->x, context->y, &local_x, &local_y);
+  dt_canvas_t *before = _begin_edit(view);
+  if(dt_canvas_mask_insert_node(view->canvas, object, (uint32_t)context->value + 1,
+                                (float)(local_x / object->width + 0.5), (float)(local_y / object->height + 0.5)))
+    _record_undo(context->self, before);
+  else
+    dt_canvas_free(before);
+  dt_control_queue_redraw_center();
+}
+
+static void _menu_cutout_remove_node(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(!dt_canvas_object_is_frame(object)) return;
+  dt_canvas_t *before = _begin_edit(view);
+  if(dt_canvas_mask_remove_node(view->canvas, object, (uint32_t)context->value))
+    _record_undo(context->self, before);
+  else
+    dt_canvas_free(before);
+  dt_control_queue_redraw_center();
+}
+
+static void _menu_cutout_smooth_node(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(!dt_canvas_object_is_frame(object) || object->mask.shape != DT_CANVAS_MASK_POLYGON) return;
+  if(context->value < 0 || (uint32_t)context->value >= object->mask.node_count) return;
+  dt_canvas_t *before = _begin_edit(view);
+  float *node = object->mask.nodes + (size_t)context->value * DT_CANVAS_MASK_NODE_FLOATS;
+  node[6] = node[6] != 0.0f ? 0.0f : 1.0f;
+  dt_canvas_touch(view->canvas);
+  _record_undo(context->self, before);
+  dt_control_queue_redraw_center();
+}
+
 static void _menu_rotate(GtkWidget *widget, gpointer data)
 {
   dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
@@ -1461,6 +1554,42 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
     _menu_item(order_menu, _("Send backward"), _menu_z_order, _menu_context(self, id, x, y, 2));
     _menu_item(order_menu, _("Send to back"), _menu_z_order, _menu_context(self, id, x, y, 3));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), order_item);
+
+    dt_canvas_view_t *canvas_view = (dt_canvas_view_t *)self->data;
+    // The cutout: its shape, editing it, and the node under the pointer when there is one.
+    GtkWidget *cutout_item = gtk_menu_item_new_with_label(_("Cutout"));
+    GtkWidget *cutout_menu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(cutout_item), cutout_menu);
+    _menu_item(cutout_menu, _("None"), _menu_cutout_shape, _menu_context(self, id, x, y, DT_CANVAS_MASK_NONE));
+    _menu_item(cutout_menu, _("Circle"), _menu_cutout_shape, _menu_context(self, id, x, y, DT_CANVAS_MASK_CIRCLE));
+    _menu_item(cutout_menu, _("Ellipse"), _menu_cutout_shape, _menu_context(self, id, x, y, DT_CANVAS_MASK_ELLIPSE));
+    _menu_item(cutout_menu, _("Polygon"), _menu_cutout_shape, _menu_context(self, id, x, y, DT_CANVAS_MASK_POLYGON));
+    _menu_item(cutout_menu, _("Gradient"), _menu_cutout_shape, _menu_context(self, id, x, y, DT_CANVAS_MASK_GRADIENT));
+    if(object->mask.shape != DT_CANVAS_MASK_NONE)
+    {
+      gtk_menu_shell_append(GTK_MENU_SHELL(cutout_menu), gtk_separator_menu_item_new());
+      _menu_item(cutout_menu, canvas_view->mask_editing ? _("Stop editing the shape") : _("Edit the shape"),
+                 _menu_cutout_edit, _menu_context(self, id, x, y, canvas_view->mask_editing ? 0 : 1));
+      _menu_item(cutout_menu, (object->mask.flags & DT_CANVAS_MASK_INVERT) ? _("Keep the inside") : _("Keep the outside"),
+                 _menu_cutout_invert, _menu_context(self, id, x, y, 0));
+      int node_index = -1;
+      const dt_canvas_drag_t on_handle = _mask_handle_at(canvas_view, object, x, y, &node_index);
+      const int segment = on_handle == DT_CANVAS_DRAG_NONE ? _mask_segment_at(canvas_view, object, x, y) : -1;
+      if(on_handle == DT_CANVAS_DRAG_MASK_NODE)
+      {
+        const float *node = object->mask.nodes + (size_t)node_index * DT_CANVAS_MASK_NODE_FLOATS;
+        gtk_menu_shell_append(GTK_MENU_SHELL(cutout_menu), gtk_separator_menu_item_new());
+        _menu_item(cutout_menu, node[6] != 0.0f ? _("Make this node a sharp corner") : _("Make this node smooth"),
+                   _menu_cutout_smooth_node, _menu_context(self, id, x, y, node_index));
+        _menu_item(cutout_menu, _("Remove this node"), _menu_cutout_remove_node, _menu_context(self, id, x, y, node_index));
+      }
+      else if(segment >= 0 && canvas_view->mask_editing)
+      {
+        gtk_menu_shell_append(GTK_MENU_SHELL(cutout_menu), gtk_separator_menu_item_new());
+        _menu_item(cutout_menu, _("Add a node here"), _menu_cutout_add_node, _menu_context(self, id, x, y, segment));
+      }
+    }
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), cutout_item);
 
     GtkWidget *rotate_item = gtk_menu_item_new_with_label(_("Rotate"));
     GtkWidget *rotate_menu = gtk_menu_new();
@@ -1751,19 +1880,17 @@ static void _bar_border_default_clicked(GtkWidget *button, gpointer data)
   if(IS_NULL_PTR(object)) return;                                                                          \
   dt_canvas_t *before = _begin_edit(view);
 
-static void _bar_rotate_toggled(GtkToggleButton *button, gpointer data)
-{
-  dt_view_t *self = (dt_view_t *)data;
-  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  gtk_widget_set_visible(view->object_rotation, gtk_toggle_button_get_active(button));
-  _bars_request(self);
-}
-
-static void _bar_rotation_changed(GtkSpinButton *spin, gpointer data)
+/** The geometry row: the frame's centre, size and rotation, typed in. */
+static void _bar_geometry_changed(GtkSpinButton *spin, gpointer data)
 {
   BAR_EDIT_BEGIN_FRAME()
-  object->rotation = gtk_spin_button_get_value(spin) * M_PI / 180.0;
+  object->x = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_x));
+  object->y = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_y));
+  object->width = fmax(gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_width)), 1.0);
+  object->height = fmax(gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_height)), 1.0);
+  object->rotation = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_rotation)) * M_PI / 180.0;
   BAR_EDIT_END()
+  if(object->kind == DT_CANVAS_OBJECT_MAP) _start_map_render(self, object);
 }
 
 /** Read the shadow widgets into the object's own shadow, and make it the one that applies. */
@@ -1937,129 +2064,68 @@ static void _bar_map_refresh_clicked(GtkWidget *button, gpointer data)
   dt_control_queue_redraw_center();
 }
 
-static GtkWidget *_bar_new(GtkWidget *base)
-{
-  GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
-  dt_gui_add_class(bar, "dt-canvas-floating");
-  gtk_widget_set_halign(bar, GTK_ALIGN_START);
-  gtk_widget_set_valign(bar, GTK_ALIGN_START);
-  gtk_container_set_border_width(GTK_CONTAINER(bar), DT_PIXEL_APPLY_DPI(4));
-  gtk_overlay_add_overlay(GTK_OVERLAY(base), bar);
-  return bar;
-}
-
-static void _bar_finish(GtkWidget *bar)
-{
-  gtk_widget_show_all(bar);
-  gtk_widget_hide(bar);
-  g_object_set_data(G_OBJECT(bar), "canvas-bar", GINT_TO_POINTER(1));
-  g_object_set_data(G_OBJECT(bar), "bar-left", GINT_TO_POINTER(-1));
-  g_object_set_data(G_OBJECT(bar), "bar-top", GINT_TO_POINTER(-1));
-}
-
-static GtkWidget *_bar_color_button(GtkWidget *bar, const char *tooltip, GCallback callback, gpointer data)
+static GtkWidget *_bar_color_button(GtkWidget *row, const char *tooltip, GCallback callback, gpointer data)
 {
   GtkWidget *button = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(button), TRUE);
   gtk_widget_set_tooltip_text(button, tooltip);
   g_signal_connect(button, "color-set", callback, data);
-  gtk_box_pack_start(GTK_BOX(bar), button, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(row), button, FALSE, FALSE, 0);
   return button;
 }
 
-static GtkWidget *_bar_spin(GtkWidget *bar, const double low, const double high, const double step,
-                            const char *tooltip, GCallback callback, gpointer data)
+static GtkWidget *_bar_spin(GtkWidget *row, const double low, const double high, const double step,
+                            const int digits, const char *tooltip, GCallback callback, gpointer data)
 {
   GtkWidget *spin = gtk_spin_button_new_with_range(low, high, step);
+  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(spin), digits);
+  gtk_entry_set_width_chars(GTK_ENTRY(spin), 5);
   gtk_widget_set_tooltip_text(spin, tooltip);
   g_signal_connect(spin, "value-changed", callback, data);
-  gtk_box_pack_start(GTK_BOX(bar), spin, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(row), spin, FALSE, FALSE, 0);
   return spin;
 }
 
-static GtkWidget *_bar_section(GtkWidget *bar, const char *label)
+static GtkWidget *_bar_toggle(GtkWidget *row, const char *label, const char *tooltip, GCallback callback, gpointer data)
+{
+  GtkWidget *toggle = gtk_toggle_button_new_with_label(label);
+  gtk_widget_set_tooltip_text(toggle, tooltip);
+  g_signal_connect(toggle, "toggled", callback, data);
+  gtk_box_pack_start(GTK_BOX(row), toggle, FALSE, FALSE, 0);
+  return toggle;
+}
+
+static GtkWidget *_bar_button(GtkWidget *row, const char *label, const char *tooltip, GCallback callback, gpointer data)
+{
+  GtkWidget *button = gtk_button_new_with_label(label);
+  gtk_widget_set_tooltip_text(button, tooltip);
+  g_signal_connect(button, "clicked", callback, data);
+  gtk_box_pack_start(GTK_BOX(row), button, FALSE, FALSE, 0);
+  return button;
+}
+
+/** A row of the bar, headed by its topic; every kind's bar reads the same way, row by row. */
+static GtkWidget *_bar_row(GtkWidget *bar, const char *topic)
+{
+  GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
+  GtkWidget *label = gtk_label_new(NULL);
+  gchar *markup = g_markup_printf_escaped("<b>%s</b>", topic);
+  gtk_label_set_markup(GTK_LABEL(label), markup);
+  dt_free(markup);
+  gtk_widget_set_size_request(label, DT_PIXEL_APPLY_DPI(70), -1);
+  gtk_widget_set_halign(label, GTK_ALIGN_START);
+  gtk_box_pack_start(GTK_BOX(row), label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(bar), row, FALSE, FALSE, 0);
+  return row;
+}
+
+/** A group inside a row: a label and its controls, set off from the group before. */
+static GtkWidget *_bar_group(GtkWidget *row, const char *label)
 {
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
   if(!IS_NULL_PTR(label)) gtk_box_pack_start(GTK_BOX(box), gtk_label_new(label), FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(bar), box, FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
+  gtk_box_pack_start(GTK_BOX(row), box, FALSE, FALSE, DT_PIXEL_APPLY_DPI(6));
   return box;
-}
-
-/**
- * The object bar: what every object has, under the kind's own bar. Rotation, border,
- * shadow, opacity and the cutout; a connector hides the sections it has no use for.
- */
-static void _bar_create_object_bar(dt_view_t *self, GtkWidget *base)
-{
-  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  view->object_bar = _bar_new(base);
-
-  GtkWidget *rotate = _bar_section(view->object_bar, NULL);
-  view->object_rotate_toggle = gtk_toggle_button_new_with_label(_("Rotate"));
-  gtk_widget_set_tooltip_text(view->object_rotate_toggle, _("Show the rotation angle"));
-  g_signal_connect(view->object_rotate_toggle, "toggled", G_CALLBACK(_bar_rotate_toggled), self);
-  gtk_box_pack_start(GTK_BOX(rotate), view->object_rotate_toggle, FALSE, FALSE, 0);
-  view->object_rotation = _bar_spin(rotate, -360.0, 360.0, 1.0, _("Rotation, degrees clockwise"),
-                                    G_CALLBACK(_bar_rotation_changed), self);
-  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(view->object_rotation), 1);
-  gtk_spin_button_set_wrap(GTK_SPIN_BUTTON(view->object_rotation), TRUE);
-
-  view->object_border_box = _bar_section(view->object_bar, _("Border"));
-  view->object_border_width
-      = _bar_spin(view->object_border_box, 0.0, 200.0, 1.0,
-                  _("Border width, in canvas units. The border is part of the frame: the content shrinks inside it."),
-                  G_CALLBACK(_bar_border_width_changed), self);
-  view->object_border_color = _bar_color_button(view->object_border_box, _("Border colour and opacity"),
-                                                G_CALLBACK(_bar_border_color_set), self);
-  GtkWidget *border_default = gtk_button_new_with_label(_("Canvas border"));
-  gtk_widget_set_tooltip_text(border_default, _("Use the canvas's uniform border for this frame"));
-  g_signal_connect(border_default, "clicked", G_CALLBACK(_bar_border_default_clicked), self);
-  gtk_box_pack_start(GTK_BOX(view->object_border_box), border_default, FALSE, FALSE, 0);
-
-  GtkWidget *shadow = _bar_section(view->object_bar, NULL);
-  view->object_shadow_toggle = gtk_toggle_button_new_with_label(_("Shadow"));
-  gtk_widget_set_tooltip_text(view->object_shadow_toggle, _("Drop a shadow under this object"));
-  g_signal_connect(view->object_shadow_toggle, "toggled", G_CALLBACK(_bar_shadow_toggled), self);
-  gtk_box_pack_start(GTK_BOX(shadow), view->object_shadow_toggle, FALSE, FALSE, 0);
-  view->object_shadow_offset_x = _bar_spin(shadow, -500.0, 500.0, 1.0, _("Shadow offset to the right, in canvas units"),
-                                           G_CALLBACK(_bar_shadow_changed), self);
-  view->object_shadow_offset_y = _bar_spin(shadow, -500.0, 500.0, 1.0, _("Shadow offset downwards, in canvas units"),
-                                           G_CALLBACK(_bar_shadow_changed), self);
-  view->object_shadow_blur = _bar_spin(shadow, 0.0, 500.0, 1.0, _("Shadow blur, in canvas units"),
-                                       G_CALLBACK(_bar_shadow_changed), self);
-  view->object_shadow_color = _bar_color_button(shadow, _("Shadow colour and strength"), G_CALLBACK(_bar_shadow_changed), self);
-  GtkWidget *shadow_default = gtk_button_new_with_label(_("Canvas shadow"));
-  gtk_widget_set_tooltip_text(shadow_default, _("Use the canvas's default shadow for this object"));
-  g_signal_connect(shadow_default, "clicked", G_CALLBACK(_bar_shadow_default_clicked), self);
-  gtk_box_pack_start(GTK_BOX(shadow), shadow_default, FALSE, FALSE, 0);
-
-  GtkWidget *opacity = _bar_section(view->object_bar, _("Opacity"));
-  view->object_opacity = _bar_spin(opacity, 0.0, 100.0, 5.0, _("Opacity, percent"), G_CALLBACK(_bar_opacity_changed), self);
-
-  view->object_cutout_box = _bar_section(view->object_bar, _("Cutout"));
-  view->object_cutout_shape = gtk_combo_box_text_new();
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("None"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Circle"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Ellipse"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Polygon"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Gradient"));
-  gtk_widget_set_tooltip_text(view->object_cutout_shape,
-                              _("A drawn shape that cuts the frame out of its rectangle, with a fall-off past its edge"));
-  g_signal_connect(view->object_cutout_shape, "changed", G_CALLBACK(_bar_cutout_shape_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->object_cutout_box), view->object_cutout_shape, FALSE, FALSE, 0);
-  view->object_cutout_feather = _bar_spin(view->object_cutout_box, 0.0, 100.0, 1.0,
-                                          _("Fall-off past the shape's edge, percent of the frame's shorter side"),
-                                          G_CALLBACK(_bar_cutout_feather_changed), self);
-  view->object_cutout_invert = gtk_toggle_button_new_with_label(_("Invert"));
-  gtk_widget_set_tooltip_text(view->object_cutout_invert, _("Keep what is outside the shape"));
-  g_signal_connect(view->object_cutout_invert, "toggled", G_CALLBACK(_bar_cutout_invert_toggled), self);
-  gtk_box_pack_start(GTK_BOX(view->object_cutout_box), view->object_cutout_invert, FALSE, FALSE, 0);
-  view->object_cutout_edit = gtk_toggle_button_new_with_label(_("Edit"));
-  gtk_widget_set_tooltip_text(view->object_cutout_edit,
-                              _("Show the shape's handles. Drag them; on a polygon, Ctrl+click an edge to add a node and Shift+click a node to remove it."));
-  g_signal_connect(view->object_cutout_edit, "toggled", G_CALLBACK(_bar_cutout_edit_toggled), self);
-  gtk_box_pack_start(GTK_BOX(view->object_cutout_box), view->object_cutout_edit, FALSE, FALSE, 0);
-  _bar_finish(view->object_bar);
 }
 
 /**
@@ -2080,26 +2146,37 @@ static gboolean _bars_child_position(GtkOverlay *overlay, GtkWidget *widget, Gdk
   return TRUE;
 }
 
+/**
+ * The bar: one vertical box of rows, the selected object's kind first, then what every
+ * object has -- geometry, border and shadow, the cutout -- so the bars of two kinds differ
+ * only by their first row. Rows and controls a kind has no use for are hidden at refill.
+ */
 static void _bars_create(dt_view_t *self)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  if(!IS_NULL_PTR(view->text_bar)) return;
+  if(!IS_NULL_PTR(view->bar)) return;
   GtkWidget *base = dt_ui_center_base(dt_gui_get_ui());
   view->bars_position_handler = g_signal_connect(base, "get-child-position", G_CALLBACK(_bars_child_position), self);
 
-  view->text_bar = _bar_new(base);
+  GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(3));
+  dt_gui_add_class(bar, "dt-canvas-floating");
+  gtk_widget_set_halign(bar, GTK_ALIGN_START);
+  gtk_widget_set_valign(bar, GTK_ALIGN_START);
+  gtk_container_set_border_width(GTK_CONTAINER(bar), DT_PIXEL_APPLY_DPI(4));
+  gtk_overlay_add_overlay(GTK_OVERLAY(base), bar);
+  view->bar = bar;
+
+  // 1. The kind's own row.
+  view->row_text = _bar_row(bar, _("Text"));
   view->text_font = gtk_font_button_new();
   gtk_font_button_set_show_size(GTK_FONT_BUTTON(view->text_font), TRUE);
   gtk_widget_set_tooltip_text(view->text_font, _("Font family and size"));
   g_signal_connect(view->text_font, "font-set", G_CALLBACK(_bar_text_font_set), self);
-  gtk_box_pack_start(GTK_BOX(view->text_bar), view->text_font, FALSE, FALSE, 0);
-  view->text_color = _bar_color_button(view->text_bar, _("Text colour"), G_CALLBACK(_bar_text_color_set), self);
-  view->text_background
-      = _bar_color_button(view->text_bar, _("Background colour"), G_CALLBACK(_bar_text_color_set), self);
-  view->text_no_background = gtk_toggle_button_new_with_label(_("Transparent"));
-  gtk_widget_set_tooltip_text(view->text_no_background, _("No background: the canvas shows through"));
-  g_signal_connect(view->text_no_background, "toggled", G_CALLBACK(_bar_text_no_background_toggled), self);
-  gtk_box_pack_start(GTK_BOX(view->text_bar), view->text_no_background, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(view->row_text), view->text_font, FALSE, FALSE, 0);
+  view->text_color = _bar_color_button(view->row_text, _("Text colour"), G_CALLBACK(_bar_text_color_set), self);
+  view->text_background = _bar_color_button(view->row_text, _("Background colour"), G_CALLBACK(_bar_text_color_set), self);
+  view->text_no_background = _bar_toggle(view->row_text, _("Transparent"), _("No background: the canvas shows through"),
+                                         G_CALLBACK(_bar_text_no_background_toggled), self);
   view->text_align_h = gtk_combo_box_text_new();
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_h), _("Left"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_h), _("Centred"));
@@ -2107,29 +2184,23 @@ static void _bars_create(dt_view_t *self)
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_h), _("Justified"));
   gtk_widget_set_tooltip_text(view->text_align_h, _("Horizontal alignment"));
   g_signal_connect(view->text_align_h, "changed", G_CALLBACK(_bar_text_align_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->text_bar), view->text_align_h, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(view->row_text), view->text_align_h, FALSE, FALSE, 0);
   view->text_align_v = gtk_combo_box_text_new();
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_v), _("Top"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_v), _("Middle"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->text_align_v), _("Bottom"));
   gtk_widget_set_tooltip_text(view->text_align_v, _("Vertical alignment"));
   g_signal_connect(view->text_align_v, "changed", G_CALLBACK(_bar_text_align_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->text_bar), view->text_align_v, FALSE, FALSE, 0);
-  _bar_finish(view->text_bar);
+  gtk_box_pack_start(GTK_BOX(view->row_text), view->text_align_v, FALSE, FALSE, 0);
 
-  view->image_bar = _bar_new(base);
-  GtkWidget *image_hint = gtk_label_new(_("Image"));
-  gtk_box_pack_start(GTK_BOX(view->image_bar), image_hint, FALSE, FALSE, 0);
-  _bar_finish(view->image_bar);
-
-  view->connector_bar = _bar_new(base);
+  view->row_connector = _bar_row(bar, _("Connector"));
   view->connector_route = gtk_combo_box_text_new();
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->connector_route), _("Straight"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->connector_route), _("Square"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->connector_route), _("Cubic spline"));
   gtk_widget_set_tooltip_text(view->connector_route, _("Route"));
   g_signal_connect(view->connector_route, "changed", G_CALLBACK(_bar_connector_route_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->connector_bar), view->connector_route, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(view->row_connector), view->connector_route, FALSE, FALSE, 0);
   view->connector_arrows = gtk_combo_box_text_new();
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->connector_arrows), _("Flat line"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->connector_arrows), _("Arrow at the end"));
@@ -2137,53 +2208,99 @@ static void _bars_create(dt_view_t *self)
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->connector_arrows), _("Arrows at both ends"));
   gtk_widget_set_tooltip_text(view->connector_arrows, _("Arrow heads"));
   g_signal_connect(view->connector_arrows, "changed", G_CALLBACK(_bar_connector_arrows_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->connector_bar), view->connector_arrows, FALSE, FALSE, 0);
-  GtkWidget *reverse = gtk_button_new_with_label(_("Reverse"));
-  gtk_widget_set_tooltip_text(reverse, _("Swap the start and the end"));
-  g_signal_connect(reverse, "clicked", G_CALLBACK(_bar_connector_reverse_clicked), self);
-  gtk_box_pack_start(GTK_BOX(view->connector_bar), reverse, FALSE, FALSE, 0);
-  view->connector_width = gtk_spin_button_new_with_range(1.0, 40.0, 1.0);
-  gtk_widget_set_tooltip_text(view->connector_width, _("Line width, in canvas units"));
-  g_signal_connect(view->connector_width, "value-changed", G_CALLBACK(_bar_connector_width_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->connector_bar), view->connector_width, FALSE, FALSE, 0);
-  view->connector_dashed = gtk_toggle_button_new_with_label(_("Dashed"));
-  g_signal_connect(view->connector_dashed, "toggled", G_CALLBACK(_bar_connector_dashed_toggled), self);
-  gtk_box_pack_start(GTK_BOX(view->connector_bar), view->connector_dashed, FALSE, FALSE, 0);
-  view->connector_color = _bar_color_button(view->connector_bar, _("Colour"), G_CALLBACK(_bar_connector_color_set), self);
-  view->connector_via = gtk_toggle_button_new_with_label(_("Waypoint"));
-  gtk_widget_set_tooltip_text(view->connector_via, _("Add a point the connector passes by, to go around other frames. Drag it into place."));
-  g_signal_connect(view->connector_via, "toggled", G_CALLBACK(_bar_connector_via_toggled), self);
-  gtk_box_pack_start(GTK_BOX(view->connector_bar), view->connector_via, FALSE, FALSE, 0);
-  _bar_finish(view->connector_bar);
+  gtk_box_pack_start(GTK_BOX(view->row_connector), view->connector_arrows, FALSE, FALSE, 0);
+  _bar_button(view->row_connector, _("Reverse"), _("Swap the start and the end"), G_CALLBACK(_bar_connector_reverse_clicked), self);
+  view->connector_width = _bar_spin(view->row_connector, 1.0, 40.0, 1.0, 0, _("Line width, in canvas units"),
+                                    G_CALLBACK(_bar_connector_width_changed), self);
+  view->connector_dashed = _bar_toggle(view->row_connector, _("Dashed"), NULL, G_CALLBACK(_bar_connector_dashed_toggled), self);
+  view->connector_color = _bar_color_button(view->row_connector, _("Colour"), G_CALLBACK(_bar_connector_color_set), self);
+  view->connector_via = _bar_toggle(view->row_connector, _("Waypoint"),
+                                    _("Add a point the connector passes by, to go around other frames. Drag it into place."),
+                                    G_CALLBACK(_bar_connector_via_toggled), self);
 
-  view->map_bar = _bar_new(base);
-  view->map_latitude = gtk_spin_button_new_with_range(-85.0, 85.0, 0.0001);
-  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(view->map_latitude), 5);
-  gtk_widget_set_tooltip_text(view->map_latitude, _("Latitude, degrees"));
-  g_signal_connect(view->map_latitude, "value-changed", G_CALLBACK(_bar_map_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->map_bar), view->map_latitude, FALSE, FALSE, 0);
-  view->map_longitude = gtk_spin_button_new_with_range(-180.0, 180.0, 0.0001);
-  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(view->map_longitude), 5);
-  gtk_widget_set_tooltip_text(view->map_longitude, _("Longitude, degrees"));
-  g_signal_connect(view->map_longitude, "value-changed", G_CALLBACK(_bar_map_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->map_bar), view->map_longitude, FALSE, FALSE, 0);
-  view->map_zoom = gtk_spin_button_new_with_range(1.0, 19.0, 1.0);
-  gtk_widget_set_tooltip_text(view->map_zoom, _("Zoom level, 1 (the world) to 19 (a street)"));
-  g_signal_connect(view->map_zoom, "value-changed", G_CALLBACK(_bar_map_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->map_bar), view->map_zoom, FALSE, FALSE, 0);
+  view->row_map = _bar_row(bar, _("Map"));
+  view->map_latitude = _bar_spin(view->row_map, -85.0, 85.0, 0.0001, 5, _("Latitude, degrees"), G_CALLBACK(_bar_map_changed), self);
+  gtk_entry_set_width_chars(GTK_ENTRY(view->map_latitude), 9);
+  view->map_longitude = _bar_spin(view->row_map, -180.0, 180.0, 0.0001, 5, _("Longitude, degrees"), G_CALLBACK(_bar_map_changed), self);
+  gtk_entry_set_width_chars(GTK_ENTRY(view->map_longitude), 9);
+  view->map_zoom = _bar_spin(view->row_map, 1.0, 19.0, 1.0, 0, _("Zoom level, 1 (the world) to 19 (a street)"),
+                             G_CALLBACK(_bar_map_changed), self);
   view->map_source = gtk_combo_box_text_new();
   for(int idx = 0; idx < dt_canvas_map_source_count(); idx++)
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->map_source), dt_canvas_map_source_name(idx));
   gtk_widget_set_tooltip_text(view->map_source, _("Map style and provider"));
   g_signal_connect(view->map_source, "changed", G_CALLBACK(_bar_map_changed), self);
-  gtk_box_pack_start(GTK_BOX(view->map_bar), view->map_source, FALSE, FALSE, 0);
-  GtkWidget *map_refresh = gtk_button_new_with_label(_("Fetch"));
-  gtk_widget_set_tooltip_text(map_refresh, _("Fetch the tiles again"));
-  g_signal_connect(map_refresh, "clicked", G_CALLBACK(_bar_map_refresh_clicked), self);
-  gtk_box_pack_start(GTK_BOX(view->map_bar), map_refresh, FALSE, FALSE, 0);
-  _bar_finish(view->map_bar);
+  gtk_box_pack_start(GTK_BOX(view->row_map), view->map_source, FALSE, FALSE, 0);
+  _bar_button(view->row_map, _("Fetch"), _("Fetch the tiles again"), G_CALLBACK(_bar_map_refresh_clicked), self);
 
-  _bar_create_object_bar(self, base);
+  // 2. Geometry: the frame's centre, size and rotation.
+  view->row_geometry = _bar_row(bar, _("Geometry"));
+  GtkWidget *position = _bar_group(view->row_geometry, _("Centre"));
+  view->geometry_x = _bar_spin(position, -1e6, 1e6, 1.0, 0, _("Horizontal position of the centre, canvas units"),
+                               G_CALLBACK(_bar_geometry_changed), self);
+  view->geometry_y = _bar_spin(position, -1e6, 1e6, 1.0, 0, _("Vertical position of the centre, canvas units"),
+                               G_CALLBACK(_bar_geometry_changed), self);
+  GtkWidget *size = _bar_group(view->row_geometry, _("Size"));
+  view->geometry_width = _bar_spin(size, 1.0, 1e6, 1.0, 0, _("Width, canvas units"), G_CALLBACK(_bar_geometry_changed), self);
+  view->geometry_height = _bar_spin(size, 1.0, 1e6, 1.0, 0, _("Height, canvas units"), G_CALLBACK(_bar_geometry_changed), self);
+  GtkWidget *angle = _bar_group(view->row_geometry, _("Angle"));
+  view->geometry_rotation = _bar_spin(angle, -360.0, 360.0, 1.0, 1, _("Rotation, degrees clockwise"),
+                                      G_CALLBACK(_bar_geometry_changed), self);
+  gtk_spin_button_set_wrap(GTK_SPIN_BUTTON(view->geometry_rotation), TRUE);
+
+  // 3. Border, shadow and opacity.
+  view->row_effects = _bar_row(bar, _("Border"));
+  view->object_border_box = _bar_group(view->row_effects, NULL);
+  view->object_border_width = _bar_spin(view->object_border_box, 0.0, 200.0, 1.0, 0,
+                                        _("Border width, in canvas units. A rectangular frame's border sits inside its edge; a cut-out frame's follows the cutout, outward."),
+                                        G_CALLBACK(_bar_border_width_changed), self);
+  view->object_border_color = _bar_color_button(view->object_border_box, _("Border colour and opacity"),
+                                                G_CALLBACK(_bar_border_color_set), self);
+  _bar_button(view->object_border_box, _("Default"), _("Use the canvas's uniform border for this frame"),
+              G_CALLBACK(_bar_border_default_clicked), self);
+  GtkWidget *shadow = _bar_group(view->row_effects, _("Shadow"));
+  view->object_shadow_toggle = _bar_toggle(shadow, _("On"), _("Drop a shadow under this object"), G_CALLBACK(_bar_shadow_toggled), self);
+  view->object_shadow_offset_x = _bar_spin(shadow, -500.0, 500.0, 1.0, 0, _("Shadow offset to the right, in canvas units"),
+                                           G_CALLBACK(_bar_shadow_changed), self);
+  view->object_shadow_offset_y = _bar_spin(shadow, -500.0, 500.0, 1.0, 0, _("Shadow offset downwards, in canvas units"),
+                                           G_CALLBACK(_bar_shadow_changed), self);
+  view->object_shadow_blur = _bar_spin(shadow, 0.0, 500.0, 1.0, 0, _("Shadow blur, in canvas units"),
+                                       G_CALLBACK(_bar_shadow_changed), self);
+  view->object_shadow_color = _bar_color_button(shadow, _("Shadow colour and strength"), G_CALLBACK(_bar_shadow_changed), self);
+  _bar_button(shadow, _("Default"), _("Use the canvas's default shadow for this object"),
+              G_CALLBACK(_bar_shadow_default_clicked), self);
+  GtkWidget *opacity = _bar_group(view->row_effects, _("Opacity"));
+  view->object_opacity = _bar_spin(opacity, 0.0, 100.0, 5.0, 0, _("Opacity, percent"), G_CALLBACK(_bar_opacity_changed), self);
+
+  // 4. The cutout.
+  view->row_cutout = _bar_row(bar, _("Cutout"));
+  view->object_cutout_shape = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("None"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Circle"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Ellipse"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Polygon"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->object_cutout_shape), _("Gradient"));
+  gtk_widget_set_tooltip_text(view->object_cutout_shape,
+                              _("A drawn shape that cuts the frame out of its rectangle, with a fall-off past its edge"));
+  g_signal_connect(view->object_cutout_shape, "changed", G_CALLBACK(_bar_cutout_shape_changed), self);
+  gtk_box_pack_start(GTK_BOX(view->row_cutout), view->object_cutout_shape, FALSE, FALSE, 0);
+  GtkWidget *feather = _bar_group(view->row_cutout, _("Feather"));
+  view->object_cutout_feather = _bar_spin(feather, 0.0, 100.0, 1.0, 0,
+                                          _("Fall-off past the shape's edge, percent of the frame's shorter side. The wheel over the frame changes it while editing."),
+                                          G_CALLBACK(_bar_cutout_feather_changed), self);
+  view->object_cutout_invert = _bar_toggle(view->row_cutout, _("Invert"), _("Keep what is outside the shape"),
+                                           G_CALLBACK(_bar_cutout_invert_toggled), self);
+  view->object_cutout_edit = _bar_toggle(view->row_cutout, _("Edit"),
+                                         _("Show the shape's handles: drag them; the wheel sets the feather, Shift+wheel the opacity. "
+                                           "On a polygon, Ctrl+click an edge adds a node, Shift+click removes one, a double click "
+                                           "makes it smooth or sharp; the right-click menu offers the same."),
+                                         G_CALLBACK(_bar_cutout_edit_toggled), self);
+
+  gtk_widget_show_all(bar);
+  gtk_widget_hide(bar);
+  g_object_set_data(G_OBJECT(bar), "canvas-bar", GINT_TO_POINTER(1));
+  g_object_set_data(G_OBJECT(bar), "bar-left", GINT_TO_POINTER(-1));
+  g_object_set_data(G_OBJECT(bar), "bar-top", GINT_TO_POINTER(-1));
 }
 
 static void _bars_destroy(dt_view_t *self)
@@ -2195,21 +2312,13 @@ static void _bars_destroy(dt_view_t *self)
     g_source_remove(view->bars_idle);
     view->bars_idle = 0;
   }
-  if(!IS_NULL_PTR(view->text_bar)) gtk_container_remove(GTK_CONTAINER(base), view->text_bar);
-  if(!IS_NULL_PTR(view->image_bar)) gtk_container_remove(GTK_CONTAINER(base), view->image_bar);
-  if(!IS_NULL_PTR(view->connector_bar)) gtk_container_remove(GTK_CONTAINER(base), view->connector_bar);
-  if(!IS_NULL_PTR(view->map_bar)) gtk_container_remove(GTK_CONTAINER(base), view->map_bar);
-  if(!IS_NULL_PTR(view->object_bar)) gtk_container_remove(GTK_CONTAINER(base), view->object_bar);
+  if(!IS_NULL_PTR(view->bar)) gtk_container_remove(GTK_CONTAINER(base), view->bar);
   if(view->bars_position_handler != 0)
   {
     g_signal_handler_disconnect(base, view->bars_position_handler);
     view->bars_position_handler = 0;
   }
-  view->text_bar = NULL;
-  view->image_bar = NULL;
-  view->object_bar = NULL;
-  view->connector_bar = NULL;
-  view->map_bar = NULL;
+  view->bar = NULL;
   view->bars_signature = 0;
 }
 
@@ -2244,35 +2353,21 @@ static gboolean _object_screen_box(const dt_canvas_view_t *view, const dt_canvas
   return TRUE;
 }
 
-/**
- * Place a bar immediately below the object, above it when there is no room below; a second
- * bar goes under the first, or above it when the first was pushed above the object.
- */
-static void _bar_place(dt_canvas_view_t *view, GtkWidget *bar, const dt_canvas_object_t *object, GtkWidget *under)
+/** Place the bar immediately below the object, above it when there is no room below. */
+static void _bar_place(dt_canvas_view_t *view, const dt_canvas_object_t *object)
 {
   double min_x = 0.0;
   double min_y = 0.0;
   double max_x = 0.0;
   double max_y = 0.0;
   if(!_object_screen_box(view, object, &min_x, &min_y, &max_x, &max_y)) return;
+  GtkWidget *bar = view->bar;
   GtkRequisition natural;
   gtk_widget_get_preferred_size(bar, NULL, &natural);
   const int spacing = DT_PIXEL_APPLY_DPI(6);
   int left = (int)lround(min_x);
   int top = (int)lround(max_y) + spacing;
-  if(!IS_NULL_PTR(under) && gtk_widget_get_visible(under))
-  {
-    GtkRequisition under_natural;
-    gtk_widget_get_preferred_size(under, NULL, &under_natural);
-    const int under_top = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(under), "bar-top"));
-    left = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(under), "bar-left"));
-    top = under_top >= (int)lround(max_y) ? under_top + under_natural.height + spacing / 2
-                                          : under_top - natural.height - spacing / 2;
-  }
-  else if(top + natural.height > view->height - spacing)
-  {
-    top = (int)lround(min_y) - natural.height - spacing;
-  }
+  if(top + natural.height > view->height - spacing) top = (int)lround(min_y) - natural.height - spacing;
   left = CLAMP(left, spacing, MAX(spacing, view->width - natural.width - spacing));
   top = CLAMP(top, spacing, MAX(spacing, view->height - natural.height - spacing));
   const int last_left = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(bar), "bar-left"));
@@ -2285,29 +2380,24 @@ static void _bar_place(dt_canvas_view_t *view, GtkWidget *bar, const dt_canvas_o
   }
 }
 
-/** Hide the bars at once, without waiting for the idle: a click on the background dismisses them. */
+/** Hide the bar at once, without waiting for the idle: a click on the background dismisses it. */
 static void _bars_hide_now(dt_canvas_view_t *view)
 {
-  if(IS_NULL_PTR(view->text_bar)) return;
-  gtk_widget_hide(view->text_bar);
-  gtk_widget_hide(view->image_bar);
-  gtk_widget_hide(view->connector_bar);
-  gtk_widget_hide(view->map_bar);
-  gtk_widget_hide(view->object_bar);
+  if(IS_NULL_PTR(view->bar)) return;
+  gtk_widget_hide(view->bar);
   view->bars_signature = 0;
 }
 
 static void _bars_refresh(dt_view_t *self, gboolean force)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  if(IS_NULL_PTR(view->text_bar) || IS_NULL_PTR(view->image_bar) || IS_NULL_PTR(view->connector_bar)
-     || IS_NULL_PTR(view->map_bar) || IS_NULL_PTR(view->object_bar))
-    return;
+  if(IS_NULL_PTR(view->bar)) return;
   // No bar while a gesture is running: it would follow every motion through a re-allocation.
   const gboolean dragging = view->drag != DT_CANVAS_DRAG_NONE;
   const dt_canvas_object_t *object = (view->connecting || dragging) ? NULL : _bar_target(view);
   const uint32_t kind = IS_NULL_PTR(object) ? DT_CANVAS_OBJECT_NONE : object->kind;
-  const uint64_t signature = view->canvas->generation * 131u + (IS_NULL_PTR(object) ? 0u : object->id) * 7u + kind;
+  const uint64_t signature = view->canvas->generation * 131u + (IS_NULL_PTR(object) ? 0u : object->id) * 7u + kind
+                             + (view->mask_editing ? 3u : 0u);
   if(force || signature != view->bars_signature)
   {
     view->bars_signature = signature;
@@ -2347,7 +2437,14 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
     if(!IS_NULL_PTR(object))
     {
       const gboolean frame = dt_canvas_object_is_frame(object);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_rotation), object->rotation * 180.0 / M_PI);
+      if(frame)
+      {
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_x), object->x);
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_y), object->y);
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_width), object->width);
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_height), object->height);
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_rotation), object->rotation * 180.0 / M_PI);
+      }
       dt_canvas_color_t border_color;
       float border_width = 0.0f;
       dt_canvas_object_effective_border(view->canvas, object, &border_color, &border_width);
@@ -2365,31 +2462,21 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_cutout_feather), object->mask.feather * 100.0);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->object_cutout_invert), (object->mask.flags & DT_CANVAS_MASK_INVERT) != 0);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->object_cutout_edit), view->mask_editing);
-      gtk_widget_set_visible(view->object_rotate_toggle, frame);
-      gtk_widget_set_visible(view->object_rotation, frame && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(view->object_rotate_toggle)));
+      const gboolean cut = frame && object->mask.shape != DT_CANVAS_MASK_NONE;
+      gtk_widget_set_visible(view->row_text, kind == DT_CANVAS_OBJECT_TEXT);
+      gtk_widget_set_visible(view->row_connector, kind == DT_CANVAS_OBJECT_CONNECTOR);
+      gtk_widget_set_visible(view->row_map, kind == DT_CANVAS_OBJECT_MAP);
+      gtk_widget_set_visible(view->row_geometry, frame);
       gtk_widget_set_visible(view->object_border_box, frame);
-      gtk_widget_set_visible(view->object_cutout_box, frame);
-      gtk_widget_set_visible(view->object_cutout_feather, frame && object->mask.shape != DT_CANVAS_MASK_NONE);
-      gtk_widget_set_visible(view->object_cutout_invert, frame && object->mask.shape != DT_CANVAS_MASK_NONE);
-      gtk_widget_set_visible(view->object_cutout_edit, frame && object->mask.shape != DT_CANVAS_MASK_NONE);
+      gtk_widget_set_visible(view->row_cutout, frame);
+      gtk_widget_set_visible(gtk_widget_get_parent(view->object_cutout_feather), cut && object->mask.shape != DT_CANVAS_MASK_GRADIENT);
+      gtk_widget_set_visible(view->object_cutout_invert, cut);
+      gtk_widget_set_visible(view->object_cutout_edit, cut);
     }
     view->bars_refilling = FALSE;
-    gtk_widget_set_visible(view->text_bar, kind == DT_CANVAS_OBJECT_TEXT);
-    gtk_widget_set_visible(view->image_bar, kind == DT_CANVAS_OBJECT_IMAGE);
-    gtk_widget_set_visible(view->connector_bar, kind == DT_CANVAS_OBJECT_CONNECTOR);
-    gtk_widget_set_visible(view->map_bar, kind == DT_CANVAS_OBJECT_MAP);
-    gtk_widget_set_visible(view->object_bar, !IS_NULL_PTR(object));
+    gtk_widget_set_visible(view->bar, !IS_NULL_PTR(object));
   }
-  GtkWidget *kind_bar = NULL;
-  if(kind == DT_CANVAS_OBJECT_TEXT) kind_bar = view->text_bar;
-  if(kind == DT_CANVAS_OBJECT_IMAGE) kind_bar = view->image_bar;
-  if(kind == DT_CANVAS_OBJECT_CONNECTOR) kind_bar = view->connector_bar;
-  if(kind == DT_CANVAS_OBJECT_MAP) kind_bar = view->map_bar;
-  if(!IS_NULL_PTR(kind_bar))
-  {
-    _bar_place(view, kind_bar, object, NULL);
-    _bar_place(view, view->object_bar, object, kind_bar);
-  }
+  if(!IS_NULL_PTR(object)) _bar_place(view, object);
 }
 
 static gboolean _bars_idle(gpointer data)
@@ -2405,7 +2492,7 @@ static gboolean _bars_idle(gpointer data)
 static void _bars_request(dt_view_t *self)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->text_bar) || view->bars_idle != 0) return;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->bar) || view->bars_idle != 0) return;
   view->bars_idle = g_idle_add(_bars_idle, self);
 }
 
@@ -2719,10 +2806,11 @@ static void _mask_to_local(const dt_canvas_object_t *object, const double u, con
 
 /**
  * The cutout's handles in local units: [0] the centre or anchor, [1] the radius (circle), the
- * first radius (ellipse) or the reach (gradient), [2] the ellipse's second radius.
+ * first radius (ellipse) or the reach (gradient), [2] the ellipse's second radius, [3] the
+ * feather of a circle or an ellipse, on its dashed ring.
  * @return how many there are; a polygon's nodes are its own handles.
  */
-static int _mask_handle_points(const dt_canvas_object_t *object, double points[6])
+static int _mask_handle_points(const dt_canvas_object_t *object, double points[8])
 {
   const dt_canvas_mask_t *mask = &object->mask;
   const double side = _mask_side(object);
@@ -2737,13 +2825,18 @@ static int _mask_handle_points(const dt_canvas_object_t *object, double points[6
     case DT_CANVAS_MASK_CIRCLE:
       points[2] = center_x + mask->radius_x * side;
       points[3] = center_y;
-      return 2;
+      // The feather handle sits on the dashed ring, off the radius handle's axis.
+      points[6] = center_x + M_SQRT1_2 * (mask->radius_x + mask->feather) * side;
+      points[7] = center_y + M_SQRT1_2 * (mask->radius_x + mask->feather) * side;
+      return 4;
     case DT_CANVAS_MASK_ELLIPSE:
       points[2] = center_x + cos(angle) * mask->radius_x * side;
       points[3] = center_y + sin(angle) * mask->radius_x * side;
       points[4] = center_x - sin(angle) * mask->radius_y * side;
       points[5] = center_y + cos(angle) * mask->radius_y * side;
-      return 3;
+      points[6] = center_x - cos(angle) * (mask->radius_x + mask->feather) * side;
+      points[7] = center_y - sin(angle) * (mask->radius_x + mask->feather) * side;
+      return 4;
     case DT_CANVAS_MASK_GRADIENT:
       // The reach handle sits across the line, on the side the fall-off goes.
       points[2] = center_x - sin(angle) * mask->radius_x * side;
@@ -2764,6 +2857,70 @@ static void _paint_dot(cairo_t *cr, const double x, const double y, const double
   cairo_stroke(cr);
 }
 
+/**
+ * The polygon's control points for the segment leaving node `index`, as the masks module
+ * computes them: a Catmull-Rom tangent through a smooth node, the stored points otherwise.
+ */
+static void _mask_polygon_controls(const dt_canvas_mask_t *mask, const uint32_t index, float control1[2],
+                                   float control2[2])
+{
+  const uint32_t count = mask->node_count;
+  const float *previous = mask->nodes + (size_t)((index + count - 1) % count) * DT_CANVAS_MASK_NODE_FLOATS;
+  const float *from = mask->nodes + (size_t)index * DT_CANVAS_MASK_NODE_FLOATS;
+  const float *to = mask->nodes + (size_t)((index + 1) % count) * DT_CANVAS_MASK_NODE_FLOATS;
+  const float *after = mask->nodes + (size_t)((index + 2) % count) * DT_CANVAS_MASK_NODE_FLOATS;
+  if(from[6] != 0.0f)
+  {
+    control1[0] = (-previous[0] + 6.0f * from[0] + to[0]) / 6.0f;
+    control1[1] = (-previous[1] + 6.0f * from[1] + to[1]) / 6.0f;
+  }
+  else
+  {
+    control1[0] = from[4];
+    control1[1] = from[5];
+  }
+  if(to[6] != 0.0f)
+  {
+    control2[0] = (from[0] + 6.0f * to[0] - after[0]) / 6.0f;
+    control2[1] = (from[1] + 6.0f * to[1] - after[1]) / 6.0f;
+  }
+  else
+  {
+    control2[0] = to[2];
+    control2[1] = to[3];
+  }
+}
+
+/** The polygon's closed path in the frame's local units, curved where its nodes are smooth. */
+static void _mask_polygon_path(cairo_t *cr, const dt_canvas_object_t *object)
+{
+  const dt_canvas_mask_t *mask = &object->mask;
+  if(mask->node_count < 2) return;
+  for(uint32_t idx = 0; idx < mask->node_count; idx++)
+  {
+    const float *from = mask->nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
+    const float *to = mask->nodes + (size_t)((idx + 1) % mask->node_count) * DT_CANVAS_MASK_NODE_FLOATS;
+    double from_x = 0.0;
+    double from_y = 0.0;
+    _mask_to_local(object, from[0], from[1], &from_x, &from_y);
+    if(idx == 0) cairo_move_to(cr, from_x, from_y);
+    float control1[2];
+    float control2[2];
+    _mask_polygon_controls(mask, idx, control1, control2);
+    double control1_x = 0.0;
+    double control1_y = 0.0;
+    double control2_x = 0.0;
+    double control2_y = 0.0;
+    double to_x = 0.0;
+    double to_y = 0.0;
+    _mask_to_local(object, control1[0], control1[1], &control1_x, &control1_y);
+    _mask_to_local(object, control2[0], control2[1], &control2_x, &control2_y);
+    _mask_to_local(object, to[0], to[1], &to_x, &to_y);
+    cairo_curve_to(cr, control1_x, control1_y, control2_x, control2_y, to_x, to_y);
+  }
+  cairo_close_path(cr);
+}
+
 /** The cutout's outline, its fall-off and its handles, over the selected frame. */
 static void _paint_mask_handles(cairo_t *cr, const dt_canvas_view_t *view, const dt_canvas_object_t *object)
 {
@@ -2777,7 +2934,7 @@ static void _paint_mask_handles(cairo_t *cr, const dt_canvas_view_t *view, const
   cairo_translate(cr, object->x, object->y);
   cairo_rotate(cr, object->rotation);
   cairo_set_line_width(cr, hairline * 1.5);
-  double points[6] = { 0.0 };
+  double points[8] = { 0.0 };
   const int count = _mask_handle_points(object, points);
   const double angle = mask->rotation * M_PI / 180.0;
   cairo_set_source_rgba(cr, 1.0, 0.85, 0.3, 0.9);
@@ -2823,18 +2980,7 @@ static void _paint_mask_handles(cairo_t *cr, const dt_canvas_view_t *view, const
       break;
     }
     case DT_CANVAS_MASK_POLYGON:
-      for(uint32_t idx = 0; idx < mask->node_count; idx++)
-      {
-        const float *node = mask->nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
-        double local_x = 0.0;
-        double local_y = 0.0;
-        _mask_to_local(object, node[0], node[1], &local_x, &local_y);
-        if(idx == 0)
-          cairo_move_to(cr, local_x, local_y);
-        else
-          cairo_line_to(cr, local_x, local_y);
-      }
-      cairo_close_path(cr);
+      _mask_polygon_path(cr, object);
       cairo_stroke(cr);
       for(uint32_t idx = 0; idx < mask->node_count; idx++)
       {
@@ -2885,13 +3031,14 @@ static dt_canvas_drag_t _mask_handle_at(const dt_canvas_view_t *view, const dt_c
     }
     return DT_CANVAS_DRAG_NONE;
   }
-  double points[6] = { 0.0 };
+  double points[8] = { 0.0 };
   const int count = _mask_handle_points(object, points);
   // The outer handles first: with a small shape they sit over the centre.
   for(int idx = count - 1; idx >= 0; idx--)
   {
     if(hypot(local_x - points[2 * idx], local_y - points[2 * idx + 1]) > reach) continue;
     if(idx == 0) return DT_CANVAS_DRAG_MASK_CENTER;
+    if(idx == 3) return DT_CANVAS_DRAG_MASK_FEATHER;
     if(idx == 2) return DT_CANVAS_DRAG_MASK_RADIUS_Y;
     return object->mask.shape == DT_CANVAS_MASK_GRADIENT ? DT_CANVAS_DRAG_MASK_REACH : DT_CANVAS_DRAG_MASK_RADIUS_X;
   }
@@ -2961,6 +3108,15 @@ static void _mask_drag(dt_canvas_view_t *view, dt_canvas_object_t *object, const
       mask->radius_x = (float)CLAMP(distance / side, 0.0005, 1.0);
       mask->rotation = (float)(atan2(delta_y, delta_x) * 180.0 / M_PI - 90.0);
       break;
+    case DT_CANVAS_DRAG_MASK_FEATHER:
+    {
+      // The ring's distance from the shape's edge: past the radius for a circle, the first radius for an ellipse.
+      const double edge = mask->shape == DT_CANVAS_MASK_ELLIPSE
+                              ? fabs(cos(angle) * delta_x + sin(angle) * delta_y) / side
+                              : distance / side;
+      mask->feather = (float)CLAMP(edge - mask->radius_x, 0.0, 1.0);
+      break;
+    }
     case DT_CANVAS_DRAG_MASK_NODE:
       if(view->mask_handle >= 0 && (uint32_t)view->mask_handle < mask->node_count)
       {
@@ -3575,6 +3731,16 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     const dt_canvas_drag_t mask_drag = _mask_handle_at(view, mask_owner, canvas_x, canvas_y, &mask_index);
     if(mask_drag != DT_CANVAS_DRAG_NONE)
     {
+      if(mask_drag == DT_CANVAS_DRAG_MASK_NODE && type == GDK_2BUTTON_PRESS)
+      {
+        dt_canvas_t *before = _begin_edit(view);
+        float *node = mask_owner->mask.nodes + (size_t)mask_index * DT_CANVAS_MASK_NODE_FLOATS;
+        node[6] = node[6] != 0.0f ? 0.0f : 1.0f;
+        dt_canvas_touch(view->canvas);
+        _record_undo(self, before);
+        _end_gesture(self);
+        return 1;
+      }
       if(mask_drag == DT_CANVAS_DRAG_MASK_NODE && shift)
       {
         dt_canvas_t *before = _begin_edit(view);
@@ -3864,6 +4030,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     case DT_CANVAS_DRAG_MASK_RADIUS_Y:
     case DT_CANVAS_DRAG_MASK_REACH:
     case DT_CANVAS_DRAG_MASK_NODE:
+    case DT_CANVAS_DRAG_MASK_FEATHER:
     {
       dt_canvas_object_t *object = _single_selected(view);
       if(dt_canvas_object_is_frame(object) && object->mask.shape != DT_CANVAS_MASK_NONE)
@@ -3950,6 +4117,36 @@ void mouse_leave(dt_view_t *self)
 int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  // Over the frame whose cutout is being edited, the wheel edits the cutout: the feather,
+  // with Shift the opacity, with Ctrl the gradient's curvature or the ellipse's rotation.
+  dt_canvas_object_t *edited = _single_selected(view);
+  if(view->mask_editing && dt_canvas_object_is_frame(edited) && edited->mask.shape != DT_CANVAS_MASK_NONE)
+  {
+    double canvas_x = 0.0;
+    double canvas_y = 0.0;
+    _to_canvas(view, x, y, &canvas_x, &canvas_y);
+    if(dt_canvas_object_contains(view->canvas, edited, canvas_x, canvas_y, CANVAS_PICK_TOLERANCE_PIXELS / view->zoom))
+    {
+      dt_canvas_t *before = _begin_edit(view);
+      const double step = up ? 1.0 : -1.0;
+      if(dt_modifier_is(state, DT_PRIMARY_MASK))
+      {
+        if(edited->mask.shape == DT_CANVAS_MASK_GRADIENT)
+          edited->mask.radius_y = (float)CLAMP(edited->mask.radius_y + 0.1 * step, -2.0, 2.0);
+        else if(edited->mask.shape == DT_CANVAS_MASK_ELLIPSE)
+          edited->mask.rotation = (float)(edited->mask.rotation + 5.0 * step);
+      }
+      else if(dt_modifier_is(state, GDK_SHIFT_MASK))
+        edited->transparency = (float)CLAMP(edited->transparency - 0.05 * step, 0.0, 1.0);
+      else
+        edited->mask.feather = (float)CLAMP(edited->mask.feather + 0.01 * step, 0.0, 1.0);
+      dt_canvas_touch(view->canvas);
+      _record_undo(self, before);
+      _bars_request(self);
+      dt_control_queue_redraw_center();
+      return 1;
+    }
+  }
   if(dt_modifier_is(state, GDK_SHIFT_MASK))
   {
     // Shift + wheel pans sideways, plain wheel zooms: a plane has no natural scroll direction.
