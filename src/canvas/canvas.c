@@ -28,6 +28,7 @@
 #include <string.h>
 
 #define CANVAS_DEFAULT_GRID_SIZE 50.0f
+#define CANVAS_DEFAULT_GUTTER 20.0f
 #define CANVAS_DEFAULT_LONG_EDGE 2048
 #define CANVAS_DEFAULT_JPEG_QUALITY 92
 #define CANVAS_DEFAULT_FONT "Sans 12"
@@ -139,6 +140,7 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->border_width = 0.0f;
   canvas->grid_size = CANVAS_DEFAULT_GRID_SIZE;
   canvas->grid_flags = DT_CANVAS_GRID_VISIBLE;
+  canvas->gutter = CANVAS_DEFAULT_GUTTER;
   canvas->view_zoom = 1.0;
   canvas->view_x = 0.0;
   canvas->view_y = 0.0;
@@ -385,6 +387,7 @@ dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_i
   object->connector.from_anchor = DT_CANVAS_ANCHOR_AUTO;
   object->connector.to_anchor = DT_CANVAS_ANCHOR_AUTO;
   object->connector.routing = DT_CANVAS_ROUTING_STRAIGHT;
+  object->connector.via_count = 0;
   return object;
 }
 
@@ -780,7 +783,20 @@ static void _route_square(dt_canvas_route_t *route)
   const gboolean to_horizontal = fabs(route->to_normal_x) >= fabs(route->to_normal_y);
   _route_add_point(route, route->from_x, route->from_y);
   _route_add_point(route, start_x, start_y);
-  if(from_horizontal && to_horizontal)
+  if(route->segment_count == 2)
+  {
+    // Through the waypoint: one elbow to reach it along the start's axis, one to leave it along the end's.
+    if(from_horizontal)
+      _route_add_point(route, route->via_x, start_y);
+    else
+      _route_add_point(route, start_x, route->via_y);
+    _route_add_point(route, route->via_x, route->via_y);
+    if(to_horizontal)
+      _route_add_point(route, route->via_x, end_y);
+    else
+      _route_add_point(route, end_x, route->via_y);
+  }
+  else if(from_horizontal && to_horizontal)
   {
     const double mid_x = (start_x + end_x) * 0.5;
     _route_add_point(route, mid_x, start_y);
@@ -804,17 +820,12 @@ static void _route_square(dt_canvas_route_t *route)
   _route_add_point(route, route->to_x, route->to_y);
 }
 
-/** Cubic routing: control points along the normals, flattened for hit tests. */
-static void _route_cubic(dt_canvas_route_t *route)
+static void _route_flatten_cubic(dt_canvas_route_t *route, const double start_x, const double start_y,
+                                 const double control1_x, const double control1_y, const double control2_x,
+                                 const double control2_y, const double end_x, const double end_y,
+                                 const int segments, const gboolean skip_start)
 {
-  const double distance = hypot(route->to_x - route->from_x, route->to_y - route->from_y);
-  const double reach = fmax(40.0, distance * 0.4);
-  route->control1_x = route->from_x + route->from_normal_x * reach;
-  route->control1_y = route->from_y + route->from_normal_y * reach;
-  route->control2_x = route->to_x + route->to_normal_x * reach;
-  route->control2_y = route->to_y + route->to_normal_y * reach;
-  const int segments = DT_CANVAS_ROUTE_MAX_POINTS - 1;
-  for(int idx = 0; idx <= segments; idx++)
+  for(int idx = skip_start ? 1 : 0; idx <= segments; idx++)
   {
     const double parameter = (double)idx / (double)segments;
     const double remaining = 1.0 - parameter;
@@ -822,12 +833,50 @@ static void _route_cubic(dt_canvas_route_t *route)
     const double weight1 = 3.0 * remaining * remaining * parameter;
     const double weight2 = 3.0 * remaining * parameter * parameter;
     const double weight3 = parameter * parameter * parameter;
-    _route_add_point(route,
-                     weight0 * route->from_x + weight1 * route->control1_x + weight2 * route->control2_x
-                         + weight3 * route->to_x,
-                     weight0 * route->from_y + weight1 * route->control1_y + weight2 * route->control2_y
-                         + weight3 * route->to_y);
+    _route_add_point(route, weight0 * start_x + weight1 * control1_x + weight2 * control2_x + weight3 * end_x,
+                     weight0 * start_y + weight1 * control1_y + weight2 * control2_y + weight3 * end_y);
   }
+}
+
+/** Cubic routing: control points along the normals, flattened for hit tests. */
+static void _route_cubic(dt_canvas_route_t *route)
+{
+  if(route->segment_count == 2)
+  {
+    // Two curves meeting at the waypoint with one tangent: the direction from start to end.
+    double tangent_x = route->to_x - route->from_x;
+    double tangent_y = route->to_y - route->from_y;
+    const double tangent_length = hypot(tangent_x, tangent_y);
+    if(tangent_length > 1e-9)
+    {
+      tangent_x /= tangent_length;
+      tangent_y /= tangent_length;
+    }
+    const double reach1 = fmax(40.0, hypot(route->via_x - route->from_x, route->via_y - route->from_y) * 0.4);
+    const double reach2 = fmax(40.0, hypot(route->to_x - route->via_x, route->to_y - route->via_y) * 0.4);
+    route->control1_x = route->from_x + route->from_normal_x * reach1;
+    route->control1_y = route->from_y + route->from_normal_y * reach1;
+    route->control2_x = route->via_x - tangent_x * reach1;
+    route->control2_y = route->via_y - tangent_y * reach1;
+    route->control3_x = route->via_x + tangent_x * reach2;
+    route->control3_y = route->via_y + tangent_y * reach2;
+    route->control4_x = route->to_x + route->to_normal_x * reach2;
+    route->control4_y = route->to_y + route->to_normal_y * reach2;
+    const int segments = (DT_CANVAS_ROUTE_MAX_POINTS - 1) / 2;
+    _route_flatten_cubic(route, route->from_x, route->from_y, route->control1_x, route->control1_y,
+                         route->control2_x, route->control2_y, route->via_x, route->via_y, segments, FALSE);
+    _route_flatten_cubic(route, route->via_x, route->via_y, route->control3_x, route->control3_y,
+                         route->control4_x, route->control4_y, route->to_x, route->to_y, segments, TRUE);
+    return;
+  }
+  const double distance = hypot(route->to_x - route->from_x, route->to_y - route->from_y);
+  const double reach = fmax(40.0, distance * 0.4);
+  route->control1_x = route->from_x + route->from_normal_x * reach;
+  route->control1_y = route->from_y + route->from_normal_y * reach;
+  route->control2_x = route->to_x + route->to_normal_x * reach;
+  route->control2_y = route->to_y + route->to_normal_y * reach;
+  _route_flatten_cubic(route, route->from_x, route->from_y, route->control1_x, route->control1_y, route->control2_x,
+                       route->control2_y, route->to_x, route->to_y, DT_CANVAS_ROUTE_MAX_POINTS - 1, FALSE);
 }
 
 gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
@@ -839,6 +888,9 @@ gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_ob
   if(!dt_canvas_object_is_frame(from) || !dt_canvas_object_is_frame(to)) return FALSE;
   memset(route, 0, sizeof(*route));
   route->routing = connector->connector.routing;
+  route->segment_count = connector->connector.via_count > 0 ? 2 : 1;
+  route->via_x = connector->connector.via_x;
+  route->via_y = connector->connector.via_y;
   dt_canvas_object_anchor_point(from, (dt_canvas_anchor_t)connector->connector.from_anchor, to->x, to->y,
                                 &route->from_x, &route->from_y, &route->from_normal_x, &route->from_normal_y);
   dt_canvas_object_anchor_point(to, (dt_canvas_anchor_t)connector->connector.to_anchor, from->x, from->y,
@@ -855,10 +907,37 @@ gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_ob
     default:
       route->routing = DT_CANVAS_ROUTING_STRAIGHT;
       _route_add_point(route, route->from_x, route->from_y);
+      if(route->segment_count == 2) _route_add_point(route, route->via_x, route->via_y);
       _route_add_point(route, route->to_x, route->to_y);
       break;
   }
   return route->point_count >= 2;
+}
+
+void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connector)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(connector) || connector->kind != DT_CANVAS_OBJECT_CONNECTOR) return;
+  dt_canvas_route_t route;
+  connector->connector.via_count = 0;
+  if(!dt_canvas_connector_route(canvas, connector, &route)) return;
+  // The middle of the current route, so adding a waypoint changes nothing until it is moved.
+  const int middle = route.point_count / 2;
+  connector->connector.via_x = route.points[2 * middle];
+  connector->connector.via_y = route.points[2 * middle + 1];
+  if(route.point_count == 2)
+  {
+    connector->connector.via_x = (route.from_x + route.to_x) * 0.5;
+    connector->connector.via_y = (route.from_y + route.to_y) * 0.5;
+  }
+  connector->connector.via_count = 1;
+  dt_canvas_touch(canvas);
+}
+
+void dt_canvas_connector_remove_via(dt_canvas_t *canvas, dt_canvas_object_t *connector)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(connector) || connector->kind != DT_CANVAS_OBJECT_CONNECTOR) return;
+  connector->connector.via_count = 0;
+  dt_canvas_touch(canvas);
 }
 
 gboolean dt_canvas_connector_endpoints(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
@@ -927,6 +1006,68 @@ dt_canvas_object_t *dt_canvas_pick(const dt_canvas_t *canvas, double x, double y
     if(dt_canvas_object_contains(canvas, object, x, y, tolerance)) return object;
   }
   return NULL;
+}
+
+/* --- snapping to neighbours ----------------------------------------------------- */
+
+static gboolean _excluded(const GArray *exclude, const uint32_t id)
+{
+  if(IS_NULL_PTR(exclude)) return FALSE;
+  for(guint idx = 0; idx < exclude->len; idx++)
+  {
+    if(g_array_index(exclude, uint32_t, idx) == id) return TRUE;
+  }
+  return FALSE;
+}
+
+/** Keep `candidate` as the axis's snap when it beats the current best within `threshold`. */
+static void _snap_axis(const double current, const double candidate, const double threshold, double *best_delta,
+                       gboolean *found)
+{
+  const double delta = candidate - current;
+  if(fabs(delta) > threshold) return;
+  if(*found && fabs(delta) >= fabs(*best_delta)) return;
+  *best_delta = delta;
+  *found = TRUE;
+}
+
+gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving,
+                                      const GArray *exclude, double threshold, double *delta_x, double *delta_y)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(moving)) return FALSE;
+  const double gutter = canvas->gutter > 0.0f ? canvas->gutter : 0.0;
+  const double left = moving->x;
+  const double right = moving->x + moving->width;
+  const double top = moving->y;
+  const double bottom = moving->y + moving->height;
+  gboolean found_x = FALSE;
+  gboolean found_y = FALSE;
+  double best_x = 0.0;
+  double best_y = 0.0;
+  for(guint idx = 0; idx < canvas->objects->len; idx++)
+  {
+    const dt_canvas_object_t *other = g_ptr_array_index(canvas->objects, idx);
+    if(!dt_canvas_object_is_frame(other) || (other->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
+    if(_excluded(exclude, other->id)) continue;
+    const dt_canvas_rect_t bounds = dt_canvas_object_bounds(other);
+    const double other_left = bounds.x;
+    const double other_right = bounds.x + bounds.width;
+    const double other_top = bounds.y;
+    const double other_bottom = bounds.y + bounds.height;
+    // Side by side, one gutter apart.
+    _snap_axis(left, other_right + gutter, threshold, &best_x, &found_x);
+    _snap_axis(right, other_left - gutter, threshold, &best_x, &found_x);
+    _snap_axis(top, other_bottom + gutter, threshold, &best_y, &found_y);
+    _snap_axis(bottom, other_top - gutter, threshold, &best_y, &found_y);
+    // In line: edges aligned.
+    _snap_axis(left, other_left, threshold, &best_x, &found_x);
+    _snap_axis(right, other_right, threshold, &best_x, &found_x);
+    _snap_axis(top, other_top, threshold, &best_y, &found_y);
+    _snap_axis(bottom, other_bottom, threshold, &best_y, &found_y);
+  }
+  if(!IS_NULL_PTR(delta_x)) *delta_x = found_x ? best_x : 0.0;
+  if(!IS_NULL_PTR(delta_y)) *delta_y = found_y ? best_y : 0.0;
+  return found_x || found_y;
 }
 
 /* --- layout ----------------------------------------------------------------- */
@@ -1090,8 +1231,8 @@ void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_la
   double anchor_x = 0.0;
   double anchor_y = 0.0;
   _layout_anchor(frames, &anchor_x, &anchor_y);
-  // The gap between frames is the grid, and the whole arrangement starts on it when snapping.
-  const double gap = canvas->grid_size > 0.0f ? canvas->grid_size : CANVAS_DEFAULT_GRID_SIZE;
+  // The gap between frames is the gutter, and the whole arrangement starts on the grid when snapping.
+  const double gap = canvas->gutter > 0.0f ? canvas->gutter : 0.0;
   anchor_x = dt_canvas_snap(canvas, anchor_x);
   anchor_y = dt_canvas_snap(canvas, anchor_y);
   switch(layout)
