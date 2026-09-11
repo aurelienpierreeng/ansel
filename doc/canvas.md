@@ -426,14 +426,30 @@ the fields), **grain** the finishing dither. 1 everywhere is the paper as design
 unset weight (a file from before) reads as 1 (`dt_canvas_texture_get()`). The two composed
 fields are kept per resolution and scale, the coloured and weighed tile per key.
 
-The canvas is painted with its background colour or with one of four procedural papers:
+The canvas is painted with its background colour, with a transparent plane, or with one of
+five procedural papers:
 **Moleskine** (cream, fine soft clouds and short fibres in every direction), **watercolour**
 (white, a tooth that only darkens so the paper is white at its peaks, rounded pores),
 **embossed** (a wove sheet dried on a metallic mesh: a mottle and fibres, and the mesh's
 grooves stamped over the blended field in absolute coordinates, so it stays one mesh across
 placements; the weft threads closer and deeper than the warp, and the sheet's own relief
 bending the threads and varying their pressure) and **Japanese** (washi: large soft clouds and long wrinkles, the zero crossings
-of a low-frequency field lit as ridges, the same lines at every zoom). Both are random fields synthesised in the
+of a low-frequency field lit as ridges, the same lines at every zoom). **Psychedelic washi**
+is that last sheet with its wrinkles dyed instead of lit: the same clouds from the same knees
+and the same ridges, but the ridge reaches the pixels bare -- a coverage in [0, 1] rather
+than a depth -- and each channel takes its own share of it, a third of a turn apart. It has
+to SUBTRACT: a paper sits near the top of the scale, so a ridge added to every channel only
+clips to white, which is exactly what makes the achromatic washi's ridge read as a highlight
+and forbids the same arithmetic here. Two channels are pulled down and the third is spared,
+hard enough to reach zero at a ridge's core -- that clamp is the look, a saturated thread
+rather than a pastel one -- and which channel is spared comes from the cloud underneath, so
+neighbouring wrinkles are different colours and one wrinkle drifts along its length. The
+cloud is read as about a fifth of a turn either side of the paper's own hue: a steeper turn
+spins the hue faster than a wrinkle is wide and comes out as fringing, not as dye (measured;
+the first attempt swept eleven turns across one sheet and read as chromatic aberration). It
+carries no grain field of its own -- a grain added to the cloud would scramble the hue at
+pixel scale -- and takes the same doubled dither the achromatic washi does. These are random
+fields synthesised in the
 frequency domain: white noise shaped by a radial filter (a plateau below a knee frequency, a
 power-law fall-off above it) and transformed back with a small radix-2 FFT of our own. The
 discrete transform is periodic by construction, so a sprite wraps without a seam. One sprite

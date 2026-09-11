@@ -4008,21 +4008,12 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   else
     status = g_strdup_printf("%s%s — %d%%", file_name, view->canvas->dirty ? "*" : "", (int)lround(view->zoom * 100.0));
   // Ink against the plane's luminance, and a halo of the opposite so it reads over a picture too.
+  // A paper is painted in the canvas's own colour -- the relief is a zero-mean modulation of
+  // it -- so that one colour answers for every style that paints something, and a second copy
+  // of the tint table here would only go stale as papers are added. A hole shows the view's
+  // own backdrop instead, which is dark whatever colour the document carries.
   double background[3] = { 0.2, 0.2, 0.2 };
-  if(view->canvas->background_style == DT_CANVAS_BACKGROUND_MOLESKINE)
-  {
-    background[0] = 0.961;
-    background[1] = 0.941;
-    background[2] = 0.886;
-  }
-  else if(view->canvas->background_style >= DT_CANVAS_BACKGROUND_WATERCOLOUR
-          && view->canvas->background_style < DT_CANVAS_BACKGROUND_LAST)
-  {
-    background[0] = 0.97;
-    background[1] = 0.96;
-    background[2] = 0.94;
-  }
-  else
+  if(!dt_canvas_background_is_transparent(view->canvas->background_style))
   {
     background[0] = view->canvas->background.red;
     background[1] = view->canvas->background.green;
