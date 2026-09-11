@@ -38,6 +38,9 @@ set(LIB_ANSEL_UNIT_TESTS
   test_pipe_cache_policy
   test_backbuf_publish
   test_conf_value_lifetime
+  test_xmp_colorlabels
+  test_xmp_import_safety
+  test_xmp_tags
   test_dtpthread_recursive
   test_history_snapshot
   test_masks_raster_contract
@@ -73,4 +76,6 @@ target_sources(test_tagging_completion PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
 target_sources(test_tagging_completion_model PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
+target_sources(test_xmp_colorlabels PRIVATE test_xmp_fixture.c)
+target_sources(test_xmp_tags PRIVATE test_xmp_fixture.c)
 set_tests_properties(test_tagging_completion PROPERTIES SKIP_RETURN_CODE 77)

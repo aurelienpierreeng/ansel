@@ -71,6 +71,10 @@ extern "C" {
     function();                                                          \
   } while (0)
 
+#define DT_DEBUG_TRACE_WRAPPER_RESULT_VOID(thread, function)             \
+  (dt_vprint((thread), "[debug_trace] %s is called from %s at %s:%d\n",  \
+             #function, __FUNCTION__, __FILE__, __LINE__), function())
+
 #ifdef __cplusplus
 }
 #endif
