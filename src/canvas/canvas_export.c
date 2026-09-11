@@ -108,11 +108,13 @@ static gchar *_page_path(const char *path, const guint page, const guint pages)
 }
 
 /**
- * The pages the canvas asks for. A canvas divided into pages gives one per page holding a
- * frame, empty ones skipped; a canvas without gives one page around every frame. The page
- * size is the canvas's -- one canvas unit is one point -- never the exporter's.
+ * The pages the canvas asks for, in CANVAS UNITS. A canvas divided into pages gives one per
+ * page holding a frame, empty ones skipped; a canvas without pages gives ONE page around
+ * everything on it, grown by the canvas's margin -- not one page per frame. The page size is
+ * the canvas's, never the exporter's, and what turns it into a physical size is the canvas's
+ * own resolution.
  */
-static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed_pt)
+static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
 {
   GArray *pages = g_array_new(FALSE, FALSE, sizeof(dt_canvas_export_page_t));
   double paper_width = 0.0;
@@ -156,15 +158,27 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed_pt)
   }
   else
   {
+    // No page size: ONE page around everything on the canvas, with the canvas's margin as the
+    // padding round it -- the margin has no page edge to sit inside here, so it becomes the
+    // white space the single sheet keeps around its content.
     dt_canvas_export_page_t page;
     page.area = dt_canvas_bounds(canvas);
     if(!(page.area.width > 0.0) || !(page.area.height > 0.0))
     {
       // Nothing on it: an A4's worth of background, so the file is still a page.
-      page.area.x = -297.5;
-      page.area.y = -421.0;
-      page.area.width = 595.0;
-      page.area.height = 842.0;
+      const double units_per_point = dt_canvas_resolution(canvas) / 72.0;
+      page.area.width = 595.0 * units_per_point;
+      page.area.height = 842.0 * units_per_point;
+      page.area.x = -0.5 * page.area.width;
+      page.area.y = -0.5 * page.area.height;
+    }
+    else
+    {
+      const double margin = fmax(canvas->page_margin, 0.0f);
+      page.area.x -= margin;
+      page.area.y -= margin;
+      page.area.width += 2.0 * margin;
+      page.area.height += 2.0 * margin;
     }
     g_array_append_val(pages, page);
   }
@@ -172,12 +186,17 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed_pt)
   for(guint idx = 0; idx < pages->len; idx++)
   {
     dt_canvas_export_page_t *page = &g_array_index(pages, dt_canvas_export_page_t, idx);
-    page->area.x -= bleed_pt;
-    page->area.y -= bleed_pt;
-    page->area.width += 2.0 * bleed_pt;
-    page->area.height += 2.0 * bleed_pt;
-    page->width_pt = page->area.width;
-    page->height_pt = page->area.height;
+    page->area.x -= bleed;
+    page->area.y -= bleed;
+    page->area.width += 2.0 * bleed;
+    page->area.height += 2.0 * bleed;
+    // A unit is a display pixel and the canvas says how many go to the inch, so the physical
+    // size of the sheet is the units divided by that. Read the units as points instead, as
+    // this did, and every material page comes out at whatever size 72 units to the inch makes
+    // it -- which is where an A4 being smaller than a phone story came from.
+    const double points_per_unit = 72.0 / dt_canvas_resolution(canvas);
+    page->width_pt = page->area.width * points_per_unit;
+    page->height_pt = page->area.height * points_per_unit;
   }
   return pages;
 }
@@ -506,10 +525,13 @@ gboolean dt_canvas_export(const dt_canvas_t *canvas, const char *path, const dt_
     return FALSE;
   }
   const double dpi = options->dpi > 0.0f ? options->dpi : 300.0;
-  // The bleed belongs to the document, beside the page size it grows: one canvas unit is one point.
-  const double bleed_pt = fmax(canvas->page_bleed, 0.0f);
-  const double scale = dpi / 72.0;
-  GArray *pages = _pages_of(canvas, bleed_pt);
+  // The bleed belongs to the document, beside the page size it grows, and is in canvas units.
+  const double bleed = fmax(canvas->page_bleed, 0.0f);
+  // Canvas units to output pixels: the dialog's resolution against the canvas's own, so the
+  // export at the canvas's resolution is one output pixel per unit and asking for more
+  // resamples rather than re-rasterising something that was never measured in points.
+  const double scale = dpi / dt_canvas_resolution(canvas);
+  GArray *pages = _pages_of(canvas, bleed);
 
   const dt_colorspaces_color_profile_t *output = NULL;
   if(options->icc_type != DT_COLORSPACE_NONE)

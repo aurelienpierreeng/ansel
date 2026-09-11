@@ -486,8 +486,10 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   const char *page_color = dt_conf_get_string_const("canvas/trim_color");
   dt_canvas_color_parse(page_color, &canvas->page_color);
   if(dt_conf_get_bool("canvas/page_visible")) canvas->grid_flags |= DT_CANVAS_PAGE_VISIBLE;
-  if(dt_conf_get_bool("canvas/guides_over")) canvas->grid_flags |= DT_CANVAS_GUIDES_OVER;
   else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_PAGE_VISIBLE;
+  if(dt_conf_get_bool("canvas/guides_over")) canvas->grid_flags |= DT_CANVAS_GUIDES_OVER;
+  else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_GUIDES_OVER;
+  canvas->resolution = (float)CLAMP(dt_conf_get_float("canvas/resolution"), 18.0, 2400.0);
   const char *border = dt_conf_get_string_const("canvas/border_color");
   dt_canvas_color_parse(border, &canvas->border_color);
   const char *background = dt_conf_get_string_const("canvas/background_color");
@@ -914,8 +916,9 @@ static void _export_canvas(dt_view_t *self)
                              "orientation are the canvas's, under Guides in the toolbar."),
                            dt_pdf_point_to_mm(canvas_paper_width), dt_pdf_point_to_mm(canvas_paper_height));
   else
-    note = g_strdup(_("The canvas is not divided into pages, so this is one page around every frame. Give it a page "
-                      "size under Guides in the toolbar to export several."));
+    note = g_strdup(_("The canvas is not divided into pages, so this is ONE page around everything on it, with the "
+                      "canvas's margin as the white space around the content. Give it a page size under Guides in "
+                      "the toolbar to export several."));
   if(transparent)
   {
     gchar *both = g_strconcat(note, "\n",
@@ -5393,6 +5396,17 @@ static const dt_canvas_t *_proxy_document(dt_view_t *self)
   return IS_NULL_PTR(view) ? NULL : view->canvas;
 }
 
+/** Canvas units per inch: what a paper size is measured against. */
+static void _proxy_set_resolution(dt_view_t *self, float resolution)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  view->canvas->resolution = CLAMP(resolution, 18.0f, 2400.0f);
+  dt_conf_set_float("canvas/resolution", view->canvas->resolution);
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
 static void _proxy_set_grid_size(dt_view_t *self, float size)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -5523,6 +5537,7 @@ void init(dt_view_t *self)
   manager->proxy.canvas.set_gutter_color = _proxy_set_gutter_color;
   manager->proxy.canvas.set_shadow = _proxy_set_shadow;
   manager->proxy.canvas.set_texture = _proxy_set_texture;
+  manager->proxy.canvas.set_resolution = _proxy_set_resolution;
   manager->proxy.canvas.set_corner_radius = _proxy_set_corner_radius;
   manager->proxy.canvas.set_page_guides = _proxy_set_page_guides;
   manager->proxy.canvas.set_margin_color = _proxy_set_margin_color;

@@ -616,15 +616,32 @@ period from the origin, so the dashes neither crawl under a pan nor differ betwe
 horizontal and the vertical. Page borders are a snapping rule of their own, applied after
 the gutter and before the size.
 
-**One canvas unit is one point**, so an A4 page is 595 by 842 units and a print size is its
-size in points. A screen format is the same number read as pixels: a story page is 1080 by
-1920 units, and exported at 72 dpi it comes out at exactly 1080 by 1920 pixels, at 144 dpi at
-twice that. One table holds them all, and the toolbar reads it rather than repeating it. **The stored
+**One canvas unit is a display pixel, and the canvas says how many go to the inch**
+(`dt_canvas_t.resolution`, `dt_canvas_resolution()`, 300 on a new canvas). That is what tells
+the two kinds of page size apart. A **sheet of paper** is held in points and scaled by the
+resolution, so an A4 is 2480 units wide at 300; a **screen format** is its pixel size outright
+and does not move, so a story page is 1080 by 1920 units whatever the resolution says. Read as
+points, as both were, a story came out 1080 units against an A4's 595 -- nearly twice the
+sheet, for something that fits in a hand, which is the defect this field exists to fix.
+`dt_canvas_paper_is_physical()` answers which kind a size is.
+
+A document written before the field holds zero, which `dt_canvas_resolution()` reads as **72**:
+one unit to the point, exactly the geometry it was laid out with. The export converts through
+the same number -- the page's physical size is its units divided by the resolution, and the
+output pixel count is `units * export_dpi / resolution`, so exporting at the canvas's own
+resolution is one output pixel per unit and asking for more resamples.
+
+One table holds every size, and the toolbar reads it rather than repeating it. **The stored
 value is a code, not the row it is shown on**: a size is appended to `dt_canvas_paper_t` so no
 saved document changes page, and the table's order is where the list shows it, which is how A0
 and A1 came to sit above A2 while carrying the highest codes. `dt_canvas_paper_code()` turns a
 row into the value to store and `dt_canvas_paper_position()` turns it back; only
 `dt_canvas_paper_points()` speaks codes.
+
+**A canvas with no page size exports as ONE page around everything on it**, grown by the
+canvas's margin -- the margin has no page edge to sit inside there, so it becomes the white
+space the single sheet keeps around its content -- and not one page per frame, which is what
+the dialog's old wording said it did.
 
 Two more guides ride on the pages, each with its own show, snap, size and colour, and each one
 rectangle per page rather than a grid of shared lines: the **margin** inside every page edge,
