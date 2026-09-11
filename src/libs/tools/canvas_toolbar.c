@@ -319,6 +319,8 @@ static void _background_changed(GtkWidget *widget, gpointer user_data)
   dt_view_manager_get_global()->proxy.canvas.set_background(view, rgba, -1);
 }
 
+static void _refill(dt_lib_module_t *self);
+
 static void _texture_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
@@ -340,6 +342,13 @@ static void _texture_reset(GtkWidget *widget, gpointer user_data)
   if(!_live(self, &view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_texture)) return;
   dt_view_manager_get_global()->proxy.canvas.set_texture(view, 1.0f, 1.0f, 1.0f, 1.0f);
+  // Every other caller of set_texture is one of the four sliders sending its own value, and
+  // refilling under a slider the user is still holding would fight the pointer -- so the
+  // setter stays quiet and the ONE caller that writes all four behind their backs refreshes
+  // them itself. Without it the reset reached the document and nothing else: the sliders
+  // kept the old positions, so it read as doing nothing at all, and the next touch of any
+  // slider sent all four stale values back and undid it.
+  _refill(self);
 }
 
 static void _border_changed(GtkWidget *widget, gpointer user_data)
