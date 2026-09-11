@@ -375,16 +375,18 @@ static double *_paper_field(const int size, const double knee, const double slop
 #define PAPER_FIBRES_PER_SPRITE 5000
 
 /**
- * Short fibres in random directions, as a periodic field: segments stamped at random
- * positions, angles and lengths, half darker and half lighter than the sheet, antialiased
- * across their width. Defined in the sprite's own units, so a fibre is the same fibre at
- * every resolution and only sharper at a higher one.
+ * Fibres in random directions, as a periodic field: `count` segments stamped at random
+ * positions and angles, `shortest` to `shortest + span` canvas units long and `width` wide,
+ * half darker and half lighter than the sheet, antialiased across their width. Every extent
+ * is in the sprite's own units, so a fibre is the same fibre at every resolution and only
+ * sharper at a higher one.
  */
-static double *_paper_fibres(const int size, const guint32 seed)
+static double *_paper_fibres_of(const int size, const guint32 seed, const int count, const double shortest,
+                                const double span, const double width)
 {
   double *field = g_new0(double, (size_t)size * size);
   const double pixels_per_unit = (double)size / PAPER_TILE;
-  for(int fibre = 0; fibre < PAPER_FIBRES_PER_SPRITE; fibre++)
+  for(int fibre = 0; fibre < count; fibre++)
   {
     double uniform_a = 0.0;
     double uniform_b = 0.0;
@@ -395,9 +397,8 @@ static double *_paper_fibres(const int size, const guint32 seed)
     const double center_x = uniform_a * size;
     const double center_y = uniform_b * size;
     const double angle = uniform_c * M_PI;
-    // 6 to 22 units long, about a unit wide, as dark as light on average.
-    const double half_length = (6.0 + 16.0 * uniform_d) * 0.5 * pixels_per_unit;
-    const double half_width = fmax(0.55 * pixels_per_unit, 0.6);
+    const double half_length = (shortest + span * uniform_d) * 0.5 * pixels_per_unit;
+    const double half_width = fmax(0.5 * width * pixels_per_unit, 0.6);
     const double sign = (fibre & 1) ? 1.0 : -1.0;
     const double direction_x = cos(angle);
     const double direction_y = sin(angle);
@@ -422,12 +423,19 @@ static double *_paper_fibres(const int size, const guint32 seed)
   return field;
 }
 
+/** The short fibres of a machine-made sheet: 6 to 22 units long, about a unit wide. */
+static double *_paper_fibres(const int size, const guint32 seed)
+{
+  return _paper_fibres_of(size, seed, PAPER_FIBRES_PER_SPRITE, 6.0, 16.0, 1.1);
+}
+
 static gboolean _is_paper(const uint32_t style)
 {
-  // The papers are not one run of codes: transparent was appended between the Japanese
-  // paper and the psychedelic one, and a code is never moved once a file can carry it.
-  return (style >= DT_CANVAS_BACKGROUND_MOLESKINE && style <= DT_CANVAS_BACKGROUND_JAPANESE)
-         || style == DT_CANVAS_BACKGROUND_PSYCHEDELIC;
+  // The papers are not one run of codes -- transparent was appended among them, and a code
+  // is never moved once a file can carry it -- so this names the two that are not papers
+  // rather than the run that is, and a paper appended later needs nothing here.
+  return style != DT_CANVAS_BACKGROUND_PLAIN && style != DT_CANVAS_BACKGROUND_TRANSPARENT
+         && style < DT_CANVAS_BACKGROUND_LAST;
 }
 
 /**
@@ -526,6 +534,104 @@ static void _paper_relief(const dt_canvas_background_t style, const int size, co
     dt_free(clouds);
     dt_free(wrinkle_field);
   }
+  else if(style == DT_CANVAS_BACKGROUND_LAID)
+  {
+    // A hand mould's sheet: a wild, cloudy formation -- the pulp never settled evenly, and
+    // that unevenness is the paper's signature as much as the wires are -- over short
+    // fibres and a fine grain. The wires themselves are periodic in absolute coordinates
+    // and are stamped after the blend, like the embossed paper's mesh.
+    double *formation = _paper_field(size, 20.0 / scale, 2.0, seed + 601u);
+    double *fibres = _paper_fibres(size, seed + 605u);
+    double *grain = _paper_field(size, 170.0 / scale, 1.1, seed + 603u);
+    for(size_t idx = 0; idx < count; idx++)
+    {
+      (*low)[idx] = formation[idx] * 0.022;
+      (*high)[idx] = fibres[idx] * 0.007 + grain[idx] * 0.002;
+    }
+    dt_free(formation);
+    dt_free(fibres);
+    dt_free(grain);
+  }
+  else if(style == DT_CANVAS_BACKGROUND_KRAFT)
+  {
+    // Unbleached softwood pulp: a broad blotchiness from uneven cooking, long fibres that
+    // show because nothing bleached them out, and shives -- flecks of bark the digester
+    // missed. A shive is a RARE, deep event, so it is the far tail of a band-passed field
+    // and not the field itself, and the tail is taken in the field's OWN deviations rather
+    // than in absolute value: a threshold in absolute value depends on how _paper_field_band
+    // happens to normalise, and a first version that guessed at one covered the sheet in
+    // flecks and read as cork. Just under three deviations is a few tenths of a percent of
+    // the sheet, which is what a fleck should be.
+    double *mottle = _paper_field(size, 26.0 / scale, 2.1, seed + 701u);
+    double *fibres = _paper_fibres_of(size, seed + 705u, 2600, 24.0, 56.0, 1.4);
+    double *shive_field = _paper_field_band(size, 110.0 / scale, 3.0, 35.0 / scale, seed + 703u);
+    double shive_power = 0.0;
+    for(size_t idx = 0; idx < count; idx++) shive_power += shive_field[idx] * shive_field[idx];
+    const double shive_deviation = fmax(sqrt(shive_power / (double)count), 1e-9);
+    for(size_t idx = 0; idx < count; idx++)
+    {
+      const double shive = fmin(fmax(shive_field[idx] / shive_deviation - 2.8, 0.0), 1.0);
+      (*low)[idx] = mottle[idx] * 0.045;
+      (*high)[idx] = fibres[idx] * 0.045 - shive * 0.45;
+    }
+    dt_free(mottle);
+    dt_free(fibres);
+    dt_free(shive_field);
+  }
+  else if(style == DT_CANVAS_BACKGROUND_CHARCOAL)
+  {
+    // The mirror of the watercolour's rule. That paper is white at its peaks, so its tooth
+    // may only carve; this one is black in its hollows, where no light reaches, so its
+    // tooth may only LIFT -- a hollow on a near-black sheet has nothing left to take. The
+    // relief is one-sided for that reason and its mean is therefore not zero, which the
+    // tint already allows for.
+    double *tooth = _paper_field(size, 44.0 / scale, 1.8, seed + 801u);
+    double *fibres = _paper_fibres(size, seed + 805u);
+    double *grain = _paper_field(size, 190.0 / scale, 1.2, seed + 803u);
+    for(size_t idx = 0; idx < count; idx++)
+    {
+      const double peak = fmax(tooth[idx], 0.0);
+      (*low)[idx] = 0.45 * (1.0 - exp(-peak * peak * 0.6));
+      (*high)[idx] = fmax(fibres[idx], 0.0) * 0.10 + fmax(grain[idx], 0.0) * 0.07;
+    }
+    dt_free(tooth);
+    dt_free(fibres);
+    dt_free(grain);
+  }
+}
+
+#define PAPER_LAID_PITCH 3.0  ///< the mould's laid wires, about 1 mm apart; 3072 units is a whole number of them
+#define PAPER_LAID_CHAIN 64.0 ///< its chain wires, about 23 mm apart; likewise, so the composed field still wraps
+
+/**
+ * The papermaking mould's wires at a point of the composed field, in canvas units: the pulp
+ * settles thinner over a wire, so both families read LIGHTER than the sheet around them --
+ * a ripple along the close-set laid wires, and a narrow line along each chain wire, which
+ * is thicker and tens of times further apart. `wobble` -- the sheet's own formation -- bends
+ * them and varies how hard they pressed, so the wires belong to a sheet of pulp rather than
+ * being ruled over it.
+ *
+ * The laid ripple is the one feature in any paper here whose period is close to the tile's
+ * own sampling, so it is the one that has to say when it cannot be drawn: at `samples` per
+ * period it fades out below three and is gone below two. Measured without it, the coarse
+ * tile (half a sample per unit, so 1.5 per period) carried the ripple at three quarters of
+ * its full amplitude into a period of 2.4 screen pixels -- an alias, not the wires -- and
+ * read as a fine streaking that is not paper. A millimetre of texture has no business being
+ * visible at that zoom anyway.
+ */
+static double _paper_laid(const double unit_x, const double unit_y, const double wobble,
+                          const double pixels_per_unit)
+{
+  const double bend = wobble * 12.0;
+  const double pressure = CLAMP(1.0 + wobble * 6.0, 0.6, 1.4);
+  const double samples = pixels_per_unit * PAPER_LAID_PITCH;
+  const double visible = CLAMP(samples - 2.0, 0.0, 1.0);
+  const double laid = cos(2.0 * M_PI * (unit_y + bend) / PAPER_LAID_PITCH);
+  // A high power makes a narrow line: cos^40 at this pitch is about a millimetre wide,
+  // which is what a chain wire leaves. The chains are twenty times the laid spacing apart
+  // and are never near the sampling, so they do not fade.
+  const double chain = fmax(cos(2.0 * M_PI * (unit_x - bend) / PAPER_LAID_CHAIN), 0.0);
+  return pressure * (visible * 0.030 * laid + 0.055 * pow(chain, 40.0));
 }
 
 #define PAPER_WEFT_PITCH 6.0  ///< the mesh's weft threads, across the sheet: close and pressed in deep
@@ -700,10 +806,14 @@ static uint8_t *_paper_pixels(const dt_canvas_background_t style, const int spri
       continue;
     }
     double relief = contrast * low[idx] + detail * high[idx];
-    // The mesh is stamped over the blended field in absolute coordinates, so it stays one
-    // mesh across placements whatever their phase and jitter; its pitch divides the period.
+    // The mesh and the mould's wires are stamped over the blended field in absolute
+    // coordinates, so each stays one mesh across placements whatever their phase and
+    // jitter; both pitches divide the composed field's period, so it still wraps.
     if(style == DT_CANVAS_BACKGROUND_EMBOSSED)
       relief += detail * _paper_mesh((idx % total) / pixels_per_unit, (idx / total) / pixels_per_unit, low[idx] + high[idx]);
+    else if(style == DT_CANVAS_BACKGROUND_LAID)
+      relief += detail * _paper_laid((idx % total) / pixels_per_unit, (idx / total) / pixels_per_unit,
+                                     low[idx] + high[idx], pixels_per_unit);
     for(int channel = 0; channel < 3; channel++)
       pixels[4 * idx + channel] = (uint8_t)lround(CLAMP(base[channel] * (1.0 + relief), 0.0, 1.0) * 255.0);
     pixels[4 * idx + 3] = 255;
