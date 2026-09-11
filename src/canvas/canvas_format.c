@@ -271,6 +271,10 @@ GBytes *dt_canvas_format_write_index(const dt_canvas_t *canvas)
   _w_f32(out, canvas->texture_scale);
   _w_f32(out, canvas->texture_grain);
   _w_f32(out, canvas->corner_radius);
+  _w_f32(out, canvas->page_margin);
+  _w_color(out, &canvas->margin_color);
+  _w_f32(out, canvas->page_bleed);
+  _w_color(out, &canvas->bleed_color);
   _w_bytes(out, canvas->reserved, sizeof(canvas->reserved));
   const uint32_t header_size = out->len;
   uint8_t *size_field = out->data + CANVAS_MAGIC_LEN + 4;
@@ -619,6 +623,10 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
   canvas->texture_scale = _r_f32(&cursor);
   canvas->texture_grain = _r_f32(&cursor);
   canvas->corner_radius = _r_f32(&cursor);
+  canvas->page_margin = _r_f32(&cursor);
+  canvas->margin_color = _r_color(&cursor);
+  canvas->page_bleed = _r_f32(&cursor);
+  canvas->bleed_color = _r_color(&cursor);
   _r_bytes(&cursor, canvas->reserved, sizeof(canvas->reserved));
   cursor.pos = header_size;
   cursor.limit = cursor.size;

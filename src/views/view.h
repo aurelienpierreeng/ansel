@@ -289,6 +289,10 @@ typedef struct dt_view_manager_t
       /** The paper texture's multipliers: contrast, detail, feature scale, grain; 1 is the paper as designed. */
       void (*set_texture)(struct dt_view_t *view, float contrast, float detail, float scale, float grain);
       void (*set_corner_radius)(struct dt_view_t *view, float radius); ///< the frames' default rounded corners
+      /** The page's inner margin and the sheet's bleed outside it, in canvas units; < 0 leaves one alone. */
+      void (*set_page_guides)(struct dt_view_t *view, float margin, float bleed);
+      void (*set_margin_color)(struct dt_view_t *view, const float *rgba);
+      void (*set_bleed_color)(struct dt_view_t *view, const float *rgba);
     } canvas;
   } proxy;
 

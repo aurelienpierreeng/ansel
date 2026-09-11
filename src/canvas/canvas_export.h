@@ -57,7 +57,6 @@ typedef enum dt_canvas_export_format_t
 typedef struct dt_canvas_export_options_t
 {
   dt_canvas_export_format_t format;
-  float bleed_mm;       ///< how far past every page edge the picture keeps going
   float dpi;            ///< raster resolution
   int quality;          ///< JPEG quality, and the PDF's own image streams; 100 keeps them lossless
   dt_colorspaces_color_profile_type_t icc_type; ///< output profile; NONE or SRGB keep sRGB
@@ -65,7 +64,7 @@ typedef struct dt_canvas_export_options_t
   dt_iop_color_intent_t intent;
 } dt_canvas_export_options_t;
 
-/** @brief PDF, no bleed, 300 dpi, quality 92, sRGB, perceptual. */
+/** @brief PDF, 300 dpi, quality 92, sRGB, perceptual. */
 dt_canvas_export_options_t dt_canvas_export_options_default(void);
 
 /** @brief The format's usual file extension, with its dot. */
@@ -75,10 +74,11 @@ const char *dt_canvas_export_extension(dt_canvas_export_format_t format);
  * @brief Write the canvas's pages to `path`.
  * @details A format that holds one page per file numbers them from `path`'s stem
  * (`book_01.png`, `book_02.png`) unless there is only one, which keeps `path` itself.
- * `bleed_mm` grows every page by that much on all four sides and fills the growth with
- * whatever the canvas has there -- the picture a page break cut in two keeps going, which is
- * what a binder trims into or folds around. It is nothing to do with a margin: no content is
- * moved, the sheet is simply larger than the page.
+ * The canvas's own bleed (`dt_canvas_t.page_bleed`, set in the atelier beside the page size)
+ * grows every sheet on all four sides and fills the growth with whatever the canvas has
+ * there -- the picture a page break cut in two keeps going, which is what a binder trims into
+ * or folds around. It is nothing to do with a margin: no content is moved, the sheet is simply
+ * larger than the page.
  */
 gboolean dt_canvas_export(const dt_canvas_t *canvas, const char *path, const dt_canvas_export_options_t *options,
                           GError **error);

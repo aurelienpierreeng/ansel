@@ -187,6 +187,10 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->texture_detail = 1.0f;
   canvas->texture_scale = 1.0f;
   canvas->texture_grain = 1.0f;
+  canvas->page_margin = 0.0f;
+  canvas->margin_color = dt_canvas_color(0.4f, 0.8f, 1.0f, 0.7f);
+  canvas->page_bleed = 0.0f;
+  canvas->bleed_color = dt_canvas_color(1.0f, 0.45f, 0.45f, 0.7f);
   canvas->view_zoom = 1.0;
   canvas->view_x = 0.0;
   canvas->view_y = 0.0;
@@ -1739,24 +1743,27 @@ gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, d
  */
 static const struct
 {
+  uint32_t code; ///< what is stored; the row's position is only where it is shown
   const char *name;
   double width;
   double height;
 } _paper_sizes[] = {
-  { N_("None"), 0.0, 0.0 },
-  { "A2", 1191.0, 1684.0 },
-  { "A3", 842.0, 1191.0 },
-  { "A4", 595.0, 842.0 },
-  { "A5", 420.0, 595.0 },
-  { "A6", 298.0, 420.0 },
-  { N_("US Letter"), 612.0, 792.0 },
-  { N_("Instagram square"), 1080.0, 1080.0 },
-  { N_("Instagram portrait"), 1080.0, 1350.0 },
-  { N_("Story, reel, Short"), 1080.0, 1920.0 },
-  { N_("Facebook post"), 1200.0, 630.0 },
-  { N_("Facebook cover"), 851.0, 315.0 },
-  { N_("YouTube thumbnail"), 1280.0, 720.0 },
-  { N_("YouTube banner"), 2560.0, 1440.0 },
+  { DT_CANVAS_PAPER_NONE, N_("None"), 0.0, 0.0 },
+  { DT_CANVAS_PAPER_A0, "A0", 2384.0, 3370.0 },
+  { DT_CANVAS_PAPER_A1, "A1", 1684.0, 2384.0 },
+  { DT_CANVAS_PAPER_A2, "A2", 1191.0, 1684.0 },
+  { DT_CANVAS_PAPER_A3, "A3", 842.0, 1191.0 },
+  { DT_CANVAS_PAPER_A4, "A4", 595.0, 842.0 },
+  { DT_CANVAS_PAPER_A5, "A5", 420.0, 595.0 },
+  { DT_CANVAS_PAPER_A6, "A6", 298.0, 420.0 },
+  { DT_CANVAS_PAPER_LETTER, N_("US Letter"), 612.0, 792.0 },
+  { DT_CANVAS_PAPER_INSTAGRAM_SQUARE, N_("Instagram square"), 1080.0, 1080.0 },
+  { DT_CANVAS_PAPER_INSTAGRAM_PORTRAIT, N_("Instagram portrait"), 1080.0, 1350.0 },
+  { DT_CANVAS_PAPER_STORY, N_("Story, reel, Short"), 1080.0, 1920.0 },
+  { DT_CANVAS_PAPER_FACEBOOK_POST, N_("Facebook post"), 1200.0, 630.0 },
+  { DT_CANVAS_PAPER_FACEBOOK_COVER, N_("Facebook cover"), 851.0, 315.0 },
+  { DT_CANVAS_PAPER_YOUTUBE_THUMBNAIL, N_("YouTube thumbnail"), 1280.0, 720.0 },
+  { DT_CANVAS_PAPER_YOUTUBE_BANNER, N_("YouTube banner"), 2560.0, 1440.0 },
 };
 
 int dt_canvas_paper_count(void)
@@ -1764,20 +1771,40 @@ int dt_canvas_paper_count(void)
   return (int)(sizeof(_paper_sizes) / sizeof(_paper_sizes[0]));
 }
 
-const char *dt_canvas_paper_name(const int paper)
+const char *dt_canvas_paper_name(const int position)
 {
-  if(paper < 0 || paper >= dt_canvas_paper_count()) return NULL;
-  // A2 through A6 are the same word in every language and are not in the catalogue.
-  return paper >= DT_CANVAS_PAPER_A2 && paper <= DT_CANVAS_PAPER_A6 ? _paper_sizes[paper].name
-                                                                    : _(_paper_sizes[paper].name);
+  if(position < 0 || position >= dt_canvas_paper_count()) return NULL;
+  // A0 through A6 are the same word in every language and are not in the catalogue.
+  const uint32_t code = _paper_sizes[position].code;
+  const gboolean iso = code == DT_CANVAS_PAPER_A0 || code == DT_CANVAS_PAPER_A1
+                       || (code >= DT_CANVAS_PAPER_A2 && code <= DT_CANVAS_PAPER_A6);
+  return iso ? _paper_sizes[position].name : _(_paper_sizes[position].name);
 }
 
-gboolean dt_canvas_paper_points(const int paper, double *width, double *height)
+uint32_t dt_canvas_paper_code(const int position)
 {
-  if(paper <= DT_CANVAS_PAPER_NONE || paper >= dt_canvas_paper_count()) return FALSE;
-  if(!IS_NULL_PTR(width)) *width = _paper_sizes[paper].width;
-  if(!IS_NULL_PTR(height)) *height = _paper_sizes[paper].height;
-  return TRUE;
+  if(position < 0 || position >= dt_canvas_paper_count()) return DT_CANVAS_PAPER_NONE;
+  return _paper_sizes[position].code;
+}
+
+int dt_canvas_paper_position(const uint32_t paper)
+{
+  for(int position = 0; position < dt_canvas_paper_count(); position++)
+    if(_paper_sizes[position].code == paper) return position;
+  return 0;
+}
+
+gboolean dt_canvas_paper_points(const uint32_t paper, double *width, double *height)
+{
+  if(paper == DT_CANVAS_PAPER_NONE) return FALSE;
+  for(int position = 0; position < dt_canvas_paper_count(); position++)
+  {
+    if(_paper_sizes[position].code != paper) continue;
+    if(!IS_NULL_PTR(width)) *width = _paper_sizes[position].width;
+    if(!IS_NULL_PTR(height)) *height = _paper_sizes[position].height;
+    return TRUE;
+  }
+  return FALSE;
 }
 
 gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, double *height)
@@ -1785,7 +1812,7 @@ gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, do
   if(IS_NULL_PTR(canvas)) return FALSE;
   double portrait_width = 0.0;
   double portrait_height = 0.0;
-  if(!dt_canvas_paper_points((int)canvas->paper_size, &portrait_width, &portrait_height)) return FALSE;
+  if(!dt_canvas_paper_points(canvas->paper_size, &portrait_width, &portrait_height)) return FALSE;
   if(!IS_NULL_PTR(width)) *width = canvas->paper_landscape ? portrait_height : portrait_width;
   if(!IS_NULL_PTR(height)) *height = canvas->paper_landscape ? portrait_width : portrait_height;
   return TRUE;
@@ -1802,6 +1829,21 @@ dt_canvas_rect_t dt_canvas_page_rect(const dt_canvas_t *canvas, int col, int row
   rect.width = width;
   rect.height = height;
   return rect;
+}
+
+gboolean dt_canvas_page_guide_rect(const dt_canvas_t *canvas, const int col, const int row, const double outset,
+                                   dt_canvas_rect_t *rect)
+{
+  if(IS_NULL_PTR(rect)) return FALSE;
+  *rect = dt_canvas_page_rect(canvas, col, row);
+  if(!(rect->width > 0.0) || !(rect->height > 0.0)) return FALSE;
+  // A margin that would meet itself, or a bleed on no page at all, is no guide.
+  if(2.0 * outset <= -rect->width || 2.0 * outset <= -rect->height) return FALSE;
+  rect->x -= outset;
+  rect->y -= outset;
+  rect->width += 2.0 * outset;
+  rect->height += 2.0 * outset;
+  return TRUE;
 }
 
 gboolean dt_canvas_snap_to_pages(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving, double threshold,
@@ -1821,10 +1863,30 @@ gboolean dt_canvas_snap_to_pages(const dt_canvas_t *canvas, const dt_canvas_rect
   const uint32_t x_edges[2] = { DT_CANVAS_EDGE_LEFT, DT_CANVAS_EDGE_RIGHT };
   const double ys[2] = { moving->y, moving->y + moving->height };
   const uint32_t y_edges[2] = { DT_CANVAS_EDGE_TOP, DT_CANVAS_EDGE_BOTTOM };
+  // The page's own borders, then the lines the user asked to be drawn inside and outside them.
+  // Each is a grid of the same period, offset from the border by the margin or the bleed.
+  double offsets[5] = { 0.0, 0.0, 0.0, 0.0, 0.0 };
+  int offset_count = 1;
+  if((canvas->grid_flags & DT_CANVAS_SNAP_MARGIN) && canvas->page_margin > 0.0f)
+  {
+    offsets[offset_count++] = canvas->page_margin;
+    offsets[offset_count++] = -canvas->page_margin;
+  }
+  if((canvas->grid_flags & DT_CANVAS_SNAP_BLEED) && canvas->page_bleed > 0.0f)
+  {
+    offsets[offset_count++] = canvas->page_bleed;
+    offsets[offset_count++] = -canvas->page_bleed;
+  }
   for(int idx = 0; idx < 2; idx++)
   {
-    if(edges & x_edges[idx]) _snap_axis(xs[idx], round(xs[idx] / page_width) * page_width, threshold, &best_x, &found_x);
-    if(edges & y_edges[idx]) _snap_axis(ys[idx], round(ys[idx] / page_height) * page_height, threshold, &best_y, &found_y);
+    for(int offset = 0; offset < offset_count; offset++)
+    {
+      const double shift = offsets[offset];
+      if(edges & x_edges[idx])
+        _snap_axis(xs[idx], round((xs[idx] - shift) / page_width) * page_width + shift, threshold, &best_x, &found_x);
+      if(edges & y_edges[idx])
+        _snap_axis(ys[idx], round((ys[idx] - shift) / page_height) * page_height + shift, threshold, &best_y, &found_y);
+    }
   }
   if(!IS_NULL_PTR(delta_x)) *delta_x = found_x ? best_x : 0.0;
   if(!IS_NULL_PTR(delta_y)) *delta_y = found_y ? best_y : 0.0;

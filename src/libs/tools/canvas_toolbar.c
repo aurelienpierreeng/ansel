@@ -61,6 +61,14 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *page_color;
   GtkWidget *gutter_snap;
   GtkWidget *gutter_size;
+  GtkWidget *margin_show;
+  GtkWidget *margin_snap;
+  GtkWidget *margin_size;
+  GtkWidget *margin_color;
+  GtkWidget *bleed_show;
+  GtkWidget *bleed_snap;
+  GtkWidget *bleed_size;
+  GtkWidget *bleed_color;
   GtkWidget *gutter_show;
   GtkWidget *gutter_color;
   GtkWidget *size_snap;
@@ -243,6 +251,40 @@ static void _shadow_changed(GtkWidget *widget, gpointer user_data)
       (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->shadow_blur)));
 }
 
+static void _page_guides_changed(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  dt_view_t *view = NULL;
+  if(!_live(self, &view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_page_guides)) return;
+  dt_view_manager_get_global()->proxy.canvas.set_page_guides(
+      view, (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->margin_size)),
+      (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->bleed_size)));
+}
+
+static void _margin_color_set(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_view_t *view = NULL;
+  if(!_live(self, &view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_margin_color)) return;
+  float rgba[4];
+  _rgba_of(widget, rgba);
+  dt_view_manager_get_global()->proxy.canvas.set_margin_color(view, rgba);
+}
+
+static void _bleed_color_set(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_view_t *view = NULL;
+  if(!_live(self, &view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_bleed_color)) return;
+  float rgba[4];
+  _rgba_of(widget, rgba);
+  dt_view_manager_get_global()->proxy.canvas.set_bleed_color(view, rgba);
+}
+
 static void _page_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
@@ -250,7 +292,9 @@ static void _page_changed(GtkWidget *widget, gpointer user_data)
   dt_view_t *view = NULL;
   if(!_live(self, &view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_paper)) return;
-  dt_view_manager_get_global()->proxy.canvas.set_paper(view, gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->page_size)),
+  // The list's order is not the stored value: a size appended to the enum shows where it belongs.
+  const int position = gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->page_size));
+  dt_view_manager_get_global()->proxy.canvas.set_paper(view, (int)dt_canvas_paper_code(position),
                                                      gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->page_orientation)));
 }
 
@@ -352,7 +396,7 @@ static void _refill(dt_lib_module_t *self)
   _rgba_to(toolbar->grid_color, &canvas->grid_color, TRUE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->page_show), (flags & DT_CANVAS_PAGE_VISIBLE) != 0);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->page_snap), (flags & DT_CANVAS_SNAP_PAGE) != 0);
-  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_size), CLAMP((int)canvas->paper_size, 0, dt_canvas_paper_count() - 1));
+  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_size), dt_canvas_paper_position(canvas->paper_size));
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_orientation), canvas->paper_landscape ? 1 : 0);
   _rgba_to(toolbar->page_color, &canvas->page_color, TRUE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->gutter_snap), (flags & DT_CANVAS_SNAP_GUTTER) != 0);
@@ -528,8 +572,8 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   toolbar->page_show = _guide_check(self, grid, 3, 0, _("Show"), DT_CANVAS_PAGE_VISIBLE);
   toolbar->page_snap = _guide_check(self, grid, 3, 1, _("Snap"), DT_CANVAS_SNAP_PAGE);
   toolbar->page_size = gtk_combo_box_text_new();
-  for(int idx = 0; idx < dt_canvas_paper_count(); idx++)
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_size), dt_canvas_paper_name(idx));
+  for(int position = 0; position < dt_canvas_paper_count(); position++)
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_size), dt_canvas_paper_name(position));
   gtk_widget_set_tooltip_text(toolbar->page_size,
                               _("Divide the canvas into pages of this size, one exported page each. One canvas unit is one "
                                 "point, so a print size is its size in points and a screen size is its size in pixels at 72 dpi."));
@@ -546,22 +590,53 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   g_signal_connect(toolbar->page_orientation, "changed", G_CALLBACK(_page_changed), self);
   _labelled(grid, 4, 2, _("Orientation"), toolbar->page_orientation);
 
-  _section_label(grid, 5, _("Gutters"));
-  toolbar->gutter_show = _guide_check(self, grid, 6, 0, _("Show"), DT_CANVAS_GUTTER_VISIBLE);
+  _section_label(grid, 5, _("Page margins"));
+  toolbar->margin_show = _guide_check(self, grid, 6, 0, _("Show"), DT_CANVAS_MARGIN_VISIBLE);
+  toolbar->margin_snap = _guide_check(self, grid, 6, 1, _("Snap"), DT_CANVAS_SNAP_MARGIN);
+  toolbar->margin_size = gtk_spin_button_new_with_range(0.0, 2000.0, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->margin_size,
+                              _("Kept clear inside every page edge, in canvas units. A guide and a snapping rule only: "
+                                "nothing is moved and the page is unchanged."));
+  g_signal_connect(toolbar->margin_size, "value-changed", G_CALLBACK(_page_guides_changed), self);
+  _labelled(grid, 6, 2, _("Size"), toolbar->margin_size);
+  toolbar->margin_color = gtk_color_button_new();
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->margin_color), TRUE);
+  gtk_widget_set_tooltip_text(toolbar->margin_color, _("Colour of the margin lines"));
+  g_signal_connect(toolbar->margin_color, "color-set", G_CALLBACK(_margin_color_set), self);
+  _labelled(grid, 6, 3, _("Colour"), toolbar->margin_color);
+
+  _section_label(grid, 7, _("Bleed"));
+  toolbar->bleed_show = _guide_check(self, grid, 8, 0, _("Show"), DT_CANVAS_BLEED_VISIBLE);
+  toolbar->bleed_snap = _guide_check(self, grid, 8, 1, _("Snap"), DT_CANVAS_SNAP_BLEED);
+  toolbar->bleed_size = gtk_spin_button_new_with_range(0.0, 2000.0, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->bleed_size,
+                              _("How far past every page edge the sheet keeps going, in canvas units. A frame a page break "
+                                "cuts in two carries on into the bleed on both sheets, which is what a binding folds around "
+                                "and a trim cuts into. The export writes it."));
+  g_signal_connect(toolbar->bleed_size, "value-changed", G_CALLBACK(_page_guides_changed), self);
+  _labelled(grid, 8, 2, _("Size"), toolbar->bleed_size);
+  toolbar->bleed_color = gtk_color_button_new();
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->bleed_color), TRUE);
+  gtk_widget_set_tooltip_text(toolbar->bleed_color, _("Colour of the bleed lines"));
+  g_signal_connect(toolbar->bleed_color, "color-set", G_CALLBACK(_bleed_color_set), self);
+  _labelled(grid, 8, 3, _("Colour"), toolbar->bleed_color);
+
+  _section_label(grid, 9, _("Gutters"));
+  toolbar->gutter_show = _guide_check(self, grid, 10, 0, _("Show"), DT_CANVAS_GUTTER_VISIBLE);
   gtk_widget_set_tooltip_text(toolbar->gutter_show,
                               _("Draw a frame one gutter out around every frame. Neighbours one gutter apart share it: it is what the snapping keeps clear, not a margin."));
-  toolbar->gutter_snap = _guide_check(self, grid, 6, 1, _("Snap"), DT_CANVAS_SNAP_GUTTER);
+  toolbar->gutter_snap = _guide_check(self, grid, 10, 1, _("Snap"), DT_CANVAS_SNAP_GUTTER);
   toolbar->gutter_size = gtk_spin_button_new_with_range(0.0, 500.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->gutter_size,
                               _("Margin frames keep from each other when snapped side by side or arranged, in canvas units"));
   g_signal_connect(toolbar->gutter_size, "value-changed", G_CALLBACK(_gutter_changed), self);
-  _labelled(grid, 6, 2, _("Size"), toolbar->gutter_size);
+  _labelled(grid, 10, 2, _("Size"), toolbar->gutter_size);
   toolbar->gutter_color = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->gutter_color), TRUE);
   gtk_widget_set_tooltip_text(toolbar->gutter_color, _("Colour of the gutter frames"));
   g_signal_connect(toolbar->gutter_color, "color-set", G_CALLBACK(_gutter_color_set), self);
-  _labelled(grid, 6, 3, _("Colour"), toolbar->gutter_color);
-  toolbar->size_snap = _guide_check(self, grid, 7, 0, _("Snap sizes to neighbours"), DT_CANVAS_SNAP_SIZE);
+  _labelled(grid, 10, 3, _("Colour"), toolbar->gutter_color);
+  toolbar->size_snap = _guide_check(self, grid, 11, 0, _("Snap sizes to neighbours"), DT_CANVAS_SNAP_SIZE);
   gtk_widget_set_hexpand(toolbar->size_snap, TRUE);
 
   GtkWidget *popover = gtk_popover_new(NULL);

@@ -124,6 +124,10 @@ static dt_canvas_t *_populated_canvas(void)
   dt_canvas_mask_set_nodes(canvas, image, nodes, 4);
   image->mask.feather = 0.12f;
   image->mask.flags = DT_CANVAS_MASK_INVERT;
+  canvas->page_margin = 18.0f;
+  canvas->page_bleed = 9.0f;
+  canvas->margin_color = dt_canvas_color(0.1f, 0.2f, 0.25f, 1.0f);
+  canvas->bleed_color = dt_canvas_color(0.75f, 0.3f, 0.3f, 1.0f);
   // The text gets an ellipse: no nodes, only the fixed fields.
   dt_canvas_mask_set_shape(canvas, text, DT_CANVAS_MASK_ELLIPSE);
   text->mask.center_x = 0.4f;
@@ -216,6 +220,10 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(restored->shadow.offset_x, 11.0f, 1e-6);
   assert_float_equal(restored->shadow.offset_y, -7.0f, 1e-6);
   assert_float_equal(restored->shadow.blur, 5.5f, 1e-6);
+  assert_float_equal(restored->page_margin, 18.0f, 1e-6);
+  assert_float_equal(restored->page_bleed, 9.0f, 1e-6);
+  assert_float_equal(restored->margin_color.blue, 0.25f, 1e-6);
+  assert_float_equal(restored->bleed_color.red, 0.75f, 1e-6);
   assert_float_equal(restored->gutter_color.red, 0.9f, 1e-6);
   assert_float_equal(restored->texture_contrast, 1.5f, 1e-6);
   assert_float_equal(restored->texture_scale, 2.0f, 1e-6);
@@ -537,6 +545,79 @@ static void _connectors_route_between_cardinal_anchors(void **state)
  * A frame offers nine places to attach a connector: the four edge midpoints, the four
  * corners, and the centre. They are the frame's own points, so they turn with it.
  */
+/**
+ * The page list is ordered for reading and stored by code, so a size appended to the enum --
+ * A0 and A1 were -- shows where it belongs without moving any saved document's page.
+ */
+static void _the_page_list_reads_in_order_and_stores_by_code(void **state)
+{
+  (void)state;
+  // The list starts at "None" and then runs down the ISO A series from the largest.
+  assert_int_equal(dt_canvas_paper_code(0), DT_CANVAS_PAPER_NONE);
+  assert_int_equal(dt_canvas_paper_code(1), DT_CANVAS_PAPER_A0);
+  assert_int_equal(dt_canvas_paper_code(2), DT_CANVAS_PAPER_A1);
+  assert_int_equal(dt_canvas_paper_code(3), DT_CANVAS_PAPER_A2);
+  assert_int_equal(dt_canvas_paper_code(7), DT_CANVAS_PAPER_A6);
+  assert_string_equal(dt_canvas_paper_name(1), "A0");
+  // Every code the list offers comes back to the row it was shown on, and every one of them
+  // is a size -- a stored value with no size behind it would silently become no pages at all.
+  for(int position = 1; position < dt_canvas_paper_count(); position++)
+  {
+    const uint32_t code = dt_canvas_paper_code(position);
+    assert_int_equal(dt_canvas_paper_position(code), position);
+    double width = 0.0;
+    double height = 0.0;
+    assert_true(dt_canvas_paper_points(code, &width, &height));
+    assert_true(width > 0.0 && height > 0.0);
+  }
+  // A0 is 841 by 1189 mm, which is what a print shop will ask for.
+  double width = 0.0;
+  double height = 0.0;
+  assert_true(dt_canvas_paper_points(DT_CANVAS_PAPER_A0, &width, &height));
+  assert_float_equal(width, 2384.0, 1.0);
+  assert_float_equal(height, 3370.0, 1.0);
+  // And each step down the series halves the sheet: A1's long edge is A0's short one.
+  double next_width = 0.0;
+  double next_height = 0.0;
+  assert_true(dt_canvas_paper_points(DT_CANVAS_PAPER_A1, &next_width, &next_height));
+  assert_float_equal(next_height, width, 1.0);
+}
+
+/**
+ * The page's inner margin and the sheet's bleed are the same rectangle moved in and out, and
+ * both are the document's rather than the export's.
+ */
+static void _a_page_carries_a_margin_inside_it_and_a_bleed_outside(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->paper_size = DT_CANVAS_PAPER_A6; // 298 x 420 points
+  canvas->paper_landscape = 0;
+  canvas->page_margin = 20.0f;
+  canvas->page_bleed = 10.0f;
+  dt_canvas_rect_t rect;
+
+  assert_true(dt_canvas_page_guide_rect(canvas, 0, 0, 0.0, &rect));
+  assert_float_equal(rect.width, 298.0, 1e-6);
+  assert_float_equal(rect.height, 420.0, 1e-6);
+  // Inside, by the margin, on all four sides.
+  assert_true(dt_canvas_page_guide_rect(canvas, 0, 0, -canvas->page_margin, &rect));
+  assert_float_equal(rect.x, 20.0, 1e-6);
+  assert_float_equal(rect.y, 20.0, 1e-6);
+  assert_float_equal(rect.width, 298.0 - 40.0, 1e-6);
+  assert_float_equal(rect.height, 420.0 - 40.0, 1e-6);
+  // Outside, by the bleed, on all four sides -- and on the page next door too.
+  assert_true(dt_canvas_page_guide_rect(canvas, 1, 0, canvas->page_bleed, &rect));
+  assert_float_equal(rect.x, 298.0 - 10.0, 1e-6);
+  assert_float_equal(rect.width, 298.0 + 20.0, 1e-6);
+  // A margin that would meet itself is no guide at all.
+  assert_false(dt_canvas_page_guide_rect(canvas, 0, 0, -200.0, &rect));
+  // And none of it exists without pages.
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  assert_false(dt_canvas_page_guide_rect(canvas, 0, 0, 0.0, &rect));
+  dt_canvas_free(canvas);
+}
+
 static void _a_frame_offers_its_corners_and_its_centre_as_anchors(void **state)
 {
   (void)state;
@@ -923,6 +1004,8 @@ int main(void)
     cmocka_unit_test(_draw_order_edits_keep_the_list_sorted),
     cmocka_unit_test(_rotated_frames_answer_hit_tests_and_bounds),
     cmocka_unit_test(_connectors_route_between_cardinal_anchors),
+    cmocka_unit_test(_the_page_list_reads_in_order_and_stores_by_code),
+    cmocka_unit_test(_a_page_carries_a_margin_inside_it_and_a_bleed_outside),
     cmocka_unit_test(_a_frame_offers_its_corners_and_its_centre_as_anchors),
     cmocka_unit_test(_a_waypoint_bends_every_routing_through_it),
     cmocka_unit_test(_frames_snap_next_to_their_neighbours_one_gutter_apart),
