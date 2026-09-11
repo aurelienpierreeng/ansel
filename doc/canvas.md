@@ -272,9 +272,16 @@ margin each frame owns, so the frames overlap where the frames meet.
 
 ### Connectors
 
-A connector joins two frames at **anchors**: each frame's own cardinal points (top, right,
-bottom, left), which rotate with it, or `AUTO`, which picks of the four the one nearest the
-other end's frame. `dt_canvas_connector_route()` resolves a connector to its geometry once,
+A connector joins two frames at **anchors**: nine per frame -- the four edge midpoints, the
+four corners, and the centre -- all of them the frame's own points, so they rotate with it;
+or `AUTO`, which picks of the four midpoints the one nearest the other end's frame. A
+corner's normal is its diagonal, so a route leaves it at 45 degrees rather than running
+beside an edge. **The centre is the one anchor whose handle is not where the route touches**:
+the handle is the frame's centre, and the attachment slides around the frame's edge to
+wherever faces the other end, which is what to reach for when the side a route leaves by is
+the layout's business rather than the user's. `AUTO` keeps its four candidates so a document
+laid out before the corners existed keeps the routes it had. Anchors are stored by index, so
+a new one is appended and never inserted. `dt_canvas_connector_route()` resolves a connector to its geometry once,
 for the painter and the hit test alike: the two anchor points, the outward normal at each,
 and a polyline. Three **routings**: straight (one segment); square (a stub along each
 normal, then horizontal and vertical legs, with a middle leg when both normals point the
@@ -289,6 +296,16 @@ and length are free; a handle left alone stays automatic. The line stops short o
 tip: a disc of the head's length around the arrowed end is cut out of the stroke, so the tip
 is the triangle's alone and stays sharp. All of it is in the connector's floating bar, with
 dashes, colour and width.
+
+**Ctrl while dragging a handle locks it.** A handle free to go anywhere -- a cutout's centre,
+radius, feather or node, a connector's waypoint -- keeps to one axis, the one it has
+travelled furthest along since the press, so the user chooses which by moving. A handle that
+sets a direction rather than a place -- a connector's tangents, the gradient its curve leaves
+by -- snaps that direction to 45 degree steps about the point it turns around, keeping how
+far out it was pulled; the axes are among those steps, so it is the same lock said in the
+terms an angle has. A frame's rotation reads it the same way, 45 degree steps, where Shift
+reads 15. A handle already confined to a line, like a connector's reach along its anchor's
+normal, has nothing to lock.
 
 Connectors are drawn from the toolbar's **Connect** button (or C): in that mode the frame
 under the pointer shows its four cardinal anchor dots, the first click picks the source
