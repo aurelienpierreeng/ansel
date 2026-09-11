@@ -1460,6 +1460,20 @@ each needs to know is which tree the gesture came from. **That includes the cont
 connecting them with the module instead is what once made every menu action dereference arbitrary
 memory.
 
+**A row's module (`TREE_MODULE`) is the module of the mask the row sits in, not the owner of the
+group the row names.** It is NULL for a group in the inventory that no module renders, and the
+root mask's module for a nested group. A handler that changes a group and must refresh the module
+panels showing it asks `_modules_owning_group()` for the modules whose mask *is* that group —
+those are the ones whose "N shapes used" moved; every panel's member list is rebuilt by the
+signal anyway.
+
+**`DT_SIGNAL_MASK_CHANGED` with `DT_MASKS_EVENT_CHANGE` and ids `(0, 0)` means "rebuild".** The
+manager's handler first looks for the row the ids name; `(0, 0)` names none, so its not-found
+branch rebuilds on a CHANGE as it does on a deletion. The handlers that raise the signal instead
+of broadcasting it (adding an existing shape to a group, renaming, changing a combine operation)
+count on that rebuild; the ones that rebuild the tree themselves go through
+`_shape_manager_broadcast()`, whose `gui_reset` makes the handler's rebuild a no-op.
+
 A module mask is shown FLAT in the inventory -- one row, no expander, its members not appended
 under it -- and expandable in the module list, which is where that subtree belongs. `_tree_row_t`
 carries the `flat` flag that stops `_shape_manager_list_recurs()` after the row itself.

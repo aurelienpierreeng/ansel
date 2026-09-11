@@ -79,6 +79,7 @@ DT_MODULE(1)
 
 static void _shape_manager_recreate_list(dt_lib_module_t *self);
 static void _shape_manager_update_list(dt_lib_module_t *self);
+static GList *_modules_owning_group(const dt_masks_form_t *group);
 static void _shape_manager_broadcast(dt_lib_module_t *self, const int formid, const int parentid,
                                      const dt_masks_event_t event);
 
@@ -260,7 +261,6 @@ static void _tree_add_exist(GtkButton *button, dt_masks_form_t *grp)
   if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return;
   // we get the new formid
   const int id = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "formid"));
-  dt_iop_module_t *module = g_object_get_data(G_OBJECT(button), "module");
 
   // we add the form in this group
   dt_masks_form_t *form = dt_masks_get_from_id(dev, id);
@@ -270,9 +270,16 @@ static void _tree_add_exist(GtkButton *button, dt_masks_form_t *grp)
     // we save the group
     dt_dev_add_history_item(dev, NULL, FALSE, TRUE);
 
-    // and we apply the change
+    /* The modules whose drawn mask IS this group now count one more shape. Not the module of the
+     * row the menu was opened on: a nested group's row carries the module of the mask it sits in,
+     * whose own count does not change, and a group no module renders yet -- the inventory offers
+     * this menu on those too -- carries none at all. Every module's member list is rebuilt by the
+     * signal below. */
+    GList *owners = _modules_owning_group(grp);
+    for(const GList *m = owners; m; m = g_list_next(m))
+      dt_iop_gui_blend_masks_update((dt_iop_module_t *)m->data);
+    g_list_free(owners);
 
-    dt_iop_gui_blend_masks_update(module);
     dt_dev_masks_selection_change(dev, NULL, grp->formid, TRUE);
 
   /* Raised rather than broadcast: unlike the handlers above, this one does not rebuild the tree
@@ -1357,7 +1364,12 @@ static void _show_masks_on_owning_module(GtkTreeModel *model, GtkTreeIter *iter)
      || !dt_iop_module_supports_drawn_mask(module))
     return;
 
+  /* Blend data exists as soon as the module has a GUI, but its masks widgets only once the
+   * masks body has been built, which masks_inited says -- dt_iop_gui_blend_masks_update() asks
+   * the same question. A module whose mask the manager lists need never have been expanded. */
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
+  if(!bd->masks_inited) return;
+
   bd->masks_shown = 1;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
   gtk_widget_queue_draw(bd->masks_edit);
@@ -1475,7 +1487,6 @@ static void _menu_append_existing_shapes(GtkMenuShell *menu, dt_masks_form_t *gr
 
     GtkWidget *item = gtk_menu_item_new_with_label(str);
     g_object_set_data(G_OBJECT(item), "formid", GUINT_TO_POINTER(form->formid));
-    g_object_set_data(G_OBJECT(item), "module", module);
     g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_tree_add_exist), grp);
     gtk_menu_shell_append(GTK_MENU_SHELL(shapes_menu), item);
     any = TRUE;
@@ -2842,10 +2853,14 @@ static void _shape_manager_handler_callback(gpointer instance __attribute__((unu
     _shape_manager_recreate_list(self);
   }
 
-  else if(event == DT_MASKS_EVENT_DELETE || event == DT_MASKS_EVENT_REMOVE)
+  /* A change or a deletion whose row cannot be found still rebuilds the whole list. A deleted
+   * shape may no longer have its row; and a CHANGE raised with the ids (0, 0) names no row at
+   * all -- it is how "the structure changed" is spelled by the handlers here that raise rather
+   * than broadcast (adding an existing shape to a group, renaming, changing a combine
+   * operation), which count on this handler to rebuild the tree. The handlers that rebuild it
+   * themselves broadcast under gui_reset, which makes the rebuild a no-op for them. */
+  else if(event == DT_MASKS_EVENT_CHANGE || event == DT_MASKS_EVENT_DELETE || event == DT_MASKS_EVENT_REMOVE)
   {
-    // When a shape is deleted from the model, we may no longer find its previous row in the current tree.
-    // In that case, force a full list refresh so stale rows don't remain visible.
     _shape_manager_recreate_list(self);
   }
 
