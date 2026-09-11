@@ -88,6 +88,7 @@ macro(add_iop _lib _src)
             --present ${_present}
             --fill ${_fill}
             --cc ${CMAKE_C_COMPILER}
+            --cxx ${CMAKE_CXX_COMPILER}
             --sources ${_scan_sources}
             --
               "-I$<JOIN:$<TARGET_PROPERTY:${_lib},INCLUDE_DIRECTORIES>,;-I>"
