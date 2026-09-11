@@ -2686,11 +2686,23 @@ they are visible.
   needs because its pasteboard is always light and this plane can be a charcoal card. The
   colour conf keys were RENAMED (`canvas/trim_color`, `canvas/guide_*_color`) because a
   configuration that already holds the old defaults would otherwise never see the new ones.
-  And the gutter: two frames sit side by side when their margin boxes touch, so the clear
-  space between them is TWO gutters. Keyed on one, a frame's box landed on its neighbour's
+  And the object gutter is now the PADDING, the word gutter having gone to the fold's own
+  allowance where print puts it: two frames sit side by side when their padding boxes touch,
+  so the clear space between them is TWO paddings. Keyed on one, a frame's box landed on its neighbour's
   edge and the two boxes overlapped across the whole gap -- box against frame, reported as
   odd and crossing. The snapping, the masonry run detection and `dt_canvas_layout_apply()`
   must carry the same factor, or an arranged layout is not one the snapping can reproduce.
+- **A spread is the sheet, and the plane stops tiling evenly.** `spread_cols` by `spread_rows`
+  pages stay contiguous with FOLDS between them (dashed, the dieline's crease against its cut);
+  between two spreads the plane opens by TWICE the bleed so no two bleeds overlap. Zero is the
+  uniform tiling every document had before. Three things follow and each is a trap if
+  forgotten: the page under a point must be ASKED for (`dt_canvas_page_at()`) and never divided
+  out, and it answers with the page on the left for a point in the gap; the page snapping
+  cannot use a period and gathers the real lines the neighbouring pages offer; and the trim,
+  the bleed and the export's output pages all belong to the SHEET, claimed by its first page so
+  a spread is emitted once however many of its pages a walk passes over. The **bind gutter** is
+  the binding's allowance inside a page at a fold ONLY, which is why
+  `dt_canvas_page_margin_rect()` exists beside the symmetric `dt_canvas_page_guide_rect()`.
 - **A page size is an index into one appended-only table** (`dt_canvas_paper_points()`), and
   the GUI reads the table rather than repeating it. Insert a size in the middle and every
   saved document changes page. **A canvas unit is a display pixel and the canvas says how many

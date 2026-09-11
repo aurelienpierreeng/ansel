@@ -70,7 +70,7 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 868 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4)
+#define DT_CANVAS_HEADER_RESERVED 856 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12)
 #define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
 #define DT_CANVAS_TEXT_RESERVED 240 ///< 256 at format 1, minus the two alignments, the line height and the tracking
@@ -122,17 +122,17 @@ typedef enum dt_canvas_grid_flags_t
   DT_CANVAS_GRID_NONE = 0,
   DT_CANVAS_GRID_VISIBLE = 1 << 0,
   DT_CANVAS_GRID_SNAP = 1 << 1,     ///< positions and sizes round to the grid
-  DT_CANVAS_SNAP_GUTTER = 1 << 2,   ///< edges land one gutter from a neighbour, or in line with it
+  DT_CANVAS_SNAP_PADDING = 1 << 2,   ///< edges land one padding from a neighbour, or in line with it
   DT_CANVAS_SNAP_SIZE = 1 << 3,     ///< a resized frame takes a neighbour's width or height
   DT_CANVAS_PAGE_VISIBLE = 1 << 4,  ///< the page borders are drawn
   DT_CANVAS_SNAP_PAGE = 1 << 5,     ///< edges land on a page border
-  DT_CANVAS_GUTTER_VISIBLE = 1 << 6, ///< a frame one gutter out is drawn around every frame
+  DT_CANVAS_PADDING_VISIBLE = 1 << 6, ///< a frame one padding out is drawn around every frame
   DT_CANVAS_MARGIN_VISIBLE = 1 << 7, ///< the page's inner margin is drawn
   DT_CANVAS_SNAP_MARGIN = 1 << 8,    ///< edges land on it
   DT_CANVAS_BLEED_VISIBLE = 1 << 9,  ///< the sheet's bleed, outside the page, is drawn
   DT_CANVAS_SNAP_BLEED = 1 << 10,    ///< edges land on it
   DT_CANVAS_GUIDES_OVER = 1 << 11,   ///< the page guides are drawn over the content, not under it
-  DT_CANVAS_SNAP_ALL = DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_GUTTER | DT_CANVAS_SNAP_SIZE | DT_CANVAS_SNAP_PAGE
+  DT_CANVAS_SNAP_ALL = DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_PADDING | DT_CANVAS_SNAP_SIZE | DT_CANVAS_SNAP_PAGE
                        | DT_CANVAS_SNAP_MARGIN | DT_CANVAS_SNAP_BLEED,
 } dt_canvas_grid_flags_t;
 
@@ -511,19 +511,43 @@ typedef struct dt_canvas_t
   float border_width;
   float grid_size;                  ///< canvas units between grid lines
   uint32_t grid_flags;              ///< dt_canvas_grid_flags_t bits
-  float gutter;                     ///< the margin frames keep from each other when snapped side by side or laid out
+  /**
+   * The clear margin EVERY frame keeps around itself, so two of them side by side are two of
+   * these apart and their margin boxes meet on one line. It used to be called the gutter,
+   * which in print is the fold's own allowance and is now `bind_gutter` below.
+   */
+  float padding;
   uint32_t background_style;        ///< dt_canvas_background_t
   dt_canvas_color_t grid_color;     ///< the grid dots
   uint32_t paper_size;              ///< dt_canvas_paper_t
   uint32_t paper_landscape;         ///< 0 portrait, 1 landscape
   dt_canvas_color_t page_color;     ///< the page borders
   dt_canvas_shadow_t shadow;        ///< default shadow for objects without an override
-  dt_canvas_color_t gutter_color;   ///< the gutter frames, when DT_CANVAS_GUTTER_VISIBLE
+  dt_canvas_color_t padding_color;   ///< the padding frames, when DT_CANVAS_PADDING_VISIBLE
   float texture_contrast;           ///< the paper's relief: multipliers, 1 is the paper as designed; 0 reads as 1
   float texture_detail;             ///< its fine structure: fibres, pores, wrinkles, the mesh
   float texture_scale;              ///< the size of its features
   float texture_grain;              ///< the dither that finishes it
   float resolution;                 ///< canvas units per inch; 0 reads as 72, which is what a file from before held
+  /**
+   * A SPREAD is the block of pages that stays on one sheet: `spread_cols` across by
+   * `spread_rows` down. A book is 2 by 1, a zine folded both ways 2 by 2, a poster printed at
+   * home and taped together as many as it takes. Pages inside a spread are contiguous and the
+   * borders between them are FOLDS; between two spreads the plane opens by twice the bleed, so
+   * each sheet carries its own all round and no two bleeds overlap.
+   *
+   * ZERO is a plane tiled uniformly, which is what every document written before these fields
+   * holds and exactly the geometry it was laid out with. One is every page on its own sheet,
+   * two bleeds apart.
+   */
+  uint32_t spread_cols;
+  uint32_t spread_rows;
+  /**
+   * The binding's own allowance, added inside a page AT A FOLD only -- what a perfect binding
+   * swallows out of the middle of a picture that crosses it. It is not the page margin, which
+   * is uniform all round; it is the extra the fold side needs on top of it.
+   */
+  float bind_gutter;
   float corner_radius;              ///< default rounded corners of the frames, canvas units; 0 is square
   float page_margin;                ///< kept clear inside every page edge, canvas units
   dt_canvas_color_t margin_color;   ///< the margin lines
@@ -795,9 +819,9 @@ dt_canvas_object_t *dt_canvas_pick(const dt_canvas_t *canvas, double x, double y
 
 /**
  * @brief Snap a moving box next to, or in line with, the other frames.
- * @details Candidates are the other frames' edges plus or minus the gutter (side by side with
+ * @details Candidates are the other frames' edges plus or minus the padding (side by side with
  * the canvas margin) and their edges themselves (aligned). The nearest candidate within
- * `threshold` wins per axis. This is the gutter rule; it ignores the canvas's snap flags,
+ * `threshold` wins per axis. This is the padding rule; it ignores the canvas's snap flags,
  * the caller consults them.
  * @param moving the box being moved, canvas units.
  * @param exclude object ids not to snap against (the selection itself); may be NULL.
@@ -813,7 +837,7 @@ gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas
  * @brief Snap a size to another frame's width or height, or to a run of frames.
  * @details The same-size rule: the nearest candidate within `threshold` replaces `*width`, and
  * likewise for `*height`, each axis on its own. Candidates are every other frame's box and
- * every run of frames stacked one gutter apart (masonry style), so a frame beside two stacked
+ * every run of frames stacked one padding apart (masonry style), so a frame beside two stacked
  * ones can take their combined height.
  * @param width_reference receives the box the width was taken from, for a guide; may be NULL.
  * @return TRUE when at least one dimension snapped.
@@ -868,6 +892,29 @@ gboolean dt_canvas_paper_is_physical(uint32_t paper);
 double dt_canvas_resolution(const dt_canvas_t *canvas);
 
 /**
+ * @brief The sheet a page belongs to: the block of pages that stays contiguous, and how many
+ * pages it holds.
+ *
+ * With no spread the sheet IS the page, which is the uniform tiling every document had before
+ * spreads existed. `cols`/`rows` may be NULL.
+ */
+gboolean dt_canvas_spread_rect(const dt_canvas_t *canvas, int col, int row, dt_canvas_rect_t *rect, int *cols,
+                               int *rows);
+
+/** @brief Where a page sits inside its own spread, so a caller can tell a fold from a trim. */
+void dt_canvas_page_in_spread(const dt_canvas_t *canvas, int col, int row, int *across, int *down, int *cols,
+                              int *rows);
+
+/**
+ * @brief The page rectangle inset by the margin, and by the bind gutter on whichever sides are
+ * a fold.
+ */
+gboolean dt_canvas_page_margin_rect(const dt_canvas_t *canvas, int col, int row, dt_canvas_rect_t *rect);
+
+/** @brief The page column and row whose rectangle covers a point, clamped into the nearest page. */
+void dt_canvas_page_at(const dt_canvas_t *canvas, double x, double y, int *col, int *row);
+
+/**
  * @brief The rectangle of one page, grown by `outset` on every side.
  * @details A negative outset is the page's inner margin, a positive one its bleed. FALSE when
  * the canvas is not divided into pages.
@@ -905,7 +952,7 @@ typedef enum dt_canvas_layout_t
  * @brief Arrange frames.
  * @param ids the object ids to arrange, in the order they should flow; NULL arranges every frame.
  * @param columns column count for masonry; ignored by the other layouts.
- * @details Rotations are reset. The gap between frames is the canvas gutter. The arrangement is
+ * @details Rotations are reset. The gap between frames is the canvas padding. The arrangement is
  * anchored at the top-left of the box the frames currently occupy, so applying a layout does
  * not move the group elsewhere; with snapping on, that anchor and every cell land on the grid.
  */
