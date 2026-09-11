@@ -148,6 +148,31 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     cairo_line_to(cr, end_x, row * page_height);
   }
   cairo_stroke(cr);
+
+  // The margin inside every page and the bleed outside it: one rectangle per page rather than
+  // a grid of lines, since neither is shared between neighbours the way a page border is.
+  const struct
+  {
+    double outset;
+    uint32_t visible;
+    const dt_canvas_color_t *color;
+  } guides[2] = { { -(double)canvas->page_margin, DT_CANVAS_MARGIN_VISIBLE, &canvas->margin_color },
+                  { (double)canvas->page_bleed, DT_CANVAS_BLEED_VISIBLE, &canvas->bleed_color } };
+  for(int guide = 0; guide < 2; guide++)
+  {
+    if(!(canvas->grid_flags & guides[guide].visible) || fabs(guides[guide].outset) <= 0.0) continue;
+    _set_color(cr, guides[guide].color, options->for_display);
+    for(int row = first_row; row <= last_row; row++)
+    {
+      for(int col = first_col; col <= last_col; col++)
+      {
+        dt_canvas_rect_t rect;
+        if(!dt_canvas_page_guide_rect(canvas, col, row, guides[guide].outset, &rect)) continue;
+        cairo_rectangle(cr, rect.x, rect.y, rect.width, rect.height);
+      }
+    }
+    cairo_stroke(cr);
+  }
   cairo_restore(cr);
 }
 

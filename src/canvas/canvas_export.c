@@ -60,7 +60,6 @@ dt_canvas_export_options_t dt_canvas_export_options_default(void)
   dt_canvas_export_options_t options;
   memset(&options, 0, sizeof(options));
   options.format = DT_CANVAS_EXPORT_PDF;
-  options.bleed_mm = 0.0f;
   options.dpi = 300.0f;
   options.quality = 92;
   options.icc_type = DT_COLORSPACE_SRGB;
@@ -452,7 +451,8 @@ gboolean dt_canvas_export(const dt_canvas_t *canvas, const char *path, const dt_
     return FALSE;
   }
   const double dpi = options->dpi > 0.0f ? options->dpi : 300.0;
-  const double bleed_pt = fmax(options->bleed_mm, 0.0f) / 25.4 * 72.0;
+  // The bleed belongs to the document, beside the page size it grows: one canvas unit is one point.
+  const double bleed_pt = fmax(canvas->page_bleed, 0.0f);
   const double scale = dpi / 72.0;
   GArray *pages = _pages_of(canvas, bleed_pt);
 

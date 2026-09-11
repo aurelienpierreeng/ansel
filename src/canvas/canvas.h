@@ -70,7 +70,7 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 912 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16), texture (16), corners (4)
+#define DT_CANVAS_HEADER_RESERVED 872 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16), texture (16), corners (4), page margin (20), page bleed (20)
 #define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
 #define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
@@ -127,7 +127,12 @@ typedef enum dt_canvas_grid_flags_t
   DT_CANVAS_PAGE_VISIBLE = 1 << 4,  ///< the page borders are drawn
   DT_CANVAS_SNAP_PAGE = 1 << 5,     ///< edges land on a page border
   DT_CANVAS_GUTTER_VISIBLE = 1 << 6, ///< a frame one gutter out is drawn around every frame
-  DT_CANVAS_SNAP_ALL = DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_GUTTER | DT_CANVAS_SNAP_SIZE | DT_CANVAS_SNAP_PAGE,
+  DT_CANVAS_MARGIN_VISIBLE = 1 << 7, ///< the page's inner margin is drawn
+  DT_CANVAS_SNAP_MARGIN = 1 << 8,    ///< edges land on it
+  DT_CANVAS_BLEED_VISIBLE = 1 << 9,  ///< the sheet's bleed, outside the page, is drawn
+  DT_CANVAS_SNAP_BLEED = 1 << 10,    ///< edges land on it
+  DT_CANVAS_SNAP_ALL = DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_GUTTER | DT_CANVAS_SNAP_SIZE | DT_CANVAS_SNAP_PAGE
+                       | DT_CANVAS_SNAP_MARGIN | DT_CANVAS_SNAP_BLEED,
 } dt_canvas_grid_flags_t;
 
 /** Which edges of a moving box may snap: all four for a move, the dragged ones for a resize. */
@@ -455,7 +460,9 @@ typedef enum dt_canvas_paper_t
   DT_CANVAS_PAPER_FACEBOOK_COVER = 11,    ///< 851 x 315 px
   DT_CANVAS_PAPER_YOUTUBE_THUMBNAIL = 12, ///< 1280 x 720 px
   DT_CANVAS_PAPER_YOUTUBE_BANNER = 13,    ///< channel art, 2560 x 1440 px
-  DT_CANVAS_PAPER_LAST = 14,
+  DT_CANVAS_PAPER_A1 = 14,
+  DT_CANVAS_PAPER_A0 = 15,
+  DT_CANVAS_PAPER_LAST = 16,
 } dt_canvas_paper_t;
 
 typedef struct dt_canvas_t
@@ -480,6 +487,10 @@ typedef struct dt_canvas_t
   float texture_scale;              ///< the size of its features
   float texture_grain;              ///< the dither that finishes it
   float corner_radius;              ///< default rounded corners of the frames, canvas units; 0 is square
+  float page_margin;                ///< kept clear inside every page edge, canvas units
+  dt_canvas_color_t margin_color;   ///< the margin lines
+  float page_bleed;                 ///< how far past every page edge the sheet keeps going, canvas units
+  dt_canvas_color_t bleed_color;    ///< the bleed lines
   double view_zoom;                 ///< the viewport the canvas was saved with
   double view_x;                    ///< canvas point shown at the centre of the view
   double view_y;
@@ -759,18 +770,38 @@ gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, d
  */
 gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, double *height);
 
-/** @brief How many page sizes there are, DT_CANVAS_PAPER_NONE included. */
+/**
+ * @brief How many page sizes there are to offer, DT_CANVAS_PAPER_NONE included.
+ * @details `position` runs 0..count-1 in the order a list should show them, which is NOT the
+ * stored value: sizes are appended to `dt_canvas_paper_t` so old documents keep their page,
+ * and appear in the list wherever they belong. `dt_canvas_paper_code()` turns a position into
+ * the value to store, `dt_canvas_paper_position()` turns it back.
+ */
 int dt_canvas_paper_count(void);
 
-/** @brief The page size's name, translated, or NULL past the end. "None" is the first. */
-const char *dt_canvas_paper_name(int paper);
+/** @brief The page size shown at `position`, translated, or NULL past the end. */
+const char *dt_canvas_paper_name(int position);
+
+/** @brief The dt_canvas_paper_t to store for the size shown at `position`. */
+uint32_t dt_canvas_paper_code(int position);
+
+/** @brief Where a stored dt_canvas_paper_t sits in the list, or 0 when it is not one. */
+int dt_canvas_paper_position(uint32_t paper);
 
 /**
  * @brief The page size in points, portrait. FALSE for DT_CANVAS_PAPER_NONE and past the end.
  * @note A pixel-defined size (a story, a banner) is that many points, which is that many
  * pixels at 72 dpi.
  */
-gboolean dt_canvas_paper_points(int paper, double *width, double *height);
+gboolean dt_canvas_paper_points(uint32_t paper, double *width, double *height);
+
+/**
+ * @brief The rectangle of one page, grown by `outset` on every side.
+ * @details A negative outset is the page's inner margin, a positive one its bleed. FALSE when
+ * the canvas is not divided into pages.
+ */
+gboolean dt_canvas_page_guide_rect(const dt_canvas_t *canvas, int col, int row, double outset,
+                                   dt_canvas_rect_t *rect);
 
 /** @brief The page rectangle at column `col`, row `row` of the paper tiling, from the origin. */
 dt_canvas_rect_t dt_canvas_page_rect(const dt_canvas_t *canvas, int col, int row);

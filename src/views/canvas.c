@@ -469,7 +469,15 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   canvas->background_style = (uint32_t)CLAMP(dt_conf_get_int("canvas/background_style"), 0, DT_CANVAS_BACKGROUND_LAST - 1);
   const char *grid_color = dt_conf_get_string_const("canvas/grid_color");
   dt_canvas_color_parse(grid_color, &canvas->grid_color);
-  canvas->paper_size = (uint32_t)CLAMP(dt_conf_get_int("canvas/paper_size"), 0, dt_canvas_paper_count() - 1);
+  canvas->paper_size = (uint32_t)CLAMP(dt_conf_get_int("canvas/paper_size"), 0, DT_CANVAS_PAPER_LAST - 1);
+  canvas->page_margin = (float)fmax(dt_conf_get_float("canvas/page_margin"), 0.0);
+  canvas->page_bleed = (float)fmax(dt_conf_get_float("canvas/page_bleed"), 0.0);
+  dt_canvas_color_parse(dt_conf_get_string_const("canvas/margin_color"), &canvas->margin_color);
+  dt_canvas_color_parse(dt_conf_get_string_const("canvas/bleed_color"), &canvas->bleed_color);
+  if(dt_conf_get_bool("canvas/margin_visible")) canvas->grid_flags |= DT_CANVAS_MARGIN_VISIBLE;
+  else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_MARGIN_VISIBLE;
+  if(dt_conf_get_bool("canvas/bleed_visible")) canvas->grid_flags |= DT_CANVAS_BLEED_VISIBLE;
+  else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_BLEED_VISIBLE;
   canvas->paper_landscape = dt_conf_get_bool("canvas/paper_landscape") ? 1u : 0u;
   const char *page_color = dt_conf_get_string_const("canvas/page_color");
   dt_canvas_color_parse(page_color, &canvas->page_color);
@@ -789,8 +797,6 @@ typedef struct dt_canvas_export_dialog_t
 {
   GtkWidget *format;
   GtkWidget *dpi;
-  GtkWidget *bleed;
-  GtkWidget *bleed_unit;
   GtkWidget *quality;
   GtkWidget *profile;
   GtkWidget *intent;
@@ -806,54 +812,6 @@ static GtkWidget *_labelled_row(GtkWidget *grid, const int row, const char *labe
   gtk_widget_set_hexpand(widget, TRUE);
   gtk_grid_attach(GTK_GRID(grid), widget, 1, row, 1, 1);
   return widget;
-}
-
-/** The bleed is typed in whatever unit suits the job; millimetres are what the exporter takes. */
-typedef enum dt_canvas_bleed_unit_t
-{
-  DT_CANVAS_BLEED_CM = 0,
-  DT_CANVAS_BLEED_INCH = 1,
-  DT_CANVAS_BLEED_PIXELS = 2,
-} dt_canvas_bleed_unit_t;
-
-static float _bleed_to_mm(const double value, const int unit, const double dpi)
-{
-  switch(unit)
-  {
-    case DT_CANVAS_BLEED_INCH:
-      return (float)(value * 25.4);
-    case DT_CANVAS_BLEED_PIXELS:
-      return (float)(dpi > 0.0 ? value / dpi * 25.4 : 0.0);
-    default:
-      return (float)(value * 10.0);
-  }
-}
-
-static double _bleed_from_mm(const double millimetres, const int unit, const double dpi)
-{
-  switch(unit)
-  {
-    case DT_CANVAS_BLEED_INCH:
-      return millimetres / 25.4;
-    case DT_CANVAS_BLEED_PIXELS:
-      return millimetres / 25.4 * dpi;
-    default:
-      return millimetres * 0.1;
-  }
-}
-
-/** The bleed's unit changed: keep the length it stands for and restate it in the new unit. */
-static void _export_bleed_unit_changed(GtkComboBox *combo, gpointer data)
-{
-  dt_canvas_export_dialog_t *widgets = (dt_canvas_export_dialog_t *)data;
-  const int unit = gtk_combo_box_get_active(combo);
-  const double dpi = gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets->dpi));
-  const int previous = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(combo), "bleed-unit"));
-  const double millimetres
-      = _bleed_to_mm(gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets->bleed)), previous, dpi);
-  g_object_set_data(G_OBJECT(combo), "bleed-unit", GINT_TO_POINTER(unit));
-  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(widgets->bleed), unit == DT_CANVAS_BLEED_PIXELS ? 0 : 2);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets->bleed), _bleed_from_mm(millimetres, unit, dpi));
 }
 
 /** Only the formats that compress lossily have a quality to set. */
@@ -897,35 +855,13 @@ static void _export_canvas(dt_view_t *self)
                               _("A page is rasterised at exactly this many pixels per inch of its own size, and no more"));
   _labelled_row(grid, 1, _("Resolution (dpi)"), widgets.dpi);
 
-  GtkWidget *bleed_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
-  widgets.bleed = gtk_spin_button_new_with_range(0.0, 200.0, 0.1);
-  gtk_widget_set_tooltip_text(widgets.bleed,
-                              _("How far past every page edge the picture keeps going. A frame a page break cuts in two "
-                                "carries on into the bleed on both sheets, which is what a binding folds around and a "
-                                "trim cuts into. Nothing is moved: the sheet is simply larger than the page."));
-  gtk_box_pack_start(GTK_BOX(bleed_box), widgets.bleed, TRUE, TRUE, 0);
-  widgets.bleed_unit = gtk_combo_box_text_new();
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.bleed_unit), _("cm"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.bleed_unit), _("in"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.bleed_unit), _("px"));
-  gtk_box_pack_start(GTK_BOX(bleed_box), widgets.bleed_unit, FALSE, FALSE, 0);
-  const int bleed_unit = CLAMP(dt_conf_get_int("canvas/export/bleed_unit"), 0, 2);
-  gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.bleed_unit), bleed_unit);
-  g_object_set_data(G_OBJECT(widgets.bleed_unit), "bleed-unit", GINT_TO_POINTER(bleed_unit));
-  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(widgets.bleed), bleed_unit == DT_CANVAS_BLEED_PIXELS ? 0 : 2);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets.bleed),
-                            _bleed_from_mm(dt_conf_get_float("canvas/export/bleed_mm"), bleed_unit,
-                                           gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.dpi))));
-  g_signal_connect(widgets.bleed_unit, "changed", G_CALLBACK(_export_bleed_unit_changed), &widgets);
-  _labelled_row(grid, 2, _("Bleed"), bleed_box);
-
   widgets.quality = gtk_spin_button_new_with_range(50.0, 100.0, 1.0);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets.quality), CLAMP(dt_conf_get_int("canvas/export/quality"), 50, 100));
   gtk_widget_set_tooltip_text(widgets.quality,
                               _("How hard the pages are compressed. A PDF page is a photograph and is carried as one, "
                                 "which is what keeps the file from weighing what its pixels weigh; 100 keeps every code "
                                 "and makes it many times larger. PNG and TIFF are always lossless."));
-  _labelled_row(grid, 3, _("Quality"), widgets.quality);
+  _labelled_row(grid, 2, _("Quality"), widgets.quality);
 
   widgets.profile = gtk_combo_box_text_new();
   widgets.profile_count = dt_colorspaces_enumerate_profiles(DT_PROFILE_ROLE_OUTPUT, &widgets.profiles);
@@ -940,7 +876,7 @@ static void _export_canvas(dt_view_t *self)
   }
   if(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.profile)) < 0 && widgets.profile_count > 0)
     gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.profile), 0);
-  _labelled_row(grid, 4, _("Output profile"), widgets.profile);
+  _labelled_row(grid, 3, _("Output profile"), widgets.profile);
 
   widgets.intent = gtk_combo_box_text_new();
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.intent), _("perceptual"));
@@ -948,7 +884,7 @@ static void _export_canvas(dt_view_t *self)
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.intent), _("saturation"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.intent), _("absolute colorimetric"));
   gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.intent), CLAMP(dt_conf_get_int("canvas/pdf/intent"), 0, 3));
-  _labelled_row(grid, 5, _("Rendering intent"), widgets.intent);
+  _labelled_row(grid, 4, _("Rendering intent"), widgets.intent);
 
   // The page is the document's: say which one, so nobody looks for it here.
   double canvas_paper_width = 0.0;
@@ -965,7 +901,7 @@ static void _export_canvas(dt_view_t *self)
   gtk_label_set_line_wrap(GTK_LABEL(note_label), TRUE);
   gtk_label_set_max_width_chars(GTK_LABEL(note_label), 60);
   gtk_widget_set_halign(note_label, GTK_ALIGN_START);
-  gtk_grid_attach(GTK_GRID(grid), note_label, 0, 6, 2, 1);
+  gtk_grid_attach(GTK_GRID(grid), note_label, 0, 5, 2, 1);
   dt_free(note);
 
   gtk_widget_show_all(dialog);
@@ -978,8 +914,6 @@ static void _export_canvas(dt_view_t *self)
     options.format = (dt_canvas_export_format_t)CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.format)), 0,
                                                       DT_CANVAS_EXPORT_LAST - 1);
     options.dpi = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.dpi));
-    const int unit = CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.bleed_unit)), 0, 2);
-    options.bleed_mm = _bleed_to_mm(gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.bleed)), unit, options.dpi);
     options.quality = (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.quality));
     options.intent = (dt_iop_color_intent_t)CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.intent)), 0, 3);
     const int profile = gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.profile));
@@ -990,8 +924,6 @@ static void _export_canvas(dt_view_t *self)
     }
     dt_conf_set_int("canvas/export/format", (int)options.format);
     dt_conf_set_int("canvas/pdf/dpi", (int)options.dpi);
-    dt_conf_set_float("canvas/export/bleed_mm", options.bleed_mm);
-    dt_conf_set_int("canvas/export/bleed_unit", unit);
     dt_conf_set_int("canvas/export/quality", options.quality);
     dt_conf_set_int("canvas/pdf/icc_type", options.icc_type);
     dt_conf_set_string("canvas/pdf/icc_filename", options.icc_filename);
@@ -5183,7 +5115,7 @@ static void _proxy_set_paper(dt_view_t *self, int paper, int landscape)
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
   if(paper >= 0)
   {
-    view->canvas->paper_size = (uint32_t)CLAMP(paper, 0, dt_canvas_paper_count() - 1);
+    view->canvas->paper_size = (uint32_t)CLAMP(paper, 0, DT_CANVAS_PAPER_LAST - 1);
     dt_conf_set_int("canvas/paper_size", (int)view->canvas->paper_size);
   }
   if(landscape >= 0)
@@ -5191,6 +5123,48 @@ static void _proxy_set_paper(dt_view_t *self, int paper, int landscape)
     view->canvas->paper_landscape = landscape ? 1u : 0u;
     dt_conf_set_bool("canvas/paper_landscape", landscape != 0);
   }
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
+static void _proxy_set_page_guides(dt_view_t *self, float margin, float bleed)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  if(margin >= 0.0f)
+  {
+    view->canvas->page_margin = margin;
+    dt_conf_set_float("canvas/page_margin", margin);
+  }
+  if(bleed >= 0.0f)
+  {
+    view->canvas->page_bleed = bleed;
+    dt_conf_set_float("canvas/page_bleed", bleed);
+  }
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
+static void _proxy_set_margin_color(dt_view_t *self, const float *rgba)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(rgba)) return;
+  view->canvas->margin_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  char text[16];
+  dt_canvas_color_format(&view->canvas->margin_color, text, sizeof(text));
+  dt_conf_set_string("canvas/margin_color", text);
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
+static void _proxy_set_bleed_color(dt_view_t *self, const float *rgba)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(rgba)) return;
+  view->canvas->bleed_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  char text[16];
+  dt_canvas_color_format(&view->canvas->bleed_color, text, sizeof(text));
+  dt_conf_set_string("canvas/bleed_color", text);
   dt_canvas_touch(view->canvas);
   dt_control_queue_redraw_center();
 }
@@ -5410,6 +5384,9 @@ void init(dt_view_t *self)
   manager->proxy.canvas.set_shadow = _proxy_set_shadow;
   manager->proxy.canvas.set_texture = _proxy_set_texture;
   manager->proxy.canvas.set_corner_radius = _proxy_set_corner_radius;
+  manager->proxy.canvas.set_page_guides = _proxy_set_page_guides;
+  manager->proxy.canvas.set_margin_color = _proxy_set_margin_color;
+  manager->proxy.canvas.set_bleed_color = _proxy_set_bleed_color;
 }
 
 void gui_init(dt_view_t *self)
