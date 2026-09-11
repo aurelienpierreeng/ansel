@@ -152,6 +152,87 @@ static void _a_polygon_fills_its_interior(void **state)
 }
 
 /**
+ * A node's record says where its curve comes from, and there are THREE answers, not two: its
+ * own control points (a cusp when they coincide, a smooth node when the caller keeps them
+ * collinear), or a tangent computed from its neighbours. The entry used to read the field as
+ * "non-zero means computed", which threw away every tangent a user had steered -- the handles
+ * moved the outline on screen and the cut did not follow.
+ */
+static void _a_polygon_node_steers_its_own_curve(void **state)
+{
+  (void)state;
+  const float corners[4][2] = { { 0.2f, 0.2f }, { 0.8f, 0.2f }, { 0.8f, 0.8f }, { 0.2f, 0.8f } };
+  float nodes[4 * DT_MASKS_CUTOUT_NODE_FLOATS];
+  dt_masks_cutout_t cutout;
+
+  // A square whose nodes carry control points ON themselves: every edge is straight, so a
+  // probe just outside the right edge is empty.
+  for(int kind = 0; kind < 3; kind++)
+  {
+    const float kinds[3] = { 0.0f, 1.0f, 2.0f };
+    memset(nodes, 0, sizeof(nodes));
+    for(int node = 0; node < 4; node++)
+    {
+      float *record = nodes + (size_t)node * DT_MASKS_CUTOUT_NODE_FLOATS;
+      record[DT_MASKS_CUTOUT_NODE_X] = corners[node][0];
+      record[DT_MASKS_CUTOUT_NODE_Y] = corners[node][1];
+      record[DT_MASKS_CUTOUT_NODE_CTRL1_X] = corners[node][0];
+      record[DT_MASKS_CUTOUT_NODE_CTRL1_Y] = corners[node][1];
+      record[DT_MASKS_CUTOUT_NODE_CTRL2_X] = corners[node][0];
+      record[DT_MASKS_CUTOUT_NODE_CTRL2_Y] = corners[node][1];
+      record[DT_MASKS_CUTOUT_NODE_SMOOTH] = kinds[kind];
+    }
+    memset(&cutout, 0, sizeof(cutout));
+    cutout.shape = DT_MASKS_CUTOUT_POLYGON;
+    cutout.node_count = 4;
+    cutout.node_stride = DT_MASKS_CUTOUT_NODE_FLOATS;
+    cutout.nodes = nodes;
+    cutout.feather = 0.02f;
+    float *raster = dt_masks_cutout_rasterise(&cutout, SIZE, SIZE);
+    assert_non_null(raster);
+    // The computed tangent of a square points along its diagonal, so a smoothed square bulges
+    // past the middle of every edge; a square carrying its own coincident controls does not.
+    // A STEERED node carries its own too, so it must read as the cusp and not as the computed
+    // one -- that is the whole regression.
+    if(kinds[kind] == 1.0f)
+      assert_true(_at(raster, 86, 50) > 0.5f);
+    else
+      assert_float_equal(_at(raster, 86, 50), 0.0f, 1e-3);
+    dt_masks_cutout_free(raster);
+  }
+
+  // And a steered node's own control points are what the cut follows: pulling the two
+  // controls of the right edge outward bulges it, with the kind still saying "smooth".
+  memset(nodes, 0, sizeof(nodes));
+  for(int node = 0; node < 4; node++)
+  {
+    float *record = nodes + (size_t)node * DT_MASKS_CUTOUT_NODE_FLOATS;
+    record[DT_MASKS_CUTOUT_NODE_X] = corners[node][0];
+    record[DT_MASKS_CUTOUT_NODE_Y] = corners[node][1];
+    record[DT_MASKS_CUTOUT_NODE_CTRL1_X] = corners[node][0];
+    record[DT_MASKS_CUTOUT_NODE_CTRL1_Y] = corners[node][1];
+    record[DT_MASKS_CUTOUT_NODE_CTRL2_X] = corners[node][0];
+    record[DT_MASKS_CUTOUT_NODE_CTRL2_Y] = corners[node][1];
+    record[DT_MASKS_CUTOUT_NODE_SMOOTH] = 2.0f;
+  }
+  // Node 1 leaves towards node 2 and node 2 arrives from node 1: both controls out to the right.
+  nodes[1 * DT_MASKS_CUTOUT_NODE_FLOATS + DT_MASKS_CUTOUT_NODE_CTRL2_X] = 0.95f;
+  nodes[1 * DT_MASKS_CUTOUT_NODE_FLOATS + DT_MASKS_CUTOUT_NODE_CTRL2_Y] = 0.2f;
+  nodes[2 * DT_MASKS_CUTOUT_NODE_FLOATS + DT_MASKS_CUTOUT_NODE_CTRL1_X] = 0.95f;
+  nodes[2 * DT_MASKS_CUTOUT_NODE_FLOATS + DT_MASKS_CUTOUT_NODE_CTRL1_Y] = 0.8f;
+  memset(&cutout, 0, sizeof(cutout));
+  cutout.shape = DT_MASKS_CUTOUT_POLYGON;
+  cutout.node_count = 4;
+  cutout.node_stride = DT_MASKS_CUTOUT_NODE_FLOATS;
+  cutout.nodes = nodes;
+  cutout.feather = 0.02f;
+  float *steered = dt_masks_cutout_rasterise(&cutout, SIZE, SIZE);
+  assert_non_null(steered);
+  assert_true(_at(steered, 86, 50) > 0.5f);
+  dt_masks_cutout_free(steered);
+}
+
+/**
  * A polygon node carries its own fall-off radius, and a node without one takes the shape's.
  * That is the darkroom's own per-node border, which the cutout entry now passes through.
  */
@@ -872,6 +953,7 @@ int main(void)
     cmocka_unit_test(_a_circle_is_full_inside_empty_outside_and_feathers_between),
     cmocka_unit_test(_a_polygon_fills_its_interior),
     cmocka_unit_test(_a_polygon_node_carries_its_own_fall_off),
+    cmocka_unit_test(_a_polygon_node_steers_its_own_curve),
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),

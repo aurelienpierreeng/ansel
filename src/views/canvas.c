@@ -259,6 +259,10 @@ static dt_canvas_drag_t _mask_handle_at(const dt_canvas_view_t *view, const dt_c
                                         const double x, const double y, int *index);
 static int _mask_segment_at(const dt_canvas_view_t *view, const dt_canvas_object_t *object, const double x,
                             const double y);
+static int _mask_node_at(const dt_canvas_view_t *view, const dt_canvas_object_t *object, const double x,
+                         const double y);
+static void _mask_node_controls(const dt_canvas_mask_t *mask, uint32_t index, float incoming[2],
+                                float outgoing[2]);
 
 /* --- module identity ---------------------------------------------------------- */
 
@@ -1673,6 +1677,34 @@ static void _menu_cutout_remove_node(GtkWidget *widget, gpointer data)
   dt_control_queue_redraw_center();
 }
 
+/** Write a node's effective control points down as its own, so a change of kind moves nothing. */
+static void _mask_node_freeze_controls(dt_canvas_mask_t *mask, const uint32_t index)
+{
+  float *node = mask->nodes + (size_t)index * DT_CANVAS_MASK_NODE_FLOATS;
+  float incoming[2];
+  float outgoing[2];
+  _mask_node_controls(mask, index, incoming, outgoing);
+  node[DT_CANVAS_MASK_NODE_CTRL1_X] = incoming[0];
+  node[DT_CANVAS_MASK_NODE_CTRL1_Y] = incoming[1];
+  node[DT_CANVAS_MASK_NODE_CTRL2_X] = outgoing[0];
+  node[DT_CANVAS_MASK_NODE_CTRL2_Y] = outgoing[1];
+}
+
+/**
+ * A node between its two kinds. Becoming a cusp keeps the curve that was there: the tangent
+ * it had, computed or steered, is written down first, and the two sides are free of each
+ * other from then on. Becoming smooth hands the tangent back to the neighbours, which is the
+ * change the user asked for. The context menu and the double click share this so the two
+ * cannot drift apart.
+ */
+static void _mask_node_toggle_smooth(dt_canvas_mask_t *mask, const uint32_t index)
+{
+  float *node = mask->nodes + (size_t)index * DT_CANVAS_MASK_NODE_FLOATS;
+  const gboolean smooth = node[DT_CANVAS_MASK_NODE_SMOOTH] != (float)DT_CANVAS_MASK_NODE_CUSP;
+  if(smooth) _mask_node_freeze_controls(mask, index);
+  node[DT_CANVAS_MASK_NODE_SMOOTH] = (float)(smooth ? DT_CANVAS_MASK_NODE_CUSP : DT_CANVAS_MASK_NODE_AUTO);
+}
+
 static void _menu_cutout_smooth_node(GtkWidget *widget, gpointer data)
 {
   dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
@@ -1681,8 +1713,23 @@ static void _menu_cutout_smooth_node(GtkWidget *widget, gpointer data)
   if(!dt_canvas_object_is_frame(object) || object->mask.shape != DT_CANVAS_MASK_POLYGON) return;
   if(context->value < 0 || (uint32_t)context->value >= object->mask.node_count) return;
   dt_canvas_t *before = _begin_edit(view);
+  _mask_node_toggle_smooth(&object->mask, (uint32_t)context->value);
+  dt_canvas_touch(view->canvas);
+  _record_undo(context->self, before);
+  dt_control_queue_redraw_center();
+}
+
+/** A steered node back to the tangent its neighbours give it. */
+static void _menu_cutout_reset_node(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
+  dt_canvas_object_t *object = _menu_object(context);
+  if(!dt_canvas_object_is_frame(object) || object->mask.shape != DT_CANVAS_MASK_POLYGON) return;
+  if(context->value < 0 || (uint32_t)context->value >= object->mask.node_count) return;
+  dt_canvas_t *before = _begin_edit(view);
   float *node = object->mask.nodes + (size_t)context->value * DT_CANVAS_MASK_NODE_FLOATS;
-  node[6] = node[6] != 0.0f ? 0.0f : 1.0f;
+  node[DT_CANVAS_MASK_NODE_SMOOTH] = (float)DT_CANVAS_MASK_NODE_AUTO;
   dt_canvas_touch(view->canvas);
   _record_undo(context->self, before);
   dt_control_queue_redraw_center();
@@ -1840,13 +1887,18 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
       // A polygon's nodes: the node or the edge under the pointer, right here in the menu.
       if(object->mask.shape == DT_CANVAS_MASK_POLYGON)
       {
-        const int segment = hovered == DT_CANVAS_DRAG_NONE ? _mask_segment_at(canvas_view, object, x, y) : -1;
-        if(hovered == DT_CANVAS_DRAG_MASK_NODE)
+        const int node_here = _mask_node_at(canvas_view, object, x, y);
+        const int segment = node_here < 0 ? _mask_segment_at(canvas_view, object, x, y) : -1;
+        if(node_here >= 0)
         {
-          const float *node = object->mask.nodes + (size_t)hovered_index * DT_CANVAS_MASK_NODE_FLOATS;
-          _menu_item(menu, node[6] != 0.0f ? _("Make this node a cusp") : _("Make this node smooth"),
-                     _menu_cutout_smooth_node, _menu_context(self, id, x, y, hovered_index));
-          _menu_item(menu, _("Remove this node"), _menu_cutout_remove_node, _menu_context(self, id, x, y, hovered_index));
+          const float *node = object->mask.nodes + (size_t)node_here * DT_CANVAS_MASK_NODE_FLOATS;
+          const gboolean smooth = node[DT_CANVAS_MASK_NODE_SMOOTH] != (float)DT_CANVAS_MASK_NODE_CUSP;
+          _menu_item(menu, smooth ? _("Switch to a cusp node") : _("Switch to a smooth node"),
+                     _menu_cutout_smooth_node, _menu_context(self, id, x, y, node_here));
+          if(node[DT_CANVAS_MASK_NODE_SMOOTH] == (float)DT_CANVAS_MASK_NODE_STEERED)
+            _menu_item(menu, _("Give this node its computed curve back"), _menu_cutout_reset_node,
+                       _menu_context(self, id, x, y, node_here));
+          _menu_item(menu, _("Remove this node"), _menu_cutout_remove_node, _menu_context(self, id, x, y, node_here));
         }
         else if(segment >= 0)
         {
@@ -1862,21 +1914,16 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
                  _menu_cutout_edit, _menu_context(self, id, x, y, canvas_view->mask_editing ? 0 : 1));
       _menu_item(cutout_menu, (object->mask.flags & DT_CANVAS_MASK_INVERT) ? _("Keep the inside") : _("Keep the outside"),
                  _menu_cutout_invert, _menu_context(self, id, x, y, 0));
-      int node_index = -1;
-      const dt_canvas_drag_t on_handle = _mask_handle_at(canvas_view, object, x, y, &node_index);
-      const int segment = on_handle == DT_CANVAS_DRAG_NONE ? _mask_segment_at(canvas_view, object, x, y) : -1;
-      if(on_handle == DT_CANVAS_DRAG_MASK_NODE)
-      {
-        const float *node = object->mask.nodes + (size_t)node_index * DT_CANVAS_MASK_NODE_FLOATS;
-        gtk_menu_shell_append(GTK_MENU_SHELL(cutout_menu), gtk_separator_menu_item_new());
-        _menu_item(cutout_menu, node[6] != 0.0f ? _("Make this node a sharp corner") : _("Make this node smooth"),
-                   _menu_cutout_smooth_node, _menu_context(self, id, x, y, node_index));
-        _menu_item(cutout_menu, _("Remove this node"), _menu_cutout_remove_node, _menu_context(self, id, x, y, node_index));
-      }
-      else if(segment >= 0 && canvas_view->mask_editing)
+      // The node entries live once, at the top of the menu, and only while the shape is being
+      // edited: this submenu used to carry a second copy of them keyed on `_mask_handle_at()`,
+      // which answers NOTHING outside the edit mode -- so they were a duplicate whenever they
+      // showed and dead the rest of the time. What a polygon offers here is the way in.
+      if(object->mask.shape == DT_CANVAS_MASK_POLYGON && !canvas_view->mask_editing
+         && _mask_node_at(canvas_view, object, x, y) >= 0)
       {
         gtk_menu_shell_append(GTK_MENU_SHELL(cutout_menu), gtk_separator_menu_item_new());
-        _menu_item(cutout_menu, _("Add a node here"), _menu_cutout_add_node, _menu_context(self, id, x, y, segment));
+        _menu_item(cutout_menu, _("Edit the shape to work on this node"), _menu_cutout_edit,
+                   _menu_context(self, id, x, y, 1));
       }
     }
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), cutout_item);
@@ -3437,25 +3484,27 @@ static void _mask_polygon_controls(const dt_canvas_mask_t *mask, const uint32_t 
   const float *from = mask->nodes + (size_t)index * DT_CANVAS_MASK_NODE_FLOATS;
   const float *to = mask->nodes + (size_t)((index + 1) % count) * DT_CANVAS_MASK_NODE_FLOATS;
   const float *after = mask->nodes + (size_t)((index + 2) % count) * DT_CANVAS_MASK_NODE_FLOATS;
-  if(from[6] != 0.0f)
+  // Only an AUTO node has its tangent computed: a cusp and a steered node both carry theirs,
+  // and the difference between those two is what a DRAG does to them, not what is read here.
+  if(from[DT_CANVAS_MASK_NODE_SMOOTH] == (float)DT_CANVAS_MASK_NODE_AUTO)
   {
     control1[0] = (-previous[0] + 6.0f * from[0] + to[0]) / 6.0f;
     control1[1] = (-previous[1] + 6.0f * from[1] + to[1]) / 6.0f;
   }
   else
   {
-    control1[0] = from[4];
-    control1[1] = from[5];
+    control1[0] = from[DT_CANVAS_MASK_NODE_CTRL2_X];
+    control1[1] = from[DT_CANVAS_MASK_NODE_CTRL2_Y];
   }
-  if(to[6] != 0.0f)
+  if(to[DT_CANVAS_MASK_NODE_SMOOTH] == (float)DT_CANVAS_MASK_NODE_AUTO)
   {
     control2[0] = (from[0] + 6.0f * to[0] - after[0]) / 6.0f;
     control2[1] = (from[1] + 6.0f * to[1] - after[1]) / 6.0f;
   }
   else
   {
-    control2[0] = to[2];
-    control2[1] = to[3];
+    control2[0] = to[DT_CANVAS_MASK_NODE_CTRL1_X];
+    control2[1] = to[DT_CANVAS_MASK_NODE_CTRL1_Y];
   }
 }
 
@@ -3600,7 +3649,12 @@ static void _paint_mask_handles(cairo_t *cr, const dt_canvas_view_t *view, const
         double local_x = 0.0;
         double local_y = 0.0;
         _mask_to_local(object, node[0], node[1], &local_x, &local_y);
-        cairo_rectangle(cr, local_x - handle, local_y - handle, 2.0 * handle, 2.0 * handle);
+        // Square for a cusp, round for a smooth node, the way the darkroom tells its own
+        // two apart -- a toggle nobody can see the result of is a toggle nobody trusts.
+        if(node[DT_CANVAS_MASK_NODE_SMOOTH] == (float)DT_CANVAS_MASK_NODE_CUSP)
+          cairo_rectangle(cr, local_x - handle, local_y - handle, 2.0 * handle, 2.0 * handle);
+        else
+          cairo_arc(cr, local_x, local_y, handle, 0.0, 2.0 * M_PI);
         cairo_set_source_rgba(cr, 1.0, 0.85, 0.3, 0.95);
         cairo_fill_preserve(cr);
         cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.8);
@@ -3651,19 +3705,8 @@ static dt_canvas_drag_t _mask_handle_at(const dt_canvas_view_t *view, const dt_c
         return own[candidate].drag;
       }
     }
-    for(uint32_t idx = 0; idx < object->mask.node_count; idx++)
-    {
-      const float *node = object->mask.nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
-      double node_x = 0.0;
-      double node_y = 0.0;
-      _mask_to_local(object, node[0], node[1], &node_x, &node_y);
-      if(fabs(local_x - node_x) <= reach && fabs(local_y - node_y) <= reach)
-      {
-        *index = (int)idx;
-        return DT_CANVAS_DRAG_MASK_NODE;
-      }
-    }
-    return DT_CANVAS_DRAG_NONE;
+    *index = _mask_node_at(view, object, x, y);
+    return *index >= 0 ? DT_CANVAS_DRAG_MASK_NODE : DT_CANVAS_DRAG_NONE;
   }
   double points[8] = { 0.0 };
   const int count = _mask_handle_points(object, points);
@@ -3680,6 +3723,32 @@ static dt_canvas_drag_t _mask_handle_at(const dt_canvas_view_t *view, const dt_c
 }
 
 /** The polygon edge under a canvas point: the index of the node it starts at, or -1. */
+/**
+ * The polygon node under a point, or -1. Deliberately NOT gated on the edit mode, the way
+ * `_mask_segment_at()` is not: `_mask_handle_at()` answers what a DRAG would grab and refuses
+ * everything while the shape is not being edited, which is right for a drag and wrong for a
+ * menu -- the right click that asks about a node is itself the statement of intent, and for
+ * as long as the menu asked the drag's question its node entries were unreachable.
+ */
+static int _mask_node_at(const dt_canvas_view_t *view, const dt_canvas_object_t *object, const double x,
+                         const double y)
+{
+  if(!dt_canvas_object_is_frame(object) || object->mask.shape != DT_CANVAS_MASK_POLYGON) return -1;
+  double local_x = 0.0;
+  double local_y = 0.0;
+  dt_canvas_object_to_local(object, x, y, &local_x, &local_y);
+  const double reach = CANVAS_HANDLE_PIXELS / view->zoom;
+  for(uint32_t idx = 0; idx < object->mask.node_count; idx++)
+  {
+    const float *node = object->mask.nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
+    double node_x = 0.0;
+    double node_y = 0.0;
+    _mask_to_local(object, node[0], node[1], &node_x, &node_y);
+    if(fabs(local_x - node_x) <= reach && fabs(local_y - node_y) <= reach) return (int)idx;
+  }
+  return -1;
+}
+
 static int _mask_segment_at(const dt_canvas_view_t *view, const dt_canvas_object_t *object, const double x,
                             const double y)
 {
@@ -3769,8 +3838,9 @@ static void _mask_drag(dt_canvas_view_t *view, dt_canvas_object_t *object, const
     case DT_CANVAS_DRAG_MASK_NODE_CTRL_OUT:
       if(view->mask_handle >= 0 && (uint32_t)view->mask_handle < mask->node_count)
       {
-        // Steering a control point makes the node the user's: the curve stops being computed
-        // through it, so the other control is written down as it stood and nothing jumps.
+        // Steering a control point makes the tangent the user's: the curve stops being
+        // computed through the node, so the other control is written down as it stood and
+        // nothing jumps.
         float *node = mask->nodes + (size_t)view->mask_handle * DT_CANVAS_MASK_NODE_FLOATS;
         float incoming[2];
         float outgoing[2];
@@ -3779,11 +3849,36 @@ static void _mask_drag(dt_canvas_view_t *view, dt_canvas_object_t *object, const
         node[DT_CANVAS_MASK_NODE_CTRL1_Y] = incoming[1];
         node[DT_CANVAS_MASK_NODE_CTRL2_X] = outgoing[0];
         node[DT_CANVAS_MASK_NODE_CTRL2_Y] = outgoing[1];
-        node[DT_CANVAS_MASK_NODE_SMOOTH] = 0.0f;
+        // A smooth node STAYS smooth while it is steered -- that is the whole difference
+        // between the two kinds, and without it the first touch of a handle turned every
+        // node into a cusp and there was no way to give a smooth node a tangent of its own.
+        const gboolean smooth = node[DT_CANVAS_MASK_NODE_SMOOTH] != (float)DT_CANVAS_MASK_NODE_CUSP;
+        node[DT_CANVAS_MASK_NODE_SMOOTH]
+            = (float)(smooth ? DT_CANVAS_MASK_NODE_STEERED : DT_CANVAS_MASK_NODE_CUSP);
         const int base = view->drag == DT_CANVAS_DRAG_MASK_NODE_CTRL_IN ? DT_CANVAS_MASK_NODE_CTRL1_X
                                                                         : DT_CANVAS_MASK_NODE_CTRL2_X;
         node[base] = (float)u;
         node[base + 1] = (float)v;
+        // The handle drives the tangent's DIRECTION and its TENSION: on a smooth node the
+        // opposite control turns with it, through the node, and keeps the length it had, so
+        // one handle sets which way the curve leaves and how hard it pulls. On a cusp the
+        // two sides are free of each other and only the dragged one moves.
+        const int other = base == DT_CANVAS_MASK_NODE_CTRL1_X ? DT_CANVAS_MASK_NODE_CTRL2_X
+                                                              : DT_CANVAS_MASK_NODE_CTRL1_X;
+        const double pull_x = (double)node[base] - node[DT_CANVAS_MASK_NODE_X];
+        const double pull_y = (double)node[base + 1] - node[DT_CANVAS_MASK_NODE_Y];
+        const double pull = hypot(pull_x, pull_y);
+        if(smooth && pull > 1e-6)
+        {
+          const double other_x = (double)node[other] - node[DT_CANVAS_MASK_NODE_X];
+          const double other_y = (double)node[other + 1] - node[DT_CANVAS_MASK_NODE_Y];
+          // A control sitting on its node has no length to keep: give it the dragged one's,
+          // so a node whose tangent was never pulled out becomes symmetric rather than
+          // staying collapsed on one side.
+          const double kept = fmax(hypot(other_x, other_y), pull);
+          node[other] = (float)(node[DT_CANVAS_MASK_NODE_X] - pull_x / pull * kept);
+          node[other + 1] = (float)(node[DT_CANVAS_MASK_NODE_Y] - pull_y / pull * kept);
+        }
       }
       break;
     case DT_CANVAS_DRAG_MASK_NODE:
@@ -4414,8 +4509,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       if(mask_drag == DT_CANVAS_DRAG_MASK_NODE && type == GDK_2BUTTON_PRESS)
       {
         dt_canvas_t *before = _begin_edit(view);
-        float *node = mask_owner->mask.nodes + (size_t)mask_index * DT_CANVAS_MASK_NODE_FLOATS;
-        node[6] = node[6] != 0.0f ? 0.0f : 1.0f;
+        _mask_node_toggle_smooth(&mask_owner->mask, (uint32_t)mask_index);
         dt_canvas_touch(view->canvas);
         _record_undo(self, before);
         _end_gesture(self);
