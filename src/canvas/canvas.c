@@ -31,6 +31,13 @@
 
 #define CANVAS_DEFAULT_GRID_SIZE 50.0f
 #define CANVAS_DEFAULT_GUTTER 20.0f
+/**
+ * Canvas units to the inch on a new canvas. The plane is measured in display pixels, so this
+ * is what turns a sheet of paper into a size on it: 300 is the print standard and puts an A4
+ * at 2480 units against an Instagram reel's 1080, which is the right way round. A document
+ * from before the field reads as 72 and keeps the geometry it was laid out with.
+ */
+#define CANVAS_DEFAULT_RESOLUTION 300.0f
 #define CANVAS_DEFAULT_LONG_EDGE 2048
 #define CANVAS_DEFAULT_JPEG_QUALITY 92
 #define CANVAS_DEFAULT_FONT "Sans 12"
@@ -192,6 +199,7 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->texture_detail = 1.0f;
   canvas->texture_scale = 1.0f;
   canvas->texture_grain = 1.0f;
+  canvas->resolution = CANVAS_DEFAULT_RESOLUTION;
   canvas->page_margin = 0.0f;
   canvas->margin_color = dt_canvas_color(0.557f, 0.267f, 0.816f, 1.0f);
   canvas->page_bleed = 0.0f;
@@ -1820,9 +1828,13 @@ gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, d
 /* --- paper ------------------------------------------------------------------- */
 
 /**
- * Every page size, portrait, in points. The order IS the stored value, so entries are only
- * ever appended. A screen format is its pixel size read as points: at 72 dpi the export comes
- * out at exactly the pixels the format is named for, at 144 dpi at twice that, and so on.
+ * Every page size, portrait. The order IS the stored value, so entries are only ever appended.
+ *
+ * A sheet of paper is given in POINTS and a screen format in PIXELS, and the two reach the
+ * plane differently: a canvas unit is a display pixel, so a screen format is its pixel size
+ * outright while a sheet is its size in points scaled by the canvas's resolution. Read both
+ * as points, as they were, and an Instagram reel comes out 1080 units against an A4's 595 --
+ * nearly twice the sheet, for something that fits in a hand.
  */
 static const struct
 {
@@ -1830,24 +1842,40 @@ static const struct
   const char *name;
   double width;
   double height;
+  gboolean physical; ///< the size is in points and scales with the resolution; else it is pixels
 } _paper_sizes[] = {
-  { DT_CANVAS_PAPER_NONE, N_("None"), 0.0, 0.0 },
-  { DT_CANVAS_PAPER_A0, "A0", 2384.0, 3370.0 },
-  { DT_CANVAS_PAPER_A1, "A1", 1684.0, 2384.0 },
-  { DT_CANVAS_PAPER_A2, "A2", 1191.0, 1684.0 },
-  { DT_CANVAS_PAPER_A3, "A3", 842.0, 1191.0 },
-  { DT_CANVAS_PAPER_A4, "A4", 595.0, 842.0 },
-  { DT_CANVAS_PAPER_A5, "A5", 420.0, 595.0 },
-  { DT_CANVAS_PAPER_A6, "A6", 298.0, 420.0 },
-  { DT_CANVAS_PAPER_LETTER, N_("US Letter"), 612.0, 792.0 },
-  { DT_CANVAS_PAPER_INSTAGRAM_SQUARE, N_("Instagram square"), 1080.0, 1080.0 },
-  { DT_CANVAS_PAPER_INSTAGRAM_PORTRAIT, N_("Instagram portrait"), 1080.0, 1350.0 },
-  { DT_CANVAS_PAPER_STORY, N_("Story, reel, Short"), 1080.0, 1920.0 },
-  { DT_CANVAS_PAPER_FACEBOOK_POST, N_("Facebook post"), 1200.0, 630.0 },
-  { DT_CANVAS_PAPER_FACEBOOK_COVER, N_("Facebook cover"), 851.0, 315.0 },
-  { DT_CANVAS_PAPER_YOUTUBE_THUMBNAIL, N_("YouTube thumbnail"), 1280.0, 720.0 },
-  { DT_CANVAS_PAPER_YOUTUBE_BANNER, N_("YouTube banner"), 2560.0, 1440.0 },
+  { DT_CANVAS_PAPER_NONE, N_("None"), 0.0, 0.0, FALSE },
+  { DT_CANVAS_PAPER_A0, "A0", 2384.0, 3370.0, TRUE },
+  { DT_CANVAS_PAPER_A1, "A1", 1684.0, 2384.0, TRUE },
+  { DT_CANVAS_PAPER_A2, "A2", 1191.0, 1684.0, TRUE },
+  { DT_CANVAS_PAPER_A3, "A3", 842.0, 1191.0, TRUE },
+  { DT_CANVAS_PAPER_A4, "A4", 595.0, 842.0, TRUE },
+  { DT_CANVAS_PAPER_A5, "A5", 420.0, 595.0, TRUE },
+  { DT_CANVAS_PAPER_A6, "A6", 298.0, 420.0, TRUE },
+  { DT_CANVAS_PAPER_LETTER, N_("US Letter"), 612.0, 792.0, TRUE },
+  { DT_CANVAS_PAPER_INSTAGRAM_SQUARE, N_("Instagram square"), 1080.0, 1080.0, FALSE },
+  { DT_CANVAS_PAPER_INSTAGRAM_PORTRAIT, N_("Instagram portrait"), 1080.0, 1350.0, FALSE },
+  { DT_CANVAS_PAPER_STORY, N_("Story, reel, Short"), 1080.0, 1920.0, FALSE },
+  { DT_CANVAS_PAPER_FACEBOOK_POST, N_("Facebook post"), 1200.0, 630.0, FALSE },
+  { DT_CANVAS_PAPER_FACEBOOK_COVER, N_("Facebook cover"), 851.0, 315.0, FALSE },
+  { DT_CANVAS_PAPER_YOUTUBE_THUMBNAIL, N_("YouTube thumbnail"), 1280.0, 720.0, FALSE },
+  { DT_CANVAS_PAPER_YOUTUBE_BANNER, N_("YouTube banner"), 2560.0, 1440.0, FALSE },
 };
+
+gboolean dt_canvas_paper_is_physical(const uint32_t paper)
+{
+  for(int position = 0; position < dt_canvas_paper_count(); position++)
+    if(_paper_sizes[position].code == paper) return _paper_sizes[position].physical;
+  return FALSE;
+}
+
+double dt_canvas_resolution(const dt_canvas_t *canvas)
+{
+  // A document from before the field holds zero, and its page sizes were laid out as points:
+  // 72 units to the inch is what keeps its geometry exactly where the user left it.
+  if(IS_NULL_PTR(canvas) || !(canvas->resolution > 0.0f)) return 72.0;
+  return (double)canvas->resolution;
+}
 
 int dt_canvas_paper_count(void)
 {
@@ -1896,6 +1924,13 @@ gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, do
   double portrait_width = 0.0;
   double portrait_height = 0.0;
   if(!dt_canvas_paper_points(canvas->paper_size, &portrait_width, &portrait_height)) return FALSE;
+  // Points to units for a sheet of paper; a screen format is already in the plane's own unit.
+  if(dt_canvas_paper_is_physical(canvas->paper_size))
+  {
+    const double units_per_point = dt_canvas_resolution(canvas) / 72.0;
+    portrait_width *= units_per_point;
+    portrait_height *= units_per_point;
+  }
   if(!IS_NULL_PTR(width)) *width = canvas->paper_landscape ? portrait_height : portrait_width;
   if(!IS_NULL_PTR(height)) *height = canvas->paper_landscape ? portrait_width : portrait_height;
   return TRUE;

@@ -2693,8 +2693,14 @@ they are visible.
   must carry the same factor, or an arranged layout is not one the snapping can reproduce.
 - **A page size is an index into one appended-only table** (`dt_canvas_paper_points()`), and
   the GUI reads the table rather than repeating it. Insert a size in the middle and every
-  saved document changes page. One canvas unit is one point, so a screen format is its pixel
-  size read as points: exported at 72 dpi it lands on exactly the pixels it is named for.
+  saved document changes page. **A canvas unit is a display pixel and the canvas says how many
+  go to the inch** (`dt_canvas_resolution()`, 300 on a new canvas, 72 for a document from
+  before the field so its geometry does not move): a sheet of paper is held in points and
+  scaled by that, a screen format is its pixel size outright and does not scale
+  (`dt_canvas_paper_is_physical()`). Read as points, as both were, an Instagram story came out
+  1080 units against an A4's 595 -- nearly twice the sheet. The export converts through the
+  same number: physical size is units over the resolution, output pixels are
+  `units * export_dpi / resolution`.
 - **The export's page is the document's, never the dialog's.** Page size and orientation are
   the canvas's; the dialog asks only for format, resolution, bleed, quality and profile. The
   bleed grows the sheet and the canvas rectangle it shows, so a frame a page break cut in two

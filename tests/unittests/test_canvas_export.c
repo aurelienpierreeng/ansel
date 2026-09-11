@@ -79,6 +79,9 @@ static dt_canvas_t *_canvas_of_pages(const int pages)
   dt_canvas_t *canvas = dt_canvas_new();
   canvas->grid_flags = 0;
   canvas->background_style = DT_CANVAS_BACKGROUND_PLAIN;
+  // One canvas unit to the point, so every number in this file is the page's size in points
+  // and the dpi maths reads as it did before the plane gained a resolution of its own.
+  canvas->resolution = 72.0f;
   canvas->paper_size = DT_CANVAS_PAPER_A6;
   canvas->paper_landscape = 0;
   double width = 0.0;

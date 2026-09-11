@@ -608,6 +608,7 @@ static void _a_page_carries_a_margin_inside_it_and_a_bleed_outside(void **state)
   (void)state;
   dt_canvas_t *canvas = dt_canvas_new();
   canvas->paper_size = DT_CANVAS_PAPER_A6; // 298 x 420 points
+  canvas->resolution = 72.0f;              // one unit to the point, so the numbers below are the points
   canvas->paper_landscape = 0;
   canvas->page_margin = 20.0f;
   canvas->page_bleed = 10.0f;
@@ -879,6 +880,46 @@ static void _frames_snap_with_their_gutters_touching(void **state)
   dt_canvas_free(canvas);
 }
 
+/**
+ * A canvas unit is a display pixel and the canvas says how many go to the inch, so a sheet of
+ * paper is scaled by that and a screen format is not. Read as points, as both were, an
+ * Instagram story came out 1080 units against an A4's 595 -- nearly twice the sheet, for
+ * something that fits in a hand.
+ */
+static void _a_sheet_of_paper_scales_with_the_resolution_and_a_screen_format_does_not(void **state)
+{
+  (void)state;
+  assert_true(dt_canvas_paper_is_physical(DT_CANVAS_PAPER_A4));
+  assert_false(dt_canvas_paper_is_physical(DT_CANVAS_PAPER_STORY));
+
+  dt_canvas_t *canvas = dt_canvas_new();
+  // A document from before the field holds zero and reads as 72, which is the geometry it was
+  // laid out with: every page size is then its own number outright.
+  canvas->resolution = 0.0f;
+  assert_float_equal(dt_canvas_resolution(canvas), 72.0, 1e-9);
+  double paper_width = 0.0;
+  double screen_width = 0.0;
+  canvas->paper_size = DT_CANVAS_PAPER_A4;
+  assert_true(dt_canvas_paper_dimensions(canvas, &paper_width, NULL));
+  canvas->paper_size = DT_CANVAS_PAPER_STORY;
+  assert_true(dt_canvas_paper_dimensions(canvas, &screen_width, NULL));
+  assert_float_equal(paper_width, 595.0, 1e-9);
+  assert_float_equal(screen_width, 1080.0, 1e-9);
+  assert_true(screen_width > paper_width); // the old reading, and why it had to change
+
+  // At the resolution a new canvas carries, the sheet is the larger of the two and the screen
+  // format has not moved: it was already in the plane's own unit.
+  canvas->resolution = 300.0f;
+  canvas->paper_size = DT_CANVAS_PAPER_A4;
+  assert_true(dt_canvas_paper_dimensions(canvas, &paper_width, NULL));
+  canvas->paper_size = DT_CANVAS_PAPER_STORY;
+  assert_true(dt_canvas_paper_dimensions(canvas, &screen_width, NULL));
+  assert_float_equal(paper_width, 595.0 * 300.0 / 72.0, 1e-6);
+  assert_float_equal(screen_width, 1080.0, 1e-9);
+  assert_true(paper_width > screen_width);
+  dt_canvas_free(canvas);
+}
+
 static void _paper_tiles_the_plane_from_the_origin(void **state)
 {
   (void)state;
@@ -886,6 +927,7 @@ static void _paper_tiles_the_plane_from_the_origin(void **state)
   double width = 0.0;
   double height = 0.0;
   assert_false(dt_canvas_paper_dimensions(canvas, &width, &height));
+  canvas->resolution = 72.0f; // one unit to the point, so the numbers below are the points
   canvas->paper_size = DT_CANVAS_PAPER_A4;
   assert_true(dt_canvas_paper_dimensions(canvas, &width, &height));
   assert_float_equal(width, 595.0, 1e-9);
@@ -1035,6 +1077,7 @@ int main(void)
     cmocka_unit_test(_a_frame_offers_its_corners_and_its_centre_as_anchors),
     cmocka_unit_test(_a_waypoint_bends_every_routing_through_it),
     cmocka_unit_test(_frames_snap_with_their_gutters_touching),
+    cmocka_unit_test(_a_sheet_of_paper_scales_with_the_resolution_and_a_screen_format_does_not),
     cmocka_unit_test(_paper_tiles_the_plane_from_the_origin),
     cmocka_unit_test(_layouts_arrange_without_moving_the_group),
     cmocka_unit_test(_a_layout_sorts_images_by_a_key_and_keeps_the_rest_after),

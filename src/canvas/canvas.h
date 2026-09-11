@@ -70,7 +70,7 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 872 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16), texture (16), corners (4), page margin (20), page bleed (20)
+#define DT_CANVAS_HEADER_RESERVED 868 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4)
 #define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
 #define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
@@ -510,6 +510,7 @@ typedef struct dt_canvas_t
   float texture_detail;             ///< its fine structure: fibres, pores, wrinkles, the mesh
   float texture_scale;              ///< the size of its features
   float texture_grain;              ///< the dither that finishes it
+  float resolution;                 ///< canvas units per inch; 0 reads as 72, which is what a file from before held
   float corner_radius;              ///< default rounded corners of the frames, canvas units; 0 is square
   float page_margin;                ///< kept clear inside every page edge, canvas units
   dt_canvas_color_t margin_color;   ///< the margin lines
@@ -837,6 +838,21 @@ int dt_canvas_paper_position(uint32_t paper);
  * pixels at 72 dpi.
  */
 gboolean dt_canvas_paper_points(uint32_t paper, double *width, double *height);
+
+/**
+ * @brief Whether a page size is a PHYSICAL one, measured in points, or a screen one measured
+ * in pixels.
+ *
+ * A canvas unit is a display pixel and the canvas carries how many of them go to the inch
+ * (`dt_canvas_resolution()`), so the two kinds of page size reach the plane differently: a
+ * screen format is its pixel size outright, and a sheet of paper is its size in points scaled
+ * by the resolution. Without that, both were read as points and an Instagram reel came out
+ * nearly twice the size of an A4 on the same plane, which is not a thing.
+ */
+gboolean dt_canvas_paper_is_physical(uint32_t paper);
+
+/** @brief Canvas units per inch: what the canvas holds, or 72 for a document from before the field. */
+double dt_canvas_resolution(const dt_canvas_t *canvas);
 
 /**
  * @brief The rectangle of one page, grown by `outset` on every side.

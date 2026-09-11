@@ -275,6 +275,7 @@ GBytes *dt_canvas_format_write_index(const dt_canvas_t *canvas)
   _w_color(out, &canvas->margin_color);
   _w_f32(out, canvas->page_bleed);
   _w_color(out, &canvas->bleed_color);
+  _w_f32(out, canvas->resolution);
   _w_bytes(out, canvas->reserved, sizeof(canvas->reserved));
   const uint32_t header_size = out->len;
   uint8_t *size_field = out->data + CANVAS_MAGIC_LEN + 4;
@@ -627,6 +628,8 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
   canvas->margin_color = _r_color(&cursor);
   canvas->page_bleed = _r_f32(&cursor);
   canvas->bleed_color = _r_color(&cursor);
+  // Zero from a document written before the field, which dt_canvas_resolution() reads as 72.
+  canvas->resolution = _r_f32(&cursor);
   _r_bytes(&cursor, canvas->reserved, sizeof(canvas->reserved));
   cursor.pos = header_size;
   cursor.limit = cursor.size;
