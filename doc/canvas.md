@@ -450,6 +450,13 @@ tooth, clouds), **detail** the fine structure (fibres, pores, grain, wrinkles, t
 **scale** the size of every feature (every knee divided by it; the only one that rebuilds
 the fields), **grain** the finishing dither. 1 everywhere is the paper as designed.
 
+**The Reset button refills the sliders itself.** Every other call to the texture setter is
+one of the four sliders sending its own value, and refilling under a slider the user is still
+holding would fight the pointer -- so the setter stays quiet and the one caller that writes
+all four behind their backs refreshes them. Without that the reset reached the document and
+nothing else: the sliders kept their positions, so it read as doing nothing, and the next
+touch of any slider sent all four stale values back and undid it.
+
 **All FOUR at zero is an old file and reads as 1; one weight at zero is zero**
 (`dt_canvas_texture_get()`). The rule used to be per field, which conflated the migration
 with a deliberate setting: a user who turned the grain -- or the detail -- down to nothing

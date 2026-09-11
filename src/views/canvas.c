@@ -1641,6 +1641,8 @@ static void _menu_cutout_invert(GtkWidget *widget, gpointer data)
   object->mask.flags ^= DT_CANVAS_MASK_INVERT;
   dt_canvas_touch(view->canvas);
   _record_undo(context->self, before);
+  // The property bar carries this same flag as a toggle, and it shows what it last read.
+  _bars_refresh(context->self, TRUE);
   dt_control_queue_redraw_center();
 }
 

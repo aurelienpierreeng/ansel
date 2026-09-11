@@ -2517,6 +2517,18 @@ they are visible.
   kept the previous paper's colour while the new one was painted -- reported as "confusing to
   retain old parameters in GUI feedback while new stuff gets applied". A setter that only
   writes the field its own control sent needs no raise.
+  **Where the setter is on the interactive path, the obligation moves to the odd caller
+  instead**: every call to `set_texture` is one of the four sliders sending its own value, and
+  refilling under a slider the user is still holding would fight the pointer -- so the setter
+  stays quiet and `_texture_reset()`, the one caller that writes all four behind their backs,
+  refills the toolbar itself. Without that the Reset button reached the document and nothing
+  else: the sliders kept their positions, so it read as doing nothing at all, and the next
+  touch of any slider sent all four stale values back and undid it. The same shape lives in
+  the view's context menu, whose handlers change fields the property bar shows and must call
+  `_bars_refresh(self, TRUE)`: the cutout's shape and the edit mode did, its Invert did not.
+  **Sweep for this by function, not by eye** -- and grep for all three spellings
+  (`_bars_refresh`, `_bars_request`, `_announce_document`), since a sweep that misses one
+  reports every correct handler as broken.
 - **The ZIP is ours** (`canvas_zip.c`, store + deflate, no ZIP64) because no archive library
   is linked and zlib is. `unzip -t` is run on the writer's output in the unit test when
   available; keep it passing.
