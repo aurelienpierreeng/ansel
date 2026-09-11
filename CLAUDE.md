@@ -2025,6 +2025,29 @@ discarding the record frees the snapshot. That is every lighttable undo's lifeti
 is also the point of no return for data the database was the only holder of: a trip to the
 darkroom and back makes a removal permanent.
 
+### The metadata panel writes a field when it stops being edited, to the images it shows
+
+`libs/metadata.c` shows the values of the images to act on (`d->last_act_on`, refreshed by
+`_update()` when that list changes) and writes to **those same images**, never to the selection.
+The two differ exactly when it matters: with nothing selected the panel shows the image under the
+cursor, and a click on another thumbnail has already moved the selection by the time the field it
+leaves is written — writing to the selection then lands the edit on the image just clicked.
+
+A field is written as soon as it stops being edited — focus lost (a click elsewhere), another
+image taking over the panel (`_update()` commits the field still being typed in before switching
+lists), Tab, Enter or "apply" — the way any text field behaves; only Escape discards it, by
+clearing `d->editing` *before* the focus leaves. `d->editing` means "the user typed": every
+programmatic fill goes through `_set_text_buffer()`, which blocks `_textbuffer_changed()`, so
+emptying a `<leave unchanged>` field on focus never counts as an edit and never erases a value
+across the selection. `_refresh()` re-reads what the images hold; `_update()` only follows the
+list, so calling it to "redraw after a write" does nothing — the list has not changed.
+
+Escape reaches the module only because `_key_pressed()` is connected **before**
+`dt_accels_disconnect_on_text_input()`: that helper's own key handler takes Escape to hand the
+focus back (`dt_widget_refocus()`) and stops the emission, so connected first it turns every
+Escape into a plain focus-out — which, with focus-out committing, writes what Escape was meant to
+discard. Any text field that commits on focus-out and cancels on Escape owes the same order.
+
 ---
 
 ## GTK / UI
