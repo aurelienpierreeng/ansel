@@ -230,9 +230,25 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(restored->corner_radius, 14.0f, 1e-6);
   assert_float_equal(image->corner_radius, 7.0f, 1e-6);
   assert_true((image->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE) != 0);
+  // A zero among non-zero siblings is a weight the user turned off, and reads as off. Only
+  // all FOUR at zero is a file from before the fields, and that one reads as the paper as
+  // designed -- the fixture sets three weights and leaves the grain at zero.
+  float detail = -1.0f;
   float grain = -1.0f;
-  dt_canvas_texture_get(restored, NULL, NULL, NULL, &grain);
-  assert_float_equal(grain, 1.0f, 1e-6); // an unset weight reads as the paper as designed
+  dt_canvas_texture_get(restored, NULL, &detail, NULL, &grain);
+  assert_float_equal(detail, 0.5f, 1e-6);
+  assert_float_equal(grain, 0.0f, 1e-6);
+
+  dt_canvas_t *old_file = dt_canvas_new();
+  assert_non_null(old_file);
+  old_file->texture_contrast = 0.0f;
+  old_file->texture_detail = 0.0f;
+  old_file->texture_scale = 0.0f;
+  old_file->texture_grain = 0.0f;
+  float weights[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
+  dt_canvas_texture_get(old_file, &weights[0], &weights[1], &weights[2], &weights[3]);
+  for(int idx = 0; idx < 4; idx++) assert_float_equal(weights[idx], 1.0f, 1e-6);
+  dt_canvas_free(old_file);
   assert_true((restored->grid_flags & DT_CANVAS_GUTTER_VISIBLE) != 0);
 
   const dt_canvas_object_t *text = dt_canvas_find_object(restored, 2);

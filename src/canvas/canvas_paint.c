@@ -945,7 +945,16 @@ static cairo_surface_t *_paper_tile(const dt_canvas_t *canvas, const int sprite_
 }
 
 #define PAPER_DITHER_TILE 256    ///< the noise tile, repeated in device space
-#define PAPER_DITHER_SIGMA 0.008 ///< at zoom 1, the standard deviation of the multiplicative noise
+/**
+ * At zoom 1, the standard deviation of the multiplicative noise. It is applied to the LINEAR
+ * canvas and read on a gamma-encoded one, so a fraction here arrives as roughly half of it in
+ * code values; and it competes with the paper's own pixel-level content, measured at 1.45
+ * codes on the moleskine. At 0.008 the dither was 0.65 codes -- 45% of that -- so moving the
+ * grain weight from nothing to its default changed the pixel texture by 10%, which is why the
+ * slider read as having no effect at all. At 0.018 the two are comparable and the weight has
+ * the authority its range promises.
+ */
+#define PAPER_DITHER_SIGMA 0.018
 
 /** A tile of unit gaussian noise, one draw for the process: the dither is the same every frame. */
 static const float *_dither_noise(void)

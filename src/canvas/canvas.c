@@ -711,11 +711,19 @@ void dt_canvas_texture_get(const dt_canvas_t *canvas, float *contrast, float *de
                             IS_NULL_PTR(canvas) ? 1.0f : canvas->texture_scale,
                             IS_NULL_PTR(canvas) ? 1.0f : canvas->texture_grain };
   float *targets[4] = { contrast, detail, scale, grain };
+  // A file from before these fields holds FOUR zeros, and that is the only thing a zero may
+  // stand for: all four unset is an old file and reads as the paper as designed. Read the
+  // rule per field instead -- as it was -- and a weight a user deliberately turned down to
+  // nothing comes back as 1, which is how the grain slider came to do nothing at its own
+  // zero, and the detail slider with it. A canvas whose four weights are all zero is a plain
+  // colour by another name, so nothing is lost by spending that one combination here.
+  const gboolean unset = values[0] <= 0.0f && values[1] <= 0.0f && values[2] <= 0.0f && values[3] <= 0.0f;
+  // The scale divides every knee, so it alone may never reach zero.
+  const float floors[4] = { 0.0f, 0.0f, 0.05f, 0.0f };
   for(int idx = 0; idx < 4; idx++)
   {
     if(IS_NULL_PTR(targets[idx])) continue;
-    // A file from before the fields holds zeros, and a zero multiplier means nothing: the paper as designed.
-    *targets[idx] = values[idx] > 0.0f ? values[idx] : 1.0f;
+    *targets[idx] = unset ? 1.0f : fmaxf(values[idx], floors[idx]);
   }
 }
 
