@@ -427,7 +427,7 @@ unset weight (a file from before) reads as 1 (`dt_canvas_texture_get()`). The tw
 fields are kept per resolution and scale, the coloured and weighed tile per key.
 
 The canvas is painted with its background colour, with a transparent plane, or with one of
-five procedural papers:
+eight procedural papers:
 **Moleskine** (cream, fine soft clouds and short fibres in every direction), **watercolour**
 (white, a tooth that only darkens so the paper is white at its peaks, rounded pores),
 **embossed** (a wove sheet dried on a metallic mesh: a mottle and fibres, and the mesh's
@@ -448,8 +448,41 @@ cloud is read as about a fifth of a turn either side of the paper's own hue: a s
 spins the hue faster than a wrinkle is wide and comes out as fringing, not as dye (measured;
 the first attempt swept eleven turns across one sheet and read as chromatic aberration). It
 carries no grain field of its own -- a grain added to the cloud would scramble the hue at
-pixel scale -- and takes the same doubled dither the achromatic washi does. These are random
-fields synthesised in the
+pixel scale -- and takes the same doubled dither the achromatic washi does.
+
+Three more were added after a survey of what real papers look like and of which of their
+signatures these primitives can actually carry. **Laid** (verge) is the mould's own imprint:
+a wild, cloudy formation under two families of wires stamped in absolute coordinates like
+the embossed paper's mesh, both reading LIGHTER because the pulp settles thinner where a
+wire touched it -- a ripple along the close-set laid wires and a narrow line along each
+chain wire. Their pitches are the real ones **and** divide the composed field's 3072-unit
+period, which is what lets the tile still wrap: laid wires every 3 units (1.06 mm against a
+measured 1 mm) and chains every 64 (22.6 mm against 23). **Kraft** is unbleached softwood
+pulp: a broad blotchiness from uneven cooking, long fibres nothing bleached out, and shives
+-- flecks of bark -- as the far tail of a band-passed field. **Charcoal card** is the mirror
+of the watercolour's rule: that paper is white at its peaks so its tooth may only carve,
+this one is black in its hollows where no light reaches so its tooth may only LIFT, and its
+relief is one-sided positive with a mean the tint already allows for.
+
+Two things that round settled. **A threshold on a field is taken in the field's own
+deviations, never in absolute value**: kraft's shives were first cut at a guessed absolute
+level, which depends on how `_paper_field_band()` happens to normalise, and covered the
+sheet in flecks that read as cork; just under three of the field's own deviations is the few
+tenths of a percent a fleck should be. And **the laid ripple is the one feature whose period
+is near the tile's own sampling, so it is the one that has to fade when it cannot be drawn**:
+without that, the coarse tile (half a sample per unit, 1.5 per period) carried it at three
+quarters of full amplitude into a 2.4-pixel period -- an alias, measured, not the wires. It
+now fades below three samples per period and is gone below two. The residual case is
+everyone's: between half zoom and full, the tile is built finer than the screen and cairo
+shrinks it with `CAIRO_FILTER_BILINEAR`, which attenuates a fine structure rather than
+filtering it, the same trade the moleskine's fibres and the embossed mesh already make.
+
+Considered and left out: an artist's **canvas weave**, whose plain or duck weave the embossed
+paper's mesh already is, at a different pitch; and **Mi-Teintes' honeycomb**, which is a
+crisscross of the same machinery again. Both would have been a third and fourth mesh rather
+than a new kind of structure.
+
+These are random fields synthesised in the
 frequency domain: white noise shaped by a radial filter (a plateau below a knee frequency, a
 power-law fall-off above it) and transformed back with a small radix-2 FFT of our own. The
 discrete transform is periodic by construction, so a sprite wraps without a seam. One sprite
