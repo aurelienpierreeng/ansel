@@ -33,6 +33,7 @@
 
 #include <glib.h>
 #include "common/paths.h"   // DT_PATH_MAX
+#include <gio/gio.h>
 #include <glib/gstdio.h>
 #include <stdio.h>
 #include <string.h>
@@ -41,7 +42,9 @@
 #include "common/history_actions.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "database/database.h"
+#include "caches/image_cache.h"
+#include "control/control.h"
+#include "control/jobs.h"
 #include "database/image_repository.h"
 #include "common/image.h"
 #include "common/utility.h"
@@ -83,6 +86,13 @@ static void _free_crawler_result(dt_control_crawler_result_t *entry)
   entry->image_path = entry->xmp_path = NULL;
 }
 
+static void _free_crawler_results(GList *results)
+{
+  for(GList *l = results; !IS_NULL_PTR(l); l = g_list_next(l))
+    _free_crawler_result((dt_control_crawler_result_t *)l->data);
+  g_list_free_full(results, dt_free_gpointer);
+}
+
 static void _set_modification_time(char *filename,
                                    const time_t timestamp)
 {
@@ -121,128 +131,440 @@ static void _set_modification_time(char *filename,
   if(info) g_clear_object(&info);
 }
 
+/* A folder's contents as one lookup table: basename -> modification time.
+ *
+ * The crawler asks up to six questions about every image -- does the image still exist, does
+ * its XMP exist and when was it last written, is there a .txt/.TXT/.wav/.WAV beside it -- and
+ * used to answer each one with its own stat(). On a network filesystem the round-trip, not the
+ * work, is the entire cost: measured at 8.1 ms per stat() on a GVFS/SMB share, a 1969-image
+ * library spent 102 s in dt_control_crawler_run() before the main window was ever built.
+ *
+ * One directory listing answers all six questions for every image in that folder, and carries
+ * the modification times with it -- SMB returns them in the listing itself, so the XMP
+ * timestamp costs nothing beyond the listing. Same library, same share: 1.1 s for 3967 entries
+ * across 18 folders.
+ *
+ * Do NOT "improve" this by parallelising the per-file lookups instead. That was measured on
+ * the same share and does not work: gvfsd-fuse multiplexes every FUSE request through a single
+ * daemon, so 4 threads gained 4% (inside the noise) and 64 threads ran twice as slow as one.
+ * What this path needs is fewer round-trips, not overlapping ones.
+ */
+/* Windows and macOS resolve a filename without regard to case, and so does an SMB server:
+ * stat() found `IMG.NEF.XMP' when asked for `IMG.NEF.xmp', and an exact lookup in a listing
+ * does not. So a folder carries a second index, of casefolded names, consulted only when the
+ * exact name misses and built on that first miss -- a library whose names all agree with the
+ * database never pays for it.
+ *
+ * That index is a FILTER, not an answer. It says a file exists under some other spelling;
+ * whether the database's own spelling resolves to it is the filesystem's call, so a stat() of
+ * that spelling decides -- the very question the per-file code asked, put to the same
+ * filesystem. Found where the filesystem folds case; "missing" where it does not (ext4), and
+ * rightly: there the database's name really names no file, and taking the other one would
+ * hand this image another file's sidecar and companions. That costs one stat() per name that
+ * exists only under another spelling, which on an agreeing library is none.
+ *
+ * The key is Unicode-normalised before it is folded: macOS stores names decomposed, and a
+ * database may carry the composed spelling of the same name. The stat() is what makes a
+ * generous key safe -- at worst it asks the filesystem once for nothing. */
+typedef struct dt_crawler_folder_t
+{
+  gchar *path;        // the folder itself, for the stat() confirming a casefold hit
+  GHashTable *exact;  // basename -> guint64 *mtime, owns both
+  GHashTable *folded; // set of normalised, casefolded basenames; NULL until needed
+} dt_crawler_folder_t;
+
+static void _free_folder(gpointer p)
+{
+  dt_crawler_folder_t *folder = (dt_crawler_folder_t *)p;
+  if(!IS_NULL_PTR(folder->folded)) g_hash_table_destroy(folder->folded);
+  g_hash_table_destroy(folder->exact);
+  dt_free(folder->path);
+  dt_free(folder);
+}
+
+/* The spelling two names share when only case or Unicode composition sets them apart. */
+static gchar *_folded_key(const char *name)
+{
+  // a name that is not UTF-8 -- possible on a POSIX filesystem -- has no case to fold
+  if(!g_utf8_validate(name, -1, NULL)) return g_strdup(name);
+
+  gchar *normalised = g_utf8_normalize(name, -1, G_NORMALIZE_DEFAULT);
+  gchar *key = g_utf8_casefold(normalised, -1);
+  dt_free(normalised);
+  return key;
+}
+
+typedef struct dt_crawler_walk_t
+{
+  GList **result;
+  GHashTable *folders; // dirname -> dt_crawler_folder_t *
+  dt_job_t *job;       // NULL for a crawl the user asked for from the menu: it runs to its end
+} dt_crawler_walk_t;
+
+/* A crawl run as a job stops when the job is cancelled, and when Ansel quits. Nothing cancels a
+ * running job on the way out -- dt_control_quit() and dt_control_shutdown() only clear
+ * `running`, then join the workers -- so `running` is the flag that says so, and a crawl that
+ * ignored it would hold the quit up until the last image: the full mount timeout per folder
+ * on a share that has gone away. */
+static gboolean _job_cancelled(dt_job_t *job)
+{
+  return !IS_NULL_PTR(job)
+         && (dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED || !dt_control_running());
+}
+
+/* The walk visits folders in film-roll order -- the query orders by f.id -- so one folder is
+ * live at a time and this cache is a window onto the library, not a copy of it. The cap keeps
+ * it a window even if that order ever changes: past it the cache is dropped wholesale rather
+ * than growing with the collection, which costs a re-listing at worst and never a wrong
+ * answer. */
+#define DT_CRAWLER_FOLDER_CACHE_MAX 32
+
+static dt_crawler_folder_t *_crawler_folder(dt_crawler_walk_t *walk, const char *dirname)
+{
+  GHashTable *folders = walk->folders;
+  dt_crawler_folder_t *folder = (dt_crawler_folder_t *)g_hash_table_lookup(folders, dirname);
+  if(!IS_NULL_PTR(folder)) return folder;
+
+  if(g_hash_table_size(folders) >= DT_CRAWLER_FOLDER_CACHE_MAX)
+    g_hash_table_remove_all(folders);
+
+  folder = (dt_crawler_folder_t *)g_malloc0(sizeof(dt_crawler_folder_t));
+  folder->path = g_strdup(dirname);
+  folder->exact = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                        dt_free_gpointer, dt_free_gpointer);
+
+  /* GIO rather than readdir()/stat(): it is the one spelling that works on all three
+   * platforms, and on Windows it takes the UTF-8 path this database stores and does the
+   * UTF-16 conversion itself -- which is exactly what the hand-rolled _wstati64() branch
+   * removed from _crawl_image() was there to do. */
+  GFile *dir = g_file_new_for_path(dirname);
+  GFileEnumerator *entries = g_file_enumerate_children(dir,
+                                                       G_FILE_ATTRIBUTE_STANDARD_NAME ","
+                                                       G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                                                       G_FILE_QUERY_INFO_NONE, NULL, NULL);
+  if(!IS_NULL_PTR(entries))
+  {
+    GError *error = NULL;
+    while(!_job_cancelled(walk->job))
+    {
+      GFileInfo *info = g_file_enumerator_next_file(entries, NULL, &error);
+      if(IS_NULL_PTR(info)) break;
+
+      const char *name = g_file_info_get_name(info);
+      if(!IS_NULL_PTR(name))
+      {
+        guint64 *mtime = (guint64 *)g_malloc(sizeof(guint64));
+        *mtime = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
+        g_hash_table_insert(folder->exact, g_strdup(name), mtime);
+      }
+      g_object_unref(info);
+    }
+
+    /* A listing that fails part-way -- a share dropping mid-read -- is discarded whole. Kept as
+     * far as it got, it would read an image whose .txt came after the break as having none and
+     * clear its flag; empty, it reads every image here as missing, which is the answer an
+     * unreadable folder gets below. */
+    if(!IS_NULL_PTR(error))
+    {
+      dt_print(DT_DEBUG_CONTROL, "[crawler] listing `%s' failed part-way: %s\n", dirname,
+               error->message);
+      g_hash_table_remove_all(folder->exact);
+      g_error_free(error);
+    }
+    g_object_unref(entries);
+  }
+  else
+    dt_print(DT_DEBUG_CONTROL, "[crawler] cannot list `%s'.\n", dirname);
+
+  g_object_unref(dir);
+
+  /* A folder we could not read memoises as an EMPTY listing, not as "not looked at yet":
+   * every image in it then reads as missing, which is exactly what the per-file stat()
+   * answered for an unreachable folder -- and we do not ask again once per image. That is
+   * the unplugged external drive and the offline share, at one failed call per folder
+   * instead of six per image. */
+  g_hash_table_insert(folders, g_strdup(dirname), folder);
+  return folder;
+}
+
+/* TRUE if the folder holds `name`; its modification time goes to `mtime` when one is wanted. */
+static gboolean _folder_holds(dt_crawler_folder_t *folder, const char *name, time_t *mtime)
+{
+  const guint64 *found = (const guint64 *)g_hash_table_lookup(folder->exact, name);
+  if(!IS_NULL_PTR(found))
+  {
+    if(!IS_NULL_PTR(mtime)) *mtime = (time_t)*found;
+    return TRUE;
+  }
+
+  if(IS_NULL_PTR(folder->folded))
+  {
+    folder->folded = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
+    GHashTableIter iter;
+    gpointer listed = NULL;
+    g_hash_table_iter_init(&iter, folder->exact);
+    while(g_hash_table_iter_next(&iter, &listed, NULL))
+      g_hash_table_add(folder->folded, _folded_key((const char *)listed));
+  }
+
+  gchar *key = _folded_key(name);
+  const gboolean elsewhere = g_hash_table_contains(folder->folded, key);
+  dt_free(key);
+  if(!elsewhere) return FALSE;
+
+  // a file answers to this name under another spelling; the filesystem decides if this one does
+  gchar *path = g_build_filename(folder->path, name, NULL);
+  GStatBuf st;
+  const gboolean resolves = (g_stat(path, &st) == 0);
+  dt_free(path);
+  if(resolves && !IS_NULL_PTR(mtime)) *mtime = st.st_mtime;
+  return resolves;
+}
+
+/* `name` with its extension replaced by the three characters `ext`: the sibling-file spelling
+ * the per-file lookups built by hand. It finds the dot in the file name, where they searched
+ * the whole path, and the two agree for every name that has an extension. They part ways for
+ * a name with none in a folder whose path has a dot: the old spelling then pointed beside the
+ * folder, outside the image's own directory, where this one stays inside it. A name with no
+ * '.' at all comes out as its first character followed by `ext` -- no companion file is
+ * spelled that way, so such an image simply has none. */
+static gchar *_sibling_name(const char *name, const char *ext)
+{
+  size_t len = strlen(name);
+  const char *c = name + len;
+  while((c > name) && (*c != '.')) c--;
+  len = c - name + 1;
+
+  // g_strndup always allocates n + 1 bytes and NUL-pads, so writing [len .. len + 2] is in
+  // bounds even when `name`'s own extension is shorter than three characters.
+  gchar *sibling = g_strndup(name, len + 3);
+  memcpy(sibling + len, ext, 3);
+  return sibling;
+}
+
 /* One row of the library walk: everything below used to be the body of a cursor loop over
  * main.images joined to main.film_rolls, with a second statement writing the flags back. */
-static void _crawl_image(const int32_t id,
-                         const int64_t timestamp,
-                         const int version,
-                         const char *image_path,
-                         const int flags,
-                         void *user_data)
+static gboolean _crawl_image(const int32_t id,
+                             const int64_t timestamp,
+                             const int version,
+                             const char *image_path,
+                             const int flags,
+                             void *user_data)
 {
-  GList **result = (GList **)user_data;
+  dt_crawler_walk_t *walk = (dt_crawler_walk_t *)user_data;
+  if(_job_cancelled(walk->job)) return FALSE;
+
+  gboolean go_on = TRUE;
+  gchar *dirname = g_path_get_dirname(image_path);
+  gchar *filename = g_path_get_basename(image_path);
+  dt_crawler_folder_t *folder = _crawler_folder(walk, dirname);
+
+  /* Checked again after the listing, which is where the time goes: a cancel landing during it
+   * leaves a listing cut short, and a name missing from it would read as a file missing from
+   * disk -- clearing the companion flags of every image whose .txt was not listed yet. */
+  if(_job_cancelled(walk->job))
+  {
+    go_on = FALSE;
+    goto done;
+  }
 
   // if the image is missing we ignore it.
-  if(!g_file_test(image_path, G_FILE_TEST_EXISTS))
+  if(!_folder_holds(folder, filename, NULL))
   {
     dt_print(DT_DEBUG_CONTROL, "[crawler] `%s' (id: %d) is missing.\n", image_path, id);
-    return;
+    goto done;
   }
 
-  // construct the xmp filename for this image
-  gchar xmp_path[DT_PATH_MAX] = { 0 };
-  g_strlcpy(xmp_path, image_path, sizeof(xmp_path));
-  dt_image_path_append_version_no_db(version, xmp_path, sizeof(xmp_path));
-  size_t len = strlen(xmp_path);
-  if(len + 4 >= DT_PATH_MAX) return;
-  xmp_path[len++] = '.';
-  xmp_path[len++] = 'x';
-  xmp_path[len++] = 'm';
-  xmp_path[len++] = 'p';
-  xmp_path[len] = '\0';
-
-  // on Windows the encoding might not be UTF8
-  gchar *xmp_path_locale = dt_util_normalize_path(xmp_path);
-  int stat_res = -1;
-#ifdef _WIN32
-  // UTF8 paths fail in this context, but converting to UTF16 works
-  struct _stati64 statbuf;
-  if(xmp_path_locale) // in Windows dt_util_normalize_path returns
-                      // NULL if file does not exist
   {
-    wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
-    stat_res = _wstati64(wfilename, &statbuf);
-    dt_free(wfilename);
-  }
-#else
-  struct stat statbuf;
-  stat_res = stat(xmp_path_locale, &statbuf);
-#endif
-  dt_free(xmp_path_locale);
-  if(stat_res) return; // TODO: shall we report these?
+    // construct the xmp filename for this image
+    gchar xmp_name[DT_PATH_MAX] = { 0 };
+    g_strlcpy(xmp_name, filename, sizeof(xmp_name));
+    dt_image_path_append_version_no_db(version, xmp_name, sizeof(xmp_name));
+    g_strlcat(xmp_name, ".xmp", sizeof(xmp_name));
 
-  // step 1: check if the xmp is newer than our db entry
-  // FIXME: allow for a few seconds difference?
-  if(timestamp < statbuf.st_mtime)
+    time_t xmp_timestamp = 0;
+    if(!_folder_holds(folder, xmp_name, &xmp_timestamp))
+      goto done; // TODO: shall we report these?
+
+    // step 1: check if the xmp is newer than our db entry
+    // FIXME: allow for a few seconds difference?
+    if(timestamp < xmp_timestamp)
+    {
+      dt_control_crawler_result_t *item
+          = (dt_control_crawler_result_t *)malloc(sizeof(dt_control_crawler_result_t));
+      item->id = id;
+      item->timestamp_xmp = xmp_timestamp;
+      item->timestamp_db = timestamp;
+      item->image_path = g_strdup(image_path);
+      item->xmp_path = g_build_filename(dirname, xmp_name, NULL);
+
+      *walk->result = g_list_prepend(*walk->result, item);
+      dt_print(DT_DEBUG_CONTROL,
+                "[crawler] `%s' (id: %d) is a newer XMP file.\n", item->xmp_path, id);
+    }
+    // older timestamps are the case for all images after the db
+    // upgrade. better not report these
+  }
+
   {
-    dt_control_crawler_result_t *item
-        = (dt_control_crawler_result_t *)malloc(sizeof(dt_control_crawler_result_t));
-    item->id = id;
-    item->timestamp_xmp = statbuf.st_mtime;
-    item->timestamp_db = timestamp;
-    item->image_path = g_strdup(image_path);
-    item->xmp_path = g_strdup(xmp_path);
+    // step 2: check if the image has associated files (.txt, .wav)
+    // Both spellings of each, in the order the per-file lookups tried them.
+    gchar *txt_lower = _sibling_name(filename, "txt");
+    gchar *txt_upper = _sibling_name(filename, "TXT");
+    const gboolean has_txt = _folder_holds(folder, txt_lower, NULL)
+                          || _folder_holds(folder, txt_upper, NULL);
+    dt_free(txt_lower);
+    dt_free(txt_upper);
 
-    *result = g_list_prepend(*result, item);
-    dt_print(DT_DEBUG_CONTROL,
-              "[crawler] `%s' (id: %d) is a newer XMP file.\n", xmp_path, id);
+    gchar *wav_lower = _sibling_name(filename, "wav");
+    gchar *wav_upper = _sibling_name(filename, "WAV");
+    const gboolean has_wav = _folder_holds(folder, wav_lower, NULL)
+                          || _folder_holds(folder, wav_upper, NULL);
+    dt_free(wav_lower);
+    dt_free(wav_upper);
+
+    // TODO: decide if we want to remove the flag for images that lost
+    // their extra file. currently we do (the else cases)
+    const int mask = DT_IMAGE_HAS_TXT | DT_IMAGE_HAS_WAV;
+    int value = 0;
+    if(has_txt) value |= DT_IMAGE_HAS_TXT;
+    if(has_wav) value |= DT_IMAGE_HAS_WAV;
+
+    /* The row is not the only copy of this word. An image the user has looked at also has an
+     * image-cache entry holding its own dt_image_t, and releasing that entry writes the whole
+     * struct back -- which is how a rating or a colour label reaches the database at all
+     * (metadata/ratings.c's _ratings_apply_to_image()). So when the image has an entry, the
+     * entry is what we compare against AND what we edit: it owns the struct, and its write lock
+     * is the one _ratings_apply_to_image() takes, which is what serialises the two. A rating set
+     * meanwhile either lands before us and is read here, or lands after us and sees our bits.
+     *
+     * Compare against the entry, not the row. The two can disagree on these very bits -- a row
+     * written behind the entry earlier, say -- and a guard reading the row would then find
+     * nothing to do, leave the entry stale, and let its next release write the stale bits back.
+     *
+     * get_existing(), not testget(). testget() returns NULL for an entry someone holds this
+     * instant as well as for no entry, and writing the row in the first case writes behind a
+     * live entry whose release then reverts it. get_existing() waits for that entry instead --
+     * and, like testget(), never creates one, so a crawl over the whole library does not pull
+     * the whole library into the cache on its way past.
+     *
+     * RELAXED rather than SAFE: the release writes the row, but must not queue an XMP write
+     * from the one job whose entire purpose is to find out whether the sidecars are in sync.
+     * MINIMAL when nothing changed: that gives the lock back without writing anything. */
+    dt_image_t *cached = dt_image_cache_get_existing(id, 'w');
+    if(!IS_NULL_PTR(cached))
+    {
+      if((cached->flags & mask) != value)
+      {
+        cached->flags = (cached->flags & ~mask) | value;
+        dt_image_cache_write_release(cached, DT_IMAGE_CACHE_RELAXED);
+      }
+      else
+        dt_image_cache_write_release(cached, DT_IMAGE_CACHE_MINIMAL);
+    }
+    /* No entry, so the row is the only copy and comparing against it is sound. `flags` was read
+     * from it before this folder was listed -- a filesystem round-trip, up to a second on a
+     * network share -- so the write is masked: a rating set in that window lives in the same
+     * word and must survive. The two bits compared are written only by the crawl and by the
+     * import, so the stale read costs at worst one redundant UPDATE. */
+    else if((flags & mask) != value)
+      dt_image_repository_set_flags_masked(id, mask, value);
   }
-  // older timestamps are the case for all images after the db
-  // upgrade. better not report these
 
-  // step 2: check if the image has associated files (.txt, .wav)
-  len = strlen(image_path);
-  const char *c = image_path + len;
-  while((c > image_path) && (*c != '.')) c--;
-  len = c - image_path + 1;
+done:
+  dt_free(dirname);
+  dt_free(filename);
+  return go_on;
+}
 
-  char *txt_path = dt_image_get_text_path_from_path(image_path);
-  gboolean has_txt = !IS_NULL_PTR(txt_path);
-  dt_free(txt_path);
+static GList *_crawler_run(dt_job_t *job)
+{
+  GList *result = NULL;
+  dt_crawler_walk_t walk
+      = { .result = &result,
+          .folders = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                           dt_free_gpointer, _free_folder),
+          .job = job };
 
-  char *extra_path = (char *)calloc(len + 3 + 1, sizeof(char));
-  g_strlcpy(extra_path, image_path, len + 1);
+  /* NO transaction around this walk, deliberately -- it used to carry one, inherited from the
+   * days when the crawl ran before the main window existed and nothing else could touch the
+   * database. It cannot stay now that this runs as a background job:
+   *
+   *  - dt_database_start_transaction() takes the module-wide _db_lock as a WRITER and holds it
+   *    until the matching release, so every other thread that opens a transaction -- the GUI
+   *    thread does so constantly -- would block for the whole crawl;
+   *  - the module owns ONE sqlite3 connection, and a transaction belongs to the connection
+   *    rather than to the thread, so any statement the GUI thread issues outside a transaction
+   *    of its own would silently execute inside OURS: not durable until we commit, and gone if
+   *    anything rolled us back;
+   *  - and what it spanned is not database work at all. _crawler_folder() lists a directory
+   *    from inside the callback, so the lock would be held across every filesystem round-trip
+   *    -- 1.1 s on the measured SMB share, and the full mount timeout when a share is gone.
+   *
+   * Nothing is lost by dropping it. The walk is a read; the only writes are the rare
+   * dt_image_repository_set_flags_masked() calls for an image whose .txt/.wav sibling appeared or
+   * disappeared, and the database runs `synchronous = OFF` with `journal_mode = MEMORY`
+   * (dt_database_open), so a commit costs no disk sync and batching them buys nothing.
+   */
+  dt_image_repository_foreach_with_path(_crawl_image, &walk);
 
-  extra_path[len] = 'w';
-  extra_path[len + 1] = 'a';
-  extra_path[len + 2] = 'v';
-  gboolean has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
+  g_hash_table_destroy(walk.folders);
 
-  if(!has_wav)
-  {
-    extra_path[len] = 'W';
-    extra_path[len + 1] = 'A';
-    extra_path[len + 2] = 'V';
-    has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
-  }
-
-  // TODO: decide if we want to remove the flag for images that lost
-  // their extra file. currently we do (the else cases)
-  int new_flags = flags;
-  if(has_txt)
-    new_flags |= DT_IMAGE_HAS_TXT;
-  else
-    new_flags &= ~DT_IMAGE_HAS_TXT;
-  if(has_wav)
-    new_flags |= DT_IMAGE_HAS_WAV;
-  else
-    new_flags &= ~DT_IMAGE_HAS_WAV;
-  if(flags != new_flags)
-    dt_image_repository_set_flags(id, new_flags);
-
-  dt_free(extra_path);
+  return g_list_reverse(result); // list was built in reverse order, so un-reverse it
 }
 
 GList *dt_control_crawler_run(void)
 {
-  GList *result = NULL;
+  return _crawler_run(NULL);
+}
 
-  // let's wrap this into a transaction, it might make it a little faster.
-  dt_database_start_transaction();
-  dt_image_repository_foreach_with_path(_crawl_image, &result);
-  dt_database_release_transaction();
+/* The crawl is I/O-latency bound and its cost scales with the library, so it does not belong
+ * on the startup path at all: it used to run to completion before dt_control_init(), i.e.
+ * before the main window was built. It runs as a background job instead, and posts its popup
+ * to the GUI thread if and when it finds anything.
+ */
+static gboolean _crawler_show_results(gpointer user_data)
+{
+  // takes ownership of the list and frees it
+  dt_control_crawler_show_image_list((GList *)user_data);
+  return G_SOURCE_REMOVE;
+}
 
-  return g_list_reverse(result); // list was built in reverse order, so un-reverse it
+static int32_t _crawler_job_run(dt_job_t *job)
+{
+  GList *changed_xmp_files = _crawler_run(job);
+
+  /* A cancelled walk stopped part-way, so its list is a fraction of the answer -- and after a
+   * quit, the main loop that would show it is on its way out. Neither is worth a popup. */
+  if(_job_cancelled(job))
+  {
+    _free_crawler_results(changed_xmp_files);
+    return 0;
+  }
+
+  // the popup is GTK and this runs on a worker thread
+  if(!IS_NULL_PTR(changed_xmp_files))
+    g_main_context_invoke(NULL, _crawler_show_results, changed_xmp_files);
+
+  return 0;
+}
+
+void dt_control_crawler_run_in_background(void)
+{
+  /* dt_control_add_job() runs a job synchronously on the calling thread when the scheduler is
+   * not up, and reports that as success -- which is the one outcome this function exists to
+   * avoid. No crawl at all is the right answer then: it is a consistency check between the
+   * database and the sidecars, not something a session depends on. dt_init() calls this well
+   * after dt_control_init() starts the workers, so it cannot fire today; this keeps that
+   * ordering from being a silent precondition. */
+  if(!dt_control_running()) return;
+
+  dt_job_t *job = dt_control_job_create(&_crawler_job_run, "crawl XMP files");
+  if(IS_NULL_PTR(job)) return;
+
+  // SYSTEM_BG, not SYSTEM_FG: the queue a job may not be pushed back out of. Dropping the
+  // crawl would leave the database out of sync with the sidecars with nothing said about it.
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_SYSTEM_BG, job);
 }
 
 

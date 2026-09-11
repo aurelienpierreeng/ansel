@@ -100,6 +100,16 @@ dt_image_t *dt_image_cache_get(const int32_t imgid, char mode);
 // is currently unavailable.
 dt_image_t *dt_image_cache_testget(const int32_t imgid, char mode);
 
+// same as get, but only for an image that is ALREADY cached: waits for the entry's lock when
+// an entry exists, as get() does, and returns NULL without creating one when it does not.
+// testget() cannot stand in for it -- it returns NULL for an entry someone holds this instant
+// as well as for no entry, and a caller writing the row in the first case writes behind a live
+// entry whose next release reverts it. For code that keeps an existing entry in step with a
+// row it writes, without pulling every image it visits into the cache (the XMP crawler).
+// An entry evicted between the check and the wait is reloaded from its row, as get() would:
+// one allocation, never a stale answer.
+dt_image_t *dt_image_cache_get_existing(const int32_t imgid, char mode);
+
 // like dt_image_cache_get/testget, but always reloads the image data from the database
 // before returning the cache entry.
 dt_image_t *dt_image_cache_get_reload(const int32_t imgid, char mode);
