@@ -174,6 +174,8 @@ typedef struct dt_canvas_view_t
   // object: one row per topic, the kind's own row first, the others shared by every kind
   GtkWidget *bar;
   GtkWidget *row_text;
+  GtkWidget *text_line_height;
+  GtkWidget *text_letter_spacing;
   GtkWidget *text_font;
   GtkWidget *text_color;
   GtkWidget *text_align_h;
@@ -2235,6 +2237,17 @@ static void _bar_text_align_changed(GtkComboBox *combo, gpointer data)
   BAR_EDIT_END()
 }
 
+/** The leading and the tracking: the two the type needs that the font description cannot say. */
+static void _bar_text_metrics_changed(GtkSpinButton *spin, gpointer data)
+{
+  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
+  if(GTK_WIDGET(spin) == view->text_line_height)
+    object->text.line_height = (float)gtk_spin_button_get_value(spin);
+  else
+    object->text.letter_spacing = (float)gtk_spin_button_get_value(spin);
+  BAR_EDIT_END()
+}
+
 /** The border handlers serve the image bar and the text bar alike: any frame. */
 #define BAR_EDIT_BEGIN_FRAME()                                                                             \
   dt_view_t *self = (dt_view_t *)data;                                                                     \
@@ -2627,6 +2640,15 @@ static void _bars_create(dt_view_t *self)
   gtk_widget_set_tooltip_text(view->text_align_v, _("Vertical alignment"));
   g_signal_connect(view->text_align_v, "changed", G_CALLBACK(_bar_text_align_changed), self);
   gtk_box_pack_start(GTK_BOX(view->row_text), view->text_align_v, FALSE, FALSE, 0);
+  view->text_line_height
+      = _bar_spin(view->row_text, 0.5, 4.0, 0.05, 2,
+                  _("Line height, as a multiple of what the font asks for: 1 is the font's own leading"),
+                  G_CALLBACK(_bar_text_metrics_changed), self);
+  view->text_letter_spacing
+      = _bar_spin(view->row_text, -200.0, 500.0, 5.0, 0,
+                  _("Letter spacing in thousandths of an em, so it follows the type size: negative condenses the "
+                    "line, positive opens it out. A condensed CUT is chosen in the font name instead."),
+                  G_CALLBACK(_bar_text_metrics_changed), self);
   view->text_color = _bar_color_button(view->row_text, _("Text colour and opacity"), G_CALLBACK(_bar_text_color_set), self);
 
   view->row_connector = _bar_row(bar, _("Connector"));
@@ -2871,6 +2893,10 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       _color_to_button(view->text_color, &object->text.text_color);
       gtk_combo_box_set_active(GTK_COMBO_BOX(view->text_align_h), CLAMP((int)object->text.align_h, 0, 3));
       gtk_combo_box_set_active(GTK_COMBO_BOX(view->text_align_v), CLAMP((int)object->text.align_v, 0, 2));
+      // Unset is the font's own leading, which the spin shows as 1 rather than as 0.
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_line_height),
+                                object->text.line_height > 0.0f ? object->text.line_height : 1.0f);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_letter_spacing), object->text.letter_spacing);
     }
     else if(kind == DT_CANVAS_OBJECT_CONNECTOR)
     {

@@ -136,6 +136,8 @@ static void _write_text(GByteArray *out, const dt_canvas_text_t *text)
   _w_f32(out, text->padding);
   _w_u32(out, text->align_h);
   _w_u32(out, text->align_v);
+  _w_f32(out, text->line_height);
+  _w_f32(out, text->letter_spacing);
   _w_bytes(out, text->reserved, sizeof(text->reserved));
 }
 
@@ -433,6 +435,9 @@ static void _read_text(dt_canvas_cursor_t *cursor, dt_canvas_text_t *text)
   text->padding = _r_f32(cursor);
   text->align_h = _r_u32(cursor);
   text->align_v = _r_u32(cursor);
+  // Zero from a document written before these: the font's own leading and spacing.
+  text->line_height = _r_f32(cursor);
+  text->letter_spacing = _r_f32(cursor);
   _r_bytes(cursor, text->reserved, sizeof(text->reserved));
   text->markdown = NULL;
 }

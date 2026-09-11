@@ -73,7 +73,7 @@ extern "C" {
 #define DT_CANVAS_HEADER_RESERVED 868 ///< 1024 at format 1, minus the gutter (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), gutter colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4)
 #define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
-#define DT_CANVAS_TEXT_RESERVED 248 ///< 256 at format 1, minus the two alignments
+#define DT_CANVAS_TEXT_RESERVED 240 ///< 256 at format 1, minus the two alignments, the line height and the tracking
 #define DT_CANVAS_MAP_RESERVED 256
 #define DT_CANVAS_CONNECTOR_RESERVED 72 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24)
 
@@ -211,6 +211,19 @@ typedef struct dt_canvas_text_t
   float padding;                  ///< inner margin in canvas units
   uint32_t align_h;               ///< dt_canvas_text_align_t
   uint32_t align_v;               ///< dt_canvas_text_align_t, never JUSTIFY
+  /**
+   * The leading, as a multiple of what the font asks for: 1 is the font's own, 1.5 is one and
+   * a half. 0 means unset and reads as 1, which is what a document from before the field
+   * holds and what keeps it looking as it did.
+   */
+  float line_height;
+  /**
+   * The tracking, in THOUSANDTHS OF AN EM, so it follows the type size rather than the plane:
+   * -50 tightens a line, +100 opens it out. 0 is the font's own spacing. A true condensed cut
+   * is a different thing and is chosen in the font name, since Pango can only reach one that
+   * the family actually ships.
+   */
+  float letter_spacing;
   uint8_t reserved[DT_CANVAS_TEXT_RESERVED];
 
   /* runtime: the Markdown travels as its own archive entry */

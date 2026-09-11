@@ -285,6 +285,18 @@ edited and unreachable the rest of the time. `_mask_node_at()` is the geometric 
 the submenu offers the way into the edit mode instead. Every drag and
 every wheel step is one undo record.
 
+A text frame carries two things its font description cannot say. Its **line height** is a
+multiple of the leading the font asks for, and reaches Pango as the EXTRA space between lines
+-- `pango_layout_set_spacing()` against the context's own metrics, rather than a newer call,
+so it works wherever the rest of the application builds. Its **letter spacing** is a tracking
+in thousandths of an em, so it follows the type size rather than the plane: negative condenses
+a line, positive opens it out, and a condensed CUT is a different thing chosen in the font
+name, since Pango can only reach one the family actually ships. The tracking is INSERTED into
+a copy of the markup's own attributes; `pango_attr_list_splice()` is the call that looks right
+there and is not, since it opens a hole of the length it is given and a zero-length one
+collapses the attribute it is carrying. Both are 0 when unset, which reads as the font's own,
+so a document from before them looks exactly as it did.
+
 A cut-out frame is three layers over each other in linear light, composited in one pass
 over the frame's float layer. Its **background** (every object has one, alpha 0 for none; a
 text frame keeps its own field) fills the shape's whole support -- everywhere the cutout has

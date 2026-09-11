@@ -1327,6 +1327,42 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
   gchar *markup = dt_canvas_markdown_to_pango(dt_canvas_text_get_markdown(object));
   pango_layout_set_markup(layout, markup, -1);
   dt_free(markup);
+
+  // The leading, as a multiple of the font's own. Pango's line spacing is the EXTRA space
+  // between lines, not the total, so the multiplier is turned into one against what the font
+  // asks for -- and it is read from the context's metrics rather than from a newer Pango call,
+  // which keeps this working wherever the rest of the application builds.
+  if(object->text.line_height > 0.0f && fabsf(object->text.line_height - 1.0f) > 1e-4f)
+  {
+    PangoContext *context = pango_layout_get_context(layout);
+    PangoFontMetrics *metrics
+        = pango_context_get_metrics(context, pango_layout_get_font_description(layout), NULL);
+    if(!IS_NULL_PTR(metrics))
+    {
+      const int natural = pango_font_metrics_get_ascent(metrics) + pango_font_metrics_get_descent(metrics);
+      pango_layout_set_spacing(layout, (int)lround((double)natural * (object->text.line_height - 1.0)));
+      pango_font_metrics_unref(metrics);
+    }
+  }
+  // The tracking, in thousandths of an em, so it follows the type size and not the plane.
+  if(fabsf(object->text.letter_spacing) > 1e-4f)
+  {
+    const PangoFontDescription *description = pango_layout_get_font_description(layout);
+    const int size = IS_NULL_PTR(description) ? 0 : pango_font_description_get_size(description);
+    if(size > 0)
+    {
+      // The markup brought its own attributes and they are kept: the tracking is INSERTED into
+      // a copy of them, spanning the whole text by default. Splicing one list into the other
+      // is the call that looks right here and is not -- it opens a hole of the length it is
+      // given, so a zero-length one collapses the very attribute it is carrying.
+      PangoAttrList *existing = pango_layout_get_attributes(layout);
+      PangoAttrList *attributes = IS_NULL_PTR(existing) ? pango_attr_list_new() : pango_attr_list_copy(existing);
+      pango_attr_list_insert(
+          attributes, pango_attr_letter_spacing_new((int)lround((double)size * object->text.letter_spacing / 1000.0)));
+      pango_layout_set_attributes(layout, attributes);
+      pango_attr_list_unref(attributes);
+    }
+  }
   return layout;
 }
 
