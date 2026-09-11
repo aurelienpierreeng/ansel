@@ -944,12 +944,16 @@ static gboolean _log_key_event(GSignalInvocationHint *hint, guint n_params, cons
   // token of its own, which would name it twice on the release.
   gchar *accel = gtk_accelerator_name(event->keyval, mods);
   GtkWidget *widget = GTK_WIDGET(g_value_get_object(&params[0]));
-  dt_print(DT_DEBUG_INPUT, "[input] key %s: %s%s%s%s (keyval 0x%x, keycode %u, state 0x%x) on %s\n",
+  // Every toplevel is a GtkWindow, so the type alone cannot say whether a key reached the main
+  // window or a panel holding the keyboard; the title can.
+  const gchar *title = GTK_IS_WINDOW(widget) ? gtk_window_get_title(GTK_WINDOW(widget)) : NULL;
+  dt_print(DT_DEBUG_INPUT, "[input] key %s: %s%s%s%s (keyval 0x%x, keycode %u, state 0x%x) on %s%s%s%s\n",
            (event->type == GDK_KEY_PRESS) ? "pressed" : "released",
            (primary_mod && !primary_key) ? "<Primary>" : "", primary_key ? "<Primary> (" : "",
            IS_NULL_PTR(accel) ? "<unnamed>" : accel, primary_key ? ")" : "",
            event->keyval, (unsigned int)event->hardware_keycode, event->state,
-           IS_NULL_PTR(widget) ? "<none>" : G_OBJECT_TYPE_NAME(widget));
+           IS_NULL_PTR(widget) ? "<none>" : G_OBJECT_TYPE_NAME(widget), IS_NULL_PTR(title) ? "" : " \"",
+           IS_NULL_PTR(title) ? "" : title, IS_NULL_PTR(title) ? "" : "\"");
   dt_free(accel);
 
   return TRUE;

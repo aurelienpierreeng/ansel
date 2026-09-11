@@ -2376,6 +2376,9 @@ Two things about a key event that the trace has to state rather than pass throug
   modifiers (`<Primary><Mod2>`), spelling one keystroke twice. Both bits come out before naming
   and `<Primary>` is printed once, the same duplicate `_accels_keys_decode()` and
   `dt_modifier_is()` drop before matching. The raw `state` is printed alongside, in hex.
+- **A toplevel is named by its title as well as its type.** Every toplevel is a `GtkWindow`, so
+  the type alone cannot say whether a key reached the main window or a panel holding the keyboard
+  (the shape manager while a name is edited) — which is the question such a trace is read for.
 
 ---
 
