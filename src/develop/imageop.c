@@ -1347,9 +1347,10 @@ void _hash_raster_masks(gpointer key, gpointer value, uint64_t *hash)
 
   // Use only "constant" module params with regard to the pipeline
   // init/resync aka we can't use any module pre-computed hash.
+  // Not module->instance, for the reason dt_iop_compute_module_hash() gives: it is renumbered on
+  // every darkroom entry, and op, iop_order and multi_priority already name the provider.
   *hash = dt_hash(*hash, (char *)module->op, sizeof(module->op));
   *hash = dt_hash(*hash, (char *)&module->iop_order, sizeof(module->iop_order));
-  *hash = dt_hash(*hash, (char *)&module->instance, sizeof(module->instance));
   *hash = dt_hash(*hash, (char *)&module->multi_priority, sizeof(module->multi_priority));
   *hash = dt_hash(*hash, (char *)module->blend_params, sizeof(dt_develop_blend_params_t));
 }
@@ -1415,9 +1416,14 @@ void dt_iop_compute_module_hash(dt_iop_module_t *module, GList *masks)
   // including masks and blending.
   // WARNING: doesn't take into account parameters dynamically set at runtime.
 
+  /* NOT module->instance. That is a runtime identity -- the family id dt_dev_module_duplicate()
+   * matches on -- handed out by a counter on the dev that is never reset, so every darkroom
+   * entry, which reloads the modules into the same dev, numbers them anew. Folding it here rekeyed
+   * every cacheline of the image on each re-entry and the pipe recomputed from basebuffer although
+   * its whole cache was still there. op, multi_priority and iop_order already tell every piece of
+   * the pipe apart; what identifies a piece's output must be what the piece computes. */
   uint64_t hash = dt_hash(5381, (char *)module->op, sizeof(dt_dev_operation_t));
   hash = dt_hash(hash, (char *)&module->enabled, sizeof(gboolean));
-  hash = dt_hash(hash, (char *)&module->instance, sizeof(int32_t));
   hash = dt_hash(hash, (char *)&module->multi_priority, sizeof(int));
   hash = dt_hash(hash, (char *)&module->iop_order, sizeof(int));
 
