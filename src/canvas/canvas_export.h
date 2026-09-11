@@ -71,6 +71,14 @@ dt_canvas_export_options_t dt_canvas_export_options_default(void);
 const char *dt_canvas_export_extension(dt_canvas_export_format_t format);
 
 /**
+ * @brief Whether the format can carry a transparent plane.
+ * @details A canvas whose background is transparent composites to real holes, and only a
+ * format with an alpha channel can write them: JPEG cannot, and asking it to fails rather
+ * than quietly filling the holes with a colour nobody chose.
+ */
+gboolean dt_canvas_export_format_carries_alpha(dt_canvas_export_format_t format);
+
+/**
  * @brief Write the canvas's pages to `path`.
  * @details A format that holds one page per file numbers them from `path`'s stem
  * (`book_01.png`, `book_02.png`) unless there is only one, which keeps `path` itself.

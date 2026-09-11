@@ -424,7 +424,11 @@ typedef struct dt_canvas_object_t
   };
 } dt_canvas_object_t;
 
-/** What the plane is painted with. */
+/**
+ * What the plane is painted with. Stored by value, so a background is APPENDED and never
+ * inserted; where it is offered in the list is `dt_canvas_background_position()`'s business,
+ * the same way the page sizes work.
+ */
 typedef enum dt_canvas_background_t
 {
   DT_CANVAS_BACKGROUND_PLAIN = 0,       ///< the background colour
@@ -432,7 +436,8 @@ typedef enum dt_canvas_background_t
   DT_CANVAS_BACKGROUND_WATERCOLOUR = 2, ///< white watercolour paper, thick texture
   DT_CANVAS_BACKGROUND_EMBOSSED = 3,    ///< paper dried on a metallic mesh, its imprint in the fibres
   DT_CANVAS_BACKGROUND_JAPANESE = 4,    ///< washi: large soft clouds and long wrinkles
-  DT_CANVAS_BACKGROUND_LAST = 5,
+  DT_CANVAS_BACKGROUND_TRANSPARENT = 5, ///< nothing at all: the plane is a hole the export carries
+  DT_CANVAS_BACKGROUND_LAST = 6,
 } dt_canvas_background_t;
 
 /**
@@ -632,6 +637,25 @@ void dt_canvas_texture_get(const dt_canvas_t *canvas, float *contrast, float *de
 
 /** @brief The colour a paper is traditionally sold in: what the background takes when a paper is chosen. */
 dt_canvas_color_t dt_canvas_background_tint(uint32_t style);
+
+/** @brief How many backgrounds there are to offer. */
+int dt_canvas_background_count(void);
+
+/** @brief The background shown at `position`, translated. */
+const char *dt_canvas_background_name(int position);
+
+/** @brief The dt_canvas_background_t to store for the background shown at `position`. */
+uint32_t dt_canvas_background_code(int position);
+
+/** @brief Where a stored dt_canvas_background_t sits in the list. */
+int dt_canvas_background_position(uint32_t style);
+
+/**
+ * @brief Whether the plane is a hole rather than a colour.
+ * @details Such a canvas composites to real transparency, which a format without an alpha
+ * channel cannot carry: `dt_canvas_export_format_carries_alpha()` is the other half.
+ */
+gboolean dt_canvas_background_is_transparent(uint32_t style);
 
 /** @brief Whether a shadow draws anything at all: a radius other than zero and some strength. */
 gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow);

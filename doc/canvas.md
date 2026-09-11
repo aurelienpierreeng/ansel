@@ -487,6 +487,31 @@ also what the export writes. Both are the document's -- `dt_canvas_page_guide_re
 page rectangle grown by a signed outset, negative for the margin and positive for the bleed --
 so what the atelier shows is what comes out, and the export dialog does not ask again.
 
+### A transparent plane
+
+**Transparent** heads the background list, and a canvas set to it has no plane at all: the
+compositor's float canvas is premultiplied RGBA already, so what is left uncovered simply
+stays uncovered. On screen that is shown as a chequerboard of one grid step, in the two greys
+every editor uses for the same thing, drawn into the base layer -- so the composite stays
+opaque and nothing else in the painter changes. Zoomed out past three pixels a square the two
+greys would average to one, and the lighter one alone is painted instead.
+
+An export keeps the hole. The encode writes ARGB32 rather than RGB24, straight from the
+premultiplied canvas, which is cairo's own convention; the band is blitted with
+`CAIRO_OPERATOR_SOURCE`, since a hole laid *over* an opaque page would stop being one. The
+writers then unpremultiply before the colour transform -- a profile is not linear in coverage,
+and transforming a premultiplied value drags every edge towards black -- and put the coverage
+back afterwards, LCMS having been asked for three channels. PNG becomes RGBA, TIFF gains an
+`EXTRASAMPLE_UNASSALPHA` sample, and a PDF page is written as its colour plus a
+`/DeviceGray` **soft mask** named in the image's own dictionary, which is the only way a PDF
+carries coverage. Such a page stays a flate stream whatever quality was asked for: a lossy one
+would blur the mask's own edges. **JPEG has no alpha channel**, so it is not offered for a
+transparent canvas and refuses one if asked, rather than filling the holes with a colour
+nobody chose.
+
+Background styles are stored by value like the page sizes, so Transparent was appended to the
+enum and shows at the head of the list through `dt_canvas_background_position()`.
+
 ### Exporting
 
 `dt_canvas_export()` writes the canvas's pages as a PDF, a TIFF (both hold every page in the
