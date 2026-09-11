@@ -2182,6 +2182,13 @@ window)`, snapped to whole rows so it never shows a half-row — no slack anywhe
 `GTK_POLICY_AUTOMATIC` did the rest. Measured, same rows and same CSS, border omitted then
 counted: `page=123 < upper=125, scrollbar` → `page=125 = upper=125, none`.
 
+A list that must show where it ends asks for one blank row past its content with
+`dt_ui_scroll_wrap_reserve_trailing_row()` — the shape manager's two lists do, since a list
+filled edge to edge cannot be told from one with rows hidden below. It is part of the sizing rule,
+not a resize of the window around the list: a window grown by a row right after `show_all()` is
+snapped back to its content as soon as the lists realize and compute their height, and would
+otherwise gain a row at every opening once its geometry is saved and restored.
+
 Reproduce this class of bug offscreen in seconds: build the widget with the theme's CSS on it,
 pump the main loop, then compare the scrolled window's vadjustment `page_size` against `upper`.
 A scrollbar that appears for a couple of pixels looks like a content-height miscount and is

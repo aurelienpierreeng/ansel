@@ -303,6 +303,11 @@ static void _resizable_scroll_apply(GtkWidget *w)
       gtk_widget_get_preferred_height(w, NULL, &content);
     }
 
+    /* One blank row past the last one, when the caller asked for it: a list filled edge to edge
+     * cannot be told from one with more rows hidden below, the blank row says it ends there. It
+     * only counts while everything fits -- a capped list snaps to its rows below and scrolls. */
+    if(row_based && state->trailing_row) content += increment;
+
     const gint cap = has_conf ? CLAMP(stored, min_size, max_height) : max_height;
     height = CLAMP(MIN(content, cap), min_size, max_height);
 
@@ -616,9 +621,14 @@ GtkWidget *dt_ui_scroll_wrap_get_scrolled_window(GtkWidget *wrapper)
   return sw;
 }
 
-gint dt_ui_scroll_wrap_row_height(GtkWidget *content_widget)
+void dt_ui_scroll_wrap_reserve_trailing_row(GtkWidget *content_widget)
 {
-  return _get_container_row_heigth(content_widget);
+  dt_gui_widget_auto_height_t *state
+      = IS_NULL_PTR(content_widget) ? NULL : g_object_get_data(G_OBJECT(content_widget), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
+  if(IS_NULL_PTR(state)) return;
+
+  state->trailing_row = TRUE;
+  _widget_auto_update(content_widget);
 }
 
 static void _resizable_area_free(gpointer data)

@@ -1512,6 +1512,19 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_shape_manager
     dt_dev_pixelpipe_change_zoom_main(dev);
 }
 
+/* A separator, unless the menu is empty or already ends with one. Every section of the context
+ * menu is optional and opens with a separator, so two sections with nothing between them would
+ * otherwise draw two in a row. */
+static void _menu_append_separator(GtkMenuShell *menu)
+{
+  GList *children = gtk_container_get_children(GTK_CONTAINER(menu));
+  const GList *last = g_list_last(children);
+  const gboolean needed = !IS_NULL_PTR(last) && !GTK_IS_SEPARATOR_MENU_ITEM(last->data);
+  g_list_free(children);
+
+  if(needed) gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
+}
+
 /* The five shapes a group can gain, as their own submenu. Offered on an empty selection and on a
  * selected group alike, which is why it is not written out twice. */
 static void _menu_append_new_shape_submenu(GtkMenuShell *menu, dt_iop_module_t *module)
@@ -1633,7 +1646,7 @@ static void _menu_append_operations(GtkMenuShell *menu, dt_shape_manager_list_t 
     { N_("Exclusion"), DT_MASKS_STATE_EXCLUSION },
   };
 
-  gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
+  _menu_append_separator(menu);
 
   GtkWidget *item = gtk_menu_item_new_with_label(_("Operation"));
   GtkWidget *op_submenu = gtk_menu_new();
@@ -1714,16 +1727,6 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
     _menu_append_existing_shapes(menu, grp, grpid, module);
   }
 
-  // Both act on the whole selection, one row or several, wherever the rows sit.
-  if(nb > 0)
-  {
-    gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
-    item = gtk_menu_item_new_with_label(_("New group from selection"));
-    g_signal_connect(item, "activate", (GCallback)_tree_group, list);
-    gtk_menu_shell_append(menu, item);
-    _menu_append_join_group(menu, list);
-  }
-
   // Same shape-parameter sliders (size/fading/rotation/opacity) as the darkroom canvas's and
   // the blend module's own shape context menus. Available for any single selected shape, not
   // just one nested under a group in the tree: _shape_manager_list_recurs also lists every shape
@@ -1743,6 +1746,18 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
   }
 
   if(from_group && depth < 3) _menu_append_operations(menu, list, nb);
+
+  // Below the shape's own parameters and its combine operations: both act on the whole
+  // selection, one row or several, wherever the rows sit.
+  if(nb > 0)
+  {
+    _menu_append_separator(menu);
+    item = gtk_menu_item_new_with_label(_("New group from selection"));
+    g_signal_connect(item, "activate", (GCallback)_tree_group, list);
+    gtk_menu_shell_append(menu, item);
+    _menu_append_join_group(menu, list);
+    _menu_append_separator(menu);
+  }
 
   if(!from_group && !grp_is_group && nb == 1)
   {
@@ -3127,31 +3142,6 @@ static void _shape_manager_relax_height_caps(const dt_shape_manager_t *d)
   }
 }
 
-/** @brief Grows the just-shown window by one row past whatever height the (now uncapped) lists
- * settled on, so the longer one reads as complete rather than filled edge-to-edge -- and so a
- * list exactly as tall as the window doesn't look like it might have one more row hidden below.
- *
- * Must run AFTER gtk_widget_show_all(): the row-height query works on an empty model, but the
- * window's OWN height only reflects the lists' true content once they have been realized and
- * dt_ui_scroll_wrap's sizing rule has run against the raised ceiling. */
-static void _shape_manager_grow_by_one_row(const dt_shape_manager_t *d)
-{
-  if(!GTK_IS_WINDOW(d->popup_window)) return;
-
-  gint row = 0;
-  for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
-  {
-    const gint h = dt_ui_scroll_wrap_row_height(d->lists[i].treeview);
-    if(h > row) row = h;
-  }
-  if(row <= 0) return;
-
-  gint width = 0;
-  gint height = 0;
-  gtk_window_get_size(GTK_WINDOW(d->popup_window), &width, &height);
-  gtk_window_resize(GTK_WINDOW(d->popup_window), width, height + row);
-}
-
 static void _shape_manager_popup_button_toggled_cb(GtkWidget *button, gpointer user_data)
 {
   dt_shape_manager_t *d = (dt_shape_manager_t *)user_data;
@@ -3170,9 +3160,6 @@ static void _shape_manager_popup_button_toggled_cb(GtkWidget *button, gpointer u
     _shape_manager_relax_height_caps(d);
 
     gtk_widget_show_all(d->popup_window);
-
-    // Only after: needs the lists' post-realize, freshly-uncapped height to add one row to it.
-    _shape_manager_grow_by_one_row(d);
   }
   else
   {
@@ -3507,9 +3494,11 @@ void gui_init(dt_lib_module_t *self)
     gtk_widget_set_tooltip_text(title, _(list_defs[i].tooltip));
     gtk_box_pack_start(GTK_BOX(half), title, FALSE, FALSE, 0);
 
-    // Auto-grows to its content (the window scrolls) up to a user-set, persisted height.
+    // Auto-grows to its content (the window scrolls) up to a user-set, persisted height, plus one
+    // blank row so a list that fits shows that nothing is left below it.
     GtkWidget *wrapper = dt_ui_scroll_wrap(list->treeview, 90, list_defs[i].height_key,
                                            DT_UI_RESIZE_DYNAMIC);
+    dt_ui_scroll_wrap_reserve_trailing_row(list->treeview);
 
     /* A default floor for an EMPTY list, where the treeview's own content-derived minimum is
      * near zero: without this, an empty paned half could be dragged down to nothing. It never

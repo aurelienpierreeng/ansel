@@ -52,6 +52,7 @@ typedef struct dt_gui_widget_auto_height_t
   int min_size;       // minimum height floor in device pixels
   int last_height;    // last applied bare (pre-padding) height, shared with the drag handle
   dt_ui_resize_mode_t mode;
+  gboolean trailing_row; // one blank row past the content, see dt_ui_scroll_wrap_reserve_trailing_row()
   GtkTreeModel *model;
   GtkTextBuffer *buffer;
   gulong model_row_inserted;
@@ -88,15 +89,16 @@ GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, const char *config_str
 GtkWidget *dt_ui_scroll_wrap_get_scrolled_window(GtkWidget *wrapper);
 
 /**
- * @brief One row's height for @p content_widget, the same measurement dt_ui_scroll_wrap()'s own
- * dynamic sizing is built on -- a GtkTreeView's tallest column cell plus its vertical-separator
- * style property, or a GtkTextView's line height. Works on an empty model: it reads renderer and
- * font metrics, not actual rows.
+ * @brief Make a DT_UI_RESIZE_DYNAMIC list or text view ask for one blank row past its content.
  *
- * For a caller that needs to reserve room for one more row than the content itself requires (a
- * trailing blank line, say) without re-deriving this measurement by hand.
+ * A list filled edge to edge cannot be told from one with more rows hidden below; the blank row
+ * says it ends there. Part of the sizing rule rather than a one-off resize of the window around
+ * it, so it holds through every content change and every re-layout. A list capped below its
+ * content still snaps to whole rows and scrolls, with no blank row.
+ *
+ * @param content_widget the widget passed to dt_ui_scroll_wrap(). Ignored when it was not wrapped.
  */
-gint dt_ui_scroll_wrap_row_height(GtkWidget *content_widget);
+void dt_ui_scroll_wrap_reserve_trailing_row(GtkWidget *content_widget);
 
 /**
  * @brief Make a self-drawing widget (typically a GtkDrawingArea graph or scope) vertically
