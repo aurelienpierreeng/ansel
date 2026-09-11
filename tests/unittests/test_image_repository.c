@@ -204,6 +204,36 @@ static void test_count_distinct_fields(void **state)
   assert_null(dt_image_repository_count_distinct_fields(NULL));
 }
 
+static gboolean _count_two_rows(const int32_t imgid, const int64_t write_timestamp,
+                                const int version, const char *image_path, const int flags,
+                                void *user_data)
+{
+  (void)imgid;
+  (void)write_timestamp;
+  (void)version;
+  (void)image_path;
+  (void)flags;
+  int *seen = (int *)user_data;
+  (*seen)++;
+  return *seen < 2; // refuse the second row
+}
+
+/* The walk ends at the first row the callback refuses. That is how the XMP crawler stops when
+ * Ansel quits; a walk that went on regardless would hold the quit up until the last image. */
+static void test_foreach_with_path_stops_when_asked(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/walk");
+  assert_true(film > 0);
+  assert_true(testdb_make_image(film, "w0.raw") > 0);
+  assert_true(testdb_make_image(film, "w1.raw") > 0);
+  assert_true(testdb_make_image(film, "w2.raw") > 0);
+
+  int seen = 0;
+  dt_image_repository_foreach_with_path(_count_two_rows, &seen);
+  assert_int_equal(seen, 2);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -214,6 +244,7 @@ int main(void)
     cmocka_unit_test(test_write_timestamp_is_64bit),
     cmocka_unit_test(test_group_member_rows),
     cmocka_unit_test(test_count_distinct_fields),
+    cmocka_unit_test(test_foreach_with_path_stops_when_asked),
   };
   return cmocka_run_group_tests(tests, testdb_setup, testdb_teardown);
 }

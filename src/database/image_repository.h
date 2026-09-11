@@ -284,13 +284,14 @@ gboolean dt_image_repository_set_flags(const int32_t imgid, const int flags);
 gboolean dt_image_repository_set_flags_masked(const int32_t imgid, const int mask, const int value);
 
 /** @brief One row of dt_image_repository_foreach_with_path(). @p image_path is borrowed:
- *  it lives until the callback returns. */
-typedef void (*dt_image_repository_path_row_cb)(const int32_t imgid,
-                                                const int64_t write_timestamp,
-                                                const int version,
-                                                const char *image_path,
-                                                const int flags,
-                                                void *user_data);
+ *  it lives until the callback returns.
+ *  @return TRUE to go on to the next row, FALSE to end the walk at this one. */
+typedef gboolean (*dt_image_repository_path_row_cb)(const int32_t imgid,
+                                                    const int64_t write_timestamp,
+                                                    const int version,
+                                                    const char *image_path,
+                                                    const int flags,
+                                                    void *user_data);
 
 /**
  * @brief Walk every image in the library, film roll by film roll, filename within each.
@@ -304,6 +305,10 @@ typedef void (*dt_image_repository_path_row_cb)(const int32_t imgid,
  * internal lock is held while the callback runs: the callback is expected to write back
  * through this same repository (dt_image_repository_set_flags_masked()), and a cached
  * statement under the shared statement mutex would deadlock on that re-entry.
+ *
+ * The walk ends at the first row the callback answers FALSE for. That is how a caller running
+ * as a job stops when it is cancelled or Ansel quits: the workers are joined on shutdown, so a
+ * walk that could not stop would hold the quit up until the last image of the library.
  */
 void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, void *user_data);
 

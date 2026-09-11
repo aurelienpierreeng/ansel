@@ -788,12 +788,13 @@ void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, v
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     // No lock is held here on purpose: cb() writes back through this repository.
-    cb(sqlite3_column_int(stmt, 0),
-       sqlite3_column_int64(stmt, 1),
-       sqlite3_column_int(stmt, 2),
-       (const char *)sqlite3_column_text(stmt, 3),
-       sqlite3_column_int(stmt, 4),
-       user_data);
+    if(!cb(sqlite3_column_int(stmt, 0),
+           sqlite3_column_int64(stmt, 1),
+           sqlite3_column_int(stmt, 2),
+           (const char *)sqlite3_column_text(stmt, 3),
+           sqlite3_column_int(stmt, 4),
+           user_data))
+      break;
   }
   sqlite3_finalize(stmt);
 }
