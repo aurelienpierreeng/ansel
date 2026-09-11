@@ -106,10 +106,19 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       out[k] = NAN;
   }
 
-  const gboolean fitting = dt_tiling_piece_fits_host_memory(MAX(piece->roi_in.width, piece->roi_out.width),
-                                                            MAX(piece->roi_in.height, piece->roi_out.height),
-                                                            MAX(process_input_dsc.bpp, piece->dsc_out.bpp),
-                                                            tiling->factor, tiling->overhead);
+  /* Asked only when the module can be tiled. The answer chooses between process() and
+   * process_tiling(), and getting it EVICTS cache lines -- other pipes' included -- until the
+   * module's whole working set fits one contiguous arena run. For a module that cannot be tiled
+   * it chooses nothing, process() runs either way, and the eviction only threw work away: a
+   * full-resolution tone equalizer in the preview pipe emptied most of the cache on every edit,
+   * and the FULL pipe then recomputed from its raw input. The module's own allocations still
+   * evict what each of them needs, when it is made. */
+  const gboolean fitting
+      = !piece->process_tiling_ready
+        || dt_tiling_piece_fits_host_memory(MAX(piece->roi_in.width, piece->roi_out.width),
+                                            MAX(piece->roi_in.height, piece->roi_out.height),
+                                            MAX(process_input_dsc.bpp, piece->dsc_out.bpp),
+                                            tiling->factor, tiling->overhead);
 
   int err = 0;
   if(!fitting && piece->process_tiling_ready)

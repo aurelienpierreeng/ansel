@@ -171,6 +171,28 @@ If a flushed entry is then empty (no host data + no vRAM on any device), remove 
 hash table via `g_hash_table_iter_remove` — do NOT subtract `current_memory` manually, the
 `_free_cache_entry` GDestroyNotify handles it.
 
+### The host-memory fit probe evicts: ask it only when its answer chooses something
+
+`dt_tiling_piece_fits_host_memory()` (`develop/tiling.c`) is not a pure question. To answer "does
+this module's working set fit untiled?" it evicts LRU cache lines — any pipe's — until the byte
+headroom covers `factor × roi × bpp` AND `0.9 ×` the largest contiguous arena run does too. The
+contiguity term is what makes it expensive: with a fragmented arena it keeps evicting long after
+the bytes are there, measured at ~8 GB shed for a 1.95 GB working set.
+
+`pixelpipe_cpu.c` therefore asks it only when `piece->process_tiling_ready` — i.e. when the answer
+picks `process_tiling()` over `process()`. For a module without `IOP_FLAGS_ALLOW_TILING` (tone
+equalizer, among others) `process()` runs either way, and the probe used to throw the cache away
+for nothing: with `darkroom/render_size = 0` the preview pipe runs tone equalizer at full sensor
+resolution (see the toneequal section), so every edit emptied the cache down to ~3 GB, the FULL
+pipe's intermediates went first (least recently used, since the preview had just re-read its own),
+and the FULL pipe recomputed from `basebuffer` — 8 s of highlight reconstruction per edit — while
+the preview resumed from the edited module. The module's real allocations still go through the
+cache allocator, which evicts what each of them needs when it is made.
+
+Diagnose this class with `-d dev -d perf -d pipecache`: the ``processed `Module' … [pipe]`` lines
+say which modules each pipe actually ran, and a burst of `LRU … removed` lines right after one of
+them names the allocation that emptied the cache.
+
 ### Mipmap invalidation is explicit, not hash-driven
 
 The mipmap cache get path (`_generate_blocking` in `caches/mipmap_cache.c`) does NOT compare
