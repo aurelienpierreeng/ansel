@@ -301,6 +301,13 @@ line and the navigation flower are the view's and are painted after the document
 line is inked dark or light against the plane's luminance, with a halo of the opposite, so
 it reads on any background colour or paper and over a picture.
 
+**Every overlay line carries its own opposite**, for the same reason and by the same trick
+seen three ways: the status line's halo; the selected frame's solid light rectangle under a
+dashed dark one; and the hovered frame's two adjacent hairlines, light against the frame and
+dark just outside it. A single pale line is legible on a dark plane and gone on a bright one,
+and a canvas is as often one as the other. The hover pair sits wholly past the frame's edge,
+so it never covers what it is outlining.
+
 ### The floating property bar
 
 The bar is one vertical box of rows, one per topic, so the bars of two kinds differ only by

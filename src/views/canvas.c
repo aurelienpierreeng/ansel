@@ -3671,13 +3671,27 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     const dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, view->hover);
     if(dt_canvas_object_is_frame(object))
     {
+      // Two lines, light against the frame and dark just outside it: one of the two is
+      // legible whatever the frame and the canvas are, where a single pale hairline
+      // disappeared over anything bright. Both sit past the frame's edge, so what they
+      // outline is never covered by them.
+      const double hairline = 1.0 / view->zoom;
+      const double half_width = object->width * 0.5;
+      const double half_height = object->height * 0.5;
       cairo_save(cr);
       cairo_translate(cr, object->x, object->y);
       cairo_rotate(cr, object->rotation);
-      cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.5);
-      cairo_set_line_width(cr, 1.0 / view->zoom);
-      cairo_rectangle(cr, -object->width * 0.5, -object->height * 0.5, object->width, object->height);
-      cairo_stroke(cr);
+      cairo_set_line_width(cr, hairline);
+      const double insets[2] = { 0.5 * hairline, 1.5 * hairline };
+      const double shades[2] = { 1.0, 0.0 };
+      const double alphas[2] = { 0.9, 0.7 };
+      for(int line = 0; line < 2; line++)
+      {
+        cairo_set_source_rgba(cr, shades[line], shades[line], shades[line], alphas[line]);
+        cairo_rectangle(cr, -half_width - insets[line], -half_height - insets[line],
+                        object->width + 2.0 * insets[line], object->height + 2.0 * insets[line]);
+        cairo_stroke(cr);
+      }
       cairo_restore(cr);
     }
   }
