@@ -86,6 +86,13 @@ static void _free_crawler_result(dt_control_crawler_result_t *entry)
   entry->image_path = entry->xmp_path = NULL;
 }
 
+static void _free_crawler_results(GList *results)
+{
+  for(GList *l = results; !IS_NULL_PTR(l); l = g_list_next(l))
+    _free_crawler_result((dt_control_crawler_result_t *)l->data);
+  g_list_free_full(results, dt_free_gpointer);
+}
+
 static void _set_modification_time(char *filename,
                                    const time_t timestamp)
 {
@@ -163,6 +170,24 @@ static void _free_folder(gpointer p)
   dt_free(folder);
 }
 
+typedef struct dt_crawler_walk_t
+{
+  GList **result;
+  GHashTable *folders; // dirname -> dt_crawler_folder_t *
+  dt_job_t *job;       // NULL for a crawl the user asked for from the menu: it runs to its end
+} dt_crawler_walk_t;
+
+/* A crawl run as a job stops when the job is cancelled, and when Ansel quits. Nothing cancels a
+ * running job on the way out -- dt_control_quit() and dt_control_shutdown() only clear
+ * `running`, then join the workers -- so `running` is the flag that says so, and a crawl that
+ * ignored it would hold the quit up until the last image: the full mount timeout per folder
+ * on a share that has gone away. */
+static gboolean _job_cancelled(dt_job_t *job)
+{
+  return !IS_NULL_PTR(job)
+         && (dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED || !dt_control_running());
+}
+
 /* The walk visits folders in film-roll order -- the query orders by f.id -- so one folder is
  * live at a time and this cache is a window onto the library, not a copy of it. The cap keeps
  * it a window even if that order ever changes: past it the cache is dropped wholesale rather
@@ -170,8 +195,9 @@ static void _free_folder(gpointer p)
  * answer. */
 #define DT_CRAWLER_FOLDER_CACHE_MAX 32
 
-static dt_crawler_folder_t *_crawler_folder(GHashTable *folders, const char *dirname)
+static dt_crawler_folder_t *_crawler_folder(dt_crawler_walk_t *walk, const char *dirname)
 {
+  GHashTable *folders = walk->folders;
   dt_crawler_folder_t *folder = (dt_crawler_folder_t *)g_hash_table_lookup(folders, dirname);
   if(folder) return folder;
 
@@ -187,14 +213,14 @@ static dt_crawler_folder_t *_crawler_folder(GHashTable *folders, const char *dir
    * UTF-16 conversion itself -- which is exactly what the hand-rolled _wstati64() branch
    * removed from _crawl_image() was there to do. */
   GFile *dir = g_file_new_for_path(dirname);
-  GFileEnumerator *walk = g_file_enumerate_children(dir,
-                                                    G_FILE_ATTRIBUTE_STANDARD_NAME ","
-                                                    G_FILE_ATTRIBUTE_TIME_MODIFIED,
-                                                    G_FILE_QUERY_INFO_NONE, NULL, NULL);
-  if(walk)
+  GFileEnumerator *entries = g_file_enumerate_children(dir,
+                                                       G_FILE_ATTRIBUTE_STANDARD_NAME ","
+                                                       G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                                                       G_FILE_QUERY_INFO_NONE, NULL, NULL);
+  if(entries)
   {
     GFileInfo *info = NULL;
-    while((info = g_file_enumerator_next_file(walk, NULL, NULL)))
+    while(!_job_cancelled(walk->job) && (info = g_file_enumerator_next_file(entries, NULL, NULL)))
     {
       const char *name = g_file_info_get_name(info);
       if(name)
@@ -205,7 +231,7 @@ static dt_crawler_folder_t *_crawler_folder(GHashTable *folders, const char *dir
       }
       g_object_unref(info);
     }
-    g_object_unref(walk);
+    g_object_unref(entries);
   }
   else
     dt_print(DT_DEBUG_CONTROL, "[crawler] cannot list `%s'.\n", dirname);
@@ -265,26 +291,31 @@ static gchar *_sibling_name(const char *name, const char *ext)
   return sibling;
 }
 
-typedef struct dt_crawler_walk_t
-{
-  GList **result;
-  GHashTable *folders; // dirname -> GHashTable(basename -> guint64 *mtime)
-} dt_crawler_walk_t;
-
 /* One row of the library walk: everything below used to be the body of a cursor loop over
  * main.images joined to main.film_rolls, with a second statement writing the flags back. */
-static void _crawl_image(const int32_t id,
-                         const int64_t timestamp,
-                         const int version,
-                         const char *image_path,
-                         const int flags,
-                         void *user_data)
+static gboolean _crawl_image(const int32_t id,
+                             const int64_t timestamp,
+                             const int version,
+                             const char *image_path,
+                             const int flags,
+                             void *user_data)
 {
   dt_crawler_walk_t *walk = (dt_crawler_walk_t *)user_data;
+  if(_job_cancelled(walk->job)) return FALSE;
 
+  gboolean go_on = TRUE;
   gchar *dirname = g_path_get_dirname(image_path);
   gchar *filename = g_path_get_basename(image_path);
-  dt_crawler_folder_t *folder = _crawler_folder(walk->folders, dirname);
+  dt_crawler_folder_t *folder = _crawler_folder(walk, dirname);
+
+  /* Checked again after the listing, which is where the time goes: a cancel landing during it
+   * leaves a listing cut short, and a name missing from it would read as a file missing from
+   * disk -- clearing the companion flags of every image whose .txt was not listed yet. */
+  if(_job_cancelled(walk->job))
+  {
+    go_on = FALSE;
+    goto done;
+  }
 
   // if the image is missing we ignore it.
   if(!_folder_holds(folder, filename, NULL))
@@ -392,15 +423,17 @@ static void _crawl_image(const int32_t id,
 done:
   dt_free(dirname);
   dt_free(filename);
+  return go_on;
 }
 
-GList *dt_control_crawler_run(void)
+static GList *_crawler_run(dt_job_t *job)
 {
   GList *result = NULL;
   dt_crawler_walk_t walk
       = { .result = &result,
           .folders = g_hash_table_new_full(g_str_hash, g_str_equal,
-                                           dt_free_gpointer, _free_folder) };
+                                           dt_free_gpointer, _free_folder),
+          .job = job };
 
   /* NO transaction around this walk, deliberately -- it used to carry one, inherited from the
    * days when the crawl ran before the main window existed and nothing else could touch the
@@ -429,6 +462,11 @@ GList *dt_control_crawler_run(void)
   return g_list_reverse(result); // list was built in reverse order, so un-reverse it
 }
 
+GList *dt_control_crawler_run(void)
+{
+  return _crawler_run(NULL);
+}
+
 /* The crawl is I/O-latency bound and its cost scales with the library, so it does not belong
  * on the startup path at all: it used to run to completion before dt_control_init(), i.e.
  * before the main window was built. It runs as a background job instead, and posts its popup
@@ -443,10 +481,18 @@ static gboolean _crawler_show_results(gpointer user_data)
 
 static int32_t _crawler_job_run(dt_job_t *job)
 {
-  GList *changed_xmp_files = dt_control_crawler_run();
+  GList *changed_xmp_files = _crawler_run(job);
+
+  /* A cancelled walk stopped part-way, so its list is a fraction of the answer -- and after a
+   * quit, the main loop that would show it is on its way out. Neither is worth a popup. */
+  if(_job_cancelled(job))
+  {
+    _free_crawler_results(changed_xmp_files);
+    return 0;
+  }
 
   // the popup is GTK and this runs on a worker thread
-  if(changed_xmp_files)
+  if(!IS_NULL_PTR(changed_xmp_files))
     g_main_context_invoke(NULL, _crawler_show_results, changed_xmp_files);
 
   return 0;
@@ -454,6 +500,14 @@ static int32_t _crawler_job_run(dt_job_t *job)
 
 void dt_control_crawler_run_in_background(void)
 {
+  /* dt_control_add_job() runs a job synchronously on the calling thread when the scheduler is
+   * not up, and reports that as success -- which is the one outcome this function exists to
+   * avoid. No crawl at all is the right answer then: it is a consistency check between the
+   * database and the sidecars, not something a session depends on. dt_init() calls this well
+   * after dt_control_init() starts the workers, so it cannot fire today; this keeps that
+   * ordering from being a silent precondition. */
+  if(!dt_control_running()) return;
+
   dt_job_t *job = dt_control_job_create(&_crawler_job_run, "crawl XMP files");
   if(IS_NULL_PTR(job)) return;
 
