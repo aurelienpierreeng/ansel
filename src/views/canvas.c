@@ -796,6 +796,8 @@ static void _open_canvas(dt_view_t *self)
 typedef struct dt_canvas_export_dialog_t
 {
   GtkWidget *format;
+  dt_canvas_export_format_t offered[DT_CANVAS_EXPORT_LAST]; ///< what each row of `format` stands for
+  int offered_count;
   GtkWidget *dpi;
   GtkWidget *quality;
   GtkWidget *profile;
@@ -818,7 +820,8 @@ static GtkWidget *_labelled_row(GtkWidget *grid, const int row, const char *labe
 static void _export_format_changed(GtkComboBox *combo, gpointer data)
 {
   dt_canvas_export_dialog_t *widgets = (dt_canvas_export_dialog_t *)data;
-  const int format = gtk_combo_box_get_active(combo);
+  const int row = CLAMP(gtk_combo_box_get_active(combo), 0, MAX(widgets->offered_count - 1, 0));
+  const dt_canvas_export_format_t format = widgets->offered[row];
   const gboolean lossy = format == DT_CANVAS_EXPORT_JPEG || format == DT_CANVAS_EXPORT_PDF;
   gtk_widget_set_sensitive(widgets->quality, lossy);
 }
@@ -839,13 +842,24 @@ static void _export_canvas(dt_view_t *self)
   dt_canvas_export_dialog_t widgets;
   memset(&widgets, 0, sizeof(widgets));
 
+  // A transparent canvas composites to real holes, and a format with no alpha channel cannot
+  // carry them: it is left out of the list rather than offered and then refused.
+  const gboolean transparent = dt_canvas_background_is_transparent(view->canvas->background_style);
+  const dt_canvas_export_format_t every[DT_CANVAS_EXPORT_LAST]
+      = { DT_CANVAS_EXPORT_PDF, DT_CANVAS_EXPORT_PNG, DT_CANVAS_EXPORT_JPEG, DT_CANVAS_EXPORT_TIFF };
+  const char *labels[DT_CANVAS_EXPORT_LAST] = { N_("PDF, every page in one file"), N_("PNG, one file per page"),
+                                                N_("JPEG, one file per page"), N_("TIFF, every page in one file") };
+  const int stored = CLAMP(dt_conf_get_int("canvas/export/format"), 0, DT_CANVAS_EXPORT_LAST - 1);
   widgets.format = gtk_combo_box_text_new();
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.format), _("PDF, every page in one file"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.format), _("PNG, one file per page"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.format), _("JPEG, one file per page"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.format), _("TIFF, every page in one file"));
-  gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.format),
-                           CLAMP(dt_conf_get_int("canvas/export/format"), 0, DT_CANVAS_EXPORT_LAST - 1));
+  for(int idx = 0; idx < DT_CANVAS_EXPORT_LAST; idx++)
+  {
+    if(transparent && !dt_canvas_export_format_carries_alpha(every[idx])) continue;
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.format), _(labels[idx]));
+    if((int)every[idx] == stored) gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.format), widgets.offered_count);
+    widgets.offered[widgets.offered_count++] = every[idx];
+  }
+  if(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.format)) < 0)
+    gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.format), 0);
   g_signal_connect(widgets.format, "changed", G_CALLBACK(_export_format_changed), &widgets);
   _labelled_row(grid, 0, _("Format"), widgets.format);
 
@@ -897,6 +911,15 @@ static void _export_canvas(dt_view_t *self)
   else
     note = g_strdup(_("The canvas is not divided into pages, so this is one page around every frame. Give it a page "
                       "size under Guides in the toolbar to export several."));
+  if(transparent)
+  {
+    gchar *both = g_strconcat(note, "\n",
+                              _("The canvas is transparent, so only the formats that can carry a hole are offered: "
+                                "JPEG has no alpha channel."),
+                              NULL);
+    dt_free(note);
+    note = both;
+  }
   GtkWidget *note_label = gtk_label_new(note);
   gtk_label_set_line_wrap(GTK_LABEL(note_label), TRUE);
   gtk_label_set_max_width_chars(GTK_LABEL(note_label), 60);
@@ -911,8 +934,8 @@ static void _export_canvas(dt_view_t *self)
   const gboolean proceed = response == GTK_RESPONSE_OK;
   if(proceed)
   {
-    options.format = (dt_canvas_export_format_t)CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.format)), 0,
-                                                      DT_CANVAS_EXPORT_LAST - 1);
+    options.format = widgets.offered[CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.format)), 0,
+                                          MAX(widgets.offered_count - 1, 0))];
     options.dpi = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.dpi));
     options.quality = (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(widgets.quality));
     options.intent = (dt_iop_color_intent_t)CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.intent)), 0, 3);
@@ -5057,7 +5080,8 @@ static void _proxy_set_background(dt_view_t *self, const float *rgba, int style)
   {
     const uint32_t chosen = (uint32_t)CLAMP(style, 0, DT_CANVAS_BACKGROUND_LAST - 1);
     // A paper comes in its own colour: choosing one sets it, and the colour patch stays live to recolour it.
-    if(chosen != view->canvas->background_style && chosen != DT_CANVAS_BACKGROUND_PLAIN && IS_NULL_PTR(rgba))
+    if(chosen != view->canvas->background_style && chosen != DT_CANVAS_BACKGROUND_PLAIN
+       && !dt_canvas_background_is_transparent(chosen) && IS_NULL_PTR(rgba))
     {
       view->canvas->background = dt_canvas_background_tint(chosen);
       char text[16];

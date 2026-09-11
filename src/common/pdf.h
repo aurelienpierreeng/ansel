@@ -124,10 +124,17 @@ dt_pdf_t *dt_pdf_start(const char *filename, float width, float height, float dp
 int dt_pdf_add_icc(dt_pdf_t *pdf, const char *filename);
 int dt_pdf_add_icc_from_data(dt_pdf_t *pdf, const unsigned char *data, size_t size);
 dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int width, int height, int bpp, int icc_id, float border);
+// The same, with a /SMask hung on it: the mask object has to exist BEFORE the image, since it
+// is named in the image's own dictionary. dt_pdf_add_soft_mask() makes one.
+dt_pdf_image_t *dt_pdf_add_image_masked(dt_pdf_t *pdf, const unsigned char *image, int width, int height, int bpp, int icc_id, int smask_id, float border);
 // A page that is a photograph is a photograph: hand over the JPEG and it becomes a /DCTDecode
 // stream, which is what keeps a rasterised page from weighing what its pixels weigh. `jpeg` is
 // copied into the file as it stands, so its dimensions must be the ones given here.
 dt_pdf_image_t *dt_pdf_add_image_jpeg(dt_pdf_t *pdf, const unsigned char *jpeg, size_t jpeg_size, int width, int height, int icc_id, float border);
+// One 8-bit grey plane written as a standalone image object, to hang on an image's `smask_id`:
+// that is how a PDF carries coverage, since an image's own stream has no alpha channel.
+// Returns the object id, or 0.
+int dt_pdf_add_soft_mask(dt_pdf_t *pdf, const unsigned char *coverage, int width, int height);
 dt_pdf_page_t *dt_pdf_add_page(dt_pdf_t *pdf, dt_pdf_image_t **images, int n_images);
 void dt_pdf_finish(dt_pdf_t *pdf, dt_pdf_page_t **pages, int n_pages);
 

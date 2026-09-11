@@ -215,6 +215,104 @@ static void _every_format_writes_every_page(void **state)
   dt_canvas_free(canvas);
 }
 
+/**
+ * Whether a run of bytes holds this text. It cannot be g_strstr_len(): that stops at the first
+ * NUL whatever length it is given, and a PDF is compressed streams with NULs all through them,
+ * so a dictionary written after the first stream would never be found.
+ */
+static gboolean _holds_text(const char *bytes, const gsize length, const char *needle)
+{
+  const gsize needle_length = strlen(needle);
+  if(needle_length == 0 || length < needle_length) return FALSE;
+  for(gsize at = 0; at + needle_length <= length; at++)
+    if(memcmp(bytes + at, needle, needle_length) == 0) return TRUE;
+  return FALSE;
+}
+
+/** A PNG's pixel size and whether it has an alpha channel. */
+static void _png_info(const char *path, int *width, int *height, int *channels)
+{
+  *width = 0;
+  *height = 0;
+  *channels = 0;
+  FILE *file = g_fopen(path, "rb");
+  assert_non_null(file);
+  png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+  png_infop info = png_create_info_struct(png);
+  assert_int_equal(setjmp(png_jmpbuf(png)), 0);
+  png_init_io(png, file);
+  png_read_info(png, info);
+  *width = (int)png_get_image_width(png, info);
+  *height = (int)png_get_image_height(png, info);
+  *channels = (int)png_get_channels(png, info);
+  png_destroy_read_struct(&png, &info, NULL);
+  fclose(file);
+}
+
+/**
+ * A transparent canvas exports as a hole. Only a format with an alpha channel can carry one,
+ * so JPEG is refused rather than quietly filling the holes with a colour nobody chose, and
+ * the PDF carries its coverage as a soft mask, which is the only way a PDF has.
+ */
+static void _a_transparent_canvas_exports_as_a_hole(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = _canvas_of_pages(1);
+  canvas->background_style = DT_CANVAS_BACKGROUND_TRANSPARENT;
+  dt_canvas_touch(canvas);
+  dt_canvas_export_options_t options = dt_canvas_export_options_default();
+  options.dpi = 72.0f;
+  GError *error = NULL;
+
+  // PNG comes out with four channels, and the plane really is empty where no frame is.
+  options.format = DT_CANVAS_EXPORT_PNG;
+  gchar *path = _output("hole.png");
+  assert_true(dt_canvas_export(canvas, path, &options, &error));
+  assert_null(error);
+  int width = 0;
+  int height = 0;
+  int channels = 0;
+  _png_info(path, &width, &height, &channels);
+  assert_int_equal(channels, 4);
+  g_remove(path);
+  dt_free(path);
+
+  // JPEG has no alpha channel and says so rather than writing a file that lies.
+  options.format = DT_CANVAS_EXPORT_JPEG;
+  path = _output("hole.jpg");
+  assert_false(dt_canvas_export(canvas, path, &options, &error));
+  assert_non_null(error);
+  assert_false(g_file_test(path, G_FILE_TEST_EXISTS));
+  g_clear_error(&error);
+  dt_free(path);
+
+  // The PDF carries the coverage as a soft mask on the page's own image.
+  options.format = DT_CANVAS_EXPORT_PDF;
+  path = _output("hole.pdf");
+  assert_true(dt_canvas_export(canvas, path, &options, &error));
+  assert_null(error);
+  gchar *contents = NULL;
+  gsize length = 0;
+  assert_true(g_file_get_contents(path, &contents, &length, NULL));
+  assert_true(_holds_text(contents, length, "/SMask "));
+  assert_true(_holds_text(contents, length, "/DeviceGray"));
+  dt_free(contents);
+  g_remove(path);
+  dt_free(path);
+
+  // An opaque canvas is untouched by any of it: still three channels, still no mask.
+  canvas->background_style = DT_CANVAS_BACKGROUND_PLAIN;
+  dt_canvas_touch(canvas);
+  options.format = DT_CANVAS_EXPORT_PNG;
+  path = _output("solid.png");
+  assert_true(dt_canvas_export(canvas, path, &options, &error));
+  _png_info(path, &width, &height, &channels);
+  assert_int_equal(channels, 3);
+  g_remove(path);
+  dt_free(path);
+  dt_canvas_free(canvas);
+}
+
 /** A page of photographs is carried as one: the lossless stream is many times the size. */
 static void _a_pdf_page_is_a_photograph_not_a_bitmap(void **state)
 {
@@ -252,6 +350,7 @@ int main(void)
     cmocka_unit_test(_a_page_is_rasterised_at_exactly_its_size_times_the_resolution),
     cmocka_unit_test(_a_bleed_grows_the_sheet_on_every_side),
     cmocka_unit_test(_every_format_writes_every_page),
+    cmocka_unit_test(_a_transparent_canvas_exports_as_a_hole),
     cmocka_unit_test(_a_pdf_page_is_a_photograph_not_a_bitmap),
   };
   return cmocka_run_group_tests(tests, _group_setup, _group_teardown);

@@ -2488,6 +2488,10 @@ they are visible.
   zero in the fields it lacks, a longer one is stepped over. Never assume the current width
   when reading it, and never write a test fixture as a flat run of floats -- three of them
   fed every node the next one's numbers the day the record gained its per-node fall-off.
+- **`g_strstr_len()` cannot search binary data: it stops at the first NUL** whatever length it
+  is given. A test looking for `/SMask` in an exported PDF found the dictionary before the
+  first compressed stream and nothing after it, and read as a missing feature that was
+  actually written correctly. Compare bytes with `memcmp` over the range instead.
 - **The toolbar owns no state.** It asks the view through `proxy.canvas` and refills from
   the document on `DT_SIGNAL_CANVAS_CHANGED` with its handlers blocked. A control that wrote
   back during a refill would loop.

@@ -111,6 +111,40 @@ static void _paint_grid(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
 }
 
 /** The pages of the paper tiling that cross the clip, as dashed outlines. */
+/**
+ * The chequerboard under a transparent plane, one square per grid step, in the two greys every
+ * editor uses for the same thing. It is drawn on screen only: an export of a transparent
+ * canvas carries the hole itself.
+ */
+static void _paint_checker(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
+{
+  if(options->clip.width <= 0.0 || options->clip.height <= 0.0) return;
+  const double square = fmax(canvas->grid_size, 1.0);
+  const int first_col = (int)floor(options->clip.x / square);
+  const int last_col = (int)floor((options->clip.x + options->clip.width) / square);
+  const int first_row = (int)floor(options->clip.y / square);
+  const int last_row = (int)floor((options->clip.y + options->clip.height) / square);
+  // Zoomed far out the squares are smaller than a pixel: the two greys average to one, so the
+  // lighter one alone is both cheaper and what the eye would have seen anyway.
+  const double on_screen = square / fmax(options->units_per_pixel, 1e-9);
+  const dt_canvas_color_t light = dt_canvas_color(0.60f, 0.60f, 0.60f, 1.0f);
+  const dt_canvas_color_t dark = dt_canvas_color(0.45f, 0.45f, 0.45f, 1.0f);
+  _set_color(cr, &light, options->for_display);
+  cairo_paint(cr);
+  if(on_screen < 3.0) return;
+  if((double)(last_col - first_col + 1) * (double)(last_row - first_row + 1) > 262144.0) return;
+  _set_color(cr, &dark, options->for_display);
+  for(int row = first_row; row <= last_row; row++)
+  {
+    for(int col = first_col; col <= last_col; col++)
+    {
+      if(((col + row) & 1) == 0) continue;
+      cairo_rectangle(cr, col * square, row * square, square, square);
+    }
+  }
+  cairo_fill(cr);
+}
+
 static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
 {
   double page_width = 0.0;
@@ -390,7 +424,7 @@ static double *_paper_fibres(const int size, const guint32 seed)
 
 static gboolean _is_paper(const uint32_t style)
 {
-  return style >= DT_CANVAS_BACKGROUND_MOLESKINE && style < DT_CANVAS_BACKGROUND_LAST;
+  return style >= DT_CANVAS_BACKGROUND_MOLESKINE && style <= DT_CANVAS_BACKGROUND_JAPANESE;
 }
 
 /**
@@ -1329,18 +1363,19 @@ static struct
 } _composite;
 
 /** An RGB24 surface for a band's encode: the spare when it is the right size, else a new one. */
-static cairo_surface_t *_encoded_surface(const int width, const int height)
+static cairo_surface_t *_encoded_surface(const int width, const int height, const cairo_format_t format)
 {
   cairo_surface_t *surface = NULL;
   g_mutex_lock(&_composite.lock);
   if(!IS_NULL_PTR(_composite.spare) && cairo_image_surface_get_width(_composite.spare) == width
-     && cairo_image_surface_get_height(_composite.spare) == height)
+     && cairo_image_surface_get_height(_composite.spare) == height
+     && cairo_image_surface_get_format(_composite.spare) == format)
   {
     surface = _composite.spare;
     _composite.spare = NULL;
   }
   g_mutex_unlock(&_composite.lock);
-  if(IS_NULL_PTR(surface)) surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+  if(IS_NULL_PTR(surface)) surface = cairo_image_surface_create(format, width, height);
   return surface;
 }
 
@@ -1626,6 +1661,40 @@ static void _canvas_encode(const float *rgba, cairo_surface_t *surface, const gb
   const int stride = cairo_image_surface_get_stride(surface);
   const int width = cairo_image_surface_get_width(surface);
   const int height = cairo_image_surface_get_height(surface);
+  // An ARGB32 target is a transparent plane on its way to a file that can carry one: the
+  // canvas is premultiplied already, which is cairo's own convention, so the coverage rides
+  // out with the colour and nothing has to be divided back.
+  if(cairo_image_surface_get_format(surface) == CAIRO_FORMAT_ARGB32)
+  {
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) shared(_oetf_lut) schedule(static)
+#endif
+    for(int row = 0; row < height; row++)
+    {
+      const float *source = rgba + (size_t)row * width * 4;
+      uint32_t *target = (uint32_t *)(pixels + (size_t)row * stride);
+      for(int col = 0; col < width; col++)
+      {
+        const float coverage = CLAMP(source[4 * col + 3], 0.0f, 1.0f);
+        const uint32_t alpha = (uint32_t)lrintf(coverage * 255.0f);
+        if(alpha == 0)
+        {
+          target[col] = 0u;
+          continue;
+        }
+        // Encoded straight from the premultiplied value: a code and its coverage together are
+        // what cairo means by ARGB32, and what a writer unpremultiplies on the way out.
+        const uint32_t red = _encode(fminf(source[4 * col + 0], coverage));
+        const uint32_t green = _encode(fminf(source[4 * col + 1], coverage));
+        const uint32_t blue = _encode(fminf(source[4 * col + 2], coverage));
+        const uint32_t scale = alpha;
+        target[col] = (alpha << 24) | (((red * scale + 127u) / 255u) << 16) | (((green * scale + 127u) / 255u) << 8)
+                      | ((blue * scale + 127u) / 255u);
+      }
+    }
+    cairo_surface_mark_dirty(surface);
+    return;
+  }
 #ifdef _OPENMP
 #pragma omp parallel for default(firstprivate) shared(_oetf_lut) schedule(static)
 #endif
@@ -2224,7 +2293,14 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     return;
   }
   cairo_t *base_cr = _layer_context(base, matrix, band, font_options);
-  if(local.draw_background && _is_paper(canvas->background_style))
+  const gboolean transparent = dt_canvas_background_is_transparent(canvas->background_style);
+  if(local.draw_background && transparent)
+  {
+    // A hole has to be SHOWN as one, and the checker is how every editor says so. It is not
+    // painted for an export: there the plane really is a hole, and the file carries it.
+    if(local.for_display) _paint_checker(base_cr, canvas, &local);
+  }
+  else if(local.draw_background && _is_paper(canvas->background_style))
   {
     _paint_paper(base_cr, canvas, &local);
   }
@@ -2335,7 +2411,11 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
 
   // 3. Back to 8 bits, and onto the context, pixel for pixel: the band is in the surface's
   //    own pixels, so the device scale is undone on the way.
-  cairo_surface_t *encoded = _encoded_surface(band->width, band->height);
+  // A transparent plane on its way to a file keeps its coverage; anything else is opaque and
+  // the cheaper format says so.
+  const gboolean keep_alpha = !local.for_display && dt_canvas_background_is_transparent(canvas->background_style);
+  cairo_surface_t *encoded
+      = _encoded_surface(band->width, band->height, keep_alpha ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24);
   if(cairo_surface_status(encoded) == CAIRO_STATUS_SUCCESS)
   {
     _canvas_encode(canvas_rgba, encoded, local.for_display);
@@ -2344,6 +2424,9 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     cairo_scale(cr, 1.0 / scale_x, 1.0 / scale_y);
     cairo_set_source_surface(cr, encoded, band->x, band->y);
     cairo_pattern_set_filter(cairo_get_source(cr), local.quality < 1.0 ? CAIRO_FILTER_BILINEAR : CAIRO_FILTER_NEAREST);
+    // The band replaces what is under it rather than compositing onto it: bands do not
+    // overlap, and a hole laid OVER an opaque page would stop being one.
+    if(keep_alpha) cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
     cairo_rectangle(cr, band->x, band->y, band->width, band->height);
     cairo_fill(cr);
     cairo_restore(cr);
