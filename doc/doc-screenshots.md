@@ -21,9 +21,16 @@ Nothing else changes, and without the flag the entry does not exist.
 The panel is a tree going from the whole window down to a single slider:
 
 * the top level lists the entry points a manual actually starts from — the tool modules, the
-  darkroom modules, the panels, the window;
+  darkroom modules, the panels, the windows;
+* the *Windows* section holds the main window and every other window the application has
+  built — the shape manager, the module order graph, the tag manager, the event supervisor —
+  named by their title. They are found by asking GTK for every titled toplevel, not listed by
+  hand, so a new window appears without the panel knowing about it. Menus, tooltips, the
+  splash screen and this panel's own windows are left out. A window hidden on close (the shape
+  manager) stays listed and greyed out while closed; one built on demand appears at the first
+  *Refresh* after it is opened;
 * every row unfolds into the real GTK children of its widget, built on demand the first time
-  it is opened;
+  it is opened — and a list or a tree into its items too, see below;
 * a row whose widget is not currently displayed is greyed out. Modules belonging to the view
   you are not in stay listed, so the inventory reads the same in lighttable and in darkroom —
   but you have to be in the right view to capture them.
@@ -66,6 +73,26 @@ for a single picture. The row captures the outermost of the chain (padding inclu
 its name and its children from the innermost. Only boxes, grids, scrolled windows, viewports
 and overlays are folded away: a `GtkButton` also holds a single child, and folding it would
 delete the very row someone wants.
+
+### Items of a list or a tree
+
+The rows of a `GtkTreeView` are not widgets — the view paints them from its cell renderers —
+so walking GTK children never reaches them. A tree view therefore unfolds into its **items**,
+and an item with children into those, built lazily like the rest. An item is named after the
+text its cells show, read from the renderers the way the view draws it (a model column may
+hold an id or a sort key), followed by `(GtkTreeView row)` — which keeps an item reading
+"Exposure" from taking the map key of the module.
+
+Capturing an item draws the whole view and keeps the item's band: the view's full width and
+the row's height, indentation and selection highlight as they are on screen. An item is
+capturable only while it is **wholly visible** — a collapsed parent, a row scrolled out of
+sight or cut by the edge of the list all count as not displayed, and the capture reports it
+as skipped. The panel does not scroll or unfold the application's lists itself, for the same
+reason it does not call `gtk_widget_show_all()`.
+
+An item stays tied to the model its view showed when the row was built. A list that rebuilds
+itself into a new model — the shape manager does, on every change — greys its items out until
+*Refresh*.
 
 ## The widget-to-page map
 
