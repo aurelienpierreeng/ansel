@@ -68,6 +68,11 @@ dt_canvas_export_options_t dt_canvas_export_options_default(void)
   return options;
 }
 
+gboolean dt_canvas_export_format_carries_alpha(const dt_canvas_export_format_t format)
+{
+  return format != DT_CANVAS_EXPORT_JPEG;
+}
+
 const char *dt_canvas_export_extension(const dt_canvas_export_format_t format)
 {
   switch(format)
@@ -206,11 +211,18 @@ static uint8_t *_profile_bytes(const dt_colorspaces_color_profile_t *profile, ui
   return bytes;
 }
 
-/** Convert a cairo RGB24 page (BGRx in memory) to packed RGB8 in the output profile. */
+/**
+ * Convert a cairo page (BGRx in memory) to packed RGB8, or to straight RGBA8 when `alpha`, in
+ * the output profile. A cairo ARGB32 page is PREMULTIPLIED, so the colour is divided back out
+ * before it is converted: a profile transform is not linear in coverage, and running it on a
+ * premultiplied value darkens every edge towards black.
+ */
 static uint8_t *_page_to_output(const uint8_t *bgra, const int width, const int height, const int stride,
-                                const dt_colorspaces_color_profile_t *output, const dt_iop_color_intent_t intent)
+                                const dt_colorspaces_color_profile_t *output, const dt_iop_color_intent_t intent,
+                                const gboolean alpha)
 {
-  uint8_t *rgb = g_try_malloc((size_t)width * height * 3);
+  const int channels = alpha ? 4 : 3;
+  uint8_t *rgb = g_try_malloc((size_t)width * height * channels);
   if(IS_NULL_PTR(rgb)) return NULL;
 
   cmsHTRANSFORM transform = NULL;
@@ -222,15 +234,36 @@ static uint8_t *_page_to_output(const uint8_t *bgra, const int width, const int 
     dt_colorspaces_lock_profile(source);
     dt_colorspaces_lock_profile(output);
     if(!IS_NULL_PTR(source->profile) && !IS_NULL_PTR(output->profile))
-      transform = cmsCreateTransform(source->profile, TYPE_BGRA_8, output->profile, TYPE_RGB_8, (cmsUInt32Number)intent, 0);
+      transform = cmsCreateTransform(source->profile, TYPE_BGRA_8, output->profile,
+                                     alpha ? TYPE_RGBA_8 : TYPE_RGB_8, (cmsUInt32Number)intent, 0);
     dt_colorspaces_unlock_profile(output);
     dt_colorspaces_unlock_profile(source);
   }
 
+  uint8_t *straight = alpha ? g_try_malloc((size_t)width * 4) : NULL;
+  if(alpha && IS_NULL_PTR(straight))
+  {
+    if(!IS_NULL_PTR(transform)) cmsDeleteTransform(transform);
+    dt_free(rgb);
+    return NULL;
+  }
   for(int y = 0; y < height; y++)
   {
     const uint8_t *row = bgra + (size_t)y * stride;
-    uint8_t *out = rgb + (size_t)y * width * 3;
+    uint8_t *out = rgb + (size_t)y * width * channels;
+    if(alpha)
+    {
+      // Back to straight colour, in cairo's own byte order, for the transform to read.
+      for(int x = 0; x < width; x++)
+      {
+        const uint32_t coverage = row[4 * x + 3];
+        for(int channel = 0; channel < 3; channel++)
+          straight[4 * x + channel]
+              = coverage == 0 ? 0 : (uint8_t)MIN(255u, (row[4 * x + channel] * 255u + coverage / 2) / coverage);
+        straight[4 * x + 3] = (uint8_t)coverage;
+      }
+      row = straight;
+    }
     if(!IS_NULL_PTR(transform))
     {
       cmsDoTransform(transform, row, out, width);
@@ -239,12 +272,16 @@ static uint8_t *_page_to_output(const uint8_t *bgra, const int width, const int 
     {
       for(int x = 0; x < width; x++)
       {
-        out[3 * x + 0] = row[4 * x + 2];
-        out[3 * x + 1] = row[4 * x + 1];
-        out[3 * x + 2] = row[4 * x + 0];
+        out[channels * x + 0] = row[4 * x + 2];
+        out[channels * x + 1] = row[4 * x + 1];
+        out[channels * x + 2] = row[4 * x + 0];
       }
     }
+    // LCMS was asked for three channels; the coverage is copied across afterwards.
+    if(alpha)
+      for(int x = 0; x < width; x++) out[4 * x + 3] = row[4 * x + 3];
   }
+  dt_free(straight);
   if(!IS_NULL_PTR(transform)) cmsDeleteTransform(transform);
   return rgb;
 }
@@ -256,9 +293,9 @@ static uint8_t *_page_to_output(const uint8_t *bgra, const int width, const int 
 static uint8_t *_render_page(const dt_canvas_t *canvas, const dt_canvas_rect_t *area, const int width,
                              const int height, const double scale,
                              const dt_colorspaces_color_profile_t *output, const dt_iop_color_intent_t intent,
-                             dt_canvas_surface_cache_t *cache)
+                             dt_canvas_surface_cache_t *cache, const gboolean alpha)
 {
-  cairo_surface_t *page = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+  cairo_surface_t *page = cairo_image_surface_create(alpha ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24, width, height);
   if(cairo_surface_status(page) != CAIRO_STATUS_SUCCESS)
   {
     cairo_surface_destroy(page);
@@ -272,7 +309,7 @@ static uint8_t *_render_page(const dt_canvas_t *canvas, const dt_canvas_rect_t *
   cairo_destroy(cr);
   cairo_surface_flush(page);
   uint8_t *rgb = _page_to_output(cairo_image_surface_get_data(page), width, height,
-                                 cairo_image_surface_get_stride(page), output, intent);
+                                 cairo_image_surface_get_stride(page), output, intent, alpha);
   cairo_surface_destroy(page);
   return rgb;
 }
@@ -375,7 +412,7 @@ static gboolean _write_jpeg(const char *path, const uint8_t *rgb, const int widt
 }
 
 static gboolean _write_png(const char *path, const uint8_t *rgb, const int width, const int height,
-                           const uint8_t *icc, const uint32_t icc_length, const double dpi)
+                           const uint8_t *icc, const uint32_t icc_length, const double dpi, const gboolean alpha)
 {
   FILE *file = g_fopen(path, "wb");
   if(IS_NULL_PTR(file)) return FALSE;
@@ -389,15 +426,16 @@ static gboolean _write_png(const char *path, const uint8_t *rgb, const int width
   }
   png_init_io(png, file);
   png_set_compression_level(png, 5);
-  png_set_IHDR(png, info, width, height, 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT,
-               PNG_FILTER_TYPE_DEFAULT);
+  png_set_IHDR(png, info, width, height, 8, alpha ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB,
+               PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
   // Metres per inch, since pHYs counts pixels per metre.
   const png_uint_32 per_metre = (png_uint_32)lround(dpi / 0.0254);
   png_set_pHYs(png, info, per_metre, per_metre, PNG_RESOLUTION_METER);
   if(!IS_NULL_PTR(icc) && icc_length > 0)
     png_set_iCCP(png, info, "ICC profile", PNG_COMPRESSION_TYPE_BASE, (png_const_bytep)icc, icc_length);
   png_write_info(png, info);
-  for(int row = 0; row < height; row++) png_write_row(png, (png_const_bytep)(rgb + (size_t)row * width * 3));
+  const size_t png_stride = (size_t)width * (alpha ? 4 : 3);
+  for(int row = 0; row < height; row++) png_write_row(png, (png_const_bytep)(rgb + (size_t)row * png_stride));
   png_write_end(png, NULL);
   png_destroy_write_struct(&png, &info);
   fclose(file);
@@ -407,11 +445,17 @@ static gboolean _write_png(const char *path, const uint8_t *rgb, const int width
 /** One directory of a multi-page TIFF, appended to an already-open file. */
 static gboolean _write_tiff_page(TIFF *tiff, const uint8_t *rgb, const int width, const int height,
                                  const uint8_t *icc, const uint32_t icc_length, const double dpi,
-                                 const guint page, const guint pages)
+                                 const guint page, const guint pages, const gboolean alpha)
 {
   TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, (uint32_t)width);
   TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, (uint32_t)height);
-  TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, 3);
+  TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, alpha ? 3 + 1 : 3);
+  if(alpha)
+  {
+    // Straight, not associated: the colour was divided back out of its coverage.
+    const uint16_t extra[1] = { EXTRASAMPLE_UNASSALPHA };
+    TIFFSetField(tiff, TIFFTAG_EXTRASAMPLES, 1, extra);
+  }
   TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, 8);
   TIFFSetField(tiff, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
   TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
@@ -427,9 +471,10 @@ static gboolean _write_tiff_page(TIFF *tiff, const uint8_t *rgb, const int width
     TIFFSetField(tiff, TIFFTAG_PAGENUMBER, (uint16_t)page, (uint16_t)pages);
   }
   if(!IS_NULL_PTR(icc) && icc_length > 0) TIFFSetField(tiff, TIFFTAG_ICCPROFILE, icc_length, icc);
+  const size_t tiff_stride = (size_t)width * (alpha ? 4 : 3);
   for(int row = 0; row < height; row++)
   {
-    if(TIFFWriteScanline(tiff, (void *)(rgb + (size_t)row * width * 3), (uint32_t)row, 0) < 0) return FALSE;
+    if(TIFFWriteScanline(tiff, (void *)(rgb + (size_t)row * tiff_stride), (uint32_t)row, 0) < 0) return FALSE;
   }
   return TIFFWriteDirectory(tiff) != 0;
 }
@@ -448,6 +493,16 @@ gboolean dt_canvas_export(const dt_canvas_t *canvas, const char *path, const dt_
   if(IS_NULL_PTR(canvas) || IS_NULL_PTR(path) || IS_NULL_PTR(options))
   {
     g_set_error(error, DT_CANVAS_ERROR, DT_CANVAS_ERROR_IO, "nothing to export");
+    return FALSE;
+  }
+  // A transparent plane needs a format that can carry one: writing it as JPEG would fill
+  // every hole with a colour nobody chose, so it is refused rather than guessed at.
+  const gboolean alpha = dt_canvas_background_is_transparent(canvas->background_style);
+  if(alpha && !dt_canvas_export_format_carries_alpha(options->format))
+  {
+    g_set_error(error, DT_CANVAS_ERROR, DT_CANVAS_ERROR_IO,
+                "this canvas is transparent, and %s has no alpha channel to carry it",
+                dt_canvas_export_extension(options->format) + 1);
     return FALSE;
   }
   const double dpi = options->dpi > 0.0f ? options->dpi : 300.0;
@@ -506,7 +561,7 @@ gboolean dt_canvas_export(const dt_canvas_t *canvas, const char *path, const dt_
       ok = FALSE;
       break;
     }
-    uint8_t *rgb = _render_page(canvas, &page->area, width, height, scale, output, options->intent, cache);
+    uint8_t *rgb = _render_page(canvas, &page->area, width, height, scale, output, options->intent, cache, alpha);
     if(IS_NULL_PTR(rgb))
     {
       g_set_error(error, DT_CANVAS_ERROR, DT_CANVAS_ERROR_IO, "cannot render a page of `%s'", path);
@@ -517,20 +572,45 @@ gboolean dt_canvas_export(const dt_canvas_t *canvas, const char *path, const dt_
     {
       // A page of photographs weighs what a photograph weighs: the stream is a JPEG unless
       // the user asked for every code back, in which case it stays a lossless flate one.
-      if(options->quality >= 100)
+      // A transparent page is written as its colour plus a soft mask of its coverage, which
+      // is how a PDF carries one; a lossy stream would blur the mask's own edges, so such a
+      // page stays flate whatever the quality asked for.
+      uint8_t *opaque = rgb;
+      uint8_t *coverage = NULL;
+      if(alpha)
       {
-        images[idx] = dt_pdf_add_image(pdf, rgb, width, height, 8, icc_id, 0.0f);
+        opaque = g_try_malloc((size_t)width * height * 3);
+        coverage = g_try_malloc((size_t)width * height);
+        if(!IS_NULL_PTR(opaque) && !IS_NULL_PTR(coverage))
+        {
+          for(size_t pixel = 0; pixel < (size_t)width * height; pixel++)
+          {
+            for(int channel = 0; channel < 3; channel++) opaque[3 * pixel + channel] = rgb[4 * pixel + channel];
+            coverage[pixel] = rgb[4 * pixel + 3];
+          }
+        }
+      }
+      const int mask_id = IS_NULL_PTR(coverage) ? 0 : dt_pdf_add_soft_mask(pdf, coverage, width, height);
+      if(IS_NULL_PTR(opaque) || (alpha && mask_id <= 0))
+      {
+        ok = FALSE;
+      }
+      else if(options->quality >= 100 || alpha)
+      {
+        images[idx] = dt_pdf_add_image_masked(pdf, opaque, width, height, 8, icc_id, mask_id, 0.0f);
       }
       else
       {
         size_t jpeg_size = 0;
-        uint8_t *jpeg = _encode_jpeg(rgb, width, height, options->quality, NULL, 0, dpi, &jpeg_size);
+        uint8_t *jpeg = _encode_jpeg(opaque, width, height, options->quality, NULL, 0, dpi, &jpeg_size);
         if(!IS_NULL_PTR(jpeg))
         {
           images[idx] = dt_pdf_add_image_jpeg(pdf, jpeg, jpeg_size, width, height, icc_id, 0.0f);
           free(jpeg);
         }
       }
+      if(alpha) dt_free(opaque);
+      dt_free(coverage);
       if(IS_NULL_PTR(images[idx]))
       {
         ok = FALSE;
@@ -546,13 +626,13 @@ gboolean dt_canvas_export(const dt_canvas_t *canvas, const char *path, const dt_
     }
     else if(options->format == DT_CANVAS_EXPORT_TIFF)
     {
-      ok = _write_tiff_page(tiff, rgb, width, height, icc, icc_length, dpi, idx, pages->len);
+      ok = _write_tiff_page(tiff, rgb, width, height, icc, icc_length, dpi, idx, pages->len, alpha);
     }
     else
     {
       gchar *page_path = _page_path(path, idx, pages->len);
       ok = options->format == DT_CANVAS_EXPORT_PNG
-               ? _write_png(page_path, rgb, width, height, icc, icc_length, dpi)
+               ? _write_png(page_path, rgb, width, height, icc, icc_length, dpi, alpha)
                : _write_jpeg(page_path, rgb, width, height, options->quality, icc, icc_length, dpi);
       if(!ok) g_set_error(error, DT_CANVAS_ERROR, DT_CANVAS_ERROR_IO, "cannot write `%s'", page_path);
       dt_free(page_path);

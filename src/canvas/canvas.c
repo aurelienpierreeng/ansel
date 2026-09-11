@@ -719,6 +719,54 @@ void dt_canvas_texture_get(const dt_canvas_t *canvas, float *contrast, float *de
   }
 }
 
+/** Every background, in the order the list shows them; the code is what is stored. */
+static const struct
+{
+  uint32_t code;
+  const char *name;
+} _backgrounds[] = {
+  { DT_CANVAS_BACKGROUND_TRANSPARENT, N_("Transparent") },
+  { DT_CANVAS_BACKGROUND_PLAIN, N_("Plain colour") },
+  { DT_CANVAS_BACKGROUND_MOLESKINE, N_("Moleskine paper") },
+  { DT_CANVAS_BACKGROUND_WATERCOLOUR, N_("Watercolour paper") },
+  { DT_CANVAS_BACKGROUND_EMBOSSED, N_("Embossed paper") },
+  { DT_CANVAS_BACKGROUND_JAPANESE, N_("Japanese paper") },
+};
+
+int dt_canvas_background_count(void)
+{
+  return (int)(sizeof(_backgrounds) / sizeof(_backgrounds[0]));
+}
+
+const char *dt_canvas_background_name(const int position)
+{
+  if(position < 0 || position >= dt_canvas_background_count()) return NULL;
+  return _(_backgrounds[position].name);
+}
+
+uint32_t dt_canvas_background_code(const int position)
+{
+  if(position < 0 || position >= dt_canvas_background_count()) return DT_CANVAS_BACKGROUND_PLAIN;
+  return _backgrounds[position].code;
+}
+
+int dt_canvas_background_position(const uint32_t style)
+{
+  int plain = 0;
+  for(int position = 0; position < dt_canvas_background_count(); position++)
+  {
+    if(_backgrounds[position].code == style) return position;
+    if(_backgrounds[position].code == DT_CANVAS_BACKGROUND_PLAIN) plain = position;
+  }
+  // A value this version does not know reads as the plain colour, never as a hole.
+  return plain;
+}
+
+gboolean dt_canvas_background_is_transparent(const uint32_t style)
+{
+  return style == DT_CANVAS_BACKGROUND_TRANSPARENT;
+}
+
 dt_canvas_color_t dt_canvas_background_tint(const uint32_t style)
 {
   switch(style)

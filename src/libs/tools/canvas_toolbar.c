@@ -308,8 +308,10 @@ static void _background_changed(GtkWidget *widget, gpointer user_data)
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_background)) return;
   if(widget == toolbar->background_style)
   {
-    dt_view_manager_get_global()->proxy.canvas.set_background(
-        view, NULL, gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->background_style)));
+    // The list's order is not the stored value: a background appended to the enum shows where
+    // it belongs, which is how Transparent came to head a list it joined last.
+    const int position = gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->background_style));
+    dt_view_manager_get_global()->proxy.canvas.set_background(view, NULL, (int)dt_canvas_background_code(position));
     return;
   }
   float rgba[4];
@@ -415,7 +417,7 @@ static void _refill(dt_lib_module_t *self)
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->corner_radius), canvas->corner_radius);
   _rgba_to(toolbar->background_color, &canvas->background, FALSE);
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->background_style),
-                           CLAMP((int)canvas->background_style, 0, DT_CANVAS_BACKGROUND_LAST - 1));
+                           dt_canvas_background_position(canvas->background_style));
   float contrast = 1.0f;
   float detail = 1.0f;
   float scale = 1.0f;
@@ -785,12 +787,11 @@ void gui_init(dt_lib_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Background")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
   toolbar->background_style = gtk_combo_box_text_new();
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Plain colour"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Moleskine paper"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Watercolour paper"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Embossed paper"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), _("Japanese paper"));
-  gtk_widget_set_tooltip_text(toolbar->background_style, _("What the canvas is painted with"));
+  for(int position = 0; position < dt_canvas_background_count(); position++)
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->background_style), dt_canvas_background_name(position));
+  gtk_widget_set_tooltip_text(toolbar->background_style,
+                              _("What the canvas is painted with. Transparent leaves it a hole, shown here as a chequerboard "
+                                "and carried out by any export format with an alpha channel."));
   g_signal_connect(toolbar->background_style, "changed", G_CALLBACK(_background_changed), self);
   gtk_box_pack_start(GTK_BOX(box), toolbar->background_style, FALSE, FALSE, 0);
   toolbar->background_color = gtk_color_button_new();
