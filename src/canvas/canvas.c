@@ -1010,6 +1010,9 @@ static void _anchor_local(const dt_canvas_anchor_t anchor, const double width, c
   *local_y = 0.0;
   *normal_x = 0.0;
   *normal_y = 0.0;
+  // A corner's normal is the diagonal, so a route leaves it at 45 degrees rather than along an
+  // edge it would then run beside.
+  static const double diagonal = 0.70710678118654752;
   switch(anchor)
   {
     case DT_CANVAS_ANCHOR_EAST:
@@ -1023,6 +1026,33 @@ static void _anchor_local(const dt_canvas_anchor_t anchor, const double width, c
     case DT_CANVAS_ANCHOR_WEST:
       *local_x = -width * 0.5;
       *normal_x = -1.0;
+      break;
+    case DT_CANVAS_ANCHOR_NORTH_EAST:
+      *local_x = width * 0.5;
+      *local_y = -height * 0.5;
+      *normal_x = diagonal;
+      *normal_y = -diagonal;
+      break;
+    case DT_CANVAS_ANCHOR_SOUTH_EAST:
+      *local_x = width * 0.5;
+      *local_y = height * 0.5;
+      *normal_x = diagonal;
+      *normal_y = diagonal;
+      break;
+    case DT_CANVAS_ANCHOR_SOUTH_WEST:
+      *local_x = -width * 0.5;
+      *local_y = height * 0.5;
+      *normal_x = -diagonal;
+      *normal_y = diagonal;
+      break;
+    case DT_CANVAS_ANCHOR_NORTH_WEST:
+      *local_x = -width * 0.5;
+      *local_y = -height * 0.5;
+      *normal_x = -diagonal;
+      *normal_y = -diagonal;
+      break;
+    case DT_CANVAS_ANCHOR_CENTRE:
+      // Resolved against the other end by the caller; the centre is only where its handle is.
       break;
     case DT_CANVAS_ANCHOR_NORTH:
     default:
@@ -1052,6 +1082,37 @@ void dt_canvas_object_anchor_point(const dt_canvas_object_t *frame, dt_canvas_an
                                    double target_y, double *x, double *y, double *normal_x, double *normal_y)
 {
   if(IS_NULL_PTR(frame)) return;
+  if(anchor == DT_CANVAS_ANCHOR_CENTRE)
+  {
+    // The centre anchor aims at the centre and touches the edge on the way: the point slides
+    // around the frame as the other end moves, which is the anchor to reach for when which
+    // side the route leaves by is the layout's business rather than the user's.
+    double local_x = 0.0;
+    double local_y = 0.0;
+    dt_canvas_object_to_local(frame, target_x, target_y, &local_x, &local_y);
+    double length = hypot(local_x, local_y);
+    if(!(length > 0.0))
+    {
+      local_x = 1.0;
+      local_y = 0.0;
+      length = 1.0;
+    }
+    local_x /= length;
+    local_y /= length;
+    // Where that direction leaves the rectangle: the nearer of the two sides it points at.
+    const double to_side = fabs(local_x) > 1e-9 ? frame->width * 0.5 / fabs(local_x) : INFINITY;
+    const double to_edge = fabs(local_y) > 1e-9 ? frame->height * 0.5 / fabs(local_y) : INFINITY;
+    const double reach = fmin(to_side, to_edge);
+    const double cos_r = cos(frame->rotation);
+    const double sin_r = sin(frame->rotation);
+    const double out_x = local_x * reach;
+    const double out_y = local_y * reach;
+    *x = frame->x + out_x * cos_r - out_y * sin_r;
+    *y = frame->y + out_x * sin_r + out_y * cos_r;
+    *normal_x = local_x * cos_r - local_y * sin_r;
+    *normal_y = local_x * sin_r + local_y * cos_r;
+    return;
+  }
   if(anchor != DT_CANVAS_ANCHOR_AUTO)
   {
     _anchor_world(frame, anchor, x, y, normal_x, normal_y);
@@ -1078,6 +1139,21 @@ void dt_canvas_object_anchor_point(const dt_canvas_object_t *frame, dt_canvas_an
       *normal_y = candidate_normal_y;
     }
   }
+}
+
+void dt_canvas_object_anchor_handle(const dt_canvas_object_t *frame, const dt_canvas_anchor_t anchor, double *x,
+                                    double *y)
+{
+  if(IS_NULL_PTR(frame)) return;
+  if(anchor == DT_CANVAS_ANCHOR_CENTRE)
+  {
+    *x = frame->x;
+    *y = frame->y;
+    return;
+  }
+  double normal_x = 0.0;
+  double normal_y = 0.0;
+  dt_canvas_object_anchor_point(frame, anchor, 0.0, 0.0, x, y, &normal_x, &normal_y);
 }
 
 static void _route_add_point(dt_canvas_route_t *route, const double x, const double y)
