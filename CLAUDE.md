@@ -171,6 +171,26 @@ If a flushed entry is then empty (no host data + no vRAM on any device), remove 
 hash table via `g_hash_table_iter_remove` — do NOT subtract `current_memory` manually, the
 `_free_cache_entry` GDestroyNotify handles it.
 
+### A cache key is what a piece computes, never a runtime identity
+
+`dt_iop_compute_module_hash()` (`develop/imageop.c`) keys a module by its op, enabled state,
+`multi_priority`, `iop_order`, params and blendop hash — and must not fold `module->instance`.
+That field is the family id `dt_dev_module_duplicate()` matches on, assigned at load from
+`dev->iop_instance++`, a counter `dt_dev_init()` zeroes once for the darkroom's long-lived dev and
+nothing resets after: every darkroom entry reloads the modules into the same dev and numbers them
+anew. With it in the key, a darkroom → lighttable → darkroom round trip rekeyed every cacheline of
+the image, and the preview recomputed from `basebuffer` while the whole cache was still there —
+measured: the entry it could have resumed from was present, and it asked for keys never seen
+before. It stayed harmless as long as `dt_dev_load_modules()` zeroed the counter before numbering,
+so every entry numbered the modules alike; only the increment is left there now. The same key feeds `hist->hash`, hence `img->history_hash` and the
+`history_hash.current_hash` column, which changed per session for an unchanged history too.
+`_hash_raster_masks()` folded it as well, into the blendop hash of every module consuming another
+module's raster mask. `dt_iop_check_modules_equal()` still compares it, legitimately: that is an
+identity test within one session, not a key.
+
+Anything else folded into a cache key owes the same test: would two sessions editing the same
+image, with the same history, produce the same value?
+
 ### The host-memory fit probe evicts: ask it only when its answer chooses something
 
 `dt_tiling_piece_fits_host_memory()` (`develop/tiling.c`) is not a pure question. To answer "does
