@@ -5056,6 +5056,24 @@ static void _proxy_action(dt_view_t *self, int action)
   _announce_document(self);
 }
 
+/**
+ * The four texture weights back to 1: the paper as it was designed. Choosing a paper is
+ * choosing a whole surface, so the weights the previous one was tuned with do not carry over
+ * -- they are the canvas's, not each paper's, and leaving them on means the sheet that
+ * arrives is not the one the list named.
+ */
+static void _texture_to_defaults(dt_canvas_t *canvas)
+{
+  canvas->texture_contrast = 1.0f;
+  canvas->texture_detail = 1.0f;
+  canvas->texture_scale = 1.0f;
+  canvas->texture_grain = 1.0f;
+  dt_conf_set_float("canvas/texture_contrast", 1.0);
+  dt_conf_set_float("canvas/texture_detail", 1.0);
+  dt_conf_set_float("canvas/texture_scale", 1.0);
+  dt_conf_set_float("canvas/texture_grain", 1.0);
+}
+
 static void _proxy_set_background(dt_view_t *self, const float *rgba, int style)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -5067,11 +5085,13 @@ static void _proxy_set_background(dt_view_t *self, const float *rgba, int style)
     dt_canvas_color_format(&view->canvas->background, text, sizeof(text));
     dt_conf_set_string("canvas/background_color", text);
   }
+  gboolean style_changed = FALSE;
   if(style >= 0)
   {
     const uint32_t chosen = (uint32_t)CLAMP(style, 0, DT_CANVAS_BACKGROUND_LAST - 1);
+    style_changed = chosen != view->canvas->background_style;
     // A paper comes in its own colour: choosing one sets it, and the colour patch stays live to recolour it.
-    if(chosen != view->canvas->background_style && chosen != DT_CANVAS_BACKGROUND_PLAIN
+    if(style_changed && chosen != DT_CANVAS_BACKGROUND_PLAIN
        && !dt_canvas_background_is_transparent(chosen) && IS_NULL_PTR(rgba))
     {
       view->canvas->background = dt_canvas_background_tint(chosen);
@@ -5079,10 +5099,15 @@ static void _proxy_set_background(dt_view_t *self, const float *rgba, int style)
       dt_canvas_color_format(&view->canvas->background, text, sizeof(text));
       dt_conf_set_string("canvas/background_color", text);
     }
+    if(style_changed) _texture_to_defaults(view->canvas);
     view->canvas->background_style = chosen;
     dt_conf_set_int("canvas/background_style", (int)view->canvas->background_style);
   }
   dt_canvas_touch(view->canvas);
+  // Choosing a background rewrites the colour and the four weights behind the toolbar's back,
+  // so the toolbar has to be told: it owns no state and only ever shows what it last read, so
+  // without this it goes on showing the previous paper's colour while this one is painted.
+  if(style_changed) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
   dt_control_queue_redraw_center();
 }
 

@@ -2494,7 +2494,13 @@ they are visible.
   actually written correctly. Compare bytes with `memcmp` over the range instead.
 - **The toolbar owns no state.** It asks the view through `proxy.canvas` and refills from
   the document on `DT_SIGNAL_CANVAS_CHANGED` with its handlers blocked. A control that wrote
-  back during a refill would loop.
+  back during a refill would loop. **The other half of that bargain: a proxy setter that
+  writes a field some OTHER control shows must raise the signal**, or the toolbar goes on
+  displaying what it last read. `_proxy_set_background()` rewrites the tint and resets the
+  four texture weights when the paper changes, and for want of that raise the colour patch
+  kept the previous paper's colour while the new one was painted -- reported as "confusing to
+  retain old parameters in GUI feedback while new stuff gets applied". A setter that only
+  writes the field its own control sent needs no raise.
 - **The ZIP is ours** (`canvas_zip.c`, store + deflate, no ZIP64) because no archive library
   is linked and zlib is. `unzip -t` is run on the writer's output in the unit test when
   available; keep it passing.
@@ -2555,6 +2561,22 @@ they are visible.
   overwrites the other. Zero-mean is the default, not a law: the watercolour's tooth may only
   carve (a white sheet has nothing to add at its peaks) and the charcoal card's may only lift
   (a black sheet has nothing to take in its hollows), and both tints allow for the offset.
+- **Independent fields blended by a window are normalised IN QUADRATURE, never linearly.**
+  `_paper_compose()` lays six sprites of one process on a half-overlapping grid under Hann
+  windows. A weighted sum of independent draws has variance `sigma^2 * sum(w^2)`, so dividing
+  by `sum(w)` leaves the composed field carrying `sqrt(sum(w^2)) / sum(w)` of the amplitude:
+  1 at a placement's centre, where its window stands alone and equal to one, and 1/2 where
+  four meet at a quarter each. That is a two-fold amplitude lattice at the cell pitch, and
+  the placement jitter does NOT hide it -- jitter moves the lobes, it does not flatten them.
+  Measured on the kraft paper: local high-frequency RMS 3.12 to 6.50 over one sheet, ratio
+  2.08, strongest modulation at 533 px against a 512-unit cell; dividing the deviations by
+  `sqrt(sum(w^2))` instead gives 1.28 and moves the modulation off the cell pitch. Take the
+  deviations about the sprites' common mean and add the mean back linearly: a relief is not
+  always zero-mean, and only the fluctuation must keep its size. **A field read as a COVERAGE
+  rather than as a signed relief must then clamp at the point of use**, since a quadrature
+  blend overshoots both ends of [0, 1] -- the psychedelic washi's negative coverage turned
+  its subtraction into a lift and washed the paper between the wrinkles with the
+  complementary colour (18.1% of pixels with a clipped channel, against 9.4% clamped).
 - **A threshold on a synthesised field is taken in the field's OWN deviations, never in
   absolute value.** `_paper_field_band()` normalises against a fixed 256x256 power sum, so an
   absolute cut depends on a number nobody reading the call site can see: kraft's shives were

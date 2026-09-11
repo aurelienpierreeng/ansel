@@ -489,9 +489,32 @@ discrete transform is periodic by construction, so a sprite wraps without a seam
 repeated shows its period, and sprites sharing a border repeat that border, so six sprites
 per paper are laid on a half-overlapping grid, each placement a random sprite in one of eight
 orientations at a random phase, its centre jittered off the cell's, blended by
-two-dimensional Hann windows whose summed weights are divided out, into a field six sprites
-(3072 units) wide that is itself periodic: no seam, no border band, and no lattice of window
-centres either. The Moleskine carries short fibres in random directions over its clouds:
+two-dimensional Hann windows, into a field six sprites (3072 units) wide that is itself
+periodic: no seam and no border band.
+
+**Those weights are normalised in quadrature, not linearly, and that is the whole of it.**
+The sprites are independent draws of one process, so a weighted sum of them has variance
+`sigma^2 * sum(w^2)`; dividing by `sum(w)` leaves `sigma * sqrt(sum(w^2)) / sum(w)`, which is
+1 where a cell's Hann window stands alone and equal to one -- at the placement's own centre --
+and 1/2 where four windows meet at a quarter each. That is a two-fold amplitude lattice at the
+cell pitch, and it is exactly the lattice of window centres the jitter was supposed to hide:
+jitter moves the lobes, it does not flatten them. Reported as "a repeated area with more high
+frequencies than the rest", most striking on the kraft paper; measured over one sheet, the
+local high-frequency RMS ran 3.12 to 6.50, a ratio of 2.08, with the strongest modulation at a
+period of 533 px against a 512-unit cell. Dividing the deviations by `sqrt(sum(w^2))` gives
+the same variance everywhere and still reproduces one sprite exactly wherever one window
+stands alone: 2.08 becomes 1.28, the spread across the sheet 15.5% becomes 3.8%, and the
+modulation leaves the cell pitch altogether. The deviations are taken about the sprites'
+common mean and the mean is added back linearly, because a relief is not always zero-mean --
+the watercolour's tooth only carves, the charcoal card's only lifts -- and it is only the
+fluctuation about that mean whose size must not vary.
+
+One consequence to keep in mind for any field read as a **coverage** rather than as a signed
+relief: a quadrature blend overshoots both ends of [0, 1], so the psychedelic washi clamps its
+ridge at the point of use. Left alone, a slightly negative coverage turned its subtraction
+into a lift, two channels clipped to white against a spared third, and the paper between the
+wrinkles picked up a faint wash of the complementary colour (measured: 18.1% of pixels with a
+clipped channel, against 9.4% once clamped). The Moleskine carries short fibres in random directions over its clouds:
 segments stamped at random positions, angles and lengths, defined in the sprite's units so a
 fibre is the same fibre at every zoom and only sharper. The watercolour carries a band-passed
 layer of rounded pores, and its tooth saturates at four and a half percent, so a deep hollow
