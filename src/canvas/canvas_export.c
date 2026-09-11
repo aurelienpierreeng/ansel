@@ -124,27 +124,39 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
     const dt_canvas_rect_t bounds = dt_canvas_bounds(canvas);
     if(bounds.width > 0.0 && bounds.height > 0.0)
     {
-      const int first_col = (int)floor(bounds.x / paper_width);
-      const int last_col = (int)floor((bounds.x + bounds.width - 1e-9) / paper_width);
-      const int first_row = (int)floor(bounds.y / paper_height);
-      const int last_row = (int)floor((bounds.y + bounds.height - 1e-9) / paper_height);
+      // One output page per SHEET, not per page: the two halves of a book's spread are printed
+      // on one piece of paper, and a picture sitting on the fold has to come out whole.
+      int first_col = 0;
+      int first_row = 0;
+      int last_col = 0;
+      int last_row = 0;
+      dt_canvas_page_at(canvas, bounds.x, bounds.y, &first_col, &first_row);
+      dt_canvas_page_at(canvas, bounds.x + bounds.width - 1e-9, bounds.y + bounds.height - 1e-9, &last_col,
+                        &last_row);
       for(int row = first_row; row <= last_row; row++)
       {
         for(int col = first_col; col <= last_col; col++)
         {
-          const dt_canvas_rect_t page_rect = dt_canvas_page_rect(canvas, col, row);
+          int across = 0;
+          int down = 0;
+          dt_canvas_page_in_spread(canvas, col, row, &across, &down, NULL, NULL);
+          // Claimed by the sheet's first page, so a spread is emitted once however many pages
+          // of it the walk passes over.
+          if(across != 0 || down != 0) continue;
+          dt_canvas_rect_t sheet;
+          if(!dt_canvas_spread_rect(canvas, col, row, &sheet, NULL, NULL)) continue;
           gboolean holds_a_frame = FALSE;
           for(guint idx = 0; idx < dt_canvas_object_count(canvas) && !holds_a_frame; idx++)
           {
             const dt_canvas_object_t *object = dt_canvas_object_at(canvas, idx);
             if(!dt_canvas_object_is_frame(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
             const dt_canvas_rect_t frame = dt_canvas_object_bounds(object);
-            holds_a_frame = frame.x < page_rect.x + page_rect.width && frame.x + frame.width > page_rect.x
-                            && frame.y < page_rect.y + page_rect.height && frame.y + frame.height > page_rect.y;
+            holds_a_frame = frame.x < sheet.x + sheet.width && frame.x + frame.width > sheet.x
+                            && frame.y < sheet.y + sheet.height && frame.y + frame.height > sheet.y;
           }
           if(!holds_a_frame) continue;
           dt_canvas_export_page_t page;
-          page.area = page_rect;
+          page.area = sheet;
           g_array_append_val(pages, page);
         }
       }
@@ -152,7 +164,7 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
     if(pages->len == 0)
     {
       dt_canvas_export_page_t page;
-      page.area = dt_canvas_page_rect(canvas, 0, 0);
+      if(!dt_canvas_spread_rect(canvas, 0, 0, &page.area, NULL, NULL)) page.area = dt_canvas_page_rect(canvas, 0, 0);
       g_array_append_val(pages, page);
     }
   }

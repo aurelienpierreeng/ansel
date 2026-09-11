@@ -145,6 +145,52 @@ static void _a_page_is_rasterised_at_exactly_its_size_times_the_resolution(void 
 }
 
 /**
+ * A spread is one SHEET, so it is one output page however many canvas pages it holds: the two
+ * halves of a book's spread are printed on one piece of paper, and a picture sitting on the
+ * fold has to come out whole.
+ */
+static void _a_spread_is_one_output_page(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = _canvas_of_pages(2);
+  dt_canvas_export_options_t options = dt_canvas_export_options_default();
+  options.format = DT_CANVAS_EXPORT_PNG;
+  options.dpi = 72.0f;
+
+  // Two pages, no spread: two sheets, each an A6.
+  gchar *path = _output("apart.png");
+  GError *error = NULL;
+  assert_true(dt_canvas_export(canvas, path, &options, &error));
+  gchar *first = _output("apart_01.png");
+  gchar *second = _output("apart_02.png");
+  int width = 0;
+  int height = 0;
+  _png_size(first, &width, &height);
+  assert_int_equal(width, 298);
+  assert_int_equal(height, 420);
+  assert_true(g_file_test(second, G_FILE_TEST_EXISTS));
+  g_remove(first);
+  g_remove(second);
+  dt_free(first);
+  dt_free(second);
+  dt_free(path);
+
+  // The same two pages on one sheet: ONE file, twice as wide, and no second page at all.
+  canvas->spread_cols = 2;
+  path = _output("together.png");
+  assert_true(dt_canvas_export(canvas, path, &options, &error));
+  _png_size(path, &width, &height);
+  assert_int_equal(width, 2 * 298);
+  assert_int_equal(height, 420);
+  gchar *numbered = _output("together_01.png");
+  assert_false(g_file_test(numbered, G_FILE_TEST_EXISTS));
+  g_remove(path);
+  dt_free(numbered);
+  dt_free(path);
+  dt_canvas_free(canvas);
+}
+
+/**
  * The bleed grows the sheet on all four sides, and nothing else moves. It belongs to the
  * document, beside the page size it grows, not to the export that writes it.
  */
@@ -351,6 +397,7 @@ int main(void)
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_a_page_is_rasterised_at_exactly_its_size_times_the_resolution),
+    cmocka_unit_test(_a_spread_is_one_output_page),
     cmocka_unit_test(_a_bleed_grows_the_sheet_on_every_side),
     cmocka_unit_test(_every_format_writes_every_page),
     cmocka_unit_test(_a_transparent_canvas_exports_as_a_hole),

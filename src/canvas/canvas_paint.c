@@ -181,53 +181,113 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   double page_height = 0.0;
   if(!dt_canvas_paper_dimensions(canvas, &page_width, &page_height)) return;
   if(options->clip.width <= 0.0 || options->clip.height <= 0.0) return;
-  const int first_col = (int)floor(options->clip.x / page_width);
-  const int last_col = (int)floor((options->clip.x + options->clip.width) / page_width);
-  const int first_row = (int)floor(options->clip.y / page_height);
-  const int last_row = (int)floor((options->clip.y + options->clip.height) / page_height);
-  if((double)(last_col - first_col + 1) * (double)(last_row - first_row + 1) > 4096.0) return;
   if(!(canvas->grid_flags & DT_CANVAS_PAGE_VISIBLE)) return;
+  // The plane no longer tiles evenly -- it opens by two bleeds between spreads -- so the page
+  // under a point is asked for rather than divided out, and the range is grown by one either
+  // way so a sheet straddling the clip's edge is drawn whole.
+  int first_col = 0;
+  int first_row = 0;
+  int last_col = 0;
+  int last_row = 0;
+  dt_canvas_page_at(canvas, options->clip.x, options->clip.y, &first_col, &first_row);
+  dt_canvas_page_at(canvas, options->clip.x + options->clip.width, options->clip.y + options->clip.height,
+                    &last_col, &last_row);
+  first_col--;
+  first_row--;
+  last_col++;
+  last_row++;
+  if((double)(last_col - first_col + 1) * (double)(last_row - first_row + 1) > 4096.0) return;
   cairo_save(cr);
-  // One line per border, not one rectangle per page: a shared edge would otherwise be
-  // stroked twice.
-  const double start_x = options->clip.x;
-  const double end_x = options->clip.x + options->clip.width;
-  const double start_y = options->clip.y;
-  const double end_y = options->clip.y + options->clip.height;
-  for(int col = first_col; col <= last_col + 1; col++)
+
+  // The FOLDS first: the borders between two pages of one sheet, dashed, which on a dieline
+  // is what tells a crease from a cut. Each is claimed by the page on its far side, so a
+  // border shared by two pages is laid down once.
+  gboolean any_fold = FALSE;
+  for(int row = first_row; row <= last_row; row++)
   {
-    cairo_move_to(cr, col * page_width, start_y);
-    cairo_line_to(cr, col * page_width, end_y);
+    for(int col = first_col; col <= last_col; col++)
+    {
+      int across = 0;
+      int down = 0;
+      dt_canvas_page_in_spread(canvas, col, row, &across, &down, NULL, NULL);
+      if(across == 0 && down == 0) continue;
+      const dt_canvas_rect_t page = dt_canvas_page_rect(canvas, col, row);
+      if(across > 0)
+      {
+        cairo_move_to(cr, page.x, page.y);
+        cairo_line_to(cr, page.x, page.y + page.height);
+        any_fold = TRUE;
+      }
+      if(down > 0)
+      {
+        cairo_move_to(cr, page.x, page.y);
+        cairo_line_to(cr, page.x + page.width, page.y);
+        any_fold = TRUE;
+      }
+    }
   }
-  for(int row = first_row; row <= last_row + 1; row++)
+  if(any_fold) _stroke_guide(cr, canvas->page_color, options, TRUE);
+  else cairo_new_path(cr);
+
+  // Then the TRIMS: one rectangle per sheet, laid down at its first page so a spread is not
+  // stroked once per page it holds. Coincident edges cost nothing -- the whole path is one
+  // stroke, so cairo paints their union rather than each of them.
+  for(int row = first_row; row <= last_row; row++)
   {
-    cairo_move_to(cr, start_x, row * page_height);
-    cairo_line_to(cr, end_x, row * page_height);
+    for(int col = first_col; col <= last_col; col++)
+    {
+      int across = 0;
+      int down = 0;
+      dt_canvas_page_in_spread(canvas, col, row, &across, &down, NULL, NULL);
+      if(across != 0 || down != 0) continue;
+      dt_canvas_rect_t sheet;
+      if(!dt_canvas_spread_rect(canvas, col, row, &sheet, NULL, NULL)) continue;
+      cairo_rectangle(cr, sheet.x, sheet.y, sheet.width, sheet.height);
+    }
   }
   _stroke_guide(cr, canvas->page_color, options, FALSE);
 
-  // The margin inside every page and the bleed outside it: one rectangle per page rather than
-  // a grid of lines, since neither is shared between neighbours the way a page border is.
-  const struct
+  // The BLEED belongs to the sheet, not to the page: a page in the middle of a spread has no
+  // bleed at its folds, and between two sheets the plane already opened by exactly two of them
+  // so no two bleeds overlap.
+  const double bleed = fmax((double)canvas->page_bleed, 0.0);
+  if((canvas->grid_flags & DT_CANVAS_BLEED_VISIBLE) && bleed > 0.0)
   {
-    double outset;
-    uint32_t visible;
-    const dt_canvas_color_t *color;
-  } guides[2] = { { -(double)canvas->page_margin, DT_CANVAS_MARGIN_VISIBLE, &canvas->margin_color },
-                  { (double)canvas->page_bleed, DT_CANVAS_BLEED_VISIBLE, &canvas->bleed_color } };
-  for(int guide = 0; guide < 2; guide++)
+    for(int row = first_row; row <= last_row; row++)
+    {
+      for(int col = first_col; col <= last_col; col++)
+      {
+        int across = 0;
+        int down = 0;
+        dt_canvas_page_in_spread(canvas, col, row, &across, &down, NULL, NULL);
+        if(across != 0 || down != 0) continue;
+        dt_canvas_rect_t sheet;
+        if(!dt_canvas_spread_rect(canvas, col, row, &sheet, NULL, NULL)) continue;
+        cairo_rectangle(cr, sheet.x - bleed, sheet.y - bleed, sheet.width + 2.0 * bleed,
+                        sheet.height + 2.0 * bleed);
+      }
+    }
+    _stroke_guide(cr, canvas->bleed_color, options, FALSE);
+  }
+
+  // The MARGIN is the page's, and asks for the rectangle that knows which of its sides are a
+  // fold: those owe the binding its allowance on top of the margin, and no others do.
+  if((canvas->grid_flags & DT_CANVAS_MARGIN_VISIBLE)
+     && (canvas->page_margin > 0.0f || canvas->bind_gutter > 0.0f))
   {
-    if(!(canvas->grid_flags & guides[guide].visible) || fabs(guides[guide].outset) <= 0.0) continue;
+    gboolean any_margin = FALSE;
     for(int row = first_row; row <= last_row; row++)
     {
       for(int col = first_col; col <= last_col; col++)
       {
         dt_canvas_rect_t rect;
-        if(!dt_canvas_page_guide_rect(canvas, col, row, guides[guide].outset, &rect)) continue;
+        if(!dt_canvas_page_margin_rect(canvas, col, row, &rect)) continue;
         cairo_rectangle(cr, rect.x, rect.y, rect.width, rect.height);
+        any_margin = TRUE;
       }
     }
-    _stroke_guide(cr, *guides[guide].color, options, FALSE);
+    if(any_margin) _stroke_guide(cr, canvas->margin_color, options, FALSE);
+    else cairo_new_path(cr);
   }
   cairo_restore(cr);
 }
@@ -2699,29 +2759,29 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   _stats.encode_seconds += dt_get_wtime() - clock;
 }
 
-/** The gutter frames: one gutter out from every frame, over everything, as a guide. */
-static void _paint_gutters(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
+/** The padding frames: one padding out from every frame, over everything, as a guide. */
+static void _paint_paddings(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
 {
-  if(!(canvas->grid_flags & DT_CANVAS_GUTTER_VISIBLE) || canvas->gutter <= 0.0f) return;
-  if(canvas->gutter_color.alpha <= 0.0f) return;
+  if(!(canvas->grid_flags & DT_CANVAS_PADDING_VISIBLE) || canvas->padding <= 0.0f) return;
+  if(canvas->padding_color.alpha <= 0.0f) return;
   cairo_save(cr);
   for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
   {
     const dt_canvas_object_t *object = dt_canvas_object_at(canvas, idx);
     if(!dt_canvas_object_is_frame(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
     const dt_canvas_rect_t bounds = dt_canvas_object_bounds(object);
-    const dt_canvas_rect_t reach = { bounds.x - canvas->gutter, bounds.y - canvas->gutter,
-                                     bounds.width + 2.0 * canvas->gutter, bounds.height + 2.0 * canvas->gutter };
+    const dt_canvas_rect_t reach = { bounds.x - canvas->padding, bounds.y - canvas->padding,
+                                     bounds.width + 2.0 * canvas->padding, bounds.height + 2.0 * canvas->padding };
     if(!_rect_intersects(&options->clip, &reach)) continue;
-    // A gutter is the clear margin around ONE frame: two frames snapped side by side are two
-    // gutters apart and their boxes meet on one shared line, never overlapping.
+    // A padding is the clear margin around ONE frame: two frames snapped side by side are two
+    // paddings apart and their boxes meet on one shared line, never overlapping.
     cairo_save(cr);
     cairo_translate(cr, object->x, object->y);
     cairo_rotate(cr, object->rotation);
-    cairo_rectangle(cr, -object->width * 0.5 - canvas->gutter, -object->height * 0.5 - canvas->gutter,
-                    object->width + 2.0 * canvas->gutter, object->height + 2.0 * canvas->gutter);
+    cairo_rectangle(cr, -object->width * 0.5 - canvas->padding, -object->height * 0.5 - canvas->padding,
+                    object->width + 2.0 * canvas->padding, object->height + 2.0 * canvas->padding);
     cairo_restore(cr);
-    _stroke_guide(cr, canvas->gutter_color, options, FALSE);
+    _stroke_guide(cr, canvas->padding_color, options, FALSE);
   }
   cairo_restore(cr);
 }
@@ -2824,7 +2884,7 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
     cairo_restore(cr);
     g_mutex_unlock(&_composite.lock);
     if(options->draw_grid && (canvas->grid_flags & DT_CANVAS_GUIDES_OVER)) _paint_pages(cr, canvas, options);
-    if(options->draw_grid) _paint_gutters(cr, canvas, options);
+    if(options->draw_grid) _paint_paddings(cr, canvas, options);
     _stats.cached = TRUE;
     _stats.total_seconds = dt_get_wtime() - start;
     dt_print(DT_DEBUG_PERF, "[canvas paint] the previous frame, blitted: %.1f ms\n", _stats.total_seconds * 1000.0);
@@ -2841,7 +2901,7 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
     _paint_band(cr, canvas, options, &matrix, &band, scale_x, scale_y, one_band ? &key : NULL);
   }
   if(options->draw_grid && (canvas->grid_flags & DT_CANVAS_GUIDES_OVER)) _paint_pages(cr, canvas, options);
-  if(options->draw_grid) _paint_gutters(cr, canvas, options);
+  if(options->draw_grid) _paint_paddings(cr, canvas, options);
   _stats.total_seconds = dt_get_wtime() - start;
   dt_print(DT_DEBUG_PERF,
            "[canvas paint] %" G_GINT64_FORMAT " px, %d objects (%d layers, %d shadows): background %.1f ms, objects %.1f ms "

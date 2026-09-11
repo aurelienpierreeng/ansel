@@ -471,7 +471,7 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   canvas->grid_flags = (dt_conf_get_bool("canvas/grid_visible") ? DT_CANVAS_GRID_VISIBLE : 0)
                        | ((uint32_t)dt_conf_get_int("canvas/snap_mode") & DT_CANVAS_SNAP_ALL);
   canvas->border_width = dt_conf_get_float("canvas/border_width");
-  canvas->gutter = dt_conf_get_float("canvas/gutter");
+  canvas->padding = dt_conf_get_float("canvas/padding");
   canvas->background_style = (uint32_t)CLAMP(dt_conf_get_int("canvas/background_style"), 0, DT_CANVAS_BACKGROUND_LAST - 1);
   const char *grid_color = dt_conf_get_string_const("canvas/grid_color");
   dt_canvas_color_parse(grid_color, &canvas->grid_color);
@@ -492,6 +492,9 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   if(dt_conf_get_bool("canvas/guides_over")) canvas->grid_flags |= DT_CANVAS_GUIDES_OVER;
   else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_GUIDES_OVER;
   canvas->resolution = (float)CLAMP(dt_conf_get_float("canvas/resolution"), 18.0, 2400.0);
+  canvas->spread_cols = (uint32_t)CLAMP(dt_conf_get_int("canvas/spread_cols"), 0, 64);
+  canvas->spread_rows = (uint32_t)CLAMP(dt_conf_get_int("canvas/spread_rows"), 0, 64);
+  canvas->bind_gutter = (float)CLAMP(dt_conf_get_float("canvas/bind_gutter"), 0.0, 2000.0);
   const char *border = dt_conf_get_string_const("canvas/border_color");
   dt_canvas_color_parse(border, &canvas->border_color);
   const char *background = dt_conf_get_string_const("canvas/background_color");
@@ -505,10 +508,10 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   canvas->shadow.offset_x = dt_conf_get_float("canvas/shadow_offset_x");
   canvas->shadow.offset_y = dt_conf_get_float("canvas/shadow_offset_y");
   canvas->shadow.blur = dt_conf_get_float("canvas/shadow_radius");
-  const char *gutter_color = dt_conf_get_string_const("canvas/guide_gutter_color");
-  dt_canvas_color_parse(gutter_color, &canvas->gutter_color);
-  if(dt_conf_get_bool("canvas/gutter_visible")) canvas->grid_flags |= DT_CANVAS_GUTTER_VISIBLE;
-  else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_GUTTER_VISIBLE;
+  const char *padding_color = dt_conf_get_string_const("canvas/guide_padding_color");
+  dt_canvas_color_parse(padding_color, &canvas->padding_color);
+  if(dt_conf_get_bool("canvas/padding_visible")) canvas->grid_flags |= DT_CANVAS_PADDING_VISIBLE;
+  else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_PADDING_VISIBLE;
   canvas->texture_contrast = dt_conf_get_float("canvas/texture_contrast");
   canvas->texture_detail = dt_conf_get_float("canvas/texture_detail");
   canvas->texture_scale = dt_conf_get_float("canvas/texture_scale");
@@ -1421,7 +1424,7 @@ static void _menu_map_of_image(GtkWidget *widget, gpointer data)
     return;
   }
   const dt_canvas_rect_t bounds = dt_canvas_object_bounds(image);
-  _add_map(context->self, image->x, bounds.y + bounds.height + view->canvas->gutter + image->height * 0.375,
+  _add_map(context->self, image->x, bounds.y + bounds.height + view->canvas->padding + image->height * 0.375,
            latitude, longitude);
 }
 
@@ -4279,7 +4282,7 @@ static void _move_selection(dt_canvas_view_t *view, const double delta_x, const 
 
 /**
  * Snap the dragged frame, moving the rest of the selection with it, in the canvas's order of
- * rules: the grid first, then a neighbour one gutter away or in line, which wins when within reach.
+ * rules: the grid first, then a neighbour one padding away or in line, which wins when within reach.
  */
 static void _snap_selection(dt_canvas_view_t *view, const uint32_t leader_id)
 {
@@ -4294,14 +4297,14 @@ static void _snap_selection(dt_canvas_view_t *view, const uint32_t leader_id)
     delta_x = dt_canvas_snap(view->canvas, bounds.x) - bounds.x;
     delta_y = dt_canvas_snap(view->canvas, bounds.y) - bounds.y;
   }
-  if(rules & DT_CANVAS_SNAP_GUTTER)
+  if(rules & DT_CANVAS_SNAP_PADDING)
   {
-    double gutter_x = 0.0;
-    double gutter_y = 0.0;
+    double padding_x = 0.0;
+    double padding_y = 0.0;
     dt_canvas_snap_to_neighbours(view->canvas, &bounds, view->selection, CANVAS_NEIGHBOUR_SNAP_PIXELS / view->zoom,
-                                 DT_CANVAS_EDGE_ALL, &gutter_x, &gutter_y);
-    if(gutter_x != 0.0) delta_x = gutter_x;
-    if(gutter_y != 0.0) delta_y = gutter_y;
+                                 DT_CANVAS_EDGE_ALL, &padding_x, &padding_y);
+    if(padding_x != 0.0) delta_x = padding_x;
+    if(padding_y != 0.0) delta_y = padding_y;
   }
   if(rules & DT_CANVAS_SNAP_PAGE)
   {
@@ -4343,7 +4346,7 @@ static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, co
     }
   }
 
-  // Snapping, in the canvas's order of rules: the grid, then the gutter, then a neighbour's size.
+  // Snapping, in the canvas's order of rules: the grid, then the padding, then a neighbour's size.
   // Each later rule that triggers replaces the earlier answer; a proportional frame follows its width.
   const uint32_t rules = view->canvas->grid_flags;
   const double threshold = CANVAS_NEIGHBOUR_SNAP_PIXELS / view->zoom;
@@ -4352,7 +4355,7 @@ static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, co
     new_width = fmax(dt_canvas_snap(view->canvas, new_width), 20.0);
     new_height = proportional ? new_width / ratio : fmax(dt_canvas_snap(view->canvas, new_height), 20.0);
   }
-  if(rules & DT_CANVAS_SNAP_GUTTER)
+  if(rules & DT_CANVAS_SNAP_PADDING)
   {
     // Only the dragged edges may snap; the box is the frame as it would be, unrotated.
     dt_canvas_rect_t box;
@@ -5342,7 +5345,7 @@ static void _proxy_set_guides(dt_view_t *self, int mask, int value)
   view->canvas->grid_flags = (view->canvas->grid_flags & ~(uint32_t)mask) | ((uint32_t)value & (uint32_t)mask);
   dt_conf_set_bool("canvas/grid_visible", (view->canvas->grid_flags & DT_CANVAS_GRID_VISIBLE) != 0);
   dt_conf_set_bool("canvas/page_visible", (view->canvas->grid_flags & DT_CANVAS_PAGE_VISIBLE) != 0);
-  dt_conf_set_bool("canvas/gutter_visible", (view->canvas->grid_flags & DT_CANVAS_GUTTER_VISIBLE) != 0);
+  dt_conf_set_bool("canvas/padding_visible", (view->canvas->grid_flags & DT_CANVAS_PADDING_VISIBLE) != 0);
   dt_conf_set_bool("canvas/margin_visible", (view->canvas->grid_flags & DT_CANVAS_MARGIN_VISIBLE) != 0);
   dt_conf_set_bool("canvas/bleed_visible", (view->canvas->grid_flags & DT_CANVAS_BLEED_VISIBLE) != 0);
   dt_conf_set_bool("canvas/guides_over", (view->canvas->grid_flags & DT_CANVAS_GUIDES_OVER) != 0);
@@ -5363,14 +5366,14 @@ static void _proxy_set_page_color(dt_view_t *self, const float *rgba)
   dt_control_queue_redraw_center();
 }
 
-static void _proxy_set_gutter_color(dt_view_t *self, const float *rgba)
+static void _proxy_set_padding_color(dt_view_t *self, const float *rgba)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(rgba)) return;
-  view->canvas->gutter_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  view->canvas->padding_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
   char text[16];
-  dt_canvas_color_format(&view->canvas->gutter_color, text, sizeof(text));
-  dt_conf_set_string("canvas/guide_gutter_color", text);
+  dt_canvas_color_format(&view->canvas->padding_color, text, sizeof(text));
+  dt_conf_set_string("canvas/guide_padding_color", text);
   dt_canvas_touch(view->canvas);
   dt_control_queue_redraw_center();
 }
@@ -5406,12 +5409,12 @@ static void _proxy_set_snap_mode(dt_view_t *self, int mode)
   dt_control_queue_redraw_center();
 }
 
-static void _proxy_set_gutter(dt_view_t *self, float gutter)
+static void _proxy_set_padding(dt_view_t *self, float padding)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || gutter < 0.0f) return;
-  view->canvas->gutter = gutter;
-  dt_conf_set_float("canvas/gutter", gutter);
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || padding < 0.0f) return;
+  view->canvas->padding = padding;
+  dt_conf_set_float("canvas/padding", padding);
   dt_canvas_touch(view->canvas);
   dt_control_queue_redraw_center();
 }
@@ -5420,6 +5423,21 @@ static const dt_canvas_t *_proxy_document(dt_view_t *self)
 {
   const dt_canvas_view_t *view = (const dt_canvas_view_t *)self->data;
   return IS_NULL_PTR(view) ? NULL : view->canvas;
+}
+
+/** The sheet: how many pages it holds, and what the binding takes out of a fold. */
+static void _proxy_set_spread(dt_view_t *self, const int cols, const int rows, const float bind_gutter)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  view->canvas->spread_cols = (uint32_t)CLAMP(cols, 0, 64);
+  view->canvas->spread_rows = (uint32_t)CLAMP(rows, 0, 64);
+  view->canvas->bind_gutter = CLAMP(bind_gutter, 0.0f, 2000.0f);
+  dt_conf_set_int("canvas/spread_cols", (int)view->canvas->spread_cols);
+  dt_conf_set_int("canvas/spread_rows", (int)view->canvas->spread_rows);
+  dt_conf_set_float("canvas/bind_gutter", view->canvas->bind_gutter);
+  dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
 }
 
 /** Canvas units per inch: what a paper size is measured against. */
@@ -5553,17 +5571,18 @@ void init(dt_view_t *self)
   manager->proxy.canvas.set_grid_size = _proxy_set_grid_size;
   manager->proxy.canvas.set_border = _proxy_set_border;
   manager->proxy.canvas.is_connecting = _proxy_is_connecting;
-  manager->proxy.canvas.set_gutter = _proxy_set_gutter;
+  manager->proxy.canvas.set_padding = _proxy_set_padding;
   manager->proxy.canvas.set_snap_mode = _proxy_set_snap_mode;
   manager->proxy.canvas.set_background = _proxy_set_background;
   manager->proxy.canvas.set_grid_color = _proxy_set_grid_color;
   manager->proxy.canvas.set_paper = _proxy_set_paper;
   manager->proxy.canvas.set_guides = _proxy_set_guides;
   manager->proxy.canvas.set_page_color = _proxy_set_page_color;
-  manager->proxy.canvas.set_gutter_color = _proxy_set_gutter_color;
+  manager->proxy.canvas.set_padding_color = _proxy_set_padding_color;
   manager->proxy.canvas.set_shadow = _proxy_set_shadow;
   manager->proxy.canvas.set_texture = _proxy_set_texture;
   manager->proxy.canvas.set_resolution = _proxy_set_resolution;
+  manager->proxy.canvas.set_spread = _proxy_set_spread;
   manager->proxy.canvas.set_corner_radius = _proxy_set_corner_radius;
   manager->proxy.canvas.set_page_guides = _proxy_set_page_guides;
   manager->proxy.canvas.set_margin_color = _proxy_set_margin_color;
