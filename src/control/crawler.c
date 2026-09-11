@@ -348,48 +348,45 @@ static void _crawl_image(const int32_t id,
     if(has_txt) value |= DT_IMAGE_HAS_TXT;
     if(has_wav) value |= DT_IMAGE_HAS_WAV;
 
-    /* Masked, never a whole-word write. `flags` was read from the row before this folder was
-     * listed, and that listing is a filesystem round-trip -- up to a second on a network
-     * share, longer on one that has gone away. A star rating or a colour label the user sets
-     * in that window lives in the same word, and writing the word back would silently revert
-     * it. These two bits are the only ones the crawl owns, so they are the only ones it
-     * writes; the row supplies the rest.
+    /* The row is not the only copy of this word. An image the user has looked at also has an
+     * image-cache entry holding its own dt_image_t, and releasing that entry writes the whole
+     * struct back -- which is how a rating or a colour label reaches the database at all
+     * (metadata/ratings.c's _ratings_apply_to_image()). So when the image has an entry, the
+     * entry is what we compare against AND what we edit: it owns the struct, and its write lock
+     * is the one _ratings_apply_to_image() takes, which is what serialises the two. A rating set
+     * meanwhile either lands before us and is read here, or lands after us and sees our bits.
      *
-     * The comparison below is only there to skip a write that would change nothing. It reads
-     * the stale copy on purpose: the bits it looks at are the ones nothing else touches, so
-     * the worst a stale answer can cost is one redundant UPDATE. */
-    if((flags & mask) != value)
+     * Compare against the entry, not the row. The two can disagree on these very bits -- a row
+     * written behind the entry earlier, say -- and a guard reading the row would then find
+     * nothing to do, leave the entry stale, and let its next release write the stale bits back.
+     *
+     * get_existing(), not testget(). testget() returns NULL for an entry someone holds this
+     * instant as well as for no entry, and writing the row in the first case writes behind a
+     * live entry whose release then reverts it. get_existing() waits for that entry instead --
+     * and, like testget(), never creates one, so a crawl over the whole library does not pull
+     * the whole library into the cache on its way past.
+     *
+     * RELAXED rather than SAFE: the release writes the row, but must not queue an XMP write
+     * from the one job whose entire purpose is to find out whether the sidecars are in sync.
+     * MINIMAL when nothing changed: that gives the lock back without writing anything. */
+    dt_image_t *cached = dt_image_cache_get_existing(id, 'w');
+    if(!IS_NULL_PTR(cached))
     {
-      /* The row is not the only copy of this word. An image the user has looked at also has an
-       * image-cache entry holding its own dt_image_t, and releasing that entry writes the whole
-       * struct back -- which is how a rating or a colour label reaches the database at all
-       * (metadata/ratings.c's _ratings_apply_to_image()). Writing the row from here and leaving
-       * a cached entry carrying the bits we just replaced would have that entry undo this crawl
-       * on the user's next rating, silently and at a moment nothing connects to it.
-       *
-       * So when the image has an entry, the entry is what we edit: it owns the struct, and its
-       * write lock is the one _ratings_apply_to_image() takes, which is what serialises the two
-       * against each other. A rating set meanwhile either lands before us and is read here, or
-       * lands after us and sees our bits.
-       *
-       * testget(), never get(): it hands back only an entry that ALREADY exists, so a crawl
-       * over the whole library does not pull the whole library into the cache on its way past.
-       * NULL means either no entry -- nothing to keep in step, and the masked UPDATE is the
-       * whole job -- or an entry someone holds this instant, which is rare and still leaves the
-       * row correct.
-       *
-       * RELAXED rather than SAFE: this writes the row, but it must not queue an XMP write, from
-       * the one job whose entire purpose is to find out whether the sidecars are in sync.
-       */
-      dt_image_t *cached = dt_image_cache_testget(id, 'w');
-      if(!IS_NULL_PTR(cached))
+      if((cached->flags & mask) != value)
       {
         cached->flags = (cached->flags & ~mask) | value;
         dt_image_cache_write_release(cached, DT_IMAGE_CACHE_RELAXED);
       }
       else
-        dt_image_repository_set_flags_masked(id, mask, value);
+        dt_image_cache_write_release(cached, DT_IMAGE_CACHE_MINIMAL);
     }
+    /* No entry, so the row is the only copy and comparing against it is sound. `flags` was read
+     * from it before this folder was listed -- a filesystem round-trip, up to a second on a
+     * network share -- so the write is masked: a rating set in that window lives in the same
+     * word and must survive. The two bits compared are written only by the crawl and by the
+     * import, so the stale read costs at worst one redundant UPDATE. */
+    else if((flags & mask) != value)
+      dt_image_repository_set_flags_masked(id, mask, value);
   }
 
 done:
