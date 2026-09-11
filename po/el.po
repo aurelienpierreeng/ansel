@@ -19628,14 +19628,16 @@ msgid "Add gradient"
 msgstr "προσθήκη διαβάθμισης"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "%d σχήμα σε χρήση"
+msgid "Attach shape ..."
+msgstr "σύνδεση σχήματος..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "ομαδοποίηση φορμών"
+msgid "New group from selection"
+msgstr "νέα ομάδα από την επιλογή"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "σύνδεση στην ομάδα"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

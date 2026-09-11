@@ -19634,14 +19634,16 @@ msgid "Add gradient"
 msgstr "添加渐变。"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "已使用 %d 个形状"
+msgid "Attach shape ..."
+msgstr "附加形状..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "组合形状"
+msgid "New group from selection"
+msgstr "从所选项新建组"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "附加到组"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

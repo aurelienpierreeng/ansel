@@ -5540,9 +5540,8 @@ msgstr ""
 #: ../src/develop/masks/masks_gui.c:454 ../src/iop/ashift.c:5344
 #: ../src/iop/crop.c:1028 ../src/iop/drawlayer.c:1308
 #: ../src/iop/drawlayer.c:1964 ../src/iop/drawlayer.c:2506
-#, fuzzy
 msgid "Cancel"
-msgstr "anulează"
+msgstr "Anulează"
 
 #: ../src/common/import.c:1054
 #, fuzzy
@@ -6901,7 +6900,7 @@ msgstr ""
 #: ../src/develop/blend_gui.c:1749
 #, c-format
 msgid "Already in '%s'"
-msgstr ""
+msgstr "Deja în '%s'"
 
 #: ../src/develop/blend_gui.c:2082 ../src/develop/blend_gui.c:2381
 #: ../src/iop/drawlayer.c:1965
@@ -6930,9 +6929,8 @@ msgid "Attach shapes"
 msgstr "formă"
 
 #: ../src/develop/blend_gui.c:2280 ../src/develop/masks/masks_gui.c:783
-#, fuzzy
 msgid "Operation"
-msgstr "saturație"
+msgstr "Operație"
 
 #: ../src/develop/blend_gui.c:2285 ../src/develop/masks/masks_gui.c:788
 msgid "Invert"
@@ -6941,24 +6939,22 @@ msgstr ""
 #: ../src/develop/blend_gui.c:2296 ../src/develop/masks/masks_gui.c:791
 #: ../src/libs/masks.c:1097
 msgid "Union"
-msgstr ""
+msgstr "Uniune"
 
 #: ../src/develop/blend_gui.c:2304 ../src/develop/masks/masks_gui.c:793
 #: ../src/libs/masks.c:1100
-#, fuzzy
 msgid "Intersection"
-msgstr "inversează selecţia"
+msgstr "Intersecție"
 
 #: ../src/develop/blend_gui.c:2312 ../src/develop/masks/masks_gui.c:795
 #: ../src/libs/masks.c:1103
 msgid "Difference"
-msgstr ""
+msgstr "Diferență"
 
 #: ../src/develop/blend_gui.c:2320 ../src/develop/masks/masks_gui.c:797
 #: ../src/libs/masks.c:1106
-#, fuzzy
 msgid "Exclusion"
-msgstr "exclude imagini"
+msgstr "Excludere"
 
 #: ../src/develop/blend_gui.c:2330
 #, fuzzy
@@ -6985,7 +6981,7 @@ msgstr ""
 msgid ""
 "Detach this shape from the mask. The shape is kept and stays available for "
 "reuse."
-msgstr ""
+msgstr "Detașează această formă de mască. Forma este păstrată și rămâne disponibilă pentru reutilizare."
 
 #: ../src/develop/blend_gui.c:2516
 msgid ""
@@ -7862,9 +7858,8 @@ msgid ""
 msgstr ""
 
 #: ../src/develop/masks/masks_gui.c:452 ../src/libs/masks.c:1133
-#, fuzzy
 msgid "Delete shape"
-msgstr "șterge această presetare"
+msgstr "Șterge forma"
 
 #: ../src/develop/masks/masks_gui.c:453
 msgid "Keep unused shape"
@@ -7934,14 +7929,13 @@ msgstr "opacitate"
 
 #: ../src/develop/masks/masks_gui.c:805 ../src/dtgtk/thumbtable.c:2187
 #: ../src/libs/masks.c:1111 ../src/views/darkroom.c:2037
-#, fuzzy
 msgid "Move up"
-msgstr "elimină"
+msgstr "Mută în sus"
 
 #: ../src/develop/masks/masks_gui.c:807 ../src/dtgtk/thumbtable.c:2191
 #: ../src/libs/masks.c:1114 ../src/views/darkroom.c:2052
 msgid "Move down"
-msgstr ""
+msgstr "Mută în jos"
 
 #: ../src/develop/masks/masks_gui.c:816
 #, fuzzy
@@ -7955,7 +7949,7 @@ msgstr "șterge"
 
 #: ../src/develop/masks/masks_gui.c:829 ../src/libs/masks.c:1146
 msgid "Remove shape from mask"
-msgstr ""
+msgstr "Elimină forma din mască"
 
 #: ../src/develop/masks/masks.c:1515
 #, c-format
@@ -10969,9 +10963,8 @@ msgid "vertical"
 msgstr "centrare pe verticală"
 
 #: ../src/iop/ashift.c:5773 ../src/iop/crop.c:1257
-#, fuzzy
 msgid "Apply"
-msgstr "aplică"
+msgstr "Aplică"
 
 #: ../src/iop/ashift.c:5773 ../src/iop/crop.c:1257
 msgid "Apply changes"
@@ -19258,13 +19251,13 @@ msgid "<i>Blending is not available for the <b>%s</b> module.</i>"
 msgstr ""
 
 #: ../src/libs/masks.c:331
-#, fuzzy, c-format
+#, c-format
 msgid "Mask #%d"
-msgstr "cale"
+msgstr "Masca #%d"
 
 #: ../src/libs/masks.c:995 ../src/libs/masks.c:1024
 msgid "Add new shape ..."
-msgstr ""
+msgstr "Adaugă o formă nouă..."
 
 #: ../src/libs/masks.c:1028
 msgid "Add brush"
@@ -19287,27 +19280,28 @@ msgid "Add gradient"
 msgstr ""
 
 #: ../src/libs/masks.c:1073
-msgid "Add shape ..."
-msgstr ""
+msgid "Attach shape ..."
+msgstr "atașează forma..."
 
 #: ../src/libs/masks.c:1083
-msgid "Group the forms"
-msgstr ""
+msgid "New group from selection"
+msgstr "grup nou din selecție"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "atașează la grup"
 
 #: ../src/libs/masks.c:1091
-#, fuzzy
 msgid "Invert shape"
-msgstr "inversează selecţia"
+msgstr "Inversează forma"
 
 #: ../src/libs/masks.c:1123
-#, fuzzy
 msgid "Duplicate shape"
-msgstr "șterge această presetare"
+msgstr "Duplică forma"
 
 #: ../src/libs/masks.c:1139
-#, fuzzy
 msgid "Delete mask"
-msgstr "şterge tag?"
+msgstr "Șterge masca"
 
 #: ../src/libs/masks.c:1151
 #, fuzzy
@@ -20544,7 +20538,7 @@ msgstr "scop"
 
 #: ../src/libs/tools/filter.c:122
 msgid "group"
-msgstr ""
+msgstr "grup"
 
 #: ../src/libs/tools/filter.c:139
 #, fuzzy
@@ -21992,6 +21986,85 @@ msgstr ""
 #: ../src/iop/splittoningrgb.c:1289
 msgid "sample average luminance from an area to set this keyframe"
 msgstr ""
+
+#: ../src/libs/shape_manager.c
+msgid "All shapes"
+msgstr "Toate formele"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Attach this to the mask '%s'."
+msgstr "Atașează la masca '%s'."
+
+#: ../src/libs/shape_manager.c
+msgid "Delete unused shapes"
+msgstr "Șterge formele neutilizate"
+
+#: ../src/libs/shape_manager.c
+msgid "Every shape and group drawn on this image, including the masks modules already use -- pick any of them up to reuse."
+msgstr "Toate formele și grupurile desenate pe această imagine, inclusiv măștile pe care modulele le folosesc deja -- alegeți oricare pentru a o reutiliza."
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Manage which modules use this %s. A mask is created for the ticked ones that have none, and shared between them."
+msgstr "Gestionați ce module folosesc acest/această %s. Pentru modulele bifate care nu au o mască se creează una, partajată între ele."
+
+#: ../src/libs/shape_manager.c
+msgid "Module groups"
+msgstr "Grupuri de module"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Modules using this %s"
+msgstr "Module care folosesc acest/această %s"
+
+#: ../src/libs/shape_manager.c
+msgid "No module in the pipeline can carry a drawn mask."
+msgstr "Niciun modul din flux nu poate purta o mască desenată."
+
+#: ../src/libs/shape_manager.c
+msgid "Open shape manager..."
+msgstr "Deschide managerul de forme..."
+
+#: ../src/libs/shape_manager.c
+msgid "Permanently delete this shape. It is detached from every mask and removed from the list of available shapes."
+msgstr "Șterge definitiv această formă. Este detașată de toate măștile și eliminată din lista formelor disponibile."
+
+#: ../src/libs/shape_manager.c
+msgid "Select a mask in the module groups list to attach this shape to it."
+msgstr "Selectați o mască în lista grupurilor de module pentru a atașa această formă la ea."
+
+#: ../src/libs/shape_manager.c
+msgid "Shape Manager"
+msgstr "Manager de forme"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "The mask '%s' already uses every shape of this group."
+msgstr "Masca '%s' folosește deja toate formele acestui grup."
+
+#: ../src/libs/shape_manager.c
+msgid "The masks modules actually render, and the shapes each one is made of."
+msgstr "Măștile pe care modulele le aplică efectiv și formele din care este alcătuită fiecare."
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "This group cannot be added to the mask '%s': it already contains it."
+msgstr "Acest grup nu poate fi adăugat la masca '%s': o conține deja."
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "This is already part of the mask '%s'."
+msgstr "Aceasta face deja parte din masca '%s'."
+
+#: ../src/libs/shape_manager.c
+msgid "this is the module's own mask"
+msgstr "aceasta este masca proprie a modulului"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Tick the modules that should use the %s '%s', untick the ones that should stop."
+msgstr "Bifați modulele care trebuie să folosească %s '%s' și debifați-le pe cele care nu trebuie să o mai facă."
 
 #, fuzzy
 #~ msgid "Wire shapes"

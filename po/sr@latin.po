@@ -20011,14 +20011,16 @@ msgid "Add gradient"
 msgstr "dodaj preliv"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "upotrebljen je %d oblik"
+msgid "Attach shape ..."
+msgstr "priključi oblik..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "grupiši formulare"
+msgid "New group from selection"
+msgstr "nova grupa od izbora"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "priključi grupi"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

@@ -19704,14 +19704,16 @@ msgid "Add gradient"
 msgstr "legg til gradient"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "%d omriss brukt"
+msgid "Attach shape ..."
+msgstr "knytt til omriss..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "gruppér omrissene"
+msgid "New group from selection"
+msgstr "ny gruppe fra utvalg"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "knytt til gruppen"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

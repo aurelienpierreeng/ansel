@@ -20050,12 +20050,16 @@ msgid "Add gradient"
 msgstr "Ajouter un dégradé"
 
 #: ../src/libs/masks.c:1073
-msgid "Add shape ..."
-msgstr "Ajouter une forme..."
+msgid "Attach shape ..."
+msgstr "Attacher une forme..."
 
 #: ../src/libs/masks.c:1083
-msgid "Group the forms"
-msgstr "Grouper les formes"
+msgid "New group from selection"
+msgstr "Nouveau groupe depuis la sélection"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "Attacher au groupe"
 
 #: ../src/libs/masks.c:1091
 msgid "Invert shape"

@@ -20576,14 +20576,16 @@ msgid "Add gradient"
 msgstr "增加漸層遮罩"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "已使用 %d 個形狀"
+msgid "Attach shape ..."
+msgstr "附加形狀..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "把遮罩組成群組"
+msgid "New group from selection"
+msgstr "從選取項目建立新群組"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "附加到群組"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

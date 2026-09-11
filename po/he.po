@@ -19765,14 +19765,16 @@ msgid "Add gradient"
 msgstr "הוסף גרדיאנט"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "נעשה שימוש בצורה %d"
+msgid "Attach shape ..."
+msgstr "צרף צורה..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "קבץ את הצורות"
+msgid "New group from selection"
+msgstr "קבוצה חדשה מהבחירה"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "צרף לקבוצה"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

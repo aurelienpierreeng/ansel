@@ -19973,14 +19973,16 @@ msgid "Add gradient"
 msgstr "eyim ekle"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "%d kullanılan şekil"
+msgid "Attach shape ..."
+msgstr "şekil bağla..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "formları gruplandır"
+msgid "New group from selection"
+msgstr "seçimden yeni grup"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "gruba bağla"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

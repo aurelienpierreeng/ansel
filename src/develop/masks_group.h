@@ -212,6 +212,23 @@ dt_masks_result_t dt_masks_group_first_use(struct dt_develop_t *dev, int root_id
 int dt_masks_group_find_holder(struct dt_develop_t *dev, int formid);
 
 /**
+ * @brief Describe every group of the live list, in dev->forms order, into caller storage.
+ *
+ * The catalogue a caller offers a destination group from -- the shape manager's "Attach to the
+ * group" -- BY VALUE, so the caller neither walks dev->forms nor holds a pointer into a
+ * refcounted form. Retouch and spot groups come too; a caller that must not offer them filters on
+ * dt_masks_form_info_t.is_retouch.
+ *
+ * Takes the masks lock for reading across the walk.
+ *
+ * @param out caller storage, or NULL to query the count only.
+ * @param out_max capacity of @p out in elements.
+ * @return the TOTAL number of groups, which may exceed @p out_max; exactly MIN(total, out_max)
+ *         elements are written. 0 for a NULL dev.
+ */
+guint dt_masks_group_list(struct dt_develop_t *dev, dt_masks_form_info_t *out, guint out_max);
+
+/**
  * @brief Set a group member's opacity.
  *
  * Same id-keyed contract as dt_masks_group_set_member_operation() above, and it exists for a

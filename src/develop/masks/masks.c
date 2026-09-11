@@ -1832,6 +1832,28 @@ int dt_masks_group_find_holder(dt_develop_t *dev, const int formid)
 }
 
 
+guint dt_masks_group_list(dt_develop_t *dev, dt_masks_form_info_t *out, const guint out_max)
+{
+  if(IS_NULL_PTR(dev)) return 0;
+
+  /* Held across the whole walk, which is safe only because nothing below resolves an id: that
+   * would take this same lock again, and a nested read queued behind a waiting writer deadlocks. */
+  dt_pthread_rwlock_rdlock(&dev->masks_mutex);
+  guint total = 0;
+  for(const GList *forms = dev->forms; forms; forms = g_list_next(forms))
+  {
+    const dt_masks_form_t *const form = (const dt_masks_form_t *)forms->data;
+    if(IS_NULL_PTR(form) || !(form->type & DT_MASKS_GROUP)) continue;
+
+    if(!IS_NULL_PTR(out) && total < out_max) dt_masks_form_get_info(form, &out[total]);
+    total++;
+  }
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
+
+  return total;
+}
+
+
 dt_masks_result_t dt_masks_group_get_member(dt_develop_t *dev, const int group_id, const int formid,
                                             dt_masks_member_t *out)
 {

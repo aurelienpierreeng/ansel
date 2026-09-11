@@ -3540,7 +3540,7 @@ msgstr ""
 #: ../build/src/iop/introspection_vignette.c:145
 #: ../build/src/iop/introspection_vignette.c:236 ../src/iop/vignette.c:1022
 msgid "shape"
-msgstr ""
+msgstr "forma"
 
 #: ../build/src/iop/introspection_vignette.c:264
 msgid "8-bit output"
@@ -5482,9 +5482,8 @@ msgstr ""
 #: ../src/develop/masks/masks_gui.c:454 ../src/iop/ashift.c:5344
 #: ../src/iop/crop.c:1028 ../src/iop/drawlayer.c:1308
 #: ../src/iop/drawlayer.c:1964 ../src/iop/drawlayer.c:2506
-#, fuzzy
 msgid "Cancel"
-msgstr "cancelar"
+msgstr "Cancelar"
 
 #: ../src/common/import.c:1054
 #, fuzzy
@@ -6836,7 +6835,7 @@ msgstr ""
 #: ../src/develop/blend_gui.c:1749
 #, c-format
 msgid "Already in '%s'"
-msgstr ""
+msgstr "Xa en '%s'"
 
 #: ../src/develop/blend_gui.c:2082 ../src/develop/blend_gui.c:2381
 #: ../src/iop/drawlayer.c:1965
@@ -6865,9 +6864,8 @@ msgid "Attach shapes"
 msgstr "engadir"
 
 #: ../src/develop/blend_gui.c:2280 ../src/develop/masks/masks_gui.c:783
-#, fuzzy
 msgid "Operation"
-msgstr "saturación"
+msgstr "Operación"
 
 #: ../src/develop/blend_gui.c:2285 ../src/develop/masks/masks_gui.c:788
 #, fuzzy
@@ -6877,23 +6875,22 @@ msgstr "invertir"
 #: ../src/develop/blend_gui.c:2296 ../src/develop/masks/masks_gui.c:791
 #: ../src/libs/masks.c:1097
 msgid "Union"
-msgstr ""
+msgstr "Unión"
 
 #: ../src/develop/blend_gui.c:2304 ../src/develop/masks/masks_gui.c:793
 #: ../src/libs/masks.c:1100
-#, fuzzy
 msgid "Intersection"
-msgstr "invertir selección"
+msgstr "Intersección"
 
 #: ../src/develop/blend_gui.c:2312 ../src/develop/masks/masks_gui.c:795
 #: ../src/libs/masks.c:1103
 msgid "Difference"
-msgstr ""
+msgstr "Diferenza"
 
 #: ../src/develop/blend_gui.c:2320 ../src/develop/masks/masks_gui.c:797
 #: ../src/libs/masks.c:1106
 msgid "Exclusion"
-msgstr ""
+msgstr "Exclusión"
 
 #: ../src/develop/blend_gui.c:2330
 #, fuzzy
@@ -6920,7 +6917,7 @@ msgstr ""
 msgid ""
 "Detach this shape from the mask. The shape is kept and stays available for "
 "reuse."
-msgstr ""
+msgstr "Desanexar esta forma da máscara. A forma consérvase e segue dispoñible para reutilizala."
 
 #: ../src/develop/blend_gui.c:2516
 msgid ""
@@ -7788,9 +7785,8 @@ msgid ""
 msgstr ""
 
 #: ../src/develop/masks/masks_gui.c:452 ../src/libs/masks.c:1133
-#, fuzzy
 msgid "Delete shape"
-msgstr "borrar este preestablecido"
+msgstr "Eliminar a forma"
 
 #: ../src/develop/masks/masks_gui.c:453
 msgid "Keep unused shape"
@@ -7858,14 +7854,13 @@ msgstr ""
 
 #: ../src/develop/masks/masks_gui.c:805 ../src/dtgtk/thumbtable.c:2187
 #: ../src/libs/masks.c:1111 ../src/views/darkroom.c:2037
-#, fuzzy
 msgid "Move up"
-msgstr "eliminar"
+msgstr "Mover arriba"
 
 #: ../src/develop/masks/masks_gui.c:807 ../src/dtgtk/thumbtable.c:2191
 #: ../src/libs/masks.c:1114 ../src/views/darkroom.c:2052
 msgid "Move down"
-msgstr ""
+msgstr "Mover abaixo"
 
 #: ../src/develop/masks/masks_gui.c:816
 #, fuzzy
@@ -7879,7 +7874,7 @@ msgstr "borrar"
 
 #: ../src/develop/masks/masks_gui.c:829 ../src/libs/masks.c:1146
 msgid "Remove shape from mask"
-msgstr ""
+msgstr "Quitar a forma da máscara"
 
 #: ../src/develop/masks/masks.c:1515
 #, c-format
@@ -10868,9 +10863,8 @@ msgid "vertical"
 msgstr ""
 
 #: ../src/iop/ashift.c:5773 ../src/iop/crop.c:1257
-#, fuzzy
 msgid "Apply"
-msgstr "aplicar"
+msgstr "Aplicar"
 
 #: ../src/iop/ashift.c:5773 ../src/iop/crop.c:1257
 msgid "Apply changes"
@@ -19084,11 +19078,11 @@ msgstr ""
 #: ../src/libs/masks.c:331
 #, c-format
 msgid "Mask #%d"
-msgstr ""
+msgstr "Máscara #%d"
 
 #: ../src/libs/masks.c:995 ../src/libs/masks.c:1024
 msgid "Add new shape ..."
-msgstr ""
+msgstr "Engadir unha forma nova..."
 
 #: ../src/libs/masks.c:1028
 msgid "Add brush"
@@ -19111,27 +19105,28 @@ msgid "Add gradient"
 msgstr ""
 
 #: ../src/libs/masks.c:1073
-msgid "Add shape ..."
-msgstr ""
+msgid "Attach shape ..."
+msgstr "anexar forma..."
 
 #: ../src/libs/masks.c:1083
-msgid "Group the forms"
-msgstr ""
+msgid "New group from selection"
+msgstr "novo grupo a partir da selección"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "anexar ao grupo"
 
 #: ../src/libs/masks.c:1091
-#, fuzzy
 msgid "Invert shape"
-msgstr "invertir selección"
+msgstr "Inverter a forma"
 
 #: ../src/libs/masks.c:1123
-#, fuzzy
 msgid "Duplicate shape"
-msgstr "borrar este preestablecido"
+msgstr "Duplicar a forma"
 
 #: ../src/libs/masks.c:1139
-#, fuzzy
 msgid "Delete mask"
-msgstr "borrar etiqueta?"
+msgstr "Eliminar a máscara"
 
 #: ../src/libs/masks.c:1151
 msgid "Cleanup unused shapes"
@@ -20356,7 +20351,7 @@ msgstr "tento"
 
 #: ../src/libs/tools/filter.c:122
 msgid "group"
-msgstr ""
+msgstr "grupo"
 
 #: ../src/libs/tools/filter.c:139
 #, fuzzy
@@ -21790,6 +21785,85 @@ msgstr ""
 #: ../src/iop/splittoningrgb.c:1289
 msgid "sample average luminance from an area to set this keyframe"
 msgstr ""
+
+#: ../src/libs/shape_manager.c
+msgid "All shapes"
+msgstr "Todas as formas"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Attach this to the mask '%s'."
+msgstr "Anexar isto á máscara '%s'."
+
+#: ../src/libs/shape_manager.c
+msgid "Delete unused shapes"
+msgstr "Eliminar as formas non usadas"
+
+#: ../src/libs/shape_manager.c
+msgid "Every shape and group drawn on this image, including the masks modules already use -- pick any of them up to reuse."
+msgstr "Todas as formas e grupos debuxados nesta imaxe, incluídas as máscaras que xa usan os módulos -- colle calquera delas para reutilizala."
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Manage which modules use this %s. A mask is created for the ticked ones that have none, and shared between them."
+msgstr "Xestiona que módulos usan este/a %s. Créase unha máscara para os marcados que non teñen ningunha, compartida entre eles."
+
+#: ../src/libs/shape_manager.c
+msgid "Module groups"
+msgstr "Grupos de módulos"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Modules using this %s"
+msgstr "Módulos que usan este/a %s"
+
+#: ../src/libs/shape_manager.c
+msgid "No module in the pipeline can carry a drawn mask."
+msgstr "Ningún módulo do fluxo de procesamento pode levar unha máscara debuxada."
+
+#: ../src/libs/shape_manager.c
+msgid "Open shape manager..."
+msgstr "Abrir o xestor de formas..."
+
+#: ../src/libs/shape_manager.c
+msgid "Permanently delete this shape. It is detached from every mask and removed from the list of available shapes."
+msgstr "Eliminar permanentemente esta forma. Desanéxase de todas as máscaras e quítase da lista de formas dispoñibles."
+
+#: ../src/libs/shape_manager.c
+msgid "Select a mask in the module groups list to attach this shape to it."
+msgstr "Selecciona unha máscara na lista de grupos de módulos para anexarlle esta forma."
+
+#: ../src/libs/shape_manager.c
+msgid "Shape Manager"
+msgstr "Xestor de formas"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "The mask '%s' already uses every shape of this group."
+msgstr "A máscara '%s' xa usa todas as formas deste grupo."
+
+#: ../src/libs/shape_manager.c
+msgid "The masks modules actually render, and the shapes each one is made of."
+msgstr "As máscaras que os módulos aplican realmente, e as formas das que se compón cada unha."
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "This group cannot be added to the mask '%s': it already contains it."
+msgstr "Este grupo non se pode engadir á máscara '%s': xa a contén."
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "This is already part of the mask '%s'."
+msgstr "Isto xa forma parte da máscara '%s'."
+
+#: ../src/libs/shape_manager.c
+msgid "this is the module's own mask"
+msgstr "esta é a máscara propia do módulo"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Tick the modules that should use the %s '%s', untick the ones that should stop."
+msgstr "Marca os módulos que deben usar o/a %s '%s' e desmarca os que deben deixar de usalo."
 
 #, fuzzy
 #~ msgid "Options"

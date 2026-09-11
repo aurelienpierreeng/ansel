@@ -1474,6 +1474,14 @@ of broadcasting it (adding an existing shape to a group, renaming, changing a co
 count on that rebuild; the ones that rebuild the tree themselves go through
 `_shape_manager_broadcast()`, whose `gui_reset` makes the handler's rebuild a no-op.
 
+**Whether a form can join a group is one question, `_form_can_join_group()`**, asked by a row's
+"+", by the "Attach to the group" and "Attach shape ..." menus to grey an entry, and again by each
+action, form by form, over the whole selection. A destination that cannot take anything — it
+already holds the shape at any depth, or taking a group would close a cycle — is listed greyed,
+never left out: the menu is where the user reads that a shape is already there. The groups a menu
+offers come by value from `dt_masks_group_list()` (`develop/masks_group.h`), not from a walk over
+`dev->forms`, which section 9 of `tools/check_module_boundaries.sh` counts.
+
 A module mask is shown FLAT in the inventory -- one row, no expander, its members not appended
 under it -- and expandable in the module list, which is where that subtree belongs. `_tree_row_t`
 carries the `flat` flag that stops `_shape_manager_list_recurs()` after the row itself.

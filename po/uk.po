@@ -20071,14 +20071,16 @@ msgid "Add gradient"
 msgstr "додати градієнт"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "%d фігуру використано"
+msgid "Attach shape ..."
+msgstr "прикріпити фігуру..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "групувати фігури"
+msgid "New group from selection"
+msgstr "нова група з виділеного"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "прикріпити до групи"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

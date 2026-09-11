@@ -20053,14 +20053,16 @@ msgid "Add gradient"
 msgstr "kleurverloop toevoegen"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "%d vorm gebruikt"
+msgid "Attach shape ..."
+msgstr "vorm koppelen..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "groepeer vormen"
+msgid "New group from selection"
+msgstr "nieuwe groep van selectie"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "koppelen aan de groep"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

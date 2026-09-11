@@ -19889,14 +19889,16 @@ msgstr "voeg gradient by"
 
 # not sure if this means X type of shape used, or x number of shapes used.
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "%d vorm gebruik"
+msgid "Attach shape ..."
+msgstr "koppel vorm..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "groepeer die vorms"
+msgid "New group from selection"
+msgstr "nuwe groep uit seleksie"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "koppel aan die groep"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

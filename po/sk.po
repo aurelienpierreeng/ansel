@@ -19877,14 +19877,16 @@ msgid "Add gradient"
 msgstr "pridať prelínanie"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "použitý %d tvar"
+msgid "Attach shape ..."
+msgstr "pripojiť tvar..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "zoskupiť tvary"
+msgid "New group from selection"
+msgstr "nová skupina z výberu"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "pripojiť ku skupine"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

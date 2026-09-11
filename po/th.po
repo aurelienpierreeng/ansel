@@ -3519,7 +3519,7 @@ msgstr ""
 #: ../build/src/iop/introspection_vignette.c:145
 #: ../build/src/iop/introspection_vignette.c:236 ../src/iop/vignette.c:1022
 msgid "shape"
-msgstr ""
+msgstr "รูปร่าง"
 
 #: ../build/src/iop/introspection_vignette.c:264
 msgid "8-bit output"
@@ -5465,7 +5465,6 @@ msgstr ""
 #: ../src/develop/masks/masks_gui.c:454 ../src/iop/ashift.c:5344
 #: ../src/iop/crop.c:1028 ../src/iop/drawlayer.c:1308
 #: ../src/iop/drawlayer.c:1964 ../src/iop/drawlayer.c:2506
-#, fuzzy
 msgid "Cancel"
 msgstr "ยกเลิก"
 
@@ -6825,7 +6824,7 @@ msgstr ""
 #: ../src/develop/blend_gui.c:1749
 #, c-format
 msgid "Already in '%s'"
-msgstr ""
+msgstr "อยู่ใน '%s' แล้ว"
 
 #: ../src/develop/blend_gui.c:2082 ../src/develop/blend_gui.c:2381
 #: ../src/iop/drawlayer.c:1965
@@ -6854,9 +6853,8 @@ msgid "Attach shapes"
 msgstr "รูปร่างถูกสร้างขึ้น"
 
 #: ../src/develop/blend_gui.c:2280 ../src/develop/masks/masks_gui.c:783
-#, fuzzy
 msgid "Operation"
-msgstr "การวางภาพ"
+msgstr "การดำเนินการ"
 
 #: ../src/develop/blend_gui.c:2285 ../src/develop/masks/masks_gui.c:788
 msgid "Invert"
@@ -6865,24 +6863,22 @@ msgstr ""
 #: ../src/develop/blend_gui.c:2296 ../src/develop/masks/masks_gui.c:791
 #: ../src/libs/masks.c:1097
 msgid "Union"
-msgstr ""
+msgstr "การรวม"
 
 #: ../src/develop/blend_gui.c:2304 ../src/develop/masks/masks_gui.c:793
 #: ../src/libs/masks.c:1100
-#, fuzzy
 msgid "Intersection"
-msgstr "การแก้ใข"
+msgstr "ส่วนร่วม"
 
 #: ../src/develop/blend_gui.c:2312 ../src/develop/masks/masks_gui.c:795
 #: ../src/libs/masks.c:1103
 msgid "Difference"
-msgstr ""
+msgstr "ผลต่าง"
 
 #: ../src/develop/blend_gui.c:2320 ../src/develop/masks/masks_gui.c:797
 #: ../src/libs/masks.c:1106
-#, fuzzy
 msgid "Exclusion"
-msgstr "เป็นพิเศษ"
+msgstr "การยกเว้น"
 
 #: ../src/develop/blend_gui.c:2330
 #, fuzzy
@@ -6909,7 +6905,7 @@ msgstr ""
 msgid ""
 "Detach this shape from the mask. The shape is kept and stays available for "
 "reuse."
-msgstr ""
+msgstr "แยกรูปร่างนี้ออกจากมาสก์ รูปร่างจะยังคงอยู่และพร้อมให้นำกลับมาใช้ใหม่"
 
 #: ../src/develop/blend_gui.c:2516
 msgid ""
@@ -7794,9 +7790,8 @@ msgid ""
 msgstr ""
 
 #: ../src/develop/masks/masks_gui.c:452 ../src/libs/masks.c:1133
-#, fuzzy
 msgid "Delete shape"
-msgstr "ลบรูปร่างนี้"
+msgstr "ลบรูปร่าง"
 
 #: ../src/develop/masks/masks_gui.c:453
 #, fuzzy
@@ -7869,13 +7864,11 @@ msgstr "ความทึบ"
 
 #: ../src/develop/masks/masks_gui.c:805 ../src/dtgtk/thumbtable.c:2187
 #: ../src/libs/masks.c:1111 ../src/views/darkroom.c:2037
-#, fuzzy
 msgid "Move up"
 msgstr "เลื่อนขึ้น"
 
 #: ../src/develop/masks/masks_gui.c:807 ../src/dtgtk/thumbtable.c:2191
 #: ../src/libs/masks.c:1114 ../src/views/darkroom.c:2052
-#, fuzzy
 msgid "Move down"
 msgstr "เลื่อนลง"
 
@@ -7890,9 +7883,8 @@ msgid "Delete node"
 msgstr "ลบ"
 
 #: ../src/develop/masks/masks_gui.c:829 ../src/libs/masks.c:1146
-#, fuzzy
 msgid "Remove shape from mask"
-msgstr "ต้องการจะย้ายรูปหรือไม่?"
+msgstr "นำรูปร่างออกจากมาสก์"
 
 #: ../src/develop/masks/masks.c:1515
 #, c-format
@@ -10888,9 +10880,8 @@ msgid "vertical"
 msgstr ""
 
 #: ../src/iop/ashift.c:5773 ../src/iop/crop.c:1257
-#, fuzzy
 msgid "Apply"
-msgstr "เริ่มใช้"
+msgstr "นำไปใช้"
 
 #: ../src/iop/ashift.c:5773 ../src/iop/crop.c:1257
 msgid "Apply changes"
@@ -19053,11 +19044,11 @@ msgstr ""
 #: ../src/libs/masks.c:331
 #, c-format
 msgid "Mask #%d"
-msgstr ""
+msgstr "มาสก์ #%d"
 
 #: ../src/libs/masks.c:995 ../src/libs/masks.c:1024
 msgid "Add new shape ..."
-msgstr ""
+msgstr "เพิ่มรูปร่างใหม่..."
 
 #: ../src/libs/masks.c:1028
 msgid "Add brush"
@@ -19080,27 +19071,28 @@ msgid "Add gradient"
 msgstr ""
 
 #: ../src/libs/masks.c:1073
-msgid "Add shape ..."
-msgstr ""
+msgid "Attach shape ..."
+msgstr "แนบรูปร่าง..."
 
 #: ../src/libs/masks.c:1083
-msgid "Group the forms"
-msgstr ""
+msgid "New group from selection"
+msgstr "กลุ่มใหม่จากสิ่งที่เลือก"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "แนบกับกลุ่ม"
 
 #: ../src/libs/masks.c:1091
-#, fuzzy
 msgid "Invert shape"
-msgstr "รูปร่างถูกสร้างขึ้น"
+msgstr "กลับด้านรูปร่าง"
 
 #: ../src/libs/masks.c:1123
-#, fuzzy
 msgid "Duplicate shape"
-msgstr "ลบรูปร่างนี้"
+msgstr "ทำสำเนารูปร่าง"
 
 #: ../src/libs/masks.c:1139
-#, fuzzy
 msgid "Delete mask"
-msgstr "ลบแท็ก?"
+msgstr "ลบมาสก์"
 
 #: ../src/libs/masks.c:1151
 #, fuzzy
@@ -21755,6 +21747,85 @@ msgstr ""
 #: ../src/iop/splittoningrgb.c:1289
 msgid "sample average luminance from an area to set this keyframe"
 msgstr ""
+
+#: ../src/libs/shape_manager.c
+msgid "All shapes"
+msgstr "รูปร่างทั้งหมด"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Attach this to the mask '%s'."
+msgstr "แนบสิ่งนี้กับมาสก์ '%s'"
+
+#: ../src/libs/shape_manager.c
+msgid "Delete unused shapes"
+msgstr "ลบรูปร่างที่ไม่ได้ใช้"
+
+#: ../src/libs/shape_manager.c
+msgid "Every shape and group drawn on this image, including the masks modules already use -- pick any of them up to reuse."
+msgstr "รูปร่างและกลุ่มทั้งหมดที่วาดบนภาพนี้ รวมถึงมาสก์ที่โมดูลใช้อยู่แล้ว -- เลือกอันใดก็ได้เพื่อนำกลับมาใช้ใหม่"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Manage which modules use this %s. A mask is created for the ticked ones that have none, and shared between them."
+msgstr "จัดการว่าโมดูลใดใช้%sนี้ มาสก์จะถูกสร้างสำหรับโมดูลที่เลือกซึ่งยังไม่มี และใช้ร่วมกันระหว่างโมดูลเหล่านั้น"
+
+#: ../src/libs/shape_manager.c
+msgid "Module groups"
+msgstr "กลุ่มโมดูล"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Modules using this %s"
+msgstr "โมดูลที่ใช้%sนี้"
+
+#: ../src/libs/shape_manager.c
+msgid "No module in the pipeline can carry a drawn mask."
+msgstr "ไม่มีโมดูลในไปป์ไลน์ที่สามารถใช้มาสก์แบบวาดได้"
+
+#: ../src/libs/shape_manager.c
+msgid "Open shape manager..."
+msgstr "เปิดตัวจัดการรูปร่าง..."
+
+#: ../src/libs/shape_manager.c
+msgid "Permanently delete this shape. It is detached from every mask and removed from the list of available shapes."
+msgstr "ลบรูปร่างนี้อย่างถาวร รูปร่างจะถูกแยกออกจากทุกมาสก์และนำออกจากรายการรูปร่างที่ใช้ได้"
+
+#: ../src/libs/shape_manager.c
+msgid "Select a mask in the module groups list to attach this shape to it."
+msgstr "เลือกมาสก์ในรายการกลุ่มโมดูลเพื่อแนบรูปร่างนี้"
+
+#: ../src/libs/shape_manager.c
+msgid "Shape Manager"
+msgstr "ตัวจัดการรูปร่าง"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "The mask '%s' already uses every shape of this group."
+msgstr "มาสก์ '%s' ใช้ทุกรูปร่างของกลุ่มนี้อยู่แล้ว"
+
+#: ../src/libs/shape_manager.c
+msgid "The masks modules actually render, and the shapes each one is made of."
+msgstr "มาสก์ที่โมดูลใช้งานจริง และรูปร่างที่ประกอบเป็นแต่ละมาสก์"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "This group cannot be added to the mask '%s': it already contains it."
+msgstr "ไม่สามารถเพิ่มกลุ่มนี้ลงในมาสก์ '%s' ได้ เพราะกลุ่มนี้มีมาสก์นั้นอยู่แล้ว"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "This is already part of the mask '%s'."
+msgstr "สิ่งนี้เป็นส่วนหนึ่งของมาสก์ '%s' อยู่แล้ว"
+
+#: ../src/libs/shape_manager.c
+msgid "this is the module's own mask"
+msgstr "นี่คือมาสก์ของโมดูลเอง"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Tick the modules that should use the %s '%s', untick the ones that should stop."
+msgstr "เลือกโมดูลที่ควรใช้%s '%s' และยกเลิกการเลือกโมดูลที่ควรหยุดใช้"
 
 #, fuzzy
 #~ msgid "Wire shapes"

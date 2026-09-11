@@ -19985,14 +19985,16 @@ msgid "Add gradient"
 msgstr "aldoni gradienton"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "%d formo uzata"
+msgid "Attach shape ..."
+msgstr "alligi formon..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "grupigi la formojn"
+msgid "New group from selection"
+msgstr "nova grupo el la elekto"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "alligi al la grupo"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

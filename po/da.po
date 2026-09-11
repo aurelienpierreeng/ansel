@@ -19738,14 +19738,16 @@ msgid "Add gradient"
 msgstr "tilføj farveovergang"
 
 #: ../src/libs/masks.c:1073
-#, fuzzy
-msgid "Add shape ..."
-msgstr "%d figur brugt"
+msgid "Attach shape ..."
+msgstr "tilknyt figur..."
 
 #: ../src/libs/masks.c:1083
-#, fuzzy
-msgid "Group the forms"
-msgstr "gruppér formene"
+msgid "New group from selection"
+msgstr "ny gruppe fra markering"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "tilknyt gruppen"
 
 #: ../src/libs/masks.c:1091
 #, fuzzy

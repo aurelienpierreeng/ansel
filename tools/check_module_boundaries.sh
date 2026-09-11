@@ -416,7 +416,9 @@ fi
 # is written down, not because ground was won here.
 masks_include_baseline=18
 masks_gui_include_baseline=11
-masks_member_baseline=75
+# 75 -> 73 when the shape manager's "Add shape ..." menu took a shape's id and kind from
+# dt_masks_form_get_info() instead of reading them off the form.
+masks_member_baseline=73
 masks_write_baseline=16
 masks_alloc_baseline=1
 masks_forms_baseline=74
