@@ -678,15 +678,29 @@ void dt_canvas_object_to_local(const dt_canvas_object_t *object, double x, doubl
  * @brief A frame's cardinal point and the outward normal there.
  * @param anchor which point; AUTO picks the one nearest (target_x, target_y).
  */
-void dt_canvas_object_anchor_point(const dt_canvas_object_t *frame, dt_canvas_anchor_t anchor, double target_x,
-                                   double target_y, double *x, double *y, double *normal_x, double *normal_y);
+void dt_canvas_object_anchor_point(const dt_canvas_t *canvas, const dt_canvas_object_t *frame,
+                                   dt_canvas_anchor_t anchor, double target_x, double target_y, double *x, double *y,
+                                   double *normal_x, double *normal_y);
 
 /**
  * @brief Where the anchor's handle sits, which is where it is drawn and clicked.
  * @details Every anchor's handle is its attachment point, except the centre's: that one is at
  * the frame's centre, while what it attaches is out on the edge facing the other end.
  */
-void dt_canvas_object_anchor_handle(const dt_canvas_object_t *frame, dt_canvas_anchor_t anchor, double *x, double *y);
+void dt_canvas_object_anchor_handle(const dt_canvas_t *canvas, const dt_canvas_object_t *frame,
+                                    dt_canvas_anchor_t anchor, double *x, double *y);
+
+/**
+ * @brief How far from the frame's centre the object still draws something, along `dir` in the
+ * frame's own axes.
+ * @details What the object draws is its rounded rectangle, or -- where a cutout replaces it --
+ * the cut shape grown by its fall-off and by the border band dilated from it, never past the
+ * frame. It is what the centre anchor leaves by, so a connector meets the picture rather than
+ * an empty corner of its bounding box. `dir` need not be normalised; the result is in canvas
+ * units along it.
+ */
+double dt_canvas_object_silhouette_reach(const dt_canvas_t *canvas, const dt_canvas_object_t *frame, double dir_x,
+                                         double dir_y);
 
 /**
  * @brief Resolve a connector to its geometry.

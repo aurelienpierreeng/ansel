@@ -548,34 +548,34 @@ static void _a_frame_offers_its_corners_and_its_centre_as_anchors(void **state)
   double normal_y = 0.0;
 
   // The corners are the frame's corners, and their normals point out along the diagonal.
-  dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_SOUTH_EAST, 0.0, 0.0, &x, &y, &normal_x, &normal_y);
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_SOUTH_EAST, 0.0, 0.0, &x, &y, &normal_x, &normal_y);
   assert_float_equal(x, 200.0, 1e-9);
   assert_float_equal(y, 100.0, 1e-9);
   assert_float_equal(normal_x, normal_y, 1e-9);
   assert_true(normal_x > 0.0);
   assert_float_equal(hypot(normal_x, normal_y), 1.0, 1e-9);
-  dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_NORTH_WEST, 0.0, 0.0, &x, &y, &normal_x, &normal_y);
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_NORTH_WEST, 0.0, 0.0, &x, &y, &normal_x, &normal_y);
   assert_float_equal(x, 0.0, 1e-9);
   assert_float_equal(y, 0.0, 1e-9);
 
   // A quarter turn carries them round with the frame: the corner at (+100, +50) in the
   // frame's own axes swings to (-50, +100) of its centre.
   frame->rotation = M_PI / 2.0;
-  dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_SOUTH_EAST, 0.0, 0.0, &x, &y, &normal_x, &normal_y);
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_SOUTH_EAST, 0.0, 0.0, &x, &y, &normal_x, &normal_y);
   assert_float_equal(x, 50.0, 1e-6);
   assert_float_equal(y, 150.0, 1e-6);
   frame->rotation = 0.0;
 
   // The centre's handle is the centre; what it attaches is out on the edge facing the other
   // end, so it slides around the frame as that end moves.
-  dt_canvas_object_anchor_handle(frame, DT_CANVAS_ANCHOR_CENTRE, &x, &y);
+  dt_canvas_object_anchor_handle(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, &x, &y);
   assert_float_equal(x, 100.0, 1e-9);
   assert_float_equal(y, 50.0, 1e-9);
-  dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_CENTRE, 1000.0, 50.0, &x, &y, &normal_x, &normal_y);
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 1000.0, 50.0, &x, &y, &normal_x, &normal_y);
   assert_float_equal(x, 200.0, 1e-9); // the right edge, dead level with the centre
   assert_float_equal(y, 50.0, 1e-9);
   assert_float_equal(normal_x, 1.0, 1e-9);
-  dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_CENTRE, 100.0, -1000.0, &x, &y, &normal_x, &normal_y);
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 100.0, -1000.0, &x, &y, &normal_x, &normal_y);
   assert_float_equal(x, 100.0, 1e-9); // straight above: the top edge
   assert_float_equal(y, 0.0, 1e-9);
   assert_float_equal(normal_y, -1.0, 1e-9);
@@ -583,13 +583,91 @@ static void _a_frame_offers_its_corners_and_its_centre_as_anchors(void **state)
   for(int step = 0; step < 16; step++)
   {
     const double angle = step * M_PI / 8.0;
-    dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_CENTRE, 100.0 + cos(angle) * 900.0,
+    dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 100.0 + cos(angle) * 900.0,
                                   50.0 + sin(angle) * 900.0, &x, &y, &normal_x, &normal_y);
     const double on_side = fabs(fabs(x - 100.0) - 100.0) < 1e-9;
     const double on_edge = fabs(fabs(y - 50.0) - 50.0) < 1e-9;
     assert_true(on_side || on_edge);
     assert_true(fabs(x - 100.0) <= 100.0 + 1e-9 && fabs(y - 50.0) <= 50.0 + 1e-9);
   }
+
+  // The centre leaves by what the object DRAWS. Cut it to a circle well inside the frame and
+  // the line stops on the circle's own edge, not out on the rectangle.
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_CIRCLE);
+  frame->mask.center_x = 0.5f;
+  frame->mask.center_y = 0.5f;
+  frame->mask.radius_x = 0.25f; // a quarter of the shorter side: 25 units
+  frame->mask.feather = 0.0f;
+  frame->border_width = 0.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 1000.0, 50.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 125.0, 1e-6); // the frame's centre plus the circle's radius
+  assert_float_equal(y, 50.0, 1e-6);
+  // The fall-off and the border reach past the shape, and the line ends past them too.
+  frame->mask.feather = 0.1f; // ten more units
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 1000.0, 50.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 135.0, 1e-6);
+  frame->border_width = 5.0f;
+  frame->border_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 1000.0, 50.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 140.0, 1e-6);
+  // Never past the frame: a cutout is confined to it, and so is what leaves by the centre.
+  frame->mask.radius_x = 5.0f;
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 1000.0, 50.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 200.0, 1e-6);
+  // Inverted, the shape is a hole and the frame's own edge is what shows.
+  frame->mask.radius_x = 0.25f;
+  frame->mask.flags |= DT_CANVAS_MASK_INVERT;
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 1000.0, 50.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 200.0, 1e-6);
+  frame->mask.flags = 0;
+
+  // An ellipse answers the same way, through its own axes.
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_ELLIPSE);
+  frame->mask.center_x = 0.5f;
+  frame->mask.center_y = 0.5f;
+  frame->mask.radius_x = 0.25f;
+  frame->mask.radius_y = 0.4f;
+  frame->mask.rotation = 0.0f;
+  frame->mask.feather = 0.0f;
+  frame->border_width = 0.0f;
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 1000.0, 50.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 125.0, 1e-6);
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 100.0, 1000.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(y, 90.0, 1e-6); // 0.4 of the shorter side, downward
+
+  // And a polygon, against the straight run of its nodes.
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_POLYGON);
+  frame->mask.feather = 0.0f;
+  const float square_corners[4][2] = { { 0.25f, 0.25f }, { 0.75f, 0.25f }, { 0.75f, 0.75f }, { 0.25f, 0.75f } };
+  float square_nodes[4 * DT_CANVAS_MASK_NODE_FLOATS];
+  memset(square_nodes, 0, sizeof(square_nodes));
+  for(int node = 0; node < 4; node++)
+  {
+    float *record = square_nodes + (size_t)node * DT_CANVAS_MASK_NODE_FLOATS;
+    record[DT_CANVAS_MASK_NODE_X] = square_corners[node][0];
+    record[DT_CANVAS_MASK_NODE_Y] = square_corners[node][1];
+    record[DT_CANVAS_MASK_NODE_CTRL1_X] = square_corners[node][0];
+    record[DT_CANVAS_MASK_NODE_CTRL1_Y] = square_corners[node][1];
+    record[DT_CANVAS_MASK_NODE_CTRL2_X] = square_corners[node][0];
+    record[DT_CANVAS_MASK_NODE_CTRL2_Y] = square_corners[node][1];
+  }
+  dt_canvas_mask_set_nodes(canvas, frame, square_nodes, 4);
+  dt_canvas_object_anchor_point(canvas, frame, DT_CANVAS_ANCHOR_CENTRE, 1000.0, 50.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 150.0, 1e-6); // a quarter of the frame's width in from its right edge
+
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_NONE);
+  frame->border_width = 0.0f;
+
+  // Rounded corners round the silhouette with them: straight out to a corner, the line stops
+  // on the arc rather than on the point the rectangle would have had.
+  frame->corner_radius = 30.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  const double square = dt_canvas_object_silhouette_reach(canvas, frame, 1.0, 0.0);
+  assert_float_equal(square, 100.0, 1e-6); // a flat side is untouched by the radius
+  const double diagonal = dt_canvas_object_silhouette_reach(canvas, frame, 100.0, 50.0);
+  assert_true(diagonal < hypot(100.0, 50.0) - 1e-6);
+  frame->flags &= ~DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
 
   // The anchors are stored as they stand, so a new one has to be appended, never inserted.
   assert_int_equal(DT_CANVAS_ANCHOR_NORTH, 1);
