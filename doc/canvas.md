@@ -422,8 +422,25 @@ the colour patch stays live to recolour it. The relief comes in two parts the us
 from the Texture popover, in `dt_canvas_t.texture_*`: **contrast** scales the body (mottle,
 tooth, clouds), **detail** the fine structure (fibres, pores, grain, wrinkles, the mesh),
 **scale** the size of every feature (every knee divided by it; the only one that rebuilds
-the fields), **grain** the finishing dither. 1 everywhere is the paper as designed and an
-unset weight (a file from before) reads as 1 (`dt_canvas_texture_get()`). The two composed
+the fields), **grain** the finishing dither. 1 everywhere is the paper as designed.
+
+**All FOUR at zero is an old file and reads as 1; one weight at zero is zero**
+(`dt_canvas_texture_get()`). The rule used to be per field, which conflated the migration
+with a deliberate setting: a user who turned the grain -- or the detail -- down to nothing
+got the default back instead, so the bottom of those two sliders did nothing at all. A canvas
+with all four weights at zero is a plain colour by another name, so that one combination is
+what the migration costs. `scale` keeps a floor of its own because it divides every knee.
+
+The dither's own strength was the other half of "the grain has no effect". It is applied to
+the LINEAR canvas and read on a gamma-encoded one, so a fraction there arrives as roughly
+half of it in code values, and it competes with the paper's own pixel-level content: measured
+on the moleskine, that content is 1.45 codes while the dither at `PAPER_DITHER_SIGMA` = 0.008
+was 0.646, so moving the weight from nothing to its default changed the pixel texture by 10%
+-- invisible. At 0.018 the two are comparable and the weight spans what its range promises:
+1.43 codes at 0, then 1.62, 2.05, 3.24 and 5.83 at 0.5, 1, 2 and 4. The quadrature blend
+above is what made this worth fixing now: it raised the paper's own content over most of the
+sheet, and the dither, which used to stand out wherever the composition had attenuated the
+paper, no longer did anywhere. The two composed
 fields are kept per resolution and scale, the coloured and weighed tile per key.
 
 The canvas is painted with its background colour, with a transparent plane, or with one of
