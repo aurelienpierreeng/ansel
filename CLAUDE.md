@@ -2577,6 +2577,21 @@ they are visible.
   blend overshoots both ends of [0, 1] -- the psychedelic washi's negative coverage turned
   its subtraction into a lift and washed the paper between the wrinkles with the
   complementary colour (18.1% of pixels with a clipped channel, against 9.4% clamped).
+- **A zero that means "unset for migration" must be read across the WHOLE record, never per
+  field.** The four `texture_*` weights were added together, so a file from before them holds
+  four zeros -- but `dt_canvas_texture_get()` applied the "zero reads as 1" rule field by
+  field, which is indistinguishable from a user turning one weight down to nothing. The grain
+  and detail sliders therefore did nothing at their own zero, silently. All four zero is the
+  old file; one zero is a zero. The combination it costs (a canvas with no relief and no
+  finish) is a plain colour by another name.
+- **A weight is only a weight if its range moves the picture, and that is a measurement.**
+  The grain weight scales a dither applied to the LINEAR canvas and read on a gamma-encoded
+  one, so a fraction there arrives as about half of it in codes, and it competes with the
+  paper's own pixel content -- 1.45 codes on the moleskine against the dither's 0.646 at
+  `PAPER_DITHER_SIGMA` 0.008. Moving the weight from nothing to its default changed the
+  pixel texture by 10%, which is why it was reported as having no effect at all. Fit the
+  contributions (`total^2 = own^2 + k*weight^2` over a few renders) before touching the
+  constant: it says whether the control is dead or merely outgunned, and by how much.
 - **A threshold on a synthesised field is taken in the field's OWN deviations, never in
   absolute value.** `_paper_field_band()` normalises against a fixed 256x256 power sum, so an
   absolute cut depends on a number nobody reading the call site can see: kraft's shives were
