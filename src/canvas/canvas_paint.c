@@ -695,9 +695,24 @@ static double _paper_sample(const double *sprite, const int size, const int orie
 /**
  * The composed field, PAPER_CELLS sprites square and periodic: sprites twice a cell wide,
  * one per cell, each a random sprite in a random orientation at a random phase, its centre
- * jittered off the cell's, weighted by a two-dimensional Hann window. The weights are summed
- * and divided out, so however the placements stray the blend is exact: neither a seam, nor a
- * border band, nor the lattice of window centres a regular grid leaves for a trained eye.
+ * jittered off the cell's, weighted by a two-dimensional Hann window.
+ *
+ * The weights are normalised IN QUADRATURE, not linearly, and that is the whole point of this
+ * function. The sprites are independent draws of one process, so a weighted SUM of them has
+ * variance sigma^2 * sum(w^2) while a linear normalisation divides by sum(w): the composed
+ * field then carries sigma * sqrt(sum(w^2)) / sum(w), which is 1 at a placement's centre --
+ * where the Hann window of the cell is alone and equal to one -- and 1/2 where four windows
+ * meet at a quarter each. That is a two-fold amplitude lattice at the cell pitch, and it is
+ * exactly the "lattice of window centres a regular grid leaves for a trained eye" that the
+ * jitter was meant to hide and cannot: jitter moves the lobes, it does not flatten them.
+ * Measured on the kraft paper before this: local high-frequency RMS 3.12 to 6.50 over one
+ * sheet, ratio 2.08, strongest modulation at a period of 533 px against a 512-unit cell.
+ *
+ * Dividing the deviations by sqrt(sum(w^2)) instead gives variance sigma^2 everywhere, and
+ * still reproduces one sprite exactly wherever one window stands alone. The deviations are
+ * taken about the sprites' common mean and the mean is added back linearly, because a relief
+ * is not always zero-mean -- the watercolour's tooth only carves and the charcoal card's only
+ * lifts -- and only the fluctuation about that mean is what must keep its size.
  */
 static double *_paper_compose(double **sprites, const int sprite_size)
 {
@@ -707,6 +722,18 @@ static double *_paper_compose(double **sprites, const int sprite_size)
   double *window = g_new(double, 2 * (size_t)sprite_size);
   for(int idx = 0; idx < 2 * sprite_size; idx++)
     window[idx] = 0.5 * (1.0 - cos(2.0 * M_PI * (idx + 0.5) / (2.0 * sprite_size)));
+
+  // One mean for every sprite: they are draws of the same process, so the differences between
+  // their means are sampling noise over a quarter of a million pixels, and one number here
+  // saves carrying a third plane the size of the field.
+  double mean = 0.0;
+  for(int variant = 0; variant < PAPER_SPRITES; variant++)
+  {
+    double sum = 0.0;
+    for(size_t idx = 0; idx < (size_t)sprite_size * sprite_size; idx++) sum += sprites[variant][idx];
+    mean += sum / ((double)sprite_size * sprite_size);
+  }
+  mean /= PAPER_SPRITES;
 
   for(int row = 0; row < PAPER_CELLS; row++)
   {
@@ -730,17 +757,15 @@ static double *_paper_compose(double **sprites, const int sprite_size)
         {
           const int field_x = ((origin_x + x) % total + total) % total;
           const double weight = window[x] * window[y];
-          field[(size_t)field_y * total + field_x]
-              += weight * _paper_sample(sprites[variant], sprite_size, orientation, shift_x, shift_y, x, y);
-          weights[(size_t)field_y * total + field_x] += weight;
+          const double sample = _paper_sample(sprites[variant], sprite_size, orientation, shift_x, shift_y, x, y);
+          field[(size_t)field_y * total + field_x] += weight * (sample - mean);
+          weights[(size_t)field_y * total + field_x] += weight * weight;
         }
       }
     }
   }
   for(size_t idx = 0; idx < (size_t)total * total; idx++)
-  {
-    if(weights[idx] > 1e-6) field[idx] /= weights[idx];
-  }
+    field[idx] = weights[idx] > 1e-12 ? mean + field[idx] / sqrt(weights[idx]) : mean;
   dt_free(weights);
   dt_free(window);
   return field;
@@ -791,11 +816,17 @@ static uint8_t *_paper_pixels(const dt_canvas_background_t style, const int spri
       // read as a tinted paper. A steeper turn spins the hue faster than a wrinkle is wide
       // and comes out as fringing, not as dye -- measured, at the composed cloud's own
       // range of +/- 0.11.
+      // The ridge is a COVERAGE, and the composition is free to overshoot either end of it:
+      // it blends the sprites' deviations in quadrature, so a flat stretch can come out a
+      // little below zero. Left alone, a negative coverage turns the subtraction into a lift,
+      // two channels clip to white against a spared third, and the paper BETWEEN the wrinkles
+      // picks up a faint wash of the complementary colour. Say what the range is instead.
+      const double coverage = CLAMP(high[idx], 0.0, 1.0);
       const double hue = low[idx] * 12.0;
       // Hard enough to take the two channels it acts on to zero at a ridge's core: that
       // clamp IS the look, a saturated thread rather than a pastel one, and `detail` is
       // what tones the whole sheet back down.
-      const double amount = detail * high[idx] * 1.8;
+      const double amount = detail * coverage * 1.8;
       for(int channel = 0; channel < 3; channel++)
       {
         const double share = 0.5 * (1.0 + cos(2.0 * M_PI * (hue + channel / 3.0)));
