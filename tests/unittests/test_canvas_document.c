@@ -810,7 +810,7 @@ static void _a_waypoint_bends_every_routing_through_it(void **state)
   dt_canvas_free(canvas);
 }
 
-static void _frames_snap_next_to_their_neighbours_one_gutter_apart(void **state)
+static void _frames_snap_with_their_gutters_touching(void **state)
 {
   (void)state;
   dt_canvas_t *canvas = dt_canvas_new();
@@ -822,10 +822,17 @@ static void _frames_snap_next_to_their_neighbours_one_gutter_apart(void **state)
   double delta_x = 0.0;
   double delta_y = 0.0;
 
-  // Its left edge 6 units short of one gutter past the fixed frame's right edge: pulled there.
-  dt_canvas_rect_t box = { 224.0, 300.0, 100.0, 100.0 };
+  // The gutter is a margin around EACH frame, so two of them side by side are two gutters
+  // apart and their margin boxes meet on one line. The fixed frame's right edge is at 200,
+  // so the moving frame's left edge belongs at 260: from 254 it is pulled 6 units.
+  dt_canvas_rect_t box = { 254.0, 300.0, 100.0, 100.0 };
   assert_true(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, DT_CANVAS_EDGE_ALL, &delta_x, &delta_y));
   assert_float_equal(delta_x, 6.0, 1e-9);
+  // And one gutter apart is no longer a resting place: nothing pulls it there.
+  dt_canvas_rect_t single = { 232.0, 300.0, 100.0, 100.0 };
+  double single_x = 0.0;
+  dt_canvas_snap_to_neighbours(canvas, &single, exclude, 8.0, DT_CANVAS_EDGE_ALL, &single_x, &delta_y);
+  assert_float_equal(single_x, 0.0, 1e-9);
   assert_float_equal(delta_y, 0.0, 1e-9); // nothing within reach on y
   // Only the dragged edges may snap: with the left edge held still, nothing pulls on x.
   assert_false(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, DT_CANVAS_EDGE_RIGHT | DT_CANVAS_EDGE_BOTTOM,
@@ -858,13 +865,14 @@ static void _frames_snap_next_to_their_neighbours_one_gutter_apart(void **state)
   width = 150.0;
   assert_false(dt_canvas_snap_size(canvas, exclude, 8.0, &width, &height, NULL, NULL));
 
-  // Masonry: two frames stacked one gutter apart offer their combined height.
-  dt_canvas_object_t *below = dt_canvas_add_text(canvas, 100.0, 150.0 + 30.0 + 40.0, 200.0, 80.0, ""); // y 180..260
-  height = 205.0;
+  // Masonry: two frames stacked with their gutters touching -- two gutters of clear space --
+  // offer their combined height.
+  dt_canvas_object_t *below = dt_canvas_add_text(canvas, 100.0, 150.0 + 60.0 + 40.0, 200.0, 80.0, ""); // y 210..290
+  height = 235.0;
   assert_true(dt_canvas_snap_size(canvas, exclude, 8.0, NULL, &height, NULL, &height_reference));
-  assert_float_equal(height, 210.0, 1e-9); // 50..260
+  assert_float_equal(height, 240.0, 1e-9); // 50..290
   assert_float_equal(height_reference.y, 50.0, 1e-9);
-  assert_float_equal(height_reference.height, 210.0, 1e-9);
+  assert_float_equal(height_reference.height, 240.0, 1e-9);
   (void)below;
   (void)fixed;
   g_array_free(exclude, TRUE);
@@ -916,8 +924,10 @@ static void _layouts_arrange_without_moving_the_group(void **state)
   const dt_canvas_rect_t after = dt_canvas_bounds(canvas);
   assert_float_equal(after.x, before.x, 1e-9);
   assert_float_equal(after.y, before.y, 1e-9);
-  // The gap is the gutter: the second column starts one cell plus one gutter after the first.
-  assert_float_equal(frames[1]->x - frames[0]->x, frames[0]->width + 30.0, 1e-9);
+  // Every frame keeps a gutter around itself, so the second column starts one cell plus TWO
+  // gutters after the first -- the same arithmetic the snapping uses, or an arranged layout
+  // would not be one the snapping can reproduce by hand.
+  assert_float_equal(frames[1]->x - frames[0]->x, frames[0]->width + 60.0, 1e-9);
   // Two columns of two: the second frame sits to the right of the first, the third below it.
   assert_true(frames[1]->x > frames[0]->x);
   assert_float_equal(frames[1]->y, frames[0]->y, 1e-9);
@@ -1024,7 +1034,7 @@ int main(void)
     cmocka_unit_test(_a_page_carries_a_margin_inside_it_and_a_bleed_outside),
     cmocka_unit_test(_a_frame_offers_its_corners_and_its_centre_as_anchors),
     cmocka_unit_test(_a_waypoint_bends_every_routing_through_it),
-    cmocka_unit_test(_frames_snap_next_to_their_neighbours_one_gutter_apart),
+    cmocka_unit_test(_frames_snap_with_their_gutters_touching),
     cmocka_unit_test(_paper_tiles_the_plane_from_the_origin),
     cmocka_unit_test(_layouts_arrange_without_moving_the_group),
     cmocka_unit_test(_a_layout_sorts_images_by_a_key_and_keeps_the_rest_after),

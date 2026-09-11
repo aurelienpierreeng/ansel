@@ -145,6 +145,36 @@ static void _paint_checker(cairo_t *cr, const dt_canvas_t *canvas, const dt_canv
   cairo_fill(cr);
 }
 
+/**
+ * Stroke the path already laid down as a print guide: a white keyline first, the guide's own
+ * colour over it. The palette is the prepress one every print shop's template uses -- the
+ * trim black, the bleed red, the margin violet -- and the keyline is what that convention
+ * does not have to solve, since InDesign's pasteboard is always light and this plane can be
+ * a charcoal card or a hole. `dashed` is reserved for the fold: on a dieline a cut is solid
+ * and a crease is dashed, which is the one distinction worth spending a line style on.
+ */
+static void _stroke_guide(cairo_t *cr, const dt_canvas_color_t color, const dt_canvas_paint_options_t *options,
+                          const gboolean dashed)
+{
+  const double pixel = options->units_per_pixel;
+  cairo_set_dash(cr, NULL, 0, 0.0);
+  cairo_set_line_width(cr, 3.0 * pixel);
+  const dt_canvas_color_t keyline = dt_canvas_color(1.0f, 1.0f, 1.0f, 0.45f * color.alpha);
+  _set_color(cr, &keyline, options->for_display);
+  cairo_stroke_preserve(cr);
+  if(dashed)
+  {
+    // Anchored to the canvas origin so the dashes neither crawl under a pan nor differ
+    // between the horizontal and the vertical.
+    const double dashes[2] = { 9.0 * pixel, 6.0 * pixel };
+    cairo_set_dash(cr, dashes, 2, 0.0);
+  }
+  cairo_set_line_width(cr, pixel);
+  _set_color(cr, &color, options->for_display);
+  cairo_stroke(cr);
+  cairo_set_dash(cr, NULL, 0, 0.0);
+}
+
 static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options)
 {
   double page_width = 0.0;
@@ -158,18 +188,11 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   if((double)(last_col - first_col + 1) * (double)(last_row - first_row + 1) > 4096.0) return;
   if(!(canvas->grid_flags & DT_CANVAS_PAGE_VISIBLE)) return;
   cairo_save(cr);
-  _set_color(cr, &canvas->page_color, options->for_display);
-  cairo_set_line_width(cr, 1.0 * options->units_per_pixel);
-  // One line per border, not one rectangle per page: a shared edge stroked twice with two
-  // dash phases fills its own gaps and reads as solid. Each line starts on a multiple of
-  // the dash period from the origin, so the dashes neither crawl under a pan nor differ
-  // between the horizontal and the vertical.
-  const double dashes[2] = { 8.0 * options->units_per_pixel, 6.0 * options->units_per_pixel };
-  const double period = dashes[0] + dashes[1];
-  cairo_set_dash(cr, dashes, 2, 0.0);
-  const double start_x = floor(options->clip.x / period) * period;
+  // One line per border, not one rectangle per page: a shared edge would otherwise be
+  // stroked twice.
+  const double start_x = options->clip.x;
   const double end_x = options->clip.x + options->clip.width;
-  const double start_y = floor(options->clip.y / period) * period;
+  const double start_y = options->clip.y;
   const double end_y = options->clip.y + options->clip.height;
   for(int col = first_col; col <= last_col + 1; col++)
   {
@@ -181,7 +204,7 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     cairo_move_to(cr, start_x, row * page_height);
     cairo_line_to(cr, end_x, row * page_height);
   }
-  cairo_stroke(cr);
+  _stroke_guide(cr, canvas->page_color, options, FALSE);
 
   // The margin inside every page and the bleed outside it: one rectangle per page rather than
   // a grid of lines, since neither is shared between neighbours the way a page border is.
@@ -195,7 +218,6 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   for(int guide = 0; guide < 2; guide++)
   {
     if(!(canvas->grid_flags & guides[guide].visible) || fabs(guides[guide].outset) <= 0.0) continue;
-    _set_color(cr, guides[guide].color, options->for_display);
     for(int row = first_row; row <= last_row; row++)
     {
       for(int col = first_col; col <= last_col; col++)
@@ -205,7 +227,7 @@ static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
         cairo_rectangle(cr, rect.x, rect.y, rect.width, rect.height);
       }
     }
-    cairo_stroke(cr);
+    _stroke_guide(cr, *guides[guide].color, options, FALSE);
   }
   cairo_restore(cr);
 }
@@ -2507,7 +2529,9 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     cairo_paint(base_cr);
   }
   if(local.draw_grid) _paint_grid(base_cr, canvas, &local);
-  if(local.draw_grid) _paint_pages(base_cr, canvas, &local);
+  // Under the content by default, and over it on request: a frame that deliberately crosses a
+  // page break cannot be placed against a trim line it is covering.
+  if(local.draw_grid && !(canvas->grid_flags & DT_CANVAS_GUIDES_OVER)) _paint_pages(base_cr, canvas, &local);
   cairo_destroy(base_cr);
 
   const size_t canvas_floats = (size_t)band->width * band->height * 4;
@@ -2645,8 +2669,6 @@ static void _paint_gutters(cairo_t *cr, const dt_canvas_t *canvas, const dt_canv
   if(!(canvas->grid_flags & DT_CANVAS_GUTTER_VISIBLE) || canvas->gutter <= 0.0f) return;
   if(canvas->gutter_color.alpha <= 0.0f) return;
   cairo_save(cr);
-  _set_color(cr, &canvas->gutter_color, options->for_display);
-  cairo_set_line_width(cr, options->units_per_pixel);
   for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
   {
     const dt_canvas_object_t *object = dt_canvas_object_at(canvas, idx);
@@ -2655,14 +2677,15 @@ static void _paint_gutters(cairo_t *cr, const dt_canvas_t *canvas, const dt_canv
     const dt_canvas_rect_t reach = { bounds.x - canvas->gutter, bounds.y - canvas->gutter,
                                      bounds.width + 2.0 * canvas->gutter, bounds.height + 2.0 * canvas->gutter };
     if(!_rect_intersects(&options->clip, &reach)) continue;
-    // Gutters overlap between neighbours one gutter apart: they are what the snapping keeps clear, not a margin.
+    // A gutter is the clear margin around ONE frame: two frames snapped side by side are two
+    // gutters apart and their boxes meet on one shared line, never overlapping.
     cairo_save(cr);
     cairo_translate(cr, object->x, object->y);
     cairo_rotate(cr, object->rotation);
     cairo_rectangle(cr, -object->width * 0.5 - canvas->gutter, -object->height * 0.5 - canvas->gutter,
                     object->width + 2.0 * canvas->gutter, object->height + 2.0 * canvas->gutter);
     cairo_restore(cr);
-    cairo_stroke(cr);
+    _stroke_guide(cr, canvas->gutter_color, options, FALSE);
   }
   cairo_restore(cr);
 }
@@ -2764,6 +2787,7 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
     cairo_fill(cr);
     cairo_restore(cr);
     g_mutex_unlock(&_composite.lock);
+    if(options->draw_grid && (canvas->grid_flags & DT_CANVAS_GUIDES_OVER)) _paint_pages(cr, canvas, options);
     if(options->draw_grid) _paint_gutters(cr, canvas, options);
     _stats.cached = TRUE;
     _stats.total_seconds = dt_get_wtime() - start;
@@ -2780,6 +2804,7 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
     const dt_canvas_box_t band = { box.x, top, box.width, MIN(rows_per_band, box.y + box.height - top) };
     _paint_band(cr, canvas, options, &matrix, &band, scale_x, scale_y, one_band ? &key : NULL);
   }
+  if(options->draw_grid && (canvas->grid_flags & DT_CANVAS_GUIDES_OVER)) _paint_pages(cr, canvas, options);
   if(options->draw_grid) _paint_gutters(cr, canvas, options);
   _stats.total_seconds = dt_get_wtime() - start;
   dt_print(DT_DEBUG_PERF,
