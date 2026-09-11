@@ -476,16 +476,17 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   canvas->paper_size = (uint32_t)CLAMP(dt_conf_get_int("canvas/paper_size"), 0, DT_CANVAS_PAPER_LAST - 1);
   canvas->page_margin = (float)fmax(dt_conf_get_float("canvas/page_margin"), 0.0);
   canvas->page_bleed = (float)fmax(dt_conf_get_float("canvas/page_bleed"), 0.0);
-  dt_canvas_color_parse(dt_conf_get_string_const("canvas/margin_color"), &canvas->margin_color);
-  dt_canvas_color_parse(dt_conf_get_string_const("canvas/bleed_color"), &canvas->bleed_color);
+  dt_canvas_color_parse(dt_conf_get_string_const("canvas/guide_margin_color"), &canvas->margin_color);
+  dt_canvas_color_parse(dt_conf_get_string_const("canvas/guide_bleed_color"), &canvas->bleed_color);
   if(dt_conf_get_bool("canvas/margin_visible")) canvas->grid_flags |= DT_CANVAS_MARGIN_VISIBLE;
   else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_MARGIN_VISIBLE;
   if(dt_conf_get_bool("canvas/bleed_visible")) canvas->grid_flags |= DT_CANVAS_BLEED_VISIBLE;
   else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_BLEED_VISIBLE;
   canvas->paper_landscape = dt_conf_get_bool("canvas/paper_landscape") ? 1u : 0u;
-  const char *page_color = dt_conf_get_string_const("canvas/page_color");
+  const char *page_color = dt_conf_get_string_const("canvas/trim_color");
   dt_canvas_color_parse(page_color, &canvas->page_color);
   if(dt_conf_get_bool("canvas/page_visible")) canvas->grid_flags |= DT_CANVAS_PAGE_VISIBLE;
+  if(dt_conf_get_bool("canvas/guides_over")) canvas->grid_flags |= DT_CANVAS_GUIDES_OVER;
   else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_PAGE_VISIBLE;
   const char *border = dt_conf_get_string_const("canvas/border_color");
   dt_canvas_color_parse(border, &canvas->border_color);
@@ -500,7 +501,7 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   canvas->shadow.offset_x = dt_conf_get_float("canvas/shadow_offset_x");
   canvas->shadow.offset_y = dt_conf_get_float("canvas/shadow_offset_y");
   canvas->shadow.blur = dt_conf_get_float("canvas/shadow_radius");
-  const char *gutter_color = dt_conf_get_string_const("canvas/gutter_color");
+  const char *gutter_color = dt_conf_get_string_const("canvas/guide_gutter_color");
   dt_canvas_color_parse(gutter_color, &canvas->gutter_color);
   if(dt_conf_get_bool("canvas/gutter_visible")) canvas->grid_flags |= DT_CANVAS_GUTTER_VISIBLE;
   else canvas->grid_flags &= ~(uint32_t)DT_CANVAS_GUTTER_VISIBLE;
@@ -5288,7 +5289,7 @@ static void _proxy_set_margin_color(dt_view_t *self, const float *rgba)
   view->canvas->margin_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
   char text[16];
   dt_canvas_color_format(&view->canvas->margin_color, text, sizeof(text));
-  dt_conf_set_string("canvas/margin_color", text);
+  dt_conf_set_string("canvas/guide_margin_color", text);
   dt_canvas_touch(view->canvas);
   dt_control_queue_redraw_center();
 }
@@ -5300,7 +5301,7 @@ static void _proxy_set_bleed_color(dt_view_t *self, const float *rgba)
   view->canvas->bleed_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
   char text[16];
   dt_canvas_color_format(&view->canvas->bleed_color, text, sizeof(text));
-  dt_conf_set_string("canvas/bleed_color", text);
+  dt_conf_set_string("canvas/guide_bleed_color", text);
   dt_canvas_touch(view->canvas);
   dt_control_queue_redraw_center();
 }
@@ -5313,6 +5314,9 @@ static void _proxy_set_guides(dt_view_t *self, int mask, int value)
   dt_conf_set_bool("canvas/grid_visible", (view->canvas->grid_flags & DT_CANVAS_GRID_VISIBLE) != 0);
   dt_conf_set_bool("canvas/page_visible", (view->canvas->grid_flags & DT_CANVAS_PAGE_VISIBLE) != 0);
   dt_conf_set_bool("canvas/gutter_visible", (view->canvas->grid_flags & DT_CANVAS_GUTTER_VISIBLE) != 0);
+  dt_conf_set_bool("canvas/margin_visible", (view->canvas->grid_flags & DT_CANVAS_MARGIN_VISIBLE) != 0);
+  dt_conf_set_bool("canvas/bleed_visible", (view->canvas->grid_flags & DT_CANVAS_BLEED_VISIBLE) != 0);
+  dt_conf_set_bool("canvas/guides_over", (view->canvas->grid_flags & DT_CANVAS_GUIDES_OVER) != 0);
   dt_conf_set_int("canvas/snap_mode", (int)(view->canvas->grid_flags & DT_CANVAS_SNAP_ALL));
   dt_canvas_touch(view->canvas);
   dt_control_queue_redraw_center();
@@ -5325,7 +5329,7 @@ static void _proxy_set_page_color(dt_view_t *self, const float *rgba)
   view->canvas->page_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
   char text[16];
   dt_canvas_color_format(&view->canvas->page_color, text, sizeof(text));
-  dt_conf_set_string("canvas/page_color", text);
+  dt_conf_set_string("canvas/trim_color", text);
   dt_canvas_touch(view->canvas);
   dt_control_queue_redraw_center();
 }
@@ -5337,7 +5341,7 @@ static void _proxy_set_gutter_color(dt_view_t *self, const float *rgba)
   view->canvas->gutter_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
   char text[16];
   dt_canvas_color_format(&view->canvas->gutter_color, text, sizeof(text));
-  dt_conf_set_string("canvas/gutter_color", text);
+  dt_conf_set_string("canvas/guide_gutter_color", text);
   dt_canvas_touch(view->canvas);
   dt_control_queue_redraw_center();
 }

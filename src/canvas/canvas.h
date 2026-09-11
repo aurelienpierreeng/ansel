@@ -131,6 +131,7 @@ typedef enum dt_canvas_grid_flags_t
   DT_CANVAS_SNAP_MARGIN = 1 << 8,    ///< edges land on it
   DT_CANVAS_BLEED_VISIBLE = 1 << 9,  ///< the sheet's bleed, outside the page, is drawn
   DT_CANVAS_SNAP_BLEED = 1 << 10,    ///< edges land on it
+  DT_CANVAS_GUIDES_OVER = 1 << 11,   ///< the page guides are drawn over the content, not under it
   DT_CANVAS_SNAP_ALL = DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_GUTTER | DT_CANVAS_SNAP_SIZE | DT_CANVAS_SNAP_PAGE
                        | DT_CANVAS_SNAP_MARGIN | DT_CANVAS_SNAP_BLEED,
 } dt_canvas_grid_flags_t;

@@ -37,8 +37,9 @@ Coordinates are canvas units: one unit is one screen pixel at zoom 1, the origin
 centre of the plane, y grows downwards. The view converts through `_to_canvas()` and nothing
 else, so the document never learns what a pixel is.
 
-The four layouts space frames by the gutter and, with snapping on, start on the grid and
-round every cell up to whole grid steps, frames sitting top-left in their cell.
+The four layouts leave two gutters between frames -- each keeps one all round -- and, with
+snapping on, start on the grid and round every cell up to whole grid steps, frames sitting
+top-left in their cell.
 
 ### The file
 
@@ -309,8 +310,14 @@ is not worth its cost.
 
 `DT_CANVAS_GUTTER_VISIBLE` draws a frame one gutter out around every frame, in the canvas's
 gutter colour, over everything -- a guide, so it is drawn with the grid and not exported.
-Two neighbours one gutter apart share it: the gutter is what the snapping keeps clear, not a
-margin each frame owns, so the frames overlap where the frames meet.
+
+**The gutter is a margin around ONE frame, not a gap between two**, so two frames sit side by
+side when their margin boxes TOUCH and the clear space between them is TWO gutters. Keyed on
+one, as it was, a frame's own box landed exactly on its neighbour's edge and the two boxes
+overlapped across the whole gap, each drawing its line on top of the other frame's border --
+box against frame, which is what read as odd and crossing. Box against box they share one
+line. The snapping, the masonry run detection and `dt_canvas_layout_apply()` all carry the
+same factor of two, or an arranged layout would not be one the snapping can reproduce by hand.
 
 ### Connectors
 
@@ -579,6 +586,23 @@ cell in device space at integer offsets, cairo's fastest blit, then finished wit
 achromatic multiplicative dither, one device pixel wide at every zoom, whose deviation grows
 with the square root of the zoom: a repeated noise tile blended with the multiply operator,
 anchored to the canvas origin so it does not shimmer under a pan.
+**The guides are drawn in the prepress palette, which is InDesign's and therefore every
+print shop's template**: the page border is the **trim** and is black, the **bleed** red, the
+**margin** violet. All three are solid lines -- on a dieline a cut is solid and a crease is
+dashed, so the dash is reserved for the fold and means something. The **gutter** is no
+prepress object at all, being a layout aid rather than anything that reaches the press, so it
+takes the one family the convention leaves free here, the blue of the slug. Every guide is
+stroked twice, a white keyline under its own colour: the convention assumes a light
+pasteboard and this plane can be a charcoal card or a hole, and a black trim on a black plane
+is no guide. `canvas/trim_color` and the `canvas/guide_*_color` keys carry them; they were
+renamed from `canvas/page_color` and friends precisely so the new defaults reach a
+configuration that already holds the old ones.
+
+The page guides are drawn UNDER the content by default and over it with
+`DT_CANVAS_GUIDES_OVER`, which is what makes a frame deliberately crossing a page break
+placeable against a trim line it is covering. The gutter boxes are always over: they belong
+to the frames, not to the sheet.
+
 The grid dots have a colour of their own and a radius that is a fraction of the grid step,
 so they scale with the zoom too, floored at three quarters of a pixel so they never vanish.
 

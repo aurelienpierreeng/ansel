@@ -176,21 +176,26 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->grid_color = dt_canvas_color(0.5f, 0.5f, 0.5f, 1.0f);
   canvas->paper_size = DT_CANVAS_PAPER_NONE;
   canvas->paper_landscape = 0;
-  canvas->page_color = dt_canvas_color(0.35f, 0.6f, 1.0f, 1.0f);
+  // The prepress palette, as every print shop's template draws it: the trim black, the
+  // bleed red, the margin violet. A guide is stroked under a white keyline so a black trim
+  // still reads on a charcoal plane, which is the one thing InDesign never has to solve.
+  canvas->page_color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
   canvas->grid_flags |= DT_CANVAS_PAGE_VISIBLE;
   canvas->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.5f);
   canvas->shadow.offset_x = CANVAS_DEFAULT_SHADOW_OFFSET;
   canvas->shadow.offset_y = CANVAS_DEFAULT_SHADOW_OFFSET;
   canvas->shadow.blur = 0.0f; // off until asked for
-  canvas->gutter_color = dt_canvas_color(1.0f, 0.65f, 0.2f, 0.8f);
+  // A gutter is no prepress object at all -- it is a layout aid -- so it takes the one
+  // family the convention leaves free here, the blue of the slug.
+  canvas->gutter_color = dt_canvas_color(0.235f, 0.471f, 0.784f, 1.0f);
   canvas->texture_contrast = 1.0f;
   canvas->texture_detail = 1.0f;
   canvas->texture_scale = 1.0f;
   canvas->texture_grain = 1.0f;
   canvas->page_margin = 0.0f;
-  canvas->margin_color = dt_canvas_color(0.4f, 0.8f, 1.0f, 0.7f);
+  canvas->margin_color = dt_canvas_color(0.557f, 0.267f, 0.816f, 1.0f);
   canvas->page_bleed = 0.0f;
-  canvas->bleed_color = dt_canvas_color(1.0f, 0.45f, 0.45f, 0.7f);
+  canvas->bleed_color = dt_canvas_color(0.882f, 0.149f, 0.110f, 1.0f);
   canvas->view_zoom = 1.0;
   canvas->view_x = 0.0;
   canvas->view_y = 0.0;
@@ -1677,25 +1682,30 @@ gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas
     const double other_right = bounds.x + bounds.width;
     const double other_top = bounds.y;
     const double other_bottom = bounds.y + bounds.height;
-    // Side by side, one gutter apart, and in line: edges aligned.
+    // The gutter is a MARGIN AROUND each frame, not a gap between two, so two frames sit
+    // side by side when their margins TOUCH and the clear space between them is two gutters.
+    // Keyed on one gutter, a frame's own margin box landed exactly on its neighbour's edge
+    // and the two boxes overlapped across the whole gap, each drawing its line on top of the
+    // other frame's border -- box against frame, which is what read as odd and crossing.
+    // Box against box, they share one line.
     if(snap_left)
     {
-      _snap_axis(left, other_right + gutter, threshold, &best_x, &found_x);
+      _snap_axis(left, other_right + 2.0 * gutter, threshold, &best_x, &found_x);
       _snap_axis(left, other_left, threshold, &best_x, &found_x);
     }
     if(snap_right)
     {
-      _snap_axis(right, other_left - gutter, threshold, &best_x, &found_x);
+      _snap_axis(right, other_left - 2.0 * gutter, threshold, &best_x, &found_x);
       _snap_axis(right, other_right, threshold, &best_x, &found_x);
     }
     if(snap_top)
     {
-      _snap_axis(top, other_bottom + gutter, threshold, &best_y, &found_y);
+      _snap_axis(top, other_bottom + 2.0 * gutter, threshold, &best_y, &found_y);
       _snap_axis(top, other_top, threshold, &best_y, &found_y);
     }
     if(snap_bottom)
     {
-      _snap_axis(bottom, other_top - gutter, threshold, &best_y, &found_y);
+      _snap_axis(bottom, other_top - 2.0 * gutter, threshold, &best_y, &found_y);
       _snap_axis(bottom, other_bottom, threshold, &best_y, &found_y);
     }
   }
@@ -1750,7 +1760,7 @@ static void _snap_size_runs(const dt_canvas_t *canvas, const GArray *exclude, co
       const dt_canvas_rect_t bounds = dt_canvas_object_bounds(other);
       if(vertical)
       {
-        if(fabs(bounds.y - (span.y + span.height + gutter)) > CANVAS_RUN_TOLERANCE) continue;
+        if(fabs(bounds.y - (span.y + span.height + 2.0 * gutter)) > CANVAS_RUN_TOLERANCE) continue;
         if(!_ranges_overlap(span.x, span.x + span.width, bounds.x, bounds.x + bounds.width)) continue;
         const double left = fmin(span.x, bounds.x);
         const double right = fmax(span.x + span.width, bounds.x + bounds.width);
@@ -1760,7 +1770,7 @@ static void _snap_size_runs(const dt_canvas_t *canvas, const GArray *exclude, co
       }
       else
       {
-        if(fabs(bounds.x - (span.x + span.width + gutter)) > CANVAS_RUN_TOLERANCE) continue;
+        if(fabs(bounds.x - (span.x + span.width + 2.0 * gutter)) > CANVAS_RUN_TOLERANCE) continue;
         if(!_ranges_overlap(span.y, span.y + span.height, bounds.y, bounds.y + bounds.height)) continue;
         const double top = fmin(span.y, bounds.y);
         const double bottom = fmax(span.y + span.height, bounds.y + bounds.height);
@@ -2167,8 +2177,10 @@ void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_la
   double anchor_x = 0.0;
   double anchor_y = 0.0;
   _layout_anchor(frames, &anchor_x, &anchor_y);
-  // The gap between frames is the gutter, and the whole arrangement starts on the grid when snapping.
-  const double gap = canvas->gutter > 0.0f ? canvas->gutter : 0.0;
+  // Every frame keeps a gutter of clear space around itself, so two of them side by side are
+  // two gutters apart -- the same arithmetic the snapping uses, or an arranged layout would
+  // not be one the snapping can reproduce by hand.
+  const double gap = canvas->gutter > 0.0f ? 2.0 * canvas->gutter : 0.0;
   anchor_x = dt_canvas_snap(canvas, anchor_x);
   anchor_y = dt_canvas_snap(canvas, anchor_y);
   switch(layout)
