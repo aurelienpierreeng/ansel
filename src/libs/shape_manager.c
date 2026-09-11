@@ -2871,6 +2871,14 @@ static void _shape_manager_view_changed(gpointer instance __attribute__((unused)
   _shape_manager_recreate_list(self);
 }
 
+/* Both lists order module masks by the pipe order (reverse iop_order), which is read at each
+ * rebuild, so a reorder has to trigger one. Every reorder path raises this signal: drag and drop,
+ * an order preset or reset (dt_iop_gui_commit_iop_order_change()), history navigation. */
+static void _shape_manager_modules_moved(gpointer instance __attribute__((unused)), dt_lib_module_t *self)
+{
+  _shape_manager_recreate_list(self);
+}
+
 /* Geometry the user gives the shape manager by hand. The height is not ours: the shape list
  * carries its own persisted height (dt_ui_scroll_wrap below) and the window follows it. */
 #define DT_MASKS_PANEL_CONF_WIDTH "plugins/darkroom/masks/windowwidth"
@@ -3399,6 +3407,8 @@ void gui_init(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, G_CALLBACK(_shape_manager_handler_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
                                   G_CALLBACK(_shape_manager_view_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MODULE_MOVED,
+                                  G_CALLBACK(_shape_manager_modules_moved), self);
 
   // Modules are loaded before any view is entered: start out empty and greyed out.
   _shape_manager_recreate_list(self);
@@ -3453,6 +3463,7 @@ void gui_cleanup(dt_lib_module_t *self)
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_shape_manager_handler_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_shape_manager_view_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_shape_manager_modules_moved), self);
 }
 
 // clang-format off

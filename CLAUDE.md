@@ -1470,7 +1470,9 @@ panel's Pipeline tab already use, so a mask sits where its module does everywher
 is scoped like `_modules_owning_group()`, every module in `dev->iop` rather than only the ones
 `dt_iop_module_is_in_pipeline()` shows: the "unclaimed groups" pass afterwards skips anything
 `_group_is_module_mask()` claims, so a narrower scope here would drop a hidden instance's mask
-from both passes.
+from both passes. The order is read at each rebuild, so a reorder must trigger one: the panel
+rebuilds on `DT_SIGNAL_DEVELOP_MODULE_MOVED`, which every reorder path raises — drag and drop, an
+order preset or reset (all through `dt_iop_gui_commit_iop_order_change()`), history navigation.
 
 **Three GTK behaviours here were measured offscreen, not reasoned about, and each one contradicted
 the obvious guess:**
