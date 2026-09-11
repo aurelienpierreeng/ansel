@@ -1502,6 +1502,28 @@ a standalone toplevel that outlives that. `dt_masks_change_form_gui()` is NULL-s
 does NOT allocate one, so a caller cannot assume it has one afterwards -- `_tree_selection_change()`
 dereferenced it unguarded and crashed (SIGSEGV, observed live).
 
+**Renaming takes a double-click, so the name renderer's `editable` property is NOT bound to the
+`TREE_EDITABLE` column.** GtkTreeView has a built-in behaviour: when a cell is editable, a single
+click on a row that is already selected opens the text editor. But a single click on a selected
+row is also how the user starts a drag, a Ctrl+click or a right-click, so with the property bound,
+each of those gestures could open the editor by accident. The property therefore stays FALSE, and
+`TREE_EDITABLE` only records whether a row may be renamed at all (top-level rows only).
+`_tree_start_name_editing()` is the one place that opens the editor: called on a double-click
+(`row-activated` on the name column) and for a freshly created group, it sets `editable` to TRUE,
+opens the editor with `gtk_tree_view_set_cursor_on_cell()`, and sets it back to FALSE at once.
+Measured offscreen: while the property is FALSE nothing opens the editor, and an editor opened
+this way stays open after the property goes back to FALSE and still emits `edited` when validated.
+
+**The panel takes the keyboard focus for exactly as long as a name is being edited.** It is built
+with `gtk_window_set_accept_focus(FALSE)` so its drawing tools act on the main window, which
+therefore stays the active window — and every key typed "into" the editor went there instead,
+through `dt_accels_dispatch()` and the view's `key_pressed()`: a letter fired its shortcut, Escape
+left the darkroom for the lighttable. `_tree_name_editing_started()` makes the panel accept the
+focus and presents it, and the entry's `editing-done` (Enter, Escape or focus loss alike) turns
+that off again and, if the panel still holds the focus, hands it back to the main window. Both
+main-window key handlers act only while that window is active, so nothing else needs to know an
+edit is in progress; key *releases* landing on it after the hand-back fire nothing.
+
 The graph questions live in `develop/masks_group.h`, id-keyed and by value like the rest of that
 header — `dt_masks_group_contains()` (cycle guard: wiring a group into one that already holds it
 makes every walk non-terminating), `dt_masks_group_covers_shapes()`, `dt_masks_group_first_use()`.

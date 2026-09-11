@@ -760,6 +760,62 @@ static void _shape_manager_sync_add_sensitivity(const dt_shape_manager_t *lm)
   gtk_widget_queue_draw(list->treeview);
 }
 
+/* The panel never takes the keyboard focus on its own (see gui_init: its drawing tools act on
+ * the main window), so while a name is being edited every keystroke would still go to the main
+ * window, where dt_accels_dispatch() and the view read it as a shortcut -- Escape leaves the
+ * darkroom for the lighttable, a letter fires whatever it is bound to -- and the editor would get
+ * none of it. For the life of the editor the panel accepts the focus and asks for it: the entry
+ * then receives every key and consumes Escape itself (it cancels the edit and does nothing else),
+ * while both main-window handlers stand down, since they act only when that window is active. */
+static void _tree_name_editing_done(GtkCellEditable *editable __attribute__((unused)), dt_shape_manager_t *lm)
+{
+  if(IS_NULL_PTR(lm->popup_window)) return;
+
+  const gboolean had_focus = gtk_window_is_active(GTK_WINDOW(lm->popup_window));
+  gtk_window_set_accept_focus(GTK_WINDOW(lm->popup_window), FALSE);
+  // Ended by a key (Enter, Escape), the panel still holds the focus and hands it back. Ended by a
+  // click in another window, the focus is already where that click put it.
+  if(had_focus) dt_gui_refocus_parent(GTK_WINDOW(dt_gui_main_window()));
+}
+
+static void _tree_name_editing_started(GtkCellRenderer *renderer __attribute__((unused)),
+                                       GtkCellEditable *editable, const gchar *path __attribute__((unused)),
+                                       dt_shape_manager_list_t *list)
+{
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)list->self->data;
+  if(IS_NULL_PTR(lm->popup_window)) return;
+
+  // "editing-done" is emitted however the edit ends -- Enter, Escape, or the entry losing the
+  // focus -- and the connection goes with the entry, which the tree destroys right after.
+  g_signal_connect(editable, "editing-done", G_CALLBACK(_tree_name_editing_done), lm);
+  gtk_window_set_accept_focus(GTK_WINDOW(lm->popup_window), TRUE);
+  gtk_window_present(GTK_WINDOW(lm->popup_window));
+}
+
+/* Opens a row's name for editing, when the row may be renamed at all (TREE_EDITABLE).
+ *
+ * The renderer's "editable" property is deliberately not bound to TREE_EDITABLE. Whenever a cell
+ * is editable, GtkTreeView opens the editor on a single click on a row that is already selected --
+ * and that same click is how a drag, a Ctrl+click or a right-click on a selected row starts, so
+ * each of them would open the editor by accident. The property therefore stays FALSE and is set
+ * TRUE only while this function opens the editor. Once open, the editor does not read it again:
+ * "edited" is still emitted when the name is validated. */
+static void _tree_start_name_editing(const dt_shape_manager_list_t *list, GtkTreeModel *model,
+                                     GtkTreeIter *iter, GtkTreePath *path)
+{
+  if(IS_NULL_PTR(list->treeview) || IS_NULL_PTR(list->name_col) || IS_NULL_PTR(list->name_renderer))
+    return;
+
+  gboolean editable = FALSE;
+  gtk_tree_model_get(model, iter, TREE_EDITABLE, &editable, -1);
+  if(!editable) return;
+
+  g_object_set(list->name_renderer, "editable", TRUE, NULL);
+  gtk_tree_view_set_cursor_on_cell(GTK_TREE_VIEW(list->treeview), path, list->name_col,
+                                   list->name_renderer, TRUE);
+  g_object_set(list->name_renderer, "editable", FALSE, NULL);
+}
+
 /* Opens the module list's row for that group straight into name editing.
  *
  * The tree has just been rebuilt, so the row is found by id rather than kept across the rebuild:
@@ -769,8 +825,7 @@ static void _tree_edit_group_name(dt_lib_module_t *self, const int formid)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
   const dt_shape_manager_list_t *list = &lm->lists[DT_SHAPE_LIST_MODULES];
-  if(IS_NULL_PTR(list->treeview) || IS_NULL_PTR(list->name_col) || IS_NULL_PTR(list->name_renderer))
-    return;
+  if(IS_NULL_PTR(list->treeview)) return;
 
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
   if(!GTK_IS_TREE_MODEL(model)) return;
@@ -787,8 +842,7 @@ static void _tree_edit_group_name(dt_lib_module_t *self, const int formid)
     GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
     if(!IS_NULL_PTR(path))
     {
-      gtk_tree_view_set_cursor_on_cell(GTK_TREE_VIEW(list->treeview), path, list->name_col,
-                                       list->name_renderer, TRUE);
+      _tree_start_name_editing(list, model, &iter, path);
       gtk_tree_path_free(path);
     }
     return;
@@ -1717,6 +1771,21 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_s
   // of the two button-3 branches.
   if(mouse_path) gtk_tree_path_free(mouse_path);
   return handled;
+}
+
+/* A double-click on a name renames it. GtkTreeView reports it as an activation of that row and
+ * column, which nothing else on these trees answers. The icon columns never get here from the
+ * mouse: _tree_button_pressed() consumes both presses of a double-click on them. */
+static void _tree_row_activated(GtkTreeView *treeview, GtkTreePath *path, GtkTreeViewColumn *column,
+                                dt_shape_manager_list_t *list)
+{
+  if(column != list->name_col) return;
+
+  GtkTreeModel *model = gtk_tree_view_get_model(treeview);
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter(model, &iter, path)) return;
+
+  _tree_start_name_editing(list, model, &iter, path);
 }
 
 static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel *model __attribute__((unused)), GtkTreePath *path,
@@ -3135,9 +3204,10 @@ void gui_init(dt_lib_module_t *self)
     renderer = gtk_cell_renderer_text_new();
     gtk_tree_view_column_pack_start(col, renderer, TRUE);
     gtk_tree_view_column_add_attribute(col, renderer, "text", TREE_TEXT);
-    gtk_tree_view_column_add_attribute(col, renderer, "editable", TREE_EDITABLE);
+    // No "editable" attribute: see _tree_start_name_editing(), the only place that opens the editor.
     g_signal_connect(renderer, "edited", (GCallback)_tree_cell_edited, list);
-    // Kept so a freshly created group's row can be opened straight into editing.
+    g_signal_connect(renderer, "editing-started", (GCallback)_tree_name_editing_started, list);
+    // Kept so a double-clicked row, or a freshly created group's, can be opened into editing.
     list->name_col = col;
     list->name_renderer = renderer;
 
@@ -3239,6 +3309,7 @@ void gui_init(dt_lib_module_t *self)
     g_signal_connect(list->treeview, "query-tooltip", G_CALLBACK(_tree_query_tooltip), list);
     g_signal_connect(selection, "changed", G_CALLBACK(_tree_selection_change), list);
     g_signal_connect(list->treeview, "button-press-event", (GCallback)_tree_button_pressed, list);
+    g_signal_connect(list->treeview, "row-activated", (GCallback)_tree_row_activated, list);
 
     /* Each half is a titled section of its own: with two trees side by side and no column
      * headers, the heading is what says which is which, and the rule the theme draws under a
