@@ -1062,6 +1062,131 @@ static void _anchor_local(const dt_canvas_anchor_t anchor, const double width, c
   }
 }
 
+/* --- what an object actually draws ---------------------------------------------- */
+
+static double _cross(const double a_x, const double a_y, const double b_x, const double b_y)
+{
+  return a_x * b_y - a_y * b_x;
+}
+
+/** Where a ray from the centre leaves a rounded rectangle of half extents `half`, radius `corner`. */
+static double _rounded_rect_reach(const double half_x, const double half_y, const double corner, const double dir_x,
+                                  const double dir_y)
+{
+  const double to_side = fabs(dir_x) > 1e-9 ? half_x / fabs(dir_x) : INFINITY;
+  const double to_edge = fabs(dir_y) > 1e-9 ? half_y / fabs(dir_y) : INFINITY;
+  const double straight = fmin(to_side, to_edge);
+  if(!(corner > 0.0)) return straight;
+  const double at_x = dir_x * straight;
+  const double at_y = dir_y * straight;
+  // Only a ray leaving through a corner's square meets the arc; the rest leaves a flat side.
+  if(fabs(at_x) <= half_x - corner || fabs(at_y) <= half_y - corner) return straight;
+  const double centre_x = (at_x < 0.0 ? -1.0 : 1.0) * (half_x - corner);
+  const double centre_y = (at_y < 0.0 ? -1.0 : 1.0) * (half_y - corner);
+  const double along = dir_x * centre_x + dir_y * centre_y;
+  const double discriminant = along * along - (centre_x * centre_x + centre_y * centre_y - corner * corner);
+  if(discriminant < 0.0) return straight;
+  return fmax(along + sqrt(discriminant), 0.0);
+}
+
+/** Where a ray from the centre leaves a disc of radius `radius` centred at `centre`. */
+static double _disc_reach(const double centre_x, const double centre_y, const double radius, const double dir_x,
+                          const double dir_y)
+{
+  const double along = dir_x * centre_x + dir_y * centre_y;
+  const double discriminant = along * along - (centre_x * centre_x + centre_y * centre_y - radius * radius);
+  if(discriminant < 0.0) return -1.0;
+  return along + sqrt(discriminant);
+}
+
+double dt_canvas_object_silhouette_reach(const dt_canvas_t *canvas, const dt_canvas_object_t *frame,
+                                         const double dir_x, const double dir_y)
+{
+  if(IS_NULL_PTR(frame)) return 0.0;
+  const double length = hypot(dir_x, dir_y);
+  if(!(length > 0.0)) return 0.0;
+  const double unit_x = dir_x / length;
+  const double unit_y = dir_y / length;
+  const double half_x = frame->width * 0.5;
+  const double half_y = frame->height * 0.5;
+  const double corner = dt_canvas_object_effective_corner_radius(canvas, frame);
+  const double outer = _rounded_rect_reach(half_x, half_y, corner, unit_x, unit_y);
+
+  const dt_canvas_mask_t *mask = &frame->mask;
+  const gboolean cut = dt_canvas_object_is_frame(frame) && mask->shape != DT_CANVAS_MASK_NONE;
+  // An inverted cutout keeps what is outside the shape, so the frame's own edge is the
+  // silhouette; a gradient covers the frame and comes to the same thing.
+  if(!cut || (mask->flags & DT_CANVAS_MASK_INVERT) || mask->shape == DT_CANVAS_MASK_GRADIENT) return outer;
+
+  const double side = fmax(fmin(frame->width, frame->height), 1.0);
+  const double centre_x = (mask->center_x - 0.5) * frame->width;
+  const double centre_y = (mask->center_y - 0.5) * frame->height;
+  // The fall-off and the border band both reach past the shape's own edge, and the band is
+  // dilated outward from it, so what shows ends that much further out.
+  dt_canvas_color_t border_color;
+  float border_width = 0.0f;
+  dt_canvas_object_effective_border(canvas, frame, &border_color, &border_width);
+  const double grown = fmax(mask->feather, 0.0f) * side
+                       + (border_color.alpha > 0.0f ? fmax(border_width, 0.0f) : 0.0);
+  double reach = -1.0;
+  switch(mask->shape)
+  {
+    case DT_CANVAS_MASK_CIRCLE:
+      reach = _disc_reach(centre_x, centre_y, fmax(mask->radius_x, 0.0f) * side + grown, unit_x, unit_y);
+      break;
+    case DT_CANVAS_MASK_ELLIPSE:
+    {
+      // In the ellipse's own axes the shape is the unit circle, so the ray is solved there.
+      const double angle = mask->rotation * M_PI / 180.0;
+      const double cos_r = cos(angle);
+      const double sin_r = sin(angle);
+      const double radius_x = fmax(fmax(mask->radius_x, 0.0f) * side + grown, 1e-6);
+      const double radius_y = fmax(fmax(mask->radius_y, 0.0f) * side + grown, 1e-6);
+      const double along_x = (unit_x * cos_r + unit_y * sin_r) / radius_x;
+      const double along_y = (-unit_x * sin_r + unit_y * cos_r) / radius_y;
+      const double offset_x = (centre_x * cos_r + centre_y * sin_r) / radius_x;
+      const double offset_y = (-centre_x * sin_r + centre_y * cos_r) / radius_y;
+      const double square = along_x * along_x + along_y * along_y;
+      if(square > 1e-12)
+      {
+        const double along = along_x * offset_x + along_y * offset_y;
+        const double discriminant = along * along - square * (offset_x * offset_x + offset_y * offset_y - 1.0);
+        if(discriminant >= 0.0) reach = (along + sqrt(discriminant)) / square;
+      }
+      break;
+    }
+    case DT_CANVAS_MASK_POLYGON:
+    {
+      // The straight polygon through the nodes, which a curve through them leaves by at most
+      // a fraction of a segment: near enough for where a line should stop.
+      if(mask->node_count < 3 || IS_NULL_PTR(mask->nodes)) break;
+      for(uint32_t idx = 0; idx < mask->node_count; idx++)
+      {
+        const float *from = mask->nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
+        const float *to = mask->nodes + (size_t)((idx + 1) % mask->node_count) * DT_CANVAS_MASK_NODE_FLOATS;
+        const double from_x = (from[DT_CANVAS_MASK_NODE_X] - 0.5) * frame->width;
+        const double from_y = (from[DT_CANVAS_MASK_NODE_Y] - 0.5) * frame->height;
+        const double edge_x = (to[DT_CANVAS_MASK_NODE_X] - 0.5) * frame->width - from_x;
+        const double edge_y = (to[DT_CANVAS_MASK_NODE_Y] - 0.5) * frame->height - from_y;
+        const double denominator = _cross(unit_x, unit_y, edge_x, edge_y);
+        if(fabs(denominator) < 1e-12) continue;
+        const double along = _cross(from_x, from_y, edge_x, edge_y) / denominator;
+        const double across = _cross(from_x, from_y, unit_x, unit_y) / denominator;
+        if(along <= 0.0 || across < 0.0 || across > 1.0) continue;
+        // The farthest crossing: a ray out of a dented shape leaves by its outermost edge.
+        if(along > reach) reach = along;
+      }
+      if(reach > 0.0) reach += grown;
+      break;
+    }
+    default:
+      break;
+  }
+  // Never past what the frame itself draws: a cut shape is confined to it.
+  if(!(reach > 0.0)) return outer;
+  return fmin(reach, outer);
+}
+
 static void _anchor_world(const dt_canvas_object_t *frame, const dt_canvas_anchor_t anchor, double *x, double *y,
                           double *normal_x, double *normal_y)
 {
@@ -1078,8 +1203,9 @@ static void _anchor_world(const dt_canvas_object_t *frame, const dt_canvas_ancho
   *normal_y = local_normal_x * sin_r + local_normal_y * cos_r;
 }
 
-void dt_canvas_object_anchor_point(const dt_canvas_object_t *frame, dt_canvas_anchor_t anchor, double target_x,
-                                   double target_y, double *x, double *y, double *normal_x, double *normal_y)
+void dt_canvas_object_anchor_point(const dt_canvas_t *canvas, const dt_canvas_object_t *frame,
+                                   dt_canvas_anchor_t anchor, double target_x, double target_y, double *x, double *y,
+                                   double *normal_x, double *normal_y)
 {
   if(IS_NULL_PTR(frame)) return;
   if(anchor == DT_CANVAS_ANCHOR_CENTRE)
@@ -1099,10 +1225,10 @@ void dt_canvas_object_anchor_point(const dt_canvas_object_t *frame, dt_canvas_an
     }
     local_x /= length;
     local_y /= length;
-    // Where that direction leaves the rectangle: the nearer of the two sides it points at.
-    const double to_side = fabs(local_x) > 1e-9 ? frame->width * 0.5 / fabs(local_x) : INFINITY;
-    const double to_edge = fabs(local_y) > 1e-9 ? frame->height * 0.5 / fabs(local_y) : INFINITY;
-    const double reach = fmin(to_side, to_edge);
+    // Where that direction leaves what the object DRAWS, which is its rounded rectangle or,
+    // where a cutout replaces it, the cut shape with its fall-off and its border: a line meets
+    // the picture rather than the empty corner of a bounding box.
+    const double reach = dt_canvas_object_silhouette_reach(canvas, frame, local_x, local_y);
     const double cos_r = cos(frame->rotation);
     const double sin_r = sin(frame->rotation);
     const double out_x = local_x * reach;
@@ -1141,8 +1267,8 @@ void dt_canvas_object_anchor_point(const dt_canvas_object_t *frame, dt_canvas_an
   }
 }
 
-void dt_canvas_object_anchor_handle(const dt_canvas_object_t *frame, const dt_canvas_anchor_t anchor, double *x,
-                                    double *y)
+void dt_canvas_object_anchor_handle(const dt_canvas_t *canvas, const dt_canvas_object_t *frame,
+                                    const dt_canvas_anchor_t anchor, double *x, double *y)
 {
   if(IS_NULL_PTR(frame)) return;
   if(anchor == DT_CANVAS_ANCHOR_CENTRE)
@@ -1153,7 +1279,7 @@ void dt_canvas_object_anchor_handle(const dt_canvas_object_t *frame, const dt_ca
   }
   double normal_x = 0.0;
   double normal_y = 0.0;
-  dt_canvas_object_anchor_point(frame, anchor, 0.0, 0.0, x, y, &normal_x, &normal_y);
+  dt_canvas_object_anchor_point(canvas, frame, anchor, 0.0, 0.0, x, y, &normal_x, &normal_y);
 }
 
 static void _route_add_point(dt_canvas_route_t *route, const double x, const double y)
@@ -1295,9 +1421,9 @@ gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_ob
   route->segment_count = connector->connector.via_count > 0 ? 2 : 1;
   route->via_x = connector->connector.via_x;
   route->via_y = connector->connector.via_y;
-  dt_canvas_object_anchor_point(from, (dt_canvas_anchor_t)connector->connector.from_anchor, to->x, to->y,
+  dt_canvas_object_anchor_point(canvas, from, (dt_canvas_anchor_t)connector->connector.from_anchor, to->x, to->y,
                                 &route->from_x, &route->from_y, &route->from_normal_x, &route->from_normal_y);
-  dt_canvas_object_anchor_point(to, (dt_canvas_anchor_t)connector->connector.to_anchor, from->x, from->y,
+  dt_canvas_object_anchor_point(canvas, to, (dt_canvas_anchor_t)connector->connector.to_anchor, from->x, from->y,
                                 &route->to_x, &route->to_y, &route->to_normal_x, &route->to_normal_y);
   switch(route->routing)
   {

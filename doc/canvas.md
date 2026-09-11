@@ -293,9 +293,17 @@ four corners, and the centre -- all of them the frame's own points, so they rota
 or `AUTO`, which picks of the four midpoints the one nearest the other end's frame. A
 corner's normal is its diagonal, so a route leaves it at 45 degrees rather than running
 beside an edge. **The centre is the one anchor whose handle is not where the route touches**:
-the handle is the frame's centre, and the attachment slides around the frame's edge to
-wherever faces the other end, which is what to reach for when the side a route leaves by is
-the layout's business rather than the user's. `AUTO` keeps its four candidates so a document
+the handle is the frame's centre, and the attachment slides to wherever faces the other end,
+which is what to reach for when the side a route leaves by is the layout's business rather
+than the user's. **It stops where the object actually draws something**, not on its bounding
+box: `dt_canvas_object_silhouette_reach()` answers a ray out of the centre with the rounded
+rectangle, or -- where a cutout replaces it -- the cut shape grown by its fall-off and by the
+border band dilated from it, never past the frame. A disc and an ellipse are solved in closed
+form (the ellipse in its own axes, where it is the unit circle), a polygon against the
+straight run of its nodes, which the curve through them leaves by a fraction of a segment at
+most. An inverted cutout is a hole, and a gradient covers the frame, so both give the frame's
+own edge back. So a line to a round picture meets the picture, where before it stopped in the
+empty corner of the rectangle around it. `AUTO` keeps its four candidates so a document
 laid out before the corners existed keeps the routes it had. Anchors are stored by index, so
 a new one is appended and never inserted. `dt_canvas_connector_route()` resolves a connector to its geometry once,
 for the painter and the hit test alike: the two anchor points, the outward normal at each,

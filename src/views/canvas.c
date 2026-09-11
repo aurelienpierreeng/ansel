@@ -2004,7 +2004,7 @@ static gboolean _anchor_at(const dt_canvas_view_t *view, const double x, const d
     {
       double anchor_x = 0.0;
       double anchor_y = 0.0;
-      dt_canvas_object_anchor_handle(object, _frame_anchors[candidate], &anchor_x, &anchor_y);
+      dt_canvas_object_anchor_handle(view->canvas, object, _frame_anchors[candidate], &anchor_x, &anchor_y);
       const double distance = hypot(anchor_x - x, anchor_y - y);
       if(distance <= best)
       {
@@ -2071,7 +2071,7 @@ static void _paint_anchor_dots(cairo_t *cr, const dt_canvas_view_t *view, const 
     const dt_canvas_anchor_t anchor = _frame_anchors[candidate];
     double anchor_x = 0.0;
     double anchor_y = 0.0;
-    dt_canvas_object_anchor_handle(frame, anchor, &anchor_x, &anchor_y);
+    dt_canvas_object_anchor_handle(view->canvas, frame, anchor, &anchor_x, &anchor_y);
     const gboolean hovered = frame->id == view->anchor_hover_id && view->anchor_hover == anchor;
     const gboolean picked = chosen == anchor;
     const double dot = hovered ? radius * 1.5 : radius;
@@ -2105,7 +2105,7 @@ static void _paint_connect_mode(cairo_t *cr, const dt_canvas_view_t *view)
     double anchor_y = 0.0;
     double normal_x = 0.0;
     double normal_y = 0.0;
-    dt_canvas_object_anchor_point(from, (dt_canvas_anchor_t)view->connect_from_anchor, 0.0, 0.0, &anchor_x,
+    dt_canvas_object_anchor_point(view->canvas, from, (dt_canvas_anchor_t)view->connect_from_anchor, 0.0, 0.0, &anchor_x,
                                   &anchor_y, &normal_x, &normal_y);
     if(view->pointer_inside)
     {
