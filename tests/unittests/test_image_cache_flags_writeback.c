@@ -365,6 +365,33 @@ static void test_crawl_waits_for_a_held_entry(void **state)
   _crawl_dir_free(&d);
 }
 
+/* A name the database spells differently from the disk. Where the filesystem folds case,
+ * stat() found the file, and so must the crawl; where it does not (ext4), stat() answered
+ * "missing", and the crawl must too -- rather than find `shot.raw' under the database's
+ * `SHOT.raw' and hand that image another file's companions. This checks the second half, so
+ * it needs a directory that tells the two spellings apart. */
+static void test_crawl_reads_a_miscased_name_as_the_filesystem_does(void **state)
+{
+  (void)state;
+  _crawl_dir_t d = _crawl_dir_new("SHOT.raw");
+
+  gchar *as_named = g_build_filename(d.dir, "SHOT.raw", NULL);
+  const gboolean folds_case = g_file_test(as_named, G_FILE_TEST_EXISTS);
+  g_free(as_named);
+  if(folds_case)
+  {
+    _crawl_dir_free(&d);
+    skip();
+  }
+
+  GList *changed = dt_control_crawler_run();
+  assert_null(changed);
+
+  // `SHOT.raw' names no file in this directory, so `shot.txt' is not its companion
+  assert_false(_row_has(d.img, DT_IMAGE_HAS_TXT));
+  _crawl_dir_free(&d);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -374,6 +401,7 @@ int main(void)
     cmocka_unit_test(test_crawl_keeps_a_cached_entry_in_step),
     cmocka_unit_test(test_crawl_corrects_an_entry_the_row_already_agrees_with),
     cmocka_unit_test(test_crawl_waits_for_a_held_entry),
+    cmocka_unit_test(test_crawl_reads_a_miscased_name_as_the_filesystem_does),
   };
   return cmocka_run_group_tests(tests, cache_setup, cache_teardown);
 }
