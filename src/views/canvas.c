@@ -1936,13 +1936,52 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
   gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
 }
 
+/**
+ * Ctrl held during a handle's drag keeps it on one axis: the one it has travelled furthest
+ * along since the press, so the user chooses which by moving. It applies to the handles that
+ * are free to go anywhere -- a cutout's, a connector's waypoint and its tangents -- while a
+ * handle already confined to a line, like a connector's reach along its anchor's normal, has
+ * nothing to constrain. A frame's rotation reads it as 45 degree steps instead, which is the
+ * same request answered in the only way an angle can answer it: the two axes, and the two
+ * diagonals between them.
+ */
+static void _axis_lock(const dt_canvas_view_t *view, const int state, double *x, double *y)
+{
+  if(!dt_modifier_is(state, DT_PRIMARY_MASK)) return;
+  if(fabs(*x - view->press_x) >= fabs(*y - view->press_y))
+    *y = view->press_y;
+  else
+    *x = view->press_x;
+}
+
+/**
+ * Ctrl on a handle that sets a DIRECTION -- a connector's tangents, which are the gradient
+ * its curve leaves by -- snaps that direction to 45 degree steps about the point it turns
+ * around, keeping how far out the handle was pulled. The axes are among those steps, so this
+ * is the same lock the free handles get, said in the terms an angle has.
+ */
+static void _angle_lock(const int state, const double origin_x, const double origin_y, double *x, double *y)
+{
+  if(!dt_modifier_is(state, DT_PRIMARY_MASK)) return;
+  const double reach = hypot(*x - origin_x, *y - origin_y);
+  if(!(reach > 0.0)) return;
+  const double step = M_PI / 4.0;
+  const double angle = round(atan2(*y - origin_y, *x - origin_x) / step) * step;
+  *x = origin_x + cos(angle) * reach;
+  *y = origin_y + sin(angle) * reach;
+}
+
 /* --- connector drawing mode ---------------------------------------------------------- */
 
 #define CANVAS_ANCHOR_REACH_PIXELS 12.0
 #define CANVAS_ANCHOR_DOT_PIXELS 6.0
 
-static const dt_canvas_anchor_t _cardinal_anchors[4]
-    = { DT_CANVAS_ANCHOR_NORTH, DT_CANVAS_ANCHOR_EAST, DT_CANVAS_ANCHOR_SOUTH, DT_CANVAS_ANCHOR_WEST };
+/** Every point a connector can be attached to, in the order their dots are drawn. */
+static const dt_canvas_anchor_t _frame_anchors[9]
+    = { DT_CANVAS_ANCHOR_NORTH,      DT_CANVAS_ANCHOR_EAST,       DT_CANVAS_ANCHOR_SOUTH,
+        DT_CANVAS_ANCHOR_WEST,       DT_CANVAS_ANCHOR_NORTH_EAST, DT_CANVAS_ANCHOR_SOUTH_EAST,
+        DT_CANVAS_ANCHOR_SOUTH_WEST, DT_CANVAS_ANCHOR_NORTH_WEST, DT_CANVAS_ANCHOR_CENTRE };
+#define CANVAS_FRAME_ANCHORS ((int)(sizeof(_frame_anchors) / sizeof(_frame_anchors[0])))
 
 /** The nearest anchor of any frame within reach of the canvas point. */
 static gboolean _anchor_at(const dt_canvas_view_t *view, const double x, const double y, uint32_t *frame_id,
@@ -1955,20 +1994,17 @@ static gboolean _anchor_at(const dt_canvas_view_t *view, const double x, const d
   {
     const dt_canvas_object_t *object = dt_canvas_object_at(view->canvas, idx);
     if(!dt_canvas_object_is_frame(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
-    for(int candidate = 0; candidate < 4; candidate++)
+    for(int candidate = 0; candidate < CANVAS_FRAME_ANCHORS; candidate++)
     {
       double anchor_x = 0.0;
       double anchor_y = 0.0;
-      double normal_x = 0.0;
-      double normal_y = 0.0;
-      dt_canvas_object_anchor_point(object, _cardinal_anchors[candidate], 0.0, 0.0, &anchor_x, &anchor_y, &normal_x,
-                                    &normal_y);
+      dt_canvas_object_anchor_handle(object, _frame_anchors[candidate], &anchor_x, &anchor_y);
       const double distance = hypot(anchor_x - x, anchor_y - y);
       if(distance <= best)
       {
         best = distance;
         *frame_id = object->id;
-        *anchor = _cardinal_anchors[candidate];
+        *anchor = _frame_anchors[candidate];
         found = TRUE;
       }
     }
@@ -2024,17 +2060,16 @@ static void _paint_anchor_dots(cairo_t *cr, const dt_canvas_view_t *view, const 
 {
   if(!dt_canvas_object_is_frame(frame)) return;
   const double radius = CANVAS_ANCHOR_DOT_PIXELS / view->zoom;
-  for(int candidate = 0; candidate < 4; candidate++)
+  for(int candidate = 0; candidate < CANVAS_FRAME_ANCHORS; candidate++)
   {
+    const dt_canvas_anchor_t anchor = _frame_anchors[candidate];
     double anchor_x = 0.0;
     double anchor_y = 0.0;
-    double normal_x = 0.0;
-    double normal_y = 0.0;
-    dt_canvas_object_anchor_point(frame, _cardinal_anchors[candidate], 0.0, 0.0, &anchor_x, &anchor_y, &normal_x,
-                                  &normal_y);
-    const gboolean hovered = frame->id == view->anchor_hover_id && view->anchor_hover == _cardinal_anchors[candidate];
-    const gboolean picked = chosen == _cardinal_anchors[candidate];
-    cairo_arc(cr, anchor_x, anchor_y, hovered ? radius * 1.5 : radius, 0.0, 2.0 * M_PI);
+    dt_canvas_object_anchor_handle(frame, anchor, &anchor_x, &anchor_y);
+    const gboolean hovered = frame->id == view->anchor_hover_id && view->anchor_hover == anchor;
+    const gboolean picked = chosen == anchor;
+    const double dot = hovered ? radius * 1.5 : radius;
+    cairo_arc(cr, anchor_x, anchor_y, dot, 0.0, 2.0 * M_PI);
     if(picked)
       cairo_set_source_rgba(cr, 1.0, 0.75, 0.2, 1.0);
     else
@@ -2043,6 +2078,13 @@ static void _paint_anchor_dots(cairo_t *cr, const dt_canvas_view_t *view, const 
     cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.8);
     cairo_set_line_width(cr, 1.0 / view->zoom);
     cairo_stroke(cr);
+    if(anchor == DT_CANVAS_ANCHOR_CENTRE)
+    {
+      // A ring, since this one is not where the route will touch: it is the frame itself,
+      // and the route leaves by whichever edge faces the other end.
+      cairo_arc(cr, anchor_x, anchor_y, dot * 0.45, 0.0, 2.0 * M_PI);
+      cairo_stroke(cr);
+    }
   }
 }
 
@@ -2698,7 +2740,8 @@ static void _bars_create(dt_view_t *self)
   view->object_cutout_invert = _bar_toggle(view->row_cutout, _("Invert"), _("Keep what is outside the shape"),
                                            G_CALLBACK(_bar_cutout_invert_toggled), self);
   view->object_cutout_edit = _bar_toggle(view->row_cutout, _("Edit"),
-                                         _("Show the shape's handles: drag them; the wheel sets the feather, Shift+wheel the opacity. "
+                                         _("Show the shape's handles: drag them, Ctrl to keep one on a single axis; the wheel "
+                                           "sets the feather, Shift+wheel the opacity. "
                                            "The right-click menu edits the shape's properties and its nodes."),
                                          G_CALLBACK(_bar_cutout_edit_toggled), self);
 
@@ -4424,8 +4467,9 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
         _interaction_touch(self);
         const double angle = atan2(canvas_y - object->y, canvas_x - object->x);
         double rotation = view->gesture_start_rotation + angle - view->gesture_start_angle;
-        // Shift snaps to 15 degree steps.
+        // Shift snaps to 15 degree steps, Ctrl to 45: upright, on its side, or on a diagonal.
         if(dt_modifier_is(which, GDK_SHIFT_MASK)) rotation = round(rotation / (M_PI / 12.0)) * (M_PI / 12.0);
+        if(dt_modifier_is(which, DT_PRIMARY_MASK)) rotation = round(rotation / (M_PI / 4.0)) * (M_PI / 4.0);
         object->rotation = rotation;
       }
       break;
@@ -4436,8 +4480,11 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       if(!IS_NULL_PTR(connector) && connector->kind == DT_CANVAS_OBJECT_CONNECTOR)
       {
         view->drag_moved = TRUE;
-        connector->connector.via_x = dt_canvas_snap(view->canvas, canvas_x);
-        connector->connector.via_y = dt_canvas_snap(view->canvas, canvas_y);
+        double via_x = canvas_x;
+        double via_y = canvas_y;
+        _axis_lock(view, which, &via_x, &via_y);
+        connector->connector.via_x = dt_canvas_snap(view->canvas, via_x);
+        connector->connector.via_y = dt_canvas_snap(view->canvas, via_y);
       }
       break;
     }
@@ -4469,8 +4516,11 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       if(!IS_NULL_PTR(connector) && connector->kind == DT_CANVAS_OBJECT_CONNECTOR && connector->connector.via_count > 0)
       {
         view->drag_moved = TRUE;
-        connector->connector.via_tangent_x = (canvas_x - connector->connector.via_x) * view->handle_sign;
-        connector->connector.via_tangent_y = (canvas_y - connector->connector.via_y) * view->handle_sign;
+        double tangent_x = canvas_x;
+        double tangent_y = canvas_y;
+        _angle_lock(which, connector->connector.via_x, connector->connector.via_y, &tangent_x, &tangent_y);
+        connector->connector.via_tangent_x = (tangent_x - connector->connector.via_x) * view->handle_sign;
+        connector->connector.via_tangent_y = (tangent_y - connector->connector.via_y) * view->handle_sign;
       }
       break;
     }
@@ -4486,7 +4536,10 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       {
         view->drag_moved = TRUE;
         _interaction_touch(self);
-        _mask_drag(view, object, canvas_x, canvas_y);
+        double handle_x = canvas_x;
+        double handle_y = canvas_y;
+        _axis_lock(view, which, &handle_x, &handle_y);
+        _mask_drag(view, object, handle_x, handle_y);
       }
       break;
     }

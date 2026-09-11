@@ -219,8 +219,14 @@ typedef enum dt_canvas_connector_style_t
   DT_CANVAS_CONNECTOR_DASHED = 1 << 2,
 } dt_canvas_connector_style_t;
 
-/** Where on a frame a connector attaches. The cardinal points are the frame's own, so
- * they rotate with it; AUTO picks, of the four, the one nearest the other end's frame. */
+/**
+ * Where on a frame a connector attaches: the four edge midpoints, the four corners, or the
+ * centre. They are the frame's own points, so they rotate with it. AUTO picks, of the four
+ * cardinals, the one nearest the other end's frame -- the corners and the centre are not
+ * among its candidates, so a document laid out before they existed keeps the routes it had.
+ *
+ * The values are stored in the document: NEW ANCHORS ARE APPENDED, never inserted.
+ */
 typedef enum dt_canvas_anchor_t
 {
   DT_CANVAS_ANCHOR_AUTO = 0,
@@ -228,6 +234,12 @@ typedef enum dt_canvas_anchor_t
   DT_CANVAS_ANCHOR_EAST = 2,
   DT_CANVAS_ANCHOR_SOUTH = 3,
   DT_CANVAS_ANCHOR_WEST = 4,
+  DT_CANVAS_ANCHOR_NORTH_EAST = 5,
+  DT_CANVAS_ANCHOR_SOUTH_EAST = 6,
+  DT_CANVAS_ANCHOR_SOUTH_WEST = 7,
+  DT_CANVAS_ANCHOR_NORTH_WEST = 8,
+  DT_CANVAS_ANCHOR_CENTRE = 9, ///< aims at the centre and touches the edge, wherever the other end is
+  DT_CANVAS_ANCHOR_LAST = 10,
 } dt_canvas_anchor_t;
 
 /** How a connector travels between its anchors. */
@@ -649,6 +661,13 @@ void dt_canvas_object_to_local(const dt_canvas_object_t *object, double x, doubl
  */
 void dt_canvas_object_anchor_point(const dt_canvas_object_t *frame, dt_canvas_anchor_t anchor, double target_x,
                                    double target_y, double *x, double *y, double *normal_x, double *normal_y);
+
+/**
+ * @brief Where the anchor's handle sits, which is where it is drawn and clicked.
+ * @details Every anchor's handle is its attachment point, except the centre's: that one is at
+ * the frame's centre, while what it attaches is out on the edge facing the other end.
+ */
+void dt_canvas_object_anchor_handle(const dt_canvas_object_t *frame, dt_canvas_anchor_t anchor, double *x, double *y);
 
 /**
  * @brief Resolve a connector to its geometry.

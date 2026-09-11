@@ -515,6 +515,71 @@ static void _connectors_route_between_cardinal_anchors(void **state)
   dt_canvas_free(canvas);
 }
 
+/**
+ * A frame offers nine places to attach a connector: the four edge midpoints, the four
+ * corners, and the centre. They are the frame's own points, so they turn with it.
+ */
+static void _a_frame_offers_its_corners_and_its_centre_as_anchors(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 100.0, 50.0, 200.0, 100.0, "");
+  double x = 0.0;
+  double y = 0.0;
+  double normal_x = 0.0;
+  double normal_y = 0.0;
+
+  // The corners are the frame's corners, and their normals point out along the diagonal.
+  dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_SOUTH_EAST, 0.0, 0.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 200.0, 1e-9);
+  assert_float_equal(y, 100.0, 1e-9);
+  assert_float_equal(normal_x, normal_y, 1e-9);
+  assert_true(normal_x > 0.0);
+  assert_float_equal(hypot(normal_x, normal_y), 1.0, 1e-9);
+  dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_NORTH_WEST, 0.0, 0.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 0.0, 1e-9);
+  assert_float_equal(y, 0.0, 1e-9);
+
+  // A quarter turn carries them round with the frame: the corner at (+100, +50) in the
+  // frame's own axes swings to (-50, +100) of its centre.
+  frame->rotation = M_PI / 2.0;
+  dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_SOUTH_EAST, 0.0, 0.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 50.0, 1e-6);
+  assert_float_equal(y, 150.0, 1e-6);
+  frame->rotation = 0.0;
+
+  // The centre's handle is the centre; what it attaches is out on the edge facing the other
+  // end, so it slides around the frame as that end moves.
+  dt_canvas_object_anchor_handle(frame, DT_CANVAS_ANCHOR_CENTRE, &x, &y);
+  assert_float_equal(x, 100.0, 1e-9);
+  assert_float_equal(y, 50.0, 1e-9);
+  dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_CENTRE, 1000.0, 50.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 200.0, 1e-9); // the right edge, dead level with the centre
+  assert_float_equal(y, 50.0, 1e-9);
+  assert_float_equal(normal_x, 1.0, 1e-9);
+  dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_CENTRE, 100.0, -1000.0, &x, &y, &normal_x, &normal_y);
+  assert_float_equal(x, 100.0, 1e-9); // straight above: the top edge
+  assert_float_equal(y, 0.0, 1e-9);
+  assert_float_equal(normal_y, -1.0, 1e-9);
+  // Every direction leaves it on the frame's own edge, never inside and never past it.
+  for(int step = 0; step < 16; step++)
+  {
+    const double angle = step * M_PI / 8.0;
+    dt_canvas_object_anchor_point(frame, DT_CANVAS_ANCHOR_CENTRE, 100.0 + cos(angle) * 900.0,
+                                  50.0 + sin(angle) * 900.0, &x, &y, &normal_x, &normal_y);
+    const double on_side = fabs(fabs(x - 100.0) - 100.0) < 1e-9;
+    const double on_edge = fabs(fabs(y - 50.0) - 50.0) < 1e-9;
+    assert_true(on_side || on_edge);
+    assert_true(fabs(x - 100.0) <= 100.0 + 1e-9 && fabs(y - 50.0) <= 50.0 + 1e-9);
+  }
+
+  // The anchors are stored as they stand, so a new one has to be appended, never inserted.
+  assert_int_equal(DT_CANVAS_ANCHOR_NORTH, 1);
+  assert_int_equal(DT_CANVAS_ANCHOR_WEST, 4);
+  assert_int_equal(DT_CANVAS_ANCHOR_CENTRE, 9);
+  dt_canvas_free(canvas);
+}
+
 static void _a_waypoint_bends_every_routing_through_it(void **state)
 {
   (void)state;
@@ -762,6 +827,7 @@ int main(void)
     cmocka_unit_test(_draw_order_edits_keep_the_list_sorted),
     cmocka_unit_test(_rotated_frames_answer_hit_tests_and_bounds),
     cmocka_unit_test(_connectors_route_between_cardinal_anchors),
+    cmocka_unit_test(_a_frame_offers_its_corners_and_its_centre_as_anchors),
     cmocka_unit_test(_a_waypoint_bends_every_routing_through_it),
     cmocka_unit_test(_frames_snap_next_to_their_neighbours_one_gutter_apart),
     cmocka_unit_test(_paper_tiles_the_plane_from_the_origin),
