@@ -781,14 +781,14 @@ void dt_canvas_mask_set_nodes(dt_canvas_t *canvas, dt_canvas_object_t *object, c
 /** A corner node at a unit-square point: control points on the node, not smoothed. */
 static void _mask_node_init(float *node, const float x, const float y)
 {
-  node[0] = x;
-  node[1] = y;
-  node[2] = x;
-  node[3] = y;
-  node[4] = x;
-  node[5] = y;
-  node[6] = 0.0f;
-  node[7] = 0.0f;
+  for(int idx = 0; idx < DT_CANVAS_MASK_NODE_FLOATS; idx++) node[idx] = 0.0f;
+  node[DT_CANVAS_MASK_NODE_X] = x;
+  node[DT_CANVAS_MASK_NODE_Y] = y;
+  node[DT_CANVAS_MASK_NODE_CTRL1_X] = x;
+  node[DT_CANVAS_MASK_NODE_CTRL1_Y] = y;
+  node[DT_CANVAS_MASK_NODE_CTRL2_X] = x;
+  node[DT_CANVAS_MASK_NODE_CTRL2_Y] = y;
+  // The borders stay 0: the node takes the shape's fall-off until the user gives it its own.
 }
 
 void dt_canvas_mask_set_shape(dt_canvas_t *canvas, dt_canvas_object_t *object, uint32_t shape)

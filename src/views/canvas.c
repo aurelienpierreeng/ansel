@@ -123,6 +123,9 @@ typedef enum dt_canvas_drag_t
   DT_CANVAS_DRAG_MASK_REACH,    ///< the gradient's extent and rotation
   DT_CANVAS_DRAG_MASK_NODE,     ///< one polygon node, `mask_handle`
   DT_CANVAS_DRAG_MASK_FEATHER,  ///< the circle's or the ellipse's fall-off, on its dashed ring
+  DT_CANVAS_DRAG_MASK_NODE_BORDER,   ///< one polygon node's own fall-off radius
+  DT_CANVAS_DRAG_MASK_NODE_CTRL_IN,  ///< its control point on the previous node's side
+  DT_CANVAS_DRAG_MASK_NODE_CTRL_OUT, ///< and on the next node's side
 } dt_canvas_drag_t;
 
 typedef struct dt_canvas_view_t
@@ -153,6 +156,7 @@ typedef struct dt_canvas_view_t
   dt_canvas_t *drag_snapshot;           ///< the document before the gesture, for undo
   int scale_corner;                     ///< 0..3, the corner being dragged
   int handle_sign;                      ///< +1 or -1: which side of the waypoint's tangent is dragged
+  int mask_node_hover;                  ///< the polygon node whose own handles are showing, -1 for none
   double gesture_start_rotation;
   double gesture_start_angle;
   gboolean connecting;                  ///< connector-drawing mode, armed from the toolbar
@@ -522,6 +526,8 @@ static void _set_document(dt_view_t *self, dt_canvas_t *canvas)
   view->connect_from = 0;
   view->anchor_hover_id = 0;
   view->hover = 0;
+  view->mask_node_hover = -1;
+  view->mask_node_hover = -1;
   g_array_set_size(view->selection, 0);
   dt_canvas_surface_cache_clear(view->cache);
   dt_canvas_free(view->canvas);
@@ -3278,6 +3284,145 @@ static void _mask_to_local(const dt_canvas_object_t *object, const double u, con
  * feather of a circle or an ellipse, on its dashed ring.
  * @return how many there are; a polygon's nodes are its own handles.
  */
+static void _mask_polygon_controls(const dt_canvas_mask_t *mask, uint32_t index, float control1[2],
+                                   float control2[2]);
+
+/**
+ * A polygon node's own fall-off radius, in the shape's units: its own where it has one, the
+ * shape's where it does not. A node is born with none, so a polygon reads as it always did
+ * until the user pulls one node's feather out.
+ */
+static double _mask_node_border(const dt_canvas_mask_t *mask, const uint32_t index)
+{
+  const float *node = mask->nodes + (size_t)index * DT_CANVAS_MASK_NODE_FLOATS;
+  const double own = node[DT_CANVAS_MASK_NODE_BORDER1];
+  return own > 0.0 ? own : mask->feather;
+}
+
+/**
+ * The outward unit normal at a node, in the frame's local units: perpendicular to the line
+ * through its neighbours, turned to face away from the shape. It is where the node's feather
+ * handle is hung, so the handle leaves the shape rather than lying along it.
+ */
+static void _mask_node_normal(const dt_canvas_object_t *object, const uint32_t index, double *normal_x,
+                              double *normal_y)
+{
+  const dt_canvas_mask_t *mask = &object->mask;
+  const uint32_t count = mask->node_count;
+  *normal_x = 1.0;
+  *normal_y = 0.0;
+  if(count < 3) return;
+  const float *previous = mask->nodes + (size_t)((index + count - 1) % count) * DT_CANVAS_MASK_NODE_FLOATS;
+  const float *node = mask->nodes + (size_t)index * DT_CANVAS_MASK_NODE_FLOATS;
+  const float *next = mask->nodes + (size_t)((index + 1) % count) * DT_CANVAS_MASK_NODE_FLOATS;
+  double previous_x = 0.0;
+  double previous_y = 0.0;
+  double node_x = 0.0;
+  double node_y = 0.0;
+  double next_x = 0.0;
+  double next_y = 0.0;
+  _mask_to_local(object, previous[0], previous[1], &previous_x, &previous_y);
+  _mask_to_local(object, node[0], node[1], &node_x, &node_y);
+  _mask_to_local(object, next[0], next[1], &next_x, &next_y);
+  double tangent_x = next_x - previous_x;
+  double tangent_y = next_y - previous_y;
+  const double length = hypot(tangent_x, tangent_y);
+  if(!(length > 0.0)) return;
+  tangent_x /= length;
+  tangent_y /= length;
+  *normal_x = tangent_y;
+  *normal_y = -tangent_x;
+  // Away from the shape: the average of the nodes is inside any polygon the user can draw here.
+  double centre_x = 0.0;
+  double centre_y = 0.0;
+  for(uint32_t idx = 0; idx < count; idx++)
+  {
+    const float *other = mask->nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
+    double other_x = 0.0;
+    double other_y = 0.0;
+    _mask_to_local(object, other[0], other[1], &other_x, &other_y);
+    centre_x += other_x;
+    centre_y += other_y;
+  }
+  centre_x /= count;
+  centre_y /= count;
+  if((node_x - centre_x) * *normal_x + (node_y - centre_y) * *normal_y < 0.0)
+  {
+    *normal_x = -*normal_x;
+    *normal_y = -*normal_y;
+  }
+}
+
+/**
+ * A node's two control points, in the shape's units: the stored ones, or the tangent the
+ * curve actually takes through a smooth node, so a handle always sits on the curve it steers.
+ */
+static void _mask_node_controls(const dt_canvas_mask_t *mask, const uint32_t index, float incoming[2],
+                                float outgoing[2])
+{
+  const uint32_t count = mask->node_count;
+  float control1[2];
+  float control2[2];
+  _mask_polygon_controls(mask, index, control1, control2);
+  outgoing[0] = control1[0];
+  outgoing[1] = control1[1];
+  _mask_polygon_controls(mask, (index + count - 1) % count, control1, control2);
+  incoming[0] = control2[0];
+  incoming[1] = control2[1];
+}
+
+/** Where a node's three own handles sit, in the frame's local units. */
+static void _mask_node_handles(const dt_canvas_object_t *object, const uint32_t index, double border[2],
+                               double incoming[2], double outgoing[2])
+{
+  const dt_canvas_mask_t *mask = &object->mask;
+  const float *node = mask->nodes + (size_t)index * DT_CANVAS_MASK_NODE_FLOATS;
+  double node_x = 0.0;
+  double node_y = 0.0;
+  _mask_to_local(object, node[0], node[1], &node_x, &node_y);
+  double normal_x = 0.0;
+  double normal_y = 0.0;
+  _mask_node_normal(object, index, &normal_x, &normal_y);
+  const double reach = _mask_node_border(mask, index) * _mask_side(object);
+  border[0] = node_x + normal_x * reach;
+  border[1] = node_y + normal_y * reach;
+  float in_point[2];
+  float out_point[2];
+  _mask_node_controls(mask, index, in_point, out_point);
+  _mask_to_local(object, in_point[0], in_point[1], &incoming[0], &incoming[1]);
+  _mask_to_local(object, out_point[0], out_point[1], &outgoing[0], &outgoing[1]);
+}
+
+/** The node whose own handles are showing: the nearest one the pointer is still working near. */
+static int _mask_node_near(const dt_canvas_view_t *view, const dt_canvas_object_t *object, const double x,
+                           const double y)
+{
+  if(!view->mask_editing || !dt_canvas_object_is_frame(object)) return -1;
+  if(object->mask.shape != DT_CANVAS_MASK_POLYGON || object->mask.node_count < 3) return -1;
+  double local_x = 0.0;
+  double local_y = 0.0;
+  dt_canvas_object_to_local(object, x, y, &local_x, &local_y);
+  const double reach = CANVAS_HANDLE_PIXELS / view->zoom;
+  int nearest = -1;
+  double best = INFINITY;
+  for(uint32_t idx = 0; idx < object->mask.node_count; idx++)
+  {
+    const float *node = object->mask.nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
+    double node_x = 0.0;
+    double node_y = 0.0;
+    _mask_to_local(object, node[0], node[1], &node_x, &node_y);
+    const double distance = hypot(local_x - node_x, local_y - node_y);
+    // Far enough to keep the handles up while the pointer travels out to one of them.
+    const double keep = _mask_node_border(&object->mask, idx) * _mask_side(object) + 3.0 * reach;
+    if(distance < best && distance <= keep)
+    {
+      best = distance;
+      nearest = (int)idx;
+    }
+  }
+  return nearest;
+}
+
 static int _mask_handle_points(const dt_canvas_object_t *object, double points[8])
 {
   const dt_canvas_mask_t *mask = &object->mask;
@@ -3448,8 +3593,52 @@ static void _paint_mask_handles(cairo_t *cr, const dt_canvas_view_t *view, const
       break;
     }
     case DT_CANVAS_MASK_POLYGON:
+    {
       _mask_polygon_path(cr, object);
       cairo_stroke(cr);
+      // The node the pointer is working near shows what that node alone owns: the two control
+      // points its curve leaves by, and its own fall-off. Every node at once would bury the
+      // shape under its own handles.
+      const int shown = view->drag == DT_CANVAS_DRAG_NONE ? view->mask_node_hover : view->mask_handle;
+      if(shown >= 0 && (uint32_t)shown < mask->node_count)
+      {
+        double border[2] = { 0.0, 0.0 };
+        double incoming[2] = { 0.0, 0.0 };
+        double outgoing[2] = { 0.0, 0.0 };
+        _mask_node_handles(object, (uint32_t)shown, border, incoming, outgoing);
+        const float *node = mask->nodes + (size_t)shown * DT_CANVAS_MASK_NODE_FLOATS;
+        double node_x = 0.0;
+        double node_y = 0.0;
+        _mask_to_local(object, node[0], node[1], &node_x, &node_y);
+        // The tethers, so it reads which node each handle belongs to.
+        cairo_set_line_width(cr, hairline);
+        cairo_set_source_rgba(cr, 1.0, 0.85, 0.3, 0.6);
+        cairo_move_to(cr, incoming[0], incoming[1]);
+        cairo_line_to(cr, node_x, node_y);
+        cairo_line_to(cr, outgoing[0], outgoing[1]);
+        cairo_stroke(cr);
+        cairo_set_dash(cr, dashes, 2, 0.0);
+        cairo_move_to(cr, node_x, node_y);
+        cairo_line_to(cr, border[0], border[1]);
+        cairo_stroke(cr);
+        cairo_set_dash(cr, NULL, 0, 0.0);
+        // The control points are round, the fall-off is the dashed one's end: three shapes,
+        // three jobs, told apart without a legend.
+        for(int which = 0; which < 2; which++)
+        {
+          const double *point = which == 0 ? incoming : outgoing;
+          cairo_arc(cr, point[0], point[1], handle * 0.7, 0.0, 2.0 * M_PI);
+          cairo_set_source_rgba(cr, 0.4, 0.8, 1.0, 0.95);
+          cairo_fill_preserve(cr);
+          cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.8);
+          cairo_stroke(cr);
+        }
+        cairo_arc(cr, border[0], border[1], handle * 0.7, 0.0, 2.0 * M_PI);
+        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
+        cairo_fill_preserve(cr);
+        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.8);
+        cairo_stroke(cr);
+      }
       for(uint32_t idx = 0; idx < mask->node_count; idx++)
       {
         const float *node = mask->nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
@@ -3464,6 +3653,7 @@ static void _paint_mask_handles(cairo_t *cr, const dt_canvas_view_t *view, const
         cairo_stroke(cr);
       }
       break;
+    }
     default:
       break;
   }
@@ -3485,6 +3675,27 @@ static dt_canvas_drag_t _mask_handle_at(const dt_canvas_view_t *view, const dt_c
   const double reach = CANVAS_HANDLE_PIXELS / view->zoom;
   if(object->mask.shape == DT_CANVAS_MASK_POLYGON)
   {
+    // The handles of the node being worked on sit over the shape and are reached first.
+    if(view->mask_node_hover >= 0 && (uint32_t)view->mask_node_hover < object->mask.node_count)
+    {
+      double border[2] = { 0.0, 0.0 };
+      double incoming[2] = { 0.0, 0.0 };
+      double outgoing[2] = { 0.0, 0.0 };
+      _mask_node_handles(object, (uint32_t)view->mask_node_hover, border, incoming, outgoing);
+      const struct
+      {
+        const double *point;
+        dt_canvas_drag_t drag;
+      } own[3] = { { border, DT_CANVAS_DRAG_MASK_NODE_BORDER },
+                   { incoming, DT_CANVAS_DRAG_MASK_NODE_CTRL_IN },
+                   { outgoing, DT_CANVAS_DRAG_MASK_NODE_CTRL_OUT } };
+      for(int candidate = 0; candidate < 3; candidate++)
+      {
+        if(hypot(local_x - own[candidate].point[0], local_y - own[candidate].point[1]) > reach) continue;
+        *index = view->mask_node_hover;
+        return own[candidate].drag;
+      }
+    }
     for(uint32_t idx = 0; idx < object->mask.node_count; idx++)
     {
       const float *node = object->mask.nodes + (size_t)idx * DT_CANVAS_MASK_NODE_FLOATS;
@@ -3585,6 +3796,41 @@ static void _mask_drag(dt_canvas_view_t *view, dt_canvas_object_t *object, const
       mask->feather = (float)CLAMP(edge - mask->radius_x, 0.0, 1.0);
       break;
     }
+    case DT_CANVAS_DRAG_MASK_NODE_BORDER:
+      if(view->mask_handle >= 0 && (uint32_t)view->mask_handle < mask->node_count)
+      {
+        // How far the handle was pulled from its node IS the fall-off, the way the circle's
+        // and the ellipse's read theirs off their dashed ring.
+        float *node = mask->nodes + (size_t)view->mask_handle * DT_CANVAS_MASK_NODE_FLOATS;
+        double node_x = 0.0;
+        double node_y = 0.0;
+        _mask_to_local(object, node[0], node[1], &node_x, &node_y);
+        const float own = (float)CLAMP(hypot(local_x - node_x, local_y - node_y) / side, 0.001, 2.0);
+        node[DT_CANVAS_MASK_NODE_BORDER1] = own;
+        node[DT_CANVAS_MASK_NODE_BORDER2] = own;
+      }
+      break;
+    case DT_CANVAS_DRAG_MASK_NODE_CTRL_IN:
+    case DT_CANVAS_DRAG_MASK_NODE_CTRL_OUT:
+      if(view->mask_handle >= 0 && (uint32_t)view->mask_handle < mask->node_count)
+      {
+        // Steering a control point makes the node the user's: the curve stops being computed
+        // through it, so the other control is written down as it stood and nothing jumps.
+        float *node = mask->nodes + (size_t)view->mask_handle * DT_CANVAS_MASK_NODE_FLOATS;
+        float incoming[2];
+        float outgoing[2];
+        _mask_node_controls(mask, (uint32_t)view->mask_handle, incoming, outgoing);
+        node[DT_CANVAS_MASK_NODE_CTRL1_X] = incoming[0];
+        node[DT_CANVAS_MASK_NODE_CTRL1_Y] = incoming[1];
+        node[DT_CANVAS_MASK_NODE_CTRL2_X] = outgoing[0];
+        node[DT_CANVAS_MASK_NODE_CTRL2_Y] = outgoing[1];
+        node[DT_CANVAS_MASK_NODE_SMOOTH] = 0.0f;
+        const int base = view->drag == DT_CANVAS_DRAG_MASK_NODE_CTRL_IN ? DT_CANVAS_MASK_NODE_CTRL1_X
+                                                                        : DT_CANVAS_MASK_NODE_CTRL2_X;
+        node[base] = (float)u;
+        node[base + 1] = (float)v;
+      }
+      break;
     case DT_CANVAS_DRAG_MASK_NODE:
       if(view->mask_handle >= 0 && (uint32_t)view->mask_handle < mask->node_count)
       {
@@ -4419,6 +4665,27 @@ static void _queue_cursor_for(dt_view_t *self, const double screen_x, const doub
   }
 }
 
+/**
+ * Whether this gesture is changing the document rather than the view. Every one of these owes
+ * the canvas a touch per motion: the painter keeps the frame it last composited and blits it
+ * again for a key it has already seen, and the document's generation is what tells the two
+ * apart. Without it a drag paints its first frame over and over and the object, the route or
+ * the waypoint only catches up when something else moves the key -- which is what "the path
+ * does not follow the handle" looks like from the outside.
+ */
+static gboolean _drag_changes_the_document(const dt_canvas_drag_t drag)
+{
+  switch(drag)
+  {
+    case DT_CANVAS_DRAG_NONE:
+    case DT_CANVAS_DRAG_PAN:
+    case DT_CANVAS_DRAG_RUBBERBAND:
+      return FALSE;
+    default:
+      return TRUE;
+  }
+}
+
 void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -4530,6 +4797,9 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     case DT_CANVAS_DRAG_MASK_REACH:
     case DT_CANVAS_DRAG_MASK_NODE:
     case DT_CANVAS_DRAG_MASK_FEATHER:
+    case DT_CANVAS_DRAG_MASK_NODE_BORDER:
+    case DT_CANVAS_DRAG_MASK_NODE_CTRL_IN:
+    case DT_CANVAS_DRAG_MASK_NODE_CTRL_OUT:
     {
       dt_canvas_object_t *object = _single_selected(view);
       if(dt_canvas_object_is_frame(object) && object->mask.shape != DT_CANVAS_MASK_NONE)
@@ -4551,6 +4821,12 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       if(flower_part != view->flower_hover)
       {
         view->flower_hover = flower_part;
+        dt_control_queue_redraw_center();
+      }
+      const int mask_node = _mask_node_near(view, _single_selected(view), canvas_x, canvas_y);
+      if(mask_node != view->mask_node_hover)
+      {
+        view->mask_node_hover = mask_node;
         dt_control_queue_redraw_center();
       }
       const double tolerance = CANVAS_PICK_TOLERANCE_PIXELS / view->zoom;
@@ -4584,6 +4860,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       return;
     }
   }
+  if(_drag_changes_the_document(view->drag)) dt_canvas_touch(view->canvas);
   view->pointer_x = canvas_x;
   view->pointer_y = canvas_y;
   view->last_x = canvas_x;
@@ -4608,11 +4885,12 @@ void mouse_leave(dt_view_t *self)
     view->cursor = GDK_LEFT_PTR;
     dt_control_change_cursor(GDK_LEFT_PTR);
   }
-  if(view->hover != 0 || view->flower_hover != DT_CANVAS_FLOWER_NONE)
+  if(view->hover != 0 || view->flower_hover != DT_CANVAS_FLOWER_NONE || view->mask_node_hover >= 0)
   {
     view->hover = 0;
     view->flower_hover = DT_CANVAS_FLOWER_NONE;
-  view->cursor = GDK_LEFT_PTR;
+    view->mask_node_hover = -1;
+    view->cursor = GDK_LEFT_PTR;
     dt_control_queue_redraw_center();
   }
 }
@@ -5236,6 +5514,7 @@ void leave(dt_view_t *self)
   view->connect_from = 0;
   view->anchor_hover_id = 0;
   view->hover = 0;
+  view->mask_node_hover = -1;
   _store_viewport(view);
   dt_accels_disconnect_active_group(dt_gui_get_accels());
   dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_filmstrip);
