@@ -2483,6 +2483,22 @@ they are visible.
   code: `_drag_changes_the_document()` answers for every drag kind and is written as an
   opt-OUT (only panning and the rubber band are exempt), so a new kind is covered the day it
   is added. `test_canvas_cutout` pins the painter's half of the bargain.
+- **A polygon node has THREE kinds and a cusp is geometry, not a flag.**
+  `dt_canvas_mask_node_kind_t`: a CUSP carries its own two control points and they are free of
+  each other, an AUTO node's tangent is computed from its neighbours, a STEERED one carries
+  its own and the view keeps them collinear. Only AUTO asks the shape for a tangent -- both
+  the others hand their points down -- and `masks_cutout.c` reading that field as "non-zero
+  means computed" is what made a steered tangent move the outline on screen while the cut
+  ignored it. The far end has no flag to read: `dt_masks_node_is_cusp()` (`masks_gui.c`)
+  answers by asking whether the two control points coincide, so what makes a node smooth here
+  is the view keeping them opposite, nothing else. `test_canvas_cutout` pins all three, and
+  the pin was checked by putting the bug back.
+- **A menu asks the geometry its own question, never the drag's.** `_mask_handle_at()` reports
+  what a drag would grab and refuses everything outside the edit mode, which is right for a
+  drag. Keyed on it, the cutout submenu's node entries were a duplicate of the top-level ones
+  whenever the shape was being edited and dead code the rest of the time -- reported as "the
+  context menu option to toggle nodes cusps <-> smooth is missing", and it was there twice.
+  `_mask_node_at()` is the question a menu wants.
 - **A polygon node's record may grow, and the file says how wide it was.** The node chunk's
   size divided by the node count is the stride it was written with: a shorter record reads as
   zero in the fields it lacks, a longer one is stepped over. Never assume the current width

@@ -369,10 +369,24 @@ enum
   DT_CANVAS_MASK_NODE_CTRL1_Y = 3,
   DT_CANVAS_MASK_NODE_CTRL2_X = 4, ///< the one on the next node's side
   DT_CANVAS_MASK_NODE_CTRL2_Y = 5,
-  DT_CANVAS_MASK_NODE_SMOOTH = 6,
+  DT_CANVAS_MASK_NODE_SMOOTH = 6, ///< a dt_canvas_mask_node_kind_t
   DT_CANVAS_MASK_NODE_BORDER1 = 7,
   DT_CANVAS_MASK_NODE_BORDER2 = 8,
 };
+
+/**
+ * What `DT_CANVAS_MASK_NODE_SMOOTH` holds. A cusp is zero, which is what a node is born as
+ * and what every document written before the smooth ones carries, so an older file reads
+ * exactly as it did. A reader that knows only "zero or not" treats a steered node as an
+ * automatic one: it loses the tangent the user gave it and keeps the shape smooth there,
+ * which is the graceful half of the two.
+ */
+typedef enum dt_canvas_mask_node_kind_t
+{
+  DT_CANVAS_MASK_NODE_CUSP = 0,    ///< the two stored control points are independent
+  DT_CANVAS_MASK_NODE_AUTO = 1,    ///< smooth, its tangent computed from its neighbours
+  DT_CANVAS_MASK_NODE_STEERED = 2, ///< smooth, its tangent the one the user dragged
+} dt_canvas_mask_node_kind_t;
 
 /**
  * A cutout, in the object's own unit square: (0, 0) is the top-left corner of the unrotated
