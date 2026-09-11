@@ -729,9 +729,12 @@ static const struct
   { DT_CANVAS_BACKGROUND_PLAIN, N_("Plain colour") },
   { DT_CANVAS_BACKGROUND_MOLESKINE, N_("Moleskine paper") },
   { DT_CANVAS_BACKGROUND_WATERCOLOUR, N_("Watercolour paper") },
+  { DT_CANVAS_BACKGROUND_LAID, N_("Laid paper") },
   { DT_CANVAS_BACKGROUND_EMBOSSED, N_("Embossed paper") },
   { DT_CANVAS_BACKGROUND_JAPANESE, N_("Japanese paper") },
   { DT_CANVAS_BACKGROUND_PSYCHEDELIC, N_("Psychedelic washi") },
+  { DT_CANVAS_BACKGROUND_KRAFT, N_("Kraft paper") },
+  { DT_CANVAS_BACKGROUND_CHARCOAL, N_("Charcoal card") },
 };
 
 int dt_canvas_background_count(void)
@@ -783,6 +786,16 @@ dt_canvas_color_t dt_canvas_background_tint(const uint32_t style)
     case DT_CANVAS_BACKGROUND_PSYCHEDELIC:
       // Washi's own colour: it is the same sheet, and only its wrinkles are dyed.
       return dt_canvas_color(0.972f, 0.962f, 0.935f, 1.0f);
+    case DT_CANVAS_BACKGROUND_LAID:
+      // Antique laid is a warm cream: rag pulp, aged.
+      return dt_canvas_color(0.945f, 0.930f, 0.895f, 1.0f);
+    case DT_CANVAS_BACKGROUND_KRAFT:
+      // Unbleached softwood pulp, the colour its own lignin leaves it.
+      return dt_canvas_color(0.640f, 0.490f, 0.340f, 1.0f);
+    case DT_CANVAS_BACKGROUND_CHARCOAL:
+      // Not black: the tooth has to be able to catch a light, and it can only lift what is
+      // there. A sheet at zero would stay at zero however deep its relief.
+      return dt_canvas_color(0.130f, 0.128f, 0.138f, 1.0f);
     default:
       return dt_canvas_color(0.18f, 0.18f, 0.18f, 1.0f);
   }

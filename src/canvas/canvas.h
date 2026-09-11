@@ -438,7 +438,10 @@ typedef enum dt_canvas_background_t
   DT_CANVAS_BACKGROUND_JAPANESE = 4,    ///< washi: large soft clouds and long wrinkles
   DT_CANVAS_BACKGROUND_TRANSPARENT = 5, ///< nothing at all: the plane is a hole the export carries
   DT_CANVAS_BACKGROUND_PSYCHEDELIC = 6, ///< washi whose wrinkles carry a colour instead of a brightness
-  DT_CANVAS_BACKGROUND_LAST = 7,
+  DT_CANVAS_BACKGROUND_LAID = 7,        ///< verge: the mould's laid and chain wires left in a cloudy sheet
+  DT_CANVAS_BACKGROUND_KRAFT = 8,       ///< unbleached wrapping paper: brown, long fibres, dark shives
+  DT_CANVAS_BACKGROUND_CHARCOAL = 9,    ///< a near-black card whose tooth catches light instead of casting shade
+  DT_CANVAS_BACKGROUND_LAST = 10,
 } dt_canvas_background_t;
 
 /**
