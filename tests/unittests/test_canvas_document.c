@@ -37,7 +37,7 @@ static dt_canvas_t *_populated_canvas(void)
   canvas->grid_flags = DT_CANVAS_GRID_VISIBLE | DT_CANVAS_GRID_SNAP;
   canvas->border_width = 3.0f;
   canvas->border_color = dt_canvas_color(1.0f, 0.5f, 0.25f, 1.0f);
-  canvas->gutter = 35.0f;
+  canvas->padding = 35.0f;
   canvas->background_style = DT_CANVAS_BACKGROUND_WATERCOLOUR;
   canvas->grid_color = dt_canvas_color(0.1f, 0.2f, 0.3f, 0.4f);
   canvas->paper_size = DT_CANVAS_PAPER_A4;
@@ -84,7 +84,7 @@ static dt_canvas_t *_populated_canvas(void)
   canvas->shadow.offset_x = 11.0f;
   canvas->shadow.offset_y = -7.0f;
   canvas->shadow.blur = 5.5f;
-  canvas->gutter_color = dt_canvas_color(0.9f, 0.8f, 0.7f, 0.6f);
+  canvas->padding_color = dt_canvas_color(0.9f, 0.8f, 0.7f, 0.6f);
   canvas->texture_contrast = 1.5f;
   canvas->texture_detail = 0.5f;
   canvas->texture_scale = 2.0f;
@@ -92,7 +92,7 @@ static dt_canvas_t *_populated_canvas(void)
   canvas->corner_radius = 14.0f;
   image->corner_radius = 7.0f;
   image->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
-  canvas->grid_flags |= DT_CANVAS_GUTTER_VISIBLE;
+  canvas->grid_flags |= DT_CANVAS_PADDING_VISIBLE;
 
   // The image gets a shadow of its own, some transparency and a polygon cutout with four nodes.
   image->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.4f);
@@ -156,9 +156,9 @@ static void _index_round_trip_keeps_every_field(void **state)
 
   assert_string_equal(restored->title, "Exhibition 2026");
   assert_float_equal(restored->grid_size, 25.0f, 1e-6);
-  assert_int_equal(restored->grid_flags, DT_CANVAS_GRID_VISIBLE | DT_CANVAS_GRID_SNAP | DT_CANVAS_GUTTER_VISIBLE);
+  assert_int_equal(restored->grid_flags, DT_CANVAS_GRID_VISIBLE | DT_CANVAS_GRID_SNAP | DT_CANVAS_PADDING_VISIBLE);
   assert_float_equal(restored->border_color.green, 0.5f, 1e-6);
-  assert_float_equal(restored->gutter, 35.0f, 1e-6);
+  assert_float_equal(restored->padding, 35.0f, 1e-6);
   assert_int_equal(restored->background_style, DT_CANVAS_BACKGROUND_WATERCOLOUR);
   assert_float_equal(restored->grid_color.alpha, 0.4f, 1e-6);
   assert_int_equal(restored->paper_size, DT_CANVAS_PAPER_A4);
@@ -224,7 +224,7 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(restored->page_bleed, 9.0f, 1e-6);
   assert_float_equal(restored->margin_color.blue, 0.25f, 1e-6);
   assert_float_equal(restored->bleed_color.red, 0.75f, 1e-6);
-  assert_float_equal(restored->gutter_color.red, 0.9f, 1e-6);
+  assert_float_equal(restored->padding_color.red, 0.9f, 1e-6);
   assert_float_equal(restored->texture_contrast, 1.5f, 1e-6);
   assert_float_equal(restored->texture_scale, 2.0f, 1e-6);
   assert_float_equal(restored->corner_radius, 14.0f, 1e-6);
@@ -249,7 +249,7 @@ static void _index_round_trip_keeps_every_field(void **state)
   dt_canvas_texture_get(old_file, &weights[0], &weights[1], &weights[2], &weights[3]);
   for(int idx = 0; idx < 4; idx++) assert_float_equal(weights[idx], 1.0f, 1e-6);
   dt_canvas_free(old_file);
-  assert_true((restored->grid_flags & DT_CANVAS_GUTTER_VISIBLE) != 0);
+  assert_true((restored->grid_flags & DT_CANVAS_PADDING_VISIBLE) != 0);
 
   const dt_canvas_object_t *text = dt_canvas_find_object(restored, 2);
   assert_non_null(text);
@@ -811,11 +811,11 @@ static void _a_waypoint_bends_every_routing_through_it(void **state)
   dt_canvas_free(canvas);
 }
 
-static void _frames_snap_with_their_gutters_touching(void **state)
+static void _frames_snap_with_their_paddings_touching(void **state)
 {
   (void)state;
   dt_canvas_t *canvas = dt_canvas_new();
-  canvas->gutter = 30.0f;
+  canvas->padding = 30.0f;
   dt_canvas_object_t *fixed = dt_canvas_add_text(canvas, 100.0, 100.0, 200.0, 100.0, ""); // spans x 0..200, y 50..150
   dt_canvas_object_t *moving = dt_canvas_add_text(canvas, 400.0, 400.0, 100.0, 100.0, "");
   GArray *exclude = g_array_new(FALSE, FALSE, sizeof(uint32_t));
@@ -823,13 +823,13 @@ static void _frames_snap_with_their_gutters_touching(void **state)
   double delta_x = 0.0;
   double delta_y = 0.0;
 
-  // The gutter is a margin around EACH frame, so two of them side by side are two gutters
+  // The padding is a margin around EACH frame, so two of them side by side are two paddings
   // apart and their margin boxes meet on one line. The fixed frame's right edge is at 200,
   // so the moving frame's left edge belongs at 260: from 254 it is pulled 6 units.
   dt_canvas_rect_t box = { 254.0, 300.0, 100.0, 100.0 };
   assert_true(dt_canvas_snap_to_neighbours(canvas, &box, exclude, 8.0, DT_CANVAS_EDGE_ALL, &delta_x, &delta_y));
   assert_float_equal(delta_x, 6.0, 1e-9);
-  // And one gutter apart is no longer a resting place: nothing pulls it there.
+  // And one padding apart is no longer a resting place: nothing pulls it there.
   dt_canvas_rect_t single = { 232.0, 300.0, 100.0, 100.0 };
   double single_x = 0.0;
   dt_canvas_snap_to_neighbours(canvas, &single, exclude, 8.0, DT_CANVAS_EDGE_ALL, &single_x, &delta_y);
@@ -866,7 +866,7 @@ static void _frames_snap_with_their_gutters_touching(void **state)
   width = 150.0;
   assert_false(dt_canvas_snap_size(canvas, exclude, 8.0, &width, &height, NULL, NULL));
 
-  // Masonry: two frames stacked with their gutters touching -- two gutters of clear space --
+  // Masonry: two frames stacked with their paddings touching -- two paddings of clear space --
   // offer their combined height.
   dt_canvas_object_t *below = dt_canvas_add_text(canvas, 100.0, 150.0 + 60.0 + 40.0, 200.0, 80.0, ""); // y 210..290
   height = 235.0;
@@ -920,6 +920,76 @@ static void _a_sheet_of_paper_scales_with_the_resolution_and_a_screen_format_doe
   dt_canvas_free(canvas);
 }
 
+/**
+ * A spread is the block of pages that stays on one sheet. Inside it they are contiguous and
+ * the borders between them are folds; between two spreads the plane opens by twice the bleed,
+ * so each sheet carries its own all round and no two bleeds overlap. Zero is a plane tiled
+ * uniformly, which is what every document written before the field holds.
+ */
+static void _a_spread_keeps_its_pages_together_and_opens_between_sheets(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->resolution = 72.0f;
+  canvas->paper_size = DT_CANVAS_PAPER_A6; // 298 x 420 points
+  canvas->page_bleed = 9.0f;
+  canvas->page_margin = 20.0f;
+
+  // No spread: the plane tiles evenly, every page is its own sheet, and nothing is a fold.
+  const dt_canvas_rect_t plain = dt_canvas_page_rect(canvas, 2, 0);
+  assert_float_equal(plain.x, 2.0 * 298.0, 1e-6);
+  dt_canvas_rect_t sheet;
+  int cols = 0;
+  assert_true(dt_canvas_spread_rect(canvas, 2, 0, &sheet, &cols, NULL));
+  assert_int_equal(cols, 1);
+  assert_float_equal(sheet.width, 298.0, 1e-6);
+
+  // Two pages to a sheet: page 1 abuts page 0, and page 2 opens the next sheet by two bleeds.
+  canvas->spread_cols = 2;
+  assert_float_equal(dt_canvas_page_rect(canvas, 0, 0).x, 0.0, 1e-6);
+  assert_float_equal(dt_canvas_page_rect(canvas, 1, 0).x, 298.0, 1e-6);
+  assert_float_equal(dt_canvas_page_rect(canvas, 2, 0).x, 2.0 * 298.0 + 18.0, 1e-6);
+  assert_float_equal(dt_canvas_page_rect(canvas, 3, 0).x, 3.0 * 298.0 + 18.0, 1e-6);
+  // And to the left of the origin the gaps are owed on that side too.
+  assert_float_equal(dt_canvas_page_rect(canvas, -1, 0).x, -298.0 - 18.0, 1e-6);
+  assert_float_equal(dt_canvas_page_rect(canvas, -2, 0).x, -2.0 * 298.0 - 18.0, 1e-6);
+
+  assert_true(dt_canvas_spread_rect(canvas, 1, 0, &sheet, &cols, NULL));
+  assert_int_equal(cols, 2);
+  assert_float_equal(sheet.x, 0.0, 1e-6);
+  assert_float_equal(sheet.width, 2.0 * 298.0, 1e-6);
+
+  // Where a page sits in its sheet is what tells a fold from a trim.
+  int across = 0;
+  dt_canvas_page_in_spread(canvas, 0, 0, &across, NULL, NULL, NULL);
+  assert_int_equal(across, 0);
+  dt_canvas_page_in_spread(canvas, 1, 0, &across, NULL, NULL, NULL);
+  assert_int_equal(across, 1);
+  dt_canvas_page_in_spread(canvas, -1, 0, &across, NULL, NULL, NULL);
+  assert_int_equal(across, 1); // the right-hand page of the sheet before the origin
+
+  // The binding's allowance is owed by the fold side and by no other.
+  canvas->bind_gutter = 30.0f;
+  dt_canvas_rect_t margin;
+  assert_true(dt_canvas_page_margin_rect(canvas, 0, 0, &margin));
+  assert_float_equal(margin.x, 20.0, 1e-6);                        // outer edge: the margin alone
+  assert_float_equal(margin.width, 298.0 - 20.0 - 50.0, 1e-6);     // fold edge: margin plus bind
+  assert_true(dt_canvas_page_margin_rect(canvas, 1, 0, &margin));
+  assert_float_equal(margin.x, 298.0 + 50.0, 1e-6);                // this one folds on its left
+  assert_float_equal(margin.width, 298.0 - 50.0 - 20.0, 1e-6);
+  // Nothing folds vertically here, so both horizontal edges take the margin alone.
+  assert_float_equal(margin.y, 20.0, 1e-6);
+  assert_float_equal(margin.height, 420.0 - 40.0, 1e-6);
+
+  // A point in the gap between two sheets belongs to the page on its left.
+  int col = 0;
+  dt_canvas_page_at(canvas, 2.0 * 298.0 + 4.0, 0.0, &col, NULL);
+  assert_int_equal(col, 1);
+  dt_canvas_page_at(canvas, 2.0 * 298.0 + 20.0, 0.0, &col, NULL);
+  assert_int_equal(col, 2);
+  dt_canvas_free(canvas);
+}
+
 static void _paper_tiles_the_plane_from_the_origin(void **state)
 {
   (void)state;
@@ -961,13 +1031,13 @@ static void _layouts_arrange_without_moving_the_group(void **state)
   }
   const dt_canvas_rect_t before = dt_canvas_bounds(canvas);
   canvas->grid_size = 50.0f;
-  canvas->gutter = 30.0f;
+  canvas->padding = 30.0f;
   dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_GRID, 0, DT_CANVAS_SORT_CANVAS);
   const dt_canvas_rect_t after = dt_canvas_bounds(canvas);
   assert_float_equal(after.x, before.x, 1e-9);
   assert_float_equal(after.y, before.y, 1e-9);
-  // Every frame keeps a gutter around itself, so the second column starts one cell plus TWO
-  // gutters after the first -- the same arithmetic the snapping uses, or an arranged layout
+  // Every frame keeps a padding around itself, so the second column starts one cell plus TWO
+  // paddings after the first -- the same arithmetic the snapping uses, or an arranged layout
   // would not be one the snapping can reproduce by hand.
   assert_float_equal(frames[1]->x - frames[0]->x, frames[0]->width + 60.0, 1e-9);
   // Two columns of two: the second frame sits to the right of the first, the third below it.
@@ -993,9 +1063,9 @@ static void _layouts_arrange_without_moving_the_group(void **state)
   assert_float_equal(dt_canvas_snap(canvas, 74.0), 50.0, 1e-9);
   assert_float_equal(dt_canvas_snap(canvas, 76.0), 100.0, 1e-9);
 
-  // With snapping on and a gutter that is a grid multiple, every layout puts every frame's
+  // With snapping on and a padding that is a grid multiple, every layout puts every frame's
   // top-left corner on the grid.
-  canvas->gutter = 50.0f;
+  canvas->padding = 50.0f;
   static const dt_canvas_layout_t layouts[]
       = { DT_CANVAS_LAYOUT_GRID, DT_CANVAS_LAYOUT_MASONRY, DT_CANVAS_LAYOUT_ROW, DT_CANVAS_LAYOUT_COLUMN };
   for(size_t layout = 0; layout < G_N_ELEMENTS(layouts); layout++)
@@ -1076,8 +1146,9 @@ int main(void)
     cmocka_unit_test(_a_page_carries_a_margin_inside_it_and_a_bleed_outside),
     cmocka_unit_test(_a_frame_offers_its_corners_and_its_centre_as_anchors),
     cmocka_unit_test(_a_waypoint_bends_every_routing_through_it),
-    cmocka_unit_test(_frames_snap_with_their_gutters_touching),
+    cmocka_unit_test(_frames_snap_with_their_paddings_touching),
     cmocka_unit_test(_a_sheet_of_paper_scales_with_the_resolution_and_a_screen_format_does_not),
+    cmocka_unit_test(_a_spread_keeps_its_pages_together_and_opens_between_sheets),
     cmocka_unit_test(_paper_tiles_the_plane_from_the_origin),
     cmocka_unit_test(_layouts_arrange_without_moving_the_group),
     cmocka_unit_test(_a_layout_sorts_images_by_a_key_and_keeps_the_rest_after),

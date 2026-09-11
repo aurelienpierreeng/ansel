@@ -260,14 +260,14 @@ GBytes *dt_canvas_format_write_index(const dt_canvas_t *canvas)
   _w_i32(out, canvas->image_long_edge);
   _w_i32(out, canvas->jpeg_quality);
   _w_u32(out, canvas->next_id);
-  _w_f32(out, canvas->gutter);
+  _w_f32(out, canvas->padding);
   _w_u32(out, canvas->background_style);
   _w_color(out, &canvas->grid_color);
   _w_u32(out, canvas->paper_size);
   _w_u32(out, canvas->paper_landscape);
   _w_color(out, &canvas->page_color);
   _w_shadow(out, &canvas->shadow);
-  _w_color(out, &canvas->gutter_color);
+  _w_color(out, &canvas->padding_color);
   _w_f32(out, canvas->texture_contrast);
   _w_f32(out, canvas->texture_detail);
   _w_f32(out, canvas->texture_scale);
@@ -278,6 +278,9 @@ GBytes *dt_canvas_format_write_index(const dt_canvas_t *canvas)
   _w_f32(out, canvas->page_bleed);
   _w_color(out, &canvas->bleed_color);
   _w_f32(out, canvas->resolution);
+  _w_u32(out, canvas->spread_cols);
+  _w_u32(out, canvas->spread_rows);
+  _w_f32(out, canvas->bind_gutter);
   _w_bytes(out, canvas->reserved, sizeof(canvas->reserved));
   const uint32_t header_size = out->len;
   uint8_t *size_field = out->data + CANVAS_MAGIC_LEN + 4;
@@ -616,14 +619,14 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
   canvas->image_long_edge = _r_i32(&cursor);
   canvas->jpeg_quality = _r_i32(&cursor);
   canvas->next_id = _r_u32(&cursor);
-  canvas->gutter = _r_f32(&cursor);
+  canvas->padding = _r_f32(&cursor);
   canvas->background_style = _r_u32(&cursor);
   canvas->grid_color = _r_color(&cursor);
   canvas->paper_size = _r_u32(&cursor);
   canvas->paper_landscape = _r_u32(&cursor);
   canvas->page_color = _r_color(&cursor);
   canvas->shadow = _r_shadow(&cursor);
-  canvas->gutter_color = _r_color(&cursor);
+  canvas->padding_color = _r_color(&cursor);
   canvas->texture_contrast = _r_f32(&cursor);
   canvas->texture_detail = _r_f32(&cursor);
   canvas->texture_scale = _r_f32(&cursor);
@@ -635,6 +638,10 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
   canvas->bleed_color = _r_color(&cursor);
   // Zero from a document written before the field, which dt_canvas_resolution() reads as 72.
   canvas->resolution = _r_f32(&cursor);
+  // Zero from a document written before spreads: a plane tiled uniformly, as it was laid out.
+  canvas->spread_cols = _r_u32(&cursor);
+  canvas->spread_rows = _r_u32(&cursor);
+  canvas->bind_gutter = _r_f32(&cursor);
   _r_bytes(&cursor, canvas->reserved, sizeof(canvas->reserved));
   cursor.pos = header_size;
   cursor.limit = cursor.size;

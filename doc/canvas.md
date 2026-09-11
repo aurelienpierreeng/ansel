@@ -37,7 +37,7 @@ Coordinates are canvas units: one unit is one screen pixel at zoom 1, the origin
 centre of the plane, y grows downwards. The view converts through `_to_canvas()` and nothing
 else, so the document never learns what a pixel is.
 
-The four layouts leave two gutters between frames -- each keeps one all round -- and, with
+The four layouts leave two paddings between frames -- each keeps one all round -- and, with
 snapping on, start on the grid and round every cell up to whole grid steps, frames sitting
 top-left in their cell.
 
@@ -318,13 +318,15 @@ the sampler averages it over the pixel's footprint, two a side and no more: a 2x
 the quantisation leaves over, and sixteen reads a pixel on a frame nobody is looking at yet
 is not worth its cost.
 
-### Gutter frames
+### Padding frames
 
-`DT_CANVAS_GUTTER_VISIBLE` draws a frame one gutter out around every frame, in the canvas's
-gutter colour, over everything -- a guide, so it is drawn with the grid and not exported.
+The word **gutter** now means what it means in print -- the fold's own allowance, see spreads
+below -- so what every frame keeps around itself is the **padding**.
+`DT_CANVAS_PADDING_VISIBLE` draws a frame one padding out around every frame, in the canvas's
+padding colour, over everything -- a guide, so it is drawn with the grid and not exported.
 
-**The gutter is a margin around ONE frame, not a gap between two**, so two frames sit side by
-side when their margin boxes TOUCH and the clear space between them is TWO gutters. Keyed on
+**The padding is a margin around ONE frame, not a gap between two**, so two frames sit side by
+side when their margin boxes TOUCH and the clear space between them is TWO paddings. Keyed on
 one, as it was, a frame's own box landed exactly on its neighbour's edge and the two boxes
 overlapped across the whole gap, each drawing its line on top of the other frame's border --
 box against frame, which is what read as odd and crossing. Box against box they share one
@@ -436,9 +438,9 @@ moving an overlay child from inside a draw glitches -- but from
 an idle scheduled by every event that moves the object or the viewport; the bar is refilled
 only when the selection or the document changed (a signature of both), with its handlers
 blocked during a refill so a refill never writes back. The canvas-level defaults (grid,
-gutter, border) stay in the toolbar.
+padding, border) stay in the toolbar.
 
-### Borders, the gutter, and snapping to neighbours
+### Borders, the padding, and snapping to neighbours
 
 A frame's width and height are its outer size, border included: the border is stroked
 inside the edge and the picture (or the text) is inset by it, so widening a border shrinks
@@ -649,6 +651,34 @@ saved document changes page, and the table's order is where the list shows it, w
 and A1 came to sit above A2 while carrying the highest codes. `dt_canvas_paper_code()` turns a
 row into the value to store and `dt_canvas_paper_position()` turns it back; only
 `dt_canvas_paper_points()` speaks codes.
+
+### Spreads, folds and the bind gutter
+
+**A SPREAD is the block of pages that stays on one sheet**: `spread_cols` across by
+`spread_rows` down. A book is 2 by 1, a zine folded both ways 2 by 2, a poster printed at home
+and taped together as many as it takes. **Zero is a plane tiled uniformly** -- what every
+document written before the fields holds, and exactly the geometry it was laid out with -- and
+one is every page on its own sheet.
+
+Inside a spread the pages are contiguous and the borders between them are **folds**, drawn
+dashed, which on a dieline is what tells a crease from a cut. Between two spreads the plane
+opens by **twice the bleed**, so each sheet carries its own all round and no two bleeds
+overlap; that is the one thing the uniform tiling could never express, since there a page's
+bleed reached into its neighbour. The trim is therefore the outline of the SHEET, not of the
+page, and so is the bleed: a page in the middle of a spread has no bleed at its folds.
+
+The **bind gutter** is the binding's own allowance, added inside a page AT A FOLD only -- what
+a perfect binding swallows out of the middle of a picture crossing it. It is not the page
+margin, which is uniform all round; it is the extra the fold side needs on top of it, which is
+why `dt_canvas_page_margin_rect()` exists beside the symmetric `dt_canvas_page_guide_rect()`.
+
+Three consequences a reader should expect. **The plane no longer tiles evenly**, so the page
+under a point is asked for (`dt_canvas_page_at()`) rather than divided out, and it answers with
+the page on the left for a point that falls in the gap between two sheets. **The page snapping
+cannot use a period** either: it gathers the real lines the pages around each edge offer --
+their borders, their margins with the bind gutter where it applies, and their sheet's bleed.
+And **the export emits one output page per sheet**, claimed by the sheet's first page so a
+spread is written once however many of its pages the walk passes over.
 
 **A canvas with no page size exports as ONE page around everything on it**, grown by the
 canvas's margin -- the margin has no page edge to sit inside there, so it becomes the white

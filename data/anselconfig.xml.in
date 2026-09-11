@@ -2886,7 +2886,7 @@
     <name>canvas/snap_mode</name>
     <type min="0" max="46">int</type>
     <default>2</default>
-    <shortdescription>what canvas frames snap to when moved or resized: bits 2 grid, 4 gutter, 8 same size</shortdescription>
+    <shortdescription>what canvas frames snap to when moved or resized: bits 2 grid, 4 padding, 8 same size</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/border_width</name>
@@ -2937,7 +2937,7 @@
     <shortdescription>memory budget for decoded canvas images, in MB</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/gutter</name>
+    <name>canvas/padding</name>
     <type min="0" max="500">float</type>
     <default>20</default>
     <shortdescription>margin canvas frames keep from each other when snapped side by side or arranged, in canvas units</shortdescription>
@@ -2971,6 +2971,24 @@
     <type>string</type>
     <default>#000000ff</default>
     <shortdescription>colour of the canvas page borders -- the trim line, black by prepress convention -- as #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/spread_cols</name>
+    <type min="0" max="64">int</type>
+    <default>0</default>
+    <shortdescription>pages across one sheet on a new canvas; 0 tiles the plane uniformly</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/spread_rows</name>
+    <type min="0" max="64">int</type>
+    <default>0</default>
+    <shortdescription>pages down one sheet on a new canvas; 0 tiles the plane uniformly</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/bind_gutter</name>
+    <type min="0" max="2000">float</type>
+    <default>0</default>
+    <shortdescription>the binding's allowance kept clear inside a canvas page at a fold, in canvas units</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/resolution</name>
@@ -3159,15 +3177,15 @@
     <shortdescription>the paper's finishing grain on a new canvas</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/gutter_visible</name>
+    <name>canvas/padding_visible</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>whether a new canvas draws the gutter frames around its frames</shortdescription>
+    <shortdescription>whether a new canvas draws the padding frames around its frames</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/guide_gutter_color</name>
+    <name>canvas/guide_padding_color</name>
     <type>string</type>
     <default>#3C78C8ff</default>
-    <shortdescription>colour of the gutter frames of a new canvas, #rrggbbaa</shortdescription>
+    <shortdescription>colour of the padding frames of a new canvas, #rrggbbaa</shortdescription>
   </dtconfig>
 </dtconfiglist>

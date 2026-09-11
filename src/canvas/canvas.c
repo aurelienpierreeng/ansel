@@ -30,7 +30,7 @@
 #include <string.h>
 
 #define CANVAS_DEFAULT_GRID_SIZE 50.0f
-#define CANVAS_DEFAULT_GUTTER 20.0f
+#define CANVAS_DEFAULT_PADDING 20.0f
 /**
  * Canvas units to the inch on a new canvas. The plane is measured in display pixels, so this
  * is what turns a sheet of paper into a size on it: 300 is the print standard and puts an A4
@@ -178,7 +178,7 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->border_width = 0.0f;
   canvas->grid_size = CANVAS_DEFAULT_GRID_SIZE;
   canvas->grid_flags = DT_CANVAS_GRID_VISIBLE;
-  canvas->gutter = CANVAS_DEFAULT_GUTTER;
+  canvas->padding = CANVAS_DEFAULT_PADDING;
   canvas->background_style = DT_CANVAS_BACKGROUND_PLAIN;
   canvas->grid_color = dt_canvas_color(0.5f, 0.5f, 0.5f, 1.0f);
   canvas->paper_size = DT_CANVAS_PAPER_NONE;
@@ -192,9 +192,9 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->shadow.offset_x = CANVAS_DEFAULT_SHADOW_OFFSET;
   canvas->shadow.offset_y = CANVAS_DEFAULT_SHADOW_OFFSET;
   canvas->shadow.blur = 0.0f; // off until asked for
-  // A gutter is no prepress object at all -- it is a layout aid -- so it takes the one
+  // A padding is no prepress object at all -- it is a layout aid -- so it takes the one
   // family the convention leaves free here, the blue of the slug.
-  canvas->gutter_color = dt_canvas_color(0.235f, 0.471f, 0.784f, 1.0f);
+  canvas->padding_color = dt_canvas_color(0.235f, 0.471f, 0.784f, 1.0f);
   canvas->texture_contrast = 1.0f;
   canvas->texture_detail = 1.0f;
   canvas->texture_scale = 1.0f;
@@ -1671,7 +1671,7 @@ gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas
   const gboolean snap_right = (edges & DT_CANVAS_EDGE_RIGHT) != 0;
   const gboolean snap_top = (edges & DT_CANVAS_EDGE_TOP) != 0;
   const gboolean snap_bottom = (edges & DT_CANVAS_EDGE_BOTTOM) != 0;
-  const double gutter = canvas->gutter > 0.0f ? canvas->gutter : 0.0;
+  const double padding = canvas->padding > 0.0f ? canvas->padding : 0.0;
   const double left = moving->x;
   const double right = moving->x + moving->width;
   const double top = moving->y;
@@ -1690,30 +1690,30 @@ gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas
     const double other_right = bounds.x + bounds.width;
     const double other_top = bounds.y;
     const double other_bottom = bounds.y + bounds.height;
-    // The gutter is a MARGIN AROUND each frame, not a gap between two, so two frames sit
-    // side by side when their margins TOUCH and the clear space between them is two gutters.
-    // Keyed on one gutter, a frame's own margin box landed exactly on its neighbour's edge
+    // The padding is a MARGIN AROUND each frame, not a gap between two, so two frames sit
+    // side by side when their margins TOUCH and the clear space between them is two paddings.
+    // Keyed on one padding, a frame's own margin box landed exactly on its neighbour's edge
     // and the two boxes overlapped across the whole gap, each drawing its line on top of the
     // other frame's border -- box against frame, which is what read as odd and crossing.
     // Box against box, they share one line.
     if(snap_left)
     {
-      _snap_axis(left, other_right + 2.0 * gutter, threshold, &best_x, &found_x);
+      _snap_axis(left, other_right + 2.0 * padding, threshold, &best_x, &found_x);
       _snap_axis(left, other_left, threshold, &best_x, &found_x);
     }
     if(snap_right)
     {
-      _snap_axis(right, other_left - 2.0 * gutter, threshold, &best_x, &found_x);
+      _snap_axis(right, other_left - 2.0 * padding, threshold, &best_x, &found_x);
       _snap_axis(right, other_right, threshold, &best_x, &found_x);
     }
     if(snap_top)
     {
-      _snap_axis(top, other_bottom + 2.0 * gutter, threshold, &best_y, &found_y);
+      _snap_axis(top, other_bottom + 2.0 * padding, threshold, &best_y, &found_y);
       _snap_axis(top, other_top, threshold, &best_y, &found_y);
     }
     if(snap_bottom)
     {
-      _snap_axis(bottom, other_top - 2.0 * gutter, threshold, &best_y, &found_y);
+      _snap_axis(bottom, other_top - 2.0 * padding, threshold, &best_y, &found_y);
       _snap_axis(bottom, other_bottom, threshold, &best_y, &found_y);
     }
   }
@@ -1748,14 +1748,14 @@ static gboolean _ranges_overlap(const double start_a, const double end_a, const 
 }
 
 /**
- * Every run of frames stacked one gutter apart, starting at `start`, as a growing box: the
+ * Every run of frames stacked one padding apart, starting at `start`, as a growing box: the
  * masonry candidates. `vertical` walks downwards, else rightwards.
  */
 static void _snap_size_runs(const dt_canvas_t *canvas, const GArray *exclude, const dt_canvas_rect_t *start,
                             const gboolean vertical, const double current, const double threshold,
                             dt_canvas_size_candidate_t *axis)
 {
-  const double gutter = canvas->gutter > 0.0f ? canvas->gutter : 0.0;
+  const double padding = canvas->padding > 0.0f ? canvas->padding : 0.0;
   dt_canvas_rect_t span = *start;
   for(int step = 0; step < CANVAS_RUN_MAX; step++)
   {
@@ -1768,7 +1768,7 @@ static void _snap_size_runs(const dt_canvas_t *canvas, const GArray *exclude, co
       const dt_canvas_rect_t bounds = dt_canvas_object_bounds(other);
       if(vertical)
       {
-        if(fabs(bounds.y - (span.y + span.height + 2.0 * gutter)) > CANVAS_RUN_TOLERANCE) continue;
+        if(fabs(bounds.y - (span.y + span.height + 2.0 * padding)) > CANVAS_RUN_TOLERANCE) continue;
         if(!_ranges_overlap(span.x, span.x + span.width, bounds.x, bounds.x + bounds.width)) continue;
         const double left = fmin(span.x, bounds.x);
         const double right = fmax(span.x + span.width, bounds.x + bounds.width);
@@ -1778,7 +1778,7 @@ static void _snap_size_runs(const dt_canvas_t *canvas, const GArray *exclude, co
       }
       else
       {
-        if(fabs(bounds.x - (span.x + span.width + 2.0 * gutter)) > CANVAS_RUN_TOLERANCE) continue;
+        if(fabs(bounds.x - (span.x + span.width + 2.0 * padding)) > CANVAS_RUN_TOLERANCE) continue;
         if(!_ranges_overlap(span.y, span.y + span.height, bounds.y, bounds.y + bounds.height)) continue;
         const double top = fmin(span.y, bounds.y);
         const double bottom = fmax(span.y + span.height, bounds.y + bounds.height);
@@ -1936,17 +1936,124 @@ gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, do
   return TRUE;
 }
 
+/** Pages to a spread along one axis; 0 is a plane tiled uniformly, and the cap keeps the walk finite. */
+static int _spread_span(const uint32_t pages)
+{
+  return pages == 0u ? 0 : (int)MIN(pages, 64u);
+}
+
+/** The gap the plane opens between two spreads: one bleed for each of the sheets that meet there. */
+static double _spread_gap(const dt_canvas_t *canvas)
+{
+  return 2.0 * fmax((double)canvas->page_bleed, 0.0);
+}
+
+/** How far a page index is pushed along by the gaps between all the spreads before it. */
+static double _spread_offset(const int index, const int span, const double gap)
+{
+  if(span <= 0 || !(gap > 0.0)) return 0.0;
+  // Floored, not truncated: a page left of the origin owes the gaps on its own side.
+  const int spread = (int)floor((double)index / (double)span);
+  return (double)spread * gap;
+}
+
+/** The page index whose extent covers `position`, or the nearest one when it falls in a gap. */
+static int _page_index_at(const double position, const double extent, const int span, const double gap)
+{
+  if(!(extent > 0.0)) return 0;
+  if(span <= 0 || !(gap > 0.0)) return (int)floor(position / extent);
+  const double pitch = (double)span * extent + gap;
+  const int spread = (int)floor(position / pitch);
+  const double within = position - (double)spread * pitch;
+  int page = (int)floor(within / extent);
+  // Inside the gap between two sheets: the last page of the one on the left owns it.
+  page = CLAMP(page, 0, span - 1);
+  return spread * span + page;
+}
+
 dt_canvas_rect_t dt_canvas_page_rect(const dt_canvas_t *canvas, int col, int row)
 {
   dt_canvas_rect_t rect = { 0.0, 0.0, 0.0, 0.0 };
   double width = 0.0;
   double height = 0.0;
   if(!dt_canvas_paper_dimensions(canvas, &width, &height)) return rect;
-  rect.x = col * width;
-  rect.y = row * height;
+  const double gap = _spread_gap(canvas);
+  rect.x = col * width + _spread_offset(col, _spread_span(canvas->spread_cols), gap);
+  rect.y = row * height + _spread_offset(row, _spread_span(canvas->spread_rows), gap);
   rect.width = width;
   rect.height = height;
   return rect;
+}
+
+void dt_canvas_page_in_spread(const dt_canvas_t *canvas, const int col, const int row, int *across, int *down,
+                              int *cols, int *rows)
+{
+  const int span_x = IS_NULL_PTR(canvas) ? 0 : _spread_span(canvas->spread_cols);
+  const int span_y = IS_NULL_PTR(canvas) ? 0 : _spread_span(canvas->spread_rows);
+  // With no spread every page is its own sheet: it sits at 0 of 1, and every edge is a trim.
+  if(!IS_NULL_PTR(cols)) *cols = span_x > 0 ? span_x : 1;
+  if(!IS_NULL_PTR(rows)) *rows = span_y > 0 ? span_y : 1;
+  if(!IS_NULL_PTR(across)) *across = span_x > 0 ? col - (int)floor((double)col / span_x) * span_x : 0;
+  if(!IS_NULL_PTR(down)) *down = span_y > 0 ? row - (int)floor((double)row / span_y) * span_y : 0;
+}
+
+gboolean dt_canvas_spread_rect(const dt_canvas_t *canvas, const int col, const int row, dt_canvas_rect_t *rect,
+                               int *cols, int *rows)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(rect)) return FALSE;
+  int across = 0;
+  int down = 0;
+  int span_x = 1;
+  int span_y = 1;
+  dt_canvas_page_in_spread(canvas, col, row, &across, &down, &span_x, &span_y);
+  const dt_canvas_rect_t first = dt_canvas_page_rect(canvas, col - across, row - down);
+  if(!(first.width > 0.0) || !(first.height > 0.0)) return FALSE;
+  // Pages inside a spread are contiguous, so the sheet is simply as many of them across.
+  rect->x = first.x;
+  rect->y = first.y;
+  rect->width = first.width * span_x;
+  rect->height = first.height * span_y;
+  if(!IS_NULL_PTR(cols)) *cols = span_x;
+  if(!IS_NULL_PTR(rows)) *rows = span_y;
+  return TRUE;
+}
+
+gboolean dt_canvas_page_margin_rect(const dt_canvas_t *canvas, const int col, const int row, dt_canvas_rect_t *rect)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(rect)) return FALSE;
+  *rect = dt_canvas_page_rect(canvas, col, row);
+  if(!(rect->width > 0.0) || !(rect->height > 0.0)) return FALSE;
+  const double margin = fmax((double)canvas->page_margin, 0.0);
+  const double bind = fmax((double)canvas->bind_gutter, 0.0);
+  int across = 0;
+  int down = 0;
+  int span_x = 1;
+  int span_y = 1;
+  dt_canvas_page_in_spread(canvas, col, row, &across, &down, &span_x, &span_y);
+  // The binding's allowance is owed by the sides that ARE a fold, and by no others: that is
+  // the whole difference between it and the page margin, which is uniform all round.
+  const double left = margin + (across > 0 ? bind : 0.0);
+  const double right = margin + (across < span_x - 1 ? bind : 0.0);
+  const double top = margin + (down > 0 ? bind : 0.0);
+  const double bottom = margin + (down < span_y - 1 ? bind : 0.0);
+  if(left + right >= rect->width || top + bottom >= rect->height) return FALSE;
+  rect->x += left;
+  rect->y += top;
+  rect->width -= left + right;
+  rect->height -= top + bottom;
+  return TRUE;
+}
+
+void dt_canvas_page_at(const dt_canvas_t *canvas, const double x, const double y, int *col, int *row)
+{
+  if(!IS_NULL_PTR(col)) *col = 0;
+  if(!IS_NULL_PTR(row)) *row = 0;
+  double width = 0.0;
+  double height = 0.0;
+  if(!dt_canvas_paper_dimensions(canvas, &width, &height)) return;
+  const double gap = _spread_gap(canvas);
+  if(!IS_NULL_PTR(col)) *col = _page_index_at(x, width, _spread_span(canvas->spread_cols), gap);
+  if(!IS_NULL_PTR(row)) *row = _page_index_at(y, height, _spread_span(canvas->spread_rows), gap);
 }
 
 gboolean dt_canvas_page_guide_rect(const dt_canvas_t *canvas, const int col, const int row, const double outset,
@@ -1962,6 +2069,68 @@ gboolean dt_canvas_page_guide_rect(const dt_canvas_t *canvas, const int col, con
   rect->width += 2.0 * outset;
   rect->height += 2.0 * outset;
   return TRUE;
+}
+
+/**
+ * The vertical lines one page column offers: its own two borders, its margin's -- which the
+ * binding's allowance moves on a fold side -- and its SHEET's bleed, since a page in the
+ * middle of a spread has no bleed at its folds. At most six.
+ */
+static int _page_lines_x(const dt_canvas_t *canvas, const int col, const int row, double *lines)
+{
+  int count = 0;
+  const dt_canvas_rect_t page = dt_canvas_page_rect(canvas, col, row);
+  if(!(page.width > 0.0)) return 0;
+  lines[count++] = page.x;
+  lines[count++] = page.x + page.width;
+  if(canvas->grid_flags & DT_CANVAS_SNAP_MARGIN)
+  {
+    dt_canvas_rect_t margin;
+    if(dt_canvas_page_margin_rect(canvas, col, row, &margin))
+    {
+      lines[count++] = margin.x;
+      lines[count++] = margin.x + margin.width;
+    }
+  }
+  if((canvas->grid_flags & DT_CANVAS_SNAP_BLEED) && canvas->page_bleed > 0.0f)
+  {
+    dt_canvas_rect_t sheet;
+    if(dt_canvas_spread_rect(canvas, col, row, &sheet, NULL, NULL))
+    {
+      lines[count++] = sheet.x - canvas->page_bleed;
+      lines[count++] = sheet.x + sheet.width + canvas->page_bleed;
+    }
+  }
+  return count;
+}
+
+/** The same, horizontally. */
+static int _page_lines_y(const dt_canvas_t *canvas, const int col, const int row, double *lines)
+{
+  int count = 0;
+  const dt_canvas_rect_t page = dt_canvas_page_rect(canvas, col, row);
+  if(!(page.height > 0.0)) return 0;
+  lines[count++] = page.y;
+  lines[count++] = page.y + page.height;
+  if(canvas->grid_flags & DT_CANVAS_SNAP_MARGIN)
+  {
+    dt_canvas_rect_t margin;
+    if(dt_canvas_page_margin_rect(canvas, col, row, &margin))
+    {
+      lines[count++] = margin.y;
+      lines[count++] = margin.y + margin.height;
+    }
+  }
+  if((canvas->grid_flags & DT_CANVAS_SNAP_BLEED) && canvas->page_bleed > 0.0f)
+  {
+    dt_canvas_rect_t sheet;
+    if(dt_canvas_spread_rect(canvas, col, row, &sheet, NULL, NULL))
+    {
+      lines[count++] = sheet.y - canvas->page_bleed;
+      lines[count++] = sheet.y + sheet.height + canvas->page_bleed;
+    }
+  }
+  return count;
 }
 
 gboolean dt_canvas_snap_to_pages(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving, double threshold,
@@ -1981,29 +2150,28 @@ gboolean dt_canvas_snap_to_pages(const dt_canvas_t *canvas, const dt_canvas_rect
   const uint32_t x_edges[2] = { DT_CANVAS_EDGE_LEFT, DT_CANVAS_EDGE_RIGHT };
   const double ys[2] = { moving->y, moving->y + moving->height };
   const uint32_t y_edges[2] = { DT_CANVAS_EDGE_TOP, DT_CANVAS_EDGE_BOTTOM };
-  // The page's own borders, then the lines the user asked to be drawn inside and outside them.
-  // Each is a grid of the same period, offset from the border by the margin or the bleed.
-  double offsets[5] = { 0.0, 0.0, 0.0, 0.0, 0.0 };
-  int offset_count = 1;
-  if((canvas->grid_flags & DT_CANVAS_SNAP_MARGIN) && canvas->page_margin > 0.0f)
-  {
-    offsets[offset_count++] = canvas->page_margin;
-    offsets[offset_count++] = -canvas->page_margin;
-  }
-  if((canvas->grid_flags & DT_CANVAS_SNAP_BLEED) && canvas->page_bleed > 0.0f)
-  {
-    offsets[offset_count++] = canvas->page_bleed;
-    offsets[offset_count++] = -canvas->page_bleed;
-  }
+  // The plane no longer tiles evenly -- it opens by two bleeds between spreads, and a fold
+  // side's margin sits further in than the others -- so the lines are asked of the pages
+  // around each edge rather than computed from a period. The neighbours either side are
+  // included because an edge lying in the gap between two sheets belongs to neither.
   for(int idx = 0; idx < 2; idx++)
   {
-    for(int offset = 0; offset < offset_count; offset++)
+    int col = 0;
+    int row = 0;
+    dt_canvas_page_at(canvas, xs[idx], ys[idx], &col, &row);
+    for(int step = -1; step <= 1; step++)
     {
-      const double shift = offsets[offset];
+      double lines[6];
       if(edges & x_edges[idx])
-        _snap_axis(xs[idx], round((xs[idx] - shift) / page_width) * page_width + shift, threshold, &best_x, &found_x);
+      {
+        const int count = _page_lines_x(canvas, col + step, row, lines);
+        for(int line = 0; line < count; line++) _snap_axis(xs[idx], lines[line], threshold, &best_x, &found_x);
+      }
       if(edges & y_edges[idx])
-        _snap_axis(ys[idx], round((ys[idx] - shift) / page_height) * page_height + shift, threshold, &best_y, &found_y);
+      {
+        const int count = _page_lines_y(canvas, col, row + step, lines);
+        for(int line = 0; line < count; line++) _snap_axis(ys[idx], lines[line], threshold, &best_y, &found_y);
+      }
     }
   }
   if(!IS_NULL_PTR(delta_x)) *delta_x = found_x ? best_x : 0.0;
@@ -2212,10 +2380,10 @@ void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_la
   double anchor_x = 0.0;
   double anchor_y = 0.0;
   _layout_anchor(frames, &anchor_x, &anchor_y);
-  // Every frame keeps a gutter of clear space around itself, so two of them side by side are
-  // two gutters apart -- the same arithmetic the snapping uses, or an arranged layout would
+  // Every frame keeps a padding of clear space around itself, so two of them side by side are
+  // two paddings apart -- the same arithmetic the snapping uses, or an arranged layout would
   // not be one the snapping can reproduce by hand.
-  const double gap = canvas->gutter > 0.0f ? 2.0 * canvas->gutter : 0.0;
+  const double gap = canvas->padding > 0.0f ? 2.0 * canvas->padding : 0.0;
   anchor_x = dt_canvas_snap(canvas, anchor_x);
   anchor_y = dt_canvas_snap(canvas, anchor_y);
   switch(layout)
