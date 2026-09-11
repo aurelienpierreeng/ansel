@@ -150,24 +150,48 @@ static void _set_modification_time(char *filename,
  * What this path needs is fewer round-trips, not overlapping ones.
  */
 /* Windows and macOS resolve a filename without regard to case, and so does an SMB server:
- * stat() used to find `IMG.NEF.XMP' when asked for `IMG.NEF.xmp', and the exact hash lookup
- * that replaced it does not. So a folder carries a second, casefolded index, consulted only
- * when the exact name misses and built on that first miss -- a library whose names all agree
- * with the database never pays for it. Two names differing only in case cannot coexist on the
- * filesystems this rescues, and on one where they can (ext4) the exact lookup already
- * answered, so the fallback only ever adds tolerance it cannot take away. */
+ * stat() found `IMG.NEF.XMP' when asked for `IMG.NEF.xmp', and an exact lookup in a listing
+ * does not. So a folder carries a second index, of casefolded names, consulted only when the
+ * exact name misses and built on that first miss -- a library whose names all agree with the
+ * database never pays for it.
+ *
+ * That index is a FILTER, not an answer. It says a file exists under some other spelling;
+ * whether the database's own spelling resolves to it is the filesystem's call, so a stat() of
+ * that spelling decides -- the very question the per-file code asked, put to the same
+ * filesystem. Found where the filesystem folds case; "missing" where it does not (ext4), and
+ * rightly: there the database's name really names no file, and taking the other one would
+ * hand this image another file's sidecar and companions. That costs one stat() per name that
+ * exists only under another spelling, which on an agreeing library is none.
+ *
+ * The key is Unicode-normalised before it is folded: macOS stores names decomposed, and a
+ * database may carry the composed spelling of the same name. The stat() is what makes a
+ * generous key safe -- at worst it asks the filesystem once for nothing. */
 typedef struct dt_crawler_folder_t
 {
+  gchar *path;        // the folder itself, for the stat() confirming a casefold hit
   GHashTable *exact;  // basename -> guint64 *mtime, owns both
-  GHashTable *folded; // casefolded basename -> the SAME guint64 *, borrowed; NULL until needed
+  GHashTable *folded; // set of normalised, casefolded basenames; NULL until needed
 } dt_crawler_folder_t;
 
 static void _free_folder(gpointer p)
 {
   dt_crawler_folder_t *folder = (dt_crawler_folder_t *)p;
-  if(folder->folded) g_hash_table_destroy(folder->folded);
+  if(!IS_NULL_PTR(folder->folded)) g_hash_table_destroy(folder->folded);
   g_hash_table_destroy(folder->exact);
+  dt_free(folder->path);
   dt_free(folder);
+}
+
+/* The spelling two names share when only case or Unicode composition sets them apart. */
+static gchar *_folded_key(const char *name)
+{
+  // a name that is not UTF-8 -- possible on a POSIX filesystem -- has no case to fold
+  if(!g_utf8_validate(name, -1, NULL)) return g_strdup(name);
+
+  gchar *normalised = g_utf8_normalize(name, -1, G_NORMALIZE_DEFAULT);
+  gchar *key = g_utf8_casefold(normalised, -1);
+  dt_free(normalised);
+  return key;
 }
 
 typedef struct dt_crawler_walk_t
@@ -199,12 +223,13 @@ static dt_crawler_folder_t *_crawler_folder(dt_crawler_walk_t *walk, const char 
 {
   GHashTable *folders = walk->folders;
   dt_crawler_folder_t *folder = (dt_crawler_folder_t *)g_hash_table_lookup(folders, dirname);
-  if(folder) return folder;
+  if(!IS_NULL_PTR(folder)) return folder;
 
   if(g_hash_table_size(folders) >= DT_CRAWLER_FOLDER_CACHE_MAX)
     g_hash_table_remove_all(folders);
 
   folder = (dt_crawler_folder_t *)g_malloc0(sizeof(dt_crawler_folder_t));
+  folder->path = g_strdup(dirname);
   folder->exact = g_hash_table_new_full(g_str_hash, g_str_equal,
                                         dt_free_gpointer, dt_free_gpointer);
 
@@ -217,19 +242,34 @@ static dt_crawler_folder_t *_crawler_folder(dt_crawler_walk_t *walk, const char 
                                                        G_FILE_ATTRIBUTE_STANDARD_NAME ","
                                                        G_FILE_ATTRIBUTE_TIME_MODIFIED,
                                                        G_FILE_QUERY_INFO_NONE, NULL, NULL);
-  if(entries)
+  if(!IS_NULL_PTR(entries))
   {
-    GFileInfo *info = NULL;
-    while(!_job_cancelled(walk->job) && (info = g_file_enumerator_next_file(entries, NULL, NULL)))
+    GError *error = NULL;
+    while(!_job_cancelled(walk->job))
     {
+      GFileInfo *info = g_file_enumerator_next_file(entries, NULL, &error);
+      if(IS_NULL_PTR(info)) break;
+
       const char *name = g_file_info_get_name(info);
-      if(name)
+      if(!IS_NULL_PTR(name))
       {
         guint64 *mtime = (guint64 *)g_malloc(sizeof(guint64));
         *mtime = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
         g_hash_table_insert(folder->exact, g_strdup(name), mtime);
       }
       g_object_unref(info);
+    }
+
+    /* A listing that fails part-way -- a share dropping mid-read -- is discarded whole. Kept as
+     * far as it got, it would read an image whose .txt came after the break as having none and
+     * clear its flag; empty, it reads every image here as missing, which is the answer an
+     * unreadable folder gets below. */
+    if(!IS_NULL_PTR(error))
+    {
+      dt_print(DT_DEBUG_CONTROL, "[crawler] listing `%s' failed part-way: %s\n", dirname,
+               error->message);
+      g_hash_table_remove_all(folder->exact);
+      g_error_free(error);
     }
     g_object_unref(entries);
   }
@@ -251,32 +291,43 @@ static dt_crawler_folder_t *_crawler_folder(dt_crawler_walk_t *walk, const char 
 static gboolean _folder_holds(dt_crawler_folder_t *folder, const char *name, time_t *mtime)
 {
   const guint64 *found = (const guint64 *)g_hash_table_lookup(folder->exact, name);
-
-  if(!found)
+  if(!IS_NULL_PTR(found))
   {
-    if(!folder->folded)
-    {
-      folder->folded = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
-      GHashTableIter iter;
-      gpointer key, value;
-      g_hash_table_iter_init(&iter, folder->exact);
-      while(g_hash_table_iter_next(&iter, &key, &value))
-        g_hash_table_insert(folder->folded, g_utf8_casefold((const char *)key, -1), value);
-    }
-
-    gchar *folded = g_utf8_casefold(name, -1);
-    found = (const guint64 *)g_hash_table_lookup(folder->folded, folded);
-    dt_free(folded);
+    if(!IS_NULL_PTR(mtime)) *mtime = (time_t)*found;
+    return TRUE;
   }
 
-  if(!found) return FALSE;
-  if(mtime) *mtime = (time_t)*found;
-  return TRUE;
+  if(IS_NULL_PTR(folder->folded))
+  {
+    folder->folded = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
+    GHashTableIter iter;
+    gpointer listed = NULL;
+    g_hash_table_iter_init(&iter, folder->exact);
+    while(g_hash_table_iter_next(&iter, &listed, NULL))
+      g_hash_table_add(folder->folded, _folded_key((const char *)listed));
+  }
+
+  gchar *key = _folded_key(name);
+  const gboolean elsewhere = g_hash_table_contains(folder->folded, key);
+  dt_free(key);
+  if(!elsewhere) return FALSE;
+
+  // a file answers to this name under another spelling; the filesystem decides if this one does
+  gchar *path = g_build_filename(folder->path, name, NULL);
+  GStatBuf st;
+  const gboolean resolves = (g_stat(path, &st) == 0);
+  dt_free(path);
+  if(resolves && !IS_NULL_PTR(mtime)) *mtime = st.st_mtime;
+  return resolves;
 }
 
-/* `name` with its extension replaced by the three characters `ext` -- the sibling-file
- * spelling the per-file lookups used to build by hand, kept byte-for-byte compatible with
- * them (a name carrying no '.' at all keeps its first character, as it always did). */
+/* `name` with its extension replaced by the three characters `ext`: the sibling-file spelling
+ * the per-file lookups built by hand. It finds the dot in the file name, where they searched
+ * the whole path, and the two agree for every name that has an extension. They part ways for
+ * a name with none in a folder whose path has a dot: the old spelling then pointed beside the
+ * folder, outside the image's own directory, where this one stays inside it. A name with no
+ * '.' at all comes out as its first character followed by `ext` -- no companion file is
+ * spelled that way, so such an image simply has none. */
 static gchar *_sibling_name(const char *name, const char *ext)
 {
   size_t len = strlen(name);
