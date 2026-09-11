@@ -424,7 +424,10 @@ static double *_paper_fibres(const int size, const guint32 seed)
 
 static gboolean _is_paper(const uint32_t style)
 {
-  return style >= DT_CANVAS_BACKGROUND_MOLESKINE && style <= DT_CANVAS_BACKGROUND_JAPANESE;
+  // The papers are not one run of codes: transparent was appended between the Japanese
+  // paper and the psychedelic one, and a code is never moved once a file can carry it.
+  return (style >= DT_CANVAS_BACKGROUND_MOLESKINE && style <= DT_CANVAS_BACKGROUND_JAPANESE)
+         || style == DT_CANVAS_BACKGROUND_PSYCHEDELIC;
 }
 
 /**
@@ -505,6 +508,23 @@ static void _paper_relief(const dt_canvas_background_t style, const int size, co
     dt_free(clouds);
     dt_free(wrinkle_field);
     dt_free(grain);
+  }
+  else if(style == DT_CANVAS_BACKGROUND_PSYCHEDELIC)
+  {
+    // The same sheet as the Japanese paper -- same clouds, same wrinkles from the same
+    // knees -- with the ridge kept BARE, a coverage in [0, 1] rather than a depth: what
+    // reads it gives each channel its own share, and a depth already spent on brightness
+    // has no colour left to give. The grain goes with it for the same reason; the paper's
+    // doubled dither supplies the fine noise.
+    double *clouds = _paper_field(size, 9.0 / scale, 2.2, seed + 401u);
+    double *wrinkle_field = _paper_field(size, 14.0 / scale, 2.5, seed + 405u);
+    for(size_t idx = 0; idx < count; idx++)
+    {
+      (*low)[idx] = clouds[idx] * 0.018;
+      (*high)[idx] = exp(-wrinkle_field[idx] * wrinkle_field[idx] * 80.0);
+    }
+    dt_free(clouds);
+    dt_free(wrinkle_field);
   }
 }
 
@@ -652,6 +672,33 @@ static uint8_t *_paper_pixels(const dt_canvas_background_t style, const int spri
   uint8_t *pixels = g_malloc((size_t)total * total * 4);
   for(size_t idx = 0; idx < (size_t)total * total; idx++)
   {
+    if(style == DT_CANVAS_BACKGROUND_PSYCHEDELIC)
+    {
+      // The wrinkle is DYED rather than lit: it subtracts from two channels and spares the
+      // third. It has to subtract -- a paper sits near the top of the scale, so a ridge
+      // added to every channel only clips to white, which is exactly what makes the
+      // achromatic washi's ridge read as a highlight and forbids the same arithmetic here.
+      //
+      // Which channel a wrinkle spares comes from the cloud under it, read as about a fifth
+      // of a turn either side of the paper's own hue: neighbouring wrinkles are then
+      // different colours and one wrinkle drifts along its length, where a single hue would
+      // read as a tinted paper. A steeper turn spins the hue faster than a wrinkle is wide
+      // and comes out as fringing, not as dye -- measured, at the composed cloud's own
+      // range of +/- 0.11.
+      const double hue = low[idx] * 12.0;
+      // Hard enough to take the two channels it acts on to zero at a ridge's core: that
+      // clamp IS the look, a saturated thread rather than a pastel one, and `detail` is
+      // what tones the whole sheet back down.
+      const double amount = detail * high[idx] * 1.8;
+      for(int channel = 0; channel < 3; channel++)
+      {
+        const double share = 0.5 * (1.0 + cos(2.0 * M_PI * (hue + channel / 3.0)));
+        const double tone = base[channel] * (1.0 + contrast * low[idx] - amount * (1.0 - share));
+        pixels[4 * idx + channel] = (uint8_t)lround(CLAMP(tone, 0.0, 1.0) * 255.0);
+      }
+      pixels[4 * idx + 3] = 255;
+      continue;
+    }
     double relief = contrast * low[idx] + detail * high[idx];
     // The mesh is stamped over the blended field in absolute coordinates, so it stays one
     // mesh across placements whatever their phase and jitter; its pitch divides the period.
@@ -2335,8 +2382,10 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     // Washi is grainier to the eye than the western sheets: twice the dither; the user's grain on top.
     float grain = 1.0f;
     dt_canvas_texture_get(canvas, NULL, NULL, NULL, &grain);
-    _dither_canvas(canvas_rgba, band, options->units_per_pixel,
-                   (canvas->background_style == DT_CANVAS_BACKGROUND_JAPANESE ? 2.0 : 1.0) * grain);
+    // Both washi papers carry their fine noise in the dither alone, so theirs is doubled.
+    const gboolean is_washi = canvas->background_style == DT_CANVAS_BACKGROUND_JAPANESE
+                              || canvas->background_style == DT_CANVAS_BACKGROUND_PSYCHEDELIC;
+    _dither_canvas(canvas_rgba, band, options->units_per_pixel, (is_washi ? 2.0 : 1.0) * grain);
   }
   _stats.background_seconds += dt_get_wtime() - clock;
   clock = dt_get_wtime();
