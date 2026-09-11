@@ -2973,6 +2973,12 @@
     <shortdescription>colour of the canvas page borders -- the trim line, black by prepress convention -- as #rrggbbaa</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>canvas/resolution</name>
+    <type min="18" max="2400">float</type>
+    <default>300</default>
+    <shortdescription>canvas units per inch on a new canvas: what turns a paper size into a size on the plane</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>canvas/guides_over</name>
     <type>bool</type>
     <default>false</default>

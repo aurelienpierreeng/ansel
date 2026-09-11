@@ -56,6 +56,7 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *grid_color;
   GtkWidget *page_show;
   GtkWidget *page_over;
+  GtkWidget *resolution;
   GtkWidget *page_snap;
   GtkWidget *page_size;
   GtkWidget *page_orientation;
@@ -188,6 +189,14 @@ static void _guide_flag_toggled(GtkToggleButton *button, gpointer user_data)
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_guides)) return;
   const int flag = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "guide-flag"));
   dt_view_manager_get_global()->proxy.canvas.set_guides(view, flag, gtk_toggle_button_get_active(button) ? flag : 0);
+}
+
+static void _resolution_changed(GtkSpinButton *spin, gpointer user_data)
+{
+  dt_view_t *view = NULL;
+  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_resolution)) return;
+  dt_view_manager_get_global()->proxy.canvas.set_resolution(view, (float)gtk_spin_button_get_value(spin));
 }
 
 static void _grid_size_changed(GtkSpinButton *spin, gpointer user_data)
@@ -409,6 +418,7 @@ static void _refill(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->page_show), (flags & DT_CANVAS_PAGE_VISIBLE) != 0);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->page_snap), (flags & DT_CANVAS_SNAP_PAGE) != 0);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->page_over), (flags & DT_CANVAS_GUIDES_OVER) != 0);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->resolution), dt_canvas_resolution(canvas));
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_size), dt_canvas_paper_position(canvas->paper_size));
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_orientation), canvas->paper_landscape ? 1 : 0);
   _rgba_to(toolbar->page_color, &canvas->page_color, TRUE);
@@ -582,6 +592,15 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   _labelled(grid, 1, 3, _("Colour"), toolbar->grid_color);
 
   _section_label(grid, 2, _("Page borders"));
+  // The resolution belongs beside the page size: it is what turns a sheet of paper into a
+  // size on a plane measured in display pixels, and without it an A4 and a phone story are
+  // read as the same kind of number.
+  toolbar->resolution = gtk_spin_button_new_with_range(18.0, 2400.0, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->resolution,
+                              _("Canvas units per inch. A paper size is scaled by it -- at 300 an A4 is 2480 units "
+                                "wide -- while a screen format is its own pixel size whatever this says."));
+  g_signal_connect(toolbar->resolution, "value-changed", G_CALLBACK(_resolution_changed), self);
+  _labelled(grid, 2, 2, _("Resolution"), toolbar->resolution);
   toolbar->page_show = _guide_check(self, grid, 3, 0, _("Show"), DT_CANVAS_PAGE_VISIBLE);
   toolbar->page_snap = _guide_check(self, grid, 3, 1, _("Snap"), DT_CANVAS_SNAP_PAGE);
   toolbar->page_over = _guide_check(self, grid, 4, 0, _("Over"), DT_CANVAS_GUIDES_OVER);
