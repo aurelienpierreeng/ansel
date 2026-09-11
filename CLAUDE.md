@@ -1496,6 +1496,16 @@ groups". `gtk_tree_view_expand_to_path()` on the found row does the same job. Th
 `collapse_all()` on the not-found branch went with it: without an `expand_all()` to undo, it would
 have destroyed the user's own expansions on any selection event that missed.
 
+**Outside the darkroom the panel is empty and insensitive.** It is a toplevel that outlives the
+view, while what its rows point at does not: the darkroom's `leave()` frees `dev->iop`, and a row
+stores its module by address (`TREE_MODULE`). `_shape_manager_recreate_list()` is the one place
+that decides it (`_shape_manager_is_active()`: the current view is the darkroom), so no path that
+rebuilds the lists — a mask signal, the develop proxy — can refill them from another view. A view
+switch reaches it through `DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED`, because a `special` lib is never
+handed `view_enter()`/`view_leave()`; that signal is raised after the new view's `enter()`, so the
+darkroom's modules are loaded by the time the rows are built. The emptied lists get an empty store,
+not a NULL model: the handlers read the model without checking it.
+
 **`dev->form_gui` can be NULL while this panel is open.** It is allocated on entering darkroom and
 freed back to NULL on leaving it (`views/darkroom.c`, `views/studio_capture.c`), and this panel is
 a standalone toplevel that outlives that. `dt_masks_change_form_gui()` is NULL-safe throughout and

@@ -2314,16 +2314,20 @@ static gboolean _tree_row_is_separator(GtkTreeModel *model, GtkTreeIter *iter,
   return is_separator;
 }
 
+/* An empty store with the columns both lists read (see dt_masks_tree_cols_t). */
+static GtkTreeStore *_tree_store_new(void)
+{
+  // we store : text ; *module ; groupid ; formid
+  return gtk_tree_store_new(TREE_COUNT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT, G_TYPE_INT, G_TYPE_BOOLEAN,
+                            GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
+                            G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_BOOLEAN);
+}
+
 /* The inventory list shows the unclaimed groups first, then every shape, with a rule between
  * them. The module list has only groups, so it gets neither the second pass nor the rule. */
 static GtkTreeStore *_tree_store_build(dt_shape_manager_t *lm, const dt_shape_list_t which)
 {
-  // we store : text ; *module ; groupid ; formid
-  GtkTreeStore *treestore = gtk_tree_store_new(TREE_COUNT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT,
-                                               G_TYPE_INT, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN,
-                                               GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING,
-                                               G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING,
-                                               G_TYPE_BOOLEAN);
+  GtkTreeStore *treestore = _tree_store_new();
   const gboolean had_groups = _tree_store_add_forms(treestore, lm, which, TRUE);
   if(which == DT_SHAPE_LIST_MODULES) return treestore;
 
@@ -2393,6 +2397,17 @@ static gboolean _tree_select_module_group(dt_shape_manager_list_t *list, GtkTree
   return TRUE;
 }
 
+/* Whether the panel has anything to show: only the darkroom has a develop to read shapes from.
+ * The window is a toplevel of its own and outlives the view -- the user can leave the darkroom
+ * with it open -- while what its rows point at does not: the darkroom's leave() frees dev->iop,
+ * and a row stores its module by address (TREE_MODULE). */
+static gboolean _shape_manager_is_active(void)
+{
+  dt_view_manager_t *vm = dt_view_manager_get_global();
+  const dt_view_t *cv = IS_NULL_PTR(vm) ? NULL : dt_view_manager_get_current_view(vm);
+  return !IS_NULL_PTR(cv) && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM;
+}
+
 static void _shape_manager_recreate_list(dt_lib_module_t *self)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
@@ -2401,6 +2416,29 @@ static void _shape_manager_recreate_list(dt_lib_module_t *self)
   // Everything below drives the trees itself, so the handlers they would wake must stay quiet.
   const int gui_reset = lm->gui_reset;
   lm->gui_reset = 1;
+
+  /* Outside the darkroom both lists are emptied and the whole window greyed out: no row would
+   * still be valid, and no button has a develop to act on. Decided here, where every rebuild
+   * passes, so no caller -- a mask signal, the develop proxy, a view switch -- can refill it. */
+  const gboolean active = _shape_manager_is_active();
+  GtkWidget *content = IS_NULL_PTR(lm->popup_window) ? NULL : gtk_bin_get_child(GTK_BIN(lm->popup_window));
+  if(!IS_NULL_PTR(content)) gtk_widget_set_sensitive(content, active);
+
+  if(!active)
+  {
+    for(int i = 0; i < DT_SHAPE_LIST_COUNT; i++)
+    {
+      dt_shape_manager_list_t *list = &lm->lists[i];
+      if(IS_NULL_PTR(list->treeview)) continue;
+
+      // An empty store rather than none: every handler reads the model without a NULL check.
+      GtkTreeStore *empty = _tree_store_new();
+      gtk_tree_view_set_model(GTK_TREE_VIEW(list->treeview), GTK_TREE_MODEL(empty));
+      g_object_unref(empty);
+    }
+    lm->gui_reset = gui_reset;
+    return;
+  }
 
   // Rebuilding the list also refreshes shapes created during continuous creation. In that case
   // the active creation button must stay active until the user cancels creation explicitly.
@@ -2821,6 +2859,16 @@ static void _shape_manager_handler_callback(gpointer instance __attribute__((unu
   }
 
   dt_control_queue_redraw_center();
+}
+
+/* Empties or refills the lists on a view switch (see _shape_manager_is_active()). A "special"
+ * module is never handed view_enter()/view_leave(), hence the signal; it is raised once the new
+ * view has entered, so the darkroom's modules are loaded by the time the rows are built. */
+static void _shape_manager_view_changed(gpointer instance __attribute__((unused)),
+                                        dt_view_t *old_view __attribute__((unused)),
+                                        dt_view_t *new_view __attribute__((unused)), dt_lib_module_t *self)
+{
+  _shape_manager_recreate_list(self);
 }
 
 /* Geometry the user gives the shape manager by hand. The height is not ours: the shape list
@@ -3349,6 +3397,11 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(shape_manager_container), lists_paned, TRUE, TRUE, 0);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, G_CALLBACK(_shape_manager_handler_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
+                                  G_CALLBACK(_shape_manager_view_changed), self);
+
+  // Modules are loaded before any view is entered: start out empty and greyed out.
+  _shape_manager_recreate_list(self);
 
   // set proxy functions
   dt_dev_get_global()->proxy.masks.module = self;
@@ -3399,6 +3452,7 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_free(self->data);
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_shape_manager_handler_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_shape_manager_view_changed), self);
 }
 
 // clang-format off
