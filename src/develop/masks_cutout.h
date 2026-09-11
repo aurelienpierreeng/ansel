@@ -55,7 +55,16 @@ enum
   DT_MASKS_CUTOUT_NODE_CTRL1_Y = 3,
   DT_MASKS_CUTOUT_NODE_CTRL2_X = 4,
   DT_MASKS_CUTOUT_NODE_CTRL2_Y = 5,
-  DT_MASKS_CUTOUT_NODE_SMOOTH = 6, ///< non-zero: the curve is smoothed through the node and the control points are computed
+  /**
+   * What the node's control points are: 0 they are its own, 1 the curve is smoothed through
+   * the node and they are computed from its neighbours, 2 they are its own AND the node is
+   * smooth -- the caller keeps them collinear, which is the only thing that makes a node
+   * smooth here, since a cusp is two control points that coincide and nothing else. Only 1
+   * asks for a computed tangent; a reader that tested "non-zero" instead threw away every
+   * tangent a user had steered. Nothing ever wrote 2 before it was defined, so every
+   * existing document holds 0 or 1 and reads exactly as it did.
+   */
+  DT_MASKS_CUTOUT_NODE_SMOOTH = 6,
   DT_MASKS_CUTOUT_NODE_BORDER1 = 7, ///< the fall-off's own radius on one side of the node; 0 takes the shape's
   DT_MASKS_CUTOUT_NODE_BORDER2 = 8, ///< and on the other
   DT_MASKS_CUTOUT_NODE_FLOATS = 9, ///< the least a node record holds; `node_stride` may be larger

@@ -65,8 +65,12 @@ static dt_masks_form_t *_polygon_form(const dt_masks_cutout_t *cutout, const flo
     }
     node->node[0] = source[DT_MASKS_CUTOUT_NODE_X];
     node->node[1] = source[DT_MASKS_CUTOUT_NODE_Y];
-    const gboolean smooth = source[DT_MASKS_CUTOUT_NODE_SMOOTH] != 0.0f;
-    if(smooth)
+    // Only "computed" asks the shape for a tangent. A node carrying its own control points is
+    // a cusp or a smooth node according to whether they coincide -- the darkroom decides that
+    // by geometry (`dt_masks_node_is_cusp()`), not by a flag -- so both land in the same
+    // branch here and the difference lives in where the caller puts the points.
+    const gboolean computed = source[DT_MASKS_CUTOUT_NODE_SMOOTH] == 1.0f;
+    if(computed)
     {
       // -1 asks the polygon's own initialiser for a Catmull-Rom tangent through the node.
       node->ctrl1[0] = node->ctrl1[1] = node->ctrl2[0] = node->ctrl2[1] = -1.0f;

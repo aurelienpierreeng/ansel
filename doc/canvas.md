@@ -247,15 +247,41 @@ from the average of the nodes; how far it is pulled is the radius, written to bo
 darkroom's per-node borders. A node with none takes the shape's, so a polygon reads as it
 always did until one node's feather is pulled out. Its two **control points** are round and
 tethered either side, drawn where the curve actually goes -- the stored points, or the
-Catmull-Rom tangent through a smooth node -- and steering one makes the node the user's: the
-other control is written down as it stood, so nothing jumps, and the curve stops being
-computed through it. Three shapes for three jobs: a square is the node, a circle its curve,
-the dashed tether's end its fall-off. Over the frame, the wheel sets the feather, with
+Catmull-Rom tangent through an automatic node.
+
+**A node has THREE kinds, not two** (`dt_canvas_mask_node_kind_t`): a **cusp**, whose two
+control points are its own and free of each other; an **automatic** node, smooth, whose
+tangent is computed from its neighbours; and a **steered** node, smooth, whose tangent is the
+one the user dragged. Steering a handle on a cusp moves that handle alone. Steering one on a
+smooth node keeps it smooth: the opposite control turns with it, through the node, and keeps
+the length it had, so **one handle sets the direction the curve leaves in and the tension it
+leaves with**. Without that third kind the first touch of a handle turned every node into a
+cusp and a smooth node could never be given a tangent of its own. A control sitting on its
+node has no length to keep and takes the dragged one's, so a tangent pulled out of a node
+that never had one comes out symmetric instead of collapsed on one side.
+
+The distinction is not a flag at the far end: `dt_masks_node_is_cusp()` decides it by
+geometry, two control points that coincide, so the cutout entry hands a cusp and a steered
+node down the same way and only an automatic one asks the shape for a tangent. Reading that
+field as "non-zero means computed" threw away every steered tangent -- the outline moved on
+screen and the cut did not follow -- which `test_canvas_cutout` now pins. Nothing ever wrote
+the third value before it existed, so every document written before this reads as it did.
+
+Four shapes for four jobs: a square is a cusp node, a circle a smooth one, a circle on a
+short tether its curve, the dashed tether's end its fall-off. Over the frame, the wheel sets the feather, with
 Shift the opacity, with Ctrl the gradient's curvature or the ellipse's rotation. On a
 polygon, Ctrl+click on an edge inserts a node, Shift+click on a node removes it and a double
-click makes it smooth or sharp; a smooth node takes the Catmull-Rom tangent the masks module
-computes, and the view draws the same curve. The context menu offers the shapes, editing,
-inverting, and the node actions for the node or edge under the pointer. Every drag and
+click switches it between cusp and smooth -- the same one call the context menu's entry uses,
+so the two cannot drift. The context menu offers the shapes, editing, inverting, and the node
+actions for the node or edge under the pointer: switch the node's kind, give a steered one its
+computed curve back, remove it, or add one on the edge.
+
+**The menu asks its own question of the geometry, not the drag's.** `_mask_handle_at()`
+answers what a drag would grab and refuses everything while the shape is not being edited,
+which is right for a drag and wrong for a menu: for as long as the cutout submenu keyed its
+node entries on it, they were a duplicate of the top-level ones whenever the shape was being
+edited and unreachable the rest of the time. `_mask_node_at()` is the geometric question, and
+the submenu offers the way into the edit mode instead. Every drag and
 every wheel step is one undo record.
 
 A cut-out frame is three layers over each other in linear light, composited in one pass
