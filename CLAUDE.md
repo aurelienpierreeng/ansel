@@ -2552,7 +2552,28 @@ they are visible.
   rebuild the coloured tile (`_paper_key()`). Choosing a paper style sets the background to
   the paper's tint through the style-only branch of `set_background()` -- the toolbar's combo
   sends NULL for the colour and the colour patch sends -1 for the style, so one never
-  overwrites the other.
+  overwrites the other. Zero-mean is the default, not a law: the watercolour's tooth may only
+  carve (a white sheet has nothing to add at its peaks) and the charcoal card's may only lift
+  (a black sheet has nothing to take in its hollows), and both tints allow for the offset.
+- **A threshold on a synthesised field is taken in the field's OWN deviations, never in
+  absolute value.** `_paper_field_band()` normalises against a fixed 256x256 power sum, so an
+  absolute cut depends on a number nobody reading the call site can see: kraft's shives were
+  first cut at a guessed level and covered the sheet, reading as cork instead of a paper with
+  the odd fleck. Sum the squares over the sprite, divide, and cut at just under three sigma
+  for something that should be a few tenths of a percent of the surface.
+- **A periodic stamp whose pitch approaches the tile's sampling must fade itself out.** The
+  papers are synthesised at 256 or 512 pixels per 512-unit sprite, so the coarse tile has half
+  a sample per unit: the laid paper's 3-unit ripple gets 1.5 samples per period and comes back
+  at three quarters of full amplitude in a 2.4-pixel period -- measured, an alias and not the
+  wires, reading as a fine streaking that is not paper. `_paper_laid()` ramps its ripple out
+  below three samples per period and to nothing below two. The residual belongs to every
+  paper and is not worth a per-frame cost: between half zoom and full, the tile is built finer
+  than the screen and the plane blit shrinks it with `CAIRO_FILTER_BILINEAR`, which attenuates
+  a fine structure rather than filtering it.
+- **A paper's whole synthesis is a cold cost of about 2.2 s**, cached per (resolution, scale),
+  and the FFT fields dominate it -- not the fibre or mesh stamps. Kraft's 2600 long fibres, a
+  six-fold bigger stamp than the moleskine's, cost 15% more in total (2568 ms against 2238).
+  Measure the whole paint before optimising a stamp.
 - **An inset shadow's plane must be padded with ONES before the blur.** `_box_blur()` pads with
   zeros, which for the uncovered plane means "covered": the shadow thinned wherever an ellipse
   cutout came near its bounding box. `_shadow_plane()` grows the inset plane by three radii of
