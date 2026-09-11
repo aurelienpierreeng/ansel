@@ -2473,6 +2473,21 @@ they are visible.
   atelier converts to the display profile, the export keeps Adobe RGB and converts the whole
   page with LCMS. Every colour the canvas draws goes through `dt_canvas_render_color()`, so borders match
   their pictures.
+- **Every gesture that changes the document must touch the canvas, once per motion.** The
+  painter keeps the frame it last composited and blits it again for a key it has already seen,
+  and the generation is what tells two frames apart -- the key knows nothing of where an object
+  sits or where a connector's waypoint is. A drag that forgets it paints its first frame over
+  and over, and the thing being dragged only catches up when something else moves the key,
+  which is how "the connector does not follow its handle" was reported. Before the composite
+  cache every redraw recomposited and no drag needed it, so this is a new obligation on old
+  code: `_drag_changes_the_document()` answers for every drag kind and is written as an
+  opt-OUT (only panning and the rubber band are exempt), so a new kind is covered the day it
+  is added. `test_canvas_cutout` pins the painter's half of the bargain.
+- **A polygon node's record may grow, and the file says how wide it was.** The node chunk's
+  size divided by the node count is the stride it was written with: a shorter record reads as
+  zero in the fields it lacks, a longer one is stepped over. Never assume the current width
+  when reading it, and never write a test fixture as a flat run of floats -- three of them
+  fed every node the next one's numbers the day the record gained its per-node fall-off.
 - **The toolbar owns no state.** It asks the view through `proxy.canvas` and refills from
   the document on `DT_SIGNAL_CANVAS_CHANGED` with its handlers blocked. A control that wrote
   back during a refill would loop.

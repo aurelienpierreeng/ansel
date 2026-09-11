@@ -56,7 +56,9 @@ enum
   DT_MASKS_CUTOUT_NODE_CTRL2_X = 4,
   DT_MASKS_CUTOUT_NODE_CTRL2_Y = 5,
   DT_MASKS_CUTOUT_NODE_SMOOTH = 6, ///< non-zero: the curve is smoothed through the node and the control points are computed
-  DT_MASKS_CUTOUT_NODE_FLOATS = 7, ///< the least a node record holds; `node_stride` may be larger
+  DT_MASKS_CUTOUT_NODE_BORDER1 = 7, ///< the fall-off's own radius on one side of the node; 0 takes the shape's
+  DT_MASKS_CUTOUT_NODE_BORDER2 = 8, ///< and on the other
+  DT_MASKS_CUTOUT_NODE_FLOATS = 9, ///< the least a node record holds; `node_stride` may be larger
 };
 
 /**
@@ -70,7 +72,7 @@ typedef struct dt_masks_cutout_t
   float center[2];     ///< circle, ellipse: the centre; gradient: the anchor
   float radius[2];     ///< circle: [0]; ellipse: horizontal, vertical; gradient: extent, curvature
   float rotation;      ///< degrees; ellipse and gradient
-  float feather;       ///< the fall-off's extent past the shape's edge
+  float feather;       ///< the fall-off's extent past the shape's edge, and a polygon node's default
   gboolean invert;     ///< keep the outside of the shape
   uint32_t node_count; ///< polygon nodes
   uint32_t node_stride;///< floats per node in `nodes`, at least DT_MASKS_CUTOUT_NODE_FLOATS

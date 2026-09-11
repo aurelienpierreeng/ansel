@@ -206,8 +206,11 @@ is the raster's size. The masks module is being enclosed and the canvas never re
 a `dt_masks_form_t`; the entry is inside the module, so the ratchet stays where it is.
 
 The polygon's nodes are variable-length and follow the object's record as a tagged chunk
-(`CANVAS_CHUNK_MASK_NODES`), eight floats per node: position, two control points, a smooth
-flag. The fixed fields (shape, flags, feather, centre, radii, rotation) took reserved bytes.
+(`CANVAS_CHUNK_MASK_NODES`), ten floats per node: position, two control points, a smooth
+flag, the fall-off's own radius either side of the node, and a spare. **The chunk's size
+divided by the node count is the stride it was written with**, so the record may gain a field
+without the format moving and without an older document losing a node: fewer floats than this
+version keeps read as zero, more are stepped over. The fixed fields (shape, flags, feather, centre, radii, rotation) took reserved bytes.
 The raster is cached in the surface cache by the mask's hash, size and inset
 (`dt_canvas_surface_cache_get_mask()`), as an 8-bit alpha surface at the frame's size on
 screen, capped at 3072 pixels a side. **One rule sizes every frame: the frame is the
@@ -234,7 +237,20 @@ resolution, so its two edges are anti-aliased too.
 The view edits a cutout with handles over the frame when the bar's Edit toggle is on: the
 centre or anchor, the radius or radii (the ellipse's first radius handle also sets its
 rotation), the feather on the circle's or the ellipse's dashed ring, the gradient's reach
-across its line, and the polygon's nodes. Over the frame, the wheel sets the feather, with
+across its line, and the polygon's nodes.
+
+**A polygon node owns two things the shape does not**, both the darkroom's own, and both
+reached from the node the pointer is working near -- one node's at a time, since every node's
+at once buries the shape under its handles. Its **fall-off** hangs on a dashed tether along
+the node's outward normal, the perpendicular to the line through its neighbours turned away
+from the average of the nodes; how far it is pulled is the radius, written to both of the
+darkroom's per-node borders. A node with none takes the shape's, so a polygon reads as it
+always did until one node's feather is pulled out. Its two **control points** are round and
+tethered either side, drawn where the curve actually goes -- the stored points, or the
+Catmull-Rom tangent through a smooth node -- and steering one makes the node the user's: the
+other control is written down as it stood, so nothing jumps, and the curve stops being
+computed through it. Three shapes for three jobs: a square is the node, a circle its curve,
+the dashed tether's end its fall-off. Over the frame, the wheel sets the feather, with
 Shift the opacity, with Ctrl the gradient's curvature or the ellipse's rotation. On a
 polygon, Ctrl+click on an edge inserts a node, Shift+click on a node removes it and a double
 click makes it smooth or sharp; a smooth node takes the Catmull-Rom tangent the masks module

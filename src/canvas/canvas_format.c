@@ -225,6 +225,8 @@ static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
     _w_u32(out, 4 + floats * 4);
     _w_u32(out, object->mask.node_count);
     for(uint32_t idx = 0; idx < floats; idx++) _w_f32(out, object->mask.nodes[idx]);
+    // The reader divides the chunk by the node count to learn how wide a node was when this
+    // was written, so the record may gain a field without the format moving.
   }
   const uint32_t record_size = out->len - start;
   uint8_t *size_field = out->data + start + 4;
@@ -528,11 +530,20 @@ static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *obj
     if(tag == CANVAS_CHUNK_MASK_NODES && size >= 4)
     {
       const uint32_t count = _r_u32(cursor);
-      const uint32_t floats = count * DT_CANVAS_MASK_NODE_FLOATS;
-      if(count > 0 && count <= 4096 && floats * 4 <= size - 4)
+      // How wide a node was when this was written: fewer floats than this version keeps means
+      // an older file, whose missing fields read as zero; more means a newer one, whose extra
+      // fields are stepped over. Either way every node arrives whole.
+      const uint32_t stride = count > 0 ? (size - 4) / 4 / count : 0;
+      if(count > 0 && count <= 4096 && stride > 0 && stride * count * 4 <= size - 4)
       {
-        float *nodes = g_new(float, floats);
-        for(uint32_t idx = 0; idx < floats; idx++) nodes[idx] = _r_f32(cursor);
+        const uint32_t kept = MIN(stride, (uint32_t)DT_CANVAS_MASK_NODE_FLOATS);
+        float *nodes = g_new0(float, (size_t)count * DT_CANVAS_MASK_NODE_FLOATS);
+        for(uint32_t node = 0; node < count; node++)
+        {
+          for(uint32_t idx = 0; idx < kept; idx++)
+            nodes[(size_t)node * DT_CANVAS_MASK_NODE_FLOATS + idx] = _r_f32(cursor);
+          for(uint32_t idx = kept; idx < stride; idx++) _r_f32(cursor);
+        }
         dt_canvas_mask_clear(object);
         object->mask.nodes = nodes;
         object->mask.node_count = count;
