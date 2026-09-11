@@ -460,7 +460,7 @@ anchored to the canvas origin so it does not shimmer under a pan.
 The grid dots have a colour of their own and a radius that is a fraction of the grid step,
 so they scale with the zoom too, floored at three quarters of a pixel so they never vanish.
 
-A canvas may be divided into **pages** -- ISO A2 to A6, US Letter, or one of the screen
+A canvas may be divided into **pages** -- ISO A0 to A6, US Letter, or one of the screen
 formats a picture is made for (Instagram square and portrait, a story/reel/Short, a Facebook
 post or cover, a YouTube thumbnail or channel banner), portrait or landscape -- tiled from
 the origin and outlined with dashed lines in their own colour: one line per
@@ -473,9 +473,19 @@ the gutter and before the size.
 **One canvas unit is one point**, so an A4 page is 595 by 842 units and a print size is its
 size in points. A screen format is the same number read as pixels: a story page is 1080 by
 1920 units, and exported at 72 dpi it comes out at exactly 1080 by 1920 pixels, at 144 dpi at
-twice that. `dt_canvas_paper_name()` and `dt_canvas_paper_points()` are the one table behind
-the list, and the toolbar reads it rather than repeating it. **The stored value is the
-index**, so a new size is appended and never inserted, or every saved document changes page.
+twice that. One table holds them all, and the toolbar reads it rather than repeating it. **The stored
+value is a code, not the row it is shown on**: a size is appended to `dt_canvas_paper_t` so no
+saved document changes page, and the table's order is where the list shows it, which is how A0
+and A1 came to sit above A2 while carrying the highest codes. `dt_canvas_paper_code()` turns a
+row into the value to store and `dt_canvas_paper_position()` turns it back; only
+`dt_canvas_paper_points()` speaks codes.
+
+Two more guides ride on the pages, each with its own show, snap, size and colour, and each one
+rectangle per page rather than a grid of shared lines: the **margin** inside every page edge,
+which is a guide and a snapping rule and moves nothing; and the **bleed** outside it, which is
+also what the export writes. Both are the document's -- `dt_canvas_page_guide_rect()` is the
+page rectangle grown by a signed outset, negative for the margin and positive for the bleed --
+so what the atelier shows is what comes out, and the export dialog does not ask again.
 
 ### Exporting
 
@@ -495,11 +505,12 @@ picture that was already a lossy JPEG on the way in. A PDF page is therefore car
 six-page A3 book from 87 MB to 14.5 MB and halved the time; quality 100 keeps the lossless
 stream for anyone who wants every code. PNG and TIFF are always lossless.
 
-**The bleed** grows every sheet by the amount asked for on all four sides -- in centimetres,
-inches or pixels at the export resolution -- and grows the canvas rectangle with it, so a
-frame a page break cut in two carries on into the bleed on both sheets. That is what a
-binding folds around and a trim cuts into. **It is not a margin**: nothing is moved and no
-room is kept clear, the sheet is simply larger than the page.
+**The bleed** is the canvas's own, set in the atelier beside the page size and drawn there.
+It grows every sheet on all four sides and grows the canvas rectangle with it, so a frame a
+page break cut in two carries on into the bleed on both sheets. That is what a binding folds
+around and a trim cuts into. **It is not a margin**: nothing is moved and no room is kept
+clear, the sheet is simply larger than the page. The page's own margin is the guide that keeps
+room clear, and it changes nothing about what is exported.
 
 ### Text frames
 

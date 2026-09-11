@@ -3027,16 +3027,40 @@
     <shortdescription>file format of the canvas export (dt_canvas_export_format_t)</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/export/bleed_mm</name>
+    <name>canvas/page_margin</name>
     <type min="0" max="2000">float</type>
     <default>0</default>
-    <shortdescription>how far past every page edge the canvas export keeps drawing, in mm</shortdescription>
+    <shortdescription>margin kept clear inside every canvas page edge, in canvas units</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/export/bleed_unit</name>
-    <type min="0" max="2">int</type>
+    <name>canvas/margin_visible</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>draw the canvas pages' inner margins</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/margin_color</name>
+    <type>string</type>
+    <default>#66CCFFB3</default>
+    <shortdescription>colour of the canvas pages' margin lines</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/page_bleed</name>
+    <type min="0" max="2000">float</type>
     <default>0</default>
-    <shortdescription>unit the canvas export's bleed is typed in: 0 cm, 1 inch, 2 pixels</shortdescription>
+    <shortdescription>how far past every canvas page edge the sheet keeps going, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/bleed_visible</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>draw the canvas pages' bleed lines</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/bleed_color</name>
+    <type>string</type>
+    <default>#FF7373B3</default>
+    <shortdescription>colour of the canvas pages' bleed lines</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/export/quality</name>

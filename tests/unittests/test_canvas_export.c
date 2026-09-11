@@ -141,15 +141,18 @@ static void _a_page_is_rasterised_at_exactly_its_size_times_the_resolution(void 
   dt_canvas_free(canvas);
 }
 
-/** The bleed grows the sheet on all four sides, and nothing else moves. */
+/**
+ * The bleed grows the sheet on all four sides, and nothing else moves. It belongs to the
+ * document, beside the page size it grows, not to the export that writes it.
+ */
 static void _a_bleed_grows_the_sheet_on_every_side(void **state)
 {
   (void)state;
   dt_canvas_t *canvas = _canvas_of_pages(1);
+  canvas->page_bleed = 72.0f; // one inch of canvas units: one page's worth of pixels per side at 72 dpi
   dt_canvas_export_options_t options = dt_canvas_export_options_default();
   options.format = DT_CANVAS_EXPORT_PNG;
   options.dpi = 72.0f;
-  options.bleed_mm = 25.4f; // one inch, so one page's worth of pixels per side at 72 dpi
   gchar *path = _output("bleed.png");
   GError *error = NULL;
   assert_true(dt_canvas_export(canvas, path, &options, &error));
