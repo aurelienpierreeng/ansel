@@ -437,7 +437,8 @@ typedef enum dt_canvas_background_t
   DT_CANVAS_BACKGROUND_EMBOSSED = 3,    ///< paper dried on a metallic mesh, its imprint in the fibres
   DT_CANVAS_BACKGROUND_JAPANESE = 4,    ///< washi: large soft clouds and long wrinkles
   DT_CANVAS_BACKGROUND_TRANSPARENT = 5, ///< nothing at all: the plane is a hole the export carries
-  DT_CANVAS_BACKGROUND_LAST = 6,
+  DT_CANVAS_BACKGROUND_PSYCHEDELIC = 6, ///< washi whose wrinkles carry a colour instead of a brightness
+  DT_CANVAS_BACKGROUND_LAST = 7,
 } dt_canvas_background_t;
 
 /**

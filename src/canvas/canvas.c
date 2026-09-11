@@ -731,6 +731,7 @@ static const struct
   { DT_CANVAS_BACKGROUND_WATERCOLOUR, N_("Watercolour paper") },
   { DT_CANVAS_BACKGROUND_EMBOSSED, N_("Embossed paper") },
   { DT_CANVAS_BACKGROUND_JAPANESE, N_("Japanese paper") },
+  { DT_CANVAS_BACKGROUND_PSYCHEDELIC, N_("Psychedelic washi") },
 };
 
 int dt_canvas_background_count(void)
@@ -778,6 +779,9 @@ dt_canvas_color_t dt_canvas_background_tint(const uint32_t style)
     case DT_CANVAS_BACKGROUND_EMBOSSED:
       return dt_canvas_color(0.965f, 0.962f, 0.950f, 1.0f);
     case DT_CANVAS_BACKGROUND_JAPANESE:
+      return dt_canvas_color(0.972f, 0.962f, 0.935f, 1.0f);
+    case DT_CANVAS_BACKGROUND_PSYCHEDELIC:
+      // Washi's own colour: it is the same sheet, and only its wrinkles are dyed.
       return dt_canvas_color(0.972f, 0.962f, 0.935f, 1.0f);
     default:
       return dt_canvas_color(0.18f, 0.18f, 0.18f, 1.0f);
