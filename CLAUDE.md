@@ -2679,6 +2679,18 @@ they are visible.
   free and recreate documents at the same address with the same generation, and were handed
   the previous test's frame. It serves paints that carry a surface cache only, because a test
   that edits the struct by hand between two paints bumps no generation.
+- **The guides are the prepress palette, and the gutter is a margin around ONE frame.** Trim
+  black, bleed red, margin violet -- InDesign's, hence every print shop's template -- all
+  solid, since on a dieline a cut is solid and a crease is dashed and the dash is worth
+  reserving for the fold. Each is stroked under a white keyline, which the convention never
+  needs because its pasteboard is always light and this plane can be a charcoal card. The
+  colour conf keys were RENAMED (`canvas/trim_color`, `canvas/guide_*_color`) because a
+  configuration that already holds the old defaults would otherwise never see the new ones.
+  And the gutter: two frames sit side by side when their margin boxes touch, so the clear
+  space between them is TWO gutters. Keyed on one, a frame's box landed on its neighbour's
+  edge and the two boxes overlapped across the whole gap -- box against frame, reported as
+  odd and crossing. The snapping, the masonry run detection and `dt_canvas_layout_apply()`
+  must carry the same factor, or an arranged layout is not one the snapping can reproduce.
 - **A page size is an index into one appended-only table** (`dt_canvas_paper_points()`), and
   the GUI reads the table rather than repeating it. Insert a size in the middle and every
   saved document changes page. One canvas unit is one point, so a screen format is its pixel

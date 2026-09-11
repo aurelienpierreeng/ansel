@@ -2967,10 +2967,16 @@
     <shortdescription>landscape pages on a new canvas</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/page_color</name>
+    <name>canvas/trim_color</name>
     <type>string</type>
-    <default>#5999ffff</default>
-    <shortdescription>colour of the canvas page borders, #rrggbbaa</shortdescription>
+    <default>#000000ff</default>
+    <shortdescription>colour of the canvas page borders -- the trim line, black by prepress convention -- as #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/guides_over</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>draw the canvas page guides over the content rather than under it</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/page_visible</name>
@@ -3039,10 +3045,10 @@
     <shortdescription>draw the canvas pages' inner margins</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/margin_color</name>
+    <name>canvas/guide_margin_color</name>
     <type>string</type>
-    <default>#66CCFFB3</default>
-    <shortdescription>colour of the canvas pages' margin lines</shortdescription>
+    <default>#8E44D0ff</default>
+    <shortdescription>colour of the canvas pages' margin lines, violet by prepress convention</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/page_bleed</name>
@@ -3057,10 +3063,10 @@
     <shortdescription>draw the canvas pages' bleed lines</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/bleed_color</name>
+    <name>canvas/guide_bleed_color</name>
     <type>string</type>
-    <default>#FF7373B3</default>
-    <shortdescription>colour of the canvas pages' bleed lines</shortdescription>
+    <default>#E1261Cff</default>
+    <shortdescription>colour of the canvas pages' bleed lines, red by prepress convention</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/export/quality</name>
@@ -3153,9 +3159,9 @@
     <shortdescription>whether a new canvas draws the gutter frames around its frames</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/gutter_color</name>
+    <name>canvas/guide_gutter_color</name>
     <type>string</type>
-    <default>#ffa633cc</default>
+    <default>#3C78C8ff</default>
     <shortdescription>colour of the gutter frames of a new canvas, #rrggbbaa</shortdescription>
   </dtconfig>
 </dtconfiglist>

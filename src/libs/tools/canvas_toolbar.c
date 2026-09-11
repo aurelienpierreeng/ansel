@@ -55,6 +55,7 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *grid_size;
   GtkWidget *grid_color;
   GtkWidget *page_show;
+  GtkWidget *page_over;
   GtkWidget *page_snap;
   GtkWidget *page_size;
   GtkWidget *page_orientation;
@@ -407,6 +408,7 @@ static void _refill(dt_lib_module_t *self)
   _rgba_to(toolbar->grid_color, &canvas->grid_color, TRUE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->page_show), (flags & DT_CANVAS_PAGE_VISIBLE) != 0);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->page_snap), (flags & DT_CANVAS_SNAP_PAGE) != 0);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->page_over), (flags & DT_CANVAS_GUIDES_OVER) != 0);
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_size), dt_canvas_paper_position(canvas->paper_size));
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_orientation), canvas->paper_landscape ? 1 : 0);
   _rgba_to(toolbar->page_color, &canvas->page_color, TRUE);
@@ -582,6 +584,10 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   _section_label(grid, 2, _("Page borders"));
   toolbar->page_show = _guide_check(self, grid, 3, 0, _("Show"), DT_CANVAS_PAGE_VISIBLE);
   toolbar->page_snap = _guide_check(self, grid, 3, 1, _("Snap"), DT_CANVAS_SNAP_PAGE);
+  toolbar->page_over = _guide_check(self, grid, 4, 0, _("Over"), DT_CANVAS_GUIDES_OVER);
+  gtk_widget_set_tooltip_text(toolbar->page_over,
+                              _("Draw the page borders, margins and bleed over the content rather than under it, so a "
+                                "frame that crosses a page break can still be placed against them"));
   toolbar->page_size = gtk_combo_box_text_new();
   for(int position = 0; position < dt_canvas_paper_count(); position++)
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_size), dt_canvas_paper_name(position));
@@ -635,11 +641,11 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   _section_label(grid, 9, _("Gutters"));
   toolbar->gutter_show = _guide_check(self, grid, 10, 0, _("Show"), DT_CANVAS_GUTTER_VISIBLE);
   gtk_widget_set_tooltip_text(toolbar->gutter_show,
-                              _("Draw a frame one gutter out around every frame. Neighbours one gutter apart share it: it is what the snapping keeps clear, not a margin."));
+                              _("Draw each frame's clear margin around it. Two frames snapped side by side meet on one shared line, two gutters apart."));
   toolbar->gutter_snap = _guide_check(self, grid, 10, 1, _("Snap"), DT_CANVAS_SNAP_GUTTER);
   toolbar->gutter_size = gtk_spin_button_new_with_range(0.0, 500.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->gutter_size,
-                              _("Margin frames keep from each other when snapped side by side or arranged, in canvas units"));
+                              _("The clear margin every frame keeps around itself, in canvas units. Side by side, two frames are two of these apart."));
   g_signal_connect(toolbar->gutter_size, "value-changed", G_CALLBACK(_gutter_changed), self);
   _labelled(grid, 10, 2, _("Size"), toolbar->gutter_size);
   toolbar->gutter_color = gtk_color_button_new();
