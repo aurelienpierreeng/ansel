@@ -116,10 +116,21 @@ static void _a_circle_is_full_inside_empty_outside_and_feathers_between(void **s
 static void _a_polygon_fills_its_interior(void **state)
 {
   (void)state;
-  const float nodes[4 * DT_MASKS_CUTOUT_NODE_FLOATS] = { 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.0f,
-                                                         0.8f, 0.2f, 0.8f, 0.2f, 0.8f, 0.2f, 0.0f,
-                                                         0.8f, 0.8f, 0.8f, 0.8f, 0.8f, 0.8f, 0.0f,
-                                                         0.2f, 0.8f, 0.2f, 0.8f, 0.2f, 0.8f, 0.0f };
+  // By index, not as a flat run: the record may gain a field, and a fixture that assumed its
+  // width would then feed every node the next one's numbers.
+  const float corners[4][2] = { { 0.2f, 0.2f }, { 0.8f, 0.2f }, { 0.8f, 0.8f }, { 0.2f, 0.8f } };
+  float nodes[4 * DT_MASKS_CUTOUT_NODE_FLOATS];
+  memset(nodes, 0, sizeof(nodes));
+  for(int node = 0; node < 4; node++)
+  {
+    float *record = nodes + (size_t)node * DT_MASKS_CUTOUT_NODE_FLOATS;
+    record[DT_MASKS_CUTOUT_NODE_X] = corners[node][0];
+    record[DT_MASKS_CUTOUT_NODE_Y] = corners[node][1];
+    record[DT_MASKS_CUTOUT_NODE_CTRL1_X] = corners[node][0];
+    record[DT_MASKS_CUTOUT_NODE_CTRL1_Y] = corners[node][1];
+    record[DT_MASKS_CUTOUT_NODE_CTRL2_X] = corners[node][0];
+    record[DT_MASKS_CUTOUT_NODE_CTRL2_Y] = corners[node][1];
+  }
   dt_masks_cutout_t cutout;
   memset(&cutout, 0, sizeof(cutout));
   cutout.shape = DT_MASKS_CUTOUT_POLYGON;
@@ -138,6 +149,61 @@ static void _a_polygon_fills_its_interior(void **state)
   // Fewer than three nodes is not a shape.
   cutout.node_count = 2;
   assert_null(dt_masks_cutout_rasterise(&cutout, SIZE, SIZE));
+}
+
+/**
+ * A polygon node carries its own fall-off radius, and a node without one takes the shape's.
+ * That is the darkroom's own per-node border, which the cutout entry now passes through.
+ */
+static void _a_polygon_node_carries_its_own_fall_off(void **state)
+{
+  (void)state;
+  const float corners[4][2] = { { 0.25f, 0.25f }, { 0.75f, 0.25f }, { 0.75f, 0.75f }, { 0.25f, 0.75f } };
+  float nodes[4 * DT_MASKS_CUTOUT_NODE_FLOATS];
+  memset(nodes, 0, sizeof(nodes));
+  for(int node = 0; node < 4; node++)
+  {
+    float *record = nodes + (size_t)node * DT_MASKS_CUTOUT_NODE_FLOATS;
+    record[DT_MASKS_CUTOUT_NODE_X] = corners[node][0];
+    record[DT_MASKS_CUTOUT_NODE_Y] = corners[node][1];
+    record[DT_MASKS_CUTOUT_NODE_CTRL1_X] = corners[node][0];
+    record[DT_MASKS_CUTOUT_NODE_CTRL1_Y] = corners[node][1];
+    record[DT_MASKS_CUTOUT_NODE_CTRL2_X] = corners[node][0];
+    record[DT_MASKS_CUTOUT_NODE_CTRL2_Y] = corners[node][1];
+  }
+  dt_masks_cutout_t cutout;
+  memset(&cutout, 0, sizeof(cutout));
+  cutout.shape = DT_MASKS_CUTOUT_POLYGON;
+  cutout.node_count = 4;
+  cutout.node_stride = DT_MASKS_CUTOUT_NODE_FLOATS;
+  cutout.nodes = nodes;
+  cutout.feather = 0.02f;
+
+  // A tight fall-off everywhere: eight pixels out from the top edge is well past it.
+  float *raster = dt_masks_cutout_rasterise(&cutout, SIZE, SIZE);
+  assert_non_null(raster);
+  const float tight = _at(raster, 30, 17);
+  assert_float_equal(tight, 0.0f, 1e-3);
+  dt_masks_cutout_free(raster);
+
+  // The same shape with a wide fall-off on the two nodes of that edge reaches the same point.
+  nodes[0 * DT_MASKS_CUTOUT_NODE_FLOATS + DT_MASKS_CUTOUT_NODE_BORDER1] = 0.2f;
+  nodes[0 * DT_MASKS_CUTOUT_NODE_FLOATS + DT_MASKS_CUTOUT_NODE_BORDER2] = 0.2f;
+  nodes[1 * DT_MASKS_CUTOUT_NODE_FLOATS + DT_MASKS_CUTOUT_NODE_BORDER1] = 0.2f;
+  nodes[1 * DT_MASKS_CUTOUT_NODE_FLOATS + DT_MASKS_CUTOUT_NODE_BORDER2] = 0.2f;
+  raster = dt_masks_cutout_rasterise(&cutout, SIZE, SIZE);
+  assert_non_null(raster);
+  const float wide = _at(raster, 30, 17);
+  if(!(wide > tight + 0.05f))
+  {
+    print_error("a node's own fall-off changed nothing: %f against %f\n", (double)wide, (double)tight);
+    fail();
+  }
+  // The shape is untouched where it is solid, and a node with no fall-off of its own still
+  // takes the shape's: the bottom edge, whose nodes were left alone, is as tight as before.
+  assert_float_equal(_at(raster, 50, 50), 1.0f, 1e-3);
+  assert_float_equal(_at(raster, 50, 83), 0.0f, 1e-3);
+  dt_masks_cutout_free(raster);
 }
 
 static void _a_gradient_fades_across_its_line(void **state)
@@ -511,6 +577,39 @@ static void _an_edge_pixel_stays_between_the_colours_it_blends(void **state)
 }
 
 /**
+ * The painter keeps the frame it last composited and blits it again for a key it has already
+ * seen. The document's generation is in that key, so an edit that bumps it is drawn at once.
+ * This is what makes a drag follow the pointer: every motion that changes the document has to
+ * touch it, or the gesture paints its first frame over and over.
+ */
+static void _an_edited_document_is_not_served_from_the_last_frame(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 60.0, 60.0, "");
+  frame->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  frame->border_width = 0.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 16u * 1024u * 1024u);
+
+  assert_int_equal(_painted_pixel_cached(canvas, cache, 200, 1.0, 100, 100), 0xFFFFFFu);
+  // The same view, the same cache: only the document moved, and only its generation says so.
+  frame->x = 70.0;
+  dt_canvas_touch(canvas);
+  assert_int_equal(_painted_pixel_cached(canvas, cache, 200, 1.0, 100, 100), 0x000000u);
+  assert_int_equal(_painted_pixel_cached(canvas, cache, 200, 1.0, 170, 100), 0xFFFFFFu);
+  // And back: a generation it has seen before is still a new one, never the frame it held.
+  frame->x = 0.0;
+  dt_canvas_touch(canvas);
+  assert_int_equal(_painted_pixel_cached(canvas, cache, 200, 1.0, 100, 100), 0xFFFFFFu);
+  dt_canvas_surface_cache_free(cache);
+  dt_canvas_free(canvas);
+}
+
+/**
  * A cutout keeps the side it was told to keep at every zoom. The raster cache holds two
  * sizes per frame, so a zoom out and back reads the raster built for the first zoom: it must
  * be that frame's raster and not another's, and an inverted shape must not come back
@@ -728,10 +827,19 @@ static void _the_compositor_blends_in_linear_light_and_round_trips_opaque_codes(
   const uint32_t at_frame_edge = _painted_pixel(canvas, 200, 52, 100);
   // ...against the same distance inside a square cutout's straight edge, 25 in from the frame
   // (a curved edge would legitimately differ: more uncovered world around it).
-  const float square[4 * DT_CANVAS_MASK_NODE_FLOATS] = { 0.25f, 0.25f, 0.25f, 0.25f, 0.25f, 0.25f, 0.0f, 0.0f,
-                                                         0.75f, 0.25f, 0.75f, 0.25f, 0.75f, 0.25f, 0.0f, 0.0f,
-                                                         0.75f, 0.75f, 0.75f, 0.75f, 0.75f, 0.75f, 0.0f, 0.0f,
-                                                         0.25f, 0.75f, 0.25f, 0.75f, 0.25f, 0.75f, 0.0f, 0.0f };
+  const float square_corners[4][2] = { { 0.25f, 0.25f }, { 0.75f, 0.25f }, { 0.75f, 0.75f }, { 0.25f, 0.75f } };
+  float square[4 * DT_CANVAS_MASK_NODE_FLOATS];
+  memset(square, 0, sizeof(square));
+  for(int node = 0; node < 4; node++)
+  {
+    float *record = square + (size_t)node * DT_CANVAS_MASK_NODE_FLOATS;
+    record[DT_CANVAS_MASK_NODE_X] = square_corners[node][0];
+    record[DT_CANVAS_MASK_NODE_Y] = square_corners[node][1];
+    record[DT_CANVAS_MASK_NODE_CTRL1_X] = square_corners[node][0];
+    record[DT_CANVAS_MASK_NODE_CTRL1_Y] = square_corners[node][1];
+    record[DT_CANVAS_MASK_NODE_CTRL2_X] = square_corners[node][0];
+    record[DT_CANVAS_MASK_NODE_CTRL2_Y] = square_corners[node][1];
+  }
   dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_POLYGON);
   dt_canvas_mask_set_nodes(canvas, frame, square, 4);
   frame->mask.feather = 0.0f;
@@ -763,11 +871,13 @@ int main(void)
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_a_circle_is_full_inside_empty_outside_and_feathers_between),
     cmocka_unit_test(_a_polygon_fills_its_interior),
+    cmocka_unit_test(_a_polygon_node_carries_its_own_fall_off),
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),
     cmocka_unit_test(_the_compositor_paints_the_surfaces_own_pixels_on_a_scaled_surface),
     cmocka_unit_test(_a_cut_frames_border_follows_the_cutout_outward),
+    cmocka_unit_test(_an_edited_document_is_not_served_from_the_last_frame),
     cmocka_unit_test(_a_cutout_keeps_its_side_through_the_raster_cache),
     cmocka_unit_test(_an_edge_pixel_stays_between_the_colours_it_blends),
     cmocka_unit_test(_a_picture_reaches_its_frames_every_edge),

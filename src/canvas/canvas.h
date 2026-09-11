@@ -347,8 +347,27 @@ typedef enum dt_canvas_mask_flags_t
   DT_CANVAS_MASK_INVERT = 1 << 0, ///< keep what is outside the shape
 } dt_canvas_mask_flags_t;
 
-/** Floats per polygon node: x, y, first control point x, y, second control point x, y, smooth, unused. */
-#define DT_CANVAS_MASK_NODE_FLOATS 8
+/**
+ * Floats per polygon node: x, y, the incoming control point x, y, the outgoing one x, y, the
+ * smooth flag, the fall-off's own radius either side of the node (0 takes the shape's), and
+ * one spare. The stride is written into the file's node chunk and read back from its size, so
+ * it may grow again without a format bump and without losing a node of an older document.
+ */
+#define DT_CANVAS_MASK_NODE_FLOATS 10
+
+/** Indices into a node record. */
+enum
+{
+  DT_CANVAS_MASK_NODE_X = 0,
+  DT_CANVAS_MASK_NODE_Y = 1,
+  DT_CANVAS_MASK_NODE_CTRL1_X = 2, ///< the control point on the previous node's side
+  DT_CANVAS_MASK_NODE_CTRL1_Y = 3,
+  DT_CANVAS_MASK_NODE_CTRL2_X = 4, ///< the one on the next node's side
+  DT_CANVAS_MASK_NODE_CTRL2_Y = 5,
+  DT_CANVAS_MASK_NODE_SMOOTH = 6,
+  DT_CANVAS_MASK_NODE_BORDER1 = 7,
+  DT_CANVAS_MASK_NODE_BORDER2 = 8,
+};
 
 /**
  * A cutout, in the object's own unit square: (0, 0) is the top-left corner of the unrotated

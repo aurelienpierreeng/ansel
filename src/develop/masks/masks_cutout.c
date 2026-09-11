@@ -35,9 +35,21 @@
 #include <math.h>
 #include <string.h>
 
+/** A node's own fall-off radius, or the shape's when it has none of its own. */
+static float _node_border(const dt_masks_cutout_t *cutout, const float *node, const int which, const float feather)
+{
+  const int index = which == 0 ? DT_MASKS_CUTOUT_NODE_BORDER1 : DT_MASKS_CUTOUT_NODE_BORDER2;
+  if(cutout->node_stride <= (uint32_t)index) return feather;
+  const float own = node[index];
+  return own > 0.0f ? own : feather;
+}
+
 static dt_masks_form_t *_polygon_form(const dt_masks_cutout_t *cutout, const float feather)
 {
-  if(cutout->node_count < 3 || IS_NULL_PTR(cutout->nodes) || cutout->node_stride < DT_MASKS_CUTOUT_NODE_FLOATS)
+  // A node record used to stop at the smooth flag; one that still does gets the shape's
+  // fall-off for every node, which is what it always had.
+  if(cutout->node_count < 3 || IS_NULL_PTR(cutout->nodes)
+     || cutout->node_stride < DT_MASKS_CUTOUT_NODE_SMOOTH + 1)
     return NULL;
   dt_masks_form_t *form = dt_masks_form_new_silent(DT_MASKS_POLYGON);
   if(IS_NULL_PTR(form)) return NULL;
@@ -69,9 +81,10 @@ static dt_masks_form_t *_polygon_form(const dt_masks_cutout_t *cutout, const flo
       node->ctrl2[1] = source[DT_MASKS_CUTOUT_NODE_CTRL2_Y];
       node->state = DT_MASKS_POINT_STATE_USER;
     }
-    // A node's border is the feather's radius on either side of it, the same on both here.
-    node->border[0] = feather;
-    node->border[1] = feather;
+    // A node's border is the fall-off's radius on either side of it: its own where it has
+    // one, the shape's where it does not.
+    node->border[0] = _node_border(cutout, source, 0, feather);
+    node->border[1] = _node_border(cutout, source, 1, feather);
     form->points = g_list_append(form->points, node);
   }
   if(any_smooth && !IS_NULL_PTR(form->functions) && !IS_NULL_PTR(form->functions->init_ctrl_points))

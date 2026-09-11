@@ -103,10 +103,24 @@ static dt_canvas_t *_populated_canvas(void)
   image->transparency = 0.25f;
   image->background = dt_canvas_color(0.2f, 0.4f, 0.6f, 0.8f);
   dt_canvas_mask_set_shape(canvas, image, DT_CANVAS_MASK_POLYGON);
-  const float nodes[4 * DT_CANVAS_MASK_NODE_FLOATS] = { 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.0f, 0.0f,
-                                                        0.9f, 0.1f, 0.9f, 0.1f, 0.9f, 0.1f, 0.0f, 0.0f,
-                                                        0.9f, 0.9f, 0.9f, 0.9f, 0.9f, 0.9f, 1.0f, 0.0f,
-                                                        0.1f, 0.9f, 0.1f, 0.9f, 0.1f, 0.9f, 0.0f, 0.0f };
+  // Written by index rather than as a flat run, so the record may gain a field without every
+  // node in this fixture silently shifting into the next one's.
+  const float corners[4][2] = { { 0.1f, 0.1f }, { 0.9f, 0.1f }, { 0.9f, 0.9f }, { 0.1f, 0.9f } };
+  float nodes[4 * DT_CANVAS_MASK_NODE_FLOATS];
+  memset(nodes, 0, sizeof(nodes));
+  for(int node = 0; node < 4; node++)
+  {
+    float *record = nodes + (size_t)node * DT_CANVAS_MASK_NODE_FLOATS;
+    record[DT_CANVAS_MASK_NODE_X] = corners[node][0];
+    record[DT_CANVAS_MASK_NODE_Y] = corners[node][1];
+    record[DT_CANVAS_MASK_NODE_CTRL1_X] = corners[node][0];
+    record[DT_CANVAS_MASK_NODE_CTRL1_Y] = corners[node][1];
+    record[DT_CANVAS_MASK_NODE_CTRL2_X] = corners[node][0];
+    record[DT_CANVAS_MASK_NODE_CTRL2_Y] = corners[node][1];
+  }
+  nodes[2 * DT_CANVAS_MASK_NODE_FLOATS + DT_CANVAS_MASK_NODE_SMOOTH] = 1.0f;
+  nodes[3 * DT_CANVAS_MASK_NODE_FLOATS + DT_CANVAS_MASK_NODE_BORDER1] = 0.07f;
+  nodes[3 * DT_CANVAS_MASK_NODE_FLOATS + DT_CANVAS_MASK_NODE_BORDER2] = 0.04f;
   dt_canvas_mask_set_nodes(canvas, image, nodes, 4);
   image->mask.feather = 0.12f;
   image->mask.flags = DT_CANVAS_MASK_INVERT;
@@ -191,9 +205,13 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(image->mask.feather, 0.12f, 1e-6);
   assert_int_equal(image->mask.node_count, 4);
   assert_non_null(image->mask.nodes);
-  assert_float_equal(image->mask.nodes[1 * DT_CANVAS_MASK_NODE_FLOATS + 0], 0.9f, 1e-6);
-  assert_float_equal(image->mask.nodes[2 * DT_CANVAS_MASK_NODE_FLOATS + 1], 0.9f, 1e-6);
-  assert_float_equal(image->mask.nodes[2 * DT_CANVAS_MASK_NODE_FLOATS + 6], 1.0f, 1e-6);
+  assert_float_equal(image->mask.nodes[1 * DT_CANVAS_MASK_NODE_FLOATS + DT_CANVAS_MASK_NODE_X], 0.9f, 1e-6);
+  assert_float_equal(image->mask.nodes[2 * DT_CANVAS_MASK_NODE_FLOATS + DT_CANVAS_MASK_NODE_Y], 0.9f, 1e-6);
+  assert_float_equal(image->mask.nodes[2 * DT_CANVAS_MASK_NODE_FLOATS + DT_CANVAS_MASK_NODE_SMOOTH], 1.0f, 1e-6);
+  // A node's own fall-off radii, either side of it, survive the round trip.
+  assert_float_equal(image->mask.nodes[3 * DT_CANVAS_MASK_NODE_FLOATS + DT_CANVAS_MASK_NODE_BORDER1], 0.07f, 1e-6);
+  assert_float_equal(image->mask.nodes[3 * DT_CANVAS_MASK_NODE_FLOATS + DT_CANVAS_MASK_NODE_BORDER2], 0.04f, 1e-6);
+  assert_float_equal(image->mask.nodes[0 * DT_CANVAS_MASK_NODE_FLOATS + DT_CANVAS_MASK_NODE_BORDER1], 0.0f, 1e-6);
   assert_float_equal(restored->shadow.color.alpha, 0.6f, 1e-6);
   assert_float_equal(restored->shadow.offset_x, 11.0f, 1e-6);
   assert_float_equal(restored->shadow.offset_y, -7.0f, 1e-6);
