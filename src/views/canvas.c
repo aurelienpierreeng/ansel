@@ -176,7 +176,8 @@ typedef struct dt_canvas_view_t
   GtkWidget *row_text;
   GtkWidget *text_line_height;
   GtkWidget *text_letter_spacing;
-  GtkWidget *text_features;
+  GtkWidget *text_margin[4];
+  GtkWidget *text_feature[DT_CANVAS_TEXT_FEATURE_MAX];
   GtkWidget *text_auto_height;
   GtkWidget *text_optical;
   GtkWidget *text_font;
@@ -2254,17 +2255,41 @@ static void _bar_text_metrics_changed(GtkSpinButton *spin, gpointer data)
   BAR_EDIT_END()
 }
 
-static void _bar_text_features_set(GtkWidget *entry, gpointer data)
+static void _bar_text_margin_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
-  g_strlcpy(object->text.features, gtk_entry_get_text(GTK_ENTRY(entry)), sizeof(object->text.features));
-  BAR_EDIT_END()
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(view->bars_refilling) return;
+  dt_canvas_object_t *object = _bar_target(view);
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return;
+  dt_canvas_t *before = _begin_edit(view);
+  // Every side is written, not just the edited one: all four zero is the "unset" that takes
+  // the old uniform padding, so a single side left at zero has to be a deliberate zero.
+  for(int side = 0; side < 4; side++)
+    object->text.margins[side] = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->text_margin[side]));
+  (void)spin;
+  dt_canvas_touch(view->canvas);
+  _record_undo(self, before);
+  _bars_request(self);
+  dt_control_queue_redraw_center();
 }
 
-static gboolean _bar_text_features_focus_out(GtkWidget *entry, GdkEvent *event, gpointer data)
+static void _bar_text_feature_toggled(GtkToggleButton *check, gpointer data)
 {
-  _bar_text_features_set(entry, data);
-  return FALSE;
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(view->bars_refilling) return;
+  dt_canvas_object_t *object = _bar_target(view);
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return;
+  dt_canvas_t *before = _begin_edit(view);
+  gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX];
+  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
+    wanted[feature] = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(view->text_feature[feature]));
+  dt_canvas_text_features_compose(wanted, object->text.features, sizeof(object->text.features));
+  (void)check;
+  dt_canvas_touch(view->canvas);
+  _record_undo(self, before);
+  dt_control_queue_redraw_center();
 }
 
 static void _bar_text_flag_toggled(GtkToggleButton *button, gpointer data)
@@ -2608,6 +2633,20 @@ static GtkWidget *_bar_group(GtkWidget *row, const char *label)
   return box;
 }
 
+/** A button on a bar row that drops a popover: for what needs more than one control. */
+static GtkWidget *_bar_popover(GtkWidget *row, const char *label, const char *tooltip, GtkWidget *content)
+{
+  GtkWidget *button = gtk_menu_button_new();
+  gtk_button_set_label(GTK_BUTTON(button), label);
+  gtk_widget_set_tooltip_text(button, tooltip);
+  GtkWidget *popover = gtk_popover_new(NULL);
+  gtk_container_add(GTK_CONTAINER(popover), content);
+  gtk_widget_show_all(content);
+  gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), popover);
+  gtk_box_pack_start(GTK_BOX(row), button, FALSE, FALSE, 0);
+  return button;
+}
+
 /**
  * Where an overlay child goes: the position a placement stored on it. Answering the
  * overlay's own question is what keeps a move to a re-allocation of the overlay, where
@@ -2677,14 +2716,41 @@ static void _bars_create(dt_view_t *self)
                   _("Letter spacing in thousandths of an em, so it follows the type size: negative condenses the "
                     "line, positive opens it out. A condensed CUT is chosen in the font name instead."),
                   G_CALLBACK(_bar_text_metrics_changed), self);
-  view->text_features = gtk_entry_new();
-  gtk_entry_set_width_chars(GTK_ENTRY(view->text_features), 12);
-  gtk_widget_set_tooltip_text(view->text_features,
-                              _("OpenType features the font offers, as Pango spells them: \"liga 1, onum 1, smcp 1\" "
-                                "for ligatures, old-style figures and small capitals. Empty is the font's own."));
-  g_signal_connect(view->text_features, "activate", G_CALLBACK(_bar_text_features_set), self);
-  g_signal_connect(view->text_features, "focus-out-event", G_CALLBACK(_bar_text_features_focus_out), self);
-  gtk_box_pack_start(GTK_BOX(view->row_text), view->text_features, FALSE, FALSE, 0);
+  GtkWidget *padding_grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(padding_grid), DT_PIXEL_APPLY_DPI(4));
+  gtk_grid_set_column_spacing(GTK_GRID(padding_grid), DT_PIXEL_APPLY_DPI(8));
+  gtk_container_set_border_width(GTK_CONTAINER(padding_grid), DT_PIXEL_APPLY_DPI(8));
+  static const char *const sides[4] = { N_("Top"), N_("Right"), N_("Bottom"), N_("Left") };
+  for(int side = 0; side < 4; side++)
+  {
+    GtkWidget *spin = gtk_spin_button_new_with_range(0.0, 4000.0, 1.0);
+    gtk_entry_set_width_chars(GTK_ENTRY(spin), 5);
+    g_object_set_data(G_OBJECT(spin), "text-margin-side", GINT_TO_POINTER(side));
+    g_signal_connect(spin, "value-changed", G_CALLBACK(_bar_text_margin_changed), self);
+    gtk_grid_attach(GTK_GRID(padding_grid), gtk_label_new(_(sides[side])), 0, side, 1, 1);
+    gtk_grid_attach(GTK_GRID(padding_grid), spin, 1, side, 1, 1);
+    view->text_margin[side] = spin;
+  }
+  _bar_popover(view->row_text, _("Padding"),
+               _("How far the text is held off each of the frame's four edges, inside its border. What keeps a "
+                 "coloured frame from having its text run into the edge."),
+               padding_grid);
+
+  GtkWidget *features_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(2));
+  gtk_container_set_border_width(GTK_CONTAINER(features_box), DT_PIXEL_APPLY_DPI(8));
+  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
+  {
+    GtkWidget *check = gtk_check_button_new_with_label(dt_canvas_text_feature_name(feature));
+    gtk_widget_set_tooltip_text(check, dt_canvas_text_feature_tooltip(feature));
+    g_object_set_data(G_OBJECT(check), "text-feature", GINT_TO_POINTER(feature));
+    g_signal_connect(check, "toggled", G_CALLBACK(_bar_text_feature_toggled), self);
+    gtk_box_pack_start(GTK_BOX(features_box), check, FALSE, FALSE, 0);
+    view->text_feature[feature] = check;
+  }
+  _bar_popover(view->row_text, _("Features"),
+               _("What the font is asked to do with its own alternates: ligatures, figure styles, small "
+                 "capitals. A font that does not ship one simply ignores it."),
+               features_box);
   view->text_auto_height = _bar_toggle(view->row_text, _("Auto height"),
                                        _("The frame's height follows its content"),
                                        G_CALLBACK(_bar_text_flag_toggled), self);
@@ -2942,7 +3008,14 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_line_height),
                                 object->text.line_height > 0.0f ? object->text.line_height : 1.0f);
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_letter_spacing), object->text.letter_spacing);
-      gtk_entry_set_text(GTK_ENTRY(view->text_features), object->text.features);
+      double margins[4];
+      dt_canvas_text_margins(object, margins);
+      for(int side = 0; side < 4; side++)
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_margin[side]), margins[side]);
+      gboolean on[DT_CANVAS_TEXT_FEATURE_MAX];
+      dt_canvas_text_features_parse(object->text.features, on);
+      for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_feature[feature]), on[feature]);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_auto_height),
                                    (object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT) != 0);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_optical),
