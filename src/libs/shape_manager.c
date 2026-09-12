@@ -334,7 +334,7 @@ static void _tree_group(GtkButton *button __attribute__((unused)), dt_shape_mana
   // touches dev->forms outside masks_mutex, which a hand-rolled g_list_append does -- and the
   // pipeline thread reads that list under the same lock.
   dt_masks_form_t *mask = dt_masks_create_ext(dt_dev_get_global(), DT_MASKS_GROUP);
-  g_snprintf(mask->name, sizeof(mask->name), _("Mask #%d"), g_list_length(dt_dev_get_global()->forms));
+  g_snprintf(mask->name, sizeof(mask->name), _("Group #%d"), g_list_length(dt_dev_get_global()->forms));
 
   // we add all selected forms to this group
   for(const GList *id = ids; id; id = g_list_next(id))
@@ -1769,8 +1769,8 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
   
   if(!from_group && nb > 0)
   {
-    // One entry, named for what the row holds -- the whole mask when it is a group.
-    item = gtk_menu_item_new_with_label(grp_is_group ? _("Delete mask") : _("Delete shape"));
+    // One entry, named for what the row holds -- the whole group when it is one.
+    item = gtk_menu_item_new_with_label(grp_is_group ? _("Delete group") : _("Delete shape"));
     g_signal_connect(item, "activate", (GCallback)_tree_delete_shape, list);
     gtk_menu_shell_append(menu, item);
   }
