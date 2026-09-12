@@ -285,7 +285,32 @@ edited and unreachable the rest of the time. `_mask_node_at()` is the geometric 
 the submenu offers the way into the edit mode instead. Every drag and
 every wheel step is one undo record.
 
-A text frame carries two things its font description cannot say. Its **line height** is a
+A text frame carries **four inner margins** rather than one, top, right, bottom, left. All
+four zero takes the uniform `padding` on every side -- what a document from before them holds
+-- and any one of them set makes all four literal, so a side really can be zero; the canvas's
+texture weights follow the same rule for the same reason (`dt_canvas_text_margins()`).
+
+**Optical margins** hang punctuation outside the measured edge, so a column reads from its
+STEMS rather than from a quote or a full stop. The layout is therefore drawn line by line,
+each nudged by a fraction of the hanging character's own advance -- a quote is nearly all
+white space and hangs almost whole, a full stop hangs a little. Which edge may hang is the one
+the alignment pins: the left for ragged-right and justified text, the right for ragged-left.
+`_show_layout()` is `pango_cairo_show_layout()` spelled out when the flag is off, deliberately
+so, since one path cannot drift from itself.
+
+**Auto height** makes a frame take the height its text needs, applied once per frame in the
+view's expose rather than at every edit: the height depends on the laid-out text and the text
+depends on everything that can change it. Only a height that actually moved touches the
+canvas, so it settles on the first frame instead of handing the painter a new generation for
+ever.
+
+**OpenType features** are passed to Pango as it spells them -- `"liga 1, onum 1, smcp 1"` --
+which is the only way to reach a font's alternates, figures and ligature sets, since a font
+description cannot name them. Measured with `kern 0`, which every font has: a line of AVATAR
+Ta Wa Yo goes from 167 to 179 pixels wide. A feature the font does NOT ship is silently
+nothing, which is why a no-op here says more about the font than about the code.
+
+A text frame also carries two things its font description cannot say. Its **line height** is a
 multiple of the leading the font asks for, and reaches Pango as the EXTRA space between lines
 -- `pango_layout_set_spacing()` against the context's own metrics, rather than a newer call,
 so it works wherever the rest of the application builds. Its **letter spacing** is a tracking

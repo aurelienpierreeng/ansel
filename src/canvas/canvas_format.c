@@ -138,6 +138,10 @@ static void _write_text(GByteArray *out, const dt_canvas_text_t *text)
   _w_u32(out, text->align_v);
   _w_f32(out, text->line_height);
   _w_f32(out, text->letter_spacing);
+  for(int side = 0; side < 4; side++) _w_f32(out, text->margins[side]);
+  _w_string(out, text->features, DT_CANVAS_TEXT_FEATURES_LEN);
+  _w_u32(out, text->text_flags);
+  _w_f32(out, text->wrap_standoff);
   _w_bytes(out, text->reserved, sizeof(text->reserved));
 }
 
@@ -441,6 +445,12 @@ static void _read_text(dt_canvas_cursor_t *cursor, dt_canvas_text_t *text)
   // Zero from a document written before these: the font's own leading and spacing.
   text->line_height = _r_f32(cursor);
   text->letter_spacing = _r_f32(cursor);
+  // Zeros and an empty string from a document written before these: the uniform padding, the
+  // font's own features, no flags.
+  for(int side = 0; side < 4; side++) text->margins[side] = _r_f32(cursor);
+  _r_string(cursor, text->features, DT_CANVAS_TEXT_FEATURES_LEN);
+  text->text_flags = _r_u32(cursor);
+  text->wrap_standoff = _r_f32(cursor);
   _r_bytes(cursor, text->reserved, sizeof(text->reserved));
   text->markdown = NULL;
 }
