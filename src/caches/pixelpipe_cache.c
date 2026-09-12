@@ -2209,22 +2209,26 @@ static void _pressure_watch_start(dt_dev_pixelpipe_cache_t *cache)
 #endif
 }
 
-static void _pressure_watch_stop(dt_dev_pixelpipe_cache_t *cache_unused)
+static void _pressure_watch_stop(dt_dev_pixelpipe_cache_t *cache)
 {
 #if defined(__linux__)
-  if(cache_unused->psi.running)
+  if(cache->psi.running)
   {
     const uint64_t wake = 1;
-    if(write(cache_unused->psi.stop_fd, &wake, sizeof(wake)) != (ssize_t)sizeof(wake))
-      pthread_cancel(cache_unused->psi.thread); // poll() is a cancellation point
-    pthread_join(cache_unused->psi.thread, NULL);
-    cache_unused->psi.running = FALSE;
+    if(write(cache->psi.stop_fd, &wake, sizeof(wake)) != (ssize_t)sizeof(wake))
+      pthread_cancel(cache->psi.thread); // poll() is a cancellation point
+    pthread_join(cache->psi.thread, NULL);
+    cache->psi.running = FALSE;
   }
 
-  if(cache_unused->psi.stop_fd >= 0) close(cache_unused->psi.stop_fd);
-  cache_unused->psi.stop_fd = -1;
-  for(int i = 0; i < cache_unused->psi.count; i++) close(cache_unused->psi.fds[i]);
-  cache_unused->psi.count = 0;
+  if(cache->psi.stop_fd >= 0) close(cache->psi.stop_fd);
+  cache->psi.stop_fd = -1;
+  for(int i = 0; i < cache->psi.count; i++) close(cache->psi.fds[i]);
+  cache->psi.count = 0;
+#else
+  // No watcher was started, so there is nothing to stop -- but the parameter is the interface,
+  // and this is the configuration SonarCloud reads (c:S1172).
+  (void)cache;
 #endif
 }
 
