@@ -72,6 +72,25 @@ static gboolean _verbose_detail = FALSE;
 
 
 
+/* Everything the cache holds about kernel memory pressure, in one member rather than ten: the
+ * PSI counters two reads turn into a stall share, the budget that share steers -- the policy
+ * itself is caches/pixelpipe_cache_pressure.h -- and the watcher thread the kernel wakes. */
+typedef struct _cache_pressure_t
+{
+  // Guarded by the cache's `lock`, like the fields around the member.
+  uint64_t totals[DT_MEMORY_PRESSURE_MAX_LEVELS];
+  int levels;
+  gint64 time_us;
+  gint64 shed_time_us;
+  dt_pixelpipe_cache_pressure_t budget;
+  // NOT guarded: written before the thread starts and after it has joined.
+  pthread_t thread;
+  int fds[DT_MEMORY_PRESSURE_MAX_LEVELS];
+  int count;
+  int stop_fd;
+  gboolean running;
+} _cache_pressure_t;
+
 /* PRIVATE. Nothing outside this file reads a field of it -- the header exposes the
  * type as an opaque handle so that it cannot. */
 typedef struct dt_dev_pixelpipe_cache_t
@@ -92,23 +111,8 @@ typedef struct dt_dev_pixelpipe_cache_t
   gint64 sys_probe_time_us;
   size_t sys_available_est;
   gboolean sys_probe_valid;
-  // Kernel memory pressure (Linux PSI), guarded by `lock`: the previous read of every level's
-  // cumulative full-stall time, which turns two reads into the share of the window between
-  // them, and the ceiling pressure lowered the budget to -- max_memory while calm. See
-  // _pressure_react_locked().
-  uint64_t psi_total_us[DT_MEMORY_PRESSURE_MAX_LEVELS];
-  int psi_levels;
-  gint64 psi_time_us;
-  dt_pixelpipe_cache_pressure_t pressure;
-  gint64 psi_shed_time_us;
-  // The watcher thread the kernel wakes on a PSI trigger, its trigger descriptors and the
-  // eventfd that stops it. Not guarded by `lock`: written before the thread starts and after it
-  // has joined.
-  pthread_t psi_watch_thread;
-  int psi_watch_fds[DT_MEMORY_PRESSURE_MAX_LEVELS];
-  int psi_watch_count;
-  int psi_stop_fd;
-  gboolean psi_watch_running;
+  // Kernel memory pressure: see _pressure_react_locked().
+  _cache_pressure_t psi;
   dt_pthread_mutex_t lock; // mutex to protect the cache entries
   dt_cache_arena_t arena;
 } dt_dev_pixelpipe_cache_t;
@@ -2026,7 +2030,7 @@ size_t dt_pixel_cache_entry_get_size(dt_pixel_cache_entry_t *entry)
 // WARNING: non thread-safe
 static inline size_t _cache_budget_locked(const dt_dev_pixelpipe_cache_t *cache)
 {
-  return dt_pixelpipe_cache_pressure_budget(&cache->pressure);
+  return dt_pixelpipe_cache_pressure_budget(&cache->psi.budget);
 }
 
 /* Full-stall share of the window since the previous read, the highest over the levels
@@ -2037,24 +2041,24 @@ static inline size_t _cache_budget_locked(const dt_dev_pixelpipe_cache_t *cache)
 static double _pressure_window_share_locked(dt_dev_pixelpipe_cache_t *cache, const gint64 now,
                                             const gint64 min_window_us)
 {
-  if(cache->psi_time_us != 0 && now - cache->psi_time_us < min_window_us) return -1.;
+  if(cache->psi.time_us != 0 && now - cache->psi.time_us < min_window_us) return -1.;
 
   uint64_t totals[DT_MEMORY_PRESSURE_MAX_LEVELS] = { 0 };
   const int levels = dt_memory_pressure_read_full_stall(totals, DT_MEMORY_PRESSURE_MAX_LEVELS);
-  const gint64 elapsed = now - cache->psi_time_us;
+  const gint64 elapsed = now - cache->psi.time_us;
 
   double share = -1.;
-  if(cache->psi_time_us != 0 && levels > 0 && levels == cache->psi_levels)
+  if(cache->psi.time_us != 0 && levels > 0 && levels == cache->psi.levels)
   {
     share = 0.;
     for(int i = 0; i < levels; i++)
-      if(totals[i] >= cache->psi_total_us[i])
-        share = MAX(share, (double)(totals[i] - cache->psi_total_us[i]) / (double)elapsed);
+      if(totals[i] >= cache->psi.totals[i])
+        share = MAX(share, (double)(totals[i] - cache->psi.totals[i]) / (double)elapsed);
   }
 
-  memcpy(cache->psi_total_us, totals, sizeof(cache->psi_total_us));
-  cache->psi_levels = levels;
-  cache->psi_time_us = now;
+  memcpy(cache->psi.totals, totals, sizeof(cache->psi.totals));
+  cache->psi.levels = levels;
+  cache->psi.time_us = now;
   return share;
 }
 
@@ -2063,14 +2067,14 @@ static double _pressure_window_share_locked(dt_dev_pixelpipe_cache_t *cache, con
 static size_t _pressure_shed_locked(dt_dev_pixelpipe_cache_t *cache, const double share, const char *origin)
 {
   const size_t before = cache->current_memory;
-  const size_t target = dt_pixelpipe_cache_pressure_shed_target(&cache->pressure, share, before);
+  const size_t target = dt_pixelpipe_cache_pressure_shed_target(&cache->psi.budget, share, before);
   if(target == DT_PIXELPIPE_CACHE_PRESSURE_KEEP) return 0;
 
   while(cache->current_memory > target && g_hash_table_size(cache->entries) > 0)
     if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache)) break;
 
-  dt_pixelpipe_cache_pressure_after_shed(&cache->pressure, before, cache->current_memory);
-  cache->psi_shed_time_us = g_get_monotonic_time();
+  dt_pixelpipe_cache_pressure_after_shed(&cache->psi.budget, before, cache->current_memory);
+  cache->psi.shed_time_us = g_get_monotonic_time();
 
   // Hand the pages over now rather than when the kernel gets to MADV_FREE, and make the
   // available-RAM valve re-read the system instead of trusting its pre-shed estimate.
@@ -2091,7 +2095,7 @@ static size_t _pressure_shed_locked(dt_dev_pixelpipe_cache_t *cache, const doubl
 // the other just did. WARNING: non thread-safe
 static inline gboolean _pressure_shed_too_soon(const dt_dev_pixelpipe_cache_t *cache, const gint64 now)
 {
-  return cache->psi_shed_time_us != 0 && now - cache->psi_shed_time_us < DT_PIXELPIPE_CACHE_PSI_WINDOW_US / 2;
+  return cache->psi.shed_time_us != 0 && now - cache->psi.shed_time_us < DT_PIXELPIPE_CACHE_PSI_WINDOW_US / 2;
 }
 
 // See the kernel memory pressure comment above. Returns the bytes shed.
@@ -2105,12 +2109,12 @@ static size_t _pressure_react_locked(dt_dev_pixelpipe_cache_t *cache)
   if(share >= DT_PIXELPIPE_CACHE_PSI_SHED)
     return _pressure_shed_too_soon(cache, now) ? 0 : _pressure_shed_locked(cache, share, "measured");
 
-  if(share < DT_PIXELPIPE_CACHE_PSI_CALM && dt_pixelpipe_cache_pressure_relax(&cache->pressure))
+  if(share < DT_PIXELPIPE_CACHE_PSI_CALM && dt_pixelpipe_cache_pressure_relax(&cache->psi.budget))
     dt_print(DT_DEBUG_MEMORY | DT_DEBUG_PIPECACHE,
              "[pixelpipe_cache] kernel memory pressure calm: budget raised to %" G_GSIZE_FORMAT
              " MiB (at most %" G_GSIZE_FORMAT " MiB until the pressure mark recovers)\n",
              _cache_budget_locked(cache) / (1024 * 1024),
-             dt_pixelpipe_cache_pressure_cap(&cache->pressure) / (1024 * 1024));
+             dt_pixelpipe_cache_pressure_cap(&cache->psi.budget) / (1024 * 1024));
   return 0;
 }
 
@@ -2134,15 +2138,15 @@ static void *_pressure_watch_thread(void *arg)
   dt_dev_pixelpipe_cache_t *cache = (dt_dev_pixelpipe_cache_t *)arg;
   struct pollfd pfd[DT_MEMORY_PRESSURE_MAX_LEVELS + 1];
   int n = 0;
-  for(int i = 0; i < cache->psi_watch_count; i++)
+  for(int i = 0; i < cache->psi.count; i++)
   {
-    pfd[n].fd = cache->psi_watch_fds[i];
+    pfd[n].fd = cache->psi.fds[i];
     pfd[n].events = POLLPRI;
     pfd[n].revents = 0;
     n++;
   }
   const int stop = n;
-  pfd[n].fd = cache->psi_stop_fd;
+  pfd[n].fd = cache->psi.stop_fd;
   pfd[n].events = POLLIN;
   pfd[n].revents = 0;
   n++;
@@ -2176,51 +2180,51 @@ static void *_pressure_watch_thread(void *arg)
 
 static void _pressure_watch_start(dt_dev_pixelpipe_cache_t *cache)
 {
-  cache->psi_watch_count = 0;
-  cache->psi_stop_fd = -1;
-  cache->psi_watch_running = FALSE;
+  cache->psi.count = 0;
+  cache->psi.stop_fd = -1;
+  cache->psi.running = FALSE;
 
 #if defined(__linux__)
-  cache->psi_watch_count = dt_memory_pressure_triggers_open(
-      cache->psi_watch_fds, DT_MEMORY_PRESSURE_MAX_LEVELS,
+  cache->psi.count = dt_memory_pressure_triggers_open(
+      cache->psi.fds, DT_MEMORY_PRESSURE_MAX_LEVELS,
       (uint64_t)(DT_PIXELPIPE_CACHE_PSI_SHED * DT_PIXELPIPE_CACHE_PSI_WINDOW_US),
       (uint64_t)DT_PIXELPIPE_CACHE_PSI_WINDOW_US);
-  if(cache->psi_watch_count == 0) return;
+  if(cache->psi.count == 0) return;
 
-  cache->psi_stop_fd = eventfd(0, EFD_CLOEXEC);
-  if(cache->psi_stop_fd >= 0 && dt_pthread_create(&cache->psi_watch_thread, _pressure_watch_thread, cache, FALSE) == 0)
+  cache->psi.stop_fd = eventfd(0, EFD_CLOEXEC);
+  if(cache->psi.stop_fd >= 0 && dt_pthread_create(&cache->psi.thread, _pressure_watch_thread, cache, FALSE) == 0)
   {
-    cache->psi_watch_running = TRUE;
+    cache->psi.running = TRUE;
     dt_print(DT_DEBUG_MEMORY | DT_DEBUG_PIPECACHE,
-             "[pixelpipe_cache] watching kernel memory pressure on %i level(s)\n", cache->psi_watch_count);
+             "[pixelpipe_cache] watching kernel memory pressure on %i level(s)\n", cache->psi.count);
     return;
   }
 
   // No watcher: the measured windows in _free_space_to_alloc() and the idle shedder still react,
   // just not while nothing runs.
-  if(cache->psi_stop_fd >= 0) close(cache->psi_stop_fd);
-  cache->psi_stop_fd = -1;
-  for(int i = 0; i < cache->psi_watch_count; i++) close(cache->psi_watch_fds[i]);
-  cache->psi_watch_count = 0;
+  if(cache->psi.stop_fd >= 0) close(cache->psi.stop_fd);
+  cache->psi.stop_fd = -1;
+  for(int i = 0; i < cache->psi.count; i++) close(cache->psi.fds[i]);
+  cache->psi.count = 0;
 #endif
 }
 
-static void _pressure_watch_stop(dt_dev_pixelpipe_cache_t *cache)
+static void _pressure_watch_stop(dt_dev_pixelpipe_cache_t *cache_unused)
 {
 #if defined(__linux__)
-  if(cache->psi_watch_running)
+  if(cache_unused->psi.running)
   {
     const uint64_t wake = 1;
-    if(write(cache->psi_stop_fd, &wake, sizeof(wake)) != (ssize_t)sizeof(wake))
-      pthread_cancel(cache->psi_watch_thread); // poll() is a cancellation point
-    pthread_join(cache->psi_watch_thread, NULL);
-    cache->psi_watch_running = FALSE;
+    if(write(cache_unused->psi.stop_fd, &wake, sizeof(wake)) != (ssize_t)sizeof(wake))
+      pthread_cancel(cache_unused->psi.thread); // poll() is a cancellation point
+    pthread_join(cache_unused->psi.thread, NULL);
+    cache_unused->psi.running = FALSE;
   }
 
-  if(cache->psi_stop_fd >= 0) close(cache->psi_stop_fd);
-  cache->psi_stop_fd = -1;
-  for(int i = 0; i < cache->psi_watch_count; i++) close(cache->psi_watch_fds[i]);
-  cache->psi_watch_count = 0;
+  if(cache_unused->psi.stop_fd >= 0) close(cache_unused->psi.stop_fd);
+  cache_unused->psi.stop_fd = -1;
+  for(int i = 0; i < cache_unused->psi.count; i++) close(cache_unused->psi.fds[i]);
+  cache_unused->psi.count = 0;
 #endif
 }
 
@@ -2503,11 +2507,11 @@ gboolean dt_dev_pixelpipe_cache_init(size_t max_memory, const gboolean verbose,
   cache->sys_probe_time_us = 0;
   cache->sys_available_est = 0;
   cache->sys_probe_valid = FALSE;
-  memset(cache->psi_total_us, 0, sizeof(cache->psi_total_us));
-  cache->psi_levels = 0;
-  cache->psi_time_us = 0;
-  dt_pixelpipe_cache_pressure_init(&cache->pressure, max_memory);
-  cache->psi_shed_time_us = 0;
+  memset(cache->psi.totals, 0, sizeof(cache->psi.totals));
+  cache->psi.levels = 0;
+  cache->psi.time_us = 0;
+  dt_pixelpipe_cache_pressure_init(&cache->psi.budget, max_memory);
+  cache->psi.shed_time_us = 0;
 
   if(IS_NULL_PTR(cache->entries) || IS_NULL_PTR(cache->external_entries))
   {
@@ -3420,7 +3424,7 @@ void dt_dev_pixelpipe_cache_get_usage(size_t *current, size_t *max)
   if(current) *current = cache->current_memory;
   // The budget allocations currently evict down to, so tiling plans against it -- and never
   // under what is held, since the callers compute `max - current` unsigned.
-  if(max) *max = dt_pixelpipe_cache_pressure_reported(&cache->pressure, cache->current_memory);
+  if(max) *max = dt_pixelpipe_cache_pressure_reported(&cache->psi.budget, cache->current_memory);
   dt_pthread_mutex_unlock(&cache->lock);
 }
 
