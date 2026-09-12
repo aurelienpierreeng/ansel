@@ -21,13 +21,13 @@
 
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
 #if defined(__linux__)
-#include <fcntl.h>
-#include <inttypes.h>
-#include <unistd.h>
+#include <fcntl.h>    // conditional-ok: every PSI file is opened inside this same #ifdef
+#include <unistd.h>   // conditional-ok: idem -- read(), write() and close() on those descriptors
 
 // The `total` of the "full" line of one PSI file. FALSE when the file is absent (a kernel
 // without PSI, a cgroup level without the memory controller) or unreadable.
