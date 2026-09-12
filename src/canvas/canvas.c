@@ -1189,6 +1189,21 @@ static double _disc_reach(const double centre_x, const double centre_y, const do
   return along + sqrt(discriminant);
 }
 
+gboolean dt_canvas_object_covers(const dt_canvas_t *canvas, const dt_canvas_object_t *frame, const double x,
+                                 const double y, const double standoff)
+{
+  if(IS_NULL_PTR(frame) || !dt_canvas_object_is_frame(frame)) return FALSE;
+  if(frame->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN) return FALSE;
+  double local_x = 0.0;
+  double local_y = 0.0;
+  dt_canvas_object_to_local(frame, x, y, &local_x, &local_y);
+  const double distance = hypot(local_x, local_y);
+  // The centre is inside whatever the frame draws, and has no direction to ask about.
+  if(!(distance > 0.0)) return TRUE;
+  const double reach = dt_canvas_object_silhouette_reach(canvas, frame, local_x, local_y);
+  return distance <= reach + fmax(standoff, 0.0);
+}
+
 double dt_canvas_object_silhouette_reach(const dt_canvas_t *canvas, const dt_canvas_object_t *frame,
                                          const double dir_x, const double dir_y)
 {

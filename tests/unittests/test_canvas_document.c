@@ -1025,6 +1025,30 @@ static void _opentype_features_round_trip_through_their_pango_spelling(void **st
   for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++) assert_false(read_back[feature]);
 }
 
+/**
+ * What a frame covers is its SILHOUETTE, not the box around it: a circular cutout covers its
+ * middle and leaves the corner beside it empty. That is what text flowing around an object has
+ * to ask, or it would keep clear of empty corners.
+ */
+static void _a_frame_covers_its_silhouette_and_not_its_corners(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 200.0, 200.0, "");
+  // Uncut: the whole rectangle is covered, and just outside it is not.
+  assert_true(dt_canvas_object_covers(canvas, frame, 0.0, 0.0, 0.0));
+  assert_true(dt_canvas_object_covers(canvas, frame, 95.0, 95.0, 0.0));
+  assert_false(dt_canvas_object_covers(canvas, frame, 130.0, 0.0, 0.0));
+  // The standoff grows it, which is what keeps the text off it.
+  assert_true(dt_canvas_object_covers(canvas, frame, 130.0, 0.0, 40.0));
+
+  // Cut to a circle: the centre is still covered, the corner it no longer fills is not.
+  dt_canvas_mask_set_shape(canvas, frame, DT_CANVAS_MASK_CIRCLE);
+  assert_true(dt_canvas_object_covers(canvas, frame, 0.0, 0.0, 0.0));
+  assert_false(dt_canvas_object_covers(canvas, frame, 95.0, 95.0, 0.0));
+  dt_canvas_free(canvas);
+}
+
 static void _paper_tiles_the_plane_from_the_origin(void **state)
 {
   (void)state;
@@ -1185,6 +1209,7 @@ int main(void)
     cmocka_unit_test(_a_sheet_of_paper_scales_with_the_resolution_and_a_screen_format_does_not),
     cmocka_unit_test(_a_spread_keeps_its_pages_together_and_opens_between_sheets),
     cmocka_unit_test(_opentype_features_round_trip_through_their_pango_spelling),
+    cmocka_unit_test(_a_frame_covers_its_silhouette_and_not_its_corners),
     cmocka_unit_test(_paper_tiles_the_plane_from_the_origin),
     cmocka_unit_test(_layouts_arrange_without_moving_the_group),
     cmocka_unit_test(_a_layout_sorts_images_by_a_key_and_keeps_the_rest_after),
