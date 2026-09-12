@@ -73,7 +73,7 @@ extern "C" {
 #define DT_CANVAS_HEADER_RESERVED 856 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12)
 #define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
-#define DT_CANVAS_TEXT_RESERVED 152 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags and the standoff
+#define DT_CANVAS_TEXT_RESERVED 144 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags, the standoff and the two paragraph settings
 #define DT_CANVAS_TEXT_FEATURES_LEN 64 ///< an OpenType feature string, as Pango spells it: "liga 1, onum 1"
 
 /** Which side of a text frame's inner margins an index names. */
@@ -252,6 +252,18 @@ typedef struct dt_canvas_text_t
   char features[DT_CANVAS_TEXT_FEATURES_LEN];
   uint32_t text_flags;  ///< dt_canvas_text_flag_t
   float wrap_standoff;  ///< how far the text keeps off a frame laid over it, in canvas units
+  /**
+   * The first line of every paragraph, moved in from the measure by this much, in canvas
+   * units. Negative hangs it out instead, which is what a bibliography or a dictionary wants.
+   * Zero is flush, and is what a document from before the field holds.
+   */
+  float first_line_indent;
+  /**
+   * Extra space before every paragraph but the first, in canvas units. This is the space a
+   * typographer sets INSTEAD of an indent, not as well; the two are offered together because
+   * which one a text wants is the designer's call.
+   */
+  float paragraph_spacing;
   uint8_t reserved[DT_CANVAS_TEXT_RESERVED];
 
   /* runtime: the Markdown travels as its own archive entry */

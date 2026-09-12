@@ -409,6 +409,24 @@ cos(theta)`, which on the reported picture is the difference between 5 units of 
 the cut runs vertical and 15 along its slant. Widening the Gap raises both and narrows the
 ratio; nothing short of letting glyphs overlap removes it.
 
+**A paragraph's first line and the space before it are this engine's too.** Pango indents the
+first line of every paragraph in a layout, which is exactly the rule -- so the plain path uses
+`pango_layout_set_indent()` and the flowing one cannot, since every line there is the first of
+its own layout: it moves the run's start in by the indent and leaves its end, so the line comes
+out indented under every alignment and justified text keeps its right edge, and a NEGATIVE
+indent hangs the line out of the measure the way a bibliography wants. Space between paragraphs
+Pango cannot do at all -- its spacing is between LINES and it has no notion of a paragraph --
+so a frame that asks for it is set line by line whether or not it wraps (`_text_flows()`).
+
+**A run of newlines is ONE paragraph break, however many it holds.** The markdown converter
+separates its blocks with a blank line, and Pango renders the second newline as a line of its
+own with no ink in it. A rule keyed on "did I step over a newline" therefore fires on the empty
+line and again on the real one -- two gaps per break, measured as 159.6 units where 80 was
+owed. The question is asked of the FOLLOWING line instead: the one whose preceding character is
+a newline and which has ink of its own opens the paragraph, and there is exactly one of those
+per run. The blank line itself is left alone, so a document laid out before the control looks
+as it did and the space is genuinely extra.
+
 **The leading is space BETWEEN lines, so this engine advances it by hand.**
 `pango_layout_set_spacing()` puts it between the lines of one layout, and every line here is
 line zero of a layout of its own, so no line's extents ever carry it: setting a line height did

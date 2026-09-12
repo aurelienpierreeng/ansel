@@ -3429,6 +3429,15 @@ they are visible.
   not a defect**: horizontal lines against a diagonal always clear it by more at the line's own
   height than the gap asks for, by about `(band / 2) * tan(theta) * cos(theta)`, and every
   page-layout application does the same.
+- **A run of newlines is ONE paragraph break, and the question is asked of the FOLLOWING line.**
+  The markdown converter separates blocks with a blank line and Pango renders the second
+  newline as a line of its own with no ink; a rule keyed on "did I step over a newline" fires
+  on the empty line and again on the real one, which is two paragraph gaps per break -- 159.6
+  units measured where 80 was owed. The line whose preceding character is a newline AND which
+  has ink of its own opens the paragraph, and there is exactly one per run. Pango indents the
+  first line of a paragraph itself, so the plain path uses `pango_layout_set_indent()`; the
+  flowing one cannot (every line is the first of its own layout) and moves the run's start in
+  instead, leaving its end, so every alignment indents correctly.
 - **The leading is space BETWEEN lines, so a flowing paragraph has to advance it by hand.**
   `pango_layout_set_spacing()` puts it between the lines of ONE layout, and every line of a
   flowing paragraph is line zero of a layout of its own -- so no line's extents ever carry it,

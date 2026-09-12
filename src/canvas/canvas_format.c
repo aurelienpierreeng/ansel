@@ -142,6 +142,8 @@ static void _write_text(GByteArray *out, const dt_canvas_text_t *text)
   _w_string(out, text->features, DT_CANVAS_TEXT_FEATURES_LEN);
   _w_u32(out, text->text_flags);
   _w_f32(out, text->wrap_standoff);
+  _w_f32(out, text->first_line_indent);
+  _w_f32(out, text->paragraph_spacing);
   _w_bytes(out, text->reserved, sizeof(text->reserved));
 }
 
@@ -451,6 +453,10 @@ static void _read_text(dt_canvas_cursor_t *cursor, dt_canvas_text_t *text)
   _r_string(cursor, text->features, DT_CANVAS_TEXT_FEATURES_LEN);
   text->text_flags = _r_u32(cursor);
   text->wrap_standoff = _r_f32(cursor);
+  // Zeros from a document written before these: a flush first line and no space between
+  // paragraphs, which is what such a document was laid out with.
+  text->first_line_indent = _r_f32(cursor);
+  text->paragraph_spacing = _r_f32(cursor);
   _r_bytes(cursor, text->reserved, sizeof(text->reserved));
   text->markdown = NULL;
 }

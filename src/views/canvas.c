@@ -177,6 +177,8 @@ typedef struct dt_canvas_view_t
   GtkWidget *text_line_height;
   GtkWidget *text_letter_spacing;
   GtkWidget *text_margin[4];
+  GtkWidget *text_first_line_indent;
+  GtkWidget *text_paragraph_spacing;
   GtkWidget *text_feature[DT_CANVAS_TEXT_FEATURE_MAX];
   GtkWidget *text_auto_height;
   GtkWidget *text_optical;
@@ -2294,6 +2296,16 @@ static void _bar_text_margin_changed(GtkSpinButton *spin, gpointer data)
   dt_control_queue_redraw_center();
 }
 
+static void _bar_text_paragraph_changed(GtkSpinButton *spin, gpointer data)
+{
+  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
+  if(GTK_WIDGET(spin) == view->text_first_line_indent)
+    object->text.first_line_indent = (float)gtk_spin_button_get_value(spin);
+  else
+    object->text.paragraph_spacing = (float)gtk_spin_button_get_value(spin);
+  BAR_EDIT_END()
+}
+
 static void _bar_text_standoff_changed(GtkSpinButton *spin, gpointer data)
 {
   BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
@@ -2764,6 +2776,30 @@ static void _bars_create(dt_view_t *self)
                  "coloured frame from having its text run into the edge."),
                padding_grid);
 
+  GtkWidget *paragraph_grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(paragraph_grid), DT_PIXEL_APPLY_DPI(4));
+  gtk_grid_set_column_spacing(GTK_GRID(paragraph_grid), DT_PIXEL_APPLY_DPI(8));
+  gtk_container_set_border_width(GTK_CONTAINER(paragraph_grid), DT_PIXEL_APPLY_DPI(8));
+  view->text_first_line_indent = gtk_spin_button_new_with_range(-2000.0, 2000.0, 1.0);
+  gtk_entry_set_width_chars(GTK_ENTRY(view->text_first_line_indent), 6);
+  gtk_widget_set_tooltip_text(view->text_first_line_indent,
+                              _("How far the first line of every paragraph is moved in from the measure, in "
+                                "canvas units. Negative hangs it out instead, which is what a bibliography or "
+                                "a dictionary wants."));
+  g_signal_connect(view->text_first_line_indent, "value-changed", G_CALLBACK(_bar_text_paragraph_changed), self);
+  gtk_grid_attach(GTK_GRID(paragraph_grid), gtk_label_new(_("First line")), 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(paragraph_grid), view->text_first_line_indent, 1, 0, 1, 1);
+  view->text_paragraph_spacing = gtk_spin_button_new_with_range(0.0, 2000.0, 1.0);
+  gtk_entry_set_width_chars(GTK_ENTRY(view->text_paragraph_spacing), 6);
+  gtk_widget_set_tooltip_text(view->text_paragraph_spacing,
+                              _("Extra space before every paragraph but the first, in canvas units. A "
+                                "typographer sets this INSTEAD of an indent rather than as well as one."));
+  g_signal_connect(view->text_paragraph_spacing, "value-changed", G_CALLBACK(_bar_text_paragraph_changed), self);
+  gtk_grid_attach(GTK_GRID(paragraph_grid), gtk_label_new(_("Space between")), 0, 1, 1, 1);
+  gtk_grid_attach(GTK_GRID(paragraph_grid), view->text_paragraph_spacing, 1, 1, 1, 1);
+  _bar_popover(view->row_text, _("Paragraph"),
+               _("Where a paragraph begins and how far it sits from the one before it."), paragraph_grid);
+
   GtkWidget *features_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(2));
   gtk_container_set_border_width(GTK_CONTAINER(features_box), DT_PIXEL_APPLY_DPI(8));
   for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
@@ -3060,6 +3096,10 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_wrap),
                                    (object->text.text_flags & DT_CANVAS_TEXT_WRAP_AROUND) != 0);
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_standoff), object->text.wrap_standoff);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_first_line_indent),
+                                object->text.first_line_indent);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_paragraph_spacing),
+                                object->text.paragraph_spacing);
     }
     else if(kind == DT_CANVAS_OBJECT_CONNECTOR)
     {

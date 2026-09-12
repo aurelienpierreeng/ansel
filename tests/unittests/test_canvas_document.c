@@ -67,6 +67,8 @@ static dt_canvas_t *_populated_canvas(void)
   text->text.align_h = DT_CANVAS_ALIGN_JUSTIFY;
   text->text.align_v = DT_CANVAS_ALIGN_END;
   text->text.background.alpha = 0.0f;
+  text->text.first_line_indent = -18.0f;  // a hanging indent, so the sign survives too
+  text->text.paragraph_spacing = 24.0f;
 
   dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, text->id, image->id);
   assert_non_null(connector);
@@ -257,6 +259,8 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_int_equal(text->text.align_h, DT_CANVAS_ALIGN_JUSTIFY);
   assert_int_equal(text->text.align_v, DT_CANVAS_ALIGN_END);
   assert_float_equal(text->text.background.alpha, 0.0f, 1e-6);
+  assert_float_equal(text->text.first_line_indent, -18.0f, 1e-6);
+  assert_float_equal(text->text.paragraph_spacing, 24.0f, 1e-6);
   assert_int_equal(text->mask.shape, DT_CANVAS_MASK_ELLIPSE);
   assert_float_equal(text->mask.center_x, 0.4f, 1e-6);
   assert_float_equal(text->mask.rotation, 30.0f, 1e-6);

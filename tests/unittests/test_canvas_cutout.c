@@ -991,6 +991,42 @@ static double _flowed_height_with_obstacle_below_the_top(const double offset)
   return flowed;
 }
 
+static void _paragraphs_take_their_indent_and_their_space(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 0.0, 0.0, 400.0, 4000.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way "
+      "whatever the zoom.\n\nThe page is the thing being designed and the screen is only a window "
+      "onto it.\n\nA column set beside a picture must keep clear of it line by line.");
+  assert_non_null(text);
+  text->text.padding = 0.0f;
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double plain = dt_canvas_paint_text_natural_height(cr, canvas, text);
+
+  // Three paragraphs, so two gaps between them. The first one gets none: the space is BETWEEN
+  // paragraphs, not above every one of them.
+  text->text.paragraph_spacing = 40.0f;
+  const double spaced = dt_canvas_paint_text_natural_height(cr, canvas, text);
+
+  // An indent shortens the first line of each paragraph. Half the measure, over three
+  // paragraphs, has to cost lines.
+  text->text.paragraph_spacing = 0.0f;
+  text->text.first_line_indent = 200.0f;
+  const double indented = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+
+  assert_true(plain > 0.0);
+  assert_float_equal(spaced, plain + 80.0, 1.0);
+  assert_true(indented > plain);
+  dt_canvas_free(canvas);
+}
+
 /** A column beside one obstacle; returns the height its text needs at that leading. */
 static double _paragraph_height(const gboolean flowing, const float leading, const gboolean one_line)
 {
@@ -1280,6 +1316,7 @@ int main(void)
     cmocka_unit_test(_the_gap_around_an_obstacle_is_a_disc_not_a_square),
     cmocka_unit_test(_a_frame_standing_just_outside_a_column_still_pushes_its_text),
     cmocka_unit_test(_the_leading_reaches_a_flowing_paragraph_once_per_gap),
+    cmocka_unit_test(_paragraphs_take_their_indent_and_their_space),
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),

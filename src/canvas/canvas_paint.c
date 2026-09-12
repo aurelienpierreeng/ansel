@@ -1456,6 +1456,22 @@ static void _text_layout_finish(PangoLayout *layout, const dt_canvas_object_t *o
   }
 }
 
+/**
+ * Whether a frame must be set line by line rather than as one Pango layout.
+ *
+ * Wrapping and optical margins each need a line set at a width this code chooses. So does
+ * space between paragraphs: Pango's spacing is between LINES and it has no notion of a
+ * paragraph, so the only place that space can be inserted is where this engine already knows
+ * one paragraph ended and another began. A first-line indent does NOT need it -- Pango indents
+ * the first line of every paragraph itself -- so a frame that only wants an indent keeps the
+ * cheaper path, and the two agree because they mean the same thing by it.
+ */
+static gboolean _text_flows(const dt_canvas_object_t *object)
+{
+  return (object->text.text_flags & (DT_CANVAS_TEXT_WRAP_AROUND | DT_CANVAS_TEXT_OPTICAL_MARGINS)) != 0
+         || fabsf(object->text.paragraph_spacing) > 1e-4f;
+}
+
 static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object)
 {
   PangoLayout *layout = _text_layout_styled(cr, canvas, object);
@@ -1467,6 +1483,9 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
   gchar *markup = dt_canvas_markdown_to_pango(dt_canvas_text_get_markdown(object));
   pango_layout_set_markup(layout, markup, -1);
   dt_free(markup);
+  // Pango indents the first line of every paragraph in the layout, which is exactly the rule;
+  // the flowing engine cannot use it, since every line there is the first of its own layout.
+  pango_layout_set_indent(layout, (int)lround((double)object->text.first_line_indent * PANGO_SCALE));
   _text_layout_finish(layout, object);
   return layout;
 }
@@ -1983,6 +2002,14 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   double layout_width = -1.0;
   gsize layout_offset = 0;
   int layout_line = 0;
+  // Where a paragraph begins, since that is what an indent and the space between paragraphs
+  // both answer to. Pango knows neither here: every line is the first of its own layout, so
+  // its own indent would indent every line, and it has no paragraph spacing at all.
+  gboolean paragraph_start = TRUE;
+  gboolean before_first_paragraph = TRUE;
+  const double indent = (double)object->text.first_line_indent;
+  const double paragraph_gap = fmax((double)object->text.paragraph_spacing, 0.0);
+
   // Before there is a line to measure, the whole logical box: a first line must not be placed
   // against a guess that is too small, and the check above corrects it downward for the rest.
   double previous_ink_top = 0.0;
@@ -1991,6 +2018,10 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   {
     // A trial band one line tall. The height of a line is not known before it is laid out, so
     // the band is asked for with the last line's height, or the font's to begin with.
+    // The space between paragraphs goes in before the band is asked for, or the line would be
+    // measured against the obstacles at the height it is NOT going to be set at.
+    if(paragraph_start && !before_first_paragraph) y += paragraph_gap;
+
     double run_x = text_left;
     double run_width = inner_width;
     /*
@@ -2007,6 +2038,18 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     _obstacles_free_run(obstacles, top + y + band_top, top + y + band_top + band_height, text_left, text_right,
                         &run_x, &run_width);
     if(!(run_width > 0.0)) break;
+    /*
+     * The first line of a paragraph is set on a shorter measure, from the side the reading
+     * starts: the run's start moves in and its end stays, so the line comes out indented under
+     * every alignment and justified text keeps its right edge. A negative indent hangs the
+     * line out of the measure instead, which is what a bibliography or a dictionary wants.
+     */
+    if(paragraph_start && fabs(indent) > 1e-4)
+    {
+      run_x += indent;
+      run_width -= indent;
+      if(!(run_width > 0.0)) break;
+    }
 
     if(IS_NULL_PTR(layout) || fabs(run_width - layout_width) > 0.01)
     {
@@ -2130,6 +2173,7 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     }
     y += line_height;
     const double leading_gap = fmax((double)pango_layout_get_spacing(layout) / PANGO_SCALE, 0.0);
+    if(paragraph_start) before_first_paragraph = FALSE;
     consumed = layout_offset + line->start_index + line->length;
     // A break eats the space it broke on, and a paragraph break its newline: step over
     // whatever the line did not take, or the next chunk begins with it and never advances.
@@ -2144,8 +2188,24 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
      */
     if(consumed < length) y += leading_gap;
     layout_line++;
-    if(!IS_NULL_PTR(pango_layout_get_line_readonly(layout, layout_line))) continue;
+    /*
+     * Whether the NEXT line opens a paragraph, asked of the line itself rather than of what
+     * this one stepped over. A run of newlines is ONE break however many it holds: markdown
+     * separates its blocks with a blank line, Pango renders the second newline as a line of
+     * its own with no ink in it, and a rule keyed on "did I step over a newline" fires on the
+     * empty line and again on the real one -- two gaps per break, measured as 159.6 units
+     * where 80 was owed. The line whose character before it is a newline AND which has ink of
+     * its own is the one that opens the paragraph, and there is exactly one per run.
+     */
+    const PangoLayoutLine *following = pango_layout_get_line_readonly(layout, layout_line);
+    if(!IS_NULL_PTR(following))
+    {
+      const gsize starts_at = layout_offset + following->start_index;
+      paragraph_start = following->length > 0 && starts_at > 0 && plain[starts_at - 1] == '\n';
+      continue;
+    }
     // The layout is spent: the next line rebuilds from where this one stopped.
+    paragraph_start = consumed < length && consumed > 0 && plain[consumed - 1] == '\n';
     layout_width = -1.0;
   }
   if(!IS_NULL_PTR(layout)) g_object_unref(layout);
@@ -2186,7 +2246,7 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   const gboolean wrapping = (object->text.text_flags & DT_CANVAS_TEXT_WRAP_AROUND)
                             && _obstacles_build(&obstacles, canvas, object, inner_width, inner_height, insets);
   if(!wrapping) memset(&obstacles, 0, sizeof(obstacles));
-  if(wrapping || (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS))
+  if(wrapping || _text_flows(object))
   {
     // The height is only known once it is set, so the vertical alignment measures first.
     double offset_y = 0.0;
@@ -2266,7 +2326,7 @@ double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canva
     const gboolean wrapping = (object->text.text_flags & DT_CANVAS_TEXT_WRAP_AROUND)
                               && _obstacles_build(&obstacles, canvas, object, inner_width, fmax(object->height, 1.0), insets);
     if(!wrapping) memset(&obstacles, 0, sizeof(obstacles));
-    if(wrapping || (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS))
+    if(wrapping || _text_flows(object))
     {
       const double used = _flow_text(cr, canvas, object, &obstacles, inner_width, 1.0e9, 0.0, FALSE);
       _obstacles_free(&obstacles);
