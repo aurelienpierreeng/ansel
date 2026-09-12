@@ -1398,8 +1398,21 @@ are now refcounted (`dt_masks_form_t.refcount`, `src/develop/masks/masks_history
 
 `blend_params->mask_id` lives inside each module's own params blob, so several modules naming the
 same group is *representable* — but it is not what anything builds, and code here should not
-create it. A module owns ONE mask group of its own, named "Mask <module>", and a shape or shape
+create it. A module owns ONE mask group of its own, named "Group <module>", and a shape or shape
 group used by several modules is nested as a member of each of their masks.
+
+That name is the masks module's own convention, not the caller's: `dt_masks_group_name_for_module()`
+builds the string (published for the two consumers that have no form to write it into — the blend
+panel's name-entry placeholder, and what it puts back when the user empties the entry), and
+`dt_masks_group_set_name_from_module()` writes it, **id-keyed**, so the rename copies on write like
+every other group mutation. It is NOT translated: it goes into the form, the database and the XMP,
+so it may not depend on the language the group happened to be created in. The two creation paths
+(`libs/shape_manager.c`'s `_module_create_own_mask()`, `develop/blend_gui.c`'s
+`_blendop_masks_group_create()`) name the group AFTER `dt_masks_append_form()`, since an id resolves
+against `dev->forms` and nowhere else — and they re-resolve the group by id afterwards, because a
+fresh group already carries two claims (its creator's and the list's), so the touch inside the
+setter genuinely clones it and the pointer they created would otherwise be an orphan that
+`dt_masks_cow_touch()` leaves alone and every later mutation writes into the void.
 
 That separation is what keeps the modules independent. A module's own mask carries its own combine
 operators, opacities and member order, so attaching the same shape group to a second module cannot

@@ -251,6 +251,37 @@ guint dt_masks_group_list(struct dt_develop_t *dev, dt_masks_form_info_t *out, g
 dt_masks_result_t dt_masks_group_set_member_opacity(struct dt_develop_t *dev, int group_id, int formid,
                                                     float opacity, dt_masks_member_t *out);
 
+/**
+ * @brief The name a module's own mask group carries: "Group <module>", after the module's
+ * multi-instance name when it has one, its own name otherwise.
+ *
+ * The convention belongs to the masks module because the string it builds is a form's name. It is
+ * published because two callers need the text without a form to write it into: the blend panel
+ * shows it as the name entry's placeholder, and puts it back when the user empties the entry.
+ *
+ * Thread-neutral: reads only @p module. Takes no lock and does not copy-on-write.
+ *
+ * @return a newly allocated string the caller frees, NULL for a NULL module. NOT translated: it is
+ *         stored in the form and persisted to the database and the XMP, so it may not depend on
+ *         the language the user happened to run when the group was created.
+ */
+gchar *dt_masks_group_name_for_module(const struct dt_iop_module_t *module);
+
+/**
+ * @brief Name a group after the module that renders it, by id.
+ *
+ * The write half of dt_masks_group_name_for_module(), and id-keyed for the reason the whole write
+ * API is: a group is refcounted and shared with every history snapshot referencing it, so a rename
+ * is a mutation that must copy on write. A caller holding the form cannot do that correctly --
+ * cloning replaces the object wholesale, and the pointer it wrote through belongs to the copy that
+ * was just abandoned.
+ *
+ * @return OK when the name changed, UNCHANGED when the group already carried it, NOT_FOUND for no
+ *         such group or an id naming a shape, INVALID for a NULL dev or module.
+ */
+dt_masks_result_t dt_masks_group_set_name_from_module(struct dt_develop_t *dev, int group_id,
+                                                      struct dt_iop_module_t *module);
+
 #ifdef __cplusplus
 }
 #endif

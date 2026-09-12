@@ -4968,11 +4968,12 @@ static void _menu_add_exist(dt_iop_module_t *module, int form_id)
 void dt_masks_group_update_name(dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return;
-  dt_masks_form_t *group_form = _group_from_module(module->dev, module);
-  if (IS_NULL_PTR(group_form))
-    return;
 
-  _set_group_name_from_module(module, group_form);
+  // Id-keyed: renaming a module's mask after the module was renamed is a mutation like any other,
+  // and the group may be shared with a history snapshot, so it copies on write.
+  const dt_masks_result_t result =
+    dt_masks_group_set_name_from_module(module->dev, module->blend_params->mask_id, module);
+  if(result != DT_MASKS_OK && result != DT_MASKS_UNCHANGED) return;
 
   dt_iop_gui_blend_masks_update(module);
 }

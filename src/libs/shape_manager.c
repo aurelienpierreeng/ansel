@@ -1165,15 +1165,18 @@ static dt_masks_form_t *_module_create_own_mask(dt_develop_t *dev, dt_iop_module
   dt_masks_form_t *own = dt_masks_create_ext(dev, DT_MASKS_GROUP);
   if(IS_NULL_PTR(own)) return NULL;
 
-  gchar *name = dt_dev_get_masks_group_name(module);
-  g_strlcpy(own->name, name, sizeof(own->name));
-  dt_free(name);
-
   dt_masks_form_info_t own_info = { 0 };
   if(!dt_masks_form_get_info(own, &own_info)) return NULL;
   *own_id = own_info.formid;
 
   dt_masks_append_form(dev, own);
+
+  // Named by id, so the naming convention and the copy-on-write both stay inside the masks
+  // module. The touch it takes may replace the group with a clone, which is why the live one is
+  // resolved again afterwards rather than the pointer created above being returned.
+  dt_masks_group_set_name_from_module(dev, *own_id, module);
+  own = dt_masks_get_from_id(dev, *own_id);
+  if(IS_NULL_PTR(own)) return NULL;
 
   // A module's blend_params are its own history entry; the forms get one of their own later.
   if(dt_iop_gui_blend_set_drawn_mask_group(module, *own_id))
@@ -1184,7 +1187,7 @@ static dt_masks_form_t *_module_create_own_mask(dt_develop_t *dev, dt_iop_module
 
 /* Puts the row's form to work in the modules the user picks.
  *
- * Every module renders its OWN mask group -- created here, named "Mask <module>", if it has none
+ * Every module renders its OWN mask group -- created here, named "Group <module>", if it has none
  * yet -- and the row's form is nested as a member of each. What is shared between the modules is
  * that form, not the mask holding it: one shape or shape group, referenced by as many module
  * masks as tick it.
