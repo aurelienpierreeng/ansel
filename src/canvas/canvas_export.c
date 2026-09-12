@@ -53,6 +53,11 @@ typedef struct dt_canvas_export_page_t
   dt_canvas_rect_t area;
   double width_pt;
   double height_pt;
+  /**
+   * Which of this leaf's four sides is a FOLD rather than a cut, top, right, bottom, left. A
+   * fold has no bleed -- nothing is trimmed there -- and has taken the bind gutter instead.
+   */
+  gboolean fold[4];
 } dt_canvas_export_page_t;
 
 dt_canvas_export_options_t dt_canvas_export_options_default(void)
@@ -124,8 +129,16 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
     const dt_canvas_rect_t bounds = dt_canvas_bounds(canvas);
     if(bounds.width > 0.0 && bounds.height > 0.0)
     {
-      // One output page per SHEET, not per page: the two halves of a book's spread are printed
-      // on one piece of paper, and a picture sitting on the fold has to come out whole.
+      // ONE OUTPUT PAGE PER CANVAS PAGE, cut at the folds. A spread is a sheet on the plane,
+      // where a picture crossing the fold is laid out whole; it is not one piece of paper at
+      // the press, because the press prints leaves and the binder folds them.
+      //
+      // What the fold gets instead is the BIND GUTTER, and it behaves exactly as a bleed does
+      // -- content carried past the cut line -- only facing inward. So the strip either side
+      // of a fold is printed on BOTH leaves: the part of a picture the binding swallows is
+      // still there on each. Nothing is scaled for it, so a frame lands exactly where the
+      // canvas shows it, and the sheet simply comes out that much wider, the same way a bleed
+      // already makes it wider.
       int first_col = 0;
       int first_row = 0;
       int last_col = 0;
@@ -133,30 +146,43 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
       dt_canvas_page_at(canvas, bounds.x, bounds.y, &first_col, &first_row);
       dt_canvas_page_at(canvas, bounds.x + bounds.width - 1e-9, bounds.y + bounds.height - 1e-9, &last_col,
                         &last_row);
+      const double bind = fmax((double)canvas->bind_gutter, 0.0);
       for(int row = first_row; row <= last_row; row++)
       {
         for(int col = first_col; col <= last_col; col++)
         {
-          int across = 0;
-          int down = 0;
-          dt_canvas_page_in_spread(canvas, col, row, &across, &down, NULL, NULL);
-          // Claimed by the sheet's first page, so a spread is emitted once however many pages
-          // of it the walk passes over.
-          if(across != 0 || down != 0) continue;
-          dt_canvas_rect_t sheet;
-          if(!dt_canvas_spread_rect(canvas, col, row, &sheet, NULL, NULL)) continue;
+          const dt_canvas_rect_t page_rect = dt_canvas_page_rect(canvas, col, row);
+          if(!(page_rect.width > 0.0)) continue;
           gboolean holds_a_frame = FALSE;
           for(guint idx = 0; idx < dt_canvas_object_count(canvas) && !holds_a_frame; idx++)
           {
             const dt_canvas_object_t *object = dt_canvas_object_at(canvas, idx);
             if(!dt_canvas_object_is_frame(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
             const dt_canvas_rect_t frame = dt_canvas_object_bounds(object);
-            holds_a_frame = frame.x < sheet.x + sheet.width && frame.x + frame.width > sheet.x
-                            && frame.y < sheet.y + sheet.height && frame.y + frame.height > sheet.y;
+            holds_a_frame = frame.x < page_rect.x + page_rect.width && frame.x + frame.width > page_rect.x
+                            && frame.y < page_rect.y + page_rect.height && frame.y + frame.height > page_rect.y;
           }
           if(!holds_a_frame) continue;
+          // Each side gets whichever of the two it owes: a fold owes the bind gutter, a cut
+          // owes the bleed. The bleed is added to every page below, so only the difference is
+          // applied here and the fold sides take theirs back.
+          int across = 0;
+          int down = 0;
+          int span_x = 1;
+          int span_y = 1;
+          dt_canvas_page_in_spread(canvas, col, row, &across, &down, &span_x, &span_y);
           dt_canvas_export_page_t page;
-          page.area = sheet;
+          page.area = page_rect;
+          page.fold[0] = down > 0;
+          page.fold[1] = across < span_x - 1;
+          page.fold[2] = down < span_y - 1;
+          page.fold[3] = across > 0;
+          const double outsets[4] = { page.fold[0] ? bind : 0.0, page.fold[1] ? bind : 0.0,
+                                      page.fold[2] ? bind : 0.0, page.fold[3] ? bind : 0.0 };
+          page.area.x -= outsets[3];
+          page.area.y -= outsets[0];
+          page.area.width += outsets[1] + outsets[3];
+          page.area.height += outsets[0] + outsets[2];
           g_array_append_val(pages, page);
         }
       }
@@ -164,7 +190,8 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
     if(pages->len == 0)
     {
       dt_canvas_export_page_t page;
-      if(!dt_canvas_spread_rect(canvas, 0, 0, &page.area, NULL, NULL)) page.area = dt_canvas_page_rect(canvas, 0, 0);
+      page.area = dt_canvas_page_rect(canvas, 0, 0);
+      for(int side = 0; side < 4; side++) page.fold[side] = FALSE;
       g_array_append_val(pages, page);
     }
   }
@@ -174,6 +201,7 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
     // padding round it -- the margin has no page edge to sit inside here, so it becomes the
     // white space the single sheet keeps around its content.
     dt_canvas_export_page_t page;
+    memset(&page, 0, sizeof(page));
     page.area = dt_canvas_bounds(canvas);
     if(!(page.area.width > 0.0) || !(page.area.height > 0.0))
     {
@@ -194,14 +222,20 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
     }
     g_array_append_val(pages, page);
   }
-  // The bleed grows every sheet, and the rectangle with it: what is out there gets drawn.
+  // The bleed grows every leaf on the sides that are CUT, and the rectangle with it: what is
+  // out there gets drawn. A fold is not cut, so it takes no bleed -- it already took the bind
+  // gutter, which is the same idea facing the other way.
   for(guint idx = 0; idx < pages->len; idx++)
   {
     dt_canvas_export_page_t *page = &g_array_index(pages, dt_canvas_export_page_t, idx);
-    page->area.x -= bleed;
-    page->area.y -= bleed;
-    page->area.width += 2.0 * bleed;
-    page->area.height += 2.0 * bleed;
+    const double top = page->fold[0] ? 0.0 : bleed;
+    const double right = page->fold[1] ? 0.0 : bleed;
+    const double bottom = page->fold[2] ? 0.0 : bleed;
+    const double left = page->fold[3] ? 0.0 : bleed;
+    page->area.x -= left;
+    page->area.y -= top;
+    page->area.width += left + right;
+    page->area.height += top + bottom;
     // A unit is a display pixel and the canvas says how many go to the inch, so the physical
     // size of the sheet is the units divided by that. Read the units as points instead, as
     // this did, and every material page comes out at whatever size 72 units to the inch makes
