@@ -990,6 +990,41 @@ static void _a_spread_keeps_its_pages_together_and_opens_between_sheets(void **s
   dt_canvas_free(canvas);
 }
 
+/**
+ * The OpenType features are stored as the string Pango reads and shown as a list of names to
+ * tick, so the two have to agree: what compose writes, parse must read back.
+ */
+static void _opentype_features_round_trip_through_their_pango_spelling(void **state)
+{
+  (void)state;
+  gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX];
+  char features[64];
+  for(int feature = 0; feature < DT_CANVAS_TEXT_FEATURE_MAX; feature++) wanted[feature] = FALSE;
+
+  // Nothing ticked is an empty string, which is the font's own behaviour and not "all off".
+  dt_canvas_text_features_compose(wanted, features, sizeof(features));
+  assert_string_equal(features, "");
+
+  wanted[0] = TRUE;
+  wanted[5] = TRUE;
+  dt_canvas_text_features_compose(wanted, features, sizeof(features));
+  assert_non_null(strstr(features, " 1"));
+  gboolean read_back[DT_CANVAS_TEXT_FEATURE_MAX];
+  dt_canvas_text_features_parse(features, read_back);
+  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
+    assert_int_equal(read_back[feature], wanted[feature]);
+
+  // Every name in the menu is a name, and parsing nothing asks for nothing.
+  assert_true(dt_canvas_text_feature_count() > 0);
+  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
+  {
+    assert_non_null(dt_canvas_text_feature_name(feature));
+    assert_true(dt_canvas_text_feature_name(feature)[0] != '\0');
+  }
+  dt_canvas_text_features_parse("", read_back);
+  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++) assert_false(read_back[feature]);
+}
+
 static void _paper_tiles_the_plane_from_the_origin(void **state)
 {
   (void)state;
@@ -1149,6 +1184,7 @@ int main(void)
     cmocka_unit_test(_frames_snap_with_their_paddings_touching),
     cmocka_unit_test(_a_sheet_of_paper_scales_with_the_resolution_and_a_screen_format_does_not),
     cmocka_unit_test(_a_spread_keeps_its_pages_together_and_opens_between_sheets),
+    cmocka_unit_test(_opentype_features_round_trip_through_their_pango_spelling),
     cmocka_unit_test(_paper_tiles_the_plane_from_the_origin),
     cmocka_unit_test(_layouts_arrange_without_moving_the_group),
     cmocka_unit_test(_a_layout_sorts_images_by_a_key_and_keeps_the_rest_after),

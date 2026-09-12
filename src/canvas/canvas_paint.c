@@ -1364,6 +1364,21 @@ static void _text_insets(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
 static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object)
 {
   PangoLayout *layout = pango_cairo_create_layout(cr);
+  // METRICS HINTING OFF, and the glyph grid-fitting with it. The layer's context carries the
+  // target's font options and its matrix carries the ZOOM, so with hinting on every advance is
+  // rounded to a whole device pixel: the same paragraph breaks its lines differently at every
+  // zoom, and justified text -- which redistributes the rounding error across the line -- is
+  // where it shows worst. Off, an advance is an exact fraction of the em, the layout in canvas
+  // units is the same at every zoom, and what the screen shows is what the page gets.
+  PangoContext *context = pango_layout_get_context(layout);
+  cairo_font_options_t *unhinted = cairo_font_options_create();
+  const cairo_font_options_t *inherited = pango_cairo_context_get_font_options(context);
+  if(!IS_NULL_PTR(inherited)) cairo_font_options_merge(unhinted, inherited);
+  cairo_font_options_set_hint_metrics(unhinted, CAIRO_HINT_METRICS_OFF);
+  cairo_font_options_set_hint_style(unhinted, CAIRO_HINT_STYLE_NONE);
+  pango_cairo_context_set_font_options(context, unhinted);
+  cairo_font_options_destroy(unhinted);
+  pango_layout_context_changed(layout);
   PangoFontDescription *font = pango_font_description_from_string(dt_canvas_text_effective_font(canvas, object));
   pango_layout_set_font_description(layout, font);
   pango_font_description_free(font);
@@ -1397,7 +1412,6 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
   // which keeps this working wherever the rest of the application builds.
   if(object->text.line_height > 0.0f && fabsf(object->text.line_height - 1.0f) > 1e-4f)
   {
-    PangoContext *context = pango_layout_get_context(layout);
     PangoFontMetrics *metrics
         = pango_context_get_metrics(context, pango_layout_get_font_description(layout), NULL);
     if(!IS_NULL_PTR(metrics))
@@ -1489,8 +1503,12 @@ static void _show_layout(cairo_t *cr, PangoLayout *layout, const gboolean optica
   {
     PangoLayoutLine *line = pango_layout_iter_get_line_readonly(iter);
     if(IS_NULL_PTR(line)) continue;
+    // The ITER's extents, not the line's own: a line's own are relative to where the line
+    // starts, and it is the iter that knows where the ALIGNMENT put it. Taken from the line,
+    // every line begins at the layout's left edge -- invisible in ragged-right text, and
+    // centred text stops being centred.
     PangoRectangle logical;
-    pango_layout_line_get_extents(line, NULL, &logical);
+    pango_layout_iter_get_line_extents(iter, NULL, &logical);
     const int baseline = pango_layout_iter_get_baseline(iter);
     double shift = 0.0;
     if(optical && line->length > 0)
