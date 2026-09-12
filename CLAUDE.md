@@ -213,6 +213,60 @@ Diagnose this class with `-d dev -d perf -d pipecache`: the ``processed `Module'
 say which modules each pipe actually ran, and a burst of `LRU … removed` lines right after one of
 them names the allocation that emptied the cache.
 
+### The cache gives memory back on kernel pressure, not only on low available RAM
+
+The pixelpipe cache budget (`total − memory_os_headroom − memory_mipmap_cache`) is a plan made at
+startup, and `_system_memory_pressure_valve()` guards a floor of available RAM (200 MiB). Neither
+sees a machine that still reports memory available but spends its time reclaiming it: swap full,
+other applications' pages evicted and faulted back in. That stall is what systemd-oomd acts on —
+on an Ubuntu 24.04 session, past 50 % "full" stall of `user@.service` for 20 s it SIGKILLs a
+cgroup under it, Ansel being the obvious one. Measured on a 24 GB machine with other
+applications holding ~9.5 GB and a full swap: the cache reached 11 GB of its 14.5 GB budget,
+pressure hit 73 %, and oomd killed Ansel with MemAvailable nowhere near the floor.
+
+`system/memory_pressure.c` reads PSI's cumulative "full" `total` for the whole system and every
+cgroup above the process, stateless. `pixelpipe_cache.c` turns two reads into the stall share of
+the window between them (2 s), the highest over the levels; past 10 % it sheds a quarter of the
+cache (half past 30 %), trims the arena, and lowers `pressure_ceiling`, the budget allocations
+evict down to. Under 2 % the ceiling climbs back by 1/32 of the plan per window, but only to 7/8 of
+`pressure_level`, the footprint pressure struck at, which itself rises by 1/1024 of the plan per
+calm window. It runs in `_free_space_to_alloc()`, in the idle shedder, which ticks every 2 s, and
+in `_pressure_watch_thread()`, which the kernel wakes. The arithmetic of the ceiling and the mark
+is `caches/pixelpipe_cache_pressure.h`, kept pure and separate for the same reason
+`develop/pipe_cache_policy.h` is: `tests/unittests/test_pipe_cache_pressure.c` is the only thing
+that can see a policy which changes no pixel and no hash.
+
+Six things a reviewer would otherwise change:
+
+- **A cache holding less than an eighth of the plan sheds nothing and lowers nothing.** The stall
+  is somebody else's then. Measured: four kernel wake-ups in the first 12 s of a run, before the
+  cache held anything, recorded a pressure mark of 0 and pinned the budget at the floor, where it
+  still sat a quarter of an hour later. The same eighth is the floor the ceiling never falls under.
+
+- **The kernel wakes the watcher; the cache does not only poll.** A measured window needs the
+  cache to be running something, and past a certain stall nothing of ours runs: a second test died
+  with its last 32 seconds silent — no timer, no allocation, the process frozen at 13.6 GB while
+  oomd counted its 20 seconds, and the valve never sampled the ramp that killed it. PSI *triggers*
+  (`dt_memory_pressure_triggers_open()`, `poll()` for `POLLPRI`) are raised by the kernel as soon
+  as a window is stalled past the threshold. Unprivileged triggers need a window that is a
+  multiple of 2 s, and only the levels the process may write to accept one: the whole system, its
+  own cgroup, and `app.slice` — the session's `user@.service`, which is what oomd actually
+  watches, belongs to root.
+- **The ceiling does not climb straight back to the plan.** Measured on the machine above: with
+  the ceiling restored in ~80 s, the stall came back within half a minute of each recovery, five
+  times in five minutes, once at 49 % — one point under oomd's limit. The footprint that caused
+  it (11.5–12.8 GB there) is what the cache must stay under, until minutes of calm say the rest
+  of the machine has let go.
+
+- **The share comes from the `total` counters, never from PSI's `avg10`.** That is a 10 s moving
+  average, which keeps reading high for some 20 s after a stall has ended: shedding on it drains
+  the whole cache for pressure that is already gone.
+- **The ceiling is a target, not a limit.** An allocation it cannot make room for still goes
+  ahead; only `max_memory` fails one. A hard ceiling would turn pressure into failed pipelines.
+- **`dt_dev_pixelpipe_cache_get_usage()` reports the ceiling, floored at the current usage.**
+  Tiling must plan against the lowered budget, and both of its readers compute `max − current`
+  unsigned.
+
 ### Mipmap invalidation is explicit, not hash-driven
 
 The mipmap cache get path (`_generate_blocking` in `caches/mipmap_cache.c`) does NOT compare
