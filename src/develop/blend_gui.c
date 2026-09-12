@@ -1419,19 +1419,16 @@ static dt_masks_form_t *_blendop_masks_group_create(dt_iop_module_t *module)
   dt_masks_form_t *group_form = dt_masks_create(DT_MASKS_GROUP);
   if(IS_NULL_PTR(group_form)) return NULL;
 
-  //gchar *module_label = dt_history_item_get_name(module);
-  gchar *module_label = g_strdup(module->multi_name);
-  if(g_strcmp0(module_label, "") == 0)
-  {
-    dt_free(module_label);
-    module_label = dt_history_item_get_name(module);
-  }
-  g_snprintf(group_form->name, sizeof(group_form->name), "%s %s", _("Mask"), module_label);
-  dt_free(module_label);
-
   _blendop_masks_check_id(module->dev, group_form);
   dt_masks_append_form(module->dev, group_form);
   module->blend_params->mask_id = group_form->formid;
+
+  // Named by id, once the group is in dev->forms and its id is settled: the masks module owns the
+  // naming convention and the copy-on-write, and nothing here writes into the form. The touch may
+  // replace the group with a clone, so the live one is resolved again rather than returned from
+  // the pointer created above.
+  dt_masks_group_set_name_from_module(module->dev, module->blend_params->mask_id, module);
+  group_form = dt_masks_get_from_id(module->dev, module->blend_params->mask_id);
 
   return group_form;
 }
@@ -1786,7 +1783,7 @@ static void _blendop_masks_group_name_commit(dt_iop_module_t *module, const gcha
   dt_masks_form_t *group_form = _blendop_masks_group_from_module(module);
   if(IS_NULL_PTR(group_form)) return;
 
-  gchar *mask_default_name = dt_dev_get_masks_group_name(module);
+  gchar *mask_default_name = dt_masks_group_name_for_module(module);
   gchar *text = (new_text && *new_text) ? g_strdup(new_text) : g_strdup(mask_default_name);
   g_free(mask_default_name);
 
@@ -3958,7 +3955,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 
     GtkWidget *group_shapes_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     bd->group_shapes_label = gtk_entry_new();
-    gchar *group_placeholder = dt_dev_get_masks_group_name(module);
+    gchar *group_placeholder = dt_masks_group_name_for_module(module);
     gtk_entry_set_placeholder_text(GTK_ENTRY(bd->group_shapes_label), group_placeholder);
     g_free(group_placeholder);
     gtk_widget_set_tooltip_text(bd->group_shapes_label, _("Edit current module mask name"));

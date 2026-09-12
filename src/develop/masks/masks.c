@@ -140,9 +140,29 @@ void _check_id(dt_develop_t *dev, dt_masks_form_t *mask_form)
   }
 }
 
+gchar *dt_masks_group_name_for_module(const dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(module)) return NULL;
+
+  gchar *module_multi_name = dt_dev_get_multi_name(module);
+  const gboolean has_multi_name = g_strcmp0(module_multi_name, "") != 0;
+  // fallback to module name if no multi name
+  gchar *module_label = has_multi_name ? g_strdup(module_multi_name) : dt_history_item_get_name(module);
+  gchar *group_name = g_strdup_printf("Group %s", module_label);
+  dt_free(module_label);
+  dt_free(module_multi_name);
+
+  return group_name;
+}
+
+/* The module-internal spelling, for the creation paths that hold the form before it is reachable
+ * by id. Callers OUTSIDE the module go through dt_masks_group_set_name_from_module() instead,
+ * which owns the copy-on-write. */
 void _set_group_name_from_module(dt_iop_module_t *module, dt_masks_form_t *group_form)
 {
-  gchar *group_name = dt_dev_get_masks_group_name(module);
+  gchar *group_name = dt_masks_group_name_for_module(module);
+  if(IS_NULL_PTR(group_name)) return;
+
   g_strlcpy(group_form->name, group_name, sizeof(group_form->name));
   dt_free(group_name);
 }
@@ -1782,6 +1802,38 @@ dt_masks_result_t dt_masks_group_set_member_operation(dt_develop_t *dev, const i
 
   _member_from_entry(out, entry, index);
   return (entry->state == before) ? DT_MASKS_UNCHANGED : DT_MASKS_OK;
+}
+
+
+dt_masks_result_t dt_masks_group_set_name_from_module(dt_develop_t *dev, const int group_id,
+                                                      dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module)) return DT_MASKS_INVALID;
+
+  dt_masks_form_t *group = dt_masks_get_from_id(dev, group_id);
+  if(IS_NULL_PTR(group) || !(group->type & DT_MASKS_GROUP)) return DT_MASKS_NOT_FOUND;
+
+  gchar *name = dt_masks_group_name_for_module(module);
+  if(IS_NULL_PTR(name)) return DT_MASKS_INVALID;
+
+  // Nothing to write is not a no-op worth cloning a shared group for -- and the caller usually
+  // turns UNCHANGED into "skip the history commit", the way the other id-keyed setters do.
+  if(g_strcmp0(group->name, name) == 0)
+  {
+    dt_free(name);
+    return DT_MASKS_UNCHANGED;
+  }
+
+  group = dt_masks_cow_touch(dev, group);
+  if(IS_NULL_PTR(group))
+  {
+    dt_free(name);
+    return DT_MASKS_NOT_FOUND;
+  }
+
+  g_strlcpy(group->name, name, sizeof(group->name));
+  dt_free(name);
+  return DT_MASKS_OK;
 }
 
 
