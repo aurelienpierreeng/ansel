@@ -27,6 +27,8 @@
 
 #include <math.h>
 #include <pango/pangocairo.h>
+#include <hb-ot.h>
+#include <hb.h>
 #include <string.h>
 
 #define PAINT_GRID_MIN_PIXEL_SPACING 6.0
@@ -2280,6 +2282,74 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
 }
 
 #define TEXT_AUTO_HEIGHT_ROUNDS 8
+
+/** Sort the tags so the list a font offers reads the same way every time it is asked for. */
+static int _feature_tag_order(const void *left, const void *right)
+{
+  return strncmp((const char *)left, (const char *)right, DT_CANVAS_FONT_FEATURE_TAG_LEN);
+}
+
+/** Collect one OpenType layout table's feature tags into the caller's array, without repeats. */
+static uint32_t _face_table_features(hb_face_t *face, const hb_tag_t table,
+                                     char tags[][DT_CANVAS_FONT_FEATURE_TAG_LEN], const uint32_t max,
+                                     uint32_t found)
+{
+  unsigned int offset = 0;
+  while(found < max)
+  {
+    hb_tag_t batch[32];
+    unsigned int count = (unsigned int)(sizeof(batch) / sizeof(batch[0]));
+    hb_ot_layout_table_get_feature_tags(face, table, offset, &count, batch);
+    if(count == 0) break;
+    for(unsigned int idx = 0; idx < count && found < max; idx++)
+    {
+      char tag[DT_CANVAS_FONT_FEATURE_TAG_LEN];
+      hb_tag_to_string(batch[idx], tag);
+      tag[DT_CANVAS_FONT_FEATURE_TAG_LEN - 1] = '\0';
+      gboolean already = FALSE;
+      for(uint32_t seen = 0; seen < found && !already; seen++) already = strcmp(tags[seen], tag) == 0;
+      if(already) continue;
+      memcpy(tags[found], tag, DT_CANVAS_FONT_FEATURE_TAG_LEN);
+      found++;
+    }
+    offset += count;
+    if(count < sizeof(batch) / sizeof(batch[0])) break;
+  }
+  return found;
+}
+
+uint32_t dt_canvas_paint_text_font_features(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                            char tags[][DT_CANVAS_FONT_FEATURE_TAG_LEN], const uint32_t max)
+{
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT || IS_NULL_PTR(tags) || max == 0) return 0;
+  // Its own scratch context: which features a face ships is a property of the face, not of the
+  // viewport that happens to be asking.
+  cairo_surface_t *scratch = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+  cairo_t *cr = cairo_create(scratch);
+  PangoLayout *layout = pango_cairo_create_layout(cr);
+  PangoContext *context = pango_layout_get_context(layout);
+  PangoFontDescription *description
+      = pango_font_description_from_string(dt_canvas_text_effective_font(canvas, object));
+  PangoFont *font = pango_font_map_load_font(pango_context_get_font_map(context), context, description);
+  uint32_t found = 0;
+  if(!IS_NULL_PTR(font))
+  {
+    hb_font_t *shaped = pango_font_get_hb_font(font);
+    hb_face_t *face = IS_NULL_PTR(shaped) ? NULL : hb_font_get_face(shaped);
+    if(!IS_NULL_PTR(face))
+    {
+      found = _face_table_features(face, HB_OT_TAG_GSUB, tags, max, found);
+      found = _face_table_features(face, HB_OT_TAG_GPOS, tags, max, found);
+    }
+    g_object_unref(font);
+  }
+  pango_font_description_free(description);
+  g_object_unref(layout);
+  cairo_destroy(cr);
+  cairo_surface_destroy(scratch);
+  qsort(tags, found, DT_CANVAS_FONT_FEATURE_TAG_LEN, _feature_tag_order);
+  return found;
+}
 
 gboolean dt_canvas_paint_text_fit_height(const dt_canvas_t *canvas, dt_canvas_object_t *object)
 {

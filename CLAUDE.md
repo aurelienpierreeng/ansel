@@ -3511,6 +3511,18 @@ they are visible.
   Flate stream over photographs. `dt_pdf_add_image_jpeg()` writes a `/DCTDecode` stream
   instead. Measure a claim of oversampling before acting on it -- `/Width` and `/Height` in
   the file answer it in one grep.
+- **Which OpenType features to offer is asked of the FONT, not of a table.** A face carries
+  whatever tags its designer cut: measured on one machine, FreeSerif answers with 45 -- the
+  historical ligatures and forms, small capitals, four stylistic sets -- DejaVu Serif with 11,
+  Liberation Serif with 6 and Bitstream Vera with none. A fixed list offers the last of those
+  everything it has not got and hides the first one's own.
+  `dt_canvas_paint_text_font_features()` asks the face through HarfBuzz
+  (`pango_font_get_hb_font()` then `hb_ot_layout_table_get_feature_tags()` over GSUB and GPOS),
+  and HarfBuzz needs no build change: pango requires it PUBLICLY, so `-lharfbuzz` and its
+  include are already on the line. The checkboxes are keyed on the four-character TAG, never on
+  a position in a table, and a tag this build has no name for is offered by its tag -- which is
+  what keeps `ss01` and a script's own forms reachable. The popover is rebuilt only when the
+  face changes, so ticking a box does not destroy the box being ticked.
 - **A property with a canvas default has no toggle on the property bar: -1 in its spin button
   is the "inherit" code** (`CANVAS_BAR_INHERIT`), rendered as `default` through the spin's
   `output` signal, and leaving it seeds the object from the effective property. Colours carry

@@ -325,6 +325,25 @@ that moved geometry, since a frame dragged over a column changes that column's f
 as editing the column does. Measured after: the same paragraph breaks at the same fourteen
 byte offsets at zoom 0.42, 0.55 and 1.1, at full and interactive quality alike.
 
+**Which OpenType features are offered is asked of the FONT.** A face carries whatever tags its
+designer cut, and no two agree: measured on one machine, FreeSerif answers with 45 of them --
+historical ligatures and forms, small capitals, four stylistic sets -- DejaVu Serif with 11,
+Liberation Serif with 6, Bitstream Vera with none at all. A fixed list therefore offers a plain
+face everything it has not got and hides a rich one's own, which is how a font's historical
+ligatures came to be unreachable. `dt_canvas_paint_text_font_features()` (`canvas_paint.c`)
+loads the face on a scratch context of its own -- what a face ships is a property of the face,
+not of the viewport asking -- takes its `hb_font_t` through `pango_font_get_hb_font()` and
+enumerates `hb_ot_layout_table_get_feature_tags()` over GSUB and GPOS, sorted and without
+repeats. HarfBuzz costs no build change: pango requires it publicly, so its include and
+`-lharfbuzz` are already on the line, and `tools/mingw_syntax_check.py` compiles the file
+(verified by a tripwire, since a skipped file reports success just as loudly).
+
+The property bar's checkboxes are keyed on the four-character TAG, never on a position in a
+table: `dt_canvas_text_feature_label()` gives a tag its name where this build has one and NULL
+where it does not, and a tag with no name is offered by its tag -- which is what keeps `ss01`
+and a script's own forms reachable. The popover is rebuilt only when the face changes, so
+ticking a box does not destroy the box being ticked.
+
 **OpenType features** are stored as the string Pango reads -- `"liga 1, onum 1, smcp 1"` --
 which is the only way to reach a font's alternates, figures and ligature sets, since a font
 description cannot name them, and are SHOWN as a list of names to tick

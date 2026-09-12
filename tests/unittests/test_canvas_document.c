@@ -995,38 +995,58 @@ static void _a_spread_keeps_its_pages_together_and_opens_between_sheets(void **s
 }
 
 /**
- * The OpenType features are stored as the string Pango reads and shown as a list of names to
- * tick, so the two have to agree: what compose writes, parse must read back.
+ * The OpenType features are stored as the string Pango reads and shown as a list of boxes to
+ * tick, so the two have to agree: what setting a tag writes, asking for it must read back.
+ * They are keyed on the TAG rather than on a position in a table, because the list a font
+ * offers is the font's own and no two faces agree on it.
  */
 static void _opentype_features_round_trip_through_their_pango_spelling(void **state)
 {
   (void)state;
-  gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX];
-  char features[64];
-  for(int feature = 0; feature < DT_CANVAS_TEXT_FEATURE_MAX; feature++) wanted[feature] = FALSE;
+  char features[DT_CANVAS_TEXT_FEATURES_LEN] = { 0 };
 
   // Nothing ticked is an empty string, which is the font's own behaviour and not "all off".
-  dt_canvas_text_features_compose(wanted, features, sizeof(features));
   assert_string_equal(features, "");
+  assert_false(dt_canvas_text_feature_is_on(features, "liga"));
 
-  wanted[0] = TRUE;
-  wanted[5] = TRUE;
-  dt_canvas_text_features_compose(wanted, features, sizeof(features));
-  assert_non_null(strstr(features, " 1"));
-  gboolean read_back[DT_CANVAS_TEXT_FEATURE_MAX];
-  dt_canvas_text_features_parse(features, read_back);
-  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
-    assert_int_equal(read_back[feature], wanted[feature]);
+  dt_canvas_text_feature_set(features, sizeof(features), "liga", TRUE);
+  dt_canvas_text_feature_set(features, sizeof(features), "hlig", TRUE);
+  dt_canvas_text_feature_set(features, sizeof(features), "onum", TRUE);
+  assert_true(dt_canvas_text_feature_is_on(features, "liga"));
+  assert_true(dt_canvas_text_feature_is_on(features, "hlig"));
+  assert_true(dt_canvas_text_feature_is_on(features, "onum"));
+  assert_false(dt_canvas_text_feature_is_on(features, "smcp"));
+  // Pango's own spelling, so the renderer reads back exactly what the panel wrote.
+  assert_non_null(strstr(features, "liga 1"));
+  assert_non_null(strstr(features, "hlig 1"));
 
-  // Every name in the menu is a name, and parsing nothing asks for nothing.
-  assert_true(dt_canvas_text_feature_count() > 0);
-  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
-  {
-    assert_non_null(dt_canvas_text_feature_name(feature));
-    assert_true(dt_canvas_text_feature_name(feature)[0] != '\0');
-  }
-  dt_canvas_text_features_parse("", read_back);
-  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++) assert_false(read_back[feature]);
+  // Switching one off closes the gap it leaves rather than stranding a separator.
+  dt_canvas_text_feature_set(features, sizeof(features), "hlig", FALSE);
+  assert_false(dt_canvas_text_feature_is_on(features, "hlig"));
+  assert_true(dt_canvas_text_feature_is_on(features, "liga"));
+  assert_true(dt_canvas_text_feature_is_on(features, "onum"));
+  assert_null(strstr(features, ",,"));
+  assert_true(features[0] != ',' && features[strlen(features) - 1] != ',');
+
+  // Setting what is already set, and clearing what was never set, both change nothing.
+  char before[DT_CANVAS_TEXT_FEATURES_LEN];
+  g_strlcpy(before, features, sizeof(before));
+  dt_canvas_text_feature_set(features, sizeof(features), "liga", TRUE);
+  dt_canvas_text_feature_set(features, sizeof(features), "swsh", FALSE);
+  assert_string_equal(features, before);
+
+  // A tag that will not fit whole is not written at all: half a tag is not a feature, and the
+  // string is a fixed field in the file rather than something that can grow.
+  char tight[12] = { 0 };
+  dt_canvas_text_feature_set(tight, sizeof(tight), "liga", TRUE);
+  assert_string_equal(tight, "liga 1");
+  dt_canvas_text_feature_set(tight, sizeof(tight), "onum", TRUE);
+  assert_string_equal(tight, "liga 1");
+
+  // A tag the build has a name for is offered by name; one it has none for is offered by tag.
+  assert_non_null(dt_canvas_text_feature_label("hlig"));
+  assert_non_null(dt_canvas_text_feature_hint("hlig"));
+  assert_null(dt_canvas_text_feature_label("ss01"));
 }
 
 /**

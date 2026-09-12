@@ -991,6 +991,61 @@ static double _flowed_height_with_obstacle_below_the_top(const double offset)
   return flowed;
 }
 
+static void _a_font_offers_the_features_it_actually_ships(void **state)
+{
+  (void)state;
+  /*
+   * Asked of the FACE through HarfBuzz, never assumed from a table. A font carries whatever
+   * tags its designer cut: measured on this machine, FreeSerif answers with 45 of them --
+   * historical ligatures and forms, small capitals, four stylistic sets -- DejaVu Serif with
+   * 11, Liberation Serif with 6, and the bare default with none. A fixed list would offer the
+   * last of those everything and the first of them a fraction of what it has.
+   *
+   * Which fonts are installed is not this test's business, so it asks several and judges
+   * whatever answers: the shape of the list, not its contents.
+   */
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 0.0, 0.0, 400.0, 200.0, "Typography.");
+  assert_non_null(text);
+
+  static const char *const probes[] = { "DejaVu Serif 12", "DejaVu Sans 12", "FreeSerif 12",
+                                        "Liberation Serif 12", "Bitstream Vera Sans 12" };
+  uint32_t counts[G_N_ELEMENTS(probes)];
+  uint32_t answered = 0;
+  for(guint probe = 0; probe < G_N_ELEMENTS(probes); probe++)
+  {
+    g_strlcpy(text->text.font, probes[probe], sizeof(text->text.font));
+    char list[64][DT_CANVAS_FONT_FEATURE_TAG_LEN];
+    counts[probe] = dt_canvas_paint_text_font_features(canvas, text, list, 64);
+    if(counts[probe] > 0) answered++;
+    for(uint32_t idx = 0; idx < counts[probe]; idx++)
+    {
+      // Four characters, sorted, and never the same tag twice -- so the panel reads the same
+      // way every time it is opened and no feature is offered to the user in duplicate.
+      assert_int_equal((int)strlen(list[idx]), 4);
+      if(idx > 0) assert_true(strcmp(list[idx - 1], list[idx]) < 0);
+    }
+  }
+  // Something on this machine has to ship a feature, or nothing is being read from a face.
+  assert_true(answered > 0);
+  // And the lists are not one list: two faces that both answer must not answer identically in
+  // COUNT for every pair, which a fixed table would.
+  gboolean differ = FALSE;
+  for(guint left = 0; left < G_N_ELEMENTS(probes) && !differ; left++)
+    for(guint right = left + 1; right < G_N_ELEMENTS(probes) && !differ; right++)
+      differ = counts[left] != counts[right];
+  assert_true(differ);
+
+  // A tag the build has a name for is offered by name; one it does not is offered by its tag,
+  // which is what makes a font's own stylistic sets reachable at all.
+  assert_non_null(dt_canvas_text_feature_label("hlig"));
+  assert_non_null(dt_canvas_text_feature_label("smcp"));
+  assert_null(dt_canvas_text_feature_label("ss01"));
+  assert_null(dt_canvas_text_feature_label("zzzz"));
+  dt_canvas_free(canvas);
+}
+
 static void _paragraphs_take_their_indent_and_their_space(void **state)
 {
   (void)state;
@@ -1317,6 +1372,7 @@ int main(void)
     cmocka_unit_test(_a_frame_standing_just_outside_a_column_still_pushes_its_text),
     cmocka_unit_test(_the_leading_reaches_a_flowing_paragraph_once_per_gap),
     cmocka_unit_test(_paragraphs_take_their_indent_and_their_space),
+    cmocka_unit_test(_a_font_offers_the_features_it_actually_ships),
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),

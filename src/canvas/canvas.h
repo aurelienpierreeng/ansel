@@ -945,26 +945,23 @@ gboolean dt_canvas_paper_is_physical(uint32_t paper);
  */
 void dt_canvas_text_margins(const dt_canvas_object_t *object, double margins[4]);
 
-#define DT_CANVAS_TEXT_FEATURE_MAX 16 ///< room for the table below to grow without moving anything
-
 /**
- * @brief How many OpenType features are offered by name, and what each is called.
+ * @brief The name and the explanation this build has for an OpenType tag.
  *
  * The stored form stays the string Pango reads -- that is what the renderer wants and what a
- * file can carry without a table of its own -- and these turn it into something a person can
- * tick. A feature a font does not ship is silently nothing, which is a property of fonts and
- * not of this list.
+ * file can carry without a table of its own -- and these turn a tag into something a person
+ * can tick. NULL for a tag this build has no name for, which is not an error: a font may ship
+ * any tag its designer cut (a stylistic set, a script's own form), and one that cannot be
+ * named is offered by its tag. Which tags to offer at all is asked of the FONT, through
+ * `dt_canvas_paint_text_font_features()` -- a fixed list offers a plain face things it does
+ * not have and hides a rich one's own.
  */
-int dt_canvas_text_feature_count(void);
-const char *dt_canvas_text_feature_name(int feature);
-const char *dt_canvas_text_feature_tooltip(int feature);
+const char *dt_canvas_text_feature_label(const char *tag);
+const char *dt_canvas_text_feature_hint(const char *tag);
 
-/** @brief Which of the named features a stored Pango feature string asks for. */
-void dt_canvas_text_features_parse(const char *features, gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX]);
-
-/** @brief The Pango feature string for a set of named features; empty when none is asked for. */
-void dt_canvas_text_features_compose(const gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX], char *features,
-                                     size_t length);
+/** @brief Whether a stored feature string switches a tag on, and how to switch one in it. */
+gboolean dt_canvas_text_feature_is_on(const char *features, const char *tag);
+void dt_canvas_text_feature_set(char *features, const size_t length, const char *tag, const gboolean on);
 
 /** @brief Canvas units per inch: what the canvas holds, or 72 for a document from before the field. */
 double dt_canvas_resolution(const dt_canvas_t *canvas);

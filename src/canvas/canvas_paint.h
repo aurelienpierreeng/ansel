@@ -109,6 +109,24 @@ double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canva
  */
 gboolean dt_canvas_paint_text_fit_height(const dt_canvas_t *canvas, dt_canvas_object_t *object);
 
+#define DT_CANVAS_FONT_FEATURE_TAG_LEN 5 ///< four characters and a terminator
+#define DT_CANVAS_TEXT_FEATURE_LIST_MAX 128 ///< a rich face ships tens of them; FreeSerif, 45
+
+/**
+ * @brief The OpenType features the object's own font actually ships.
+ *
+ * Asked of the face through HarfBuzz rather than assumed from a table: a font carries whatever
+ * tags its designer cut, so Linux Libertine's historical ligatures are there to be offered and
+ * a face without small capitals must not be. The tags come back sorted and without repeats,
+ * from the substitution and the positioning tables both.
+ *
+ * @param tags filled with NUL-terminated four-character tags
+ * @param max how many the caller has room for
+ * @return how many were written, 0 when the face cannot be asked
+ */
+uint32_t dt_canvas_paint_text_font_features(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                            char tags[][DT_CANVAS_FONT_FEATURE_TAG_LEN], const uint32_t max);
+
 #ifdef __cplusplus
 }
 #endif

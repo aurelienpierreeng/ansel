@@ -179,7 +179,8 @@ typedef struct dt_canvas_view_t
   GtkWidget *text_margin[4];
   GtkWidget *text_first_line_indent;
   GtkWidget *text_paragraph_spacing;
-  GtkWidget *text_feature[DT_CANVAS_TEXT_FEATURE_MAX];
+  GtkWidget *text_features_box;
+  gchar *text_features_font; ///< the font its checkboxes were built for
   GtkWidget *text_auto_height;
   GtkWidget *text_optical;
   GtkWidget *text_wrap;
@@ -2320,16 +2321,72 @@ static void _bar_text_feature_toggled(GtkToggleButton *check, gpointer data)
   if(view->bars_refilling) return;
   dt_canvas_object_t *object = _bar_target(view);
   if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return;
+  const char *tag = g_object_get_data(G_OBJECT(check), "text-feature-tag");
+  if(IS_NULL_PTR(tag)) return;
   dt_canvas_t *before = _begin_edit(view);
-  gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX];
-  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
-    wanted[feature] = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(view->text_feature[feature]));
-  dt_canvas_text_features_compose(wanted, object->text.features, sizeof(object->text.features));
-  (void)check;
+  dt_canvas_text_feature_set(object->text.features, sizeof(object->text.features), tag,
+                             gtk_toggle_button_get_active(check));
   _auto_height_settle(view, object);
   dt_canvas_touch(view->canvas);
   _record_undo(self, before);
   dt_control_queue_redraw_center();
+}
+
+/**
+ * Rebuild the Features popover from the face the frame actually uses, and tick what is on.
+ *
+ * The checkboxes are keyed on the TAG, not on a position in a table: a font carries whatever
+ * its designer cut, so the list is different for every face and a fixed one both offers a
+ * plain face things it does not have and hides a rich one's own -- Linux Libertine's
+ * historical ligatures among them. A tag this build has a name for is shown by name; one it
+ * does not is shown by its tag, which is how a font's own stylistic sets stay reachable.
+ *
+ * Rebuilt only when the face changes, so ticking a box does not destroy the box being ticked.
+ */
+static void _text_features_fill(dt_view_t *self, const dt_canvas_object_t *object)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view->text_features_box) || IS_NULL_PTR(object)) return;
+  const char *face = dt_canvas_text_effective_font(view->canvas, object);
+  if(g_strcmp0(view->text_features_font, face) != 0)
+  {
+    dt_free(view->text_features_font);
+    view->text_features_font = g_strdup(face);
+    GList *previous = gtk_container_get_children(GTK_CONTAINER(view->text_features_box));
+    for(GList *child = previous; !IS_NULL_PTR(child); child = child->next)
+      gtk_widget_destroy(GTK_WIDGET(child->data));
+    g_list_free(previous);
+
+    char tags[DT_CANVAS_TEXT_FEATURE_LIST_MAX][DT_CANVAS_FONT_FEATURE_TAG_LEN];
+    const uint32_t count
+        = dt_canvas_paint_text_font_features(view->canvas, object, tags, DT_CANVAS_TEXT_FEATURE_LIST_MAX);
+    for(uint32_t idx = 0; idx < count; idx++)
+    {
+      const char *label = dt_canvas_text_feature_label(tags[idx]);
+      GtkWidget *check = gtk_check_button_new_with_label(IS_NULL_PTR(label) ? tags[idx] : label);
+      const char *hint = dt_canvas_text_feature_hint(tags[idx]);
+      gchar *tooltip = IS_NULL_PTR(hint) ? g_strdup_printf(_("The font's own \"%s\" feature"), tags[idx])
+                                         : g_strdup(hint);
+      gtk_widget_set_tooltip_text(check, tooltip);
+      dt_free(tooltip);
+      g_object_set_data_full(G_OBJECT(check), "text-feature-tag", g_strdup(tags[idx]), g_free);
+      g_signal_connect(check, "toggled", G_CALLBACK(_bar_text_feature_toggled), self);
+      gtk_box_pack_start(GTK_BOX(view->text_features_box), check, FALSE, FALSE, 0);
+    }
+    if(count == 0)
+      gtk_box_pack_start(GTK_BOX(view->text_features_box),
+                         gtk_label_new(_("This font ships no OpenType features.")), FALSE, FALSE, 0);
+    gtk_widget_show_all(view->text_features_box);
+  }
+  GList *children = gtk_container_get_children(GTK_CONTAINER(view->text_features_box));
+  for(GList *child = children; !IS_NULL_PTR(child); child = child->next)
+  {
+    const char *tag = g_object_get_data(G_OBJECT(child->data), "text-feature-tag");
+    if(IS_NULL_PTR(tag)) continue;
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(child->data),
+                                 dt_canvas_text_feature_is_on(object->text.features, tag));
+  }
+  g_list_free(children);
 }
 
 static void _bar_text_flag_toggled(GtkToggleButton *button, gpointer data)
@@ -2800,21 +2857,14 @@ static void _bars_create(dt_view_t *self)
   _bar_popover(view->row_text, _("Paragraph"),
                _("Where a paragraph begins and how far it sits from the one before it."), paragraph_grid);
 
-  GtkWidget *features_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(2));
-  gtk_container_set_border_width(GTK_CONTAINER(features_box), DT_PIXEL_APPLY_DPI(8));
-  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
-  {
-    GtkWidget *check = gtk_check_button_new_with_label(dt_canvas_text_feature_name(feature));
-    gtk_widget_set_tooltip_text(check, dt_canvas_text_feature_tooltip(feature));
-    g_object_set_data(G_OBJECT(check), "text-feature", GINT_TO_POINTER(feature));
-    g_signal_connect(check, "toggled", G_CALLBACK(_bar_text_feature_toggled), self);
-    gtk_box_pack_start(GTK_BOX(features_box), check, FALSE, FALSE, 0);
-    view->text_feature[feature] = check;
-  }
+  // Empty here: what a font ships is the font's business, so the list is built on the refill
+  // from whatever the selected frame's own face answers with.
+  view->text_features_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(2));
+  gtk_container_set_border_width(GTK_CONTAINER(view->text_features_box), DT_PIXEL_APPLY_DPI(8));
   _bar_popover(view->row_text, _("Features"),
-               _("What the font is asked to do with its own alternates: ligatures, figure styles, small "
-                 "capitals. A font that does not ship one simply ignores it."),
-               features_box);
+               _("What this font is asked to do with its own alternates: ligatures, figure styles, small "
+                 "capitals. Only what the font actually ships is offered."),
+               view->text_features_box);
   view->text_auto_height = _bar_toggle(view->row_text, _("Auto height"),
                                        _("The frame's height follows its content"),
                                        G_CALLBACK(_bar_text_flag_toggled), self);
@@ -3085,10 +3135,7 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       dt_canvas_text_margins(object, margins);
       for(int side = 0; side < 4; side++)
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_margin[side]), margins[side]);
-      gboolean on[DT_CANVAS_TEXT_FEATURE_MAX];
-      dt_canvas_text_features_parse(object->text.features, on);
-      for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_feature[feature]), on[feature]);
+      _text_features_fill(self, object);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_auto_height),
                                    (object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT) != 0);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_optical),
@@ -5823,6 +5870,8 @@ void cleanup(dt_view_t *self)
   }
   dt_view_manager_t *manager = dt_view_manager_get_global();
   if(manager->proxy.canvas.view == self) manager->proxy.canvas.view = NULL;
+  dt_free(view->text_features_font);
+  view->text_features_font = NULL;
   dt_canvas_free(view->drag_snapshot);
   dt_canvas_free(view->canvas);
   dt_canvas_surface_cache_free(view->cache);

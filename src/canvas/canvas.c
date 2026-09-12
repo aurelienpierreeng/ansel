@@ -1910,51 +1910,73 @@ static const struct
   { "subs", N_("Subscript"), N_("Figures and letters lowered and reduced") },
   { "swsh", N_("Swashes"), N_("The flourished forms a font keeps for display") },
   { "kern", N_("Kerning"), N_("The pair adjustments the font asks for; on by default in every font that has them") },
+  { "hlig", N_("Historical ligatures"), N_("The joins an old face used and a modern reader does not expect, the long s among them") },
+  { "hist", N_("Historical forms"), N_("The letterforms an old face used in place of today's") },
+  { "titl", N_("Titling"), N_("Capitals cut for a line set large, lighter than the text ones") },
+  { "ordn", N_("Ordinals"), N_("The raised letters of 1st and 2nd, drawn for the purpose") },
+  { "salt", N_("Stylistic alternates"), N_("The font's own alternative shapes, wherever it offers them") },
+  { "case", N_("Case-sensitive forms"), N_("Punctuation and figures raised to suit a line set all in capitals") },
+  { "cpsp", N_("Capital spacing"), N_("A little air added between capitals, which are drawn to sit closer") },
+  { "unic", N_("Unicase"), N_("One height for capitals and lower case together") },
 };
 
-int dt_canvas_text_feature_count(void)
+
+const char *dt_canvas_text_feature_label(const char *tag)
 {
-  return (int)MIN(sizeof(_text_features) / sizeof(_text_features[0]), (size_t)DT_CANVAS_TEXT_FEATURE_MAX);
+  if(IS_NULL_PTR(tag)) return NULL;
+  for(size_t feature = 0; feature < sizeof(_text_features) / sizeof(_text_features[0]); feature++)
+    if(g_strcmp0(_text_features[feature].tag, tag) == 0) return _(_text_features[feature].name);
+  return NULL;
 }
 
-const char *dt_canvas_text_feature_name(const int feature)
+const char *dt_canvas_text_feature_hint(const char *tag)
 {
-  if(feature < 0 || feature >= dt_canvas_text_feature_count()) return "";
-  return _(_text_features[feature].name);
+  if(IS_NULL_PTR(tag)) return NULL;
+  for(size_t feature = 0; feature < sizeof(_text_features) / sizeof(_text_features[0]); feature++)
+    if(g_strcmp0(_text_features[feature].tag, tag) == 0) return _(_text_features[feature].tooltip);
+  return NULL;
 }
 
-const char *dt_canvas_text_feature_tooltip(const int feature)
+gboolean dt_canvas_text_feature_is_on(const char *features, const char *tag)
 {
-  if(feature < 0 || feature >= dt_canvas_text_feature_count()) return "";
-  return _(_text_features[feature].tooltip);
+  if(IS_NULL_PTR(features) || IS_NULL_PTR(tag) || features[0] == '\0') return FALSE;
+  // The composed form is always "<tag> 1", so this reads back exactly what was written and
+  // ignores anything else the string may hold rather than guessing at it.
+  gchar *token = g_strdup_printf("%s 1", tag);
+  const gboolean on = strstr(features, token) != NULL;
+  dt_free(token);
+  return on;
 }
 
-void dt_canvas_text_features_parse(const char *features, gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX])
+void dt_canvas_text_feature_set(char *features, const size_t length, const char *tag, const gboolean on)
 {
-  for(int feature = 0; feature < DT_CANVAS_TEXT_FEATURE_MAX; feature++) wanted[feature] = FALSE;
-  if(IS_NULL_PTR(features) || features[0] == '\0') return;
-  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
+  if(IS_NULL_PTR(features) || length == 0 || IS_NULL_PTR(tag) || tag[0] == '\0') return;
+  if(dt_canvas_text_feature_is_on(features, tag) == on) return;
+  if(on)
   {
-    // The composed form is always "<tag> 1", so this reads back exactly what was written and
-    // ignores anything else the string may hold rather than guessing at it.
-    gchar *token = g_strdup_printf("%s 1", _text_features[feature].tag);
-    wanted[feature] = strstr(features, token) != NULL;
-    dt_free(token);
-  }
-}
-
-void dt_canvas_text_features_compose(const gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX], char *features,
-                                     const size_t length)
-{
-  if(IS_NULL_PTR(features) || length == 0) return;
-  features[0] = '\0';
-  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
-  {
-    if(!wanted[feature]) continue;
+    // A tag that will not fit whole is not written at all: half a tag is not a feature, and
+    // the string is a fixed field in the file rather than something that can grow.
+    const size_t wanted = strlen(features) + (features[0] == '\0' ? 0 : 2) + strlen(tag) + 2;
+    if(wanted >= length) return;
     if(features[0] != '\0') g_strlcat(features, ", ", length);
-    g_strlcat(features, _text_features[feature].tag, length);
+    g_strlcat(features, tag, length);
     g_strlcat(features, " 1", length);
+    return;
   }
+  // Off: rebuild without it, which is the only way to close the gap it leaves behind.
+  gchar **parts = g_strsplit(features, ",", -1);
+  features[0] = '\0';
+  for(int part = 0; !IS_NULL_PTR(parts[part]); part++)
+  {
+    gchar *trimmed = g_strstrip(g_strdup(parts[part]));
+    if(trimmed[0] != '\0' && !g_str_has_prefix(trimmed, tag))
+    {
+      if(features[0] != '\0') g_strlcat(features, ", ", length);
+      g_strlcat(features, trimmed, length);
+    }
+    dt_free(trimmed);
+  }
+  g_strfreev(parts);
 }
 
 void dt_canvas_text_margins(const dt_canvas_object_t *object, double margins[4])
