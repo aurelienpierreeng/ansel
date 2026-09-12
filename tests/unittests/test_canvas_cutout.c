@@ -947,6 +947,39 @@ static int _group_teardown(void **state)
   return 0;
 }
 
+/**
+ * Text told to flow around what is laid over it lays its lines in the clear run beside the
+ * object, so the same words take more lines and the frame needs to be taller. Without the
+ * flag the object is ignored and the text runs straight under it.
+ */
+static void _text_flows_around_what_is_laid_over_it(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 200.0, 150.0, 360.0, 260.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+      "zoom, because the page is the thing being designed and the screen is only a window onto it.");
+  assert_non_null(text);
+  // Later in draw order, so it is laid OVER the text and pushes it.
+  dt_canvas_object_t *over = dt_canvas_add_text(canvas, 300.0, 150.0, 140.0, 120.0, "");
+  assert_non_null(over);
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double plain = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND;
+  text->text.wrap_standoff = 8.0f;
+  const double flowed = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+
+  assert_true(plain > 0.0);
+  assert_true(flowed > plain);
+  dt_canvas_free(canvas);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -954,6 +987,7 @@ int main(void)
     cmocka_unit_test(_a_polygon_fills_its_interior),
     cmocka_unit_test(_a_polygon_node_carries_its_own_fall_off),
     cmocka_unit_test(_a_polygon_node_steers_its_own_curve),
+    cmocka_unit_test(_text_flows_around_what_is_laid_over_it),
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),

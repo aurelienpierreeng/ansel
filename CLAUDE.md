@@ -2707,6 +2707,25 @@ they are visible.
   leaf's four sides owes the bleed or the bind, never both. The **bind gutter** is
   the binding's allowance inside a page at a fold ONLY, which is why
   `dt_canvas_page_margin_rect()` exists beside the symmetric `dt_canvas_page_guide_rect()`.
+- **A line set at a width the code chooses is one capability that buys two.** `_flow_text()`
+  lays a text frame line by line, and that is what BOTH text-wrapping and both-edge optical
+  margins need: a line inside the clear run beside an overlaid object, and a line set to a
+  measure slightly wider than its column so its final comma ends past the edge. Shifting a
+  finished line -- all the paragraph painter can do -- hangs the leading edge only. Three
+  traps paid for: **justification is free** (Pango never justifies a layout's last line, and
+  each layout holds all the remaining text, so line zero is last exactly when it should not be
+  justified); **a line ends on the space it broke at**, so its last byte is whitespace and
+  never the comma that should hang, and without walking back over it the trailing hang
+  measures a flat zero; and rebuild the layout ONLY when the run's width changes, or a plain
+  paragraph costs one layout per line. Obstacles are the frames ABOVE the text in draw order,
+  and each covers its SILHOUETTE (`dt_canvas_object_covers()`), never its bounding box.
+- **Text is laid out with METRICS HINTING OFF.** The layer's context carries the target's font
+  options and its matrix carries the zoom, so with hinting on every advance is rounded to a
+  whole device pixel and the same paragraph is set differently at every zoom -- measured, a
+  justified line's right edge wandering four pixels between zoom 0.6 and 4. And **a line's
+  position comes from `pango_layout_iter_get_line_extents()`, never the line's own**: a line's
+  own extents are relative to where the line starts, so taken from the line every line begins
+  at the layout's left edge and centred text quietly stops being centred.
 - **A page size is an index into one appended-only table** (`dt_canvas_paper_points()`), and
   the GUI reads the table rather than repeating it. Insert a size in the middle and every
   saved document changes page. **A canvas unit is a display pixel and the canvas says how many

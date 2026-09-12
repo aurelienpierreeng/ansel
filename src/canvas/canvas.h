@@ -823,6 +823,17 @@ double dt_canvas_object_silhouette_reach(const dt_canvas_t *canvas, const dt_can
                                          double dir_y);
 
 /**
+ * @brief Whether a canvas point falls on what a frame actually DRAWS, grown by `standoff`.
+ * @details The silhouette, not the bounding box: a cut frame covers its cut shape and the
+ * empty corner beside it covers nothing. Exact for a shape every ray from the centre leaves
+ * once -- a circle, an ellipse, a rounded rectangle, a convex polygon -- and an approximation
+ * for one that does not, which is the same bargain `dt_canvas_object_silhouette_reach()`
+ * already makes for the connectors.
+ */
+gboolean dt_canvas_object_covers(const dt_canvas_t *canvas, const dt_canvas_object_t *frame, double x, double y,
+                                 double standoff);
+
+/**
  * @brief Resolve a connector to its geometry.
  * @return FALSE when either end is missing.
  */
