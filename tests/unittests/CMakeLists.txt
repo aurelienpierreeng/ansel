@@ -36,6 +36,7 @@ set(LIB_ANSEL_UNIT_TESTS
   # Not database tests, but they want the same standalone-binary-linking-lib_ansel treatment,
   # and splitting the list to say so would be more ceremony than it is worth.
   test_pipe_cache_policy
+  test_pipe_cache_pressure
   test_backbuf_publish
   test_conf_value_lifetime
   test_dtpthread_recursive
