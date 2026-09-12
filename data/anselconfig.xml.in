@@ -2863,4 +2863,329 @@
     <shortdescription>height of the collect list</shortdescription>
     <longdescription>maximum height the collect list in lighttable will grow to before scrolling</longdescription>
   </dtconfig>
+  <dtconfig prefs="views" section="otherviews" restart="true">
+    <name>/views/canvas/enable</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>Enable the canvas view</shortdescription>
+    <longdescription>Check to enable the Canvas atelier, where images are laid out freely to prepare books, exhibitions and series. (needs a restart)</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/grid_size</name>
+    <type min="5" max="1000">int</type>
+    <default>50</default>
+    <shortdescription>canvas grid spacing, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/grid_visible</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>show the canvas grid dots</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/snap_mode</name>
+    <type min="0" max="46">int</type>
+    <default>2</default>
+    <shortdescription>what canvas frames snap to when moved or resized: bits 2 grid, 4 padding, 8 same size</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/border_width</name>
+    <type min="0" max="200">float</type>
+    <default>0</default>
+    <shortdescription>default border width of canvas frames, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/border_color</name>
+    <type>string</type>
+    <default>#ffffffff</default>
+    <shortdescription>default border colour of canvas frames, #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/background_color</name>
+    <type>string</type>
+    <default>#2e2e2eff</default>
+    <shortdescription>background colour of a new canvas, #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/default_font</name>
+    <type>string</type>
+    <default>Sans 12</default>
+    <shortdescription>font of canvas text frames without a font of their own</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/image_long_edge</name>
+    <type min="256" max="8192">int</type>
+    <default>2048</default>
+    <shortdescription>long edge, in pixels, of the JPEG stored for each canvas image</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/jpeg_quality</name>
+    <type min="50" max="100">int</type>
+    <default>92</default>
+    <shortdescription>JPEG quality of canvas image renders</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/auto_refresh</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>re-render stale canvas images from the library automatically when a canvas is opened</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/surface_cache_mb</name>
+    <type min="64" max="8192">int</type>
+    <default>512</default>
+    <shortdescription>memory budget for decoded canvas images, in MB</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/padding</name>
+    <type min="0" max="500">float</type>
+    <default>20</default>
+    <shortdescription>margin canvas frames keep from each other when snapped side by side or arranged, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/grid_color</name>
+    <type>string</type>
+    <default>#808080ff</default>
+    <shortdescription>colour of the canvas grid dots and page outlines, #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/background_style</name>
+    <type min="0" max="4">int</type>
+    <default>0</default>
+    <shortdescription>what a new canvas is painted with: 0 plain colour, 1 Moleskine, 2 watercolour, 3 embossed, 4 Japanese paper</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/paper_size</name>
+    <type min="0" max="5">int</type>
+    <default>0</default>
+    <shortdescription>paper a new canvas is divided into: 0 none, 1 A2, 2 A3, 3 A4, 4 A5, 5 A6</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/paper_landscape</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>landscape pages on a new canvas</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/trim_color</name>
+    <type>string</type>
+    <default>#000000ff</default>
+    <shortdescription>colour of the canvas page borders -- the trim line, black by prepress convention -- as #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/spread_cols</name>
+    <type min="0" max="64">int</type>
+    <default>0</default>
+    <shortdescription>pages across one sheet on a new canvas; 0 tiles the plane uniformly</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/spread_rows</name>
+    <type min="0" max="64">int</type>
+    <default>0</default>
+    <shortdescription>pages down one sheet on a new canvas; 0 tiles the plane uniformly</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/bind_gutter</name>
+    <type min="0" max="2000">float</type>
+    <default>0</default>
+    <shortdescription>the binding's allowance kept clear inside a canvas page at a fold, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/resolution</name>
+    <type min="18" max="2400">float</type>
+    <default>300</default>
+    <shortdescription>canvas units per inch on a new canvas: what turns a paper size into a size on the plane</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/guides_over</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>draw the canvas page guides over the content rather than under it</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/page_visible</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>show the canvas page borders</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/map_zoom</name>
+    <type min="1" max="19">int</type>
+    <default>12</default>
+    <shortdescription>zoom level of a new canvas map frame</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/map_source</name>
+    <type>int</type>
+    <default>0</default>
+    <shortdescription>tile provider of a new canvas map frame (an OsmGpsMapSource_t value, 0 for OpenStreetMap)</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/map_latitude</name>
+    <type min="-85" max="85">float</type>
+    <default>48.8566</default>
+    <shortdescription>latitude of the last canvas map frame</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/map_longitude</name>
+    <type min="-180" max="180">float</type>
+    <default>2.3522</default>
+    <shortdescription>longitude of the last canvas map frame</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/masonry_columns</name>
+    <type min="1" max="20">int</type>
+    <default>3</default>
+    <shortdescription>columns of the canvas masonry layout</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/last_directory</name>
+    <type>string</type>
+    <default></default>
+    <shortdescription>folder the last canvas was opened from or saved to</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/dpi</name>
+    <type min="72" max="1200">int</type>
+    <default>300</default>
+    <shortdescription>resolution of the canvas export</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/export/format</name>
+    <type min="0" max="3">int</type>
+    <default>0</default>
+    <shortdescription>file format of the canvas export (dt_canvas_export_format_t)</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/page_margin</name>
+    <type min="0" max="2000">float</type>
+    <default>0</default>
+    <shortdescription>margin kept clear inside every canvas page edge, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/margin_visible</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>draw the canvas pages' inner margins</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/guide_margin_color</name>
+    <type>string</type>
+    <default>#8E44D0ff</default>
+    <shortdescription>colour of the canvas pages' margin lines, violet by prepress convention</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/page_bleed</name>
+    <type min="0" max="2000">float</type>
+    <default>0</default>
+    <shortdescription>how far past every canvas page edge the sheet keeps going, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/bleed_visible</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>draw the canvas pages' bleed lines</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/guide_bleed_color</name>
+    <type>string</type>
+    <default>#E1261Cff</default>
+    <shortdescription>colour of the canvas pages' bleed lines, red by prepress convention</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/export/quality</name>
+    <type min="50" max="100">int</type>
+    <default>92</default>
+    <shortdescription>compression quality of the canvas export's pages; 100 keeps every code</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/icc_type</name>
+    <type>int</type>
+    <default>1</default>
+    <shortdescription>output profile type of the canvas PDF export (dt_colorspaces_color_profile_type_t)</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/icc_filename</name>
+    <type>string</type>
+    <default></default>
+    <shortdescription>output profile file of the canvas PDF export, when the type is a file</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/pdf/intent</name>
+    <type min="0" max="3">int</type>
+    <default>0</default>
+    <shortdescription>rendering intent of the canvas PDF export</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_color</name>
+    <type>string</type>
+    <default>#00000080</default>
+    <shortdescription>default shadow colour and strength of a new canvas, #rrggbbaa</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_offset_x</name>
+    <type min="-500" max="500">float</type>
+    <default>8</default>
+    <shortdescription>default shadow offset to the right, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_offset_y</name>
+    <type min="-500" max="500">float</type>
+    <default>8</default>
+    <shortdescription>default shadow offset downwards, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_radius</name>
+    <type min="-500" max="500">float</type>
+    <default>0</default>
+    <shortdescription>default shadow radius of a new canvas, in canvas units: 0 none, positive outside the objects, negative inside</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/layout_sort</name>
+    <type min="0" max="4">int</type>
+    <default>0</default>
+    <shortdescription>the order canvas frames are arranged in: 0 canvas order, 1 filename, 2 capture time, 3 id, 4 full path</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/corner_radius</name>
+    <type min="0" max="5000">float</type>
+    <default>0</default>
+    <shortdescription>default radius of the rounded corners of a new canvas's frames, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/texture_contrast</name>
+    <type min="0.05" max="8">float</type>
+    <default>1</default>
+    <shortdescription>weight of the paper relief's body on a new canvas; 1 is the paper as designed</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/texture_detail</name>
+    <type min="0" max="8">float</type>
+    <default>1</default>
+    <shortdescription>weight of the paper's fine structure on a new canvas</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/texture_scale</name>
+    <type min="0.1" max="8">float</type>
+    <default>1</default>
+    <shortdescription>size of the paper's features on a new canvas</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/texture_grain</name>
+    <type min="0" max="8">float</type>
+    <default>1</default>
+    <shortdescription>the paper's finishing grain on a new canvas</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/padding_visible</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>whether a new canvas draws the padding frames around its frames</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/guide_padding_color</name>
+    <type>string</type>
+    <default>#3C78C8ff</default>
+    <shortdescription>colour of the padding frames of a new canvas, #rrggbbaa</shortdescription>
+  </dtconfig>
 </dtconfiglist>

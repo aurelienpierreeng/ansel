@@ -2538,3 +2538,303 @@ cacheable.
 Since every data flow in the software is a pipeline, issues should be tracked to their root
 cause by climbing the call tree up until the source is found, instead of being fixed where
 they are visible.
+
+---
+
+## Canvas atelier (`src/canvas`, `src/views/canvas.c`)
+
+`doc/canvas.md` is the design. The rules that are not visible from the code:
+
+- **The canvas is a file, never a database row.** Nothing in `src/canvas/` writes to the
+  library; an image frame carries its own identity (id, version, folder, file name, history
+  hash, EXIF) so `dt_canvas_render_locate_source()` can find the original again, and the
+  sync status (current / stale / missing) is a runtime comparison of history hashes, not
+  stored.
+- **The index has reserved bytes and size-prefixed records, and that is the migration
+  strategy.** Add a field by taking reserved bytes (or appending after them and bumping
+  nothing): an old reader skips what it does not know by `record_size`, a new reader gets
+  zeros from an old file. Bump `DT_CANVAS_FORMAT_VERSION` only when an existing field changes
+  meaning. `test_canvas_document` pins the skip.
+- **A render job never touches the canvas.** It gets a library id and an object id, delivers
+  on the GUI thread with the token the view issued for the open document, and the view drops
+  results whose token is stale. Do not hand it a `dt_canvas_t *`.
+- **One painter for the screen and the export**, differing only in the colour target: the
+  atelier converts to the display profile, the export keeps Adobe RGB and converts the whole
+  page with LCMS. Every colour the canvas draws goes through `dt_canvas_render_color()`, so borders match
+  their pictures.
+- **Every gesture that changes the document must touch the canvas, once per motion.** The
+  painter keeps the frame it last composited and blits it again for a key it has already seen,
+  and the generation is what tells two frames apart -- the key knows nothing of where an object
+  sits or where a connector's waypoint is. A drag that forgets it paints its first frame over
+  and over, and the thing being dragged only catches up when something else moves the key,
+  which is how "the connector does not follow its handle" was reported. Before the composite
+  cache every redraw recomposited and no drag needed it, so this is a new obligation on old
+  code: `_drag_changes_the_document()` answers for every drag kind and is written as an
+  opt-OUT (only panning and the rubber band are exempt), so a new kind is covered the day it
+  is added. `test_canvas_cutout` pins the painter's half of the bargain.
+- **A polygon node has THREE kinds and a cusp is geometry, not a flag.**
+  `dt_canvas_mask_node_kind_t`: a CUSP carries its own two control points and they are free of
+  each other, an AUTO node's tangent is computed from its neighbours, a STEERED one carries
+  its own and the view keeps them collinear. Only AUTO asks the shape for a tangent -- both
+  the others hand their points down -- and `masks_cutout.c` reading that field as "non-zero
+  means computed" is what made a steered tangent move the outline on screen while the cut
+  ignored it. The far end has no flag to read: `dt_masks_node_is_cusp()` (`masks_gui.c`)
+  answers by asking whether the two control points coincide, so what makes a node smooth here
+  is the view keeping them opposite, nothing else. `test_canvas_cutout` pins all three, and
+  the pin was checked by putting the bug back.
+- **A menu asks the geometry its own question, never the drag's.** `_mask_handle_at()` reports
+  what a drag would grab and refuses everything outside the edit mode, which is right for a
+  drag. Keyed on it, the cutout submenu's node entries were a duplicate of the top-level ones
+  whenever the shape was being edited and dead code the rest of the time -- reported as "the
+  context menu option to toggle nodes cusps <-> smooth is missing", and it was there twice.
+  `_mask_node_at()` is the question a menu wants.
+- **A polygon node's record may grow, and the file says how wide it was.** The node chunk's
+  size divided by the node count is the stride it was written with: a shorter record reads as
+  zero in the fields it lacks, a longer one is stepped over. Never assume the current width
+  when reading it, and never write a test fixture as a flat run of floats -- three of them
+  fed every node the next one's numbers the day the record gained its per-node fall-off.
+- **`g_strstr_len()` cannot search binary data: it stops at the first NUL** whatever length it
+  is given. A test looking for `/SMask` in an exported PDF found the dictionary before the
+  first compressed stream and nothing after it, and read as a missing feature that was
+  actually written correctly. Compare bytes with `memcmp` over the range instead.
+- **The toolbar owns no state.** It asks the view through `proxy.canvas` and refills from
+  the document on `DT_SIGNAL_CANVAS_CHANGED` with its handlers blocked. A control that wrote
+  back during a refill would loop. **The other half of that bargain: a proxy setter that
+  writes a field some OTHER control shows must raise the signal**, or the toolbar goes on
+  displaying what it last read. `_proxy_set_background()` rewrites the tint and resets the
+  four texture weights when the paper changes, and for want of that raise the colour patch
+  kept the previous paper's colour while the new one was painted -- reported as "confusing to
+  retain old parameters in GUI feedback while new stuff gets applied". A setter that only
+  writes the field its own control sent needs no raise.
+  **Where the setter is on the interactive path, the obligation moves to the odd caller
+  instead**: every call to `set_texture` is one of the four sliders sending its own value, and
+  refilling under a slider the user is still holding would fight the pointer -- so the setter
+  stays quiet and `_texture_reset()`, the one caller that writes all four behind their backs,
+  refills the toolbar itself. Without that the Reset button reached the document and nothing
+  else: the sliders kept their positions, so it read as doing nothing at all, and the next
+  touch of any slider sent all four stale values back and undid it. The same shape lives in
+  the view's context menu, whose handlers change fields the property bar shows and must call
+  `_bars_refresh(self, TRUE)`: the cutout's shape and the edit mode did, its Invert did not.
+  **Sweep for this by function, not by eye** -- and grep for all three spellings
+  (`_bars_refresh`, `_bars_request`, `_announce_document`), since a sweep that misses one
+  reports every correct handler as broken.
+- **The ZIP is ours** (`canvas_zip.c`, store + deflate, no ZIP64) because no archive library
+  is linked and zlib is. `unzip -t` is run on the writer's output in the unit test when
+  available; keep it passing.
+- **The painter composites in linear light itself.** Cairo blends in the encoding of its
+  sources, so every object is painted into its own 8-bit layer, decoded through the sRGB
+  curve into premultiplied linear floats, masked, shadowed and laid over a float canvas that
+  is encoded back once. The decode table is per code and the encode table has 16384 steps,
+  which is what makes an opaque pixel round-trip to the exact code it held -- do not "save"
+  the table's size. `test_canvas_cutout` pins the round trip and the 188 that half of white
+  over black must give.
+- **The cutouts are the darkroom's shapes, asked for through `develop/masks_cutout.h`.** That
+  entry lives inside `src/develop/masks` on purpose: the canvas never names a
+  `dt_masks_form_t`, and the enclosure ratchet in `tools/check_module_boundaries.sh` stays
+  where it is. Two things the masks code does not say: a polygon node's `border[2]` is a pair
+  of feather RADII (either side of the node), not a border point, and the shapes take their
+  scratch from the pixelpipe cache's arena, so a headless consumer must have run
+  `dt_dev_pixelpipe_cache_init()` (the test does, in its group setup). `dt_masks_create()`
+  also sanitises conf and tells the supervisor; `dt_masks_form_new_silent()` is the
+  side-effect-free constructor for consumers with neither.
+- **The compositor works in the surface's own pixels.** `cairo_get_matrix()` stops at cairo's
+  device space; the surface's device scale comes after it, so a layer sized from that matrix
+  on a 2x screen is half the resolution and the blit upsamples it -- blurred AND aliased text
+  was the report. Fold `cairo_surface_get_device_scale(cairo_get_group_target(cr))` into the
+  matrix and divide it out at the blit, and hand every layer context the target's font
+  options. `test_canvas_cutout` paints on a device-scale-2 surface and checks the edges land
+  on the doubled pixels.
+- **The working space is linear Adobe RGB (1998) and colour management is the LAST step.**
+  Adobe RGB is the layer encoding end to end: the renders leave the pipeline in it (profile
+  embedded, `image.colorspace` records it; older sRGB JPEGs and map tiles are converted at
+  decode), `dt_canvas_render_color()` converts every drawn colour into it, and the paper fields
+  go through `dt_canvas_render_srgb8_to_layer8()`. A layer therefore decodes through the 563/256
+  gamma with no matrix. The finished canvas is encoded to 8-bit Adobe RGB and goes to the
+  display through `dt_colorprofiles_adobergb_bgrx8_to_display()`, the module's prepared 8-bit
+  transform (a float XYZ path cost 800 ms a frame). The PDF page is Adobe RGB and the
+  exporter's source profile says so. The encode table
+  must be indexed by sqrt(value): a uniform 16384-step table misses the first codes of a 2.2
+  gamma by whole steps. Tests compute expected codes with an independent sRGB-to-Adobe helper
+  and cairo's own quantisation (16 bits rounded, then the high byte).
+- **The frame is every object's outer size, border included -- cut or not.** A cut frame's
+  shape is confined to the frame less the border's width (`dt_canvas_mask_geometry_t.inset`,
+  applied in `_mask_raster_fine()`), so the border dilated from it ends at the frame's edge,
+  exactly like a rectangular frame's inset stroke. The first version grew the raster past the
+  frame instead, and a gradient cutout, which covers the frame, grew a border outside it
+  where an uncut frame had none. Only shadows reach past the frame. **Dilate the band from the
+  shape as described, not from the confined shape**: a disc dilation of the confined rectangle
+  rounds its corners, which is how a gradient cutout came back with rounded corners; the band
+  is stopped at the frame afterwards (`_mask_clip_rounded()`, which is also how every frame's
+  corner radius reaches a cut frame). Every mask surface is
+  rasterised at 3x (2x past a megapixel) and box-filtered, the band's distance transform
+  included: that is where the anti-aliasing of cutouts and their borders comes from. The masks
+  module's own rasterisers are hard-edged.
+- **The papers are coloured by the canvas background**, a zero-mean relief around it, in two
+  parts weighed by `texture_contrast`/`texture_detail`; `texture_scale` divides every knee and
+  is the only weight that rebuilds the composed fields (`_paper_fields()`), the others only
+  rebuild the coloured tile (`_paper_key()`). Choosing a paper style sets the background to
+  the paper's tint through the style-only branch of `set_background()` -- the toolbar's combo
+  sends NULL for the colour and the colour patch sends -1 for the style, so one never
+  overwrites the other. Zero-mean is the default, not a law: the watercolour's tooth may only
+  carve (a white sheet has nothing to add at its peaks) and the charcoal card's may only lift
+  (a black sheet has nothing to take in its hollows), and both tints allow for the offset.
+- **Independent fields blended by a window are normalised IN QUADRATURE, never linearly.**
+  `_paper_compose()` lays six sprites of one process on a half-overlapping grid under Hann
+  windows. A weighted sum of independent draws has variance `sigma^2 * sum(w^2)`, so dividing
+  by `sum(w)` leaves the composed field carrying `sqrt(sum(w^2)) / sum(w)` of the amplitude:
+  1 at a placement's centre, where its window stands alone and equal to one, and 1/2 where
+  four meet at a quarter each. That is a two-fold amplitude lattice at the cell pitch, and
+  the placement jitter does NOT hide it -- jitter moves the lobes, it does not flatten them.
+  Measured on the kraft paper: local high-frequency RMS 3.12 to 6.50 over one sheet, ratio
+  2.08, strongest modulation at 533 px against a 512-unit cell; dividing the deviations by
+  `sqrt(sum(w^2))` instead gives 1.28 and moves the modulation off the cell pitch. Take the
+  deviations about the sprites' common mean and add the mean back linearly: a relief is not
+  always zero-mean, and only the fluctuation must keep its size. **A field read as a COVERAGE
+  rather than as a signed relief must then clamp at the point of use**, since a quadrature
+  blend overshoots both ends of [0, 1] -- the psychedelic washi's negative coverage turned
+  its subtraction into a lift and washed the paper between the wrinkles with the
+  complementary colour (18.1% of pixels with a clipped channel, against 9.4% clamped).
+- **A zero that means "unset for migration" must be read across the WHOLE record, never per
+  field.** The four `texture_*` weights were added together, so a file from before them holds
+  four zeros -- but `dt_canvas_texture_get()` applied the "zero reads as 1" rule field by
+  field, which is indistinguishable from a user turning one weight down to nothing. The grain
+  and detail sliders therefore did nothing at their own zero, silently. All four zero is the
+  old file; one zero is a zero. The combination it costs (a canvas with no relief and no
+  finish) is a plain colour by another name.
+- **A weight is only a weight if its range moves the picture, and that is a measurement.**
+  The grain weight scales a dither applied to the LINEAR canvas and read on a gamma-encoded
+  one, so a fraction there arrives as about half of it in codes, and it competes with the
+  paper's own pixel content -- 1.45 codes on the moleskine against the dither's 0.646 at
+  `PAPER_DITHER_SIGMA` 0.008. Moving the weight from nothing to its default changed the
+  pixel texture by 10%, which is why it was reported as having no effect at all. Fit the
+  contributions (`total^2 = own^2 + k*weight^2` over a few renders) before touching the
+  constant: it says whether the control is dead or merely outgunned, and by how much.
+- **A threshold on a synthesised field is taken in the field's OWN deviations, never in
+  absolute value.** `_paper_field_band()` normalises against a fixed 256x256 power sum, so an
+  absolute cut depends on a number nobody reading the call site can see: kraft's shives were
+  first cut at a guessed level and covered the sheet, reading as cork instead of a paper with
+  the odd fleck. Sum the squares over the sprite, divide, and cut at just under three sigma
+  for something that should be a few tenths of a percent of the surface.
+- **A periodic stamp whose pitch approaches the tile's sampling must fade itself out.** The
+  papers are synthesised at 256 or 512 pixels per 512-unit sprite, so the coarse tile has half
+  a sample per unit: the laid paper's 3-unit ripple gets 1.5 samples per period and comes back
+  at three quarters of full amplitude in a 2.4-pixel period -- measured, an alias and not the
+  wires, reading as a fine streaking that is not paper. `_paper_laid()` ramps its ripple out
+  below three samples per period and to nothing below two. The residual belongs to every
+  paper and is not worth a per-frame cost: between half zoom and full, the tile is built finer
+  than the screen and the plane blit shrinks it with `CAIRO_FILTER_BILINEAR`, which attenuates
+  a fine structure rather than filtering it.
+- **A paper's whole synthesis is a cold cost of about 2.2 s**, cached per (resolution, scale),
+  and the FFT fields dominate it -- not the fibre or mesh stamps. Kraft's 2600 long fibres, a
+  six-fold bigger stamp than the moleskine's, cost 15% more in total (2568 ms against 2238).
+  Measure the whole paint before optimising a stamp.
+- **An inset shadow's plane must be padded with ONES before the blur.** `_box_blur()` pads with
+  zeros, which for the uncovered plane means "covered": the shadow thinned wherever an ellipse
+  cutout came near its bounding box. `_shadow_plane()` grows the inset plane by three radii of
+  ones and the sampler offsets into it. The test compares two STRAIGHT edges (the frame's and a
+  square cutout's); a curved edge legitimately reads deeper, since more uncovered world
+  surrounds it.
+- **A shadow's radius is signed and is its own switch**: positive outset, negative inset (the
+  uncovered plane blurred and laid over the object within its coverage), zero none. Do not
+  reintroduce an enable flag; `dt_canvas_shadow_visible()` reads the radius.
+- **`far` and `near` are macros on Windows** (minwindef.h defines them empty), and the local
+  MinGW syntax check skips `canvas_render.c` for its curl header, so a local of that name
+  compiles everywhere but CI. Name it something else.
+- **A cut-out frame's border is a band, not a stroke**: the cutout's half-level edge dilated by
+  the border width through a Euclidean distance transform (a disc, so the band is as thick on
+  the diagonal as on the axes; a separable max filter is a square and was 41% thicker there),
+  less the cutout, painted through as a mask into its own layer and composited over the
+  content in linear light. A rectangular frame keeps the inset stroke. A text frame's
+  background must fill INSIDE its border, or it paints the border over -- it did, for as long
+  as text frames had backgrounds.
+- **Variable-length data follows an object's record as tagged chunks** (tag, size, bytes), so
+  a reader steps over what it does not know; the polygon's nodes are the first. Fixed
+  additions keep taking reserved bytes.
+- **An include inside an `#ifdef` needs `// conditional-ok: <reason>`** on its line
+  (`tools/check_conditional_includes.sh`, run on pull requests only, so a local build cannot
+  show it): the osm-gps-map header in `canvas_render.c` is one.
+- **The painter's serial bottleneck is cairo compositing a scaled source**, not the float
+  maths: a picture scaled onto its frame with `CAIRO_FILTER_GOOD`, a mask applied through
+  `cairo_mask_surface()` under a transform, each runs a separable convolution on one core
+  and was 40% of the main thread. Blit sprites 1:1 under an identity matrix
+  (`dt_canvas_surface_cache_get_scaled()`) and do masks in float in a parallel loop
+  (`_cut_compose()`). And profile the MAIN thread with children: the workers' samples are
+  barrier spin, and `perf` attributes page faults to nothing -- a 240 MB float layer
+  allocated per frame is returned to the kernel on free and faulted in again next frame,
+  which is why every working buffer is a slot in the surface cache
+  (`dt_canvas_scratch_slot_t`). `doc/canvas.md` "Instrumentation and performance" has the
+  numbers and `tests/unittests/bench_canvas_paint` reproduces them.
+- **The composite cache is keyed on `dt_canvas_t.serial`, never on the address**: the tests
+  free and recreate documents at the same address with the same generation, and were handed
+  the previous test's frame. It serves paints that carry a surface cache only, because a test
+  that edits the struct by hand between two paints bumps no generation.
+- **The guides are the prepress palette, and the gutter is a margin around ONE frame.** Trim
+  black, bleed red, margin violet -- InDesign's, hence every print shop's template -- all
+  solid, since on a dieline a cut is solid and a crease is dashed and the dash is worth
+  reserving for the fold. Each is stroked under a white keyline, which the convention never
+  needs because its pasteboard is always light and this plane can be a charcoal card. The
+  colour conf keys were RENAMED (`canvas/trim_color`, `canvas/guide_*_color`) because a
+  configuration that already holds the old defaults would otherwise never see the new ones.
+  And the object gutter is now the PADDING, the word gutter having gone to the fold's own
+  allowance where print puts it: two frames sit side by side when their padding boxes touch,
+  so the clear space between them is TWO paddings. Keyed on one, a frame's box landed on its neighbour's
+  edge and the two boxes overlapped across the whole gap -- box against frame, reported as
+  odd and crossing. The snapping, the masonry run detection and `dt_canvas_layout_apply()`
+  must carry the same factor, or an arranged layout is not one the snapping can reproduce.
+- **A spread is the sheet, and the plane stops tiling evenly.** `spread_cols` by `spread_rows`
+  pages stay contiguous with FOLDS between them (dashed, the dieline's crease against its cut);
+  between two spreads the plane opens by TWICE the bleed so no two bleeds overlap. Zero is the
+  uniform tiling every document had before. Three things follow and each is a trap if
+  forgotten: the page under a point must be ASKED for (`dt_canvas_page_at()`) and never divided
+  out, and it answers with the page on the left for a point in the gap; the page snapping
+  cannot use a period and gathers the real lines the neighbouring pages offer; and the trim and the
+  bleed GUIDES belong to the sheet while the EXPORT cuts at the folds, one leaf per canvas
+  page -- a spread is how the plane is laid out, not how the press prints, since the press
+  prints leaves and the binder folds them. The bind gutter is what a fold gets instead of a
+  bleed, and behaves identically: content carried past the cut line, facing inward, so the
+  strip either side of a fold is printed on both leaves and nothing is scaled. Each of a
+  leaf's four sides owes the bleed or the bind, never both. The **bind gutter** is
+  the binding's allowance inside a page at a fold ONLY, which is why
+  `dt_canvas_page_margin_rect()` exists beside the symmetric `dt_canvas_page_guide_rect()`.
+- **A line set at a width the code chooses is one capability that buys two.** `_flow_text()`
+  lays a text frame line by line, and that is what BOTH text-wrapping and both-edge optical
+  margins need: a line inside the clear run beside an overlaid object, and a line set to a
+  measure slightly wider than its column so its final comma ends past the edge. Shifting a
+  finished line -- all the paragraph painter can do -- hangs the leading edge only. Three
+  traps paid for: **justification is free** (Pango never justifies a layout's last line, and
+  each layout holds all the remaining text, so line zero is last exactly when it should not be
+  justified); **a line ends on the space it broke at**, so its last byte is whitespace and
+  never the comma that should hang, and without walking back over it the trailing hang
+  measures a flat zero; and rebuild the layout ONLY when the run's width changes, or a plain
+  paragraph costs one layout per line. Obstacles are the frames ABOVE the text in draw order,
+  and each covers its SILHOUETTE (`dt_canvas_object_covers()`), never its bounding box.
+- **Text is laid out with METRICS HINTING OFF.** The layer's context carries the target's font
+  options and its matrix carries the zoom, so with hinting on every advance is rounded to a
+  whole device pixel and the same paragraph is set differently at every zoom -- measured, a
+  justified line's right edge wandering four pixels between zoom 0.6 and 4. And **a line's
+  position comes from `pango_layout_iter_get_line_extents()`, never the line's own**: a line's
+  own extents are relative to where the line starts, so taken from the line every line begins
+  at the layout's left edge and centred text quietly stops being centred.
+- **A page size is an index into one appended-only table** (`dt_canvas_paper_points()`), and
+  the GUI reads the table rather than repeating it. Insert a size in the middle and every
+  saved document changes page. **A canvas unit is a display pixel and the canvas says how many
+  go to the inch** (`dt_canvas_resolution()`, 300 on a new canvas, 72 for a document from
+  before the field so its geometry does not move): a sheet of paper is held in points and
+  scaled by that, a screen format is its pixel size outright and does not scale
+  (`dt_canvas_paper_is_physical()`). Read as points, as both were, an Instagram story came out
+  1080 units against an A4's 595 -- nearly twice the sheet. The export converts through the
+  same number: physical size is units over the resolution, output pixels are
+  `units * export_dpi / resolution`.
+- **The export's page is the document's, never the dialog's.** Page size and orientation are
+  the canvas's; the dialog asks only for format, resolution, bleed, quality and profile. The
+  bleed grows the sheet and the canvas rectangle it shows, so a frame a page break cut in two
+  keeps going: it is not a margin and moves nothing.
+- **A rasterised PDF page is heavy because of its stream, not its pixel count.** The raster is
+  already exactly dpi x physical size; what cost 87 MB on a six-page A3 book was a lossless
+  Flate stream over photographs. `dt_pdf_add_image_jpeg()` writes a `/DCTDecode` stream
+  instead. Measure a claim of oversampling before acting on it -- `/Width` and `/Height` in
+  the file answer it in one grep.
+- **A property with a canvas default has no toggle on the property bar: -1 in its spin button
+  is the "inherit" code** (`CANVAS_BAR_INHERIT`), rendered as `default` through the spin's
+  `output` signal, and leaving it seeds the object from the effective property. Colours carry
+  their own alpha, so nothing has a "Transparent" button either.
