@@ -362,6 +362,15 @@ than the grid on any large frame -- 192 px over a 1680-unit frame is 8.75 units 
 against a 3-unit cell -- which squares off a curve and lets a line in by most of a step, which
 is a shape's rounded edge coming out straight.
 
+What an obstacle covers is what it PAINTS, which is more than its silhouette: a border band is
+dilated outward from the cut edge, and a shadow is the one thing allowed to reach past a frame
+at all, so each obstacle is grown by `border_width` plus its visible outset shadow before it is
+merged into the map. Text set flush against the silhouette otherwise lands under both -- on a
+cut picture over a column the chosen run started exactly on the cutout edge, to 0.0 units, and
+the first word of five lines still vanished into a 75-unit white border band. That the layout
+agreed with its own map *perfectly* and the picture still overlapped is the tell: a map that
+describes the wrong thing cannot be found by checking the layout against it.
+
 They are baked into a coarse occupancy map in the frame's own local coordinates, three units
 to a cell, and a line asks it for the widest clear run across the band it is about to occupy.
 ONE run per line, deliberately: a line split either side of something standing in the middle
@@ -370,7 +379,8 @@ of a column is a different feature, and this is the choice a page-layout applica
 the frame's -- taken from the frame while the extent is the inner size, every obstacle sits
 one padding to the left of where the lines think it is. The GAP the text keeps around what it
 avoids is the user's ("Gap" on the property bar, `wrap_standoff` in the document) and is grown
-on the map by a separable dilation rather than asked of each shape: it then costs the same
+on the merged map, on top of every obstacle's own reach, by a separable dilation rather than
+asked of each shape: it then costs the same
 whatever the obstacle is and reaches a raster as well as a rectangle, and the corner of an
 obstacle keeps the gap along its diagonal too, which is what a rectangular offset does in
 every layout application.

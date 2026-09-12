@@ -3427,6 +3427,20 @@ they are visible.
   font's own ascent plus descent times the leading, and a line taller than the band it was
   placed against is asked again -- the band only grows and the run only narrows, so one extra
   pass settles it.
+- **An obstacle's extent is what it PAINTS, not its silhouette.** The silhouette is the cutout,
+  and a frame draws a border band dilated outward from that cut edge, plus a shadow, which is
+  the one thing allowed to reach past a frame at all. Text set flush against the silhouette
+  lands under both: measured on a cut picture over a column, the chosen run started exactly on
+  the cutout edge -- to 0.0 units, so the layout was RIGHT -- and the first word of five lines
+  still disappeared, into a 75-unit white border band. The reach is added per obstacle, before
+  the merge, so each is grown by its own; the user's gap goes on top of all of them. Note the
+  diagnosis only came from comparing the run against the map and finding them in exact
+  agreement -- a layout that matches its own map perfectly and still overlaps is a sign that
+  the MAP is describing the wrong thing, not that the layout is wrong.
+- **A dilation of the occupancy grid is counted, never stamped.** A cell is covered if the band
+  either side of it holds one, which a prefix sum answers in a subtraction; stamping a
+  rectangle per covered cell is the same picture for `grow` squared times the work, and a
+  75-unit border on a three-unit grid is 25 cells each way, 2601 bytes per covered cell.
 - **An obstacle's raster is sampled at the occupancy grid's own pitch.** A flat pixel cap reads
   as prudence and is coarser than the grid on any large frame -- 192 px over a 1680-unit frame
   is 8.75 units a sample against a 3-unit cell -- which squares off a curve and lets a line in

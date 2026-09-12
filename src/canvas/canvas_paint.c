@@ -1588,6 +1588,81 @@ static void _obstacles_free(dt_text_obstacles_t *obstacles)
   obstacles->covered = NULL;
 }
 
+/**
+ * Dilate an occupancy grid in place by a rectangle of cells.
+ *
+ * Separable and counted, not stamped: a cell is covered if the band of `grow` cells either
+ * side of it holds one, which a prefix sum answers in a subtraction. Stamping a rectangle per
+ * covered cell instead is the same picture for `grow` squared times the work -- at a 75-unit
+ * border on a three-unit grid that is 25 cells each way, 2601 bytes written per covered cell.
+ */
+static void _obstacles_dilate(uint8_t *cells, const int columns, const int rows, const int grow_x,
+                              const int grow_y)
+{
+  if((grow_x <= 0 && grow_y <= 0) || IS_NULL_PTR(cells)) return;
+  const int span = MAX(columns, rows);
+  int32_t *sums = g_malloc0(sizeof(int32_t) * (size_t)(span + 1));
+  uint8_t *line = g_malloc0((size_t)span);
+  if(IS_NULL_PTR(sums) || IS_NULL_PTR(line))
+  {
+    dt_free(sums);
+    dt_free(line);
+    return;
+  }
+  if(grow_x > 0)
+    for(int row = 0; row < rows; row++)
+    {
+      uint8_t *const at = cells + (size_t)row * columns;
+      for(int column = 0; column < columns; column++) sums[column + 1] = sums[column] + (at[column] ? 1 : 0);
+      for(int column = 0; column < columns; column++)
+      {
+        const int first = MAX(column - grow_x, 0);
+        const int last = MIN(column + grow_x, columns - 1);
+        line[column] = sums[last + 1] - sums[first] > 0 ? 1 : 0;
+      }
+      memcpy(at, line, (size_t)columns);
+    }
+  if(grow_y > 0)
+    for(int column = 0; column < columns; column++)
+    {
+      for(int row = 0; row < rows; row++)
+        sums[row + 1] = sums[row] + (cells[(size_t)row * columns + column] ? 1 : 0);
+      for(int row = 0; row < rows; row++)
+      {
+        const int first = MAX(row - grow_y, 0);
+        const int last = MIN(row + grow_y, rows - 1);
+        line[row] = sums[last + 1] - sums[first] > 0 ? 1 : 0;
+      }
+      for(int row = 0; row < rows; row++) cells[(size_t)row * columns + column] = line[row];
+    }
+  dt_free(sums);
+  dt_free(line);
+}
+
+/**
+ * How far past its silhouette an obstacle actually PAINTS, in canvas units.
+ *
+ * The silhouette is the cutout, and a frame draws more than that: a border band dilated
+ * outward from the cut edge, and a shadow, which is the one thing allowed to reach past the
+ * frame at all. Text set flush against the silhouette therefore lands under both -- measured
+ * on a cut picture over a column, the run started exactly on the cutout edge (to 0.0 units,
+ * so the layout was right) and the first word of five lines still disappeared, into the
+ * frame's white glow.
+ */
+static double _obstacle_reach(const dt_canvas_t *canvas, const dt_canvas_object_t *other)
+{
+  double reach = fmax((double)other->border_width, 0.0);
+  dt_canvas_shadow_t shadow;
+  dt_canvas_object_effective_shadow(canvas, other, &shadow);
+  if(dt_canvas_shadow_visible(&shadow) && shadow.blur > 0.0)
+  {
+    // An outset shadow is a blur about an offset copy, so it reaches the offset plus the blur.
+    // An inset one (a negative radius) paints inside the object and reaches nothing.
+    reach += (double)shadow.blur + hypot((double)shadow.offset_x, (double)shadow.offset_y);
+  }
+  return reach;
+}
+
 /** Build the map; FALSE when nothing stands over the frame and the caller may lay out plainly. */
 static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas_t *canvas,
                                  const dt_canvas_object_t *object, const double inner_width,
@@ -1666,19 +1741,22 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
     rasters[idx] = dt_canvas_render_mask(other, mask_width, mask_height, 0, 0);
   }
 
-  for(int row = 0; row < obstacles->rows; row++)
+  // Object-major, because each obstacle is grown by ITS OWN reach before being merged in.
+  uint8_t *own = g_malloc0((size_t)obstacles->columns * obstacles->rows);
+  for(guint idx = 0; idx < over->len && !IS_NULL_PTR(own); idx++)
   {
-    const double local_y = obstacles->origin_y + (row + 0.5) * obstacles->cell_y;
-    for(int column = 0; column < obstacles->columns; column++)
+    const dt_canvas_object_t *other = g_ptr_array_index(over, idx);
+    memset(own, 0, (size_t)obstacles->columns * obstacles->rows);
+    for(int row = 0; row < obstacles->rows; row++)
     {
-      const double local_x = obstacles->origin_x + (column + 0.5) * obstacles->cell_x;
-      // The cell centre back into canvas coordinates, through the text frame's own rotation.
-      const double angle = object->rotation;
-      const double canvas_x = object->x + local_x * cos(angle) - local_y * sin(angle);
-      const double canvas_y = object->y + local_x * sin(angle) + local_y * cos(angle);
-      for(guint idx = 0; idx < over->len; idx++)
+      const double local_y = obstacles->origin_y + (row + 0.5) * obstacles->cell_y;
+      for(int column = 0; column < obstacles->columns; column++)
       {
-        const dt_canvas_object_t *other = g_ptr_array_index(over, idx);
+        const double local_x = obstacles->origin_x + (column + 0.5) * obstacles->cell_x;
+        // The cell centre back into canvas coordinates, through the text frame's own rotation.
+        const double angle = object->rotation;
+        const double canvas_x = object->x + local_x * cos(angle) - local_y * sin(angle);
+        const double canvas_y = object->y + local_x * sin(angle) + local_y * cos(angle);
         gboolean hit = FALSE;
         if(IS_NULL_PTR(rasters[idx]))
           hit = dt_canvas_object_covers(canvas, other, canvas_x, canvas_y, 0.0);
@@ -1698,12 +1776,17 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
             hit = pixels[(size_t)sample_y * stride + sample_x] > 127;
           }
         }
-        if(!hit) continue;
-        obstacles->covered[(size_t)row * obstacles->columns + column] = 1;
-        break;
+        if(hit) own[(size_t)row * obstacles->columns + column] = 1;
       }
     }
+    const double reach = _obstacle_reach(canvas, other);
+    _obstacles_dilate(own, obstacles->columns, obstacles->rows,
+                      (int)ceil(reach / fmax(obstacles->cell_x, 1e-6)),
+                      (int)ceil(reach / fmax(obstacles->cell_y, 1e-6)));
+    for(size_t cell = 0; cell < (size_t)obstacles->columns * obstacles->rows; cell++)
+      if(own[cell]) obstacles->covered[cell] = 1;
   }
+  dt_free(own);
   for(guint idx = 0; idx < over->len; idx++)
     if(!IS_NULL_PTR(rasters[idx])) cairo_surface_destroy(rasters[idx]);
   dt_free(rasters);
@@ -1713,26 +1796,10 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
   // the shape is and works for a raster as well as for a rectangle. Separable, so the corner
   // of an obstacle keeps the gap along the diagonal too -- a little more than along the axes,
   // which is what a rectangular offset does in every layout application.
-  const int grow_x = (int)ceil(standoff / fmax(obstacles->cell_x, 1e-6));
-  const int grow_y = (int)ceil(standoff / fmax(obstacles->cell_y, 1e-6));
-  if(grow_x > 0 || grow_y > 0)
-  {
-    uint8_t *grown = g_malloc0((size_t)obstacles->columns * obstacles->rows);
-    for(int row = 0; row < obstacles->rows; row++)
-      for(int column = 0; column < obstacles->columns; column++)
-      {
-        if(!obstacles->covered[(size_t)row * obstacles->columns + column]) continue;
-        const int first_row = MAX(row - grow_y, 0);
-        const int last_row = MIN(row + grow_y, obstacles->rows - 1);
-        const int first_column = MAX(column - grow_x, 0);
-        const int last_column = MIN(column + grow_x, obstacles->columns - 1);
-        for(int y = first_row; y <= last_row; y++)
-          memset(grown + (size_t)y * obstacles->columns + first_column, 1,
-                 (size_t)(last_column - first_column + 1));
-      }
-    dt_free(obstacles->covered);
-    obstacles->covered = grown;
-  }
+  // The GAP the user asked for, on top of every obstacle's own reach.
+  _obstacles_dilate(obstacles->covered, obstacles->columns, obstacles->rows,
+                    (int)ceil(standoff / fmax(obstacles->cell_x, 1e-6)),
+                    (int)ceil(standoff / fmax(obstacles->cell_y, 1e-6)));
   return TRUE;
 }
 

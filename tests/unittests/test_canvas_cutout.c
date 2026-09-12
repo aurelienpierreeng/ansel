@@ -991,6 +991,39 @@ static double _flowed_height_with_obstacle_below_the_top(const double offset)
   return flowed;
 }
 
+static void _text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 200.0, 150.0, 360.0, 260.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+      "zoom, because the page is the thing being designed and the screen is only a window onto it.");
+  assert_non_null(text);
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND;
+  text->text.wrap_standoff = 0.0f;
+  dt_canvas_object_t *over = dt_canvas_add_text(canvas, 300.0, 150.0, 140.0, 120.0, "");
+  assert_non_null(over);
+  over->border_width = 0.0f;
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double bare = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  // A border is painted OUTSIDE the silhouette the occupancy map is built from, so text set
+  // flush against that silhouette lands under it. Measured on a cut picture over a column: the
+  // run started exactly on the cutout edge -- the layout was right to 0.0 units -- and the
+  // first word of five lines still vanished, into a 75-unit white border band.
+  over->border_width = 40.0f;
+  const double bordered = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+
+  assert_true(bare > 0.0);
+  assert_true(bordered > bare);
+  dt_canvas_free(canvas);
+}
+
 static void _an_auto_height_frame_grows_downward_and_settles(void **state)
 {
   (void)state;
@@ -1080,6 +1113,7 @@ int main(void)
     cmocka_unit_test(_text_flows_around_what_is_laid_over_it),
     cmocka_unit_test(_the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map),
     cmocka_unit_test(_an_auto_height_frame_grows_downward_and_settles),
+    cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),
