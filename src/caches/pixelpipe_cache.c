@@ -2209,7 +2209,7 @@ static void _pressure_watch_start(dt_dev_pixelpipe_cache_t *cache)
 #endif
 }
 
-static void _pressure_watch_stop(dt_dev_pixelpipe_cache_t *cache)
+static void _pressure_watch_stop(dt_dev_pixelpipe_cache_t *cache __attribute__((unused)))
 {
 #if defined(__linux__)
   if(cache->psi.running)
@@ -2225,10 +2225,6 @@ static void _pressure_watch_stop(dt_dev_pixelpipe_cache_t *cache)
   cache->psi.stop_fd = -1;
   for(int i = 0; i < cache->psi.count; i++) close(cache->psi.fds[i]);
   cache->psi.count = 0;
-#else
-  // No watcher was started, so there is nothing to stop -- but the parameter is the interface,
-  // and this is the configuration SonarCloud reads (c:S1172).
-  (void)cache;
 #endif
 }
 
