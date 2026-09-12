@@ -322,6 +322,32 @@ is where it shows worst. Measured on a six-line justified paragraph, the last li
 edge wandered over four pixels between zoom 0.6 and 4, and holds to one -- the downsample's
 own noise -- unhinted.
 
+**Text flows around what is laid over it, and hangs at both edges, through ONE capability**:
+a line set at a width this code chooses rather than the paragraph's (`_flow_text()`). That is
+what both asks need. A line can be laid inside the clear run beside an object standing over
+the frame; and a line can be set to a measure slightly wider than its column so its final
+comma ends past the edge instead of sitting on it -- shifting a finished line, which is all
+the paragraph painter can do, hangs the leading edge only.
+
+The obstacles are the frames drawn ABOVE the text in draw order -- something behind the text
+is behind the text -- and what each covers is its SILHOUETTE, `dt_canvas_object_covers()`
+answering through `dt_canvas_object_silhouette_reach()`, so a circular cutout pushes the text
+along its curve and leaves the empty corner beside it usable. They are baked into a coarse
+occupancy map in the frame's own local coordinates, three units to a cell, and a line asks it
+for the widest clear run across the band it is about to occupy. ONE run per line,
+deliberately: a line split either side of something standing in the middle of a column is a
+different feature, and this is the choice a page-layout application offers as "the largest
+area".
+
+Three things about that engine that are not obvious. **Justification comes out right for
+free**: Pango never justifies the last line of a layout, and each layout here holds all the
+text that is left, so line zero is the last one exactly when the remainder fits on one line --
+exactly when it should not be justified. **A line ends on the space it broke at**, so the last
+byte of it is whitespace and never the comma that should hang; the walk back over what the
+break ate is what makes a trailing hang appear at all, and without it the measurement is a
+flat zero. And **the layout is only rebuilt when the run's width changes**, so a paragraph
+with nothing over it costs one layout and not one per line.
+
 **A line is drawn through the ITER's extents, never its own.** A line's own extents are
 relative to where the line starts; it is `pango_layout_iter_get_line_extents()` that knows
 where the ALIGNMENT put it. Taken from the line, every line begins at the layout's left edge:

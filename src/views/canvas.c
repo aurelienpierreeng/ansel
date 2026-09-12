@@ -180,6 +180,8 @@ typedef struct dt_canvas_view_t
   GtkWidget *text_feature[DT_CANVAS_TEXT_FEATURE_MAX];
   GtkWidget *text_auto_height;
   GtkWidget *text_optical;
+  GtkWidget *text_wrap;
+  GtkWidget *text_standoff;
   GtkWidget *text_font;
   GtkWidget *text_color;
   GtkWidget *text_align_h;
@@ -2274,6 +2276,13 @@ static void _bar_text_margin_changed(GtkSpinButton *spin, gpointer data)
   dt_control_queue_redraw_center();
 }
 
+static void _bar_text_standoff_changed(GtkSpinButton *spin, gpointer data)
+{
+  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
+  object->text.wrap_standoff = (float)gtk_spin_button_get_value(spin);
+  BAR_EDIT_END()
+}
+
 static void _bar_text_feature_toggled(GtkToggleButton *check, gpointer data)
 {
   dt_view_t *self = (dt_view_t *)data;
@@ -2755,6 +2764,14 @@ static void _bars_create(dt_view_t *self)
                                        _("The frame's height follows its content"),
                                        G_CALLBACK(_bar_text_flag_toggled), self);
   g_object_set_data(G_OBJECT(view->text_auto_height), "text-flag", GINT_TO_POINTER(DT_CANVAS_TEXT_AUTO_HEIGHT));
+  view->text_wrap = _bar_toggle(view->row_text, _("Wrap"),
+                                _("Flow the text around the frames laid over it, following what each of them "
+                                  "actually draws rather than the box around it"),
+                                G_CALLBACK(_bar_text_flag_toggled), self);
+  g_object_set_data(G_OBJECT(view->text_wrap), "text-flag", GINT_TO_POINTER(DT_CANVAS_TEXT_WRAP_AROUND));
+  view->text_standoff = _bar_spin(view->row_text, 0.0, 500.0, 1.0, 0,
+                                  _("How far the text keeps off what is laid over it, in canvas units"),
+                                  G_CALLBACK(_bar_text_standoff_changed), self);
   view->text_optical = _bar_toggle(view->row_text, _("Optical"),
                                    _("Hang punctuation into the margin, so the column's edge reads from the stems "
                                      "rather than from a quote or a full stop"),
@@ -3020,6 +3037,9 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
                                    (object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT) != 0);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_optical),
                                    (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS) != 0);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_wrap),
+                                   (object->text.text_flags & DT_CANVAS_TEXT_WRAP_AROUND) != 0);
+      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_standoff), object->text.wrap_standoff);
     }
     else if(kind == DT_CANVAS_OBJECT_CONNECTOR)
     {

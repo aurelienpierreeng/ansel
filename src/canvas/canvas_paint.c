@@ -1361,7 +1361,12 @@ static void _text_insets(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
   for(int side = 0; side < 4; side++) insets[side] += border;
 }
 
-static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object)
+/**
+ * A layout carrying everything about a text frame EXCEPT its text and its width: the font, the
+ * alignment, the leading, the features, the tracking and the hinting. The paragraph painter
+ * adds the markup and the frame's width; the flow engine adds one chunk and one line's width.
+ */
+static PangoLayout *_text_layout_styled(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object)
 {
   PangoLayout *layout = pango_cairo_create_layout(cr);
   // METRICS HINTING OFF, and the glyph grid-fitting with it. The layer's context carries the
@@ -1382,11 +1387,6 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
   PangoFontDescription *font = pango_font_description_from_string(dt_canvas_text_effective_font(canvas, object));
   pango_layout_set_font_description(layout, font);
   pango_font_description_free(font);
-  double insets[4];
-  _text_insets(canvas, object, insets);
-  const double text_width
-      = fmax(object->width - insets[DT_CANVAS_TEXT_MARGIN_LEFT] - insets[DT_CANVAS_TEXT_MARGIN_RIGHT], 1.0);
-  pango_layout_set_width(layout, (int)(text_width * PANGO_SCALE));
   pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
   switch(object->text.align_h)
   {
@@ -1402,10 +1402,14 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
     default:
       break;
   }
-  gchar *markup = dt_canvas_markdown_to_pango(dt_canvas_text_get_markdown(object));
-  pango_layout_set_markup(layout, markup, -1);
-  dt_free(markup);
 
+  return layout;
+}
+
+/** The part that can only be set once the layout holds its text: leading, features, tracking. */
+static void _text_layout_finish(PangoLayout *layout, const dt_canvas_object_t *object)
+{
+  PangoContext *context = pango_layout_get_context(layout);
   // The leading, as a multiple of the font's own. Pango's line spacing is the EXTRA space
   // between lines, not the total, so the multiplier is turned into one against what the font
   // asks for -- and it is read from the context's metrics rather than from a newer Pango call,
@@ -1450,6 +1454,20 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
       pango_attr_list_unref(attributes);
     }
   }
+}
+
+static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object)
+{
+  PangoLayout *layout = _text_layout_styled(cr, canvas, object);
+  double insets[4];
+  _text_insets(canvas, object, insets);
+  const double text_width
+      = fmax(object->width - insets[DT_CANVAS_TEXT_MARGIN_LEFT] - insets[DT_CANVAS_TEXT_MARGIN_RIGHT], 1.0);
+  pango_layout_set_width(layout, (int)(text_width * PANGO_SCALE));
+  gchar *markup = dt_canvas_markdown_to_pango(dt_canvas_text_get_markdown(object));
+  pango_layout_set_markup(layout, markup, -1);
+  dt_free(markup);
+  _text_layout_finish(layout, object);
   return layout;
 }
 
@@ -1540,6 +1558,308 @@ static void _show_layout(cairo_t *cr, PangoLayout *layout, const gboolean optica
   pango_layout_iter_free(iter);
 }
 
+/* --- flowing text: around a shape, and hanging at both edges ------------------------- */
+
+#define TEXT_FLOW_CELL 3.0     ///< canvas units per occupancy cell: finer than a glyph, coarse enough to be free
+#define TEXT_FLOW_MAX_CELLS 512 ///< per axis, so a huge frame costs a coarser map rather than the world
+#define TEXT_FLOW_MAX_LINES 4096
+
+/**
+ * Where the frames laid OVER a text frame stand, as a coarse occupancy map in the text
+ * frame's own local coordinates. Only frames drawn above it push it: something behind the
+ * text is behind the text.
+ */
+typedef struct dt_text_obstacles_t
+{
+  int columns;
+  int rows;
+  double cell_x;
+  double cell_y;
+  double origin_x; ///< local coordinate of the left edge of column 0
+  double origin_y;
+  uint8_t *covered;
+} dt_text_obstacles_t;
+
+static void _obstacles_free(dt_text_obstacles_t *obstacles)
+{
+  if(IS_NULL_PTR(obstacles)) return;
+  dt_free(obstacles->covered);
+  obstacles->covered = NULL;
+}
+
+/** Build the map; FALSE when nothing stands over the frame and the caller may lay out plainly. */
+static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas_t *canvas,
+                                 const dt_canvas_object_t *object, const double inner_width,
+                                 const double inner_height)
+{
+  memset(obstacles, 0, sizeof(*obstacles));
+  if(!(inner_width > 0.0) || !(inner_height > 0.0)) return FALSE;
+  const double standoff = fmax((double)object->text.wrap_standoff, 0.0);
+  const dt_canvas_rect_t bounds = dt_canvas_object_bounds(object);
+
+  // Draw order decides: a frame BELOW the text is behind it and pushes nothing.
+  guint own_index = 0;
+  gboolean found = FALSE;
+  for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
+    if(dt_canvas_object_at(canvas, idx) == object)
+    {
+      own_index = idx;
+      found = TRUE;
+      break;
+    }
+  if(!found) return FALSE;
+
+  GPtrArray *over = g_ptr_array_new();
+  for(guint idx = own_index + 1; idx < dt_canvas_object_count(canvas); idx++)
+  {
+    const dt_canvas_object_t *other = dt_canvas_object_at(canvas, idx);
+    if(!dt_canvas_object_is_frame(other) || (other->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
+    const dt_canvas_rect_t reach = dt_canvas_object_bounds(other);
+    if(reach.x - standoff > bounds.x + bounds.width || reach.x + reach.width + standoff < bounds.x) continue;
+    if(reach.y - standoff > bounds.y + bounds.height || reach.y + reach.height + standoff < bounds.y) continue;
+    g_ptr_array_add(over, (gpointer)other);
+  }
+  if(over->len == 0)
+  {
+    g_ptr_array_free(over, TRUE);
+    return FALSE;
+  }
+
+  obstacles->columns = CLAMP((int)ceil(inner_width / TEXT_FLOW_CELL), 1, TEXT_FLOW_MAX_CELLS);
+  obstacles->rows = CLAMP((int)ceil(inner_height / TEXT_FLOW_CELL), 1, TEXT_FLOW_MAX_CELLS);
+  obstacles->cell_x = inner_width / obstacles->columns;
+  obstacles->cell_y = inner_height / obstacles->rows;
+  obstacles->origin_x = -object->width * 0.5;
+  obstacles->origin_y = -object->height * 0.5;
+  obstacles->covered = g_malloc0((size_t)obstacles->columns * obstacles->rows);
+
+  for(int row = 0; row < obstacles->rows; row++)
+  {
+    const double local_y = obstacles->origin_y + (row + 0.5) * obstacles->cell_y;
+    for(int column = 0; column < obstacles->columns; column++)
+    {
+      const double local_x = obstacles->origin_x + (column + 0.5) * obstacles->cell_x;
+      // The cell centre back into canvas coordinates, through the text frame's own rotation.
+      const double angle = object->rotation;
+      const double canvas_x = object->x + local_x * cos(angle) - local_y * sin(angle);
+      const double canvas_y = object->y + local_x * sin(angle) + local_y * cos(angle);
+      for(guint idx = 0; idx < over->len; idx++)
+      {
+        if(!dt_canvas_object_covers(canvas, g_ptr_array_index(over, idx), canvas_x, canvas_y, standoff)) continue;
+        obstacles->covered[(size_t)row * obstacles->columns + column] = 1;
+        break;
+      }
+    }
+  }
+  g_ptr_array_free(over, TRUE);
+  return TRUE;
+}
+
+/**
+ * The widest clear run across a band, in local x. One run per line, deliberately: a line split
+ * either side of something standing in the middle of a column is a different feature, and this
+ * is the choice a page-layout application offers as "the largest area".
+ */
+static gboolean _obstacles_free_run(const dt_text_obstacles_t *obstacles, const double top, const double bottom,
+                                    const double left, const double right, double *run_x, double *run_width)
+{
+  *run_x = left;
+  *run_width = right - left;
+  if(IS_NULL_PTR(obstacles->covered)) return TRUE;
+  const int first_row = CLAMP((int)floor((top - obstacles->origin_y) / obstacles->cell_y), 0, obstacles->rows - 1);
+  const int last_row = CLAMP((int)ceil((bottom - obstacles->origin_y) / obstacles->cell_y) - 1, 0, obstacles->rows - 1);
+  const int first_column
+      = CLAMP((int)floor((left - obstacles->origin_x) / obstacles->cell_x), 0, obstacles->columns - 1);
+  const int last_column
+      = CLAMP((int)ceil((right - obstacles->origin_x) / obstacles->cell_x) - 1, 0, obstacles->columns - 1);
+
+  int best_start = -1;
+  int best_length = 0;
+  int start = -1;
+  for(int column = first_column; column <= last_column + 1; column++)
+  {
+    gboolean blocked = column > last_column;
+    for(int row = first_row; row <= last_row && !blocked; row++)
+      blocked = obstacles->covered[(size_t)row * obstacles->columns + column] != 0;
+    if(blocked)
+    {
+      if(start >= 0 && column - start > best_length)
+      {
+        best_length = column - start;
+        best_start = start;
+      }
+      start = -1;
+    }
+    else if(start < 0)
+      start = column;
+  }
+  if(best_start < 0 || best_length <= 0) return FALSE;
+  const double run_left = fmax(obstacles->origin_x + best_start * obstacles->cell_x, left);
+  const double run_right = fmin(obstacles->origin_x + (best_start + best_length) * obstacles->cell_x, right);
+  if(!(run_right - run_left > 0.0)) return FALSE;
+  *run_x = run_left;
+  *run_width = run_right - run_left;
+  return TRUE;
+}
+
+/** Shift an attribute list back by `offset` bytes, dropping what ends before the chunk starts. */
+static gboolean _attribute_shift(PangoAttribute *attribute, gpointer data)
+{
+  const guint offset = GPOINTER_TO_UINT(data);
+  if(attribute->end_index <= offset) return TRUE; // wholly before this chunk: drop it
+  attribute->start_index = attribute->start_index > offset ? attribute->start_index - offset : 0;
+  if(attribute->end_index != G_MAXUINT) attribute->end_index -= offset;
+  return FALSE;
+}
+
+/**
+ * Set a text frame line by line, each at a width this code chooses rather than the paragraph's.
+ * That one capability is what BOTH remaining typographic asks need: a line can be laid inside
+ * the clear run beside an object standing over the frame, and a line can be set to a measure
+ * slightly wider than its column so its final comma hangs past the edge instead of sitting on
+ * it. Shifting a finished line, which is all the paragraph painter can do, hangs the leading
+ * edge only.
+ *
+ * Justification comes out right for free. Pango never justifies the LAST line of a layout, and
+ * each layout here holds all the text that is left -- so line zero is the last one exactly when
+ * the remainder fits on one line, which is exactly when it should not be justified.
+ *
+ * Returns the height the text actually took. With `draw` false it measures and paints nothing,
+ * which is how the vertical alignment learns where to start.
+ */
+static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                         const dt_text_obstacles_t *obstacles, const double inner_width,
+                         const double inner_height, const double offset_y, const gboolean draw)
+{
+  gchar *markup = dt_canvas_markdown_to_pango(dt_canvas_text_get_markdown(object));
+  gchar *plain = NULL;
+  PangoAttrList *attributes = NULL;
+  if(!pango_parse_markup(markup, -1, 0, &attributes, &plain, NULL, NULL))
+  {
+    // Not markup we can take apart: the paragraph painter still has it whole.
+    dt_free(markup);
+    return 0.0;
+  }
+  dt_free(markup);
+  const gsize length = strlen(plain);
+  const gboolean optical = (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS) != 0;
+  const double left = -object->width * 0.5;
+  double insets[4];
+  _text_insets(canvas, object, insets);
+  const double text_left = left + insets[DT_CANVAS_TEXT_MARGIN_LEFT];
+  const double text_right = text_left + inner_width;
+  const double top = -object->height * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_TOP];
+
+  double y = 0.0;
+  gsize consumed = 0;
+  PangoLayout *layout = NULL;
+  double layout_width = -1.0;
+  gsize layout_offset = 0;
+  int layout_line = 0;
+  for(int line_index = 0; line_index < TEXT_FLOW_MAX_LINES && consumed < length; line_index++)
+  {
+    // A trial band one line tall. The height of a line is not known before it is laid out, so
+    // the band is asked for with the last line's height, or the font's to begin with.
+    double run_x = text_left;
+    double run_width = inner_width;
+    const double guess = layout_width > 0.0 && !IS_NULL_PTR(layout)
+                             ? fmax((double)pango_layout_get_baseline(layout) / PANGO_SCALE, 1.0)
+                             : 1.0;
+    _obstacles_free_run(obstacles, top + y, top + y + guess, text_left, text_right, &run_x, &run_width);
+    if(!(run_width > 0.0)) break;
+
+    if(IS_NULL_PTR(layout) || fabs(run_width - layout_width) > 0.01)
+    {
+      if(!IS_NULL_PTR(layout)) g_object_unref(layout);
+      layout = _text_layout_styled(cr, canvas, object);
+      pango_layout_set_text(layout, plain + consumed, -1);
+      PangoAttrList *shifted = pango_attr_list_copy(attributes);
+      PangoAttrList *dropped = pango_attr_list_filter(shifted, _attribute_shift, GUINT_TO_POINTER((guint)consumed));
+      if(!IS_NULL_PTR(dropped)) pango_attr_list_unref(dropped);
+      pango_layout_set_attributes(layout, shifted);
+      pango_attr_list_unref(shifted);
+      _text_layout_finish(layout, object);
+      pango_layout_set_width(layout, (int)(run_width * PANGO_SCALE));
+      layout_width = run_width;
+      layout_offset = consumed;
+      layout_line = 0;
+    }
+
+    PangoLayoutLine *line = pango_layout_get_line_readonly(layout, layout_line);
+    if(IS_NULL_PTR(line)) break;
+
+    double hang = 0.0;
+    if(optical && line->length > 0)
+    {
+      // The leading edge is nudged, the trailing one is given ROOM: a line set to a slightly
+      // wider measure ends its comma past the column's edge, and a justified line stretches
+      // to that same wider measure so both of its edges read straight.
+      const char *chunk = plain + layout_offset;
+      const double lead = _optical_hang(g_utf8_get_char(chunk + line->start_index));
+      // A line ENDS on the space it broke at, so the last byte of it is whitespace and never
+      // the comma that should hang. Walk back over what the break ate to find the character
+      // the eye actually sees at the edge.
+      const char *edge = chunk + line->start_index + line->length;
+      while(edge > chunk + line->start_index)
+      {
+        const char *previous = g_utf8_prev_char(edge);
+        const gunichar character = g_utf8_get_char(previous);
+        if(character != ' ' && character != '\n' && character != '\t') break;
+        edge = previous;
+      }
+      edge = edge > chunk + line->start_index ? g_utf8_prev_char(edge) : chunk + line->start_index;
+      const double trail = _optical_hang(g_utf8_get_char(edge));
+      if(trail > 0.0)
+      {
+        int near_x = 0;
+        int far_x = 0;
+        pango_layout_line_index_to_x(line, (int)(edge - chunk), FALSE, &near_x);
+        pango_layout_line_index_to_x(line, (int)(g_utf8_next_char(edge) - chunk), FALSE, &far_x);
+        const double room = trail * fabs((double)(far_x - near_x)) / PANGO_SCALE;
+        if(room > 0.01)
+        {
+          pango_layout_set_width(layout, (int)((run_width + room) * PANGO_SCALE));
+          line = pango_layout_get_line_readonly(layout, layout_line);
+          if(IS_NULL_PTR(line)) break;
+        }
+      }
+      if(lead > 0.0)
+      {
+        int near_x = 0;
+        int far_x = 0;
+        pango_layout_line_index_to_x(line, line->start_index, FALSE, &near_x);
+        pango_layout_line_index_to_x(line, (int)(g_utf8_next_char(chunk + line->start_index) - chunk), FALSE, &far_x);
+        hang = -lead * fabs((double)(far_x - near_x)) / PANGO_SCALE;
+      }
+    }
+
+    PangoRectangle logical;
+    pango_layout_line_get_extents(line, NULL, &logical);
+    const double line_height = fmax((double)logical.height / PANGO_SCALE, 1.0);
+    if(y + line_height > inner_height && line_index > 0) break;
+    if(draw)
+    {
+      cairo_save(cr);
+      cairo_move_to(cr, run_x + hang, top + offset_y + y - (double)logical.y / PANGO_SCALE);
+      pango_cairo_show_layout_line(cr, line);
+      cairo_restore(cr);
+    }
+    y += line_height;
+    consumed = layout_offset + line->start_index + line->length;
+    // A break eats the space it broke on, and a paragraph break its newline: step over
+    // whatever the line did not take, or the next chunk begins with it and never advances.
+    while(consumed < length && (plain[consumed] == ' ' || plain[consumed] == '\n')) consumed++;
+    layout_line++;
+    if(!IS_NULL_PTR(pango_layout_get_line_readonly(layout, layout_line))) continue;
+    // The layout is spent: the next line rebuilds from where this one stopped.
+    layout_width = -1.0;
+  }
+  if(!IS_NULL_PTR(layout)) g_object_unref(layout);
+  pango_attr_list_unref(attributes);
+  dt_free(plain);
+  return y;
+}
+
 static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                         const dt_canvas_paint_options_t *options)
 {
@@ -1560,21 +1880,47 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   cairo_clip(cr);
   double insets[4];
   _text_insets(canvas, object, insets);
+  const double inner_width
+      = fmax(object->width - insets[DT_CANVAS_TEXT_MARGIN_LEFT] - insets[DT_CANVAS_TEXT_MARGIN_RIGHT], 1.0);
+  const double inner_height
+      = fmax(object->height - insets[DT_CANVAS_TEXT_MARGIN_TOP] - insets[DT_CANVAS_TEXT_MARGIN_BOTTOM], 0.0);
+  _set_color(cr, &object->text.text_color, options->for_display);
+
+  // Line by line whenever a line needs a width of its own: to sit beside something laid over
+  // the frame, or to be set wide enough for its final comma to hang past the column's edge.
+  dt_text_obstacles_t obstacles;
+  const gboolean wrapping = (object->text.text_flags & DT_CANVAS_TEXT_WRAP_AROUND)
+                            && _obstacles_build(&obstacles, canvas, object, inner_width, inner_height);
+  if(!wrapping) memset(&obstacles, 0, sizeof(obstacles));
+  if(wrapping || (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS))
+  {
+    // The height is only known once it is set, so the vertical alignment measures first.
+    double offset_y = 0.0;
+    if(object->text.align_v != DT_CANVAS_ALIGN_START)
+    {
+      const double used = _flow_text(cr, canvas, object, &obstacles, inner_width, inner_height, 0.0, FALSE);
+      offset_y = object->text.align_v == DT_CANVAS_ALIGN_CENTER ? (inner_height - used) * 0.5 : inner_height - used;
+      offset_y = fmax(offset_y, 0.0);
+    }
+    _flow_text(cr, canvas, object, &obstacles, inner_width, inner_height, offset_y, TRUE);
+    _obstacles_free(&obstacles);
+    cairo_restore(cr);
+    return;
+  }
+  _obstacles_free(&obstacles);
+
   PangoLayout *layout = _text_layout(cr, canvas, object);
   // Vertical alignment: the layout's height against the inner height.
   int layout_width = 0;
   int layout_height = 0;
   pango_layout_get_pixel_size(layout, &layout_width, &layout_height);
-  const double inner_height
-      = fmax(object->height - insets[DT_CANVAS_TEXT_MARGIN_TOP] - insets[DT_CANVAS_TEXT_MARGIN_BOTTOM], 0.0);
   double offset_y = 0.0;
   if(object->text.align_v == DT_CANVAS_ALIGN_CENTER) offset_y = (inner_height - layout_height) * 0.5;
   else if(object->text.align_v == DT_CANVAS_ALIGN_END) offset_y = inner_height - layout_height;
   cairo_translate(cr, -half_width + insets[DT_CANVAS_TEXT_MARGIN_LEFT],
                   -half_height + insets[DT_CANVAS_TEXT_MARGIN_TOP] + fmax(offset_y, 0.0));
-  _set_color(cr, &object->text.text_color, options->for_display);
   pango_cairo_update_layout(cr, layout);
-  _show_layout(cr, layout, (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS) != 0);
+  _show_layout(cr, layout, FALSE);
   g_object_unref(layout);
   cairo_restore(cr);
 }
@@ -1582,6 +1928,25 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
 double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object)
 {
   if(IS_NULL_PTR(cr) || IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return 0.0;
+  {
+    // Flowing text has no single layout to measure: it is as tall as its lines came out, and
+    // its lines depend on what stands over the frame at each height.
+    double insets[4];
+    _text_insets(canvas, object, insets);
+    const double inner_width
+        = fmax(object->width - insets[DT_CANVAS_TEXT_MARGIN_LEFT] - insets[DT_CANVAS_TEXT_MARGIN_RIGHT], 1.0);
+    dt_text_obstacles_t obstacles;
+    const gboolean wrapping = (object->text.text_flags & DT_CANVAS_TEXT_WRAP_AROUND)
+                              && _obstacles_build(&obstacles, canvas, object, inner_width, fmax(object->height, 1.0));
+    if(!wrapping) memset(&obstacles, 0, sizeof(obstacles));
+    if(wrapping || (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS))
+    {
+      const double used = _flow_text(cr, canvas, object, &obstacles, inner_width, 1.0e9, 0.0, FALSE);
+      _obstacles_free(&obstacles);
+      return used + insets[DT_CANVAS_TEXT_MARGIN_TOP] + insets[DT_CANVAS_TEXT_MARGIN_BOTTOM];
+    }
+    _obstacles_free(&obstacles);
+  }
   PangoLayout *layout = _text_layout(cr, canvas, object);
   int layout_width = 0;
   int layout_height = 0;
