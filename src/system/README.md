@@ -14,7 +14,7 @@ as little as possible.
 | CPU instruction sets | `simd.h`, `target_clones.h`, `openmp.h`, `ppc64le/altivec.h` |
 | platform validation | `is_supported_platform.h` |
 | memory substrate | `mem_alloc.h`, `memory_arena.{c,h}`, `atomic.{c,h}`, `fp_mode.h` |
-| machine budgets | `sys_resources.h` |
+| machine budgets | `sys_resources.h`, `memory_pressure.{c,h}` (kernel memory pressure, Linux PSI) |
 | runtime capabilities | `capabilities.h` |
 | GPU / display hardware | `nvidia_gpus.h`, `opencl_drivers_blacklist.h`, `display_profile.{c,h}` |
 

@@ -86,6 +86,7 @@ FILE(GLOB SOURCE_FILES
   "common/dtpthread.c"
   "pixel/eaw.c"
   "system/memory_arena.c"
+  "system/memory_pressure.c"
   "common/xmp_sidecar.cc"
   "common/film.c"
   "common/file_location.c"

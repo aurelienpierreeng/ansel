@@ -171,6 +171,102 @@ If a flushed entry is then empty (no host data + no vRAM on any device), remove 
 hash table via `g_hash_table_iter_remove` — do NOT subtract `current_memory` manually, the
 `_free_cache_entry` GDestroyNotify handles it.
 
+### A cache key is what a piece computes, never a runtime identity
+
+`dt_iop_compute_module_hash()` (`develop/imageop.c`) keys a module by its op, enabled state,
+`multi_priority`, `iop_order`, params and blendop hash — and must not fold `module->instance`.
+That field is the family id `dt_dev_module_duplicate()` matches on, assigned at load from
+`dev->iop_instance++`, a counter `dt_dev_init()` zeroes once for the darkroom's long-lived dev and
+nothing resets after: every darkroom entry reloads the modules into the same dev and numbers them
+anew. With it in the key, a darkroom → lighttable → darkroom round trip rekeyed every cacheline of
+the image, and the preview recomputed from `basebuffer` while the whole cache was still there —
+measured: the entry it could have resumed from was present, and it asked for keys never seen
+before. It stayed harmless as long as `dt_dev_load_modules()` zeroed the counter before numbering,
+so every entry numbered the modules alike; only the increment is left there now. The same key feeds `hist->hash`, hence `img->history_hash` and the
+`history_hash.current_hash` column, which changed per session for an unchanged history too.
+`_hash_raster_masks()` folded it as well, into the blendop hash of every module consuming another
+module's raster mask. `dt_iop_check_modules_equal()` still compares it, legitimately: that is an
+identity test within one session, not a key.
+
+Anything else folded into a cache key owes the same test: would two sessions editing the same
+image, with the same history, produce the same value?
+
+### The host-memory fit probe evicts: ask it only when its answer chooses something
+
+`dt_tiling_piece_fits_host_memory()` (`develop/tiling.c`) is not a pure question. To answer "does
+this module's working set fit untiled?" it evicts LRU cache lines — any pipe's — until the byte
+headroom covers `factor × roi × bpp` AND `0.9 ×` the largest contiguous arena run does too. The
+contiguity term is what makes it expensive: with a fragmented arena it keeps evicting long after
+the bytes are there, measured at ~8 GB shed for a 1.95 GB working set.
+
+`pixelpipe_cpu.c` therefore asks it only when `piece->process_tiling_ready` — i.e. when the answer
+picks `process_tiling()` over `process()`. For a module without `IOP_FLAGS_ALLOW_TILING` (tone
+equalizer, among others) `process()` runs either way, and the probe used to throw the cache away
+for nothing: with `darkroom/render_size = 0` the preview pipe runs tone equalizer at full sensor
+resolution (see the toneequal section), so every edit emptied the cache down to ~3 GB, the FULL
+pipe's intermediates went first (least recently used, since the preview had just re-read its own),
+and the FULL pipe recomputed from `basebuffer` — 8 s of highlight reconstruction per edit — while
+the preview resumed from the edited module. The module's real allocations still go through the
+cache allocator, which evicts what each of them needs when it is made.
+
+Diagnose this class with `-d dev -d perf -d pipecache`: the ``processed `Module' … [pipe]`` lines
+say which modules each pipe actually ran, and a burst of `LRU … removed` lines right after one of
+them names the allocation that emptied the cache.
+
+### The cache gives memory back on kernel pressure, not only on low available RAM
+
+The pixelpipe cache budget (`total − memory_os_headroom − memory_mipmap_cache`) is a plan made at
+startup, and `_system_memory_pressure_valve()` guards a floor of available RAM (200 MiB). Neither
+sees a machine that still reports memory available but spends its time reclaiming it: swap full,
+other applications' pages evicted and faulted back in. That stall is what systemd-oomd acts on —
+on an Ubuntu 24.04 session, past 50 % "full" stall of `user@.service` for 20 s it SIGKILLs a
+cgroup under it, Ansel being the obvious one. Measured on a 24 GB machine with other
+applications holding ~9.5 GB and a full swap: the cache reached 11 GB of its 14.5 GB budget,
+pressure hit 73 %, and oomd killed Ansel with MemAvailable nowhere near the floor.
+
+`system/memory_pressure.c` reads PSI's cumulative "full" `total` for the whole system and every
+cgroup above the process, stateless. `pixelpipe_cache.c` turns two reads into the stall share of
+the window between them (2 s), the highest over the levels; past 10 % it sheds a quarter of the
+cache (half past 30 %), trims the arena, and lowers `pressure_ceiling`, the budget allocations
+evict down to. Under 2 % the ceiling climbs back by 1/32 of the plan per window, but only to 7/8 of
+`pressure_level`, the footprint pressure struck at, which itself rises by 1/1024 of the plan per
+calm window. It runs in `_free_space_to_alloc()`, in the idle shedder, which ticks every 2 s, and
+in `_pressure_watch_thread()`, which the kernel wakes. The arithmetic of the ceiling and the mark
+is `caches/pixelpipe_cache_pressure.h`, kept pure and separate for the same reason
+`develop/pipe_cache_policy.h` is: `tests/unittests/test_pipe_cache_pressure.c` is the only thing
+that can see a policy which changes no pixel and no hash.
+
+Six things a reviewer would otherwise change:
+
+- **A cache holding less than an eighth of the plan sheds nothing and lowers nothing.** The stall
+  is somebody else's then. Measured: four kernel wake-ups in the first 12 s of a run, before the
+  cache held anything, recorded a pressure mark of 0 and pinned the budget at the floor, where it
+  still sat a quarter of an hour later. The same eighth is the floor the ceiling never falls under.
+
+- **The kernel wakes the watcher; the cache does not only poll.** A measured window needs the
+  cache to be running something, and past a certain stall nothing of ours runs: a second test died
+  with its last 32 seconds silent — no timer, no allocation, the process frozen at 13.6 GB while
+  oomd counted its 20 seconds, and the valve never sampled the ramp that killed it. PSI *triggers*
+  (`dt_memory_pressure_triggers_open()`, `poll()` for `POLLPRI`) are raised by the kernel as soon
+  as a window is stalled past the threshold. Unprivileged triggers need a window that is a
+  multiple of 2 s, and only the levels the process may write to accept one: the whole system, its
+  own cgroup, and `app.slice` — the session's `user@.service`, which is what oomd actually
+  watches, belongs to root.
+- **The ceiling does not climb straight back to the plan.** Measured on the machine above: with
+  the ceiling restored in ~80 s, the stall came back within half a minute of each recovery, five
+  times in five minutes, once at 49 % — one point under oomd's limit. The footprint that caused
+  it (11.5–12.8 GB there) is what the cache must stay under, until minutes of calm say the rest
+  of the machine has let go.
+
+- **The share comes from the `total` counters, never from PSI's `avg10`.** That is a 10 s moving
+  average, which keeps reading high for some 20 s after a stall has ended: shedding on it drains
+  the whole cache for pressure that is already gone.
+- **The ceiling is a target, not a limit.** An allocation it cannot make room for still goes
+  ahead; only `max_memory` fails one. A hard ceiling would turn pressure into failed pipelines.
+- **`dt_dev_pixelpipe_cache_get_usage()` reports the ceiling, floored at the current usage.**
+  Tiling must plan against the lowered budget, and both of its readers compute `max − current`
+  unsigned.
+
 ### Mipmap invalidation is explicit, not hash-driven
 
 The mipmap cache get path (`_generate_blocking` in `caches/mipmap_cache.c`) does NOT compare
