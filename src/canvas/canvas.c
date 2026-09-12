@@ -1869,6 +1869,20 @@ gboolean dt_canvas_paper_is_physical(const uint32_t paper)
   return FALSE;
 }
 
+void dt_canvas_text_margins(const dt_canvas_object_t *object, double margins[4])
+{
+  const double uniform = IS_NULL_PTR(object) ? 0.0 : fmax((double)object->text.padding, 0.0);
+  for(int side = 0; side < 4; side++) margins[side] = uniform;
+  if(IS_NULL_PTR(object)) return;
+  // All four unset is a document from before the per-side margins, and takes the uniform one.
+  // Any one of them set makes all four literal, so a side really can be zero -- the same rule
+  // the canvas's texture weights follow, for the same reason.
+  gboolean any = FALSE;
+  for(int side = 0; side < 4; side++) any = any || object->text.margins[side] > 0.0f;
+  if(!any) return;
+  for(int side = 0; side < 4; side++) margins[side] = fmax((double)object->text.margins[side], 0.0);
+}
+
 double dt_canvas_resolution(const dt_canvas_t *canvas)
 {
   // A document from before the field holds zero, and its page sizes were laid out as points:

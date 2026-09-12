@@ -1353,11 +1353,12 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   }
 }
 
-/** The text sits inside the border and the padding. */
-static double _text_inset(const dt_canvas_t *canvas, const dt_canvas_object_t *object)
+/** The text sits inside the border and its own four inner margins. */
+static void _text_insets(const dt_canvas_t *canvas, const dt_canvas_object_t *object, double insets[4])
 {
-  const double padding = object->text.padding > 0.0f ? object->text.padding : 0.0;
-  return padding + _border_inset(canvas, object);
+  dt_canvas_text_margins(object, insets);
+  const double border = _border_inset(canvas, object);
+  for(int side = 0; side < 4; side++) insets[side] += border;
 }
 
 static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object)
@@ -1366,8 +1367,10 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
   PangoFontDescription *font = pango_font_description_from_string(dt_canvas_text_effective_font(canvas, object));
   pango_layout_set_font_description(layout, font);
   pango_font_description_free(font);
-  const double padding = _text_inset(canvas, object);
-  const double text_width = fmax(object->width - 2.0 * padding, 1.0);
+  double insets[4];
+  _text_insets(canvas, object, insets);
+  const double text_width
+      = fmax(object->width - insets[DT_CANVAS_TEXT_MARGIN_LEFT] - insets[DT_CANVAS_TEXT_MARGIN_RIGHT], 1.0);
   pango_layout_set_width(layout, (int)(text_width * PANGO_SCALE));
   pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
   switch(object->text.align_h)
@@ -1404,6 +1407,16 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
       pango_font_metrics_unref(metrics);
     }
   }
+  // OpenType features, as Pango spells them: the font's own alternates, figures and ligatures,
+  // which a font description cannot ask for.
+  if(object->text.features[0] != '\0')
+  {
+    PangoAttrList *existing = pango_layout_get_attributes(layout);
+    PangoAttrList *attributes = IS_NULL_PTR(existing) ? pango_attr_list_new() : pango_attr_list_copy(existing);
+    pango_attr_list_insert(attributes, pango_attr_font_features_new(object->text.features));
+    pango_layout_set_attributes(layout, attributes);
+    pango_attr_list_unref(attributes);
+  }
   // The tracking, in thousandths of an em, so it follows the type size and not the plane.
   if(fabsf(object->text.letter_spacing) > 1e-4f)
   {
@@ -1426,6 +1439,89 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
   return layout;
 }
 
+/**
+ * How far a character may hang outside the measured edge, as a fraction of its own advance.
+ * A quote is nearly all white space and hangs almost whole; a full stop hangs a little. The
+ * point of it is that a column's edge is read from the STEMS, and a line beginning with a
+ * quote looks indented when its box is flush.
+ */
+static double _optical_hang(const gunichar character)
+{
+  switch(character)
+  {
+    case '"':
+    case '\'':
+    case 0x2018: // ' '
+    case 0x2019:
+    case 0x201C: // " "
+    case 0x201D:
+    case 0x00AB: // guillemets
+    case 0x00BB:
+    case 0x2039:
+    case 0x203A:
+      return 0.6;
+    case '-':
+    case 0x2013: // en and em dash
+    case 0x2014:
+      return 0.5;
+    case '.':
+    case ',':
+    case ';':
+    case ':':
+      return 0.35;
+    default:
+      return 0.0;
+  }
+}
+
+/**
+ * Draw a layout line by line, so a line may be nudged for optical margins. Without the flag
+ * this is `pango_cairo_show_layout()` spelled out, which is deliberate: ONE path, so the two
+ * cannot drift apart.
+ */
+static void _show_layout(cairo_t *cr, PangoLayout *layout, const gboolean optical)
+{
+  const char *text = pango_layout_get_text(layout);
+  const PangoAlignment alignment = pango_layout_get_alignment(layout);
+  PangoLayoutIter *iter = pango_layout_get_iter(layout);
+  if(IS_NULL_PTR(iter)) return;
+  do
+  {
+    PangoLayoutLine *line = pango_layout_iter_get_line_readonly(iter);
+    if(IS_NULL_PTR(line)) continue;
+    PangoRectangle logical;
+    pango_layout_line_get_extents(line, NULL, &logical);
+    const int baseline = pango_layout_iter_get_baseline(iter);
+    double shift = 0.0;
+    if(optical && line->length > 0)
+    {
+      // The edge the eye reads is the one the alignment pins: the left for ragged-right and
+      // justified text, the right for ragged-left. Only that edge's character may hang, and
+      // it hangs OUTWARD, which is why the two signs differ.
+      const gboolean from_right = alignment == PANGO_ALIGN_RIGHT;
+      const char *at = text + line->start_index;
+      const char *edge = from_right ? g_utf8_prev_char(text + line->start_index + line->length) : at;
+      const double fraction = _optical_hang(g_utf8_get_char(edge));
+      if(fraction > 0.0)
+      {
+        int near_x = 0;
+        int far_x = 0;
+        const int index = (int)(edge - text);
+        const int next = (int)(g_utf8_next_char(edge) - text);
+        pango_layout_line_index_to_x(line, index, FALSE, &near_x);
+        pango_layout_line_index_to_x(line, next, FALSE, &far_x);
+        const double advance = fabs((double)(far_x - near_x)) / PANGO_SCALE;
+        shift = (from_right ? 1.0 : -1.0) * fraction * advance;
+      }
+    }
+    cairo_save(cr);
+    cairo_move_to(cr, (double)logical.x / PANGO_SCALE + shift, (double)baseline / PANGO_SCALE);
+    pango_cairo_show_layout_line(cr, line);
+    cairo_restore(cr);
+  } while(pango_layout_iter_next_line(iter));
+  pango_layout_iter_free(iter);
+}
+
 static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                         const dt_canvas_paint_options_t *options)
 {
@@ -1444,20 +1540,23 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   cairo_save(cr);
   _frame_path(cr, canvas, object, 0.0);
   cairo_clip(cr);
-  const double padding = _text_inset(canvas, object);
+  double insets[4];
+  _text_insets(canvas, object, insets);
   PangoLayout *layout = _text_layout(cr, canvas, object);
   // Vertical alignment: the layout's height against the inner height.
   int layout_width = 0;
   int layout_height = 0;
   pango_layout_get_pixel_size(layout, &layout_width, &layout_height);
-  const double inner_height = fmax(object->height - 2.0 * padding, 0.0);
+  const double inner_height
+      = fmax(object->height - insets[DT_CANVAS_TEXT_MARGIN_TOP] - insets[DT_CANVAS_TEXT_MARGIN_BOTTOM], 0.0);
   double offset_y = 0.0;
   if(object->text.align_v == DT_CANVAS_ALIGN_CENTER) offset_y = (inner_height - layout_height) * 0.5;
   else if(object->text.align_v == DT_CANVAS_ALIGN_END) offset_y = inner_height - layout_height;
-  cairo_translate(cr, -half_width + padding, -half_height + padding + fmax(offset_y, 0.0));
+  cairo_translate(cr, -half_width + insets[DT_CANVAS_TEXT_MARGIN_LEFT],
+                  -half_height + insets[DT_CANVAS_TEXT_MARGIN_TOP] + fmax(offset_y, 0.0));
   _set_color(cr, &object->text.text_color, options->for_display);
   pango_cairo_update_layout(cr, layout);
-  pango_cairo_show_layout(cr, layout);
+  _show_layout(cr, layout, (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS) != 0);
   g_object_unref(layout);
   cairo_restore(cr);
 }
@@ -1470,7 +1569,9 @@ double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canva
   int layout_height = 0;
   pango_layout_get_pixel_size(layout, &layout_width, &layout_height);
   g_object_unref(layout);
-  return layout_height + 2.0 * _text_inset(canvas, object);
+  double insets[4];
+  _text_insets(canvas, object, insets);
+  return layout_height + insets[DT_CANVAS_TEXT_MARGIN_TOP] + insets[DT_CANVAS_TEXT_MARGIN_BOTTOM];
 }
 
 /* --- connectors --------------------------------------------------------------- */

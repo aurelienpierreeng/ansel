@@ -73,7 +73,24 @@ extern "C" {
 #define DT_CANVAS_HEADER_RESERVED 856 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12)
 #define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
-#define DT_CANVAS_TEXT_RESERVED 240 ///< 256 at format 1, minus the two alignments, the line height and the tracking
+#define DT_CANVAS_TEXT_RESERVED 152 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags and the standoff
+#define DT_CANVAS_TEXT_FEATURES_LEN 64 ///< an OpenType feature string, as Pango spells it: "liga 1, onum 1"
+
+/** Which side of a text frame's inner margins an index names. */
+enum
+{
+  DT_CANVAS_TEXT_MARGIN_TOP = 0,
+  DT_CANVAS_TEXT_MARGIN_RIGHT = 1,
+  DT_CANVAS_TEXT_MARGIN_BOTTOM = 2,
+  DT_CANVAS_TEXT_MARGIN_LEFT = 3,
+};
+
+typedef enum dt_canvas_text_flag_t
+{
+  DT_CANVAS_TEXT_AUTO_HEIGHT = 1 << 0,     ///< the frame's height follows its content
+  DT_CANVAS_TEXT_OPTICAL_MARGINS = 1 << 1, ///< punctuation hangs into the margin so the edge reads straight
+  DT_CANVAS_TEXT_WRAP_AROUND = 1 << 2,     ///< the text flows around the frames laid over it
+} dt_canvas_text_flag_t;
 #define DT_CANVAS_MAP_RESERVED 256
 #define DT_CANVAS_CONNECTOR_RESERVED 72 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24)
 
@@ -224,6 +241,17 @@ typedef struct dt_canvas_text_t
    * the family actually ships.
    */
   float letter_spacing;
+  /**
+   * The inner margins, top, right, bottom, left. ALL FOUR zero takes the uniform `padding` on
+   * every side, which is what a document from before them holds; any one of them set makes
+   * all four literal, so a side really can be zero. Same rule, same reason, as the canvas's
+   * texture weights.
+   */
+  float margins[4];
+  /** OpenType features as Pango spells them, "liga 1, onum 1, smcp 1"; empty is the font's own. */
+  char features[DT_CANVAS_TEXT_FEATURES_LEN];
+  uint32_t text_flags;  ///< dt_canvas_text_flag_t
+  float wrap_standoff;  ///< how far the text keeps off a frame laid over it, in canvas units
   uint8_t reserved[DT_CANVAS_TEXT_RESERVED];
 
   /* runtime: the Markdown travels as its own archive entry */
@@ -887,6 +915,12 @@ gboolean dt_canvas_paper_points(uint32_t paper, double *width, double *height);
  * nearly twice the size of an A4 on the same plane, which is not a thing.
  */
 gboolean dt_canvas_paper_is_physical(uint32_t paper);
+
+/**
+ * @brief A text frame's four effective inner margins, top, right, bottom, left, in canvas
+ * units -- the border's own inset NOT included.
+ */
+void dt_canvas_text_margins(const dt_canvas_object_t *object, double margins[4]);
 
 /** @brief Canvas units per inch: what the canvas holds, or 72 for a document from before the field. */
 double dt_canvas_resolution(const dt_canvas_t *canvas);

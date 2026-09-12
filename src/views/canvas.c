@@ -176,6 +176,9 @@ typedef struct dt_canvas_view_t
   GtkWidget *row_text;
   GtkWidget *text_line_height;
   GtkWidget *text_letter_spacing;
+  GtkWidget *text_features;
+  GtkWidget *text_auto_height;
+  GtkWidget *text_optical;
   GtkWidget *text_font;
   GtkWidget *text_color;
   GtkWidget *text_align_h;
@@ -2251,6 +2254,28 @@ static void _bar_text_metrics_changed(GtkSpinButton *spin, gpointer data)
   BAR_EDIT_END()
 }
 
+static void _bar_text_features_set(GtkWidget *entry, gpointer data)
+{
+  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
+  g_strlcpy(object->text.features, gtk_entry_get_text(GTK_ENTRY(entry)), sizeof(object->text.features));
+  BAR_EDIT_END()
+}
+
+static gboolean _bar_text_features_focus_out(GtkWidget *entry, GdkEvent *event, gpointer data)
+{
+  _bar_text_features_set(entry, data);
+  return FALSE;
+}
+
+static void _bar_text_flag_toggled(GtkToggleButton *button, gpointer data)
+{
+  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
+  const uint32_t flag = (uint32_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "text-flag"));
+  if(gtk_toggle_button_get_active(button)) object->text.text_flags |= flag;
+  else object->text.text_flags &= ~flag;
+  BAR_EDIT_END()
+}
+
 /** The border handlers serve the image bar and the text bar alike: any frame. */
 #define BAR_EDIT_BEGIN_FRAME()                                                                             \
   dt_view_t *self = (dt_view_t *)data;                                                                     \
@@ -2652,6 +2677,23 @@ static void _bars_create(dt_view_t *self)
                   _("Letter spacing in thousandths of an em, so it follows the type size: negative condenses the "
                     "line, positive opens it out. A condensed CUT is chosen in the font name instead."),
                   G_CALLBACK(_bar_text_metrics_changed), self);
+  view->text_features = gtk_entry_new();
+  gtk_entry_set_width_chars(GTK_ENTRY(view->text_features), 12);
+  gtk_widget_set_tooltip_text(view->text_features,
+                              _("OpenType features the font offers, as Pango spells them: \"liga 1, onum 1, smcp 1\" "
+                                "for ligatures, old-style figures and small capitals. Empty is the font's own."));
+  g_signal_connect(view->text_features, "activate", G_CALLBACK(_bar_text_features_set), self);
+  g_signal_connect(view->text_features, "focus-out-event", G_CALLBACK(_bar_text_features_focus_out), self);
+  gtk_box_pack_start(GTK_BOX(view->row_text), view->text_features, FALSE, FALSE, 0);
+  view->text_auto_height = _bar_toggle(view->row_text, _("Auto height"),
+                                       _("The frame's height follows its content"),
+                                       G_CALLBACK(_bar_text_flag_toggled), self);
+  g_object_set_data(G_OBJECT(view->text_auto_height), "text-flag", GINT_TO_POINTER(DT_CANVAS_TEXT_AUTO_HEIGHT));
+  view->text_optical = _bar_toggle(view->row_text, _("Optical"),
+                                   _("Hang punctuation into the margin, so the column's edge reads from the stems "
+                                     "rather than from a quote or a full stop"),
+                                   G_CALLBACK(_bar_text_flag_toggled), self);
+  g_object_set_data(G_OBJECT(view->text_optical), "text-flag", GINT_TO_POINTER(DT_CANVAS_TEXT_OPTICAL_MARGINS));
   view->text_color = _bar_color_button(view->row_text, _("Text colour and opacity"), G_CALLBACK(_bar_text_color_set), self);
 
   view->row_connector = _bar_row(bar, _("Connector"));
@@ -2900,6 +2942,11 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_line_height),
                                 object->text.line_height > 0.0f ? object->text.line_height : 1.0f);
       gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_letter_spacing), object->text.letter_spacing);
+      gtk_entry_set_text(GTK_ENTRY(view->text_features), object->text.features);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_auto_height),
+                                   (object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT) != 0);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_optical),
+                                   (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS) != 0);
     }
     else if(kind == DT_CANVAS_OBJECT_CONNECTOR)
     {
@@ -3972,9 +4019,32 @@ static void _paint_badge(cairo_t *cr, const dt_canvas_view_t *view, const dt_can
   cairo_restore(cr);
 }
 
+/**
+ * A text frame set to follow its content takes the height its text actually needs. It is done
+ * here, once per frame, because the height depends on the laid-out text and the text depends
+ * on everything that can change it -- the markdown, the font, the margins, the width. Only a
+ * height that actually MOVED touches the canvas, so this settles on the first frame and does
+ * not hand the painter a new generation for ever.
+ */
+static void _apply_auto_heights(dt_canvas_view_t *view, cairo_t *cr)
+{
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
+  {
+    dt_canvas_object_t *object = dt_canvas_object_at(view->canvas, idx);
+    if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) continue;
+    if(!(object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT)) continue;
+    const double natural = dt_canvas_paint_text_natural_height(cr, view->canvas, object);
+    if(!(natural > 0.0) || fabs(natural - object->height) < 0.01) continue;
+    object->height = natural;
+    dt_canvas_touch(view->canvas);
+  }
+}
+
 void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t pointerx, int32_t pointery)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  _apply_auto_heights(view, cr);
   const gboolean first_layout = view->width <= 0 || view->height <= 0;
   view->width = width;
   view->height = height;
