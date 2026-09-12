@@ -2698,9 +2698,13 @@ they are visible.
   uniform tiling every document had before. Three things follow and each is a trap if
   forgotten: the page under a point must be ASKED for (`dt_canvas_page_at()`) and never divided
   out, and it answers with the page on the left for a point in the gap; the page snapping
-  cannot use a period and gathers the real lines the neighbouring pages offer; and the trim,
-  the bleed and the export's output pages all belong to the SHEET, claimed by its first page so
-  a spread is emitted once however many of its pages a walk passes over. The **bind gutter** is
+  cannot use a period and gathers the real lines the neighbouring pages offer; and the trim and the
+  bleed GUIDES belong to the sheet while the EXPORT cuts at the folds, one leaf per canvas
+  page -- a spread is how the plane is laid out, not how the press prints, since the press
+  prints leaves and the binder folds them. The bind gutter is what a fold gets instead of a
+  bleed, and behaves identically: content carried past the cut line, facing inward, so the
+  strip either side of a fold is printed on both leaves and nothing is scaled. Each of a
+  leaf's four sides owes the bleed or the bind, never both. The **bind gutter** is
   the binding's allowance inside a page at a fold ONLY, which is why
   `dt_canvas_page_margin_rect()` exists beside the symmetric `dt_canvas_page_guide_rect()`.
 - **A page size is an index into one appended-only table** (`dt_canvas_paper_points()`), and

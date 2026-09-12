@@ -702,8 +702,16 @@ under a point is asked for (`dt_canvas_page_at()`) rather than divided out, and 
 the page on the left for a point that falls in the gap between two sheets. **The page snapping
 cannot use a period** either: it gathers the real lines the pages around each edge offer --
 their borders, their margins with the bind gutter where it applies, and their sheet's bleed.
-And **the export emits one output page per sheet**, claimed by the sheet's first page so a
-spread is written once however many of its pages the walk passes over.
+And **the export cuts at the FOLDS, one leaf per canvas page** -- a spread is how the plane is
+laid out, not how the press prints, because the press prints leaves and the binder folds them.
+What the fold gets instead is the **bind gutter, which behaves exactly as a bleed does**:
+content carried past the cut line, only facing inward. The strip either side of a fold is
+therefore printed on BOTH leaves, so the part of a picture the binding swallows is still there
+on each. Nothing is scaled for it -- a frame lands exactly where the canvas shows it, and the
+leaf simply comes out that much wider, the same way a bleed already makes it wider -- which is
+the answer to the question the geometry poses: the page keeps its trim size and the raster
+grows, rather than the content being squeezed into the trim and distorted. A fold is not cut,
+so it takes no bleed; each of a leaf's four sides owes whichever of the two applies to it.
 
 **A canvas with no page size exports as ONE page around everything on it**, grown by the
 canvas's margin -- the margin has no page edge to sit inside there, so it becomes the white
