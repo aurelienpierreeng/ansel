@@ -991,6 +991,90 @@ static double _flowed_height_with_obstacle_below_the_top(const double offset)
   return flowed;
 }
 
+static void _a_frame_standing_just_outside_a_column_still_pushes_its_text(void **state)
+{
+  (void)state;
+  /*
+   * Coverage is only ever sampled at a cell of the occupancy grid, so a grid stopping at the
+   * text area cannot know about a frame standing just beyond it: no cell is covered, the
+   * dilation of nothing is nothing, and the frame pushed the text not at all however wide a
+   * gap was asked for. The grid is grown by the furthest anything can reach into it.
+   */
+  double heights[2] = { 0.0, 0.0 };
+  const float gaps[2] = { 100.0f, 300.0f };
+  for(int pass = 0; pass < 2; pass++)
+  {
+    dt_canvas_t *canvas = dt_canvas_new();
+    assert_non_null(canvas);
+    dt_canvas_object_t *text = dt_canvas_add_text(
+        canvas, 0.0, 0.0, 400.0, 900.0,
+        "Typography on an infinite plane demands that a paragraph break its lines the same way whatever "
+        "the zoom, because the page is the thing being designed and the screen is only a window onto it.");
+    assert_non_null(text);
+    text->text.padding = 0.0f;
+    text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND | DT_CANVAS_TEXT_OPTICAL_MARGINS;
+    text->text.wrap_standoff = gaps[pass];
+    // Spanning the column's whole height, its right edge 50 units clear of the text area's
+    // left edge at -200. It touches no cell of the column; only the gap reaches in.
+    dt_canvas_object_t *beside = dt_canvas_add_text(canvas, -325.0, 0.0, 150.0, 900.0, "");
+    assert_non_null(beside);
+    beside->border_width = 0.0f;
+
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+    cairo_t *cr = cairo_create(surface);
+    heights[pass] = dt_canvas_paint_text_natural_height(cr, canvas, text);
+    cairo_destroy(cr);
+    cairo_surface_destroy(surface);
+    dt_canvas_free(canvas);
+  }
+  // 100 units of gap clears the 50 that separate them and takes 50 off the measure; 300 takes
+  // 250, so the same text needs more lines.
+  assert_true(heights[0] > 0.0);
+  assert_true(heights[1] > heights[0]);
+}
+
+static void _the_gap_around_an_obstacle_is_a_disc_not_a_square(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 0.0, 0.0, 400.0, 600.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+      "zoom, because the page is the thing being designed and the screen is only a window onto it.");
+  assert_non_null(text);
+  text->text.padding = 0.0f;
+  // Optical margins keep BOTH measurements on the line-by-line engine: without an obstacle the
+  // wrap flag alone falls back to the plain paragraph layout, and the two engines do not agree
+  // on a height to the last hundredth.
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND | DT_CANVAS_TEXT_OPTICAL_MARGINS;
+  text->text.wrap_standoff = 200.0f;
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double alone = dt_canvas_paint_text_natural_height(cr, canvas, text);
+
+  /*
+   * A small frame off the text area's top-left CORNER, 150 units clear on each axis. Its
+   * diagonal distance to the area is 212, beyond the 200 the gap allows, so a disc of that
+   * radius does not touch the column and the text must lay out exactly as it did alone. A
+   * separable max filter is a SQUARE instead: it reaches 200 along each axis independently,
+   * its corner covers everything within 283, and it would take a bite out of the first lines.
+   * That is the same square that made the clear space widest where a shape's edge slants and
+   * tightest where it runs straight -- a gutter that would not hold still along a cut.
+   */
+  dt_canvas_object_t *corner = dt_canvas_add_text(canvas, -370.0, -470.0, 40.0, 40.0, "");
+  assert_non_null(corner);
+  corner->border_width = 0.0f;
+  const double with_corner = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+
+  assert_true(alone > 0.0);
+  assert_float_equal(alone, with_corner, 0.01);
+  dt_canvas_free(canvas);
+}
+
 static void _text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette(void **state)
 {
   (void)state;
@@ -1114,6 +1198,8 @@ int main(void)
     cmocka_unit_test(_the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map),
     cmocka_unit_test(_an_auto_height_frame_grows_downward_and_settles),
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
+    cmocka_unit_test(_the_gap_around_an_obstacle_is_a_disc_not_a_square),
+    cmocka_unit_test(_a_frame_standing_just_outside_a_column_still_pushes_its_text),
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),

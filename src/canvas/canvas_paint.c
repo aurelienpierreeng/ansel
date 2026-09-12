@@ -1589,57 +1589,6 @@ static void _obstacles_free(dt_text_obstacles_t *obstacles)
 }
 
 /**
- * Dilate an occupancy grid in place by a rectangle of cells.
- *
- * Separable and counted, not stamped: a cell is covered if the band of `grow` cells either
- * side of it holds one, which a prefix sum answers in a subtraction. Stamping a rectangle per
- * covered cell instead is the same picture for `grow` squared times the work -- at a 75-unit
- * border on a three-unit grid that is 25 cells each way, 2601 bytes written per covered cell.
- */
-static void _obstacles_dilate(uint8_t *cells, const int columns, const int rows, const int grow_x,
-                              const int grow_y)
-{
-  if((grow_x <= 0 && grow_y <= 0) || IS_NULL_PTR(cells)) return;
-  const int span = MAX(columns, rows);
-  int32_t *sums = g_malloc0(sizeof(int32_t) * (size_t)(span + 1));
-  uint8_t *line = g_malloc0((size_t)span);
-  if(IS_NULL_PTR(sums) || IS_NULL_PTR(line))
-  {
-    dt_free(sums);
-    dt_free(line);
-    return;
-  }
-  if(grow_x > 0)
-    for(int row = 0; row < rows; row++)
-    {
-      uint8_t *const at = cells + (size_t)row * columns;
-      for(int column = 0; column < columns; column++) sums[column + 1] = sums[column] + (at[column] ? 1 : 0);
-      for(int column = 0; column < columns; column++)
-      {
-        const int first = MAX(column - grow_x, 0);
-        const int last = MIN(column + grow_x, columns - 1);
-        line[column] = sums[last + 1] - sums[first] > 0 ? 1 : 0;
-      }
-      memcpy(at, line, (size_t)columns);
-    }
-  if(grow_y > 0)
-    for(int column = 0; column < columns; column++)
-    {
-      for(int row = 0; row < rows; row++)
-        sums[row + 1] = sums[row] + (cells[(size_t)row * columns + column] ? 1 : 0);
-      for(int row = 0; row < rows; row++)
-      {
-        const int first = MAX(row - grow_y, 0);
-        const int last = MIN(row + grow_y, rows - 1);
-        line[row] = sums[last + 1] - sums[first] > 0 ? 1 : 0;
-      }
-      for(int row = 0; row < rows; row++) cells[(size_t)row * columns + column] = line[row];
-    }
-  dt_free(sums);
-  dt_free(line);
-}
-
-/**
  * How far past its silhouette an obstacle actually PAINTS, in canvas units.
  *
  * The silhouette is the cutout, and a frame draws more than that: a border band dilated
@@ -1661,6 +1610,103 @@ static double _obstacle_reach(const dt_canvas_t *canvas, const dt_canvas_object_
     reach += (double)shadow.blur + hypot((double)shadow.offset_x, (double)shadow.offset_y);
   }
   return reach;
+}
+
+/**
+ * One dimension of Felzenszwalb and Huttenlocher's squared Euclidean distance transform, on a
+ * lattice whose step is `scale` canvas units, so a grid of oblong cells still measures a true
+ * distance.
+ */
+static void _obstacles_distance_1d(const float *f, float *out, int *vertices, float *boundaries, const int n,
+                                   const float scale)
+{
+  const float step = scale * scale;
+  int k = 0;
+  vertices[0] = 0;
+  boundaries[0] = -INFINITY;
+  boundaries[1] = INFINITY;
+  for(int q = 1; q < n; q++)
+  {
+    float crossing = 0.0f;
+    while(TRUE)
+    {
+      const int v = vertices[k];
+      crossing = ((f[q] + step * q * q) - (f[v] + step * v * v)) / (2.0f * step * (q - v));
+      if(crossing > boundaries[k] || k == 0) break;
+      k--;
+    }
+    k++;
+    vertices[k] = q;
+    boundaries[k] = crossing;
+    boundaries[k + 1] = INFINITY;
+  }
+  k = 0;
+  for(int q = 0; q < n; q++)
+  {
+    while(boundaries[k + 1] < q) k++;
+    const float away = scale * (float)(q - vertices[k]);
+    out[q] = away * away + f[vertices[k]];
+  }
+}
+
+/**
+ * Grow an occupancy grid in place by `reach` canvas units, as a DISC.
+ *
+ * A separable max filter is a SQUARE, and a square grows an edge by `reach` along the axes and
+ * by `reach * sqrt(2)` along a diagonal -- so the clear space a text column keeps is widest
+ * exactly where the shape's edge slants and tightest where it runs straight, which reads as a
+ * gutter that will not hold still along the cut. This module already learned that once, for a
+ * cut frame's border band, and the answer is the same: the Euclidean distance to the covered
+ * cells, thresholded at the reach. The grid's cells are not square -- the column count is
+ * capped -- so the distance is taken in canvas units, one scale per axis.
+ */
+static void _obstacles_dilate(uint8_t *cells, const int columns, const int rows, const double cell_x,
+                              const double cell_y, const double reach)
+{
+  if(!(reach > 0.0) || IS_NULL_PTR(cells)) return;
+  const size_t count = (size_t)columns * rows;
+  const int span = MAX(columns, rows);
+  float *distance = g_malloc0(sizeof(float) * count);
+  float *line = g_malloc0(sizeof(float) * (size_t)span);
+  float *transformed = g_malloc0(sizeof(float) * (size_t)span);
+  float *boundaries = g_malloc0(sizeof(float) * (size_t)(span + 1));
+  int *vertices = g_malloc0(sizeof(int) * (size_t)span);
+  if(IS_NULL_PTR(distance) || IS_NULL_PTR(line) || IS_NULL_PTR(transformed) || IS_NULL_PTR(boundaries)
+     || IS_NULL_PTR(vertices))
+  {
+    dt_free(distance);
+    dt_free(line);
+    dt_free(transformed);
+    dt_free(boundaries);
+    dt_free(vertices);
+    return;
+  }
+  // Zero on the covered cells, out of reach elsewhere; the two passes then give every cell the
+  // squared distance to the nearest covered one. The sentinel is the grid's own diagonal
+  // squared rather than a huge constant, so a float keeps its digits through the arithmetic.
+  const double diagonal = (double)columns * cell_x + (double)rows * cell_y;
+  const float unreached = (float)(diagonal * diagonal);
+  for(size_t idx = 0; idx < count; idx++) distance[idx] = cells[idx] ? 0.0f : unreached;
+  for(int row = 0; row < rows; row++)
+  {
+    float *const at = distance + (size_t)row * columns;
+    _obstacles_distance_1d(at, transformed, vertices, boundaries, columns, (float)cell_x);
+    memcpy(at, transformed, sizeof(float) * (size_t)columns);
+  }
+  for(int column = 0; column < columns; column++)
+  {
+    for(int row = 0; row < rows; row++) line[row] = distance[(size_t)row * columns + column];
+    _obstacles_distance_1d(line, transformed, vertices, boundaries, rows, (float)cell_y);
+    for(int row = 0; row < rows; row++) distance[(size_t)row * columns + column] = transformed[row];
+  }
+  const float limit = (float)(reach * reach);
+  for(size_t idx = 0; idx < count; idx++)
+    if(distance[idx] <= limit) cells[idx] = 1;
+  dt_free(distance);
+  dt_free(line);
+  dt_free(transformed);
+  dt_free(boundaries);
+  dt_free(vertices);
 }
 
 /** Build the map; FALSE when nothing stands over the frame and the caller may lay out plainly. */
@@ -1690,9 +1736,13 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
   {
     const dt_canvas_object_t *other = dt_canvas_object_at(canvas, idx);
     if(!dt_canvas_object_is_frame(other) || (other->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
-    const dt_canvas_rect_t reach = dt_canvas_object_bounds(other);
-    if(reach.x - standoff > bounds.x + bounds.width || reach.x + reach.width + standoff < bounds.x) continue;
-    if(reach.y - standoff > bounds.y + bounds.height || reach.y + reach.height + standoff < bounds.y) continue;
+    // Grown by the gap AND by what the obstacle paints past its own bounds: a shadow reaches
+    // outside the frame, so a frame further off than the gap can still lay something over the
+    // column, and dropping it here would have made that invisible to everything downstream.
+    const dt_canvas_rect_t box = dt_canvas_object_bounds(other);
+    const double reach = standoff + _obstacle_reach(canvas, other);
+    if(box.x - reach > bounds.x + bounds.width || box.x + box.width + reach < bounds.x) continue;
+    if(box.y - reach > bounds.y + bounds.height || box.y + box.height + reach < bounds.y) continue;
     g_ptr_array_add(over, (gpointer)other);
   }
   if(over->len == 0)
@@ -1701,16 +1751,29 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
     return FALSE;
   }
 
-  obstacles->columns = CLAMP((int)ceil(inner_width / TEXT_FLOW_CELL), 1, TEXT_FLOW_MAX_CELLS);
-  obstacles->rows = CLAMP((int)ceil(inner_height / TEXT_FLOW_CELL), 1, TEXT_FLOW_MAX_CELLS);
-  obstacles->cell_x = inner_width / obstacles->columns;
-  obstacles->cell_y = inner_height / obstacles->rows;
+  /*
+   * The grid spans the text area GROWN by the furthest anything can reach into it. Coverage is
+   * only ever sampled at a cell, so a grid stopping at the text area cannot know about a frame
+   * standing just outside it: no cell is covered, the dilation of nothing is nothing, and an
+   * obstacle a hair beyond the column pushed the text not at all -- however wide a gap was
+   * asked for. The margin is that gap plus the most any one obstacle paints past its bounds.
+   */
+  double margin = 0.0;
+  for(guint idx = 0; idx < over->len; idx++)
+    margin = fmax(margin, _obstacle_reach(canvas, g_ptr_array_index(over, idx)));
+  margin += standoff;
+  const double mapped_width = inner_width + 2.0 * margin;
+  const double mapped_height = inner_height + 2.0 * margin;
+  obstacles->columns = CLAMP((int)ceil(mapped_width / TEXT_FLOW_CELL), 1, TEXT_FLOW_MAX_CELLS);
+  obstacles->rows = CLAMP((int)ceil(mapped_height / TEXT_FLOW_CELL), 1, TEXT_FLOW_MAX_CELLS);
+  obstacles->cell_x = mapped_width / obstacles->columns;
+  obstacles->cell_y = mapped_height / obstacles->rows;
   // The map spans the TEXT AREA, so its origin is that area's corner and not the frame's:
   // taken from the frame while the extent is the inner size, every obstacle sits one padding
   // to the left of where the lines think it is, and the last padding of the area has no map
   // under it at all.
-  obstacles->origin_x = -object->width * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_LEFT];
-  obstacles->origin_y = -object->height * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_TOP];
+  obstacles->origin_x = -object->width * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_LEFT] - margin;
+  obstacles->origin_y = -object->height * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_TOP] - margin;
   obstacles->covered = g_malloc0((size_t)obstacles->columns * obstacles->rows);
 
   /*
@@ -1780,9 +1843,7 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
       }
     }
     const double reach = _obstacle_reach(canvas, other);
-    _obstacles_dilate(own, obstacles->columns, obstacles->rows,
-                      (int)ceil(reach / fmax(obstacles->cell_x, 1e-6)),
-                      (int)ceil(reach / fmax(obstacles->cell_y, 1e-6)));
+    _obstacles_dilate(own, obstacles->columns, obstacles->rows, obstacles->cell_x, obstacles->cell_y, reach);
     for(size_t cell = 0; cell < (size_t)obstacles->columns * obstacles->rows; cell++)
       if(own[cell]) obstacles->covered[cell] = 1;
   }
@@ -1792,14 +1853,10 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
   dt_free(rasters);
   g_ptr_array_free(over, TRUE);
 
-  // The gap is grown on the MAP rather than asked of each shape, so it costs the same whatever
-  // the shape is and works for a raster as well as for a rectangle. Separable, so the corner
-  // of an obstacle keeps the gap along the diagonal too -- a little more than along the axes,
-  // which is what a rectangular offset does in every layout application.
-  // The GAP the user asked for, on top of every obstacle's own reach.
-  _obstacles_dilate(obstacles->covered, obstacles->columns, obstacles->rows,
-                    (int)ceil(standoff / fmax(obstacles->cell_x, 1e-6)),
-                    (int)ceil(standoff / fmax(obstacles->cell_y, 1e-6)));
+  // The GAP the user asked for, on top of every obstacle's own reach. It is a disc too, so the
+  // clear space is the one the user set whatever way the shape's edge happens to run.
+  _obstacles_dilate(obstacles->covered, obstacles->columns, obstacles->rows, obstacles->cell_x,
+                    obstacles->cell_y, standoff);
   return TRUE;
 }
 

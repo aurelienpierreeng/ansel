@@ -372,12 +372,24 @@ agreed with its own map *perfectly* and the picture still overlapped is the tell
 describes the wrong thing cannot be found by checking the layout against it.
 
 They are baked into a coarse occupancy map in the frame's own local coordinates, three units
-to a cell, and a line asks it for the widest clear run across the band it is about to occupy.
+to a cell, spanning the text area GROWN by the furthest anything can reach into it -- coverage
+is only ever sampled AT a cell, so a map stopping at the text area cannot know about a frame
+standing just outside it, and such a frame pushed the text not at all however wide a gap was
+asked for. Every growth of that map is a DISC, through the Euclidean distance to the covered
+cells (Felzenszwalb-Huttenlocher, two passes, one scale per axis since the cells are oblong).
+A separable max filter is a square, and a square grows an edge by the reach along the axes and
+by `reach * sqrt(2)` along a diagonal: the clear space is then widest exactly where the shape's
+edge slants and tightest where it runs straight, which reads as a gutter that will not hold
+still along the cut. Measured on a 75-unit border, the square reached 34.2 units past the disc
+against the 31.1 predicted for a 45-degree edge. This module learned the same thing once
+already for a cut frame's border band; the text flow reintroduced it.
+
+A line asks that map for the widest clear run across the band it is about to occupy.
 ONE run per line, deliberately: a line split either side of something standing in the middle
 of a column is a different feature, and this is the choice a page-layout application offers as
-"the largest area". The map spans the TEXT AREA, so its origin is that area's corner and not
-the frame's -- taken from the frame while the extent is the inner size, every obstacle sits
-one padding to the left of where the lines think it is. The GAP the text keeps around what it
+"the largest area". The map is anchored on the TEXT AREA's corner, less the margin above, and
+not on the frame's -- taken from the frame while the extent is the inner size, every obstacle
+sits one padding to the left of where the lines think it is. The GAP the text keeps around what it
 avoids is the user's ("Gap" on the property bar, `wrap_standoff` in the document) and is grown
 on the merged map, on top of every obstacle's own reach, by a separable dilation rather than
 asked of each shape: it then costs the same

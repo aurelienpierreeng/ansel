@@ -3437,10 +3437,21 @@ they are visible.
   diagnosis only came from comparing the run against the map and finding them in exact
   agreement -- a layout that matches its own map perfectly and still overlaps is a sign that
   the MAP is describing the wrong thing, not that the layout is wrong.
-- **A dilation of the occupancy grid is counted, never stamped.** A cell is covered if the band
-  either side of it holds one, which a prefix sum answers in a subtraction; stamping a
-  rectangle per covered cell is the same picture for `grow` squared times the work, and a
-  75-unit border on a three-unit grid is 25 cells each way, 2601 bytes per covered cell.
+- **The occupancy grid is grown by a DISC, never a separable max filter.** This module already
+  learned it once, for a cut frame's border band, and the text flow reintroduced the square: a
+  square grows an edge by the reach along the axes and by `reach * sqrt(2)` along a diagonal,
+  so the clear space a column keeps is widest exactly where the shape's edge slants and
+  tightest where it runs straight -- reported as a gutter that will not hold still along the
+  cut. Measured on the reported picture, the square reached **34.2 canvas units** past the disc
+  against the `75 * (sqrt(2) - 1) = 31.1` predicted for a 45-degree edge, the rest being cell
+  quantisation. It is the Euclidean distance to the covered cells, thresholded at the reach,
+  Felzenszwalb-Huttenlocher in two passes with one scale per axis since the cells are oblong.
+- **The grid spans the text area GROWN by the furthest anything reaches into it.** Coverage is
+  only ever sampled AT a cell, so a grid stopping at the text area cannot know about a frame
+  standing just outside it: no cell is covered, the dilation of nothing is nothing, and a frame
+  a hair beyond the column pushed the text not at all, however wide a gap was asked for. The
+  same omission was in the obstacle collection filter, which grew the text's bounds by the gap
+  alone and so dropped a frame whose SHADOW reached in from further off.
 - **An obstacle's raster is sampled at the occupancy grid's own pitch.** A flat pixel cap reads
   as prudence and is coarser than the grid on any large frame -- 192 px over a 1680-unit frame
   is 8.75 units a sample against a 3-unit cell -- which squares off a curve and lets a line in
