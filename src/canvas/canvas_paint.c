@@ -1563,7 +1563,7 @@ static void _show_layout(cairo_t *cr, PangoLayout *layout, const gboolean optica
 #define TEXT_FLOW_CELL 3.0     ///< canvas units per occupancy cell: finer than a glyph, coarse enough to be free
 #define TEXT_FLOW_MAX_CELLS 512 ///< per axis, so a huge frame costs a coarser map rather than the world
 #define TEXT_FLOW_MAX_LINES 4096
-#define TEXT_FLOW_MASK_SIZE 192.0 ///< an obstacle's cutout raster, longest side: finer than the cells sample it
+#define TEXT_FLOW_MASK_MAX 1024 ///< an obstacle's cutout raster, longest side: a ceiling, not a target
 
 /**
  * Where the frames laid OVER a text frame stand, as a coarse occupancy map in the text
@@ -1652,10 +1652,17 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
   {
     const dt_canvas_object_t *other = g_ptr_array_index(over, idx);
     if(other->mask.shape == DT_CANVAS_MASK_NONE) continue;
-    const double longest = fmax(other->width, other->height);
-    const double scale = longest > 0.0 ? MIN(TEXT_FLOW_MASK_SIZE / longest, 1.0) : 1.0;
-    const int mask_width = MAX((int)lround(other->width * scale), 2);
-    const int mask_height = MAX((int)lround(other->height * scale), 2);
+    /*
+     * One raster pixel per occupancy cell, so the silhouette the cells read is at least as
+     * fine as the cells themselves. A flat cap instead makes the raster COARSER than the grid
+     * on any large frame -- at 192 px a 1680-unit frame samples every 8.75 units against a
+     * 3-unit cell, which staircases a curve and lets a line in by most of a step. That is a
+     * shape's rounded edge coming out square, which is where the text ran into it.
+     */
+    const double cells_x = other->width / TEXT_FLOW_CELL;
+    const double cells_y = other->height / TEXT_FLOW_CELL;
+    const int mask_width = CLAMP((int)ceil(cells_x), 2, TEXT_FLOW_MASK_MAX);
+    const int mask_height = CLAMP((int)ceil(cells_y), 2, TEXT_FLOW_MASK_MAX);
     rasters[idx] = dt_canvas_render_mask(other, mask_width, mask_height, 0, 0);
   }
 
@@ -2050,6 +2057,39 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   _show_layout(cr, layout, FALSE);
   g_object_unref(layout);
   cairo_restore(cr);
+}
+
+#define TEXT_AUTO_HEIGHT_ROUNDS 8
+
+gboolean dt_canvas_paint_text_fit_height(const dt_canvas_t *canvas, dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return FALSE;
+  // Measured on a scratch context of its own: the height is a property of the document, so it
+  // must not depend on which viewport, zoom or screen happened to ask for it.
+  cairo_surface_t *scratch = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+  cairo_t *cr = cairo_create(scratch);
+  gboolean moved = FALSE;
+  /*
+   * Iterated, because growing the frame opens room below that more text can flow into, which
+   * asks for a little more height again. Downward growth makes that monotone -- the obstacles
+   * above every existing line stay where they are -- so it settles; measured on a frame beside
+   * a cut picture, 616 -> 1191 -> 1045 and done. Growing about the CENTRE instead moved the
+   * top edge, changed what the first lines had to avoid, and gave a two-cycle (616 -> 1191 ->
+   * 681 -> 1191) the frame flipped between on every repaint.
+   */
+  for(int round = 0; round < TEXT_AUTO_HEIGHT_ROUNDS; round++)
+  {
+    const double natural = dt_canvas_paint_text_natural_height(cr, canvas, object);
+    if(!(natural > 0.0) || fabs(natural - object->height) < 0.01) break;
+    const double growth = natural - object->height;
+    object->x -= growth * 0.5 * sin(object->rotation);
+    object->y += growth * 0.5 * cos(object->rotation);
+    object->height = natural;
+    moved = TRUE;
+  }
+  cairo_destroy(cr);
+  cairo_surface_destroy(scratch);
+  return moved;
 }
 
 double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object)

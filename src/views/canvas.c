@@ -1012,6 +1012,26 @@ static void _export_canvas(dt_view_t *self)
 
 /* --- text and colour dialogs ------------------------------------------------------- */
 
+/**
+ * Fit an auto-height text frame to its text, at EDIT time. Every path that changes what the
+ * text or its box is owes this call; nothing measures a frame at paint time, because a frame
+ * that flows around its neighbours would then re-measure into a different answer each frame.
+ */
+static void _auto_height_settle(dt_canvas_view_t *view, dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return;
+  if(!(object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT)) return;
+  dt_canvas_paint_text_fit_height(view->canvas, object);
+}
+
+/** Every auto-height frame, for a gesture that moved geometry some other frame flows around. */
+static void _auto_height_settle_all(dt_canvas_view_t *view)
+{
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
+    _auto_height_settle(view, dt_canvas_object_at(view->canvas, idx));
+}
+
 static void _edit_text(dt_view_t *self, dt_canvas_object_t *object)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -1069,15 +1089,9 @@ static void _edit_text(dt_view_t *self, dt_canvas_object_t *object)
         g_strlcpy(object->text.font, font, sizeof(object->text.font));
       dt_free(font);
     }
-    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(fit_height)))
-    {
-      cairo_surface_t *scratch = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
-      cairo_t *cr = cairo_create(scratch);
-      const double natural = dt_canvas_paint_text_natural_height(cr, view->canvas, object);
-      cairo_destroy(cr);
-      cairo_surface_destroy(scratch);
-      if(natural > 0.0) object->height = natural;
-    }
+    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(fit_height))
+       || (object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT))
+      dt_canvas_paint_text_fit_height(view->canvas, object);
     dt_canvas_touch(view->canvas);
     _record_undo(self, before);
   }
@@ -1156,6 +1170,7 @@ static gboolean _load_sidecar_text(dt_canvas_view_t *view, dt_canvas_object_t *t
   if(!IS_NULL_PTR(note_path) && g_file_get_contents(note_path, &contents, NULL, NULL))
   {
     dt_canvas_text_set_markdown(view->canvas, text, contents);
+    _auto_height_settle(view, text);
     loaded = TRUE;
   }
   dt_free(contents);
@@ -1220,6 +1235,7 @@ static dt_canvas_object_t *_add_sidecar_note(dt_canvas_view_t *view, dt_canvas_o
       return NULL;
     }
     dt_canvas_text_set_markdown(view->canvas, text, _("*No text note found for this image.*"));
+    _auto_height_settle(view, text);
   }
   return text;
 }
@@ -2179,6 +2195,7 @@ static void _color_to_button(GtkWidget *button, const dt_canvas_color_t *color)
   dt_canvas_t *before = _begin_edit(view);
 
 #define BAR_EDIT_END()                                                                                     \
+  _auto_height_settle(view, object);                                                                       \
   dt_canvas_touch(view->canvas);                                                                           \
   _record_undo(self, before);                                                                              \
   _bars_request(self);                                                                                     \
@@ -2270,6 +2287,7 @@ static void _bar_text_margin_changed(GtkSpinButton *spin, gpointer data)
   for(int side = 0; side < 4; side++)
     object->text.margins[side] = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->text_margin[side]));
   (void)spin;
+  _auto_height_settle(view, object);
   dt_canvas_touch(view->canvas);
   _record_undo(self, before);
   _bars_request(self);
@@ -2296,6 +2314,7 @@ static void _bar_text_feature_toggled(GtkToggleButton *check, gpointer data)
     wanted[feature] = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(view->text_feature[feature]));
   dt_canvas_text_features_compose(wanted, object->text.features, sizeof(object->text.features));
   (void)check;
+  _auto_height_settle(view, object);
   dt_canvas_touch(view->canvas);
   _record_undo(self, before);
   dt_control_queue_redraw_center();
@@ -4120,25 +4139,9 @@ static void _paint_badge(cairo_t *cr, const dt_canvas_view_t *view, const dt_can
  * height that actually MOVED touches the canvas, so this settles on the first frame and does
  * not hand the painter a new generation for ever.
  */
-static void _apply_auto_heights(dt_canvas_view_t *view, cairo_t *cr)
-{
-  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
-  for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
-  {
-    dt_canvas_object_t *object = dt_canvas_object_at(view->canvas, idx);
-    if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) continue;
-    if(!(object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT)) continue;
-    const double natural = dt_canvas_paint_text_natural_height(cr, view->canvas, object);
-    if(!(natural > 0.0) || fabs(natural - object->height) < 0.01) continue;
-    object->height = natural;
-    dt_canvas_touch(view->canvas);
-  }
-}
-
 void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t pointerx, int32_t pointery)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  _apply_auto_heights(view, cr);
   const gboolean first_layout = view->width <= 0 || view->height <= 0;
   view->width = width;
   view->height = height;
@@ -4616,6 +4619,10 @@ static void _end_gesture(dt_view_t *self)
   {
     if(view->drag_moved)
     {
+      // The gesture is over, so the geometry is final: fit every auto-height frame to it now,
+      // once. A frame that was moved, resized or rotated changes what its own text flows
+      // around, and so does one that merely passed over another frame's text.
+      _auto_height_settle_all(view);
       dt_canvas_touch(view->canvas);
       _record_undo(self, view->drag_snapshot);
       view->drag_snapshot = NULL;

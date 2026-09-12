@@ -991,6 +991,37 @@ static double _flowed_height_with_obstacle_below_the_top(const double offset)
   return flowed;
 }
 
+static void _an_auto_height_frame_grows_downward_and_settles(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 200.0, 150.0, 360.0, 120.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+      "zoom, because the page is the thing being designed and the screen is only a window onto it, and a "
+      "column set beside a picture must keep clear of it line by line.");
+  assert_non_null(text);
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND | DT_CANVAS_TEXT_AUTO_HEIGHT;
+  text->text.wrap_standoff = 8.0f;
+  // Over the frame's upper half, so what the first lines must avoid depends on where the top
+  // edge is -- which is the whole point: growing the frame must not move that edge.
+  dt_canvas_object_t *over = dt_canvas_add_text(canvas, 120.0, 120.0, 200.0, 120.0, "");
+  assert_non_null(over);
+
+  const double top_before = text->y - text->height * 0.5;
+  assert_true(dt_canvas_paint_text_fit_height(canvas, text));
+  const double top_after = text->y - text->height * 0.5;
+  // The frame grew into the room below it; the edge the user placed did not move.
+  assert_true(text->height > 120.0);
+  assert_float_equal(top_before, top_after, 0.01);
+  // And it settled: asking again changes nothing. Growing about the CENTRE instead moved the
+  // top, changed the obstacles above the first lines, and gave a two-cycle the frame flipped
+  // between on every repaint.
+  assert_false(dt_canvas_paint_text_fit_height(canvas, text));
+  dt_canvas_free(canvas);
+}
+
 static void _the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map(void **state)
 {
   (void)state;
@@ -1048,6 +1079,7 @@ int main(void)
     cmocka_unit_test(_a_polygon_node_steers_its_own_curve),
     cmocka_unit_test(_text_flows_around_what_is_laid_over_it),
     cmocka_unit_test(_the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map),
+    cmocka_unit_test(_an_auto_height_frame_grows_downward_and_settles),
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),

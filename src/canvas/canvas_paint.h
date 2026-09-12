@@ -95,6 +95,20 @@ void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_can
  */
 double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object);
 
+/**
+ * @brief Resize a text frame to the text it holds, ONCE, at edit time.
+ *
+ * Never per frame: a text frame that flows around what is laid over it has a height that
+ * depends on the obstacles above it, and those depend on where its top edge is, so measuring
+ * on every repaint let the two chase each other. The frame grows DOWNWARD -- its top edge is
+ * where the user put it -- and the height is iterated to a fixed point here rather than one
+ * step per paint. The caller decides whether the frame wants this; the auto-height flag is
+ * not read here, so the atelier's explicit "fit height" action shares the entry.
+ *
+ * @return TRUE when the object's geometry was changed, so the caller may touch the document.
+ */
+gboolean dt_canvas_paint_text_fit_height(const dt_canvas_t *canvas, dt_canvas_object_t *object);
+
 #ifdef __cplusplus
 }
 #endif
