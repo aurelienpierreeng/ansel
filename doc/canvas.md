@@ -304,11 +304,28 @@ depends on everything that can change it. Only a height that actually moved touc
 canvas, so it settles on the first frame instead of handing the painter a new generation for
 ever.
 
-**OpenType features** are passed to Pango as it spells them -- `"liga 1, onum 1, smcp 1"` --
+**OpenType features** are stored as the string Pango reads -- `"liga 1, onum 1, smcp 1"` --
 which is the only way to reach a font's alternates, figures and ligature sets, since a font
-description cannot name them. Measured with `kern 0`, which every font has: a line of AVATAR
-Ta Wa Yo goes from 167 to 179 pixels wide. A feature the font does NOT ship is silently
-nothing, which is why a no-op here says more about the font than about the code.
+description cannot name them, and are SHOWN as a list of names to tick
+(`dt_canvas_text_feature_name()`, `..._features_parse()`, `..._features_compose()`). The
+string stays the stored form because that is what the renderer wants and what a file can carry
+without a table of its own; the names are the menu's business alone, so the list may be
+appended to freely. Measured with `kern 0`, which every font has: a line of AVATAR Ta Wa Yo
+goes from 167 to 179 pixels wide. A feature the font does NOT ship is silently nothing, which
+is why a no-op here says more about the font than about the code.
+
+**The layout is computed with METRICS HINTING OFF, and glyph grid-fitting with it.** The
+layer's context carries the target's font options and its matrix carries the ZOOM, so with
+hinting on every advance is rounded to a whole device pixel and the same paragraph is set
+differently at every zoom -- justified text, which redistributes the rounding across the line,
+is where it shows worst. Measured on a six-line justified paragraph, the last line's right
+edge wandered over four pixels between zoom 0.6 and 4, and holds to one -- the downsample's
+own noise -- unhinted.
+
+**A line is drawn through the ITER's extents, never its own.** A line's own extents are
+relative to where the line starts; it is `pango_layout_iter_get_line_extents()` that knows
+where the ALIGNMENT put it. Taken from the line, every line begins at the layout's left edge:
+invisible in ragged-right text, and centred text quietly stops being centred.
 
 A text frame also carries two things its font description cannot say. Its **line height** is a
 multiple of the leading the font asks for, and reaches Pango as the EXTRA space between lines

@@ -1869,6 +1869,79 @@ gboolean dt_canvas_paper_is_physical(const uint32_t paper)
   return FALSE;
 }
 
+/**
+ * The OpenType features worth a name in a menu, each with the four-letter tag Pango reads.
+ * Appended only: the stored form is the tag string, so the order here is nobody's business
+ * but the menu's.
+ */
+static const struct
+{
+  const char *tag;
+  const char *name;
+  const char *tooltip;
+} _text_features[] = {
+  { "liga", N_("Standard ligatures"), N_("The joined pairs a font draws for fi, fl and the like") },
+  { "dlig", N_("Discretionary ligatures"), N_("The decorative joins a font offers but does not use by default") },
+  { "calt", N_("Contextual alternates"), N_("Letters the font swaps depending on their neighbours") },
+  { "smcp", N_("Small capitals"), N_("Lower case drawn as capitals at lower-case height") },
+  { "c2sc", N_("Capitals to small capitals"), N_("Capitals drawn at small-capital height too") },
+  { "onum", N_("Old-style figures"), N_("Figures with ascenders and descenders, which sit in running text") },
+  { "lnum", N_("Lining figures"), N_("Figures all of cap height, which sit in tables and headings") },
+  { "tnum", N_("Tabular figures"), N_("Every figure the same width, so columns line up") },
+  { "pnum", N_("Proportional figures"), N_("Every figure its own width, which reads better in a sentence") },
+  { "zero", N_("Slashed zero"), N_("A zero told apart from a capital O") },
+  { "frac", N_("Fractions"), N_("Figures around a slash drawn as a proper fraction") },
+  { "sups", N_("Superscript"), N_("Figures and letters raised and reduced") },
+  { "subs", N_("Subscript"), N_("Figures and letters lowered and reduced") },
+  { "swsh", N_("Swashes"), N_("The flourished forms a font keeps for display") },
+  { "kern", N_("Kerning"), N_("The pair adjustments the font asks for; on by default in every font that has them") },
+};
+
+int dt_canvas_text_feature_count(void)
+{
+  return (int)MIN(sizeof(_text_features) / sizeof(_text_features[0]), (size_t)DT_CANVAS_TEXT_FEATURE_MAX);
+}
+
+const char *dt_canvas_text_feature_name(const int feature)
+{
+  if(feature < 0 || feature >= dt_canvas_text_feature_count()) return "";
+  return _(_text_features[feature].name);
+}
+
+const char *dt_canvas_text_feature_tooltip(const int feature)
+{
+  if(feature < 0 || feature >= dt_canvas_text_feature_count()) return "";
+  return _(_text_features[feature].tooltip);
+}
+
+void dt_canvas_text_features_parse(const char *features, gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX])
+{
+  for(int feature = 0; feature < DT_CANVAS_TEXT_FEATURE_MAX; feature++) wanted[feature] = FALSE;
+  if(IS_NULL_PTR(features) || features[0] == '\0') return;
+  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
+  {
+    // The composed form is always "<tag> 1", so this reads back exactly what was written and
+    // ignores anything else the string may hold rather than guessing at it.
+    gchar *token = g_strdup_printf("%s 1", _text_features[feature].tag);
+    wanted[feature] = strstr(features, token) != NULL;
+    dt_free(token);
+  }
+}
+
+void dt_canvas_text_features_compose(const gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX], char *features,
+                                     const size_t length)
+{
+  if(IS_NULL_PTR(features) || length == 0) return;
+  features[0] = '\0';
+  for(int feature = 0; feature < dt_canvas_text_feature_count(); feature++)
+  {
+    if(!wanted[feature]) continue;
+    if(features[0] != '\0') g_strlcat(features, ", ", length);
+    g_strlcat(features, _text_features[feature].tag, length);
+    g_strlcat(features, " 1", length);
+  }
+}
+
 void dt_canvas_text_margins(const dt_canvas_object_t *object, double margins[4])
 {
   const double uniform = IS_NULL_PTR(object) ? 0.0 : fmax((double)object->text.padding, 0.0);

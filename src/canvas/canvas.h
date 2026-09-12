@@ -922,6 +922,27 @@ gboolean dt_canvas_paper_is_physical(uint32_t paper);
  */
 void dt_canvas_text_margins(const dt_canvas_object_t *object, double margins[4]);
 
+#define DT_CANVAS_TEXT_FEATURE_MAX 16 ///< room for the table below to grow without moving anything
+
+/**
+ * @brief How many OpenType features are offered by name, and what each is called.
+ *
+ * The stored form stays the string Pango reads -- that is what the renderer wants and what a
+ * file can carry without a table of its own -- and these turn it into something a person can
+ * tick. A feature a font does not ship is silently nothing, which is a property of fonts and
+ * not of this list.
+ */
+int dt_canvas_text_feature_count(void);
+const char *dt_canvas_text_feature_name(int feature);
+const char *dt_canvas_text_feature_tooltip(int feature);
+
+/** @brief Which of the named features a stored Pango feature string asks for. */
+void dt_canvas_text_features_parse(const char *features, gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX]);
+
+/** @brief The Pango feature string for a set of named features; empty when none is asked for. */
+void dt_canvas_text_features_compose(const gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX], char *features,
+                                     size_t length);
+
 /** @brief Canvas units per inch: what the canvas holds, or 72 for a document from before the field. */
 double dt_canvas_resolution(const dt_canvas_t *canvas);
 
