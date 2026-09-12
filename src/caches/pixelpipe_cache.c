@@ -34,6 +34,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <errno.h>
 #include <inttypes.h>
 #include <stdarg.h>
 #include <glib.h>
@@ -46,10 +47,9 @@
 #include "caches/pixelpipe_cache_pressure.h"
 
 #if defined(__linux__)
-#include <errno.h>
-#include <poll.h>
-#include <sys/eventfd.h>
-#include <unistd.h>
+#include <poll.h>          // conditional-ok: only _pressure_watch_thread() uses it, inside this same #ifdef
+#include <sys/eventfd.h>   // conditional-ok: idem -- the eventfd that stops that thread
+#include <unistd.h>        // conditional-ok: idem -- close() and write() on its descriptors
 #endif
 #include "develop/pixelpipe_hb.h"
 #include "caches/pixelpipe_cache.h"
