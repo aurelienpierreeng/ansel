@@ -454,7 +454,8 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
   return id;
 }
 
-// Returns total system memory in kiloBytes
+// Returns total system memory in KiB: /proc/meminfo's "kB" is 1024 bytes, and the other
+// platforms divide a byte count by 1024.
 static inline size_t _get_total_memory()
 {
 #if defined(__linux__)
@@ -2426,7 +2427,7 @@ size_t dt_get_memory_pressure_floor(void)
 
 void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean init_gui)
 {
-  size_t physical_memory = _get_total_memory() * 1000;
+  size_t physical_memory = _get_total_memory() * 1024;
 
   // A container/cgroup memory limit (Flatpak sandbox, systemd slice, docker...) is
   // the envelope the kernel actually OOM-enforces on us: inside it, the machine's
