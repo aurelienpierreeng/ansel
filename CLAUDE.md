@@ -3407,6 +3407,33 @@ they are visible.
   measures a flat zero; and rebuild the layout ONLY when the run's width changes, or a plain
   paragraph costs one layout per line. Obstacles are the frames ABOVE the text in draw order,
   and each covers its SILHOUETTE (`dt_canvas_object_covers()`), never its bounding box.
+- **A text frame's height is fitted when it is EDITED, never while it paints.** Auto height
+  used to run in the view's expose, and for a frame that also flows around its neighbours that
+  closes a loop: an object is anchored at its CENTRE, so writing a new height lifts the top
+  edge by half the growth, the first lines then have different obstacles above them, the
+  paragraph re-wraps, and it asks for a different height again -- measured 616 -> 1191 -> 681
+  -> 1191, a two-cycle the frame flipped between on every repaint, which a zoom, a pan or a
+  hover each trigger one of. Reported as the text jumping and, in the tall state, running
+  across the very shape it was avoiding. `dt_canvas_paint_text_fit_height()` measures on a
+  scratch context of its own -- a height is a property of the DOCUMENT, not of the viewport
+  that happens to ask -- grows the frame DOWNWARD so the edge the user placed stays put, and
+  iterates to a fixed point, which downward growth makes monotone. Every path that changes
+  what the text or its box is owes the call, the end of a gesture included: a frame dragged
+  over a column changes that column's flow as surely as editing it does.
+- **A line is offered to the occupancy map in a band a LINE tall, and the first line has no
+  previous line to measure.** Taken from the last line it degenerates to nothing on line zero,
+  which placed the opening lines against a sliver of the map, gave them the full measure and
+  drew them straight through whatever stood just below the frame's top. The band starts at the
+  font's own ascent plus descent times the leading, and a line taller than the band it was
+  placed against is asked again -- the band only grows and the run only narrows, so one extra
+  pass settles it.
+- **An obstacle's raster is sampled at the occupancy grid's own pitch.** A flat pixel cap reads
+  as prudence and is coarser than the grid on any large frame -- 192 px over a 1680-unit frame
+  is 8.75 units a sample against a 3-unit cell -- which squares off a curve and lets a line in
+  by most of a step: a shape's rounded edge coming out straight is what the text ran into.
+- **The gap the text leaves around what it avoids is grown on the MAP**, by a separable
+  dilation, not asked of each shape: it then costs the same whatever the obstacle is and
+  reaches a raster as well as a rectangle.
 - **Text is laid out with METRICS HINTING OFF.** The layer's context carries the target's font
   options and its matrix carries the zoom, so with hinting on every advance is rounded to a
   whole device pixel and the same paragraph is set differently at every zoom -- measured, a

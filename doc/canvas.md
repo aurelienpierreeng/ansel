@@ -298,11 +298,32 @@ the alignment pins: the left for ragged-right and justified text, the right for 
 `_show_layout()` is `pango_cairo_show_layout()` spelled out when the flag is off, deliberately
 so, since one path cannot drift from itself.
 
-**Auto height** makes a frame take the height its text needs, applied once per frame in the
-view's expose rather than at every edit: the height depends on the laid-out text and the text
-depends on everything that can change it. Only a height that actually moved touches the
-canvas, so it settles on the first frame instead of handing the painter a new generation for
-ever.
+**Auto height** makes a frame take the height its text needs, and it is applied when the frame
+is EDITED, never while it paints. Measuring in the view's expose looks cheaper -- the height
+depends on the laid-out text and the text depends on everything that can change it, so letting
+the painter settle it seems to catch every case for free -- and for a frame that also flows
+around what is laid over it, it closes a loop. An object is anchored at its centre, so writing
+a new height lifts the top edge by half the growth; the first lines then have a different set
+of obstacles above them, the paragraph re-wraps, and it asks for a different height again.
+Measured on a column set beside a cut picture: 616 -> 1191 -> 681 -> 1191, a two-cycle the
+frame flipped between on every repaint, and a zoom, a pan or a hover is one repaint each. It
+was reported as the text jumping, "re-rendered with different size, wrapping and line width",
+and in the tall state the frame's top sits 288 units higher, so the opening lines clear the
+picture and run straight across it -- the same defect wearing its other face.
+
+`dt_canvas_paint_text_fit_height()` is therefore the whole of it. It measures on a scratch
+context of its own, because a height is a property of the DOCUMENT and must not depend on
+which viewport, zoom or screen asked; it grows the frame DOWNWARD, so the edge the user placed
+stays where they put it; and it iterates to a fixed point rather than taking one step per
+paint, which downward growth makes monotone -- every existing line keeps the obstacles it had
+and the height only opens room below. The same run settles in two: 616 -> 1191 -> 1045.
+
+Every path that changes what the text or its box is owes that call: each property-bar handler
+(through `BAR_EDIT_END()`), the text editor -- whose "fit height" button was this measurement
+open-coded, growing about the centre -- the sidecar note frames, and the end of any gesture
+that moved geometry, since a frame dragged over a column changes that column's flow as surely
+as editing the column does. Measured after: the same paragraph breaks at the same fourteen
+byte offsets at zoom 0.42, 0.55 and 1.1, at full and interactive quality alike.
 
 **OpenType features** are stored as the string Pango reads -- `"liga 1, onum 1, smcp 1"` --
 which is the only way to reach a font's alternates, figures and ligature sets, since a font
@@ -330,16 +351,41 @@ comma ends past the edge instead of sitting on it -- shifting a finished line, w
 the paragraph painter can do, hangs the leading edge only.
 
 The obstacles are the frames drawn ABOVE the text in draw order -- something behind the text
-is behind the text -- and what each covers is its SILHOUETTE, `dt_canvas_object_covers()`
-answering through `dt_canvas_object_silhouette_reach()`, so a circular cutout pushes the text
-along its curve and leaves the empty corner beside it usable. They are baked into a coarse
-occupancy map in the frame's own local coordinates, three units to a cell, and a line asks it
-for the widest clear run across the band it is about to occupy. ONE run per line,
-deliberately: a line split either side of something standing in the middle of a column is a
-different feature, and this is the choice a page-layout application offers as "the largest
-area".
+is behind the text -- and what each covers is its SILHOUETTE, so a circular cutout pushes the
+text along its curve and leaves the empty corner beside it usable. A CUT frame is asked for
+its raster: `dt_canvas_object_silhouette_reach()` casts a ray against the straight polygon
+through the nodes, which is near enough for deciding where a connector should stop and short
+of the drawn curve wherever the shape bulges. An uncut frame has no curve to miss and still
+answers through `dt_canvas_object_covers()`. That raster is taken at ONE PIXEL PER OCCUPANCY
+CELL, with a flat number kept only as a ceiling: a flat cap reads as prudence and is coarser
+than the grid on any large frame -- 192 px over a 1680-unit frame is 8.75 units to a sample
+against a 3-unit cell -- which squares off a curve and lets a line in by most of a step, which
+is a shape's rounded edge coming out straight.
 
-Three things about that engine that are not obvious. **Justification comes out right for
+They are baked into a coarse occupancy map in the frame's own local coordinates, three units
+to a cell, and a line asks it for the widest clear run across the band it is about to occupy.
+ONE run per line, deliberately: a line split either side of something standing in the middle
+of a column is a different feature, and this is the choice a page-layout application offers as
+"the largest area". The map spans the TEXT AREA, so its origin is that area's corner and not
+the frame's -- taken from the frame while the extent is the inner size, every obstacle sits
+one padding to the left of where the lines think it is. The GAP the text keeps around what it
+avoids is the user's ("Gap" on the property bar, `wrap_standoff` in the document) and is grown
+on the map by a separable dilation rather than asked of each shape: it then costs the same
+whatever the obstacle is and reaches a raster as well as a rectangle, and the corner of an
+obstacle keeps the gap along its diagonal too, which is what a rectangular offset does in
+every layout application.
+
+**A line is offered a band a LINE tall, and the first line has no previous line to measure.**
+The height of a line is not known until it is laid out, so the band is asked for with the last
+line's -- which on line zero is nothing at all, and a band of nothing is clear of everything:
+the opening lines were placed against a sliver of the map, given the full measure, and drawn
+straight through whatever stood just below the frame's top. The band starts at the font's own
+ascent plus descent times the leading, and a line that comes out taller than the band it was
+placed against is asked again and set once more; the band only grows and the run only narrows,
+so one extra pass settles it. Measured on the reported document, the first line was set as
+"em ipsum dolor" with its "Lor" under the picture, and reads "Lorem ipsum" now.
+
+Three more things about that engine that are not obvious. **Justification comes out right for
 free**: Pango never justifies the last line of a layout, and each layout here holds all the
 text that is left, so line zero is the last one exactly when the remainder fits on one line --
 exactly when it should not be justified. **A line ends on the space it broke at**, so the last
