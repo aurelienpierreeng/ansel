@@ -145,47 +145,59 @@ static void _a_page_is_rasterised_at_exactly_its_size_times_the_resolution(void 
 }
 
 /**
- * A spread is one SHEET, so it is one output page however many canvas pages it holds: the two
- * halves of a book's spread are printed on one piece of paper, and a picture sitting on the
- * fold has to come out whole.
+ * A spread is how the plane is laid out, not how the press prints: the export cuts at the
+ * FOLDS, one leaf per canvas page. What the fold gets is the bind gutter, which behaves
+ * exactly as a bleed does -- content carried past the cut line -- only facing inward, so the
+ * strip either side of a fold is printed on both leaves and the part of a picture the binding
+ * swallows is still there on each. A fold is not cut, so it takes no bleed.
  */
-static void _a_spread_is_one_output_page(void **state)
+static void _a_spread_is_cut_at_its_folds(void **state)
 {
   (void)state;
   dt_canvas_t *canvas = _canvas_of_pages(2);
+  canvas->spread_cols = 2;
   dt_canvas_export_options_t options = dt_canvas_export_options_default();
   options.format = DT_CANVAS_EXPORT_PNG;
   options.dpi = 72.0f;
 
-  // Two pages, no spread: two sheets, each an A6.
-  gchar *path = _output("apart.png");
+  // Two pages on one sheet, nothing added at the fold: two leaves, each its own page size.
+  gchar *path = _output("leaves.png");
   GError *error = NULL;
   assert_true(dt_canvas_export(canvas, path, &options, &error));
-  gchar *first = _output("apart_01.png");
-  gchar *second = _output("apart_02.png");
+  gchar *first = _output("leaves_01.png");
+  gchar *second = _output("leaves_02.png");
   int width = 0;
   int height = 0;
   _png_size(first, &width, &height);
   assert_int_equal(width, 298);
   assert_int_equal(height, 420);
-  assert_true(g_file_test(second, G_FILE_TEST_EXISTS));
+  _png_size(second, &width, &height);
+  assert_int_equal(width, 298);
   g_remove(first);
   g_remove(second);
   dt_free(first);
   dt_free(second);
   dt_free(path);
 
-  // The same two pages on one sheet: ONE file, twice as wide, and no second page at all.
-  canvas->spread_cols = 2;
-  path = _output("together.png");
+  // A bind gutter widens each leaf on its FOLD side only, and a bleed widens it on the sides
+  // that are cut -- so the left-hand leaf takes the bleed on three sides and the bind on the
+  // fourth, and comes out 298 + 9 + 20 wide and 420 + 18 tall.
+  canvas->bind_gutter = 20.0f;
+  canvas->page_bleed = 9.0f;
+  path = _output("bound.png");
   assert_true(dt_canvas_export(canvas, path, &options, &error));
-  _png_size(path, &width, &height);
-  assert_int_equal(width, 2 * 298);
-  assert_int_equal(height, 420);
-  gchar *numbered = _output("together_01.png");
-  assert_false(g_file_test(numbered, G_FILE_TEST_EXISTS));
-  g_remove(path);
-  dt_free(numbered);
+  first = _output("bound_01.png");
+  second = _output("bound_02.png");
+  _png_size(first, &width, &height);
+  assert_int_equal(width, 298 + 9 + 20);
+  assert_int_equal(height, 420 + 18);
+  _png_size(second, &width, &height);
+  assert_int_equal(width, 298 + 20 + 9);
+  assert_int_equal(height, 420 + 18);
+  g_remove(first);
+  g_remove(second);
+  dt_free(first);
+  dt_free(second);
   dt_free(path);
   dt_canvas_free(canvas);
 }
@@ -397,7 +409,7 @@ int main(void)
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_a_page_is_rasterised_at_exactly_its_size_times_the_resolution),
-    cmocka_unit_test(_a_spread_is_one_output_page),
+    cmocka_unit_test(_a_spread_is_cut_at_its_folds),
     cmocka_unit_test(_a_bleed_grows_the_sheet_on_every_side),
     cmocka_unit_test(_every_format_writes_every_page),
     cmocka_unit_test(_a_transparent_canvas_exports_as_a_hole),
