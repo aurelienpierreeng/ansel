@@ -952,6 +952,60 @@ static int _group_teardown(void **state)
  * object, so the same words take more lines and the frame needs to be taller. Without the
  * flag the object is ignored and the text runs straight under it.
  */
+/** A text frame with one obstacle laid over it, whose top edge sits `offset` below the text's. */
+static double _flowed_height_with_obstacle_below_the_top(const double offset)
+{
+  dt_canvas_t *canvas = dt_canvas_new();
+  if(IS_NULL_PTR(canvas)) return -1.0;
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 200.0, 150.0, 360.0, 260.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+      "zoom, because the page is the thing being designed and the screen is only a window onto it.");
+  if(IS_NULL_PTR(text))
+  {
+    dt_canvas_free(canvas);
+    return -1.0;
+  }
+  g_strlcpy(text->text.font, "Sans 24", sizeof(text->text.font));
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND;
+  text->text.wrap_standoff = 0.0f;
+
+  // The left half of the column, from `offset` below the text's top down past its bottom. Later
+  // in draw order, so it is laid OVER the text.
+  const double top = 20.0 + offset;
+  const double bottom = 400.0;
+  dt_canvas_object_t *over
+      = dt_canvas_add_text(canvas, 120.0, (top + bottom) * 0.5, 200.0, bottom - top, "");
+  if(IS_NULL_PTR(over))
+  {
+    dt_canvas_free(canvas);
+    return -1.0;
+  }
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double flowed = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+  dt_canvas_free(canvas);
+  return flowed;
+}
+
+static void _the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map(void **state)
+{
+  (void)state;
+  // The band a line is placed against must be a line tall. Before there is a line to measure
+  // it came out as nothing, so the first line was placed against a sliver of the map: an
+  // obstacle whose top edge sits just below the text's own was invisible to it, and the line
+  // was set at the full measure and drawn straight under the shape. Both offsets are well
+  // inside one line's height, so the two must lay out identically.
+  const double flush = _flowed_height_with_obstacle_below_the_top(0.0);
+  const double lowered = _flowed_height_with_obstacle_below_the_top(20.0);
+  assert_true(flush > 0.0);
+  assert_true(lowered > 0.0);
+  assert_float_equal(flush, lowered, 0.01);
+}
+
 static void _text_flows_around_what_is_laid_over_it(void **state)
 {
   (void)state;
@@ -972,11 +1026,16 @@ static void _text_flows_around_what_is_laid_over_it(void **state)
   text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND;
   text->text.wrap_standoff = 8.0f;
   const double flowed = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  // The gap the text leaves around what it avoids is the user's to set: widening it takes more
+  // width off every line beside the obstacle, so the paragraph grows.
+  text->text.wrap_standoff = 48.0f;
+  const double roomier = dt_canvas_paint_text_natural_height(cr, canvas, text);
   cairo_destroy(cr);
   cairo_surface_destroy(surface);
 
   assert_true(plain > 0.0);
   assert_true(flowed > plain);
+  assert_true(roomier > flowed);
   dt_canvas_free(canvas);
 }
 
@@ -988,6 +1047,7 @@ int main(void)
     cmocka_unit_test(_a_polygon_node_carries_its_own_fall_off),
     cmocka_unit_test(_a_polygon_node_steers_its_own_curve),
     cmocka_unit_test(_text_flows_around_what_is_laid_over_it),
+    cmocka_unit_test(_the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map),
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),

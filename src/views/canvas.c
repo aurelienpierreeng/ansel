@@ -2769,8 +2769,9 @@ static void _bars_create(dt_view_t *self)
                                   "actually draws rather than the box around it"),
                                 G_CALLBACK(_bar_text_flag_toggled), self);
   g_object_set_data(G_OBJECT(view->text_wrap), "text-flag", GINT_TO_POINTER(DT_CANVAS_TEXT_WRAP_AROUND));
-  view->text_standoff = _bar_spin(view->row_text, 0.0, 500.0, 1.0, 0,
-                                  _("How far the text keeps off what is laid over it, in canvas units"),
+  GtkWidget *gap = _bar_group(view->row_text, _("Gap"));
+  view->text_standoff = _bar_spin(gap, 0.0, 500.0, 1.0, 0,
+                                  _("The clear space the text keeps around whatever it flows past, in canvas units"),
                                   G_CALLBACK(_bar_text_standoff_changed), self);
   view->text_optical = _bar_toggle(view->row_text, _("Optical"),
                                    _("Hang punctuation into the margin, so the column's edge reads from the stems "

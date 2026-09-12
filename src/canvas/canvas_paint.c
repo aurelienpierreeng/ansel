@@ -1563,6 +1563,7 @@ static void _show_layout(cairo_t *cr, PangoLayout *layout, const gboolean optica
 #define TEXT_FLOW_CELL 3.0     ///< canvas units per occupancy cell: finer than a glyph, coarse enough to be free
 #define TEXT_FLOW_MAX_CELLS 512 ///< per axis, so a huge frame costs a coarser map rather than the world
 #define TEXT_FLOW_MAX_LINES 4096
+#define TEXT_FLOW_MASK_SIZE 192.0 ///< an obstacle's cutout raster, longest side: finer than the cells sample it
 
 /**
  * Where the frames laid OVER a text frame stand, as a coarse occupancy map in the text
@@ -1590,7 +1591,7 @@ static void _obstacles_free(dt_text_obstacles_t *obstacles)
 /** Build the map; FALSE when nothing stands over the frame and the caller may lay out plainly. */
 static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas_t *canvas,
                                  const dt_canvas_object_t *object, const double inner_width,
-                                 const double inner_height)
+                                 const double inner_height, const double insets[4])
 {
   memset(obstacles, 0, sizeof(*obstacles));
   if(!(inner_width > 0.0) || !(inner_height > 0.0)) return FALSE;
@@ -1629,9 +1630,34 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
   obstacles->rows = CLAMP((int)ceil(inner_height / TEXT_FLOW_CELL), 1, TEXT_FLOW_MAX_CELLS);
   obstacles->cell_x = inner_width / obstacles->columns;
   obstacles->cell_y = inner_height / obstacles->rows;
-  obstacles->origin_x = -object->width * 0.5;
-  obstacles->origin_y = -object->height * 0.5;
+  // The map spans the TEXT AREA, so its origin is that area's corner and not the frame's:
+  // taken from the frame while the extent is the inner size, every obstacle sits one padding
+  // to the left of where the lines think it is, and the last padding of the area has no map
+  // under it at all.
+  obstacles->origin_x = -object->width * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_LEFT];
+  obstacles->origin_y = -object->height * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_TOP];
   obstacles->covered = g_malloc0((size_t)obstacles->columns * obstacles->rows);
+
+  /*
+   * A cut frame is asked for its RASTER, not for how far its silhouette reaches along a ray.
+   * The reach is a ray from the frame's centre against the STRAIGHT polygon through the nodes
+   * -- near enough for where a connector should stop, and wrong here wherever the drawn curve
+   * bulges outside that polygon, which is everywhere the shape is smooth and convex. Reported
+   * as text warping around a shape's straight slanted bottom and running into its rounded top,
+   * which is exactly the difference between the two. The raster is what the frame actually
+   * paints, so it is right for a smooth polygon, a dented one, and one no ray leaves once.
+   */
+  cairo_surface_t **rasters = g_new0(cairo_surface_t *, over->len);
+  for(guint idx = 0; idx < over->len; idx++)
+  {
+    const dt_canvas_object_t *other = g_ptr_array_index(over, idx);
+    if(other->mask.shape == DT_CANVAS_MASK_NONE) continue;
+    const double longest = fmax(other->width, other->height);
+    const double scale = longest > 0.0 ? MIN(TEXT_FLOW_MASK_SIZE / longest, 1.0) : 1.0;
+    const int mask_width = MAX((int)lround(other->width * scale), 2);
+    const int mask_height = MAX((int)lround(other->height * scale), 2);
+    rasters[idx] = dt_canvas_render_mask(other, mask_width, mask_height, 0, 0);
+  }
 
   for(int row = 0; row < obstacles->rows; row++)
   {
@@ -1645,13 +1671,61 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
       const double canvas_y = object->y + local_x * sin(angle) + local_y * cos(angle);
       for(guint idx = 0; idx < over->len; idx++)
       {
-        if(!dt_canvas_object_covers(canvas, g_ptr_array_index(over, idx), canvas_x, canvas_y, standoff)) continue;
+        const dt_canvas_object_t *other = g_ptr_array_index(over, idx);
+        gboolean hit = FALSE;
+        if(IS_NULL_PTR(rasters[idx]))
+          hit = dt_canvas_object_covers(canvas, other, canvas_x, canvas_y, 0.0);
+        else
+        {
+          double other_x = 0.0;
+          double other_y = 0.0;
+          dt_canvas_object_to_local(other, canvas_x, canvas_y, &other_x, &other_y);
+          const int mask_width = cairo_image_surface_get_width(rasters[idx]);
+          const int mask_height = cairo_image_surface_get_height(rasters[idx]);
+          const int sample_x = (int)floor((other_x / fmax(other->width, 1e-6) + 0.5) * mask_width);
+          const int sample_y = (int)floor((other_y / fmax(other->height, 1e-6) + 0.5) * mask_height);
+          if(sample_x >= 0 && sample_x < mask_width && sample_y >= 0 && sample_y < mask_height)
+          {
+            const uint8_t *pixels = cairo_image_surface_get_data(rasters[idx]);
+            const int stride = cairo_image_surface_get_stride(rasters[idx]);
+            hit = pixels[(size_t)sample_y * stride + sample_x] > 127;
+          }
+        }
+        if(!hit) continue;
         obstacles->covered[(size_t)row * obstacles->columns + column] = 1;
         break;
       }
     }
   }
+  for(guint idx = 0; idx < over->len; idx++)
+    if(!IS_NULL_PTR(rasters[idx])) cairo_surface_destroy(rasters[idx]);
+  dt_free(rasters);
   g_ptr_array_free(over, TRUE);
+
+  // The gap is grown on the MAP rather than asked of each shape, so it costs the same whatever
+  // the shape is and works for a raster as well as for a rectangle. Separable, so the corner
+  // of an obstacle keeps the gap along the diagonal too -- a little more than along the axes,
+  // which is what a rectangular offset does in every layout application.
+  const int grow_x = (int)ceil(standoff / fmax(obstacles->cell_x, 1e-6));
+  const int grow_y = (int)ceil(standoff / fmax(obstacles->cell_y, 1e-6));
+  if(grow_x > 0 || grow_y > 0)
+  {
+    uint8_t *grown = g_malloc0((size_t)obstacles->columns * obstacles->rows);
+    for(int row = 0; row < obstacles->rows; row++)
+      for(int column = 0; column < obstacles->columns; column++)
+      {
+        if(!obstacles->covered[(size_t)row * obstacles->columns + column]) continue;
+        const int first_row = MAX(row - grow_y, 0);
+        const int last_row = MIN(row + grow_y, obstacles->rows - 1);
+        const int first_column = MAX(column - grow_x, 0);
+        const int last_column = MIN(column + grow_x, obstacles->columns - 1);
+        for(int y = first_row; y <= last_row; y++)
+          memset(grown + (size_t)y * obstacles->columns + first_column, 1,
+                 (size_t)(last_column - first_column + 1));
+      }
+    dt_free(obstacles->covered);
+    obstacles->covered = grown;
+  }
   return TRUE;
 }
 
@@ -1750,22 +1824,42 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   const double text_right = text_left + inner_width;
   const double top = -object->height * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_TOP];
 
+  // How tall a line will be, BEFORE there is a line to measure: the font's own ascent plus
+  // descent, times the leading. The band handed to the obstacle map has to be a line tall or
+  // the line is placed against a sliver of it -- and "the last line's height" degenerates to
+  // nothing at all on the first line, which is how the first lines of a paragraph came to
+  // slide under the top of the very shape they were meant to avoid.
+  double nominal = 1.0;
+  {
+    PangoLayout *probe = _text_layout_styled(cr, canvas, object);
+    PangoFontMetrics *metrics
+        = pango_context_get_metrics(pango_layout_get_context(probe), pango_layout_get_font_description(probe), NULL);
+    if(!IS_NULL_PTR(metrics))
+    {
+      nominal = (double)(pango_font_metrics_get_ascent(metrics) + pango_font_metrics_get_descent(metrics))
+                / PANGO_SCALE;
+      pango_font_metrics_unref(metrics);
+    }
+    g_object_unref(probe);
+    if(object->text.line_height > 0.0f) nominal *= object->text.line_height;
+    nominal = fmax(nominal, 1.0);
+  }
+
   double y = 0.0;
   gsize consumed = 0;
   PangoLayout *layout = NULL;
   double layout_width = -1.0;
   gsize layout_offset = 0;
   int layout_line = 0;
+  double previous_height = nominal;
   for(int line_index = 0; line_index < TEXT_FLOW_MAX_LINES && consumed < length; line_index++)
   {
     // A trial band one line tall. The height of a line is not known before it is laid out, so
     // the band is asked for with the last line's height, or the font's to begin with.
     double run_x = text_left;
     double run_width = inner_width;
-    const double guess = layout_width > 0.0 && !IS_NULL_PTR(layout)
-                             ? fmax((double)pango_layout_get_baseline(layout) / PANGO_SCALE, 1.0)
-                             : 1.0;
-    _obstacles_free_run(obstacles, top + y, top + y + guess, text_left, text_right, &run_x, &run_width);
+    double band = fmax(previous_height, nominal);
+    _obstacles_free_run(obstacles, top + y, top + y + band, text_left, text_right, &run_x, &run_width);
     if(!(run_width > 0.0)) break;
 
     if(IS_NULL_PTR(layout) || fabs(run_width - layout_width) > 0.01)
@@ -1835,7 +1929,40 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
 
     PangoRectangle logical;
     pango_layout_line_get_extents(line, NULL, &logical);
-    const double line_height = fmax((double)logical.height / PANGO_SCALE, 1.0);
+    double line_height = fmax((double)logical.height / PANGO_SCALE, 1.0);
+    // The line came out taller than the band it was placed against, so what it will occupy
+    // was never asked about. Ask again with its real height and set it once more; a second
+    // pass settles it, since the band only grows and the run only narrows.
+    if(line_height > band + 0.5)
+    {
+      double retry_x = run_x;
+      double retry_width = run_width;
+      band = line_height;
+      _obstacles_free_run(obstacles, top + y, top + y + band, text_left, text_right, &retry_x, &retry_width);
+      if(retry_width > 0.0 && fabs(retry_width - run_width) > 0.01)
+      {
+        run_x = retry_x;
+        run_width = retry_width;
+        if(!IS_NULL_PTR(layout)) g_object_unref(layout);
+        layout = _text_layout_styled(cr, canvas, object);
+        pango_layout_set_text(layout, plain + consumed, -1);
+        PangoAttrList *again = pango_attr_list_copy(attributes);
+        PangoAttrList *spent = pango_attr_list_filter(again, _attribute_shift, GUINT_TO_POINTER((guint)consumed));
+        if(!IS_NULL_PTR(spent)) pango_attr_list_unref(spent);
+        pango_layout_set_attributes(layout, again);
+        pango_attr_list_unref(again);
+        _text_layout_finish(layout, object);
+        pango_layout_set_width(layout, (int)(run_width * PANGO_SCALE));
+        layout_width = run_width;
+        layout_offset = consumed;
+        layout_line = 0;
+        line = pango_layout_get_line_readonly(layout, 0);
+        if(IS_NULL_PTR(line)) break;
+        pango_layout_line_get_extents(line, NULL, &logical);
+        line_height = fmax((double)logical.height / PANGO_SCALE, 1.0);
+      }
+    }
+    previous_height = line_height;
     if(y + line_height > inner_height && line_index > 0) break;
     if(draw)
     {
@@ -1890,7 +2017,7 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   // the frame, or to be set wide enough for its final comma to hang past the column's edge.
   dt_text_obstacles_t obstacles;
   const gboolean wrapping = (object->text.text_flags & DT_CANVAS_TEXT_WRAP_AROUND)
-                            && _obstacles_build(&obstacles, canvas, object, inner_width, inner_height);
+                            && _obstacles_build(&obstacles, canvas, object, inner_width, inner_height, insets);
   if(!wrapping) memset(&obstacles, 0, sizeof(obstacles));
   if(wrapping || (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS))
   {
@@ -1937,7 +2064,7 @@ double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canva
         = fmax(object->width - insets[DT_CANVAS_TEXT_MARGIN_LEFT] - insets[DT_CANVAS_TEXT_MARGIN_RIGHT], 1.0);
     dt_text_obstacles_t obstacles;
     const gboolean wrapping = (object->text.text_flags & DT_CANVAS_TEXT_WRAP_AROUND)
-                              && _obstacles_build(&obstacles, canvas, object, inner_width, fmax(object->height, 1.0));
+                              && _obstacles_build(&obstacles, canvas, object, inner_width, fmax(object->height, 1.0), insets);
     if(!wrapping) memset(&obstacles, 0, sizeof(obstacles));
     if(wrapping || (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS))
     {
