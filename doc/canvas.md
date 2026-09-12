@@ -397,6 +397,26 @@ whatever the obstacle is and reaches a raster as well as a rectangle, and the co
 obstacle keeps the gap along its diagonal too, which is what a rectangular offset does in
 every layout application.
 
+**The band is a line's INK, not its logical box, and the leading is not part of it.** What has
+to clear a picture is the glyphs, and a logical box carries the font's full ascent above the
+tallest of them -- measured, 72.96 units of box around 59.65 of ink. A band `h` tall narrows
+the run by `h * tan(theta)` wherever the edge slants, so that surplus is charged straight to
+the gutter. Measured perpendicular clearance beside a cut picture, line by line: spread 31.1
+canvas units and sd 8.3 taking the logical box, 24.2 and 6.2 taking the ink. What is left is
+geometric and not a defect -- horizontal lines set against a diagonal always clear it at the
+line's own height by more than the gap asks for, by about `(band / 2) * tan(theta) *
+cos(theta)`, which on the reported picture is the difference between 5 units of clearance where
+the cut runs vertical and 15 along its slant. Widening the Gap raises both and narrows the
+ratio; nothing short of letting glyphs overlap removes it.
+
+**The leading is space BETWEEN lines, so this engine advances it by hand.**
+`pango_layout_set_spacing()` puts it between the lines of one layout, and every line here is
+line zero of a layout of its own, so no line's extents ever carry it: setting a line height did
+exactly nothing to a frame that wrapped around something or hung its punctuation, while the
+plain paragraph beside it honoured it. It is advanced once per GAP, and the "is there more
+text" test reads `consumed` AFTER the line's own text is accounted for -- before it, the
+paragraph ends on a trailing gap Pango would not have left.
+
 **A line is offered a band a LINE tall, and the first line has no previous line to measure.**
 The height of a line is not known until it is laid out, so the band is asked for with the last
 line's -- which on line zero is nothing at all, and a band of nothing is clear of everything:

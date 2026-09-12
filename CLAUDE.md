@@ -3420,6 +3420,23 @@ they are visible.
   iterates to a fixed point, which downward growth makes monotone. Every path that changes
   what the text or its box is owes the call, the end of a gesture included: a frame dragged
   over a column changes that column's flow as surely as editing it does.
+- **The band a line is offered to the map is its INK, never its logical box.** What has to
+  clear a picture is the glyphs, and a logical box carries the font's full ascent above the
+  tallest of them -- measured, 72.96 units of box around 59.65 of ink. On a slanted edge a band
+  `h` tall narrows the run by `h * tan(theta)`, so that surplus is charged straight to the
+  gutter: measured perpendicular clearance beside a cut picture, spread 31.1 canvas units and
+  sd 8.3 with the logical box, 24.2 and 6.2 with the ink. **What remains is geometric and is
+  not a defect**: horizontal lines against a diagonal always clear it by more at the line's own
+  height than the gap asks for, by about `(band / 2) * tan(theta) * cos(theta)`, and every
+  page-layout application does the same.
+- **The leading is space BETWEEN lines, so a flowing paragraph has to advance it by hand.**
+  `pango_layout_set_spacing()` puts it between the lines of ONE layout, and every line of a
+  flowing paragraph is line zero of a layout of its own -- so no line's extents ever carry it,
+  and a line height did exactly nothing to a frame that wrapped around something or hung its
+  punctuation, silently, while the plain paragraph beside it honoured it. Advance
+  `pango_layout_get_spacing()` once per GAP, and read "is there more text" AFTER the line's own
+  text is accounted for, or the paragraph ends on a trailing gap Pango would not have left. It
+  also must NOT be folded into the band, for the reason above.
 - **A line is offered to the occupancy map in a band a LINE tall, and the first line has no
   previous line to measure.** Taken from the last line it degenerates to nothing on line zero,
   which placed the opening lines against a sliver of the map, gave them the full measure and

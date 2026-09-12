@@ -991,6 +991,85 @@ static double _flowed_height_with_obstacle_below_the_top(const double offset)
   return flowed;
 }
 
+/** A column beside one obstacle; returns the height its text needs at that leading. */
+static double _paragraph_height(const gboolean flowing, const float leading, const gboolean one_line)
+{
+  dt_canvas_t *canvas = dt_canvas_new();
+  if(IS_NULL_PTR(canvas)) return -1.0;
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 0.0, 0.0, 500.0, 4000.0,
+      one_line ? "Typography."
+               : "Typography on an infinite plane demands that a paragraph break its lines the same way "
+                 "whatever the zoom, because the page is the thing being designed and the screen is only a "
+                 "window onto it, and a column set beside a picture must keep clear of it line by line.");
+  if(IS_NULL_PTR(text))
+  {
+    dt_canvas_free(canvas);
+    return -1.0;
+  }
+  text->text.padding = 0.0f;
+  text->text.wrap_standoff = 0.0f;
+  text->text.line_height = leading;
+  if(flowing) text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND | DT_CANVAS_TEXT_OPTICAL_MARGINS;
+  /*
+   * A rectangle beside the first lines, spanning further than the paragraph reaches at either
+   * leading. Its edges are VERTICAL on purpose: every line then loses the same width wherever
+   * the leading puts it, so the flowing line count cannot change between the two leadings. A
+   * slanted obstacle would not do -- opening the leading moves every line to a new height,
+   * where it legitimately meets a different width of the shape.
+   */
+  dt_canvas_object_t *over = dt_canvas_add_text(canvas, -180.0, -1600.0, 300.0, 1000.0, "");
+  if(IS_NULL_PTR(over))
+  {
+    dt_canvas_free(canvas);
+    return -1.0;
+  }
+  over->border_width = 0.0f;
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double height = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+  dt_canvas_free(canvas);
+  return height;
+}
+
+static void _the_leading_reaches_a_flowing_paragraph_once_per_gap(void **state)
+{
+  (void)state;
+  /*
+   * Pango's spacing is the space BETWEEN two lines of one layout, and every line of a flowing
+   * paragraph is line zero of a layout of its own -- so no line's extents ever carry it, and a
+   * line height did exactly nothing to a frame that wrapped around something or hung its
+   * punctuation, silently, while the plain paragraph beside it honoured it.
+   *
+   * It is applied once per GAP and not once per line: reading "is there more text" before the
+   * line's own text is accounted for leaves a trailing gap Pango would not have left.
+   *
+   * Line counts differ between the two paragraphs -- only the flowing one is narrowed by the
+   * obstacle -- so the plain one is here to say what a gap costs, and the flowing one is
+   * checked against its own line count. What the ink band buys on a SLANTED edge (a band `h`
+   * tall narrows the run by `h * tan(theta)`, the gutter reading wider along a slant than
+   * along a straight) is measured in doc/canvas.md rather than pinned here: moving a line
+   * changes which width of a slanted shape it meets, so no two leadings are comparable there.
+   */
+  const double one_line = _paragraph_height(FALSE, 1.0f, TRUE);
+  const double plain_tight = _paragraph_height(FALSE, 1.0f, FALSE);
+  const double plain_open = _paragraph_height(FALSE, 3.0f, FALSE);
+  const double flowing_tight = _paragraph_height(TRUE, 1.0f, FALSE);
+  const double flowing_open = _paragraph_height(TRUE, 3.0f, FALSE);
+  assert_true(one_line > 0.0 && plain_tight > 0.0 && flowing_tight > 0.0);
+
+  const double plain_lines = round(plain_tight / one_line);
+  const double flowing_lines = round(flowing_tight / one_line);
+  assert_true(plain_lines >= 2.0 && flowing_lines > plain_lines);
+  // What one gap costs, from the paragraph that is laid out plainly.
+  const double gap = (plain_open - plain_tight) / (plain_lines - 1.0);
+  assert_true(gap > 0.0);
+  assert_float_equal(flowing_open - flowing_tight, gap * (flowing_lines - 1.0), 1.0);
+}
+
 static void _a_frame_standing_just_outside_a_column_still_pushes_its_text(void **state)
 {
   (void)state;
@@ -1200,6 +1279,7 @@ int main(void)
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
     cmocka_unit_test(_the_gap_around_an_obstacle_is_a_disc_not_a_square),
     cmocka_unit_test(_a_frame_standing_just_outside_a_column_still_pushes_its_text),
+    cmocka_unit_test(_the_leading_reaches_a_flowing_paragraph_once_per_gap),
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),

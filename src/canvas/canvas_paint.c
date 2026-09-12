@@ -1972,7 +1972,8 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
       pango_font_metrics_unref(metrics);
     }
     g_object_unref(probe);
-    if(object->text.line_height > 0.0f) nominal *= object->text.line_height;
+    // NOT scaled by the leading: the leading is space BETWEEN lines, and the band is what one
+    // line's glyphs occupy. Charging it to the band steals width wherever the edge slants.
     nominal = fmax(nominal, 1.0);
   }
 
@@ -1982,15 +1983,29 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   double layout_width = -1.0;
   gsize layout_offset = 0;
   int layout_line = 0;
-  double previous_height = nominal;
+  // Before there is a line to measure, the whole logical box: a first line must not be placed
+  // against a guess that is too small, and the check above corrects it downward for the rest.
+  double previous_ink_top = 0.0;
+  double previous_ink_height = nominal;
   for(int line_index = 0; line_index < TEXT_FLOW_MAX_LINES && consumed < length; line_index++)
   {
     // A trial band one line tall. The height of a line is not known before it is laid out, so
     // the band is asked for with the last line's height, or the font's to begin with.
     double run_x = text_left;
     double run_width = inner_width;
-    double band = fmax(previous_height, nominal);
-    _obstacles_free_run(obstacles, top + y, top + y + band, text_left, text_right, &run_x, &run_width);
+    /*
+     * The band is the line's INK, not its logical box. What must clear the picture is the
+     * glyphs, and a logical box carries the font's full ascent above the tallest of them --
+     * measured here, 72.96 units of box around 59.65 of ink. That surplus is paid twice over
+     * on a slanted edge, where a band that is `h` tall makes the run `h * tan(theta)` narrower
+     * than the shape alone would: with horizontal lines against a diagonal, the clear space at
+     * a line's own height is always wider than the gap that was asked for, and the taller the
+     * band the wider it gets.
+     */
+    double band_top = previous_ink_top;
+    double band_height = fmax(previous_ink_height, 1.0);
+    _obstacles_free_run(obstacles, top + y + band_top, top + y + band_top + band_height, text_left, text_right,
+                        &run_x, &run_width);
     if(!(run_width > 0.0)) break;
 
     if(IS_NULL_PTR(layout) || fabs(run_width - layout_width) > 0.01)
@@ -2064,12 +2079,20 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     // The line came out taller than the band it was placed against, so what it will occupy
     // was never asked about. Ask again with its real height and set it once more; a second
     // pass settles it, since the band only grows and the run only narrows.
-    if(line_height > band + 0.5)
+    // What the line's ink really occupies, against what was asked for on the previous line's
+    // behalf. A line reaching outside that band was placed against the wrong question.
+    PangoRectangle ink;
+    pango_layout_line_get_extents(line, &ink, NULL);
+    double ink_top = (double)(ink.y - logical.y) / PANGO_SCALE;
+    double ink_height = fmax((double)ink.height / PANGO_SCALE, 1.0);
+    if(ink_top < band_top - 0.5 || ink_top + ink_height > band_top + band_height + 0.5)
     {
       double retry_x = run_x;
       double retry_width = run_width;
-      band = line_height;
-      _obstacles_free_run(obstacles, top + y, top + y + band, text_left, text_right, &retry_x, &retry_width);
+      band_height = fmax(ink_top + ink_height, band_top + band_height) - fmin(ink_top, band_top);
+      band_top = fmin(ink_top, band_top);
+      _obstacles_free_run(obstacles, top + y + band_top, top + y + band_top + band_height, text_left, text_right,
+                          &retry_x, &retry_width);
       if(retry_width > 0.0 && fabs(retry_width - run_width) > 0.01)
       {
         run_x = retry_x;
@@ -2089,11 +2112,14 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
         layout_line = 0;
         line = pango_layout_get_line_readonly(layout, 0);
         if(IS_NULL_PTR(line)) break;
-        pango_layout_line_get_extents(line, NULL, &logical);
+        pango_layout_line_get_extents(line, &ink, &logical);
         line_height = fmax((double)logical.height / PANGO_SCALE, 1.0);
+        ink_top = (double)(ink.y - logical.y) / PANGO_SCALE;
+        ink_height = fmax((double)ink.height / PANGO_SCALE, 1.0);
       }
     }
-    previous_height = line_height;
+    previous_ink_top = ink_top;
+    previous_ink_height = ink_height;
     if(y + line_height > inner_height && line_index > 0) break;
     if(draw)
     {
@@ -2103,10 +2129,20 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
       cairo_restore(cr);
     }
     y += line_height;
+    const double leading_gap = fmax((double)pango_layout_get_spacing(layout) / PANGO_SCALE, 0.0);
     consumed = layout_offset + line->start_index + line->length;
     // A break eats the space it broke on, and a paragraph break its newline: step over
     // whatever the line did not take, or the next chunk begins with it and never advances.
     while(consumed < length && (plain[consumed] == ' ' || plain[consumed] == '\n')) consumed++;
+    /*
+     * The leading, by hand, and only where a line follows. Pango's spacing is the space
+     * BETWEEN two lines of one layout, and every line here is line zero of a layout of its own,
+     * so no line's extents ever carry it -- setting a line height did exactly nothing to a
+     * frame that wrapped around something or hung its punctuation, silently, while the plain
+     * paragraph honoured it. The test has to read `consumed` AFTER it is advanced, or the
+     * paragraph ends on a trailing gap Pango would not have left.
+     */
+    if(consumed < length) y += leading_gap;
     layout_line++;
     if(!IS_NULL_PTR(pango_layout_get_line_readonly(layout, layout_line))) continue;
     // The layout is spent: the next line rebuilds from where this one stopped.
