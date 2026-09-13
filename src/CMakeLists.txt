@@ -211,6 +211,7 @@ FILE(GLOB SOURCE_FILES
   "develop/lightroom.c"
   "develop/pixelpipe.c"
   "caches/pixelpipe_cache.c"
+  "caches/pixelpipe_cache_pressure.c"
   "caches/pixelpipe_cache_wait.c"
   "develop/pixelpipe_cpu.c"
   "develop/pipeline_notify.c"

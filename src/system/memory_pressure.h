@@ -46,16 +46,33 @@ extern "C" {
  * the same cgroup. Stateless: every call reads the kernel. */
 int dt_memory_pressure_read_full_stall(uint64_t *total_us, int max_levels);
 
+/* A watcher on the kernel's own triggers: descriptors, thread and stop channel, all of it platform
+ * detail nobody above this file has to spell. */
+typedef struct dt_memory_pressure_watch_t dt_memory_pressure_watch_t;
+
 /* Have the kernel wake us instead of polling: arm a PSI trigger -- `stall_us` of full stall within
- * any `window_us` -- on every level that accepts one from this process. That is the whole system,
- * and each cgroup above the process that it may write to: under systemd its own scope and
- * app.slice, since the session's user@.service belongs to root. Unprivileged triggers need a
- * window that is a multiple of 2 s; the kernel refuses the others.
+ * any `window_us` -- on every level that accepts one from this process, and call `stalled(user)`
+ * each time the kernel raises one. That is the whole system, and each cgroup above the process
+ * that it may write to: under systemd its own scope and app.slice, since the session's
+ * user@.service belongs to root. Unprivileged triggers need a window that is a multiple of 2 s;
+ * the kernel refuses the others.
  *
- * Writes up to `max_fds` descriptors to `fds` and returns how many. The caller poll()s them for
- * POLLPRI, reads POLLERR as "this level is gone", and closes them. Returns 0 where the platform
- * has no PSI triggers. Stateless. */
-int dt_memory_pressure_triggers_open(int *fds, int max_fds, uint64_t stall_us, uint64_t window_us);
+ * `stalled` runs on the watcher's own thread, so it owns nothing of the caller's and must take
+ * whatever guards what it touches. NULL where the platform has no PSI triggers or where no level
+ * accepted one -- a working configuration, not an error: whatever the caller measures for itself
+ * still runs, just not while nothing else of it does. */
+dt_memory_pressure_watch_t *dt_memory_pressure_watch_start(uint64_t stall_us, uint64_t window_us,
+                                                           void (*stalled)(void *user), void *user);
+
+/* Join the thread, release everything the watcher holds, and clear the caller's handle -- which is
+ * why it takes its address: a watcher that has been stopped is a pointer nobody may use again, and
+ * the one place that knows it is gone is the one that freed it. Nothing `stalled` touches may go
+ * away before this returns. NULL-safe, like every function here, and a no-op on a handle that is
+ * already NULL. */
+void dt_memory_pressure_watch_stop(dt_memory_pressure_watch_t **watch);
+
+/* How many levels the watcher was armed on -- what a caller has to log; 0 for NULL. */
+int dt_memory_pressure_watch_levels(const dt_memory_pressure_watch_t *watch);
 
 #ifdef __cplusplus
 }
