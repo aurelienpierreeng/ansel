@@ -2640,9 +2640,15 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     point_t new_target_center = apply_homography(target_center, g->homography);
 
     const char *msg = _("Error: No color data available for the selected chart.");
-    cairo_set_font_size(cr, 20.0 / zoom_scale);
-    cairo_text_extents_t extents;
-    cairo_text_extents(cr, msg, &extents);
+    // Prefer the theme font over cairo's toy "roboto": the toy face skips the CSS stack,
+    // and measuring here with the real face also stops the box from being sized to a fallback.
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
+    pango_font_description_set_absolute_size(desc, 20.0 / zoom_scale * PANGO_SCALE);
+    pango_layout_set_font_description(layout, desc);
+    pango_layout_set_text(layout, msg, -1);
+    PangoRectangle extents;
+    pango_layout_get_pixel_extents(layout, &extents, NULL);
 
     // Draw a white rectangle behind the text
     cairo_set_source_rgba(cr, 1., 1., 1., 1.);
@@ -2655,9 +2661,13 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
     // Draw the text in red
     cairo_set_source_rgba(cr, 1., 0., 0., 1.);
-    cairo_select_font_face(cr, "roboto", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_move_to(cr, new_target_center.x - extents.width / 2.0, new_target_center.y + extents.height / 2.0);
-    cairo_show_text(cr, msg);
+    // pango_cairo_show_layout() takes the layout's top-left; subtract the ink offset so the
+    // glyphs, not the layout box, end up centred on the rectangle drawn above
+    cairo_move_to(cr, new_target_center.x - extents.width / 2.0 - extents.x,
+                  new_target_center.y - extents.height / 2.0 - extents.y);
+    pango_cairo_show_layout(cr, layout);
+    pango_font_description_free(desc);
+    g_object_unref(layout);
     return;
   }
 

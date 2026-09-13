@@ -3543,15 +3543,20 @@ static void _draw_brush_hud(cairo_t *cr, const drawlayer_hud_brush_state_t *stat
   const double pad = DT_PIXEL_APPLY_DPI(6.0);
   const double line_h = DT_PIXEL_APPLY_DPI(13.0);
   const double fs = DT_PIXEL_APPLY_DPI(12.0);
-  double max_w = 0.0;
 
-  cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-  cairo_set_font_size(cr, fs);
+  // Theme font via Pango, not cairo's toy "Sans": the toy face skips the CSS stack.
+  PangoLayout *layout = pango_cairo_create_layout(cr);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
+  pango_font_description_set_absolute_size(desc, fs * PANGO_SCALE);
+  pango_layout_set_font_description(layout, desc);
+
+  double max_w = 0.0;
   for(int i = 0; i < 3; i++)
   {
-    cairo_text_extents_t ext = { 0 };
-    cairo_text_extents(cr, lines[i], &ext);
-    max_w = fmax(max_w, ext.x_advance);
+    pango_layout_set_text(layout, lines[i], -1);
+    PangoRectangle logical;
+    pango_layout_get_pixel_extents(layout, NULL, &logical);
+    max_w = fmax(max_w, (double)logical.width);
   }
 
   const double box_w = max_w + 2.0 * pad;
@@ -3567,10 +3572,15 @@ static void _draw_brush_hud(cairo_t *cr, const drawlayer_hud_brush_state_t *stat
   cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.92);
   for(int i = 0; i < 3; i++)
   {
-    cairo_move_to(cr, x + pad, y + pad + (i + 1) * line_h - DT_PIXEL_APPLY_DPI(2.0));
-    cairo_show_text(cr, lines[i]);
+    pango_layout_set_text(layout, lines[i], -1);
+    // pango_cairo_show_layout() takes the layout's TOP-LEFT, where cairo_show_text() took a baseline
+    cairo_move_to(cr, x + pad, y + pad + i * line_h);
+    pango_cairo_show_layout(cr, layout);
   }
   cairo_restore(cr);
+
+  pango_font_description_free(desc);
+  g_object_unref(layout);
 }
 
 /** @brief Draw post-expose overlay (cursor, HUD, temp preview). */
