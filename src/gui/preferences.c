@@ -246,7 +246,11 @@ static void ui_scale_changed_callback(GtkWidget *widget, gpointer user_data)
   dt_conf_set_float("ui_scale", gtk_spin_button_get_value(GTK_SPIN_BUTTON(widget)));
   restart_required = TRUE;
   dt_configure_ppd_dpi(dt_gui_get_global());
-  dt_bauhaus_load_theme(dt_bauhaus_get_global());
+  // The theme expresses its paddings, margins and radii in em, which GTK resolves against the
+  // computed font size -- itself derived from the screen resolution we just changed. A bare
+  // gdk_screen_set_resolution() does not invalidate the style cascade, so reload the CSS, or the
+  // C-side sizes would grow while every em-based length kept its old pixel value.
+  reload_ui_last_theme();
 }
 
 static void use_sys_font_callback(GtkWidget *widget, gpointer user_data)
@@ -479,8 +483,8 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
                                            "0.9 makes everything 10% smaller.\n"
                                            "this scales controls, text, icons and the gaps between them together,\n"
                                            "so nothing overlaps. unlike the DPI setting above, it does not change\n"
-                                           "the screen resolution Ansel reports, and it applies immediately.\n"
-                                           "(some fixed-size elements still need a restart)."));
+                                           "the screen resolution Ansel reports.\n"
+                                           "(needs a restart to apply everywhere)."));
   gtk_spin_button_set_digits(GTK_SPIN_BUTTON(ui_scale), 2);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(ui_scale), dt_conf_get_float("ui_scale"));
   g_signal_connect(G_OBJECT(ui_scale), "value_changed", G_CALLBACK(ui_scale_changed_callback), 0);

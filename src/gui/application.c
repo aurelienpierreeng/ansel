@@ -1452,14 +1452,15 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui)
 }
 
 
-// Real system DPI, cached while GDK still holds it. Once a ui_scale is applied, the resolution
-// pushed into GDK is read back by gdk_screen_get_resolution(), so re-probing it on the next
-// configure event would feed the scaled value back in and compound the zoom every time.
+// Real system DPI, cached while GDK still holds it. Once a scaled resolution is pushed,
+// gdk_screen_get_resolution() reports that value back, so it must not be mistaken for a probe.
 static double _system_dpi = -1.0;
 
-// Whether the previous call pushed a non-system resolution into GDK. Used to restore the real
-// resolution when the scale is turned back off, and to know when a re-probe is safe again.
-static gboolean _dpi_overridden = FALSE;
+// The resolution this function last pushed into GDK, or -1 if it never did. A probe is only
+// meaningful when GDK holds something else -- which is also how a system-side change (a desktop
+// scaling change, GTK's own gtk-xft-dpi handler) announces itself, so tracking what we wrote
+// keeps the cache honest without freezing it for the rest of the session.
+static double _pushed_dpi = -1.0;
 
 void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
 {
@@ -1482,10 +1483,22 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
   const float ui_scale_conf = dt_conf_get_float("ui_scale");
   const double ui_scale = (ui_scale_conf > 0.0f) ? CLAMP((double)ui_scale_conf, 0.25, 4.0) : 1.0;
 
+  const float screen_dpi_overwrite = dt_conf_get_float("screen_dpi_overwrite");
+
+#ifdef GDK_WINDOWING_QUARTZ
+  if(screen_dpi_overwrite <= 0.0) dt_osx_autoset_dpi(widget);
+#endif
+
+  // Probe before the override branch, and on every call: the real resolution has to be cached
+  // even while screen_dpi_overwrite is active, or clearing that override later would read back
+  // the value we pushed for it and latch a doubly-scaled DPI for the rest of the session.
+  const double probed = gdk_screen_get_resolution(screen);
+  if(probed > 0.0 && probed != _pushed_dpi) _system_dpi = probed;
+  const gboolean force_default_dpi = (_system_dpi <= 0.0);
+  if(force_default_dpi) _system_dpi = 96.0;
+
   // get the screen resolution
   double base_dpi;
-  gboolean force_default_dpi = FALSE;
-  const float screen_dpi_overwrite = dt_conf_get_float("screen_dpi_overwrite");
   if(screen_dpi_overwrite > 0.0)
   {
     base_dpi = screen_dpi_overwrite;
@@ -1495,29 +1508,19 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
   }
   else
   {
-#ifdef GDK_WINDOWING_QUARTZ
-    dt_osx_autoset_dpi(widget);
-#endif
-    // Probe only while GDK still holds the real resolution: after a scaled call it reports back
-    // the value we set ourselves. _system_dpi < 0 means we were overridden before ever probing.
-    if(!_dpi_overridden || _system_dpi < 0.0)
-    {
-      _system_dpi = gdk_screen_get_resolution(screen);
-      if(_system_dpi < 0.0)
-      {
-        _system_dpi = 96.0;
-        force_default_dpi = TRUE;
-      }
-    }
     base_dpi = _system_dpi;
     dt_print(DT_DEBUG_CONTROL, "[screen resolution] setting the screen resolution to %f dpi\n", base_dpi);
   }
 
-  const gboolean scale_applied = (screen_dpi_overwrite > 0.0) || (ui_scale != 1.0);
   gui->dpi = base_dpi * ui_scale;
-  // Also push when a previous call is being undone, so GDK is put back on the real resolution.
-  if(scale_applied || _dpi_overridden || force_default_dpi) gdk_screen_set_resolution(screen, gui->dpi);
-  _dpi_overridden = scale_applied;
+  // Push whenever a scale is in force, whenever GDK had nothing to report, and whenever a
+  // previous call pushed -- that last case is how the real resolution is put back once the
+  // scale is turned off again.
+  if((screen_dpi_overwrite > 0.0) || (ui_scale != 1.0) || force_default_dpi || _pushed_dpi > 0.0)
+  {
+    gdk_screen_set_resolution(screen, gui->dpi);
+    _pushed_dpi = gui->dpi;
+  }
 
   gui->dpi_factor
       = gui->dpi / 96;
