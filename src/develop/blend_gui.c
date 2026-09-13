@@ -3958,7 +3958,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     gchar *group_placeholder = dt_masks_group_name_for_module(module);
     gtk_entry_set_placeholder_text(GTK_ENTRY(bd->group_shapes_label), group_placeholder);
     g_free(group_placeholder);
-    gtk_widget_set_tooltip_text(bd->group_shapes_label, _("Edit current module mask name"));
+    gtk_widget_set_tooltip_text(bd->group_shapes_label, _("Edit current module's group name"));
     gtk_widget_set_halign(bd->group_shapes_label, GTK_ALIGN_FILL);
     gtk_widget_set_hexpand(bd->group_shapes_label, TRUE);
     g_signal_connect(bd->group_shapes_label, "activate", G_CALLBACK(_blendop_masks_group_name_activate), module);
