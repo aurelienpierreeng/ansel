@@ -7407,8 +7407,8 @@ msgid "no mask used"
 msgstr "keine Maske"
 
 #: ../src/develop/blend_gui.c:3689
-msgid "Edit current module mask name"
-msgstr "Aktuellen Namen der Modulmaske bearbeiten"
+msgid "Edit current module's group name"
+msgstr "Gruppennamen des aktuellen Moduls bearbeiten"
 
 #. buttons for mask polarity and edit mode
 #: ../src/develop/blend_gui.c:3698
