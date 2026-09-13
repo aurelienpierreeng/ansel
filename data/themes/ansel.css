@@ -340,8 +340,8 @@ separator.horizontal {
 
 separator.vertical {
   min-width: 1px;
-  margin-top: 2px;
-  margin-bottom: 2px;
+  margin-top: 0.125em;
+  margin-bottom: 0.125em;
 }
 
 separator.subsection.vertical {
@@ -433,8 +433,8 @@ spinbutton {
   */
   min-height: 1em;
   min-width: 1em;
-  border-radius: 4px;
-  padding: 2px;
+  border-radius: 0.25em;
+  padding: 0.125em;
   font-weight: 400;
 }
 
@@ -469,13 +469,13 @@ spinbutton button {
 button.text-button,
 #search-button {
   /* a bit more horizontal breathing room for text in buttons */
-  padding-left: 4px;
-  padding-right: 4px;
+  padding-left: 0.25em;
+  padding-right: 0.25em;
 }
 
 /* Text Inputs */
 entry {
-  padding: 2px 4px;
+  padding: 0.125em 0.25em;
   min-height: 1em;
   border: 1px solid @recessed_color_border;
   background-image: none;
@@ -518,7 +518,7 @@ treeview {
 .dt_recessed_scroll,
 filechooser scrolledwindow {
   border: 1px solid @recessed_color_border;
-  padding: 2px;
+  padding: 0.125em;
   background-color: @recessed_color_bg;
 }
 
@@ -526,7 +526,7 @@ filechooser scrolledwindow {
   border: none;
   background: none;
   background-color: transparent;
-  margin: -2px;
+  margin: -0.125em;
 }
 
 /**
@@ -592,7 +592,7 @@ scrollbar {
 
 #top-first-line {
   background-color: @toolbar_color;
-  padding: 2px 0;
+  padding: 0.125em 0;
 }
 
 #top-first-line label,
@@ -610,8 +610,8 @@ scrollbar {
 }
 
 #top-second-line > * {
-  margin-top: 2px;
-  margin-bottom: 2px;
+  margin-top: 0.125em;
+  margin-bottom: 0.125em;
 }
 
 #menu-bar menuitem:hover {
@@ -619,11 +619,11 @@ scrollbar {
 }
 
 menuitem {
-  padding: 3px 6px;
+  padding: 0.1875em 0.375em;
 }
 
 menuitem menu menuitem {
-  padding: 3px;
+  padding: 0.1875em;
 }
 
 menubar menuitem label {
@@ -676,7 +676,7 @@ dialog .sidebar row:selected:hover label,
   margin: 0 calc(0.625em - 4px); /* no vertical margin: that's handled as children spacing by the container */
   padding: 0;
   border: 1px solid @recessed_color_bg;
-  border-radius: 10px;
+  border-radius: 0.625em;
 }
 
 .dt_iop_module.dt_module_focus,
@@ -700,7 +700,7 @@ dialog .sidebar row:selected:hover label,
 }
 
 .dt_iop_module #module-header {
-  border-radius: 8px;
+  border-radius: 0.5em;
   border-top: 1px solid shade(@plugin_header_color, 1.15);
   border-bottom: 1px solid shade(@plugin_header_color, 0.85);
 }
@@ -710,7 +710,7 @@ dialog .sidebar row:selected:hover label,
 }
 
 .dt_iop_module.expanded #module-header {
-  border-radius: 8px 8px 0 0;
+  border-radius: 0.5em 0.5em 0 0;
 }
 
 #module-header .dt_module_btn:nth-last-child(2):hover {
@@ -809,7 +809,7 @@ dialog .sidebar row:selected:hover label,
 #plugins_box .dt_plugin_ui_main .dt_section_expander .dt_section_label {
   border-bottom: none;
   margin: 0;
-  padding: 2px;
+  padding: 0.125em;
 }
 
 #collapse-block,
@@ -964,7 +964,7 @@ menuitem>arrow {
 calendar {
   background-color: transparent;
   color: @fg_color;
-  padding: 2px;
+  padding: 0.125em;
 }
 
 calendar.header,
@@ -977,7 +977,7 @@ calendar.button:disabled {
 calendar:selected {
   background-color: @field_selected_bg;
   color: @field_selected_fg;
-  border-radius: 4px;
+  border-radius: 0.25em;
 }
 
 calendar.highlight {
@@ -1214,7 +1214,7 @@ treeview header button {
 }
 
 treeview header label {
-  padding: 2px 4px;
+  padding: 0.125em 0.25em;
 }
 
 /* Preferences & Filechooser Sidebar styling */
@@ -1419,7 +1419,7 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
 }
 
 .thumb-main {
-  margin: 4px;
+  margin: 0.25em;
 }
 
 .thumb-background {
@@ -1443,7 +1443,7 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
 }
 
 .thumb-image {
-  margin: 4px;
+  margin: 0.25em;
 }
 
 #thumbtable-filmstrip .thumb-main:selected {
@@ -1515,12 +1515,12 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
 
 .thumb-bottom,
 .thumb-top {
-  padding: 4px;
+  padding: 0.25em;
 }
 
 #thumbtable-filmstrip .thumb-bottom,
 #thumbtable-filmstrip .thumb-top {
-  padding: 2px;
+  padding: 0.125em;
 }
 
 .dt_overlays_hover .thumb-main:hover .thumb-bottom,
@@ -1534,18 +1534,18 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
 }
 
 .thumb-reject {
-  margin-right: 3px;
+  margin-right: 0.1875em;
 }
 
 .thumb-colorlabels {
-  margin-left: 3px;
+  margin-left: 0.1875em;
   opacity: 0.8;
 }
 
 .thumb-alternative {
   background-color: rgba(255, 255, 255, 0.7);
   border: 1px solid #666;
-  padding: 6px;
+  padding: 0.375em;
 }
 
 .thumb-alternative * {
@@ -1642,8 +1642,8 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
 .thumb-altered,
 .thumb-group,
 .thumb-audio {
-  margin-left: 3px;
-  padding: 1px;
+  margin-left: 0.1875em;
+  padding: 0.0625em;
 }
 
 .thumb-zoom-label {

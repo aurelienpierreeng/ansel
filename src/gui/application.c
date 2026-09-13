@@ -1452,21 +1452,43 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui)
 }
 
 
+// Real system DPI, cached while GDK still holds it. Once a ui_scale is applied, the resolution
+// pushed into GDK is read back by gdk_screen_get_resolution(), so re-probing it on the next
+// configure event would feed the scaled value back in and compound the zoom every time.
+static double _system_dpi = -1.0;
+
+// Whether the previous call pushed a non-system resolution into GDK. Used to restore the real
+// resolution when the scale is turned back off, and to know when a re-probe is safe again.
+static gboolean _dpi_overridden = FALSE;
+
 void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
 {
   GtkWidget *widget = gui->ui->main_window;
+  GdkScreen *screen = gtk_widget_get_screen(widget);
 
   gui->ppd = dt_get_system_gui_ppd(widget);
   dt_widget_set_ppd(gui->ppd);
   gui->filter_image = CAIRO_FILTER_GOOD;
   dt_widget_set_image_filter(gui->filter_image);
 
+  // ui_scale is a GUI-only zoom on top of the screen resolution, kept separate from
+  // screen_dpi_overwrite: that one changes the resolution Ansel reports, this one only changes
+  // how big the GUI is drawn. GTK converts the theme's point-sized font to device pixels through
+  // the screen resolution, so a zoom that did not reach GDK would grow the C-side sizes
+  // (dpi_factor, DT_GUI_BOX_SPACING) while leaving CSS em-based minimum sizes untouched -- a
+  // partial, inconsistent scale. Feeding GDK the effective DPI keeps both axes in sync. Because
+  // it is layout-level scaling (GTK re-negotiates sizes and re-flows), widgets grow instead of
+  // painting over each other the way a CSS transform -- unsupported on GTK3 widgets -- would.
+  const float ui_scale_conf = dt_conf_get_float("ui_scale");
+  const double ui_scale = (ui_scale_conf > 0.0f) ? CLAMP((double)ui_scale_conf, 0.25, 4.0) : 1.0;
+
   // get the screen resolution
+  double base_dpi;
+  gboolean force_default_dpi = FALSE;
   const float screen_dpi_overwrite = dt_conf_get_float("screen_dpi_overwrite");
   if(screen_dpi_overwrite > 0.0)
   {
-    gui->dpi = screen_dpi_overwrite;
-    gdk_screen_set_resolution(gtk_widget_get_screen(widget), screen_dpi_overwrite);
+    base_dpi = screen_dpi_overwrite;
     dt_print(DT_DEBUG_CONTROL, "[screen resolution] setting the screen resolution to %f dpi as specified in "
                                "the configuration file\n",
              screen_dpi_overwrite);
@@ -1476,19 +1498,30 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_autoset_dpi(widget);
 #endif
-    gui->dpi = gdk_screen_get_resolution(gtk_widget_get_screen(widget));
-    if(gui->dpi < 0.0)
+    // Probe only while GDK still holds the real resolution: after a scaled call it reports back
+    // the value we set ourselves. _system_dpi < 0 means we were overridden before ever probing.
+    if(!_dpi_overridden || _system_dpi < 0.0)
     {
-      gui->dpi = 96.0;
-      gdk_screen_set_resolution(gtk_widget_get_screen(widget), 96.0);
-      dt_print(DT_DEBUG_CONTROL, "[screen resolution] setting the screen resolution to the default 96 dpi\n");
+      _system_dpi = gdk_screen_get_resolution(screen);
+      if(_system_dpi < 0.0)
+      {
+        _system_dpi = 96.0;
+        force_default_dpi = TRUE;
+      }
     }
-    else
-      dt_print(DT_DEBUG_CONTROL, "[screen resolution] setting the screen resolution to %f dpi\n", gui->dpi);
+    base_dpi = _system_dpi;
+    dt_print(DT_DEBUG_CONTROL, "[screen resolution] setting the screen resolution to %f dpi\n", base_dpi);
   }
+
+  const gboolean scale_applied = (screen_dpi_overwrite > 0.0) || (ui_scale != 1.0);
+  gui->dpi = base_dpi * ui_scale;
+  // Also push when a previous call is being undone, so GDK is put back on the real resolution.
+  if(scale_applied || _dpi_overridden || force_default_dpi) gdk_screen_set_resolution(screen, gui->dpi);
+  _dpi_overridden = scale_applied;
+
   gui->dpi_factor
       = gui->dpi / 96;
-  dt_screen_set_dpi(gui->dpi); // the raw resolution, for whoever reports it rather than scales by it
+  dt_screen_set_dpi(base_dpi); // the raw resolution, for whoever reports it rather than scales by it
   dt_widget_set_dpi_factor(gui->dpi_factor); // according to man xrandr and the docs of gdk_screen_set_resolution 96 is the default
 
   // em depends on the screen DPI (point -> px), so refresh it here too.
