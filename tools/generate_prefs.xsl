@@ -306,7 +306,7 @@ gboolean restart_required = FALSE;
   <xsl:text>
     {
       GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-      gtk_box_pack_start(GTK_BOX(lbox), gtk_label_new(_("Libraw")), FALSE, FALSE, 0);
+      gtk_box_pack_start(GTK_BOX(lbox), gtk_label_new(_("LibRaw")), FALSE, FALSE, 0);
       gtk_widget_set_name(lbox, "pref_section");
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
 

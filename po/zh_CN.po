@@ -446,11 +446,11 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
+msgid "This setting has been modified"
 msgstr "此设定已被更改。"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
-msgid "views"
+msgid "Views"
 msgstr "查看"
 
 #. TODO: look for active view. Do we know it at init time ?
@@ -460,7 +460,7 @@ msgid "Lighttable"
 msgstr "光台"
 
 #: ../build/src/preferences_gen.h:2444
-msgid "hide built-in presets for utility modules"
+msgid "Hide built-in presets for utility modules"
 msgstr "隐藏模块的内置预设"
 
 #: ../build/src/preferences_gen.h:2455 ../build/src/preferences_gen.h:2491
@@ -491,19 +491,19 @@ msgstr "隐藏模块的内置预设"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
+msgid "Double click to reset to `%s'"
 msgstr "双击以重置到“%s”。"
 
 #: ../build/src/preferences_gen.h:2458
-msgid "hides built-in presets of utility modules in presets menu."
+msgid "Hides built-in presets of utility modules in presets menu."
 msgstr "在预设菜单中隐藏实用程序模块的内置预设。"
 
 #: ../build/src/preferences_gen.h:2480
-msgid "show image time with milliseconds"
+msgid "Show image time with milliseconds"
 msgstr "以毫秒为单位显示图像时间"
 
 #: ../build/src/preferences_gen.h:2494
-msgid "defines whether time should be displayed with milliseconds"
+msgid "Defines whether time should be displayed with milliseconds"
 msgstr "定义是否以毫秒为单位显示时间。"
 
 #: ../build/src/preferences_gen.h:2504 ../src/develop/imageop.c:541
@@ -512,30 +512,30 @@ msgid "Darkroom"
 msgstr "暗房"
 
 #: ../build/src/preferences_gen.h:2524
-msgid "display of individual color channels"
+msgid "Display of individual color channels"
 msgstr "显示单独的颜色通道"
 
 #: ../build/src/preferences_gen.h:2562
 msgid ""
-"defines how color channels are displayed when activated in the parametric "
+"Defines how color channels are displayed when activated in the parametric "
 "masks feature."
 msgstr "定义在参数蒙版功能启用时如何显示颜色通道。"
 
 #: ../build/src/preferences_gen.h:2584
-msgid "pattern for the image information line"
+msgid "Pattern for the image information line"
 msgstr "图像信息线的图案"
 
 #: ../build/src/preferences_gen.h:2605
-msgid "see manual for a list of the tags you can use."
+msgid "See manual for a list of the tags you can use."
 msgstr "有关可以使用的标签的列表，请参阅手册。"
 
 #: ../build/src/preferences_gen.h:2627
-msgid "hide built-in presets for processing modules"
+msgid "Hide built-in presets for processing modules"
 msgstr "隐藏处理模块的内置预设"
 
 #: ../build/src/preferences_gen.h:2641
 msgid ""
-"hides built-in presets of processing modules in both presets and favourites "
+"Hides built-in presets of processing modules in both presets and favourites "
 "menu."
 msgstr "在预设配置菜单和收藏夹菜单中都隐藏内建的处理模块预设配置。"
 
@@ -585,12 +585,12 @@ msgid "Map"
 msgstr "地图"
 
 #: ../build/src/preferences_gen.h:2787
-msgid "pretty print the image location"
+msgid "Pretty print the image location"
 msgstr "打印图像的位置"
 
 #: ../build/src/preferences_gen.h:2801
 msgid ""
-"show a more readable representation of the location in the image information "
+"Show a more readable representation of the location in the image information "
 "module"
 msgstr "在图像的信息模块中显示更具可读性的位置标示。"
 
@@ -600,30 +600,30 @@ msgstr "幻灯片"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
+msgid "Processing"
 msgstr "数据处理"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
-msgid "image processing"
+msgid "Image processing"
 msgstr "图像处理"
 
 #: ../build/src/preferences_gen.h:2860
-msgid "always use LittleCMS 2 to apply output color profile"
+msgid "Always use LittleCMS 2 to apply output color profile"
 msgstr "始终使用 LittleCMS 2 应用输出颜色配置文件"
 
 #: ../build/src/preferences_gen.h:2874
-msgid "this is slower than the default."
+msgid "This is slower than the default."
 msgstr "比起默认这会显著变慢。"
 
 #: ../build/src/preferences_gen.h:2896
-msgid "pixel interpolator (warp)"
+msgid "Pixel interpolator (warp)"
 msgstr "像素插值器"
 
 #: ../build/src/preferences_gen.h:2939
 #, fuzzy
 msgid ""
-"pixel interpolator used in modules for rotation, lens correction, liquify, "
-"cropping and final scaling. bilinear (soft, no overshoot), bicubic (Catmull-"
+"Pixel interpolator used in modules for rotation, lens correction, liquify, "
+"cropping and final scaling. Bilinear (soft, no overshoot), bicubic (Catmull-"
 "Rom, sharp but rings at edges), mitchell (Mitchell-Netravali, sharp and "
 "effectively halo-free)."
 msgstr ""
@@ -631,18 +631,18 @@ msgstr ""
 "lanczos2）。"
 
 #: ../build/src/preferences_gen.h:2961
-msgid "pixel interpolator (scaling)"
+msgid "Pixel interpolator (scaling)"
 msgstr "像素插值器（缩放）"
 
 #: ../build/src/preferences_gen.h:3004
 msgid ""
-"pixel interpolator used for scaling. bilinear (soft, no overshoot), bicubic "
+"Pixel interpolator used for scaling. Bilinear (soft, no overshoot), bicubic "
 "(Catmull-Rom, sharp but rings at edges), mitchell (Mitchell-Netravali, sharp "
 "and effectively halo-free)."
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
+msgid "3D LUT root folder"
 msgstr "3D LUT 根文件夹"
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
@@ -654,14 +654,23 @@ msgstr "3D LUT 根文件夹"
 msgid "select directory"
 msgstr "选择目录"
 
+#: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
+#: ../src/control/jobs/control_jobs.c:1827 ../src/gui/preferences.c:1223
+#: ../src/gui/presets.c:489 ../src/imageio/storage/disk.c:153
+#: ../src/imageio/storage/disk.c:220 ../src/imageio/storage/gallery.c:141
+#: ../src/imageio/storage/gallery.c:205 ../src/libs/styles.c:415
+#: ../tools/generate_prefs.xsl:680
+msgid "Select directory"
+msgstr "选择目录"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
-"this folder (and sub-folders) contains Lut files used by lut3d modules. "
+"This folder (and sub-folders) contains LUT files used by lut3d modules. "
 "(need a restart)."
 msgstr "该目录（及其子目录）应包含 LUT 3D 模块使用的 LUT 文件。（需要重启。）"
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
+msgid "CPU / GPU / memory"
 msgstr "中央处理器/显卡处理器/内存"
 
 #: ../build/src/preferences_gen.h:3077
@@ -675,7 +684,7 @@ msgstr "CPU 核心"
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
+msgid "Double click to reset to `%d'"
 msgstr "双击以重置到“%d”。"
 
 #: ../build/src/preferences_gen.h:3100
@@ -733,16 +742,16 @@ msgstr ""
 "可在模块更改时立即重新计算。"
 
 #: ../build/src/preferences_gen.h:3302
-msgid "enable disk backend for thumbnail cache"
+msgid "Enable disk backend for thumbnail cache"
 msgstr "为缩略图缓存启用磁盘后端"
 
 #: ../build/src/preferences_gen.h:3316
 msgid ""
-"if enabled, write thumbnails to disk (.cache/ansel/) when evicted from the "
-"memory cache. note that this can take a lot of memory (several gigabytes for "
-"20k images) and will never delete cached thumbnails again. it's safe though "
-"to delete these manually, if you want. light table performance will be "
-"increased greatly when browsing a lot. to generate all thumbnails of your "
+"If enabled, write thumbnails to disk (.cache/ansel/) when evicted from the "
+"memory cache. Note that this can take a lot of memory (several gigabytes for "
+"20k images) and will never delete cached thumbnails again. It's safe though "
+"to delete these manually, if you want. Light table performance will be "
+"increased greatly when browsing a lot. To generate all thumbnails of your "
 "entire collection offline, run 'ansel-generate-cache'."
 msgstr ""
 "启用后，当缩略图从内存缓冲区移除时将被写入磁盘（.cache/ansel/）。注意这可能会"
@@ -751,31 +760,36 @@ msgstr ""
 "过“ansel-generate-cache”离线生成整个照片库的缩略图。"
 
 #: ../build/src/preferences_gen.h:3338
-msgid "system library with OpenCL runtime"
+msgid "System library with OpenCL runtime"
 msgstr "带有 OpenCL 运行时的系统库"
 
 #: ../build/src/preferences_gen.h:3356
 msgid ""
-"OpenCL runtime library is normally detected automatically by ansel. if your "
+"OpenCL runtime library is normally detected automatically by Ansel. If your "
 "OpenCL runtime is at an unusual place and cannot be detected, enter the full "
-"pathname here. leave empty for default behavior."
+"pathname here. Leave empty for default behavior."
 msgstr ""
 "Ansel 通常会自动检测 OpenCL 运行时库。如果您的 OpenCL 运行时库位于非常规位置"
 "且无法被检测到，请在此处输入完整路径名。留空则使用默认行为。"
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
+msgid "Not available"
 msgstr "不可用"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
+msgid "Not available on this system"
 msgstr "在此系统不可用"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
 msgstr "libraw"
+
+#: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
+#: ../tools/generate_prefs.xsl:309
+msgid "LibRaw"
+msgstr "LibRaw"
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
 msgid ""
@@ -831,100 +845,100 @@ msgstr ""
 "对你的相机支持不是很好，请使用此项。"
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
+msgid "Security"
 msgstr "安全性"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
+msgid "General"
 msgstr "常规"
 
 #: ../build/src/preferences_gen.h:3546
-msgid "ask before removing images from the library"
+msgid "Ask before removing images from the library"
 msgstr "从照片库移除图像前询问"
 
 #: ../build/src/preferences_gen.h:3560
-msgid "always ask the user before any image is removed from the library"
+msgid "Always ask the user before any image is removed from the library"
 msgstr "总是在从照片库移除任何图像前询问用户。"
 
 #: ../build/src/preferences_gen.h:3582
-msgid "ask before deleting images from disk"
+msgid "Ask before deleting images from disk"
 msgstr "从磁盘擦除图像前询问"
 
 #: ../build/src/preferences_gen.h:3596
-msgid "always ask the user before any image file is deleted"
+msgid "Always ask the user before any image file is deleted"
 msgstr "在删除任何图像文件之前，始终询问用户。"
 
 #: ../build/src/preferences_gen.h:3618
-msgid "ask before discarding history stack"
+msgid "Ask before discarding history stack"
 msgstr "丢弃历史记录栈前询问"
 
 #: ../build/src/preferences_gen.h:3632
-msgid "always ask the user before history stack is discarded on any image"
+msgid "Always ask the user before history stack is discarded on any image"
 msgstr "在任何图像上丢弃历史记录栈之前，始终询问用户。"
 
 #: ../build/src/preferences_gen.h:3654
-msgid "try to use trash when deleting images"
+msgid "Try to use trash when deleting images"
 msgstr "删除图像时尝试将文件发送到回收站"
 
 #: ../build/src/preferences_gen.h:3668
 msgid ""
-"send files to trash instead of permanently deleting files on system that "
+"Send files to trash instead of permanently deleting files on system that "
 "supports it"
 msgstr "对于支持回收站的系统，将文件发送到回收站，而不是永久删除文件。"
 
 #: ../build/src/preferences_gen.h:3690
-msgid "ask before moving images from film roll folder"
+msgid "Ask before moving images from film roll folder"
 msgstr "从胶卷文件夹中移除图像前询问"
 
 #: ../build/src/preferences_gen.h:3704
-msgid "always ask the user before any image file is moved."
+msgid "Always ask the user before any image file is moved."
 msgstr "移动任何图像前询问用户。"
 
 #: ../build/src/preferences_gen.h:3726
-msgid "ask before copying images to new film roll folder"
+msgid "Ask before copying images to new film roll folder"
 msgstr "复制图像到新的胶卷文件夹前询问"
 
 #: ../build/src/preferences_gen.h:3740
-msgid "always ask the user before any image file is copied."
+msgid "Always ask the user before any image file is copied."
 msgstr "复制任何图像前询问用户。"
 
 #: ../build/src/preferences_gen.h:3762
-msgid "ask before removing empty folders"
+msgid "Ask before removing empty folders"
 msgstr "移除空文件夹前询问"
 
 #: ../build/src/preferences_gen.h:3776
 msgid ""
-"always ask the user before removing any empty folder. this can happen after "
+"Always ask the user before removing any empty folder. This can happen after "
 "moving or deleting images."
 msgstr "在磁盘中删除任何空文件夹前询问用户。可能发生在移动或删除图像之后。"
 
 #: ../build/src/preferences_gen.h:3798
-msgid "ask before deleting a tag"
+msgid "Ask before deleting a tag"
 msgstr "删除标签前询问"
 
 #: ../build/src/preferences_gen.h:3833
-msgid "ask before deleting a style"
+msgid "Ask before deleting a style"
 msgstr "删除样式前询问"
 
 #: ../build/src/preferences_gen.h:3868
-msgid "ask before deleting a preset"
+msgid "Ask before deleting a preset"
 msgstr "删除预设前询问"
 
 #: ../build/src/preferences_gen.h:3882
-msgid "will ask for confirmation before deleting or overwriting a preset"
+msgid "Will ask for confirmation before deleting or overwriting a preset"
 msgstr "将在删除或覆盖预设前请求确认。"
 
 #: ../build/src/preferences_gen.h:3904
-msgid "ask before exporting in overwrite mode"
+msgid "Ask before exporting in overwrite mode"
 msgstr "在以覆盖模式导出前询问"
 
 #: ../build/src/preferences_gen.h:3918
-msgid "will ask for confirmation before exporting files in overwrite mode"
+msgid "Will ask for confirmation before exporting files in overwrite mode"
 msgstr "将在以覆盖模式导出前请求确认。"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
+msgid "Other"
 msgstr "其他"
 
 #: ../build/src/preferences_gen.h:3948
@@ -937,17 +951,17 @@ msgid ""
 msgstr "用于保存密码的后端服务：自动，无，libsecret，kwallet。"
 
 #: ../build/src/preferences_gen.h:4020
-msgid "executable for playing audio files"
+msgid "Executable for playing audio files"
 msgstr "用于播放音频文件的可执行文件"
 
 #: ../build/src/preferences_gen.h:4038
 msgid ""
-"this external program is used to play audio files some cameras record to "
+"This external program is used to play audio files some cameras record to "
 "keep notes for images"
 msgstr "使用此外部程序播放相机记录的备忘音频。"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
+msgid "Storage"
 msgstr "存储"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
@@ -955,50 +969,55 @@ msgstr "存储"
 msgid "database"
 msgstr "数据库"
 
+#: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
+#: ../tools/generate_prefs.xsl:368
+msgid "Database"
+msgstr "数据库"
+
 #: ../build/src/preferences_gen.h:4089
-msgid "database location"
+msgid "Database location"
 msgstr "数据库位置"
 
 #: ../build/src/preferences_gen.h:4107
 msgid ""
-"filename relative to ~/.config/ansel or starting with a slash (needs a "
+"Filename relative to ~/.config/ansel or starting with a slash (needs a "
 "restart)."
 msgstr "文件名相对于 ~/.config/ansel 或以斜杠开头（需要重启）。"
 
 #: ../build/src/preferences_gen.h:4129
-msgid "check for database maintenance"
+msgid "Check for database maintenance"
 msgstr "检查数据库维护"
 
 #: ../build/src/preferences_gen.h:4192
 msgid ""
-"this option indicates when to check database fragmentation and perform "
+"This option indicates when to check database fragmentation and perform "
 "maintenance"
 msgstr "此选项指示何时检查数据库碎片并执行维护。"
 
 #: ../build/src/preferences_gen.h:4214
-msgid "database fragmentation ratio threshold"
+msgid "Database fragmentation ratio threshold"
 msgstr "数据库碎片比率阈值"
 
 #: ../build/src/preferences_gen.h:4237
 msgid ""
-"fragmentation ratio above which to ask or carry out automatically database "
+"Fragmentation ratio above which to ask or carry out automatically database "
 "maintenance"
 msgstr "要求或执行自动数据库维护的碎片比率。"
 
 #: ../build/src/preferences_gen.h:4259
-msgid "create database snapshot"
+msgid "Create database snapshot"
 msgstr "创建数据库快照"
 
 #: ../build/src/preferences_gen.h:4312
 msgid ""
-"database snapshots are created right before closing ansel. options allow you "
+"Database snapshots are created right before closing Ansel. Options allow you "
 "to choose how often to make snapshots:\n"
-"never - simply don't do snapshots. that way the only snapshots done are "
+"never - simply don't do snapshots. That way the only snapshots done are "
 "mandatory version-upgrade snapshots\n"
 "once a month - create snapshot if a month has passed since last snapshot\n"
 "once a week - create snapshot if 7 days had passed since last snapshot\n"
 "once a day - create snapshot if over 24h passed since last snapshot\n"
-"on close - create snapshot every time ansel is closed"
+"on close - create snapshot every time Ansel is closed"
 msgstr ""
 "数据库快照会在 Ansel 退出前创建。此选项可以控制快照创建的频率：\n"
 "从不 - 不要定期创建快照，只在每次版本更新时强制创建快照。\n"
@@ -1008,13 +1027,13 @@ msgstr ""
 "关闭时 - 每次关闭 Ansel 都创建快照。"
 
 #: ../build/src/preferences_gen.h:4334
-msgid "how many snapshots to keep"
+msgid "How many snapshots to keep"
 msgstr "要保留多少快照"
 
 #: ../build/src/preferences_gen.h:4357
 msgid ""
-"after successfully creating snapshot, how many older snapshots to keep "
-"(excluding mandatory version update ones). enter -1 to keep all snapshots\n"
+"After successfully creating snapshot, how many older snapshots to keep "
+"(excluding mandatory version update ones). Enter -1 to keep all snapshots\n"
 "keep in mind that snapshots do take some space and you only need the most "
 "recent one for successful restore"
 msgstr ""
@@ -1026,7 +1045,7 @@ msgid "xmp"
 msgstr "XMP 数据"
 
 #: ../build/src/preferences_gen.h:4387
-msgid "write sidecar file for each image"
+msgid "Write sidecar file for each image"
 msgstr "为每个图片写入附属文件"
 
 #: ../build/src/preferences_gen.h:4425
@@ -1048,31 +1067,31 @@ msgstr ""
 " - 编辑后：在更改任何图像后写入附属文件。"
 
 #: ../build/src/preferences_gen.h:4447
-msgid "store xmp tags in compressed format"
+msgid "Store XMP tags in compressed format"
 msgstr "以压缩格式存储 XMP 标签"
 
 #: ../build/src/preferences_gen.h:4490
 msgid ""
-"entries in xmp tags can get rather large and may exceed the available space "
-"to store the history stack in output files. this option allows xmp tags to "
+"Entries in XMP tags can get rather large and may exceed the available space "
+"to store the history stack in output files. This option allows XMP tags to "
 "be compressed and save space."
 msgstr ""
 "大量 XMP 标签中的条目可能会超过输出文件中存储历史栈的可用空间。此选项允许压"
 "缩 XMP 标签以节约空间。"
 
 #: ../build/src/preferences_gen.h:4512
-msgid "look for updated xmp files on startup"
+msgid "Look for updated XMP files on startup"
 msgstr "启动时查找发生更改的 XMP 文件"
 
 #: ../build/src/preferences_gen.h:4526
 msgid ""
-"check file modification times of all xmp files on startup to check if any "
+"Check file modification times of all XMP files on startup to check if any "
 "got updated in the meantime"
 msgstr "启动时检查所有 XMP 文件的更改时间以判断文件是否被更新。"
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
+msgid "Privacy"
 msgstr "私有"
 
 #: ../build/src/preferences_gen.h:4556
@@ -1089,11 +1108,11 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
+msgid "Miscellaneous"
 msgstr "杂项"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
+msgid "Interface"
 msgstr "界面"
 
 #: ../build/src/preferences_gen.h:4621
@@ -1138,12 +1157,12 @@ msgstr ""
 "系统上的系统级快捷键完全失效。"
 
 #: ../build/src/preferences_gen.h:4729
-msgid "sort built-in presets first"
+msgid "Sort built-in presets first"
 msgstr "先对内置预设排序"
 
 #: ../build/src/preferences_gen.h:4743
 msgid ""
-"whether to show built-in presets first before user's presets in presets menu."
+"Whether to show built-in presets first before user's presets in presets menu."
 msgstr "是否先显示内置预设，然后在预设菜单中显示用户预设。"
 
 #: ../build/src/preferences_gen.h:4765
@@ -1159,13 +1178,13 @@ msgstr ""
 "异常慢的问题，请检查此项。"
 
 #: ../build/src/preferences_gen.h:4801
-msgid "method to use for getting the display profile"
+msgid "Method to use for getting the display profile"
 msgstr "用于获取显示配置文件的方法"
 
 #: ../build/src/preferences_gen.h:4844
 msgid ""
-"this option allows to force a specific means of getting the current display "
-"profile. this is useful when one alternative gives wrong results"
+"This option allows to force a specific means of getting the current display "
+"profile. This is useful when one alternative gives wrong results"
 msgstr ""
 "此选项可以指定使用特定方式获取显示器的色彩管理配置。当其中一个方式返回错误结"
 "果时请使用此选项。"
@@ -1178,15 +1197,15 @@ msgid "tags"
 msgstr "标签"
 
 #: ../build/src/preferences_gen.h:4874
-msgid "omit hierarchy in simple tag lists"
+msgid "Omit hierarchy in simple tag lists"
 msgstr "省略简单标签列表中的层次结构"
 
 #: ../build/src/preferences_gen.h:4888
 msgid ""
-"when creating XMP file the hierarchical tags are also added as a simple list "
-"of non-hierarchical ones to make them visible to some other programs. when "
-"this option is checked ansel will only include their last part and ignore "
-"the rest. so 'foo|bar|baz' will only add 'baz'."
+"When creating XMP file the hierarchical tags are also added as a simple list "
+"of non-hierarchical ones to make them visible to some other programs. When "
+"this option is checked Ansel will only include their last part and ignore "
+"the rest. So 'foo|bar|baz' will only add 'baz'."
 msgstr ""
 "创建 XMP 文件时，层级标签也会以无结构列表插入，以允许其他程序使用这些标签。当"
 "此选项启用时，Ansel 将只会插入层级标签最后的部分。例如“foo|bar|baz”会"
@@ -1284,6 +1303,14 @@ msgstr "剪切"
 #: ../src/gui/preferences.c:1007 ../src/gui/presets.c:697
 #: ../src/libs/metadata_view.c:181
 msgid "focal length"
+msgstr "镜头焦距"
+
+#. focal length
+#: ../build/src/iop/introspection_ashift.c:148
+#: ../build/src/iop/introspection_ashift.c:291 ../src/common/collection.c:675
+#: ../src/gui/preferences.c:1007 ../src/gui/presets.c:697
+#: ../src/libs/metadata_view.c:181
+msgid "Focal length"
 msgstr "镜头焦距"
 
 #: ../build/src/iop/introspection_ashift.c:154
@@ -1522,6 +1549,12 @@ msgstr "偏移"
 #: ../src/gui/preferences.c:991 ../src/gui/presets.c:648
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
+msgstr "镜头"
+
+#: ../build/src/iop/introspection_blurs.c:220 ../src/common/collection.c:674
+#: ../src/gui/preferences.c:991 ../src/gui/presets.c:648
+#: ../src/libs/metadata_view.c:177
+msgid "Lens"
 msgstr "镜头"
 
 #: ../build/src/iop/introspection_blurs.c:221
@@ -3221,6 +3254,15 @@ msgstr "内嵌增益图"
 msgid "exposure"
 msgstr "曝光"
 
+#. exposure
+#: ../build/src/iop/introspection_relight.c:43
+#: ../build/src/iop/introspection_relight.c:98 ../src/common/collection.c:678
+#: ../src/gui/preferences.c:999 ../src/gui/presets.c:667
+#: ../src/iop/basicadj.c:594 ../src/iop/exposure.c:1102
+#: ../src/libs/metadata_view.c:179
+msgid "Exposure"
+msgstr "曝光"
+
 #: ../build/src/iop/introspection_retouch.c:267
 #: ../build/src/iop/introspection_retouch.c:414
 msgid "fill mode"
@@ -3689,6 +3731,12 @@ msgstr "取消(_C)"
 msgid "_save"
 msgstr "保存(_S)"
 
+#: ../src/chart/main.c:517 ../src/gui/preferences.c:1224
+#: ../src/gui/styles_dialog.c:440 ../src/libs/ioporder.c:1539
+#: ../src/libs/styles.c:416 ../src/common/lut_viewer.c:1208
+msgid "_Save"
+msgstr "保存(_S)"
+
 #. TODO: is the rank interesting, too?
 #: ../src/chart/main.c:1076
 #, c-format
@@ -3879,6 +3927,12 @@ msgstr "ISO"
 #: ../src/common/collection.c:677 ../src/gui/preferences.c:1003
 #: ../src/gui/presets.c:682 ../src/libs/metadata_view.c:178
 msgid "aperture"
+msgstr "光圈"
+
+#. aperture
+#: ../src/common/collection.c:677 ../src/gui/preferences.c:1003
+#: ../src/gui/presets.c:682 ../src/libs/metadata_view.c:178
+msgid "Aperture"
 msgstr "光圈"
 
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
@@ -4887,6 +4941,12 @@ msgstr[0] "删除空目录？"
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
 #: ../src/libs/geotagging.c:857 ../src/libs/tagging.c:3116
 msgid "name"
+msgstr "名称"
+
+#: ../src/common/film.c:317 ../src/gui/preferences.c:979
+#: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
+#: ../src/libs/geotagging.c:857 ../src/libs/tagging.c:3116
+msgid "Name"
 msgstr "名称"
 
 #: ../src/common/film.c:424
@@ -8877,33 +8937,33 @@ msgstr "不能从未修改的图像复制操作历史。"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
+msgid "Interface language"
 msgstr "界面语言"
 
 #: ../src/gui/preferences.c:348
-msgid "double-click to reset to the system language"
+msgid "Double-click to reset to the system language"
 msgstr "双击可重置系统语言。"
 
 #: ../src/gui/preferences.c:350
 msgid ""
-"set the language of the user interface. the system default is marked with an "
+"Set the language of the user interface. The system default is marked with an "
 "* (needs a restart)"
 msgstr "设置用户界面的语言。带有 * 的项是默认值。（需要重新启动程序以生效。）"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
+msgid "Theme"
 msgstr "主题"
 
 #: ../src/gui/preferences.c:388
-msgid "set the theme for the user interface"
+msgid "Set the theme for the user interface"
 msgstr "设置用户界面的主题。"
 
 #: ../src/gui/preferences.c:401 ../src/gui/preferences.c:408
-msgid "use system font size"
+msgid "Use system font size"
 msgstr "使用系统字体大小"
 
 #: ../src/gui/preferences.c:417 ../src/gui/preferences.c:424
-msgid "font size in points"
+msgid "Font size in points"
 msgstr "字体大小（磅）"
 
 #: ../src/gui/preferences.c:429
@@ -8912,10 +8972,10 @@ msgstr "GUI 控件和文本 DPI"
 
 #: ../src/gui/preferences.c:436
 msgid ""
-"adjust the global GUI resolution to rescale controls, buttons, labels, etc.\n"
-"increase for a magnified GUI, decrease to fit more content in window.\n"
-"set to -1 to use the system-defined global resolution.\n"
-"default is 96 DPI on most systems.\n"
+"Adjust the global GUI resolution to rescale controls, buttons, labels, etc.\n"
+"Increase for a magnified GUI, decrease to fit more content in window.\n"
+"Set to -1 to use the system-defined global resolution.\n"
+"Default is 96 DPI on most systems.\n"
 "(needs a restart)."
 msgstr ""
 "调整全局 GUI 分辨率以重新缩放控件、按钮、标签等。\n"
@@ -8926,20 +8986,20 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
+msgid "Modify selected theme with CSS tweaks below"
 msgstr "使用下面的 CSS 微调选定的主题"
 
 #: ../src/gui/preferences.c:453
-msgid "modify theme with CSS keyed below (saved to user.css)"
+msgid "Modify theme with CSS keyed below (saved to user.css)"
 msgstr "用下面的 CSS 修改主题（保存到 user.css）。"
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr "保存 CSS 并应用"
 
 #: ../src/gui/preferences.c:482
-msgid "click to save and apply the CSS tweaks entered in this editor"
+msgid "Click to save and apply the CSS tweaks entered in this editor"
 msgstr "点击保存并应用在此编辑器中输入的 CSS 调整。"
 
 #. load default text with some pointers
@@ -8961,7 +9021,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -8983,7 +9043,7 @@ msgstr "Ansel 需要重新启动才能使设置生效。"
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
+msgid "Presets"
 msgstr "预置"
 
 #. exif
@@ -8992,9 +9052,20 @@ msgstr "预置"
 msgid "model"
 msgstr "型号"
 
+#. exif
+#: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
+#: ../src/libs/metadata_view.c:175
+msgid "Model"
+msgstr "型号"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
+msgstr "厂商"
+
+#: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
+#: ../src/libs/metadata_view.c:176
+msgid "Maker"
 msgstr "厂商"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
@@ -9002,41 +9073,52 @@ msgstr "厂商"
 msgid "auto"
 msgstr "自动"
 
+#: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
+#: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
+msgid "Auto"
+msgstr "自动"
+
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
+msgid "Search presets list"
 msgstr "搜索预设列表"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
-"incrementally search the list of presets\n"
-"press up or down keys to cycle through matches"
+"Incrementally search the list of presets\n"
+"Press up or down keys to cycle through matches"
 msgstr ""
 "渐进式搜索预设列表。\n"
 "按上或下键来查看搜索匹配的内容。"
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
+msgid "Import..."
 msgstr "导入…"
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
+msgid "Export..."
 msgstr "导出…"
 
 #: ../src/gui/preferences.c:1173
 #, c-format
-msgid "failed to import preset %s"
+msgid "Failed to import preset %s"
 msgstr "导入预设 %s 失败。"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr "选择要导入的预设"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
 #: ../src/libs/collect.c:1841 ../src/libs/geotagging.c:959
 #: ../src/libs/styles.c:552
 msgid "_open"
+msgstr "打开(_O)"
+
+#: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
+#: ../src/libs/collect.c:1841 ../src/libs/geotagging.c:959
+#: ../src/libs/styles.c:552
+msgid "_Open"
 msgstr "打开(_O)"
 
 #: ../src/gui/preferences.c:1194
@@ -9047,6 +9129,12 @@ msgstr "Ansel 预设文件"
 #: ../src/iop/lut3d.c:1371 ../src/libs/geotagging.c:975
 #: ../src/libs/styles.c:566
 msgid "all files"
+msgstr "全部文件"
+
+#: ../src/gui/preferences.c:1199 ../src/gui/actions/edit.c:342
+#: ../src/iop/lut3d.c:1371 ../src/libs/geotagging.c:975
+#: ../src/libs/styles.c:566
+msgid "All files"
 msgstr "全部文件"
 
 #: ../src/gui/presets.c:107
@@ -21659,7 +21747,7 @@ msgstr "</xsl:text><xsl:value-of select="
 
 #: ../tools/generate_prefs.xsl:759
 #, c-format
-msgid "double click to reset to `%.03f'"
+msgid "Double click to reset to `%.03f'"
 msgstr "双击以重置到 `%.03f'。"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790

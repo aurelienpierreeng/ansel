@@ -446,12 +446,12 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
+msgid "This setting has been modified"
 msgstr "deze instelling werd gewijzigd"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
+msgid "Views"
 msgstr "vooraf bekijken"
 
 #. TODO: look for active view. Do we know it at init time ?
@@ -462,7 +462,7 @@ msgid "Lighttable"
 msgstr "bibliotheek"
 
 #: ../build/src/preferences_gen.h:2444
-msgid "hide built-in presets for utility modules"
+msgid "Hide built-in presets for utility modules"
 msgstr "verberg standaard voorkeuren voor hulpmodules"
 
 #: ../build/src/preferences_gen.h:2455 ../build/src/preferences_gen.h:2491
@@ -493,20 +493,20 @@ msgstr "verberg standaard voorkeuren voor hulpmodules"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
+msgid "Double click to reset to `%s'"
 msgstr "dubbelklikken is resetten naar `%s'"
 
 #: ../build/src/preferences_gen.h:2458
-msgid "hides built-in presets of utility modules in presets menu."
+msgid "Hides built-in presets of utility modules in presets menu."
 msgstr ""
 "verbergt de ingebouwde voorkeuren van de gereedschapsmodules in het menu."
 
 #: ../build/src/preferences_gen.h:2480
-msgid "show image time with milliseconds"
+msgid "Show image time with milliseconds"
 msgstr "afbeelding tijd weergeven met milliseconden"
 
 #: ../build/src/preferences_gen.h:2494
-msgid "defines whether time should be displayed with milliseconds"
+msgid "Defines whether time should be displayed with milliseconds"
 msgstr "definieert of tijd weergegeven moet worden in milliseconden"
 
 #: ../build/src/preferences_gen.h:2504 ../src/develop/imageop.c:541
@@ -516,32 +516,32 @@ msgid "Darkroom"
 msgstr "ontwikkelen"
 
 #: ../build/src/preferences_gen.h:2524
-msgid "display of individual color channels"
+msgid "Display of individual color channels"
 msgstr "weergave van individuele kleur kanalen"
 
 #: ../build/src/preferences_gen.h:2562
 msgid ""
-"defines how color channels are displayed when activated in the parametric "
+"Defines how color channels are displayed when activated in the parametric "
 "masks feature."
 msgstr ""
 "bepaalt hoe kleurkanalen worden weergegeven indien geactiveerd in het "
 "parametrisch masker."
 
 #: ../build/src/preferences_gen.h:2584
-msgid "pattern for the image information line"
+msgid "Pattern for the image information line"
 msgstr "patroon voor de afbeeldingsinformatielijn"
 
 #: ../build/src/preferences_gen.h:2605
-msgid "see manual for a list of the tags you can use."
+msgid "See manual for a list of the tags you can use."
 msgstr "lees de handleiding voor een lijst van bruikbare labels."
 
 #: ../build/src/preferences_gen.h:2627
-msgid "hide built-in presets for processing modules"
+msgid "Hide built-in presets for processing modules"
 msgstr "verwijder ingebouwde voorkeuren voor verwerkingsmodules"
 
 #: ../build/src/preferences_gen.h:2641
 msgid ""
-"hides built-in presets of processing modules in both presets and favourites "
+"Hides built-in presets of processing modules in both presets and favourites "
 "menu."
 msgstr ""
 "verbergt de ingebouwde voorkeuren van de verwerkingsmodules in de voorkeuren "
@@ -589,12 +589,12 @@ msgid "Map"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:2787
-msgid "pretty print the image location"
+msgid "Pretty print the image location"
 msgstr "afbeeldingslocatie mooi afdrukken"
 
 #: ../build/src/preferences_gen.h:2801
 msgid ""
-"show a more readable representation of the location in the image information "
+"Show a more readable representation of the location in the image information "
 "module"
 msgstr "vertoon in de informatiemodule een beter leesbare weergave"
 
@@ -605,30 +605,30 @@ msgstr "presentatie"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
+msgid "Processing"
 msgstr "verwerken"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
-msgid "image processing"
+msgid "Image processing"
 msgstr "afbeelding verwerken"
 
 #: ../build/src/preferences_gen.h:2860
-msgid "always use LittleCMS 2 to apply output color profile"
+msgid "Always use LittleCMS 2 to apply output color profile"
 msgstr "gebruik altijd LittleCMS als toepassing voor uitgaand profiel"
 
 #: ../build/src/preferences_gen.h:2874
-msgid "this is slower than the default."
+msgid "This is slower than the default."
 msgstr "dit is langzamer dan de standaard."
 
 #: ../build/src/preferences_gen.h:2896
-msgid "pixel interpolator (warp)"
+msgid "Pixel interpolator (warp)"
 msgstr "pixelinterpolatie (warp)"
 
 #: ../build/src/preferences_gen.h:2939
 #, fuzzy
 msgid ""
-"pixel interpolator used in modules for rotation, lens correction, liquify, "
-"cropping and final scaling. bilinear (soft, no overshoot), bicubic (Catmull-"
+"Pixel interpolator used in modules for rotation, lens correction, liquify, "
+"cropping and final scaling. Bilinear (soft, no overshoot), bicubic (Catmull-"
 "Rom, sharp but rings at edges), mitchell (Mitchell-Netravali, sharp and "
 "effectively halo-free)."
 msgstr ""
@@ -636,18 +636,18 @@ msgstr ""
 "maken, uitsnijden en uiteindelijke schaling (bilineair, bicubic, lanczos2)."
 
 #: ../build/src/preferences_gen.h:2961
-msgid "pixel interpolator (scaling)"
+msgid "Pixel interpolator (scaling)"
 msgstr "pixel interpolatie (schaalvergroting)"
 
 #: ../build/src/preferences_gen.h:3004
 msgid ""
-"pixel interpolator used for scaling. bilinear (soft, no overshoot), bicubic "
+"Pixel interpolator used for scaling. Bilinear (soft, no overshoot), bicubic "
 "(Catmull-Rom, sharp but rings at edges), mitchell (Mitchell-Netravali, sharp "
 "and effectively halo-free)."
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
+msgid "3D LUT root folder"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
@@ -659,14 +659,23 @@ msgstr ""
 msgid "select directory"
 msgstr "selecteer map"
 
+#: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
+#: ../src/control/jobs/control_jobs.c:1827 ../src/gui/preferences.c:1223
+#: ../src/gui/presets.c:489 ../src/imageio/storage/disk.c:153
+#: ../src/imageio/storage/disk.c:220 ../src/imageio/storage/gallery.c:141
+#: ../src/imageio/storage/gallery.c:205 ../src/libs/styles.c:415
+#: ../tools/generate_prefs.xsl:680
+msgid "Select directory"
+msgstr "selecteer map"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
-"this folder (and sub-folders) contains Lut files used by lut3d modules. "
+"This folder (and sub-folders) contains LUT files used by lut3d modules. "
 "(need a restart)."
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
+msgid "CPU / GPU / memory"
 msgstr "cpu / gpu / memory"
 
 #: ../build/src/preferences_gen.h:3077
@@ -680,7 +689,7 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
+msgid "Double click to reset to `%d'"
 msgstr "dubbelklik om te resetten naar `%d'"
 
 #: ../build/src/preferences_gen.h:3100
@@ -735,43 +744,48 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3302
-msgid "enable disk backend for thumbnail cache"
+msgid "Enable disk backend for thumbnail cache"
 msgstr "inschakelen schijfbackend voor miniaturencache"
 
 #: ../build/src/preferences_gen.h:3316
 msgid ""
-"if enabled, write thumbnails to disk (.cache/ansel/) when evicted from the "
-"memory cache. note that this can take a lot of memory (several gigabytes for "
-"20k images) and will never delete cached thumbnails again. it's safe though "
-"to delete these manually, if you want. light table performance will be "
-"increased greatly when browsing a lot. to generate all thumbnails of your "
+"If enabled, write thumbnails to disk (.cache/ansel/) when evicted from the "
+"memory cache. Note that this can take a lot of memory (several gigabytes for "
+"20k images) and will never delete cached thumbnails again. It's safe though "
+"to delete these manually, if you want. Light table performance will be "
+"increased greatly when browsing a lot. To generate all thumbnails of your "
 "entire collection offline, run 'ansel-generate-cache'."
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3338
-msgid "system library with OpenCL runtime"
+msgid "System library with OpenCL runtime"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3356
 msgid ""
-"OpenCL runtime library is normally detected automatically by ansel. if your "
+"OpenCL runtime library is normally detected automatically by Ansel. If your "
 "OpenCL runtime is at an unusual place and cannot be detected, enter the full "
-"pathname here. leave empty for default behavior."
+"pathname here. Leave empty for default behavior."
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
+msgid "Not available"
 msgstr "niet beschikbaar"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
+msgid "Not available on this system"
 msgstr "niet beschikbaar op dit systeem"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
 msgstr "libraw"
+
+#: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
+#: ../tools/generate_prefs.xsl:309
+msgid "LibRaw"
+msgstr "LibRaw"
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
 msgid ""
@@ -816,116 +830,116 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
+msgid "Security"
 msgstr "veiligheid"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
+msgid "General"
 msgstr "algemeen"
 
 #: ../build/src/preferences_gen.h:3546
-msgid "ask before removing images from the library"
+msgid "Ask before removing images from the library"
 msgstr "vraag voordat afbeeldingen uit de bibliotheek worden verwijderd"
 
 #: ../build/src/preferences_gen.h:3560
 #, fuzzy
-msgid "always ask the user before any image is removed from the library"
+msgid "Always ask the user before any image is removed from the library"
 msgstr ""
 "vraag altijd eerst de gebruiker voordat een afbeelding wordt verplaatst."
 
 #: ../build/src/preferences_gen.h:3582
-msgid "ask before deleting images from disk"
+msgid "Ask before deleting images from disk"
 msgstr "vraag voordat afbeeldingen van de schijf worden verwijderd"
 
 #: ../build/src/preferences_gen.h:3596
-msgid "always ask the user before any image file is deleted"
+msgid "Always ask the user before any image file is deleted"
 msgstr ""
 "vraag altijd eerst toestemming aan de gebruiker voordat een afbeelding wordt "
 "verwijderd"
 
 #: ../build/src/preferences_gen.h:3618
-msgid "ask before discarding history stack"
+msgid "Ask before discarding history stack"
 msgstr "vraag voordat geschiedenisstappen worden weggegooid"
 
 #: ../build/src/preferences_gen.h:3632
-msgid "always ask the user before history stack is discarded on any image"
+msgid "Always ask the user before history stack is discarded on any image"
 msgstr ""
 "vraag altijd eerst de gebruiker voordat bewerkingsstappen worden weggegooid"
 
 #: ../build/src/preferences_gen.h:3654
-msgid "try to use trash when deleting images"
+msgid "Try to use trash when deleting images"
 msgstr ""
 "probeer bestanden naar de prullenbak te verplaatsen wanneer deze worden "
 "verwijderd"
 
 #: ../build/src/preferences_gen.h:3668
 msgid ""
-"send files to trash instead of permanently deleting files on system that "
+"Send files to trash instead of permanently deleting files on system that "
 "supports it"
 msgstr ""
 "stuur bestanden naar de prullenbak in plaats van deze permanent te "
 "verwijderen"
 
 #: ../build/src/preferences_gen.h:3690
-msgid "ask before moving images from film roll folder"
+msgid "Ask before moving images from film roll folder"
 msgstr "vraag voordat afbeeldingen uit de film rol worden gehaald"
 
 #: ../build/src/preferences_gen.h:3704
-msgid "always ask the user before any image file is moved."
+msgid "Always ask the user before any image file is moved."
 msgstr ""
 "vraag altijd eerst de gebruiker voordat een afbeelding wordt verplaatst."
 
 #: ../build/src/preferences_gen.h:3726
-msgid "ask before copying images to new film roll folder"
+msgid "Ask before copying images to new film roll folder"
 msgstr "vraag voordat afbeeldingen naar nieuwe film rol worden gekopieerd"
 
 #: ../build/src/preferences_gen.h:3740
-msgid "always ask the user before any image file is copied."
+msgid "Always ask the user before any image file is copied."
 msgstr "vraag om bevestiging voordat een afbeelding wordt gekopieerd."
 
 #: ../build/src/preferences_gen.h:3762
-msgid "ask before removing empty folders"
+msgid "Ask before removing empty folders"
 msgstr "vraag voordat lege mappen worden verwijderd"
 
 #: ../build/src/preferences_gen.h:3776
 msgid ""
-"always ask the user before removing any empty folder. this can happen after "
+"Always ask the user before removing any empty folder. This can happen after "
 "moving or deleting images."
 msgstr ""
 "vraag om een bevestiging voordat lege mappen verwijderd worden (de vraag kan "
 "komen na het verwijderen of verplaatsen van afbeeldingen)"
 
 #: ../build/src/preferences_gen.h:3798
-msgid "ask before deleting a tag"
+msgid "Ask before deleting a tag"
 msgstr "vraag voordat een label wordt verwijderd"
 
 #: ../build/src/preferences_gen.h:3833
-msgid "ask before deleting a style"
+msgid "Ask before deleting a style"
 msgstr "vraag voordat een stijl wordt verwijderd"
 
 #: ../build/src/preferences_gen.h:3868
-msgid "ask before deleting a preset"
+msgid "Ask before deleting a preset"
 msgstr "vraag voordat een voorkeur wordt verwijderd"
 
 #: ../build/src/preferences_gen.h:3882
-msgid "will ask for confirmation before deleting or overwriting a preset"
+msgid "Will ask for confirmation before deleting or overwriting a preset"
 msgstr ""
 "zal voor bevestiging vragen voor een voorkeur wordt overschreven of "
 "verwijderd"
 
 #: ../build/src/preferences_gen.h:3904
-msgid "ask before exporting in overwrite mode"
+msgid "Ask before exporting in overwrite mode"
 msgstr "vraag voor exporteren in overschrijfmodus"
 
 #: ../build/src/preferences_gen.h:3918
-msgid "will ask for confirmation before exporting files in overwrite mode"
+msgid "Will ask for confirmation before exporting files in overwrite mode"
 msgstr ""
 "zal om bevestiging vragen voordat bestanden in de overschrijfmodus worden "
 "geëxporteerd"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
+msgid "Other"
 msgstr "overige"
 
 #: ../build/src/preferences_gen.h:3948
@@ -938,19 +952,19 @@ msgid ""
 msgstr "de opslag voor wachtwoordopslag: auto, geen, libsecret, kwallet"
 
 #: ../build/src/preferences_gen.h:4020
-msgid "executable for playing audio files"
+msgid "Executable for playing audio files"
 msgstr "applicatie voor het afspelen van audio-bestanden"
 
 #: ../build/src/preferences_gen.h:4038
 msgid ""
-"this external program is used to play audio files some cameras record to "
+"This external program is used to play audio files some cameras record to "
 "keep notes for images"
 msgstr ""
 "dit externe programma wordt gebruikt om audiobestanden af ​​te spelen die "
 "sommige camera's als notitie bij de afbeelding bewaren"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
+msgid "Storage"
 msgstr "opslagruimte"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
@@ -958,65 +972,70 @@ msgstr "opslagruimte"
 msgid "database"
 msgstr "database"
 
+#: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
+#: ../tools/generate_prefs.xsl:368
+msgid "Database"
+msgstr "database"
+
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
-msgid "database location"
+msgid "Database location"
 msgstr "verwijder locatie"
 
 #: ../build/src/preferences_gen.h:4107
 msgid ""
-"filename relative to ~/.config/ansel or starting with a slash (needs a "
+"Filename relative to ~/.config/ansel or starting with a slash (needs a "
 "restart)."
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4129
-msgid "check for database maintenance"
+msgid "Check for database maintenance"
 msgstr "controleer op database onderhoud"
 
 #: ../build/src/preferences_gen.h:4192
 msgid ""
-"this option indicates when to check database fragmentation and perform "
+"This option indicates when to check database fragmentation and perform "
 "maintenance"
 msgstr ""
 "deze optie geeft aan wanneer databasefragmentatie moet worden gecontroleerd "
 "en onderhoud moet worden uitgevoerd"
 
 #: ../build/src/preferences_gen.h:4214
-msgid "database fragmentation ratio threshold"
+msgid "Database fragmentation ratio threshold"
 msgstr "drempel database fragmentatieverhouding"
 
 #: ../build/src/preferences_gen.h:4237
 msgid ""
-"fragmentation ratio above which to ask or carry out automatically database "
+"Fragmentation ratio above which to ask or carry out automatically database "
 "maintenance"
 msgstr ""
 "fragmentatieverhouding waarboven u kunt vragen of automatisch "
 "databaseonderhoud moet uitvoeren"
 
 #: ../build/src/preferences_gen.h:4259
-msgid "create database snapshot"
+msgid "Create database snapshot"
 msgstr "maak momentopname van database"
 
 #: ../build/src/preferences_gen.h:4312
 msgid ""
-"database snapshots are created right before closing ansel. options allow you "
+"Database snapshots are created right before closing Ansel. Options allow you "
 "to choose how often to make snapshots:\n"
-"never - simply don't do snapshots. that way the only snapshots done are "
+"never - simply don't do snapshots. That way the only snapshots done are "
 "mandatory version-upgrade snapshots\n"
 "once a month - create snapshot if a month has passed since last snapshot\n"
 "once a week - create snapshot if 7 days had passed since last snapshot\n"
 "once a day - create snapshot if over 24h passed since last snapshot\n"
-"on close - create snapshot every time ansel is closed"
+"on close - create snapshot every time Ansel is closed"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4334
-msgid "how many snapshots to keep"
+msgid "How many snapshots to keep"
 msgstr "hoeveel snapshots bewaard worden"
 
 #: ../build/src/preferences_gen.h:4357
 msgid ""
-"after successfully creating snapshot, how many older snapshots to keep "
-"(excluding mandatory version update ones). enter -1 to keep all snapshots\n"
+"After successfully creating snapshot, how many older snapshots to keep "
+"(excluding mandatory version update ones). Enter -1 to keep all snapshots\n"
 "keep in mind that snapshots do take some space and you only need the most "
 "recent one for successful restore"
 msgstr ""
@@ -1031,7 +1050,7 @@ msgid "xmp"
 msgstr "xmp"
 
 #: ../build/src/preferences_gen.h:4387
-msgid "write sidecar file for each image"
+msgid "Write sidecar file for each image"
 msgstr "maak voor elke afbeelding een sidecar-bestand aan"
 
 #: ../build/src/preferences_gen.h:4425
@@ -1055,29 +1074,29 @@ msgstr ""
 "  - na bewerking: na elke wijziging van de gebruiker op de afbeelding"
 
 #: ../build/src/preferences_gen.h:4447
-msgid "store xmp tags in compressed format"
+msgid "Store XMP tags in compressed format"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4490
 msgid ""
-"entries in xmp tags can get rather large and may exceed the available space "
-"to store the history stack in output files. this option allows xmp tags to "
+"Entries in XMP tags can get rather large and may exceed the available space "
+"to store the history stack in output files. This option allows XMP tags to "
 "be compressed and save space."
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4512
-msgid "look for updated xmp files on startup"
+msgid "Look for updated XMP files on startup"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4526
 msgid ""
-"check file modification times of all xmp files on startup to check if any "
+"Check file modification times of all XMP files on startup to check if any "
 "got updated in the meantime"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
+msgid "Privacy"
 msgstr "persoonlijk"
 
 #: ../build/src/preferences_gen.h:4556
@@ -1094,11 +1113,11 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
+msgid "Miscellaneous"
 msgstr "diversen"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
+msgid "Interface"
 msgstr "interface"
 
 #: ../build/src/preferences_gen.h:4621
@@ -1136,12 +1155,12 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4729
-msgid "sort built-in presets first"
+msgid "Sort built-in presets first"
 msgstr "sorteer de ingebouwde voorkeuren eerst"
 
 #: ../build/src/preferences_gen.h:4743
 msgid ""
-"whether to show built-in presets first before user's presets in presets menu."
+"Whether to show built-in presets first before user's presets in presets menu."
 msgstr ""
 "of de ingebouwde voorkeuren eerst moeten worden weergegeven vóór de "
 "voorkeuren van de gebruiker in het menu."
@@ -1157,13 +1176,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4801
-msgid "method to use for getting the display profile"
+msgid "Method to use for getting the display profile"
 msgstr "te gebruiken methode om het displayprofiel te verkrijgen"
 
 #: ../build/src/preferences_gen.h:4844
 msgid ""
-"this option allows to force a specific means of getting the current display "
-"profile. this is useful when one alternative gives wrong results"
+"This option allows to force a specific means of getting the current display "
+"profile. This is useful when one alternative gives wrong results"
 msgstr ""
 "deze optie forceert een specifieke manier om een weergaveprofiel af te "
 "dwingen. Dit is handig wanneer een andere methode verkeerde resultaten "
@@ -1177,15 +1196,15 @@ msgid "tags"
 msgstr "labels"
 
 #: ../build/src/preferences_gen.h:4874
-msgid "omit hierarchy in simple tag lists"
+msgid "Omit hierarchy in simple tag lists"
 msgstr "verwijder hierarchie van gewone label lijsten"
 
 #: ../build/src/preferences_gen.h:4888
 msgid ""
-"when creating XMP file the hierarchical tags are also added as a simple list "
-"of non-hierarchical ones to make them visible to some other programs. when "
-"this option is checked ansel will only include their last part and ignore "
-"the rest. so 'foo|bar|baz' will only add 'baz'."
+"When creating XMP file the hierarchical tags are also added as a simple list "
+"of non-hierarchical ones to make them visible to some other programs. When "
+"this option is checked Ansel will only include their last part and ignore "
+"the rest. So 'foo|bar|baz' will only add 'baz'."
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4925
@@ -1286,6 +1305,14 @@ msgstr "scheefstand"
 #: ../src/gui/preferences.c:1007 ../src/gui/presets.c:697
 #: ../src/libs/metadata_view.c:181
 msgid "focal length"
+msgstr "brandpuntsafstand"
+
+#. focal length
+#: ../build/src/iop/introspection_ashift.c:148
+#: ../build/src/iop/introspection_ashift.c:291 ../src/common/collection.c:675
+#: ../src/gui/preferences.c:1007 ../src/gui/presets.c:697
+#: ../src/libs/metadata_view.c:181
+msgid "Focal length"
 msgstr "brandpuntsafstand"
 
 #: ../build/src/iop/introspection_ashift.c:154
@@ -1526,6 +1553,12 @@ msgstr "compensatie"
 #: ../src/gui/preferences.c:991 ../src/gui/presets.c:648
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
+msgstr "lens"
+
+#: ../build/src/iop/introspection_blurs.c:220 ../src/common/collection.c:674
+#: ../src/gui/preferences.c:991 ../src/gui/presets.c:648
+#: ../src/libs/metadata_view.c:177
+msgid "Lens"
 msgstr "lens"
 
 #: ../build/src/iop/introspection_blurs.c:221
@@ -3233,6 +3266,15 @@ msgstr "ingesloten GainMap"
 msgid "exposure"
 msgstr "belichting"
 
+#. exposure
+#: ../build/src/iop/introspection_relight.c:43
+#: ../build/src/iop/introspection_relight.c:98 ../src/common/collection.c:678
+#: ../src/gui/preferences.c:999 ../src/gui/presets.c:667
+#: ../src/iop/basicadj.c:594 ../src/iop/exposure.c:1102
+#: ../src/libs/metadata_view.c:179
+msgid "Exposure"
+msgstr "belichting"
+
 #: ../build/src/iop/introspection_retouch.c:267
 #: ../build/src/iop/introspection_retouch.c:414
 msgid "fill mode"
@@ -3711,6 +3753,12 @@ msgstr "_annuleer"
 msgid "_save"
 msgstr "_opslaan"
 
+#: ../src/chart/main.c:517 ../src/gui/preferences.c:1224
+#: ../src/gui/styles_dialog.c:440 ../src/libs/ioporder.c:1539
+#: ../src/libs/styles.c:416 ../src/common/lut_viewer.c:1208
+msgid "_Save"
+msgstr "_Opslaan"
+
 #. TODO: is the rank interesting, too?
 #: ../src/chart/main.c:1076
 #, c-format
@@ -3910,6 +3958,12 @@ msgstr "ISO"
 #: ../src/common/collection.c:677 ../src/gui/preferences.c:1003
 #: ../src/gui/presets.c:682 ../src/libs/metadata_view.c:178
 msgid "aperture"
+msgstr "diafragma"
+
+#. aperture
+#: ../src/common/collection.c:677 ../src/gui/preferences.c:1003
+#: ../src/gui/presets.c:682 ../src/libs/metadata_view.c:178
+msgid "Aperture"
 msgstr "diafragma"
 
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
@@ -4896,6 +4950,12 @@ msgstr[1] "lege mappen verplaatsen?"
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
 #: ../src/libs/geotagging.c:857 ../src/libs/tagging.c:3116
 msgid "name"
+msgstr "bestandsnaam"
+
+#: ../src/common/film.c:317 ../src/gui/preferences.c:979
+#: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
+#: ../src/libs/geotagging.c:857 ../src/libs/tagging.c:3116
+msgid "Name"
 msgstr "bestandsnaam"
 
 #: ../src/common/film.c:424
@@ -8986,35 +9046,35 @@ msgstr "kopiëren vanuit niet-gewijzigde afbeelding lukt niet"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
+msgid "Interface language"
 msgstr "interfacetaal"
 
 #: ../src/gui/preferences.c:348
-msgid "double-click to reset to the system language"
+msgid "Double-click to reset to the system language"
 msgstr "dubbelklik om naar de systeem taal te resetten"
 
 #: ../src/gui/preferences.c:350
 msgid ""
-"set the language of the user interface. the system default is marked with an "
+"Set the language of the user interface. The system default is marked with an "
 "* (needs a restart)"
 msgstr ""
 "kies de taal van de gebruikersinterface, * is de standaard van het systeem "
 "(opnieuw opstarten vereist)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
+msgid "Theme"
 msgstr "thema"
 
 #: ../src/gui/preferences.c:388
-msgid "set the theme for the user interface"
+msgid "Set the theme for the user interface"
 msgstr "stel thema in voor gebruikers interface"
 
 #: ../src/gui/preferences.c:401 ../src/gui/preferences.c:408
-msgid "use system font size"
+msgid "Use system font size"
 msgstr "gebruik de systeemlettertypegrootte"
 
 #: ../src/gui/preferences.c:417 ../src/gui/preferences.c:424
-msgid "font size in points"
+msgid "Font size in points"
 msgstr "lettertype formaat in punten"
 
 #: ../src/gui/preferences.c:429
@@ -9023,10 +9083,10 @@ msgstr "GUI-besturingselementen en tekst DPI"
 
 #: ../src/gui/preferences.c:436
 msgid ""
-"adjust the global GUI resolution to rescale controls, buttons, labels, etc.\n"
-"increase for a magnified GUI, decrease to fit more content in window.\n"
-"set to -1 to use the system-defined global resolution.\n"
-"default is 96 DPI on most systems.\n"
+"Adjust the global GUI resolution to rescale controls, buttons, labels, etc.\n"
+"Increase for a magnified GUI, decrease to fit more content in window.\n"
+"Set to -1 to use the system-defined global resolution.\n"
+"Default is 96 DPI on most systems.\n"
 "(needs a restart)."
 msgstr ""
 "pas de globale GUI-resolutie aan om bedieningselementen, knoppen, labels, "
@@ -9040,22 +9100,22 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
+msgid "Modify selected theme with CSS tweaks below"
 msgstr "pas geselecteerd thema aan met onderstaande CSS aanpassingen"
 
 #: ../src/gui/preferences.c:453
-msgid "modify theme with CSS keyed below (saved to user.css)"
+msgid "Modify theme with CSS keyed below (saved to user.css)"
 msgstr ""
 "pas thema aan met onderstaande CSS hieronder ingetoetst (opgeslagen in user."
 "css)"
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr "sla CSS op en pas toe"
 
 #: ../src/gui/preferences.c:482
-msgid "click to save and apply the CSS tweaks entered in this editor"
+msgid "Click to save and apply the CSS tweaks entered in this editor"
 msgstr ""
 "klik om op te slaan en de CSS-tweaks die in deze editor zijn ingevoerd toe "
 "te passen"
@@ -9080,7 +9140,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9101,7 +9161,7 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
+msgid "Presets"
 msgstr "voorkeuren"
 
 #. exif
@@ -9110,9 +9170,20 @@ msgstr "voorkeuren"
 msgid "model"
 msgstr "model"
 
+#. exif
+#: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
+#: ../src/libs/metadata_view.c:175
+msgid "Model"
+msgstr "model"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
+msgstr "merk"
+
+#: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
+#: ../src/libs/metadata_view.c:176
+msgid "Maker"
 msgstr "merk"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
@@ -9120,35 +9191,40 @@ msgstr "merk"
 msgid "auto"
 msgstr "auto"
 
+#: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
+#: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
+msgid "Auto"
+msgstr "auto"
+
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
+msgid "Search presets list"
 msgstr "doorzoek de lijst met voorinstellingen"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
-"incrementally search the list of presets\n"
-"press up or down keys to cycle through matches"
+"Incrementally search the list of presets\n"
+"Press up or down keys to cycle through matches"
 msgstr ""
 "doorzoek stapsgewijs de lijst met voorinstellingen\n"
 "druk op de toetsen omhoog of omlaag om door kandidaten te bladeren"
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
+msgid "Import..."
 msgstr "importeren ..."
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
+msgid "Export..."
 msgstr "exporteren..."
 
 #: ../src/gui/preferences.c:1173
 #, c-format
-msgid "failed to import preset %s"
+msgid "Failed to import preset %s"
 msgstr "importeren voorkeur %s mislukt"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr "selecteer te importeren voorkeur(en)"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9156,6 +9232,12 @@ msgstr "selecteer te importeren voorkeur(en)"
 #: ../src/libs/styles.c:552
 msgid "_open"
 msgstr "_open"
+
+#: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
+#: ../src/libs/collect.c:1841 ../src/libs/geotagging.c:959
+#: ../src/libs/styles.c:552
+msgid "_Open"
+msgstr "_Open"
 
 #: ../src/gui/preferences.c:1194
 #, fuzzy
@@ -9166,6 +9248,12 @@ msgstr "selecteer bestand"
 #: ../src/iop/lut3d.c:1371 ../src/libs/geotagging.c:975
 #: ../src/libs/styles.c:566
 msgid "all files"
+msgstr "alle bestanden"
+
+#: ../src/gui/preferences.c:1199 ../src/gui/actions/edit.c:342
+#: ../src/iop/lut3d.c:1371 ../src/libs/geotagging.c:975
+#: ../src/libs/styles.c:566
+msgid "All files"
 msgstr "alle bestanden"
 
 #: ../src/gui/presets.c:107
@@ -22119,7 +22207,7 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
+msgid "Double click to reset to `%.03f'"
 msgstr "dubbelklik om te resetten naar `%f'"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790

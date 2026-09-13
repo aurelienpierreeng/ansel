@@ -749,7 +749,7 @@ msgid "Not available on this system"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3438 ../tools/generate_prefs.xsl:309
-msgid "Libraw"
+msgid "LibRaw"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3443 ../tools/generate_prefs.xsl:314
@@ -21004,3 +21004,518 @@ msgstr ""
 #: ../src/iop/splittoningrgb.c:1505
 msgid "sample average luminance from an area to set this keyframe"
 msgstr ""
+#: ../src/common/database.c:2664
+#, c-format
+msgid ""
+"\n"
+"  Sorry, Ansel could not be started because the database is locked.\n"
+"\n"
+"  How to solve this problem?\n"
+"\n"
+"  1 - If another Ansel instance is already running, \n"
+"      click \"Quit\" and either use that instance or close it before trying "
+"to start Ansel again. \n"
+"      (process ID <i><b>%d</b></i> created the database lock files)\n"
+"\n"
+"  2 - If you cannot find any running instance of Ansel, try restarting your "
+"session or your computer. \n"
+"      This will close all running programs and should release any database "
+"locks. \n"
+"\n"
+"  3 - If you have already tried the above steps, or you are certain that no "
+"other instances of Ansel are running, \n"
+"      this likely means the previous instance ended unexpectedly. \n"
+"      Click the \"Delete database lock files\" button to remove <i>data.db."
+"lock</i> and <i>library.db.lock</i>. \n"
+"      Ansel will then attempt to load the database again. \n"
+"\n"
+"\n"
+"      <i><u>Caution!</u> Do not delete these files without first undertaking "
+"the above checks, \n"
+"      otherwise you risk generating serious inconsistencies in your database."
+"</i>\n"
+msgstr ""
+
+#: ../src/common/database.c:2694
+msgid ""
+"\n"
+"<u>Caution!</u> Are you sure you want to delete the database lock files?\n"
+"This action should only be performed if you are certain no other Ansel "
+"instances are running.\n"
+msgstr ""
+
+#: ../src/common/database.c:2720
+#, c-format
+msgid ""
+"\n"
+"At least one lock file could not be removed.\n"
+"You may try to manually delete the files <i>data.db.lock</i> and <i>library."
+"db.lock</i>\n"
+"in folder <a href=\"file:///%s\">%s</a>.\n"
+msgstr ""
+
+#: ../src/common/database.c:2712
+msgid ""
+"\n"
+"The database lock files have been deleted successfully.\n"
+msgstr ""
+
+#: ../src/libs/masks.c:236
+#, c-format
+msgid "<i>Blending is not available for the <b>%s</b> module.</i>"
+msgstr ""
+
+#: ../src/libs/masks.c:222
+#, c-format
+msgid "<i>Select a module to edit its blending settings.</i>"
+msgstr ""
+
+#: ../src/common/database.c:3137
+#, c-format
+msgid ""
+"<span weight='bold'>Ansel library database is read-only</span>\n"
+"\n"
+"This happens if you don't have permissions to write on the filesystem\n"
+"or if you have restored a write-protected backup snapshot.\n"
+"\n"
+"Please change the filesystem access permissions for:\n"
+"\n"
+"\t<span style='italic'>%s</span>"
+msgstr ""
+
+#: ../src/libs/masks.c:995 ../src/libs/masks.c:1024
+msgid "Add new shape ..."
+msgstr ""
+
+#: ../src/common/database.c:3132
+msgid "Ansel - Database is read-only"
+msgstr ""
+
+#: ../src/views/darkroom.c:2146
+msgid "Background brightness"
+msgstr ""
+
+#: ../src/common/database.c:3134
+msgid "Close Ansel"
+msgstr ""
+
+#: ../src/common/database.c:2693
+msgid "Confirmation"
+msgstr ""
+
+#: ../src/common/database.c:2713
+msgid "Continue"
+msgstr ""
+
+#: ../src/common/database.c:2687
+msgid "Delete database lock files and try again"
+msgstr ""
+
+#: ../src/libs/masks.c:1139
+msgid "Delete mask"
+msgstr ""
+
+#: ../src/common/database.c:2711
+msgid "Done"
+msgstr ""
+
+#: ../src/gui/gtk.c:2760 ../src/gui/gtk.c:2853
+msgid "Drag to resize"
+msgstr ""
+
+#: ../src/common/database.c:2719
+msgid "Error"
+msgstr ""
+
+#. clang-format on
+#: ../src/common/database.c:2686
+msgid "Error starting Ansel"
+msgstr ""
+
+#: ../src/views/darkroom.c:2322
+msgid "Focus clipping indication options"
+msgstr ""
+
+#: ../src/views/darkroom.c:2416
+msgid "Focus gamut checking options"
+msgstr ""
+
+#: ../src/views/darkroom.c:2136
+msgid "Focus picture display options"
+msgstr ""
+
+#: ../src/views/darkroom.c:2259
+msgid "Focus raw over exposed indication options"
+msgstr ""
+
+#: ../src/views/darkroom.c:2408
+msgid "Focus softproof options"
+msgstr ""
+
+#: ../src/libs/masks.c:1091
+msgid "Invert shape"
+msgstr ""
+
+#: ../src/libs/masks.c:331
+#, c-format
+msgid "Mask #%d"
+msgstr ""
+
+#: ../src/libs/masks.c:89
+msgid "Masking & Blending"
+msgstr ""
+
+#: ../src/views/darkroom.c:2125
+msgid "Picture display options"
+msgstr ""
+
+#: ../src/views/darkroom.c:2153
+msgid "Picture margins"
+msgstr ""
+
+#: ../src/common/exif.cc:4512
+#, c-format
+msgid ""
+"The XMP file \n"
+"'%s'\n"
+" weighs %.2f MB. Writing it will take some time."
+msgstr ""
+
+#: ../src/views/darkroom.c:2118
+msgid "Toggle ISO 12646 color assessment conditions"
+msgstr ""
+
+#: ../src/views/darkroom.c:2318
+msgid "Toggle clipping indication"
+msgstr ""
+
+#: ../src/views/darkroom.c:2412
+msgid "Toggle gamut checking"
+msgstr ""
+
+#: ../src/views/darkroom.c:2255
+msgid "Toggle raw over exposed indication"
+msgstr ""
+
+#: ../src/views/darkroom.c:2404
+msgid "Toggle softproofing"
+msgstr ""
+
+#: ../src/common/database.c:2695
+msgid "Yes"
+msgstr ""
+
+#: ../src/common/collection.c:1286 ../src/common/collection.c:1868
+msgid "altered"
+msgstr ""
+
+#: ../src/common/database.c:3296 ../src/common/database.c:3472
+#, c-format
+msgid ""
+"an error has occurred while trying to open the database from\n"
+"\n"
+"<span style='italic'>%s</span>\n"
+"\n"
+"it seems that the database is corrupted.\n"
+"%s%s"
+msgstr ""
+
+#: ../src/common/database.c:3262 ../src/common/database.c:3280
+#: ../src/common/database.c:3440 ../src/common/database.c:3458
+msgid "ansel - error opening database"
+msgstr ""
+
+#: ../src/common/database.c:3815
+msgid "ansel - schema maintenance"
+msgstr ""
+
+#: ../src/common/database.c:2911
+msgid "ansel - schema migration"
+msgstr ""
+
+#: ../src/views/darkroom.c:2333
+msgid "any RGB channel"
+msgstr ""
+
+#: ../src/common/database.c:3267 ../src/common/database.c:3445
+msgid "attempt restore"
+msgstr ""
+
+#: ../src/views/darkroom.c:2340
+msgid "black & white"
+msgstr ""
+
+#: ../src/common/exif.cc:4522
+#, c-format
+msgid "cannot read xmp file '%s': '%s'"
+msgstr ""
+
+#: ../src/common/exif.cc:4578
+#, c-format
+msgid "cannot write xmp file '%s': '%s'"
+msgstr ""
+
+#: ../src/common/database.c:3802
+msgid "click later to be asked next time when closing Ansel"
+msgstr ""
+
+#: ../src/common/database.c:3794
+msgid "click later to be asked on next startup"
+msgstr ""
+
+#: ../src/common/database.c:3798
+msgid "click later to be asked when closing Ansel"
+msgstr ""
+
+#. * let's fill the encapsulating widgets
+#. preview mode
+#: ../src/views/darkroom.c:2330
+msgid "clipping preview mode"
+msgstr ""
+
+#: ../src/views/darkroom.c:2348
+msgid ""
+"clipping threshold for the black point,\n"
+"in EV, relatively to white (0 EV).\n"
+"8 bits sRGB clips blacks at -12.69 EV,\n"
+"8 bits Adobe RGB clips blacks at -19.79 EV,\n"
+"16 bits sRGB clips blacks at -20.69 EV,\n"
+"typical fine-art mat prints produce black at -5.30 EV,\n"
+"typical color glossy prints produce black at -8.00 EV,\n"
+"typical B&W glossy prints produce black at -9.00 EV."
+msgstr ""
+
+#: ../src/views/darkroom.c:2366
+#, no-c-format
+msgid ""
+"clipping threshold for the white point.\n"
+"100% is peak medium luminance."
+msgstr ""
+
+#: ../src/common/database.c:2912 ../src/common/database.c:3265
+#: ../src/common/database.c:3283 ../src/common/database.c:3443
+#: ../src/common/database.c:3461
+msgid "close Ansel"
+msgstr ""
+
+#. color scheme
+#: ../src/views/darkroom.c:2276 ../src/views/darkroom.c:2337
+msgid "color scheme"
+msgstr ""
+
+#: ../src/common/collection.c:1874
+msgid "copied locally"
+msgstr ""
+
+#: ../src/common/database.c:3269 ../src/common/database.c:3285
+#: ../src/common/database.c:3447 ../src/common/database.c:3463
+msgid "delete database"
+msgstr ""
+
+#: ../src/common/database.c:3289 ../src/common/database.c:3467
+msgid ""
+"do you want to close Ansel now to manually restore\n"
+"the database from a backup or delete the corrupted database\n"
+"and start with a new one?"
+msgstr ""
+
+#: ../src/common/database.c:3273 ../src/common/database.c:3451
+msgid ""
+"do you want to close Ansel now to manually restore\n"
+"the database from a backup, attempt an automatic restore\n"
+"from the most recent snapshot or delete the corrupted database\n"
+"and start with a new one?"
+msgstr ""
+
+#: ../src/views/darkroom.c:2270
+msgid "false color"
+msgstr ""
+
+#: ../src/views/darkroom.c:2333
+msgid "full gamut"
+msgstr ""
+
+#: ../src/views/darkroom.c:1241
+msgid "gamut check"
+msgstr ""
+
+#: ../src/common/collection.c:1922
+msgid "group followers"
+msgstr ""
+
+#. grouping
+#: ../src/common/collection.c:1587 ../src/common/collection.c:1922
+msgid "group leaders"
+msgstr ""
+
+#: ../src/common/database.c:3816
+msgid "later"
+msgstr ""
+
+#: ../src/views/darkroom.c:2347
+msgid "lower threshold"
+msgstr ""
+
+#: ../src/views/darkroom.c:2333
+msgid "luminance only"
+msgstr ""
+
+#: ../src/views/darkroom.c:2270
+msgid "mark with CFA color"
+msgstr ""
+
+#: ../src/views/darkroom.c:2270
+msgid "mark with solid color"
+msgstr ""
+
+#: ../src/common/collection.c:1340 ../src/common/collection.c:1874
+msgid "not copied locally"
+msgstr ""
+
+#: ../src/common/collection.c:1695 ../src/common/collection.c:1966
+msgid "not defined"
+msgstr ""
+
+#: ../src/views/darkroom.c:2340
+msgid "purple & green"
+msgstr ""
+
+#: ../src/views/darkroom.c:2340
+msgid "red & blue"
+msgstr ""
+
+#: ../src/views/darkroom.c:2333
+msgid "saturation only"
+msgstr ""
+
+#: ../src/views/darkroom.c:2338
+msgid "select colors to indicate clipping"
+msgstr ""
+
+#: ../src/views/darkroom.c:2268
+msgid "select how to mark the clipped pixels"
+msgstr ""
+
+#: ../src/views/darkroom.c:2331
+msgid ""
+"select the metric you want to preview\n"
+"full gamut is the combination of all other modes"
+msgstr ""
+
+#: ../src/views/darkroom.c:2284
+msgid ""
+"select the solid color to indicate over exposure.\n"
+"will only be used if mode = mark with solid color"
+msgstr ""
+
+#: ../src/views/darkroom.c:1241
+msgid "soft proof"
+msgstr ""
+
+#: ../src/views/darkroom.c:2449
+#, c-format
+msgid "softproof ICC profiles in %s or %s"
+msgstr ""
+
+#: ../src/common/collection.c:1305
+msgid "tagged*"
+msgstr ""
+
+#: ../src/common/database.c:3805
+#, c-format
+msgid ""
+"the database could use some maintenance\n"
+"\n"
+"there's <span style='italic'>%s</span> to be freed\n"
+"\n"
+"do you want to proceed now?\n"
+"\n"
+"%s\n"
+"you can always change maintenance preferences in core options"
+msgstr ""
+
+#. the database has to be upgraded, let's ask user
+#: ../src/common/database.c:2903
+#, c-format
+msgid ""
+"the database schema has to be upgraded for\n"
+"\n"
+"<span style='italic'>%s</span>\n"
+"\n"
+"this might take a long time in case of a large database\n"
+"\n"
+"do you want to proceed or quit now to do a backup\n"
+msgstr ""
+
+#: ../src/views/darkroom.c:2293
+msgid ""
+"threshold of what shall be considered overexposed\n"
+"1.0 - white level\n"
+"0.0 - black level"
+msgstr ""
+
+#: ../src/views/darkroom.c:2113
+msgid "toggle ISO 12646 color assessment conditions"
+msgstr ""
+
+#: ../src/views/darkroom.c:2305
+msgid ""
+"toggle clipping indication\n"
+"right click for options"
+msgstr ""
+
+#: ../src/views/darkroom.c:2388
+msgid ""
+"toggle gamut checking\n"
+"right click for profile options"
+msgstr ""
+
+#: ../src/views/darkroom.c:2242
+msgid ""
+"toggle raw over exposed indication\n"
+"right click for options"
+msgstr ""
+
+#: ../src/views/darkroom.c:2379
+msgid ""
+"toggle softproofing\n"
+"right click for profile options"
+msgstr ""
+
+#: ../src/common/collection.c:1290 ../src/common/collection.c:1868
+msgid "unaltered"
+msgstr ""
+
+#: ../src/common/iop_profile.c:110
+#, c-format
+msgid "unsupported working profile %s has been replaced by Rec2020 RGB!\n"
+msgstr ""
+
+#: ../src/common/database.c:2912
+msgid "upgrade database"
+msgstr ""
+
+#: ../src/views/darkroom.c:2364
+msgid "upper threshold"
+msgstr ""
+
+#: ../src/views/darkroom.c:2280
+msgctxt "solidcolor"
+msgid "black"
+msgstr ""
+
+#: ../src/views/darkroom.c:2279
+msgctxt "solidcolor"
+msgid "blue"
+msgstr ""
+
+#: ../src/views/darkroom.c:2278
+msgctxt "solidcolor"
+msgid "green"
+msgstr ""
+
+#: ../src/views/darkroom.c:2277
+msgctxt "solidcolor"
+msgid "red"
+msgstr ""
+
