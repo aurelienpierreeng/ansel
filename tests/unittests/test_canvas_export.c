@@ -79,9 +79,10 @@ static dt_canvas_t *_canvas_of_pages(const int pages)
   dt_canvas_t *canvas = dt_canvas_new();
   canvas->grid_flags = 0;
   canvas->background_style = DT_CANVAS_BACKGROUND_PLAIN;
-  // One canvas unit to the point, so every number in this file is the page's size in points
-  // and the dpi maths reads as it did before the plane gained a resolution of its own.
-  canvas->resolution = 72.0f;
+  // A canvas unit IS a point, so every number in this file is the page's size in points at any
+  // export density. The pin is here to say that the density is not a geometry: the fixture is
+  // built at one and the tests below rasterise at others.
+  canvas->resolution = 300.0f;
   canvas->paper_size = DT_CANVAS_PAPER_A6;
   canvas->paper_landscape = 0;
   double width = 0.0;
@@ -139,6 +140,34 @@ static void _a_page_is_rasterised_at_exactly_its_size_times_the_resolution(void 
   _png_size(path, &width, &height);
   assert_int_equal(width, (int)lround(298.0 / 72.0 * 150.0));
   assert_int_equal(height, (int)lround(420.0 / 72.0 * 150.0));
+  g_remove(path);
+  dt_free(path);
+
+  /*
+   * And a format named in PIXELS comes back out as those pixels. It is carried on the plane as
+   * a physical size like any other page -- 1080 x 1920 reference pixels is 810 x 1440 points --
+   * which is what lets a story and a sheet of A4 sit on one plane and mean the same thing by a
+   * point. Rasterised at the density that defines the reference pixel, the round trip is exact.
+   */
+  canvas->paper_size = DT_CANVAS_PAPER_STORY;
+  canvas->page_bleed = 0.0f;
+  dt_canvas_object_t *only = dt_canvas_object_at(canvas, 0);
+  assert_non_null(only);
+  double story_width = 0.0;
+  double story_height = 0.0;
+  assert_true(dt_canvas_paper_dimensions(canvas, &story_width, &story_height));
+  // In the middle of the first page, the way the fixture places one, so the export is one leaf.
+  only->x = story_width * 0.5;
+  only->y = story_height * 0.5;
+  only->width = story_width * 0.5;
+  only->height = story_height * 0.5;
+  options.dpi = (float)DT_CANVAS_REFERENCE_PIXEL_DPI;
+  path = _output("story.png");
+  assert_true(dt_canvas_export(canvas, path, &options, &error));
+  assert_null(error);
+  _png_size(path, &width, &height);
+  assert_int_equal(width, 1080);
+  assert_int_equal(height, 1920);
   g_remove(path);
   dt_free(path);
   dt_canvas_free(canvas);

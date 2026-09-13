@@ -33,9 +33,11 @@ the canvas, never reused, which is what connectors and sidecar links refer to. F
 a centre, a size, a rotation, a draw order and an optional border of their own; the canvas
 carries the default border, the grid, the background and the saved viewport.
 
-Coordinates are canvas units: one unit is one screen pixel at zoom 1, the origin is the
-centre of the plane, y grows downwards. The view converts through `_to_canvas()` and nothing
-else, so the document never learns what a pixel is.
+Coordinates are canvas units, and one unit is one POINT -- see "Pages, spreads and the unit"
+below. At zoom 1 it is also one screen pixel, which is what makes a point-measured plane
+legible on a screen. The origin is the centre of the plane, y grows downwards. The view
+converts through `_to_canvas()` and nothing else, so the document never learns what a pixel
+is.
 
 The four layouts leave two paddings between frames -- each keeps one all round -- and, with
 snapping on, start on the grid and round every cell up to whole grid steps, frames sitting
@@ -888,20 +890,40 @@ period from the origin, so the dashes neither crawl under a pan nor differ betwe
 horizontal and the vertical. Page borders are a snapping rule of their own, applied after
 the gutter and before the size.
 
-**One canvas unit is a display pixel, and the canvas says how many go to the inch**
-(`dt_canvas_t.resolution`, `dt_canvas_resolution()`, 300 on a new canvas). That is what tells
-the two kinds of page size apart. A **sheet of paper** is held in points and scaled by the
-resolution, so an A4 is 2480 units wide at 300; a **screen format** is its pixel size outright
-and does not move, so a story page is 1080 by 1920 units whatever the resolution says. Read as
-points, as both were, a story came out 1080 units against an A4's 595 -- nearly twice the
-sheet, for something that fits in a hand, which is the defect this field exists to fix.
-`dt_canvas_paper_is_physical()` answers which kind a size is.
+**One canvas unit is a POINT** -- a seventy-second of an inch, the typographer's own -- and
+every length on the plane is one: a page's size, a frame's, a border's width, a text frame's
+padding, and the size in a font's own description. `dt_canvas_resolution()` is then the density
+the page is RASTERISED at and nothing else: it moves nothing on the plane and only decides how
+many pixels an export carries, `points * dpi / 72`.
 
-A document written before the field holds zero, which `dt_canvas_resolution()` reads as **72**:
-one unit to the point, exactly the geometry it was laid out with. The export converts through
-the same number -- the page's physical size is its units divided by the resolution, and the
-output pixel count is `units * export_dpi / resolution`, so exporting at the canvas's own
-resolution is one output pixel per unit and asking for more resamples.
+It was not always. A unit used to be a display pixel at that density, so a sheet of paper was
+scaled by it and a screen format was not -- and since nothing ON the page was scaled with it,
+raising the density shrank the whole layout against its own paper. Measured on A4: a
+twelve-point line is 7.0% of the page's height at 72 dpi, 3.4% at 150 and 1.7% at 300, for the
+same nominal twelve points. The number was usable only if it was chosen before anything was
+laid out.
+
+**A pixel is a physical length as soon as a density is named for it**, and the one to name is
+the W3C's reference pixel, 96 to the inch (`DT_CANVAS_REFERENCE_PIXEL_DPI`), which is what
+every browser and toolkit means by one. So a 1080 x 1920 story is 810 x 1440 points, and
+exporting it at 96 dpi gives back exactly the 1080 x 1920 it is named for -- pinned end to end
+in `test_canvas_export`. That is what lets a story and a sheet of A4 be the same kind of thing:
+twelve points is twelve points on both, and converting a design from one to the other moves
+nothing by itself. `dt_canvas_paper_is_physical()` no longer says how a size reaches the plane,
+only how it is written down, so a panel can show one in points and the other in pixels.
+
+**What a design does NOT do is resize itself to a new page.** Twelve points stays twelve
+points, which is what a point is for; making the layout fill a different page is a deliberate
+act and belongs in an explicit, undoable action rather than in a rule that fires behind the
+user. No page-layout application does it implicitly, because there is no correct implicit
+answer.
+
+Pango is pinned to the same unit: `pango_cairo_context_set_resolution(context, 72.0)` in
+`_text_layout_styled()`. Pango means points by a font's size already but turns them into its
+context's units at the context's own density, 96 unless told otherwise -- so "12" arrived on
+the plane as sixteen units, a type size meant nothing measurable against a page, and it stayed
+put while the page moved. Pinned, a line of N-point type is 1.1667 N units at every size,
+which is the font's own line height and no scale factor hiding behind it.
 
 One table holds every size, and the toolbar reads it rather than repeating it. **The stored
 value is a code, not the row it is shown on**: a size is appended to `dt_canvas_paper_t` so no

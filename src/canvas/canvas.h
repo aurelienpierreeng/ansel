@@ -38,9 +38,18 @@
  * without bumping the format or migrating anything; and each record is prefixed with its
  * own size, so a reader skips fields it does not know. See canvas_format.c for the layout.
  *
- * Coordinates are "canvas units": one unit is one screen pixel at zoom 1, the origin is
- * the centre of the plane, y grows downwards, and an object's `x`/`y` is the centre of its
- * frame. Rotation is in radians, clockwise on screen.
+ * Coordinates are "canvas units", and ONE UNIT IS ONE POINT -- a seventy-second of an inch,
+ * the typographer's own. Every length on the plane is that: a page's size, a frame's, a
+ * border's width, a text frame's padding, and the size in a font's own description. So twelve
+ * points is twelve points on A4, on A3 and on an Instagram story alike, and the density an
+ * export is rasterised at (`dt_canvas_resolution()`) changes none of it -- it only decides how
+ * many pixels come out. A format named in PIXELS is a physical size too, at the W3C's
+ * reference density (`DT_CANVAS_REFERENCE_PIXEL_DPI`), so the two kinds of page are the same
+ * kind of thing and converting a design between them moves nothing by itself.
+ *
+ * At zoom 1 a unit is one screen pixel, which is what makes a point-measured plane legible on
+ * a screen. The origin is the centre of the plane, y grows downwards, and an object's `x`/`y`
+ * is the centre of its frame. Rotation is in radians, clockwise on screen.
  *
  * Threading: a `dt_canvas_t` belongs to the GUI thread. Background renders never touch it;
  * they hand their JPEG back through a GUI-thread callback that checks the canvas is still
@@ -935,17 +944,24 @@ int dt_canvas_paper_position(uint32_t paper);
  * @note A pixel-defined size (a story, a banner) is that many points, which is that many
  * pixels at 72 dpi.
  */
+/**
+ * The density a PIXEL is a physical length at: the W3C reference pixel, which is what every
+ * browser and toolkit means by one. A screen format named in pixels is that many reference
+ * pixels, so it has a size in points like any sheet of paper, and exporting it at this density
+ * gives back exactly the pixel count it is named for.
+ */
+#define DT_CANVAS_REFERENCE_PIXEL_DPI 96.0
+
 gboolean dt_canvas_paper_points(uint32_t paper, double *width, double *height);
 
 /**
- * @brief Whether a page size is a PHYSICAL one, measured in points, or a screen one measured
- * in pixels.
+ * @brief Whether a page size is STATED in points, as a sheet of paper is, or in pixels.
  *
- * A canvas unit is a display pixel and the canvas carries how many of them go to the inch
- * (`dt_canvas_resolution()`), so the two kinds of page size reach the plane differently: a
- * screen format is its pixel size outright, and a sheet of paper is its size in points scaled
- * by the resolution. Without that, both were read as points and an Instagram reel came out
- * nearly twice the size of an A4 on the same plane, which is not a thing.
+ * Both are physical: a pixel is a length as soon as a density is named for it, and
+ * `dt_canvas_paper_points()` converts a pixel-stated format at
+ * `DT_CANVAS_REFERENCE_PIXEL_DPI`. This says only which way the format is written down -- so a
+ * panel can show a story as "1080 x 1920 px" and A4 as "595 x 842 pt" -- and never how it
+ * reaches the plane, which is points either way.
  */
 gboolean dt_canvas_paper_is_physical(uint32_t paper);
 
@@ -982,7 +998,15 @@ gboolean dt_canvas_text_feature_offered(const char *tag);
 gboolean dt_canvas_text_feature_is_on(const char *features, const char *tag);
 void dt_canvas_text_feature_set(char *features, const size_t length, const char *tag, const gboolean on);
 
-/** @brief Canvas units per inch: what the canvas holds, or 72 for a document from before the field. */
+/**
+ * @brief The density the page is RASTERISED at, in dots per inch. Nothing else.
+ *
+ * A canvas unit is a POINT, so the plane's geometry does not know this number: changing it
+ * moves nothing on the page and only decides how many pixels an export carries
+ * (`pixels = points * dpi / 72`). It used to scale the page and leave everything on the page
+ * where it was, so raising it shrank the whole layout against its own paper -- measured on A4,
+ * a twelve-point line went from 7.0% of the page's height at 72 dpi to 1.7% at 300.
+ */
 double dt_canvas_resolution(const dt_canvas_t *canvas);
 
 /**

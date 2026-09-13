@@ -3528,14 +3528,24 @@ they are visible.
   at the layout's left edge and centred text quietly stops being centred.
 - **A page size is an index into one appended-only table** (`dt_canvas_paper_points()`), and
   the GUI reads the table rather than repeating it. Insert a size in the middle and every
-  saved document changes page. **A canvas unit is a display pixel and the canvas says how many
-  go to the inch** (`dt_canvas_resolution()`, 300 on a new canvas, 72 for a document from
-  before the field so its geometry does not move): a sheet of paper is held in points and
-  scaled by that, a screen format is its pixel size outright and does not scale
-  (`dt_canvas_paper_is_physical()`). Read as points, as both were, an Instagram story came out
-  1080 units against an A4's 595 -- nearly twice the sheet. The export converts through the
-  same number: physical size is units over the resolution, output pixels are
-  `units * export_dpi / resolution`.
+  saved document changes page. **A canvas unit is a POINT**, and every length on the plane is
+  one -- a page, a frame, a border, a padding, and the size in a font's own description.
+  `dt_canvas_resolution()` is the density the page is RASTERISED at and nothing else: it moves
+  nothing on the plane, and an export is `points * dpi / 72`. It used to scale a sheet of paper
+  and leave everything ON the sheet where it was, so raising it shrank the layout against its
+  own paper -- measured on A4, a twelve-point line went from 7.0% of the page's height at
+  72 dpi to 1.7% at 300. **A pixel is a physical length once a density is named for it**: the
+  W3C's reference pixel, 96 to the inch (`DT_CANVAS_REFERENCE_PIXEL_DPI`), so a 1080 x 1920
+  story is 810 x 1440 points and exporting it at 96 gives that pixel count back exactly. That
+  is what lets a story and a sheet of A4 mean the same thing by a point, and
+  `dt_canvas_paper_is_physical()` now says only how a size is WRITTEN DOWN, never how it
+  reaches the plane. **Pango is pinned to 72 too**
+  (`pango_cairo_context_set_resolution()`): it means points by a font's size already but
+  converts them at its context's density, 96 by default, so "12" arrived as sixteen units and
+  a type size meant nothing measurable. Pinned, a line of N-point type is 1.1667 N units --
+  the font's own leading and nothing else. **A design does not resize itself to a new page**;
+  twelve points stays twelve points, and filling a different page is a deliberate action, not
+  a rule that fires behind the user.
 - **The export's page is the document's, never the dialog's.** Page size and orientation are
   the canvas's; the dialog asks only for format, resolution, bleed, quality and profile. The
   bleed grows the sheet and the canvas rectangle it shows, so a frame a page break cut in two

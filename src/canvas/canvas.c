@@ -44,7 +44,12 @@
 #define CANVAS_DEFAULT_TEXT_WIDTH 400.0
 #define CANVAS_DEFAULT_TEXT_HEIGHT 200.0
 #define CANVAS_DEFAULT_TEXT_PADDING 12.0f
-#define CANVAS_DEFAULT_IMAGE_LONG_EDGE_UNITS 600.0
+/**
+ * A new picture's long edge, in points: two inches, about a third of A4's width. It was 600
+ * when a unit was a three-hundredth of an inch, which is the same two inches -- the number
+ * changed with the unit and the picture did not.
+ */
+#define CANVAS_DEFAULT_IMAGE_LONG_EDGE_UNITS 144.0
 #define CANVAS_DUPLICATE_OFFSET 40.0
 #define CANVAS_CONNECTOR_LINE_WIDTH 2.0f
 #define CANVAS_DEFAULT_SHADOW_OFFSET 8.0f
@@ -2046,9 +2051,11 @@ void dt_canvas_text_margins(const dt_canvas_object_t *object, double margins[4])
 
 double dt_canvas_resolution(const dt_canvas_t *canvas)
 {
-  // A document from before the field holds zero, and its page sizes were laid out as points:
-  // 72 units to the inch is what keeps its geometry exactly where the user left it.
-  if(IS_NULL_PTR(canvas) || !(canvas->resolution > 0.0f)) return 72.0;
+  // The density the page is RASTERISED at, and nothing else: the plane is measured in points
+  // whatever this says, so changing it moves nothing on the page and only decides how many
+  // pixels the export carries. A document with no answer takes the default rather than the
+  // point, since 72 dpi is a preview and not a print.
+  if(IS_NULL_PTR(canvas) || !(canvas->resolution > 0.0f)) return CANVAS_DEFAULT_RESOLUTION;
   return (double)canvas->resolution;
 }
 
@@ -2086,8 +2093,19 @@ gboolean dt_canvas_paper_points(const uint32_t paper, double *width, double *hei
   for(int position = 0; position < dt_canvas_paper_count(); position++)
   {
     if(_paper_sizes[position].code != paper) continue;
-    if(!IS_NULL_PTR(width)) *width = _paper_sizes[position].width;
-    if(!IS_NULL_PTR(height)) *height = _paper_sizes[position].height;
+    /*
+     * Points, whichever way the format is named. A sheet of paper is stated in points already;
+     * a screen format is stated in PIXELS, and a pixel is a physical length as soon as a
+     * density is named for it -- the W3C's reference pixel, 96 to the inch, which is what every
+     * browser and toolkit means by one. So a 1080 x 1920 story is 810 x 1440 points, and
+     * exporting it at 96 dpi gives back exactly the 1080 x 1920 it is named for.
+     *
+     * That is what lets the two kinds of page be the same kind of thing: twelve points is
+     * twelve points on A4 and on a story, and neither moves when the export density changes.
+     */
+    const double to_points = _paper_sizes[position].physical ? 1.0 : 72.0 / DT_CANVAS_REFERENCE_PIXEL_DPI;
+    if(!IS_NULL_PTR(width)) *width = _paper_sizes[position].width * to_points;
+    if(!IS_NULL_PTR(height)) *height = _paper_sizes[position].height * to_points;
     return TRUE;
   }
   return FALSE;
@@ -2099,13 +2117,9 @@ gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, do
   double portrait_width = 0.0;
   double portrait_height = 0.0;
   if(!dt_canvas_paper_points(canvas->paper_size, &portrait_width, &portrait_height)) return FALSE;
-  // Points to units for a sheet of paper; a screen format is already in the plane's own unit.
-  if(dt_canvas_paper_is_physical(canvas->paper_size))
-  {
-    const double units_per_point = dt_canvas_resolution(canvas) / 72.0;
-    portrait_width *= units_per_point;
-    portrait_height *= units_per_point;
-  }
+  // A canvas unit IS a point, so a page is its own size and the export density does not enter
+  // into it. Scaling the page by the density and leaving everything on it where it was is what
+  // made raising the DPI shrink the whole layout against its own paper.
   if(!IS_NULL_PTR(width)) *width = canvas->paper_landscape ? portrait_height : portrait_width;
   if(!IS_NULL_PTR(height)) *height = canvas->paper_landscape ? portrait_width : portrait_height;
   return TRUE;

@@ -206,7 +206,7 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
     if(!(page.area.width > 0.0) || !(page.area.height > 0.0))
     {
       // Nothing on it: an A4's worth of background, so the file is still a page.
-      const double units_per_point = dt_canvas_resolution(canvas) / 72.0;
+      const double units_per_point = 1.0; // a canvas unit IS a point
       page.area.width = 595.0 * units_per_point;
       page.area.height = 842.0 * units_per_point;
       page.area.x = -0.5 * page.area.width;
@@ -236,13 +236,11 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
     page->area.y -= top;
     page->area.width += left + right;
     page->area.height += top + bottom;
-    // A unit is a display pixel and the canvas says how many go to the inch, so the physical
-    // size of the sheet is the units divided by that. Read the units as points instead, as
-    // this did, and every material page comes out at whatever size 72 units to the inch makes
-    // it -- which is where an A4 being smaller than a phone story came from.
-    const double points_per_unit = 72.0 / dt_canvas_resolution(canvas);
-    page->width_pt = page->area.width * points_per_unit;
-    page->height_pt = page->area.height * points_per_unit;
+    // A canvas unit IS a point, so a page's size in points is its size on the plane and this
+    // is no conversion at all. It used to divide by the export's density, which is how a sheet
+    // of A4 came out at whatever size the dots-per-inch made of it.
+    page->width_pt = page->area.width;
+    page->height_pt = page->area.height;
   }
   return pages;
 }
@@ -576,7 +574,9 @@ gboolean dt_canvas_export(const dt_canvas_t *canvas, const char *path, const dt_
   // Canvas units to output pixels: the dialog's resolution against the canvas's own, so the
   // export at the canvas's resolution is one output pixel per unit and asking for more
   // resamples rather than re-rasterising something that was never measured in points.
-  const double scale = dpi / dt_canvas_resolution(canvas);
+  // Points to pixels: the page is measured in points, and this is the only place the
+  // export's density enters at all.
+  const double scale = dpi / 72.0;
   GArray *pages = _pages_of(canvas, bleed);
 
   const dt_colorspaces_color_profile_t *output = NULL;

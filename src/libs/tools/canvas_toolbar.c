@@ -611,15 +611,15 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   _labelled(grid, 1, 3, _("Colour"), toolbar->grid_color);
 
   _section_label(grid, 2, _("Page borders"));
-  // The resolution belongs beside the page size: it is what turns a sheet of paper into a
-  // size on a plane measured in display pixels, and without it an A4 and a phone story are
-  // read as the same kind of number.
+  // It belongs beside the page size because it is what the page will be PRINTED at, but it is
+  // not a property of the plane: the plane is measured in points and this moves nothing on it.
   toolbar->resolution = gtk_spin_button_new_with_range(18.0, 2400.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->resolution,
-                              _("Canvas units per inch. A paper size is scaled by it -- at 300 an A4 is 2480 units "
-                                "wide -- while a screen format is its own pixel size whatever this says."));
+                              _("Dots per inch the page is rasterised at when it is exported. It moves nothing "
+                                "on the canvas -- the plane is measured in points, so a size on it is a size on "
+                                "the paper -- and only decides how many pixels an export carries."));
   g_signal_connect(toolbar->resolution, "value-changed", G_CALLBACK(_resolution_changed), self);
-  _labelled(grid, 2, 2, _("Resolution"), toolbar->resolution);
+  _labelled(grid, 2, 2, _("Export DPI"), toolbar->resolution);
   toolbar->page_show = _guide_check(self, grid, 3, 0, _("Show"), DT_CANVAS_PAGE_VISIBLE);
   toolbar->page_snap = _guide_check(self, grid, 3, 1, _("Snap"), DT_CANVAS_SNAP_PAGE);
   toolbar->page_over = _guide_check(self, grid, 4, 0, _("Over"), DT_CANVAS_GUIDES_OVER);

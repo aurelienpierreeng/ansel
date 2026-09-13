@@ -2873,8 +2873,8 @@
   <dtconfig>
     <name>canvas/grid_size</name>
     <type min="5" max="1000">int</type>
-    <default>50</default>
-    <shortdescription>canvas grid spacing, in canvas units</shortdescription>
+    <default>12</default>
+    <shortdescription>the grid's pitch on a new canvas, in points (a canvas unit is a point)</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/grid_visible</name>
@@ -2939,8 +2939,8 @@
   <dtconfig>
     <name>canvas/padding</name>
     <type min="0" max="500">float</type>
-    <default>20</default>
-    <shortdescription>margin canvas frames keep from each other when snapped side by side or arranged, in canvas units</shortdescription>
+    <default>5</default>
+    <shortdescription>the clear space kept around each frame on a new canvas, in points (a canvas unit is a point)</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/grid_color</name>
@@ -2994,7 +2994,7 @@
     <name>canvas/resolution</name>
     <type min="18" max="2400">float</type>
     <default>300</default>
-    <shortdescription>canvas units per inch on a new canvas: what turns a paper size into a size on the plane</shortdescription>
+    <shortdescription>dots per inch a new canvas is exported at; the plane itself is measured in points</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/guides_over</name>

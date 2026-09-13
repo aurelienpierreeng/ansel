@@ -1385,6 +1385,14 @@ static PangoLayout *_text_layout_styled(cairo_t *cr, const dt_canvas_t *canvas, 
   cairo_font_options_set_hint_style(unhinted, CAIRO_HINT_STYLE_NONE);
   pango_cairo_context_set_font_options(context, unhinted);
   cairo_font_options_destroy(unhinted);
+  /*
+   * A POINT PER CANVAS UNIT. Pango means points by a font's size already, and turns them into
+   * the context's own units at the context's density -- 96 by default, so "12" arrived on the
+   * plane as sixteen units and a type size meant nothing anyone could measure. Pinned at 72
+   * the two agree: twelve points is twelve units is a sixth of an inch, on every page and at
+   * every export density.
+   */
+  pango_cairo_context_set_resolution(context, 72.0);
   pango_layout_context_changed(layout);
   PangoFontDescription *font = pango_font_description_from_string(dt_canvas_text_effective_font(canvas, object));
   pango_layout_set_font_description(layout, font);

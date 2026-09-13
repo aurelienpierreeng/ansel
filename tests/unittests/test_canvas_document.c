@@ -886,42 +886,50 @@ static void _frames_snap_with_their_paddings_touching(void **state)
 }
 
 /**
- * A canvas unit is a display pixel and the canvas says how many go to the inch, so a sheet of
- * paper is scaled by that and a screen format is not. Read as points, as both were, an
- * Instagram story came out 1080 units against an A4's 595 -- nearly twice the sheet, for
- * something that fits in a hand.
+ * A canvas unit is a POINT, so a page is its own size whatever the export is rasterised at,
+ * and a format named in pixels is a physical size too -- at the W3C's reference density, the
+ * only number that makes "1080 px" mean a length. That is what lets a sheet and a story be
+ * the same kind of thing.
+ *
+ * It used to scale a sheet of paper by the export density and leave everything ON the sheet
+ * where it was, so raising the density shrank the whole layout against its own paper: measured
+ * on A4, a twelve-point line went from 7.0% of the page's height at 72 dpi to 1.7% at 300.
  */
-static void _a_sheet_of_paper_scales_with_the_resolution_and_a_screen_format_does_not(void **state)
+static void _a_page_is_measured_in_points_whatever_it_is_rasterised_at(void **state)
 {
   (void)state;
+  // The flag says how a format is WRITTEN DOWN, not how it reaches the plane.
   assert_true(dt_canvas_paper_is_physical(DT_CANVAS_PAPER_A4));
   assert_false(dt_canvas_paper_is_physical(DT_CANVAS_PAPER_STORY));
 
   dt_canvas_t *canvas = dt_canvas_new();
-  // A document from before the field holds zero and reads as 72, which is the geometry it was
-  // laid out with: every page size is then its own number outright.
-  canvas->resolution = 0.0f;
-  assert_float_equal(dt_canvas_resolution(canvas), 72.0, 1e-9);
-  double paper_width = 0.0;
-  double screen_width = 0.0;
-  canvas->paper_size = DT_CANVAS_PAPER_A4;
-  assert_true(dt_canvas_paper_dimensions(canvas, &paper_width, NULL));
-  canvas->paper_size = DT_CANVAS_PAPER_STORY;
-  assert_true(dt_canvas_paper_dimensions(canvas, &screen_width, NULL));
-  assert_float_equal(paper_width, 595.0, 1e-9);
-  assert_float_equal(screen_width, 1080.0, 1e-9);
-  assert_true(screen_width > paper_width); // the old reading, and why it had to change
+  double a4_width = 0.0;
+  double a4_height = 0.0;
+  double story_width = 0.0;
+  double story_height = 0.0;
+  static const double densities[] = { 72.0, 96.0, 300.0, 1200.0 };
+  for(guint density = 0; density < G_N_ELEMENTS(densities); density++)
+  {
+    canvas->resolution = (float)densities[density];
+    canvas->paper_size = DT_CANVAS_PAPER_A4;
+    assert_true(dt_canvas_paper_dimensions(canvas, &a4_width, &a4_height));
+    canvas->paper_size = DT_CANVAS_PAPER_STORY;
+    assert_true(dt_canvas_paper_dimensions(canvas, &story_width, &story_height));
+    // A4 is A4 and a story is a story, at every density there is.
+    assert_float_equal(a4_width, 595.0, 1e-9);
+    assert_float_equal(a4_height, 842.0, 1e-9);
+    assert_float_equal(story_width, 1080.0 * 72.0 / DT_CANVAS_REFERENCE_PIXEL_DPI, 1e-9);
+    assert_float_equal(story_height, 1920.0 * 72.0 / DT_CANVAS_REFERENCE_PIXEL_DPI, 1e-9);
+  }
+  // And the story is what it is named: rasterised at the reference density it gives back
+  // exactly the pixel count on the tin.
+  assert_float_equal(story_width * DT_CANVAS_REFERENCE_PIXEL_DPI / 72.0, 1080.0, 1e-9);
+  assert_float_equal(story_height * DT_CANVAS_REFERENCE_PIXEL_DPI / 72.0, 1920.0, 1e-9);
 
-  // At the resolution a new canvas carries, the sheet is the larger of the two and the screen
-  // format has not moved: it was already in the plane's own unit.
-  canvas->resolution = 300.0f;
-  canvas->paper_size = DT_CANVAS_PAPER_A4;
-  assert_true(dt_canvas_paper_dimensions(canvas, &paper_width, NULL));
-  canvas->paper_size = DT_CANVAS_PAPER_STORY;
-  assert_true(dt_canvas_paper_dimensions(canvas, &screen_width, NULL));
-  assert_float_equal(paper_width, 595.0 * 300.0 / 72.0, 1e-6);
-  assert_float_equal(screen_width, 1080.0, 1e-9);
-  assert_true(paper_width > screen_width);
+  // A canvas with no answer takes the default rather than the point: 72 dpi is a preview, not
+  // a print, and the number no longer decides any geometry that could be got wrong by it.
+  canvas->resolution = 0.0f;
+  assert_float_equal(dt_canvas_resolution(canvas), 300.0, 1e-9);
   dt_canvas_free(canvas);
 }
 
@@ -1280,7 +1288,7 @@ int main(void)
     cmocka_unit_test(_a_frame_offers_its_corners_and_its_centre_as_anchors),
     cmocka_unit_test(_a_waypoint_bends_every_routing_through_it),
     cmocka_unit_test(_frames_snap_with_their_paddings_touching),
-    cmocka_unit_test(_a_sheet_of_paper_scales_with_the_resolution_and_a_screen_format_does_not),
+    cmocka_unit_test(_a_page_is_measured_in_points_whatever_it_is_rasterised_at),
     cmocka_unit_test(_a_spread_keeps_its_pages_together_and_opens_between_sheets),
     cmocka_unit_test(_opentype_features_round_trip_through_their_pango_spelling),
     cmocka_unit_test(_a_frame_covers_its_silhouette_and_not_its_corners),

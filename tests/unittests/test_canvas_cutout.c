@@ -1422,6 +1422,51 @@ static double _flowed_past_a_cut_frame(const float radius, const float feather)
   return height;
 }
 
+
+static void _a_point_of_type_is_a_unit_on_the_plane(void **state)
+{
+  (void)state;
+  /*
+   * A canvas unit is a POINT, and a font's size is in points already -- but Pango turns those
+   * into its context's units at the context's density, which is 96 unless it is told
+   * otherwise. Untold, "12" arrived on the plane as sixteen units: a type size meant nothing
+   * anyone could measure against a page, and it did not change when the export density did
+   * while the page did.
+   *
+   * Measured with the context pinned at 72: a line of N-point type is 1.1667 N units at every
+   * size, which is the font's own line height and nothing else. At 96 it would be 1.5556 N.
+   */
+  static const int sizes[] = { 12, 24, 72 };
+  static const double densities[] = { 72.0, 300.0 };
+  double first = 0.0;
+  for(guint density = 0; density < G_N_ELEMENTS(densities); density++)
+    for(guint size = 0; size < G_N_ELEMENTS(sizes); size++)
+    {
+      dt_canvas_t *canvas = dt_canvas_new();
+      canvas->resolution = (float)densities[density];
+      dt_canvas_object_t *text = dt_canvas_add_text(canvas, 0.0, 0.0, 4000.0, 400.0, "Typography");
+      assert_non_null(text);
+      text->text.padding = 0.0f;
+      gchar *description = g_strdup_printf("Sans %d", sizes[size]);
+      g_strlcpy(text->text.font, description, sizeof(text->text.font));
+      g_free(description);
+
+      cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+      cairo_t *cr = cairo_create(surface);
+      const double line = dt_canvas_paint_text_natural_height(cr, canvas, text);
+      cairo_destroy(cr);
+      cairo_surface_destroy(surface);
+      dt_canvas_free(canvas);
+
+      const double per_point = line / sizes[size];
+      // The font's leading and no scale factor hiding behind it -- 96/72 would put this at 1.56.
+      assert_true(per_point > 1.0 && per_point < 1.3);
+      // The same at every size, and the export density does not enter into it at all.
+      if(first == 0.0) first = per_point;
+      assert_float_equal(per_point, first, 1e-6);
+    }
+}
+
 static void _a_feathered_cutout_covers_all_of_its_fade(void **state)
 {
   (void)state;
@@ -1582,6 +1627,7 @@ int main(void)
     cmocka_unit_test(_an_auto_height_frame_grows_downward_and_settles),
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
     cmocka_unit_test(_a_feathered_cutout_covers_all_of_its_fade),
+    cmocka_unit_test(_a_point_of_type_is_a_unit_on_the_plane),
     cmocka_unit_test(_the_gap_around_an_obstacle_is_a_disc_not_a_square),
     cmocka_unit_test(_a_frame_standing_just_outside_a_column_still_pushes_its_text),
     cmocka_unit_test(_the_leading_reaches_a_flowing_paragraph_once_per_gap),
