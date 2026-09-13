@@ -3554,9 +3554,9 @@ static void _draw_brush_hud(cairo_t *cr, const drawlayer_hud_brush_state_t *stat
   for(int i = 0; i < 3; i++)
   {
     pango_layout_set_text(layout, lines[i], -1);
-    PangoRectangle ext;
-    pango_layout_get_pixel_extents(layout, &ext, NULL);
-    max_w = fmax(max_w, (double)ext.width);
+    PangoRectangle logical;
+    pango_layout_get_pixel_extents(layout, NULL, &logical);
+    max_w = fmax(max_w, (double)logical.width);
   }
 
   const double box_w = max_w + 2.0 * pad;
@@ -3573,7 +3573,8 @@ static void _draw_brush_hud(cairo_t *cr, const drawlayer_hud_brush_state_t *stat
   for(int i = 0; i < 3; i++)
   {
     pango_layout_set_text(layout, lines[i], -1);
-    cairo_move_to(cr, x + pad, y + pad + (i + 1) * line_h - DT_PIXEL_APPLY_DPI(2.0));
+    // pango_cairo_show_layout() takes the layout's TOP-LEFT, where cairo_show_text() took a baseline
+    cairo_move_to(cr, x + pad, y + pad + i * line_h);
     pango_cairo_show_layout(cr, layout);
   }
   cairo_restore(cr);

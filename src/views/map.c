@@ -339,7 +339,9 @@ static GdkPixbuf *_view_map_images_count(const int nb_images, const gboolean sam
   pango_layout_get_pixel_extents(layout, &ink, NULL);
   *count_width = ink.width + 4 * ink.x;
   *count_height = ink.height + 2;
-  cairo_move_to(cr, ink.x, ink.height + 1);
+  // pango_cairo_show_layout() takes the layout's top-left, so pull it up by the ink offset
+  // to put the ink itself where cairo_show_text()'s baseline used to land it
+  cairo_move_to(cr, ink.x, 1.0 - ink.y);
   pango_cairo_show_layout(cr, layout);
   pango_font_description_free(desc);
   g_object_unref(layout);

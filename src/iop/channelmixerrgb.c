@@ -1968,9 +1968,9 @@ int extract_color_checker(const float *const restrict in, float *const restrict 
                           "<b>Profile data</b>\n"
                           "illuminant:  \t%.0f K \t%s\n"
                           "matrix in adaptation space:\n"
-                          "<span font_family=\"IBM Plex Mono\">%+.4f \t%+.4f \t%+.4f\n"
+                          "<tt>%+.4f \t%+.4f \t%+.4f\n"
                           "%+.4f \t%+.4f \t%+.4f\n"
-                          "%+.4f \t%+.4f \t%+.4f</span>\n\n"
+                          "%+.4f \t%+.4f \t%+.4f</tt>\n\n"
                           "<b>Normalization values</b>\n"
                           "exposure compensation: \t%+.2f EV\n"
                           "black offset: \t%+.4f"
@@ -2661,7 +2661,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
     // Draw the text in red
     cairo_set_source_rgba(cr, 1., 0., 0., 1.);
-    cairo_move_to(cr, new_target_center.x - extents.width / 2.0, new_target_center.y - extents.height / 2.0);
+    // pango_cairo_show_layout() takes the layout's top-left; subtract the ink offset so the
+    // glyphs, not the layout box, end up centred on the rectangle drawn above
+    cairo_move_to(cr, new_target_center.x - extents.width / 2.0 - extents.x,
+                  new_target_center.y - extents.height / 2.0 - extents.y);
     pango_cairo_show_layout(cr, layout);
     pango_font_description_free(desc);
     g_object_unref(layout);

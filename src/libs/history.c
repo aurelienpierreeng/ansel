@@ -156,7 +156,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->history_view), "query-tooltip", G_CALLBACK(_lib_history_view_query_tooltip), self);
 
   GtkCellRenderer *renderer_num = gtk_cell_renderer_text_new();
-  g_object_set(G_OBJECT(renderer_num), "xalign", 1.0, "family", "IBM Plex Mono", NULL);
+  g_object_set(G_OBJECT(renderer_num), "xalign", 1.0, "family", "IBM Plex Mono,monospace", NULL);
   GtkTreeViewColumn *col_num = gtk_tree_view_column_new_with_attributes("n", renderer_num,
                                                                         "text", DT_HISTORY_VIEW_COL_NUMBER,
                                                                         NULL);

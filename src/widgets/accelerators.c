@@ -1474,7 +1474,7 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
     // -- see gtk_accelerator_name() elsewhere in this file for that, used only for debug logs).
     char *new_text = gtk_accelerator_get_label(keyval, dt_accels_display_mods(mods));
     GtkWidget *dlg
-        = gtk_message_dialog_new_with_markup(NULL, 0, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "%s <span font_family=\"IBM Plex Mono\">%s</span>\n%s <span font_family=\"IBM Plex Mono\">%s</span>.\n%s",
+        = gtk_message_dialog_new_with_markup(NULL, 0, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "%s <span font_family=\"IBM Plex Mono,monospace\">%s</span>\n%s <span font_family=\"IBM Plex Mono,monospace\">%s</span>.\n%s",
                                               _("The shortcut for"), shortcut_path,
                                               _("is already using the key combination"), new_text,
                                               _("Delete it first."));

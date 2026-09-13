@@ -3173,12 +3173,12 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       }
       else if(g->k_selected_segment >= 0)
       {
-        dt_control_hinter_message(dt_control_get_global(), _("<b>move line</b>: drag, <b>toggle symmetry</b>: click <span font_family=\"IBM Plex Mono\">\352\235\217</span>"));
+        dt_control_hinter_message(dt_control_get_global(), _("<b>move line</b>: drag, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>"));
         dt_control_queue_cursor(GDK_CROSS);
       }
       else
       {
-        dt_control_hinter_message(dt_control_get_global(), _("<b>apply</b>: click <span font_family=\"IBM Plex Mono\">ok</span>, <b>toggle symmetry</b>: click <span font_family=\"IBM Plex Mono\">\352\235\217</span>\n"
+        dt_control_hinter_message(dt_control_get_global(), _("<b>apply</b>: click <tt>ok</tt>, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>\n"
                                                        "<b>move line/control point</b>: drag"));
         dt_control_queue_cursor(GDK_FLEUR);
       }
