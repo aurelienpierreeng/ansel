@@ -54,6 +54,7 @@
 #include "gui/dtgtk/thumbtable.h"
 
 #include "gui/drag_and_drop.h"
+#include "widgets/bauhaus.h"
 #include "widgets/draw.h"
 #include "views/view.h"
 #include "views/view_api.h"
@@ -327,14 +328,21 @@ static GdkPixbuf *_view_map_images_count(const int nb_images, const gboolean sam
 
   dt_widget_set_source_rgb(cr, same_loc ? DT_GUI_COLOR_MAP_COUNT_SAME_LOC
                                          : DT_GUI_COLOR_MAP_COUNT_DIFF_LOC);
-  cairo_set_font_size(cr, 12 * (1 + (dt_gui_get_global()->dpi_factor - 1) / 2));
-  cairo_text_extents_t te;
-  cairo_text_extents(cr, text, &te);
-  *count_width = te.width + 4 * te.x_bearing;
-  *count_height = te.height + 2;
-  cairo_move_to(cr, te.x_bearing, te.height + 1);
-
-  cairo_show_text(cr, text);
+  // Theme font via Pango, not cairo's default toy font (the toy face skips the CSS stack).
+  PangoLayout *layout = pango_cairo_create_layout(cr);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
+  pango_font_description_set_absolute_size(
+      desc, 12.0 * (1.0 + (dt_gui_get_global()->dpi_factor - 1.0) / 2.0) * PANGO_SCALE);
+  pango_layout_set_font_description(layout, desc);
+  pango_layout_set_text(layout, text, -1);
+  PangoRectangle ink;
+  pango_layout_get_pixel_extents(layout, &ink, NULL);
+  *count_width = ink.width + 4 * ink.x;
+  *count_height = ink.height + 2;
+  cairo_move_to(cr, ink.x, ink.height + 1);
+  pango_cairo_show_layout(cr, layout);
+  pango_font_description_free(desc);
+  g_object_unref(layout);
   cairo_destroy(cr);
   uint8_t *data = cairo_image_surface_get_data(cst);
   dt_draw_cairo_to_gdk_pixbuf(data, w, h);

@@ -732,7 +732,7 @@ static dt_textnotes_tags_t _create_preview_tags(GtkTextBuffer *buffer)
   dt_textnotes_tags_t tags = { 0 };
   tags.bold = gtk_text_buffer_create_tag(buffer, "tn_bold", "weight", PANGO_WEIGHT_BOLD, NULL);
   tags.italic = gtk_text_buffer_create_tag(buffer, "tn_italic", "style", PANGO_STYLE_ITALIC, NULL);
-  tags.mono = gtk_text_buffer_create_tag(buffer, "tn_mono", "family", "monospace", NULL);
+  tags.mono = gtk_text_buffer_create_tag(buffer, "tn_mono", "family", "IBM Plex Mono", NULL);
   tags.h1 = gtk_text_buffer_create_tag(buffer, "tn_h1", "weight", PANGO_WEIGHT_BOLD, "scale", 1.4, NULL);
   tags.h2 = gtk_text_buffer_create_tag(buffer, "tn_h2", "weight", PANGO_WEIGHT_BOLD, "scale", 1.25, NULL);
   tags.h3 = gtk_text_buffer_create_tag(buffer, "tn_h3", "weight", PANGO_WEIGHT_BOLD, "scale", 1.15, NULL);

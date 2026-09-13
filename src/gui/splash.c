@@ -293,7 +293,7 @@ static gboolean _splash_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   {
     gchar *label = g_strdup_printf(_("© %s"), slide->author);
     PangoLayout *layout = gtk_widget_create_pango_layout(widget, label);
-    PangoFontDescription *desc = pango_font_description_from_string("14px Roboto");
+    PangoFontDescription *desc = pango_font_description_from_string("14px IBM Plex Sans");
     pango_layout_set_font_description(layout, desc);
     pango_font_description_free(desc);
     pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
@@ -626,27 +626,27 @@ void dt_gui_splash_init(void)
     "}"
     "#splash-title {"
     "  color: #f2f2f2;"
-    "  font: 700 40px \"Roboto\";"
+    "  font: 700 40px \"IBM Plex Sans\", sans-serif;"
     "}"
     "#splash-title-shadow {"
     "  color: rgba(0,0,0,0.75);"
-    "  font: 700 40px \"Roboto\";"
+    "  font: 700 40px \"IBM Plex Sans\", sans-serif;"
     "}"
     "#splash-version {"
     "  color: rgb(255,255,255);"
-    "  font: 16px \"Roboto\";"
+    "  font: 16px \"IBM Plex Sans\", sans-serif;"
     "}"
     "#splash-version-shadow {"
     "  color: rgba(0,0,0,0.75);"
-    "  font: 16px \"Roboto\";"
+    "  font: 16px \"IBM Plex Sans\", sans-serif;"
     "}"
     "#splash-message {"
     "  color: rgba(255,255,255,0.9);"
-    "  font: 16px \"Roboto\";"
+    "  font: 16px \"IBM Plex Sans\", sans-serif;"
     "}"
     "#splash-message-shadow {"
     "  color: rgba(0,0,0,0.75);"
-    "  font: 16px \"Roboto\";"
+    "  font: 16px \"IBM Plex Sans\", sans-serif;"
     "}"
     "#splash-ticker {"
     "  background: transparent;"
@@ -657,12 +657,12 @@ void dt_gui_splash_init(void)
     "}"
     "#splash-authors {"
     "  color: rgba(255,255,255,0.92);"
-    "  font: 16px \"Roboto\";"
+    "  font: 16px \"IBM Plex Sans\", sans-serif;"
     "  margin: 6px 0;"
     "}"
     "#splash-authors-shadow {"
     "  color: rgba(0,0,0,0.75);"
-    "  font: 16px \"Roboto\";"
+    "  font: 16px \"IBM Plex Sans\", sans-serif;"
     "  margin: 6px 0;"
     "}"
   );

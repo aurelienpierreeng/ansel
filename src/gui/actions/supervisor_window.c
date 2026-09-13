@@ -280,8 +280,8 @@ static gchar *_header_markup(const dt_sv_logged_event_t *ev)
   gchar *e_mn = is_raster_mask ? g_strdup_printf("%s - raster mask", e_mn_raw) : g_strdup(e_mn_raw);
   g_free(e_mn_raw);
   gchar *out = g_strdup_printf(
-      "<tt>%9.3f</tt>  <b>%-7s</b>  <span foreground=\"%s\">%-10s</span>  <b>%-16s</b>  "
-      "<a href=\"%s\"><tt>%s</tt></a>  <span size=\"small\"><i>%s</i></span>",
+      "<span font_family=\"IBM Plex Mono\">%9.3f</span>  <b>%-7s</b>  <span foreground=\"%s\">%-10s</span>  <b>%-16s</b>  "
+      "<a href=\"%s\"><span font_family=\"IBM Plex Mono\">%s</span></a>  <span size=\"small\"><i>%s</i></span>",
       ev->ts, e_op, is_raster_mask ? "#b78d45" : _domain_color(ev->domain), e_dom, e_mn, hx, hx, e_thr);
   g_free(hx);
   g_free(e_op);
@@ -305,7 +305,7 @@ static GtkWidget *_event_body_from(const char *json, GArray *links)
     {
       const dt_sv_link_t *lk = &g_array_index(links, dt_sv_link_t, i);
       gchar *lhx = _hashhex(lk->hash);
-      g_string_append_printf(ls, "%s%s → <a href=\"%s\"><tt>%s</tt></a>", i ? "      " : "", lk->label,
+      g_string_append_printf(ls, "%s%s → <a href=\"%s\"><span font_family=\"IBM Plex Mono\">%s</span></a>", i ? "      " : "", lk->label,
                              lhx, lhx);
       g_free(lhx);
     }
@@ -319,7 +319,7 @@ static GtkWidget *_event_body_from(const char *json, GArray *links)
 
   gchar *pretty = _pretty_json(json);
   gchar *escaped = g_markup_escape_text(pretty, -1);
-  gchar *mono = g_strdup_printf("<tt>%s</tt>", escaped);
+  gchar *mono = g_strdup_printf("<span font_family=\"IBM Plex Mono\">%s</span>", escaped);
   GtkWidget *body = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(body), mono);
   gtk_label_set_xalign(GTK_LABEL(body), 0.0);
@@ -567,10 +567,10 @@ static void _rebuild_memory(void)
     gchar *name = g_markup_escape_text(e->name[0] ? e->name : "-", -1);
     // fixed-width monospace trailing column so the vRAM figures line up vertically
     gchar *vram = (gpu && e->cl_count > 0)
-                      ? g_strdup_printf("<tt>+%8.2f MiB vRAM (%2d buf)</tt>", e->cl_bytes / 1048576.0,
+                      ? g_strdup_printf("<span font_family=\"IBM Plex Mono\">+%8.2f MiB vRAM (%2d buf)</span>", e->cl_bytes / 1048576.0,
                                         e->cl_count)
                       : NULL;
-    gchar *m = g_strdup_printf("<a href=\"%s\"><tt>%s</tt></a>  %.2f MiB  refs=%d hits=%d  <i>%s</i>", hx, hx,
+    gchar *m = g_strdup_printf("<a href=\"%s\"><span font_family=\"IBM Plex Mono\">%s</span></a>  %.2f MiB  refs=%d hits=%d  <i>%s</i>", hx, hx,
                                e->size / 1048576.0, e->refcount, e->hits, name);
     _add_mem_item(_g.mem_box, m, vram);
     g_free(hx);

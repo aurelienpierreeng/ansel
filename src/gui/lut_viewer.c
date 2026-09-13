@@ -936,13 +936,22 @@ static void _draw_samples(cairo_t *cr, const dt_lut_viewer_t *viewer,
 
 static void _draw_placeholder(cairo_t *cr, const int width, const int height, const char *message)
 {
-  cairo_text_extents_t extents;
-  cairo_select_font_face(cr, "sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-  cairo_set_font_size(cr, DT_PIXEL_APPLY_DPI(12.f));
-  cairo_text_extents(cr, message, &extents);
+  // Draw with the theme font (the same Pango desc the widgets use), not cairo's toy font:
+  // the toy font bypasses the CSS stack and cannot see per-user fonts on Windows.
+  PangoLayout *layout = pango_cairo_create_layout(cr);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
+  pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(12.f) * PANGO_SCALE);
+  pango_layout_set_font_description(layout, desc);
+  pango_layout_set_text(layout, message, -1);
+
+  PangoRectangle ink;
+  pango_layout_get_pixel_extents(layout, &ink, NULL);
   cairo_set_source_rgba(cr, 0.9, 0.9, 0.9, 0.7);
-  cairo_move_to(cr, 0.5f * ((float)width - extents.width), 0.5f * ((float)height - extents.height));
-  cairo_show_text(cr, message);
+  cairo_move_to(cr, 0.5f * ((float)width - ink.width) - ink.x, 0.5f * ((float)height - ink.height) - ink.y);
+  pango_cairo_show_layout(cr, layout);
+
+  pango_font_description_free(desc);
+  g_object_unref(layout);
 }
 
 static void _render_surface(dt_lut_viewer_t *viewer, const int width, const int height)
