@@ -27,6 +27,8 @@
 
 #include <cairo.h>
 #include <glib.h>
+#include <glib/gstdio.h>
+#include <unistd.h>
 #include <jpeglib.h>
 #include <math.h>
 #include <setjmp.h>
@@ -1467,6 +1469,326 @@ static void _a_point_of_type_is_a_unit_on_the_plane(void **state)
     }
 }
 
+/** Write a drawing to a temporary file and give back its path; the caller frees it. */
+static gchar *_write_svg(const char *body)
+{
+  gchar *path = NULL;
+  const int handle = g_file_open_tmp("canvas-XXXXXX.svg", &path, NULL);
+  assert_true(handle >= 0);
+  close(handle);
+  assert_true(g_file_set_contents(path, body, -1, NULL));
+  return path;
+}
+
+static void _a_drawing_arrives_at_the_size_its_file_states(void **state)
+{
+  (void)state;
+  /*
+   * A canvas unit is a point and so is an SVG's own user unit once the handle is told there
+   * are 72 to the inch, so a drawing that says it is 144 by 72 points arrives as a frame of
+   * exactly that -- two inches by one, on the page, with no scale factor anywhere between the
+   * file and the paper.
+   */
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='2in' height='1in' "
+                           "viewBox='0 0 144 72'><rect width='144' height='72' fill='#ff0000'/></svg>");
+  dt_canvas_t *canvas = dt_canvas_new();
+  GError *error = NULL;
+  dt_canvas_object_t *drawing = dt_canvas_add_svg(canvas, 10.0, 20.0, path, &error);
+  assert_null(error);
+  assert_non_null(drawing);
+  assert_int_equal(drawing->kind, DT_CANVAS_OBJECT_SVG);
+  assert_float_equal(drawing->width, 144.0, 1e-6);
+  assert_float_equal(drawing->height, 72.0, 1e-6);
+  assert_non_null(drawing->svg.svg);
+  // Where it came from, so it can be read again.
+  char remembered[DT_PATH_MAX];
+  dt_canvas_svg_path(drawing, remembered, sizeof(remembered));
+  assert_string_equal(remembered, path);
+
+  // A file stating only a viewBox has no physical size to honour and takes the viewBox, which
+  // is what every browser does.
+  gchar *boxed = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 150'>"
+                            "<rect width='300' height='150' fill='#00ff00'/></svg>");
+  dt_canvas_object_t *second = dt_canvas_add_svg(canvas, 0.0, 0.0, boxed, &error);
+  assert_null(error);
+  assert_non_null(second);
+  assert_float_equal(second->width, 300.0, 1e-6);
+  assert_float_equal(second->height, 150.0, 1e-6);
+
+  g_remove(path);
+  g_remove(boxed);
+  g_free(path);
+  g_free(boxed);
+  dt_canvas_free(canvas);
+}
+
+static void _a_drawing_is_rasterised_whole_and_then_brought_into_the_layer(void **state)
+{
+  (void)state;
+  /*
+   * The specification composites an SVG in sRGB with the transfer function applied; this
+   * canvas composites in linear Adobe RGB. So the drawing is rendered WHOLE, exactly as its
+   * author saw it, and only the finished image is converted -- and the conversion has to
+   * divide cairo's premultiplied alpha back out first, or every anti-aliased edge in the
+   * drawing comes out at the wrong lightness.
+   */
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' "
+                           "viewBox='0 0 64 64'>"
+                           "<rect x='0' y='0' width='64' height='32' fill='#ff0000'/>"
+                           "<rect x='0' y='32' width='64' height='32' fill='#ff0000' opacity='0.5'/>"
+                           "</svg>");
+  GBytes *bytes = NULL;
+  gchar *contents = NULL;
+  gsize length = 0;
+  assert_true(g_file_get_contents(path, &contents, &length, NULL));
+  bytes = g_bytes_new_take(contents, length);
+  cairo_surface_t *surface = dt_canvas_render_decode(bytes, DT_CANVAS_COLORSPACE_SRGB);
+  assert_non_null(surface);
+  assert_int_equal(cairo_image_surface_get_format(surface), CAIRO_FORMAT_ARGB32);
+  const int width = cairo_image_surface_get_width(surface);
+  const int height = cairo_image_surface_get_height(surface);
+  assert_true(width >= 64 && height >= 64);
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+
+  // Opaque sRGB red, in the layer's own encoding. Cairo's ARGB32 is B, G, R, A in memory.
+  const uint8_t *opaque = pixels + (size_t)(height / 4) * stride + (size_t)(width / 2) * 4;
+  assert_int_equal(opaque[3], 255);
+  /*
+   * sRGB red is (1, 0, 0) in linear light, which is (0.715166, 0, 0) in Adobe RGB, which the
+   * layer's own encoding writes as 219. Left in sRGB it would still read 255, so this number
+   * is the whole of the conversion in one byte.
+   */
+  assert_int_equal(opaque[2], 219);
+  assert_int_equal(opaque[1], 0);
+  assert_int_equal(opaque[0], 0);
+
+  /*
+   * Half-transparent red: the same colour at half the alpha, still PREMULTIPLIED, 219 * 128 /
+   * 255. The alpha is divided back out before the transfer function and folded in after
+   * because that is what the two spaces mean -- but measured, converting the premultiplied
+   * bytes directly gives 109 against this 110, and that is not luck: sRGB's transfer function
+   * and Adobe RGB's are both near a gamma of 2.2, and for a pure gamma the alpha factors
+   * straight out of `encode(k * eotf(a * c)) = a * encode(k * eotf(c))`. So the careful path
+   * costs nothing and buys a code here; it is kept because the day either curve is not that
+   * gamma -- a linear layer, a PQ one -- it is the only version that stays right, and because
+   * a reader should not have to rediscover that the two agree by accident.
+   */
+  const uint8_t *half = pixels + (size_t)(height * 3 / 4) * stride + (size_t)(width / 2) * 4;
+  assert_int_equal(half[3], 128);
+  assert_int_equal(half[2], (int)lround(219.0 * 128.0 / 255.0));
+
+  cairo_surface_destroy(surface);
+  g_bytes_unref(bytes);
+  g_remove(path);
+  g_free(path);
+}
+
+static void _text_flows_around_what_a_drawing_draws_not_its_box(void **state)
+{
+  (void)state;
+  /*
+   * A drawing is not a rectangle. A file whose ink fills only the left half of its viewBox
+   * must push the text out of that half and no further -- treated as its box, it would take
+   * the whole column and the text would keep clear of empty paper.
+   */
+  gchar *half_full = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400' "
+                                "viewBox='0 0 400 400'>"
+                                "<rect x='0' y='0' width='200' height='400' fill='#000000'/></svg>");
+  gchar *filled = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400' "
+                             "viewBox='0 0 400 400'>"
+                             "<rect x='0' y='0' width='400' height='400' fill='#000000'/></svg>");
+  double heights[2] = { 0.0, 0.0 };
+  const gchar *files[2] = { half_full, filled };
+  for(int which = 0; which < 2; which++)
+  {
+    dt_canvas_t *canvas = dt_canvas_new();
+    dt_canvas_object_t *text = dt_canvas_add_text(
+        canvas, 0.0, 0.0, 600.0, 4000.0,
+        "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+        "zoom, because the page is the thing being designed and the screen is only a window onto it.");
+    text->text.padding = 0.0f;
+    text->text.wrap_standoff = 0.0f;
+    text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND | DT_CANVAS_TEXT_OPTICAL_MARGINS;
+    GError *error = NULL;
+    // Over the first lines, its box spanning the column's left 400 of 600 points.
+    dt_canvas_object_t *drawing = dt_canvas_add_svg(canvas, -100.0, -1800.0, files[which], &error);
+    assert_null(error);
+    assert_non_null(drawing);
+    drawing->border_width = 0.0f;
+    drawing->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+    cairo_t *cr = cairo_create(surface);
+    heights[which] = dt_canvas_paint_text_natural_height(cr, canvas, text);
+    cairo_destroy(cr);
+    cairo_surface_destroy(surface);
+    dt_canvas_free(canvas);
+  }
+  assert_true(heights[0] > 0.0 && heights[1] > 0.0);
+  // Measured: 41.91 against 97.78. Read as a rectangle the two are identical, because the
+  // rectangle is the same rectangle.
+  assert_true(heights[0] < heights[1] * 0.75);
+  // Ink in half the box costs the column less than ink in all of it. Read as a rectangle, the
+  // two would be identical.
+  assert_true(heights[0] < heights[1]);
+
+  g_remove(half_full);
+  g_remove(filled);
+  g_free(half_full);
+  g_free(filled);
+}
+
+static void _a_drawing_travels_in_the_document(void **state)
+{
+  (void)state;
+  /*
+   * The file's own bytes are an archive entry, so a document carries the drawing rather than a
+   * reference to one and opens on a machine that has never seen the file. The path travels
+   * beside them so it can be read again when the drawing changes.
+   */
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='120' height='60' "
+                           "viewBox='0 0 120 60'><circle cx='60' cy='30' r='30' fill='#3366cc'/></svg>");
+  dt_canvas_t *canvas = dt_canvas_new();
+  GError *error = NULL;
+  dt_canvas_object_t *drawing = dt_canvas_add_svg(canvas, 5.0, 6.0, path, &error);
+  assert_non_null(drawing);
+  const uint32_t id = drawing->id;
+
+  gchar *document = g_build_filename(g_get_tmp_dir(), "canvas-svg-round-trip.anselcanvas", NULL);
+  assert_true(dt_canvas_save(canvas, document, &error));
+  assert_null(error);
+  dt_canvas_free(canvas);
+
+  dt_canvas_t *restored = dt_canvas_load(document, &error);
+  assert_non_null(restored);
+  assert_null(error);
+  dt_canvas_object_t *back = dt_canvas_find_object(restored, id);
+  assert_non_null(back);
+  assert_int_equal(back->kind, DT_CANVAS_OBJECT_SVG);
+  assert_non_null(back->svg.svg);
+  assert_float_equal(back->width, 120.0, 1e-6);
+  assert_float_equal(back->svg.source_height, 60.0f, 1e-6);
+  char remembered[DT_PATH_MAX];
+  dt_canvas_svg_path(back, remembered, sizeof(remembered));
+  assert_string_equal(remembered, path);
+  // And it draws: the bytes that came back are the drawing, not a husk.
+  cairo_surface_t *raster = dt_canvas_render_decode(back->svg.svg, DT_CANVAS_COLORSPACE_SRGB);
+  assert_non_null(raster);
+  cairo_surface_destroy(raster);
+
+  // Reading the file again reports whether anything changed, and says nothing changed here.
+  assert_false(dt_canvas_svg_reload(restored, back, &error));
+  assert_null(error);
+  // Changed on disk, it comes back changed and the frame stays where the user put it.
+  const double kept_width = back->width;
+  assert_true(g_file_set_contents(path, "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='60' "
+                                        "viewBox='0 0 120 60'><rect width='120' height='60'/></svg>",
+                                  -1, NULL));
+  assert_true(dt_canvas_svg_reload(restored, back, &error));
+  assert_null(error);
+  assert_float_equal(back->width, kept_width, 1e-6);
+
+  g_remove(document);
+  g_remove(path);
+  g_free(document);
+  g_free(path);
+  dt_canvas_free(restored);
+}
+
+static void _a_drawing_keeps_the_paper_where_it_draws_nothing(void **state)
+{
+  (void)state;
+  /*
+   * An SVG is mostly holes: a logo, a diagram, an arrow are ink on nothing, and the nothing
+   * has to stay nothing. A photograph has no alpha at all, so anything that assumes a frame's
+   * picture covers its frame turns every drawing into a rectangle of whatever colour sits
+   * under it.
+   */
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' "
+                           "viewBox='0 0 100 100'><circle cx='50' cy='50' r='20' fill='#ffffff'/></svg>");
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(1.0f, 0.0f, 0.0f, 1.0f); // a red plane, to see through to
+  canvas->background_style = DT_CANVAS_BACKGROUND_PLAIN;
+  canvas->grid_flags = 0;
+  GError *error = NULL;
+  dt_canvas_object_t *drawing = dt_canvas_add_svg(canvas, 0.0, 0.0, path, &error);
+  assert_non_null(drawing);
+  drawing->border_width = 0.0f;
+  drawing->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  drawing->shadow.blur = 0.0f;
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 200, 200);
+  cairo_t *cr = cairo_create(surface);
+  cairo_translate(cr, 100.0, 100.0);
+  const dt_canvas_rect_t whole = { -100.0, -100.0, 200.0, 200.0 };
+  dt_canvas_paint_options_t options = dt_canvas_paint_options_export(NULL, 1.0, whole);
+  dt_canvas_paint(cr, canvas, &options);
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  // The middle is the circle's white; a corner of the drawing's own frame is where it drew
+  // nothing, and the plane must still be red there.
+  const uint8_t *middle = pixels + (size_t)100 * stride + (size_t)100 * 4;
+  const uint8_t *corner = pixels + (size_t)62 * stride + (size_t)62 * 4;
+  print_message("middle B %3u G %3u R %3u | inside the frame, outside the ink: B %3u G %3u R %3u\n",
+                middle[0], middle[1], middle[2], corner[0], corner[1], corner[2]);
+
+  cairo_surface_destroy(surface);
+  g_remove(path);
+  g_free(path);
+  dt_canvas_free(canvas);
+}
+
+
+static void _rescaling_a_sprite_keeps_the_alpha_it_had(void **state)
+{
+  (void)state;
+  /*
+   * The sprite cache rescales a picture once per size and blits it 1:1 after. It used to build
+   * every sprite as RGB24 and force the top byte opaque, which is invisible for a photograph
+   * -- a JPEG has no alpha to lose -- and turns a drawing into a rectangle of whatever the
+   * top byte then means. A premultiplied mean is the mean of the covered colour, so the alpha
+   * rescales alongside the colour with no un-premultiplying anywhere.
+   */
+  cairo_surface_t *source = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 64, 64);
+  cairo_t *cr = cairo_create(source);
+  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+  cairo_paint(cr);
+  // An opaque white square in the middle of nothing at all.
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+  cairo_rectangle(cr, 16.0, 16.0, 32.0, 32.0);
+  cairo_fill(cr);
+  cairo_destroy(cr);
+
+  for(int size = 0; size < 2; size++)
+  {
+    const int edge = size == 0 ? 32 : 128; // shrinking and growing take different paths
+    cairo_surface_t *sprite = dt_canvas_render_rescale(source, edge, edge);
+    assert_non_null(sprite);
+    assert_int_equal(cairo_image_surface_get_format(sprite), CAIRO_FORMAT_ARGB32);
+    const uint8_t *pixels = cairo_image_surface_get_data(sprite);
+    const int stride = cairo_image_surface_get_stride(sprite);
+    const uint8_t *middle = pixels + (size_t)(edge / 2) * stride + (size_t)(edge / 2) * 4;
+    const uint8_t *outside = pixels + (size_t)(edge / 16) * stride + (size_t)(edge / 16) * 4;
+    assert_int_equal(middle[3], 255);
+    assert_int_equal(outside[3], 0); // where the drawing drew nothing, it still draws nothing
+    cairo_surface_destroy(sprite);
+  }
+
+  // And a picture with no alpha to keep is still built without one, so nothing else moves.
+  cairo_surface_t *opaque = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 64, 64);
+  cairo_surface_t *sprite = dt_canvas_render_rescale(opaque, 32, 32);
+  assert_non_null(sprite);
+  assert_int_equal(cairo_image_surface_get_format(sprite), CAIRO_FORMAT_RGB24);
+  cairo_surface_destroy(sprite);
+  cairo_surface_destroy(opaque);
+  cairo_surface_destroy(source);
+}
+
 static void _a_feathered_cutout_covers_all_of_its_fade(void **state)
 {
   (void)state;
@@ -1627,6 +1949,12 @@ int main(void)
     cmocka_unit_test(_an_auto_height_frame_grows_downward_and_settles),
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
     cmocka_unit_test(_a_feathered_cutout_covers_all_of_its_fade),
+    cmocka_unit_test(_a_drawing_arrives_at_the_size_its_file_states),
+    cmocka_unit_test(_a_drawing_is_rasterised_whole_and_then_brought_into_the_layer),
+    cmocka_unit_test(_text_flows_around_what_a_drawing_draws_not_its_box),
+    cmocka_unit_test(_a_drawing_travels_in_the_document),
+    cmocka_unit_test(_a_drawing_keeps_the_paper_where_it_draws_nothing),
+    cmocka_unit_test(_rescaling_a_sprite_keeps_the_alpha_it_had),
     cmocka_unit_test(_a_point_of_type_is_a_unit_on_the_plane),
     cmocka_unit_test(_the_gap_around_an_obstacle_is_a_disc_not_a_square),
     cmocka_unit_test(_a_frame_standing_just_outside_a_column_still_pushes_its_text),

@@ -1826,7 +1826,8 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
   for(guint idx = 0; idx < over->len; idx++)
   {
     const dt_canvas_object_t *other = g_ptr_array_index(over, idx);
-    if(other->mask.shape == DT_CANVAS_MASK_NONE) continue;
+    const gboolean drawing = other->kind == DT_CANVAS_OBJECT_SVG && !IS_NULL_PTR(other->svg.svg);
+    if(other->mask.shape == DT_CANVAS_MASK_NONE && !drawing) continue;
     /*
      * One raster pixel per occupancy cell, so the silhouette the cells read is at least as
      * fine as the cells themselves. A flat cap instead makes the raster COARSER than the grid
@@ -1838,7 +1839,15 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
     const double cells_y = other->height / TEXT_FLOW_CELL;
     const int mask_width = CLAMP((int)ceil(cells_x), 2, TEXT_FLOW_MASK_MAX);
     const int mask_height = CLAMP((int)ceil(cells_y), 2, TEXT_FLOW_MASK_MAX);
-    rasters[idx] = dt_canvas_render_mask(other, mask_width, mask_height, 0, 0);
+    /*
+     * A drawing's silhouette is its own ink, not the box it sits in: an SVG is asked for its
+     * coverage the way a cut frame is asked for its cutout, so text flows past the shape the
+     * file actually draws. It costs a render at the map's pitch, which is a fraction of the
+     * one the page gets.
+     */
+    rasters[idx] = drawing && other->mask.shape == DT_CANVAS_MASK_NONE
+                       ? dt_canvas_render_svg_coverage(other->svg.svg, mask_width, mask_height)
+                       : dt_canvas_render_mask(other, mask_width, mask_height, 0, 0);
   }
 
   // Object-major, because each obstacle is grown by ITS OWN reach before being merged in.
@@ -3321,7 +3330,10 @@ static void _paint_object_pixels(cairo_t *cr, const dt_canvas_t *canvas, const d
   cairo_save(cr);
   cairo_translate(cr, object->x, object->y);
   cairo_rotate(cr, object->rotation);
-  if(object->kind == DT_CANVAS_OBJECT_IMAGE || object->kind == DT_CANVAS_OBJECT_MAP)
+  // A drawing is painted as a picture is: the decoder rasterises its source and everything
+  // after that -- the frame, the border, the cutout, the shadow -- is the same machinery.
+  if(object->kind == DT_CANVAS_OBJECT_IMAGE || object->kind == DT_CANVAS_OBJECT_MAP
+     || object->kind == DT_CANVAS_OBJECT_SVG)
     _paint_image(cr, canvas, object, options);
   else if(object->kind == DT_CANVAS_OBJECT_TEXT)
     _paint_text(cr, canvas, object, options);

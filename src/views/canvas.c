@@ -1817,6 +1817,74 @@ static void _menu_add_text_here(GtkWidget *widget, gpointer data)
   _add_text_frame(context->self, context->x, context->y);
 }
 
+/** Ask for an SVG file and place it where the menu was opened, at the size the file states. */
+static void _menu_add_drawing_here(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_view_t *self = context->self;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  GtkWidget *chooser = gtk_file_chooser_dialog_new(_("Place a drawing"), GTK_WINDOW(dt_ui_main_window(dt_gui_get_ui())),
+                                                   GTK_FILE_CHOOSER_ACTION_OPEN, _("Cancel"), GTK_RESPONSE_CANCEL,
+                                                   _("Place"), GTK_RESPONSE_ACCEPT, NULL);
+  GtkFileFilter *filter = gtk_file_filter_new();
+  gtk_file_filter_set_name(filter, _("Drawings (SVG)"));
+  gtk_file_filter_add_pattern(filter, "*.svg");
+  gtk_file_filter_add_pattern(filter, "*.SVG");
+  gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
+  gchar *chosen = NULL;
+  if(gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT)
+    chosen = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
+  GtkWindow *parent = gtk_window_get_transient_for(GTK_WINDOW(chooser));
+  gtk_widget_destroy(chooser);
+  dt_gui_refocus_parent(parent);
+  if(IS_NULL_PTR(chosen)) return;
+
+  dt_canvas_t *before = _begin_edit(view);
+  GError *error = NULL;
+  dt_canvas_object_t *drawing = dt_canvas_add_svg(view->canvas, dt_canvas_snap(view->canvas, context->x),
+                                                  dt_canvas_snap(view->canvas, context->y), chosen, &error);
+  dt_free(chosen);
+  if(IS_NULL_PTR(drawing))
+  {
+    dt_canvas_free(before);
+    dt_control_log(_("cannot read that drawing: %s"), IS_NULL_PTR(error) ? _("unknown reason") : error->message);
+    g_clear_error(&error);
+    return;
+  }
+  _select_only(view, drawing->id);
+  _record_undo(self, before);
+  _bars_request(self);
+  dt_control_queue_redraw_center();
+}
+
+/** Read the drawing's file again, for when it has been edited since it was placed. */
+static void _menu_reload_drawing(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  dt_view_t *self = context->self;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, context->object_id);
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_SVG) return;
+  dt_canvas_t *before = _begin_edit(view);
+  GError *error = NULL;
+  const gboolean changed = dt_canvas_svg_reload(view->canvas, object, &error);
+  if(!IS_NULL_PTR(error))
+  {
+    dt_canvas_free(before);
+    dt_control_log(_("cannot read that drawing again: %s"), error->message);
+    g_clear_error(&error);
+    return;
+  }
+  if(!changed)
+  {
+    dt_canvas_free(before);
+    dt_control_log(_("the drawing has not changed since it was placed"));
+    return;
+  }
+  _record_undo(self, before);
+  dt_control_queue_redraw_center();
+}
+
 static void _menu_zoom_fit(GtkWidget *widget, gpointer data)
 {
   dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
@@ -1832,6 +1900,7 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
   if(IS_NULL_PTR(object))
   {
     _menu_item(menu, _("Add a text frame here"), _menu_add_text_here, _menu_context(self, 0, x, y, 0));
+    _menu_item(menu, _("Place a drawing here..."), _menu_add_drawing_here, _menu_context(self, 0, x, y, 0));
     _menu_item(menu, _("Fit the view to the canvas"), _menu_zoom_fit, _menu_context(self, 0, x, y, 0));
   }
   else if(object->kind == DT_CANVAS_OBJECT_CONNECTOR)
@@ -1860,6 +1929,11 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
     else if(object->kind == DT_CANVAS_OBJECT_MAP)
     {
       _menu_item(menu, _("Fetch the map again"), _menu_refresh_image, _menu_context(self, id, x, y, 0));
+    }
+    else if(object->kind == DT_CANVAS_OBJECT_SVG)
+    {
+      _menu_item(menu, _("Read the drawing's file again"), _menu_reload_drawing,
+                 _menu_context(self, id, x, y, 0));
     }
     else
     {

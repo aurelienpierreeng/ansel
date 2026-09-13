@@ -175,6 +175,16 @@ static void _write_text(GByteArray *out, const dt_canvas_text_t *text)
   _w_bytes(out, text->reserved, sizeof(text->reserved));
 }
 
+static void _write_svg(GByteArray *out, const dt_canvas_svg_t *svg)
+{
+  _w_string(out, svg->folder, sizeof(svg->folder));
+  _w_string(out, svg->filename, sizeof(svg->filename));
+  _w_f32(out, svg->source_width);
+  _w_f32(out, svg->source_height);
+  _w_i64(out, svg->loaded_at);
+  _w_bytes(out, svg->reserved, sizeof(svg->reserved));
+}
+
 static void _write_connector(GByteArray *out, const dt_canvas_connector_t *connector)
 {
   _w_u32(out, connector->from_id);
@@ -249,6 +259,9 @@ static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
       break;
     case DT_CANVAS_OBJECT_MAP:
       _write_map(out, &object->map);
+      break;
+    case DT_CANVAS_OBJECT_SVG:
+      _write_svg(out, &object->svg);
       break;
     default:
       break;
@@ -500,6 +513,19 @@ static void _read_text(dt_canvas_cursor_t *cursor, dt_canvas_text_t *text)
   text->markdown = NULL;
 }
 
+static void _read_svg(dt_canvas_cursor_t *cursor, dt_canvas_svg_t *svg)
+{
+  _r_string(cursor, svg->folder, sizeof(svg->folder));
+  _r_string(cursor, svg->filename, sizeof(svg->filename));
+  svg->source_width = _r_f32(cursor);
+  svg->source_height = _r_f32(cursor);
+  svg->loaded_at = _r_i64(cursor);
+  _r_bytes(cursor, svg->reserved, sizeof(svg->reserved));
+  // The drawing itself is an archive entry, the way a photograph's JPEG is.
+  svg->svg = NULL;
+  svg->sync_status = DT_CANVAS_SYNC_UNKNOWN;
+}
+
 static void _read_connector(dt_canvas_cursor_t *cursor, dt_canvas_connector_t *connector)
 {
   connector->from_id = _r_u32(cursor);
@@ -583,6 +609,9 @@ static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *obj
       break;
     case DT_CANVAS_OBJECT_MAP:
       _read_map(cursor, &object->map);
+      break;
+    case DT_CANVAS_OBJECT_SVG:
+      _read_svg(cursor, &object->svg);
       break;
     default:
       // A kind this version does not know: keep its place in the file, draw nothing.

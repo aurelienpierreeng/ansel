@@ -231,6 +231,17 @@ void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, size_t b
  * (1998): a render already is, an sRGB JPEG (a map's tiles, a render from before the change)
  * is converted on the way. `colorspace` is a dt_canvas_colorspace_t.
  */
+/**
+ * @brief An SVG's own silhouette, as an A8 coverage surface of the given size.
+ *
+ * Where a drawing puts ink, and nowhere else -- which is what text flowing past it has to keep
+ * clear of. A drawing is not a rectangle and must not be treated as one; rendered small, at
+ * the pitch the occupancy map reads, this costs a fraction of a full render.
+ *
+ * @return the surface, the caller's to destroy, or NULL when the bytes are not a drawing.
+ */
+cairo_surface_t *dt_canvas_render_svg_coverage(GBytes *svg, int width, int height);
+
 cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, uint32_t colorspace);
 
 /**

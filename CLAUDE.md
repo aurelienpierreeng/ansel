@@ -3526,6 +3526,31 @@ they are visible.
   position comes from `pango_layout_iter_get_line_extents()`, never the line's own**: a line's
   own extents are relative to where the line starts, so taken from the line every line begins
   at the layout's left edge and centred text quietly stops being centred.
+- **An SVG is rasterised ATOMICALLY and only then brought into the layer's space.** The
+  specification composites an SVG in sRGB with the transfer function applied -- its overlaps,
+  gradients and anti-aliased edges are all defined there -- and this canvas composites in
+  linear Adobe RGB. Rendering its pieces into ours one at a time would draw a different picture
+  from the one its author saw, so `rsvg_handle_render_document()` draws the whole document in
+  one pass and the finished image is converted. `rsvg_handle_set_dpi(72)` makes one SVG user
+  unit one point, which is one canvas unit, so a drawing arrives at the size its file states.
+  The conversion divides cairo's PREMULTIPLIED alpha back out before the transfer function and
+  folds it in after -- measured, that buys one code here (110 against 109), because both
+  transfer functions are near a gamma of 2.2 and the alpha then factors straight out; it is
+  kept because that accident is a property of these two spaces and not of the code.
+  **A drawing gets no border and no shadow by default**: it is ink on nothing, and a card
+  behind it turns it into the one thing it is not.
+- **A drawing's obstacle silhouette is its own ink** (`dt_canvas_render_svg_coverage()`, an A8
+  render at the occupancy map's pitch), so text flows past the shape the file draws rather than
+  the box it sits in. Measured on a file whose ink fills half its viewBox: 41.91 units of
+  column against 97.78 for one that fills all of it, where a rectangle gives the same number
+  twice.
+- **`dt_canvas_render_rescale()` keeps the SOURCE's format.** It built every sprite as RGB24
+  and forced the top byte opaque, which a JPEG never notices -- it has no alpha to lose -- and
+  which fills every hole in a drawing with whatever that byte then means. Premultiplied values
+  resample by a plain weighted mean, so the alpha rides along with no un-premultiplying.
+  Carrying four channels instead of three also turned out FASTER, measured 1.35 s against
+  1.58 s on the same document: four floats is a natural SIMD width and a three-float stride
+  breaks the alignment.
 - **A page size is an index into one appended-only table** (`dt_canvas_paper_points()`), and
   the GUI reads the table rather than repeating it. Insert a size in the middle and every
   saved document changes page. **A canvas unit is a POINT**, and every length on the plane is

@@ -24,6 +24,7 @@
 #include "system/mem_alloc.h"
 
 #include <glib/gi18n.h>
+#include <librsvg/rsvg.h>
 #include <math.h>
 #include <stdio.h>
 #include <stddef.h>
@@ -75,6 +76,11 @@ static void _object_free(gpointer data)
     g_bytes_unref(object->map.jpeg);
     object->map.jpeg = NULL;
   }
+  if(object->kind == DT_CANVAS_OBJECT_SVG && !IS_NULL_PTR(object->svg.svg))
+  {
+    g_bytes_unref(object->svg.svg);
+    object->svg.svg = NULL;
+  }
   dt_canvas_mask_clear(object);
   dt_free(object);
 }
@@ -94,6 +100,10 @@ static dt_canvas_object_t *_object_copy(const dt_canvas_object_t *source)
   if(copy->kind == DT_CANVAS_OBJECT_MAP && !IS_NULL_PTR(copy->map.jpeg))
   {
     copy->map.jpeg = g_bytes_ref(copy->map.jpeg);
+  }
+  if(copy->kind == DT_CANVAS_OBJECT_SVG && !IS_NULL_PTR(copy->svg.svg))
+  {
+    copy->svg.svg = g_bytes_ref(copy->svg.svg);
   }
   // The nodes are the copy's own: the source keeps its array.
   copy->mask.nodes = NULL;
@@ -317,6 +327,14 @@ dt_canvas_t *dt_canvas_load(const char *path, GError **error)
       object->map.jpeg = dt_canvas_zip_reader_get(reader, entry);
       object->map.sync_status = IS_NULL_PTR(object->map.jpeg) ? DT_CANVAS_SYNC_STALE : DT_CANVAS_SYNC_CURRENT;
     }
+    else if(object->kind == DT_CANVAS_OBJECT_SVG)
+    {
+      snprintf(entry, sizeof(entry), DT_CANVAS_ENTRY_SVG_PATTERN, object->id);
+      object->svg.svg = dt_canvas_zip_reader_get(reader, entry);
+      // Whether the file on disk still says the same thing is a question for whoever asks it
+      // to reload: the document carries the drawing and opens without the file being there.
+      object->svg.sync_status = IS_NULL_PTR(object->svg.svg) ? DT_CANVAS_SYNC_MISSING : DT_CANVAS_SYNC_UNKNOWN;
+    }
     else if(object->kind == DT_CANVAS_OBJECT_TEXT)
     {
       snprintf(entry, sizeof(entry), DT_CANVAS_ENTRY_TEXT_PATTERN, object->id);
@@ -387,6 +405,15 @@ gboolean dt_canvas_save(dt_canvas_t *canvas, const char *path, GError **error)
       gsize jpeg_size = 0;
       const void *jpeg_data = g_bytes_get_data(object->map.jpeg, &jpeg_size);
       ok = dt_canvas_zip_writer_add(writer, entry, jpeg_data, jpeg_size, FALSE);
+    }
+    else if(object->kind == DT_CANVAS_OBJECT_SVG && !IS_NULL_PTR(object->svg.svg))
+    {
+      // The drawing's own source, so a document carries the picture and not a reference to
+      // one. Deflated: it is text, and text is what deflate is for.
+      snprintf(entry, sizeof(entry), DT_CANVAS_ENTRY_SVG_PATTERN, object->id);
+      gsize svg_size = 0;
+      const void *svg_data = g_bytes_get_data(object->svg.svg, &svg_size);
+      ok = dt_canvas_zip_writer_add(writer, entry, svg_data, svg_size, TRUE);
     }
     else if(object->kind == DT_CANVAS_OBJECT_TEXT)
     {
@@ -492,7 +519,155 @@ GBytes *dt_canvas_object_raster(const dt_canvas_object_t *object)
   if(IS_NULL_PTR(object)) return NULL;
   if(object->kind == DT_CANVAS_OBJECT_IMAGE) return object->image.jpeg;
   if(object->kind == DT_CANVAS_OBJECT_MAP) return object->map.jpeg;
+  // An SVG's "raster" is its own source: the decoder rasterises it, and everything downstream
+  // -- the surface cache's key, the blit, the mask, the export -- works on the result exactly
+  // as it does for a photograph, without knowing the difference.
+  if(object->kind == DT_CANVAS_OBJECT_SVG) return object->svg.svg;
   return NULL;
+}
+
+/**
+ * The drawing's own size in points, from the file. An SVG states a physical width and height,
+ * or only a viewBox, or neither; a canvas unit is a point and so is the SVG user unit, so a
+ * file that says how big it is arrives at that size with no scale factor in between.
+ */
+static gboolean _svg_intrinsic_size(GBytes *bytes, double *width, double *height, GError **error)
+{
+  gsize length = 0;
+  const void *data = g_bytes_get_data(bytes, &length);
+  RsvgHandle *handle = rsvg_handle_new_from_data(data, length, error);
+  if(IS_NULL_PTR(handle)) return FALSE;
+  // Points per inch: the handle turns the file's physical units (mm, in, pt) into user units
+  // with this, so telling it 72 makes one user unit one point, which is one canvas unit.
+  rsvg_handle_set_dpi(handle, 72.0);
+  gdouble intrinsic_width = 0.0;
+  gdouble intrinsic_height = 0.0;
+  gboolean has_width = FALSE;
+  gboolean has_height = FALSE;
+  gboolean has_viewbox = FALSE;
+  RsvgLength width_length;
+  RsvgLength height_length;
+  RsvgRectangle viewbox;
+  memset(&width_length, 0, sizeof(width_length));
+  memset(&height_length, 0, sizeof(height_length));
+  memset(&viewbox, 0, sizeof(viewbox));
+  rsvg_handle_get_intrinsic_dimensions(handle, &has_width, &width_length, &has_height, &height_length,
+                                       &has_viewbox, &viewbox);
+  if(!rsvg_handle_get_intrinsic_size_in_pixels(handle, &intrinsic_width, &intrinsic_height))
+  {
+    // No physical size of its own: the viewBox is what every browser falls back to.
+    intrinsic_width = has_viewbox ? viewbox.width : 0.0;
+    intrinsic_height = has_viewbox ? viewbox.height : 0.0;
+  }
+  g_object_unref(handle);
+  if(!(intrinsic_width > 0.0) || !(intrinsic_height > 0.0))
+  {
+    g_set_error(error, DT_CANVAS_ERROR, DT_CANVAS_ERROR_CORRUPT, "the drawing states no size of its own");
+    return FALSE;
+  }
+  if(!IS_NULL_PTR(width)) *width = intrinsic_width;
+  if(!IS_NULL_PTR(height)) *height = intrinsic_height;
+  return TRUE;
+}
+
+/** Read a file and check it parses as SVG before anything is built from it. */
+static GBytes *_svg_read(const char *path, double *width, double *height, GError **error)
+{
+  gchar *contents = NULL;
+  gsize length = 0;
+  if(!g_file_get_contents(path, &contents, &length, error)) return NULL;
+  GBytes *bytes = g_bytes_new_take(contents, length);
+  if(!_svg_intrinsic_size(bytes, width, height, error))
+  {
+    g_bytes_unref(bytes);
+    return NULL;
+  }
+  return bytes;
+}
+
+dt_canvas_object_t *dt_canvas_add_svg(dt_canvas_t *canvas, const double x, const double y, const char *path,
+                                      GError **error)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(path) || path[0] == '\0')
+  {
+    g_set_error(error, DT_CANVAS_ERROR, DT_CANVAS_ERROR_IO, "no drawing to read");
+    return NULL;
+  }
+  double width = 0.0;
+  double height = 0.0;
+  GBytes *bytes = _svg_read(path, &width, &height, error);
+  if(IS_NULL_PTR(bytes)) return NULL;
+
+  dt_canvas_object_t *object = _object_new(canvas, DT_CANVAS_OBJECT_SVG, x, y, width, height);
+  /*
+   * No border and no shadow, whatever the canvas gives a photograph. A drawing is ink on
+   * nothing -- a logo, a diagram, an arrow -- and its holes are the point of it: a card behind
+   * it and a rule around it turn it into a rectangle, which is the one thing it is not. Both
+   * are the user's to switch on afterwards, and the override flags are what say the canvas's
+   * defaults do not apply here.
+   */
+  object->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  object->border_width = 0.0f;
+  memset(&object->shadow, 0, sizeof(object->shadow));
+  object->svg.svg = bytes;
+  object->svg.source_width = (float)width;
+  object->svg.source_height = (float)height;
+  object->svg.loaded_at = (int64_t)g_get_real_time() / G_USEC_PER_SEC;
+  object->svg.sync_status = DT_CANVAS_SYNC_CURRENT;
+  gchar *folder = g_path_get_dirname(path);
+  gchar *filename = g_path_get_basename(path);
+  g_strlcpy(object->svg.folder, folder, sizeof(object->svg.folder));
+  g_strlcpy(object->svg.filename, filename, sizeof(object->svg.filename));
+  dt_free(folder);
+  dt_free(filename);
+  dt_canvas_touch(canvas);
+  return object;
+}
+
+void dt_canvas_svg_path(const dt_canvas_object_t *object, char *path, const size_t length)
+{
+  if(IS_NULL_PTR(path) || length == 0) return;
+  path[0] = '\0';
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_SVG) return;
+  if(object->svg.folder[0] == '\0' || object->svg.filename[0] == '\0') return;
+  gchar *joined = g_build_filename(object->svg.folder, object->svg.filename, NULL);
+  g_strlcpy(path, joined, length);
+  dt_free(joined);
+}
+
+gboolean dt_canvas_svg_reload(dt_canvas_t *canvas, dt_canvas_object_t *object, GError **error)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_SVG) return FALSE;
+  char path[DT_PATH_MAX];
+  dt_canvas_svg_path(object, path, sizeof(path));
+  if(path[0] == '\0')
+  {
+    g_set_error(error, DT_CANVAS_ERROR, DT_CANVAS_ERROR_IO, "the drawing remembers no file to read");
+    object->svg.sync_status = DT_CANVAS_SYNC_MISSING;
+    return FALSE;
+  }
+  double width = 0.0;
+  double height = 0.0;
+  GBytes *bytes = _svg_read(path, &width, &height, error);
+  if(IS_NULL_PTR(bytes))
+  {
+    object->svg.sync_status = DT_CANVAS_SYNC_MISSING;
+    return FALSE;
+  }
+  const gboolean changed = IS_NULL_PTR(object->svg.svg) || !g_bytes_equal(bytes, object->svg.svg);
+  if(!IS_NULL_PTR(object->svg.svg)) g_bytes_unref(object->svg.svg);
+  object->svg.svg = bytes;
+  object->svg.loaded_at = (int64_t)g_get_real_time() / G_USEC_PER_SEC;
+  object->svg.sync_status = DT_CANVAS_SYNC_CURRENT;
+  /*
+   * The FRAME is not resized. Where a drawing sits and how big it is on the page are the
+   * user's, and a file that has been edited since is still the same drawing in the same box --
+   * what changes is only its own idea of its size, which is kept so a later "fit" can use it.
+   */
+  object->svg.source_width = (float)width;
+  object->svg.source_height = (float)height;
+  if(changed) dt_canvas_touch(canvas);
+  return changed;
 }
 
 dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_id, uint32_t to_id)
@@ -1000,7 +1175,7 @@ gboolean dt_canvas_object_is_frame(const dt_canvas_object_t *object)
 {
   if(IS_NULL_PTR(object)) return FALSE;
   return object->kind == DT_CANVAS_OBJECT_IMAGE || object->kind == DT_CANVAS_OBJECT_TEXT
-         || object->kind == DT_CANVAS_OBJECT_MAP;
+         || object->kind == DT_CANVAS_OBJECT_MAP || object->kind == DT_CANVAS_OBJECT_SVG;
 }
 
 void dt_canvas_object_corners(const dt_canvas_object_t *object, double corners[8])

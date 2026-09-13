@@ -37,6 +37,7 @@
 #include <glib/gi18n.h>
 #include <glib/gstdio.h>
 #include <lcms2.h>
+#include <librsvg/rsvg.h>
 #ifdef HAVE_MAP
 #include <osm-gps-map.h> // conditional-ok: the provider table below is inside the same HAVE_MAP block
 #endif
@@ -860,9 +861,199 @@ void dt_canvas_render_srgb8_to_layer8(uint8_t *pixels, const size_t count, const
   }
 }
 
+/** The longest side an SVG is rasterised to, whatever it says its size is. */
+#define CANVAS_SVG_MAX_EDGE 4096
+/** Raster pixels per point: enough that a page printed at 300 dpi is not upscaled by much. */
+#define CANVAS_SVG_OVERSAMPLE 4.0
+
+/** Does this look like an SVG document rather than a photograph? */
+static gboolean _looks_like_svg(GBytes *bytes)
+{
+  gsize length = 0;
+  const char *data = g_bytes_get_data(bytes, &length);
+  if(IS_NULL_PTR(data) || length < 5) return FALSE;
+  // The first kilobyte holds the prolog, the doctype or the root element of every real file;
+  // a JPEG or a PNG begins with bytes that cannot spell either.
+  const gsize window = MIN(length, (gsize)1024);
+  for(gsize at = 0; at + 4 < window; at++)
+    if(data[at] == '<' && (strncmp(data + at, "<svg", 4) == 0 || strncmp(data + at, "<?xml", 5) == 0)) return TRUE;
+  return FALSE;
+}
+
+/**
+ * Rasterise a whole SVG document in ONE pass, then bring it into the layer's colour space.
+ *
+ * The specification says an SVG composites in sRGB with the transfer function applied -- its
+ * overlaps, its gradients and its anti-aliased edges are all defined there -- and this canvas
+ * composites in linear Adobe RGB. Those are different pictures, so the drawing is rendered
+ * whole, exactly as its author saw it, and only the finished image is converted. Rendering its
+ * pieces into our space one at a time would be a different drawing.
+ *
+ * Cairo's ARGB32 is PREMULTIPLIED, and a transfer function does not survive premultiplication:
+ * the colour has to be divided back out, converted, and multiplied in again, or every partly
+ * transparent pixel comes out at the wrong lightness -- which on an anti-aliased edge is every
+ * pixel of every outline in the drawing.
+ */
+static cairo_surface_t *_render_svg(GBytes *bytes)
+{
+  gsize length = 0;
+  const void *data = g_bytes_get_data(bytes, &length);
+  GError *error = NULL;
+  RsvgHandle *handle = rsvg_handle_new_from_data(data, length, &error);
+  if(IS_NULL_PTR(handle))
+  {
+    dt_print(DT_DEBUG_ALWAYS, "[canvas] cannot read a drawing: %s\n",
+             IS_NULL_PTR(error) ? "unknown" : error->message);
+    g_clear_error(&error);
+    return NULL;
+  }
+  // One user unit to the point, which is one canvas unit: see dt_canvas_add_svg().
+  rsvg_handle_set_dpi(handle, 72.0);
+  gdouble points_wide = 0.0;
+  gdouble points_high = 0.0;
+  if(!rsvg_handle_get_intrinsic_size_in_pixels(handle, &points_wide, &points_high))
+  {
+    gboolean has_width = FALSE;
+    gboolean has_height = FALSE;
+    gboolean has_viewbox = FALSE;
+    RsvgLength width_length;
+    RsvgLength height_length;
+    RsvgRectangle viewbox;
+    memset(&width_length, 0, sizeof(width_length));
+    memset(&height_length, 0, sizeof(height_length));
+    memset(&viewbox, 0, sizeof(viewbox));
+    rsvg_handle_get_intrinsic_dimensions(handle, &has_width, &width_length, &has_height, &height_length,
+                                         &has_viewbox, &viewbox);
+    points_wide = has_viewbox ? viewbox.width : 0.0;
+    points_high = has_viewbox ? viewbox.height : 0.0;
+  }
+  if(!(points_wide > 0.0) || !(points_high > 0.0))
+  {
+    g_object_unref(handle);
+    return NULL;
+  }
+  double scale = CANVAS_SVG_OVERSAMPLE;
+  const double longest = fmax(points_wide, points_high) * scale;
+  if(longest > CANVAS_SVG_MAX_EDGE) scale *= CANVAS_SVG_MAX_EDGE / longest;
+  const int width = MAX((int)lround(points_wide * scale), 1);
+  const int height = MAX((int)lround(points_high * scale), 1);
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+  if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_destroy(surface);
+    g_object_unref(handle);
+    return NULL;
+  }
+  cairo_t *cr = cairo_create(surface);
+  RsvgRectangle viewport = { .x = 0.0, .y = 0.0, .width = (double)width, .height = (double)height };
+  const gboolean drawn = rsvg_handle_render_document(handle, cr, &viewport, &error);
+  cairo_destroy(cr);
+  g_object_unref(handle);
+  if(!drawn)
+  {
+    dt_print(DT_DEBUG_ALWAYS, "[canvas] cannot draw a drawing: %s\n",
+             IS_NULL_PTR(error) ? "unknown" : error->message);
+    g_clear_error(&error);
+    cairo_surface_destroy(surface);
+    return NULL;
+  }
+
+  cairo_surface_flush(surface);
+  uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  _layer_luts_init();
+  for(int row = 0; row < height; row++)
+  {
+    uint8_t *line = pixels + (size_t)row * stride;
+    for(int column = 0; column < width; column++)
+    {
+      uint8_t *pixel = line + (size_t)column * 4;
+      const uint8_t alpha = pixel[3];
+      if(alpha == 0) continue;
+      if(alpha == 255)
+      {
+        // Opaque: the bytes ARE the colour, and the table takes them straight across.
+        const float blue = _srgb_eotf_lut[pixel[0]];
+        const float green = _srgb_eotf_lut[pixel[1]];
+        const float red = _srgb_eotf_lut[pixel[2]];
+        pixel[0] = _layer_encode(0.041171f * green + 0.958829f * blue);
+        pixel[1] = _layer_encode(green);
+        pixel[2] = _layer_encode(0.715166f * red + 0.284837f * green);
+        continue;
+      }
+      // Divide the alpha back out before the transfer function, and fold it in again after.
+      const float share = 255.0f / (float)alpha;
+      const float blue = _srgb_eotf_lut[MIN((int)lroundf((float)pixel[0] * share), 255)];
+      const float green = _srgb_eotf_lut[MIN((int)lroundf((float)pixel[1] * share), 255)];
+      const float red = _srgb_eotf_lut[MIN((int)lroundf((float)pixel[2] * share), 255)];
+      const float weight = (float)alpha / 255.0f;
+      pixel[0] = (uint8_t)lroundf((float)_layer_encode(0.041171f * green + 0.958829f * blue) * weight);
+      pixel[1] = (uint8_t)lroundf((float)_layer_encode(green) * weight);
+      pixel[2] = (uint8_t)lroundf((float)_layer_encode(0.715166f * red + 0.284837f * green) * weight);
+    }
+  }
+  cairo_surface_mark_dirty(surface);
+  return surface;
+}
+
+cairo_surface_t *dt_canvas_render_svg_coverage(GBytes *svg, const int width, const int height)
+{
+  if(IS_NULL_PTR(svg) || width <= 0 || height <= 0 || !_looks_like_svg(svg)) return NULL;
+  gsize length = 0;
+  const void *data = g_bytes_get_data(svg, &length);
+  GError *error = NULL;
+  RsvgHandle *handle = rsvg_handle_new_from_data(data, length, &error);
+  if(IS_NULL_PTR(handle))
+  {
+    g_clear_error(&error);
+    return NULL;
+  }
+  rsvg_handle_set_dpi(handle, 72.0);
+  cairo_surface_t *rendered = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+  if(cairo_surface_status(rendered) != CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_destroy(rendered);
+    g_object_unref(handle);
+    return NULL;
+  }
+  cairo_t *cr = cairo_create(rendered);
+  RsvgRectangle viewport = { .x = 0.0, .y = 0.0, .width = (double)width, .height = (double)height };
+  const gboolean drawn = rsvg_handle_render_document(handle, cr, &viewport, &error);
+  cairo_destroy(cr);
+  g_object_unref(handle);
+  if(!drawn)
+  {
+    g_clear_error(&error);
+    cairo_surface_destroy(rendered);
+    return NULL;
+  }
+  // The alpha alone, as the mask surfaces are: a drawing's silhouette is where it puts ink,
+  // which for an SVG is nowhere the file did not draw. No colour is needed and none is kept.
+  cairo_surface_flush(rendered);
+  cairo_surface_t *coverage = cairo_image_surface_create(CAIRO_FORMAT_A8, width, height);
+  if(cairo_surface_status(coverage) != CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_destroy(coverage);
+    cairo_surface_destroy(rendered);
+    return NULL;
+  }
+  const uint8_t *from = cairo_image_surface_get_data(rendered);
+  const int from_stride = cairo_image_surface_get_stride(rendered);
+  uint8_t *to = cairo_image_surface_get_data(coverage);
+  const int to_stride = cairo_image_surface_get_stride(coverage);
+  for(int row = 0; row < height; row++)
+    for(int column = 0; column < width; column++)
+      to[(size_t)row * to_stride + column] = from[(size_t)row * from_stride + (size_t)column * 4 + 3];
+  cairo_surface_mark_dirty(coverage);
+  cairo_surface_destroy(rendered);
+  return coverage;
+}
+
 cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, const uint32_t colorspace)
 {
   if(IS_NULL_PTR(jpeg)) return NULL;
+  if(_looks_like_svg(jpeg)) return _render_svg(jpeg);
   int width = 0;
   int height = 0;
   uint8_t *rgba = _decode_rgba(jpeg, &width, &height);
@@ -1534,14 +1725,24 @@ cairo_surface_t *dt_canvas_render_rescale(cairo_surface_t *source, const int wid
   cairo_surface_flush(source);
   const uint8_t *pixels = cairo_image_surface_get_data(source);
   const int source_stride = cairo_image_surface_get_stride(source);
-  cairo_surface_t *target = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+  /*
+   * The SOURCE's format, not RGB24 always. A drawing is mostly holes -- an SVG is ink on
+   * nothing -- and a sprite that forces every pixel opaque fills those holes with whatever
+   * the top byte happens to mean, which on a dark page is a black card behind the logo.
+   * Cairo's ARGB32 is premultiplied, and a weighted mean of premultiplied values is exactly
+   * the weighted mean of the covered colour: resampling needs no un-premultiplying here.
+   */
+  const cairo_format_t format = cairo_image_surface_get_format(source);
+  const gboolean keeps_alpha = format == CAIRO_FORMAT_ARGB32;
+  cairo_surface_t *target = cairo_image_surface_create(keeps_alpha ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24,
+                                                       width, height);
   if(cairo_surface_status(target) != CAIRO_STATUS_SUCCESS)
   {
     cairo_surface_destroy(target);
     return NULL;
   }
   // Rows first, at the source's height: the horizontal pass writes floats, the vertical one bytes.
-  float *rows = dt_alloc_align_float((size_t)width * source_height * 3);
+  float *rows = dt_alloc_align_float((size_t)width * source_height * 4);
   if(IS_NULL_PTR(rows))
   {
     cairo_surface_destroy(target);
@@ -1555,24 +1756,23 @@ cairo_surface_t *dt_canvas_render_rescale(cairo_surface_t *source, const int wid
   for(int row = 0; row < source_height; row++)
   {
     const uint32_t *line = (const uint32_t *)(pixels + (size_t)row * source_stride);
-    float *out = rows + (size_t)row * width * 3;
+    float *out = rows + (size_t)row * width * 4;
     for(int col = 0; col < width; col++)
     {
-      float sum[3] = { 0.0f, 0.0f, 0.0f };
       if(shrink_x)
       {
         const dt_canvas_span_t span = _span(col, width, source_width);
+        float sum[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         for(int idx = 0; idx < span.count; idx++)
         {
           const uint32_t pixel = line[span.first + idx];
           sum[0] += (float)((pixel >> 16) & 0xFF);
           sum[1] += (float)((pixel >> 8) & 0xFF);
           sum[2] += (float)(pixel & 0xFF);
+          sum[3] += (float)((pixel >> 24) & 0xFF);
         }
         const float norm = 1.0f / (float)span.count;
-        out[3 * col + 0] = sum[0] * norm;
-        out[3 * col + 1] = sum[1] * norm;
-        out[3 * col + 2] = sum[2] * norm;
+        for(int channel = 0; channel < 4; channel++) out[4 * col + channel] = sum[channel] * norm;
       }
       else
       {
@@ -1582,9 +1782,10 @@ cairo_surface_t *dt_canvas_render_rescale(cairo_surface_t *source, const int wid
         const float weight = (float)CLAMP(position - left, 0.0, 1.0);
         const uint32_t a = line[left];
         const uint32_t b = line[right];
-        out[3 * col + 0] = (float)((a >> 16) & 0xFF) * (1.0f - weight) + (float)((b >> 16) & 0xFF) * weight;
-        out[3 * col + 1] = (float)((a >> 8) & 0xFF) * (1.0f - weight) + (float)((b >> 8) & 0xFF) * weight;
-        out[3 * col + 2] = (float)(a & 0xFF) * (1.0f - weight) + (float)(b & 0xFF) * weight;
+        out[4 * col + 0] = (float)((a >> 16) & 0xFF) * (1.0f - weight) + (float)((b >> 16) & 0xFF) * weight;
+        out[4 * col + 1] = (float)((a >> 8) & 0xFF) * (1.0f - weight) + (float)((b >> 8) & 0xFF) * weight;
+        out[4 * col + 2] = (float)(a & 0xFF) * (1.0f - weight) + (float)(b & 0xFF) * weight;
+        out[4 * col + 3] = (float)((a >> 24) & 0xFF) * (1.0f - weight) + (float)((b >> 24) & 0xFF) * weight;
       }
     }
   }
@@ -1603,18 +1804,17 @@ cairo_surface_t *dt_canvas_render_rescale(cairo_surface_t *source, const int wid
       const float norm = 1.0f / (float)span.count;
       for(int col = 0; col < width; col++)
       {
-        float sum[3] = { 0.0f, 0.0f, 0.0f };
+        float sum[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         for(int idx = 0; idx < span.count; idx++)
         {
-          const float *in = rows + ((size_t)(span.first + idx) * width + col) * 3;
-          sum[0] += in[0];
-          sum[1] += in[1];
-          sum[2] += in[2];
+          const float *in = rows + ((size_t)(span.first + idx) * width + col) * 4;
+          for(int channel = 0; channel < 4; channel++) sum[channel] += in[channel];
         }
         const uint32_t red = (uint32_t)lrintf(CLAMP(sum[0] * norm, 0.0f, 255.0f));
         const uint32_t green = (uint32_t)lrintf(CLAMP(sum[1] * norm, 0.0f, 255.0f));
         const uint32_t blue = (uint32_t)lrintf(CLAMP(sum[2] * norm, 0.0f, 255.0f));
-        line[col] = 0xFF000000u | (red << 16) | (green << 8) | blue;
+        const uint32_t alpha = keeps_alpha ? (uint32_t)lrintf(CLAMP(sum[3] * norm, 0.0f, 255.0f)) : 0xFFu;
+        line[col] = (alpha << 24) | (red << 16) | (green << 8) | blue;
       }
     }
     else
@@ -1623,14 +1823,18 @@ cairo_surface_t *dt_canvas_render_rescale(cairo_surface_t *source, const int wid
       const int top = CLAMP((int)floor(position), 0, source_height - 1);
       const int bottom = MIN(top + 1, source_height - 1);
       const float weight = (float)CLAMP(position - top, 0.0, 1.0);
-      const float *above = rows + (size_t)top * width * 3;
-      const float *below = rows + (size_t)bottom * width * 3;
+      const float *above = rows + (size_t)top * width * 4;
+      const float *below = rows + (size_t)bottom * width * 4;
       for(int col = 0; col < width; col++)
       {
-        const uint32_t red = (uint32_t)lrintf(CLAMP(above[3 * col + 0] * (1.0f - weight) + below[3 * col + 0] * weight, 0.0f, 255.0f));
-        const uint32_t green = (uint32_t)lrintf(CLAMP(above[3 * col + 1] * (1.0f - weight) + below[3 * col + 1] * weight, 0.0f, 255.0f));
-        const uint32_t blue = (uint32_t)lrintf(CLAMP(above[3 * col + 2] * (1.0f - weight) + below[3 * col + 2] * weight, 0.0f, 255.0f));
-        line[col] = 0xFF000000u | (red << 16) | (green << 8) | blue;
+        const uint32_t red = (uint32_t)lrintf(CLAMP(above[4 * col + 0] * (1.0f - weight) + below[4 * col + 0] * weight, 0.0f, 255.0f));
+        const uint32_t green = (uint32_t)lrintf(CLAMP(above[4 * col + 1] * (1.0f - weight) + below[4 * col + 1] * weight, 0.0f, 255.0f));
+        const uint32_t blue = (uint32_t)lrintf(CLAMP(above[4 * col + 2] * (1.0f - weight) + below[4 * col + 2] * weight, 0.0f, 255.0f));
+        const uint32_t alpha = keeps_alpha
+                                   ? (uint32_t)lrintf(CLAMP(above[4 * col + 3] * (1.0f - weight)
+                                                                + below[4 * col + 3] * weight, 0.0f, 255.0f))
+                                   : 0xFFu;
+        line[col] = (alpha << 24) | (red << 16) | (green << 8) | blue;
       }
     }
   }

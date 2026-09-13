@@ -111,6 +111,7 @@ typedef enum dt_canvas_text_flag_t
   DT_CANVAS_TEXT_WRAP_AROUND = 1 << 2,     ///< the text flows around the frames laid over it
 } dt_canvas_text_flag_t;
 #define DT_CANVAS_MAP_RESERVED 256
+#define DT_CANVAS_SVG_RESERVED 480 ///< 512 at format 1, minus the intrinsic size (8) and the load time (8)
 #define DT_CANVAS_CONNECTOR_RESERVED 72 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24)
 
 /** The colour space a stored JPEG is encoded in. A file from before the field says 0: sRGB. */
@@ -136,6 +137,7 @@ typedef enum dt_canvas_object_kind_t
   DT_CANVAS_OBJECT_TEXT = 2,
   DT_CANVAS_OBJECT_CONNECTOR = 3,
   DT_CANVAS_OBJECT_MAP = 4,
+  DT_CANVAS_OBJECT_SVG = 5,
 } dt_canvas_object_kind_t;
 
 typedef enum dt_canvas_object_flags_t
@@ -483,6 +485,35 @@ typedef struct dt_canvas_mask_t
   float *nodes;       ///< node_count * DT_CANVAS_MASK_NODE_FLOATS
 } dt_canvas_mask_t;
 
+/**
+ * @brief A drawing read from an SVG file on disk.
+ *
+ * The file's own bytes travel in the archive, so a document is complete on its own, and the
+ * path it came from travels beside them so it can be read again when the drawing changes --
+ * the same bargain an image frame makes with the library.
+ *
+ * It is RASTERISED ATOMICALLY: the whole document in one pass, the way the SVG specification
+ * says it must be composited, in sRGB with the transfer function applied. That is not how this
+ * canvas composites -- linear Adobe RGB -- and the difference is not a detail: an SVG's own
+ * overlaps, its gradients and its anti-aliased edges are all defined in that space, so
+ * rendering its pieces into ours one at a time would draw a different picture from the one its
+ * author saw. Rendered whole and then converted, it arrives as one finished image and this
+ * canvas blends THAT correctly over the page.
+ */
+typedef struct dt_canvas_svg_t
+{
+  char folder[DT_PATH_MAX];           ///< where the file was read from, for reading it again
+  char filename[DT_MAX_FILENAME_LEN]; ///< the file's own name inside it
+  float source_width;                 ///< the drawing's intrinsic size, in points; 0 when it states none
+  float source_height;
+  int64_t loaded_at;                  ///< unix time the bytes were taken from the file
+  uint8_t reserved[DT_CANVAS_SVG_RESERVED];
+
+  /* runtime, not serialised as fields: the file travels as its own archive entry */
+  GBytes *svg;                        ///< the file's own bytes, NULL when it could not be read
+  dt_canvas_sync_status_t sync_status;
+} dt_canvas_svg_t;
+
 typedef struct dt_canvas_object_t
 {
   uint32_t id;        ///< unique within the canvas, never reused
@@ -508,6 +539,7 @@ typedef struct dt_canvas_object_t
     dt_canvas_text_t text;
     dt_canvas_connector_t connector;
     dt_canvas_map_t map;
+    dt_canvas_svg_t svg;
   };
 } dt_canvas_object_t;
 
@@ -699,6 +731,28 @@ void dt_canvas_map_set_render(dt_canvas_t *canvas, dt_canvas_object_t *object, G
 
 /** @brief The raster a frame shows: an image frame's or a map frame's JPEG, NULL for the others or when unrendered. */
 GBytes *dt_canvas_object_raster(const dt_canvas_object_t *object);
+
+/**
+ * @brief Add a drawing read from an SVG file, sized to what the file itself says it is.
+ *
+ * A canvas unit is a point, and so is an SVG's own user unit when the file states a physical
+ * size -- so a drawing arrives at the size its author meant, on the page, without a scale
+ * factor anywhere. A file that states only a viewBox has no physical size to honour and is
+ * given its viewBox in points, which is the same convention every browser applies.
+ *
+ * @return the object, or NULL with `error` set when the file cannot be read or parsed.
+ */
+dt_canvas_object_t *dt_canvas_add_svg(dt_canvas_t *canvas, double x, double y, const char *path,
+                                      GError **error);
+
+/**
+ * @brief Read the drawing's file again from where it came, keeping the frame where it is.
+ * @return TRUE when the bytes changed, so the caller knows whether anything needs repainting.
+ */
+gboolean dt_canvas_svg_reload(dt_canvas_t *canvas, dt_canvas_object_t *object, GError **error);
+
+/** @brief The path an SVG object was read from, or an empty string; the buffer is the caller's. */
+void dt_canvas_svg_path(const dt_canvas_object_t *object, char *path, size_t length);
 
 /** @brief Add a connector between two objects. Refuses self-links and unknown ids. */
 dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_id, uint32_t to_id);

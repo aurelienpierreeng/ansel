@@ -327,6 +327,51 @@ that moved geometry, since a frame dragged over a column changes that column's f
 as editing the column does. Measured after: the same paragraph breaks at the same fourteen
 byte offsets at zoom 0.42, 0.55 and 1.1, at full and interactive quality alike.
 
+## Drawings
+
+An SVG is read from disk, sized to what the file itself says it is, and carried in the archive
+like a photograph's JPEG -- so a document holds the drawing and opens on a machine that has
+never seen the file. The path it came from travels beside it (`dt_canvas_svg_path()`), and
+`dt_canvas_svg_reload()` reads it again for when the drawing has been edited since; the frame
+stays where the user put it, because where a drawing sits and how big it is on the page are
+theirs and not the file's.
+
+`rsvg_handle_set_dpi(72)` makes one SVG user unit one point, which is one canvas unit, so a
+file stating two inches by one arrives as a frame of 144 by 72 points with no scale factor
+anywhere between the file and the paper. A file stating only a viewBox has no physical size to
+honour and takes its viewBox, which is the convention every browser applies.
+
+**It is rasterised ATOMICALLY.** The specification composites an SVG in sRGB with the transfer
+function applied -- its overlaps, its gradients and its anti-aliased edges are all defined
+there -- and this canvas composites in linear Adobe RGB. Those are different pictures, so
+`rsvg_handle_render_document()` draws the whole document in one pass, exactly as its author saw
+it, and only the finished image is converted. Rendering its pieces into our space one at a time
+would be a different drawing. The conversion divides cairo's PREMULTIPLIED alpha back out
+before the transfer function and folds it in after; measured, that buys a single code (110
+against 109) because sRGB's curve and Adobe RGB's are both near a gamma of 2.2 and the alpha
+then factors straight out of `encode(k * eotf(a * c)) = a * encode(k * eotf(c))` -- it is kept
+because that cancellation is a property of these two spaces, not of the code, and the day
+either one is not that gamma it is the only version that stays right.
+
+A drawing is given **no border and no shadow**: it is ink on nothing -- a logo, a diagram, an
+arrow -- and a card behind it with a rule around it turns it into a rectangle, which is the one
+thing it is not. Both are the user's to switch on afterwards.
+
+**Text flows around what the drawing DRAWS.** `dt_canvas_render_svg_coverage()` renders the
+document to an A8 coverage surface at the occupancy map's own pitch -- a fraction of a full
+render -- and the obstacle map reads that exactly as it reads a cut frame's cutout. Measured on
+a file whose ink fills half its viewBox against one that fills all of it: 41.91 units of column
+against 97.78, where treating both as their box gives the same number twice.
+
+One thing this cost elsewhere: `dt_canvas_render_rescale()` built every sprite as RGB24 and
+forced the top byte opaque. A photograph never notices -- a JPEG has no alpha to lose -- but
+every hole in a drawing filled with whatever that byte then meant, which on this canvas is a
+black card behind the logo. It keeps the source's format now. Premultiplied values resample by
+a plain weighted mean, so the alpha rides along with the colour and nothing needs
+un-premultiplying; and carrying four channels rather than three turned out FASTER, 1.35 s
+against 1.58 s on the same document, because four floats is a natural SIMD width and a
+three-float stride breaks the alignment.
+
 **Which OpenType features are offered is asked of the FONT.** A face carries whatever tags its
 designer cut, and no two agree: measured on one machine, FreeSerif answers with 45 of them --
 historical ligatures and forms, small capitals, four stylistic sets -- DejaVu Serif with 11,
