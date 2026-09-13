@@ -403,10 +403,28 @@ still along the cut. Measured on a 75-unit border, the square reached 34.2 units
 against the 31.1 predicted for a 45-degree edge. This module learned the same thing once
 already for a cut frame's border band; the text flow reintroduced it.
 
-A line asks that map for the widest clear run across the band it is about to occupy.
-ONE run per line, deliberately: a line split either side of something standing in the middle
-of a column is a different feature, and this is the choice a page-layout application offers as
-"the largest area". The map is anchored on the TEXT AREA's corner, less the margin above, and
+A line asks that map for EVERY clear stretch across the band it is about to occupy, and is set
+across all of them, left to right. A picture standing in the middle of a column leaves clear
+space on both sides of it and the line carries on past it; taking only the widest stretch --
+"the largest area", which is one of the choices a page-layout application offers -- abandons
+the far side, and is what "the text is flowing only on one side" reported. Measured on a
+600-unit column with a 200-unit picture over it: an obstacle in the CENTRE costs exactly what
+the same obstacle against the right edge costs (ratio 1.000, both stretches used) where taking
+the widest of them cost 1.833 times as much. A stretch narrower than one em is dropped rather
+than given a letter or two.
+
+The layout is still reused across lines, which is what keeps a plain paragraph at one layout
+rather than one per line, but the test for it is no longer the width alone: it also asks that
+the cached layout's next line begin where the text now stands, give or take the whitespace the
+last break ate. A line set across several stretches leaves the cache describing text that is
+already on the page, and width alone would hand it back. Two traps in that check, each of
+which cost a test: it must accept a next line starting BEFORE the text stands (the difference
+is what the break ate) or the empty line Pango draws for a blank line between paragraphs is
+skipped and every document that had one silently loses it; and a line that took no text must
+still advance the layout, or the band is asked for again with nothing changed and the walk
+never ends.
+
+The map is anchored on the TEXT AREA's corner, less the margin above, and
 not on the frame's -- taken from the frame while the extent is the inner size, every obstacle
 sits one padding to the left of where the lines think it is. The GAP the text keeps around what it
 avoids is the user's ("Gap" on the property bar, `wrap_standoff` in the document) and is grown
@@ -427,6 +445,13 @@ line's own height by more than the gap asks for, by about `(band / 2) * tan(thet
 cos(theta)`, which on the reported picture is the difference between 5 units of clearance where
 the cut runs vertical and 15 along its slant. Widening the Gap raises both and narrows the
 ratio; nothing short of letting glyphs overlap removes it.
+
+**Paragraphs are separated by a BLANK LINE, as Markdown has it.** A single line break is a
+SOFT break and joins the lines into one paragraph -- measured through the converter: a blank
+line leaves two newlines in the text and the paragraph controls act on it, a lone newline
+leaves none at all and they do not. That is Markdown's rule and not this code's, but it is
+surprising enough at a keyboard to be worth saying in the tooltip, which it now is: it was
+reported as the paragraph spacing not working.
 
 **A paragraph's first line and the space before it are this engine's too.** Pango indents the
 first line of every paragraph in a layout, which is exactly the rule -- so the plain path uses

@@ -2855,7 +2855,10 @@ static void _bars_create(dt_view_t *self)
   gtk_grid_attach(GTK_GRID(paragraph_grid), gtk_label_new(_("Space between")), 0, 1, 1, 1);
   gtk_grid_attach(GTK_GRID(paragraph_grid), view->text_paragraph_spacing, 1, 1, 1, 1);
   _bar_popover(view->row_text, _("Paragraph"),
-               _("Where a paragraph begins and how far it sits from the one before it."), paragraph_grid);
+               _("Where a paragraph begins and how far it sits from the one before it. Paragraphs are "
+                 "separated by a BLANK LINE, as Markdown has it: a single line break joins the lines into "
+                 "one paragraph and is neither indented nor spaced."),
+               paragraph_grid);
 
   // Empty here: what a font ships is the font's business, so the list is built on the refill
   // from whatever the selected frame's own face answers with.

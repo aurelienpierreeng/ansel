@@ -3429,6 +3429,21 @@ they are visible.
   not a defect**: horizontal lines against a diagonal always clear it by more at the line's own
   height than the gap asks for, by about `(band / 2) * tan(theta) * cos(theta)`, and every
   page-layout application does the same.
+- **A line is set across EVERY clear stretch of its band, not the widest one.** A picture in the
+  middle of a column leaves space either side and the line carries on past it. Measured on a
+  600-unit column with a 200-unit picture: an obstacle in the CENTRE costs what the same
+  obstacle against the edge costs (ratio 1.000) where taking the widest stretch cost 1.833.
+  The layout cache survives that only because its test now asks that the cached layout's next
+  line begin where the text stands, give or take the whitespace the last break ate -- width
+  alone hands back a layout describing text already on the page. Two traps, one test each: the
+  check must accept a next line starting BEFORE the text stands, or the empty line Pango draws
+  for a blank line between paragraphs is skipped and every document loses it; and a line that
+  took no text must still advance the layout, or the walk never ends.
+- **Paragraphs are separated by a BLANK LINE, as Markdown has it** -- a lone newline is a soft
+  break and joins the lines. Measured through the converter: a blank line leaves two newlines
+  in the text and the paragraph controls act on it, a single newline leaves NONE and they do
+  not. Reported as "paragraph spacing doesn't work"; it is Markdown's rule, and the tooltip now
+  says so.
 - **A run of newlines is ONE paragraph break, and the question is asked of the FOLLOWING line.**
   The markdown converter separates blocks with a blank line and Pango renders the second
   newline as a line of its own with no ink; a rule keyed on "did I step over a newline" fires
