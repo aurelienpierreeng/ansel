@@ -735,7 +735,8 @@ dialog .sidebar row:selected:hover label,
 #module-header .dt_module_btn.dt-collapse-arrow {
   min-width: 1em;
   min-height: 1em;
-  margin: 0 3px 0 -6px;
+  /* Right margin 0, not 3px: the label used to be pulled 3px back over this gap. */
+  margin: 0 0 0 -6px;
 }
 
 #module-header .dt_iop_enable_button:checked {
@@ -767,7 +768,12 @@ dialog .sidebar row:selected:hover label,
 #lib-panel-label {
   color: @plugin_label_color;
   padding: 0;
-  margin-left: -3px;
+  /* No negative margin here: GTK subtracts a widget's CSS margins from its size REQUEST, and
+     this label ellipsizes, so a -3px margin made it ask for 3px less than its text needs. Its
+     event box is packed with expand/fill FALSE, so it got exactly that starved width and the
+     text lost 3px -- visible as a clipped first letter at whichever font sizes put ink rather
+     than side bearing in those 3px. The gap it was tightening is taken off the arrow instead,
+     where the widget is a fixed-size icon with no content to starve. */
 }
 
 .dt_iop_module #iop_description,
