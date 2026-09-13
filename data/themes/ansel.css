@@ -92,13 +92,30 @@
 @define-color grey_90 #e2e2e2;
 @define-color grey_95 #f1f1f1;
 @define-color grey_100 #ffffff;
+/* Chrome surface ramp. The grey ramp above stays strictly neutral because the
+   image canvas and the thumbnails are drawn on it, and a hue there would bias
+   colour judgement by simultaneous contrast. The chrome around the image is a
+   separate problem: it has to be dark enough to carry text at AA, and it is
+   read as a frame rather than compared against the photo. This ramp is one
+   family -- h=216deg, s=0.049, lightness stepped -- so no chrome surface ever
+   meets a neutral sibling at an edge, which is where a faint tint stops being
+   invisible and starts reading as a mistake. slate_20 is the anchor; the rest
+   are the same hue at other lightnesses. */
+@define-color slate_12 #1d1e20;
+@define-color slate_16 #27282b;
+@define-color slate_20 #313336;
+@define-color slate_25 #3d3f43;
+@define-color slate_30 #494c50;
+@define-color slate_36 #575b60;
+@define-color slate_44 #6b6f76;
+
 @define-color danger rgba(240, 50, 40, 0.8);
 @define-color warning_color #FFA500;
 
 /* General Base Colors */
-@define-color selected_bg_color @grey_55;
+@define-color selected_bg_color @slate_36;
 @define-color border_color @grey_40;
-@define-color bg_color @grey_44;
+@define-color bg_color @slate_20;
 @define-color fg_color @grey_100;
 @define-color base_color @fg_color;
 @define-color text_color @grey_35;
@@ -115,14 +132,14 @@
 @define-color scroll_bar_bg @bg_color;
 
 /* Panels */
-@define-color toolbar_color @grey_25;
+@define-color toolbar_color @slate_12;
 
 /* Plugins/Modules */
-@define-color plugin_header_color @grey_35;
-@define-color plugin_bg_color @grey_50;
+@define-color plugin_header_color @slate_16;
+@define-color plugin_bg_color @slate_20;
 @define-color section_label @grey_95;
 @define-color plugin_label_color @grey_95;
-@define-color collapsible_bg_color @grey_55;
+@define-color collapsible_bg_color @slate_25;
 
 /* orange accent -- shared across the UI (bauhaus slider values, module enable
    buttons, selection highlights, checkmarks...), not specific to any one widget */
@@ -149,16 +166,16 @@
 @define-color button_bg @grey_50;
 @define-color button_fg alpha(@fg_color, 0.55);
 @define-color button_border shade(@button_bg, 1.04);
-@define-color button_hover_bg @grey_70;
-@define-color button_hover_fg @grey_30;
+@define-color button_hover_bg @slate_44;
+@define-color button_hover_fg @grey_100;
 
 @define-color field_fg @fg_color;
-@define-color field_active_bg @grey_55;
+@define-color field_active_bg @slate_30;
 @define-color field_active_fg @grey_95;
-@define-color field_selected_bg @grey_65;
+@define-color field_selected_bg @slate_36;
 @define-color field_selected_fg @grey_100;
-@define-color field_hover_bg @grey_75;
-@define-color field_hover_fg @grey_35;
+@define-color field_hover_bg @slate_44;
+@define-color field_hover_fg @grey_100;
 
 /* Helpers, Views & Tooltips */
 @define-color tooltip_bg_color @grey_30;
@@ -185,7 +202,7 @@
 @define-color brush_trace alpha(black, .8);
 
 /* Graphs & Utilities */
-@define-color graph_bg @grey_40;
+@define-color graph_bg @slate_16;
 @define-color navigation_bg transparent;
 @define-color graph_exterior shade(@graph_bg, 0.9);
 @define-color graph_border @grey_15;
@@ -276,7 +293,7 @@ window.csd .titlebar:backdrop {
 /* Base Typographic Defaults & Background Reset for GTK nodes */
 * {
   font-family: 
-    "Roboto Light", "Roboto", 
+    "IBM Plex Sans Light", "IBM Plex Sans",
     "Segoe UI Light", "Segoe UI", 
     "SF Pro Display Light", "SF Pro Display", 
     "Ubuntu Light", "Ubuntu", 
@@ -292,7 +309,7 @@ window.csd .titlebar:backdrop {
 treeview header label,
 treeview *:selected:not(check) {
   font-family: 
-    "Roboto Medium", "Roboto", 
+    "IBM Plex Sans Medm", "IBM Plex Sans",
     "Segoe UI Semibold", "Segoe UI", 
     "SF Pro Display Medium", "SF Pro Display", 
     "Ubuntu Medium", "Ubuntu", 
@@ -304,13 +321,13 @@ treeview *:selected:not(check) {
 #iop-panel-label,
 #lib-panel-label {
   font-family: 
-    "Roboto Condensed", "Roboto", 
+    "IBM Plex Sans Cond", "IBM Plex Sans",
     "Segoe UI Condensed", "Segoe UI", 
     "SF Pro Display", "SF Pro Display", 
     "Ubuntu Condensed", "Ubuntu", 
     "IPAPGothic", "Cantarell", sans-serif;
   font-weight: 400;
-  font-stretch: condensed; /* ansel-macos-strip: Roboto Condensed renders badly on macOS */
+  font-stretch: condensed; /* ansel-macos-strip: IBM Plex Sans Condensed renders badly on macOS */
   font-size: 1.05em;
 }
 
@@ -320,13 +337,13 @@ notebook tabs,
 #blending-header,
 tooltip label,
 .active_menu_item * {
-  font-family: "Roboto", "Segoe UI", "SF Pro Text", "Ubuntu", "IPAPGothic", "Cantarell", sans-serif;
+  font-family: "IBM Plex Sans", "Segoe UI", "SF Pro Text", "Ubuntu", "IPAPGothic", "Cantarell", sans-serif;
   font-weight: 400;
   font-stretch: normal;
 }
 
 .dt_monospace {
-  font-family: "Roboto Mono", monospace;
+  font-family: "IBM Plex Mono", monospace;
 }
 
 /* General Layout Options */
@@ -675,7 +692,7 @@ dialog .sidebar row:selected:hover label,
 .dt_iop_module.dt_module_frame {
   margin: 0 calc(0.625em - 4px); /* no vertical margin: that's handled as children spacing by the container */
   padding: 0;
-  border: 1px solid @recessed_color_bg;
+  border: 1px solid @recessed_color_border;
   border-radius: 10px;
 }
 
@@ -727,7 +744,7 @@ dialog .sidebar row:selected:hover label,
 }
 
 #module-header .dt_module_btn.dt_iop_enable_button {
-  color: @grey_50;
+  color: @grey_65;
   background: transparent;
   border-color: transparent;
 }
@@ -795,8 +812,8 @@ dialog .sidebar row:selected:hover label,
 /* Section labels for the "basic" tab */
 
 #plugins_box .dt_section_label {
-  color: @grey_15;
-  border-bottom-color: @grey_15;
+  color: @grey_90;
+  border-bottom-color: @grey_90;
   margin: 0 0.625em 0;
 }
 
@@ -994,7 +1011,7 @@ popover spinbutton {
   ======================================*/
 
 #search-box entry placeholder {
-  color: @grey_25;
+  color: @grey_70;
 }
 
 notebook header {
@@ -1128,7 +1145,7 @@ notebook.empty stack {
   border-left: 1px solid alpha(@grey_95, 0.36);
   border-right: 1px solid alpha(@grey_95, 0.36);
   border-bottom: none;
-  background-color: @grey_44;
+  background-color: @bg_color;
   margin-bottom: -1px;
 }
 

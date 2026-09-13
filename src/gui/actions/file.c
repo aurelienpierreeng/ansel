@@ -352,7 +352,7 @@ static gboolean export_image_list_callback(GtkAccelGroup *group, GObject *accele
 
   GtkWidget *view = gtk_text_view_new();
   gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
-  gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
+  dt_gui_add_class(view, "dt_monospace");
   gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
   GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
   g_object_set_data_full(G_OBJECT(buffer), "imgids", imgids, (GDestroyNotify)g_list_free);

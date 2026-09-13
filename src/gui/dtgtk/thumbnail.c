@@ -254,7 +254,7 @@ static void _active_modules_popup(GtkWidget *widget, dt_thumbnail_t *thumb)
   gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
   gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(view), FALSE);
   gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
-  gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
+  dt_gui_add_class(view, "dt_monospace");
   gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)), text->str, -1);
   gtk_container_add(GTK_CONTAINER(scrolled), view);
 
