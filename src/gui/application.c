@@ -84,6 +84,7 @@
 #include "gui/guides.h"
 #include "gui/import.h"
 #include "widgets/expander.h"
+#include "widgets/bauhaus.h"
 
 #include "common/collection.h"
 #include "common/selection.h"
@@ -111,6 +112,7 @@
 #ifdef _WIN32
 #include <gdk/gdkwin32.h>
 #endif
+#include <gio/gio.h>   // GFileMonitor, for the theme hot-reload watch
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdlib.h>
@@ -1949,6 +1951,89 @@ void dt_gui_add_help_link(GtkWidget *widget, char *link)
   gtk_widget_add_events(widget, GDK_BUTTON_PRESS_MASK);
 }
 
+/* The one CSS provider the theme is loaded into.
+ *
+ * This used to be a fresh gtk_css_provider_new() per call, added to the screen and
+ * then unreffed -- but the screen keeps its own reference and nothing ever removed
+ * the previous provider, so they accumulated one per theme change. GTK applies
+ * providers of equal priority in the order they were added, last one winning per
+ * property, which is why a reload still LOOKED correct: the new rules overrode the
+ * old ones. What it could not do is drop a rule. Any selector the new CSS no longer
+ * declares kept applying, served by an older provider nobody could reach -- so
+ * switching theme A -> B left every rule that exists only in A in force, and a
+ * hot-reload would show an edit landing but never show a deletion taking effect.
+ * One provider, re-loaded in place, makes a reload mean "this file and only this
+ * file". GTK re-resolves every style when a provider's data changes, so replacing
+ * the data is the whole operation. */
+static GtkCssProvider *_themes_style_provider = NULL;
+
+/* Hot-reload state. The monitors are armed only under `-d gtk`; the path they were
+ * armed for is kept so a reload that resolves to the same files leaves them alone
+ * -- re-arming from inside the monitor's own callback is the one thing that would
+ * make this re-entrant. */
+static GFileMonitor *_theme_css_monitor = NULL;
+static GFileMonitor *_usercss_monitor = NULL;
+static gchar *_watched_theme_path = NULL;
+static gchar *_watched_usercss_path = NULL;
+static gchar *_watched_theme_name = NULL;
+
+static void _theme_css_changed(GFileMonitor *monitor, GFile *file, GFile *other_file,
+                               GFileMonitorEvent event, gpointer user_data)
+{
+  /* One save is several events. CHANGES_DONE_HINT is the terminal one for a plain
+   * rewrite; CREATED/RENAMED/MOVED_IN cover an editor that writes a temp file and
+   * renames it over the target, which leaves the previous inode -- and therefore a
+   * monitor armed on it -- behind. Reloading on the intermediate CHANGED events
+   * would parse half-written CSS and spam the error path. */
+  if(event != G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT
+     && event != G_FILE_MONITOR_EVENT_CREATED
+     && event != G_FILE_MONITOR_EVENT_RENAMED
+     && event != G_FILE_MONITOR_EVENT_MOVED_IN)
+    return;
+
+  if(IS_NULL_PTR(_watched_theme_name)) return;
+
+  dt_print(DT_DEBUG_GTK, "[theme] CSS changed on disk, reloading `%s'\n", _watched_theme_name);
+
+  /* Mirror preferences.c's reload_ui_last_theme(): the CSS alone is not the whole
+   * theme. Bauhaus caches every colour it draws with into its own struct at
+   * dt_bauhaus_load_theme() time and never looks at the style context again, so a
+   * provider reload restyles every GTK node and leaves every slider untouched. */
+  dt_gui_load_theme(_watched_theme_name);
+  dt_bauhaus_load_theme(dt_bauhaus_get_global());
+}
+
+static void _theme_watch_file(GFileMonitor **monitor, gchar **watched, const char *path)
+{
+  if(!g_strcmp0(*watched, path)) return; // already armed on this exact file
+
+  if(!IS_NULL_PTR(*monitor))
+  {
+    g_signal_handlers_disconnect_by_func(*monitor, _theme_css_changed, NULL);
+    g_file_monitor_cancel(*monitor);
+    g_object_unref(*monitor);
+    *monitor = NULL;
+  }
+  dt_free(*watched); // the macro NULLs it too
+
+  if(IS_NULL_PTR(path)) return;
+
+  GFile *file = g_file_new_for_path(path);
+  *monitor = g_file_monitor_file(file, G_FILE_MONITOR_WATCH_MOVES, NULL, NULL);
+  g_object_unref(file);
+
+  if(IS_NULL_PTR(*monitor)) return;
+
+  /* There is no inotify on Windows for a single file: GLib falls back to polling
+   * mtime/size, so the reload lands within about a second of the save rather than
+   * instantly. The rate limit only coalesces bursts; it does not add latency. */
+  g_file_monitor_set_rate_limit(*monitor, 250);
+  g_signal_connect(*monitor, "changed", G_CALLBACK(_theme_css_changed), NULL);
+  *watched = g_strdup(path);
+
+  dt_print(DT_DEBUG_GTK, "[theme] watching %s for changes\n", path);
+}
+
 // load a CSS theme
 void dt_gui_load_theme(const char *theme)
 {
@@ -2001,9 +2086,13 @@ void dt_gui_load_theme(const char *theme)
 
   GError *error = NULL;
 
-  GtkStyleProvider *themes_style_provider = GTK_STYLE_PROVIDER(gtk_css_provider_new());
-  gtk_style_context_add_provider_for_screen
-    (gdk_screen_get_default(), themes_style_provider, GTK_STYLE_PROVIDER_PRIORITY_USER + 1);
+  if(IS_NULL_PTR(_themes_style_provider))
+  {
+    _themes_style_provider = gtk_css_provider_new();
+    gtk_style_context_add_provider_for_screen
+      (gdk_screen_get_default(), GTK_STYLE_PROVIDER(_themes_style_provider),
+       GTK_STYLE_PROVIDER_PRIORITY_USER + 1);
+  }
 
   usercsspath = g_build_filename(configdir, "user.css", NULL);
 
@@ -2027,6 +2116,29 @@ void dt_gui_load_theme(const char *theme)
   }
 
   dt_free(path_uri);
+  if(dt_get_debug_flags() & DT_DEBUG_GTK)
+  {
+    /* Take the RESOLVED name from conf, not the `theme` argument. Every branch of the
+     * lookup above writes what it actually settled on to ui_last/theme, so this is the
+     * name that reproduces this exact file. The argument cannot be trusted: the startup
+     * caller fills gui->gtkrc from ui_last/theme behind a NULL-only guard, and the key
+     * returns "" rather than NULL on a fresh config -- so the whole application runs
+     * with an empty theme name, finding its CSS through the ansel.css fallback instead
+     * of by name. Reloading with "" would work by that same fallback, but it would also
+     * rewrite ui_last/theme to "ansel" every time, silently moving a user off their
+     * chosen theme on their first save.
+     *
+     * Copy BEFORE freeing either way: the reload path calls this function with
+     * _watched_theme_name itself, so the argument can alias what is replaced here. */
+    const char *resolved = dt_conf_get_string_const("ui_last/theme");
+    gchar *theme_name = g_strdup(IS_NULL_PTR(resolved) ? "ansel" : resolved);
+    dt_free(_watched_theme_name);
+    _watched_theme_name = theme_name;
+    _theme_watch_file(&_theme_css_monitor, &_watched_theme_path, path);
+    _theme_watch_file(&_usercss_monitor, &_watched_usercss_path,
+                      dt_conf_get_bool("themes/usercss") ? usercsspath : NULL);
+  }
+
   dt_free(usercsspath_uri);
   dt_free(path);
   dt_free(usercsspath);
@@ -2038,15 +2150,13 @@ void dt_gui_load_theme(const char *theme)
     themecss = newcss;
   }
 
-  if(!gtk_css_provider_load_from_data(GTK_CSS_PROVIDER(themes_style_provider), themecss, -1, &error))
+  if(!gtk_css_provider_load_from_data(_themes_style_provider, themecss, -1, &error))
   {
     fprintf(stderr, "%s: error parsing combined CSS %s: %s\n", G_STRFUNC, themecss, error->message);
     g_clear_error(&error);
   }
 
   dt_free(themecss);
-
-  g_object_unref(themes_style_provider);
 
   // setup the colors
 
