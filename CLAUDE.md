@@ -3475,6 +3475,18 @@ they are visible.
   font's own ascent plus descent times the leading, and a line taller than the band it was
   placed against is asked again -- the band only grows and the run only narrows, so one extra
   pass settles it.
+- **An obstacle covers wherever it paints ANYTHING, and its border is the EFFECTIVE one.** Two
+  ways the same rule was got wrong. A cut frame's edge is FEATHERED -- the cutout fades out
+  rather than stopping -- and sampling that raster at half opacity puts the boundary in the
+  middle of the fade, so the text cleared the shape and sat under the visible half of its own
+  soft rim; the cut is at `TEXT_FLOW_MASK_FAINT` (12 of 255) now, the faintest of a fade the
+  eye still reads. And a frame WITHOUT `DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE` takes the
+  canvas's border, not the value in its own `border_width` field: reading the field gave nought
+  for every such frame, so the text ran clean under the white edge of one picture while the
+  picture beside it, which had been given a border of its own, was cleared correctly. Use
+  `dt_canvas_object_effective_border()`, exactly as the shadow already used
+  `dt_canvas_object_effective_shadow()`. A test that sets `border_width` on an obstacle must
+  set the override flag with it, or it is testing the canvas default.
 - **An obstacle's extent is what it PAINTS, not its silhouette.** The silhouette is the cutout,
   and a frame draws a border band dilated outward from that cut edge, plus a shadow, which is
   the one thing allowed to reach past a frame at all. Text set flush against the silhouette

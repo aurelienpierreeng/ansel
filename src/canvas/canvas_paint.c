@@ -1584,6 +1584,7 @@ static void _show_layout(cairo_t *cr, PangoLayout *layout, const gboolean optica
 #define TEXT_FLOW_CELL 3.0     ///< canvas units per occupancy cell: finer than a glyph, coarse enough to be free
 #define TEXT_FLOW_MAX_CELLS 512 ///< per axis, so a huge frame costs a coarser map rather than the world
 #define TEXT_FLOW_MAX_LINES 4096
+#define TEXT_FLOW_MASK_FAINT 12 ///< out of 255: the faintest of a feathered edge the eye still reads
 #define TEXT_FLOW_MASK_MAX 1024 ///< an obstacle's cutout raster, longest side: a ceiling, not a target
 
 /**
@@ -1621,7 +1622,14 @@ static void _obstacles_free(dt_text_obstacles_t *obstacles)
  */
 static double _obstacle_reach(const dt_canvas_t *canvas, const dt_canvas_object_t *other)
 {
-  double reach = fmax((double)other->border_width, 0.0);
+  // The EFFECTIVE border, not the object's own field: a frame without the override flag takes
+  // the canvas's, and reading the field gave nought for every such frame -- the text ran clean
+  // under the white edge of a cut picture that had never been given a border of its own, while
+  // the one beside it that had been was cleared correctly.
+  dt_canvas_color_t border_color;
+  float border_width = 0.0f;
+  dt_canvas_object_effective_border(canvas, other, &border_color, &border_width);
+  double reach = fmax((double)border_width, 0.0);
   dt_canvas_shadow_t shadow;
   dt_canvas_object_effective_shadow(canvas, other, &shadow);
   if(dt_canvas_shadow_visible(&shadow) && shadow.blur > 0.0)
@@ -1857,7 +1865,14 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
           {
             const uint8_t *pixels = cairo_image_surface_get_data(rasters[idx]);
             const int stride = cairo_image_surface_get_stride(rasters[idx]);
-            hit = pixels[(size_t)sample_y * stride + sample_x] > 127;
+            /*
+             * ANY ink, not half of it. A cut frame's edge is feathered -- the cutout fades out
+             * rather than stopping -- and half is the middle of that fade: the text cleared
+             * the shape and sat under the visible half of its own soft edge, which reads as
+             * running into the picture's white rim. What an obstacle covers is wherever it
+             * paints something the eye can see.
+             */
+            hit = pixels[(size_t)sample_y * stride + sample_x] > TEXT_FLOW_MASK_FAINT;
           }
         }
         if(hit) own[(size_t)row * obstacles->columns + column] = 1;

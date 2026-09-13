@@ -394,7 +394,25 @@ than the grid on any large frame -- 192 px over a 1680-unit frame is 8.75 units 
 against a 3-unit cell -- which squares off a curve and lets a line in by most of a step, which
 is a shape's rounded edge coming out straight.
 
-What an obstacle covers is what it PAINTS, which is more than its silhouette: a border band is
+What an obstacle covers is wherever it paints ANYTHING, which is more than its silhouette and
+more than the half of it. A cut frame's edge is FEATHERED, the cutout fading out rather than
+stopping, so the raster is sampled at `TEXT_FLOW_MASK_FAINT` -- 12 of 255, the faintest of a
+fade the eye still reads -- and not at half: half is the middle of the fade, and the text
+cleared the shape only to sit under the visible half of its own soft rim, which is what "the
+text intersects the border of the cutout image" was. Measured on a circle of radius 0.10 with a
+fall-off of 0.30, against hard circles of 0.40 and 0.10: the column pays 111.75 units where the
+full reach costs 130.38 and the bare shape 74.50, so well over half of the fade is counted and
+its faintest tail, which has nothing to see in it, is not.
+
+The border it adds is the EFFECTIVE one, `dt_canvas_object_effective_border()`: a frame without
+`DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE` takes the canvas's, not whatever sits in its own
+`border_width`, and reading the field gave nought for every such frame -- the text ran clean
+under the white edge of one picture while the picture beside it, which had been given a border
+of its own, was cleared correctly. The shadow already went through
+`dt_canvas_object_effective_shadow()` for the same reason. A test that sets `border_width` on
+an obstacle must set the override flag with it, or it is testing the canvas default.
+
+The rest of it: a border band is
 dilated outward from the cut edge, and a shadow is the one thing allowed to reach past a frame
 at all, so each obstacle is grown by `border_width` plus its visible outset shadow before it is
 merged into the map. Text set flush against the silhouette otherwise lands under both -- on a

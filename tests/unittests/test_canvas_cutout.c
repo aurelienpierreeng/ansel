@@ -1082,6 +1082,7 @@ static double _flowed_past_obstacle(const gboolean centred)
     return -1.0;
   }
   over->border_width = 0.0f;
+  over->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
   cairo_t *cr = cairo_create(surface);
@@ -1148,6 +1149,7 @@ static double _three_paragraphs_past_a_picture(const float spacing)
     return -1.0;
   }
   over->border_width = 0.0f;
+  over->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
   cairo_t *cr = cairo_create(surface);
@@ -1247,6 +1249,7 @@ static double _paragraph_height(const gboolean flowing, const float leading, con
     return -1.0;
   }
   over->border_width = 0.0f;
+  over->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
   cairo_t *cr = cairo_create(surface);
@@ -1320,6 +1323,7 @@ static void _a_frame_standing_just_outside_a_column_still_pushes_its_text(void *
     dt_canvas_object_t *beside = dt_canvas_add_text(canvas, -325.0, 0.0, 150.0, 900.0, "");
     assert_non_null(beside);
     beside->border_width = 0.0f;
+  beside->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
 
     cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
     cairo_t *cr = cairo_create(surface);
@@ -1367,6 +1371,7 @@ static void _the_gap_around_an_obstacle_is_a_disc_not_a_square(void **state)
   dt_canvas_object_t *corner = dt_canvas_add_text(canvas, -370.0, -470.0, 40.0, 40.0, "");
   assert_non_null(corner);
   corner->border_width = 0.0f;
+  corner->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
   const double with_corner = dt_canvas_paint_text_natural_height(cr, canvas, text);
   cairo_destroy(cr);
   cairo_surface_destroy(surface);
@@ -1374,6 +1379,79 @@ static void _the_gap_around_an_obstacle_is_a_disc_not_a_square(void **state)
   assert_true(alone > 0.0);
   assert_float_equal(alone, with_corner, 0.01);
   dt_canvas_free(canvas);
+}
+
+/** A column with one circular cut frame over it, of the given cutout radius and fall-off. */
+static double _flowed_past_a_cut_frame(const float radius, const float feather)
+{
+  dt_canvas_t *canvas = dt_canvas_new();
+  if(IS_NULL_PTR(canvas)) return -1.0;
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 0.0, 0.0, 600.0, 4000.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+      "zoom, because the page is the thing being designed and the screen is only a window onto it, and a "
+      "column set beside a picture must keep clear of it line by line.");
+  if(IS_NULL_PTR(text))
+  {
+    dt_canvas_free(canvas);
+    return -1.0;
+  }
+  text->text.padding = 0.0f;
+  text->text.wrap_standoff = 0.0f;
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND | DT_CANVAS_TEXT_OPTICAL_MARGINS;
+  // Over the first lines: the cutout is a circle in the middle of its frame, so the frame has
+  // to straddle the text rather than merely overlap it.
+  dt_canvas_object_t *over = dt_canvas_add_text(canvas, -300.0, -1940.0, 600.0, 600.0, "");
+  if(IS_NULL_PTR(over))
+  {
+    dt_canvas_free(canvas);
+    return -1.0;
+  }
+  over->border_width = 0.0f;
+  over->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  dt_canvas_mask_set_shape(canvas, over, DT_CANVAS_MASK_CIRCLE);
+  over->mask.radius_x = radius;
+  over->mask.feather = feather;
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double height = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+  dt_canvas_free(canvas);
+  return height;
+}
+
+static void _a_feathered_cutout_covers_all_of_its_fade(void **state)
+{
+  (void)state;
+  /*
+   * A cut frame's edge FADES rather than stopping, and what the text has to clear is wherever
+   * the picture paints something the eye can see -- not the contour where it happens to be
+   * half opaque. Sampling the cutout at half took the text to the middle of the fade, where it
+   * sat under the visible half of the picture's own soft rim: reported as the text
+   * intersecting the border of a hexagonal cutout.
+   *
+   * A shape of radius r with a fall-off of f paints out to r + f, so it must push the text
+   * exactly as far as a hard-edged shape of radius r + f does.
+   */
+  const double feathered = _flowed_past_a_cut_frame(0.10f, 0.30f);
+  const double hard = _flowed_past_a_cut_frame(0.40f, 0.0f);
+  const double small_and_hard = _flowed_past_a_cut_frame(0.10f, 0.0f);
+  assert_true(feathered > 0.0 && hard > 0.0);
+  // The fall-off is part of the picture: it costs the column what the same reach of hard edge
+  // costs, and more than the shape without it.
+  /*
+   * Measured, a shape of 0.10 with a fall-off of 0.30 against hard shapes of 0.40 and 0.10:
+   * 111.75, 130.38 and 74.50. The fade is worth most of its own width -- its faintest tail
+   * stops a little short of the nominal reach, which is right, since there is nothing there to
+   * see -- so the column pays for well over half of it. Sampling at half opacity instead put
+   * the feathered shape at the bare one's 74.50 and the text under the visible half of the
+   * picture's rim.
+   */
+  assert_true(feathered > small_and_hard);
+  assert_true(feathered > (small_and_hard + hard) * 0.5);
+  assert_true(feathered <= hard + 1.0);
 }
 
 static void _text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette(void **state)
@@ -1391,6 +1469,7 @@ static void _text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette(void
   dt_canvas_object_t *over = dt_canvas_add_text(canvas, 300.0, 150.0, 140.0, 120.0, "");
   assert_non_null(over);
   over->border_width = 0.0f;
+  over->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
   cairo_t *cr = cairo_create(surface);
@@ -1399,7 +1478,10 @@ static void _text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette(void
   // flush against that silhouette lands under it. Measured on a cut picture over a column: the
   // run started exactly on the cutout edge -- the layout was right to 0.0 units -- and the
   // first word of five lines still vanished, into a 75-unit white border band.
+  // The OVERRIDE flag with it: a frame without it takes the canvas's border, not its own, and
+  // that is the whole of what this test is about.
   over->border_width = 40.0f;
+  over->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
   const double bordered = dt_canvas_paint_text_natural_height(cr, canvas, text);
   cairo_destroy(cr);
   cairo_surface_destroy(surface);
@@ -1499,6 +1581,7 @@ int main(void)
     cmocka_unit_test(_the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map),
     cmocka_unit_test(_an_auto_height_frame_grows_downward_and_settles),
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
+    cmocka_unit_test(_a_feathered_cutout_covers_all_of_its_fade),
     cmocka_unit_test(_the_gap_around_an_obstacle_is_a_disc_not_a_square),
     cmocka_unit_test(_a_frame_standing_just_outside_a_column_still_pushes_its_text),
     cmocka_unit_test(_the_leading_reaches_a_flowing_paragraph_once_per_gap),
