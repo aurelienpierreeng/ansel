@@ -1040,10 +1040,17 @@ static void _a_font_offers_the_features_it_actually_ships(void **state)
 
   // A tag the build has a name for is offered by name; one it does not is offered by its tag,
   // which is what makes a font's own stylistic sets reachable at all.
-  assert_non_null(dt_canvas_text_feature_label("hlig"));
-  assert_non_null(dt_canvas_text_feature_label("smcp"));
-  assert_null(dt_canvas_text_feature_label("ss01"));
-  assert_null(dt_canvas_text_feature_label("zzzz"));
+  gchar *historical = dt_canvas_text_feature_label("hlig");
+  gchar *small_caps = dt_canvas_text_feature_label("smcp");
+  gchar *set = dt_canvas_text_feature_label("ss01");
+  gchar *nothing = dt_canvas_text_feature_label("zzzz");
+  assert_non_null(historical);
+  assert_non_null(small_caps);
+  assert_non_null(set);
+  assert_null(nothing);
+  dt_free(historical);
+  dt_free(small_caps);
+  dt_free(set);
   dt_canvas_free(canvas);
 }
 
@@ -1104,6 +1111,70 @@ static void _a_line_carries_on_past_a_picture_standing_in_the_column(void **stat
   assert_true(centred > 0.0 && against_the_edge > 0.0);
   // Measured: 1.000 setting the line across both stretches, 1.833 taking the widest of them.
   assert_true(centred < against_the_edge * 1.3);
+}
+
+/** Three paragraphs in a column with a picture standing in the middle of it. */
+static double _three_paragraphs_past_a_picture(const float spacing)
+{
+  dt_canvas_t *canvas = dt_canvas_new();
+  if(IS_NULL_PTR(canvas)) return -1.0;
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 0.0, 0.0, 600.0, 4000.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way "
+      "whatever the zoom.\n\nThe page is the thing being designed and the screen is only a window "
+      "onto it.\n\nA column set beside a picture must keep clear of it line by line.");
+  if(IS_NULL_PTR(text))
+  {
+    dt_canvas_free(canvas);
+    return -1.0;
+  }
+  text->text.padding = 0.0f;
+  text->text.wrap_standoff = 0.0f;
+  text->text.paragraph_spacing = spacing;
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND | DT_CANVAS_TEXT_OPTICAL_MARGINS;
+  /*
+   * OFF CENTRE, so the two clear stretches are 250 and 150 units wide rather than equal. Each
+   * line is then set from a layout built for a width the last piece did not use, and the
+   * cached one is rebuilt on every piece -- which is the state the paragraph break was lost
+   * in: the rebuild starts after the break and the empty line carrying it is never reached.
+   * Equal stretches let the layout survive from one line to the next and never exercise it; a
+   * slanted obstacle exercises it but moves every line to a new width, so no two heights are
+   * comparable. This shape does the one without the other.
+   */
+  dt_canvas_object_t *over = dt_canvas_add_text(canvas, 50.0, 0.0, 200.0, 4000.0, "");
+  if(IS_NULL_PTR(over))
+  {
+    dt_canvas_free(canvas);
+    return -1.0;
+  }
+  over->border_width = 0.0f;
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double height = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+  dt_canvas_free(canvas);
+  return height;
+}
+
+static void _a_paragraph_break_survives_the_layout_being_rebuilt(void **state)
+{
+  (void)state;
+  /*
+   * Which line opens a paragraph is a question about the TEXT, and asking it of the cached
+   * Pango layout answered correctly only while that layout survived from line to line. A line
+   * set across two stretches rebuilds it almost every line, and the rebuild starts after the
+   * break: the empty line Pango draws for the blank one was never reached, the paragraph after
+   * it was never asked about, and neither the space nor the indent arrived -- on a real
+   * document with both set to 50 units, not once in twenty-three lines.
+   *
+   * Three paragraphs are two gaps, whatever the picture in the middle does to the lines.
+   */
+  const double tight = _three_paragraphs_past_a_picture(0.0f);
+  const double spaced = _three_paragraphs_past_a_picture(40.0f);
+  assert_true(tight > 0.0);
+  assert_float_equal(spaced, tight + 80.0, 1.0);
 }
 
 static void _paragraphs_take_their_indent_and_their_space(void **state)
@@ -1432,6 +1503,7 @@ int main(void)
     cmocka_unit_test(_a_frame_standing_just_outside_a_column_still_pushes_its_text),
     cmocka_unit_test(_the_leading_reaches_a_flowing_paragraph_once_per_gap),
     cmocka_unit_test(_paragraphs_take_their_indent_and_their_space),
+    cmocka_unit_test(_a_paragraph_break_survives_the_layout_being_rebuilt),
     cmocka_unit_test(_a_line_carries_on_past_a_picture_standing_in_the_column),
     cmocka_unit_test(_a_font_offers_the_features_it_actually_ships),
     cmocka_unit_test(_a_gradient_fades_across_its_line),

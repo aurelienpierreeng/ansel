@@ -3444,15 +3444,22 @@ they are visible.
   in the text and the paragraph controls act on it, a single newline leaves NONE and they do
   not. Reported as "paragraph spacing doesn't work"; it is Markdown's rule, and the tooltip now
   says so.
-- **A run of newlines is ONE paragraph break, and the question is asked of the FOLLOWING line.**
-  The markdown converter separates blocks with a blank line and Pango renders the second
-  newline as a line of its own with no ink; a rule keyed on "did I step over a newline" fires
-  on the empty line and again on the real one, which is two paragraph gaps per break -- 159.6
-  units measured where 80 was owed. The line whose preceding character is a newline AND which
-  has ink of its own opens the paragraph, and there is exactly one per run. Pango indents the
-  first line of a paragraph itself, so the plain path uses `pango_layout_set_indent()`; the
-  flowing one cannot (every line is the first of its own layout) and moves the run's start in
-  instead, leaving its end, so every alignment indents correctly.
+- **Which line opens a paragraph is a question about the TEXT, never about the cached layout.**
+  The character before where the text stands is the terminator the last break ate, so a newline
+  there is a paragraph boundary, and a line beginning ON a newline is the blank line between
+  two paragraphs, which opens nothing. Asked of the cached Pango layout instead -- "is its next
+  line preceded by a newline" -- the answer holds only while that layout survives from line to
+  line: a line set across two stretches rebuilds it almost every line, the rebuild starts AFTER
+  the break, the empty line carrying it is never reached, and the paragraph after it is never
+  asked about. Measured on a real document with the indent and the space both at 50 units, not
+  one of twenty-three lines got either. A run of newlines is ONE break however many it holds --
+  the blank line takes neither the indent nor the space, so the gap lands once, on the first
+  line with ink -- and `_flow_piece()` steps over ONE newline and no more for the same reason:
+  swallowing a run makes the blank line appear or vanish according to whether the layout
+  happened to be reused. Pango indents the first line of a paragraph itself, so the plain path
+  uses `pango_layout_set_indent()`; the flowing one cannot (every line is the first of its own
+  layout) and moves the run's start in instead, leaving its end, so every alignment indents
+  correctly.
 - **The leading is space BETWEEN lines, so a flowing paragraph has to advance it by hand.**
   `pango_layout_set_spacing()` puts it between the lines of ONE layout, and every line of a
   flowing paragraph is line zero of a layout of its own -- so no line's extents ever carry it,
@@ -3535,9 +3542,20 @@ they are visible.
   (`pango_font_get_hb_font()` then `hb_ot_layout_table_get_feature_tags()` over GSUB and GPOS),
   and HarfBuzz needs no build change: pango requires it PUBLICLY, so `-lharfbuzz` and its
   include are already on the line. The checkboxes are keyed on the four-character TAG, never on
-  a position in a table, and a tag this build has no name for is offered by its tag -- which is
-  what keeps `ss01` and a script's own forms reachable. The popover is rebuilt only when the
+  a position in a table. The numbered families are named from their number (`ss04` is
+  "Stylistic set 4", `cv12` "Character variant 12") since only the font knows what they draw,
+  and a tag with no name at all is offered by its tag. **The features the layout ENGINE owns
+  are not offered**: glyph composition, mark placement, cursive joining forms and the
+  language's own substitutions are what make text shapeable, HarfBuzz turns them on and off as
+  the script requires, and a checkbox overriding that breaks the rendering rather than styling
+  it. Linux Libertine ships five of them among its 32. The popover is rebuilt only when the
   face changes, so ticking a box does not destroy the box being ticked.
+- **The feature string outgrew the record's fixed field, and silently.** 64 bytes holds eight
+  tags; a document with seven set refused the ninth and every one after it with no error,
+  reported as the feature checkboxes having stopped working. The whole string is a tagged CHUNK
+  beside the record now -- the mechanism the polygon's nodes already use -- and the fixed field
+  keeps as many WHOLE tags as fit, for a reader that predates the chunk: half a tag is not a
+  feature, and Pango reads a malformed feature string as nothing at all.
 - **A property with a canvas default has no toggle on the property bar: -1 in its spin button
   is the "inherit" code** (`CANVAS_BAR_INHERIT`), rendered as `default` through the spin's
   `output` signal, and leaving it seeds the object from the effective property. Colours carry

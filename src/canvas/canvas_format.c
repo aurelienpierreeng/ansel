@@ -82,6 +82,7 @@ static void _w_bytes(GByteArray *out, const uint8_t *bytes, const size_t len)
 
 /** Tags of the chunks that follow an object's fixed part. */
 #define CANVAS_CHUNK_MASK_NODES 1u
+#define CANVAS_CHUNK_TEXT_FEATURES 2u
 
 static void _w_color(GByteArray *out, const dt_canvas_color_t *color)
 {
@@ -126,6 +127,31 @@ static void _write_image(GByteArray *out, const dt_canvas_image_t *image)
   _w_bytes(out, image->reserved, sizeof(image->reserved));
 }
 
+/**
+ * As much of the feature string as the record's fixed field holds, cut on a tag boundary.
+ *
+ * Half a tag is not a feature, and an older reader has no chunk to fall back on -- it would
+ * hand Pango "liga 1, on" and be told nothing at all. The whole string goes in the chunk.
+ */
+static void _features_for_the_fixed_field(const char *features, char *field, const size_t length)
+{
+  field[0] = '\0';
+  if(IS_NULL_PTR(features) || features[0] == '\0') return;
+  gchar **parts = g_strsplit(features, ",", -1);
+  for(int part = 0; !IS_NULL_PTR(parts[part]); part++)
+  {
+    gchar *trimmed = g_strstrip(g_strdup(parts[part]));
+    const size_t wanted = strlen(field) + (field[0] == '\0' ? 0 : 2) + strlen(trimmed) + 1;
+    if(trimmed[0] != '\0' && wanted <= length)
+    {
+      if(field[0] != '\0') g_strlcat(field, ", ", length);
+      g_strlcat(field, trimmed, length);
+    }
+    dt_free(trimmed);
+  }
+  g_strfreev(parts);
+}
+
 static void _write_text(GByteArray *out, const dt_canvas_text_t *text)
 {
   _w_string(out, text->font, sizeof(text->font));
@@ -139,7 +165,9 @@ static void _write_text(GByteArray *out, const dt_canvas_text_t *text)
   _w_f32(out, text->line_height);
   _w_f32(out, text->letter_spacing);
   for(int side = 0; side < 4; side++) _w_f32(out, text->margins[side]);
-  _w_string(out, text->features, DT_CANVAS_TEXT_FEATURES_LEN);
+  char field[DT_CANVAS_TEXT_FEATURES_FIELD];
+  _features_for_the_fixed_field(text->features, field, sizeof(field));
+  _w_string(out, field, DT_CANVAS_TEXT_FEATURES_FIELD);
   _w_u32(out, text->text_flags);
   _w_f32(out, text->wrap_standoff);
   _w_f32(out, text->first_line_indent);
@@ -235,6 +263,14 @@ static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
     for(uint32_t idx = 0; idx < floats; idx++) _w_f32(out, object->mask.nodes[idx]);
     // The reader divides the chunk by the node count to learn how wide a node was when this
     // was written, so the record may gain a field without the format moving.
+  }
+  if(object->kind == DT_CANVAS_OBJECT_TEXT && object->text.features[0] != '\0')
+  {
+    // The whole feature string, which the fixed field above holds only the first tags of.
+    const uint32_t bytes = (uint32_t)strlen(object->text.features) + 1;
+    _w_u32(out, CANVAS_CHUNK_TEXT_FEATURES);
+    _w_u32(out, bytes);
+    g_byte_array_append(out, (const uint8_t *)object->text.features, bytes);
   }
   const uint32_t record_size = out->len - start;
   uint8_t *size_field = out->data + start + 4;
@@ -450,7 +486,10 @@ static void _read_text(dt_canvas_cursor_t *cursor, dt_canvas_text_t *text)
   // Zeros and an empty string from a document written before these: the uniform padding, the
   // font's own features, no flags.
   for(int side = 0; side < 4; side++) text->margins[side] = _r_f32(cursor);
-  _r_string(cursor, text->features, DT_CANVAS_TEXT_FEATURES_LEN);
+  // Whole tags only; the chunk after the record carries the rest, and overwrites this.
+  char field[DT_CANVAS_TEXT_FEATURES_FIELD];
+  _r_string(cursor, field, DT_CANVAS_TEXT_FEATURES_FIELD);
+  g_strlcpy(text->features, field, DT_CANVAS_TEXT_FEATURES_LEN);
   text->text_flags = _r_u32(cursor);
   text->wrap_standoff = _r_f32(cursor);
   // Zeros from a document written before these: a flush first line and no space between
@@ -577,6 +616,17 @@ static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *obj
         object->mask.nodes = nodes;
         object->mask.node_count = count;
       }
+    }
+    else if(tag == CANVAS_CHUNK_TEXT_FEATURES && size > 0 && object->kind == DT_CANVAS_OBJECT_TEXT)
+    {
+      const size_t kept = MIN((size_t)size, (size_t)DT_CANVAS_TEXT_FEATURES_LEN - 1);
+      memcpy(object->text.features, cursor->data + chunk_start, kept);
+      object->text.features[kept] = '\0';
+      // A string longer than this version keeps is cut back to whole tags rather than left
+      // ending in half a one, which Pango reads as nothing at all.
+      char *last = strrchr(object->text.features, ',');
+      if(kept + 1 < (size_t)size && !IS_NULL_PTR(last)) *last = '\0';
+      g_strchomp(object->text.features);
     }
     cursor->pos = chunk_start + size;
   }

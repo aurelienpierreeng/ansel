@@ -339,10 +339,23 @@ repeats. HarfBuzz costs no build change: pango requires it publicly, so its incl
 (verified by a tripwire, since a skipped file reports success just as loudly).
 
 The property bar's checkboxes are keyed on the four-character TAG, never on a position in a
-table: `dt_canvas_text_feature_label()` gives a tag its name where this build has one and NULL
-where it does not, and a tag with no name is offered by its tag -- which is what keeps `ss01`
-and a script's own forms reachable. The popover is rebuilt only when the face changes, so
-ticking a box does not destroy the box being ticked.
+table. `dt_canvas_text_feature_label()` names a tag where this build has a name for it, names
+the numbered families from their number -- `ss04` is "Stylistic set 4", `cv12` "Character
+variant 12", since only the font knows what they draw -- and answers NULL otherwise, where the
+tag itself is shown. `dt_canvas_text_feature_offered()` keeps the features the layout ENGINE
+owns out of the panel altogether: glyph composition, mark placement, cursive joining forms and
+the language's own substitutions are what make text shapeable at all, HarfBuzz turns them on
+and off as the script requires, and a checkbox overriding that breaks the rendering rather than
+styling it. Linux Libertine ships five of them among its 32, so without the filter the panel
+would invite exactly that. The popover is rebuilt only when the face changes, so ticking a box
+does not destroy the box being ticked.
+
+**The feature string outgrew the record's fixed field, and did it silently.** 64 bytes holds
+eight tags, and a document with seven set refused the ninth with no error -- reported as the
+checkboxes having stopped working. The whole string travels as a tagged CHUNK beside the record
+now, the mechanism the polygon's nodes already used, and the fixed field keeps as many WHOLE
+tags as still fit, for a reader that predates the chunk: half a tag is not a feature, and Pango
+reads a malformed feature string as nothing at all.
 
 **OpenType features** are stored as the string Pango reads -- `"liga 1, onum 1, smcp 1"` --
 which is the only way to reach a font's alternates, figures and ligature sets, since a font
@@ -462,14 +475,23 @@ indent hangs the line out of the measure the way a bibliography wants. Space bet
 Pango cannot do at all -- its spacing is between LINES and it has no notion of a paragraph --
 so a frame that asks for it is set line by line whether or not it wraps (`_text_flows()`).
 
-**A run of newlines is ONE paragraph break, however many it holds.** The markdown converter
-separates its blocks with a blank line, and Pango renders the second newline as a line of its
-own with no ink in it. A rule keyed on "did I step over a newline" therefore fires on the empty
-line and again on the real one -- two gaps per break, measured as 159.6 units where 80 was
-owed. The question is asked of the FOLLOWING line instead: the one whose preceding character is
-a newline and which has ink of its own opens the paragraph, and there is exactly one of those
-per run. The blank line itself is left alone, so a document laid out before the control looks
-as it did and the space is genuinely extra.
+**Which line opens a paragraph is a question about the TEXT, never about the cached layout.**
+The character before where the text stands is the line terminator the last break ate, so a
+newline there is a paragraph boundary; and a line beginning ON a newline is the blank line
+between two paragraphs, which opens nothing and takes neither the indent nor the space. A run
+of newlines is therefore ONE break however many it holds -- the markdown converter separates
+its blocks with a blank line, and Pango renders the second newline as a line of its own with
+no ink -- and the gap lands once, on the first line with ink. The blank line itself is left
+alone, so a document laid out before the control looks as it did and the space is extra.
+
+Asking the cached Pango layout instead ("is its next line preceded by a newline") answers
+correctly only while that layout survives from line to line. A line set across two stretches
+rebuilds it on almost every line, and the rebuild starts AFTER the break: the empty line
+carrying it is never reached and the paragraph after it is never asked about. Measured on a
+real document with the indent and the space both at 50 units, not one of its twenty-three
+lines got either. For the same reason `_flow_piece()` steps over ONE newline and no more --
+swallowing a run makes the blank line appear or vanish according to whether the layout happened
+to be reused, which with two stretches is almost never.
 
 **The leading is space BETWEEN lines, so this engine advances it by hand.**
 `pango_layout_set_spacing()` puts it between the lines of one layout, and every line here is

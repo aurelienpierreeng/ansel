@@ -1918,22 +1918,73 @@ static const struct
   { "case", N_("Case-sensitive forms"), N_("Punctuation and figures raised to suit a line set all in capitals") },
   { "cpsp", N_("Capital spacing"), N_("A little air added between capitals, which are drawn to sit closer") },
   { "unic", N_("Unicase"), N_("One height for capitals and lower case together") },
+  { "aalt", N_("All alternates"), N_("Every alternative shape the font holds for a character, at once") },
+  { "sinf", N_("Scientific inferiors"), N_("The lowered figures of a chemical formula, drawn for the purpose") },
+  { "nalt", N_("Annotation forms"), N_("Circled and boxed forms, where the font draws them") },
+  { "lfbd", N_("Optical left bound"), N_("The font's own idea of where its left edge should hang") },
+  { "rtbd", N_("Optical right bound"), N_("The font's own idea of where its right edge should hang") },
+  { "falt", N_("Final glyph alternates"), N_("The shapes a font keeps for the last glyph of a line") },
+  { "expt", N_("Expert forms"), N_("The expert set of a Japanese face") },
+  { "jalt", N_("Justification alternates"), N_("Shapes the font offers to help a line justify") },
+  { "rand", N_("Randomise"), N_("A different shape each time a character repeats, where the font has them") },
+};
+
+/**
+ * The features the LAYOUT ENGINE owns, which are never the user's to switch.
+ *
+ * A font ships these so that text can be shaped at all -- glyph composition, mark placement,
+ * the joining forms of a cursive script, the language's own substitutions. HarfBuzz turns them
+ * on and off as the script and the language require, and a checkbox that overrides that breaks
+ * the rendering rather than styling it. Linux Libertine offers five of them among its 32, so
+ * without this the panel would invite exactly that.
+ */
+static const char *const _shaping_features[] = {
+  "abvf", "abvm", "abvs", "akhn", "blwf", "blwm", "blws", "ccmp", "cfar", "cjct", "curs", "dist",
+  "dtls", "fin2", "fin3", "fina", "flac", "half", "haln", "init", "isol", "ljmo", "locl", "ltra",
+  "ltrm", "mark", "med2", "medi", "mkmk", "mset", "nukt", "pref", "pres", "pstf", "psts", "rclt",
+  "rkrf", "rlig", "rphf", "rtla", "rtlm", "rvrn", "ssty", "stch", "tjmo", "vjmo",
 };
 
 
-const char *dt_canvas_text_feature_label(const char *tag)
+/** A numbered family: "ss01" is stylistic set 1, "cv01" character variant 1. 0 for anything else. */
+static int _numbered_feature(const char *tag, const char *family)
+{
+  if(IS_NULL_PTR(tag) || strlen(tag) != 4 || strncmp(tag, family, 2) != 0) return 0;
+  if(!g_ascii_isdigit(tag[2]) || !g_ascii_isdigit(tag[3])) return 0;
+  return (tag[2] - '0') * 10 + (tag[3] - '0');
+}
+
+gboolean dt_canvas_text_feature_offered(const char *tag)
+{
+  if(IS_NULL_PTR(tag) || strlen(tag) != 4) return FALSE;
+  for(size_t idx = 0; idx < sizeof(_shaping_features) / sizeof(_shaping_features[0]); idx++)
+    if(g_strcmp0(_shaping_features[idx], tag) == 0) return FALSE;
+  return TRUE;
+}
+
+gchar *dt_canvas_text_feature_label(const char *tag)
 {
   if(IS_NULL_PTR(tag)) return NULL;
   for(size_t feature = 0; feature < sizeof(_text_features) / sizeof(_text_features[0]); feature++)
-    if(g_strcmp0(_text_features[feature].tag, tag) == 0) return _(_text_features[feature].name);
+    if(g_strcmp0(_text_features[feature].tag, tag) == 0) return g_strdup(_(_text_features[feature].name));
+  // A font's own numbered sets: there are up to twenty of each and only the font knows what
+  // they draw, so they are named by their number rather than left as four characters.
+  const int set = _numbered_feature(tag, "ss");
+  if(set > 0) return g_strdup_printf(_("Stylistic set %d"), set);
+  const int variant = _numbered_feature(tag, "cv");
+  if(variant > 0) return g_strdup_printf(_("Character variant %d"), variant);
   return NULL;
 }
 
-const char *dt_canvas_text_feature_hint(const char *tag)
+gchar *dt_canvas_text_feature_hint(const char *tag)
 {
   if(IS_NULL_PTR(tag)) return NULL;
   for(size_t feature = 0; feature < sizeof(_text_features) / sizeof(_text_features[0]); feature++)
-    if(g_strcmp0(_text_features[feature].tag, tag) == 0) return _(_text_features[feature].tooltip);
+    if(g_strcmp0(_text_features[feature].tag, tag) == 0) return g_strdup(_(_text_features[feature].tooltip));
+  if(_numbered_feature(tag, "ss") > 0)
+    return g_strdup(_("One of the font's own sets of alternative shapes; what it draws is the font's business"));
+  if(_numbered_feature(tag, "cv") > 0)
+    return g_strdup(_("One of the font's own alternative shapes for a single character"));
   return NULL;
 }
 

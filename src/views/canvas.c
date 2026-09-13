@@ -2360,22 +2360,27 @@ static void _text_features_fill(dt_view_t *self, const dt_canvas_object_t *objec
     char tags[DT_CANVAS_TEXT_FEATURE_LIST_MAX][DT_CANVAS_FONT_FEATURE_TAG_LEN];
     const uint32_t count
         = dt_canvas_paint_text_font_features(view->canvas, object, tags, DT_CANVAS_TEXT_FEATURE_LIST_MAX);
+    int offered = 0;
     for(uint32_t idx = 0; idx < count; idx++)
     {
-      const char *label = dt_canvas_text_feature_label(tags[idx]);
+      // Not the ones the layout engine owns: a font ships those so that text can be SHAPED,
+      // and a checkbox overriding them breaks the rendering rather than styling it.
+      if(!dt_canvas_text_feature_offered(tags[idx])) continue;
+      gchar *label = dt_canvas_text_feature_label(tags[idx]);
       GtkWidget *check = gtk_check_button_new_with_label(IS_NULL_PTR(label) ? tags[idx] : label);
-      const char *hint = dt_canvas_text_feature_hint(tags[idx]);
-      gchar *tooltip = IS_NULL_PTR(hint) ? g_strdup_printf(_("The font's own \"%s\" feature"), tags[idx])
-                                         : g_strdup(hint);
+      dt_free(label);
+      gchar *hint = dt_canvas_text_feature_hint(tags[idx]);
+      gchar *tooltip = IS_NULL_PTR(hint) ? g_strdup_printf(_("The font's own \"%s\" feature"), tags[idx]) : hint;
       gtk_widget_set_tooltip_text(check, tooltip);
       dt_free(tooltip);
       g_object_set_data_full(G_OBJECT(check), "text-feature-tag", g_strdup(tags[idx]), g_free);
       g_signal_connect(check, "toggled", G_CALLBACK(_bar_text_feature_toggled), self);
       gtk_box_pack_start(GTK_BOX(view->text_features_box), check, FALSE, FALSE, 0);
+      offered++;
     }
-    if(count == 0)
+    if(offered == 0)
       gtk_box_pack_start(GTK_BOX(view->text_features_box),
-                         gtk_label_new(_("This font ships no OpenType features.")), FALSE, FALSE, 0);
+                         gtk_label_new(_("This font offers no OpenType features to choose.")), FALSE, FALSE, 0);
     gtk_widget_show_all(view->text_features_box);
   }
   GList *children = gtk_container_get_children(GTK_CONTAINER(view->text_features_box));

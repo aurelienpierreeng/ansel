@@ -17,6 +17,7 @@
 */
 
 #include "canvas/canvas.h"
+#include "system/mem_alloc.h"
 #include "canvas/canvas_format.h"
 
 #include <glib.h>
@@ -1035,18 +1036,67 @@ static void _opentype_features_round_trip_through_their_pango_spelling(void **st
   dt_canvas_text_feature_set(features, sizeof(features), "swsh", FALSE);
   assert_string_equal(features, before);
 
-  // A tag that will not fit whole is not written at all: half a tag is not a feature, and the
-  // string is a fixed field in the file rather than something that can grow.
+  // A tag that will not fit whole is not written at all: half a tag is not a feature.
   char tight[12] = { 0 };
   dt_canvas_text_feature_set(tight, sizeof(tight), "liga", TRUE);
   assert_string_equal(tight, "liga 1");
   dt_canvas_text_feature_set(tight, sizeof(tight), "onum", TRUE);
   assert_string_equal(tight, "liga 1");
 
-  // A tag the build has a name for is offered by name; one it has none for is offered by tag.
-  assert_non_null(dt_canvas_text_feature_label("hlig"));
-  assert_non_null(dt_canvas_text_feature_hint("hlig"));
-  assert_null(dt_canvas_text_feature_label("ss01"));
+  /*
+   * More features than the record's fixed 64-byte field holds must survive the file. A rich
+   * face ships tens of them -- Linux Libertine, 32 -- and a document with seven set silently
+   * refused the eighth and every one after it, which read as the checkboxes having stopped
+   * working. The whole string travels as a chunk beside the record; the fixed field keeps as
+   * many WHOLE tags as fit, for a reader that predates the chunk.
+   */
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "Typography.");
+  assert_non_null(text);
+  static const char *const many[] = { "liga", "dlig", "hlig", "onum", "smcp", "c2sc", "frac",
+                                      "zero", "salt", "case", "cpsp", "sups" };
+  for(guint idx = 0; idx < G_N_ELEMENTS(many); idx++)
+    dt_canvas_text_feature_set(text->text.features, sizeof(text->text.features), many[idx], TRUE);
+  assert_true(strlen(text->text.features) > DT_CANVAS_TEXT_FEATURES_FIELD);
+  for(guint idx = 0; idx < G_N_ELEMENTS(many); idx++)
+    assert_true(dt_canvas_text_feature_is_on(text->text.features, many[idx]));
+
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  assert_non_null(index);
+  dt_canvas_t *restored = dt_canvas_new();
+  assert_true(dt_canvas_format_read_index(restored, index, NULL));
+  g_bytes_unref(index);
+  const dt_canvas_object_t *back = dt_canvas_object_at(restored, 0);
+  assert_non_null(back);
+  assert_string_equal(back->text.features, text->text.features);
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+
+  // A tag the build has a name for is offered by name, and so is a numbered set, of which a
+  // font may ship twenty and only the font knows what each draws.
+  gchar *historical = dt_canvas_text_feature_label("hlig");
+  gchar *historical_hint = dt_canvas_text_feature_hint("hlig");
+  gchar *set = dt_canvas_text_feature_label("ss04");
+  gchar *variant = dt_canvas_text_feature_label("cv12");
+  gchar *nothing = dt_canvas_text_feature_label("zzzz");
+  assert_non_null(historical);
+  assert_non_null(historical_hint);
+  assert_non_null(strstr(set, "4"));
+  assert_non_null(strstr(variant, "12"));
+  assert_null(nothing);
+  dt_free(historical);
+  dt_free(historical_hint);
+  dt_free(set);
+  dt_free(variant);
+
+  // And the ones the layout engine owns are not offered at all: a checkbox on those breaks the
+  // shaping rather than styling it.
+  assert_true(dt_canvas_text_feature_offered("smcp"));
+  assert_true(dt_canvas_text_feature_offered("ss04"));
+  assert_false(dt_canvas_text_feature_offered("ccmp"));
+  assert_false(dt_canvas_text_feature_offered("mark"));
+  assert_false(dt_canvas_text_feature_offered("locl"));
 }
 
 /**

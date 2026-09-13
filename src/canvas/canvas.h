@@ -74,7 +74,17 @@ extern "C" {
 #define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
 #define DT_CANVAS_TEXT_RESERVED 144 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags, the standoff and the two paragraph settings
-#define DT_CANVAS_TEXT_FEATURES_LEN 64 ///< an OpenType feature string, as Pango spells it: "liga 1, onum 1"
+/**
+ * An OpenType feature string, as Pango spells it: "liga 1, onum 1".
+ *
+ * 256 in memory, but only the first whole tags of it reach the record's fixed field, which is
+ * 64 bytes and cannot move; the whole string travels as a tagged chunk beside it. A rich face
+ * ships tens of features -- Linux Libertine, 32 of them -- and 64 bytes holds eight: a
+ * document with seven set silently refused the ninth, which read as the feature checkboxes
+ * having stopped working.
+ */
+#define DT_CANVAS_TEXT_FEATURES_LEN 256
+#define DT_CANVAS_TEXT_FEATURES_FIELD 64 ///< what the fixed record field holds, for an older reader
 
 /** Which side of a text frame's inner margins an index names. */
 enum
@@ -956,8 +966,17 @@ void dt_canvas_text_margins(const dt_canvas_object_t *object, double margins[4])
  * `dt_canvas_paint_text_font_features()` -- a fixed list offers a plain face things it does
  * not have and hides a rich one's own.
  */
-const char *dt_canvas_text_feature_label(const char *tag);
-const char *dt_canvas_text_feature_hint(const char *tag);
+gchar *dt_canvas_text_feature_label(const char *tag);
+gchar *dt_canvas_text_feature_hint(const char *tag);
+
+/**
+ * @brief Whether a tag is one a person chooses, rather than one the layout engine owns.
+ *
+ * A font ships glyph composition, mark placement, cursive joining forms and the language's own
+ * substitutions so that text can be SHAPED at all; HarfBuzz turns those on and off as the
+ * script requires and a checkbox overriding it breaks the rendering rather than styling it.
+ */
+gboolean dt_canvas_text_feature_offered(const char *tag);
 
 /** @brief Whether a stored feature string switches a tag on, and how to switch one in it. */
 gboolean dt_canvas_text_feature_is_on(const char *features, const char *tag);

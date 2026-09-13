@@ -2073,10 +2073,16 @@ static gboolean _flow_piece(cairo_t *cr, const dt_canvas_t *canvas, const dt_can
   piece->ink_top = (double)(ink.y - logical.y) / PANGO_SCALE;
   piece->ink_height = fmax((double)ink.height / PANGO_SCALE, 1.0);
   piece->consumed = *cached_offset + line->start_index + line->length;
-  // A break eats the space it broke on, and a paragraph break its newline: step over
-  // whatever the line did not take, or the next chunk begins with it and never advances.
-  while(piece->consumed < length && (plain[piece->consumed] == ' ' || plain[piece->consumed] == '\n'))
+  /*
+   * A break eats the space it broke on: step over what the line did not take, or the next
+   * chunk begins with it and never advances. But over ONE newline only, never a run of them.
+   * The second newline of a blank line is a line of its own -- Pango draws it as one -- and
+   * swallowing it here makes the blank line appear or vanish according to whether the layout
+   * happened to be reused, which with a line set across two stretches is almost never.
+   */
+  while(piece->consumed < length && (plain[piece->consumed] == ' ' || plain[piece->consumed] == '\t'))
     piece->consumed++;
+  if(piece->consumed < length && plain[piece->consumed] == '\n') piece->consumed++;
   return TRUE;
 }
 
@@ -2149,6 +2155,17 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
 
   for(int line_index = 0; line_index < TEXT_FLOW_MAX_LINES && consumed < length; line_index++)
   {
+    /*
+     * Whether this line opens a paragraph, asked of the TEXT and not of whichever layout is
+     * cached. The character before where the text stands is the line terminator the last break
+     * ate, so a newline there is a paragraph boundary -- and a line that begins ON a newline is
+     * the blank line between two paragraphs, which opens nothing and takes neither the indent
+     * nor the space. Asked of the layout instead, the answer was right only while the layout
+     * was reused across lines: with a line set across two stretches it is rebuilt almost every
+     * line, the blank line is never reached, and the paragraph after it was never asked about.
+     */
+    const gboolean blank_line = consumed < length && plain[consumed] == '\n';
+    paragraph_start = !blank_line && (consumed == 0 || (consumed > 0 && plain[consumed - 1] == '\n'));
     // The space between paragraphs goes in before the band is asked for, or the line would be
     // measured against the obstacles at the height it is NOT going to be set at.
     if(paragraph_start && !before_first_paragraph) y += paragraph_gap;
@@ -2247,7 +2264,9 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
       layout_line++;
       const gboolean advanced = piece.consumed > consumed;
       if(advanced) consumed = piece.consumed;
-      if(!advanced) break;
+      // Nothing follows a blank line on the same line, and a stretch that took nothing at all
+      // cannot be waited on.
+      if(!advanced || piece.line->length == 0) break;
     }
     if(paragraph_start) before_first_paragraph = FALSE;
     y += fmax(line_height, 1.0);
@@ -2269,16 +2288,10 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
      * where 80 was owed. The line whose character before it is a newline AND which has ink of
      * its own is the one that opens the paragraph, and there is exactly one per run.
      */
+    // The layout is kept for the next line only while it still describes where the text
+    // stands; `_flow_piece()` makes that judgement, and a width that changed forces its hand.
     const PangoLayoutLine *following = pango_layout_get_line_readonly(layout, layout_line);
-    if(!IS_NULL_PTR(following) && layout_offset + following->start_index <= consumed)
-    {
-      const gsize starts_at = layout_offset + following->start_index;
-      paragraph_start = following->length > 0 && starts_at > 0 && plain[starts_at - 1] == '\n';
-      continue;
-    }
-    // The layout no longer describes where the text stands: the next line rebuilds from here.
-    paragraph_start = consumed < length && consumed > 0 && plain[consumed - 1] == '\n';
-    layout_width = -1.0;
+    if(IS_NULL_PTR(following)) layout_width = -1.0;
   }
   if(!IS_NULL_PTR(layout)) g_object_unref(layout);
   pango_attr_list_unref(attributes);
