@@ -309,6 +309,7 @@ window.csd .titlebar:backdrop {
 treeview header label,
 treeview *:selected:not(check) {
   font-family: 
+    "IBM Plex Sans Medium",
     "IBM Plex Sans Medm", "IBM Plex Sans",
     "Segoe UI Semibold", "Segoe UI", 
     "SF Pro Display Medium", "SF Pro Display", 
@@ -321,6 +322,7 @@ treeview *:selected:not(check) {
 #iop-panel-label,
 #lib-panel-label {
   font-family: 
+    "IBM Plex Sans Condensed", /* ansel-macos-strip: IBM Plex Sans Condensed renders badly on macOS */
     "IBM Plex Sans Cond", "IBM Plex Sans",
     "Segoe UI Condensed", "Segoe UI", 
     "SF Pro Display", "SF Pro Display", 
