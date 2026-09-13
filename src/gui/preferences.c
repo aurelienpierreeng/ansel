@@ -241,6 +241,18 @@ static void dpi_scaling_changed_callback(GtkWidget *widget, gpointer user_data)
   dt_bauhaus_load_theme(dt_bauhaus_get_global());
 }
 
+static void ui_scale_changed_callback(GtkWidget *widget, gpointer user_data)
+{
+  dt_conf_set_float("ui_scale", gtk_spin_button_get_value(GTK_SPIN_BUTTON(widget)));
+  restart_required = TRUE;
+  dt_configure_ppd_dpi(dt_gui_get_global());
+  // The theme expresses its paddings, margins and radii in em, which GTK resolves against the
+  // computed font size -- itself derived from the screen resolution we just changed. A bare
+  // gdk_screen_set_resolution() does not invalidate the style cascade, so reload the CSS, or the
+  // C-side sizes would grow while every em-based length kept its old pixel value.
+  reload_ui_last_theme();
+}
+
 static void use_sys_font_callback(GtkWidget *widget, gpointer user_data)
 {
   dt_conf_set_bool("use_system_font", gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget)));
@@ -457,6 +469,25 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
                                                       "(needs a restart)."));
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(screen_dpi_overwrite), dt_conf_get_float("screen_dpi_overwrite"));
   g_signal_connect(G_OBJECT(screen_dpi_overwrite), "value_changed", G_CALLBACK(dpi_scaling_changed_callback), 0);
+
+  GtkWidget *ui_scale = gtk_spin_button_new_with_range(0.25f, 4.0f, 0.05f);
+  label = gtk_label_new(_("user interface zoom"));
+  gtk_widget_set_halign(label, GTK_ALIGN_START);
+  labelev = gtk_event_box_new();
+  gtk_widget_add_events(labelev, GDK_BUTTON_PRESS_MASK);
+  gtk_container_add(GTK_CONTAINER(labelev), label);
+  gtk_grid_attach(GTK_GRID(grid), labelev, i, i?3:line++, 1, 1);
+  gtk_grid_attach_next_to(GTK_GRID(grid), ui_scale, labelev, GTK_POS_RIGHT, 1, 1);
+  gtk_widget_set_tooltip_text(ui_scale, _("multiply the size of the whole user interface.\n"
+                                           "1.0 is the reference size, 1.1 makes everything 10% bigger,\n"
+                                           "0.9 makes everything 10% smaller.\n"
+                                           "this scales controls, text, icons and the gaps between them together,\n"
+                                           "so nothing overlaps. unlike the DPI setting above, it does not change\n"
+                                           "the screen resolution Ansel reports.\n"
+                                           "(needs a restart to apply everywhere)."));
+  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(ui_scale), 2);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(ui_scale), dt_conf_get_float("ui_scale"));
+  g_signal_connect(G_OBJECT(ui_scale), "value_changed", G_CALLBACK(ui_scale_changed_callback), 0);
 
   //checkbox to allow user to modify theme with user.css
   label = gtk_label_new(_("modify selected theme with CSS tweaks below"));

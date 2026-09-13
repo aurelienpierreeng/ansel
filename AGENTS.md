@@ -65,6 +65,29 @@ Assume upstream contracts are valid unless the user asks for defensive programmi
 
 After non-trivial code changes, run the narrowest relevant build or test target that exercises the edited code.
 
+## Building locally (Windows / MSYS2)
+
+The Windows toolchain lives in MSYS2, not on the plain Windows `PATH`. Do everything from the
+**MSYS2 MINGW64** shell (`C:\msys64\mingw64.exe`); the MSYS shell picks the wrong compiler.
+
+Initialize the submodules once, or `cmake` stops at `RawSpeed submodule not found`:
+
+    git submodule update --init --recursive
+
+Configure once per checkout (this tree's `build/` is gitignored):
+
+    cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+      -DCMAKE_INSTALL_PREFIX=C:/Users/sting/ansel-dev
+
+Then rebuild and stage an install that leaves the real prefix untouched:
+
+    ./rebuild.sh
+
+`rebuild.sh` runs `cmake --build build -j"$(nproc)"` then
+`cmake --install build --prefix build/stage`. Run the staged binary with
+`build/stage/bin/ansel.exe`: a bare build tree has an empty `share/`, so the app must be installed
+before it can find `themes/` and the rest of its data.
+
 ## Coding style
 
 - Functions that have many input arguments should take structures as input.

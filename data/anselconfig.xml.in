@@ -2655,6 +2655,13 @@
     <longdescription>if this value is &gt; 0.0 then it is used as the screen's dpi setting which is used to scale the gui</longdescription>
   </dtconfig>
   <dtconfig>
+    <name>ui_scale</name>
+    <type>float</type>
+    <default>1.0</default>
+    <shortdescription>global user interface zoom</shortdescription>
+    <longdescription>multiplies the size of the whole user interface. 1.0 is the reference size, 1.1 makes everything 10% bigger and 0.9 makes everything 10% smaller. Unlike the screen dpi override, this only changes how big the GUI is drawn, not the screen resolution Ansel reports.</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/lighttable/preview/max_in_memory_images</name>
     <type>int</type>
     <default>4</default>
