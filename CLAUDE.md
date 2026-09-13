@@ -224,17 +224,24 @@ cgroup under it, Ansel being the obvious one. Measured on a 24 GB machine with o
 applications holding ~9.5 GB and a full swap: the cache reached 11 GB of its 14.5 GB budget,
 pressure hit 73 %, and oomd killed Ansel with MemAvailable nowhere near the floor.
 
-`system/memory_pressure.c` reads PSI's cumulative "full" `total` for the whole system and every
-cgroup above the process, stateless. `pixelpipe_cache.c` turns two reads into the stall share of
-the window between them (2 s), the highest over the levels; past 10 % it sheds a quarter of the
-cache (half past 30 %), trims the arena, and lowers `pressure_ceiling`, the budget allocations
-evict down to. Under 2 % the ceiling climbs back by 1/32 of the plan per window, but only to 7/8 of
-`pressure_level`, the footprint pressure struck at, which itself rises by 1/1024 of the plan per
-calm window. It runs in `_free_space_to_alloc()`, in the idle shedder, which ticks every 2 s, and
-in `_pressure_watch_thread()`, which the kernel wakes. The arithmetic of the ceiling and the mark
-is `caches/pixelpipe_cache_pressure.h`, kept pure and separate for the same reason
-`develop/pipe_cache_policy.h` is: `tests/unittests/test_pipe_cache_pressure.c` is the only thing
-that can see a policy which changes no pixel and no hash.
+**Three modules, and the seam between them is what keeps each one readable.**
+`system/memory_pressure.c` is the only file that knows what a kernel counter looks like: it reads
+PSI's cumulative "full" `total` for the whole system and every cgroup above the process, and it
+owns the watcher — `dt_memory_pressure_watch_start()` arms the kernel's own triggers, sleeps a
+thread of its own in `poll()`, and calls back. Everything `#ifdef`-ed on a platform lives there
+and nowhere else. `caches/pixelpipe_cache_pressure.c` turns two of those reads into the stall
+share of the window between them (2 s), the highest over the levels; past 10 % it sheds a quarter
+of the cache (half past 30 %) and lowers the ceiling, the budget allocations evict down to. Under
+2 % the ceiling climbs back by 1/32 of the plan per window, but only to 7/8 of the mark, the
+footprint pressure struck at, which itself rises by 1/1024 of the plan per calm window. It reads
+no cache entry: `pixelpipe_cache.c` passes it a `dt_pixelpipe_cache_pressure_sink_t` — what the
+cache holds, and what evicting down to a target and trimming the arena gives back — and takes
+`lock` around every call, the watcher's callback included. `dt_pixelpipe_cache_pressure_react()`
+runs in `_free_space_to_alloc()` and in the idle shedder, which ticks every 2 s;
+`dt_pixelpipe_cache_pressure_triggered()` runs on the watcher's thread. The arithmetic of the
+ceiling and the mark is inline in `caches/pixelpipe_cache_pressure.h`, kept pure and separate for
+the same reason `develop/pipe_cache_policy.h` is: `tests/unittests/test_pipe_cache_pressure.c` is
+the only thing that can see a policy which changes no pixel and no hash.
 
 Six things a reviewer would otherwise change:
 
@@ -247,7 +254,7 @@ Six things a reviewer would otherwise change:
   cache to be running something, and past a certain stall nothing of ours runs: a second test died
   with its last 32 seconds silent — no timer, no allocation, the process frozen at 13.6 GB while
   oomd counted its 20 seconds, and the valve never sampled the ramp that killed it. PSI *triggers*
-  (`dt_memory_pressure_triggers_open()`, `poll()` for `POLLPRI`) are raised by the kernel as soon
+  (`dt_memory_pressure_watch_start()`, `poll()` for `POLLPRI`) are raised by the kernel as soon
   as a window is stalled past the threshold. Unprivileged triggers need a window that is a
   multiple of 2 s, and only the levels the process may write to accept one: the whole system, its
   own cgroup, and `app.slice` — the session's `user@.service`, which is what oomd actually

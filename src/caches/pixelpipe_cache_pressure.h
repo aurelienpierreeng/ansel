@@ -19,21 +19,28 @@
 #ifndef DT_CACHES_PIXELPIPE_CACHE_PRESSURE_H
 #define DT_CACHES_PIXELPIPE_CACHE_PRESSURE_H
 
-/* How much the pixelpipe cache may hold while the kernel reports memory pressure.
+/* How much the pixelpipe cache may hold while the kernel reports memory pressure, and what makes
+ * it hold that.
  *
- * Pure arithmetic, separated from pixelpipe_cache.c the way develop/pipe_cache_policy.h is:
- * everything here is a decision nothing else can observe -- it changes no pixel and no hash,
- * only how much cache survives a stalling machine -- so the only way to hold it to its rules is
- * to state them where a test can call them. tests/unittests/test_pipe_cache_pressure.c pins
- * both defects this policy was written around, each found on a live run:
+ * A cache is one module and memory management is another: pixelpipe_cache.c holds entries and
+ * evicts them, this decides when and how much, and system/memory_pressure.c is the only file that
+ * knows what a kernel counter looks like. So nothing below reads an entry and nothing below is
+ * written twice for two platforms; the cache passes a sink -- how much it holds, and what it
+ * costs to give some back -- and is told what to shed.
+ *
+ * The first half is pure arithmetic, separated the way develop/pipe_cache_policy.h is: those are
+ * decisions nothing else can observe -- they change no pixel and no hash, only how much cache
+ * survives a stalling machine -- so the only way to hold them to their rules is to state them
+ * where a test can call them. tests/unittests/test_pipe_cache_pressure.c pins both defects this
+ * policy was written around, each found on a live run:
  *
  *   - a ceiling that climbed straight back to the plan brought the stall back within half a
  *     minute, five times in five minutes, once at 49% -- one point under systemd-oomd's limit;
  *   - a stall while the cache still held nothing (four kernel wake-ups in the first 12 s of a
  *     run) recorded a pressure mark of 0 and pinned the budget at the floor, where it stayed
- *     for the next quarter of an hour.
- *
- * The caller owns the measurement and the eviction; this owns only the numbers. */
+ *     for the next quarter of an hour. */
+
+#include "system/memory_pressure.h"
 
 #include <glib.h>
 #include <stddef.h>
@@ -146,6 +153,58 @@ static inline gboolean dt_pixelpipe_cache_pressure_relax(dt_pixelpipe_cache_pres
   p->ceiling = MIN(cap, p->ceiling + p->plan / 32);
   return TRUE;
 }
+
+/* The cache's reaction to what the kernel reports, implemented in pixelpipe_cache_pressure.c:
+ * the PSI counters two reads turn into a stall share, the budget above that share steers, and
+ * the watcher thread the kernel wakes. The cache holds one of these and asks it; it holds no
+ * lock and no cache entry of its own, so it can say how much must go without knowing what the
+ * cache is made of. */
+typedef struct dt_pixelpipe_cache_pressure_monitor_t
+{
+  /* Guarded by whatever guards the cache this steers: the caller takes its own lock around every
+   * function below except the two that start and stop the watcher. */
+  uint64_t totals[DT_MEMORY_PRESSURE_MAX_LEVELS];
+  int levels;
+  gint64 time_us;
+  gint64 shed_time_us;
+  dt_pixelpipe_cache_pressure_t budget;
+  /* NOT guarded: written before the watcher's thread starts and after it has joined. */
+  dt_memory_pressure_watch_t *watch;
+} dt_pixelpipe_cache_pressure_monitor_t;
+
+/* The other side of the conversation: the monitor says how much must go, this is what going
+ * costs. Both run under the caller's lock, since the monitor is called under it. */
+typedef struct dt_pixelpipe_cache_pressure_sink_t
+{
+  /** What the cache holds right now, in bytes. */
+  size_t (*held)(void *user);
+  /** Evict down to `target` bytes and hand the freed pages back to the OS. Returns what is left,
+   *  and writes to `*given_back` the bytes the OS actually got -- the two differ, which is why
+   *  the log line the monitor writes wants both. */
+  size_t (*shed)(void *user, size_t target, size_t *given_back);
+  void *user;
+} dt_pixelpipe_cache_pressure_sink_t;
+
+/** A monitor for a cache planned at `plan` bytes: full budget, nothing measured, no watcher. */
+void dt_pixelpipe_cache_pressure_monitor_init(dt_pixelpipe_cache_pressure_monitor_t *m, size_t plan);
+
+/* Have the kernel wake us rather than wait for a window of our own to close: `wake(user)` runs on
+ * the watcher's thread and must take whatever guards the monitor before calling
+ * dt_pixelpipe_cache_pressure_triggered(). A platform without PSI triggers arms nothing, which
+ * leaves the measured windows below as the only reaction. */
+void dt_pixelpipe_cache_pressure_watch_start(dt_pixelpipe_cache_pressure_monitor_t *m,
+                                             void (*wake)(void *user), void *user);
+/** Join that thread. Nothing the sink touches may go away before this returns. */
+void dt_pixelpipe_cache_pressure_watch_stop(dt_pixelpipe_cache_pressure_monitor_t *m);
+
+/** Close the window since the last measurement and act on it: shed past the threshold, let the
+ *  budget climb back under it, do nothing in between. Returns the bytes shed. */
+size_t dt_pixelpipe_cache_pressure_react(dt_pixelpipe_cache_pressure_monitor_t *m,
+                                         const dt_pixelpipe_cache_pressure_sink_t *sink);
+
+/** The kernel raised a trigger: shed now, without waiting for a window of ours to close. */
+void dt_pixelpipe_cache_pressure_triggered(dt_pixelpipe_cache_pressure_monitor_t *m,
+                                           const dt_pixelpipe_cache_pressure_sink_t *sink);
 
 #endif // DT_CACHES_PIXELPIPE_CACHE_PRESSURE_H
 

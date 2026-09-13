@@ -593,7 +593,7 @@ above physical RAM was even honored as-is), freed arena runs never returned thei
 to the OS (RSS was a permanent high-water mark), and nothing at runtime ever looked at the
 system-wide available memory.
 
-The defense has four layers, from planning to last resort:
+The defense has five layers, from planning to last resort:
 
 1. **Envelope-aware startup budgets** (`darktable.c`). The detected total RAM is clamped
    by the physical RAM (so a misconfigured `host_memory_limit` can only shrink, never grow it) and
@@ -637,7 +637,21 @@ The defense has four layers, from planning to last resort:
    "does this platform answer at all" is a separate `sys_probe_valid` flag: deriving it from an
    `est == 0` sentinel would silently disable the valve at exactly the moment it matters most.
 
-4. **Pressure-aware tiling** (`dt_get_available_mem()`, `darktable.c`). The planning value
+4. **Kernel-pressure shedding** (`caches/pixelpipe_cache_pressure.{c,h}`). MemAvailable says
+   how much is left, never what it costs to keep it: a machine reclaiming as fast as it allocates
+   reports memory available while systemd-oomd is already counting down on it. Linux PSI reports
+   that directly, and `system/memory_pressure.c` is where every platform detail of it lives — the
+   cumulative "full" counters for the system and every cgroup above the process, plus a watcher
+   that arms the kernel's own triggers and wakes a thread of its own, so the reaction does not
+   wait for a cache that a thrashing machine has already stopped running. The pressure module
+   turns two reads into the stall share of the 2 s window between them and decides what must go;
+   `pixelpipe_cache.c` passes it a sink (what it holds, what evicting and trimming gives back) and
+   takes `lock` around every call. Past 10 % stall a quarter of the cache goes (half past 30 %)
+   and the budget allocations evict down to is lowered to what is left, climbing back only over
+   minutes of calm and never past 7/8 of the footprint the stall struck at. See `CLAUDE.md` for
+   the measurements each of those numbers came from.
+
+5. **Pressure-aware tiling** (`dt_get_available_mem()`, `darktable.c`). The planning value
    tiled modules size their working set from is capped by the live system availability (plus half
    our own cache, which is LRU-evictable on demand — our own hoard must never force tiling), so
    under pressure modules split into smaller tiles instead of planning allocations the valve
