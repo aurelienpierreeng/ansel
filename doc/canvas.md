@@ -379,11 +379,36 @@ corner of where it belongs -- which is what an internal ceiling on the raster di
 crossed it, reported as a drawing that vanishes or jumps at some zoom levels. The ceiling is
 still there, since a drawing across a wall-sized page must not ask for a raster nobody has the
 memory for; it applies to what is RENDERED, and the result is brought back to the size that was
-asked for. And **the drawing is drawn at the BOX's size, centred in the sprite**, not stretched
-over it: the painter asks for a sprite a pixel or two larger than the box so that the clip and
-not the sprite's edge ends the picture, a photograph stretched over that loses a sliver nobody
-sees, and a drawing stretched over it has its last row or two of ink pushed outside the clip --
-the missing rows at the bottom of a drawing.
+asked for. And **the drawing is drawn at the BOX's size, inside a guard of one pixel**, not
+stretched over the sprite: the painter asks for a sprite a pixel or two larger than the box so
+that the clip and not the sprite's edge ends the picture, a photograph stretched over that loses
+a sliver nobody sees, and a drawing stretched over it has its last row or two of ink pushed
+outside the clip -- the missing rows at the bottom of a drawing.
+
+The guard is headroom, and it is there because a drawing is FITTED to its frame. A frame whose
+proportions differ from the document's is filled along one axis and letterboxed along the other,
+so a frame proportionally taller than its drawing has the ink running edge to edge down it --
+measured on a real document, a 2341 x 1600 frame around a 340.3 x 243.2 diagram fills the height
+exactly and leaves 51 px of air each side. An author who drew to the edge of the page, which is
+most of them, then has the last line of type sitting exactly on the frame's boundary, and this
+one does: the diagram's ink touches all four sides of its own viewBox, with about a quarter of a
+unit of anti-aliasing beyond it that librsvg clips at the viewport whatever we ask for, since
+that is what an SVG's own `overflow` means. Flush against the frame it reads as shaved off, and
+was reported as text clipped on a drawing.
+
+The guard is separately what a sprite blitted at a WHOLE pixel owes a box that sits at a
+fractional one -- the caller's clip lies up to a pixel inside the sprite's own edge -- but that
+is not what was taking the ink, and the measurement says so: sweeping sixteen sub-pixel pan
+alignments, the bottom line of type keeps its ink to within **0.07%** both with the guard and
+without it, and with one surface cache across the sweep (what the atelier does) exactly as with a
+fresh one per frame. An earlier reading of 2.1% did not survive a clean A/B against a verified
+binary and is not evidence of anything. So this is headroom, not a repair. It is two pixels,
+which is what was asked for by name, and costs the drawing four pixels of its box in each
+direction -- a fifth of a percent of a nine-hundred-pixel frame, and the same two screen pixels
+at any zoom, since the guard is measured where the sprite is -- and the alternative, placing the
+drawing at the box's exact sub-pixel position, would need a render per alignment: 13 ms at this
+drawing's screen size and 160 ms at four times it, per frame of a pan, against a sprite cache of
+two slots.
 
 **A picture and a drawing keep their proportions unless told not to**
 (`dt_canvas_object_keeps_ratio()`, `DT_CANVAS_OBJECT_FLAG_FREE_RATIO`). The flag is stated the

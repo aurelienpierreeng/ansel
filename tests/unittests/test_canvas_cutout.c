@@ -1929,16 +1929,23 @@ static void _a_drawings_sprite_is_exactly_the_size_it_was_asked_for(void **state
   g_free(path);
 }
 
-static void _a_drawing_is_drawn_at_the_boxs_size_not_the_sprites(void **state)
+static void _a_drawing_keeps_a_guard_pixel_inside_the_box(void **state)
 {
   (void)state;
   /*
-   * The painter asks for a sprite a pixel or two larger than the box the picture occupies, so
-   * that the clip and not the sprite's edge ends it. A photograph stretched over those extra
-   * pixels loses a sliver of photograph that nobody sees. A drawing stretched over them has
-   * its last row or two of ink pushed outside the clip -- the missing rows at the bottom of a
-   * drawing. Drawn at the box's size and centred in the sprite, the margin is empty and the
-   * clip trims nothing that was drawn.
+   * A drawing is FITTED to its frame, so a frame whose proportions differ from the document's
+   * is filled along one axis and letterboxed along the other -- and a frame proportionally
+   * taller than its drawing has the ink running edge to edge DOWN it. An author who drew to
+   * the edge of the page, which is most of them, then has the last line of type sitting
+   * exactly on the frame's boundary, anti-aliased against whatever is behind it and reading as
+   * shaved off: that is what was reported as text clipped on a drawing, with two pixels of
+   * headroom asked for by name.
+   *
+   * The guard is the hair of air that answers it, and it is headroom rather than a repair --
+   * the sub-pixel placement of the sprite was measured and is NOT what takes the ink (the
+   * bottom line of type in a real diagram keeps it to within 0.07% at every alignment, guard
+   * or no guard). What it pins here is that the ink is a whole pixel clear of the sprite's
+   * edges whatever padding the sprite carries, so a drawing never lands on its frame.
    */
   gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' "
                            "viewBox='0 0 100 100'><rect width='100' height='100' fill='#000000'/></svg>");
@@ -1947,23 +1954,34 @@ static void _a_drawing_is_drawn_at_the_boxs_size_not_the_sprites(void **state)
   assert_true(g_file_get_contents(path, &contents, &length, NULL));
   GBytes *bytes = g_bytes_new_take(contents, length);
 
-  // A sprite four pixels larger than the box, carrying a box-sized drawing.
-  cairo_surface_t *sprite = dt_canvas_render_svg(bytes, 104, 104, 100, 100);
-  assert_non_null(sprite);
-  assert_int_equal(cairo_image_surface_get_width(sprite), 104);
-  const uint8_t *pixels = cairo_image_surface_get_data(sprite);
-  const int stride = cairo_image_surface_get_stride(sprite);
-  // Two pixels of empty margin either side, and a hundred of solid ink between them: the ink
-  // ends where the box ends, which is where the clip is.
-  assert_int_equal(pixels[(size_t)0 * stride + 52 * 4 + 3], 0);
-  assert_int_equal(pixels[(size_t)1 * stride + 52 * 4 + 3], 0);
-  assert_int_equal(pixels[(size_t)2 * stride + 52 * 4 + 3], 255);
-  assert_int_equal(pixels[(size_t)101 * stride + 52 * 4 + 3], 255);
-  assert_int_equal(pixels[(size_t)102 * stride + 52 * 4 + 3], 0);
-  assert_int_equal(pixels[(size_t)103 * stride + 52 * 4 + 3], 0);
-  cairo_surface_destroy(sprite);
+  // A sprite four pixels larger than the box, carrying a box-sized drawing: the ink starts one
+  // pixel in and ends one pixel before the box does, whatever padding the sprite carries.
+  static const int sprites[] = { 100, 101, 102, 104 };
+  for(guint idx = 0; idx < G_N_ELEMENTS(sprites); idx++)
+  {
+    const int edge = sprites[idx];
+    cairo_surface_t *sprite = dt_canvas_render_svg(bytes, edge, edge, 100, 100);
+    assert_non_null(sprite);
+    assert_int_equal(cairo_image_surface_get_width(sprite), edge);
+    const uint8_t *pixels = cairo_image_surface_get_data(sprite);
+    const int stride = cairo_image_surface_get_stride(sprite);
+    int first = -1;
+    int last = -1;
+    for(int row = 0; row < edge; row++)
+    {
+      if(pixels[(size_t)row * stride + (edge / 2) * 4 + 3] == 0) continue;
+      if(first < 0) first = row;
+      last = row;
+    }
+    // At least two pixels of air at the top, and the ink stopping at least two before the
+    // box's own bottom edge, whatever padding the sprite happens to carry.
+    assert_true(first >= 2);
+    assert_true(last <= 97);
+    cairo_surface_destroy(sprite);
+  }
 
-  // Asked to fill the sprite, it fills the sprite: a photograph's bargain, unchanged.
+  // Asked to fill the sprite, it fills the sprite: a photograph's bargain, and the path an
+  // export takes, where there is no fractional box and so nothing to guard against.
   cairo_surface_t *filled = dt_canvas_render_svg(bytes, 104, 104, 0, 0);
   assert_non_null(filled);
   const uint8_t *full = cairo_image_surface_get_data(filled);
@@ -2138,7 +2156,7 @@ int main(void)
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
     cmocka_unit_test(_a_feathered_cutout_covers_all_of_its_fade),
     cmocka_unit_test(_a_drawings_sprite_is_exactly_the_size_it_was_asked_for),
-    cmocka_unit_test(_a_drawing_is_drawn_at_the_boxs_size_not_the_sprites),
+    cmocka_unit_test(_a_drawing_keeps_a_guard_pixel_inside_the_box),
     cmocka_unit_test(_a_drawing_arrives_at_the_size_its_file_states),
     cmocka_unit_test(_a_drawing_is_rasterised_whole_and_then_brought_into_the_layer),
     cmocka_unit_test(_text_flows_around_what_a_drawing_draws_not_its_box),

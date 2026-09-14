@@ -3554,7 +3554,24 @@ they are visible.
   And the painter deliberately asks for a sprite a pixel or two LARGER than the box so the clip
   ends the picture: a photograph stretched over that loses a sliver nobody sees, a drawing
   loses its last rows of ink to the clip, so `get_scaled()` takes the box's size too and a
-  drawing is centred in the padding rather than stretched into it.
+  drawing is drawn at it rather than stretched into it.
+- **A drawing is drawn inside a GUARD of one pixel of the sprite, and that guard is HEADROOM,
+  not a repair.** A drawing is FITTED to its frame, so a frame proportionally taller than the
+  document is filled by height and the ink runs edge to edge down it -- measured, a 2341 x 1600
+  frame around a 340.3 x 243.2 diagram fills the height exactly and letterboxes 51 px each side.
+  An author who drew to the edge of the page, which is most of them, then has the last line of
+  type sitting on the frame's boundary; that diagram's ink touches all four sides of its own
+  viewBox, and the quarter-unit of anti-aliasing past it is clipped by librsvg at the viewport
+  whatever we ask for, because that is what an SVG's `overflow` means. Flush, it reads as shaved
+  off -- reported as text clipped on a drawing. **The sub-pixel story is NOT the cause and the
+  measurement says so**: sweeping sixteen sub-pixel pan alignments, the bottom line of type keeps
+  its ink to within 0.07% with the guard and without it, with one surface cache across the sweep
+  (what the atelier does) exactly as with a fresh one per frame. An earlier 2.1% reading did not
+  survive a clean A/B against a verified binary -- with an LTO tree and several builds in flight,
+  assert which side you built before believing a number. The guard is two pixels, asked for by
+  name. Do not "improve" this into an exact sub-pixel placement: it would need a render per
+  alignment, 13 ms at that drawing's screen size and 160 ms at four times it, per frame of a
+  pan, against a sprite cache of two slots.
 - **A picture and a drawing keep their proportions unless told not to**
   (`dt_canvas_object_keeps_ratio()`). `DT_CANVAS_OBJECT_FLAG_FREE_RATIO` is stated the FREE way
   round so ZERO is the careful answer, and one predicate answers for the corner drag and the

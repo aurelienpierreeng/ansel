@@ -153,8 +153,9 @@ cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, c
  * `content_width`/`content_height` say how much of that surface the picture itself occupies,
  * for a caller whose sprite is deliberately a pixel or two larger than the box so that the
  * clip, and not the sprite's edge, ends the picture. A photograph is stretched over the whole
- * sprite and loses a sliver nobody sees; a DRAWING is drawn at the content size and centred,
- * because its last row of ink is a row of ink. 0 fills the surface.
+ * sprite and loses a sliver nobody sees; a DRAWING is drawn at the content size, inside a guard
+ * of one pixel, because its last row of ink is a row of ink and a drawing fitted edge to edge
+ * down its frame would otherwise sit on the clip. 0 fills the surface.
  */
 cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
                                                     int width, int height, int content_width, int content_height);
@@ -255,9 +256,12 @@ void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, size_t b
  * A drawing has no resolution of its own, so the one to use is whatever it is about to be
  * shown at: pass the pixels wanted and the answer is exact, pass 0 and it comes at the size
  * the file states. `content_width`/`content_height` say how big the DRAWING is inside that
- * surface -- centred, the rest transparent -- for a caller whose sprite is deliberately larger
- * than the box the drawing occupies; 0 fills the surface. The surface RETURNED is always the
- * size asked for, whatever ceiling the renderer applies internally.
+ * surface, for a caller whose sprite is deliberately larger than the box the drawing occupies;
+ * 0 fills the surface. Given one, the drawing is kept a GUARD of one pixel inside the sprite on
+ * every side -- placed at the guard, and that much smaller -- so that a drawing fitted edge to
+ * edge down its frame keeps a hair of air off the caller's clip; see CANVAS_SVG_GUARD. The
+ * surface RETURNED is always the size asked for, whatever ceiling the renderer applies
+ * internally.
  *
  * Rendered in ONE pass, the way the specification composites an SVG, and only then converted
  * out of sRGB -- see the drawings section of doc/canvas.md.
