@@ -207,6 +207,9 @@ typedef enum dt_masks_tree_cols_t
   /* What the row has to say about itself beyond its name -- currently only that the same shape
    * is reached twice within one module's mask. Empty on every row that has nothing to add. */
   TREE_NOTE,
+  /* The name struck through: this application of the shape is a repeat of one the same mask makes
+   * earlier, so it is the note's own claim said on the name. FALSE on every other row. */
+  TREE_STRIKE,
   TREE_IS_SEPARATOR,
   TREE_COUNT
 } dt_masks_tree_cols_t;
@@ -1102,6 +1105,16 @@ static void _modchooser_collect(GtkListStore *store, GList **to_attach, GList **
  * to undo exactly what ticking it did. A shape reaching a module through a nested group is that
  * group's business, not this dialog's.
  *
+ * Whether an unticked box may be ticked is _form_can_join_group(), the one rule a row's "+" and
+ * the "Attach to the group" menu already ask -- so the dialog cannot offer an attachment the rest
+ * of the window refuses. A module reaching the shape only through a nested group therefore comes
+ * up unticked AND insensitive, carrying the group's name in MODCHOOSER_NOTE, rather than unticked
+ * and free: ticking it added the shape a second time to a mask that already applied it, which is
+ * a duplicate no other path in this window can create. Ticking it is not the answer either --
+ * unticking would then have to reach into a nested group this module does not own and may share,
+ * and no untick may change a group the user has not opened. The one case ticked without asking is
+ * a module with no mask yet: there is no group to ask about, and ticking is what creates it.
+ *
  * @return whether the user validated; both lists are empty when nothing changed. */
 static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, GList **to_detach)
 {
@@ -1126,24 +1139,58 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
     dt_iop_module_t *module = (dt_iop_module_t *)iops->data;
     if(!dt_iop_module_is_in_pipeline(module) || !dt_iop_module_supports_drawn_mask(module)) continue;
 
+    const int own_id = module->blend_params->mask_id;
+
     /* A module cannot render its own mask as a member of itself -- ticking this would ask
-     * dt_masks_group_add_form() to nest a group inside itself, which _row_can_be_added()'s
-     * equivalent, dt_masks_group_contains(), already refuses trivially at depth 0. Surfacing it
-     * here instead of letting the tick silently do nothing on validation. */
-    const gboolean is_self_mask = (module->blend_params->mask_id == info.formid);
+     * dt_masks_group_add_form() to nest a group inside itself, which dt_masks_group_contains()
+     * already refuses trivially at depth 0, so _form_can_join_group() below would answer the same.
+     * Kept as its own case for the note it can then give, which says more than the general one. */
+    const gboolean is_self_mask = (own_id == info.formid);
+
+    // What ticking manages, and the only state unticking can undo.
     const gboolean attached
-        = !is_self_mask
-          && (dt_masks_group_get_member(dev, module->blend_params->mask_id, info.formid, NULL)
-              == DT_MASKS_OK);
+        = !is_self_mask && (dt_masks_group_get_member(dev, own_id, info.formid, NULL) == DT_MASKS_OK);
+
+    /* No mask yet is the case ticking CREATES, and there is no group to ask about: the same test
+     * validation makes before calling _module_create_own_mask(). _form_can_join_group() answers
+     * FALSE for such a module, so it has to be settled before the call rather than by it. */
+    const dt_masks_form_t *const own = dt_masks_get_from_id(dev, own_id);
+    const gboolean has_mask = !IS_NULL_PTR(own) && (own->type & DT_MASKS_GROUP);
+
+    gchar *note = NULL;
+    gboolean sensitive = TRUE;
+
+    if(is_self_mask)
+    {
+      sensitive = FALSE;
+      note = g_strdup(_("this is the module's own mask"));
+    }
+    else if(!attached && has_mask && !_form_can_join_group(dev, own_id, info.formid))
+    {
+      sensitive = FALSE;
+
+      /* Which of the rule's three refusals this is, in the words the tree already uses for the
+       * first of them. The mask reaching the form through a nested group is the common one and
+       * the only one that used to slip through as a tickable box. */
+      char holder_name[DT_MASKS_FORM_NAME_LEN] = "";
+      if(dt_masks_group_first_use(dev, own_id, info.formid, NULL, NULL, holder_name,
+                                  sizeof(holder_name)) == DT_MASKS_OK)
+        note = g_strdup_printf(_("Already in '%s'"), holder_name);
+      else if(dt_masks_group_contains(dev, info.formid, own_id) == DT_MASKS_OK)
+        note = g_strdup(_("this group holds the module's own mask"));
+      else
+        note = g_strdup(_("the module already applies every shape of this group"));
+    }
 
     gchar *label = dt_history_item_get_name(module);
     GtkTreeIter iter;
     gtk_list_store_append(store, &iter);
     gtk_list_store_set(store, &iter, MODCHOOSER_CHECKED, attached, MODCHOOSER_WAS_CHECKED, attached,
-                       MODCHOOSER_SENSITIVE, !is_self_mask, MODCHOOSER_NAME, label,
-                       MODCHOOSER_NOTE, is_self_mask ? _("this is the module's own mask") : "",
+                       MODCHOOSER_SENSITIVE, sensitive, MODCHOOSER_NAME, label,
+                       MODCHOOSER_NOTE, IS_NULL_PTR(note) ? "" : note,
                        MODCHOOSER_MODULE, module, -1);
     dt_free(label);
+    dt_free(note);
     any = TRUE;
   }
 
@@ -1317,9 +1364,9 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
       changed = TRUE;
     }
 
-    // Already there, or it would close a cycle: leave the mask alone.
-    if(dt_masks_group_get_member(dev, own_id, fid, NULL) == DT_MASKS_OK) continue;
-    if(dt_masks_group_contains(dev, fid, own_id) == DT_MASKS_OK) continue;
+    /* The same rule the box was offered under, asked again against the state as it is NOW: a
+     * dialog left open while the window is used elsewhere must not carry a stale answer past it. */
+    if(!_form_can_join_group(dev, own_id, fid)) continue;
 
     own = dt_masks_cow_touch(dev, own);
     if(IS_NULL_PTR(dt_masks_group_add_form(dev, own, form))) continue;
@@ -2310,7 +2357,8 @@ static void _tree_append_row(GtkTreeStore *treestore, GtkTreeIter *toplevel, dt_
                      TREE_IC_USED_VISIBLE, (nbuse > 0), TREE_USED_TEXT, used_by,
                      TREE_IC_DELETE_VISIBLE, (row->grp_id == 0),
                      TREE_IC_UNLINK_VISIBLE, (row->grp_id != 0),
-                     TREE_NOTE, IS_NULL_PTR(note) ? "" : note, -1);
+                     TREE_NOTE, IS_NULL_PTR(note) ? "" : note,
+                     TREE_STRIKE, !IS_NULL_PTR(note), -1);
   dt_free(note);
   _set_iter_name(lm, row->form, row->gstate, row->opacity, GTK_TREE_MODEL(treestore), child, row->index);
 }
@@ -2531,7 +2579,8 @@ static GtkTreeStore *_tree_store_new(void)
   // we store : text ; *module ; groupid ; formid
   return gtk_tree_store_new(TREE_COUNT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT, G_TYPE_INT, G_TYPE_BOOLEAN,
                             GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
-                            G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_BOOLEAN);
+                            G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING,
+                            G_TYPE_BOOLEAN, G_TYPE_BOOLEAN);
 }
 
 /* The inventory list shows the unclaimed groups first, then every shape, with a rule between
@@ -3447,6 +3496,11 @@ void gui_init(dt_lib_module_t *self)
     renderer = gtk_cell_renderer_text_new();
     gtk_tree_view_column_pack_start(col, renderer, TRUE);
     gtk_tree_view_column_add_attribute(col, renderer, "text", TREE_TEXT);
+    /* A repeat of a shape the mask already applies is struck through, so the row says on its own
+     * name what the note spells out to its right. Struck, never greyed or left out: the repeat is
+     * not necessarily a no-op -- union and intersection are idempotent, difference and exclusion
+     * are not -- so the list may mark it and may not claim it does nothing. */
+    gtk_tree_view_column_add_attribute(col, renderer, "strikethrough", TREE_STRIKE);
     // No "editable" attribute: see _tree_start_name_editing(), the only place that opens the editor.
     g_signal_connect(renderer, "edited", (GCallback)_tree_cell_edited, list);
     g_signal_connect(renderer, "editing-started", (GCallback)_tree_name_editing_started, list);
