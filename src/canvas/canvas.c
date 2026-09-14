@@ -44,7 +44,6 @@
 #define CANVAS_DEFAULT_FONT "Sans 12"
 #define CANVAS_DEFAULT_TEXT_WIDTH 400.0
 #define CANVAS_DEFAULT_TEXT_HEIGHT 200.0
-#define CANVAS_DEFAULT_TEXT_PADDING 12.0f
 /**
  * A new picture's long edge, in points: two inches, about a third of A4's width. It was 600
  * when a unit was a three-hundredth of an inch, which is the same two inches -- the number
@@ -478,7 +477,7 @@ dt_canvas_object_t *dt_canvas_add_text(dt_canvas_t *canvas, double x, double y, 
   object->text.background = dt_canvas_color(0.12f, 0.12f, 0.12f, 1.0f);
   object->text.source = DT_CANVAS_TEXT_SOURCE_MARKDOWN;
   object->text.linked_object = 0;
-  object->text.padding = CANVAS_DEFAULT_TEXT_PADDING;
+  object->text.padding = DT_CANVAS_TEXT_DEFAULT_PADDING;
   object->text.align_h = DT_CANVAS_ALIGN_START;
   object->text.align_v = DT_CANVAS_ALIGN_START;
   object->text.markdown = g_strdup(IS_NULL_PTR(markdown) ? "" : markdown);

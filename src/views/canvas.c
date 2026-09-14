@@ -36,6 +36,7 @@
 #include "canvas/canvas.h"
 #include "canvas/canvas_actions.h"
 #include "canvas/canvas_paint.h"
+#include "canvas/canvas_props.h"
 #include "canvas/canvas_export.h"
 #include "canvas/canvas_render.h"
 #include "colorprofiles/colorspaces.h"
@@ -1016,26 +1017,6 @@ static void _export_canvas(dt_view_t *self)
 
 /* --- text and colour dialogs ------------------------------------------------------- */
 
-/**
- * Fit an auto-height text frame to its text, at EDIT time. Every path that changes what the
- * text or its box is owes this call; nothing measures a frame at paint time, because a frame
- * that flows around its neighbours would then re-measure into a different answer each frame.
- */
-static void _auto_height_settle(dt_canvas_view_t *view, dt_canvas_object_t *object)
-{
-  if(IS_NULL_PTR(view) || IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return;
-  if(!(object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT)) return;
-  dt_canvas_paint_text_fit_height(view->canvas, object);
-}
-
-/** Every auto-height frame, for a gesture that moved geometry some other frame flows around. */
-static void _auto_height_settle_all(dt_canvas_view_t *view)
-{
-  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
-  for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
-    _auto_height_settle(view, dt_canvas_object_at(view->canvas, idx));
-}
-
 static void _edit_text(dt_view_t *self, dt_canvas_object_t *object)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -1174,7 +1155,7 @@ static gboolean _load_sidecar_text(dt_canvas_view_t *view, dt_canvas_object_t *t
   if(!IS_NULL_PTR(note_path) && g_file_get_contents(note_path, &contents, NULL, NULL))
   {
     dt_canvas_text_set_markdown(view->canvas, text, contents);
-    _auto_height_settle(view, text);
+    dt_canvas_props_settle(view->canvas, text);
     loaded = TRUE;
   }
   dt_free(contents);
@@ -1239,7 +1220,7 @@ static dt_canvas_object_t *_add_sidecar_note(dt_canvas_view_t *view, dt_canvas_o
       return NULL;
     }
     dt_canvas_text_set_markdown(view->canvas, text, _("*No text note found for this image.*"));
-    _auto_height_settle(view, text);
+    dt_canvas_props_settle(view->canvas, text);
   }
   return text;
 }
@@ -2258,37 +2239,13 @@ static dt_canvas_color_t _color_from_button(GtkWidget *button)
   return dt_canvas_color((float)rgba.red, (float)rgba.green, (float)rgba.blue, (float)rgba.alpha);
 }
 
-static void _color_to_button(GtkWidget *button, const dt_canvas_color_t *color)
-{
-  GdkRGBA rgba;
-  rgba.red = color->red;
-  rgba.green = color->green;
-  rgba.blue = color->blue;
-  rgba.alpha = color->alpha;
-  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(button), &rgba);
-}
-
-/** Every bar handler: an edit of the one selected object, recorded for undo. */
-#define BAR_EDIT_BEGIN(kind_wanted)                                                                        \
-  dt_view_t *self = (dt_view_t *)data;                                                                     \
-  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;                                                 \
-  if(view->bars_refilling) return;                                                                         \
-  dt_canvas_object_t *object = _bar_target(view);                                                          \
-  if(IS_NULL_PTR(object) || object->kind != (kind_wanted)) return;                                        \
-  dt_canvas_t *before = _begin_edit(view);
-
-#define BAR_EDIT_END()                                                                                     \
-  _auto_height_settle(view, object);                                                                       \
-  dt_canvas_touch(view->canvas);                                                                           \
-  _record_undo(self, before);                                                                              \
-  _bars_request(self);                                                                                     \
-  dt_control_queue_redraw_center();
-
 /**
  * A property with a canvas-wide default is edited by ONE spin button, and this value in it
  * means "whatever the canvas says". There is no separate toggle: the number is the switch,
  * the way a shadow's radius is its own on/off. Leaving the sentinel seeds the object with the
- * effective property, so an edit starts from what was on screen rather than from zero.
+ * effective property, so an edit starts from what was on screen rather than from zero -- and
+ * makes the object own it even at the canvas's own number, since a spin that shows a number
+ * promises that number stays when the canvas default changes.
  */
 #define CANVAS_BAR_INHERIT (-1.0)
 
@@ -2300,127 +2257,222 @@ static gboolean _bar_inherits(const double value)
 /** The sentinel reads as a word, not as a number. */
 static gboolean _bar_inherit_output(GtkSpinButton *spin, gpointer data)
 {
-  (void)data;
   if(!_bar_inherits(gtk_spin_button_get_value(spin))) return FALSE;
   gtk_entry_set_text(GTK_ENTRY(spin), _("default"));
   return TRUE;
 }
 
+/**
+ * Every bar edit ends here. The property table's writer made the change and said what it
+ * owes; the view pays it once -- the neighbours refitted, the document touched, one undo
+ * step, the map's settings and tiles, the bar refilled. An edit that changed nothing records
+ * nothing, which is what keeps a colour reselected at the canvas's own value inheriting -- but
+ * the bar is refilled all the same: the control now shows what was asked, and the document still
+ * holds what it held, so the control is put back on the document's side.
+ */
+static void _bar_settle(dt_view_t *self, dt_canvas_object_t *object, dt_canvas_t *before, const uint32_t effects)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(!(effects & DT_CANVAS_EFFECT_CHANGED))
+  {
+    dt_canvas_free(before);
+    if(effects & DT_CANVAS_EFFECT_COMMIT_RENDER)
+    {
+      _start_map_render(self, object);
+      dt_control_queue_redraw_center();
+    }
+    // The document generation did not move, so only a cleared signature makes the idle refill.
+    view->bars_signature = 0;
+    _bars_request(self);
+    return;
+  }
+  if(effects & DT_CANVAS_EFFECT_SETTLE_ALL) dt_canvas_props_settle_all(view->canvas);
+  dt_canvas_touch(view->canvas);
+  _record_undo(self, before);
+  if(effects & DT_CANVAS_EFFECT_COMMIT_CONF)
+  {
+    // The map just edited is where the next one starts.
+    dt_conf_set_int("canvas/map_zoom", object->map.zoom);
+    dt_conf_set_int("canvas/map_source", (int)object->map.source);
+    dt_conf_set_float("canvas/map_latitude", (float)object->map.latitude);
+    dt_conf_set_float("canvas/map_longitude", (float)object->map.longitude);
+  }
+  if(effects & DT_CANVAS_EFFECT_COMMIT_RENDER) _start_map_render(self, object);
+  _bars_request(self);
+  dt_control_queue_redraw_center();
+}
+
+/** The one selected object, when the bar is not refilling and the object has the property. */
+static dt_canvas_object_t *_bar_edit_target(dt_view_t *self, const dt_canvas_prop_id_t prop_id)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(view->bars_refilling) return NULL;
+  dt_canvas_object_t *object = _bar_target(view);
+  if(IS_NULL_PTR(object) || !dt_canvas_prop_for_kind(dt_canvas_prop_get(prop_id), object->kind)) return NULL;
+  return object;
+}
+
+/** One property written through the table, as one undo step. */
+static void _bar_write(dt_view_t *self, const dt_canvas_prop_id_t prop_id, const dt_canvas_prop_value_t *value)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  dt_canvas_object_t *object = _bar_edit_target(self, prop_id);
+  if(IS_NULL_PTR(object)) return;
+  dt_canvas_t *before = _begin_edit(view);
+  const uint32_t effects = dt_canvas_prop_write(view->canvas, object, prop_id, value);
+  _bar_settle(self, object, before, effects);
+}
+
+static void _bar_write_number(dt_view_t *self, const dt_canvas_prop_id_t prop_id, const double number)
+{
+  dt_canvas_prop_value_t value;
+  memset(&value, 0, sizeof(value));
+  value.number = number;
+  _bar_write(self, prop_id, &value);
+}
+
+static void _bar_write_choice(dt_view_t *self, const dt_canvas_prop_id_t prop_id, const int choice)
+{
+  dt_canvas_prop_value_t value;
+  memset(&value, 0, sizeof(value));
+  value.choice = choice;
+  _bar_write(self, prop_id, &value);
+}
+
+static void _bar_write_color(dt_view_t *self, const dt_canvas_prop_id_t prop_id, GtkWidget *button)
+{
+  dt_canvas_prop_value_t value;
+  memset(&value, 0, sizeof(value));
+  value.color = _color_from_button(button);
+  _bar_write(self, prop_id, &value);
+}
+
+/**
+ * A spin button carrying the inherit sentinel: the sentinel gives the whole group back to the
+ * canvas, any other number makes the object own the group and is an edit of this one field.
+ *
+ * The group is owned FIRST, and explicitly. The writer leaves an object inheriting when the
+ * number written is the canvas's own, which is right for a control that can be reset to the
+ * canvas's value -- but this spin has no such reset: its sentinel is the reset, so stepping off
+ * it onto the canvas's number (a border of 0, a square corner) is a request to keep that number.
+ * Owning seeds the rest of the group from what is drawn, so the offsets and the colour of a
+ * shadow are not lost while its blur reads "default".
+ */
+static void _bar_write_or_inherit(dt_view_t *self, const dt_canvas_prop_id_t prop_id, const double number)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  dt_canvas_object_t *object = _bar_edit_target(self, prop_id);
+  if(IS_NULL_PTR(object)) return;
+  const dt_canvas_prop_group_t group = dt_canvas_prop_get(prop_id)->group;
+  dt_canvas_t *before = _begin_edit(view);
+  uint32_t effects = 0u;
+  if(_bar_inherits(number))
+  {
+    effects = dt_canvas_group_set_own(view->canvas, object, group, FALSE);
+  }
+  else
+  {
+    effects = dt_canvas_group_set_own(view->canvas, object, group, TRUE);
+    dt_canvas_prop_value_t value;
+    memset(&value, 0, sizeof(value));
+    value.number = number;
+    effects |= dt_canvas_prop_write(view->canvas, object, prop_id, &value);
+  }
+  _bar_settle(self, object, before, effects);
+}
+
 static void _bar_text_font_set(GtkFontButton *button, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_prop_value_t value;
+  memset(&value, 0, sizeof(value));
   gchar *font = gtk_font_chooser_get_font(GTK_FONT_CHOOSER(button));
-  // A font equal to the canvas default is stored as "no font of its own".
-  if(IS_NULL_PTR(font) || g_strcmp0(font, view->canvas->default_font) == 0)
-    object->text.font[0] = '\0';
-  else
-    g_strlcpy(object->text.font, font, sizeof(object->text.font));
+  if(!IS_NULL_PTR(font)) g_strlcpy(value.text, font, sizeof(value.text));
   dt_free(font);
-  BAR_EDIT_END()
+  _bar_write(self, DT_CANVAS_PROP_TEXT_FONT, &value);
 }
 
 static void _bar_text_color_set(GtkColorButton *button, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
-  object->text.text_color = _color_from_button(GTK_WIDGET(button));
-  BAR_EDIT_END()
-}
-
-/** The colour under an object's content: a text frame keeps its own field, the others share one. */
-static void _object_set_background(dt_canvas_object_t *object, const dt_canvas_color_t color)
-{
-  if(object->kind == DT_CANVAS_OBJECT_TEXT)
-    object->text.background = color;
-  else
-    object->background = color;
+  _bar_write_color((dt_view_t *)data, DT_CANVAS_PROP_TEXT_COLOR, GTK_WIDGET(button));
 }
 
 static void _bar_text_align_changed(GtkComboBox *combo, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
-  const int choice = gtk_combo_box_get_active(combo);
-  if(GTK_WIDGET(combo) == view->text_align_h)
-    object->text.align_h = (uint32_t)CLAMP(choice, 0, 3);
-  else
-    object->text.align_v = (uint32_t)CLAMP(choice, 0, 2);
-  BAR_EDIT_END()
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  const dt_canvas_prop_id_t prop_id
+      = GTK_WIDGET(combo) == view->text_align_h ? DT_CANVAS_PROP_TEXT_ALIGN_H : DT_CANVAS_PROP_TEXT_ALIGN_V;
+  _bar_write_choice(self, prop_id, gtk_combo_box_get_active(combo));
 }
 
 /** The leading and the tracking: the two the type needs that the font description cannot say. */
 static void _bar_text_metrics_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
-  if(GTK_WIDGET(spin) == view->text_line_height)
-    object->text.line_height = (float)gtk_spin_button_get_value(spin);
-  else
-    object->text.letter_spacing = (float)gtk_spin_button_get_value(spin);
-  BAR_EDIT_END()
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  const dt_canvas_prop_id_t prop_id = GTK_WIDGET(spin) == view->text_line_height
+                                          ? DT_CANVAS_PROP_TEXT_LINE_HEIGHT
+                                          : DT_CANVAS_PROP_TEXT_LETTER_SPACING;
+  _bar_write_number(self, prop_id, gtk_spin_button_get_value(spin));
 }
 
 static void _bar_text_margin_changed(GtkSpinButton *spin, gpointer data)
 {
-  dt_view_t *self = (dt_view_t *)data;
-  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  if(view->bars_refilling) return;
-  dt_canvas_object_t *object = _bar_target(view);
-  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return;
-  dt_canvas_t *before = _begin_edit(view);
-  // Every side is written, not just the edited one: all four zero is the "unset" that takes
-  // the old uniform padding, so a single side left at zero has to be a deliberate zero.
-  for(int side = 0; side < 4; side++)
-    object->text.margins[side] = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->text_margin[side]));
-  (void)spin;
-  _auto_height_settle(view, object);
-  dt_canvas_touch(view->canvas);
-  _record_undo(self, before);
-  _bars_request(self);
-  dt_control_queue_redraw_center();
+  // Which side's inset property travels on the spin, named, never computed from the side's index.
+  const dt_canvas_prop_id_t prop_id
+      = (dt_canvas_prop_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(spin), "canvas-prop"));
+  _bar_write_number((dt_view_t *)data, prop_id, gtk_spin_button_get_value(spin));
 }
 
 static void _bar_text_paragraph_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
-  if(GTK_WIDGET(spin) == view->text_first_line_indent)
-    object->text.first_line_indent = (float)gtk_spin_button_get_value(spin);
-  else
-    object->text.paragraph_spacing = (float)gtk_spin_button_get_value(spin);
-  BAR_EDIT_END()
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  const dt_canvas_prop_id_t prop_id = GTK_WIDGET(spin) == view->text_first_line_indent
+                                     ? DT_CANVAS_PROP_TEXT_FIRST_LINE_INDENT
+                                     : DT_CANVAS_PROP_TEXT_PARAGRAPH_SPACING;
+  _bar_write_number(self, prop_id, gtk_spin_button_get_value(spin));
 }
 
 static void _bar_text_standoff_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
-  object->text.wrap_standoff = (float)gtk_spin_button_get_value(spin);
-  BAR_EDIT_END()
+  _bar_write_number((dt_view_t *)data, DT_CANVAS_PROP_TEXT_WRAP_GAP, gtk_spin_button_get_value(spin));
 }
 
 static void _bar_text_feature_toggled(GtkToggleButton *check, gpointer data)
 {
   dt_view_t *self = (dt_view_t *)data;
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  if(view->bars_refilling) return;
-  dt_canvas_object_t *object = _bar_target(view);
-  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return;
-  const char *tag = g_object_get_data(G_OBJECT(check), "text-feature-tag");
-  if(IS_NULL_PTR(tag)) return;
-  dt_canvas_t *before = _begin_edit(view);
-  dt_canvas_text_feature_set(object->text.features, sizeof(object->text.features), tag,
+  dt_canvas_object_t *object = _bar_edit_target(self, DT_CANVAS_PROP_TEXT_FEATURES);
+  const char *feature_tag = g_object_get_data(G_OBJECT(check), "text-feature-tag");
+  if(IS_NULL_PTR(object) || IS_NULL_PTR(feature_tag)) return;
+  dt_canvas_prop_value_t value;
+  dt_canvas_prop_read(view->canvas, object, DT_CANVAS_PROP_TEXT_FEATURES, &value);
+  // Edited at the length the record holds, so a tag that would not fit is refused whole rather
+  // than stored as half a tag, which Pango reads as no features at all.
+  dt_canvas_text_feature_set(value.text, DT_CANVAS_TEXT_FEATURES_LEN, feature_tag,
                              gtk_toggle_button_get_active(check));
-  _auto_height_settle(view, object);
-  dt_canvas_touch(view->canvas);
-  _record_undo(self, before);
-  dt_control_queue_redraw_center();
+  _bar_write(self, DT_CANVAS_PROP_TEXT_FEATURES, &value);
+}
+
+static void _text_feature_add(const char *feature_tag, const char *label, const char *hint,
+                              const gboolean is_on, gpointer user_data)
+{
+  dt_view_t *self = (dt_view_t *)user_data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  GtkWidget *check = gtk_check_button_new_with_label(label);
+  gtk_widget_set_tooltip_text(check, hint);
+  g_object_set_data_full(G_OBJECT(check), "text-feature-tag", g_strdup(feature_tag), g_free);
+  g_signal_connect(check, "toggled", G_CALLBACK(_bar_text_feature_toggled), self);
+  gtk_box_pack_start(GTK_BOX(view->text_features_box), check, FALSE, FALSE, 0);
 }
 
 /**
  * Rebuild the Features popover from the face the frame actually uses, and tick what is on.
  *
- * The checkboxes are keyed on the TAG, not on a position in a table: a font carries whatever
- * its designer cut, so the list is different for every face and a fixed one both offers a
- * plain face things it does not have and hides a rich one's own -- Linux Libertine's
- * historical ligatures among them. A tag this build has a name for is shown by name; one it
- * does not is shown by its tag, which is how a font's own stylistic sets stay reachable.
- *
+ * The checkboxes are keyed on the TAG, not on a position in a table: what a face offers is the
+ * property table's to answer (`dt_canvas_props_text_features()`), and it differs for every face.
  * Rebuilt only when the face changes, so ticking a box does not destroy the box being ticked.
  */
 static void _text_features_fill(dt_view_t *self, const dt_canvas_object_t *object)
@@ -2436,245 +2488,126 @@ static void _text_features_fill(dt_view_t *self, const dt_canvas_object_t *objec
     for(GList *child = previous; !IS_NULL_PTR(child); child = child->next)
       gtk_widget_destroy(GTK_WIDGET(child->data));
     g_list_free(previous);
-
-    char tags[DT_CANVAS_TEXT_FEATURE_LIST_MAX][DT_CANVAS_FONT_FEATURE_TAG_LEN];
-    const uint32_t count
-        = dt_canvas_paint_text_font_features(view->canvas, object, tags, DT_CANVAS_TEXT_FEATURE_LIST_MAX);
-    int offered = 0;
-    for(uint32_t idx = 0; idx < count; idx++)
-    {
-      // Not the ones the layout engine owns: a font ships those so that text can be SHAPED,
-      // and a checkbox overriding them breaks the rendering rather than styling it.
-      if(!dt_canvas_text_feature_offered(tags[idx])) continue;
-      gchar *label = dt_canvas_text_feature_label(tags[idx]);
-      GtkWidget *check = gtk_check_button_new_with_label(IS_NULL_PTR(label) ? tags[idx] : label);
-      dt_free(label);
-      gchar *hint = dt_canvas_text_feature_hint(tags[idx]);
-      gchar *tooltip = IS_NULL_PTR(hint) ? g_strdup_printf(_("The font's own \"%s\" feature"), tags[idx]) : hint;
-      gtk_widget_set_tooltip_text(check, tooltip);
-      dt_free(tooltip);
-      g_object_set_data_full(G_OBJECT(check), "text-feature-tag", g_strdup(tags[idx]), g_free);
-      g_signal_connect(check, "toggled", G_CALLBACK(_bar_text_feature_toggled), self);
-      gtk_box_pack_start(GTK_BOX(view->text_features_box), check, FALSE, FALSE, 0);
-      offered++;
-    }
+    const uint32_t offered = dt_canvas_props_text_features(view->canvas, object, _text_feature_add, self);
     if(offered == 0)
       gtk_box_pack_start(GTK_BOX(view->text_features_box),
                          gtk_label_new(_("This font offers no OpenType features to choose.")), FALSE, FALSE, 0);
     gtk_widget_show_all(view->text_features_box);
   }
+  dt_canvas_prop_value_t features;
+  dt_canvas_prop_read(view->canvas, object, DT_CANVAS_PROP_TEXT_FEATURES, &features);
   GList *children = gtk_container_get_children(GTK_CONTAINER(view->text_features_box));
   for(GList *child = children; !IS_NULL_PTR(child); child = child->next)
   {
-    const char *tag = g_object_get_data(G_OBJECT(child->data), "text-feature-tag");
-    if(IS_NULL_PTR(tag)) continue;
+    const char *feature_tag = g_object_get_data(G_OBJECT(child->data), "text-feature-tag");
+    if(IS_NULL_PTR(feature_tag)) continue;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(child->data),
-                                 dt_canvas_text_feature_is_on(object->text.features, tag));
+                                 dt_canvas_text_feature_is_on(features.text, feature_tag));
   }
   g_list_free(children);
 }
 
-static void _bar_text_flag_toggled(GtkToggleButton *button, gpointer data)
+/** Every switch of the bar that is one property: which one travels on the button. */
+static void _bar_flag_toggled(GtkToggleButton *button, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_TEXT)
-  const uint32_t flag = (uint32_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "text-flag"));
-  if(gtk_toggle_button_get_active(button)) object->text.text_flags |= flag;
-  else object->text.text_flags &= ~flag;
-  BAR_EDIT_END()
+  const dt_canvas_prop_id_t prop_id
+      = (dt_canvas_prop_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "canvas-prop"));
+  dt_canvas_prop_value_t value;
+  memset(&value, 0, sizeof(value));
+  value.flag = gtk_toggle_button_get_active(button);
+  _bar_write((dt_view_t *)data, prop_id, &value);
 }
-
-/** The border handlers serve the image bar and the text bar alike: any frame. */
-#define BAR_EDIT_BEGIN_FRAME()                                                                             \
-  dt_view_t *self = (dt_view_t *)data;                                                                     \
-  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;                                                 \
-  if(view->bars_refilling) return;                                                                         \
-  dt_canvas_object_t *object = _bar_target(view);                                                          \
-  if(!dt_canvas_object_is_frame(object)) return;                                                           \
-  dt_canvas_t *before = _begin_edit(view);
 
 static void _bar_border_width_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN_FRAME()
-  dt_canvas_color_t color;
-  float width = 0.0f;
-  dt_canvas_object_effective_border(view->canvas, object, &color, &width);
-  const double asked = gtk_spin_button_get_value(spin);
-  if(_bar_inherits(asked))
-  {
-    object->flags &= ~DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
-  }
-  else
-  {
-    object->border_color = color;
-    object->border_width = (float)fmax(asked, 0.0);
-    object->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
-  }
-  BAR_EDIT_END()
+  _bar_write_or_inherit((dt_view_t *)data, DT_CANVAS_PROP_BORDER_WIDTH, gtk_spin_button_get_value(spin));
 }
 
 static void _bar_border_color_set(GtkColorButton *button, gpointer data)
 {
-  BAR_EDIT_BEGIN_FRAME()
-  dt_canvas_color_t color;
-  float width = 0.0f;
-  dt_canvas_object_effective_border(view->canvas, object, &color, &width);
-  object->border_width = width;
-  object->border_color = _color_from_button(GTK_WIDGET(button));
-  object->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
-  BAR_EDIT_END()
+  _bar_write_color((dt_view_t *)data, DT_CANVAS_PROP_BORDER_COLOR, GTK_WIDGET(button));
 }
 
-/** The object bar's other handlers serve every kind: frames and connectors alike. */
-#define BAR_EDIT_BEGIN_ANY()                                                                               \
-  dt_view_t *self = (dt_view_t *)data;                                                                     \
-  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;                                                 \
-  if(view->bars_refilling) return;                                                                         \
-  dt_canvas_object_t *object = _bar_target(view);                                                          \
-  if(IS_NULL_PTR(object)) return;                                                                          \
-  dt_canvas_t *before = _begin_edit(view);
-
-/** The geometry row: the frame's centre, size and rotation, typed in. */
-/** Keep the frame's shape, or let its two sides move independently. */
-static void _bar_proportions_toggled(GtkToggleButton *button, gpointer data)
-{
-  BAR_EDIT_BEGIN_FRAME()
-  if(gtk_toggle_button_get_active(button))
-    object->flags &= ~DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
-  else
-    object->flags |= DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
-  BAR_EDIT_END()
-}
-
+/** The geometry row: the frame's centre, size and rotation, typed in, each spin its own property. */
 static void _bar_geometry_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN_FRAME()
-  object->x = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_x));
-  object->y = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_y));
-  const double typed_width = fmax(gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_width)), 1.0);
-  const double typed_height = fmax(gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_height)), 1.0);
-  // A typed size obeys the same rule the drag does, or the two controls fight: whichever of
-  // the pair was edited leads, and the other follows the shape the frame is keeping.
-  if(dt_canvas_object_keeps_ratio(object) && object->width > 0.0 && object->height > 0.0)
-  {
-    const double ratio = object->width / object->height;
-    if(GTK_WIDGET(spin) == view->geometry_height)
-    {
-      object->height = typed_height;
-      object->width = fmax(typed_height * ratio, 1.0);
-    }
-    else
-    {
-      object->width = typed_width;
-      object->height = fmax(typed_width / ratio, 1.0);
-    }
-  }
-  else
-  {
-    object->width = typed_width;
-    object->height = typed_height;
-  }
-  object->rotation = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_rotation)) * M_PI / 180.0;
-  BAR_EDIT_END()
-  if(object->kind == DT_CANVAS_OBJECT_MAP) _start_map_render(self, object);
-}
-
-/** Read the shadow widgets into the object's own shadow, and make it the one that applies. */
-static void _bar_shadow_apply(dt_canvas_view_t *view, dt_canvas_object_t *object)
-{
-  dt_canvas_shadow_t shadow;
-  dt_canvas_object_effective_shadow(view->canvas, object, &shadow);
-  shadow.color = _color_from_button(view->object_shadow_color);
-  shadow.offset_x = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_shadow_offset_x));
-  shadow.offset_y = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_shadow_offset_y));
-  shadow.blur = (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_shadow_blur));
-  object->shadow = shadow;
-  object->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  const GtkWidget *widget = GTK_WIDGET(spin);
+  dt_canvas_prop_id_t prop_id = DT_CANVAS_PROP_ROTATION;
+  if(widget == view->geometry_x) prop_id = DT_CANVAS_PROP_X;
+  else if(widget == view->geometry_y) prop_id = DT_CANVAS_PROP_Y;
+  else if(widget == view->geometry_width) prop_id = DT_CANVAS_PROP_WIDTH;
+  else if(widget == view->geometry_height) prop_id = DT_CANVAS_PROP_HEIGHT;
+  _bar_write_number(self, prop_id, gtk_spin_button_get_value(spin));
 }
 
 static void _bar_shadow_changed(GtkWidget *widget, gpointer data)
 {
-  BAR_EDIT_BEGIN_ANY()
-  // The blur is the whole shadow's switch: the sentinel gives it back to the canvas, and any
-  // other value -- or a move of an offset, or a colour -- makes the object's own.
-  if(_bar_inherits(gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_shadow_blur))))
-    object->flags &= ~DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(widget == view->object_shadow_color)
+  {
+    _bar_write_color(self, DT_CANVAS_PROP_SHADOW_COLOR, widget);
+    return;
+  }
+  // The blur is the whole shadow's switch: the sentinel gives it back to the canvas. An offset
+  // is an edit of the shadow even while the blur reads the sentinel.
+  dt_canvas_prop_id_t prop_id = DT_CANVAS_PROP_SHADOW_BLUR;
+  if(widget == view->object_shadow_offset_x) prop_id = DT_CANVAS_PROP_SHADOW_OFFSET_X;
+  else if(widget == view->object_shadow_offset_y) prop_id = DT_CANVAS_PROP_SHADOW_OFFSET_Y;
+  const double number = gtk_spin_button_get_value(GTK_SPIN_BUTTON(widget));
+  if(prop_id == DT_CANVAS_PROP_SHADOW_BLUR)
+    _bar_write_or_inherit(self, prop_id, number);
   else
-    _bar_shadow_apply(view, object);
-  BAR_EDIT_END()
+    _bar_write_number(self, prop_id, number);
 }
 
 static void _bar_corner_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN_FRAME()
-  const double radius = gtk_spin_button_get_value(spin);
-  if(_bar_inherits(radius))
-  {
-    object->flags &= ~DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
-  }
-  else
-  {
-    object->corner_radius = (float)fmax(radius, 0.0);
-    object->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
-  }
-  BAR_EDIT_END()
+  _bar_write_or_inherit((dt_view_t *)data, DT_CANVAS_PROP_CORNER_RADIUS, gtk_spin_button_get_value(spin));
 }
 
 static void _bar_opacity_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN_ANY()
-  object->transparency = 1.0f - (float)CLAMP(gtk_spin_button_get_value(spin) / 100.0, 0.0, 1.0);
-  BAR_EDIT_END()
+  _bar_write_number((dt_view_t *)data, DT_CANVAS_PROP_OPACITY, gtk_spin_button_get_value(spin));
 }
 
 static void _bar_background_set(GtkColorButton *button, gpointer data)
 {
-  BAR_EDIT_BEGIN_FRAME()
-  _object_set_background(object, _color_from_button(GTK_WIDGET(button)));
-  BAR_EDIT_END()
+  _bar_write_color((dt_view_t *)data, DT_CANVAS_PROP_BACKGROUND, GTK_WIDGET(button));
 }
 
 static void _bar_cutout_shape_changed(GtkComboBox *combo, gpointer data)
 {
-  BAR_EDIT_BEGIN_FRAME()
-  const int shape = gtk_combo_box_get_active(combo);
-  dt_canvas_mask_set_shape(view->canvas, object, (uint32_t)CLAMP(shape, 0, DT_CANVAS_MASK_GRADIENT));
-  if(object->mask.shape == DT_CANVAS_MASK_NONE) view->mask_editing = FALSE;
-  else view->mask_editing = TRUE;
-  BAR_EDIT_END()
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  dt_canvas_object_t *object = _bar_edit_target(self, DT_CANVAS_PROP_CUTOUT_SHAPE);
+  if(IS_NULL_PTR(object)) return;
+  dt_canvas_t *before = _begin_edit(view);
+  dt_canvas_prop_value_t value;
+  memset(&value, 0, sizeof(value));
+  value.choice = gtk_combo_box_get_active(combo);
+  const uint32_t effects = dt_canvas_prop_write(view->canvas, object, DT_CANVAS_PROP_CUTOUT_SHAPE, &value);
+  // A new shape is edited at once, and no shape has nothing to edit.
+  if(effects & DT_CANVAS_EFFECT_VIEW) view->mask_editing = object->mask.shape != DT_CANVAS_MASK_NONE;
+  _bar_settle(self, object, before, effects);
   _bars_refresh(self, TRUE);
 }
 
 static void _bar_cutout_feather_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN_FRAME()
-  object->mask.feather = (float)CLAMP(gtk_spin_button_get_value(spin) / 100.0, 0.0, 1.0);
-  BAR_EDIT_END()
+  _bar_write_number((dt_view_t *)data, DT_CANVAS_PROP_CUTOUT_FEATHER, gtk_spin_button_get_value(spin));
 }
 
 /** The shape's size: the circle's radius, the ellipse's two radii, the gradient's extent; percent of the shorter side. */
 static void _bar_cutout_size_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN_FRAME()
-  const double size_x = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_cutout_size_x)) / 100.0;
-  const double size_y = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->object_cutout_size_y)) / 100.0;
-  if(object->mask.shape == DT_CANVAS_MASK_GRADIENT)
-    object->mask.radius_x = (float)CLAMP(size_x, 0.0005, 1.0);
-  else
-  {
-    object->mask.radius_x = (float)CLAMP(size_x, 0.005, 2.0);
-    if(object->mask.shape == DT_CANVAS_MASK_ELLIPSE) object->mask.radius_y = (float)CLAMP(size_y, 0.005, 2.0);
-  }
-  BAR_EDIT_END()
-}
-
-static void _bar_cutout_invert_toggled(GtkToggleButton *button, gpointer data)
-{
-  BAR_EDIT_BEGIN_FRAME()
-  if(gtk_toggle_button_get_active(button))
-    object->mask.flags |= DT_CANVAS_MASK_INVERT;
-  else
-    object->mask.flags &= ~(uint32_t)DT_CANVAS_MASK_INVERT;
-  BAR_EDIT_END()
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  const dt_canvas_prop_id_t prop_id = GTK_WIDGET(spin) == view->object_cutout_size_y ? DT_CANVAS_PROP_CUTOUT_SIZE_Y
+                                                                                : DT_CANVAS_PROP_CUTOUT_SIZE_X;
+  _bar_write_number(self, prop_id, gtk_spin_button_get_value(spin));
 }
 
 static void _bar_cutout_edit_toggled(GtkToggleButton *button, gpointer data)
@@ -2688,90 +2621,66 @@ static void _bar_cutout_edit_toggled(GtkToggleButton *button, gpointer data)
 
 static void _bar_connector_route_changed(GtkComboBox *combo, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_CONNECTOR)
-  object->connector.routing = (uint32_t)CLAMP(gtk_combo_box_get_active(combo), 0, 2);
-  BAR_EDIT_END()
+  _bar_write_choice((dt_view_t *)data, DT_CANVAS_PROP_CONNECTOR_ROUTING, gtk_combo_box_get_active(combo));
 }
 
+/** Four combinations of two arrowheads in one list: both bits written, one undo step. */
 static void _bar_connector_arrows_changed(GtkComboBox *combo, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_CONNECTOR)
-  static const uint32_t arrow_bits[4] = { 0, DT_CANVAS_CONNECTOR_ARROW_END, DT_CANVAS_CONNECTOR_ARROW_START,
-                                          DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START };
-  object->connector.style &= ~(uint32_t)(DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START);
-  object->connector.style |= arrow_bits[CLAMP(gtk_combo_box_get_active(combo), 0, 3)];
-  BAR_EDIT_END()
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  dt_canvas_object_t *object = _bar_edit_target(self, DT_CANVAS_PROP_CONNECTOR_ARROW_END);
+  if(IS_NULL_PTR(object)) return;
+  const int combination = CLAMP(gtk_combo_box_get_active(combo), 0, 3);
+  dt_canvas_t *before = _begin_edit(view);
+  dt_canvas_prop_value_t at_end;
+  memset(&at_end, 0, sizeof(at_end));
+  at_end.flag = combination == 1 || combination == 3;
+  dt_canvas_prop_value_t at_start;
+  memset(&at_start, 0, sizeof(at_start));
+  at_start.flag = combination == 2 || combination == 3;
+  uint32_t effects = dt_canvas_prop_write(view->canvas, object, DT_CANVAS_PROP_CONNECTOR_ARROW_END, &at_end);
+  effects |= dt_canvas_prop_write(view->canvas, object, DT_CANVAS_PROP_CONNECTOR_ARROW_START, &at_start);
+  _bar_settle(self, object, before, effects);
 }
 
 static void _bar_connector_reverse_clicked(GtkWidget *button, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_CONNECTOR)
-  const uint32_t from_id = object->connector.from_id;
-  const uint32_t from_anchor = object->connector.from_anchor;
-  object->connector.from_id = object->connector.to_id;
-  object->connector.from_anchor = object->connector.to_anchor;
-  object->connector.to_id = from_id;
-  object->connector.to_anchor = from_anchor;
-  BAR_EDIT_END()
+  dt_canvas_prop_value_t value;
+  memset(&value, 0, sizeof(value));
+  _bar_write((dt_view_t *)data, DT_CANVAS_PROP_CONNECTOR_REVERSE, &value);
 }
 
 static void _bar_connector_width_changed(GtkSpinButton *spin, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_CONNECTOR)
-  object->connector.line_width = (float)gtk_spin_button_get_value(spin);
-  BAR_EDIT_END()
-}
-
-static void _bar_connector_dashed_toggled(GtkToggleButton *toggle, gpointer data)
-{
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_CONNECTOR)
-  if(gtk_toggle_button_get_active(toggle))
-    object->connector.style |= DT_CANVAS_CONNECTOR_DASHED;
-  else
-    object->connector.style &= ~(uint32_t)DT_CANVAS_CONNECTOR_DASHED;
-  BAR_EDIT_END()
+  _bar_write_number((dt_view_t *)data, DT_CANVAS_PROP_LINE_WIDTH, gtk_spin_button_get_value(spin));
 }
 
 static void _bar_connector_color_set(GtkColorButton *button, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_CONNECTOR)
-  object->connector.color = _color_from_button(GTK_WIDGET(button));
-  BAR_EDIT_END()
-}
-
-static void _bar_connector_via_toggled(GtkToggleButton *toggle, gpointer data)
-{
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_CONNECTOR)
-  if(gtk_toggle_button_get_active(toggle))
-    dt_canvas_connector_add_via(view->canvas, object);
-  else
-    dt_canvas_connector_remove_via(view->canvas, object);
-  BAR_EDIT_END()
+  _bar_write_color((dt_view_t *)data, DT_CANVAS_PROP_LINE_COLOR, GTK_WIDGET(button));
 }
 
 static void _bar_map_changed(GtkWidget *widget, gpointer data)
 {
-  BAR_EDIT_BEGIN(DT_CANVAS_OBJECT_MAP)
-  object->map.latitude = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->map_latitude));
-  object->map.longitude = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->map_longitude));
-  object->map.zoom = (int32_t)gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->map_zoom));
-  object->map.source = dt_canvas_map_source_id(gtk_combo_box_get_active(GTK_COMBO_BOX(view->map_source)));
-  dt_conf_set_int("canvas/map_zoom", object->map.zoom);
-  dt_conf_set_int("canvas/map_source", (int)object->map.source);
-  dt_conf_set_float("canvas/map_latitude", (float)object->map.latitude);
-  dt_conf_set_float("canvas/map_longitude", (float)object->map.longitude);
-  BAR_EDIT_END()
-  _start_map_render(self, object);
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(widget == view->map_source)
+  {
+    _bar_write_choice(self, DT_CANVAS_PROP_MAP_STYLE, gtk_combo_box_get_active(GTK_COMBO_BOX(widget)));
+    return;
+  }
+  dt_canvas_prop_id_t prop_id = DT_CANVAS_PROP_MAP_ZOOM;
+  if(widget == view->map_latitude) prop_id = DT_CANVAS_PROP_MAP_LATITUDE;
+  else if(widget == view->map_longitude) prop_id = DT_CANVAS_PROP_MAP_LONGITUDE;
+  _bar_write_number(self, prop_id, gtk_spin_button_get_value(GTK_SPIN_BUTTON(widget)));
 }
 
 static void _bar_map_refresh_clicked(GtkWidget *button, gpointer data)
 {
-  dt_view_t *self = (dt_view_t *)data;
-  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  dt_canvas_object_t *object = _bar_target(view);
-  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_MAP) return;
-  _start_map_render(self, object);
-  dt_control_queue_redraw_center();
+  dt_canvas_prop_value_t value;
+  memset(&value, 0, sizeof(value));
+  _bar_write((dt_view_t *)data, DT_CANVAS_PROP_MAP_FETCH, &value);
 }
 
 static GtkWidget *_bar_color_button(GtkWidget *row, const char *tooltip, GCallback callback, gpointer data)
@@ -2935,11 +2844,14 @@ static void _bars_create(dt_view_t *self)
   gtk_grid_set_column_spacing(GTK_GRID(padding_grid), DT_PIXEL_APPLY_DPI(8));
   gtk_container_set_border_width(GTK_CONTAINER(padding_grid), DT_PIXEL_APPLY_DPI(8));
   static const char *const sides[4] = { N_("Top"), N_("Right"), N_("Bottom"), N_("Left") };
+  static const dt_canvas_prop_id_t side_props[4]
+      = { DT_CANVAS_PROP_TEXT_INSET_TOP, DT_CANVAS_PROP_TEXT_INSET_RIGHT, DT_CANVAS_PROP_TEXT_INSET_BOTTOM,
+          DT_CANVAS_PROP_TEXT_INSET_LEFT };
   for(int side = 0; side < 4; side++)
   {
     GtkWidget *spin = gtk_spin_button_new_with_range(0.0, 4000.0, 1.0);
     gtk_entry_set_width_chars(GTK_ENTRY(spin), 5);
-    g_object_set_data(G_OBJECT(spin), "text-margin-side", GINT_TO_POINTER(side));
+    g_object_set_data(G_OBJECT(spin), "canvas-prop", GINT_TO_POINTER(side_props[side]));
     g_signal_connect(spin, "value-changed", G_CALLBACK(_bar_text_margin_changed), self);
     gtk_grid_attach(GTK_GRID(padding_grid), gtk_label_new(_(sides[side])), 0, side, 1, 1);
     gtk_grid_attach(GTK_GRID(padding_grid), spin, 1, side, 1, 1);
@@ -2987,13 +2899,14 @@ static void _bars_create(dt_view_t *self)
                view->text_features_box);
   view->text_auto_height = _bar_toggle(view->row_text, _("Auto height"),
                                        _("The frame's height follows its content"),
-                                       G_CALLBACK(_bar_text_flag_toggled), self);
-  g_object_set_data(G_OBJECT(view->text_auto_height), "text-flag", GINT_TO_POINTER(DT_CANVAS_TEXT_AUTO_HEIGHT));
+                                       G_CALLBACK(_bar_flag_toggled), self);
+  g_object_set_data(G_OBJECT(view->text_auto_height), "canvas-prop",
+                    GINT_TO_POINTER(DT_CANVAS_PROP_TEXT_AUTO_HEIGHT));
   view->text_wrap = _bar_toggle(view->row_text, _("Wrap"),
                                 _("Flow the text around the frames laid over it, following what each of them "
                                   "actually draws rather than the box around it"),
-                                G_CALLBACK(_bar_text_flag_toggled), self);
-  g_object_set_data(G_OBJECT(view->text_wrap), "text-flag", GINT_TO_POINTER(DT_CANVAS_TEXT_WRAP_AROUND));
+                                G_CALLBACK(_bar_flag_toggled), self);
+  g_object_set_data(G_OBJECT(view->text_wrap), "canvas-prop", GINT_TO_POINTER(DT_CANVAS_PROP_TEXT_WRAP));
   GtkWidget *gap = _bar_group(view->row_text, _("Gap"));
   view->text_standoff = _bar_spin(gap, 0.0, 500.0, 1.0, 0,
                                   _("The clear space the text keeps around whatever it flows past, in canvas units"),
@@ -3001,8 +2914,9 @@ static void _bars_create(dt_view_t *self)
   view->text_optical = _bar_toggle(view->row_text, _("Optical"),
                                    _("Hang punctuation into the margin, so the column's edge reads from the stems "
                                      "rather than from a quote or a full stop"),
-                                   G_CALLBACK(_bar_text_flag_toggled), self);
-  g_object_set_data(G_OBJECT(view->text_optical), "text-flag", GINT_TO_POINTER(DT_CANVAS_TEXT_OPTICAL_MARGINS));
+                                   G_CALLBACK(_bar_flag_toggled), self);
+  g_object_set_data(G_OBJECT(view->text_optical), "canvas-prop",
+                    GINT_TO_POINTER(DT_CANVAS_PROP_TEXT_OPTICAL_MARGINS));
   view->text_color = _bar_color_button(view->row_text, _("Text colour and opacity"), G_CALLBACK(_bar_text_color_set), self);
 
   view->row_connector = _bar_row(bar, _("Connector"));
@@ -3024,7 +2938,9 @@ static void _bars_create(dt_view_t *self)
   _bar_button(view->row_connector, _("Reverse"), _("Swap the start and the end"), G_CALLBACK(_bar_connector_reverse_clicked), self);
   view->connector_via = _bar_toggle(view->row_connector, _("Waypoint"),
                                     _("Add a point the connector passes by, to go around other frames. Drag it into place."),
-                                    G_CALLBACK(_bar_connector_via_toggled), self);
+                                    G_CALLBACK(_bar_flag_toggled), self);
+  g_object_set_data(G_OBJECT(view->connector_via), "canvas-prop",
+                    GINT_TO_POINTER(DT_CANVAS_PROP_CONNECTOR_WAYPOINT));
 
   view->row_map = _bar_row(bar, _("Map"));
   view->map_latitude = _bar_spin(view->row_map, -85.0, 85.0, 0.0001, 5, _("Latitude, degrees"), G_CALLBACK(_bar_map_changed), self);
@@ -3055,7 +2971,9 @@ static void _bars_create(dt_view_t *self)
       = _bar_toggle(view->row_geometry, _("Proportions"),
                     _("Keep the frame's shape when it is resized, so a picture or a drawing is never "
                       "stretched. Off, the two sides move independently."),
-                    G_CALLBACK(_bar_proportions_toggled), self);
+                    G_CALLBACK(_bar_flag_toggled), self);
+  g_object_set_data(G_OBJECT(view->geometry_proportions), "canvas-prop",
+                    GINT_TO_POINTER(DT_CANVAS_PROP_KEEP_RATIO));
   GtkWidget *angle = _bar_group(view->row_geometry, _("Angle"));
   view->geometry_rotation = _bar_spin(angle, -360.0, 360.0, 1.0, 1, _("Rotation, degrees clockwise"),
                                       G_CALLBACK(_bar_geometry_changed), self);
@@ -3089,7 +3007,8 @@ static void _bars_create(dt_view_t *self)
   GtkWidget *line_width = _bar_group(view->row_line, _("Width"));
   view->connector_width = _bar_spin(line_width, 1.0, 40.0, 1.0, 0, _("Line width, in canvas units"),
                                     G_CALLBACK(_bar_connector_width_changed), self);
-  view->connector_dashed = _bar_toggle(view->row_line, _("Dashed"), NULL, G_CALLBACK(_bar_connector_dashed_toggled), self);
+  view->connector_dashed = _bar_toggle(view->row_line, _("Dashed"), NULL, G_CALLBACK(_bar_flag_toggled), self);
+  g_object_set_data(G_OBJECT(view->connector_dashed), "canvas-prop", GINT_TO_POINTER(DT_CANVAS_PROP_LINE_DASHED));
   view->connector_color = _bar_color_button(view->row_line, _("Colour"), G_CALLBACK(_bar_connector_color_set), self);
 
   // 5. The shadow: a signed radius, outside the object when positive, inside when negative, none at zero.
@@ -3133,7 +3052,9 @@ static void _bars_create(dt_view_t *self)
                                          _("The ellipse's vertical radius, percent of the frame's shorter side"),
                                          G_CALLBACK(_bar_cutout_size_changed), self);
   view->object_cutout_invert = _bar_toggle(view->row_cutout, _("Invert"), _("Keep what is outside the shape"),
-                                           G_CALLBACK(_bar_cutout_invert_toggled), self);
+                                           G_CALLBACK(_bar_flag_toggled), self);
+  g_object_set_data(G_OBJECT(view->object_cutout_invert), "canvas-prop",
+                    GINT_TO_POINTER(DT_CANVAS_PROP_CUTOUT_INVERT));
   view->object_cutout_edit = _bar_toggle(view->row_cutout, _("Edit"),
                                          _("Show the shape's handles: drag them, Ctrl to keep one on a single axis; the wheel "
                                            "sets the feather, Shift+wheel the opacity. "
@@ -3232,6 +3153,55 @@ static void _bars_hide_now(dt_canvas_view_t *view)
   view->bars_signature = 0;
 }
 
+/** Refill a spin button from the property table: the value the object is drawn with. */
+static void _bar_show_number(const dt_canvas_view_t *view, GtkWidget *spin, const dt_canvas_object_t *object,
+                             const dt_canvas_prop_id_t prop_id)
+{
+  dt_canvas_prop_value_t value;
+  dt_canvas_prop_read(view->canvas, object, prop_id, &value);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), value.number);
+}
+
+static void _bar_show_color(const dt_canvas_view_t *view, GtkWidget *button, const dt_canvas_object_t *object,
+                            const dt_canvas_prop_id_t prop_id)
+{
+  dt_canvas_prop_value_t value;
+  dt_canvas_prop_read(view->canvas, object, prop_id, &value);
+  GdkRGBA rgba;
+  rgba.red = value.color.red;
+  rgba.green = value.color.green;
+  rgba.blue = value.color.blue;
+  rgba.alpha = value.color.alpha;
+  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(button), &rgba);
+}
+
+static void _bar_show_flag(const dt_canvas_view_t *view, GtkWidget *toggle, const dt_canvas_object_t *object,
+                           const dt_canvas_prop_id_t prop_id)
+{
+  dt_canvas_prop_value_t value;
+  dt_canvas_prop_read(view->canvas, object, prop_id, &value);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), value.flag);
+}
+
+static void _bar_show_choice(const dt_canvas_view_t *view, GtkWidget *combo, const dt_canvas_object_t *object,
+                             const dt_canvas_prop_id_t prop_id)
+{
+  dt_canvas_prop_value_t value;
+  dt_canvas_prop_read(view->canvas, object, prop_id, &value);
+  gtk_combo_box_set_active(GTK_COMBO_BOX(combo), value.choice);
+}
+
+/** A spin button carrying the inherit sentinel shows it for as long as the group is the canvas's. */
+static void _bar_show_inherit(const dt_canvas_view_t *view, GtkWidget *spin, const dt_canvas_object_t *object,
+                              const dt_canvas_prop_id_t prop_id)
+{
+  const dt_canvas_prop_group_t group = dt_canvas_prop_get(prop_id)->group;
+  if(dt_canvas_group_state(view->canvas, object, group) == DT_CANVAS_OWN_INHERIT)
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), CANVAS_BAR_INHERIT);
+  else
+    _bar_show_number(view, spin, object, prop_id);
+}
+
 static void _bars_refresh(dt_view_t *self, gboolean force)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -3248,49 +3218,50 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
     view->bars_refilling = TRUE;
     if(kind == DT_CANVAS_OBJECT_TEXT)
     {
-      gtk_font_chooser_set_font(GTK_FONT_CHOOSER(view->text_font), dt_canvas_text_effective_font(view->canvas, object));
-      _color_to_button(view->text_color, &object->text.text_color);
-      gtk_combo_box_set_active(GTK_COMBO_BOX(view->text_align_h), CLAMP((int)object->text.align_h, 0, 3));
-      gtk_combo_box_set_active(GTK_COMBO_BOX(view->text_align_v), CLAMP((int)object->text.align_v, 0, 2));
-      // Unset is the font's own leading, which the spin shows as 1 rather than as 0.
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_line_height),
-                                object->text.line_height > 0.0f ? object->text.line_height : 1.0f);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_letter_spacing), object->text.letter_spacing);
-      double margins[4];
-      dt_canvas_text_margins(object, margins);
+      dt_canvas_prop_value_t font;
+      dt_canvas_prop_read(view->canvas, object, DT_CANVAS_PROP_TEXT_FONT, &font);
+      gtk_font_chooser_set_font(GTK_FONT_CHOOSER(view->text_font), font.text);
+      _bar_show_color(view, view->text_color, object, DT_CANVAS_PROP_TEXT_COLOR);
+      _bar_show_choice(view, view->text_align_h, object, DT_CANVAS_PROP_TEXT_ALIGN_H);
+      _bar_show_choice(view, view->text_align_v, object, DT_CANVAS_PROP_TEXT_ALIGN_V);
+      // Unset is the font's own leading, which the table reads as 1 rather than as 0.
+      _bar_show_number(view, view->text_line_height, object, DT_CANVAS_PROP_TEXT_LINE_HEIGHT);
+      _bar_show_number(view, view->text_letter_spacing, object, DT_CANVAS_PROP_TEXT_LETTER_SPACING);
       for(int side = 0; side < 4; side++)
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_margin[side]), margins[side]);
+      {
+        GObject *margin_spin = G_OBJECT(view->text_margin[side]);
+        const dt_canvas_prop_id_t side_prop
+            = (dt_canvas_prop_id_t)GPOINTER_TO_INT(g_object_get_data(margin_spin, "canvas-prop"));
+        _bar_show_number(view, view->text_margin[side], object, side_prop);
+      }
       _text_features_fill(self, object);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_auto_height),
-                                   (object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT) != 0);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_optical),
-                                   (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS) != 0);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->text_wrap),
-                                   (object->text.text_flags & DT_CANVAS_TEXT_WRAP_AROUND) != 0);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_standoff), object->text.wrap_standoff);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_first_line_indent),
-                                object->text.first_line_indent);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->text_paragraph_spacing),
-                                object->text.paragraph_spacing);
+      _bar_show_flag(view, view->text_auto_height, object, DT_CANVAS_PROP_TEXT_AUTO_HEIGHT);
+      _bar_show_flag(view, view->text_optical, object, DT_CANVAS_PROP_TEXT_OPTICAL_MARGINS);
+      _bar_show_flag(view, view->text_wrap, object, DT_CANVAS_PROP_TEXT_WRAP);
+      _bar_show_number(view, view->text_standoff, object, DT_CANVAS_PROP_TEXT_WRAP_GAP);
+      _bar_show_number(view, view->text_first_line_indent, object, DT_CANVAS_PROP_TEXT_FIRST_LINE_INDENT);
+      _bar_show_number(view, view->text_paragraph_spacing, object, DT_CANVAS_PROP_TEXT_PARAGRAPH_SPACING);
     }
     else if(kind == DT_CANVAS_OBJECT_CONNECTOR)
     {
-      const uint32_t arrows = object->connector.style
-                              & (DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START);
+      dt_canvas_prop_value_t at_end;
+      dt_canvas_prop_read(view->canvas, object, DT_CANVAS_PROP_CONNECTOR_ARROW_END, &at_end);
+      dt_canvas_prop_value_t at_start;
+      dt_canvas_prop_read(view->canvas, object, DT_CANVAS_PROP_CONNECTOR_ARROW_START, &at_start);
       int arrows_index = 0;
-      if(arrows == DT_CANVAS_CONNECTOR_ARROW_END) arrows_index = 1;
-      else if(arrows == DT_CANVAS_CONNECTOR_ARROW_START) arrows_index = 2;
-      else if(arrows != 0) arrows_index = 3;
-      gtk_combo_box_set_active(GTK_COMBO_BOX(view->connector_route), CLAMP((int)object->connector.routing, 0, 2));
+      if(at_end.flag && at_start.flag) arrows_index = 3;
+      else if(at_start.flag) arrows_index = 2;
+      else if(at_end.flag) arrows_index = 1;
+      _bar_show_choice(view, view->connector_route, object, DT_CANVAS_PROP_CONNECTOR_ROUTING);
       gtk_combo_box_set_active(GTK_COMBO_BOX(view->connector_arrows), arrows_index);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->connector_via), object->connector.via_count > 0);
+      _bar_show_flag(view, view->connector_via, object, DT_CANVAS_PROP_CONNECTOR_WAYPOINT);
     }
     else if(kind == DT_CANVAS_OBJECT_MAP)
     {
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->map_latitude), object->map.latitude);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->map_longitude), object->map.longitude);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->map_zoom), object->map.zoom);
-      gtk_combo_box_set_active(GTK_COMBO_BOX(view->map_source), dt_canvas_map_source_index(object->map.source));
+      _bar_show_number(view, view->map_latitude, object, DT_CANVAS_PROP_MAP_LATITUDE);
+      _bar_show_number(view, view->map_longitude, object, DT_CANVAS_PROP_MAP_LONGITUDE);
+      _bar_show_number(view, view->map_zoom, object, DT_CANVAS_PROP_MAP_ZOOM);
+      _bar_show_choice(view, view->map_source, object, DT_CANVAS_PROP_MAP_STYLE);
     }
     if(!IS_NULL_PTR(object))
     {
@@ -3298,67 +3269,60 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       const gboolean connector = kind == DT_CANVAS_OBJECT_CONNECTOR;
       if(frame)
       {
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_x), object->x);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_y), object->y);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_width), object->width);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_height), object->height);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->geometry_rotation), object->rotation * 180.0 / M_PI);
-        const dt_canvas_color_t background = dt_canvas_object_background(object);
-        _color_to_button(view->object_background, &background);
-        dt_canvas_color_t border_color;
-        float border_width = 0.0f;
-        dt_canvas_object_effective_border(view->canvas, object, &border_color, &border_width);
+        _bar_show_number(view, view->geometry_x, object, DT_CANVAS_PROP_X);
+        _bar_show_number(view, view->geometry_y, object, DT_CANVAS_PROP_Y);
+        _bar_show_number(view, view->geometry_width, object, DT_CANVAS_PROP_WIDTH);
+        _bar_show_number(view, view->geometry_height, object, DT_CANVAS_PROP_HEIGHT);
+        _bar_show_number(view, view->geometry_rotation, object, DT_CANVAS_PROP_ROTATION);
+        _bar_show_color(view, view->object_background, object, DT_CANVAS_PROP_BACKGROUND);
         // The colour shows the effective one; the sizes read the sentinel while they are inherited.
-        _color_to_button(view->object_border_color, &border_color);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_border_width),
-                                  (object->flags & DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE) ? border_width
-                                                                                          : CANVAS_BAR_INHERIT);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_corner_radius),
-                                  (object->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE)
-                                      ? dt_canvas_object_effective_corner_radius(view->canvas, object)
-                                      : CANVAS_BAR_INHERIT);
+        _bar_show_color(view, view->object_border_color, object, DT_CANVAS_PROP_BORDER_COLOR);
+        _bar_show_inherit(view, view->object_border_width, object, DT_CANVAS_PROP_BORDER_WIDTH);
+        _bar_show_inherit(view, view->object_corner_radius, object, DT_CANVAS_PROP_CORNER_RADIUS);
       }
       if(connector)
       {
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->connector_width), object->connector.line_width);
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->connector_dashed),
-                                     (object->connector.style & DT_CANVAS_CONNECTOR_DASHED) != 0);
-        _color_to_button(view->connector_color, &object->connector.color);
+        _bar_show_number(view, view->connector_width, object, DT_CANVAS_PROP_LINE_WIDTH);
+        _bar_show_flag(view, view->connector_dashed, object, DT_CANVAS_PROP_LINE_DASHED);
+        _bar_show_color(view, view->connector_color, object, DT_CANVAS_PROP_LINE_COLOR);
       }
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_opacity), (1.0 - CLAMP(object->transparency, 0.0f, 1.0f)) * 100.0);
-      dt_canvas_shadow_t shadow;
-      dt_canvas_object_effective_shadow(view->canvas, object, &shadow);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_shadow_offset_x), shadow.offset_x);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_shadow_offset_y), shadow.offset_y);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_shadow_blur),
-                                (object->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE) ? shadow.blur
-                                                                                        : CANVAS_BAR_INHERIT);
-      _color_to_button(view->object_shadow_color, &shadow.color);
-      gtk_combo_box_set_active(GTK_COMBO_BOX(view->object_cutout_shape), CLAMP((int)object->mask.shape, 0, DT_CANVAS_MASK_GRADIENT));
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_cutout_feather), object->mask.feather * 100.0);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_cutout_size_x), object->mask.radius_x * 100.0);
-      gtk_spin_button_set_value(GTK_SPIN_BUTTON(view->object_cutout_size_y), object->mask.radius_y * 100.0);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->object_cutout_invert), (object->mask.flags & DT_CANVAS_MASK_INVERT) != 0);
+      _bar_show_number(view, view->object_opacity, object, DT_CANVAS_PROP_OPACITY);
+      _bar_show_number(view, view->object_shadow_offset_x, object, DT_CANVAS_PROP_SHADOW_OFFSET_X);
+      _bar_show_number(view, view->object_shadow_offset_y, object, DT_CANVAS_PROP_SHADOW_OFFSET_Y);
+      _bar_show_inherit(view, view->object_shadow_blur, object, DT_CANVAS_PROP_SHADOW_BLUR);
+      _bar_show_color(view, view->object_shadow_color, object, DT_CANVAS_PROP_SHADOW_COLOR);
+      if(frame)
+      {
+        _bar_show_choice(view, view->object_cutout_shape, object, DT_CANVAS_PROP_CUTOUT_SHAPE);
+        _bar_show_number(view, view->object_cutout_feather, object, DT_CANVAS_PROP_CUTOUT_FEATHER);
+        _bar_show_number(view, view->object_cutout_size_x, object, DT_CANVAS_PROP_CUTOUT_SIZE_X);
+        _bar_show_number(view, view->object_cutout_size_y, object, DT_CANVAS_PROP_CUTOUT_SIZE_Y);
+        _bar_show_flag(view, view->object_cutout_invert, object, DT_CANVAS_PROP_CUTOUT_INVERT);
+        _bar_show_flag(view, view->geometry_proportions, object, DT_CANVAS_PROP_KEEP_RATIO);
+      }
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->object_cutout_edit), view->mask_editing);
-      const gboolean cut = frame && object->mask.shape != DT_CANVAS_MASK_NONE;
       gtk_widget_set_visible(view->row_text, kind == DT_CANVAS_OBJECT_TEXT);
       gtk_widget_set_visible(view->row_connector, connector);
       gtk_widget_set_visible(view->row_map, kind == DT_CANVAS_OBJECT_MAP);
       gtk_widget_set_visible(view->row_geometry, frame);
       // Only where there is a shape to keep: a text frame has none.
       gtk_widget_set_visible(view->geometry_proportions,
-                             kind == DT_CANVAS_OBJECT_IMAGE || kind == DT_CANVAS_OBJECT_SVG);
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->geometry_proportions),
-                                   (object->flags & DT_CANVAS_OBJECT_FLAG_FREE_RATIO) == 0);
+                             dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_KEEP_RATIO), object));
       gtk_widget_set_visible(gtk_widget_get_parent(view->object_background), frame);
       gtk_widget_set_visible(view->row_frame, frame);
       gtk_widget_set_visible(view->row_line, connector);
       gtk_widget_set_visible(view->row_cutout, frame);
-      gtk_widget_set_visible(gtk_widget_get_parent(view->object_cutout_feather), cut && object->mask.shape != DT_CANVAS_MASK_GRADIENT);
-      gtk_widget_set_visible(gtk_widget_get_parent(view->object_cutout_size_x), cut && object->mask.shape != DT_CANVAS_MASK_POLYGON);
-      gtk_widget_set_visible(view->object_cutout_size_y, cut && object->mask.shape == DT_CANVAS_MASK_ELLIPSE);
-      gtk_widget_set_visible(view->object_cutout_invert, cut);
-      gtk_widget_set_visible(view->object_cutout_edit, cut);
+      // What the shape has to edit is the table's to say, the same rule for every frontend.
+      gtk_widget_set_visible(gtk_widget_get_parent(view->object_cutout_feather),
+                             dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_CUTOUT_FEATHER), object));
+      gtk_widget_set_visible(gtk_widget_get_parent(view->object_cutout_size_x),
+                             dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_CUTOUT_SIZE_X), object));
+      gtk_widget_set_visible(view->object_cutout_size_y,
+                             dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_CUTOUT_SIZE_Y), object));
+      gtk_widget_set_visible(view->object_cutout_invert,
+                             dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_CUTOUT_INVERT), object));
+      gtk_widget_set_visible(view->object_cutout_edit,
+                             dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_CUTOUT_EDIT), object));
     }
     view->bars_refilling = FALSE;
     gtk_widget_set_visible(view->bar, !IS_NULL_PTR(object));
@@ -3381,6 +3345,17 @@ static void _bars_request(dt_view_t *self)
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->bar) || view->bars_idle != 0) return;
   view->bars_idle = g_idle_add(_bars_idle, self);
+}
+
+/**
+ * The document changed behind the bar's back -- a canvas default the toolbar set, an undo.
+ * What an inheriting object shows is the canvas's value, so the bar is refilled like any
+ * other reader of the document; the refill runs at idle and under `bars_refilling`, which turns
+ * the handlers it sets off, so it cannot answer itself.
+ */
+static void _bars_canvas_changed(gpointer instance, gpointer user_data)
+{
+  _bars_request((dt_view_t *)user_data);
 }
 
 /* --- drag and drop from the filmstrip ------------------------------------------------- */
@@ -4839,7 +4814,7 @@ static void _end_gesture(dt_view_t *self)
       // The gesture is over, so the geometry is final: fit every auto-height frame to it now,
       // once. A frame that was moved, resized or rotated changes what its own text flows
       // around, and so does one that merely passed over another frame's text.
-      _auto_height_settle_all(view);
+      dt_canvas_props_settle_all(view->canvas);
       dt_canvas_touch(view->canvas);
       _record_undo(self, view->drag_snapshot);
       view->drag_snapshot = NULL;
@@ -5635,9 +5610,16 @@ static void _proxy_set_corner_radius(dt_view_t *self, float radius)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
-  view->canvas->corner_radius = fmaxf(radius, 0.0f);
+  const float wanted = fmaxf(radius, 0.0f);
+  if(wanted == view->canvas->corner_radius) return;
+  dt_canvas_t *before = _begin_edit(view);
+  view->canvas->corner_radius = wanted;
   dt_conf_set_float("canvas/corner_radius", view->canvas->corner_radius);
   dt_canvas_touch(view->canvas);
+  _record_undo(self, before);
+  // The property bar shows the inherited radius: it owns no state and only shows what it last
+  // read, so without this it goes on showing the previous default under a frame drawn with the new one.
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
   dt_control_queue_redraw_center();
 }
 
@@ -5786,6 +5768,8 @@ static void _proxy_set_shadow(dt_view_t *self, const float *rgba, float offset_x
   dt_conf_set_float("canvas/shadow_radius", blur);
   dt_canvas_touch(view->canvas);
   _record_undo(self, before);
+  // Every object that inherits its shadow is drawn with the new one, and the property bar shows it.
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
   dt_control_queue_redraw_center();
 }
 
@@ -5856,19 +5840,22 @@ static void _proxy_set_border(dt_view_t *self, const float *rgba, float width)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
-  if(!IS_NULL_PTR(rgba))
-  {
-    view->canvas->border_color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
-    char text[16];
-    dt_canvas_color_format(&view->canvas->border_color, text, sizeof(text));
-    dt_conf_set_string("canvas/border_color", text);
-  }
-  if(width >= 0.0f)
-  {
-    view->canvas->border_width = width;
-    dt_conf_set_float("canvas/border_width", width);
-  }
+  const dt_canvas_color_t color = IS_NULL_PTR(rgba) ? view->canvas->border_color
+                                                    : dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  const float wanted = width >= 0.0f ? width : view->canvas->border_width;
+  const gboolean same_color = memcmp(&color, &view->canvas->border_color, sizeof(color)) == 0;
+  if(same_color && wanted == view->canvas->border_width) return;
+  dt_canvas_t *before = _begin_edit(view);
+  view->canvas->border_color = color;
+  char text[16];
+  dt_canvas_color_format(&view->canvas->border_color, text, sizeof(text));
+  dt_conf_set_string("canvas/border_color", text);
+  view->canvas->border_width = wanted;
+  dt_conf_set_float("canvas/border_width", wanted);
   dt_canvas_touch(view->canvas);
+  _record_undo(self, before);
+  // The property bar shows the inherited border: tell it, as a paper's colour tells the toolbar.
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
   dt_control_queue_redraw_center();
 }
 
@@ -6047,6 +6034,8 @@ void enter(dt_view_t *self)
                                   G_CALLBACK(_filmstrip_drag_begin), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_CHANGED,
                                   G_CALLBACK(_profile_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED,
+                                  G_CALLBACK(_bars_canvas_changed), self);
 
   // The library may have moved on while we were away: compare, and refresh when asked to.
   _sync_check_all(view);
@@ -6069,6 +6058,7 @@ void leave(dt_view_t *self)
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_filmstrip_drag_begin), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_profile_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_bars_canvas_changed), self);
   if(view->dnd_connected)
   {
     GtkWidget *center = dt_gui_center_widget();

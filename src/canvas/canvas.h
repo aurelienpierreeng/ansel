@@ -104,6 +104,9 @@ enum
   DT_CANVAS_TEXT_MARGIN_LEFT = 3,
 };
 
+/** The inner margin a new text frame is born with, in canvas units: what an untouched inset reads. */
+#define DT_CANVAS_TEXT_DEFAULT_PADDING 12.0f
+
 typedef enum dt_canvas_text_flag_t
 {
   DT_CANVAS_TEXT_AUTO_HEIGHT = 1 << 0,     ///< the frame's height follows its content
