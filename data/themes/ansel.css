@@ -502,6 +502,17 @@ treeview {
 }
 
 /**
+ * The editor a treeview opens on a cell is an ordinary entry, and it is the one entry in the
+ * application that does not sit over a solid surface: the row goes on painting its own text
+ * underneath it, so the 25% recessed fill shows the old value through the one being typed.
+ * @grey_25 is what that fill already composites to over a .dt_recessed_scroll, so an opaque
+ * background of it keeps the look of every other field and hides what is behind.
+ **/
+treeview entry {
+  background-color: @grey_25;
+}
+
+/**
  * Recessed outer frame for a treeview (the counterpart to entry/textview
  * above, applied once on the whole widget rather than per row).
  *

@@ -150,7 +150,22 @@ typedef struct dt_shape_manager_t
   GdkPixbuf *ic_difference;
   GdkPixbuf *ic_exclusion;
   int gui_reset;
+
+  /* Set for the life of one _tree_start_name_editing() call, read by _tree_name_editing_started():
+   * the editor opens with the cursor after the text instead of the text selected. A name the user
+   * is meant to complete -- "Group " -- wants the caret, a name they are meant to replace wants
+   * the selection. */
+  gboolean name_edit_cursor_at_end;
+
+  /* The name edit waiting for the tree to be laid out, see _tree_edit_group_name(). A formid of 0
+   * is none pending; only one can be, since one action creates one group. */
+  dt_shape_list_t name_edit_which;
+  int name_edit_formid;
+  gboolean name_edit_at_end;
 } dt_shape_manager_t;
+
+static void _tree_edit_group_name(dt_lib_module_t *self, dt_shape_list_t which,
+                                  int formid, gboolean cursor_at_end);
 
 
 const char *name(struct dt_lib_module_t *self __attribute__((unused)))
@@ -334,7 +349,20 @@ static void _tree_group(GtkButton *button __attribute__((unused)), dt_shape_mana
   // touches dev->forms outside masks_mutex, which a hand-rolled g_list_append does -- and the
   // pipeline thread reads that list under the same lock.
   dt_masks_form_t *mask = dt_masks_create_ext(dt_dev_get_global(), DT_MASKS_GROUP);
-  g_snprintf(mask->name, sizeof(mask->name), _("Group #%d"), g_list_length(dt_dev_get_global()->forms));
+
+  /* A name to complete rather than one to keep: the row opens straight into editing with the caret
+   * after it, for the user to say what the group holds. It carries its rank among the groups all
+   * the same, so an edit the user cancels still leaves the rows told apart -- the group is not in
+   * dev->forms yet, so the count is of the ones before it. Not translated, for the reason
+   * dt_masks_group_name_for_module() is not either -- the string goes into the form, the database
+   * and the XMP, so it may not depend on the language the group happened to be created in. */
+  g_snprintf(mask->name, sizeof(mask->name), "Group %u",
+             dt_masks_group_list(dt_dev_get_global(), NULL, 0) + 1);
+
+  // Its id, to find its row again once the tree is rebuilt -- asked of the masks module rather
+  // than read off the form, which the boundary gate counts.
+  dt_masks_form_info_t info = { 0 };
+  const int new_id = dt_masks_form_get_info(mask, &info) ? info.formid : -1;
 
   // we add all selected forms to this group
   for(const GList *id = ids; id; id = g_list_next(id))
@@ -354,6 +382,9 @@ static void _tree_group(GtkButton *button __attribute__((unused)), dt_shape_mana
   dt_dev_add_history_item(dt_dev_get_global(), NULL, FALSE, TRUE);
   _shape_manager_recreate_list(self);
   _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
+
+  // The group renders for no module yet, so its row is the inventory's.
+  if(new_id > 0) _tree_edit_group_name(self, DT_SHAPE_LIST_SHAPES, new_id, TRUE);
 }
 
 static int _tree_format_form_usage_label(char *str, const size_t str_size,
@@ -845,12 +876,27 @@ static void _tree_name_editing_done(GtkCellEditable *editable __attribute__((unu
   if(had_focus) dt_gui_refocus_parent(GTK_WINDOW(dt_gui_main_window()));
 }
 
+/* Places the caret after the text, once. The editor is a GtkEntry, and an entry selects all its
+ * text when it takes the focus -- which the tree makes it do right after "editing-started", so
+ * anything the started handler does to the selection is undone a moment later (measured
+ * offscreen: set_position and select_region alike come back as the full selection, while the same
+ * call after "grab-focus" holds). It disconnects itself, so a later focus grab within the same
+ * edit -- the user clicking back into the entry -- leaves their caret where they put it. */
+static void _tree_name_caret_to_end(GtkWidget *editable, gpointer user_data __attribute__((unused)))
+{
+  g_signal_handlers_disconnect_by_func(editable, G_CALLBACK(_tree_name_caret_to_end), NULL);
+  if(GTK_IS_EDITABLE(editable)) gtk_editable_set_position(GTK_EDITABLE(editable), -1);
+}
+
 static void _tree_name_editing_started(GtkCellRenderer *renderer __attribute__((unused)),
                                        GtkCellEditable *editable, const gchar *path __attribute__((unused)),
                                        dt_shape_manager_list_t *list)
 {
   dt_shape_manager_t *lm = (dt_shape_manager_t *)list->self->data;
   if(IS_NULL_PTR(lm->popup_window)) return;
+
+  if(lm->name_edit_cursor_at_end)
+    g_signal_connect_after(editable, "grab-focus", G_CALLBACK(_tree_name_caret_to_end), NULL);
 
   // "editing-done" is emitted however the edit ends -- Enter, Escape, or the entry losing the
   // focus -- and the connection goes with the entry, which the tree destroys right after.
@@ -868,7 +914,7 @@ static void _tree_name_editing_started(GtkCellRenderer *renderer __attribute__((
  * TRUE only while this function opens the editor. Once open, the editor does not read it again:
  * "edited" is still emitted when the name is validated. */
 static void _tree_start_name_editing(const dt_shape_manager_list_t *list, GtkTreeModel *model,
-                                     GtkTreeIter *iter, GtkTreePath *path)
+                                     GtkTreeIter *iter, GtkTreePath *path, const gboolean cursor_at_end)
 {
   if(IS_NULL_PTR(list->treeview) || IS_NULL_PTR(list->name_col) || IS_NULL_PTR(list->name_renderer))
     return;
@@ -877,28 +923,34 @@ static void _tree_start_name_editing(const dt_shape_manager_list_t *list, GtkTre
   gtk_tree_model_get(model, iter, TREE_EDITABLE, &editable, -1);
   if(!editable) return;
 
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)list->self->data;
+  lm->name_edit_cursor_at_end = cursor_at_end;
+
   g_object_set(list->name_renderer, "editable", TRUE, NULL);
   gtk_tree_view_set_cursor_on_cell(GTK_TREE_VIEW(list->treeview), path, list->name_col,
                                    list->name_renderer, TRUE);
   g_object_set(list->name_renderer, "editable", FALSE, NULL);
+
+  lm->name_edit_cursor_at_end = FALSE;
 }
 
-/* Opens the module list's row for that group straight into name editing.
- *
- * The tree has just been rebuilt, so the row is found by id rather than kept across the rebuild:
- * every iter from before it is stale. Only a top-level row is editable (TREE_EDITABLE), which a
- * module group in that list always is. */
-static void _tree_edit_group_name(dt_lib_module_t *self, const int formid)
+static gboolean _tree_edit_group_name_idle(gpointer user_data)
 {
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
-  const dt_shape_manager_list_t *list = &lm->lists[DT_SHAPE_LIST_MODULES];
-  if(IS_NULL_PTR(list->treeview)) return;
+
+  const int formid = lm->name_edit_formid;
+  const gboolean cursor_at_end = lm->name_edit_at_end;
+  const dt_shape_manager_list_t *list = &lm->lists[lm->name_edit_which];
+  lm->name_edit_formid = 0;
+
+  if(formid <= 0 || IS_NULL_PTR(list->treeview)) return G_SOURCE_REMOVE;
 
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(list->treeview));
-  if(!GTK_IS_TREE_MODEL(model)) return;
+  if(!GTK_IS_TREE_MODEL(model)) return G_SOURCE_REMOVE;
 
   GtkTreeIter iter;
-  if(!gtk_tree_model_get_iter_first(model, &iter)) return;
+  if(!gtk_tree_model_get_iter_first(model, &iter)) return G_SOURCE_REMOVE;
 
   do
   {
@@ -909,11 +961,33 @@ static void _tree_edit_group_name(dt_lib_module_t *self, const int formid)
     GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
     if(!IS_NULL_PTR(path))
     {
-      _tree_start_name_editing(list, model, &iter, path);
+      _tree_start_name_editing(list, model, &iter, path, cursor_at_end);
       gtk_tree_path_free(path);
     }
-    return;
+    return G_SOURCE_REMOVE;
   } while(gtk_tree_model_iter_next(model, &iter));
+
+  return G_SOURCE_REMOVE;
+}
+
+/* Opens one list's top-level row for that group straight into name editing, one loop turn from
+ * now. Only a top-level row is editable (TREE_EDITABLE), which is what both lists hold a group as.
+ *
+ * The wait is not politeness. A rebuilt tree holds the row in its model immediately but has not
+ * been laid out yet, so the editor GtkTreeView opens on it is placed against an allocation that
+ * does not exist and is never mapped -- measured in the running application: the entry is alive
+ * and carries the right text, with mapped == 0, no focus and no grab held by anyone, which reads
+ * as "the editor did not open". G_PRIORITY_DEFAULT_IDLE runs below GTK's resize and redraw, so by
+ * then the row has its place. The row is found by id rather than by an iter kept across the wait,
+ * so a further rebuild in between costs the edit and nothing else. */
+static void _tree_edit_group_name(dt_lib_module_t *self, const dt_shape_list_t which,
+                                  const int formid, const gboolean cursor_at_end)
+{
+  dt_shape_manager_t *lm = (dt_shape_manager_t *)self->data;
+  lm->name_edit_which = which;
+  lm->name_edit_formid = formid;
+  lm->name_edit_at_end = cursor_at_end;
+  g_idle_add(_tree_edit_group_name_idle, self);
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -1213,8 +1287,6 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
   GList *to_detach = NULL;
   if(!_modchooser_run(form, &to_attach, &to_detach)) return;
 
-  int created_id = 0;
-  int created_count = 0;
   gboolean changed = FALSE;
 
   /* Detaching first, so a module the user unticked and one they ticked cannot fight over the
@@ -1242,8 +1314,6 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
       own = _module_create_own_mask(dev, module, &own_id);
       if(IS_NULL_PTR(own)) break;
 
-      created_id = own_id;
-      created_count++;
       changed = TRUE;
     }
 
@@ -1265,11 +1335,6 @@ static void _tree_row_assign_to_modules(dt_shape_manager_list_t *list, GtkTreeMo
   dt_dev_add_history_item(dev, NULL, FALSE, TRUE);
   _shape_manager_recreate_list(self);
   _shape_manager_broadcast(self, 0, 0, DT_MASKS_EVENT_CHANGE);
-
-  /* A mask the user has just conjured wants a name, so its row opens straight into editing --
-   * but only when exactly one was made. With several there is no "the" one to open, and each
-   * already carries its module's name, which is the answer most of the time anyway. */
-  if(created_count == 1) _tree_edit_group_name(self, created_id);
 }
 
 /* The inventory's "+": add this row's form to the group the module list points at. */
@@ -1930,7 +1995,8 @@ static void _tree_row_activated(GtkTreeView *treeview, GtkTreePath *path, GtkTre
   GtkTreeIter iter;
   if(!gtk_tree_model_get_iter(model, &iter, path)) return;
 
-  _tree_start_name_editing(list, model, &iter, path);
+  // Renaming something already named: the text is there to be replaced, so it opens selected.
+  _tree_start_name_editing(list, model, &iter, path, FALSE);
 }
 
 static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel *model __attribute__((unused)), GtkTreePath *path,
