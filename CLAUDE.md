@@ -3539,6 +3539,18 @@ they are visible.
   kept because that accident is a property of these two spaces and not of the code.
   **A drawing gets no border and no shadow by default**: it is ink on nothing, and a card
   behind it turns it into the one thing it is not.
+- **A drawing is drawn at the size it is SHOWN at, never rescaled to it.** An SVG has no
+  resolution of its own, so `dt_canvas_surface_cache_get_scaled()` renders the document at the
+  sprite's pixel size instead of resampling a raster of it. Rasterising once and stretching
+  throws away the only thing a drawing had over a photograph -- measured on a 32-point file
+  shown at 512 pixels, a square's edge is a full step of 255 drawn at size and under 60
+  stretched from its own, which is exactly the "blurry at 1:1" a fixed oversample factor buys
+  as soon as a frame is bigger than the factor allowed for.
+- **A picture and a drawing keep their proportions unless told not to**
+  (`dt_canvas_object_keeps_ratio()`). `DT_CANVAS_OBJECT_FLAG_FREE_RATIO` is stated the FREE way
+  round so ZERO is the careful answer, and one predicate answers for the corner drag and the
+  property bar's two size spins alike -- two spellings of that question is how they come to
+  disagree.
 - **A drawing's obstacle silhouette is its own ink** (`dt_canvas_render_svg_coverage()`, an A8
   render at the occupancy map's pitch), so text flows past the shape the file draws rather than
   the box it sits in. Measured on a file whose ink fills half its viewBox: 41.91 units of

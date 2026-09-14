@@ -863,8 +863,6 @@ void dt_canvas_render_srgb8_to_layer8(uint8_t *pixels, const size_t count, const
 
 /** The longest side an SVG is rasterised to, whatever it says its size is. */
 #define CANVAS_SVG_MAX_EDGE 4096
-/** Raster pixels per point: enough that a page printed at 300 dpi is not upscaled by much. */
-#define CANVAS_SVG_OVERSAMPLE 4.0
 
 /** Does this look like an SVG document rather than a photograph? */
 static gboolean _looks_like_svg(GBytes *bytes)
@@ -894,7 +892,7 @@ static gboolean _looks_like_svg(GBytes *bytes)
  * transparent pixel comes out at the wrong lightness -- which on an anti-aliased edge is every
  * pixel of every outline in the drawing.
  */
-static cairo_surface_t *_render_svg(GBytes *bytes)
+cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const int want_height)
 {
   gsize length = 0;
   const void *data = g_bytes_get_data(bytes, &length);
@@ -932,11 +930,25 @@ static cairo_surface_t *_render_svg(GBytes *bytes)
     g_object_unref(handle);
     return NULL;
   }
-  double scale = CANVAS_SVG_OVERSAMPLE;
-  const double longest = fmax(points_wide, points_high) * scale;
-  if(longest > CANVAS_SVG_MAX_EDGE) scale *= CANVAS_SVG_MAX_EDGE / longest;
-  const int width = MAX((int)lround(points_wide * scale), 1);
-  const int height = MAX((int)lround(points_high * scale), 1);
+  /*
+   * The size the caller asked for, or the drawing's own when it asked for nothing. A drawing
+   * has no resolution of its own, so the one to use is whatever it is about to be shown at.
+   */
+  int width = want_width;
+  int height = want_height;
+  if(width <= 0 || height <= 0)
+  {
+    width = MAX((int)lround(points_wide), 1);
+    height = MAX((int)lround(points_high), 1);
+  }
+  const int longest = MAX(width, height);
+  if(longest > CANVAS_SVG_MAX_EDGE)
+  {
+    // A ceiling, so a drawing placed across a wall-sized page cannot ask for a raster nobody
+    // has the memory for; at that size the scaling that follows is invisible anyway.
+    width = MAX(width * CANVAS_SVG_MAX_EDGE / longest, 1);
+    height = MAX(height * CANVAS_SVG_MAX_EDGE / longest, 1);
+  }
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
   if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
@@ -1053,7 +1065,8 @@ cairo_surface_t *dt_canvas_render_svg_coverage(GBytes *svg, const int width, con
 cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, const uint32_t colorspace)
 {
   if(IS_NULL_PTR(jpeg)) return NULL;
-  if(_looks_like_svg(jpeg)) return _render_svg(jpeg);
+  // No size asked for: the drawing's own, which is what the mask and the export start from.
+  if(_looks_like_svg(jpeg)) return dt_canvas_render_svg(jpeg, 0, 0);
   int width = 0;
   int height = 0;
   uint8_t *rgba = _decode_rgba(jpeg, &width, &height);
@@ -1680,7 +1693,17 @@ cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *c
     }
     if(entry->sprite_use[slot] < entry->sprite_use[oldest]) oldest = slot;
   }
-  cairo_surface_t *sprite = dt_canvas_render_rescale(source, width, height);
+  /*
+   * A DRAWING is drawn again at the size asked for, never rescaled to it. An SVG has no
+   * resolution of its own -- that is the whole point of one -- so rescaling a raster of it
+   * throws away the only thing it had over a photograph, and a logo comes back soft at any
+   * zoom where the sprite is bigger than whatever raster it was rasterised into. Rendering
+   * costs about what rescaling costs and the answer is exact at every size, so there is no
+   * oversample factor to guess at either.
+   */
+  cairo_surface_t *sprite = object->kind == DT_CANVAS_OBJECT_SVG
+                                ? dt_canvas_render_svg(dt_canvas_object_raster(object), width, height)
+                                : dt_canvas_render_rescale(source, width, height);
   if(IS_NULL_PTR(sprite)) return NULL;
   if(!IS_NULL_PTR(entry->sprite[oldest]))
   {

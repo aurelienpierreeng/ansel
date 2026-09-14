@@ -204,6 +204,7 @@ typedef struct dt_canvas_view_t
   GtkWidget *geometry_width;
   GtkWidget *geometry_height;
   GtkWidget *geometry_rotation;
+  GtkWidget *geometry_proportions;
   GtkWidget *row_opacity;
   GtkWidget *object_opacity;
   GtkWidget *object_background;
@@ -2533,13 +2534,45 @@ static void _bar_border_color_set(GtkColorButton *button, gpointer data)
   dt_canvas_t *before = _begin_edit(view);
 
 /** The geometry row: the frame's centre, size and rotation, typed in. */
+/** Keep the frame's shape, or let its two sides move independently. */
+static void _bar_proportions_toggled(GtkToggleButton *button, gpointer data)
+{
+  BAR_EDIT_BEGIN_FRAME()
+  if(gtk_toggle_button_get_active(button))
+    object->flags &= ~DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
+  else
+    object->flags |= DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
+  BAR_EDIT_END()
+}
+
 static void _bar_geometry_changed(GtkSpinButton *spin, gpointer data)
 {
   BAR_EDIT_BEGIN_FRAME()
   object->x = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_x));
   object->y = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_y));
-  object->width = fmax(gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_width)), 1.0);
-  object->height = fmax(gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_height)), 1.0);
+  const double typed_width = fmax(gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_width)), 1.0);
+  const double typed_height = fmax(gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_height)), 1.0);
+  // A typed size obeys the same rule the drag does, or the two controls fight: whichever of
+  // the pair was edited leads, and the other follows the shape the frame is keeping.
+  if(dt_canvas_object_keeps_ratio(object) && object->width > 0.0 && object->height > 0.0)
+  {
+    const double ratio = object->width / object->height;
+    if(GTK_WIDGET(spin) == view->geometry_height)
+    {
+      object->height = typed_height;
+      object->width = fmax(typed_height * ratio, 1.0);
+    }
+    else
+    {
+      object->width = typed_width;
+      object->height = fmax(typed_width / ratio, 1.0);
+    }
+  }
+  else
+  {
+    object->width = typed_width;
+    object->height = typed_height;
+  }
   object->rotation = gtk_spin_button_get_value(GTK_SPIN_BUTTON(view->geometry_rotation)) * M_PI / 180.0;
   BAR_EDIT_END()
   if(object->kind == DT_CANVAS_OBJECT_MAP) _start_map_render(self, object);
@@ -3018,6 +3051,11 @@ static void _bars_create(dt_view_t *self)
   GtkWidget *size = _bar_group(view->row_geometry, _("Size"));
   view->geometry_width = _bar_spin(size, 1.0, 1e6, 1.0, 0, _("Width, canvas units"), G_CALLBACK(_bar_geometry_changed), self);
   view->geometry_height = _bar_spin(size, 1.0, 1e6, 1.0, 0, _("Height, canvas units"), G_CALLBACK(_bar_geometry_changed), self);
+  view->geometry_proportions
+      = _bar_toggle(view->row_geometry, _("Proportions"),
+                    _("Keep the frame's shape when it is resized, so a picture or a drawing is never "
+                      "stretched. Off, the two sides move independently."),
+                    G_CALLBACK(_bar_proportions_toggled), self);
   GtkWidget *angle = _bar_group(view->row_geometry, _("Angle"));
   view->geometry_rotation = _bar_spin(angle, -360.0, 360.0, 1.0, 1, _("Rotation, degrees clockwise"),
                                       G_CALLBACK(_bar_geometry_changed), self);
@@ -3307,6 +3345,11 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
       gtk_widget_set_visible(view->row_connector, connector);
       gtk_widget_set_visible(view->row_map, kind == DT_CANVAS_OBJECT_MAP);
       gtk_widget_set_visible(view->row_geometry, frame);
+      // Only where there is a shape to keep: a text frame has none.
+      gtk_widget_set_visible(view->geometry_proportions,
+                             kind == DT_CANVAS_OBJECT_IMAGE || kind == DT_CANVAS_OBJECT_SVG);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(view->geometry_proportions),
+                                   (object->flags & DT_CANVAS_OBJECT_FLAG_FREE_RATIO) == 0);
       gtk_widget_set_visible(gtk_widget_get_parent(view->object_background), frame);
       gtk_widget_set_visible(view->row_frame, frame);
       gtk_widget_set_visible(view->row_line, connector);
@@ -4661,14 +4704,14 @@ static void _snap_selection(dt_canvas_view_t *view, const uint32_t leader_id)
 
 static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, const double x, const double y)
 {
-  // The dragged corner follows the pointer; the opposite corner stays put. An image keeps its
-  // aspect ratio, a text frame resizes freely.
+  // The dragged corner follows the pointer; the opposite corner stays put. A picture and a
+  // drawing keep their proportions unless told not to; a text frame has none to keep.
   double local_x = 0.0;
   double local_y = 0.0;
   dt_canvas_object_to_local(object, x, y, &local_x, &local_y);
   const double sign_x = (view->scale_corner == 1 || view->scale_corner == 2) ? 1.0 : -1.0;
   const double sign_y = (view->scale_corner == 2 || view->scale_corner == 3) ? 1.0 : -1.0;
-  const gboolean proportional = object->kind == DT_CANVAS_OBJECT_IMAGE;
+  const gboolean proportional = dt_canvas_object_keeps_ratio(object);
   const double old_width = object->width;
   const double old_height = object->height;
   const double ratio = old_height > 0.0 ? old_width / old_height : 1.0;

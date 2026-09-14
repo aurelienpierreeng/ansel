@@ -1178,6 +1178,13 @@ gboolean dt_canvas_object_is_frame(const dt_canvas_object_t *object)
          || object->kind == DT_CANVAS_OBJECT_MAP || object->kind == DT_CANVAS_OBJECT_SVG;
 }
 
+gboolean dt_canvas_object_keeps_ratio(const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object)) return FALSE;
+  if(object->flags & DT_CANVAS_OBJECT_FLAG_FREE_RATIO) return FALSE;
+  return object->kind == DT_CANVAS_OBJECT_IMAGE || object->kind == DT_CANVAS_OBJECT_SVG;
+}
+
 void dt_canvas_object_corners(const dt_canvas_object_t *object, double corners[8])
 {
   const double half_width = object->width * 0.5;

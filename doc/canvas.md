@@ -363,6 +363,23 @@ A drawing is given **no border and no shadow**: it is ink on nothing -- a logo, 
 arrow -- and a card behind it with a rule around it turns it into a rectangle, which is the one
 thing it is not. Both are the user's to switch on afterwards.
 
+**A drawing is drawn at the size it is shown at, never rescaled to it.** An SVG has no
+resolution of its own -- that is the whole point of one -- so the sprite cache renders the
+document at whatever pixel size it is about to be blitted at rather than resampling a raster of
+it. Rasterising once and stretching throws away the only thing a drawing had over a photograph:
+measured on a 32-point file shown at 512 pixels, the edge of a square is a full step of 255
+drawn at size and under 60 stretched from its own. There is no oversample factor to guess at
+either, only a ceiling (`CANVAS_SVG_MAX_EDGE`) so a drawing across a wall-sized page cannot ask
+for a raster nobody has the memory for.
+
+**A picture and a drawing keep their proportions unless told not to**
+(`dt_canvas_object_keeps_ratio()`, `DT_CANVAS_OBJECT_FLAG_FREE_RATIO`). The flag is stated the
+FREE way round so that zero is the careful answer: a photograph always kept its shape, a
+drawing needs it more -- a stretched logo is almost always a mistake -- and the one time it is
+not, the flag says so. One predicate answers for the corner drag and for the property bar's two
+size spins alike, so the two cannot disagree; on the bar, whichever of the pair was edited leads
+and the other follows.
+
 **Text flows around what the drawing DRAWS.** `dt_canvas_render_svg_coverage()` renders the
 document to an A8 coverage surface at the occupancy map's own pitch -- a fraction of a full
 render -- and the obstacle map reads that exactly as it reads a cut frame's cutout. Measured on

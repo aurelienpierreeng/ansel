@@ -240,6 +240,16 @@ void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, size_t b
  *
  * @return the surface, the caller's to destroy, or NULL when the bytes are not a drawing.
  */
+/**
+ * @brief Draw an SVG document whole, at the given size, into the layer's colour space.
+ *
+ * A drawing has no resolution of its own, so the one to use is whatever it is about to be
+ * shown at: pass the pixels wanted and the answer is exact, pass 0 and it comes at the size
+ * the file states. Rendered in ONE pass, the way the specification composites an SVG, and only
+ * then converted out of sRGB -- see the drawings section of doc/canvas.md.
+ */
+cairo_surface_t *dt_canvas_render_svg(GBytes *svg, int want_width, int want_height);
+
 cairo_surface_t *dt_canvas_render_svg_coverage(GBytes *svg, int width, int height);
 
 cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, uint32_t colorspace);

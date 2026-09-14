@@ -21,6 +21,7 @@
 
 #include "caches/pixelpipe_cache.h"
 #include "canvas/canvas.h"
+#include "canvas/canvas_format.h"
 #include "canvas/canvas_paint.h"
 #include "canvas/canvas_render.h"
 #include "develop/masks_cutout.h"
@@ -1789,6 +1790,112 @@ static void _rescaling_a_sprite_keeps_the_alpha_it_had(void **state)
   cairo_surface_destroy(source);
 }
 
+/** The sharpest single-pixel step anywhere in a surface: 255 for a hard edge, less for a soft one. */
+static int _sharpest_step(cairo_surface_t *surface)
+{
+  cairo_surface_flush(surface);
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  const int width = cairo_image_surface_get_width(surface);
+  const int height = cairo_image_surface_get_height(surface);
+  int sharpest = 0;
+  for(int row = 0; row < height; row++)
+    for(int col = 1; col < width; col++)
+    {
+      const uint8_t *here = pixels + (size_t)row * stride + (size_t)col * 4;
+      const uint8_t *before = here - 4;
+      const int step = abs((int)here[3] - (int)before[3]);
+      if(step > sharpest) sharpest = step;
+    }
+  return sharpest;
+}
+
+static void _a_drawing_is_drawn_at_the_size_it_is_shown_at(void **state)
+{
+  (void)state;
+  /*
+   * An SVG has no resolution of its own -- that is the whole point of one -- so the size to
+   * draw it at is whatever it is about to be shown at. Rasterising it once and rescaling that
+   * throws away the only thing it had over a photograph: a small drawing enlarged on the page,
+   * or any drawing at a zoom past whatever factor the raster was made with, comes back soft.
+   */
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' "
+                           "viewBox='0 0 32 32'><rect x='8' y='8' width='16' height='16' fill='#000000'/></svg>");
+  gchar *contents = NULL;
+  gsize length = 0;
+  assert_true(g_file_get_contents(path, &contents, &length, NULL));
+  GBytes *bytes = g_bytes_new_take(contents, length);
+
+  // Drawn at the size asked for: the square's edge is a hard one, whatever that size is.
+  cairo_surface_t *large = dt_canvas_render_svg(bytes, 512, 512);
+  assert_non_null(large);
+  assert_int_equal(cairo_image_surface_get_width(large), 512);
+  assert_true(_sharpest_step(large) > 200);
+
+  // Against the alternative: the file's own 32 points, blown up to the same 512 by resampling.
+  cairo_surface_t *small = dt_canvas_render_svg(bytes, 0, 0);
+  assert_non_null(small);
+  assert_int_equal(cairo_image_surface_get_width(small), 32);
+  cairo_surface_t *stretched = dt_canvas_render_rescale(small, 512, 512);
+  assert_non_null(stretched);
+  // Sixteen pixels of ramp where there should be none: this is the blur, in one number.
+  assert_true(_sharpest_step(stretched) < 60);
+
+  cairo_surface_destroy(large);
+  cairo_surface_destroy(small);
+  cairo_surface_destroy(stretched);
+  g_bytes_unref(bytes);
+  g_remove(path);
+  g_free(path);
+}
+
+static void _a_picture_and_a_drawing_keep_their_shape_unless_told_not_to(void **state)
+{
+  (void)state;
+  /*
+   * Stated the free way round so that ZERO is the careful answer: a frame with proportions to
+   * keep keeps them until it is told otherwise. A photograph always did; a drawing needs it
+   * more, since a stretched logo is almost always a mistake -- and the one time it is not,
+   * the flag says so.
+   */
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='120' height='60' "
+                           "viewBox='0 0 120 60'><rect width='120' height='60'/></svg>");
+  dt_canvas_t *canvas = dt_canvas_new();
+  GError *error = NULL;
+  dt_canvas_object_t *drawing = dt_canvas_add_svg(canvas, 0.0, 0.0, path, &error);
+  assert_non_null(drawing);
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  assert_non_null(text);
+
+  // A drawing keeps its shape out of the box, and says so through one predicate the drag and
+  // the property bar's two spin buttons all read.
+  assert_true(dt_canvas_object_keeps_ratio(drawing));
+  drawing->flags |= DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
+  assert_false(dt_canvas_object_keeps_ratio(drawing));
+  drawing->flags &= ~DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
+  assert_true(dt_canvas_object_keeps_ratio(drawing));
+  // A text frame has no proportions to keep, flag or no flag.
+  assert_false(dt_canvas_object_keeps_ratio(text));
+  text->flags |= DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
+  assert_false(dt_canvas_object_keeps_ratio(text));
+  assert_false(dt_canvas_object_keeps_ratio(NULL));
+
+  // And it survives the file, since it rides in the object's own flags.
+  const uint32_t id = drawing->id;
+  drawing->flags |= DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  assert_non_null(index);
+  dt_canvas_t *restored = dt_canvas_new();
+  assert_true(dt_canvas_format_read_index(restored, index, NULL));
+  g_bytes_unref(index);
+  assert_false(dt_canvas_object_keeps_ratio(dt_canvas_find_object(restored, id)));
+
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+  g_remove(path);
+  g_free(path);
+}
+
 static void _a_feathered_cutout_covers_all_of_its_fade(void **state)
 {
   (void)state;
@@ -1955,6 +2062,8 @@ int main(void)
     cmocka_unit_test(_a_drawing_travels_in_the_document),
     cmocka_unit_test(_a_drawing_keeps_the_paper_where_it_draws_nothing),
     cmocka_unit_test(_rescaling_a_sprite_keeps_the_alpha_it_had),
+    cmocka_unit_test(_a_drawing_is_drawn_at_the_size_it_is_shown_at),
+    cmocka_unit_test(_a_picture_and_a_drawing_keep_their_shape_unless_told_not_to),
     cmocka_unit_test(_a_point_of_type_is_a_unit_on_the_plane),
     cmocka_unit_test(_the_gap_around_an_obstacle_is_a_disc_not_a_square),
     cmocka_unit_test(_a_frame_standing_just_outside_a_column_still_pushes_its_text),

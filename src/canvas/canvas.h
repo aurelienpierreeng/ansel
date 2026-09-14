@@ -153,6 +153,16 @@ typedef enum dt_canvas_object_flags_t
   DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE = 1 << 3,
   /** The object's own `corner_radius` applies instead of the canvas default. */
   DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE = 1 << 4,
+  /**
+   * The frame may be resized without keeping its proportions.
+   *
+   * Stated the free way round so that ZERO is the careful answer: a picture and a drawing both
+   * keep their shape unless they are told not to, which is what a photograph always did and
+   * what a logo needs even more -- a stretched drawing is almost always a mistake, and the one
+   * time it is not, this says so. It means nothing to a text frame, which has no proportions
+   * to keep.
+   */
+  DT_CANVAS_OBJECT_FLAG_FREE_RATIO = 1 << 5,
 } dt_canvas_object_flags_t;
 
 typedef enum dt_canvas_grid_flags_t
@@ -861,6 +871,15 @@ uint64_t dt_canvas_mask_hash(const dt_canvas_mask_t *mask);
 
 /** @brief Is this object a frame (image, text or map) rather than a connector? */
 gboolean dt_canvas_object_is_frame(const dt_canvas_object_t *object);
+
+/**
+ * @brief Whether resizing this frame must keep its proportions.
+ *
+ * A picture and a drawing have a shape of their own to keep; a text frame does not. The flag
+ * only frees what would otherwise be kept, so everything that has proportions keeps them
+ * until it is told otherwise.
+ */
+gboolean dt_canvas_object_keeps_ratio(const dt_canvas_object_t *object);
 
 /**
  * @brief The four corners of a frame after rotation, in canvas units.
