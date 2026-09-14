@@ -1817,11 +1817,9 @@ static void _menu_add_text_here(GtkWidget *widget, gpointer data)
   _add_text_frame(context->self, context->x, context->y);
 }
 
-/** Ask for an SVG file and place it where the menu was opened, at the size the file states. */
-static void _menu_add_drawing_here(GtkWidget *widget, gpointer data)
+/** Ask for an SVG file and place it at a point, at the size the file states. */
+static void _add_drawing(dt_view_t *self, const double x, const double y)
 {
-  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
-  dt_view_t *self = context->self;
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   GtkWidget *chooser = gtk_file_chooser_dialog_new(_("Place a drawing"), GTK_WINDOW(dt_ui_main_window(dt_gui_get_ui())),
                                                    GTK_FILE_CHOOSER_ACTION_OPEN, _("Cancel"), GTK_RESPONSE_CANCEL,
@@ -1841,8 +1839,9 @@ static void _menu_add_drawing_here(GtkWidget *widget, gpointer data)
 
   dt_canvas_t *before = _begin_edit(view);
   GError *error = NULL;
-  dt_canvas_object_t *drawing = dt_canvas_add_svg(view->canvas, dt_canvas_snap(view->canvas, context->x),
-                                                  dt_canvas_snap(view->canvas, context->y), chosen, &error);
+  dt_canvas_object_t *drawing
+      = dt_canvas_add_svg(view->canvas, dt_canvas_snap(view->canvas, x), dt_canvas_snap(view->canvas, y), chosen,
+                          &error);
   dt_free(chosen);
   if(IS_NULL_PTR(drawing))
   {
@@ -1855,6 +1854,12 @@ static void _menu_add_drawing_here(GtkWidget *widget, gpointer data)
   _record_undo(self, before);
   _bars_request(self);
   dt_control_queue_redraw_center();
+}
+
+static void _menu_add_drawing_here(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  _add_drawing(context->self, context->x, context->y);
 }
 
 /** Read the drawing's file again, for when it has been edited since it was placed. */
@@ -5441,6 +5446,9 @@ static void _proxy_action(dt_view_t *self, int action)
     case DT_CANVAS_ACTION_ADD_NOTES:
       _add_notes(self);
       break;
+    case DT_CANVAS_ACTION_ADD_SVG:
+      _add_drawing(self, view->center_x, view->center_y);
+      break;
     case DT_CANVAS_ACTION_ADD_MAP:
       _add_map(self, view->center_x, view->center_y, dt_conf_get_float("canvas/map_latitude"),
                dt_conf_get_float("canvas/map_longitude"));
@@ -5844,6 +5852,7 @@ static const dt_canvas_accel_t _accels[] = {
   { N_("Add a text frame"), DT_CANVAS_ACTION_ADD_TEXT, GDK_KEY_t, 0 },
   { N_("Add the text notes of the selected images"), DT_CANVAS_ACTION_ADD_NOTES, GDK_KEY_t, GDK_SHIFT_MASK },
   { N_("Add a map"), DT_CANVAS_ACTION_ADD_MAP, GDK_KEY_m, 0 },
+  { N_("Place a drawing"), DT_CANVAS_ACTION_ADD_SVG, GDK_KEY_d, 0 },
   { N_("Fit the view to the canvas"), DT_CANVAS_ACTION_ZOOM_FIT, GDK_KEY_0, DT_PRIMARY_MASK },
   { N_("Zoom to 100%"), DT_CANVAS_ACTION_ZOOM_100, GDK_KEY_1, DT_PRIMARY_MASK },
   { N_("Toggle the grid"), DT_CANVAS_ACTION_TOGGLE_GRID, GDK_KEY_g, 0 },

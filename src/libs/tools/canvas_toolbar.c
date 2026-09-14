@@ -850,6 +850,11 @@ void gui_init(dt_lib_module_t *self)
           DT_CANVAS_ACTION_ADD_NOTES);
   _button(box, _("Map"), _("Add a map frame at the centre of the view; an image's context menu adds a map of where it was taken"),
           DT_CANVAS_ACTION_ADD_MAP);
+  _button(box, _("Drawing"),
+          _("Place a drawing read from an SVG file, at the size the file states. Its own bytes travel in the "
+            "canvas, so the document carries the drawing; its context menu reads the file again when it has "
+            "been edited since."),
+          DT_CANVAS_ACTION_ADD_SVG);
   toolbar->connect_toggle = gtk_toggle_button_new_with_label(_("Connector"));
   gtk_widget_set_tooltip_text(toolbar->connect_toggle,
                               _("Draw a connector: click an anchor point on one frame, then on another"));

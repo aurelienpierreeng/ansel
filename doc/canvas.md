@@ -329,6 +329,12 @@ byte offsets at zoom 0.42, 0.55 and 1.1, at full and interactive quality alike.
 
 ## Drawings
 
+It is reached three ways, all through one action (`DT_CANVAS_ACTION_ADD_SVG`): the toolbar's
+"Drawing" button and the `d` key place one at the centre of the view, and the plane's context
+menu places one where the menu was opened. The action is APPENDED to the enum rather than
+slotted in beside the other "add" actions, because those values are what the toolbar's buttons
+and the shortcut table carry and inserting one renumbers every action after it.
+
 An SVG is read from disk, sized to what the file itself says it is, and carried in the archive
 like a photograph's JPEG -- so a document holds the drawing and opens on a machine that has
 never seen the file. The path it came from travels beside it (`dt_canvas_svg_path()`), and
