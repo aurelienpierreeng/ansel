@@ -513,6 +513,22 @@ treeview entry {
 }
 
 /**
+ * A row a click cannot act on says so by its text. Measured offscreen, against this theme: the
+ * text of an insensitive cell came out at #e5e0be where a live one is #ece2b3 -- the same white
+ * for any reader, so a greyed row read as an ordinary one. @disabled_fg_color is what the theme
+ * already means by "disabled" elsewhere, and it lands at #8a8b97: dimmer than the live text,
+ * still lighter than the row behind it, so the row stays legible while reading as dead.
+ *
+ * The state reaches a single cell, not only a whole disabled widget -- a cell renderer with
+ * sensitive == FALSE is drawn in the insensitive state -- which is why this one selector covers
+ * both the individual dead rows and a list greyed out as a whole. It has to be `treeview`, on the
+ * view's own node: `treeview text:disabled` matches nothing, measured.
+ **/
+treeview:disabled {
+  color: @disabled_fg_color;
+}
+
+/**
  * Recessed outer frame for a treeview (the counterpart to entry/textview
  * above, applied once on the whole widget rather than per row).
  *
