@@ -288,7 +288,7 @@ static void _export_list_save(GtkWidget *dialog, GtkTextBuffer *buffer)
     GError *error = NULL;
     if(!g_file_set_contents(filename, text, -1, &error))
     {
-      dt_control_log(_("could not save the image list to '%s': %s"), filename, error->message);
+      dt_control_log(_("Could not save the image list to '%s': %s"), filename, error->message);
       g_error_free(error);
     }
     g_free(text);

@@ -430,28 +430,28 @@ void init_presets(dt_lib_module_t *self)
 
   CLEAR_PARAMS(DT_COLLECTION_PROP_IMPORT_TIMESTAMP);
   g_strlcpy(params.rule[0].string, datetime_today, PARAM_STRING_SIZE);
-  dt_lib_presets_add(_("imported: today"), self->plugin_name, self->version(), &params, sizeof(params), TRUE);
+  dt_lib_presets_add(_("Imported: today"), self->plugin_name, self->version(), &params, sizeof(params), TRUE);
 
   CLEAR_PARAMS(DT_COLLECTION_PROP_IMPORT_TIMESTAMP);
   g_strlcpy(params.rule[0].string, datetime_24hrs, PARAM_STRING_SIZE);
-  dt_lib_presets_add(_("imported: last 24h"), self->plugin_name, self->version(), &params, sizeof(params), TRUE);
+  dt_lib_presets_add(_("Imported: last 24h"), self->plugin_name, self->version(), &params, sizeof(params), TRUE);
 
   CLEAR_PARAMS(DT_COLLECTION_PROP_IMPORT_TIMESTAMP);
   g_strlcpy(params.rule[0].string, datetime_30d, PARAM_STRING_SIZE);
-  dt_lib_presets_add(_("imported: last 30 days"), self->plugin_name, self->version(), &params, sizeof(params),
+  dt_lib_presets_add(_("Imported: last 30 days"), self->plugin_name, self->version(), &params, sizeof(params),
                      TRUE);
 
   CLEAR_PARAMS(DT_COLLECTION_PROP_TIME);
   g_strlcpy(params.rule[0].string, datetime_today, PARAM_STRING_SIZE);
-  dt_lib_presets_add(_("taken: today"), self->plugin_name, self->version(), &params, sizeof(params), TRUE);
+  dt_lib_presets_add(_("Taken: today"), self->plugin_name, self->version(), &params, sizeof(params), TRUE);
 
   CLEAR_PARAMS(DT_COLLECTION_PROP_TIME);
   g_strlcpy(params.rule[0].string, datetime_24hrs, PARAM_STRING_SIZE);
-  dt_lib_presets_add(_("taken: last 24h"), self->plugin_name, self->version(), &params, sizeof(params), TRUE);
+  dt_lib_presets_add(_("Taken: last 24h"), self->plugin_name, self->version(), &params, sizeof(params), TRUE);
 
   CLEAR_PARAMS(DT_COLLECTION_PROP_TIME);
   g_strlcpy(params.rule[0].string, datetime_30d, PARAM_STRING_SIZE);
-  dt_lib_presets_add(_("taken: last 30 days"), self->plugin_name, self->version(), &params, sizeof(params), TRUE);
+  dt_lib_presets_add(_("Taken: last 30 days"), self->plugin_name, self->version(), &params, sizeof(params), TRUE);
 
   dt_free(datetime_today);
   dt_free(datetime_24hrs);
@@ -1202,7 +1202,7 @@ static GtkTreeModel *_create_filtered_model(GtkTreeModel *model, dt_lib_collect_
   return filter;
 }
 
-static const char *UNCATEGORIZED_TAG = N_("uncategorized");
+static const char *UNCATEGORIZED_TAG = N_("Uncategorized");
 
 // --- preserve tree expansion across a rebuild so the user keeps their place ---
 static void _collect_expanded_cb(GtkTreeView *view, GtkTreePath *path, gpointer data)
@@ -1921,7 +1921,7 @@ static void _act_folders_relocate(dt_lib_collect_t *d, GList *rows)
   collect_row_t *first = (collect_row_t *)rows->data;
 
   GtkFileChooserNative *fc = gtk_file_chooser_native_new(
-      single ? _("select the new location of this folder") : _("select the new parent folder"), GTK_WINDOW(win),
+      single ? _("Select the new location of this folder") : _("Select the new parent folder"), GTK_WINDOW(win),
       GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, _("_open"), _("_cancel"));
   if(single && first->path) gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(fc), first->path);
 
@@ -1954,7 +1954,7 @@ static void _act_folders_relocate(dt_lib_collect_t *d, GList *rows)
       dt_free(chosen);
     }
     else
-      dt_control_log(_("problem selecting new path for the folder"));
+      dt_control_log(_("Problem selecting new path for the folder"));
   }
   g_object_unref(fc);
 }
@@ -1965,7 +1965,7 @@ static void _act_tags_remove(dt_lib_collect_t *d, GList *rows)
   gchar *msg = g_strdup_printf(ngettext("Delete %d tag and detach it from all images?",
                                         "Delete %d tags and detach them from all images?", n),
                                n);
-  const gboolean ok = _confirm(_("delete tags"), msg);
+  const gboolean ok = _confirm(_("Delete tags"), msg);
   dt_free(msg);
   if(!ok) return;
 
@@ -1987,7 +1987,7 @@ static void _act_tag_rename(dt_lib_collect_t *d, GList *rows)
   if(IS_NULL_PTR(r->path)) return;
   const guint tagid = dt_tag_get_tag_id_by_name(r->path);
   if(!tagid) return;
-  gchar *newname = _ask_text(_("rename tag"), r->path);
+  gchar *newname = _ask_text(_("Rename tag"), r->path);
   if(newname)
   {
     dt_tag_rename(tagid, newname);
@@ -2052,7 +2052,7 @@ static void _act_prerender(dt_lib_collect_t *d, GList *rows)
   p->max_size = DT_MIPMAP_2;
   dt_job_t *job = dt_control_job_create(&_prerender_job, "prerender collection thumbnails");
   dt_control_job_set_params(job, p, _prerender_free);
-  dt_control_job_add_progress(job, _("pre-rendering thumbnails"), TRUE);
+  dt_control_job_add_progress(job, _("Pre-rendering thumbnails"), TRUE);
   dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job);
 }
 
@@ -2094,11 +2094,11 @@ typedef struct collect_action_t
 } collect_action_t;
 
 static const collect_action_t ACTIONS[] = {
-  { N_("remove from library..."), TRUE, _en_folders_lighttable, _act_folders_remove },
-  { N_("relocate..."), TRUE, _en_folders, _act_folders_relocate },
-  { N_("delete tag(s)..."), TRUE, _en_tags, _act_tags_remove },
-  { N_("rename tag..."), FALSE, _en_tag_single, _act_tag_rename },
-  { N_("pre-render thumbnails"), TRUE, _en_any, _act_prerender },
+  { N_("Remove from library..."), TRUE, _en_folders_lighttable, _act_folders_remove },
+  { N_("Relocate..."), TRUE, _en_folders, _act_folders_relocate },
+  { N_("Delete tag(s)..."), TRUE, _en_tags, _act_tags_remove },
+  { N_("Rename tag..."), FALSE, _en_tag_single, _act_tag_rename },
+  { N_("Pre-render thumbnails"), TRUE, _en_any, _act_prerender },
 };
 
 static void _action_activate(GtkMenuItem *mi, dt_lib_collect_t *d)
@@ -2151,7 +2151,7 @@ static gboolean _drop_move_to_folder(dt_lib_collect_t *d, const char *folder, GL
   gchar *msg = g_strdup_printf(ngettext("Physically move %d image to\n%s ?\n\nFiles are moved on disk.",
                                         "Physically move %d images to\n%s ?\n\nFiles are moved on disk.", n),
                                n, folder);
-  const gboolean ok = _confirm(_("move images"), msg);
+  const gboolean ok = _confirm(_("Move images"), msg);
   g_free(msg);
   if(!ok) return FALSE;
 
@@ -2162,7 +2162,7 @@ static gboolean _drop_move_to_folder(dt_lib_collect_t *d, const char *folder, GL
   dt_film_cleanup(&film);
   if(filmid <= 0)
   {
-    dt_control_log(_("could not access the destination folder"));
+    dt_control_log(_("Could not access the destination folder"));
     return FALSE;
   }
 
@@ -2352,37 +2352,37 @@ static void _set_tooltip(dt_lib_collect_rule_t *dr)
 
   if(property == DT_COLLECTION_PROP_APERTURE || property == DT_COLLECTION_PROP_FOCAL_LENGTH
      || property == DT_COLLECTION_PROP_ISO || property == DT_COLLECTION_PROP_EXPOSURE)
-    gtk_widget_set_tooltip_text(dr->text, _("use <, <=, >, >=, <>, =, [;] as operators"));
+    gtk_widget_set_tooltip_text(dr->text, _("Use <, <=, >, >=, <>, =, [;] as operators"));
   else if(property == DT_COLLECTION_PROP_RATING)
-    gtk_widget_set_tooltip_text(dr->text, _("use <, <=, >, >=, <>, =, [;] as operators\n"
+    gtk_widget_set_tooltip_text(dr->text, _("Use <, <=, >, >=, <>, =, [;] as operators\n"
                                             "star rating: 0-5\n"
                                             "rejected images: -1"));
   else if(property == DT_COLLECTION_PROP_DAY || is_time_property(property))
     gtk_widget_set_tooltip_text(dr->text,
-                                _("use <, <=, >, >=, <>, =, [;] as operators\n"
+                                _("Use <, <=, >, >=, <>, =, [;] as operators\n"
                                   "type dates in the form: YYYY:MM:DD hh:mm:ss.sss (only the year is mandatory)"));
   else if(property == DT_COLLECTION_PROP_FILENAME)
     /* xgettext:no-c-format */
-    gtk_widget_set_tooltip_text(dr->text, _("use `%' as wildcard and `,' to separate values"));
+    gtk_widget_set_tooltip_text(dr->text, _("Use `%' as wildcard and `,' to separate values"));
   else if(property == DT_COLLECTION_PROP_TAG)
     /* xgettext:no-c-format */
-    gtk_widget_set_tooltip_text(dr->text, _("use `%' as wildcard\n"
+    gtk_widget_set_tooltip_text(dr->text, _("Use `%' as wildcard\n"
                                             "click to include hierarchy + sub-hierarchies (suffix `*')\n"
                                             "shift+click to include only the current hierarchy (no suffix)\n"
                                             "ctrl+click to include only sub-hierarchies (suffix `|%')"));
   else if(property == DT_COLLECTION_PROP_GEOTAGGING)
     /* xgettext:no-c-format */
-    gtk_widget_set_tooltip_text(dr->text, _("use `%' as wildcard\n"
+    gtk_widget_set_tooltip_text(dr->text, _("Use `%' as wildcard\n"
                                             "click to include location + sub-locations (suffix `*')\n"
                                             "shift+click to include only the current location (no suffix)\n"
                                             "ctrl+click to include only sub-locations (suffix `|%')"));
   else if(property == DT_COLLECTION_PROP_FOLDERS)
     /* xgettext:no-c-format */
     gtk_widget_set_tooltip_text(dr->text,
-                                _("use `%' as wildcard and append `*' to match sub-folders"));
+                                _("Use `%' as wildcard and append `*' to match sub-folders"));
   else
     /* xgettext:no-c-format */
-    gtk_widget_set_tooltip_text(dr->text, _("use `%' as wildcard"));
+    gtk_widget_set_tooltip_text(dr->text, _("Use `%' as wildcard"));
 
   gchar *tip = gtk_widget_get_tooltip_text(dr->text);
   gtk_widget_set_tooltip_text(GTK_WIDGET(dr->combo), tip);
@@ -2636,40 +2636,40 @@ static gboolean popup_button_callback(GtkWidget *widget, GdkEventButton *event, 
   GtkWidget *mi;
   const int active = _rules_count();
 
-  mi = gtk_menu_item_new_with_label(_("clear this rule"));
+  mi = gtk_menu_item_new_with_label(_("Clear this rule"));
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
   g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_clear), dr);
 
   if(dr->num == active - 1)
   {
-    mi = gtk_menu_item_new_with_label(_("narrow down search"));
+    mi = gtk_menu_item_new_with_label(_("Narrow down search"));
     g_object_set_data(G_OBJECT(mi), "menuitem_mode", GINT_TO_POINTER(DT_LIB_COLLECT_MODE_AND));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
     g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_mode), dr);
 
-    mi = gtk_menu_item_new_with_label(_("add more images"));
+    mi = gtk_menu_item_new_with_label(_("Add more images"));
     g_object_set_data(G_OBJECT(mi), "menuitem_mode", GINT_TO_POINTER(DT_LIB_COLLECT_MODE_OR));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
     g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_mode), dr);
 
-    mi = gtk_menu_item_new_with_label(_("exclude images"));
+    mi = gtk_menu_item_new_with_label(_("Exclude images"));
     g_object_set_data(G_OBJECT(mi), "menuitem_mode", GINT_TO_POINTER(DT_LIB_COLLECT_MODE_AND_NOT));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
     g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_mode), dr);
   }
   else if(dr->num < active - 1)
   {
-    mi = gtk_menu_item_new_with_label(_("change to: and"));
+    mi = gtk_menu_item_new_with_label(_("Change to: and"));
     g_object_set_data(G_OBJECT(mi), "menuitem_mode", GINT_TO_POINTER(DT_LIB_COLLECT_MODE_AND));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
     g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_mode_change), dr);
 
-    mi = gtk_menu_item_new_with_label(_("change to: or"));
+    mi = gtk_menu_item_new_with_label(_("Change to: or"));
     g_object_set_data(G_OBJECT(mi), "menuitem_mode", GINT_TO_POINTER(DT_LIB_COLLECT_MODE_OR));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
     g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_mode_change), dr);
 
-    mi = gtk_menu_item_new_with_label(_("change to: except"));
+    mi = gtk_menu_item_new_with_label(_("Change to: except"));
     g_object_set_data(G_OBJECT(mi), "menuitem_mode", GINT_TO_POINTER(DT_LIB_COLLECT_MODE_AND_NOT));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
     g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_mode_change), dr);
@@ -2719,12 +2719,12 @@ static void _set_rule_button(dt_lib_collect_rule_t *dr, gboolean last, gboolean 
   if(last)
   {
     gtk_button_set_label(GTK_BUTTON(dr->button), "-");
-    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("clear this rule"));
+    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("Clear this rule"));
   }
   else if(active)
   {
     gtk_button_set_label(GTK_BUTTON(dr->button), "+");
-    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("clear this rule or add new rules"));
+    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("Clear this rule or add new rules"));
   }
   else
   {
@@ -2732,7 +2732,7 @@ static void _set_rule_button(dt_lib_collect_rule_t *dr, gboolean last, gboolean 
     gtk_button_set_label(GTK_BUTTON(dr->button), mode == DT_LIB_COLLECT_MODE_AND  ? _("AND")
                                                  : mode == DT_LIB_COLLECT_MODE_OR ? _("OR")
                                                                                   : _("AND NOT"));
-    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("clear this rule"));
+    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("Clear this rule"));
   }
 }
 
@@ -3120,7 +3120,7 @@ void gui_init(dt_lib_module_t *self)
       gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->rule[i].op_combo), OP_LABELS[o]);
     gtk_combo_box_set_active(GTK_COMBO_BOX(d->rule[i].op_combo), 0);
     gtk_widget_set_no_show_all(d->rule[i].op_combo, TRUE);
-    gtk_widget_set_tooltip_text(d->rule[i].op_combo, _("comparison operator"));
+    gtk_widget_set_tooltip_text(d->rule[i].op_combo, _("Comparison operator"));
     g_signal_connect(G_OBJECT(d->rule[i].op_combo), "changed", G_CALLBACK(_op_changed), d->rule + i);
     gtk_box_pack_start(hbox, d->rule[i].op_combo, FALSE, FALSE, 0);
 
@@ -3145,7 +3145,7 @@ void gui_init(dt_lib_module_t *self)
 
   // Folders inline controls (sort + recursion), shown only on the Folders tab
   d->folders_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  d->recursive_check = gtk_check_button_new_with_label(_("include sub-folders"));
+  d->recursive_check = gtk_check_button_new_with_label(_("Include sub-folders"));
   // Real value comes from _configure_tab() -> _rule_get_recursive(0) before first paint (the
   // startup _lib_collect_gui_update() call below always runs it); this is just a harmless seed.
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->recursive_check), FALSE);
@@ -3153,9 +3153,9 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(d->folders_controls), d->recursive_check, FALSE, FALSE, 0);
 
   d->sort_by = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->sort_by, _("sort by"));
-  dt_bauhaus_combobox_add(d->sort_by, _("name"));
-  dt_bauhaus_combobox_add(d->sort_by, _("id"));
+  dt_bauhaus_widget_set_label(d->sort_by, _("Sort by"));
+  dt_bauhaus_combobox_add(d->sort_by, _("Name"));
+  dt_bauhaus_combobox_add(d->sort_by, _("ID"));
   // bauhaus widgets render at their own (short) natural height; in this horizontal row they would
   // otherwise stick to the top and sit higher than the native spin/toggle siblings, so center them
   gtk_widget_set_valign(d->sort_by, GTK_ALIGN_CENTER);
@@ -3164,29 +3164,29 @@ void gui_init(dt_lib_module_t *self)
 
   d->sort_dir = dtgtk_togglebutton_new(dtgtk_cairo_paint_sortby, CPF_DIRECTION_UP, NULL);
   dt_gui_add_class(d->sort_dir, "dt_ignore_fg_state");
-  gtk_widget_set_tooltip_text(d->sort_dir, _("toggle ascending / descending order"));
+  gtk_widget_set_tooltip_text(d->sort_dir, _("Toggle ascending / descending order"));
   g_signal_connect(G_OBJECT(d->sort_dir), "toggled", G_CALLBACK(_sort_dir_toggled), d);
   gtk_box_pack_start(GTK_BOX(d->folders_controls), d->sort_dir, FALSE, FALSE, 0);
 
   d->folder_levels = gtk_spin_button_new_with_range(1, 5, 1);
   gtk_widget_set_tooltip_text(d->folder_levels,
-                              _("number of folder levels to show in film-roll names, from the right"));
+                              _("Number of folder levels to show in film-roll names, from the right"));
   g_signal_connect(G_OBJECT(d->folder_levels), "value-changed", G_CALLBACK(_folder_levels_changed), d);
   gtk_box_pack_start(GTK_BOX(d->folders_controls), d->folder_levels, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->folders_controls, FALSE, FALSE, 0);
 
   // Collections inline controls, shown only on the Collections tab
   d->collections_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  d->no_uncategorized = gtk_check_button_new_with_label(_("no 'uncategorized' group"));
+  d->no_uncategorized = gtk_check_button_new_with_label(_("No 'uncategorized' group"));
   gtk_widget_set_tooltip_text(d->no_uncategorized,
-                              _("do not group childless tags under an 'uncategorized' entry"));
+                              _("Do not group childless tags under an 'uncategorized' entry"));
   g_signal_connect(G_OBJECT(d->no_uncategorized), "toggled", G_CALLBACK(_no_uncategorized_toggled), d);
   gtk_box_pack_start(GTK_BOX(d->collections_controls), d->no_uncategorized, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->collections_controls, FALSE, FALSE, 0);
 
   // Queries raw-SQL escape, shown only on the Queries tab
   d->raw_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  d->raw_check = gtk_check_button_new_with_label(_("edit as raw SQL"));
+  d->raw_check = gtk_check_button_new_with_label(_("Edit as raw SQL"));
   g_signal_connect(G_OBJECT(d->raw_check), "toggled", G_CALLBACK(_raw_toggled), d);
   gtk_box_pack_start(GTK_BOX(d->raw_box), d->raw_check, FALSE, FALSE, 0);
   d->raw_entry = gtk_entry_new();

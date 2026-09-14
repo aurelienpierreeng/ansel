@@ -555,17 +555,17 @@ static char *get_export_filename(dt_lut_t *self, const char *extension, char **n
   *description = NULL;
 
   GtkWidget *label;
-  label = gtk_label_new("style name");
+  label = gtk_label_new("Style name");
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   gtk_grid_attach(GTK_GRID(grid), label, 0, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), name_entry, 1, 0, 1, 1);
-  label = gtk_label_new("style description");
+  label = gtk_label_new("Style description");
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   gtk_grid_attach(GTK_GRID(grid), label, 0, 1, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), description_entry, 1, 1, 1, 1);
 
   // allow the user to decide what modules to include in the style
-  label = gtk_label_new("modules included in the style:");
+  label = gtk_label_new("Modules included in the style:");
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   g_object_set(label, "margin-left", 50, NULL);
 
@@ -1081,7 +1081,7 @@ static void process_data(dt_lut_t *self, double *target_L, double *target_a, dou
   if (!IS_NULL_PTR(self->result_label))
   {
     // TODO: is the rank interesting, too?
-    char *result_string = g_strdup_printf(_("average dE: %.02f\nmax dE: %.02f"), avgerr, maxerr);
+    char *result_string = g_strdup_printf(_("Average dE: %.02f\nmax dE: %.02f"), avgerr, maxerr);
     gtk_label_set_text(GTK_LABEL(self->result_label), result_string);
     dt_free(result_string);
   }
@@ -1195,11 +1195,11 @@ static GtkWidget *create_notebook_page_source(dt_lut_t *self)
   gtk_scale_set_value_pos(GTK_SCALE(source_shrink), GTK_POS_RIGHT);
   g_signal_connect(source_shrink, "value-changed", G_CALLBACK(shrink_changed_callback), &self->source);
 
-  gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new("image:"), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new("Image:"), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), image_button, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new("chart:"), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new("Chart:"), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), cht_button, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new("size:"), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new("Size:"), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), source_shrink, TRUE, TRUE, 0);
 
   init_image(self, &self->source, G_CALLBACK(motion_notify_callback_source));
@@ -1240,18 +1240,18 @@ static GtkWidget *create_notebook_page_reference(dt_lut_t *self)
   gtk_scale_set_value_pos(GTK_SCALE(reference_shrink), GTK_POS_RIGHT);
   g_signal_connect(reference_shrink, "value-changed", G_CALLBACK(shrink_changed_callback), &self->reference);
 
-  gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new("mode:"), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new("Mode:"), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), reference_mode, TRUE, TRUE, 0);
 
   GtkWidget *reference_it8_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(reference_it8_box), gtk_label_new("reference it8:"), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(reference_it8_box), gtk_label_new("Reference it8:"), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(reference_it8_box), it8_button, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), reference_it8_box, TRUE, TRUE, 0);
 
   GtkWidget *reference_image_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(reference_image_box), gtk_label_new("reference image:"), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(reference_image_box), gtk_label_new("Reference image:"), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(reference_image_box), reference_image_button, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(reference_image_box), gtk_label_new("size:"), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(reference_image_box), gtk_label_new("Size:"), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(reference_image_box), reference_shrink, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), reference_image_box, TRUE, TRUE, 0);
 
@@ -1290,12 +1290,12 @@ static GtkWidget *create_notebook_page_process(dt_lut_t *self)
   // 49 is the current max in the lut iop
   GtkWidget *number_patches = gtk_spin_button_new_with_range(0, 49, 1);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(number_patches), 24);
-  gtk_grid_attach(GTK_GRID(page), gtk_label_new("number of final patches"), 0, line, 1, 1);
+  gtk_grid_attach(GTK_GRID(page), gtk_label_new("Number of final patches"), 0, line, 1, 1);
   gtk_grid_attach(GTK_GRID(page), number_patches, 1, line++, 1, 1);
 
-  GtkWidget *process_button = gtk_button_new_with_label("process");
-  GtkWidget *export_button = gtk_button_new_with_label("export");
-  GtkWidget *export_raw_button = gtk_button_new_with_label("export raw data as csv");
+  GtkWidget *process_button = gtk_button_new_with_label("Process");
+  GtkWidget *export_button = gtk_button_new_with_label("Export");
+  GtkWidget *export_raw_button = gtk_button_new_with_label("Export raw data as csv");
   gtk_grid_attach(GTK_GRID(page), process_button, 1, line, 1, 1);
   gtk_grid_attach(GTK_GRID(page), export_button, 2, line, 1, 1);
   gtk_grid_attach(GTK_GRID(page), export_raw_button, 3, line++, 1, 1);
@@ -1323,14 +1323,14 @@ static GtkWidget *create_notebook(dt_lut_t *self)
 
   // first tab: input image + cht file
   gtk_notebook_append_page(GTK_NOTEBOOK(notebook), create_notebook_page_source(self),
-                           gtk_label_new("source image"));
+                           gtk_label_new("Source image"));
 
   // second tab: mode + either reference image or cie file
   gtk_notebook_append_page(GTK_NOTEBOOK(notebook), create_notebook_page_reference(self),
-                           gtk_label_new("reference values"));
+                           gtk_label_new("Reference values"));
 
   // third tab: analyze data and process it
-  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), create_notebook_page_process(self), gtk_label_new("process"));
+  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), create_notebook_page_process(self), gtk_label_new("Process"));
 
   return notebook;
 }

@@ -267,19 +267,19 @@ char *dt_pixelpipe_get_pipe_name(dt_dev_pixelpipe_type_t pipe_type)
   switch(pipe_type)
   {
     case DT_DEV_PIXELPIPE_PREVIEW:
-      r = _("preview");
+      r = _("Preview");
       break;
     case DT_DEV_PIXELPIPE_FULL:
-      r = _("full");
+      r = _("Full");
       break;
     case DT_DEV_PIXELPIPE_THUMBNAIL:
-      r = _("thumbnail");
+      r = _("Thumbnail");
       break;
     case DT_DEV_PIXELPIPE_EXPORT:
-      r = _("export");
+      r = _("Export");
       break;
     default:
-      r = _("invalid");
+      r = _("Invalid");
   }
   return r;
 }

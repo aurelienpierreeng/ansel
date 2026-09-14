@@ -94,7 +94,7 @@ static gboolean _gui_presets_autogen_enabled = TRUE;
 
 // format string and corresponding flag stored into the database
 static const char *_gui_presets_format_value_str[5]
-    = { N_("non-raw"), N_("raw"), N_("HDR"), N_("monochrome"), N_("color") };
+    = { N_("Non-raw"), N_("Raw"), N_("HDR"), N_("Monochrome"), N_("Color") };
 static const int _gui_presets_format_flag[5] = { FOR_LDR, FOR_RAW, FOR_HDR, FOR_NOT_MONO, FOR_NOT_COLOR };
 
 // this is also called for non-gui applications linking to libansel!
@@ -188,7 +188,7 @@ static void _menuitem_delete_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
 
   if(writeprotect)
   {
-    dt_control_log(_("preset `%s' is write-protected, can't delete!"), name);
+    dt_control_log(_("Preset `%s' is write-protected, can't delete!"), name);
     dt_free(name);
     return;
   }
@@ -200,11 +200,11 @@ static void _menuitem_delete_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
     GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
-                               GTK_BUTTONS_YES_NO, _("do you really want to delete the preset `%s'?"), name);
+                               GTK_BUTTONS_YES_NO, _("Do you really want to delete the preset `%s'?"), name);
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
-    gtk_window_set_title(GTK_WINDOW(dialog), _("delete preset?"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Delete preset?"));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
     GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);
@@ -236,12 +236,12 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
         // show error dialog
         GtkWidget *dlg_changename
             = gtk_message_dialog_new(GTK_WINDOW(dialog), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
-                                     GTK_MESSAGE_WARNING, GTK_BUTTONS_OK, _("please give preset a name"));
+                                     GTK_MESSAGE_WARNING, GTK_BUTTONS_OK, _("Please give preset a name"));
 #ifdef GDK_WINDOWING_QUARTZ
         dt_osx_disallow_fullscreen(dlg_changename);
 #endif
 
-        gtk_window_set_title(GTK_WINDOW(dlg_changename), _("unnamed preset"));
+        gtk_window_set_title(GTK_WINDOW(dlg_changename), _("Unnamed preset"));
 
         gtk_dialog_run(GTK_DIALOG(dlg_changename));
         gtk_widget_destroy(dlg_changename);
@@ -255,12 +255,12 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
         // show overwrite question dialog
         GtkWidget *dlg_overwrite = gtk_message_dialog_new(
             GTK_WINDOW(dialog), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING,
-            GTK_BUTTONS_YES_NO, _("preset `%s' already exists.\ndo you want to overwrite?"), name);
+            GTK_BUTTONS_YES_NO, _("Preset `%s' already exists.\ndo you want to overwrite?"), name);
 #ifdef GDK_WINDOWING_QUARTZ
         dt_osx_disallow_fullscreen(dlg_overwrite);
 #endif
 
-        gtk_window_set_title(GTK_WINDOW(dlg_overwrite), _("overwrite preset?"));
+        gtk_window_set_title(GTK_WINDOW(dlg_overwrite), _("Overwrite preset?"));
 
         const gint dlg_ret = gtk_dialog_run(GTK_DIALOG(dlg_overwrite));
         gtk_widget_destroy(dlg_overwrite);
@@ -328,7 +328,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
 
     // ask for destination directory
     GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-          _("select directory"), GTK_WINDOW(dialog), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+          _("Select directory"), GTK_WINDOW(dialog), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
           _("_select as output destination"), _("_cancel"));
     dt_conf_get_folder_to_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
 
@@ -337,7 +337,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
     {
       char *filedir = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(filechooser));
       dt_presets_save_to_file(g->old_id, name, filedir);
-      dt_control_log(_("preset %s was successfully exported"), name);
+      dt_control_log(_("Preset %s was successfully exported"), name);
       dt_free(filedir);
       dt_conf_set_folder_from_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
     }
@@ -368,12 +368,12 @@ void dt_gui_presets_confirm_and_delete(GtkWidget *parent_dialog, const char *nam
   // This means with want to remove the preset
   GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(parent_dialog), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
                                              GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-                                             _("do you really want to delete the preset `%s'?"), name);
+                                             _("Do you really want to delete the preset `%s'?"), name);
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(dialog);
 #endif
 
-  gtk_window_set_title(GTK_WINDOW(dialog), _("delete preset?"));
+  gtk_window_set_title(GTK_WINDOW(dialog), _("Delete preset?"));
   if(gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_YES)
   {
     // remove the preset from the database
@@ -401,11 +401,11 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
 {
   /* Create the widgets */
   char title[1024];
-  snprintf(title, sizeof(title), _("edit `%s' for module `%s'"), g->original_name, g->module_name);
+  snprintf(title, sizeof(title), _("Edit `%s' for module `%s'"), g->original_name, g->module_name);
   GtkWidget *dialog = gtk_dialog_new_with_buttons
     (title, g->parent, GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
      _("_cancel"), GTK_RESPONSE_CANCEL, _("_export..."), GTK_RESPONSE_YES,
-     _("delete"), GTK_RESPONSE_REJECT, _("_ok"), GTK_RESPONSE_OK, NULL);
+     _("Delete"), GTK_RESPONSE_REJECT, _("_ok"), GTK_RESPONSE_OK, NULL);
   gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
 
 #ifdef GDK_WINDOWING_QUARTZ
@@ -423,7 +423,7 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   else
     gtk_widget_set_sensitive(GTK_WIDGET(g->name), FALSE);
   gtk_box_pack_start(box, GTK_WIDGET(g->name), FALSE, FALSE, 0);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->name), _("name of the preset"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->name), _("Name of the preset"));
 
   g->description = GTK_ENTRY(gtk_entry_new());
   dt_accels_disconnect_on_text_input(GTK_WIDGET(g->description));
@@ -432,14 +432,14 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   else
     gtk_widget_set_sensitive(GTK_WIDGET(g->description), FALSE);
   gtk_box_pack_start(box, GTK_WIDGET(g->description), FALSE, FALSE, 0);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->description), _("description or further information"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->description), _("Description or further information"));
 
   g->autoapply
-      = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("auto apply this preset to matching images")));
+      = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Auto apply this preset to matching images")));
   gtk_box_pack_start(box, GTK_WIDGET(g->autoapply), FALSE, FALSE, 0);
   g->filter
-      = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("only show this preset for matching images")));
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->filter), _("be very careful with this option. "
+      = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Only show this preset for matching images")));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->filter), _("Be very careful with this option. "
                                                            "this might be the last time you see your preset."));
   gtk_box_pack_start(box, GTK_WIDGET(g->filter), FALSE, FALSE, 0);
   if(IS_NULL_PTR(g->iop))
@@ -465,8 +465,8 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   dt_accels_disconnect_on_text_input(g->model);
   gtk_widget_set_hexpand(GTK_WIDGET(g->model), TRUE);
   /* xgettext:no-c-format */
-  gtk_widget_set_tooltip_text(g->model, _("string to match model (use % as wildcard)"));
-  label = gtk_label_new(_("model"));
+  gtk_widget_set_tooltip_text(g->model, _("String to match model (use % as wildcard)"));
+  label = gtk_label_new(_("Model"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   gtk_grid_attach(GTK_GRID(g->details), label, 0, line++, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(g->details), g->model, label, GTK_POS_RIGHT, 2, 1);
@@ -474,8 +474,8 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   g->maker = gtk_entry_new();
   dt_accels_disconnect_on_text_input(g->maker);
   /* xgettext:no-c-format */
-  gtk_widget_set_tooltip_text(g->maker, _("string to match maker (use % as wildcard)"));
-  label = gtk_label_new(_("maker"));
+  gtk_widget_set_tooltip_text(g->maker, _("String to match maker (use % as wildcard)"));
+  label = gtk_label_new(_("Maker"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   gtk_grid_attach(GTK_GRID(g->details), label, 0, line++, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(g->details), g->maker, label, GTK_POS_RIGHT, 2, 1);
@@ -483,8 +483,8 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   g->lens = gtk_entry_new();
   dt_accels_disconnect_on_text_input(g->lens);
   /* xgettext:no-c-format */
-  gtk_widget_set_tooltip_text(g->lens, _("string to match lens (use % as wildcard)"));
-  label = gtk_label_new(_("lens"));
+  gtk_widget_set_tooltip_text(g->lens, _("String to match lens (use % as wildcard)"));
+  label = gtk_label_new(_("Lens"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   gtk_grid_attach(GTK_GRID(g->details), label, 0, line++, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(g->details), g->lens, label, GTK_POS_RIGHT, 2, 1);
@@ -493,22 +493,22 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   label = gtk_label_new(_("ISO"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   g->iso_min = gtk_spin_button_new_with_range(0, FLT_MAX, 100);
-  gtk_widget_set_tooltip_text(g->iso_min, _("minimum ISO value"));
+  gtk_widget_set_tooltip_text(g->iso_min, _("Minimum ISO value"));
   gtk_spin_button_set_digits(GTK_SPIN_BUTTON(g->iso_min), 0);
   g->iso_max = gtk_spin_button_new_with_range(0, FLT_MAX, 100);
-  gtk_widget_set_tooltip_text(g->iso_max, _("maximum ISO value"));
+  gtk_widget_set_tooltip_text(g->iso_max, _("Maximum ISO value"));
   gtk_spin_button_set_digits(GTK_SPIN_BUTTON(g->iso_max), 0);
   gtk_grid_attach(GTK_GRID(g->details), label, 0, line++, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(g->details), g->iso_min, label, GTK_POS_RIGHT, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(g->details), g->iso_max, g->iso_min, GTK_POS_RIGHT, 1, 1);
 
   // exposure
-  label = gtk_label_new(_("exposure"));
+  label = gtk_label_new(_("Exposure"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   g->exposure_min = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   g->exposure_max = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  gtk_widget_set_tooltip_text(g->exposure_min, _("minimum exposure time"));
-  gtk_widget_set_tooltip_text(g->exposure_max, _("maximum exposure time"));
+  gtk_widget_set_tooltip_text(g->exposure_min, _("Minimum exposure time"));
+  gtk_widget_set_tooltip_text(g->exposure_max, _("Maximum exposure time"));
   for(int k = 0; k < dt_gui_presets_exposure_value_cnt; k++)
     dt_bauhaus_combobox_add(g->exposure_min, dt_gui_presets_exposure_value_str[k]);
   for(int k = 0; k < dt_gui_presets_exposure_value_cnt; k++)
@@ -518,12 +518,12 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   gtk_grid_attach_next_to(GTK_GRID(g->details), g->exposure_max, g->exposure_min, GTK_POS_RIGHT, 1, 1);
 
   // aperture
-  label = gtk_label_new(_("aperture"));
+  label = gtk_label_new(_("Aperture"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   g->aperture_min = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   g->aperture_max = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  gtk_widget_set_tooltip_text(g->aperture_min, _("minimum aperture value"));
-  gtk_widget_set_tooltip_text(g->aperture_max, _("maximum aperture value"));
+  gtk_widget_set_tooltip_text(g->aperture_min, _("Minimum aperture value"));
+  gtk_widget_set_tooltip_text(g->aperture_max, _("Maximum aperture value"));
   for(int k = 0; k < dt_gui_presets_aperture_value_cnt; k++)
     dt_bauhaus_combobox_add(g->aperture_min, dt_gui_presets_aperture_value_str[k]);
   for(int k = 0; k < dt_gui_presets_aperture_value_cnt; k++)
@@ -533,23 +533,23 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   gtk_grid_attach_next_to(GTK_GRID(g->details), g->aperture_max, g->aperture_min, GTK_POS_RIGHT, 1, 1);
 
   // focal length
-  label = gtk_label_new(_("focal length"));
+  label = gtk_label_new(_("Focal length"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   g->focal_length_min = gtk_spin_button_new_with_range(0, 1000, 10);
   gtk_spin_button_set_digits(GTK_SPIN_BUTTON(g->focal_length_min), 0);
   g->focal_length_max = gtk_spin_button_new_with_range(0, 1000, 10);
   gtk_spin_button_set_digits(GTK_SPIN_BUTTON(g->focal_length_max), 0);
-  gtk_widget_set_tooltip_text(g->focal_length_min, _("minimum focal length"));
-  gtk_widget_set_tooltip_text(g->focal_length_max, _("maximum focal length"));
+  gtk_widget_set_tooltip_text(g->focal_length_min, _("Minimum focal length"));
+  gtk_widget_set_tooltip_text(g->focal_length_max, _("Maximum focal length"));
   gtk_grid_attach(GTK_GRID(g->details), label, 0, line++, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(g->details), g->focal_length_min, label, GTK_POS_RIGHT, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(g->details), g->focal_length_max, g->focal_length_min, GTK_POS_RIGHT, 1, 1);
 
   // raw/hdr/ldr/mono/color
-  label = gtk_label_new(_("format"));
+  label = gtk_label_new(_("Format"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   gtk_grid_attach(GTK_GRID(g->details), label, 0, line, 1, 1);
-  gtk_widget_set_tooltip_text(label, _("select image types you want this preset to be available for"));
+  gtk_widget_set_tooltip_text(label, _("Select image types you want this preset to be available for"));
 
   for(int i = 0; i < 5; i++)
   {
@@ -706,7 +706,7 @@ static void _edit_preset(const char *name_in, dt_iop_module_t *module)
     if(IS_NULL_PTR(name)) return;
     if(writeprotect)
     {
-      dt_control_log(_("preset `%s' is write-protected! can't edit it!"), name);
+      dt_control_log(_("Preset `%s' is write-protected! can't edit it!"), name);
       dt_free(name);
       return;
     }
@@ -735,11 +735,11 @@ static void _menuitem_update_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
     GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
-                               GTK_BUTTONS_YES_NO, _("do you really want to update the preset `%s'?"), name);
+                               GTK_BUTTONS_YES_NO, _("Do you really want to update the preset `%s'?"), name);
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
-    gtk_window_set_title(GTK_WINDOW(dialog), _("update preset?"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Update preset?"));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
     GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);
@@ -812,7 +812,7 @@ gboolean dt_gui_presets_autoapply_for_module(dt_iop_module_t *module)
 {
   dt_image_t *image = &module->dev->image_storage;
   const gboolean has_matrix = dt_image_is_matrix_correction_supported(image);
-  const char *workflow_preset = (has_matrix) ? _("scene-referred default") : "\t\n";
+  const char *workflow_preset = (has_matrix) ? _("Scene-referred default") : "\t\n";
 
   int iformat = 0;
   if(dt_image_needs_rawprepare(image)) iformat |= FOR_RAW;
@@ -1047,7 +1047,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
     if(isdisabled)
     {
       gtk_widget_set_sensitive(mi, 0);
-      gtk_widget_set_tooltip_text(mi, _("disabled: wrong module version"));
+      gtk_widget_set_tooltip_text(mi, _("Disabled: wrong module version"));
     }
     else
     {
@@ -1073,23 +1073,23 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
   {
     if(active_preset >= 0 && !writeprotect)
     {
-      mi = gtk_menu_item_new_with_label(_("edit this preset.."));
+      mi = gtk_menu_item_new_with_label(_("Edit this preset.."));
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_menuitem_edit_preset), module);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 
-      mi = gtk_menu_item_new_with_label(_("delete this preset"));
+      mi = gtk_menu_item_new_with_label(_("Delete this preset"));
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_menuitem_delete_preset), module);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
     }
     else
     {
-      mi = gtk_menu_item_new_with_label(_("store new preset.."));
+      mi = gtk_menu_item_new_with_label(_("Store new preset.."));
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_menuitem_new_preset), module);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 
       if(dt_gui_get_global()->last_preset && found)
       {
-        char *markup = g_markup_printf_escaped("%s <span weight='bold'>%s</span>", _("update preset"),
+        char *markup = g_markup_printf_escaped("%s <span weight='bold'>%s</span>", _("Update preset"),
                                                dt_gui_get_global()->last_preset);
         mi = gtk_menu_item_new_with_label("");
         gtk_label_set_markup(GTK_LABEL(gtk_bin_get_child(GTK_BIN(mi))), markup);

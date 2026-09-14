@@ -1071,7 +1071,7 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
   result->imgid = params->imgid;
   g_strlcpy(result->initiator_layer_name, params->initiator_layer_name, sizeof(result->initiator_layer_name));
   result->initiator_layer_order = params->initiator_layer_order;
-  g_strlcpy(result->message, _("failed to create background layer from input"), sizeof(result->message));
+  g_strlcpy(result->message, _("Failed to create background layer from input"), sizeof(result->message));
 
   gchar *tmp_path = NULL;
   const int tmp_fd = g_file_open_tmp("ansel-drawlayer-bg-XXXXXX.tiff", &tmp_path, NULL);
@@ -1132,7 +1132,7 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
     result->success = TRUE;
     result->sidecar_timestamp = _sidecar_timestamp_from_path(params->sidecar_path);
     g_strlcpy(result->created_bg_name, bg_name, sizeof(result->created_bg_name));
-    g_snprintf(result->message, sizeof(result->message), _("created background layer `%s'"), bg_name);
+    g_snprintf(result->message, sizeof(result->message), _("Created background layer `%s'"), bg_name);
   } while(0);
 
   if(!IS_NULL_PTR(export_pixels)) dt_free(export_pixels);

@@ -44,7 +44,7 @@ DT_MODULE(1)
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("map settings");
+  return _("Map settings");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -134,12 +134,12 @@ void gui_init(dt_lib_module_t *self)
 
   hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
-  label = dt_ui_label_new(_("map source"));
+  label = dt_ui_label_new(_("Map source"));
   gtk_box_pack_start(hbox, label, TRUE, TRUE, 0);
 
   GtkListStore *model = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_INT);
   d->map_source_dropdown = gtk_combo_box_new_with_model(GTK_TREE_MODEL(model));
-  gtk_widget_set_tooltip_text(d->map_source_dropdown, _("select the source of the map. some entries might not work"));
+  gtk_widget_set_tooltip_text(d->map_source_dropdown, _("Select the source of the map. some entries might not work"));
   GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
   gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(d->map_source_dropdown), renderer, FALSE);
   gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(d->map_source_dropdown), renderer, "text", 0, NULL);

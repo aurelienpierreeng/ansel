@@ -346,24 +346,24 @@ static void _build_overexposed_popover(dt_develop_t *dev)
   gtk_container_add(GTK_CONTAINER(dev->overexposed.floating_window), vbox);
 
   GtkWidget *mode;
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), mode, NULL, N_("clipping preview mode"),
-                               _("select the metric you want to preview\nfull gamut is the combination of all other modes"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), mode, NULL, N_("Clipping preview mode"),
+                               _("Select the metric you want to preview\nfull gamut is the combination of all other modes"),
                                dev->overexposed.mode, _overexposed_mode_callback, dev,
-                               N_("full gamut"), N_("any RGB channel"), N_("luminance only"), N_("saturation only"));
+                               N_("Full gamut"), N_("Any RGB channel"), N_("Luminance only"), N_("Saturation only"));
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(mode), TRUE, TRUE, 0);
 
   GtkWidget *colorscheme;
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), colorscheme, NULL, N_("color scheme"),
-                               _("select colors to indicate clipping"), dev->overexposed.colorscheme,
-                               _overexposed_colorscheme_callback, dev, N_("black & white"), N_("red & blue"),
-                               N_("purple & green"));
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), colorscheme, NULL, N_("Color scheme"),
+                               _("Select colors to indicate clipping"), dev->overexposed.colorscheme,
+                               _overexposed_colorscheme_callback, dev, N_("Black & white"), N_("Red & blue"),
+                               N_("Purple & green"));
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(colorscheme), TRUE, TRUE, 0);
 
   GtkWidget *lower = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), -32., -4., 1., -12.69, 2);
   dt_bauhaus_slider_set(lower, dev->overexposed.lower);
   dt_bauhaus_slider_set_format(lower, _(" EV"));
-  dt_bauhaus_widget_set_label(lower, N_("lower threshold"));
-  gtk_widget_set_tooltip_text(lower, _("clipping threshold for the black point,\n"
+  dt_bauhaus_widget_set_label(lower, N_("Lower threshold"));
+  gtk_widget_set_tooltip_text(lower, _("Clipping threshold for the black point,\n"
                                        "in EV, relatively to white (0 EV).\n"
                                        "8 bits sRGB clips blacks at -12.69 EV,\n"
                                        "8 bits Adobe RGB clips blacks at -19.79 EV,\n"
@@ -377,9 +377,9 @@ static void _build_overexposed_popover(dt_develop_t *dev)
   GtkWidget *upper = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0.0, 100.0, 0.1, 99.99, 2);
   dt_bauhaus_slider_set(upper, dev->overexposed.upper);
   dt_bauhaus_slider_set_format(upper, "%");
-  dt_bauhaus_widget_set_label(upper, N_("upper threshold"));
+  dt_bauhaus_widget_set_label(upper, N_("Upper threshold"));
   /* xgettext:no-c-format */
-  gtk_widget_set_tooltip_text(upper, _("clipping threshold for the white point.\n100% is peak medium luminance."));
+  gtk_widget_set_tooltip_text(upper, _("Clipping threshold for the white point.\n100% is peak medium luminance."));
   g_signal_connect(G_OBJECT(upper), "value-changed", G_CALLBACK(_overexposed_upper_callback), dev);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(upper), TRUE, TRUE, 0);
 
@@ -423,29 +423,29 @@ static void _build_rawoverexposed_popover(dt_develop_t *dev)
   gtk_container_add(GTK_CONTAINER(dev->rawoverexposed.floating_window), vbox);
 
   GtkWidget *mode;
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), mode, NULL, N_("mode"), _("select how to mark the clipped pixels"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), mode, NULL, N_("Mode"), _("Select how to mark the clipped pixels"),
                                dev->rawoverexposed.mode, _rawoverexposed_mode_callback, dev,
-                               N_("mark with CFA color"), N_("mark with solid color"), N_("false color"));
+                               N_("Mark with CFA color"), N_("Mark with solid color"), N_("False color"));
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(mode), TRUE, TRUE, 0);
 
   // FIXME can't use DT_BAUHAUS_COMBOBOX_NEW_FULL because of (unnecessary?) translation context
   GtkWidget *colorscheme = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(colorscheme, N_("color scheme"));
-  dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "red"));
-  dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "green"));
-  dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "blue"));
-  dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "black"));
+  dt_bauhaus_widget_set_label(colorscheme, N_("Color scheme"));
+  dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "Red"));
+  dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "Green"));
+  dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "Blue"));
+  dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "Black"));
   dt_bauhaus_combobox_set(colorscheme, dev->rawoverexposed.colorscheme);
   gtk_widget_set_tooltip_text(
-      colorscheme, _("select the solid color to indicate over exposure.\nwill only be used if mode = mark with solid color"));
+      colorscheme, _("Select the solid color to indicate over exposure.\nwill only be used if mode = mark with solid color"));
   g_signal_connect(G_OBJECT(colorscheme), "value-changed", G_CALLBACK(_rawoverexposed_colorscheme_callback), dev);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(colorscheme), TRUE, TRUE, 0);
 
   GtkWidget *threshold = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0.0, 2.0, 0.01, 1.0, 3);
   dt_bauhaus_slider_set(threshold, dev->rawoverexposed.threshold);
-  dt_bauhaus_widget_set_label(threshold, N_("clipping threshold"));
+  dt_bauhaus_widget_set_label(threshold, N_("Clipping threshold"));
   gtk_widget_set_tooltip_text(threshold,
-                              _("threshold of what shall be considered overexposed\n1.0 - white level\n0.0 - black level"));
+                              _("Threshold of what shall be considered overexposed\n1.0 - white level\n0.0 - black level"));
   g_signal_connect(G_OBJECT(threshold), "value-changed", G_CALLBACK(_rawoverexposed_threshold_callback), dev);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(threshold), TRUE, TRUE, 0);
 
@@ -499,7 +499,7 @@ static void _build_softproof_gamut_popover(dt_develop_t *dev)
   dt_loc_get_datadir(datadir, sizeof(datadir));
 
   GtkWidget *softproof_profile = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(softproof_profile, N_("softproof profile"));
+  dt_bauhaus_widget_set_label(softproof_profile, N_("Softproof profile"));
   dt_bauhaus_combobox_set_entries_ellipsis(softproof_profile, PANGO_ELLIPSIZE_MIDDLE);
   gtk_box_pack_start(GTK_BOX(vbox), softproof_profile, TRUE, TRUE, 0);
 
@@ -519,7 +519,7 @@ static void _build_softproof_gamut_popover(dt_develop_t *dev)
 
   char *system_profile_dir = g_build_filename(datadir, "color", "out", NULL);
   char *user_profile_dir = g_build_filename(confdir, "color", "out", NULL);
-  char *tooltip = g_strdup_printf(_("softproof ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
+  char *tooltip = g_strdup_printf(_("Softproof ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
   gtk_widget_set_tooltip_text(softproof_profile, tooltip);
   dt_free(tooltip);
   dt_free(system_profile_dir);
@@ -588,31 +588,31 @@ static GtkWidget *_create_one_button(dt_develop_t *dev, dt_view_type_flags_t vie
   {
     case DT_DEV_TOOLBOX_ISO_12646:
       button = dtgtk_togglebutton_new(dtgtk_cairo_paint_bulb, 0, NULL);
-      tooltip = _("toggle ISO 12646 color assessment conditions");
+      tooltip = _("Toggle ISO 12646 color assessment conditions");
       dev->iso_12646.button = button;
       break;
 
     case DT_DEV_TOOLBOX_OVEREXPOSED:
       button = dtgtk_togglebutton_new(dtgtk_cairo_paint_overexposed, 0, NULL);
-      tooltip = _("toggle clipping indication\nright click for options");
+      tooltip = _("Toggle clipping indication\nright click for options");
       dev->overexposed.button = button;
       break;
 
     case DT_DEV_TOOLBOX_RAWOVEREXPOSED:
       button = dtgtk_togglebutton_new(dtgtk_cairo_paint_rawoverexposed, 0, NULL);
-      tooltip = _("toggle raw over exposed indication\nright click for options");
+      tooltip = _("Toggle raw over exposed indication\nright click for options");
       dev->rawoverexposed.button = button;
       break;
 
     case DT_DEV_TOOLBOX_SOFTPROOF:
       button = dtgtk_togglebutton_new(dtgtk_cairo_paint_softproof, 0, NULL);
-      tooltip = _("toggle softproofing\nright click for profile options");
+      tooltip = _("Toggle softproofing\nright click for profile options");
       dev->profile.softproof_button = button;
       break;
 
     case DT_DEV_TOOLBOX_GAMUT:
       button = dtgtk_togglebutton_new(dtgtk_cairo_paint_gamut_check, 0, NULL);
-      tooltip = _("toggle gamut checking\nright click for profile options");
+      tooltip = _("Toggle gamut checking\nright click for profile options");
       dev->profile.gamut_button = button;
       break;
 

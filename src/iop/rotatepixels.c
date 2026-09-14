@@ -83,7 +83,7 @@ static void adjust_aabb(const float *p, float *aabb)
 
 const char *name()
 {
-  return C_("modulename", "rotate pixels");
+  return C_("modulename", "Rotate pixels");
 }
 
 int flags()
@@ -110,7 +110,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 const char **description(struct dt_iop_module_t *self)
 {
   return dt_iop_set_description(self,
-                                _("internal module to setup technical specificities of raw sensor.\n\n"
+                                _("Internal module to setup technical specificities of raw sensor.\n\n"
                                   "you should not touch values here !"),
                                 NULL, NULL, NULL, NULL);
 }
@@ -440,8 +440,8 @@ void reload_defaults(dt_iop_module_t *self)
 void gui_update(dt_iop_module_t *self)
 {
   gtk_label_set_text(GTK_LABEL(self->gui->widget), self->default_enabled
-                     ? _("automatic pixel rotation")
-                     : _("automatic pixel rotation\nonly works for the sensors that need it."));
+                     ? _("Automatic pixel rotation")
+                     : _("Automatic pixel rotation\nonly works for the sensors that need it."));
 }
 void gui_init(dt_iop_module_t *self)
 {

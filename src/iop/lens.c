@@ -291,13 +291,13 @@ typedef enum dt_iop_lensfun_modflag_t
 typedef struct dt_iop_lensfun_params_t
 {
   int modify_flags;
-  int inverse; // $MIN: 0 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "mode"
+  int inverse; // $MIN: 0 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "Mode"
   float scale; // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0
   float crop;
   float focal;
   float aperture;
   float distance;
-  dt_lens_type_t target_geom; // $DEFAULT: DT_LENS_RECTILINEAR $DESCRIPTION: "geometry"
+  dt_lens_type_t target_geom; // $DEFAULT: DT_LENS_RECTILINEAR $DESCRIPTION: "Geometry"
   char camera[128];
   char lens[128];
   gboolean tca_override; // $DEFAULT: FALSE $DESCRIPTION: "TCA overwrite"
@@ -918,16 +918,16 @@ const char *name()
 
 const char *aliases()
 {
-  return _("vignette|chromatic aberrations|distortion");
+  return _("Vignette|chromatic aberrations|distortion");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("correct lenses optical flaws"),
-                                      _("corrective"),
-                                      _("linear, RGB, scene-referred"),
-                                      _("geometric and reconstruction, RGB"),
-                                      _("linear, RGB, scene-referred"));
+  return dt_iop_set_description(self, _("Correct lenses optical flaws"),
+                                      _("Corrective"),
+                                      _("Linear, RGB, scene-referred"),
+                                      _("Geometric and reconstruction, RGB"),
+                                      _("Linear, RGB, scene-referred"));
 }
 
 
@@ -2678,7 +2678,7 @@ static void camera_set(dt_iop_module_t *self, long long camera_id)
   char mount[128] = "";
   ls_db_mount_name(db, cam.mount_id, mount, sizeof(mount));
 
-  fm = g_strdup_printf(_("maker:\t\t%s\n"
+  fm = g_strdup_printf(_("Maker:\t\t%s\n"
                          "model:\t\t%s%s\n"
                          "mount:\t\t%s\n"
                          "crop factor:\t%.1f"),
@@ -2867,15 +2867,15 @@ static const char *_lens_type_name(int type)
 {
   switch(type)
   {
-    case DT_LENS_RECTILINEAR:           return _("rectilinear");
-    case DT_LENS_FISHEYE:               return _("fisheye");
-    case DT_LENS_PANORAMIC:             return _("panoramic");
-    case DT_LENS_EQUIRECTANGULAR:       return _("equirectangular");
-    case DT_LENS_FISHEYE_ORTHOGRAPHIC:  return _("orthographic fisheye");
-    case DT_LENS_FISHEYE_STEREOGRAPHIC: return _("stereographic fisheye");
-    case DT_LENS_FISHEYE_EQUISOLID:     return _("equisolid fisheye");
+    case DT_LENS_RECTILINEAR:           return _("Rectilinear");
+    case DT_LENS_FISHEYE:               return _("Fisheye");
+    case DT_LENS_PANORAMIC:             return _("Panoramic");
+    case DT_LENS_EQUIRECTANGULAR:       return _("Equirectangular");
+    case DT_LENS_FISHEYE_ORTHOGRAPHIC:  return _("Orthographic fisheye");
+    case DT_LENS_FISHEYE_STEREOGRAPHIC: return _("Stereographic fisheye");
+    case DT_LENS_FISHEYE_EQUISOLID:     return _("Equisolid fisheye");
     case DT_LENS_FISHEYE_THOBY:         return _("Thoby fisheye");
-    default:                            return _("unknown");
+    default:                            return _("Unknown");
   }
 }
 
@@ -2974,7 +2974,7 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
   mounts[0] = 0;
   ls_db_lens_mounts(db, lens_id, mounts, sizeof(mounts));
 
-  fm = g_strdup_printf(_("maker:\t\t%s\n"
+  fm = g_strdup_printf(_("Maker:\t\t%s\n"
                          "model:\t\t%s\n"
                          "focal range:\t%s\n"
                          "aperture:\t%s\n"
@@ -3015,7 +3015,7 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
   // focal length
   w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(w, N_("mm"));
-  gtk_widget_set_tooltip_text(w, _("focal length (mm)"));
+  gtk_widget_set_tooltip_text(w, _("Focal length (mm)"));
   snprintf(txt, sizeof(txt), "%.*f", precision(p->focal, 10.0), p->focal);
   dt_bauhaus_combobox_add(w, txt);
   for(int k = 0; k < fli - ffi; k++)
@@ -3039,8 +3039,8 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
   }
 
   w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(w, N_("f"));
-  gtk_widget_set_tooltip_text(w, _("f-number (aperture)"));
+  dt_bauhaus_widget_set_label(w, N_("F"));
+  gtk_widget_set_tooltip_text(w, _("F-number (aperture)"));
   snprintf(txt, sizeof(txt), "%.*f", precision(p->aperture, 10.0), p->aperture);
   dt_bauhaus_combobox_add(w, txt);
   for(int k = 0; k < fli - ffi; k++)
@@ -3054,8 +3054,8 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
   g->cbe[1] = w;
 
   w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(w, N_("d"));
-  gtk_widget_set_tooltip_text(w, _("distance to subject"));
+  dt_bauhaus_widget_set_label(w, N_("D"));
+  gtk_widget_set_tooltip_text(w, _("Distance to subject"));
   snprintf(txt, sizeof(txt), "%.*f", precision(p->distance, 10.0), p->distance);
   dt_bauhaus_combobox_add(w, txt);
   float val = 0.25f;
@@ -3346,10 +3346,10 @@ static void _lens_gui_update_sensitivity(dt_iop_module_t *self)
  * "database" described where the numbers were stored, which is the one thing about them
  * nobody needs to know. The other two are not profiles and do not pretend to be. */
 static const char *const _lens_source_names[DT_LENS_SOURCE_LAST] = {
-  [DT_LENS_SOURCE_OFF]      = N_("no correction"),
-  [DT_LENS_SOURCE_LENSFUN]  = N_("community profile"),
-  [DT_LENS_SOURCE_EMBEDDED] = N_("vendor profile"),
-  [DT_LENS_SOURCE_MANUAL]   = N_("manual correction"),
+  [DT_LENS_SOURCE_OFF]      = N_("No correction"),
+  [DT_LENS_SOURCE_LENSFUN]  = N_("Community profile"),
+  [DT_LENS_SOURCE_EMBEDDED] = N_("Vendor profile"),
+  [DT_LENS_SOURCE_MANUAL]   = N_("Manual correction"),
 };
 
 /* Which sources one axis's combobox offers, in the order they appear. OFF is always first
@@ -3664,14 +3664,14 @@ void gui_init(struct dt_iop_module_t *self)
 
   // camera selector
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->camera_model = dt_iop_button_new(self, N_("camera model"),
+  g->camera_model = dt_iop_button_new(self, N_("Camera model"),
                                       G_CALLBACK(camera_menusearch_clicked), FALSE, 0, (GdkModifierType)0,
                                       NULL, 0, hbox);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, TRUE, TRUE, 0);
 
   // lens selector
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->lens_model = dt_iop_button_new(self, N_("lens model"),
+  g->lens_model = dt_iop_button_new(self, N_("Lens model"),
                                     G_CALLBACK(lens_menusearch_clicked), FALSE, 0, (GdkModifierType)0,
                                     NULL, 0, hbox);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, TRUE, TRUE, 0);
@@ -3691,25 +3691,25 @@ void gui_init(struct dt_iop_module_t *self)
    * panel ended up with a TCA override checkbox three rows away from the TCA setting. */
 
   // 2. vignetting
-  _lens_add_axis_combobox(self, g, DT_LENS_AXIS_VIGNETTING, N_("vignetting"),
-                          N_("correct the lens's light falloff, and where to take it from"));
+  _lens_add_axis_combobox(self, g, DT_LENS_AXIS_VIGNETTING, N_("Vignetting"),
+                          N_("Correct the lens's light falloff, and where to take it from"));
 
   // 3. distortion, with the projection and the scaling that go with it
-  _lens_add_axis_combobox(self, g, DT_LENS_AXIS_DISTORTION, N_("distortion"),
-                          N_("correct the lens's geometric distortion, and where to take it from"));
+  _lens_add_axis_combobox(self, g, DT_LENS_AXIS_DISTORTION, N_("Distortion"),
+                          N_("Correct the lens's geometric distortion, and where to take it from"));
 
   g->target_geom = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->target_geom, N_("geometry"));
+  dt_bauhaus_widget_set_label(g->target_geom, N_("Geometry"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->target_geom, TRUE, TRUE, 0);
-  gtk_widget_set_tooltip_text(g->target_geom, _("target geometry"));
-  dt_bauhaus_combobox_add(g->target_geom, _("rectilinear"));
-  dt_bauhaus_combobox_add(g->target_geom, _("fish-eye"));
-  dt_bauhaus_combobox_add(g->target_geom, _("panoramic"));
-  dt_bauhaus_combobox_add(g->target_geom, _("equirectangular"));
-  dt_bauhaus_combobox_add(g->target_geom, _("orthographic"));
-  dt_bauhaus_combobox_add(g->target_geom, _("stereographic"));
-  dt_bauhaus_combobox_add(g->target_geom, _("equisolid angle"));
-  dt_bauhaus_combobox_add(g->target_geom, _("thoby fish-eye"));
+  gtk_widget_set_tooltip_text(g->target_geom, _("Target geometry"));
+  dt_bauhaus_combobox_add(g->target_geom, _("Rectilinear"));
+  dt_bauhaus_combobox_add(g->target_geom, _("Fish-eye"));
+  dt_bauhaus_combobox_add(g->target_geom, _("Panoramic"));
+  dt_bauhaus_combobox_add(g->target_geom, _("Equirectangular"));
+  dt_bauhaus_combobox_add(g->target_geom, _("Orthographic"));
+  dt_bauhaus_combobox_add(g->target_geom, _("Stereographic"));
+  dt_bauhaus_combobox_add(g->target_geom, _("Equisolid angle"));
+  dt_bauhaus_combobox_add(g->target_geom, _("Thoby fish-eye"));
   g_signal_connect(G_OBJECT(g->target_geom), "value-changed", G_CALLBACK(target_geometry_changed),
                    (gpointer)self);
 
@@ -3721,11 +3721,11 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_digits(g->scale, 3);
   dt_bauhaus_widget_set_quad_paint(g->scale, dtgtk_cairo_paint_refresh, 0, NULL);
   g_signal_connect(G_OBJECT(g->scale), "quad-pressed", G_CALLBACK(autoscale_pressed), self);
-  gtk_widget_set_tooltip_text(g->scale, _("auto scale"));
+  gtk_widget_set_tooltip_text(g->scale, _("Auto scale"));
 
   // 4. chromatic aberrations, and the coefficients the manual source uses
-  _lens_add_axis_combobox(self, g, DT_LENS_AXIS_TCA, N_("chromatic aberrations"),
-                          N_("correct lateral chromatic aberration, and where to take it from"));
+  _lens_add_axis_combobox(self, g, DT_LENS_AXIS_TCA, N_("Chromatic aberrations"),
+                          N_("Correct lateral chromatic aberration, and where to take it from"));
 
   /* p->tca_override has NO widget. It survives only as storage -- _lens_source_set()
    * writes it whenever TCA is set to manual, so an edit saved by this version is still read
@@ -3744,9 +3744,9 @@ void gui_init(struct dt_iop_module_t *self)
   /* Last, because it is on its way out: it inverts every axis at once, nobody has been
    * found who uses it, and it is kept only so existing edits that set it keep rendering. */
   g->reverse = dt_bauhaus_combobox_from_params(self, "inverse");
-  dt_bauhaus_combobox_add(g->reverse, _("correct"));
-  dt_bauhaus_combobox_add(g->reverse, _("distort"));
-  gtk_widget_set_tooltip_text(g->reverse, _("correct distortions or apply them"));
+  dt_bauhaus_combobox_add(g->reverse, _("Correct"));
+  dt_bauhaus_combobox_add(g->reverse, _("Distort"));
+  gtk_widget_set_tooltip_text(g->reverse, _("Correct distortions or apply them"));
 
 
 }

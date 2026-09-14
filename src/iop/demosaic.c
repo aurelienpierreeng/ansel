@@ -128,44 +128,44 @@ typedef enum dt_iop_demosaic_method_t
   DT_IOP_DEMOSAIC_LMMSE = 6, // $DESCRIPTION: "LMMSE"
   DT_IOP_DEMOSAIC_RCD_VNG = DEMOSAIC_DUAL | DT_IOP_DEMOSAIC_RCD, // $DESCRIPTION: "RCD + VNG4"
   DT_IOP_DEMOSAIC_AMAZE_VNG = DEMOSAIC_DUAL | DT_IOP_DEMOSAIC_AMAZE, // $DESCRIPTION: "AMaZE + VNG4"
-  DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME = 3, // $DESCRIPTION: "passthrough (monochrome)"
-  DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR = 4, // $DESCRIPTION: "photosite color (debug)"
+  DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME = 3, // $DESCRIPTION: "Passthrough (monochrome)"
+  DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR = 4, // $DESCRIPTION: "Photosite color (debug)"
   // methods for x-trans images
   DT_IOP_DEMOSAIC_VNG = DEMOSAIC_XTRANS | 0,           // $DESCRIPTION: "VNG"
   DT_IOP_DEMOSAIC_MARKESTEIJN = DEMOSAIC_XTRANS | 1,   // $DESCRIPTION: "Markesteijn 1-pass"
   DT_IOP_DEMOSAIC_MARKESTEIJN_3 = DEMOSAIC_XTRANS | 2, // $DESCRIPTION: "Markesteijn 3-pass"
-  DT_IOP_DEMOSAIC_FDC = DEMOSAIC_XTRANS | 4,           // $DESCRIPTION: "frequency domain chroma"
+  DT_IOP_DEMOSAIC_FDC = DEMOSAIC_XTRANS | 4,           // $DESCRIPTION: "Frequency domain chroma"
   DT_IOP_DEMOSAIC_MARKEST3_VNG = DEMOSAIC_DUAL | DT_IOP_DEMOSAIC_MARKESTEIJN_3, // $DESCRIPTION: "Markesteijn 3-pass + VNG"
-  DT_IOP_DEMOSAIC_PASSTHR_MONOX = DEMOSAIC_XTRANS | 3, // $DESCRIPTION: "passthrough (monochrome)"
-  DT_IOP_DEMOSAIC_PASSTHR_COLORX = DEMOSAIC_XTRANS | 5, // $DESCRIPTION: "photosite color (debug)"
-  DT_IOP_DEMOSAIC_DOWNSAMPLE = 7, // $DESCRIPTION: "downsample"
+  DT_IOP_DEMOSAIC_PASSTHR_MONOX = DEMOSAIC_XTRANS | 3, // $DESCRIPTION: "Passthrough (monochrome)"
+  DT_IOP_DEMOSAIC_PASSTHR_COLORX = DEMOSAIC_XTRANS | 5, // $DESCRIPTION: "Photosite color (debug)"
+  DT_IOP_DEMOSAIC_DOWNSAMPLE = 7, // $DESCRIPTION: "Downsample"
 } dt_iop_demosaic_method_t;
 
 typedef enum dt_iop_demosaic_greeneq_t
 {
-  DT_IOP_GREEN_EQ_NO = 0,    // $DESCRIPTION: "disabled"
-  DT_IOP_GREEN_EQ_LOCAL = 1, // $DESCRIPTION: "local average"
-  DT_IOP_GREEN_EQ_FULL = 2,  // $DESCRIPTION: "full average"
-  DT_IOP_GREEN_EQ_BOTH = 3   // $DESCRIPTION: "full and local average"
+  DT_IOP_GREEN_EQ_NO = 0,    // $DESCRIPTION: "Disabled"
+  DT_IOP_GREEN_EQ_LOCAL = 1, // $DESCRIPTION: "Local average"
+  DT_IOP_GREEN_EQ_FULL = 2,  // $DESCRIPTION: "Full average"
+  DT_IOP_GREEN_EQ_BOTH = 3   // $DESCRIPTION: "Full and local average"
 } dt_iop_demosaic_greeneq_t;
 
 
 typedef enum dt_iop_demosaic_smooth_t
 {
-  DEMOSAIC_SMOOTH_OFF = 0, // $DESCRIPTION: "disabled"
-  DEMOSAIC_SMOOTH_1 = 1,   // $DESCRIPTION: "once"
-  DEMOSAIC_SMOOTH_2 = 2,   // $DESCRIPTION: "twice"
-  DEMOSAIC_SMOOTH_3 = 3,   // $DESCRIPTION: "three times"
-  DEMOSAIC_SMOOTH_4 = 4,   // $DESCRIPTION: "four times"
-  DEMOSAIC_SMOOTH_5 = 5,   // $DESCRIPTION: "five times"
+  DEMOSAIC_SMOOTH_OFF = 0, // $DESCRIPTION: "Disabled"
+  DEMOSAIC_SMOOTH_1 = 1,   // $DESCRIPTION: "Once"
+  DEMOSAIC_SMOOTH_2 = 2,   // $DESCRIPTION: "Twice"
+  DEMOSAIC_SMOOTH_3 = 3,   // $DESCRIPTION: "Three times"
+  DEMOSAIC_SMOOTH_4 = 4,   // $DESCRIPTION: "Four times"
+  DEMOSAIC_SMOOTH_5 = 5,   // $DESCRIPTION: "Five times"
 } dt_iop_demosaic_smooth_t;
 
 typedef enum dt_iop_demosaic_lmmse_t
 {
-  LMMSE_REFINE_0 = 0,   // $DESCRIPTION: "basic"
-  LMMSE_REFINE_1 = 1,   // $DESCRIPTION: "median"
+  LMMSE_REFINE_0 = 0,   // $DESCRIPTION: "Basic"
+  LMMSE_REFINE_1 = 1,   // $DESCRIPTION: "Median"
   LMMSE_REFINE_2 = 2,   // $DESCRIPTION: "3x median"
-  LMMSE_REFINE_3 = 3,   // $DESCRIPTION: "refine & medians"
+  LMMSE_REFINE_3 = 3,   // $DESCRIPTION: "Refine & medians"
   LMMSE_REFINE_4 = 4,   // $DESCRIPTION: "2x refine + medians"
 } dt_iop_demosaic_lmmse_t;
 
@@ -266,12 +266,12 @@ typedef enum dt_iop_demosaic_quality_t
 
 typedef struct dt_iop_demosaic_params_t
 {
-  dt_iop_demosaic_greeneq_t green_eq; // $DEFAULT: DT_IOP_GREEN_EQ_NO $DESCRIPTION: "match greens"
-  float median_thrs; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "edge threshold"
-  dt_iop_demosaic_smooth_t color_smoothing; // $DEFAULT: DEMOSAIC_SMOOTH_OFF $DESCRIPTION: "color smoothing"
-  dt_iop_demosaic_method_t demosaicing_method; // $DEFAULT: DT_IOP_DEMOSAIC_RCD $DESCRIPTION: "demosaicing method"
+  dt_iop_demosaic_greeneq_t green_eq; // $DEFAULT: DT_IOP_GREEN_EQ_NO $DESCRIPTION: "Match greens"
+  float median_thrs; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Edge threshold"
+  dt_iop_demosaic_smooth_t color_smoothing; // $DEFAULT: DEMOSAIC_SMOOTH_OFF $DESCRIPTION: "Color smoothing"
+  dt_iop_demosaic_method_t demosaicing_method; // $DEFAULT: DT_IOP_DEMOSAIC_RCD $DESCRIPTION: "Demosaicing method"
   dt_iop_demosaic_lmmse_t lmmse_refine; // $DEFAULT: LMMSE_REFINE_1 $DESCRIPTION: "LMMSE refine"
-  float dual_thrs; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.20 $DESCRIPTION: "dual threshold"
+  float dual_thrs; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.20 $DESCRIPTION: "Dual threshold"
 } dt_iop_demosaic_params_t;
 
 typedef struct dt_iop_demosaic_gui_data_t
@@ -310,16 +310,16 @@ void amaze_demosaic_RT(
 
 const char *name()
 {
-  return _("demosaic");
+  return _("Demosaic");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("reconstruct full RGB pixels from a sensor color filter array reading"),
-                                      _("mandatory"),
-                                      _("linear, raw, scene-referred"),
-                                      _("linear, raw"),
-                                      _("linear, RGB, scene-referred"));
+  return dt_iop_set_description(self, _("Reconstruct full RGB pixels from a sensor color filter array reading"),
+                                      _("Mandatory"),
+                                      _("Linear, raw, scene-referred"),
+                                      _("Linear, raw"),
+                                      _("Linear, RGB, scene-referred"));
 }
 
 int default_group()
@@ -2437,12 +2437,12 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->median_thrs = dt_bauhaus_slider_from_params(self, "median_thrs");
   dt_bauhaus_slider_set_digits(g->median_thrs, 3);
-  gtk_widget_set_tooltip_text(g->median_thrs, _("threshold for edge-aware median.\nset to 0.0 to switch off\n"
+  gtk_widget_set_tooltip_text(g->median_thrs, _("Threshold for edge-aware median.\nset to 0.0 to switch off\n"
                                                 "set to 1.0 to ignore edges"));
 
   g->dual_thrs = dt_bauhaus_slider_from_params(self, "dual_thrs");
   dt_bauhaus_slider_set_digits(g->dual_thrs, 2);
-  gtk_widget_set_tooltip_text(g->dual_thrs, _("contrast threshold for dual demosaic.\nset to 0.0 for high frequency content\n"
+  gtk_widget_set_tooltip_text(g->dual_thrs, _("Contrast threshold for dual demosaic.\nset to 0.0 for high frequency content\n"
                                                 "set to 1.0 for flat content\ntoggle to visualize the mask"));
   dt_bauhaus_widget_set_quad_paint(g->dual_thrs, dtgtk_cairo_paint_showmask, 0, NULL);
   dt_bauhaus_widget_set_quad_toggle(g->dual_thrs, TRUE);
@@ -2453,17 +2453,17 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->lmmse_refine, _("LMMSE refinement steps. the median steps average the output,\nrefine adds some recalculation of red & blue channels"));
 
   g->color_smoothing = dt_bauhaus_combobox_from_params(self, "color_smoothing");
-  gtk_widget_set_tooltip_text(g->color_smoothing, _("how many post-demosaic smoothing passes.\nin downsample mode this sets the guided detail equalization iterations"));
+  gtk_widget_set_tooltip_text(g->color_smoothing, _("How many post-demosaic smoothing passes.\nin downsample mode this sets the guided detail equalization iterations"));
 
   g->greeneq = dt_bauhaus_combobox_from_params(self, "green_eq");
-  gtk_widget_set_tooltip_text(g->greeneq, _("green channels matching method"));
+  gtk_widget_set_tooltip_text(g->greeneq, _("Green channels matching method"));
 
   // start building top level widget
   self->gui->widget = gtk_stack_new();
   gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
-  GtkWidget *label_non_raw = dt_ui_label_new(_("not applicable"));
-  gtk_widget_set_tooltip_text(label_non_raw, _("demosaicing is only used for color raw images"));
+  GtkWidget *label_non_raw = dt_ui_label_new(_("Not applicable"));
+  gtk_widget_set_tooltip_text(label_non_raw, _("Demosaicing is only used for color raw images"));
 
   gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
   gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");

@@ -1503,7 +1503,7 @@ static gboolean _enqueue_input(dt_iop_module_t *self, dt_drawlayer_worker_t *rt,
       ok = _rt_queue_push_locked(rt, &end_event);
 
     if(rt->finish_commit_pending) *rt->finish_commit_pending = TRUE;
-    dt_control_log(_("drawing worker queue is full, stroke aborted"));
+    dt_control_log(_("Drawing worker queue is full, stroke aborted"));
   }
   pthread_cond_broadcast(&rt->worker_cond);
   dt_pthread_mutex_unlock(&rt->worker_mutex);
@@ -1523,7 +1523,7 @@ static gboolean _enqueue_stroke_end(dt_iop_module_t *self, dt_drawlayer_worker_t
   end_input.stroke_pos = DT_DRAWLAYER_PAINT_STROKE_END;
 
   if(_enqueue_event(self, rt, &end_input)) return TRUE;
-  dt_control_log(_("drawing worker queue is full"));
+  dt_control_log(_("Drawing worker queue is full"));
   return FALSE;
 }
 

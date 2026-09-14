@@ -311,20 +311,20 @@ static const struct
   const char flag;
 } loaders_info[LOADER_COUNT] =
 {
-  { N_("unknown"),         '.'}, // EMPTY_FIELD
-  { N_("tiff"),            't'},
-  { N_("png"),             'p'},
-  { N_("j2k"),             'J'},
-  { N_("jpeg"),            'j'},
-  { N_("exr"),             'e'},
-  { N_("rgbe"),            'R'},
-  { N_("pfm"),             'P'},
-  { N_("rawspeed"),        'r'},
-  { N_("netpnm"),          'n'},
-  { N_("avif"),            'a'},
-  { N_("heif"),            'h'},
-  { N_("libraw"),          'l'},
-  { N_("webp"),            'w'}
+  { N_("Unknown"),         '.'}, // EMPTY_FIELD
+  { N_("Tiff"),            't'},
+  { N_("Png"),             'p'},
+  { N_("J2k"),             'J'},
+  { N_("Jpeg"),            'j'},
+  { N_("Exr"),             'e'},
+  { N_("Rgbe"),            'R'},
+  { N_("Pfm"),             'P'},
+  { N_("Rawspeed"),        'r'},
+  { N_("Netpnm"),          'n'},
+  { N_("Avif"),            'a'},
+  { N_("Heif"),            'h'},
+  { N_("Libraw"),          'l'},
+  { N_("Webp"),            'w'}
 };
 
 typedef struct dt_image_geoloc_t

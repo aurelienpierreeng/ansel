@@ -1915,16 +1915,16 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
   char path[DT_PATH_MAX] = { 0 };
   if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
   {
-    _layerio_append_error(errors, _("failed to resolve drawlayer sidecar path"));
+    _layerio_append_error(errors, _("Failed to resolve drawlayer sidecar path"));
   }
   else if(!g_file_test(path, G_FILE_TEST_EXISTS))
   {
-    _layerio_append_error(errors, _("drawlayer sidecar TIFF is missing"));
+    _layerio_append_error(errors, _("Drawlayer sidecar TIFF is missing"));
   }
   else
   {
     if(!dt_drawlayer_io_delete_layer(path, params->layer_name, layer_width, layer_height))
-      _layerio_append_error(errors, _("failed to delete drawing layer from sidecar"));
+      _layerio_append_error(errors, _("Failed to delete drawing layer from sidecar"));
     else
     {
       deleted = TRUE;
@@ -2021,22 +2021,22 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   }
 
   if(!_commit_dabs(self, FALSE))
-    _layerio_append_error(errors, _("failed to commit drawing stroke before renaming"));
+    _layerio_append_error(errors, _("Failed to commit drawing stroke before renaming"));
   else if(!_flush_layer_cache(self))
-    _layerio_append_error(errors, _("failed to write drawing layer sidecar"));
+    _layerio_append_error(errors, _("Failed to write drawing layer sidecar"));
   else
   {
     char path[DT_PATH_MAX] = { 0 };
     if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
-      _layerio_append_error(errors, _("failed to resolve drawlayer sidecar path"));
+      _layerio_append_error(errors, _("Failed to resolve drawlayer sidecar path"));
     else if(!g_file_test(path, G_FILE_TEST_EXISTS))
-      _layerio_append_error(errors, _("drawlayer sidecar TIFF is missing"));
+      _layerio_append_error(errors, _("Drawlayer sidecar TIFF is missing"));
     else
     {
       dt_drawlayer_io_layer_info_t info = { 0 };
       if(!dt_drawlayer_io_rename_layer(path, params->layer_name, new_name, params->work_profile,
                                        layer_width, layer_height, &info))
-        _layerio_append_error(errors, _("failed to rename drawing layer in sidecar"));
+        _layerio_append_error(errors, _("Failed to rename drawing layer in sidecar"));
       else
       {
         g_strlcpy(params->layer_name, new_name, sizeof(params->layer_name));
@@ -2160,7 +2160,7 @@ static gboolean _background_layer_job_done_idle(gpointer user_data)
   dt_drawlayer_io_background_job_result_t *result = (dt_drawlayer_io_background_job_result_t *)user_data;
   if(IS_NULL_PTR(result)) return G_SOURCE_REMOVE;
 
-  dt_control_log("%s", result->message[0] ? result->message : _("background layer job finished"));
+  dt_control_log("%s", result->message[0] ? result->message : _("Background layer job finished"));
 
   dt_develop_t *dev = dt_dev_get_global();
 
@@ -2262,7 +2262,7 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   }
 
   dt_control_job_set_params(job, job_params, g_free);
-  dt_control_job_add_progress(job, _("creating background layer"), TRUE);
+  dt_control_job_add_progress(job, _("Creating background layer"), TRUE);
   g->session.background_job_running = TRUE;
   if(g->controls.create_background) gtk_widget_set_sensitive(g->controls.create_background, FALSE);
   if(dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job) != 0)
@@ -2385,7 +2385,7 @@ static void _rename_layer_clicked(GtkButton *button, gpointer user_data)
     return;
 
   if(!_rename_current_layer_from_gui(self, requested_name))
-    dt_control_log(_("failed to rename drawing layer"));
+    dt_control_log(_("Failed to rename drawing layer"));
 }
 
 static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
@@ -2473,21 +2473,21 @@ static void _fill_white_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!_fill_current_layer(self, 1.0f)) dt_control_log(_("failed to fill drawing layer"));
+  if(!_fill_current_layer(self, 1.0f)) dt_control_log(_("Failed to fill drawing layer"));
 }
 
 static void _fill_black_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!_fill_current_layer(self, 0.0f)) dt_control_log(_("failed to fill drawing layer"));
+  if(!_fill_current_layer(self, 0.0f)) dt_control_log(_("Failed to fill drawing layer"));
 }
 
 static void _fill_transparent_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!_clear_current_layer(self)) dt_control_log(_("failed to clear drawing layer"));
+  if(!_clear_current_layer(self)) dt_control_log(_("Failed to clear drawing layer"));
 }
 
 static void _save_layer_clicked(GtkButton *button, gpointer user_data)
@@ -2575,14 +2575,14 @@ static void _create_layer_clicked(GtkButton *button, gpointer user_data)
     return;
 
   if(!_create_new_layer(self, requested_name))
-    dt_control_log(_("failed to create drawing layer"));
+    dt_control_log(_("Failed to create drawing layer"));
 }
 
 static void _create_background_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!_create_background_layer_from_input(self)) dt_control_log(_("failed to create background layer from input"));
+  if(!_create_background_layer_from_input(self)) dt_control_log(_("Failed to create background layer from input"));
 }
 
 static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
@@ -2726,15 +2726,15 @@ void dt_drawlayer_show_runtime_feedback(const dt_iop_drawlayer_gui_data_t *g,
 /** @brief Module display name. */
 const char *name()
 {
-  return C_("modulename", "drawing");
+  return C_("modulename", "Drawing");
 }
 
 /** @brief Module description strings used by UI/help. */
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("paint premultiplied RGB layers in a TIFF sidecar"), _("creative"),
-                                _("linear, RGB, scene-referred"), _("geometric, RGB"),
-                                _("linear, RGB, scene-referred"));
+  return dt_iop_set_description(self, _("Paint premultiplied RGB layers in a TIFF sidecar"), _("Creative"),
+                                _("Linear, RGB, scene-referred"), _("Geometric, RGB"),
+                                _("Linear, RGB, scene-referred"));
 }
 
 #ifdef HAVE_OPENCL
@@ -2930,7 +2930,7 @@ void gui_init(dt_iop_module_t *self)
   if(self->gui->reset_button) gtk_widget_hide(self->gui->reset_button);
 
   GtkWidget *history_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->controls.save_layer = gtk_button_new_with_label(_("save sidecar"));
+  g->controls.save_layer = gtk_button_new_with_label(_("Save sidecar"));
   gtk_box_pack_start(GTK_BOX(history_box), g->controls.save_layer, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), history_box, FALSE, FALSE, 0);
 
@@ -2962,13 +2962,13 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.preview_box = preview_box;
   GSList *preview_group = NULL;
-  g->controls.preview_bg_image = gtk_radio_button_new_with_label(preview_group, _("image"));
+  g->controls.preview_bg_image = gtk_radio_button_new_with_label(preview_group, _("Image"));
   preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_image));
-  g->controls.preview_bg_white = gtk_radio_button_new_with_label(preview_group, _("white"));
+  g->controls.preview_bg_white = gtk_radio_button_new_with_label(preview_group, _("White"));
   preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_white));
-  g->controls.preview_bg_grey = gtk_radio_button_new_with_label(preview_group, _("grey"));
+  g->controls.preview_bg_grey = gtk_radio_button_new_with_label(preview_group, _("Grey"));
   preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_grey));
-  g->controls.preview_bg_black = gtk_radio_button_new_with_label(preview_group, _("black"));
+  g->controls.preview_bg_black = gtk_radio_button_new_with_label(preview_group, _("Black"));
   gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_image, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_white, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_grey, TRUE, TRUE, 0);
@@ -2977,10 +2977,10 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(layer_tab), preview_box, FALSE, FALSE, 0);
 
   g->controls.brush_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_combobox_add(g->controls.brush_mode, _("paint"));
-  dt_bauhaus_combobox_add(g->controls.brush_mode, _("erase"));
-  dt_bauhaus_combobox_add(g->controls.brush_mode, _("blur"));
-  dt_bauhaus_combobox_add(g->controls.brush_mode, _("smudge"));
+  dt_bauhaus_combobox_add(g->controls.brush_mode, _("Paint"));
+  dt_bauhaus_combobox_add(g->controls.brush_mode, _("Erase"));
+  dt_bauhaus_combobox_add(g->controls.brush_mode, _("Blur"));
+  dt_bauhaus_combobox_add(g->controls.brush_mode, _("Smudge"));
   dt_bauhaus_widget_set_label(g->controls.brush_mode, _("Paint mode"));
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.brush_mode, TRUE, TRUE, 0);
 
@@ -3001,8 +3001,8 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *picker_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.image_colorpicker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_POINT_AREA, NULL, IOP_CS_NONE);
   g->controls.image_colorpicker_source = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_combobox_add(g->controls.image_colorpicker_source, _("input"));
-  dt_bauhaus_combobox_add(g->controls.image_colorpicker_source, _("output"));
+  dt_bauhaus_combobox_add(g->controls.image_colorpicker_source, _("Input"));
+  dt_bauhaus_combobox_add(g->controls.image_colorpicker_source, _("Output"));
   dt_bauhaus_widget_set_label(g->controls.image_colorpicker_source, _("Pick from"));
   gtk_box_pack_start(GTK_BOX(picker_controls), g->controls.image_colorpicker, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(picker_controls), g->controls.image_colorpicker_source, TRUE, TRUE, 0);
@@ -3098,14 +3098,14 @@ void gui_init(dt_iop_module_t *self)
   g->controls.layer_fill_row = layer_fill_row;
   g->controls.layer_select = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->controls.layer_select, _("Source layer"));
-  g->controls.delete_layer = gtk_button_new_with_label(_("delete layer"));
-  g->controls.create_layer = gtk_button_new_with_label(_("create new layer"));
-  g->controls.rename_layer = gtk_button_new_with_label(_("rename layer"));
-  g->controls.attach_layer = gtk_button_new_with_label(_("reuse selected layer"));
-  g->controls.create_background = gtk_button_new_with_label(_("create background from input"));
-  g->controls.fill_white = gtk_button_new_with_label(_("white"));
-  g->controls.fill_black = gtk_button_new_with_label(_("black"));
-  g->controls.fill_transparent = gtk_button_new_with_label(_("transparency"));
+  g->controls.delete_layer = gtk_button_new_with_label(_("Delete layer"));
+  g->controls.create_layer = gtk_button_new_with_label(_("Create new layer"));
+  g->controls.rename_layer = gtk_button_new_with_label(_("Rename layer"));
+  g->controls.attach_layer = gtk_button_new_with_label(_("Reuse selected layer"));
+  g->controls.create_background = gtk_button_new_with_label(_("Create background from input"));
+  g->controls.fill_white = gtk_button_new_with_label(_("White"));
+  g->controls.fill_black = gtk_button_new_with_label(_("Black"));
+  g->controls.fill_transparent = gtk_button_new_with_label(_("Transparency"));
   gtk_box_pack_start(GTK_BOX(layer_box), layer_status, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_box), g->controls.layer_select, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.create_layer, TRUE, TRUE, 0);
@@ -3121,14 +3121,14 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(layer_box), g->controls.create_background, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_tab), layer_box, FALSE, FALSE, 0);
 
-  GtkWidget *mapping_title = gtk_label_new(_("tablet mapping"));
+  GtkWidget *mapping_title = gtk_label_new(_("Tablet mapping"));
   gtk_widget_set_halign(mapping_title, GTK_ALIGN_START);
   GtkWidget *grid = gtk_grid_new();
   gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
   gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
 
-  const char *labels[4] = { _("size"), _("opacity"), _("flow"), _("hardness") };
-  const char *rows[3] = { _("pressure"), _("tilt"), _("acceleration") };
+  const char *labels[4] = { _("Size"), _("Opacity"), _("Flow"), _("Hardness") };
+  const char *rows[3] = { _("Pressure"), _("Tilt"), _("Acceleration") };
   GtkWidget **targets[3][4] = {
     { &g->controls.map_pressure_size, &g->controls.map_pressure_opacity, &g->controls.map_pressure_flow, &g->controls.map_pressure_softness },
     { &g->controls.map_tilt_size, &g->controls.map_tilt_opacity, &g->controls.map_tilt_flow, &g->controls.map_tilt_softness },
@@ -3142,7 +3142,7 @@ void gui_init(dt_iop_module_t *self)
     gtk_label_set_angle(GTK_LABEL(label), 90.0);
     gtk_grid_attach(GTK_GRID(grid), label, c + 1, 0, 1, 1);
   }
-  gtk_grid_attach(GTK_GRID(grid), gtk_label_new(_("profile")), 5, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new(_("Profile")), 5, 0, 1, 1);
 
   for(int r = 0; r < 3; r++)
   {
@@ -3153,12 +3153,12 @@ void gui_init(dt_iop_module_t *self)
       gtk_grid_attach(GTK_GRID(grid), *targets[r][c], c + 1, r + 1, 1, 1);
     }
     *profiles[r] = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-    dt_bauhaus_combobox_add(*profiles[r], _("linear"));
-    dt_bauhaus_combobox_add(*profiles[r], _("quadratic"));
-    dt_bauhaus_combobox_add(*profiles[r], _("square root"));
-    dt_bauhaus_combobox_add(*profiles[r], _("inverse linear"));
-    dt_bauhaus_combobox_add(*profiles[r], _("inverse square root"));
-    dt_bauhaus_combobox_add(*profiles[r], _("inverse quadratic"));
+    dt_bauhaus_combobox_add(*profiles[r], _("Linear"));
+    dt_bauhaus_combobox_add(*profiles[r], _("Quadratic"));
+    dt_bauhaus_combobox_add(*profiles[r], _("Square root"));
+    dt_bauhaus_combobox_add(*profiles[r], _("Inverse linear"));
+    dt_bauhaus_combobox_add(*profiles[r], _("Inverse square root"));
+    dt_bauhaus_combobox_add(*profiles[r], _("Inverse quadratic"));
     gtk_grid_attach(GTK_GRID(grid), *profiles[r], 5, r + 1, 1, 1);
   }
 
@@ -3533,11 +3533,11 @@ static void _draw_brush_hud(cairo_t *cr, const drawlayer_hud_brush_state_t *stat
   if(IS_NULL_PTR(cr) || IS_NULL_PTR(state)) return;
 
   char lines[3][128] = { { 0 } };
-  g_snprintf(lines[0], sizeof(lines[0]), _("size %.1f px  hardness %.2f%%"), state->radius * 2.0f,
+  g_snprintf(lines[0], sizeof(lines[0]), _("Size %.1f px  hardness %.2f%%"), state->radius * 2.0f,
              state->hardness * 100.0f);
-  g_snprintf(lines[1], sizeof(lines[1]), _("opacity %.2f%%  flow %.2f%%"), state->opacity * 100.0f,
+  g_snprintf(lines[1], sizeof(lines[1]), _("Opacity %.2f%%  flow %.2f%%"), state->opacity * 100.0f,
              state->flow * 100.0f);
-  g_snprintf(lines[2], sizeof(lines[2]), _("pressure %.2f%%  tilt %.2f%%  acceleration %.2f%%"),
+  g_snprintf(lines[2], sizeof(lines[2]), _("Pressure %.2f%%  tilt %.2f%%  acceleration %.2f%%"),
              state->pressure * 100.0f, state->tilt * 100.0f, state->acceleration * 100.0f);
 
   const double pad = DT_PIXEL_APPLY_DPI(6.0);
@@ -3885,7 +3885,7 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
   if(!dispatch.ok)
     return 0;
   if(!dispatch.raw_input_ok)
-    dt_control_log(_("failed to queue live drawing stroke"));
+    dt_control_log(_("Failed to queue live drawing stroke"));
   dt_control_mouse_is_painting(TRUE);
   dt_control_queue_redraw_center();
   return 1;
@@ -3938,7 +3938,7 @@ int button_released(dt_iop_module_t *self, double x, double y, int which, uint32
     const dt_drawlayer_runtime_result_t dispatch
         = dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
     if(!dispatch.ok || !dispatch.raw_input_ok)
-      dt_control_log(_("failed to queue drawing stroke end"));
+      dt_control_log(_("Failed to queue drawing stroke end"));
     dt_control_queue_redraw_center();
     return 1;
   }

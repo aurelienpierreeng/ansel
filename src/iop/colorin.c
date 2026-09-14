@@ -111,11 +111,11 @@ static void update_profile_list(dt_iop_module_t *self);
 
 typedef enum dt_iop_color_normalize_t
 {
-  DT_NORMALIZE_OFF,               //$DESCRIPTION: "off"
+  DT_NORMALIZE_OFF,               //$DESCRIPTION: "Off"
   DT_NORMALIZE_SRGB,              //$DESCRIPTION: "sRGB"
   DT_NORMALIZE_ADOBE_RGB,         //$DESCRIPTION: "Adobe RGB (compatible)"
-  DT_NORMALIZE_LINEAR_REC709_RGB, //$DESCRIPTION: "linear Rec709 RGB"
-  DT_NORMALIZE_LINEAR_REC2020_RGB //$DESCRIPTION: "linear Rec2020 RGB"
+  DT_NORMALIZE_LINEAR_REC709_RGB, //$DESCRIPTION: "Linear Rec709 RGB"
+  DT_NORMALIZE_LINEAR_REC2020_RGB //$DESCRIPTION: "Linear Rec2020 RGB"
 } dt_iop_color_normalize_t;
 
 typedef struct dt_iop_colorin_params_t
@@ -123,7 +123,7 @@ typedef struct dt_iop_colorin_params_t
   dt_colorspaces_color_profile_type_t type; // $DEFAULT: DT_COLORSPACE_ENHANCED_MATRIX
   char filename[DT_IOP_COLOR_ICC_LEN];
   dt_iop_color_intent_t intent;       // $DEFAULT: DT_INTENT_PERCEPTUAL
-  dt_iop_color_normalize_t normalize; // $DEFAULT: DT_NORMALIZE_OFF $DESCRIPTION: "gamut clipping"
+  dt_iop_color_normalize_t normalize; // $DEFAULT: DT_NORMALIZE_OFF $DESCRIPTION: "Gamut clipping"
   int blue_mapping;
   // working color profile
   dt_colorspaces_color_profile_type_t type_work; // $DEFAULT: DT_COLORSPACE_LIN_REC2020
@@ -166,17 +166,17 @@ typedef struct dt_iop_colorin_data_t
 
 const char *name()
 {
-  return _("input color profile");
+  return _("Input color profile");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("convert any RGB input to pipeline reference RGB\n"
+  return dt_iop_set_description(self, _("Convert any RGB input to pipeline reference RGB\n"
                                         "using color profiles to remap RGB values"),
-                                      _("mandatory"),
-                                      _("linear or non-linear, RGB, scene-referred"),
-                                      _("defined by profile"),
-                                      _("linear, RGB, scene-referred"));
+                                      _("Mandatory"),
+                                      _("Linear or non-linear, RGB, scene-referred"),
+                                      _("Defined by profile"),
+                                      _("Linear, RGB, scene-referred"));
 }
 
 int default_group()
@@ -576,7 +576,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
       dt_print(DT_DEBUG_COLORPROFILE,
                "[colorin] can't extract matrix from colorspace `%s', it will be replaced by Rec2020 RGB!\n",
                p->filename_work);
-      dt_control_log(_("can't extract matrix from colorspace `%s', it will be replaced by Rec2020 RGB!"), p->filename_work);
+      dt_control_log(_("Can't extract matrix from colorspace `%s', it will be replaced by Rec2020 RGB!"), p->filename_work);
 
     }
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -860,7 +860,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                p->filename);
     else
       dt_print(DT_DEBUG_COLORPROFILE, "[colorin] unsupported input profile has been replaced by linear Rec709 RGB!\n");
-    dt_control_log(_("unsupported input profile has been replaced by linear Rec709 RGB!"));
+    dt_control_log(_("Unsupported input profile has been replaced by linear Rec709 RGB!"));
 
     type = DT_COLORSPACE_LIN_REC709;
     source.type = type;
@@ -879,7 +879,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(IS_NULL_PTR(conversion))
   {
     dt_print(DT_DEBUG_COLORPROFILE, "[colorin] input profile could not be generated!\n");
-    dt_control_log(_("input profile could not be generated!"));
+    dt_control_log(_("Input profile could not be generated!"));
     dt_colorspaces_free_image_profile(image_profile);
     piece->enabled = 0;
     return;
@@ -1146,11 +1146,11 @@ void gui_init(struct dt_iop_module_t *self)
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->profile_combobox = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->profile_combobox, N_("input profile"));
+  dt_bauhaus_widget_set_label(g->profile_combobox, N_("Input profile"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->profile_combobox, TRUE, TRUE, 0);
 
   g->work_combobox = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->work_combobox, N_("working profile"));
+  dt_bauhaus_widget_set_label(g->work_combobox, N_("Working profile"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->work_combobox, TRUE, TRUE, 0);
 
   dt_bauhaus_combobox_set(g->profile_combobox, 0);
@@ -1179,7 +1179,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->work_combobox), "value-changed", G_CALLBACK(workicc_changed), (gpointer)self);
 
   g->clipping_combobox = dt_bauhaus_combobox_from_params(self, "normalize");
-  gtk_widget_set_tooltip_text(g->clipping_combobox, _("confine Lab values to gamut of RGB color space"));
+  gtk_widget_set_tooltip_text(g->clipping_combobox, _("Confine Lab values to gamut of RGB color space"));
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)

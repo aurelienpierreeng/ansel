@@ -1040,7 +1040,7 @@ static void _circle_sanitize_config(dt_masks_type_t type)
 
 static void _circle_set_form_name(struct dt_masks_form_t *const form, const size_t nb)
 {
-  snprintf(form->name, sizeof(form->name), _("circle #%d"), (int)nb);
+  snprintf(form->name, sizeof(form->name), _("Circle #%d"), (int)nb);
 }
 
 static void _circle_set_hint_message(const dt_masks_form_gui_t *const gui, const dt_masks_form_t *const form,

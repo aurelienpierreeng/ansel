@@ -174,11 +174,11 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   const gboolean have_current_profile = _get_current_work_profile_key(self, self->dev->iop, self->dev->pipe,
                                                                       current_profile, sizeof(current_profile));
   if(!have_current_profile)
-    _layerio_append_error(errors, _("failed to resolve drawlayer working profile"));
+    _layerio_append_error(errors, _("Failed to resolve drawlayer working profile"));
   else if(params->work_profile[0] == '\0')
     g_strlcpy(params->work_profile, current_profile, sizeof(params->work_profile));
   else if(g_strcmp0(params->work_profile, current_profile))
-    _layerio_append_error(errors, _("drawlayer working profile mismatch"));
+    _layerio_append_error(errors, _("Drawlayer working profile mismatch"));
 
   if(_layer_cache_matches(g, &cache_key))
   {
@@ -189,7 +189,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
 
   if(!_flush_layer_cache(self))
   {
-    _layerio_append_error(errors, _("failed to write drawing layer sidecar"));
+    _layerio_append_error(errors, _("Failed to write drawing layer sidecar"));
     _layerio_log_errors(errors);
     g_string_free(errors, TRUE);
     return FALSE;
@@ -217,7 +217,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
     _release_all_base_patch_extra_refs(g);
     dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
     g->process.cache_valid = FALSE;
-    _layerio_append_error(errors, _("failed to allocate drawlayer stroke mask"));
+    _layerio_append_error(errors, _("Failed to allocate drawlayer stroke mask"));
     _layerio_log_errors(errors);
     g_string_free(errors, TRUE);
     return FALSE;
@@ -243,7 +243,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
     _release_all_base_patch_extra_refs(g);
     dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
     g->process.cache_valid = FALSE;
-    _layerio_append_error(errors, _("failed to resolve drawlayer sidecar path"));
+    _layerio_append_error(errors, _("Failed to resolve drawlayer sidecar path"));
     _layerio_log_errors(errors);
     g_string_free(errors, TRUE);
     return TRUE;
@@ -304,7 +304,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
         g_strlcpy(params->work_profile, info.work_profile, sizeof(params->work_profile));
 
       if(have_current_profile && info.work_profile[0] != '\0' && g_strcmp0(info.work_profile, current_profile))
-        _layerio_append_error(errors, _("drawlayer sidecar profile mismatch"));
+        _layerio_append_error(errors, _("Drawlayer sidecar profile mismatch"));
 
       dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
       dt_drawlayer_io_patch_t io_patch = {
@@ -319,7 +319,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
       dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);
       if(!loaded)
       {
-        _layerio_append_error(errors, _("failed to read drawing layer sidecar"));
+        _layerio_append_error(errors, _("Failed to read drawing layer sidecar"));
         ok = FALSE;
       }
       else

@@ -3432,7 +3432,7 @@ static void _polygon_sanitize_config(dt_masks_type_t type)
  */
 static void _polygon_set_form_name(struct dt_masks_form_t *const mask_form, const size_t form_number)
 {
-  snprintf(mask_form->name, sizeof(mask_form->name), _("polygon #%d"), (int)form_number);
+  snprintf(mask_form->name, sizeof(mask_form->name), _("Polygon #%d"), (int)form_number);
 }
 
 static void _polygon_set_hint_message(const dt_masks_form_gui_t *const mask_gui,
@@ -3597,7 +3597,7 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
     const gboolean is_corner = dt_masks_node_is_cusp(gui_points, mask_gui->node_hovered);
 
     {
-      gchar *to_change_type = g_strdup_printf(_("Switch to %s node"), (is_corner) ? _("round") : _("cusp"));
+      gchar *to_change_type = g_strdup_printf(_("Switch to %s node"), (is_corner) ? _("Round") : _("Cusp"));
       const dt_menu_icon_t icon = is_corner ? DT_MENU_ICON_CIRCLE : DT_MENU_ICON_SQUARE;
       menu_item = ctx_gtk_menu_item_new_with_icon_and_shortcut(to_change_type, accel, menu,
                                                                _polygon_switch_node_callback, mask_gui, icon);

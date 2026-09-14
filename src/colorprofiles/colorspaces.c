@@ -1835,12 +1835,12 @@ static dt_colorspaces_t *_colorspaces_build(void)
 
 
   // init the category profile with NULL profile, the actual profile must be retrieved dynamically by the caller
-  res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_WORK, NULL, _("work profile"), 0));
+  res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_WORK, NULL, _("Work profile"), 0));
 
-  res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_EXPORT, NULL, _("export profile"), 0));
+  res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_EXPORT, NULL, _("Export profile"), 0));
 
   res->profiles
-      = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_SOFTPROOF, NULL, _("softproof profile"), 0));
+      = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_SOFTPROOF, NULL, _("Softproof profile"), 0));
 
   // init the display profile with srgb so some stupid code that runs before the real profile could be fetched has something to work with
   res->profiles = g_list_append(
@@ -1864,17 +1864,17 @@ static dt_colorspaces_t *_colorspaces_build(void)
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_LIN_REC709, dt_colorspaces_create_linear_rec709_rgb_profile(),
-                                     _("linear Rec709 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
+                                     _("Linear Rec709 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_REC709, dt_colorspaces_create_gamma_rec709_rgb_profile(),
-                                     _("gamma Rec709 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_WORKING));
+                                     _("Gamma Rec709 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_ITUR_BT1886, dt_colorspaces_create_itur_bt1886_rgb_profile(),
                                      _("ITU-R BT.1886 (gamma 2.4 Rec709)"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_LIN_REC2020, dt_colorspaces_create_linear_rec2020_rgb_profile(),
-                                     _("linear Rec2020 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
+                                     _("Linear Rec2020 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_PQ_REC2020, dt_colorspaces_create_pq_rec2020_rgb_profile(),
@@ -1898,11 +1898,11 @@ static dt_colorspaces_t *_colorspaces_build(void)
 
   res->profiles = g_list_append(
      res->profiles, _create_profile(DT_COLORSPACE_PROPHOTO_RGB, dt_colorspaces_create_linear_prophoto_rgb_profile(),
-                                    _("linear ProPhoto RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
+                                    _("Linear ProPhoto RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles,
-      _create_profile(DT_COLORSPACE_XYZ, dt_colorspaces_create_xyz_profile(), _("linear XYZ"),
+      _create_profile(DT_COLORSPACE_XYZ, dt_colorspaces_create_xyz_profile(), _("Linear XYZ"),
                       DT_PROFILE_ROLE_INPUT | (dt_conf_get_bool("allow_lab_output") ? DT_PROFILE_ROLE_OUTPUT : 0)));
 
   res->profiles = g_list_append(
@@ -1911,7 +1911,7 @@ static dt_colorspaces_t *_colorspaces_build(void)
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_INFRARED, dt_colorspaces_create_linear_infrared_profile(),
-                                     _("linear infrared BGR"), DT_PROFILE_ROLE_INPUT));
+                                     _("Linear infrared BGR"), DT_PROFILE_ROLE_INPUT));
 
   res->profiles
       = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_BRG, dt_colorspaces_create_brg_profile(),
@@ -2046,43 +2046,43 @@ const char *dt_colorspaces_get_name(dt_colorspaces_color_profile_type_t type,
     case DT_COLORSPACE_ADOBERGB:
       return _("Adobe RGB (compatible)");
     case DT_COLORSPACE_LIN_REC709:
-      return _("linear Rec709 RGB");
+      return _("Linear Rec709 RGB");
     case DT_COLORSPACE_LIN_REC2020:
-      return _("linear Rec2020 RGB");
+      return _("Linear Rec2020 RGB");
     case DT_COLORSPACE_XYZ:
-      return _("linear XYZ");
+      return _("Linear XYZ");
     case DT_COLORSPACE_LAB:
       return _("Lab");
     case DT_COLORSPACE_INFRARED:
-      return _("linear infrared BGR");
+      return _("Linear infrared BGR");
     case DT_COLORSPACE_DISPLAY:
       return _("System display profile (recommended)");
     case DT_COLORSPACE_EMBEDDED_ICC:
-      return _("embedded ICC profile");
+      return _("Embedded ICC profile");
     case DT_COLORSPACE_EMBEDDED_MATRIX:
-      return _("embedded matrix");
+      return _("Embedded matrix");
     case DT_COLORSPACE_STANDARD_MATRIX:
-      return _("standard color matrix");
+      return _("Standard color matrix");
     case DT_COLORSPACE_ENHANCED_MATRIX:
-      return _("enhanced color matrix");
+      return _("Enhanced color matrix");
     case DT_COLORSPACE_VENDOR_MATRIX:
-      return _("vendor color matrix");
+      return _("Vendor color matrix");
     case DT_COLORSPACE_ALTERNATE_MATRIX:
-      return _("alternate color matrix");
+      return _("Alternate color matrix");
     case DT_COLORSPACE_BRG:
       return _("BRG (experimental)");
     case DT_COLORSPACE_EXPORT:
-      return _("export profile");
+      return _("Export profile");
     case DT_COLORSPACE_SOFTPROOF:
-      return _("softproof profile");
+      return _("Softproof profile");
     case DT_COLORSPACE_WORK:
-      return _("work profile");
+      return _("Work profile");
     case DT_COLORSPACE_DISPLAY2:
       return _("Not used. Shouldn't be here.");
     case DT_COLORSPACE_REC709:
       return _("Rec709 RGB");
     case DT_COLORSPACE_PROPHOTO_RGB:
-      return _("linear ProPhoto RGB");
+      return _("Linear ProPhoto RGB");
     case DT_COLORSPACE_PQ_REC2020:
       return _("PQ Rec2020");
     case DT_COLORSPACE_HLG_REC2020:

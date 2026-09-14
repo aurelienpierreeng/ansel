@@ -71,10 +71,10 @@ static gboolean _ioppr_sanity_check_iop_order(GList *list);
 
 const char *iop_order_string[] =
 {
-  N_("custom"),
-  N_("legacy"),
-  N_("v3.0 RAW"),
-  N_("v3.0 JPEG"),
+  N_("Custom"),
+  N_("Legacy"),
+  N_("V3.0 RAW"),
+  N_("V3.0 JPEG"),
   N_("Ansel RAW"),
   N_("Ansel JPEG")
 };

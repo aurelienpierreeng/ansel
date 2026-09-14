@@ -208,27 +208,27 @@ float dt_liquify_ui_widths [] =
 
 typedef enum
 {
-  DT_LIQUIFY_WARP_TYPE_LINEAR,        // $DESCRIPTION: "linear" A linear warp originating from one point.
-  DT_LIQUIFY_WARP_TYPE_RADIAL_GROW,   // $DESCRIPTION: "radial grow" A radial warp originating from one point.
-  DT_LIQUIFY_WARP_TYPE_RADIAL_SHRINK, // $DESCRIPTION: "radial shrink"
+  DT_LIQUIFY_WARP_TYPE_LINEAR,        // $DESCRIPTION: "Linear" A linear warp originating from one point.
+  DT_LIQUIFY_WARP_TYPE_RADIAL_GROW,   // $DESCRIPTION: "Radial grow" A radial warp originating from one point.
+  DT_LIQUIFY_WARP_TYPE_RADIAL_SHRINK, // $DESCRIPTION: "Radial shrink"
   DT_LIQUIFY_WARP_TYPE_LAST
 } dt_liquify_warp_type_enum_t;
 
 typedef enum
 {
-  DT_LIQUIFY_NODE_TYPE_CUSP,        // $DESCRIPTION: "cusp"
-  DT_LIQUIFY_NODE_TYPE_SMOOTH,      // $DESCRIPTION: "smooth"
-  DT_LIQUIFY_NODE_TYPE_SYMMETRICAL, // $DESCRIPTION: "symmetrical"
-  DT_LIQUIFY_NODE_TYPE_AUTOSMOOTH,  // $DESCRIPTION: "autosmooth"
+  DT_LIQUIFY_NODE_TYPE_CUSP,        // $DESCRIPTION: "Cusp"
+  DT_LIQUIFY_NODE_TYPE_SMOOTH,      // $DESCRIPTION: "Smooth"
+  DT_LIQUIFY_NODE_TYPE_SYMMETRICAL, // $DESCRIPTION: "Symmetrical"
+  DT_LIQUIFY_NODE_TYPE_AUTOSMOOTH,  // $DESCRIPTION: "Autosmooth"
   DT_LIQUIFY_NODE_TYPE_LAST
 } dt_liquify_node_type_enum_t;
 
 typedef enum
 {
-  DT_LIQUIFY_STATUS_NONE = 0,         // $DESCRIPTION: "none"
-  DT_LIQUIFY_STATUS_NEW = 1,          // $DESCRIPTION: "new"
-  DT_LIQUIFY_STATUS_INTERPOLATED = 2, // $DESCRIPTION: "interpolated"
-  DT_LIQUIFY_STATUS_PREVIEW = 4,      // $DESCRIPTION: "preview"
+  DT_LIQUIFY_STATUS_NONE = 0,         // $DESCRIPTION: "None"
+  DT_LIQUIFY_STATUS_NEW = 1,          // $DESCRIPTION: "New"
+  DT_LIQUIFY_STATUS_INTERPOLATED = 2, // $DESCRIPTION: "Interpolated"
+  DT_LIQUIFY_STATUS_PREVIEW = 4,      // $DESCRIPTION: "Preview"
   DT_LIQUIFY_STATUS_LAST
 } dt_liquify_status_enum_t;
 
@@ -236,10 +236,10 @@ typedef enum
 
 typedef enum
 {
-  DT_LIQUIFY_PATH_INVALIDATED = 0, // $DESCRIPTION: "invalidated"
-  DT_LIQUIFY_PATH_MOVE_TO_V1,      // $DESCRIPTION: "move"
-  DT_LIQUIFY_PATH_LINE_TO_V1,      // $DESCRIPTION: "line"
-  DT_LIQUIFY_PATH_CURVE_TO_V1,     // $DESCRIPTION: "curve"
+  DT_LIQUIFY_PATH_INVALIDATED = 0, // $DESCRIPTION: "Invalidated"
+  DT_LIQUIFY_PATH_MOVE_TO_V1,      // $DESCRIPTION: "Move"
+  DT_LIQUIFY_PATH_LINE_TO_V1,      // $DESCRIPTION: "Line"
+  DT_LIQUIFY_PATH_CURVE_TO_V1,     // $DESCRIPTION: "Curve"
 } dt_liquify_path_data_enum_t;
 
 typedef struct
@@ -325,16 +325,16 @@ typedef struct
 // this returns a translatable name
 const char *name()
 {
-  return _("l_iquify");
+  return _("L_iquify");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("distort parts of the image"),
-                                      _("creative"),
-                                      _("linear, RGB, scene-referred"),
-                                      _("geometric, RGB"),
-                                      _("linear, RGB, scene-referred"));
+  return dt_iop_set_description(self, _("Distort parts of the image"),
+                                      _("Creative"),
+                                      _("Linear, RGB, scene-referred"),
+                                      _("Geometric, RGB"),
+                                      _("Linear, RGB, scene-referred"));
 }
 
 
@@ -3934,7 +3934,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
     gtk_toggle_button_set_active(g->btn_curve_tool, FALSE);
     gtk_toggle_button_set_active(g->btn_node_tool, TRUE);
 
-    dt_control_hinter_message(dt_control_get_global(), _("click to edit nodes"));
+    dt_control_hinter_message(dt_control_get_global(), _("Click to edit nodes"));
     dt_iop_request_focus(self);
     update_warp_count(g);
     sync_pipe(self, TRUE);
@@ -3978,18 +3978,18 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
 
     if(btn == g->btn_point_tool)
       dt_control_hinter_message
-        (dt_control_get_global(), _("click and drag to add point\nscroll to change size - "
+        (dt_control_get_global(), _("Click and drag to add point\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_line_tool)
       dt_control_hinter_message
-        (dt_control_get_global(), _("click to add line\nscroll to change size - "
+        (dt_control_get_global(), _("Click to add line\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_curve_tool)
       dt_control_hinter_message
-        (dt_control_get_global(), _("click to add curve\nscroll to change size - "
+        (dt_control_get_global(), _("Click to add curve\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_node_tool)
-      dt_control_hinter_message(dt_control_get_global(), _("click to edit nodes"));
+      dt_control_hinter_message(dt_control_get_global(), _("Click to edit nodes"));
 
     //  start the preview mode to show the shape that will be created
 
@@ -4036,7 +4036,7 @@ void gui_init(dt_iop_module_t *self)
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  gtk_widget_set_tooltip_text(hbox, _("use a tool to add warps.\nright-click to remove a warp."));
+  gtk_widget_set_tooltip_text(hbox, _("Use a tool to add warps.\nright-click to remove a warp."));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, TRUE, TRUE, 0);
 
 
@@ -4060,33 +4060,33 @@ void gui_init(dt_iop_module_t *self)
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, TRUE, TRUE, 0);
 
-  g->btn_node_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, NULL, N_("edit, add and delete nodes"), NULL,
+  g->btn_node_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, NULL, N_("Edit, add and delete nodes"), NULL,
                                        G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
                                        dtgtk_cairo_paint_masks_edit, hbox));
 
-  g->btn_curve_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("shapes"), N_("draw curves"), N_("draw multiple curves"),
+  g->btn_curve_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("Shapes"), N_("Draw curves"), N_("Draw multiple curves"),
                                         G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
                                         dtgtk_liquify_cairo_paint_curve_tool, hbox));
 
-  g->btn_line_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("shapes"), N_("draw lines"), N_("draw multiple lines"),
+  g->btn_line_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("Shapes"), N_("Draw lines"), N_("Draw multiple lines"),
                                        G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
                                        dtgtk_liquify_cairo_paint_line_tool, hbox));
 
-  g->btn_point_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("shapes"), N_("draw points"), N_("draw multiple points"),
+  g->btn_point_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("Shapes"), N_("Draw points"), N_("Draw multiple points"),
                                          G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
                                          dtgtk_liquify_cairo_paint_node_tool, hbox));
 
-  dt_liquify_layers[DT_LIQUIFY_LAYER_PATH].hint           = _("drag: move segment - ctrl+click: add node - right click: remove path\n"
+  dt_liquify_layers[DT_LIQUIFY_LAYER_PATH].hint           = _("Drag: move segment - ctrl+click: add node - right click: remove path\n"
                                                               "ctrl+alt+click: toggle line/curve");
-  dt_liquify_layers[DT_LIQUIFY_LAYER_CENTERPOINT].hint    = _("click and drag to move - click: show/hide feathering controls\n"
+  dt_liquify_layers[DT_LIQUIFY_LAYER_CENTERPOINT].hint    = _("Click and drag to move - click: show/hide feathering controls\n"
                                                               "ctrl+click: autosmooth, cusp, smooth, symmetrical"
                                                               " - right click to remove");
-  dt_liquify_layers[DT_LIQUIFY_LAYER_CTRLPOINT1].hint     = _("drag to change shape of path");
-  dt_liquify_layers[DT_LIQUIFY_LAYER_CTRLPOINT2].hint     = _("drag to change shape of path");
-  dt_liquify_layers[DT_LIQUIFY_LAYER_RADIUSPOINT].hint    = _("drag to adjust warp radius");
-  dt_liquify_layers[DT_LIQUIFY_LAYER_HARDNESSPOINT1].hint = _("drag to adjust hardness (center)");
-  dt_liquify_layers[DT_LIQUIFY_LAYER_HARDNESSPOINT2].hint = _("drag to adjust hardness (feather)");
-  dt_liquify_layers[DT_LIQUIFY_LAYER_STRENGTHPOINT].hint  = _("drag to adjust warp strength\n"
+  dt_liquify_layers[DT_LIQUIFY_LAYER_CTRLPOINT1].hint     = _("Drag to change shape of path");
+  dt_liquify_layers[DT_LIQUIFY_LAYER_CTRLPOINT2].hint     = _("Drag to change shape of path");
+  dt_liquify_layers[DT_LIQUIFY_LAYER_RADIUSPOINT].hint    = _("Drag to adjust warp radius");
+  dt_liquify_layers[DT_LIQUIFY_LAYER_HARDNESSPOINT1].hint = _("Drag to adjust hardness (center)");
+  dt_liquify_layers[DT_LIQUIFY_LAYER_HARDNESSPOINT2].hint = _("Drag to adjust hardness (feather)");
+  dt_liquify_layers[DT_LIQUIFY_LAYER_STRENGTHPOINT].hint  = _("Drag to adjust warp strength\n"
                                                               "ctrl+click: linear, grow, and shrink");
 }
 

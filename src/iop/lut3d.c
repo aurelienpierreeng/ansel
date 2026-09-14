@@ -86,23 +86,23 @@ typedef enum dt_iop_lut3d_colorspace_t
 {
   DT_IOP_SRGB = 0,    // $DESCRIPTION: "sRGB"
   DT_IOP_ARGB,        // $DESCRIPTION: "Adobe RGB"
-  DT_IOP_REC709,      // $DESCRIPTION: "gamma Rec709 RGB"
-  DT_IOP_LIN_REC709,  // $DESCRIPTION: "linear Rec709 RGB"
-  DT_IOP_LIN_REC2020, // $DESCRIPTION: "linear Rec2020 RGB"
+  DT_IOP_REC709,      // $DESCRIPTION: "Gamma Rec709 RGB"
+  DT_IOP_LIN_REC709,  // $DESCRIPTION: "Linear Rec709 RGB"
+  DT_IOP_LIN_REC2020, // $DESCRIPTION: "Linear Rec2020 RGB"
   DT_IOP_ITUR_BT1886, // $DESCRIPTION: "ITU-R BT.1886 (gamma 2.4 Rec709)"
 } dt_iop_lut3d_colorspace_t;
 
 typedef enum dt_iop_lut3d_interpolation_t
 {
-  DT_IOP_TETRAHEDRAL = 0, // $DESCRIPTION: "tetrahedral"
-  DT_IOP_TRILINEAR = 1,   // $DESCRIPTION: "trilinear"
-  DT_IOP_PYRAMID = 2,     // $DESCRIPTION: "pyramid"
+  DT_IOP_TETRAHEDRAL = 0, // $DESCRIPTION: "Tetrahedral"
+  DT_IOP_TRILINEAR = 1,   // $DESCRIPTION: "Trilinear"
+  DT_IOP_PYRAMID = 2,     // $DESCRIPTION: "Pyramid"
 } dt_iop_lut3d_interpolation_t;
 
 typedef struct dt_iop_lut3d_params_t
 {
   char filepath[DT_IOP_LUT3D_MAX_PATHNAME];
-  dt_iop_lut3d_colorspace_t colorspace; // $DEFAULT: DT_IOP_SRGB $DESCRIPTION: "application color space"
+  dt_iop_lut3d_colorspace_t colorspace; // $DEFAULT: DT_IOP_SRGB $DESCRIPTION: "Application color space"
   dt_iop_lut3d_interpolation_t interpolation; // $DEFAULT: DT_IOP_TETRAHEDRAL
   int nb_keypoints; // $DEFAULT: 0 >0 indicates the presence of compressed lut
   char c_clut[DT_IOP_LUT3D_MAX_KEYPOINTS*2*3];
@@ -151,16 +151,16 @@ typedef struct dt_iop_lut3d_global_data_t
 
 const char *name()
 {
-  return _("lut 3D");
+  return _("Lut 3D");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("perform color space corrections and apply look"),
-                                      _("corrective or creative"),
-                                      _("linear, RGB, display-referred"),
-                                      _("defined by profile, RGB"),
-                                      _("linear or non-linear, RGB, display-referred"));
+  return dt_iop_set_description(self, _("Perform color space corrections and apply look"),
+                                      _("Corrective or creative"),
+                                      _("Linear, RGB, display-referred"),
+                                      _("Defined by profile, RGB"),
+                                      _("Linear or non-linear, RGB, display-referred"));
 }
 
 int flags()
@@ -227,7 +227,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
   if(read_header(filepath, &png))
   {
     fprintf(stderr, "[lut3d] invalid png file %s\n", filepath);
-    dt_control_log(_("invalid png file %s"), filepath);
+    dt_control_log(_("Invalid png file %s"), filepath);
     return 0;
   }
   dt_print(DT_DEBUG_DEV, "[lut3d] png: width=%d, height=%d, color_type=%d, bit_depth=%d\n", png.width,
@@ -235,7 +235,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
   if (png.bit_depth !=8 && png.bit_depth != 16)
   {
     fprintf(stderr, "[lut3d] png bit-depth %d not supported\n", png.bit_depth);
-    dt_control_log(_("png bit-depth %d not supported"), png.bit_depth);
+    dt_control_log(_("Png bit-depth %d not supported"), png.bit_depth);
     fclose(png.f);
     png_destroy_read_struct(&png.png_ptr, &png.info_ptr, NULL);
     return 0;
@@ -250,12 +250,12 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
     if (png.height == 2)
     {
       fprintf(stderr, "[lut3d] this Ansel build is not compatible with compressed clut\n");
-      dt_control_log(_("this Ansel build is not compatible with compressed clut"));
+      dt_control_log(_("This Ansel build is not compatible with compressed clut"));
     }
     else
     {
       fprintf(stderr, "[lut3d] invalid level in png file %d %d\n", level, png.width);
-      dt_control_log(_("invalid level in png file %d %d"), level, png.width);
+      dt_control_log(_("Invalid level in png file %d %d"), level, png.width);
     }
     fclose(png.f);
     png_destroy_read_struct(&png.png_ptr, &png.info_ptr, NULL);
@@ -266,7 +266,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
   if(level > 256)
   {
     fprintf(stderr, "[lut3d] error - LUT 3D size %d > 256\n", level);
-    dt_control_log(_("error - lut 3D size %d exceeds the maximum supported"), level);
+    dt_control_log(_("Error - lut 3D size %d exceeds the maximum supported"), level);
     fclose(png.f);
     png_destroy_read_struct(&png.png_ptr, &png.info_ptr, NULL);
     return 0;
@@ -278,7 +278,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
   if(IS_NULL_PTR(buf))
   {
     fprintf(stderr, "[lut3d] error allocating buffer for png lut\n");
-    dt_control_log(_("error allocating buffer for png lut"));
+    dt_control_log(_("Error allocating buffer for png lut"));
     fclose(png.f);
     png_destroy_read_struct(&png.png_ptr, &png.info_ptr, NULL);
     return 0;
@@ -286,7 +286,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
   if (read_image(&png, buf))
   {
     fprintf(stderr, "[lut3d] error - could not read png image `%s'\n", filepath);
-    dt_control_log(_("error - could not read png image %s"), filepath);
+    dt_control_log(_("Error - could not read png image %s"), filepath);
     dt_pixelpipe_cache_free_align(buf);
     return 0;
   }
@@ -296,7 +296,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
   if(IS_NULL_PTR(lclut))
   {
     fprintf(stderr, "[lut3d] error - allocating buffer for png lut\n");
-    dt_control_log(_("error - allocating buffer for png lut"));
+    dt_control_log(_("Error - allocating buffer for png lut"));
     dt_pixelpipe_cache_free_align(buf);
     return 0;
   }
@@ -470,7 +470,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
   if(!(cube_file = g_fopen(filepath, "r")))
   {
     fprintf(stderr, "[lut3d] invalid cube file: %s\n", filepath);
-    dt_control_log(_("error - invalid cube file: %s"), filepath);
+    dt_control_log(_("Error - invalid cube file: %s"), filepath);
     return 0;
   }
   while ((read = getline(&line, &len, cube_file)) != -1)
@@ -515,7 +515,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         if(level > 256)
         {
           fprintf(stderr, "[lut3d] error - LUT 3D size %d > 256\n", level);
-          dt_control_log(_("error - lut 3D size %d exceeds the maximum supported"), level);
+          dt_control_log(_("Error - lut 3D size %d exceeds the maximum supported"), level);
           dt_free(line);
           fclose(cube_file);
           return 0;
@@ -526,7 +526,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         if(IS_NULL_PTR(lclut))
         {
           fprintf(stderr, "[lut3d] error - allocating buffer for cube lut\n");
-          dt_control_log(_("error - allocating buffer for cube lut"));
+          dt_control_log(_("Error - allocating buffer for cube lut"));
           dt_free(line);
           fclose(cube_file);
           return 0;
@@ -537,7 +537,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         if (!level)
         {
           fprintf(stderr, "[lut3d] error - cube lut size is not defined\n");
-          dt_control_log(_("error - cube lut size is not defined"));
+          dt_control_log(_("Error - cube lut size is not defined"));
           dt_free(line);
           fclose(cube_file);
           return 0;
@@ -548,7 +548,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
           if(isnan(lclut[i+j]))
           {
             fprintf(stderr, "[lut3d] error - invalid number line %d\n", (int)i/3);
-            dt_control_log(_("error - cube lut invalid number line %d"), (int)i/3);
+            dt_control_log(_("Error - cube lut invalid number line %d"), (int)i/3);
             dt_free(line);
             fclose(cube_file);
             return 0;
@@ -564,7 +564,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
   {
     fprintf(stderr, "[lut3d] error - cube lut lines number %d is not correct, should be %d\n",
             (int)i/3, (int)buf_size/3);
-    dt_control_log(_("error - cube lut lines number %d is not correct, should be %d"),
+    dt_control_log(_("Error - cube lut lines number %d is not correct, should be %d"),
                    (int)i/3, (int)buf_size/3);
     dt_pixelpipe_cache_free_align(lclut);
     dt_free(line);
@@ -574,7 +574,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
   if(out_of_range_nb)
   {
     fprintf(stderr, "[lut3d] warning - %d out of range values [0,1]\n", out_of_range_nb);
-    dt_control_log(_("warning - cube lut %d out of range values [0,1]"), out_of_range_nb);
+    dt_control_log(_("Warning - cube lut %d out of range values [0,1]"), out_of_range_nb);
   }
   *clut = lclut;
   dt_free(line);
@@ -598,7 +598,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
   if(!(cube_file = g_fopen(filepath, "r")))
   {
     fprintf(stderr, "[lut3d] invalid 3dl file: %s\n", filepath);
-    dt_control_log(_("error - invalid 3dl file: %s"), filepath);
+    dt_control_log(_("Error - invalid 3dl file: %s"), filepath);
     return 0;
   }
   while ((read = getline(&line, &len, cube_file)) != -1)
@@ -619,7 +619,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
             if(max_shaper < 128)
             {
               fprintf(stderr, "[lut3d] error - the maximum shaper lut value %d is too low\n", max_shaper);
-              dt_control_log(_("error - the maximum shaper lut value %d is too low"), max_shaper);
+              dt_control_log(_("Error - the maximum shaper lut value %d is too low"), max_shaper);
               dt_free(line);
               fclose(cube_file);
               return 0;
@@ -630,7 +630,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
             if(IS_NULL_PTR(lclut))
             {
               fprintf(stderr, "[lut3d] error - allocating buffer for cube lut\n");
-              dt_control_log(_("error - allocating buffer for cube lut"));
+              dt_control_log(_("Error - allocating buffer for cube lut"));
               dt_free(line);
               fclose(cube_file);
               return 0;
@@ -643,7 +643,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
         if (!level)
         {
           fprintf(stderr, "[lut3d] error - cube lut size is not defined\n");
-          dt_control_log(_("error - cube lut size is not defined"));
+          dt_control_log(_("Error - cube lut size is not defined"));
           dt_free(line);
           fclose(cube_file);
           return 0;
@@ -671,7 +671,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
   if (i * 3 != buf_size || i == 0)
   {
     fprintf(stderr, "[lut3d] error - cube lut lines number is not correct\n");
-    dt_control_log(_("error - cube lut lines number is not correct"));
+    dt_control_log(_("Error - cube lut lines number is not correct"));
     dt_pixelpipe_cache_free_align(lclut);
     dt_free(line);
     fclose(cube_file);
@@ -687,7 +687,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
   if (inorm < 128)  // bit depth 7
   {
     fprintf(stderr, "[lut3d] error - the maximum lut value does not match any valid bit depth\n");
-    dt_control_log(_("error - the maximum lut value does not match any valid bit depth"));
+    dt_control_log(_("Error - the maximum lut value does not match any valid bit depth"));
     dt_pixelpipe_cache_free_align(lclut);
     return 0;
   }
@@ -1064,13 +1064,13 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
   if (strlen(lutfolder) == 0)
   {
     fprintf(stderr, "[lut3d] Lut root folder not defined\n");
-    dt_control_log(_("lut root folder not defined"));
+    dt_control_log(_("Lut root folder not defined"));
     dt_free(lutfolder);
     return;
   }
   GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-        _("select lut file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
+        _("Select lut file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
         _("_select"), _("_cancel"));
   gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(filechooser), FALSE);
 
@@ -1088,7 +1088,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
   gtk_file_filter_add_pattern(filter, "*.CUBE");
   gtk_file_filter_add_pattern(filter, "*.3dl");
   gtk_file_filter_add_pattern(filter, "*.3DL");
-  gtk_file_filter_set_name(filter, _("hald cluts (png) or 3D lut (cube or 3dl)"));
+  gtk_file_filter_set_name(filter, _("Hald cluts (png) or 3D lut (cube or 3dl)"));
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(filechooser), filter);
   gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(filechooser), filter);
 
@@ -1096,7 +1096,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
   // but any selected file with ext <> png or cube will be ignored
   filter = GTK_FILE_FILTER(gtk_file_filter_new());
   gtk_file_filter_add_pattern(filter, "*");
-  gtk_file_filter_set_name(filter, _("all files"));
+  gtk_file_filter_set_name(filter, _("All files"));
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(filechooser), filter);
 
   if(gtk_native_dialog_run(GTK_NATIVE_DIALOG(filechooser)) == GTK_RESPONSE_ACCEPT)
@@ -1111,7 +1111,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
     else if (!filepath[0])// file chosen outside of root folder
     {
       fprintf(stderr, "[lut3d] select file outside Lut root folder is not allowed\n");
-      dt_control_log(_("select file outside Lut root folder is not allowed"));
+      dt_control_log(_("Select file outside Lut root folder is not allowed"));
     }
     dt_free(filepath);
     gtk_widget_set_sensitive(g->filepath, p->filepath[0]);
@@ -1159,7 +1159,7 @@ static void _warn_gmz_deprecated(const dt_iop_lut3d_params_t *const p)
       p->filepath[0] ? p->filepath : _("(the LUT was stored inside this edit)"));
   gtk_window_set_title(GTK_WINDOW(dialog), _("3D LUT: unsupported file format"));
 
-  gtk_dialog_add_button(GTK_DIALOG(dialog), _("open documentation"), GTK_RESPONSE_HELP);
+  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Open documentation"), GTK_RESPONSE_HELP);
   if(gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_HELP)
     gtk_show_uri_on_window(GTK_WINDOW(win), DT_LUT3D_GMZ_DOC_URL, GDK_CURRENT_TIME, NULL);
 
@@ -1213,7 +1213,7 @@ void gui_init(dt_iop_module_t *self)
 
   g->hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *button = dtgtk_button_new(dtgtk_cairo_paint_directory, CPF_NONE, NULL);
-  gtk_widget_set_tooltip_text(button, _("select a png (haldclut)"
+  gtk_widget_set_tooltip_text(button, _("Select a png (haldclut)"
       ", a cube or a 3dl file "
       "CAUTION: 3D lut folder must be set in preferences/processing before choosing the lut file"));
   gtk_box_pack_start(GTK_BOX(g->hbox), button, FALSE, FALSE, 0);
@@ -1223,17 +1223,17 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_combobox_set_entries_ellipsis(g->filepath, PANGO_ELLIPSIZE_MIDDLE);
   gtk_box_pack_start(GTK_BOX(g->hbox), g->filepath, TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(g->filepath,
-    _("the file path (relative to lut folder) is saved with image (and not the lut data themselves)"));
+    _("The file path (relative to lut folder) is saved with image (and not the lut data themselves)"));
   g_signal_connect(G_OBJECT(g->filepath), "value-changed", G_CALLBACK(filepath_callback), self);
 
   gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->hbox), TRUE, TRUE, 0);
 
 
   g->colorspace = dt_bauhaus_combobox_from_params(self, "colorspace");
-  gtk_widget_set_tooltip_text(g->colorspace, _("select the color space in which the LUT has to be applied"));
+  gtk_widget_set_tooltip_text(g->colorspace, _("Select the color space in which the LUT has to be applied"));
 
   g->interpolation = dt_bauhaus_combobox_from_params(self, N_("interpolation"));
-  gtk_widget_set_tooltip_text(g->interpolation, _("select the interpolation method"));
+  gtk_widget_set_tooltip_text(g->interpolation, _("Select the interpolation method"));
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MODULE_MOVED,
                             G_CALLBACK(module_moved_callback), self);

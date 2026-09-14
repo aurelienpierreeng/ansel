@@ -117,18 +117,18 @@ const dt_collection_sort_t items[] =
 #define NB_ITEMS (sizeof(items) / sizeof(dt_collection_sort_t))
 
 static const char *_sort_names[]
-  = { N_("filename"),
-      N_("captured"),
-      N_("imported"),
-      N_("modified"),
-      N_("exported"),
-      N_("printed"),
-      N_("rating"),
-      N_("id"),
-      N_("color label"),
-      N_("group"),
-      N_("full path"),
-      N_("title"),
+  = { N_("Filename"),
+      N_("Captured"),
+      N_("Imported"),
+      N_("Modified"),
+      N_("Exported"),
+      N_("Printed"),
+      N_("Rating"),
+      N_("ID"),
+      N_("Color label"),
+      N_("Group"),
+      N_("Full path"),
+      N_("Title"),
       NULL };
 
 static int _filter_get_items(const dt_collection_sort_t sort)
@@ -143,7 +143,7 @@ static int _filter_get_items(const dt_collection_sort_t sort)
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("filter");
+  return _("Filter");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -748,7 +748,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_entry_set_width_chars(GTK_ENTRY(d->text), 24);
   gtk_widget_set_tooltip_text(d->text,
           /* xgettext:no-c-format */
-                              _("filter by text from images metadata, tags, file path and name"
+                              _("Filter by text from images metadata, tags, file path and name"
           /* xgettext:no-c-format */
                                 "\n`%' is the wildcard character"
           /* xgettext:no-c-format */

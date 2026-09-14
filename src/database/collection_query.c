@@ -1308,7 +1308,7 @@ GList *dt_collection_query_get_property_values(const dt_collection_values_reques
     case DT_COLLECTION_PROP_LOCAL_COPY:
       query = g_strdup_printf("SELECT CASE WHEN (flags & %d) THEN '%s' ELSE '%s' END as lcp, 1, COUNT(*) AS count"
                               " FROM main.images AS mi WHERE %s GROUP BY lcp ORDER BY lcp ASC",
-                              DT_IMAGE_LOCAL_COPY, _("copied locally"), _("not copied locally"), where_ext);
+                              DT_IMAGE_LOCAL_COPY, _("Copied locally"), _("not copied locally"), where_ext);
       break;
 
     case DT_COLLECTION_PROP_COLORLABEL:
@@ -1356,7 +1356,7 @@ GList *dt_collection_query_get_property_values(const dt_collection_values_reques
       query = g_strdup_printf("SELECT CASE WHEN id = group_id THEN '%s' ELSE '%s' END as group_leader, 1,"
                               " COUNT(*) AS count FROM main.images AS mi WHERE %s"
                               " GROUP BY group_leader ORDER BY group_leader ASC",
-                              _("group leaders"), _("group followers"), where_ext);
+                              _("group leaders"), _("Group followers"), where_ext);
       break;
 
     case DT_COLLECTION_PROP_MODULE:
@@ -1372,7 +1372,7 @@ GList *dt_collection_query_get_property_values(const dt_collection_values_reques
       char *orders = NULL;
       for(int i = 0; i < _order_names_count; i++)
         orders = dt_util_dstrcat(orders, "WHEN mo.version = %d THEN '%s' ", i, _order_names[i]);
-      orders = dt_util_dstrcat(orders, "ELSE '%s' ", _("none"));
+      orders = dt_util_dstrcat(orders, "ELSE '%s' ", _("None"));
       query = g_strdup_printf("SELECT CASE %s END as ver, 1, COUNT(*) AS count FROM main.images AS mi"
                               " LEFT JOIN (SELECT imgid, version FROM main.module_order) mo ON mo.imgid = mi.id"
                               " WHERE %s GROUP BY ver ORDER BY ver", orders, where_ext);

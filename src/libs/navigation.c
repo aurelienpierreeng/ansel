@@ -109,7 +109,7 @@ static void _lib_navigation_set_position(struct dt_lib_module_t *self, double x,
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("navigation");
+  return _("Navigation");
 }
 
 const char **views(dt_lib_module_t *self)

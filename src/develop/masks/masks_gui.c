@@ -80,15 +80,15 @@ typedef struct dt_masks_shape_buttons_data_t
 
 static const dt_masks_shape_button_def_t _masks_shape_button_defs[] = {
   { DT_MASKS_SHAPE_INDEX_GRADIENT, DT_MASKS_SHAPE_BUTTONS_GRADIENT, DT_MASKS_GRADIENT,
-    N_("add gradient"), N_("add multiple gradients"), N_("Gradient"), dtgtk_cairo_paint_masks_gradient },
+    N_("Add gradient"), N_("Add multiple gradients"), N_("Gradient"), dtgtk_cairo_paint_masks_gradient },
   { DT_MASKS_SHAPE_INDEX_BRUSH, DT_MASKS_SHAPE_BUTTONS_BRUSH, DT_MASKS_BRUSH,
-    N_("add brush"), N_("add multiple brush strokes"), N_("Brush"), dtgtk_cairo_paint_masks_brush },
+    N_("Add brush"), N_("Add multiple brush strokes"), N_("Brush"), dtgtk_cairo_paint_masks_brush },
   { DT_MASKS_SHAPE_INDEX_POLYGON, DT_MASKS_SHAPE_BUTTONS_POLYGON, DT_MASKS_POLYGON,
-    N_("add polygon"), N_("add multiple polygons"), N_("Polygon"), dtgtk_cairo_paint_masks_polygon },
+    N_("Add polygon"), N_("Add multiple polygons"), N_("Polygon"), dtgtk_cairo_paint_masks_polygon },
   { DT_MASKS_SHAPE_INDEX_ELLIPSE, DT_MASKS_SHAPE_BUTTONS_ELLIPSE, DT_MASKS_ELLIPSE,
-    N_("add ellipse"), N_("add multiple ellipses"), N_("Ellipse"), dtgtk_cairo_paint_masks_ellipse },
+    N_("Add ellipse"), N_("Add multiple ellipses"), N_("Ellipse"), dtgtk_cairo_paint_masks_ellipse },
   { DT_MASKS_SHAPE_INDEX_CIRCLE, DT_MASKS_SHAPE_BUTTONS_CIRCLE, DT_MASKS_CIRCLE,
-    N_("add circle"), N_("add multiple circles"), N_("Circle"), dtgtk_cairo_paint_masks_circle },
+    N_("Add circle"), N_("Add multiple circles"), N_("Circle"), dtgtk_cairo_paint_masks_circle },
 };
 
 static void _masks_shape_buttons_deactivate(GtkWidget *active_button, dt_masks_shape_buttons_data_t *data)
@@ -317,7 +317,7 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
   gtk_widget_set_halign(data->box, GTK_ALIGN_END);
   gtk_widget_set_valign(data->box, GTK_ALIGN_CENTER);
 
-  const char *action_section = config->action_section ? config->action_section : N_("shapes");
+  const char *action_section = config->action_section ? config->action_section : N_("Shapes");
   const size_t button_defs_count = sizeof(_masks_shape_button_defs) / sizeof(_masks_shape_button_defs[0]);
 
   // Create buttons in the same visible order used by the module-local toolbars.
@@ -585,7 +585,7 @@ int dt_masks_gui_confirm_delete_form_dialog(const char *form_name)
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, _("Delete the shape '%s' ?"), form_name);
   gtk_message_dialog_format_secondary_text(
       GTK_MESSAGE_DIALOG(dialog), "'%s' %s\n\n%s", form_name,
-      _("will no longer be used."),
+      _("Will no longer be used."),
       _("Do you want to permanently delete it, or keep it unused for potential reuse?"));
 
   gtk_dialog_add_button(GTK_DIALOG(dialog), _("Delete shape"), GTK_RESPONSE_YES);
@@ -616,7 +616,7 @@ gboolean dt_masks_gui_confirm_permanent_delete(const char *form_name)
   GtkWidget *message_area = gtk_message_dialog_get_message_area(GTK_MESSAGE_DIALOG(dialog));
   GtkWidget *ask_check = gtk_check_button_new_with_label(_("Always ask"));
   gtk_widget_set_tooltip_text(ask_check,
-      _("when unchecked, mask shapes will be deleted silently from now on without this confirmation.\n"
+      _("When unchecked, mask shapes will be deleted silently from now on without this confirmation.\n"
         "you can turn it back on from preferences."));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ask_check), TRUE);
   gtk_box_pack_start(GTK_BOX(message_area), ask_check, FALSE, FALSE, 6);
@@ -926,22 +926,22 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     switch (form->type)
     {
       case DT_MASKS_CIRCLE:
-        form_name = g_strconcat(form_name, _("circle"), NULL);
+        form_name = g_strconcat(form_name, _("Circle"), NULL);
         break;
       case DT_MASKS_ELLIPSE:
-        form_name = g_strconcat(form_name, _("ellipse"), NULL);
+        form_name = g_strconcat(form_name, _("Ellipse"), NULL);
         break;
       case DT_MASKS_POLYGON:
-        form_name = g_strconcat(form_name, _("polygon"), NULL);
+        form_name = g_strconcat(form_name, _("Polygon"), NULL);
         break;
       case DT_MASKS_BRUSH:
-        form_name = g_strconcat(form_name, _("brush"), NULL);
+        form_name = g_strconcat(form_name, _("Brush"), NULL);
         break;
       case DT_MASKS_GRADIENT:
-        form_name = g_strconcat(form_name, _("gradient"), NULL);
+        form_name = g_strconcat(form_name, _("Gradient"), NULL);
         break;
       case DT_MASKS_GROUP:
-        form_name = g_strconcat(form_name, _("mask"), NULL);
+        form_name = g_strconcat(form_name, _("Mask"), NULL);
         break;
       default:
         dt_free(form_name); // Erase the "New " prefix
@@ -5051,7 +5051,7 @@ void dt_masks_iop_combo_populate(GtkWidget *widget, void *data)
       if(group_form)
       {
         gchar *module_label = dt_history_item_get_name(other_module);
-        dt_bauhaus_combobox_add(combo, g_strdup_printf(_("reuse shapes from %s"), module_label));
+        dt_bauhaus_combobox_add(combo, g_strdup_printf(_("Reuse shapes from %s"), module_label));
         dt_free(module_label);
         combo_ids[combo_index] = -1 * iop_index;
         combo_index++;

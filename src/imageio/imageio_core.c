@@ -593,7 +593,7 @@ gboolean _apply_style_before_export(dt_develop_t *dev, dt_imageio_module_data_t 
   GList *style_items = dt_styles_get_item_list(format_params->style, TRUE, -1);
   if(IS_NULL_PTR(style_items))
   {
-    dt_control_log(_("cannot find the style '%s' to apply during export."), format_params->style);
+    dt_control_log(_("Cannot find the style '%s' to apply during export."), format_params->style);
     return TRUE;
   }
 

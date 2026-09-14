@@ -543,7 +543,7 @@ void dt_image_cache_write_release(dt_image_t *img, dt_image_cache_write_mode_t m
   if(img->folder[0])
     g_strlcpy(img->filmroll, dt_image_film_roll_name(img->folder), sizeof(img->filmroll));
   else if(img->film_id < 0)
-    g_strlcpy(img->filmroll, _("orphaned image"), sizeof(img->filmroll));
+    g_strlcpy(img->filmroll, _("Orphaned image"), sizeof(img->filmroll));
   else
     img->filmroll[0] = '\0';
   dt_datetime_gtimespan_to_local(img->datetime, sizeof(img->datetime), img->exif_datetime_taken, FALSE, FALSE);

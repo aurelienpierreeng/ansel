@@ -408,7 +408,7 @@ int write_image(struct dt_imageio_module_data_t *data,
     break;
     }
     default:
-      dt_control_log(_("invalid AVIF bit depth!"));
+      dt_control_log(_("Invalid AVIF bit depth!"));
       rc = 1;
       goto out;
   }
@@ -735,7 +735,7 @@ void gui_init(dt_imageio_module_format_t *self)
    */
   gui->bit_depth = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
 
-  dt_bauhaus_widget_set_label(gui->bit_depth, N_("bit depth"));
+  dt_bauhaus_widget_set_label(gui->bit_depth, N_("Bit depth"));
   size_t idx = 0;
   for(size_t i = 0; !IS_NULL_PTR(avif_bit_depth[i].name); i++)
   {
@@ -748,7 +748,7 @@ void gui_init(dt_imageio_module_format_t *self)
   dt_bauhaus_combobox_set(gui->bit_depth, idx);
 
   gtk_widget_set_tooltip_text(gui->bit_depth,
-          _("color information stored in an image, higher is better"));
+          _("Color information stored in an image, higher is better"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), gui->bit_depth, TRUE, TRUE, 0);
 
@@ -756,15 +756,15 @@ void gui_init(dt_imageio_module_format_t *self)
    * Color mode combo box
    */
   gui->color_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(gui->color_mode, _("color mode"));
+  dt_bauhaus_widget_set_label(gui->color_mode, _("Color mode"));
   dt_bauhaus_combobox_add(gui->color_mode,
-                          _("rgb colors"));
+                          _("RGB colors"));
   dt_bauhaus_combobox_add(gui->color_mode,
-                          _("grayscale"));
+                          _("Grayscale"));
   dt_bauhaus_combobox_set(gui->color_mode, color_mode);
 
   gtk_widget_set_tooltip_text(gui->color_mode,
-          _("saving as grayscale will reduce the size for black & white images"));
+          _("Saving as grayscale will reduce the size for black & white images"));
 
   gtk_box_pack_start(GTK_BOX(self->widget),
                      gui->color_mode,
@@ -775,15 +775,15 @@ void gui_init(dt_imageio_module_format_t *self)
    * Tiling combo box
    */
   gui->tiling = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(gui->tiling, N_("tiling"));
+  dt_bauhaus_widget_set_label(gui->tiling, N_("Tiling"));
   dt_bauhaus_combobox_add(gui->tiling,
-                          _("on"));
+                          _("On"));
   dt_bauhaus_combobox_add(gui->tiling,
-                          _("off"));
+                          _("Off"));
   dt_bauhaus_combobox_set(gui->tiling, tiling);
 
   gtk_widget_set_tooltip_text(gui->tiling,
-          _("tile an image into segments.\n"
+          _("Tile an image into segments.\n"
             "\n"
             "makes encoding faster. the impact on quality reduction "
             "is negligible, but increases the file size."));
@@ -798,7 +798,7 @@ void gui_init(dt_imageio_module_format_t *self)
    * Compression type combo box
    */
   gui->compression_type = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(gui->compression_type, N_("compression type"));
+  dt_bauhaus_widget_set_label(gui->compression_type, N_("Compression type"));
   dt_bauhaus_combobox_add(gui->compression_type,
                           _(avif_get_compression_string(AVIF_COMP_LOSSLESS)));
   dt_bauhaus_combobox_add(gui->compression_type,
@@ -806,7 +806,7 @@ void gui_init(dt_imageio_module_format_t *self)
   dt_bauhaus_combobox_set(gui->compression_type, compression_type);
 
   gtk_widget_set_tooltip_text(gui->compression_type,
-          _("the compression for the image"));
+          _("The compression for the image"));
 
   gtk_box_pack_start(GTK_BOX(self->widget),
                      gui->compression_type,
@@ -823,12 +823,12 @@ void gui_init(dt_imageio_module_format_t *self)
                                                   1, /* step */
                                                   dt_confgen_get_int("plugins/imageio/format/avif/quality", DT_DEFAULT), /* default */
                                                   0); /* digits */
-  dt_bauhaus_widget_set_label(gui->quality, N_("quality"));
+  dt_bauhaus_widget_set_label(gui->quality, N_("Quality"));
   dt_bauhaus_slider_set_default(gui->quality, dt_confgen_get_int("plugins/imageio/format/avif/quality", DT_DEFAULT));
   dt_bauhaus_slider_set_format(gui->quality, "%");
 
   gtk_widget_set_tooltip_text(gui->quality,
-          _("the quality of an image, less quality means fewer details.\n"
+          _("The quality of an image, less quality means fewer details.\n"
             "\n"
             "the following applies only to lossy setting\n"
             "\n"

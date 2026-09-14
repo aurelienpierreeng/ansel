@@ -65,9 +65,9 @@ DT_MODULE_INTROSPECTION(3, dt_iop_global_tonemap_params_t)
 
 typedef enum _iop_operator_t
 {
-  OPERATOR_REINHARD, // $DESCRIPTION: "reinhard"
-  OPERATOR_FILMIC,   // $DESCRIPTION: "filmic"
-  OPERATOR_DRAGO     // $DESCRIPTION: "drago"
+  OPERATOR_REINHARD, // $DESCRIPTION: "Reinhard"
+  OPERATOR_FILMIC,   // $DESCRIPTION: "Filmic"
+  OPERATOR_DRAGO     // $DESCRIPTION: "Drago"
 } _iop_operator_t;
 
 typedef struct dt_iop_global_tonemap_params_t
@@ -75,8 +75,8 @@ typedef struct dt_iop_global_tonemap_params_t
   _iop_operator_t operator; // $DEFAULT: OPERATOR_DRAGO
   struct
   {
-    float bias;      // $MIN: 0.5 $MAX: 1 $DEFAULT: 0.85 $DESCRIPTION: "bias"
-    float max_light; // cd/m2 $MIN: 1 $MAX: 500 $DEFAULT: 100.0 $DESCRIPTION: "target"
+    float bias;      // $MIN: 0.5 $MAX: 1 $DEFAULT: 0.85 $DESCRIPTION: "Bias"
+    float max_light; // cd/m2 $MIN: 1 $MAX: 500 $DEFAULT: 100.0 $DESCRIPTION: "Target"
   } drago;
   float detail; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0
 } dt_iop_global_tonemap_params_t;
@@ -107,12 +107,12 @@ typedef struct dt_iop_global_tonemap_gui_data_t
 
 const char *name()
 {
-  return _("global tonemap");
+  return _("Global tonemap");
 }
 
 const char *deprecated_msg()
 {
-  return _("this module is deprecated. please use the filmic rgb module instead.");
+  return _("This module is deprecated. please use the filmic rgb module instead.");
 }
 
 int flags()
@@ -206,7 +206,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
     // other cases we make sure that the preview pipe has left us with proper readings for
     // lwmax. if data are not yet there we need to wait (with timeout).
     if(hash != piece->global_hash)
-      dt_control_log(_("inconsistent output"));
+      dt_control_log(_("Inconsistent output"));
 
     dt_iop_gui_enter_critical_section(self);
     tmp_lwmax = g->lwmax;
@@ -408,14 +408,14 @@ void gui_init(struct dt_iop_module_t *self)
   g->hash = 0;
 
   g->operator = dt_bauhaus_combobox_from_params(self, N_("operator"));
-  gtk_widget_set_tooltip_text(g->operator, _("the global tonemap operator"));
+  gtk_widget_set_tooltip_text(g->operator, _("The global tonemap operator"));
 
   g->drago.bias = dt_bauhaus_slider_from_params(self, "drago.bias");
-  gtk_widget_set_tooltip_text(g->drago.bias, _("the bias for tonemapper controls the linearity, "
+  gtk_widget_set_tooltip_text(g->drago.bias, _("The bias for tonemapper controls the linearity, "
                                                "the higher the more details in blacks"));
 
   g->drago.max_light = dt_bauhaus_slider_from_params(self, "drago.max_light");
-  gtk_widget_set_tooltip_text(g->drago.max_light, _("the target light for tonemapper specified as cd/m2"));
+  gtk_widget_set_tooltip_text(g->drago.max_light, _("The target light for tonemapper specified as cd/m2"));
 
   g->detail = dt_bauhaus_slider_from_params(self, N_("detail"));
   dt_bauhaus_slider_set_digits(g->detail, 3);

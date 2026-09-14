@@ -2866,7 +2866,7 @@ lock_again:
         // failed to open the lock file
         const int err = errno;
         fprintf(stderr, "[init] error opening the database lock file for reading: %s\n", strerror(err));
-        db->error_message = g_strdup_printf(_("error opening the database lock file for reading: %s"), strerror(err));
+        db->error_message = g_strdup_printf(_("Error opening the database lock file for reading: %s"), strerror(err));
       }
       else
       {
@@ -2891,7 +2891,7 @@ lock_again:
             else
             {
               fprintf(stderr, "[init] tried several times to acquire the database lock, giving up\n");
-              db->error_message = g_strdup_printf(_("tried several times to acquire the database lock, giving up"));
+              db->error_message = g_strdup_printf(_("Tried several times to acquire the database lock, giving up"));
             }
           }
           else
@@ -2900,7 +2900,7 @@ lock_again:
             close(fd);
             fprintf(stderr, "[init] the database lock file contains a pid that seems to be alive in your system: %d\n",
                     db->error_other_pid);
-            db->error_message = g_strdup_printf(_("the database lock file contains a pid that seems to be alive in your system: %d"), 
+            db->error_message = g_strdup_printf(_("The database lock file contains a pid that seems to be alive in your system: %d"), 
                                                 db->error_other_pid);
           }
         }
@@ -2909,7 +2909,7 @@ lock_again:
           // lock file is empty or unreadable
           close(fd);
           fprintf(stderr, "[init] the database lock file seems to be empty\n");
-          db->error_message = g_strdup_printf(_("the database lock file seems to be empty"));
+          db->error_message = g_strdup_printf(_("The database lock file seems to be empty"));
         }
       }
     }
@@ -3354,7 +3354,7 @@ start:
       gchar* quick_check_text = NULL;
       if(g_strcmp0(data_status, "ok")) // data_status is not ok
       {
-        quick_check_text = g_strdup_printf(_("quick_check said:\n"
+        quick_check_text = g_strdup_printf(_("Quick_check said:\n"
                                             "%s \n"), data_status);
       }
       else
@@ -3475,7 +3475,7 @@ start:
     gchar* quick_check_text = NULL;
     if(g_strcmp0(libdb_status, "ok")) // data_status is not ok
     {
-      quick_check_text = g_strdup_printf(_("quick_check said:\n"
+      quick_check_text = g_strdup_printf(_("Quick_check said:\n"
                                           "%s \n"), libdb_status);
     }
     else

@@ -833,7 +833,7 @@ void dt_gui_supervisor_window_show(void)
 
   // global search entry: query all events by hash (own or linked)
   _g.search_entry = gtk_search_entry_new();
-  gtk_entry_set_placeholder_text(GTK_ENTRY(_g.search_entry), _("search hash or text…"));
+  gtk_entry_set_placeholder_text(GTK_ENTRY(_g.search_entry), _("Search hash or text…"));
   gtk_widget_set_size_request(_g.search_entry, 220, -1);
   g_signal_connect(_g.search_entry, "search-changed", G_CALLBACK(_on_search_changed), NULL);
   gtk_box_pack_end(GTK_BOX(bar), _g.search_entry, FALSE, FALSE, 0);

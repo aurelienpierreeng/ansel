@@ -120,7 +120,7 @@ typedef struct dt_iop_temperature_params_t
   float red;    // $MIN: 0.0 $MAX: 8.0
   float green;  // $MIN: 0.0 $MAX: 8.0
   float blue;   // $MIN: 0.0 $MAX: 8.0
-  float g2;     // $MIN: 0.0 $MAX: 8.0 $DESCRIPTION: "emerald"
+  float g2;     // $MIN: 0.0 $MAX: 8.0 $DESCRIPTION: "Emerald"
 } dt_iop_temperature_params_t;
 
 typedef struct dt_iop_temperature_gui_data_t
@@ -236,16 +236,16 @@ static int ignore_missing_wb(dt_image_t *img)
 
 const char *name()
 {
-  return C_("modulename", "white balance");
+  return C_("modulename", "White balance");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("scale raw RGB channels to balance white and help demosaicing"),
-                                      _("corrective"),
-                                      _("linear, raw, scene-referred"),
-                                      _("linear, raw"),
-                                      _("linear, raw, scene-referred"));
+  return dt_iop_set_description(self, _("Scale raw RGB channels to balance white and help demosaicing"),
+                                      _("Corrective"),
+                                      _("Linear, raw, scene-referred"),
+                                      _("Linear, raw"),
+                                      _("Linear, raw, scene-referred"));
 }
 
 int default_group()
@@ -1040,10 +1040,10 @@ void gui_update(struct dt_iop_module_t *self)
   }
 
   dt_bauhaus_combobox_clear(g->presets);
-  dt_bauhaus_combobox_add(g->presets, C_("white balance", "as shot")); // old "camera". reason for change: all other RAW development tools use "As Shot" or "shot"
-  dt_bauhaus_combobox_add(g->presets, C_("white balance", "from image area")); // old "spot", reason: describes exactly what'll happen
-  dt_bauhaus_combobox_add(g->presets, C_("white balance", "user modified"));
-  dt_bauhaus_combobox_add(g->presets, C_("white balance", "camera reference")); // old "camera neutral", reason: better matches intent
+  dt_bauhaus_combobox_add(g->presets, C_("white balance", "As shot")); // old "camera". reason for change: all other RAW development tools use "As Shot" or "shot"
+  dt_bauhaus_combobox_add(g->presets, C_("white balance", "From image area")); // old "spot", reason: describes exactly what'll happen
+  dt_bauhaus_combobox_add(g->presets, C_("white balance", "User modified"));
+  dt_bauhaus_combobox_add(g->presets, C_("white balance", "Camera reference")); // old "camera neutral", reason: better matches intent
   g->preset_cnt = DT_IOP_NUM_OF_STD_TEMP_PRESETS;
   memset(g->preset_num, 0, sizeof(g->preset_num));
 
@@ -1205,7 +1205,7 @@ static void find_coeffs(dt_iop_module_t *module, double coeffs[4])
     //  on screen the more important message about missing sample and the way
     //  to contribute.
     if(!img->camera_missing_sample)
-      dt_control_log(_("failed to read camera white balance information from `%s'!"),
+      dt_control_log(_("Failed to read camera white balance information from `%s'!"),
                      img->filename);
     fprintf(stderr, "[temperature] failed to read camera white balance information from `%s'!\n",
             img->filename);
@@ -1506,14 +1506,14 @@ static void gui_sliders_update(struct dt_iop_module_t *self)
 
   if(FILTERS_ARE_CYGM(img->dsc.filters))
   {
-    dt_bauhaus_widget_set_label(g->scale_r, N_("green"));
-    gtk_widget_set_tooltip_text(g->scale_r, _("green channel coefficient"));
-    dt_bauhaus_widget_set_label(g->scale_g, N_("magenta"));
-    gtk_widget_set_tooltip_text(g->scale_g, _("magenta channel coefficient"));
-    dt_bauhaus_widget_set_label(g->scale_b, N_("cyan"));
-    gtk_widget_set_tooltip_text(g->scale_b, _("cyan channel coefficient"));
-    dt_bauhaus_widget_set_label(g->scale_g2, N_("yellow"));
-    gtk_widget_set_tooltip_text(g->scale_g2, _("yellow channel coefficient"));
+    dt_bauhaus_widget_set_label(g->scale_r, N_("Green"));
+    gtk_widget_set_tooltip_text(g->scale_r, _("Green channel coefficient"));
+    dt_bauhaus_widget_set_label(g->scale_g, N_("Magenta"));
+    gtk_widget_set_tooltip_text(g->scale_g, _("Magenta channel coefficient"));
+    dt_bauhaus_widget_set_label(g->scale_b, N_("Cyan"));
+    gtk_widget_set_tooltip_text(g->scale_b, _("Cyan channel coefficient"));
+    dt_bauhaus_widget_set_label(g->scale_g2, N_("Yellow"));
+    gtk_widget_set_tooltip_text(g->scale_g2, _("Yellow channel coefficient"));
 
     gtk_box_reorder_child(GTK_BOX(g->cs.container), g->scale_b, 0);
     gtk_box_reorder_child(GTK_BOX(g->cs.container), g->scale_g2, 1);
@@ -1522,14 +1522,14 @@ static void gui_sliders_update(struct dt_iop_module_t *self)
   }
   else
   {
-    dt_bauhaus_widget_set_label(g->scale_r, N_("red"));
-    gtk_widget_set_tooltip_text(g->scale_r, _("red channel coefficient"));
-    dt_bauhaus_widget_set_label(g->scale_g, N_("green"));
-    gtk_widget_set_tooltip_text(g->scale_g, _("green channel coefficient"));
-    dt_bauhaus_widget_set_label(g->scale_b, N_("blue"));
-    gtk_widget_set_tooltip_text(g->scale_b, _("blue channel coefficient"));
-    dt_bauhaus_widget_set_label(g->scale_g2, N_("emerald"));
-    gtk_widget_set_tooltip_text(g->scale_g2, _("emerald channel coefficient"));
+    dt_bauhaus_widget_set_label(g->scale_r, N_("Red"));
+    gtk_widget_set_tooltip_text(g->scale_r, _("Red channel coefficient"));
+    dt_bauhaus_widget_set_label(g->scale_g, N_("Green"));
+    gtk_widget_set_tooltip_text(g->scale_g, _("Green channel coefficient"));
+    dt_bauhaus_widget_set_label(g->scale_b, N_("Blue"));
+    gtk_widget_set_tooltip_text(g->scale_b, _("Blue channel coefficient"));
+    dt_bauhaus_widget_set_label(g->scale_g2, N_("Emerald"));
+    gtk_widget_set_tooltip_text(g->scale_g2, _("Emerald channel coefficient"));
 
     gtk_box_reorder_child(GTK_BOX(g->cs.container), g->scale_r, 0);
     gtk_box_reorder_child(GTK_BOX(g->cs.container), g->scale_g, 1);
@@ -1552,10 +1552,10 @@ void gui_init(struct dt_iop_module_t *self)
 
   GtkBox *box_enabled = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
 
-  g->btn_asshot = dt_iop_togglebutton_new(self, N_("settings"), N_("as shot"), NULL,
+  g->btn_asshot = dt_iop_togglebutton_new(self, N_("Settings"), N_("As shot"), NULL,
                                           G_CALLBACK(btn_toggled), FALSE, 0, 0,
                                           dtgtk_cairo_paint_camera, NULL);
-  gtk_widget_set_tooltip_text(g->btn_asshot, _("set white balance to as shot"));
+  gtk_widget_set_tooltip_text(g->btn_asshot, _("Set white balance to as shot"));
 
   // create color picker to be able to send its signal when spot selected,
   // this module may expect data in RAW or RGB, setting the color picker CST to IOP_CS_NONE will make the color
@@ -1564,18 +1564,18 @@ void gui_init(struct dt_iop_module_t *self)
   g->colorpicker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_AREA, NULL, IOP_CS_NONE);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->colorpicker), dtgtk_cairo_paint_colorpicker, 0, NULL);
 
-  gtk_widget_set_tooltip_text(g->colorpicker, _("set white balance to detected from area"));
+  gtk_widget_set_tooltip_text(g->colorpicker, _("Set white balance to detected from area"));
 
-  g->btn_user = dt_iop_togglebutton_new(self, N_("settings"), N_("user modified"), NULL,
+  g->btn_user = dt_iop_togglebutton_new(self, N_("Settings"), N_("User modified"), NULL,
                                         G_CALLBACK(btn_toggled), FALSE, 0, 0,
                                         dtgtk_cairo_paint_masks_drawn, NULL);
-  gtk_widget_set_tooltip_text(g->btn_user, _("set white balance to user modified"));
+  gtk_widget_set_tooltip_text(g->btn_user, _("Set white balance to user modified"));
 
 
-  g->btn_d65 = dt_iop_togglebutton_new(self, N_("settings"), N_("camera reference"), NULL,
+  g->btn_d65 = dt_iop_togglebutton_new(self, N_("Settings"), N_("Camera reference"), NULL,
                                        G_CALLBACK(btn_toggled), FALSE, 0, 0,
                                        dtgtk_cairo_paint_bulb, NULL);
-  gtk_widget_set_tooltip_text(g->btn_d65, _("set white balance to camera reference point\nin most cases it should be D65"));
+  gtk_widget_set_tooltip_text(g->btn_d65, _("Set white balance to camera reference point\nin most cases it should be D65"));
 
   g->buttonbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING); // put buttons at top. fill later.
   dt_gui_add_class(g->buttonbar, "dt_iop_toggle");
@@ -1586,8 +1586,8 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(box_enabled, g->buttonbar, TRUE, TRUE, 0);
 
   g->presets = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->presets, N_("settings")); // relabel to settings to remove confusion between module presets and white balance settings
-  gtk_widget_set_tooltip_text(g->presets, _("choose white balance setting"));
+  dt_bauhaus_widget_set_label(g->presets, N_("Settings")); // relabel to settings to remove confusion between module presets and white balance settings
+  gtk_widget_set_tooltip_text(g->presets, _("Choose white balance setting"));
   gtk_box_pack_start(box_enabled, g->presets, TRUE, TRUE, 0);
 
   g->mod_temp = NAN;
@@ -1598,8 +1598,8 @@ void gui_init(struct dt_iop_module_t *self)
   }
 
   GtkWidget *temp_label_box = gtk_event_box_new();
-  g->temp_label = dt_ui_section_label_new(_("scene illuminant temp"));
-  gtk_widget_set_tooltip_text(g->temp_label, _("click to cycle color mode on sliders"));
+  g->temp_label = dt_ui_section_label_new(_("Scene illuminant temp"));
+  gtk_widget_set_tooltip_text(g->temp_label, _("Click to cycle color mode on sliders"));
   gtk_container_add(GTK_CONTAINER(temp_label_box), g->temp_label);
 
   gtk_box_pack_start(box_enabled, temp_label_box, TRUE, TRUE, 0);
@@ -1608,20 +1608,20 @@ void gui_init(struct dt_iop_module_t *self)
   g->scale_k = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), DT_IOP_LOWEST_TEMPERATURE, DT_IOP_HIGHEST_TEMPERATURE,
                                                              0, 5000.0, 0, feedback);
   dt_bauhaus_slider_set_format(g->scale_k, " K");
-  dt_bauhaus_widget_set_label(g->scale_k, N_("temperature"));
-  gtk_widget_set_tooltip_text(g->scale_k, _("color temperature (in Kelvin)"));
+  dt_bauhaus_widget_set_label(g->scale_k, N_("Temperature"));
+  gtk_widget_set_tooltip_text(g->scale_k, _("Color temperature (in Kelvin)"));
   gtk_box_pack_start(box_enabled, g->scale_k, TRUE, TRUE, 0);
 
   g->scale_tint = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), DT_IOP_LOWEST_TINT, DT_IOP_HIGHEST_TINT,
                                                                 0, 1.0, 3, feedback);
-  dt_bauhaus_widget_set_label(g->scale_tint, N_("tint"));
-  gtk_widget_set_tooltip_text(g->scale_tint, _("color tint of the image, from magenta (value < 1) to green (value > 1)"));
+  dt_bauhaus_widget_set_label(g->scale_tint, N_("Tint"));
+  gtk_widget_set_tooltip_text(g->scale_tint, _("Color tint of the image, from magenta (value < 1) to green (value > 1)"));
   gtk_box_pack_start(box_enabled, g->scale_tint, TRUE, TRUE, 0);
 
   dt_gui_new_collapsible_section
     (&g->cs,
      "plugins/darkroom/temperature/expand_coefficients",
-     _("channel coefficients"),
+     _("Channel coefficients"),
      GTK_BOX(box_enabled), GTK_PACK_END);
 
   self->gui->widget = GTK_WIDGET(g->cs.container);
@@ -1646,7 +1646,7 @@ void gui_init(struct dt_iop_module_t *self)
   self->gui->widget = gtk_stack_new();
   gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
-  GtkWidget *label_disabled = gtk_label_new(_("white balance disabled for camera"));
+  GtkWidget *label_disabled = gtk_label_new(_("White balance disabled for camera"));
   gtk_widget_set_halign(label_disabled, GTK_ALIGN_START);
   gtk_label_set_ellipsize(GTK_LABEL(label_disabled), PANGO_ELLIPSIZE_END);
 

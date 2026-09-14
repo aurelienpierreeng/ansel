@@ -92,7 +92,7 @@ typedef enum dt_iop_rawdenoise_channel_t
 
 typedef struct dt_iop_rawdenoise_params_t
 {
-  float threshold; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.01 $DESCRIPTION: "noise threshold"
+  float threshold; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.01 $DESCRIPTION: "Noise threshold"
   float x[DT_RAWDENOISE_NONE][DT_IOP_RAWDENOISE_BANDS];
   float y[DT_RAWDENOISE_NONE][DT_IOP_RAWDENOISE_BANDS]; // $DEFAULT: 0.5
 } dt_iop_rawdenoise_params_t;
@@ -159,16 +159,16 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
 const char *name()
 {
-  return _("raw denoise");
+  return _("Raw denoise");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("denoise the raw picture early in the pipeline"),
-                                      _("corrective"),
-                                      _("linear, raw, scene-referred"),
-                                      _("linear, raw"),
-                                      _("linear, raw, scene-referred"));
+  return dt_iop_set_description(self, _("Denoise the raw picture early in the pipeline"),
+                                      _("Corrective"),
+                                      _("Linear, raw, scene-referred"),
+                                      _("Linear, raw"),
+                                      _("Linear, raw, scene-referred"));
 }
 
 int flags()
@@ -808,7 +808,7 @@ static gboolean rawdenoise_draw(GtkWidget *widget, cairo_t *crf, gpointer user_d
   pango_layout_set_font_description(layout, desc);
   cairo_set_source_rgb(cr, .1, .1, .1);
 
-  pango_layout_set_text(layout, _("coarse"), -1);
+  pango_layout_set_text(layout, _("Coarse"), -1);
   pango_layout_get_pixel_extents(layout, &ink, NULL);
   cairo_move_to(cr, .02 * width - ink.y, .5 * (height + ink.width));
   cairo_save(cr);
@@ -816,7 +816,7 @@ static gboolean rawdenoise_draw(GtkWidget *widget, cairo_t *crf, gpointer user_d
   pango_cairo_show_layout(cr, layout);
   cairo_restore(cr);
 
-  pango_layout_set_text(layout, _("fine"), -1);
+  pango_layout_set_text(layout, _("Fine"), -1);
   pango_layout_get_pixel_extents(layout, &ink, NULL);
   cairo_move_to(cr, .98 * width - ink.height, .5 * (height + ink.width));
   cairo_save(cr);
@@ -825,12 +825,12 @@ static gboolean rawdenoise_draw(GtkWidget *widget, cairo_t *crf, gpointer user_d
   cairo_restore(cr);
 
 
-  pango_layout_set_text(layout, _("smooth"), -1);
+  pango_layout_set_text(layout, _("Smooth"), -1);
   pango_layout_get_pixel_extents(layout, &ink, NULL);
   cairo_move_to(cr, .5 * (width - ink.width), .08 * height - ink.height);
   pango_cairo_show_layout(cr, layout);
 
-  pango_layout_set_text(layout, _("noisy"), -1);
+  pango_layout_set_text(layout, _("Noisy"), -1);
   pango_layout_get_pixel_extents(layout, &ink, NULL);
   cairo_move_to(cr, .5 * (width - ink.width), .97 * height - ink.height);
   pango_cairo_show_layout(cr, layout);
@@ -960,7 +960,7 @@ void gui_init(dt_iop_module_t *self)
   c->channel = dt_conf_get_int("plugins/darkroom/rawdenoise/gui_channel");
   c->channel_tabs = GTK_NOTEBOOK(gtk_notebook_new());
 
-  dt_ui_notebook_page(c->channel_tabs, N_("all"), NULL);
+  dt_ui_notebook_page(c->channel_tabs, N_("All"), NULL);
   dt_ui_notebook_page(c->channel_tabs, N_("R"), NULL);
   dt_ui_notebook_page(c->channel_tabs, N_("G"), NULL);
   dt_ui_notebook_page(c->channel_tabs, N_("B"), NULL);
@@ -1013,7 +1013,7 @@ void gui_init(dt_iop_module_t *self)
   self->gui->widget = gtk_stack_new();
   gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
-  GtkWidget *label_non_raw = dt_ui_label_new(_("raw denoising\nonly works for raw images."));
+  GtkWidget *label_non_raw = dt_ui_label_new(_("Raw denoising\nonly works for raw images."));
 
   gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
   gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");

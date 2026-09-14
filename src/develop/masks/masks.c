@@ -175,7 +175,7 @@ int dt_masks_form_duplicate(dt_develop_t *develop, int form_id)
   dest_form->source[0] = base_form->source[0];
   dest_form->source[1] = base_form->source[1];
   dest_form->version = base_form->version;
-  snprintf(dest_form->name, sizeof(dest_form->name), _("copy of %s"), base_form->name);
+  snprintf(dest_form->name, sizeof(dest_form->name), _("Copy of %s"), base_form->name);
 
   dt_masks_append_form(develop, dest_form);
 

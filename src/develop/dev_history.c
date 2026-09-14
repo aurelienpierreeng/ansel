@@ -1741,7 +1741,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
 {
   dt_image_t *image = &dev->image_storage;
   const gboolean has_matrix = dt_image_is_matrix_correction_supported(image);
-  const char *workflow_preset = has_matrix ? _("scene-referred default") : "\t\n";
+  const char *workflow_preset = has_matrix ? _("Scene-referred default") : "\t\n";
 
   int iformat = 0;
   if(dt_image_needs_rawprepare(image))
@@ -2057,13 +2057,13 @@ static int _sync_params(dt_dev_history_item_t *hist, const void *module_params, 
         || hist->module->legacy_params(hist->module, module_params, labs(modversion),
                                        hist->params, labs(hist->module->version())))
     {
-      gchar *preset = (preset_name) ? g_strdup_printf(_("from preset %s"), preset_name)
+      gchar *preset = (preset_name) ? g_strdup_printf(_("From preset %s"), preset_name)
                                     : g_strdup("");
 
       fprintf(stderr, "[dev_read_history] module `%s' %s version mismatch: history is %d, dt %d.\n", hist->module->op,
               preset, modversion, hist->module->version());
 
-      dt_history_message(_("module `%s' %s version mismatch: %d != %d"), hist->module->op,
+      dt_history_message(_("Module `%s' %s version mismatch: %d != %d"), hist->module->op,
                          preset, hist->module->version(), modversion);
 
       dt_free(preset);

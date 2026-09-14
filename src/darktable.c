@@ -395,7 +395,7 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
 
   if(IS_NULL_PTR(filename))
   {
-    dt_control_log(_("found strange path `%s'"), input);
+    dt_control_log(_("Found strange path `%s'"), input);
     return 0;
   }
 
@@ -410,7 +410,7 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
     }
     else
     {
-      dt_control_log(_("error loading directory `%s'"), filename);
+      dt_control_log(_("Error loading directory `%s'"), filename);
     }
     if(single_image) *single_image = FALSE;
   }
@@ -433,7 +433,7 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
       if(!loaded)
       {
         id = 0;
-        dt_control_log(_("file `%s' has unknown format!"), filename);
+        dt_control_log(_("File `%s' has unknown format!"), filename);
       }
       else
       {
@@ -446,7 +446,7 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
     }
     else
     {
-      dt_control_log(_("error loading file `%s'"), filename);
+      dt_control_log(_("Error loading file `%s'"), filename);
     }
     if(single_image) *single_image = TRUE;
   }

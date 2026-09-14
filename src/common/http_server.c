@@ -109,7 +109,7 @@ static void _new_connection(SoupServer *server, SoupMessage *msg, const char *pa
     goto end;
   }
 
-  char *page_title = g_strdup_printf(_("ansel >> %s"), params->id);
+  char *page_title = g_strdup_printf(_("Ansel >> %s"), params->id);
   const char *title = _(params->id);
   const char *body = _("<h1>Sorry,</h1><p>something went wrong. Please try again.</p>");
 
@@ -158,7 +158,7 @@ static void _new_connection(SoupServer *server, SoupServerMessage *msg, gpointer
       "<b>go back</b> to Ansel.</p>") :
     _("<h1>Sorry,</h1><p>something went wrong. Please try again.</p>");
 
-  char *page_title = g_strdup_printf(_("ansel >> %s"), params->id);
+  char *page_title = g_strdup_printf(_("Ansel >> %s"), params->id);
   char *resp_body = g_strdup_printf(reply, page_title, res ? 0 : 1, _(params->id), body);
   dt_free(page_title);
 

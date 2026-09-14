@@ -109,9 +109,9 @@ typedef enum dt_iop_colorequal_ring_t
 
 typedef enum dt_iop_colorequal_interpolation_t
 {
-  DT_IOP_COLOREQUAL_TETRAHEDRAL = 0, // $DESCRIPTION: "tetrahedral"
-  DT_IOP_COLOREQUAL_TRILINEAR = 1,   // $DESCRIPTION: "trilinear"
-  DT_IOP_COLOREQUAL_PYRAMID = 2,     // $DESCRIPTION: "pyramid"
+  DT_IOP_COLOREQUAL_TETRAHEDRAL = 0, // $DESCRIPTION: "Tetrahedral"
+  DT_IOP_COLOREQUAL_TRILINEAR = 1,   // $DESCRIPTION: "Trilinear"
+  DT_IOP_COLOREQUAL_PYRAMID = 2,     // $DESCRIPTION: "Pyramid"
 } dt_iop_colorequal_interpolation_t;
 
 typedef struct dt_iop_colorequal_node_t
@@ -122,12 +122,12 @@ typedef struct dt_iop_colorequal_node_t
 
 typedef struct dt_iop_colorequal_params_t
 {
-  float white_level; // $MIN: -2.0 $MAX: 16.0 $DEFAULT: 1.0 $DESCRIPTION: "white level"
-  float sigma_L;     // $MIN: 1.0 $MAX: 100.0 $DEFAULT: 50.0 $DESCRIPTION: "brightness smoothing"
-  float sigma_rho;   // $MIN: 0.01 $MAX: 2.0 $DEFAULT: 1 $DESCRIPTION: "saturation smoothing"
-  float sigma_theta; // $MIN: 0.01 $MAX: 6.28318531 $DEFAULT: 0.40 $DESCRIPTION: "hue smoothing"
-  float neutral_protection; // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 0.05 $DESCRIPTION: "neutral protection"
-  dt_iop_colorequal_interpolation_t interpolation; // $DEFAULT: DT_IOP_COLOREQUAL_TETRAHEDRAL $DESCRIPTION: "interpolation"
+  float white_level; // $MIN: -2.0 $MAX: 16.0 $DEFAULT: 1.0 $DESCRIPTION: "White level"
+  float sigma_L;     // $MIN: 1.0 $MAX: 100.0 $DEFAULT: 50.0 $DESCRIPTION: "Brightness smoothing"
+  float sigma_rho;   // $MIN: 0.01 $MAX: 2.0 $DEFAULT: 1 $DESCRIPTION: "Saturation smoothing"
+  float sigma_theta; // $MIN: 0.01 $MAX: 6.28318531 $DEFAULT: 0.40 $DESCRIPTION: "Hue smoothing"
+  float neutral_protection; // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 0.05 $DESCRIPTION: "Neutral protection"
+  dt_iop_colorequal_interpolation_t interpolation; // $DEFAULT: DT_IOP_COLOREQUAL_TETRAHEDRAL $DESCRIPTION: "Interpolation"
   dt_iop_colorequal_node_t curve[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS]
                                 [DT_IOP_COLOREQUAL_MAXNODES];
   int curve_num_nodes[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
@@ -218,19 +218,19 @@ typedef struct dt_iop_colorequal_gui_data_t
 
 const char *name()
 {
-  return _("color equalizer");
+  return _("Color equalizer");
 }
 
 const char *aliases()
 {
-  return _("color zones");
+  return _("Color zones");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
   return dt_iop_set_description(
-      self, _("stretch RGB colors around the achromatic axis from editable dt UCS hue nodes"), _("creative"),
-      _("linear, RGB, display-referred"), _("linear, RGB"), _("linear, RGB, display-referred"));
+      self, _("Stretch RGB colors around the achromatic axis from editable dt UCS hue nodes"), _("Creative"),
+      _("Linear, RGB, display-referred"), _("Linear, RGB"), _("Linear, RGB, display-referred"));
 }
 
 int default_group()
@@ -284,12 +284,12 @@ static inline const char *_ring_label(const dt_iop_colorequal_ring_t ring)
   switch(ring)
   {
     case DT_IOP_COLOREQUAL_RING_DARK:
-      return _("shadows");
+      return _("Shadows");
     case DT_IOP_COLOREQUAL_RING_LIGHT:
-      return _("highlights");
+      return _("Highlights");
     case DT_IOP_COLOREQUAL_RING_MID:
     default:
-      return _("midtones");
+      return _("Midtones");
   }
 }
 
@@ -2016,7 +2016,7 @@ static void _switch_preview_cursor(dt_iop_module_t *self)
   {
     dt_control_set_cursor_visible(FALSE);
     dt_control_hinter_message(dt_control_get_global(),
-                              _("scroll over image to adjust the selected color graph\n"
+                              _("Scroll over image to adjust the selected color graph\n"
                                 "right-click to add a node at the sampled hue"));
   }
 }
@@ -2131,23 +2131,23 @@ static void _format_picker_brightness_position(const float brightness, char *tex
 {
   if(brightness <= 0.15f)
   {
-    g_snprintf(text, size, "%d%% %s", 100, _("shadows"));
+    g_snprintf(text, size, "%d%% %s", 100, _("Shadows"));
   }
   else if(brightness < 0.45f)
   {
     const float t = (brightness - 0.15f) / (0.45f - 0.15f);
     const int shadows = CLAMP((int)lroundf((1.f - t) * 100.f), 0, 100);
-    g_snprintf(text, size, "%d%% %s, %d%% %s", shadows, _("shadows"), 100 - shadows, _("midtones"));
+    g_snprintf(text, size, "%d%% %s, %d%% %s", shadows, _("Shadows"), 100 - shadows, _("Midtones"));
   }
   else if(brightness < 0.75f)
   {
     const float t = (brightness - 0.45f) / (0.75f - 0.45f);
     const int midtones = CLAMP((int)lroundf((1.f - t) * 100.f), 0, 100);
-    g_snprintf(text, size, "%d%% %s, %d%% %s", midtones, _("midtones"), 100 - midtones, _("highlights"));
+    g_snprintf(text, size, "%d%% %s, %d%% %s", midtones, _("Midtones"), 100 - midtones, _("Highlights"));
   }
   else
   {
-    g_snprintf(text, size, "%d%% %s", 100, _("highlights"));
+    g_snprintf(text, size, "%d%% %s", 100, _("Highlights"));
   }
 }
 
@@ -2176,7 +2176,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     if(sampled_module->picked_color_max[0] < sampled_module->picked_color_min[0])
     {
       g->picker_valid = FALSE;
-      gtk_label_set_text(GTK_LABEL(g->picker_info), _("no sample"));
+      gtk_label_set_text(GTK_LABEL(g->picker_info), _("No sample"));
       for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
         for(int ch = 0; ch < DT_IOP_COLOREQUAL_NUM_CHANNELS; ch++)
           gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][ch]));
@@ -2369,7 +2369,7 @@ void gui_init(dt_iop_module_t *self)
 
   const dt_iop_colorequal_channel_t channel_order[DT_IOP_COLOREQUAL_NUM_CHANNELS]
       = { DT_IOP_COLOREQUAL_SATURATION, DT_IOP_COLOREQUAL_BRIGHTNESS, DT_IOP_COLOREQUAL_HUE };
-  const char *channel_labels[DT_IOP_COLOREQUAL_NUM_CHANNELS] = { _("saturation"), _("brightness"), _("hue") };
+  const char *channel_labels[DT_IOP_COLOREQUAL_NUM_CHANNELS] = { _("Saturation"), _("Brightness"), _("Hue") };
 
   for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
   {
@@ -2414,7 +2414,7 @@ void gui_init(dt_iop_module_t *self)
     }
   }
 
-  GtkWidget *options_label = gtk_label_new(_("options"));
+  GtkWidget *options_label = gtk_label_new(_("Options"));
   dt_gui_add_class(options_label, "dt_modulegroups_tab_label");
   GtkWidget *options_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_notebook_append_page(g->ring_notebook, options_page, options_label);
@@ -2442,7 +2442,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_soft_range(g->neutral_protection, 0.f, 1.f);
 
   g->interpolation = dt_bauhaus_combobox_from_params(self, "interpolation");
-  gtk_widget_set_tooltip_text(g->interpolation, _("select the interpolation method"));
+  gtk_widget_set_tooltip_text(g->interpolation, _("Select the interpolation method"));
 
   self->gui->widget = module_root;
 
@@ -2452,7 +2452,7 @@ void gui_init(dt_iop_module_t *self)
   g->module_picker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_AREA, NULL, IOP_CS_RGB);
   gtk_box_pack_start(GTK_BOX(picker_box), g->module_picker, FALSE, FALSE, 0);
 
-  g->picker_info = gtk_label_new(_("no sample"));
+  g->picker_info = gtk_label_new(_("No sample"));
   gtk_widget_set_hexpand(g->picker_info, TRUE);
   gtk_widget_set_halign(g->picker_info, GTK_ALIGN_START);
   gtk_label_set_xalign(GTK_LABEL(g->picker_info), 0.f);

@@ -162,16 +162,16 @@ const char *name()
 
 const char *aliases()
 {
-  return _("rotation|keystone|distortion|crop|reframe|horizon");
+  return _("Rotation|keystone|distortion|crop|reframe|horizon");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("rotate or distort perspective"),
-                                      _("corrective or creative"),
-                                      _("linear, RGB, scene-referred"),
-                                      _("geometric, RGB"),
-                                      _("linear, RGB, scene-referred"));
+  return dt_iop_set_description(self, _("Rotate or distort perspective"),
+                                      _("Corrective or creative"),
+                                      _("Linear, RGB, scene-referred"),
+                                      _("Geometric, RGB"),
+                                      _("Linear, RGB, scene-referred"));
 }
 
 int flags()
@@ -231,10 +231,10 @@ typedef enum dt_iop_ashift_linetype_t
 
 typedef enum dt_iop_ashift_fitting_t
 {
-  ASHIFT_FITTING_ALL = 0,           // $DESCRIPTION: rotation, lens shift, shear
-  ASHIFT_FITTING_LENS_ROTATION = 1, // $DESCRIPTION: rotation, lens shift
-  ASHIFT_FITTING_ROTATION = 2,      // $DESCRIPTION: rotation only
-  ASHIFT_FITTING_LENS = 3,          // $DESCRIPTION: lens shift only
+  ASHIFT_FITTING_ALL = 0,           // $DESCRIPTION: Rotation, lens shift, shear
+  ASHIFT_FITTING_LENS_ROTATION = 1, // $DESCRIPTION: Rotation, lens shift
+  ASHIFT_FITTING_ROTATION = 2,      // $DESCRIPTION: Rotation only
+  ASHIFT_FITTING_LENS = 3,          // $DESCRIPTION: Lens shift only
 } dt_iop_ashift_fitting_t;
 
 typedef enum dt_iop_ashift_linecolor_t
@@ -292,15 +292,15 @@ typedef enum dt_iop_ashift_enhance_t
 
 typedef enum dt_iop_ashift_mode_t
 {
-  ASHIFT_MODE_GENERIC = 0, // $DESCRIPTION: "generic"
-  ASHIFT_MODE_SPECIFIC = 1 // $DESCRIPTION: "specific"
+  ASHIFT_MODE_GENERIC = 0, // $DESCRIPTION: "Generic"
+  ASHIFT_MODE_SPECIFIC = 1 // $DESCRIPTION: "Specific"
 } dt_iop_ashift_mode_t;
 
 typedef enum dt_iop_ashift_crop_t
 {
-  ASHIFT_CROP_OFF = 0,    // $DESCRIPTION: "off"
-  ASHIFT_CROP_LARGEST = 1,// $DESCRIPTION: "largest area"
-  ASHIFT_CROP_ASPECT = 2  // $DESCRIPTION: "original format"
+  ASHIFT_CROP_OFF = 0,    // $DESCRIPTION: "Off"
+  ASHIFT_CROP_LARGEST = 1,// $DESCRIPTION: "Largest area"
+  ASHIFT_CROP_ASPECT = 2  // $DESCRIPTION: "Original format"
 } dt_iop_ashift_crop_t;
 
 typedef enum dt_iop_ashift_bounding_t
@@ -380,15 +380,15 @@ typedef struct dt_iop_ashift_params4_t
 typedef struct dt_iop_ashift_params_t
 {
   float rotation;    // $MIN: -ROTATION_RANGE_SOFT $MAX: ROTATION_RANGE_SOFT $DEFAULT: 0.0
-  float lensshift_v; // $MIN: -LENSSHIFT_RANGE_SOFT $MAX: LENSSHIFT_RANGE_SOFT $DEFAULT: 0.0 $DESCRIPTION: "lens shift (vertical)"
-  float lensshift_h; // $MIN: -LENSSHIFT_RANGE_SOFT $MAX: LENSSHIFT_RANGE_SOFT $DEFAULT: 0.0 $DESCRIPTION: "lens shift (horizontal)"
-  float shear;       // $MIN: -SHEAR_RANGE_SOFT $MAX: SHEAR_RANGE_SOFT $DEFAULT: 0.0 $DESCRIPTION: "shear"
-  float f_length;    // $MIN: 1.0 $MAX: 2000.0 $DEFAULT: DEFAULT_F_LENGTH $DESCRIPTION: "focal length"
-  float crop_factor; // $MIN: 0.5 $MAX: 10.0 $DEFAULT: 1.0 $DESCRIPTION: "crop factor"
-  float orthocorr;   // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "lens dependence"
-  float aspect;      // $MIN: 0.5 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "aspect adjust"
-  dt_iop_ashift_mode_t mode;     // $DEFAULT: ASHIFT_MODE_SPECIFIC $DESCRIPTION: "lens model"
-  dt_iop_ashift_crop_t cropmode; // $DEFAULT: ASHIFT_CROP_LARGEST $DESCRIPTION: "automatic cropping"
+  float lensshift_v; // $MIN: -LENSSHIFT_RANGE_SOFT $MAX: LENSSHIFT_RANGE_SOFT $DEFAULT: 0.0 $DESCRIPTION: "Lens shift (vertical)"
+  float lensshift_h; // $MIN: -LENSSHIFT_RANGE_SOFT $MAX: LENSSHIFT_RANGE_SOFT $DEFAULT: 0.0 $DESCRIPTION: "Lens shift (horizontal)"
+  float shear;       // $MIN: -SHEAR_RANGE_SOFT $MAX: SHEAR_RANGE_SOFT $DEFAULT: 0.0 $DESCRIPTION: "Shear"
+  float f_length;    // $MIN: 1.0 $MAX: 2000.0 $DEFAULT: DEFAULT_F_LENGTH $DESCRIPTION: "Focal length"
+  float crop_factor; // $MIN: 0.5 $MAX: 10.0 $DEFAULT: 1.0 $DESCRIPTION: "Crop factor"
+  float orthocorr;   // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "Lens dependence"
+  float aspect;      // $MIN: 0.5 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "Aspect adjust"
+  dt_iop_ashift_mode_t mode;     // $DEFAULT: ASHIFT_MODE_SPECIFIC $DESCRIPTION: "Lens model"
+  dt_iop_ashift_crop_t cropmode; // $DEFAULT: ASHIFT_CROP_LARGEST $DESCRIPTION: "Automatic cropping"
   float cl;          // $DEFAULT: 0.0
   float cr;          // $DEFAULT: 1.0
   float ct;          // $DEFAULT: 0.0
@@ -2978,7 +2978,7 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
 
   if(!_get_structure(self, enhance))
   {
-    dt_control_log(_("could not detect structural data in image"));
+    dt_control_log(_("Could not detect structural data in image"));
 #ifdef ASHIFT_DEBUG
     // find out more
     printf("do_get_structure: buf %p, buf_hash %" PRIu64 ", buf_width %d, buf_height %d, lines %p, lines_count %d\n",
@@ -2989,7 +2989,7 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
 
   if(!_remove_outliers(self))
   {
-    dt_control_log(_("could not run outlier removal"));
+    dt_control_log(_("Could not run outlier removal"));
 #ifdef ASHIFT_DEBUG
     // find out more
     printf("_remove_outliers: buf %p, buf_hash %" PRIu64 ", buf_width %d, buf_height %d, lines %p, lines_count %d\n",
@@ -3152,12 +3152,12 @@ static void do_fit(dt_iop_module_t *module, dt_iop_ashift_params_t *p, dt_iop_as
   {
     case NMS_NOT_ENOUGH_LINES:
       dt_control_log(
-          _("not enough structure for automatic correction\nminimum %d lines in each relevant direction"),
+          _("Not enough structure for automatic correction\nminimum %d lines in each relevant direction"),
           MINIMUM_FITLINES);
       return;
     case NMS_DID_NOT_CONVERGE:
     case NMS_INSANE:
-      dt_control_log(_("automatic correction failed, please correct manually"));
+      dt_control_log(_("Automatic correction failed, please correct manually"));
       return;
     case NMS_SUCCESS:
     default:
@@ -4717,7 +4717,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     const int count = g->lines_count + 1;
     // if count > MAX_SAVED_LINES we alert that the next lines won't be saved in params
     // but they still may be used for the current section (that's why we still allow them)
-    if(count > MAX_SAVED_LINES) dt_control_log(_("only %d lines can be saved in parameters"), MAX_SAVED_LINES);
+    if(count > MAX_SAVED_LINES) dt_control_log(_("Only %d lines can be saved in parameters"), MAX_SAVED_LINES);
 
     dt_iop_ashift_line_t *lines = (dt_iop_ashift_line_t *)malloc(sizeof(dt_iop_ashift_line_t) * count);
     for(int i = 0; i < g->lines_count; i++)
@@ -5755,8 +5755,8 @@ void gui_update(struct dt_iop_module_t *self)
 
   char string_v[256];
   char string_h[256];
-  snprintf(string_v, sizeof(string_v), _("lens shift (%s)"), isflipped ? _("horizontal") : _("vertical"));
-  snprintf(string_h, sizeof(string_h), _("lens shift (%s)"), isflipped ? _("vertical") : _("horizontal"));
+  snprintf(string_v, sizeof(string_v), _("Lens shift (%s)"), isflipped ? _("Horizontal") : _("Vertical"));
+  snprintf(string_h, sizeof(string_h), _("Lens shift (%s)"), isflipped ? _("Vertical") : _("Horizontal"));
   dt_bauhaus_widget_set_label(g->lensshift_v, string_v);
   dt_bauhaus_widget_set_label(g->lensshift_h, string_h);
 
@@ -5892,8 +5892,8 @@ static gboolean _event_draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *sel
   char string_v[256];
   char string_h[256];
 
-  snprintf(string_v, sizeof(string_v), _("lens shift (%s)"), isflipped ? _("horizontal") : _("vertical"));
-  snprintf(string_h, sizeof(string_h), _("lens shift (%s)"), isflipped ? _("vertical") : _("horizontal"));
+  snprintf(string_v, sizeof(string_v), _("Lens shift (%s)"), isflipped ? _("Horizontal") : _("Vertical"));
+  snprintf(string_h, sizeof(string_h), _("Lens shift (%s)"), isflipped ? _("Vertical") : _("Horizontal"));
 
   dt_gui_freeze_begin();
   dt_bauhaus_widget_set_label(g->lensshift_v, string_v);
@@ -6055,18 +6055,18 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *helpers = dt_ui_section_label_new(_("Fitting options"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), helpers, TRUE, TRUE, 0);
 
-  const gchar *option_labels[] = { _("rotation, lens shift, shear"),
-                                   _("rotation, lens shift"),
-                                   _("rotation only"),
-                                   _("lens shift only"), NULL };
+  const gchar *option_labels[] = { _("Rotation, lens shift, shear"),
+                                   _("Rotation, lens shift"),
+                                   _("Rotation only"),
+                                   _("Lens shift only"), NULL };
   g->fitting_option
       = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(self), _("Fit for"), NULL, ASHIFT_FITTING_ALL,
                                      (GtkCallback)fitting_option_changed, self, option_labels);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->fitting_option, TRUE, TRUE, 0);
 
-  const gchar *crop_labels[] = { _("off"), _("largest area"), _("original format"), NULL };
+  const gchar *crop_labels[] = { _("Off"), _("Largest area"), _("Original format"), NULL };
   g->cropmode
-      = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(self), _("automatic cropping"), NULL,
+      = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(self), _("Automatic cropping"), NULL,
                                      ((dt_iop_ashift_params_t *)self->params)->cropmode,
                                      (GtkCallback)cropmode_callback, self, crop_labels);
   dt_bauhaus_combobox_set_default(g->cropmode,
@@ -6075,39 +6075,39 @@ void gui_init(struct dt_iop_module_t *self)
 
   self->gui->widget = main_box;
 
-  gtk_widget_set_tooltip_text(g->rotation, _("rotate image\nright-click and drag to define a horizontal or vertical line by drawing on the image"));
-  gtk_widget_set_tooltip_text(g->lensshift_v, _("apply lens shift correction in one direction"));
-  gtk_widget_set_tooltip_text(g->lensshift_h, _("apply lens shift correction in one direction"));
-  gtk_widget_set_tooltip_text(g->shear, _("shear the image along one diagonal"));
-  gtk_widget_set_tooltip_text(g->cropmode, _("automatically crop to avoid black edges"));
-  gtk_widget_set_tooltip_text(g->mode, _("lens model of the perspective correction: "
+  gtk_widget_set_tooltip_text(g->rotation, _("Rotate image\nright-click and drag to define a horizontal or vertical line by drawing on the image"));
+  gtk_widget_set_tooltip_text(g->lensshift_v, _("Apply lens shift correction in one direction"));
+  gtk_widget_set_tooltip_text(g->lensshift_h, _("Apply lens shift correction in one direction"));
+  gtk_widget_set_tooltip_text(g->shear, _("Shear the image along one diagonal"));
+  gtk_widget_set_tooltip_text(g->cropmode, _("Automatically crop to avoid black edges"));
+  gtk_widget_set_tooltip_text(g->mode, _("Lens model of the perspective correction: "
                                          "generic or according to the focal length"));
-  gtk_widget_set_tooltip_text(g->f_length, _("focal length of the lens, "
+  gtk_widget_set_tooltip_text(g->f_length, _("Focal length of the lens, "
                                              "default value set from EXIF data if available"));
-  gtk_widget_set_tooltip_text(g->crop_factor, _("crop factor of the camera sensor, "
+  gtk_widget_set_tooltip_text(g->crop_factor, _("Crop factor of the camera sensor, "
                                                 "default value set from EXIF data if available, "
                                                 "manual setting is often required"));
-  gtk_widget_set_tooltip_text(g->orthocorr, _("the level of lens dependent correction, set to maximum for full lens dependency, "
+  gtk_widget_set_tooltip_text(g->orthocorr, _("The level of lens dependent correction, set to maximum for full lens dependency, "
                                               "set to zero for the generic case"));
-  gtk_widget_set_tooltip_text(g->aspect, _("adjust aspect ratio of image by horizontal and vertical scaling"));
-  gtk_widget_set_tooltip_text(g->fit_v, _("automatically correct for vertical perspective distortion\n"
+  gtk_widget_set_tooltip_text(g->aspect, _("Adjust aspect ratio of image by horizontal and vertical scaling"));
+  gtk_widget_set_tooltip_text(g->fit_v, _("Automatically correct for vertical perspective distortion\n"
                                           "ctrl+click to only fit rotation\n"
                                           "shift+click to only fit lens shift"));
-  gtk_widget_set_tooltip_text(g->fit_h, _("automatically correct for horizontal perspective distortion\n"
+  gtk_widget_set_tooltip_text(g->fit_h, _("Automatically correct for horizontal perspective distortion\n"
                                           "ctrl+click to only fit rotation\n"
                                           "shift+click to only fit lens shift"));
-  gtk_widget_set_tooltip_text(g->fit_both, _("automatically correct for vertical and "
+  gtk_widget_set_tooltip_text(g->fit_both, _("Automatically correct for vertical and "
                                              "horizontal perspective distortions; fitting rotation,"
                                              "lens shift in both directions, and shear\n"
                                              "ctrl+click to only fit rotation\n"
                                              "shift+click to only fit lens shift\n"
                                              "ctrl+shift+click to only fit rotation and lens shift"));
-  gtk_widget_set_tooltip_text(g->structure_auto, _("automatically analyse line structure in image\n"
+  gtk_widget_set_tooltip_text(g->structure_auto, _("Automatically analyse line structure in image\n"
                                                    "ctrl+click for an additional edge enhancement\n"
                                                    "shift+click for an additional detail enhancement\n"
                                                    "ctrl+shift+click for a combination of both methods"));
-  gtk_widget_set_tooltip_text(g->structure_quad, _("manually define perspective rectangle"));
-  gtk_widget_set_tooltip_text(g->structure_lines, _("manually draw structure lines"));
+  gtk_widget_set_tooltip_text(g->structure_quad, _("Manually define perspective rectangle"));
+  gtk_widget_set_tooltip_text(g->structure_lines, _("Manually draw structure lines"));
 
   g_signal_connect(G_OBJECT(g->fit_v), "button-press-event", G_CALLBACK(_event_fit_v_button_clicked),
                    (gpointer)self);

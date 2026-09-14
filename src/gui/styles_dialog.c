@@ -214,12 +214,12 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
         GtkWidget *window = dt_gui_main_window();
         GtkWidget *dlg_overwrite = gtk_message_dialog_new(
             GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_WARNING, GTK_BUTTONS_YES_NO,
-            _("style `%s' already exists.\ndo you want to overwrite?"), name);
+            _("Style `%s' already exists.\ndo you want to overwrite?"), name);
 #ifdef GDK_WINDOWING_QUARTZ
         dt_osx_disallow_fullscreen(dlg_overwrite);
 #endif
 
-        gtk_window_set_title(GTK_WINDOW(dlg_overwrite), _("overwrite style?"));
+        gtk_window_set_title(GTK_WINDOW(dlg_overwrite), _("Overwrite style?"));
 
         const gint dlg_ret = gtk_dialog_run(GTK_DIALOG(dlg_overwrite));
         gtk_widget_destroy(dlg_overwrite);
@@ -239,7 +239,7 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
       if(dt_styles_create_from_image(name, gtk_entry_get_text(GTK_ENTRY(g->description)),
                                      g->imgid, result, _gui_styles_is_copy_module_order_set(g)))
       {
-        dt_control_log(_("style named '%s' successfully created"), name);
+        dt_control_log(_("Style named '%s' successfully created"), name);
       };
     }
     else
@@ -248,11 +248,11 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
       GtkWidget *window = dt_gui_main_window();
       GtkWidget *dlg_changename
                     = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_WARNING,
-                                             GTK_BUTTONS_OK, _("please give style a name"));
+                                             GTK_BUTTONS_OK, _("Please give style a name"));
 #ifdef GDK_WINDOWING_QUARTZ
       dt_osx_disallow_fullscreen(dlg_changename);
 #endif
-      gtk_window_set_title(GTK_WINDOW(dlg_changename), _("unnamed style"));
+      gtk_window_set_title(GTK_WINDOW(dlg_changename), _("Unnamed style"));
       gtk_dialog_run(GTK_DIALOG(dlg_changename));
       gtk_widget_destroy(dlg_changename);
       return;
@@ -299,7 +299,7 @@ static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id,
                          _gui_styles_is_copy_module_order_set(g),
                          _gui_styles_is_update_module_order_set(g));
       }
-      dt_control_log(_("style %s was successfully saved"), name);
+      dt_control_log(_("Style %s was successfully saved"), name);
     }
     else
     {
@@ -307,11 +307,11 @@ static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id,
       GtkWidget *window = dt_gui_main_window();
       GtkWidget *dlg_changename
                     = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_WARNING,
-                                             GTK_BUTTONS_OK, _("please give style a name"));
+                                             GTK_BUTTONS_OK, _("Please give style a name"));
 #ifdef GDK_WINDOWING_QUARTZ
       dt_osx_disallow_fullscreen(dlg_changename);
 #endif
-      gtk_window_set_title(GTK_WINDOW(dlg_changename), _("unnamed style"));
+      gtk_window_set_title(GTK_WINDOW(dlg_changename), _("Unnamed style"));
       gtk_dialog_run(GTK_DIALOG(dlg_changename));
       gtk_widget_destroy(dlg_changename);
       return;
@@ -414,21 +414,21 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
 
   if(edit)
   {
-    snprintf(title, sizeof(title), "%s \"%s\"", _("edit style"), name);
-    sd->duplicate = gtk_check_button_new_with_label(_("duplicate style"));
-    gtk_widget_set_tooltip_text(sd->duplicate, _("creates a duplicate of the style before applying changes"));
+    snprintf(title, sizeof(title), "%s \"%s\"", _("Edit style"), name);
+    sd->duplicate = gtk_check_button_new_with_label(_("Duplicate style"));
+    gtk_widget_set_tooltip_text(sd->duplicate, _("Creates a duplicate of the style before applying changes"));
   }
   else
   {
-    g_strlcpy(title, _("create new style"), sizeof(title));
+    g_strlcpy(title, _("Create new style"), sizeof(title));
     sd->duplicate = NULL;
   }
   GtkWidget *window = dt_gui_main_window();
   GtkDialog *dialog = GTK_DIALOG(
       gtk_dialog_new_with_buttons(title, GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT,
                                   _("_cancel"), GTK_RESPONSE_REJECT,
-                                  _("select _all"),  GTK_RESPONSE_YES,
-                                  _("select _none"), GTK_RESPONSE_NONE,
+                                  _("Select _all"),  GTK_RESPONSE_YES,
+                                  _("Select _none"), GTK_RESPONSE_NONE,
                                   _("_save"), GTK_RESPONSE_ACCEPT, NULL));
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(GTK_WIDGET(dialog));
@@ -455,14 +455,14 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
 
   sd->name = gtk_entry_new();
   dt_accels_disconnect_on_text_input(sd->name);
-  gtk_entry_set_placeholder_text(GTK_ENTRY(sd->name), _("name"));
-  gtk_widget_set_tooltip_text(sd->name, _("enter a name for the new style"));
+  gtk_entry_set_placeholder_text(GTK_ENTRY(sd->name), _("Name"));
+  gtk_widget_set_tooltip_text(sd->name, _("Enter a name for the new style"));
 
   sd->description = gtk_entry_new();
   dt_accels_disconnect_on_text_input(sd->description);
-  gtk_entry_set_placeholder_text(GTK_ENTRY(sd->description), _("description"));
+  gtk_entry_set_placeholder_text(GTK_ENTRY(sd->description), _("Description"));
   gtk_widget_set_tooltip_text(sd->description,
-                              _("enter a description for the new style, this description is searchable"));
+                              _("Enter a description for the new style, this description is searchable"));
 
   /*set values*/
   if(edit && name)
@@ -497,7 +497,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
   g_object_set_data(G_OBJECT(renderer), "column", (gint *)DT_STYLE_ITEMS_COL_ENABLED);
   g_signal_connect(renderer, "toggled", G_CALLBACK(_gui_styles_item_toggled), sd);
 
-  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items), -1, _("include"), renderer, "active",
+  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items), -1, _("Include"), renderer, "active",
                                               DT_STYLE_ITEMS_COL_ENABLED, NULL);
 
   if(edit)
@@ -506,7 +506,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
     gtk_cell_renderer_toggle_set_activatable(GTK_CELL_RENDERER_TOGGLE(renderer), TRUE);
     g_object_set_data(G_OBJECT(renderer), "column", (gint *)DT_STYLE_ITEMS_COL_ENABLED);
     g_signal_connect(renderer, "toggled", G_CALLBACK(_gui_styles_item_new_toggled), sd);
-    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items_new), -1, _("include"), renderer,
+    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items_new), -1, _("Include"), renderer,
                                                 "active", DT_STYLE_ITEMS_COL_ENABLED, NULL);
   }
 
@@ -518,7 +518,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
     g_object_set_data(G_OBJECT(renderer), "column", (gint *)DT_STYLE_ITEMS_COL_UPDATE);
     g_signal_connect(renderer, "toggled", G_CALLBACK(_gui_styles_update_toggled), sd);
 
-    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items), -1, _("update"), renderer, "active",
+    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items), -1, _("Update"), renderer, "active",
                                                 DT_STYLE_ITEMS_COL_UPDATE, NULL);
   }
 
@@ -545,12 +545,12 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
   renderer = gtk_cell_renderer_text_new();
   g_object_set_data(G_OBJECT(renderer), "column", (gint *)DT_STYLE_ITEMS_COL_NAME);
   g_object_set(renderer, "xalign", 0.0, (gchar *)0);
-  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items), -1, _("item"), renderer, "text",
+  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items), -1, _("Item"), renderer, "text",
                                               DT_STYLE_ITEMS_COL_NAME, NULL);
 
   if(edit)
   {
-    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items_new), -1, _("item"), renderer, "text",
+    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items_new), -1, _("Item"), renderer, "text",
                                                 DT_STYLE_ITEMS_COL_NAME, NULL);
   }
 
@@ -575,7 +575,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
     gtk_list_store_set(GTK_LIST_STORE(liststore), &iter,
                        DT_STYLE_ITEMS_COL_ENABLED,  dt_styles_has_module_order(name),
                        DT_STYLE_ITEMS_COL_ISACTIVE, is_active_pb,
-                       DT_STYLE_ITEMS_COL_NAME,     _("module order"),
+                       DT_STYLE_ITEMS_COL_NAME,     _("Module order"),
                        DT_STYLE_ITEMS_COL_NUM,      -1,
                        -1);
     /* get history items for named style and populate the items list */
@@ -620,7 +620,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
   else
   {
     const dt_iop_order_t order = dt_ioppr_get_iop_order_version(imgid);
-    char *label = g_strdup_printf("%s (%s)", _("module order"), dt_iop_order_string(order));
+    char *label = g_strdup_printf("%s (%s)", _("Module order"), dt_iop_order_string(order));
     gtk_list_store_append(GTK_LIST_STORE(liststore), &iter);
     gtk_list_store_set(GTK_LIST_STORE(liststore), &iter,
                        DT_STYLE_ITEMS_COL_ENABLED,  TRUE,
@@ -667,7 +667,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
     }
     else
     {
-      dt_control_log(_("can't create style out of unaltered image"));
+      dt_control_log(_("Can't create style out of unaltered image"));
       return;
     }
   }

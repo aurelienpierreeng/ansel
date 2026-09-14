@@ -91,7 +91,7 @@ DT_MODULE_INTROSPECTION(1, dt_iop_rawdenoiseai_params_t)
  * replacing v1 — old edits keep rendering with the model they were made on. */
 typedef enum dt_iop_rawdenoiseai_version_t
 {
-  DT_RAWDENOISEAI_V1 = 0, // $DESCRIPTION: "v1"
+  DT_RAWDENOISEAI_V1 = 0, // $DESCRIPTION: "V1"
 } dt_iop_rawdenoiseai_version_t;
 
 /* Model size: same architecture family, different width of the FINE net
@@ -103,9 +103,9 @@ typedef enum dt_iop_rawdenoiseai_version_t
  * hence a user parameter rather than a silent runtime choice. */
 typedef enum dt_iop_rawdenoiseai_size_t
 {
-  DT_RAWDENOISEAI_LARGE = 0,   // $DESCRIPTION: "large"
-  DT_RAWDENOISEAI_HALF = 1,    // $DESCRIPTION: "half"
-  DT_RAWDENOISEAI_QUARTER = 2, // $DESCRIPTION: "quarter"
+  DT_RAWDENOISEAI_LARGE = 0,   // $DESCRIPTION: "Large"
+  DT_RAWDENOISEAI_HALF = 1,    // $DESCRIPTION: "Half"
+  DT_RAWDENOISEAI_QUARTER = 2, // $DESCRIPTION: "Quarter"
 } dt_iop_rawdenoiseai_size_t;
 
 /* Model variant: single-scale (the fine mosaic net alone — fast, no
@@ -113,8 +113,8 @@ typedef enum dt_iop_rawdenoiseai_size_t
  * the fine net, plus the hybrid low-band fusion — high quality). */
 typedef enum dt_iop_rawdenoiseai_scale_t
 {
-  DT_RAWDENOISEAI_SINGLE = 0, // $DESCRIPTION: "single-scale"
-  DT_RAWDENOISEAI_MULTI = 1,  // $DESCRIPTION: "multiscale"
+  DT_RAWDENOISEAI_SINGLE = 0, // $DESCRIPTION: "Single-scale"
+  DT_RAWDENOISEAI_MULTI = 1,  // $DESCRIPTION: "Multiscale"
 } dt_iop_rawdenoiseai_scale_t;
 
 #define DT_RAWDENOISEAI_NUM_VERSIONS 1
@@ -159,14 +159,14 @@ static const char *const _scale_tag[DT_RAWDENOISEAI_NUM_SCALES] = { "single", "m
 
 typedef struct dt_iop_rawdenoiseai_params_t
 {
-  float strength;                            // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.85 $DESCRIPTION: "strength"
-  dt_iop_rawdenoiseai_version_t version;     // $DEFAULT: DT_RAWDENOISEAI_V1 $DESCRIPTION: "model version"
-  dt_iop_rawdenoiseai_size_t size;           // $DEFAULT: DT_RAWDENOISEAI_QUARTER $DESCRIPTION: "model size"
-  float noise_level;                         // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "global correction"
-  float sigma_red;                           // $MIN: 0.5 $MAX: 8.0 $DEFAULT: 2.82 $DESCRIPTION: "red correction"
-  float sigma_green;                         // $MIN: 0.5 $MAX: 8.0 $DEFAULT: 3.94 $DESCRIPTION: "green correction"
-  float sigma_blue;                          // $MIN: 0.5 $MAX: 8.0 $DEFAULT: 2.96 $DESCRIPTION: "blue correction"
-  dt_iop_rawdenoiseai_scale_t scale_variant; // $DEFAULT: DT_RAWDENOISEAI_MULTI $DESCRIPTION: "model variant"
+  float strength;                            // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.85 $DESCRIPTION: "Strength"
+  dt_iop_rawdenoiseai_version_t version;     // $DEFAULT: DT_RAWDENOISEAI_V1 $DESCRIPTION: "Model version"
+  dt_iop_rawdenoiseai_size_t size;           // $DEFAULT: DT_RAWDENOISEAI_QUARTER $DESCRIPTION: "Model size"
+  float noise_level;                         // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "Global correction"
+  float sigma_red;                           // $MIN: 0.5 $MAX: 8.0 $DEFAULT: 2.82 $DESCRIPTION: "Red correction"
+  float sigma_green;                         // $MIN: 0.5 $MAX: 8.0 $DEFAULT: 3.94 $DESCRIPTION: "Green correction"
+  float sigma_blue;                          // $MIN: 0.5 $MAX: 8.0 $DEFAULT: 2.96 $DESCRIPTION: "Blue correction"
+  dt_iop_rawdenoiseai_scale_t scale_variant; // $DEFAULT: DT_RAWDENOISEAI_MULTI $DESCRIPTION: "Model variant"
   /* Empty: use the shipped model selected by (version, size, scale) above.
    * Otherwise the basename of a .anselnn in the user config dir, which
    * overrides all three. Stored by NAME, never by list position: the set of
@@ -320,16 +320,16 @@ static GList *_list_custom_models(void)
 
 const char *name()
 {
-  return _("raw denoise (AI)");
+  return _("Raw denoise (AI)");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
   return dt_iop_set_description(self,
-                                _("denoise the raw picture with a neural network conditioned "
+                                _("Denoise the raw picture with a neural network conditioned "
                                   "on the camera noise profile"),
-                                _("corrective"), _("linear, raw, scene-referred"), _("linear, raw"),
-                                _("linear, raw, scene-referred"));
+                                _("Corrective"), _("Linear, raw, scene-referred"), _("Linear, raw"),
+                                _("Linear, raw, scene-referred"));
 }
 
 int flags()
@@ -1768,12 +1768,12 @@ void gui_update(dt_iop_module_t *self)
                                                         : _get_model(gd, p->version, p->size, p->scale_variant));
   GList *profiles = dt_noiseprofile_get_matching(&self->dev->image_storage);
   gchar *prof = profiles
-                    ? g_strdup_printf(_("noise profile: %s at ISO %d"), self->dev->image_storage.camera_makermodel,
+                    ? g_strdup_printf(_("Noise profile: %s at ISO %d"), self->dev->image_storage.camera_makermodel,
                                       (int)self->dev->image_storage.exif_iso)
-                    : g_strdup(_("no noise profile for this camera — using the generic profile"));
+                    : g_strdup(_("No noise profile for this camera — using the generic profile"));
   gchar *label = have_model
                      ? g_strdup(prof)
-                     : g_strdup_printf(_("selected model (%s %s, %s) is not installed — module inactive\n%s"),
+                     : g_strdup_printf(_("Selected model (%s %s, %s) is not installed — module inactive\n%s"),
                                        _size_tag[CLAMP(p->size, 0, DT_RAWDENOISEAI_NUM_SIZES - 1)],
                                        _scale_tag[CLAMP(p->scale_variant, 0, DT_RAWDENOISEAI_NUM_SCALES - 1)],
                                        _version_tag[CLAMP(p->version, 0, DT_RAWDENOISEAI_NUM_VERSIONS - 1)], prof);
@@ -1793,37 +1793,37 @@ void gui_init(dt_iop_module_t *self)
   g->strength = dt_bauhaus_slider_from_params(self, "strength");
   dt_bauhaus_slider_set_digits(g->strength, 3);
   dt_bauhaus_slider_set_format(g->strength, "%");
-  gtk_widget_set_tooltip_text(g->strength, _("opacity of the noise removal: blends between the original\n"
+  gtk_widget_set_tooltip_text(g->strength, _("Opacity of the noise removal: blends between the original\n"
                                              "image (0%) and the fully denoised result (100%).\n"
                                              "lower it to keep some residual grain"));
 
   g->version = dt_bauhaus_combobox_from_params(self, "version");
-  gtk_widget_set_tooltip_text(g->version, _("neural model version. Older edits keep their original\n"
+  gtk_widget_set_tooltip_text(g->version, _("Neural model version. Older edits keep their original\n"
                                             "version so their result never changes across updates."));
 
   g->size = dt_bauhaus_combobox_from_params(self, "size");
-  gtk_widget_set_tooltip_text(g->size, _("network width. large: reference quality, practical on GPU\n"
+  gtk_widget_set_tooltip_text(g->size, _("Network width. large: reference quality, practical on GPU\n"
                                          "(OpenCL) and the default there. half: ~4x faster.\n"
                                          "quarter: ~4x faster again, the default without OpenCL\n"
                                          "and the choice for weak hardware or near-realtime editing."));
 
   g->scale_variant = dt_bauhaus_combobox_from_params(self, "scale_variant");
-  gtk_widget_set_tooltip_text(g->scale_variant, _("single-scale: the fine full-resolution pass only — fast,\n"
+  gtk_widget_set_tooltip_text(g->scale_variant, _("Single-scale: the fine full-resolution pass only — fast,\n"
                                                   "no low-frequency chroma handling. multiscale: adds the\n"
                                                   "coarse chroma pass and the low-band fusion — high quality,\n"
                                                   "recommended for high ISO."));
 
   g->custom_model = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->custom_model, N_("custom model"));
+  dt_bauhaus_widget_set_label(g->custom_model, N_("Custom model"));
   gtk_box_pack_start(GTK_BOX(box_raw), g->custom_model, TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(g->custom_model,
-                              _("use a neural model of your own instead of the shipped ones.\n"
+                              _("Use a neural model of your own instead of the shipped ones.\n"
                                 "drop a .anselnn file into your Ansel config directory and it\n"
                                 "appears here; the edit records the file NAME, so it keeps\n"
                                 "pointing at the same model as the folder changes."));
   g_signal_connect(G_OBJECT(g->custom_model), "value-changed", G_CALLBACK(_custom_model_callback), self);
 
-  gtk_box_pack_start(GTK_BOX(box_raw), dt_ui_section_label_new(_("noise profile correction")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(box_raw), dt_ui_section_label_new(_("Noise profile correction")), FALSE, FALSE, 0);
 
   g->profile_label = dt_ui_label_new("");
   gtk_label_set_line_wrap(GTK_LABEL(g->profile_label), TRUE);
@@ -1832,16 +1832,16 @@ void gui_init(dt_iop_module_t *self)
   g->noise_level = dt_bauhaus_slider_from_params(self, "noise_level");
   dt_bauhaus_slider_set_digits(g->noise_level, 3);
   dt_bauhaus_slider_set_format(g->noise_level, "%");
-  gtk_widget_set_tooltip_text(g->noise_level, _("global scale on the assumed noise amplitude, relative to the\n"
+  gtk_widget_set_tooltip_text(g->noise_level, _("Global scale on the assumed noise amplitude, relative to the\n"
                                                 "calibrated noise for this camera at this ISO (100% trusts the\n"
                                                 "calibration). raise it if noise remains, lower it if fine\n"
                                                 "detail is eaten"));
 
   dt_gui_new_collapsible_section(&g->cs, "plugins/darkroom/rawdenoiseai/expand_channel",
-                                 _("per-channel corrections"), GTK_BOX(box_raw), GTK_PACK_START);
+                                 _("Per-channel corrections"), GTK_BOX(box_raw), GTK_PACK_START);
   self->gui->widget = GTK_WIDGET(g->cs.container); // sliders below pack into the section
 
-  const char *sigma_tooltip = _("per-channel correction of the camera noise profile, applied on top\n"
+  const char *sigma_tooltip = _("Per-channel correction of the camera noise profile, applied on top\n"
                                 "of the global correction. Profiles are measured after demosaicing,\n"
                                 "which averages away part of the noise — most on the dense green\n"
                                 "lattice — while this module sees the raw sensor noise at full\n"

@@ -75,8 +75,8 @@ typedef struct dt_iop_hotpixels_params_t
 {
   float strength;  // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.25
   float threshold; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.05
-  gboolean markfixed;  // $DEFAULT: FALSE $DESCRIPTION: "mark fixed pixels"
-  gboolean permissive; // $DEFAULT: FALSE $DESCRIPTION: "detect by 3 neighbors"
+  gboolean markfixed;  // $DEFAULT: FALSE $DESCRIPTION: "Mark fixed pixels"
+  gboolean permissive; // $DEFAULT: FALSE $DESCRIPTION: "Detect by 3 neighbors"
 } dt_iop_hotpixels_params_t;
 
 typedef struct dt_iop_hotpixels_gui_data_t
@@ -102,16 +102,16 @@ typedef struct dt_iop_hotpixels_global_data_t
 
 const char *name()
 {
-  return _("hot pixels");
+  return _("Hot pixels");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("remove abnormally bright pixels by dampening them with neighbours"),
-                                      _("corrective"),
-                                      _("linear, raw, scene-referred"),
-                                      _("reconstruction, raw"),
-                                      _("linear, raw, scene-referred"));
+  return dt_iop_set_description(self, _("Remove abnormally bright pixels by dampening them with neighbours"),
+                                      _("Corrective"),
+                                      _("Linear, raw, scene-referred"),
+                                      _("Reconstruction, raw"),
+                                      _("Linear, raw, scene-referred"));
 }
 
 
@@ -435,11 +435,11 @@ void gui_init(dt_iop_module_t *self)
 
   g->threshold = dt_bauhaus_slider_from_params(self, N_("threshold"));
   dt_bauhaus_slider_set_digits(g->threshold, 4);
-  gtk_widget_set_tooltip_text(g->threshold, _("lower threshold for hot pixel"));
+  gtk_widget_set_tooltip_text(g->threshold, _("Lower threshold for hot pixel"));
 
   g->strength = dt_bauhaus_slider_from_params(self, N_("strength"));
   dt_bauhaus_slider_set_digits(g->strength, 4);
-  gtk_widget_set_tooltip_text(g->strength, _("strength of hot pixel correction"));
+  gtk_widget_set_tooltip_text(g->strength, _("Strength of hot pixel correction"));
 
   // 3 neighbours
   g->permissive = GTK_TOGGLE_BUTTON(dt_bauhaus_toggle_from_params(self, "permissive"));
@@ -448,7 +448,7 @@ void gui_init(dt_iop_module_t *self)
   self->gui->widget = gtk_stack_new();
   gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
-  GtkWidget *label_non_raw = dt_ui_label_new(_("hot pixel correction\nonly works for raw images."));
+  GtkWidget *label_non_raw = dt_ui_label_new(_("Hot pixel correction\nonly works for raw images."));
 
   gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
   gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");

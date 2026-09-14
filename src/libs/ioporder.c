@@ -214,7 +214,7 @@ static const char *_ioporder_type_to_string(const dt_iop_buffer_type_t datatype)
       return _("8-bit integer");
     case TYPE_UNKNOWN:
     default:
-      return _("unknown type");
+      return _("Unknown type");
   }
 }
 
@@ -243,9 +243,9 @@ static const char *_ioporder_colorspace_to_string(const dt_iop_colorspace_type_t
     case IOP_CS_JZCZHZ:
       return _("JzCzHz");
     case IOP_CS_NONE:
-      return _("none");
+      return _("None");
     default:
-      return _("unknown colorspace");
+      return _("Unknown colorspace");
   }
 }
 
@@ -257,13 +257,13 @@ static const char *_ioporder_colorspace_to_string(const dt_iop_colorspace_type_t
  */
 static gchar *_ioporder_raw_flags_to_string(const dt_iop_buffer_dsc_t *dsc)
 {
-  if(IS_NULL_PTR(dsc)) return g_strdup(_("no runtime descriptor"));
+  if(IS_NULL_PTR(dsc)) return g_strdup(_("No runtime descriptor"));
 
   if(dsc->cst != IOP_CS_RAW)
   {
     if(dsc->filters == 9u) return g_strdup(_("X-Trans passthrough"));
     if(dsc->filters != 0u) return g_strdup(_("Bayer passthrough"));
-    return g_strdup(_("no RAW flags"));
+    return g_strdup(_("No RAW flags"));
   }
 
   if(dsc->filters == 9u) return g_strdup(_("RAW X-Trans"));
@@ -292,7 +292,7 @@ static gchar *_ioporder_descriptor_to_text(const char *prefix, const dt_iop_buff
   gchar *text = g_strdup_printf(_("%s:\n\t- %s\n\t- %u channels\n\t- %s\n"
                                   "\t- max RGB:\n\t\t%.3f\n\t\t%.3f\n\t\t%.3f\n\t- %s"),
                                 prefix, _ioporder_type_to_string(dsc->datatype), dsc->channels,
-                                display_colorspace ? display_colorspace : _("runtime unavailable"),
+                                display_colorspace ? display_colorspace : _("Runtime unavailable"),
                                 dsc->processed_maximum[0], dsc->processed_maximum[1], dsc->processed_maximum[2],
                                 raw_flags);
   dt_free(raw_flags);
@@ -359,12 +359,12 @@ static const char *_ioporder_runtime_band_label(const dt_ioporder_runtime_band_k
     case DT_IOPORDER_RUNTIME_BAND_LAB:
       return _("CIE Lab 1976");
     case DT_IOPORDER_RUNTIME_BAND_UNAVAILABLE:
-      return _("runtime unavailable");
+      return _("Runtime unavailable");
     case DT_IOPORDER_RUNTIME_BAND_OTHER:
-      return dsc ? _ioporder_colorspace_to_string(dsc->cst) : _("runtime unavailable");
+      return dsc ? _ioporder_colorspace_to_string(dsc->cst) : _("Runtime unavailable");
     case DT_IOPORDER_RUNTIME_BAND_NONE:
     default:
-      return _("runtime unavailable");
+      return _("Runtime unavailable");
   }
 }
 
@@ -472,7 +472,7 @@ static const dt_iop_order_iccprofile_info_t *_ioporder_runtime_band_profile_info
 static gchar *_ioporder_runtime_band_text(const char *label,
                                           const dt_iop_order_iccprofile_info_t *profile_info)
 {
-  if(IS_NULL_PTR(label)) return g_strdup(_("runtime unavailable"));
+  if(IS_NULL_PTR(label)) return g_strdup(_("Runtime unavailable"));
   if(IS_NULL_PTR(profile_info) || profile_info->type == DT_COLORSPACE_NONE) return g_strdup(label);
 
   const char *profile_name = dt_colorspaces_get_name(profile_info->type, profile_info->filename);
@@ -568,7 +568,7 @@ static void _ioporder_refresh_toolbar(dt_lib_module_t *self)
 
   d->refreshing_toolbar = TRUE;
   gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(d->preset_combo));
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d->preset_combo), "__custom__", _("custom order"));
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d->preset_combo), "__custom__", _("Custom order"));
 
   gchar *active_id = g_strdup("__custom__");
 
@@ -812,9 +812,9 @@ static dt_ioporder_graph_node_t *_ioporder_create_graph_node(dt_iop_module_t *mo
   gtk_widget_set_valign(mask, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(presets, GTK_ALIGN_CENTER);
 
-  gtk_widget_set_tooltip_text(enable, _("toggle module"));
-  gtk_widget_set_tooltip_text(mask, _("display mask"));
-  gtk_widget_set_tooltip_text(presets, _("module presets"));
+  gtk_widget_set_tooltip_text(enable, _("Toggle module"));
+  gtk_widget_set_tooltip_text(mask, _("Display mask"));
+  gtk_widget_set_tooltip_text(presets, _("Module presets"));
 
   gtk_box_pack_start(GTK_BOX(header), enable, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(header), label, TRUE, TRUE, 0);
@@ -988,14 +988,14 @@ static void _ioporder_rebuild_graph(dt_lib_module_t *self)
   if(module_header_center_y > 0)
     endpoint_y = module_header_center_y - endpoint_height / 2;
 
-  dt_ioporder_graph_node_t *base_node = _ioporder_create_endpoint_node(_("base image"));
+  dt_ioporder_graph_node_t *base_node = _ioporder_create_endpoint_node(_("Base image"));
   d->nodes = g_list_prepend(d->nodes, base_node);
   gtk_fixed_put(GTK_FIXED(d->graph_fixed), base_node->event_box, base_x, endpoint_y);
   gtk_widget_show_all(base_node->event_box);
   visible_count++;
 
   screen_x = x;
-  dt_ioporder_graph_node_t *screen_node = _ioporder_create_endpoint_node(_("screen"));
+  dt_ioporder_graph_node_t *screen_node = _ioporder_create_endpoint_node(_("Screen"));
   d->nodes = g_list_append(d->nodes, screen_node);
   gtk_fixed_put(GTK_FIXED(d->graph_fixed), screen_node->event_box, screen_x, endpoint_y);
   gtk_widget_show_all(screen_node->event_box);
@@ -1525,7 +1525,7 @@ static void _ioporder_add_preset(GtkButton *button, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
   GtkWindow *parent = GTK_WINDOW(d->window ? d->window : dt_gui_main_window());
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("save module order preset"), parent,
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Save module order preset"), parent,
                                                   GTK_DIALOG_DESTROY_WITH_PARENT,
                                                   _("_cancel"), GTK_RESPONSE_CANCEL,
                                                   _("_save"), GTK_RESPONSE_ACCEPT, NULL);
@@ -1534,7 +1534,7 @@ static void _ioporder_add_preset(GtkButton *button, gpointer user_data)
 
   gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
   gtk_widget_set_hexpand(entry, TRUE);
-  gtk_widget_set_tooltip_text(entry, _("preset name"));
+  gtk_widget_set_tooltip_text(entry, _("Preset name"));
   gtk_box_pack_start(GTK_BOX(content), entry, FALSE, FALSE, DT_PIXEL_APPLY_DPI(8));
   gtk_widget_show_all(dialog);
 
@@ -1609,15 +1609,15 @@ static void _ioporder_init_popup(dt_lib_module_t *self)
   GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *label = gtk_label_new("");
-  GtkWidget *add_preset = gtk_button_new_with_label(_("add preset"));
+  GtkWidget *add_preset = gtk_button_new_with_label(_("Add preset"));
   GtkWidget *preset_combo = gtk_combo_box_text_new();
-  GtkWidget *reset = gtk_button_new_with_label(_("reset"));
+  GtkWidget *reset = gtk_button_new_with_label(_("Reset"));
   GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
   GtkWidget *overlay = gtk_overlay_new();
   GtkWidget *drawing = gtk_drawing_area_new();
   GtkWidget *fixed = gtk_fixed_new();
 
-  gtk_window_set_title(GTK_WINDOW(window), _("module order"));
+  gtk_window_set_title(GTK_WINDOW(window), _("Module order"));
   gtk_window_set_default_size(GTK_WINDOW(window), DT_PIXEL_APPLY_DPI(1120), DT_PIXEL_APPLY_DPI(440));
   gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(dt_gui_main_window()));
   gtk_window_set_destroy_with_parent(GTK_WINDOW(window), TRUE);
@@ -1720,7 +1720,7 @@ static void _ioporder_presets_changed_callback(gpointer instance, gpointer modul
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("module order");
+  return _("Module order");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -1802,20 +1802,20 @@ void init_presets(dt_lib_module_t *self)
 
   list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_LEGACY);
   params = dt_ioppr_serialize_iop_order_list(list, &size);
-  dt_lib_presets_add(_("legacy"), self->plugin_name, self->version(), params, (int32_t)size, TRUE);
+  dt_lib_presets_add(_("Legacy"), self->plugin_name, self->version(), params, (int32_t)size, TRUE);
   dt_free(params);
   g_list_free_full(list, dt_free_gpointer);
 
   list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_V30);
   params = dt_ioppr_serialize_iop_order_list(list, &size);
-  dt_lib_presets_add(_("v3.0 for RAW input (default)"), self->plugin_name, self->version(), params,
+  dt_lib_presets_add(_("V3.0 for RAW input (default)"), self->plugin_name, self->version(), params,
                      (int32_t)size, TRUE);
   dt_free(params);
   g_list_free_full(list, dt_free_gpointer);
 
   list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_V30_JPG);
   params = dt_ioppr_serialize_iop_order_list(list, &size);
-  dt_lib_presets_add(_("v3.0 for JPEG/non-RAW input"), self->plugin_name, self->version(), params,
+  dt_lib_presets_add(_("V3.0 for JPEG/non-RAW input"), self->plugin_name, self->version(), params,
                      (int32_t)size, TRUE);
   dt_free(params);
   g_list_free_full(list, dt_free_gpointer);

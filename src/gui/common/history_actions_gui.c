@@ -104,7 +104,7 @@ gboolean delete_history_callback(GtkAccelGroup *group, GObject *acceleratable, g
     GtkWidget *message_area = gtk_message_dialog_get_message_area(GTK_MESSAGE_DIALOG(dialog));
     GtkWidget *ask_check = gtk_check_button_new_with_label(_("Always ask"));
     gtk_widget_set_tooltip_text(ask_check,
-        _("when unchecked, history will be deleted silently from now on without this confirmation.\n"
+        _("When unchecked, history will be deleted silently from now on without this confirmation.\n"
           "you can turn it back on from preferences."));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ask_check), TRUE);
     gtk_box_pack_start(GTK_BOX(message_area), ask_check, FALSE, FALSE, 6);

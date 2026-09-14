@@ -128,22 +128,22 @@ typedef struct dt_iop_hazeremoval_global_data_t
 
 const char *name()
 {
-  return _("haze removal");
+  return _("Haze removal");
 }
 
 
 const char *aliases()
 {
-  return _("dehaze|defog|smoke|smog");
+  return _("Dehaze|defog|smoke|smog");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("remove fog and atmospheric hazing from pictures"),
-                                      _("corrective"),
-                                      _("linear, RGB, scene-referred"),
-                                      _("frequential, RGB"),
-                                      _("linear, RGB, scene-referred"));
+  return dt_iop_set_description(self, _("Remove fog and atmospheric hazing from pictures"),
+                                      _("Corrective"),
+                                      _("Linear, RGB, scene-referred"),
+                                      _("Frequential, RGB"),
+                                      _("Linear, RGB, scene-referred"));
 }
 
 int flags()
@@ -256,11 +256,11 @@ void gui_init(dt_iop_module_t *self)
   g->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   g->strength = dt_bauhaus_slider_from_params(self, N_("strength"));
-  gtk_widget_set_tooltip_text(g->strength, _("amount of haze reduction"));
+  gtk_widget_set_tooltip_text(g->strength, _("Amount of haze reduction"));
 
   g->distance = dt_bauhaus_slider_from_params(self, N_("distance"));
   dt_bauhaus_slider_set_digits(g->distance, 3);
-  gtk_widget_set_tooltip_text(g->distance, _("limit haze removal up to a specific spatial depth"));
+  gtk_widget_set_tooltip_text(g->distance, _("Limit haze removal up to a specific spatial depth"));
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_HISTORY_RESYNC,
                                   G_CALLBACK(_history_resync_callback), self);

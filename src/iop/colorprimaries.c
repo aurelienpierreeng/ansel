@@ -64,9 +64,9 @@ DT_MODULE_INTROSPECTION(1, dt_iop_colorprimaries_params_t)
 
 typedef enum dt_iop_colorprimaries_interpolation_t
 {
-  DT_IOP_COLORPRIMARIES_TETRAHEDRAL = 0, // $DESCRIPTION: "tetrahedral"
-  DT_IOP_COLORPRIMARIES_TRILINEAR = 1,   // $DESCRIPTION: "trilinear"
-  DT_IOP_COLORPRIMARIES_PYRAMID = 2,     // $DESCRIPTION: "pyramid"
+  DT_IOP_COLORPRIMARIES_TETRAHEDRAL = 0, // $DESCRIPTION: "Tetrahedral"
+  DT_IOP_COLORPRIMARIES_TRILINEAR = 1,   // $DESCRIPTION: "Trilinear"
+  DT_IOP_COLORPRIMARIES_PYRAMID = 2,     // $DESCRIPTION: "Pyramid"
 } dt_iop_colorprimaries_interpolation_t;
 
 typedef enum dt_iop_colorprimaries_node_t
@@ -87,16 +87,16 @@ typedef struct dt_iop_colorprimaries_edge_t
 
 typedef struct dt_iop_colorprimaries_params_t
 {
-  float white_level; // $MIN: -2.0 $MAX: 16.0 $DEFAULT: 1.0 $DESCRIPTION: "white level"
-  float gamut_coverage; // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 67.0 $DESCRIPTION: "gamut coverage"
-  float sigma_L; // $MIN: 1.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "brightness smoothing"
-  float sigma_rho; // $MIN: 0.01 $MAX: 2.0 $DEFAULT: 0.70710678 $DESCRIPTION: "saturation smoothing"
-  float sigma_theta; // $MIN: 0.01 $MAX: 6.28318531 $DEFAULT: 0.70710678 $DESCRIPTION: "hue smoothing"
-  float neutral_protection; // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 0.0 $DESCRIPTION: "neutral protection"
-  dt_iop_colorprimaries_interpolation_t interpolation; // $DEFAULT: DT_IOP_COLORPRIMARIES_TETRAHEDRAL $DESCRIPTION: "interpolation"
-  float hue[DT_IOP_COLORPRIMARIES_NODE_COUNT]; // $MIN: -180.0 $MAX: 180.0 $DEFAULT: 0.0 $DESCRIPTION: "hue"
-  float saturation[DT_IOP_COLORPRIMARIES_NODE_COUNT]; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "saturation"
-  float brightness[DT_IOP_COLORPRIMARIES_NODE_COUNT]; // $MIN: -0.25 $MAX: 0.25 $DEFAULT: 0.0 $DESCRIPTION: "brightness"
+  float white_level; // $MIN: -2.0 $MAX: 16.0 $DEFAULT: 1.0 $DESCRIPTION: "White level"
+  float gamut_coverage; // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 67.0 $DESCRIPTION: "Gamut coverage"
+  float sigma_L; // $MIN: 1.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "Brightness smoothing"
+  float sigma_rho; // $MIN: 0.01 $MAX: 2.0 $DEFAULT: 0.70710678 $DESCRIPTION: "Saturation smoothing"
+  float sigma_theta; // $MIN: 0.01 $MAX: 6.28318531 $DEFAULT: 0.70710678 $DESCRIPTION: "Hue smoothing"
+  float neutral_protection; // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 0.0 $DESCRIPTION: "Neutral protection"
+  dt_iop_colorprimaries_interpolation_t interpolation; // $DEFAULT: DT_IOP_COLORPRIMARIES_TETRAHEDRAL $DESCRIPTION: "Interpolation"
+  float hue[DT_IOP_COLORPRIMARIES_NODE_COUNT]; // $MIN: -180.0 $MAX: 180.0 $DEFAULT: 0.0 $DESCRIPTION: "Hue"
+  float saturation[DT_IOP_COLORPRIMARIES_NODE_COUNT]; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "Saturation"
+  float brightness[DT_IOP_COLORPRIMARIES_NODE_COUNT]; // $MIN: -0.25 $MAX: 0.25 $DEFAULT: 0.0 $DESCRIPTION: "Brightness"
 } dt_iop_colorprimaries_params_t;
 
 typedef struct dt_iop_colorprimaries_data_t
@@ -155,7 +155,7 @@ typedef struct dt_iop_colorprimaries_gui_data_t
 
 const char *name()
 {
-  return _("color primaries");
+  return _("Color primaries");
 }
 
 const char *aliases()
@@ -166,10 +166,10 @@ const char *aliases()
 const char **description(struct dt_iop_module_t *self)
 {
   return dt_iop_set_description(self,
-                                _("edit RGB/CYM primary control nodes in dt UCS and interpolate their RGB shifts "
+                                _("Edit RGB/CYM primary control nodes in dt UCS and interpolate their RGB shifts "
                                   "through a cylindrical local field"),
-                                _("creative"), _("linear, RGB, display-referred"), _("linear, RGB"),
-                                _("linear, RGB, display-referred"));
+                                _("Creative"), _("Linear, RGB, display-referred"), _("Linear, RGB"),
+                                _("Linear, RGB, display-referred"));
 }
 
 int default_group()
@@ -203,18 +203,18 @@ static inline const char *_node_name(const dt_iop_colorprimaries_node_t node)
   switch(node)
   {
     case DT_IOP_COLORPRIMARIES_YELLOW:
-      return _("yellow");
+      return _("Yellow");
     case DT_IOP_COLORPRIMARIES_GREEN:
-      return _("green");
+      return _("Green");
     case DT_IOP_COLORPRIMARIES_CYAN:
-      return _("cyan");
+      return _("Cyan");
     case DT_IOP_COLORPRIMARIES_BLUE:
-      return _("blue");
+      return _("Blue");
     case DT_IOP_COLORPRIMARIES_MAGENTA:
-      return _("magenta");
+      return _("Magenta");
     case DT_IOP_COLORPRIMARIES_RED:
     default:
-      return _("red");
+      return _("Red");
   }
 }
 
@@ -1272,7 +1272,7 @@ void gui_init(dt_iop_module_t *self)
   dt_ui_notebook_set_picker_owner(g->tabs, self);
 
   GtkWidget *colors_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  GtkWidget *colors_tab = gtk_label_new(_("colors"));
+  GtkWidget *colors_tab = gtk_label_new(_("Colors"));
   dt_gui_add_class(colors_tab, "dt_modulegroups_tab_label");
   gtk_notebook_append_page(g->tabs, colors_page, colors_tab);
   gtk_container_child_set(GTK_CONTAINER(g->tabs), colors_page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
@@ -1290,17 +1290,17 @@ void gui_init(dt_iop_module_t *self)
 
     _new_section_label(colors_page, _node_name((dt_iop_colorprimaries_node_t)node));
     g->node_hue[node] = dt_bauhaus_slider_from_params(self, hue_name);
-    dt_bauhaus_widget_set_label(g->node_hue[node], N_("hue"));
+    dt_bauhaus_widget_set_label(g->node_hue[node], N_("Hue"));
     dt_bauhaus_slider_set_format(g->node_hue[node], _("°"));
     dt_bauhaus_slider_set_default(g->node_hue[node], defaults->hue[node]);
 
     g->node_saturation[node] = dt_bauhaus_slider_from_params(self, saturation_name);
-    dt_bauhaus_widget_set_label(g->node_saturation[node], N_("saturation"));
+    dt_bauhaus_widget_set_label(g->node_saturation[node], N_("Saturation"));
     dt_bauhaus_slider_set_format(g->node_saturation[node], _(" %"));
     dt_bauhaus_slider_set_default(g->node_saturation[node], defaults->saturation[node]);
 
     g->node_brightness[node] = dt_bauhaus_slider_from_params(self, brightness_name);
-    dt_bauhaus_widget_set_label(g->node_brightness[node], N_("brightness"));
+    dt_bauhaus_widget_set_label(g->node_brightness[node], N_("Brightness"));
     dt_bauhaus_slider_set_format(g->node_brightness[node], _(" %"));
     dt_bauhaus_slider_set_soft_range(g->node_brightness[node], -0.25f, 0.25f);
     dt_bauhaus_slider_set_default(g->node_brightness[node], defaults->brightness[node]);
@@ -1308,7 +1308,7 @@ void gui_init(dt_iop_module_t *self)
   self->gui->widget = module_root;
 
   GtkWidget *options_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  GtkWidget *options_tab = gtk_label_new(_("options"));
+  GtkWidget *options_tab = gtk_label_new(_("Options"));
   dt_gui_add_class(options_tab, "dt_modulegroups_tab_label");
   gtk_notebook_append_page(g->tabs, options_page, options_tab);
   gtk_container_child_set(GTK_CONTAINER(g->tabs), options_page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);

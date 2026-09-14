@@ -712,7 +712,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
       if(schedule.ensure_worker_running && self && g
          && !dt_drawlayer_worker_ensure_running(self, g->stroke.worker))
       {
-        dt_control_log(_("failed to start drawing worker"));
+        dt_control_log(_("Failed to start drawing worker"));
         result.ok = FALSE;
       }
       if(schedule.sync_widget_cache && result.ok
@@ -754,7 +754,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
       if(result.ok && schedule.ensure_worker_running && self && g
          && !dt_drawlayer_worker_ensure_running(self, g->stroke.worker))
       {
-        dt_control_log(_("failed to start drawing worker"));
+        dt_control_log(_("Failed to start drawing worker"));
         result.ok = FALSE;
       }
       if(schedule.queue_redraw_center) dt_control_queue_redraw_center();
@@ -786,7 +786,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         _update_manager_information(state, &begin, host, NULL);
         if(self && !dt_drawlayer_flush_layer_cache(self))
         {
-          dt_control_log(_("failed to write drawing layer sidecar"));
+          dt_control_log(_("Failed to write drawing layer sidecar"));
           result.ok = FALSE;
         }
         const dt_drawlayer_runtime_update_request_t end = {
@@ -813,7 +813,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
       if(schedule.ensure_worker_running && self && g
          && !dt_drawlayer_worker_ensure_running(self, g->stroke.worker))
       {
-        dt_control_log(_("failed to start drawing worker"));
+        dt_control_log(_("Failed to start drawing worker"));
         result.ok = FALSE;
       }
       break;
@@ -831,7 +831,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         {
           if(!dt_drawlayer_worker_ensure_running(self, g->stroke.worker))
           {
-            dt_control_log(_("failed to start drawing worker"));
+            dt_control_log(_("Failed to start drawing worker"));
             result.ok = FALSE;
           }
         }
@@ -846,7 +846,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         if(!dt_drawlayer_worker_ensure_running(self, g->stroke.worker)
            && request->raw_input_kind != DT_DRAWLAYER_RUNTIME_RAW_INPUT_SAMPLE)
         {
-          dt_control_log(_("failed to start drawing worker"));
+          dt_control_log(_("Failed to start drawing worker"));
           result.ok = FALSE;
         }
       }

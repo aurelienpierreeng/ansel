@@ -125,7 +125,7 @@ gboolean dt_database_show_error(void)
  * buttons say is ours. */
 static dt_database_response_t _prompt_upgrade(const dt_database_prompt_context_t *context)
 {
-  char *label_text = g_markup_printf_escaped(_("the database schema has to be upgraded for\n"
+  char *label_text = g_markup_printf_escaped(_("The database schema has to be upgraded for\n"
                                                "\n"
                                                "<span style='italic'>%s</span>\n"
                                                "\nthis might take a long time in case of a large database\n\n"
@@ -133,8 +133,8 @@ static dt_database_response_t _prompt_upgrade(const dt_database_prompt_context_t
                                              context->dbfilename);
 
   const gboolean proceed =
-    dt_gui_show_standalone_yes_no_dialog(_("ansel - schema migration"), label_text,
-                                         _("close Ansel"), _("upgrade database"));
+    dt_gui_show_standalone_yes_no_dialog(_("Ansel - schema migration"), label_text,
+                                         _("Close Ansel"), _("Upgrade database"));
 
   dt_free(label_text);
   return proceed ? DT_DATABASE_RESPONSE_PROCEED : DT_DATABASE_RESPONSE_CLOSE;
@@ -147,14 +147,14 @@ static dt_database_response_t _prompt_maintenance(const dt_database_prompt_conte
 {
   const char *later_info = "";
   if(context->ask_on_startup)
-    later_info = _("click later to be asked on next startup");
+    later_info = _("Click later to be asked on next startup");
   else if(context->ask_on_close && !context->at_close)
-    later_info = _("click later to be asked when closing Ansel");
+    later_info = _("Click later to be asked when closing Ansel");
   else if(context->ask_on_close)
-    later_info = _("click later to be asked next time when closing Ansel");
+    later_info = _("Click later to be asked next time when closing Ansel");
 
   char *size_info = g_format_size(context->reclaimable_bytes);
-  char *label_text = g_markup_printf_escaped(_("the database could use some maintenance\n"
+  char *label_text = g_markup_printf_escaped(_("The database could use some maintenance\n"
                                                "\n"
                                                "there's <span style='italic'>%s</span> to be freed"
                                                "\n\n"
@@ -164,8 +164,8 @@ static dt_database_response_t _prompt_maintenance(const dt_database_prompt_conte
                                              size_info, later_info);
 
   const gboolean proceed =
-    dt_gui_show_standalone_yes_no_dialog(_("ansel - schema maintenance"), label_text,
-                                         _("later"), _("yes"));
+    dt_gui_show_standalone_yes_no_dialog(_("Ansel - schema maintenance"), label_text,
+                                         _("Later"), _("Yes"));
 
   dt_free(label_text);
   dt_free(size_info);
@@ -208,30 +208,30 @@ static dt_database_response_t _database_prompt(const dt_database_prompt_context_
     const char *label_options;
     if(snapshot_available)
     {
-      dialog = gtk_dialog_new_with_buttons(_("ansel - error opening database"), NULL, dflags,
-                                           _("close Ansel"), GTK_RESPONSE_CLOSE,
-                                           _("attempt restore"), GTK_RESPONSE_ACCEPT,
-                                           _("delete database"), GTK_RESPONSE_REJECT, NULL);
+      dialog = gtk_dialog_new_with_buttons(_("Ansel - error opening database"), NULL, dflags,
+                                           _("Close Ansel"), GTK_RESPONSE_CLOSE,
+                                           _("Attempt restore"), GTK_RESPONSE_ACCEPT,
+                                           _("Delete database"), GTK_RESPONSE_REJECT, NULL);
       gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
-      label_options = _("do you want to close Ansel now to manually restore\n"
+      label_options = _("Do you want to close Ansel now to manually restore\n"
                         "the database from a backup, attempt an automatic restore\n"
                         "from the most recent snapshot or delete the corrupted database\n"
                         "and start with a new one?");
     }
     else
     {
-      dialog = gtk_dialog_new_with_buttons(_("ansel - error opening database"), NULL, dflags,
-                                           _("close Ansel"), GTK_RESPONSE_CLOSE,
-                                           _("delete database"), GTK_RESPONSE_REJECT, NULL);
+      dialog = gtk_dialog_new_with_buttons(_("Ansel - error opening database"), NULL, dflags,
+                                           _("Close Ansel"), GTK_RESPONSE_CLOSE,
+                                           _("Delete database"), GTK_RESPONSE_REJECT, NULL);
       gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
-      label_options = _("do you want to close Ansel now to manually restore\n"
+      label_options = _("Do you want to close Ansel now to manually restore\n"
                         "the database from a backup or delete the corrupted database\n"
                         "and start with a new one?");
     }
 
     // quick_check is sqlite output, i.e. arbitrary text landing in a markup label. Escaping
     // is the handler's job because only the handler knows it is markup at all.
-    label_text = g_markup_printf_escaped(_("an error has occurred while trying to open the database from\n"
+    label_text = g_markup_printf_escaped(_("An error has occurred while trying to open the database from\n"
                                            "\n"
                                            "<span style='italic'>%s</span>\n"
                                            "\n"

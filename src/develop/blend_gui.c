@@ -707,7 +707,7 @@ static int _blendop_blendif_disp_alternative_worker(GtkWidget *widget, dt_iop_mo
 
   dtgtk_gradient_slider_multivalue_set_scale_callback(slider, (mode == 1) ? scale_callback : NULL);
   gchar *text = g_strdup_printf("%s%s",
-                                (in_out == 0) ? _("input") : _("output"),
+                                (in_out == 0) ? _("Input") : _("Output"),
                                 (mode == 1) ? label : "");
   gtk_label_set_text(data->filter[in_out].head, text);
   dt_free(text);
@@ -2962,7 +2962,7 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
       || module_cst == DEVELOP_BLEND_CS_RGB_SCENE)
   {
 
-    mi = gtk_menu_item_new_with_label(_("reset to default blend colorspace"));
+    mi = gtk_menu_item_new_with_label(_("Reset to default blend colorspace"));
     g_object_set_data_full(G_OBJECT(mi), "dt-blend-cst", GINT_TO_POINTER(DEVELOP_BLEND_CS_NONE), NULL);
     g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
@@ -3009,13 +3009,13 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
 
     if(bd->output_channels_shown)
     {
-      mi = gtk_menu_item_new_with_label(_("reset and hide output channels"));
+      mi = gtk_menu_item_new_with_label(_("Reset and hide output channels"));
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_hide_output_channels), module);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
     }
     else
     {
-      mi = gtk_menu_item_new_with_label(_("show output channels"));
+      mi = gtk_menu_item_new_with_label(_("Show output channels"));
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_show_output_channels), module);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
     }
@@ -3374,83 +3374,83 @@ static gboolean _blendop_blendif_key_press(GtkWidget *widget, GdkEventKey *event
 #define COLORSTOPS(gradient) sizeof(gradient) / sizeof(dt_iop_gui_blendif_colorstop_t), gradient
 
 const dt_iop_gui_blendif_channel_t Lab_channels[]
-    = { { N_("L"), N_("sliders for L channel"), 1.0f / 100.0f, COLORSTOPS(_gradient_L), TRUE, 0.0f,
+    = { { N_("L"), N_("Sliders for L channel"), 1.0f / 100.0f, COLORSTOPS(_gradient_L), TRUE, 0.0f,
           { DEVELOP_BLENDIF_L_in, DEVELOP_BLENDIF_L_out }, DT_DEV_PIXELPIPE_DISPLAY_L,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("lightness") },
-        { N_("a"), N_("sliders for a channel"), 1.0f / 256.0f, COLORSTOPS(_gradient_a), TRUE, 0.0f,
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Lightness") },
+        { N_("A"), N_("Sliders for a channel"), 1.0f / 256.0f, COLORSTOPS(_gradient_a), TRUE, 0.0f,
           { DEVELOP_BLENDIF_A_in, DEVELOP_BLENDIF_A_out }, DT_DEV_PIXELPIPE_DISPLAY_a,
-          _blendif_scale_print_ab, _blendop_blendif_disp_alternative_mag, N_("green/red") },
-        { N_("b"), N_("sliders for b channel"), 1.0f / 256.0f, COLORSTOPS(_gradient_b), TRUE, 0.0f,
+          _blendif_scale_print_ab, _blendop_blendif_disp_alternative_mag, N_("Green/red") },
+        { N_("B"), N_("Sliders for b channel"), 1.0f / 256.0f, COLORSTOPS(_gradient_b), TRUE, 0.0f,
           { DEVELOP_BLENDIF_B_in, DEVELOP_BLENDIF_B_out }, DT_DEV_PIXELPIPE_DISPLAY_b,
-          _blendif_scale_print_ab, _blendop_blendif_disp_alternative_mag, N_("blue/yellow") },
-        { N_("C"), N_("sliders for chroma channel (of LCh)"), 1.0f / 100.0f, COLORSTOPS(_gradient_chroma),
+          _blendif_scale_print_ab, _blendop_blendif_disp_alternative_mag, N_("Blue/yellow") },
+        { N_("C"), N_("Sliders for chroma channel (of LCh)"), 1.0f / 100.0f, COLORSTOPS(_gradient_chroma),
           TRUE, 0.0f,
           { DEVELOP_BLENDIF_C_in, DEVELOP_BLENDIF_C_out }, DT_DEV_PIXELPIPE_DISPLAY_LCH_C,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("saturation") },
-        { N_("h"), N_("sliders for hue channel (of LCh)"), 1.0f / 360.0f, COLORSTOPS(_gradient_LCh_hue),
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Saturation") },
+        { N_("H"), N_("Sliders for hue channel (of LCh)"), 1.0f / 360.0f, COLORSTOPS(_gradient_LCh_hue),
           FALSE, 0.0f,
           { DEVELOP_BLENDIF_h_in, DEVELOP_BLENDIF_h_out }, DT_DEV_PIXELPIPE_DISPLAY_LCH_h,
-          _blendif_scale_print_hue, NULL, N_("hue") },
+          _blendif_scale_print_hue, NULL, N_("Hue") },
         { NULL } };
 
 const dt_iop_gui_blendif_channel_t rgb_channels[]
-    = { { N_("g"), N_("sliders for gray value"), 1.0f / 255.0f, COLORSTOPS(_gradient_gray), TRUE, 0.0f,
+    = { { N_("G"), N_("Sliders for gray value"), 1.0f / 255.0f, COLORSTOPS(_gradient_gray), TRUE, 0.0f,
           { DEVELOP_BLENDIF_GRAY_in, DEVELOP_BLENDIF_GRAY_out }, DT_DEV_PIXELPIPE_DISPLAY_GRAY,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("gray") },
-        { N_("R"), N_("sliders for red channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_red), TRUE, 0.0f,
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Gray") },
+        { N_("R"), N_("Sliders for red channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_red), TRUE, 0.0f,
           { DEVELOP_BLENDIF_RED_in, DEVELOP_BLENDIF_RED_out }, DT_DEV_PIXELPIPE_DISPLAY_R,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("red") },
-        { N_("G"), N_("sliders for green channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_green), TRUE, 0.0f,
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Red") },
+        { N_("G"), N_("Sliders for green channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_green), TRUE, 0.0f,
           { DEVELOP_BLENDIF_GREEN_in, DEVELOP_BLENDIF_GREEN_out }, DT_DEV_PIXELPIPE_DISPLAY_G,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("green") },
-        { N_("B"), N_("sliders for blue channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_blue), TRUE, 0.0f,
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Green") },
+        { N_("B"), N_("Sliders for blue channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_blue), TRUE, 0.0f,
           { DEVELOP_BLENDIF_BLUE_in, DEVELOP_BLENDIF_BLUE_out }, DT_DEV_PIXELPIPE_DISPLAY_B,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("blue") },
-        { N_("H"), N_("sliders for hue channel (of HSL)"), 1.0f / 360.0f, COLORSTOPS(_gradient_HSL_hue),
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Blue") },
+        { N_("H"), N_("Sliders for hue channel (of HSL)"), 1.0f / 360.0f, COLORSTOPS(_gradient_HSL_hue),
           FALSE, 0.0f,
           { DEVELOP_BLENDIF_H_in, DEVELOP_BLENDIF_H_out }, DT_DEV_PIXELPIPE_DISPLAY_HSL_H,
-          _blendif_scale_print_hue, NULL, N_("hue") },
-        { N_("S"), N_("sliders for chroma channel (of HSL)"), 1.0f / 100.0f, COLORSTOPS(_gradient_chroma),
+          _blendif_scale_print_hue, NULL, N_("Hue") },
+        { N_("S"), N_("Sliders for chroma channel (of HSL)"), 1.0f / 100.0f, COLORSTOPS(_gradient_chroma),
           FALSE, 0.0f,
           { DEVELOP_BLENDIF_S_in, DEVELOP_BLENDIF_S_out }, DT_DEV_PIXELPIPE_DISPLAY_HSL_S,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("chroma") },
-        { N_("L"), N_("sliders for value channel (of HSL)"), 1.0f / 100.0f, COLORSTOPS(_gradient_gray),
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Chroma") },
+        { N_("L"), N_("Sliders for value channel (of HSL)"), 1.0f / 100.0f, COLORSTOPS(_gradient_gray),
           FALSE, 0.0f,
           { DEVELOP_BLENDIF_l_in, DEVELOP_BLENDIF_l_out }, DT_DEV_PIXELPIPE_DISPLAY_HSL_l,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("luminance") },
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Luminance") },
         { NULL } };
 
 const dt_iop_gui_blendif_channel_t rgbj_channels[]
-    = { { N_("g"), N_("sliders for gray value"), 1.0f / 255.0f, COLORSTOPS(_gradient_gray), TRUE, 0.0f,
+    = { { N_("G"), N_("Sliders for gray value"), 1.0f / 255.0f, COLORSTOPS(_gradient_gray), TRUE, 0.0f,
           { DEVELOP_BLENDIF_GRAY_in, DEVELOP_BLENDIF_GRAY_out }, DT_DEV_PIXELPIPE_DISPLAY_GRAY,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("gray") },
-        { N_("R"), N_("sliders for red channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_red), TRUE, 0.0f,
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Gray") },
+        { N_("R"), N_("Sliders for red channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_red), TRUE, 0.0f,
           { DEVELOP_BLENDIF_RED_in, DEVELOP_BLENDIF_RED_out }, DT_DEV_PIXELPIPE_DISPLAY_R,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("red") },
-        { N_("G"), N_("sliders for green channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_green), TRUE, 0.0f,
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Red") },
+        { N_("G"), N_("Sliders for green channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_green), TRUE, 0.0f,
           { DEVELOP_BLENDIF_GREEN_in, DEVELOP_BLENDIF_GREEN_out }, DT_DEV_PIXELPIPE_DISPLAY_G,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("green") },
-        { N_("B"), N_("sliders for blue channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_blue), TRUE, 0.0f,
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Green") },
+        { N_("B"), N_("Sliders for blue channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_blue), TRUE, 0.0f,
           { DEVELOP_BLENDIF_BLUE_in, DEVELOP_BLENDIF_BLUE_out }, DT_DEV_PIXELPIPE_DISPLAY_B,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("blue") },
-        { N_("Jz"), N_("sliders for value channel (of JzCzhz)"), 1.0f / 100.0f, COLORSTOPS(_gradient_gray),
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Blue") },
+        { N_("Jz"), N_("Sliders for value channel (of JzCzhz)"), 1.0f / 100.0f, COLORSTOPS(_gradient_gray),
           TRUE, -6.64385619f, // cf. _blend_init_blendif_boost_parameters
           { DEVELOP_BLENDIF_Jz_in, DEVELOP_BLENDIF_Jz_out }, DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Jz,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("luminance") },
-        { N_("Cz"), N_("sliders for chroma channel (of JzCzhz)"), 1.0f / 100.0f, COLORSTOPS(_gradient_chroma),
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Luminance") },
+        { N_("Cz"), N_("Sliders for chroma channel (of JzCzhz)"), 1.0f / 100.0f, COLORSTOPS(_gradient_chroma),
           TRUE, -6.64385619f, // cf. _blend_init_blendif_boost_parameters
           { DEVELOP_BLENDIF_Cz_in, DEVELOP_BLENDIF_Cz_out }, DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Cz,
-          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("chroma") },
-        { N_("hz"), N_("sliders for hue channel (of JzCzhz)"), 1.0f / 360.0f, COLORSTOPS(_gradient_JzCzhz_hue),
+          _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("Chroma") },
+        { N_("Hz"), N_("Sliders for hue channel (of JzCzhz)"), 1.0f / 360.0f, COLORSTOPS(_gradient_JzCzhz_hue),
           FALSE, 0.0f,
           { DEVELOP_BLENDIF_hz_in, DEVELOP_BLENDIF_hz_out }, DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_hz,
-          _blendif_scale_print_hue, NULL, N_("hue") },
+          _blendif_scale_print_hue, NULL, N_("Hue") },
         { NULL } };
 
-const char *slider_tooltip[] = { N_("adjustment based on input received by this module:\n* range defined by upper markers: "
+const char *slider_tooltip[] = { N_("Adjustment based on input received by this module:\n* range defined by upper markers: "
                                     "blend fully\n* range defined by lower markers: do not blend at all\n* range between "
                                     "adjacent upper/lower markers: blend gradually"),
-                                 N_("adjustment based on unblended output of this module:\n* range defined by upper "
+                                 N_("Adjustment based on unblended output of this module:\n* range defined by upper "
                                     "markers: blend fully\n* range defined by lower markers: do not blend at all\n* range "
                                     "between adjacent upper/lower markers: blend gradually") };
 
@@ -3552,7 +3552,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
   /* create and add blendif support if module supports it */
   if(bd->blendif_support)
   {
-    dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("reset blend mask settings"), NULL,
+    dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("Reset blend mask settings"), NULL,
                                         G_CALLBACK(_blendop_blendif_reset), FALSE, 0, 0,
                                         dtgtk_cairo_paint_reset, blendif_header);
 
@@ -3568,17 +3568,17 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
     dt_gui_add_class(GTK_WIDGET(bd->channel_tabs), "empty");
 
     bd->colorpicker = dt_color_picker_new(module, DT_COLOR_PICKER_POINT_AREA, header);
-    gtk_widget_set_tooltip_text(bd->colorpicker, _("pick GUI color from image\nctrl+click or right-click to select an area"));
+    gtk_widget_set_tooltip_text(bd->colorpicker, _("Pick GUI color from image\nctrl+click or right-click to select an area"));
 
     bd->colorpicker_set_values = dt_color_picker_new(module, DT_COLOR_PICKER_AREA, header);
     dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(bd->colorpicker_set_values),
                                  dtgtk_cairo_paint_colorpicker, CPF_ALTER, NULL);
 
-    gtk_widget_set_tooltip_text(bd->colorpicker_set_values, _("set the range based on an area from the image\n"
+    gtk_widget_set_tooltip_text(bd->colorpicker_set_values, _("Set the range based on an area from the image\n"
                                                               "drag to use the input image\n"
                                                               "ctrl+drag to use the output image"));
 
-    dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("invert all channel's polarities"), NULL,
+    dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("Invert all channel's polarities"), NULL,
                                                          G_CALLBACK(_blendop_blendif_invert), FALSE, 0, 0,
                                                          dtgtk_cairo_paint_invert, header);
     
@@ -3597,13 +3597,13 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
       sl->polarity = dtgtk_togglebutton_new(dtgtk_cairo_paint_invert, 0, NULL);
       dt_gui_add_class(sl->polarity, "dt_ignore_fg_state");
 
-      gtk_widget_set_tooltip_text(sl->polarity, _("toggle polarity. best seen by enabling 'display mask'"));
+      gtk_widget_set_tooltip_text(sl->polarity, _("Toggle polarity. best seen by enabling 'display mask'"));
       gtk_box_pack_end(GTK_BOX(slider_box), GTK_WIDGET(sl->polarity), FALSE, FALSE, 0);
 
       GtkWidget *label_box = gtk_grid_new();
       gtk_grid_set_column_homogeneous(GTK_GRID(label_box), TRUE);
 
-      sl->head = GTK_LABEL(dt_ui_label_new(in_out ? _("output") : _("input")));
+      sl->head = GTK_LABEL(dt_ui_label_new(in_out ? _("Output") : _("Input")));
       gtk_grid_attach(GTK_GRID(label_box), GTK_WIDGET(sl->head), 0, 0, 1, 1);
 
       GtkWidget *overlay = gtk_overlay_new();
@@ -3625,7 +3625,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
       }
 
       gtk_widget_set_tooltip_text(GTK_WIDGET(sl->slider),
-                                  _("double-click to reset.\npress 'm' to toggle mask view."));
+                                  _("Double-click to reset.\npress 'm' to toggle mask view."));
       gtk_widget_set_tooltip_text(GTK_WIDGET(sl->head), _(slider_tooltip[in_out]));
 
       g_signal_connect(G_OBJECT(sl->slider), "value-changed", G_CALLBACK(_blendop_blendif_sliders_callback), bd);
@@ -3649,7 +3649,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
       {
         sl->log_scale = gtk_toggle_button_new_with_label(_("Log scale"));
         gtk_widget_set_tooltip_text(sl->log_scale,
-                      _("toggle the alternative logarithmic or magnified scale for this channel"));
+                      _("Toggle the alternative logarithmic or magnified scale for this channel"));
         g_signal_connect(G_OBJECT(sl->log_scale), "toggled",
                         G_CALLBACK(_blendop_blendif_log_scale_toggled), module);
         gtk_box_pack_start(GTK_BOX(display_controls), sl->log_scale, FALSE, FALSE, 0);
@@ -3657,8 +3657,8 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
         sl->channel_display = dtgtk_togglebutton_new(dtgtk_cairo_paint_eye_toggle, 0, NULL);
         gtk_widget_set_tooltip_text(
             sl->channel_display,
-            in_out ? _("display the current channel from the unblended module output")
-                  : _("display the current channel from the module input"));
+            in_out ? _("Display the current channel from the unblended module output")
+                  : _("Display the current channel from the module input"));
         g_signal_connect(G_OBJECT(sl->channel_display), "toggled",
                         G_CALLBACK(_blendop_blendif_channel_display_toggled), module);
         gtk_box_pack_start(GTK_BOX(display_controls), sl->channel_display, FALSE, FALSE, 0);
@@ -3672,9 +3672,9 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
     dt_bauhaus_disable_module_list(bd->channel_boost_factor_slider);
     dt_bauhaus_set_use_default_callback(bd->channel_boost_factor_slider);
     dt_bauhaus_slider_set_format(bd->channel_boost_factor_slider, _(" EV"));
-    dt_bauhaus_widget_set_label(bd->channel_boost_factor_slider, N_("boost factor"));
+    dt_bauhaus_widget_set_label(bd->channel_boost_factor_slider, N_("Boost factor"));
     dt_bauhaus_slider_set_soft_range(bd->channel_boost_factor_slider, 0.0, 3.0);
-    gtk_widget_set_tooltip_text(bd->channel_boost_factor_slider, _("adjust the boost factor of the channel mask"));
+    gtk_widget_set_tooltip_text(bd->channel_boost_factor_slider, _("Adjust the boost factor of the channel mask"));
     gtk_widget_set_sensitive(bd->channel_boost_factor_slider, FALSE);
 
     g_signal_connect(G_OBJECT(bd->channel_boost_factor_slider), "value-changed",
@@ -3747,7 +3747,7 @@ void dt_iop_gui_blend_masks_update(dt_iop_module_t *module)
     }
     else
     {
-      dt_bauhaus_combobox_add(bd->masks_combo, _("no mask used"));
+      dt_bauhaus_combobox_add(bd->masks_combo, _("No mask used"));
     }
     dt_bauhaus_combobox_set(bd->masks_combo, 0);
     gtk_widget_queue_draw(bd->masks_combo);
@@ -3970,14 +3970,14 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     gtk_box_pack_start(GTK_BOX(group_shapes_header), bd->group_shapes_label, TRUE, TRUE, 0);
 
     // buttons for mask polarity and edit mode
-    bd->masks_polarity = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("toggle polarity of drawn mask"), NULL,
+    bd->masks_polarity = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("Toggle polarity of drawn mask"), NULL,
                                                              G_CALLBACK(_blendop_masks_polarity_callback),
                                                              FALSE, 0, 0, dtgtk_cairo_paint_invert, group_shapes_header);
     dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(bd->masks_polarity), dtgtk_cairo_paint_invert, 0, NULL);
     dt_gui_add_class(bd->masks_polarity, "dt_ignore_fg_state");
 
-    bd->masks_edit = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("show and edit mask elements"),
-                                                         N_("show and edit in restricted mode"),
+    bd->masks_edit = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("Show and edit mask elements"),
+                                                         N_("Show and edit in restricted mode"),
                                                          G_CALLBACK(_blendop_masks_show_and_edit),
                                                          FALSE, 0, 0, dtgtk_cairo_paint_masks_edit, group_shapes_header);
 
@@ -4200,7 +4200,7 @@ static void _raster_combo_populate(GtkWidget *w, void *m)
 
   raster_combo_entry_t *entry = (raster_combo_entry_t *)calloc(1, sizeof(raster_combo_entry_t));
   if(IS_NULL_PTR(entry)) return;
-  dt_bauhaus_combobox_add_full(w, _("no mask used"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, entry, free, TRUE);
+  dt_bauhaus_combobox_add_full(w, _("No mask used"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, entry, free, TRUE);
 
   int i = 1;
 
@@ -4311,8 +4311,8 @@ void dt_iop_gui_init_raster(GtkBox *blendw, dt_iop_module_t *module)
     bd->raster_combo = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(module));
     dt_bauhaus_disable_module_list(bd->raster_combo);
     dt_bauhaus_set_use_default_callback(bd->raster_combo);
-    dt_bauhaus_widget_set_label(bd->raster_combo, N_("raster mask"));
-    dt_bauhaus_combobox_add(bd->raster_combo, _("no mask used"));
+    dt_bauhaus_widget_set_label(bd->raster_combo, N_("Raster mask"));
+    dt_bauhaus_combobox_add(bd->raster_combo, _("No mask used"));
     g_signal_connect(G_OBJECT(bd->raster_combo), "value-changed",
                      G_CALLBACK(_raster_value_changed_callback), module);
     dt_bauhaus_combobox_add_populate_fct(bd->raster_combo, _raster_combo_populate);
@@ -4320,7 +4320,7 @@ void dt_iop_gui_init_raster(GtkBox *blendw, dt_iop_module_t *module)
 
     bd->raster_polarity = dtgtk_togglebutton_new(dtgtk_cairo_paint_invert, 0, NULL);
     dt_gui_add_class(bd->raster_polarity, "dt_ignore_fg_state");
-    gtk_widget_set_tooltip_text(bd->raster_polarity, _("toggle polarity of raster mask"));
+    gtk_widget_set_tooltip_text(bd->raster_polarity, _("Toggle polarity of raster mask"));
     g_signal_connect(G_OBJECT(bd->raster_polarity), "toggled", G_CALLBACK(_raster_polarity_callback), module);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->raster_polarity), FALSE);
     gtk_box_pack_start(GTK_BOX(hbox), bd->raster_polarity, FALSE, FALSE, 0);
@@ -4972,10 +4972,10 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   _blendop_update_top_enable_label(module);
   gtk_box_pack_start(GTK_BOX(display_box), bd->top_enable, FALSE, FALSE, 0);
 
-  bd->showmask = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("display mask and/or color channel"), NULL, 
+  bd->showmask = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("Display mask and/or color channel"), NULL, 
                                                      G_CALLBACK(_blendop_blendif_showmask_clicked),
                                                      FALSE, 0, 0, dtgtk_cairo_paint_showmask, display_box);
-  gtk_widget_set_tooltip_text(bd->showmask, _("display mask and/or color channel. ctrl+click to display mask, "
+  gtk_widget_set_tooltip_text(bd->showmask, _("Display mask and/or color channel. ctrl+click to display mask, "
                                               "shift+click to display channel. hover over parametric mask slider to "
                                               "select channel for display"));
 
@@ -5007,7 +5007,7 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
                                GINT_TO_POINTER(1), NULL, TRUE);
   dt_bauhaus_disable_module_list(bd->blend_modes_blend_order);
   dt_bauhaus_disable_accels(bd->blend_modes_blend_order);
-  gtk_widget_set_tooltip_text(bd->blend_modes_blend_order, _("choose compositing order: which layer is placed on top"));
+  gtk_widget_set_tooltip_text(bd->blend_modes_blend_order, _("Choose compositing order: which layer is placed on top"));
   g_signal_connect(G_OBJECT(bd->blend_modes_blend_order), "value-changed",
                    G_CALLBACK(_blendop_compositing_changed), bd);
   gtk_box_pack_start(GTK_BOX(bd->blending_box), bd->blend_modes_blend_order, TRUE, TRUE, 0);
@@ -5018,10 +5018,10 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   dt_bauhaus_set_use_default_callback(bd->blend_mode_parameter_slider);
   dt_bauhaus_disable_accels(bd->blend_mode_parameter_slider);
   dt_bauhaus_widget_set_field(bd->blend_mode_parameter_slider, &module->blend_params->blend_parameter, DT_INTROSPECTION_TYPE_FLOAT);
-  dt_bauhaus_widget_set_label(bd->blend_mode_parameter_slider, N_("blend fulcrum"));
+  dt_bauhaus_widget_set_label(bd->blend_mode_parameter_slider, N_("Blend fulcrum"));
   dt_bauhaus_slider_set_format(bd->blend_mode_parameter_slider, _(" EV"));
   dt_bauhaus_slider_set_soft_range(bd->blend_mode_parameter_slider, -3.0, 3.0);
-  gtk_widget_set_tooltip_text(bd->blend_mode_parameter_slider, _("adjust the fulcrum used by some blending"
+  gtk_widget_set_tooltip_text(bd->blend_mode_parameter_slider, _("Adjust the fulcrum used by some blending"
                                                                  " operations"));
   g_object_set_data(G_OBJECT(bd->blend_mode_parameter_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
   gtk_widget_set_visible(bd->blend_mode_parameter_slider, FALSE);
@@ -5029,7 +5029,7 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
 
   /* mask combine control: how to combine drawn/parametric masks */
   bd->masks_combine_combo = _combobox_new_from_list(module, _("Combine drawn & parametric"), dt_develop_combine_masks_names, NULL,
-                                                    _("how to combine drawn and parametric masks"));
+                                                    _("How to combine drawn and parametric masks"));
   g_signal_connect(G_OBJECT(bd->masks_combine_combo), "value-changed",
                    G_CALLBACK(_blendop_masks_combine_callback), bd);
   dt_gui_add_help_link(GTK_WIDGET(bd->masks_combine_combo), dt_get_help_url("masks_combined"));
@@ -5037,7 +5037,7 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
 
   /* mask invert control: single checkbox to invert masks */
   bd->masks_invert_combo = gtk_check_button_new_with_label(_("Invert mask"));
-  gtk_widget_set_tooltip_text(bd->masks_invert_combo, _("invert the resulting mask (apply mask in inverted mode)"));
+  gtk_widget_set_tooltip_text(bd->masks_invert_combo, _("Invert the resulting mask (apply mask in inverted mode)"));
   g_signal_connect(G_OBJECT(bd->masks_invert_combo), "toggled",
                    G_CALLBACK(_blendop_masks_invert_toggled), bd);
   gtk_box_pack_start(GTK_BOX(bd->blending_box), GTK_WIDGET(bd->masks_invert_combo), TRUE, TRUE, 0);
@@ -5048,10 +5048,10 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   dt_bauhaus_set_use_default_callback(bd->opacity_slider);
   dt_bauhaus_disable_accels(bd->opacity_slider);
   dt_bauhaus_widget_set_field(bd->opacity_slider, &module->blend_params->opacity, DT_INTROSPECTION_TYPE_FLOAT);
-  dt_bauhaus_widget_set_label(bd->opacity_slider, N_("opacity"));
+  dt_bauhaus_widget_set_label(bd->opacity_slider, N_("Opacity"));
   dt_bauhaus_slider_set_format(bd->opacity_slider, "%");
   module->gui->fusion_slider = bd->opacity_slider;
-  gtk_widget_set_tooltip_text(bd->opacity_slider, _("set the opacity of the blending"));
+  gtk_widget_set_tooltip_text(bd->opacity_slider, _("Set the opacity of the blending"));
   g_object_set_data(G_OBJECT(bd->opacity_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
   gtk_box_pack_start(GTK_BOX(bd->blending_box), bd->opacity_slider, TRUE, TRUE, 0);
 
@@ -5059,9 +5059,9 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   dt_bauhaus_disable_module_list(bd->details_slider);
   dt_bauhaus_set_use_default_callback(bd->details_slider);
   dt_bauhaus_disable_accels(bd->details_slider);
-  dt_bauhaus_widget_set_label(bd->details_slider, N_("details threshold"));
+  dt_bauhaus_widget_set_label(bd->details_slider, N_("Details threshold"));
   dt_bauhaus_slider_set_format(bd->details_slider, "%");
-  gtk_widget_set_tooltip_text(bd->details_slider, _("adjust the threshold for the details mask, "
+  gtk_widget_set_tooltip_text(bd->details_slider, _("Adjust the threshold for the details mask, "
                                                     "\npositive values selects areas with strong details, "
                                                     "\nnegative values select flat areas"));
   g_signal_connect(G_OBJECT(bd->details_slider), "value-changed", G_CALLBACK(_blendop_blendif_details_callback), bd);
@@ -5072,14 +5072,14 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   dt_bauhaus_set_use_default_callback(bd->blur_radius_slider);
   dt_bauhaus_disable_accels(bd->blur_radius_slider);
   dt_bauhaus_widget_set_field(bd->blur_radius_slider, &module->blend_params->blur_radius, DT_INTROSPECTION_TYPE_FLOAT);
-  dt_bauhaus_widget_set_label(bd->blur_radius_slider, N_("blurring radius"));
+  dt_bauhaus_widget_set_label(bd->blur_radius_slider, N_("Blurring radius"));
   dt_bauhaus_slider_set_format(bd->blur_radius_slider, " px");
-  gtk_widget_set_tooltip_text(bd->blur_radius_slider, _("radius for gaussian blur of blend mask"));
+  gtk_widget_set_tooltip_text(bd->blur_radius_slider, _("Radius for gaussian blur of blend mask"));
   g_object_set_data(G_OBJECT(bd->blur_radius_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
 
-  bd->masks_feathering_guide_combo = _combobox_new_from_list(module, _("feathering guide"), dt_develop_feathering_guide_names,
+  bd->masks_feathering_guide_combo = _combobox_new_from_list(module, _("Feathering guide"), dt_develop_feathering_guide_names,
                                                              &module->blend_params->feathering_guide,
-                                                             _("choose to guide mask by input or output image and"
+                                                             _("Choose to guide mask by input or output image and"
                                                                "\nchoose to apply feathering before or after mask blur"));
   g_object_set_data(G_OBJECT(bd->masks_feathering_guide_combo), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
 
@@ -5088,9 +5088,9 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   dt_bauhaus_set_use_default_callback(bd->feathering_radius_slider);
   dt_bauhaus_disable_accels(bd->feathering_radius_slider);
   dt_bauhaus_widget_set_field(bd->feathering_radius_slider, &module->blend_params->feathering_radius, DT_INTROSPECTION_TYPE_FLOAT);
-  dt_bauhaus_widget_set_label(bd->feathering_radius_slider, N_("feathering radius"));
+  dt_bauhaus_widget_set_label(bd->feathering_radius_slider, N_("Feathering radius"));
   dt_bauhaus_slider_set_format(bd->feathering_radius_slider, " px");
-  gtk_widget_set_tooltip_text(bd->feathering_radius_slider, _("spatial radius of feathering"));
+  gtk_widget_set_tooltip_text(bd->feathering_radius_slider, _("Spatial radius of feathering"));
   g_object_set_data(G_OBJECT(bd->feathering_radius_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
 
   bd->brightness_slider = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(module), -1.0, 1.0, 0, 0.0, 2);
@@ -5100,7 +5100,7 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   dt_bauhaus_widget_set_field(bd->brightness_slider, &module->blend_params->brightness, DT_INTROSPECTION_TYPE_FLOAT);
   dt_bauhaus_widget_set_label(bd->brightness_slider, N_("Feathering mask opacity"));
   dt_bauhaus_slider_set_format(bd->brightness_slider, "%");
-  gtk_widget_set_tooltip_text(bd->brightness_slider, _("shifts and tilts the tone curve of the blend mask to adjust its "
+  gtk_widget_set_tooltip_text(bd->brightness_slider, _("Shifts and tilts the tone curve of the blend mask to adjust its "
                                                        "brightness without affecting fully transparent/fully opaque "
                                                        "regions"));
   g_object_set_data(G_OBJECT(bd->brightness_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
@@ -5112,7 +5112,7 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   dt_bauhaus_widget_set_field(bd->contrast_slider, &module->blend_params->contrast, DT_INTROSPECTION_TYPE_FLOAT);
   dt_bauhaus_widget_set_label(bd->contrast_slider, N_("Feathering mask contrast"));
   dt_bauhaus_slider_set_format(bd->contrast_slider, "%");
-  gtk_widget_set_tooltip_text(bd->contrast_slider, _("gives the tone curve of the blend mask an s-like shape to "
+  gtk_widget_set_tooltip_text(bd->contrast_slider, _("Gives the tone curve of the blend mask an s-like shape to "
                                                      "adjust its contrast"));
   g_object_set_data(G_OBJECT(bd->contrast_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
 
@@ -5122,7 +5122,7 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   gtk_box_pack_start(GTK_BOX(bd->blending_box), blend_separator, FALSE, FALSE, 0);
 
   GtkWidget *presets_button = dtgtk_button_new(dtgtk_cairo_paint_presets, 0, NULL);
-  gtk_widget_set_tooltip_text(presets_button, _("blending options"));
+  gtk_widget_set_tooltip_text(presets_button, _("Blending options"));
   if(bd->blendif_support)
     g_signal_connect(G_OBJECT(presets_button), "button-press-event", G_CALLBACK(_blendif_options_callback), module);
   else

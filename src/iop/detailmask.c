@@ -48,7 +48,7 @@ typedef struct dt_iop_detailmask_params_t dt_iop_detailmask_data_t;
 
 const char *name()
 {
-  return _("detail mask");
+  return _("Detail mask");
 }
 
 int default_group()

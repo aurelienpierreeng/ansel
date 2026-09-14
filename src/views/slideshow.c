@@ -251,7 +251,7 @@ static void _step_state(dt_slideshow_t *d, dt_slideshow_event_t event)
     }
     else
     {
-      dt_control_log(_("end of images"));
+      dt_control_log(_("End of images"));
       d->auto_advance = FALSE;
     }
   }
@@ -272,7 +272,7 @@ static void _step_state(dt_slideshow_t *d, dt_slideshow_event_t event)
     }
     else
     {
-      dt_control_log(_("end of images. press any key to return to lighttable mode"));
+      dt_control_log(_("End of images. press any key to return to lighttable mode"));
       d->auto_advance = FALSE;
     }
   }
@@ -290,7 +290,7 @@ static void _step_state(dt_slideshow_t *d, dt_slideshow_event_t event)
 
 const char *name(const dt_view_t *self)
 {
-  return _("slideshow");
+  return _("Slideshow");
 }
 
 uint32_t view(const dt_view_t *self)
@@ -337,7 +337,7 @@ int try_enter(dt_view_t *self)
 
   if(d->incoming_selection || dt_collection_get_count(dt_collection_get_global()) != 0) return 0;
 
-  dt_control_log(_("there are no images in this collection"));
+  dt_control_log(_("There are no images in this collection"));
   return 1;
 }
 
@@ -420,7 +420,7 @@ void enter(dt_view_t *self)
 
   dt_gui_refocus_center();
   _refresh_display(d);
-  dt_control_log(_("waiting to start slideshow"));
+  dt_control_log(_("Waiting to start slideshow"));
 }
 
 void leave(dt_view_t *self)
@@ -525,14 +525,14 @@ static gboolean _slideshow_start_stop_accel(GtkAccelGroup *accel_group, GObject 
     d->auto_advance = TRUE;
     if(d->auto_advance_timeout > 0) g_source_remove(d->auto_advance_timeout);
     d->auto_advance_timeout = g_timeout_add_seconds(d->delay, auto_advance, d);
-    dt_control_log(_("slideshow started"));
+    dt_control_log(_("Slideshow started"));
   }
   else
   {
     d->auto_advance = FALSE;
     if(d->auto_advance_timeout > 0) g_source_remove(d->auto_advance_timeout);
     d->auto_advance_timeout = 0;
-    dt_control_log(_("slideshow paused"));
+    dt_control_log(_("Slideshow paused"));
   }
   return TRUE;
 }
@@ -547,7 +547,7 @@ static gboolean _slideshow_slow_down_accel(GtkAccelGroup *accel_group, GObject *
   dt_view_t *self = (dt_view_t *)user_data;
   dt_slideshow_t *d = (dt_slideshow_t *)self->data;
   _set_delay(d, 1);
-  dt_control_log(ngettext("slideshow delay set to %d second", "slideshow delay set to %d seconds", d->delay),
+  dt_control_log(ngettext("Slideshow delay set to %d second", "Slideshow delay set to %d seconds", d->delay),
                  d->delay);
   return TRUE;
 }
@@ -562,7 +562,7 @@ static gboolean _slideshow_speed_up_accel(GtkAccelGroup *accel_group, GObject *a
   dt_view_t *self = (dt_view_t *)user_data;
   dt_slideshow_t *d = (dt_slideshow_t *)self->data;
   _set_delay(d, -1);
-  dt_control_log(ngettext("slideshow delay set to %d second", "slideshow delay set to %d seconds", d->delay),
+  dt_control_log(ngettext("Slideshow delay set to %d second", "Slideshow delay set to %d seconds", d->delay),
                  d->delay);
   return TRUE;
 }
@@ -576,7 +576,7 @@ static gboolean _slideshow_step_forward_accel(GtkAccelGroup *accel_group, GObjec
 {
   dt_view_t *self = (dt_view_t *)user_data;
   dt_slideshow_t *d = (dt_slideshow_t *)self->data;
-  if(d->auto_advance) dt_control_log(_("slideshow paused"));
+  if(d->auto_advance) dt_control_log(_("Slideshow paused"));
   d->auto_advance = FALSE;
   if(d->auto_advance_timeout > 0) g_source_remove(d->auto_advance_timeout);
   d->auto_advance_timeout = 0;
@@ -593,7 +593,7 @@ static gboolean _slideshow_step_back_accel(GtkAccelGroup *accel_group, GObject *
 {
   dt_view_t *self = (dt_view_t *)user_data;
   dt_slideshow_t *d = (dt_slideshow_t *)self->data;
-  if(d->auto_advance) dt_control_log(_("slideshow paused"));
+  if(d->auto_advance) dt_control_log(_("Slideshow paused"));
   d->auto_advance = FALSE;
   if(d->auto_advance_timeout > 0) g_source_remove(d->auto_advance_timeout);
   d->auto_advance_timeout = 0;

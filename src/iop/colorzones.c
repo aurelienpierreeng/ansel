@@ -107,8 +107,8 @@ DT_MODULE_INTROSPECTION(5, dt_iop_colorzones_params_t)
 
 typedef enum dt_iop_colorzones_modes_t
 {
-  DT_IOP_COLORZONES_MODE_SMOOTH = 0, // $DESCRIPTION: "smooth"
-  DT_IOP_COLORZONES_MODE_STRONG = 1  // $DESCRIPTION: "strong"
+  DT_IOP_COLORZONES_MODE_SMOOTH = 0, // $DESCRIPTION: "Smooth"
+  DT_IOP_COLORZONES_MODE_STRONG = 1  // $DESCRIPTION: "Strong"
 } dt_iop_colorzones_modes_t;
 
 typedef enum dt_iop_colorzones_splines_version_t
@@ -119,9 +119,9 @@ typedef enum dt_iop_colorzones_splines_version_t
 
 typedef enum dt_iop_colorzones_channel_t
 {
-  DT_IOP_COLORZONES_L = 0, // $DESCRIPTION: "lightness"
-  DT_IOP_COLORZONES_C = 1, // $DESCRIPTION: "saturation"
-  DT_IOP_COLORZONES_h = 2, // $DESCRIPTION: "hue"
+  DT_IOP_COLORZONES_L = 0, // $DESCRIPTION: "Lightness"
+  DT_IOP_COLORZONES_C = 1, // $DESCRIPTION: "Saturation"
+  DT_IOP_COLORZONES_h = 2, // $DESCRIPTION: "Hue"
   DT_IOP_COLORZONES_MAX_CHANNELS = 3
 } dt_iop_colorzones_channel_t;
 
@@ -133,13 +133,13 @@ typedef struct dt_iop_colorzones_node_t
 
 typedef struct dt_iop_colorzones_params_t
 {
-  dt_iop_colorzones_channel_t channel; // $DEFAULT: DT_IOP_COLORZONES_h $DESCRIPTION: "select by"
+  dt_iop_colorzones_channel_t channel; // $DEFAULT: DT_IOP_COLORZONES_h $DESCRIPTION: "Select by"
   // three curves (L, C, h) with max number of nodes
   dt_iop_colorzones_node_t curve[DT_IOP_COLORZONES_MAX_CHANNELS][DT_IOP_COLORZONES_MAXNODES];
   int curve_num_nodes[DT_IOP_COLORZONES_MAX_CHANNELS]; // number of nodes per curve
   int curve_type[DT_IOP_COLORZONES_MAX_CHANNELS];      // CUBIC_SPLINE, CATMULL_ROM, MONOTONE_HERMITE
-  float strength;  // $MIN: -200.0 $MAX: 200.0 $DEFAULT: 0.0 $DESCRIPTION: "mix"
-  dt_iop_colorzones_modes_t mode; // $MIN: 0 $MAX: 1 $DEFAULT: DT_IOP_COLORZONES_MODE_SMOOTH $DESCRIPTION: "process mode"
+  float strength;  // $MIN: -200.0 $MAX: 200.0 $DEFAULT: 0.0 $DESCRIPTION: "Mix"
+  dt_iop_colorzones_modes_t mode; // $MIN: 0 $MAX: 1 $DEFAULT: DT_IOP_COLORZONES_MODE_SMOOTH $DESCRIPTION: "Process mode"
   int splines_version;
 } dt_iop_colorzones_params_t;
 
@@ -194,16 +194,16 @@ typedef struct dt_iop_colorzones_global_data_t
 
 const char *name()
 {
-  return _("color _zones");
+  return _("Color _zones");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("selectively shift hues, saturation and brightness of pixels"),
-                                      _("creative"),
-                                      _("linear or non-linear, Lab, display-referred"),
-                                      _("non-linear, Lab"),
-                                      _("non-linear, Lab, display-referred"));
+  return dt_iop_set_description(self, _("Selectively shift hues, saturation and brightness of pixels"),
+                                      _("Creative"),
+                                      _("Linear or non-linear, Lab, display-referred"),
+                                      _("Non-linear, Lab"),
+                                      _("Non-linear, Lab, display-referred"));
 }
 
 int flags()
@@ -665,7 +665,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = DT_IOP_COLORZONES_BANDS - 1;
     p.curve_type[c] = CATMULL_ROM;
   }
-  dt_gui_presets_add_generic(_("red black white"), self->op,
+  dt_gui_presets_add_generic(_("Red black white"), self->op,
                              version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // black white and skin tones
@@ -688,7 +688,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = DT_IOP_COLORZONES_BANDS - 1;
     p.curve_type[c] = CATMULL_ROM;
   }
-  dt_gui_presets_add_generic(_("black white and skin tones"), self->op,
+  dt_gui_presets_add_generic(_("Black white and skin tones"), self->op,
                              version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // polarizing filter
@@ -711,7 +711,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = DT_IOP_COLORZONES_BANDS;
     p.curve_type[c] = CATMULL_ROM;
   }
-  dt_gui_presets_add_generic(_("polarizing filter"), self->op,
+  dt_gui_presets_add_generic(_("Polarizing filter"), self->op,
                              version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // natural skin tone
@@ -732,7 +732,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = DT_IOP_COLORZONES_BANDS - 1;
     p.curve_type[c] = CATMULL_ROM;
   }
-  dt_gui_presets_add_generic(_("natural skin tones"), self->op,
+  dt_gui_presets_add_generic(_("Natural skin tones"), self->op,
                              version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // black and white film
@@ -763,7 +763,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = DT_IOP_COLORZONES_BANDS - 1;
     p.curve_type[c] = CATMULL_ROM;
   }
-  dt_gui_presets_add_generic(_("black & white film"), self->op,
+  dt_gui_presets_add_generic(_("Black & white film"), self->op,
                              version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // neutral preset with just a set of nodes uniformly distributed along the hue axis
@@ -2146,7 +2146,7 @@ static void _display_mask_callback(GtkToggleButton *togglebutton, dt_iop_module_
   // if blend module is displaying mask do not display it here
   if(module->request_mask_display && !g->display_mask)
   {
-    dt_control_log(_("cannot display masks when the blending mask is displayed"));
+    dt_control_log(_("Cannot display masks when the blending mask is displayed"));
 
     dt_gui_freeze_begin();
     gtk_toggle_button_set_active(togglebutton, FALSE);
@@ -2300,9 +2300,9 @@ void gui_init(struct dt_iop_module_t *self)
 
   c->channel_tabs = dt_ui_notebook_new();
 
-  dt_ui_notebook_page(c->channel_tabs, N_("lightness"), NULL);
-  dt_ui_notebook_page(c->channel_tabs, N_("saturation"), NULL);
-  dt_ui_notebook_page(c->channel_tabs, N_("hue"), NULL);
+  dt_ui_notebook_page(c->channel_tabs, N_("Lightness"), NULL);
+  dt_ui_notebook_page(c->channel_tabs, N_("Saturation"), NULL);
+  dt_ui_notebook_page(c->channel_tabs, N_("Hue"), NULL);
 
   gtk_widget_show(gtk_notebook_get_nth_page(c->channel_tabs, c->channel));
   gtk_notebook_set_current_page(c->channel_tabs, c->channel);
@@ -2316,13 +2316,13 @@ void gui_init(struct dt_iop_module_t *self)
 
   // color pickers
   c->colorpicker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_POINT_AREA, hbox, IOP_CS_LCH);
-  gtk_widget_set_tooltip_text(c->colorpicker, _("pick GUI color from image\nctrl+click or right-click to select an area"));
+  gtk_widget_set_tooltip_text(c->colorpicker, _("Pick GUI color from image\nctrl+click or right-click to select an area"));
   c->colorpicker_set_values = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_AREA, hbox, IOP_CS_LCH);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(c->colorpicker_set_values),
                                dtgtk_cairo_paint_colorpicker, CPF_ALTER, NULL);
 
   gtk_widget_set_size_request(c->colorpicker_set_values, DT_PIXEL_APPLY_DPI(14), DT_PIXEL_APPLY_DPI(14));
-  gtk_widget_set_tooltip_text(c->colorpicker_set_values, _("create a curve based on an area from the image\n"
+  gtk_widget_set_tooltip_text(c->colorpicker_set_values, _("Create a curve based on an area from the image\n"
                                                            "drag to create a flat curve\n"
                                                            "ctrl+drag to create a positive curve\n"
                                                            "shift+drag to create a negative curve"));
@@ -2346,18 +2346,18 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *hbox_select_by = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   // edit by area
-  gchar *label = N_("edit by area");
+  gchar *label = N_("Edit by area");
   c->chk_edit_by_area = gtk_check_button_new_with_label(_(label));
   gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(c->chk_edit_by_area))), PANGO_ELLIPSIZE_START);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(c->chk_edit_by_area), c->edit_by_area);
-  gtk_widget_set_tooltip_text(c->chk_edit_by_area, _("edit the curve nodes by area"));
+  gtk_widget_set_tooltip_text(c->chk_edit_by_area, _("Edit the curve nodes by area"));
   gtk_box_pack_start(GTK_BOX(hbox_select_by), c->chk_edit_by_area, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(c->chk_edit_by_area), "toggled", G_CALLBACK(_edit_by_area_callback), self);
 
   // display selection
   c->bt_showmask = dtgtk_togglebutton_new(dtgtk_cairo_paint_showmask, 0, NULL);
 
-  gtk_widget_set_tooltip_text(c->bt_showmask, _("display selection"));
+  gtk_widget_set_tooltip_text(c->bt_showmask, _("Display selection"));
   g_signal_connect(G_OBJECT(c->bt_showmask), "toggled", G_CALLBACK(_display_mask_callback), self);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(c->bt_showmask), FALSE);
   gtk_box_pack_end(GTK_BOX(hbox_select_by), c->bt_showmask, FALSE, FALSE, 0);
@@ -2367,14 +2367,14 @@ void gui_init(struct dt_iop_module_t *self)
   // select by which dimension
   c->select_by = dt_bauhaus_combobox_from_params(self, "channel");
   dt_bauhaus_combobox_remove_at(c->select_by, DT_IOP_COLORZONES_MAX_CHANNELS);
-  gtk_widget_set_tooltip_text(c->select_by, _("choose selection criterion, will be the abscissa in the graph"));
+  gtk_widget_set_tooltip_text(c->select_by, _("Choose selection criterion, will be the abscissa in the graph"));
 
   c->mode = dt_bauhaus_combobox_from_params(self, "mode");
-  gtk_widget_set_tooltip_text(c->mode, _("choose between a smoother or stronger effect"));
+  gtk_widget_set_tooltip_text(c->mode, _("Choose between a smoother or stronger effect"));
 
   c->strength = dt_bauhaus_slider_from_params(self, "strength");
   dt_bauhaus_slider_set_format(c->strength, "%");
-  gtk_widget_set_tooltip_text(c->strength, _("make effect stronger or weaker"));
+  gtk_widget_set_tooltip_text(c->strength, _("Make effect stronger or weaker"));
 
   gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
@@ -2403,13 +2403,13 @@ void gui_init(struct dt_iop_module_t *self)
     #define MONOTONE_HERMITE 2
   */
   c->interpolator = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(c->interpolator, N_("interpolation method"));
-  dt_bauhaus_combobox_add(c->interpolator, _("cubic spline"));
-  dt_bauhaus_combobox_add(c->interpolator, _("centripetal spline"));
-  dt_bauhaus_combobox_add(c->interpolator, _("monotonic spline"));
+  dt_bauhaus_widget_set_label(c->interpolator, N_("Interpolation method"));
+  dt_bauhaus_combobox_add(c->interpolator, _("Cubic spline"));
+  dt_bauhaus_combobox_add(c->interpolator, _("Centripetal spline"));
+  dt_bauhaus_combobox_add(c->interpolator, _("Monotonic spline"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), c->interpolator, TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(c->interpolator,
-      _("change this method if you see oscillations or cusps in the curve\n"
+      _("Change this method if you see oscillations or cusps in the curve\n"
         "- cubic spline is better to produce smooth curves but oscillates when nodes are too close\n"
         "- centripetal is better to avoids cusps and oscillations with close nodes but is less smooth\n"
         "- monotonic is better for accuracy of pure analytical functions (log, gamma, exp)\n"));

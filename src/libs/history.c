@@ -320,7 +320,7 @@ static gchar *_lib_history_change_text(dt_introspection_field_t *field, const ch
   case DT_INTROSPECTION_TYPE_ENUM:
     if(*(int*)o != *(int*)p)
     {
-      const char *old_str = N_("unknown"), *new_str = N_("unknown");
+      const char *old_str = N_("Unknown"), *new_str = N_("Unknown");
       for(dt_introspection_type_enum_tuple_t *i = field->Enum.values; i && i->name; i++)
       {
         if(i->value == *(int*)o)
@@ -421,8 +421,8 @@ static const dt_dev_history_item_t * _find_previous_history_step(const dt_dev_hi
 #define add_history_change_boolean(field, label)                                                                  \
   if((hitem->field) != (hprev->field))                                                                            \
   {                                                                                                               \
-    change_parts[num_parts++] = g_strdup_printf("%s\t%s\t\u2192\t%s", label, (hprev->field) ? _("on") : _("off"), \
-                                                (hitem->field) ? _("on") : _("off"));                             \
+    change_parts[num_parts++] = g_strdup_printf("%s\t%s\t\u2192\t%s", label, (hprev->field) ? _("On") : _("Off"), \
+                                                (hitem->field) ? _("On") : _("Off"));                             \
   }
 
 
@@ -446,19 +446,19 @@ static gchar *_create_tooltip_text(const dt_dev_history_item_t *hitem)
     // This is the first history entry for this module.
     // That means the module was necessarily enabled in this step.
     if(enabled_by_default)
-      change_parts[num_parts++] = g_strdup_printf(_("mandatory module created automatically"));
+      change_parts[num_parts++] = g_strdup_printf(_("Mandatory module created automatically"));
     else
-      change_parts[num_parts++] = g_strdup_printf(_("module created per user request"));
+      change_parts[num_parts++] = g_strdup_printf(_("Module created per user request"));
   }
   else
   {
     // This is not the first history entry for this module.
     // It can have been disabled.
-    add_history_change_boolean(enabled, _("enabled"));
+    add_history_change_boolean(enabled, _("Enabled"));
   }
 
-  add_history_change(iop_order, "%i", _("pipeline order"));
-  add_history_change_string(multi_name, _("instance name"));
+  add_history_change(iop_order, "%i", _("Pipeline order"));
+  add_history_change_string(multi_name, _("Instance name"));
 
   if(hitem->module->have_introspection)
   {
@@ -469,30 +469,30 @@ static gchar *_create_tooltip_text(const dt_dev_history_item_t *hitem)
 
   if(hitem->module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
   {
-    add_blend_history_change_enum(blend_cst, _("colorspace"), dt_develop_blend_colorspace_names);
-    add_blend_history_change_enum(mask_mode, _("mask mode"), dt_develop_mask_mode_names);
-    add_blend_history_change_enum(blend_mode & DEVELOP_BLEND_MODE_MASK, _("blend mode"), dt_develop_blend_mode_names);
-    add_blend_history_change_enum(blend_mode & DEVELOP_BLEND_REVERSE, _("blend operation"), dt_develop_blend_mode_flag_names);
-    add_blend_history_change(blend_parameter, _("%.2f EV"), _("blend fulcrum"));
-    add_blend_history_change(opacity, "%.4f", _("mask opacity"));
-    add_blend_history_change_enum(mask_combine & (DEVELOP_COMBINE_INV | DEVELOP_COMBINE_INCL), _("combine masks"), dt_develop_combine_masks_names);
-    add_blend_history_change(feathering_radius, "%.4f", _("feathering radius"));
-    add_blend_history_change_enum(feathering_guide, _("feathering guide"), dt_develop_feathering_guide_names);
-    add_blend_history_change(blur_radius, "%.4f", _("mask blur"));
-    add_blend_history_change(contrast, "%.4f", _("mask contrast"));
-    add_blend_history_change(brightness, "%.4f", _("brightness"));
-    add_blend_history_change(raster_mask_instance, "%d", _("raster mask instance"));
-    add_blend_history_change(raster_mask_id, "%d", _("raster mask id"));
-    add_blend_history_change_enum(raster_mask_invert, _("invert mask"), dt_develop_invert_mask_names);
+    add_blend_history_change_enum(blend_cst, _("Colorspace"), dt_develop_blend_colorspace_names);
+    add_blend_history_change_enum(mask_mode, _("Mask mode"), dt_develop_mask_mode_names);
+    add_blend_history_change_enum(blend_mode & DEVELOP_BLEND_MODE_MASK, _("Blend mode"), dt_develop_blend_mode_names);
+    add_blend_history_change_enum(blend_mode & DEVELOP_BLEND_REVERSE, _("Blend operation"), dt_develop_blend_mode_flag_names);
+    add_blend_history_change(blend_parameter, _("%.2f EV"), _("Blend fulcrum"));
+    add_blend_history_change(opacity, "%.4f", _("Mask opacity"));
+    add_blend_history_change_enum(mask_combine & (DEVELOP_COMBINE_INV | DEVELOP_COMBINE_INCL), _("Combine masks"), dt_develop_combine_masks_names);
+    add_blend_history_change(feathering_radius, "%.4f", _("Feathering radius"));
+    add_blend_history_change_enum(feathering_guide, _("Feathering guide"), dt_develop_feathering_guide_names);
+    add_blend_history_change(blur_radius, "%.4f", _("Mask blur"));
+    add_blend_history_change(contrast, "%.4f", _("Mask contrast"));
+    add_blend_history_change(brightness, "%.4f", _("Brightness"));
+    add_blend_history_change(raster_mask_instance, "%d", _("Raster mask instance"));
+    add_blend_history_change(raster_mask_id, "%d", _("Raster mask id"));
+    add_blend_history_change_enum(raster_mask_invert, _("Invert mask"), dt_develop_invert_mask_names);
 
-    add_blend_history_change(mask_combine & DEVELOP_COMBINE_MASKS_POS ? '-' : '+', "%c", _("drawn mask polarity"));
+    add_blend_history_change(mask_combine & DEVELOP_COMBINE_MASKS_POS ? '-' : '+', "%c", _("Drawn mask polarity"));
 
     if(hitem->blend_params->mask_id != old_blend->mask_id)
       change_parts[num_parts++] = old_blend->mask_id == 0
-                                ? g_strdup_printf(_("a drawn mask was added"))
+                                ? g_strdup_printf(_("A drawn mask was added"))
                                 : hitem->blend_params->mask_id == 0
-                                ? g_strdup_printf(_("the drawn mask was removed"))
-                                : g_strdup_printf(_("the drawn mask was changed"));
+                                ? g_strdup_printf(_("The drawn mask was removed"))
+                                : g_strdup_printf(_("The drawn mask was changed"));
 
     dt_iop_gui_blend_data_t *bd = hitem->module->gui ? hitem->module->gui->blend_data : NULL;
 
@@ -522,7 +522,7 @@ static gchar *_create_tooltip_text(const dt_dev_history_item_t *hitem)
         {
           if(first)
           {
-            change_parts[num_parts++] = g_strdup(in_out ? _("parametric output mask:") : _("parametric input mask:"));
+            change_parts[num_parts++] = g_strdup(in_out ? _("Parametric output mask:") : _("Parametric input mask:"));
             first = FALSE;
           }
           char s[4][2][25];
@@ -654,7 +654,7 @@ static void _history_store_add_original(dt_lib_history_t *d)
   GtkTreeIter iter;
   gtk_list_store_append(d->history_store, &iter);
   gtk_list_store_set(d->history_store, &iter, DT_HISTORY_VIEW_COL_HISTORY_END, 0, DT_HISTORY_VIEW_COL_NUMBER, " 0",
-                     DT_HISTORY_VIEW_COL_LABEL, _("original"), DT_HISTORY_VIEW_COL_ICON_NAME,
+                     DT_HISTORY_VIEW_COL_LABEL, _("Original"), DT_HISTORY_VIEW_COL_ICON_NAME,
                      _history_icon_name(TRUE, FALSE, TRUE, FALSE), DT_HISTORY_VIEW_COL_ENABLED, TRUE,
                      DT_HISTORY_VIEW_COL_TOOLTIP, "", -1);
 }

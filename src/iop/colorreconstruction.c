@@ -76,9 +76,9 @@ DT_MODULE_INTROSPECTION(3, dt_iop_colorreconstruct_params_t)
 
 typedef enum dt_iop_colorreconstruct_precedence_t
 {
-  COLORRECONSTRUCT_PRECEDENCE_NONE,   // $DESCRIPTION: "none" same weighting factor for all pixels
-  COLORRECONSTRUCT_PRECEDENCE_CHROMA, // $DESCRIPTION: "saturated colors" use chromaticy as weighting factor -> prefers saturated colors
-  COLORRECONSTRUCT_PRECEDENCE_HUE     // $DESCRIPTION: "hue" use a specific hue as weighting factor
+  COLORRECONSTRUCT_PRECEDENCE_NONE,   // $DESCRIPTION: "None" same weighting factor for all pixels
+  COLORRECONSTRUCT_PRECEDENCE_CHROMA, // $DESCRIPTION: "Saturated colors" use chromaticy as weighting factor -> prefers saturated colors
+  COLORRECONSTRUCT_PRECEDENCE_HUE     // $DESCRIPTION: "Hue" use a specific hue as weighting factor
 } dt_iop_colorreconstruct_precedence_t;
 
 typedef struct dt_iop_colorreconstruct_params1_t
@@ -99,8 +99,8 @@ typedef struct dt_iop_colorreconstruct_params2_t
 typedef struct dt_iop_colorreconstruct_params_t
 {
   float threshold; // $MIN: 50.0 $MAX: 150.0 $DEFAULT: 100.0
-  float spatial;   // $MIN: 0.0 $MAX: 1000.0 $DEFAULT: 400.0 $DESCRIPTION: "spatial extent"
-  float range;     // $MIN: 0.0 $MAX: 50.0 $DEFAULT: 10.0 $DESCRIPTION: "range extent"
+  float spatial;   // $MIN: 0.0 $MAX: 1000.0 $DEFAULT: 400.0 $DESCRIPTION: "Spatial extent"
+  float range;     // $MIN: 0.0 $MAX: 50.0 $DEFAULT: 10.0 $DESCRIPTION: "Range extent"
   float hue;       // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.66
   dt_iop_colorreconstruct_precedence_t precedence; // $DEFAULT: 0 COLORRECONSTRUCT_PRECEDENCE_NONE
 } dt_iop_colorreconstruct_params_t;
@@ -153,16 +153,16 @@ typedef struct dt_iop_colorreconstruct_global_data_t
 
 const char *name()
 {
-  return _("color reconstruction");
+  return _("Color reconstruction");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("recover clipped highlights by propagating surrounding colors"),
-                                      _("corrective"),
-                                      _("linear or non-linear, Lab, display-referred"),
-                                      _("non-linear, Lab"),
-                                      _("non-linear, Lab, display-referred"));
+  return dt_iop_set_description(self, _("Recover clipped highlights by propagating surrounding colors"),
+                                      _("Corrective"),
+                                      _("Linear or non-linear, Lab, display-referred"),
+                                      _("Non-linear, Lab"),
+                                      _("Non-linear, Lab, display-referred"));
 }
 
 int flags()
@@ -621,7 +621,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   return 0;
 
 error:
-  dt_control_log(_("module `color reconstruction' failed"));
+  dt_control_log(_("Module `color reconstruction' failed"));
   dt_iop_colorreconstruct_bilateral_free(b);
   dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, piece->dsc_in.channels);
   return 1;
@@ -1136,14 +1136,14 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_show_all(g->hue);
   gtk_widget_set_no_show_all(g->hue, TRUE);
 
-  gtk_widget_set_tooltip_text(g->threshold, _("pixels with lightness values above this threshold are corrected"));
-  gtk_widget_set_tooltip_text(g->spatial, _("how far to look for replacement colors in spatial dimensions"));
-  gtk_widget_set_tooltip_text(g->range, _("how far to look for replacement colors in the luminance dimension"));
-  gtk_widget_set_tooltip_text(g->precedence, _("if and how to give precedence to specific replacement colors"));
-  gtk_widget_set_tooltip_text(g->hue, _("the hue tone which should be given precedence over other hue tones"));
+  gtk_widget_set_tooltip_text(g->threshold, _("Pixels with lightness values above this threshold are corrected"));
+  gtk_widget_set_tooltip_text(g->spatial, _("How far to look for replacement colors in spatial dimensions"));
+  gtk_widget_set_tooltip_text(g->range, _("How far to look for replacement colors in the luminance dimension"));
+  gtk_widget_set_tooltip_text(g->precedence, _("If and how to give precedence to specific replacement colors"));
+  gtk_widget_set_tooltip_text(g->hue, _("The hue tone which should be given precedence over other hue tones"));
 
-  GtkWidget *monochromes = dt_ui_label_new(_("not applicable"));
-  gtk_widget_set_tooltip_text(monochromes, _("no highlights reconstruction for monochrome images"));
+  GtkWidget *monochromes = dt_ui_label_new(_("Not applicable"));
+  gtk_widget_set_tooltip_text(monochromes, _("No highlights reconstruction for monochrome images"));
 
   self->gui->widget = gtk_stack_new();
   gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);

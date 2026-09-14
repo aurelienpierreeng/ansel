@@ -1626,7 +1626,7 @@ static int _init_fading(dt_masks_form_t *mask_form, int parentid, dt_masks_form_
 {
   const float masks_fading = dt_masks_get_set_conf_value_with_toast(mask_form, "fading", amount,
                                                                     FADING_MIN, FADING_MAX, increment, flow,
-                                                                    _("fading: %3.2f%%"), 100.0f);
+                                                                    _("Fading: %3.2f%%"), 100.0f);
   if(mask_gui->guipoints_count > 0)
     dt_masks_dynbuf_set(mask_gui->guipoints_payload, -3, masks_fading);
   return 1;
@@ -1637,7 +1637,7 @@ static int _init_size(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gu
 {
   const float masks_border = dt_masks_get_set_conf_value_with_toast(mask_form, "border", amount,
                                                                     FADING_MIN, FADING_MAX, increment, flow,
-                                                                    _("size: %3.2f%%"), 2.f * 100.f);
+                                                                    _("Size: %3.2f%%"), 2.f * 100.f);
   if(mask_gui->guipoints_count > 0)
     dt_masks_dynbuf_set(mask_gui->guipoints_payload, -4, masks_border);
   return 1;
@@ -1647,7 +1647,7 @@ static int _init_opacity(dt_masks_form_t *mask_form, int parentid, dt_masks_form
                          const float amount, const dt_masks_increment_t increment, const int flow)
 {
   dt_masks_get_set_conf_value_with_toast(mask_form, "opacity", amount, 0.f, 1.f,
-                                         increment, flow, _("opacity: %3.2f%%"), 100.f);
+                                         increment, flow, _("Opacity: %3.2f%%"), 100.f);
   return 1;
 }
 
@@ -3436,7 +3436,7 @@ static void _brush_sanitize_config(dt_masks_type_t type)
 
 static void _brush_set_form_name(struct dt_masks_form_t *const mask_form, const size_t form_number)
 {
-  snprintf(mask_form->name, sizeof(mask_form->name), _("brush #%d"), (int)form_number);
+  snprintf(mask_form->name, sizeof(mask_form->name), _("Brush #%d"), (int)form_number);
 }
 
 static void _brush_set_hint_message(const dt_masks_form_gui_t *const mask_gui,
@@ -3578,7 +3578,7 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
     const gboolean is_corner = dt_masks_node_is_cusp(gui_points, mask_gui->node_hovered);
 
     {
-      gchar *to_change_type = g_strdup_printf(_("Switch to %s node"), (is_corner) ? _("round") : _("cusp"));
+      gchar *to_change_type = g_strdup_printf(_("Switch to %s node"), (is_corner) ? _("Round") : _("Cusp"));
       const dt_menu_icon_t icon = is_corner ? DT_MENU_ICON_CIRCLE : DT_MENU_ICON_SQUARE;
       menu_item = ctx_gtk_menu_item_new_with_icon_and_shortcut(to_change_type, accel, menu,
                                                                _brush_switch_node_callback, mask_gui, icon);

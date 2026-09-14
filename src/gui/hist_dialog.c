@@ -188,8 +188,8 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean is
                                    iscopy ? _("Select development parts to copy") : _("Select development parts to paste"),
                                    GTK_WINDOW(window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
                                    _("_cancel"),      GTK_RESPONSE_CANCEL,
-                                   _("select _all"),  GTK_RESPONSE_YES,
-                                   _("select _none"), GTK_RESPONSE_NONE,
+                                   _("Select _all"),  GTK_RESPONSE_YES,
+                                   _("Select _none"), GTK_RESPONSE_NONE,
                                    _("_ok"),          GTK_RESPONSE_OK,
                                    NULL));
 
@@ -277,7 +277,7 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean is
   }
   else
   {
-    dt_control_log(_("can't copy history out of unaltered image"));
+    dt_control_log(_("Can't copy history out of unaltered image"));
     return GTK_RESPONSE_CANCEL;
   }
 

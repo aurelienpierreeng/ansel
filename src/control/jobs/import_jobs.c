@@ -698,7 +698,7 @@ static dt_job_t *_control_import_job_create(dt_control_import_t data)
   }
   memcpy(params->data, &data, sizeof(dt_control_import_t));
   params->index = NULL;
-  dt_control_job_add_progress(job, _("import"), FALSE);
+  dt_control_job_add_progress(job, _("Import"), FALSE);
   dt_control_job_set_params(job, params, _control_import_job_cleanup);
   return job;
 }

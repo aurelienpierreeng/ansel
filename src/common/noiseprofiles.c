@@ -36,7 +36,7 @@
 // bump this when the noiseprofiles are getting a different layout or meaning (raw-raw data, ...)
 #define DT_NOISE_PROFILE_VERSION 0
 
-const dt_noiseprofile_t dt_noiseprofile_generic = {N_("generic poissonian"), "", "", 0, {0.0001f, 0.0001f, 0.0001}, {0.0f, 0.0f, 0.0f}};
+const dt_noiseprofile_t dt_noiseprofile_generic = {N_("Generic poissonian"), "", "", 0, {0.0001f, 0.0001f, 0.0001}, {0.0f, 0.0f, 0.0f}};
 static GMutex _noiseprofiles_parser_mutex;
 
 /* The parsed noiseprofiles.json, module-owned and LAZY.
@@ -99,7 +99,7 @@ static JsonParser *_noiseprofile_load(const char *alternative)
   // run over the file once to verify that it is sane
   if(!dt_noiseprofile_verify(parser))
   {
-    dt_control_log(_("noiseprofile file `%s' is not valid"), filename);
+    dt_control_log(_("Noiseprofile file `%s' is not valid"), filename);
     fprintf(stderr, "[noiseprofile] error: `%s' is not a valid noiseprofile file. run with -d control for details\n", filename);
     g_object_unref(parser);
     return NULL;

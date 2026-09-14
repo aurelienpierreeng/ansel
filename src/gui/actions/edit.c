@@ -106,7 +106,7 @@ static gboolean undo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   if(filter)
   {
     const int records = dt_undo_list_length(dt_undo_get_global(), filter);
-    const gboolean announced = _undo_announce(records, _("undoing, please wait…"));
+    const gboolean announced = _undo_announce(records, _("Undoing, please wait…"));
     dt_undo_do_undo(dt_undo_get_global(), filter);
     _undo_announce_end(announced);
   }
@@ -154,7 +154,7 @@ static gboolean redo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   if(filter)
   {
     const int records = dt_redo_list_length(dt_undo_get_global(), filter);
-    const gboolean announced = _undo_announce(records, _("redoing, please wait…"));
+    const gboolean announced = _undo_announce(records, _("Redoing, please wait…"));
     dt_undo_do_redo(dt_undo_get_global(), filter);
     _undo_announce_end(announced);
   }
@@ -335,7 +335,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
   const int act_on_one = g_list_is_singleton(imgs); // list length == 1?
   GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-          _("open sidecar file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
+          _("Open sidecar file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
           _("_open"), _("_cancel"));
   gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(filechooser), FALSE);
 
@@ -373,7 +373,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
 
   filter = GTK_FILE_FILTER(gtk_file_filter_new());
   gtk_file_filter_add_pattern(filter, "*");
-  gtk_file_filter_set_name(filter, _("all files"));
+  gtk_file_filter_set_name(filter, _("All files"));
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(filechooser), filter);
 
   if(gtk_native_dialog_run(GTK_NATIVE_DIALOG(filechooser)) == GTK_RESPONSE_ACCEPT)
@@ -383,7 +383,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
     {
       GtkWidget *dialog
           = gtk_message_dialog_new(GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_ERROR,
-                                   GTK_BUTTONS_CLOSE, _("error loading file '%s'"), dtfilename);
+                                   GTK_BUTTONS_CLOSE, _("Error loading file '%s'"), dtfilename);
 #ifdef GDK_WINDOWING_QUARTZ
       dt_osx_disallow_fullscreen(dialog);
 #endif

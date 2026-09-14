@@ -68,9 +68,9 @@ typedef enum dt_iop_filmicrgb_reconstruction_type_t
 
 typedef enum dt_iop_filmicrgb_curve_type_t
 {
-  DT_FILMIC_CURVE_POLY_4 = 0, // $DESCRIPTION: "hard"
-  DT_FILMIC_CURVE_POLY_3 = 1,  // $DESCRIPTION: "soft"
-  DT_FILMIC_CURVE_RATIONAL = 2, // $DESCRIPTION: "safe"
+  DT_FILMIC_CURVE_POLY_4 = 0, // $DESCRIPTION: "Hard"
+  DT_FILMIC_CURVE_POLY_3 = 1,  // $DESCRIPTION: "Soft"
+  DT_FILMIC_CURVE_RATIONAL = 2, // $DESCRIPTION: "Safe"
   DT_FILMIC_CURVE_SIGMOID = 3, // "perceptual" : generalized-sigmoid toe/shoulder
 } dt_iop_filmicrgb_curve_type_t;
 

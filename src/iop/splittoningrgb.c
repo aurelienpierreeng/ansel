@@ -80,7 +80,7 @@ typedef enum dt_iop_splittoning_rgb_mixer_mode_t
 typedef struct dt_iop_splittoning_rgb_params_t
 {
   float ev[DT_SPLITTONING_RGB_POINT_COUNT]; // $MIN: -16.0 $MAX: 16.0 $DEFAULT: 0.0 $DESCRIPTION: "EV"
-  float temperature[DT_SPLITTONING_RGB_POINT_COUNT]; // $MIN: 1667.0 $MAX: 25000.0 $DEFAULT: 5003.0 $DESCRIPTION: "temperature"
+  float temperature[DT_SPLITTONING_RGB_POINT_COUNT]; // $MIN: 1667.0 $MAX: 25000.0 $DEFAULT: 5003.0 $DESCRIPTION: "Temperature"
   float red[DT_SPLITTONING_RGB_POINT_COUNT][DT_SPLITTONING_RGB_ROW_COUNT];
   float green[DT_SPLITTONING_RGB_POINT_COUNT][DT_SPLITTONING_RGB_ROW_COUNT];
   float blue[DT_SPLITTONING_RGB_POINT_COUNT][DT_SPLITTONING_RGB_ROW_COUNT];
@@ -150,28 +150,28 @@ static const char *const _mode_conf[DT_SPLITTONING_RGB_POINT_COUNT] = {
 };
 
 static const char *const _point_label[DT_SPLITTONING_RGB_POINT_COUNT] = {
-  N_("dark"),
-  N_("bright")
+  N_("Dark"),
+  N_("Bright")
 };
 
 static void _update_point_slider_colors(dt_iop_module_t *self, int point);
 
 const char *name()
 {
-  return _("split-toning");
+  return _("Split-toning");
 }
 
 const char *aliases()
 {
-  return _("split toning|split tone RGB");
+  return _("Split toning|split tone RGB");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
   return dt_iop_set_description(self,
-                                _("blend two CAT16 plus RGB mixer corrections across brightness keyframes"),
-                                _("creative or corrective"), _("linear, RGB, scene-referred"),
-                                _("linear, RGB"), _("linear, RGB, scene-referred"));
+                                _("Blend two CAT16 plus RGB mixer corrections across brightness keyframes"),
+                                _("Creative or corrective"), _("Linear, RGB, scene-referred"),
+                                _("Linear, RGB"), _("Linear, RGB, scene-referred"));
 }
 
 int default_group()
@@ -660,7 +660,7 @@ static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget 
       dt_gui_freeze_end();
       _set_point_mixer_mode(g, point, DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_conf_set_int(_mode_conf[point], DT_SPLITTONING_RGB_MIXER_COMPLETE);
-      dt_control_log(_("simple mixer mode requires normalized rows with non-zero sums."));
+      dt_control_log(_("Simple mixer mode requires normalized rows with non-zero sums."));
     }
     else if(active_mode == DT_SPLITTONING_RGB_MIXER_PRIMARIES && !primaries_ok)
     {
@@ -669,7 +669,7 @@ static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget 
       dt_gui_freeze_end();
       _set_point_mixer_mode(g, point, DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_conf_set_int(_mode_conf[point], DT_SPLITTONING_RGB_MIXER_COMPLETE);
-      dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
+      dt_control_log(_("Primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
     }
     else if(active_mode == DT_SPLITTONING_RGB_MIXER_WHITE_PRESERVING && white_preserving_ready
             && !white_preserving_ok)
@@ -679,7 +679,7 @@ static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget 
       dt_gui_freeze_end();
       _set_point_mixer_mode(g, point, DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_conf_set_int(_mode_conf[point], DT_SPLITTONING_RGB_MIXER_COMPLETE);
-      dt_control_log(_("white-preserving mixer mode requires a matrix that leaves white unchanged."));
+      dt_control_log(_("White-preserving mixer mode requires a matrix that leaves white unchanged."));
     }
   }
 
@@ -860,7 +860,7 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
     float error = INFINITY;
     if(!_sync_simple_from_params(self, point, &error))
     {
-      dt_control_log(_("simple mixer mode requires normalized rows with non-zero sums."));
+      dt_control_log(_("Simple mixer mode requires normalized rows with non-zero sums."));
       dt_gui_freeze_begin();
       dt_bauhaus_combobox_set(widget, DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_gui_freeze_end();
@@ -874,7 +874,7 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
     float error = INFINITY;
     if(!_sync_primaries_from_params(self, point, &error))
     {
-      dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
+      dt_control_log(_("Primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
       dt_gui_freeze_begin();
       dt_bauhaus_combobox_set(widget, DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_gui_freeze_end();
@@ -888,7 +888,7 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
     float error = INFINITY;
     if(!_sync_white_preserving_from_params(self, point, &error))
     {
-      dt_control_log(_("white-preserving mixer mode requires a matrix that leaves white unchanged."));
+      dt_control_log(_("White-preserving mixer mode requires a matrix that leaves white unchanged."));
       dt_gui_freeze_begin();
       dt_bauhaus_combobox_set(widget, DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_gui_freeze_end();
@@ -958,7 +958,7 @@ static void _primaries_slider_callback(GtkWidget *widget, gpointer user_data)
   dt_iop_channelmixer_shared_primaries_from_sliders(widgets, &primaries);
   if(!dt_iop_channelmixer_shared_primaries_to_matrix(DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_RGB, &primaries, M))
   {
-    dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
+    dt_control_log(_("Primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
     return;
   }
 
@@ -994,7 +994,7 @@ static void _white_preserving_slider_callback(GtkWidget *widget, gpointer user_d
     // Three primaries collapsed onto the neutral have no transform to describe. Snap the sliders
     // back to the last representable state rather than leaving the page showing a setting the
     // params do not hold.
-    dt_control_log(_("white-preserving mixer mode requires non-degenerate primaries."));
+    dt_control_log(_("White-preserving mixer mode requires non-degenerate primaries."));
     _sync_white_preserving_from_params(self, point, NULL);
     return;
   }
@@ -1271,8 +1271,8 @@ static void _tag_widget(GtkWidget *widget, const int point)
 static void _build_complete_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gui_data_t *g, const int point,
                                GtkWidget *container)
 {
-  static const char *const row_label[3] = { N_("output red"), N_("output green"), N_("output blue") };
-  static const char *const input_label[3] = { N_("input R"), N_("input G"), N_("input B") };
+  static const char *const row_label[3] = { N_("Output red"), N_("Output green"), N_("Output blue") };
+  static const char *const input_label[3] = { N_("Input R"), N_("Input G"), N_("Input B") };
 
   for(int row = 0; row < 3; row++)
   {
@@ -1290,7 +1290,7 @@ static void _build_complete_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gui
       gtk_box_pack_start(GTK_BOX(container), g->point[point].complete[row][col], FALSE, FALSE, 0);
     }
 
-    g->point[point].normalize[row] = gtk_check_button_new_with_label(_("normalize"));
+    g->point[point].normalize[row] = gtk_check_button_new_with_label(_("Normalize"));
     _tag_widget(g->point[point].normalize[row], point);
     g_signal_connect(G_OBJECT(g->point[point].normalize[row]), "toggled", G_CALLBACK(_general_callback), self);
     gtk_box_pack_start(GTK_BOX(container), g->point[point].normalize[row], FALSE, FALSE, 0);
@@ -1302,41 +1302,41 @@ static void _build_simple_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gui_d
 {
   g->point[point].simple_theta
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].simple_theta, N_("global hue rotation"));
+  dt_bauhaus_widget_set_label(g->point[point].simple_theta, N_("Global hue rotation"));
   dt_bauhaus_slider_set_factor(g->point[point].simple_theta, 180.f);
   dt_bauhaus_slider_set_format(g->point[point].simple_theta, "\302\260");
 
   g->point[point].simple_psi
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].simple_psi, N_("chroma (u,v) axes orientation"));
+  dt_bauhaus_widget_set_label(g->point[point].simple_psi, N_("Chroma (u,v) axes orientation"));
   dt_bauhaus_slider_set_factor(g->point[point].simple_psi, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].simple_psi, "\302\260");
 
   g->point[point].simple_stretch_1
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].simple_stretch_1, N_("u stretch"));
+  dt_bauhaus_widget_set_label(g->point[point].simple_stretch_1, N_("U stretch"));
 
   g->point[point].simple_stretch_2
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].simple_stretch_2, N_("v stretch"));
+  dt_bauhaus_widget_set_label(g->point[point].simple_stretch_2, N_("V stretch"));
 
   g->point[point].simple_coupling_2
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].simple_coupling_2, N_("achromatic coupling hue"));
+  dt_bauhaus_widget_set_label(g->point[point].simple_coupling_2, N_("Achromatic coupling hue"));
   dt_bauhaus_slider_set_factor(g->point[point].simple_coupling_2, 180.f);
   dt_bauhaus_slider_set_format(g->point[point].simple_coupling_2, "\302\260");
 
   g->point[point].simple_coupling_1
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 1.f, 0, 0.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].simple_coupling_1, N_("achromatic coupling amount"));
+  dt_bauhaus_widget_set_label(g->point[point].simple_coupling_1, N_("Achromatic coupling amount"));
 
   GtkWidget *widgets[] = {
     g->point[point].simple_theta,
-    dt_ui_section_label_new(_("chroma")),
+    dt_ui_section_label_new(_("Chroma")),
     g->point[point].simple_psi,
     g->point[point].simple_stretch_1,
     g->point[point].simple_stretch_2,
-    dt_ui_section_label_new(_("achromatic coupling")),
+    dt_ui_section_label_new(_("Achromatic coupling")),
     g->point[point].simple_coupling_2,
     g->point[point].simple_coupling_1,
   };
@@ -1357,62 +1357,62 @@ static void _build_primaries_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gu
 {
   g->point[point].primaries_achromatic_hue
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.f, 2.f, 0, 0.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].primaries_achromatic_hue, N_("white hue"));
+  dt_bauhaus_widget_set_label(g->point[point].primaries_achromatic_hue, N_("White hue"));
   dt_bauhaus_slider_set_factor(g->point[point].primaries_achromatic_hue, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].primaries_achromatic_hue, "\302\260");
 
   g->point[point].primaries_achromatic_purity
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 0.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].primaries_achromatic_purity, N_("white purity"));
+  dt_bauhaus_widget_set_label(g->point[point].primaries_achromatic_purity, N_("White purity"));
 
   g->point[point].primaries_red_hue
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].primaries_red_hue, N_("red hue"));
+  dt_bauhaus_widget_set_label(g->point[point].primaries_red_hue, N_("Red hue"));
   dt_bauhaus_slider_set_factor(g->point[point].primaries_red_hue, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].primaries_red_hue, "\302\260");
 
   g->point[point].primaries_red_purity
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].primaries_red_purity, N_("red purity"));
+  dt_bauhaus_widget_set_label(g->point[point].primaries_red_purity, N_("Red purity"));
 
   g->point[point].primaries_green_hue
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].primaries_green_hue, N_("green hue"));
+  dt_bauhaus_widget_set_label(g->point[point].primaries_green_hue, N_("Green hue"));
   dt_bauhaus_slider_set_factor(g->point[point].primaries_green_hue, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].primaries_green_hue, "\302\260");
 
   g->point[point].primaries_green_purity
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].primaries_green_purity, N_("green purity"));
+  dt_bauhaus_widget_set_label(g->point[point].primaries_green_purity, N_("Green purity"));
 
   g->point[point].primaries_blue_hue
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].primaries_blue_hue, N_("blue hue"));
+  dt_bauhaus_widget_set_label(g->point[point].primaries_blue_hue, N_("Blue hue"));
   dt_bauhaus_slider_set_factor(g->point[point].primaries_blue_hue, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].primaries_blue_hue, "\302\260");
 
   g->point[point].primaries_blue_purity
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].primaries_blue_purity, N_("blue purity"));
+  dt_bauhaus_widget_set_label(g->point[point].primaries_blue_purity, N_("Blue purity"));
 
   g->point[point].primaries_gain
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -8.f, 8.f, 0, 1.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].primaries_gain, N_("gain"));
+  dt_bauhaus_widget_set_label(g->point[point].primaries_gain, N_("Gain"));
 
   GtkWidget *widgets[] = {
-    dt_ui_section_label_new(_("achromatic axis")),
+    dt_ui_section_label_new(_("Achromatic axis")),
     g->point[point].primaries_achromatic_hue,
     g->point[point].primaries_achromatic_purity,
-    dt_ui_section_label_new(_("red primary")),
+    dt_ui_section_label_new(_("Red primary")),
     g->point[point].primaries_red_hue,
     g->point[point].primaries_red_purity,
-    dt_ui_section_label_new(_("green primary")),
+    dt_ui_section_label_new(_("Green primary")),
     g->point[point].primaries_green_hue,
     g->point[point].primaries_green_purity,
-    dt_ui_section_label_new(_("blue primary")),
+    dt_ui_section_label_new(_("Blue primary")),
     g->point[point].primaries_blue_hue,
     g->point[point].primaries_blue_purity,
-    dt_ui_section_label_new(_("gain correction")),
+    dt_ui_section_label_new(_("Gain correction")),
     g->point[point].primaries_gain,
   };
 
@@ -1445,20 +1445,20 @@ static void _build_white_preserving_ui(dt_iop_module_t *self, dt_iop_splittoning
   /* A "%" format on a range under 10 applies the 100x factor and takes two digits off by itself. */             \
   dt_bauhaus_slider_set_format(g->point[point].white_preserving_##var##_saturation, "%");
 
-  SPLITTONING_WHITE_PRESERVING_PRIMARY(red, N_("red rotation"), N_("red saturation"))
-  SPLITTONING_WHITE_PRESERVING_PRIMARY(green, N_("green rotation"), N_("green saturation"))
-  SPLITTONING_WHITE_PRESERVING_PRIMARY(blue, N_("blue rotation"), N_("blue saturation"))
+  SPLITTONING_WHITE_PRESERVING_PRIMARY(red, N_("Red rotation"), N_("Red saturation"))
+  SPLITTONING_WHITE_PRESERVING_PRIMARY(green, N_("Green rotation"), N_("Green saturation"))
+  SPLITTONING_WHITE_PRESERVING_PRIMARY(blue, N_("Blue rotation"), N_("Blue saturation"))
 
 #undef SPLITTONING_WHITE_PRESERVING_PRIMARY
 
   GtkWidget *widgets[] = {
-    dt_ui_section_label_new(_("red primary")),
+    dt_ui_section_label_new(_("Red primary")),
     g->point[point].white_preserving_red_rotation,
     g->point[point].white_preserving_red_saturation,
-    dt_ui_section_label_new(_("green primary")),
+    dt_ui_section_label_new(_("Green primary")),
     g->point[point].white_preserving_green_rotation,
     g->point[point].white_preserving_green_saturation,
-    dt_ui_section_label_new(_("blue primary")),
+    dt_ui_section_label_new(_("Blue primary")),
     g->point[point].white_preserving_blue_rotation,
     g->point[point].white_preserving_blue_saturation,
   };
@@ -1493,23 +1493,23 @@ void gui_init(struct dt_iop_module_t *self)
 
   for(int point = 0; point < DT_SPLITTONING_RGB_POINT_COUNT; point++)
   {
-    GtkWidget *page = dt_ui_notebook_page(g->tabs, _point_label[point], _(point == 0 ? "shadows" : "highlights"));
+    GtkWidget *page = dt_ui_notebook_page(g->tabs, _point_label[point], _(point == 0 ? "Shadows" : "Highlights"));
     g->point[point].page = page;
 
     g->point[point].ev = dt_color_picker_new(
         self, DT_COLOR_PICKER_AREA,
         dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -16.f, 16.f, 0,
                                          point == 0 ? -16.f : 0.f, 2));
-    dt_bauhaus_widget_set_label(g->point[point].ev, N_("brightness"));
+    dt_bauhaus_widget_set_label(g->point[point].ev, N_("Brightness"));
     dt_bauhaus_slider_set_format(g->point[point].ev, " EV");
-    gtk_widget_set_tooltip_text(g->point[point].ev, _("sample average luminance from an area to set this keyframe"));
+    gtk_widget_set_tooltip_text(g->point[point].ev, _("Sample average luminance from an area to set this keyframe"));
     _tag_widget(g->point[point].ev, point);
     g_signal_connect(G_OBJECT(g->point[point].ev), "value-changed", G_CALLBACK(_general_callback), self);
     gtk_box_pack_start(GTK_BOX(page), g->point[point].ev, FALSE, FALSE, 0);
 
     g->point[point].temperature
         = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 1667.f, 25000.f, 0, 5003.f, 0);
-    dt_bauhaus_widget_set_label(g->point[point].temperature, N_("temperature"));
+    dt_bauhaus_widget_set_label(g->point[point].temperature, N_("Temperature"));
     dt_bauhaus_slider_set_soft_range(g->point[point].temperature, 3000.f, 7000.f);
     dt_bauhaus_slider_set_format(g->point[point].temperature, " K");
     _tag_widget(g->point[point].temperature, point);
@@ -1517,7 +1517,7 @@ void gui_init(struct dt_iop_module_t *self)
     gtk_box_pack_start(GTK_BOX(page), g->point[point].temperature, FALSE, FALSE, 0);
 
     g->point[point].mixer_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-    dt_bauhaus_widget_set_label(g->point[point].mixer_mode, N_("mode"));
+    dt_bauhaus_widget_set_label(g->point[point].mixer_mode, N_("Mode"));
     dt_bauhaus_combobox_add(g->point[point].mixer_mode, _("Complete"));
     dt_bauhaus_combobox_add(g->point[point].mixer_mode, _("Simple"));
     dt_bauhaus_combobox_add(g->point[point].mixer_mode, _("Primaries"));

@@ -101,16 +101,16 @@ typedef struct dt_iop_colorcorrection_global_data_t
 
 const char *name()
 {
-  return _("color correction");
+  return _("Color correction");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("correct white balance selectively for blacks and whites"),
-                                      _("corrective or creative"),
-                                      _("non-linear, Lab, display-referred"),
-                                      _("non-linear, Lab"),
-                                      _("non-linear, Lab, display-referred"));
+  return dt_iop_set_description(self, _("Correct white balance selectively for blacks and whites"),
+                                      _("Corrective or creative"),
+                                      _("Non-linear, Lab, display-referred"),
+                                      _("Non-linear, Lab"),
+                                      _("Non-linear, Lab, display-referred"));
 }
 
 int flags()
@@ -137,7 +137,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.hia = 0.0f;
   p.hib = 3.0f;
   p.saturation = 1.0f;
-  dt_gui_presets_add_generic(_("warm tone"), self->op,
+  dt_gui_presets_add_generic(_("Warm tone"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.loa = 3.55f;
@@ -145,7 +145,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.hia = -0.95f;
   p.hib = 4.5f;
   p.saturation = 1.0f;
-  dt_gui_presets_add_generic(_("warming filter"), self->op,
+  dt_gui_presets_add_generic(_("Warming filter"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.loa = -3.55f;
@@ -153,7 +153,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.hia = 0.95f;
   p.hib = -4.5f;
   p.saturation = 1.0f;
-  dt_gui_presets_add_generic(_("cooling filter"), self->op,
+  dt_gui_presets_add_generic(_("Cooling filter"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 }
 
@@ -291,7 +291,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.0));
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("drag the line for split-toning. "
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("Drag the line for split-toning. "
                                                      "bright means highlights, dark means shadows. "
                                                      "use mouse wheel to change saturation."));
 
@@ -310,7 +310,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->area), "key-press-event", G_CALLBACK(dt_iop_colorcorrection_key_press), self);
 
   g->slider = dt_bauhaus_slider_from_params(self, N_("saturation"));
-  gtk_widget_set_tooltip_text(g->slider, _("set the global saturation"));
+  gtk_widget_set_tooltip_text(g->slider, _("Set the global saturation"));
 
   cmsHPROFILE hsRGB = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_ROLE_INPUT)->profile;
   cmsHPROFILE hLab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_ROLE_ANY)->profile;

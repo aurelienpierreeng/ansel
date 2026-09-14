@@ -829,9 +829,9 @@ static gboolean _expand_rating_and_metadata(dt_variables_params_t *params, char 
   else if(_has_prefix(variable, "OPENCL.ACTIVATED") || _has_prefix(variable, "OPENCL_ACTIVATED"))
   {
     if(dt_opencl_is_enabled())
-      result = g_strdup(_("yes"));
+      result = g_strdup(_("Yes"));
     else
-      result = g_strdup(_("no"));
+      result = g_strdup(_("No"));
   }
   else return FALSE;
 

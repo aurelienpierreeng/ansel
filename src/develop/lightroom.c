@@ -1061,7 +1061,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
 
   if(IS_NULL_PTR(pathname))
   {
-    if(!iauto) dt_control_log(_("cannot find lightroom XMP!"));
+    if(!iauto) dt_control_log(_("Cannot find lightroom XMP!"));
     return FALSE;
   }
 
@@ -1494,7 +1494,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
   if(data.has_tags)
   {
     if(imported[0]) g_strlcat(imported, ", ", sizeof(imported));
-    g_strlcat(imported, _("tags"), sizeof(imported));
+    g_strlcat(imported, _("Tags"), sizeof(imported));
     n_import++;
   }
 
@@ -1503,7 +1503,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
     dt_ratings_apply_on_image(imgid, data.rating, FALSE, FALSE, FALSE);
 
     if(imported[0]) g_strlcat(imported, ", ", sizeof(imported));
-    g_strlcat(imported, _("rating"), sizeof(imported));
+    g_strlcat(imported, _("Rating"), sizeof(imported));
     n_import++;
   }
 
@@ -1519,7 +1519,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, imgs, 0);
 
     if(imported[0]) g_strlcat(imported, ", ", sizeof(imported));
-    g_strlcat(imported, _("geotagging"), sizeof(imported));
+    g_strlcat(imported, _("Geotagging"), sizeof(imported));
     n_import++;
   }
 
@@ -1528,7 +1528,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
     dt_colorlabels_set_label(imgid, data.color);
 
     if(imported[0]) g_strlcat(imported, ", ", sizeof(imported));
-    g_strlcat(imported, _("color label"), sizeof(imported));
+    g_strlcat(imported, _("Color label"), sizeof(imported));
     n_import++;
   }
 

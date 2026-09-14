@@ -274,7 +274,7 @@ void dt_gui_gtk_quit()
 {
   GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
   dt_gui_add_class(win, "dt_gui_quit");
-  gtk_window_set_title(GTK_WINDOW(win), _("closing Ansel..."));
+  gtk_window_set_title(GTK_WINDOW(win), _("Closing Ansel..."));
 
   dt_ui_cleanup_titlebar(darktable.gui->ui);
 

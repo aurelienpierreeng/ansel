@@ -140,7 +140,7 @@ static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
   gallery_t *d = (gallery_t *)self->gui_data;
   GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-         _("select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+         _("Select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
          _("_select as output destination"), _("_cancel"));
 
   gchar *old = g_strdup(gtk_entry_get_text(d->entry));
@@ -199,23 +199,23 @@ void gui_init(dt_imageio_module_storage_t *self)
   dt_gtkentry_setup_completion(GTK_ENTRY(widget), dt_gtkentry_get_default_path_compl_list(), "$(");
 
   gtk_widget_set_tooltip_text(widget,
-      _("enter the path where to put exported images\nvariables support bash like string manipulation\n"
+      _("Enter the path where to put exported images\nvariables support bash like string manipulation\n"
         "type '$(' to activate the completion and see the list of variables"));
   g_signal_connect(G_OBJECT(widget), "changed", G_CALLBACK(entry_changed_callback), self);
 
   widget = dtgtk_button_new(dtgtk_cairo_paint_directory, CPF_NONE, NULL);
-  gtk_widget_set_tooltip_text(widget, _("select directory"));
+  gtk_widget_set_tooltip_text(widget, _("Select directory"));
   gtk_box_pack_start(GTK_BOX(hbox), widget, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(widget), "clicked", G_CALLBACK(button_clicked), self);
 
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("title")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("Title")), FALSE, FALSE, 0);
   d->title_entry = GTK_ENTRY(gtk_entry_new());
   dt_accels_disconnect_on_text_input(GTK_WIDGET(d->title_entry));
   gtk_entry_set_width_chars(d->title_entry, 0);
   gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(d->title_entry), TRUE, TRUE, 0);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(d->title_entry), _("enter the title of the website"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(d->title_entry), _("Enter the title of the website"));
   dir = dt_conf_get_string_const("plugins/imageio/storage/gallery/title");
   if(dir)
   {
@@ -300,7 +300,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
   if(g_mkdir_with_parents(dirname, 0755))
   {
     fprintf(stderr, "[imageio_storage_gallery] could not create directory: `%s'!\n", dirname);
-    dt_control_log(_("could not create directory `%s'!"), dirname);
+    dt_control_log(_("Could not create directory `%s'!"), dirname);
     return 1;
   }
 
@@ -386,7 +386,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
                        icc_filename, icc_intent, self, sdata, num, total, metadata) != 0)
   {
     fprintf(stderr, "[imageio_storage_gallery] could not export to file: `%s'!\n", filename);
-    dt_control_log(_("could not export to file `%s'!"), filename);
+    dt_control_log(_("Could not export to file `%s'!"), filename);
     dt_free(pair);
     dt_free(esc_relfilename);
     dt_free(esc_relthumbfilename);
@@ -426,7 +426,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
                        icc_intent, self, sdata, num, total, NULL) != 0)
   {
     fprintf(stderr, "[imageio_storage_gallery] could not export to file: `%s'!\n", filename);
-    dt_control_log(_("could not export to file `%s'!"), filename);
+    dt_control_log(_("Could not export to file `%s'!"), filename);
     return 1;
   }
   // restore for next image:

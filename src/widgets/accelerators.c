@@ -619,6 +619,60 @@ static void _add_generic_accel(dt_shortcut_t *shortcut, GtkAccelFlags flags)
 
 static void _connect_accel(dt_shortcut_t *shortcut);
 
+/** Carry a user's saved keybinding across a label re-case.
+ *
+ * Paths are built from translated labels, so when a label's first letter changes
+ * ("edit this preset.." -> "Edit this preset..") the whole path moves and
+ * gtk_accel_map_load()'d user bindings land on a path the app never registers
+ * again. The app default is then installed at the new path and the user's key is
+ * orphaned (see the long note in _insert_accel()).
+ *
+ * Recover it: with the new path sitting at its app default, try every spelling
+ * obtained by lower-casing the first letter of some subset of the path's
+ * uppercase-initial components. The first alternate that exists in the loaded map
+ * with a non-default key is the pre-rename path; adopt its key onto the new path.
+ * Idempotent: once migrated, the new path carries a non-default key and this
+ * returns immediately. Components that legitimately keep a capital ("Modules",
+ * "<Ansel>") produce alternates that do not exist in the map and are ignored.
+ */
+static void _migrate_legacy_accel_path(dt_shortcut_t *shortcut)
+{
+  GtkAccelKey cur = { 0 };
+  if(gtk_accel_map_lookup_entry(shortcut->path, &cur)
+     && (cur.accel_key != shortcut->key || cur.accel_mods != shortcut->mods))
+    return; // already rebound under the new path (or migrated previously)
+
+  gchar **parts = g_strsplit(shortcut->path, "/", -1);
+  const guint n = g_strv_length(parts);
+  guint bits[16];
+  guint nbits = 0;
+  for(guint i = 0; i < n && nbits < 16; i++)
+    if(parts[i][0] >= 'A' && parts[i][0] <= 'Z')
+      bits[nbits++] = i;
+
+  for(guint mask = 1; mask < (1u << nbits); mask++)
+  {
+    for(guint b = 0; b < nbits; b++)
+      if(mask & (1u << b))
+        parts[bits[b]][0] = g_ascii_tolower(parts[bits[b]][0]);
+    gchar *candidate = g_strjoinv("/", parts);
+    for(guint b = 0; b < nbits; b++)
+      if(mask & (1u << b))
+        parts[bits[b]][0] = g_ascii_toupper(parts[bits[b]][0]);
+
+    GtkAccelKey key = { 0 };
+    if(gtk_accel_map_lookup_entry(candidate, &key) && key.accel_key != 0
+       && (key.accel_key != shortcut->key || key.accel_mods != shortcut->mods))
+    {
+      gtk_accel_map_change_entry(shortcut->path, key.accel_key, key.accel_mods, TRUE);
+      dt_free(candidate);
+      break;
+    }
+    dt_free(candidate);
+  }
+  g_strfreev(parts);
+}
+
 static void _insert_accel(dt_accels_t *accels, dt_shortcut_t *shortcut)
 {
   // Register the app default as the accel_map entry's OWN default, not as an entry with no
@@ -648,6 +702,7 @@ static void _insert_accel(dt_accels_t *accels, dt_shortcut_t *shortcut)
   // restored to its default once. It is then saved under the new spelling and stays cleared
   // from there on.
   gtk_accel_map_add_entry(shortcut->path, shortcut->key, shortcut->mods);
+  _migrate_legacy_accel_path(shortcut);
   dt_pthread_mutex_lock(&accels->lock);
   g_hash_table_insert(accels->acceleratables, shortcut->path, shortcut);
 

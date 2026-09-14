@@ -221,17 +221,17 @@ void append_run(GtkWidget **menus, GList **lists, const dt_menus_t index)
   GtkWidget *parent = get_last_widget(lists);
 
   // Add mipmap size options to the submenu
-  add_sub_sub_menu_entry(menus, parent, lists, _("up to 360x225 px"), index, NULL, preload_to_mipmap_0_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("up to 720x450 px"), index, NULL, preload_to_mipmap_1_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("up to 1440x900 px"), index, NULL, preload_to_mipmap_2_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("up to Full HD 1080p"), index, NULL, preload_to_mipmap_3_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("up to 2560x1440 px"), index, NULL, preload_to_mipmap_4_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("up to 4K/UHD"), index, NULL, preload_to_mipmap_5_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("up to 5K"), index, NULL, preload_to_mipmap_6_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("up to 6K"), index, NULL, preload_to_mipmap_7_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("up to 8K"), index, NULL, preload_to_mipmap_8_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Up to 360x225 px"), index, NULL, preload_to_mipmap_0_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Up to 720x450 px"), index, NULL, preload_to_mipmap_1_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Up to 1440x900 px"), index, NULL, preload_to_mipmap_2_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Up to Full HD 1080p"), index, NULL, preload_to_mipmap_3_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Up to 2560x1440 px"), index, NULL, preload_to_mipmap_4_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Up to 4K/UHD"), index, NULL, preload_to_mipmap_5_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Up to 5K"), index, NULL, preload_to_mipmap_6_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Up to 6K"), index, NULL, preload_to_mipmap_7_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Up to 8K"), index, NULL, preload_to_mipmap_8_callback, NULL, NULL, has_active_images, 0, 0);
   add_sub_menu_separator(parent);
-  add_sub_sub_menu_entry(menus, parent, lists, _("for current grid size"), index, NULL, preload_auto_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("For current grid size"), index, NULL, preload_auto_callback, NULL, NULL, has_active_images, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Purge selected thumbnails from cache"), index, NULL, clear_image_cache, NULL, NULL, has_active_images, 0, 0);
   add_menu_separator(menus[index]);

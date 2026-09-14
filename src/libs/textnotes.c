@@ -521,7 +521,7 @@ static void _setup_completion(dt_lib_module_t *self, GtkWidget *textview)
   GtkWidget *completion_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(d->completion_model));
   gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(completion_tree), FALSE);
   GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-  GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(_("variable"), renderer,
+  GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(_("Variable"), renderer,
                                                                      "text", COMPL_DESCRIPTION, NULL);
   gtk_tree_view_append_column(GTK_TREE_VIEW(completion_tree), col);
   GtkTreeSelection *sel = gtk_tree_view_get_selection(GTK_TREE_VIEW(completion_tree));
@@ -572,7 +572,7 @@ static void _open_uri(const char *uri)
   const gboolean ok = gtk_show_uri_on_window(win, uri, GDK_CURRENT_TIME, &error);
   if(!ok && error)
   {
-    dt_control_log(_("could not open link: %s"), error->message);
+    dt_control_log(_("Could not open link: %s"), error->message);
     g_clear_error(&error);
   }
 }
@@ -1839,7 +1839,7 @@ static void _save_and_render(dt_lib_module_t *self)
   GError *error = NULL;
   if(!g_file_set_contents(d->path, text, -1, &error))
   {
-    dt_control_log(_("failed to save text notes to %s: %s"), d->path, error->message);
+    dt_control_log(_("Failed to save text notes to %s: %s"), d->path, error->message);
     g_clear_error(&error);
     goto done;
   }
@@ -2054,8 +2054,8 @@ void gui_init(dt_lib_module_t *self)
   GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), toolbar, FALSE, FALSE, 0);
 
-  d->mode_toggle = gtk_toggle_button_new_with_label(_("preview"));
-  gtk_widget_set_tooltip_text(d->mode_toggle, _("toggle Markdown preview"));
+  d->mode_toggle = gtk_toggle_button_new_with_label(_("Preview"));
+  gtk_widget_set_tooltip_text(d->mode_toggle, _("Toggle Markdown preview"));
   gtk_box_pack_end(GTK_BOX(toolbar), d->mode_toggle, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(d->mode_toggle), "toggled", G_CALLBACK(_toggle_mode), self);
 

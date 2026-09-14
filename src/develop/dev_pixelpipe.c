@@ -1240,7 +1240,7 @@ void dt_dev_pixelpipe_propagate_formats(dt_dev_pixelpipe_t *pipe)
 
       if(input_mismatch)
       {
-        dt_control_log(_("disabled module `%s`: unexpected input buffer format"),
+        dt_control_log(_("Disabled module `%s`: unexpected input buffer format"),
                        piece->module->name());
         dt_print(DT_DEBUG_PIPE,
                  "[pixelpipe] disabling module %s because input format expects %" G_GSIZE_FORMAT

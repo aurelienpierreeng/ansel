@@ -102,12 +102,12 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
 
   // the group leader
   if(thumb->info.id == thumb->info.group_id)
-    tt = g_strdup_printf("\n\u2022 <b>%s (%s)</b>", _("current"), _("leader"));
+    tt = g_strdup_printf("\n\u2022 <b>%s (%s)</b>", _("Current"), _("Leader"));
   else
   {
     dt_image_t leader = { 0 };
     if(dt_thumbtable_get_thumbnail_info(thumb->table, thumb->info.group_id, &leader))
-      tt = g_strdup_printf("%s\n\u2022 <b>%s (%s)</b>", _("\nclick here to set this image as group leader\n"), leader.filename, _("leader"));
+      tt = g_strdup_printf("%s\n\u2022 <b>%s (%s)</b>", _("\nclick here to set this image as group leader\n"), leader.filename, _("Leader"));
   }
 
   // and the other images
@@ -120,7 +120,7 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
     if(member->imgid != thumb->info.group_id)
     {
       if(member->imgid == thumb->info.id)
-        tt = dt_util_dstrcat(tt, "\n\u2022 %s", _("current"));
+        tt = dt_util_dstrcat(tt, "\n\u2022 %s", _("Current"));
       else
       {
         tt = dt_util_dstrcat(tt, "\n\u2022 %s", member->filename);
@@ -131,7 +131,7 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
   g_list_free_full(members, dt_image_group_member_free);
 
   // and the number of grouped images
-  gchar *ttf = g_strdup_printf("%d %s\n%s", nb, _("grouped images"), tt);
+  gchar *ttf = g_strdup_printf("%d %s\n%s", nb, _("Grouped images"), tt);
   dt_free(tt);
 
   // let's apply the tooltip

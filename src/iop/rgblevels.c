@@ -81,8 +81,8 @@ typedef enum dt_iop_rgblevels_autoscale_t
 
 typedef struct dt_iop_rgblevels_params_t
 {
-  dt_iop_rgblevels_autoscale_t autoscale; // $DEFAULT: DT_IOP_RGBLEVELS_LINKED_CHANNELS $DESCRIPTION: "mode" (DT_IOP_RGBLEVELS_INDEPENDENT_CHANNELS, DT_IOP_RGBLEVELS_LINKED_CHANNELS)
-  dt_iop_rgb_norms_t preserve_colors;     // $DEFAULT: DT_RGB_NORM_LUMINANCE $DESCRIPTION: "preserve colors"
+  dt_iop_rgblevels_autoscale_t autoscale; // $DEFAULT: DT_IOP_RGBLEVELS_LINKED_CHANNELS $DESCRIPTION: "Mode" (DT_IOP_RGBLEVELS_INDEPENDENT_CHANNELS, DT_IOP_RGBLEVELS_LINKED_CHANNELS)
+  dt_iop_rgb_norms_t preserve_colors;     // $DEFAULT: DT_RGB_NORM_LUMINANCE $DESCRIPTION: "Preserve colors"
   float levels[DT_IOP_RGBLEVELS_MAX_CHANNELS][3];
 } dt_iop_rgblevels_params_t;
 
@@ -120,7 +120,7 @@ typedef struct dt_iop_rgblevels_data_t
 
 const char *name()
 {
-  return _("levels");
+  return _("Levels");
 }
 
 int default_group()
@@ -140,11 +140,11 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("adjust black, white and mid-gray points in RGB color space"),
-                                      _("corrective and creative"),
-                                      _("linear, RGB, display-referred"),
-                                      _("non-linear, RGB"),
-                                      _("non-linear, RGB, display-referred"));
+  return dt_iop_set_description(self, _("Adjust black, white and mid-gray points in RGB color space"),
+                                      _("Corrective and creative"),
+                                      _("Linear, RGB, display-referred"),
+                                      _("Non-linear, RGB"),
+                                      _("Non-linear, RGB, display-referred"));
 }
 
 static void _turn_select_region_off(struct dt_iop_module_t *self)
@@ -816,12 +816,12 @@ void gui_init(dt_iop_module_t *self)
   c->last_picked_color = -1;
 
   c->cmb_autoscale = dt_bauhaus_combobox_from_params(self, "autoscale");
-  gtk_widget_set_tooltip_text(c->cmb_autoscale, _("choose between linked and independent channels."));
+  gtk_widget_set_tooltip_text(c->cmb_autoscale, _("Choose between linked and independent channels."));
 
   c->channel_tabs = GTK_NOTEBOOK(gtk_notebook_new());
-  dt_ui_notebook_page(c->channel_tabs, N_("R"), _("curve nodes for r channel"));
-  dt_ui_notebook_page(c->channel_tabs, N_("G"), _("curve nodes for g channel"));
-  dt_ui_notebook_page(c->channel_tabs, N_("B"), _("curve nodes for b channel"));
+  dt_ui_notebook_page(c->channel_tabs, N_("R"), _("Curve nodes for r channel"));
+  dt_ui_notebook_page(c->channel_tabs, N_("G"), _("Curve nodes for g channel"));
+  dt_ui_notebook_page(c->channel_tabs, N_("B"), _("Curve nodes for b channel"));
   g_signal_connect(G_OBJECT(c->channel_tabs), "switch_page", G_CALLBACK(_tab_switch_callback), self);
   dt_ui_notebook_set_picker_owner(c->channel_tabs, self);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(c->channel_tabs), FALSE, FALSE, 0);
@@ -836,7 +836,7 @@ void gui_init(dt_iop_module_t *self)
 
   g_object_set_data(G_OBJECT(c->area), "iop-instance", self);
 
-  gtk_widget_set_tooltip_text(GTK_WIDGET(c->area),_("drag handles to set black, gray, and white points. "
+  gtk_widget_set_tooltip_text(GTK_WIDGET(c->area),_("Drag handles to set black, gray, and white points. "
                                                     "operates on L channel."));
 
   gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK
@@ -851,17 +851,17 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(c->area), "scroll-event", G_CALLBACK(_area_scroll_callback), self);
 
   c->blackpick = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, NULL);
-  gtk_widget_set_tooltip_text(c->blackpick, _("pick black point from image"));
+  gtk_widget_set_tooltip_text(c->blackpick, _("Pick black point from image"));
   gtk_widget_set_name(GTK_WIDGET(c->blackpick), "picker-black");
   g_signal_connect(G_OBJECT(c->blackpick), "toggled", G_CALLBACK(_color_picker_callback), self);
 
   c->greypick = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, NULL);
-  gtk_widget_set_tooltip_text(c->greypick, _("pick medium gray point from image"));
+  gtk_widget_set_tooltip_text(c->greypick, _("Pick medium gray point from image"));
   gtk_widget_set_name(GTK_WIDGET(c->greypick), "picker-grey");
   g_signal_connect(G_OBJECT(c->greypick), "toggled", G_CALLBACK(_color_picker_callback), self);
 
   c->whitepick = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, NULL);
-  gtk_widget_set_tooltip_text(c->whitepick, _("pick white point from image"));
+  gtk_widget_set_tooltip_text(c->whitepick, _("Pick white point from image"));
   gtk_widget_set_name(GTK_WIDGET(c->whitepick), "picker-white");
   g_signal_connect(G_OBJECT(c->whitepick), "toggled", G_CALLBACK(_color_picker_callback), self);
 
@@ -872,13 +872,13 @@ void gui_init(dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(self->gui->widget), pick_hbox, TRUE, TRUE, 0);
 
-  c->bt_auto_levels = gtk_button_new_with_label(_("auto"));
-  gtk_widget_set_tooltip_text(c->bt_auto_levels, _("apply auto levels"));
+  c->bt_auto_levels = gtk_button_new_with_label(_("Auto"));
+  gtk_widget_set_tooltip_text(c->bt_auto_levels, _("Apply auto levels"));
 
   c->bt_select_region = dtgtk_togglebutton_new(dtgtk_cairo_paint_colorpicker, 0, NULL);
 
   gtk_widget_set_tooltip_text(c->bt_select_region,
-                              _("apply auto levels based on a region defined by the user\n"
+                              _("Apply auto levels based on a region defined by the user\n"
                                 "click and drag to draw the area\n"
                                 "right click to cancel"));
 
@@ -892,7 +892,7 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(c->bt_select_region), "toggled", G_CALLBACK(_select_region_toggled_callback), self);
 
   c->cmb_preserve_colors = dt_bauhaus_combobox_from_params(self, "preserve_colors");
-  gtk_widget_set_tooltip_text(c->cmb_preserve_colors, _("method to preserve colors when applying contrast"));
+  gtk_widget_set_tooltip_text(c->cmb_preserve_colors, _("Method to preserve colors when applying contrast"));
 
   // add signal handler for preview pipe finish
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,

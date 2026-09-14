@@ -60,7 +60,7 @@ char *dt_ratings_get_name(const int rating)
   switch(rating)
   {
     case 0:
-      return _("empty");
+      return _("Empty");
     case 1:
       return _("1 star");
     case 2:
@@ -72,9 +72,9 @@ char *dt_ratings_get_name(const int rating)
     case 5:
       return _("5 stars");
     case 6:
-      return _("rejected");
+      return _("Rejected");
     default:
-      return _("unknown/invalid");
+      return _("Unknown/invalid");
   }
 }
 
@@ -232,10 +232,10 @@ void dt_ratings_apply_on_image(const int32_t imgid, const int rating, const gboo
       const guint count = g_list_length(imgs);
       if(new_rating == DT_VIEW_REJECT)
         dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE,
-                           ngettext("rejecting %d image", "rejecting %d images", count), count);
+                           ngettext("Rejecting %d image", "Rejecting %d images", count), count);
       else
         dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE,
-                           ngettext("applying rating %d to %d image", "applying rating %d to %d images", count),
+                           ngettext("Applying rating %d to %d image", "Applying rating %d to %d images", count),
                            new_rating, count);
     }
 
@@ -250,7 +250,7 @@ void dt_ratings_apply_on_image(const int32_t imgid, const int rating, const gboo
     imgs = NULL;
   }
   else
-    dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE, _("no images selected to apply rating"));
+    dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE, _("No images selected to apply rating"));
 }
 
 // clang-format off

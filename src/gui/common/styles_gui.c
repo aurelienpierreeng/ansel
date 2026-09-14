@@ -39,7 +39,7 @@ void dt_styles_create_from_list(const GList *list)
     selected = TRUE;
   }
 
-  if(!selected) dt_control_log(_("no image selected!"));
+  if(!selected) dt_control_log(_("No image selected!"));
 }
 
 // clang-format off

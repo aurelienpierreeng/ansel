@@ -71,7 +71,7 @@ static void _set_columns(dt_lib_module_t *self, int columns);
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("lighttable");
+  return _("Lighttable");
 }
 
 const char **views(dt_lib_module_t *self)

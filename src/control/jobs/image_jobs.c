@@ -79,7 +79,7 @@ dt_job_t *dt_image_import_job_create(uint32_t filmid, const char *filename)
     dt_control_job_dispose(job);
     return NULL;
   }
-  dt_control_job_add_progress(job, _("import image"), FALSE);
+  dt_control_job_add_progress(job, _("Import image"), FALSE);
   dt_control_job_set_params(job, params, dt_image_import_job_cleanup);
   params->filename = g_strdup(filename);
   params->film_id = filmid;

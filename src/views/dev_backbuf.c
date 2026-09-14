@@ -74,7 +74,7 @@ void dt_dev_draw_profile_mode_label(cairo_t *cri, int height)
   dt_colorprofiles_get_settings(&settings);
   if(settings.mode == DT_PROFILE_NORMAL) return;
 
-  gchar *label = settings.mode == DT_PROFILE_GAMUTCHECK ? _("gamut check") : _("soft proof");
+  gchar *label = settings.mode == DT_PROFILE_GAMUTCHECK ? _("Gamut check") : _("Soft proof");
   cairo_set_source_rgba(cri, 0.5, 0.5, 0.5, 0.5);
   PangoLayout *layout;
   PangoRectangle ink;

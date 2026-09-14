@@ -125,7 +125,7 @@ const char *extension(dt_imageio_module_data_t *data)
 
 const char *name()
 {
-  return _("copy");
+  return _("Copy");
 }
 
 void init(dt_imageio_module_format_t *self)
@@ -140,7 +140,7 @@ void gui_init(dt_imageio_module_format_t *self)
   self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   gtk_container_add(GTK_CONTAINER(self->widget),
-    dt_ui_label_new(_("do a 1:1 copy of the selected files.\nthe global options below do not apply!")));
+    dt_ui_label_new(_("Do a 1:1 copy of the selected files.\nthe global options below do not apply!")));
 }
 void gui_cleanup(dt_imageio_module_format_t *self)
 {

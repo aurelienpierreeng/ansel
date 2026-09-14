@@ -1543,7 +1543,7 @@ static dt_masks_raster_result_t _ellipse_get_mask_roi(const dt_iop_module_t *con
 
 static void _ellipse_set_form_name(struct dt_masks_form_t *const form, const size_t nb)
 {
-  snprintf(form->name, sizeof(form->name), _("ellipse #%d"), (int)nb);
+  snprintf(form->name, sizeof(form->name), _("Ellipse #%d"), (int)nb);
 }
 
 static void _ellipse_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)

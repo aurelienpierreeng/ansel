@@ -1044,7 +1044,7 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
                                            G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_POINTER);
 
   // What the dialog's title, intro and tooltip call the thing being managed.
-  const char *noun = info.is_group ? _("group") : _("shape");
+  const char *noun = info.is_group ? _("Group") : _("Shape");
 
   gboolean any = FALSE;
   for(const GList *iops = g_list_last(dt_dev_get_global()->iop); iops; iops = g_list_previous(iops))
@@ -1067,7 +1067,7 @@ static gboolean _modchooser_run(const dt_masks_form_t *form, GList **to_attach, 
     gtk_list_store_append(store, &iter);
     gtk_list_store_set(store, &iter, MODCHOOSER_CHECKED, attached, MODCHOOSER_WAS_CHECKED, attached,
                        MODCHOOSER_SENSITIVE, !is_self_mask, MODCHOOSER_NAME, label,
-                       MODCHOOSER_NOTE, is_self_mask ? _("this is the module's own mask") : "",
+                       MODCHOOSER_NOTE, is_self_mask ? _("This is the module's own mask") : "",
                        MODCHOOSER_MODULE, module, -1);
     dt_free(label);
     any = TRUE;
@@ -1995,7 +1995,7 @@ static gchar *_tooltip_assign_text(GtkTreeModel *model, GtkTreeIter *iter)
 
   return g_strdup_printf(_("Manage which modules use this %s. A mask is created for the "
                            "ticked ones that have none, and shared between them."),
-                         row_info.is_group ? _("group") : _("shape"));
+                         row_info.is_group ? _("Group") : _("Shape"));
 }
 
 /* The "+" says what it will do, so it has to name what is selected right now -- and when it is

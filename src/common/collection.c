@@ -392,31 +392,31 @@ const char *dt_collection_name(dt_collection_properties_t prop)
   char *col_name = NULL;
   switch(prop)
   {
-    case DT_COLLECTION_PROP_FILMROLL:         return _("film roll");
-    case DT_COLLECTION_PROP_FOLDERS:          return _("folder");
-    case DT_COLLECTION_PROP_CAMERA:           return _("camera");
-    case DT_COLLECTION_PROP_TAG:              return _("tag");
-    case DT_COLLECTION_PROP_DAY:              return _("date taken");
-    case DT_COLLECTION_PROP_TIME:             return _("date-time taken");
-    case DT_COLLECTION_PROP_IMPORT_TIMESTAMP: return _("import timestamp");
-    case DT_COLLECTION_PROP_CHANGE_TIMESTAMP: return _("change timestamp");
-    case DT_COLLECTION_PROP_EXPORT_TIMESTAMP: return _("export timestamp");
-    case DT_COLLECTION_PROP_PRINT_TIMESTAMP:  return _("print timestamp");
-    case DT_COLLECTION_PROP_HISTORY:          return _("history");
-    case DT_COLLECTION_PROP_COLORLABEL:       return _("color label");
-    case DT_COLLECTION_PROP_LENS:             return _("lens");
-    case DT_COLLECTION_PROP_FOCAL_LENGTH:     return _("focal length");
+    case DT_COLLECTION_PROP_FILMROLL:         return _("Film roll");
+    case DT_COLLECTION_PROP_FOLDERS:          return _("Folder");
+    case DT_COLLECTION_PROP_CAMERA:           return _("Camera");
+    case DT_COLLECTION_PROP_TAG:              return _("Tag");
+    case DT_COLLECTION_PROP_DAY:              return _("Date taken");
+    case DT_COLLECTION_PROP_TIME:             return _("Date-time taken");
+    case DT_COLLECTION_PROP_IMPORT_TIMESTAMP: return _("Import timestamp");
+    case DT_COLLECTION_PROP_CHANGE_TIMESTAMP: return _("Change timestamp");
+    case DT_COLLECTION_PROP_EXPORT_TIMESTAMP: return _("Export timestamp");
+    case DT_COLLECTION_PROP_PRINT_TIMESTAMP:  return _("Print timestamp");
+    case DT_COLLECTION_PROP_HISTORY:          return _("History");
+    case DT_COLLECTION_PROP_COLORLABEL:       return _("Color label");
+    case DT_COLLECTION_PROP_LENS:             return _("Lens");
+    case DT_COLLECTION_PROP_FOCAL_LENGTH:     return _("Focal length");
     case DT_COLLECTION_PROP_ISO:              return _("ISO");
-    case DT_COLLECTION_PROP_APERTURE:         return _("aperture");
-    case DT_COLLECTION_PROP_EXPOSURE:         return _("exposure");
-    case DT_COLLECTION_PROP_FILENAME:         return _("filename");
-    case DT_COLLECTION_PROP_GEOTAGGING:       return _("geotagging");
-    case DT_COLLECTION_PROP_GROUPING:         return _("grouping");
-    case DT_COLLECTION_PROP_LOCAL_COPY:       return _("local copy");
-    case DT_COLLECTION_PROP_MODULE:           return _("module");
-    case DT_COLLECTION_PROP_ORDER:            return _("module order");
-    case DT_COLLECTION_PROP_RATING:           return _("rating");
-    case DT_COLLECTION_PROP_QUERY:            return _("custom query");
+    case DT_COLLECTION_PROP_APERTURE:         return _("Aperture");
+    case DT_COLLECTION_PROP_EXPOSURE:         return _("Exposure");
+    case DT_COLLECTION_PROP_FILENAME:         return _("Filename");
+    case DT_COLLECTION_PROP_GEOTAGGING:       return _("Geotagging");
+    case DT_COLLECTION_PROP_GROUPING:         return _("Grouping");
+    case DT_COLLECTION_PROP_LOCAL_COPY:       return _("Local copy");
+    case DT_COLLECTION_PROP_MODULE:           return _("Module");
+    case DT_COLLECTION_PROP_ORDER:            return _("Module order");
+    case DT_COLLECTION_PROP_RATING:           return _("Rating");
+    case DT_COLLECTION_PROP_QUERY:            return _("Custom query");
     case DT_COLLECTION_PROP_LAST:             return NULL;
     default:
     {

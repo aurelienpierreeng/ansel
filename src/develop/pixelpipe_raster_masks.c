@@ -35,7 +35,7 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
   gboolean success = TRUE;
   gchar *clean_target_name = !IS_NULL_PTR(target_module)
       ? dt_string_replace(target_module->name(), "_")
-      : g_strdup(_("export"));
+      : g_strdup(_("Export"));
   gchar *target_name = !IS_NULL_PTR(target_module)
       ? g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name)
       : g_strdup(clean_target_name);
@@ -102,7 +102,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
 
   gchar *clean_target_name = !IS_NULL_PTR(target_module)
       ? dt_string_replace(target_module->name(), "_")
-      : g_strdup(_("export"));
+      : g_strdup(_("Export"));
   gchar *target_name = !IS_NULL_PTR(target_module)
       ? g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name)
       : g_strdup(clean_target_name);

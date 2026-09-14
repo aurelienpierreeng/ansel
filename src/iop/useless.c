@@ -80,9 +80,9 @@ DT_MODULE_INTROSPECTION(3, dt_iop_useless_params_t)
 // These numbers must not be changed when a new version is introduced.
 typedef enum dt_iop_useless_type_t
 {
-  DT_USELESS_NONE = 0,     // $DESCRIPTION: "no"
-  DT_USELESS_FIRST = 1,    // $DESCRIPTION: "first option"
-  DT_USELESS_SECOND = 2,   // $DESCRIPTION: "second one"
+  DT_USELESS_NONE = 0,     // $DESCRIPTION: "No"
+  DT_USELESS_FIRST = 1,    // $DESCRIPTION: "First option"
+  DT_USELESS_SECOND = 2,   // $DESCRIPTION: "Second one"
 } dt_iop_useless_type_t;
 
 typedef struct dt_iop_useless_params_t
@@ -104,10 +104,10 @@ typedef struct dt_iop_useless_params_t
   //
   // These field names are just examples; chose meaningful ones! For performance reasons, align
   // to 4 byte boundaries (use gboolean, not bool).
-  int checker_scale; // $MIN: 0 $MAX: 10 $DEFAULT: 1 $DESCRIPTION: "size"
+  int checker_scale; // $MIN: 0 $MAX: 10 $DEFAULT: 1 $DESCRIPTION: "Size"
   float factor;      // $MIN: -5.0 $MAX: 5.0 $DEFAULT: 0
-  gboolean check;    // $DESCRIPTION: "checkbox option"
-  dt_iop_useless_type_t method; // $DEFAULT: DT_USELESS_SECOND $DESCRIPTION: "parameter choices"
+  gboolean check;    // $DESCRIPTION: "Checkbox option"
+  dt_iop_useless_type_t method; // $DEFAULT: DT_USELESS_SECOND $DESCRIPTION: "Parameter choices"
 } dt_iop_useless_params_t;
 
 typedef struct dt_iop_useless_gui_data_t
@@ -131,7 +131,7 @@ typedef struct dt_iop_useless_global_data_t
 const char *name()
 {
   // make sure you put all your translatable strings into _() !
-  return _("silly example");
+  return _("Silly example");
 }
 
 // some additional flags (self explanatory i think):
@@ -675,7 +675,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_factor(g->factor, -100.0f);
   dt_bauhaus_slider_set_offset(g->factor, 100.0f);
   // Tooltips explain the otherwise compact interface
-  gtk_widget_set_tooltip_text(g->factor, _("adjust factor"));
+  gtk_widget_set_tooltip_text(g->factor, _("Adjust factor"));
 
   // A combobox linked to struct field will be filled with the values and $DESCRIPTIONs
   // in the struct definition, in the same order. The automatic callback will put the
@@ -687,7 +687,7 @@ void gui_init(dt_iop_module_t *self)
   // Any widgets that are _not_ directly linked to a field need to have a custom callback
   // function set up to respond to the "value-changed" signal.
   g->extra = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -0.5, 0.5, 0, 0, 2);
-  dt_bauhaus_widget_set_label(g->extra, N_("extra"));
+  dt_bauhaus_widget_set_label(g->extra, N_("Extra"));
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->extra), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->extra), "value-changed", G_CALLBACK(extra_callback), self);
 }

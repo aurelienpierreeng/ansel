@@ -1062,7 +1062,7 @@ static void _on_row_selected(GtkTreeSelection *selection, gpointer user_data)
   g_object_unref(target);
   if(IS_NULL_PTR(surface))
   {
-    gtk_label_set_text(GTK_LABEL(_g.geometry), _("not displayed right now"));
+    gtk_label_set_text(GTK_LABEL(_g.geometry), _("Not displayed right now"));
     return;
   }
 
@@ -1386,12 +1386,12 @@ void dt_gui_doc_screenshot_window_show(void)
   gtk_box_pack_start(GTK_BOX(vbox), actions, FALSE, FALSE, 0);
 
   GtkWidget *select_mapped = gtk_button_new_with_label(_("Select mapped"));
-  gtk_widget_set_tooltip_text(select_mapped, _("check every displayed row the map names"));
+  gtk_widget_set_tooltip_text(select_mapped, _("Check every displayed row the map names"));
   g_signal_connect(select_mapped, "clicked", G_CALLBACK(_on_select), GINT_TO_POINTER(2));
   gtk_box_pack_start(GTK_BOX(actions), select_mapped, FALSE, FALSE, 0);
 
   GtkWidget *select_all = gtk_button_new_with_label(_("Select all"));
-  gtk_widget_set_tooltip_text(select_all, _("only affects the rows already unfolded"));
+  gtk_widget_set_tooltip_text(select_all, _("Only affects the rows already unfolded"));
   g_signal_connect(select_all, "clicked", G_CALLBACK(_on_select), GINT_TO_POINTER(TRUE));
   gtk_box_pack_start(GTK_BOX(actions), select_all, FALSE, FALSE, 0);
 

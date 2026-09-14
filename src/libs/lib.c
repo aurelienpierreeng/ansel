@@ -189,11 +189,11 @@ static void menuitem_update_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
     GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
-                               GTK_BUTTONS_YES_NO, _("do you really want to update the preset `%s'?"), name);
+                               GTK_BUTTONS_YES_NO, _("Do you really want to update the preset `%s'?"), name);
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
-    gtk_window_set_title(GTK_WINDOW(dialog), _("update preset?"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Update preset?"));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
   }
@@ -243,11 +243,11 @@ static void menuitem_delete_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
     GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
-                               GTK_BUTTONS_YES_NO, _("do you really want to delete the preset `%s'?"), name);
+                               GTK_BUTTONS_YES_NO, _("Do you really want to delete the preset `%s'?"), name);
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
-    gtk_window_set_title(GTK_WINDOW(dialog), _("delete preset?"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Delete preset?"));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
   }
@@ -321,7 +321,7 @@ gboolean dt_lib_presets_apply(const gchar *preset, const gchar *module_name, int
   dt_module_preset_free(p);
   if(res)
   {
-    dt_control_log(_("deleting preset for obsolete module"));
+    dt_control_log(_("Deleting preset for obsolete module"));
     dt_lib_presets_remove(preset, module_name, module_version);
   }
   return ret;
@@ -433,7 +433,7 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
 
   if(minfo->module->manage_presets)
   {
-    mi = gtk_menu_item_new_with_label(_("manage presets..."));
+    mi = gtk_menu_item_new_with_label(_("Manage presets..."));
     g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_manage_presets), minfo);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
     cnt++;
@@ -442,11 +442,11 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
   {
     if(!selected_writeprotect)
     {
-      mi = gtk_menu_item_new_with_label(_("edit this preset.."));
+      mi = gtk_menu_item_new_with_label(_("Edit this preset.."));
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_edit_preset), minfo);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 
-      mi = gtk_menu_item_new_with_label(_("delete this preset"));
+      mi = gtk_menu_item_new_with_label(_("Delete this preset"));
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_delete_preset), minfo);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
       cnt++;
@@ -454,11 +454,11 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
   }
   else
   {
-    mi = gtk_menu_item_new_with_label(_("store new preset.."));
+    mi = gtk_menu_item_new_with_label(_("Store new preset.."));
     if(minfo->params_size == 0)
     {
       gtk_widget_set_sensitive(GTK_WIDGET(mi), FALSE);
-      gtk_widget_set_tooltip_text(mi, _("nothing to save"));
+      gtk_widget_set_tooltip_text(mi, _("Nothing to save"));
     }
     else
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_new_preset), minfo);
@@ -466,7 +466,7 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
 
     if(dt_gui_get_global()->last_preset && found)
     {
-      char *markup = g_markup_printf_escaped("%s <span weight=\"bold\">%s</span>", _("update preset"),
+      char *markup = g_markup_printf_escaped("%s <span weight=\"bold\">%s</span>", _("Update preset"),
                                              dt_gui_get_global()->last_preset);
       mi = gtk_menu_item_new_with_label("");
       gtk_widget_set_sensitive(GTK_WIDGET(mi), minfo->params_size > 0);

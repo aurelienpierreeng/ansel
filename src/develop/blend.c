@@ -419,7 +419,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
   return;
 
   error:
-  dt_pipeline_message(_("detail mask blending error"));
+  dt_pipeline_message(_("Detail mask blending error"));
   dt_pixelpipe_cache_free_align(warp_mask);
   dt_pixelpipe_cache_free_align(lum);
   dt_pixelpipe_cache_free_align(tmp);
@@ -707,7 +707,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   if(oscale != iscale || xoffs < 0 || yoffs < 0
      || ((xoffs > 0 || yoffs > 0) && (owidth + xoffs > iwidth || oheight + yoffs > iheight)))
   {
-    dt_pipeline_message(_("skipped blending in module '%s': roi's do not match"), self->op);
+    dt_pipeline_message(_("Skipped blending in module '%s': roi's do not match"), self->op);
     return 0;
   }
 
@@ -733,7 +733,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   float *const restrict _mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
   if(IS_NULL_PTR(_mask))
   {
-    dt_pipeline_message(_("could not allocate buffer for blending"));
+    dt_pipeline_message(_("Could not allocate buffer for blending"));
     return 1;
   }
   int raster_error = 0;
@@ -772,7 +772,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
         float *const restrict drawn_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
         if(IS_NULL_PTR(drawn_mask))
         {
-          dt_pipeline_message(_("could not allocate buffer for blending"));
+          dt_pipeline_message(_("Could not allocate buffer for blending"));
           dt_pixelpipe_cache_free_align(_mask);
           return 1;
         }
@@ -1105,7 +1105,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   return;
 
   error:
-  dt_pipeline_message(_("detail mask CL blending problem"));
+  dt_pipeline_message(_("Detail mask CL blending problem"));
   dt_pixelpipe_cache_free_align(lum);
   dt_opencl_release_mem_object(tmp);
   dt_opencl_release_mem_object(blur);
@@ -1163,7 +1163,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   if(oscale != iscale || xoffs < 0 || yoffs < 0
      || ((xoffs > 0 || yoffs > 0) && (owidth + xoffs > iwidth || oheight + yoffs > iheight)))
   {
-    dt_pipeline_message(_("skipped blending in module '%s': roi's do not match"), self->op);
+    dt_pipeline_message(_("Skipped blending in module '%s': roi's do not match"), self->op);
     return 0;
   }
 
@@ -1194,7 +1194,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   float *_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
   if(IS_NULL_PTR(_mask))
   {
-    dt_pipeline_message(_("could not allocate buffer for blending"));
+    dt_pipeline_message(_("Could not allocate buffer for blending"));
     return 1;
   }
   float *const mask = _mask;
@@ -2257,27 +2257,27 @@ int dt_develop_blend_legacy_params_from_so(dt_iop_module_so_t *module_so, const 
  * they map params values to translatable names, and backend consumers
  * (develop/supervisor.c) read them with no GUI loaded. */
 const dt_develop_name_value_t dt_develop_blend_mode_names[]
-    = { { NC_("blendmode", "normal"), DEVELOP_BLEND_NORMAL2 },
-        { NC_("blendmode", "normal bounded"), DEVELOP_BLEND_BOUNDED },
-        { NC_("blendmode", "lighten"), DEVELOP_BLEND_LIGHTEN },
-        { NC_("blendmode", "darken"), DEVELOP_BLEND_DARKEN },
-        { NC_("blendmode", "multiply"), DEVELOP_BLEND_MULTIPLY },
-        { NC_("blendmode", "average"), DEVELOP_BLEND_AVERAGE },
-        { NC_("blendmode", "addition"), DEVELOP_BLEND_ADD },
-        { NC_("blendmode", "subtract"), DEVELOP_BLEND_SUBTRACT },
-        { NC_("blendmode", "difference"), DEVELOP_BLEND_DIFFERENCE2 },
-        { NC_("blendmode", "screen"), DEVELOP_BLEND_SCREEN },
-        { NC_("blendmode", "overlay"), DEVELOP_BLEND_OVERLAY },
-        { NC_("blendmode", "softlight"), DEVELOP_BLEND_SOFTLIGHT },
-        { NC_("blendmode", "hardlight"), DEVELOP_BLEND_HARDLIGHT },
-        { NC_("blendmode", "vividlight"), DEVELOP_BLEND_VIVIDLIGHT },
-        { NC_("blendmode", "linearlight"), DEVELOP_BLEND_LINEARLIGHT },
-        { NC_("blendmode", "pinlight"), DEVELOP_BLEND_PINLIGHT },
-        { NC_("blendmode", "lightness"), DEVELOP_BLEND_LIGHTNESS },
-        { NC_("blendmode", "chromaticity"), DEVELOP_BLEND_CHROMATICITY },
-        { NC_("blendmode", "hue"), DEVELOP_BLEND_HUE },
-        { NC_("blendmode", "color"), DEVELOP_BLEND_COLOR },
-        { NC_("blendmode", "coloradjustment"), DEVELOP_BLEND_COLORADJUST },
+    = { { NC_("blendmode", "Normal"), DEVELOP_BLEND_NORMAL2 },
+        { NC_("blendmode", "Normal bounded"), DEVELOP_BLEND_BOUNDED },
+        { NC_("blendmode", "Lighten"), DEVELOP_BLEND_LIGHTEN },
+        { NC_("blendmode", "Darken"), DEVELOP_BLEND_DARKEN },
+        { NC_("blendmode", "Multiply"), DEVELOP_BLEND_MULTIPLY },
+        { NC_("blendmode", "Average"), DEVELOP_BLEND_AVERAGE },
+        { NC_("blendmode", "Addition"), DEVELOP_BLEND_ADD },
+        { NC_("blendmode", "Subtract"), DEVELOP_BLEND_SUBTRACT },
+        { NC_("blendmode", "Difference"), DEVELOP_BLEND_DIFFERENCE2 },
+        { NC_("blendmode", "Screen"), DEVELOP_BLEND_SCREEN },
+        { NC_("blendmode", "Overlay"), DEVELOP_BLEND_OVERLAY },
+        { NC_("blendmode", "Softlight"), DEVELOP_BLEND_SOFTLIGHT },
+        { NC_("blendmode", "Hardlight"), DEVELOP_BLEND_HARDLIGHT },
+        { NC_("blendmode", "Vividlight"), DEVELOP_BLEND_VIVIDLIGHT },
+        { NC_("blendmode", "Linearlight"), DEVELOP_BLEND_LINEARLIGHT },
+        { NC_("blendmode", "Pinlight"), DEVELOP_BLEND_PINLIGHT },
+        { NC_("blendmode", "Lightness"), DEVELOP_BLEND_LIGHTNESS },
+        { NC_("blendmode", "Chromaticity"), DEVELOP_BLEND_CHROMATICITY },
+        { NC_("blendmode", "Hue"), DEVELOP_BLEND_HUE },
+        { NC_("blendmode", "Color"), DEVELOP_BLEND_COLOR },
+        { NC_("blendmode", "Coloradjustment"), DEVELOP_BLEND_COLORADJUST },
         { NC_("blendmode", "Lab lightness"), DEVELOP_BLEND_LAB_LIGHTNESS },
         { NC_("blendmode", "Lab color"), DEVELOP_BLEND_LAB_COLOR },
         { NC_("blendmode", "Lab L-channel"), DEVELOP_BLEND_LAB_L },
@@ -2288,23 +2288,23 @@ const dt_develop_name_value_t dt_develop_blend_mode_names[]
         { NC_("blendmode", "RGB red channel"), DEVELOP_BLEND_RGB_R },
         { NC_("blendmode", "RGB green channel"), DEVELOP_BLEND_RGB_G },
         { NC_("blendmode", "RGB blue channel"), DEVELOP_BLEND_RGB_B },
-        { NC_("blendmode", "divide"), DEVELOP_BLEND_DIVIDE },
-        { NC_("blendmode", "geometric mean"), DEVELOP_BLEND_GEOMETRIC_MEAN },
-        { NC_("blendmode", "harmonic mean"), DEVELOP_BLEND_HARMONIC_MEAN },
+        { NC_("blendmode", "Divide"), DEVELOP_BLEND_DIVIDE },
+        { NC_("blendmode", "Geometric mean"), DEVELOP_BLEND_GEOMETRIC_MEAN },
+        { NC_("blendmode", "Harmonic mean"), DEVELOP_BLEND_HARMONIC_MEAN },
 
         /** deprecated blend modes: make them available as legacy history stacks might want them */
-        { NC_("blendmode", "difference (deprecated)"), DEVELOP_BLEND_DIFFERENCE },
-        { NC_("blendmode", "subtract inverse (deprecated)"), DEVELOP_BLEND_SUBTRACT_INVERSE },
-        { NC_("blendmode", "divide inverse (deprecated)"), DEVELOP_BLEND_DIVIDE_INVERSE },
+        { NC_("blendmode", "Difference (deprecated)"), DEVELOP_BLEND_DIFFERENCE },
+        { NC_("blendmode", "Subtract inverse (deprecated)"), DEVELOP_BLEND_SUBTRACT_INVERSE },
+        { NC_("blendmode", "Divide inverse (deprecated)"), DEVELOP_BLEND_DIVIDE_INVERSE },
         { "", 0 } };
 
 const dt_develop_name_value_t dt_develop_blend_mode_flag_names[]
-    = { { NC_("blendoperation", "normal"), 0 },
-        { NC_("blendoperation", "reverse"), DEVELOP_BLEND_REVERSE },
+    = { { NC_("blendoperation", "Normal"), 0 },
+        { NC_("blendoperation", "Reverse"), DEVELOP_BLEND_REVERSE },
         { "", 0 } };
 
 const dt_develop_name_value_t dt_develop_blend_colorspace_names[]
-    = { { N_("default"), DEVELOP_BLEND_CS_NONE },
+    = { { N_("Default"), DEVELOP_BLEND_CS_NONE },
         { N_("RAW"), DEVELOP_BLEND_CS_RAW },
         { N_("Lab"), DEVELOP_BLEND_CS_LAB },
         { N_("RGB (display)"), DEVELOP_BLEND_CS_RGB_DISPLAY },
@@ -2321,22 +2321,22 @@ const dt_develop_name_value_t dt_develop_mask_mode_names[]
         { "", 0 } };
 
 const dt_develop_name_value_t dt_develop_combine_masks_names[]
-    = { { N_("exclusive"), DEVELOP_COMBINE_NORM_EXCL },
-        { N_("inclusive"), DEVELOP_COMBINE_NORM_INCL },
-        { N_("exclusive & inverted"), DEVELOP_COMBINE_INV_EXCL },
-        { N_("inclusive & inverted"), DEVELOP_COMBINE_INV_INCL },
+    = { { N_("Exclusive"), DEVELOP_COMBINE_NORM_EXCL },
+        { N_("Inclusive"), DEVELOP_COMBINE_NORM_INCL },
+        { N_("Exclusive & inverted"), DEVELOP_COMBINE_INV_EXCL },
+        { N_("Inclusive & inverted"), DEVELOP_COMBINE_INV_INCL },
         { "", 0 } };
 
 const dt_develop_name_value_t dt_develop_feathering_guide_names[]
-    = { { N_("output before blur"), DEVELOP_MASK_GUIDE_OUT_BEFORE_BLUR },
-        { N_("input before blur"), DEVELOP_MASK_GUIDE_IN_BEFORE_BLUR },
-        { N_("output after blur"), DEVELOP_MASK_GUIDE_OUT_AFTER_BLUR },
-        { N_("input after blur"), DEVELOP_MASK_GUIDE_IN_AFTER_BLUR },
+    = { { N_("Output before blur"), DEVELOP_MASK_GUIDE_OUT_BEFORE_BLUR },
+        { N_("Input before blur"), DEVELOP_MASK_GUIDE_IN_BEFORE_BLUR },
+        { N_("Output after blur"), DEVELOP_MASK_GUIDE_OUT_AFTER_BLUR },
+        { N_("Input after blur"), DEVELOP_MASK_GUIDE_IN_AFTER_BLUR },
         { "", 0 } };
 
 const dt_develop_name_value_t dt_develop_invert_mask_names[]
-    = { { N_("off"), DEVELOP_COMBINE_NORM },
-        { N_("on"), DEVELOP_COMBINE_INV },
+    = { { N_("Off"), DEVELOP_COMBINE_NORM },
+        { N_("On"), DEVELOP_COMBINE_INV },
         { "", 0 } };
 
 // clang-format off

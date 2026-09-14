@@ -97,16 +97,16 @@ static void _generate_one(const int32_t imgid, const char *imgfilename, void *us
 
 static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mipmap_size_t max_mip, const int32_t min_imgid, const int32_t max_imgid)
 {
-  fprintf(stderr, _("creating cache directories\n"));
+  fprintf(stderr, _("Creating cache directories\n"));
   for(dt_mipmap_size_t k = min_mip; k <= max_mip; k++)
   {
     char dirname[DT_PATH_MAX] = { 0 };
     dt_mipmap_get_cache_dir(dirname, k);
 
-    fprintf(stderr, _("creating cache directory '%s'\n"), dirname);
+    fprintf(stderr, _("Creating cache directory '%s'\n"), dirname);
     if(g_mkdir_with_parents(dirname, 0750))
     {
-      fprintf(stderr, _("could not create directory '%s'!\n"), dirname);
+      fprintf(stderr, _("Could not create directory '%s'!\n"), dirname);
       return 1;
     }
   }
@@ -118,10 +118,10 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
 
   if(!image_count)
   {
-    fprintf(stderr, _("warning: no images are matching the requested image id range\n"));
+    fprintf(stderr, _("Warning: no images are matching the requested image id range\n"));
     if(min_imgid > max_imgid)
     {
-      fprintf(stderr, _("warning: did you want to swap these boundaries?\n"));
+      fprintf(stderr, _("Warning: did you want to swap these boundaries?\n"));
     }
   }
 
@@ -233,7 +233,7 @@ int main(int argc, char *arg[])
 
   if(!dt_conf_get_bool("cache_disk_backend"))
   {
-    fprintf(stderr, _("warning: disk backend for thumbnail cache is disabled (cache_disk_backend)\nif you want "
+    fprintf(stderr, _("Warning: disk backend for thumbnail cache is disabled (cache_disk_backend)\nif you want "
                       "to pre-generate thumbnails and for Ansel to use them, you need to enable disk backend "
                       "for thumbnail cache\nno thumbnails to be generated, done.\n"));
     dt_cleanup();
@@ -243,12 +243,12 @@ int main(int argc, char *arg[])
 
   if(min_mip > max_mip)
   {
-    fprintf(stderr, _("error: ensure that min_mip <= max_mip\n"));
+    fprintf(stderr, _("Error: ensure that min_mip <= max_mip\n"));
     dt_free(m_arg);
     exit(EXIT_FAILURE);
   }
 
-  fprintf(stderr, _("creating complete lighttable thumbnail cache\n"));
+  fprintf(stderr, _("Creating complete lighttable thumbnail cache\n"));
 
   if(generate_thumbnail_cache(min_mip, max_mip, min_imgid, max_imgid))
   {

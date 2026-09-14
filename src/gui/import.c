@@ -830,7 +830,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
 
   if(date[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), date))
   {
-    dt_control_log(_("invalid date/time format for import"));
+    dt_control_log(_("Invalid date/time format for import"));
     return;
   }
 

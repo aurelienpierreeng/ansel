@@ -295,7 +295,7 @@ static inline int fast_surface_blur(float *const restrict image,
 
   if(IS_NULL_PTR(ds_image) || IS_NULL_PTR(ds_mask) || IS_NULL_PTR(ds_ab) || IS_NULL_PTR(ab))
   {
-    dt_control_log(_("fast guided filter failed to allocate memory, check your RAM settings"));
+    dt_control_log(_("Fast guided filter failed to allocate memory, check your RAM settings"));
     dt_pixelpipe_cache_free_align(ab);
     dt_pixelpipe_cache_free_align(ds_ab);
     dt_pixelpipe_cache_free_align(ds_mask);

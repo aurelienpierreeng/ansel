@@ -842,11 +842,11 @@ static inline const dt_color_checker_patch *dt_color_checker_get_patch_by_name(c
 static inline int dt_colorchecker_find(GList **colorcheckers_label)
 {
   int total = dt_colorchecker_find_builtin(colorcheckers_label);
-  dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d builtin colorcheckers\n"), total);
+  dt_print(DT_DEBUG_VERBOSE, _("Dt_colorchecker_find: found %d builtin colorcheckers\n"), total);
   int b_nb = total;
   
   total += dt_colorchecker_find_cht_files(colorcheckers_label);
-  if (total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d CGAT references files\n"), total - b_nb);
+  if (total) dt_print(DT_DEBUG_VERBOSE, _("Dt_colorchecker_find: found %d CGAT references files\n"), total - b_nb);
   return total;
 }
 
@@ -865,7 +865,7 @@ static inline int dt_colorchecker_find_color(GList **color_label)
 
   // Refill the list 
   const int total = dt_colorchecker_find_CGATS_reference_files(color_label);
-  if(total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find_color: found %d .cht files\n"), total);
+  if(total) dt_print(DT_DEBUG_VERBOSE, _("Dt_colorchecker_find_color: found %d .cht files\n"), total);
 
   if(*color_label == NULL)
     fprintf(stderr, "[channelmixerrgb] no CGATS file found\n");

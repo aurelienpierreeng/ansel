@@ -1214,7 +1214,7 @@ static void _pop_menu_attached(GtkWidget *treeview, GdkEventButton *event, dt_li
     gtk_tree_model_get(model, &iter, DT_LIB_TAGGING_COL_SEL, &sel, -1);
     if(sel == DT_TS_SOME_IMAGES)
     {
-      menuitem = gtk_menu_item_new_with_label(_("attach tag to all"));
+      menuitem = gtk_menu_item_new_with_label(_("Attach tag to all"));
       g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_attached_attach_to_all, self);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
       menuitem = gtk_separator_menu_item_new();
@@ -1224,12 +1224,12 @@ static void _pop_menu_attached(GtkWidget *treeview, GdkEventButton *event, dt_li
 
   if(sel_cnt > 0)
   {
-    menuitem = gtk_menu_item_new_with_label(sel_cnt > 1 ? _("detach tags") : _("detach tag"));
+    menuitem = gtk_menu_item_new_with_label(sel_cnt > 1 ? _("Detach tags") : _("Detach tag"));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
     g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_attached_detach, self);
   }
 
-  menuitem = gtk_menu_item_new_with_label(_("detach all tags"));
+  menuitem = gtk_menu_item_new_with_label(_("Detach all tags"));
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
   g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_attached_detach_all, self);
 
@@ -1494,14 +1494,14 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   if(tag_count == 0) return;
 
   GtkWidget *win = dt_gui_main_window();
-  GtkWidget *dialog = gtk_dialog_new_with_buttons( _("delete node?"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
-                                _("cancel"), GTK_RESPONSE_NONE, _("delete"), GTK_RESPONSE_YES, NULL);
+  GtkWidget *dialog = gtk_dialog_new_with_buttons( _("Delete node?"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
+                                _("Cancel"), GTK_RESPONSE_NONE, _("Delete"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
   gtk_container_add(GTK_CONTAINER(area), vbox);
-  text = g_strdup_printf(_("selected: %s"), tagname);
+  text = g_strdup_printf(_("Selected: %s"), tagname);
   label = gtk_label_new(text);
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
   dt_free(text);
@@ -1580,8 +1580,8 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
         DT_LIB_TAGGING_COL_PATH, &path, DT_LIB_TAGGING_COL_ID, &tagid, -1);
 
   GtkWidget *win = dt_gui_main_window();
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("create tag"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
-                                       _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_YES, NULL);
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Create tag"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
+                                       _("Cancel"), GTK_RESPONSE_NONE, _("Save"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
@@ -1590,7 +1590,7 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
-  label = gtk_label_new(_("name: "));
+  label = gtk_label_new(_("Name: "));
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
   GtkWidget *entry = gtk_entry_new();
   dt_accels_disconnect_on_text_input(entry);
@@ -1603,22 +1603,22 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
   GtkWidget *vbox2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), vbox2, FALSE, TRUE, 0);
 
-  text = g_strdup_printf(_("add to: \"%s\" "), path);
+  text = g_strdup_printf(_("Add to: \"%s\" "), path);
   parent = gtk_check_button_new_with_label(text);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(parent), TRUE);
   gtk_box_pack_end(GTK_BOX(vbox2), parent, FALSE, TRUE, 0);
   dt_free(text);
 
-  category = gtk_check_button_new_with_label(_("category"));
+  category = gtk_check_button_new_with_label(_("Category"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(category), FALSE);
   gtk_box_pack_end(GTK_BOX(vbox2), category, FALSE, TRUE, 0);
-  private = gtk_check_button_new_with_label(_("private"));
+  private = gtk_check_button_new_with_label(_("Private"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(private), FALSE);
   gtk_box_pack_end(GTK_BOX(vbox2), private, FALSE, TRUE, 0);
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_end(GTK_BOX(vbox), box, TRUE, TRUE, 0);
-  label = gtk_label_new(_("synonyms: "));
+  label = gtk_label_new(_("Synonyms: "));
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
   GtkWidget *synonyms = gtk_text_view_new();
   dt_accels_disconnect_on_text_input(synonyms);
@@ -1637,7 +1637,7 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
     const char *newtag = gtk_entry_get_text(GTK_ENTRY(entry));
     char *message = NULL;
     if(!newtag[0])
-      message = _("empty tag is not allowed, aborting");
+      message = _("Empty tag is not allowed, aborting");
     char *new_tagname = NULL;
     const gboolean root = !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(parent));
     if(!root)
@@ -1648,7 +1648,7 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
     else new_tagname = g_strdup(newtag);
 
     if(dt_tag_exists(new_tagname, NULL))
-      message = _("tag name already exists. aborting.");
+      message = _("Tag name already exists. aborting.");
     if(message)
     {
       GtkWidget *warning_dialog = gtk_message_dialog_new(GTK_WINDOW(dialog), GTK_DIALOG_MODAL,
@@ -1719,14 +1719,14 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
   }
 
   GtkWidget *win = dt_gui_main_window();
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("edit"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
-                                       _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_YES, NULL);
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Edit"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
+                                       _("Cancel"), GTK_RESPONSE_NONE, _("Save"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
   gtk_container_add(GTK_CONTAINER(area), vbox);
-  text = g_strdup_printf(_("selected: %s"), tagname);
+  text = g_strdup_printf(_("Selected: %s"), tagname);
   label = gtk_label_new(text);
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
   dt_free(text);
@@ -1746,7 +1746,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
-  label = gtk_label_new(_("name: "));
+  label = gtk_label_new(_("Name: "));
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
   GtkWidget *entry = gtk_entry_new();
   dt_accels_disconnect_on_text_input(entry);
@@ -1755,7 +1755,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
 
   gint flags = 0;
   GtkWidget *category = NULL;
-  GtkWidget *private = gtk_check_button_new_with_label(_("private"));
+  GtkWidget *private = gtk_check_button_new_with_label(_("Private"));
   GtkTextBuffer *buffer = NULL;
 
   if(tagid)
@@ -1763,7 +1763,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
     GtkWidget *vbox2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(vbox), vbox2, FALSE, TRUE, 0);
     flags = dt_tag_get_flags(tagid);
-    category = gtk_check_button_new_with_label(_("category"));
+    category = gtk_check_button_new_with_label(_("Category"));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(category), flags & DT_TF_CATEGORY);
     gtk_box_pack_end(GTK_BOX(vbox2), category, FALSE, TRUE, 0);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(private), flags & DT_TF_PRIVATE);
@@ -1771,7 +1771,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
 
     box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_end(GTK_BOX(vbox), box, TRUE, TRUE, 0);
-    label = gtk_label_new(_("synonyms: "));
+    label = gtk_label_new(_("Synonyms: "));
     gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
     GtkWidget *synonyms = gtk_text_view_new();
     dt_accels_disconnect_on_text_input(synonyms);
@@ -1795,7 +1795,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
       // tag name has changed
       char *message = NULL;
       if(!newtag[0])
-        message = _("empty tag is not allowed, aborting");
+        message = _("Empty tag is not allowed, aborting");
       if(strchr(newtag, '|') != 0)
         message = _("'|' character is not allowed for renaming tag.\nto modify the hierarchy use rename path instead. Aborting.");
       if(message)
@@ -1838,7 +1838,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
         {
           GtkWidget *warning_dialog = gtk_message_dialog_new(GTK_WINDOW(dialog), GTK_DIALOG_MODAL,
                           GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE,
-                          _("at least one new tag name (%s) already exists, aborting"), new_tagname);
+                          _("At least one new tag name (%s) already exists, aborting"), new_tagname);
           gtk_dialog_run(GTK_DIALOG(warning_dialog));
           gtk_widget_destroy(warning_dialog);
           dt_free(new_tagname);
@@ -1959,7 +1959,7 @@ static gboolean _apply_rename_path(GtkWidget *dialog, const char *tagname,
 
       GtkWidget *warning_dialog = gtk_message_dialog_new(GTK_WINDOW(win), GTK_DIALOG_MODAL,
                       GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE,
-                      _("at least one new tagname (%s) already exists, aborting."), new_tagname);
+                      _("At least one new tagname (%s) already exists, aborting."), new_tagname);
       gtk_dialog_run(GTK_DIALOG(warning_dialog));
       gtk_widget_destroy(warning_dialog);
     }
@@ -2014,14 +2014,14 @@ static void _pop_menu_dictionary_change_path(GtkWidget *menuitem, dt_lib_module_
   if(tag_count == 0) return;
 
   GtkWidget *win = dt_gui_main_window();
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("change path"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
-                                       _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_YES, NULL);
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Change path"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
+                                       _("Cancel"), GTK_RESPONSE_NONE, _("Save"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
   gtk_container_add(GTK_CONTAINER(area), vbox);
-  text = g_strdup_printf(_("selected: %s"), tagname);
+  text = g_strdup_printf(_("Selected: %s"), tagname);
   label = gtk_label_new(text);
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
   dt_free(text);
@@ -2056,7 +2056,7 @@ static void _pop_menu_dictionary_change_path(GtkWidget *menuitem, dt_lib_module_
       return;  // no change
     char *message = NULL;
     if(!newtag[0])
-      message = _("empty tag is not allowed, aborting");
+      message = _("Empty tag is not allowed, aborting");
     if(strchr(newtag, '|') == &newtag[0] || strchr(newtag, '|') == &newtag[strlen(newtag)-1] || strstr(newtag, "||"))
       message = _("'|' misplaced, empty tag is not allowed, aborting");
     if(message)
@@ -2146,12 +2146,12 @@ static void _delete_tagids(GList *tagids, dt_lib_module_t *self)
   if(img_count > 0 || dt_conf_get_bool("plugins/lighttable/tagging/ask_before_delete_tag"))
   {
     GtkWidget *win = dt_gui_main_window();
-    GtkWidget *dialog = gtk_dialog_new_with_buttons(_("delete tag?"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
-                                  _("cancel"), GTK_RESPONSE_NONE, _("delete"), GTK_RESPONSE_YES, NULL);
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Delete tag?"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
+                                  _("Cancel"), GTK_RESPONSE_NONE, _("Delete"), GTK_RESPONSE_YES, NULL);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
     GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gchar *text = g_strdup_printf(ngettext("do you really want to delete %d tag?\n%d image is assigned these tags!",
-                                           "do you really want to delete %d tags?\n%d images are assigned these tags!",
+    gchar *text = g_strdup_printf(ngettext("Do you really want to delete %d tag?\n%d image is assigned these tags!",
+                                           "Do you really want to delete %d tags?\n%d images are assigned these tags!",
                                            img_count), nb, img_count);
     GtkWidget *label = gtk_label_new(text);
     gtk_container_set_border_width(GTK_CONTAINER(area), 8);
@@ -2177,7 +2177,7 @@ static void _delete_tagids(GList *tagids, dt_lib_module_t *self)
     dt_tag_remove(tagid, TRUE);
     if(name)
     {
-      dt_control_log(_("tag %s removed"), name);
+      dt_control_log(_("Tag %s removed"), name);
       dt_free(name);
     }
   }
@@ -2214,7 +2214,7 @@ static void _pop_menu_dictionary_set_as_tag(GtkWidget *menuitem, dt_lib_module_t
   gtk_tree_model_get(model, &iter, DT_LIB_TAGGING_COL_PATH, &tagname, -1);
 
   dt_tag_new(tagname, &new_tagid);
-  dt_control_log(_("tag %s created"), tagname);
+  dt_control_log(_("Tag %s created"), tagname);
 
   _init_treeview(self, 1);
   dt_tagging_completion_refresh(d->completion_store);
@@ -2239,7 +2239,7 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
   // with several tags selected, only bulk CRUD makes sense
   if(sel_cnt > 1)
   {
-    menuitem = gtk_menu_item_new_with_label(_("delete tags"));
+    menuitem = gtk_menu_item_new_with_label(_("Delete tags"));
     g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_delete_selected, self);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
     gtk_widget_show_all(GTK_WIDGET(menu));
@@ -2256,25 +2256,25 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
 
     if(d->tree_flag || !d->suggestion_flag)
     {
-      menuitem = gtk_menu_item_new_with_label(_("create tag..."));
+      menuitem = gtk_menu_item_new_with_label(_("Create tag..."));
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
       g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_create_tag, self);
 
       if(tagid)
       {
-        menuitem = gtk_menu_item_new_with_label(_("delete tag"));
+        menuitem = gtk_menu_item_new_with_label(_("Delete tag"));
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
         g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_delete_selected, self);
       }
 
       if(gtk_tree_model_iter_children(model, &child, &iter))
       {
-        menuitem = gtk_menu_item_new_with_label(_("delete node"));
+        menuitem = gtk_menu_item_new_with_label(_("Delete node"));
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
         g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_delete_node, self);
       }
 
-      menuitem = gtk_menu_item_new_with_label(_("edit..."));
+      menuitem = gtk_menu_item_new_with_label(_("Edit..."));
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
       g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_edit_tag, self);
 
@@ -2282,7 +2282,7 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
 
     if(d->tree_flag)
     {
-      menuitem = gtk_menu_item_new_with_label(_("change path..."));
+      menuitem = gtk_menu_item_new_with_label(_("Change path..."));
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
       g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_change_path, self);
     }
@@ -2292,7 +2292,7 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
       menuitem = gtk_separator_menu_item_new();
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
 
-      menuitem = gtk_menu_item_new_with_label(_("set as a tag"));
+      menuitem = gtk_menu_item_new_with_label(_("Set as a tag"));
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
       g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_set_as_tag, self);
     }
@@ -2303,7 +2303,7 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
     }
 
-    menuitem = gtk_menu_item_new_with_label(_("copy to entry"));
+    menuitem = gtk_menu_item_new_with_label(_("Copy to entry"));
     g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_copy_tag, self);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
 
@@ -2320,13 +2320,13 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
       if(count)
       {
-        menuitem = gtk_menu_item_new_with_label(_("go to tag collection"));
+        menuitem = gtk_menu_item_new_with_label(_("Go to tag collection"));
         g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_goto_tag_collection, self);
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
       }
       if(d->collection[0])
       {
-        menuitem = gtk_menu_item_new_with_label(_("go back to work"));
+        menuitem = gtk_menu_item_new_with_label(_("Go back to work"));
         g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_goto_collection_back, self);
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
       }
@@ -2497,7 +2497,7 @@ static void _import_button_clicked(GtkButton *button, dt_lib_module_t *self)
 
   GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-        _("select a keyword file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
+        _("Select a keyword file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
         _("_import"), _("_cancel"));
 
   gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), last_dirname);
@@ -2530,7 +2530,7 @@ static void _export_button_clicked(GtkButton *button, dt_lib_module_t *self)
 
   GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-        _("select file to export to"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SAVE,
+        _("Select file to export to"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SAVE,
         _("_export"), _("_cancel"));
 
   gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(filechooser), TRUE);
@@ -2962,7 +2962,7 @@ static gboolean _dnd_scroll_timeout(dt_lib_module_t *self)
       GtkTreeIter iter;
       gtk_tree_store_prepend(d->dictionary_treestore, &iter, NULL);
       gtk_tree_store_set(d->dictionary_treestore, &iter,
-                        DT_LIB_TAGGING_COL_TAG, _("drop to root"),
+                        DT_LIB_TAGGING_COL_TAG, _("Drop to root"),
                         DT_LIB_TAGGING_COL_ID, 0,
                         DT_LIB_TAGGING_COL_PATH, "",
                         DT_LIB_TAGGING_COL_COUNT, 0,
@@ -3103,24 +3103,24 @@ void gui_init(dt_lib_module_t *self)
 
   // "view" combobox: render the attached list above as a flat list, or as a hierarchical tree
   d->attached_view_combo = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->attached_view_combo, _("view"));
-  dt_bauhaus_combobox_add(d->attached_view_combo, _("list"));
-  dt_bauhaus_combobox_add(d->attached_view_combo, _("tree"));
+  dt_bauhaus_widget_set_label(d->attached_view_combo, _("View"));
+  dt_bauhaus_combobox_add(d->attached_view_combo, _("List"));
+  dt_bauhaus_combobox_add(d->attached_view_combo, _("Tree"));
   dt_bauhaus_combobox_set_selected_text_align(d->attached_view_combo, DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT);
   gtk_widget_set_valign(d->attached_view_combo, GTK_ALIGN_CENTER);
   gtk_widget_set_tooltip_text(d->attached_view_combo,
-                              _("show the attached tags as a flat list or as a hierarchical tree"));
+                              _("Show the attached tags as a flat list or as a hierarchical tree"));
   g_signal_connect(G_OBJECT(d->attached_view_combo), "value-changed", G_CALLBACK(_attached_view_combo_changed), self);
   gtk_box_pack_start(hbox, d->attached_view_combo, TRUE, TRUE, 0);
 
   // "sort" combobox: by name or by image count
   d->sort_combo = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->sort_combo, _("Sort by"));
-  dt_bauhaus_combobox_add(d->sort_combo, _("name"));
-  dt_bauhaus_combobox_add(d->sort_combo, _("count"));
+  dt_bauhaus_combobox_add(d->sort_combo, _("Name"));
+  dt_bauhaus_combobox_add(d->sort_combo, _("Count"));
   dt_bauhaus_combobox_set_selected_text_align(d->sort_combo, DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT);
   gtk_widget_set_valign(d->sort_combo, GTK_ALIGN_CENTER);
-  gtk_widget_set_tooltip_text(d->sort_combo, _("sort the tags by name or by image count"));
+  gtk_widget_set_tooltip_text(d->sort_combo, _("Sort the tags by name or by image count"));
   g_signal_connect(G_OBJECT(d->sort_combo), "value-changed", G_CALLBACK(_sort_combo_changed), self);
   gtk_box_pack_start(hbox, d->sort_combo, TRUE, TRUE, 0);
 
@@ -3179,7 +3179,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_tree_view_set_model(view, GTK_TREE_MODEL(liststore));
   // NB: liststore and treestore are not unref'd here — d keeps a ref on each so they
   // both survive while the view switches between list and tree mode (freed in gui_cleanup)
-  gtk_widget_set_tooltip_text(GTK_WIDGET(view), _("attached tags,"
+  gtk_widget_set_tooltip_text(GTK_WIDGET(view), _("Attached tags,"
                                                   "\nclick the trash icon, press Delete or double-click to detach"
                                                   "\nselect several tags and right-click to detach them in bulk,"
                                                   "\npress Tab to give the focus to entry,"
@@ -3208,9 +3208,9 @@ void gui_init(dt_lib_module_t *self)
   gtk_entry_set_text(GTK_ENTRY(w), "");
   gtk_entry_set_width_chars(GTK_ENTRY(w), 0);
   // no widget tooltip here: it would pop up over the autocompletion list and hide it
-  gtk_entry_set_placeholder_text(GTK_ENTRY(w), _("enter or pick a tag, Enter to attach"));
+  gtk_entry_set_placeholder_text(GTK_ENTRY(w), _("Enter or pick a tag, Enter to attach"));
   gtk_entry_set_icon_from_icon_name(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, "edit-clear-symbolic");
-  gtk_entry_set_icon_tooltip_text(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, _("clear entry"));
+  gtk_entry_set_icon_tooltip_text(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, _("Clear entry"));
   g_signal_connect(G_OBJECT(w), "icon-release", G_CALLBACK(_entry_clear_icon), self);
   gtk_box_pack_start(hbox, w, TRUE, TRUE, 0);
   gtk_widget_add_events(GTK_WIDGET(w), GDK_KEY_RELEASE_MASK);
@@ -3218,7 +3218,7 @@ void gui_init(dt_lib_module_t *self)
 
   // validate button: attach the typed/picked tag without having to hit Enter
   d->validate_button = dtgtk_button_new(dtgtk_cairo_paint_check_mark, 0, NULL);
-  gtk_widget_set_tooltip_text(d->validate_button, _("attach this tag to the selected images"));
+  gtk_widget_set_tooltip_text(d->validate_button, _("Attach this tag to the selected images"));
   gtk_box_pack_end(GTK_BOX(hbox), d->validate_button, FALSE, TRUE, 0);
   g_signal_connect(G_OBJECT(d->validate_button), "clicked", G_CALLBACK(_validate_button_clicked), (gpointer)self);
   gtk_box_pack_start(box, GTK_WIDGET(hbox), FALSE, TRUE, 0);
@@ -3254,7 +3254,7 @@ void gui_init(dt_lib_module_t *self)
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(d->manage_window);
 #endif
-  gtk_window_set_title(GTK_WINDOW(d->manage_window), _("manage tags"));
+  gtk_window_set_title(GTK_WINDOW(d->manage_window), _("Manage tags"));
   gtk_window_set_transient_for(GTK_WINDOW(d->manage_window), GTK_WINDOW(dt_gui_main_window()));
   gtk_window_set_default_size(GTK_WINDOW(d->manage_window), DT_PIXEL_APPLY_DPI(400), DT_PIXEL_APPLY_DPI(600));
   // hide instead of destroy so the dictionary widgets/state persist across openings
@@ -3269,9 +3269,9 @@ void gui_init(dt_lib_module_t *self)
   dt_accels_disconnect_on_text_input(w);
   gtk_entry_set_text(GTK_ENTRY(w), "");
   gtk_entry_set_width_chars(GTK_ENTRY(w), 0);
-  gtk_entry_set_placeholder_text(GTK_ENTRY(w), _("type to filter the tag dictionary below"));
+  gtk_entry_set_placeholder_text(GTK_ENTRY(w), _("Type to filter the tag dictionary below"));
   gtk_entry_set_icon_from_icon_name(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, "edit-clear-symbolic");
-  gtk_entry_set_icon_tooltip_text(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, _("clear entry"));
+  gtk_entry_set_icon_tooltip_text(GTK_ENTRY(w), GTK_ENTRY_ICON_SECONDARY, _("Clear entry"));
   g_signal_connect(G_OBJECT(w), "icon-release", G_CALLBACK(_entry_clear_icon), self);
   gtk_widget_add_events(GTK_WIDGET(w), GDK_KEY_RELEASE_MASK);
   g_signal_connect(G_OBJECT(w), "changed", G_CALLBACK(_tag_name_changed), (gpointer)self);
@@ -3317,7 +3317,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_tree_view_set_expander_column(view, col);
 
   gtk_tree_selection_set_mode(gtk_tree_view_get_selection(view), GTK_SELECTION_MULTIPLE);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(view), _("tag dictionary,"
+  gtk_widget_set_tooltip_text(GTK_WIDGET(view), _("Tag dictionary,"
                                                   "\nright-click to create, edit, delete tags,"
                                                   "\nselect several tags and right-click to delete them in bulk,"
                                                   "\nshift+click to fully expand the selected tag,"
@@ -3351,19 +3351,19 @@ void gui_init(dt_lib_module_t *self)
   // buttons
   hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
-  d->new_button = dt_action_button_new(self, N_("new"), _new_button_clicked, self, _("create a new tag with the\nname you entered"), 0, 0);
+  d->new_button = dt_action_button_new(self, N_("New"), _new_button_clicked, self, _("Create a new tag with the\nname you entered"), 0, 0);
   gtk_box_pack_start(hbox, d->new_button, TRUE, TRUE, 0);
 
-  d->import_button = dt_action_button_new(self, N_("import..."), _import_button_clicked, self, _("import tags from a Lightroom keyword file"), 0, 0);
+  d->import_button = dt_action_button_new(self, N_("Import..."), _import_button_clicked, self, _("Import tags from a Lightroom keyword file"), 0, 0);
   gtk_box_pack_start(hbox, d->import_button, TRUE, TRUE, 0);
 
-  d->export_button = dt_action_button_new(self, N_("export..."), _export_button_clicked, self, _("export all tags to a Lightroom keyword file"), 0, 0);
+  d->export_button = dt_action_button_new(self, N_("Export..."), _export_button_clicked, self, _("Export all tags to a Lightroom keyword file"), 0, 0);
   gtk_box_pack_start(hbox, d->export_button, TRUE, TRUE, 0);
 
   d->toggle_tree_button = NEW_TOGGLE_BUTTON(dtgtk_cairo_paint_treelist, _toggle_tree_button_callback,
-                                            _("toggle list / tree view"), N_("tree"));
+                                            _("Toggle list / tree view"), N_("Tree"));
   d->toggle_suggestion_button = NEW_TOGGLE_BUTTON(dtgtk_cairo_paint_plus_simple, _toggle_suggestion_button_callback,
-                                                  _("toggle list with / without suggestion"), N_("suggestion"));
+                                                  _("Toggle list with / without suggestion"), N_("Suggestion"));
 
   gtk_box_pack_start(box, GTK_WIDGET(hbox), FALSE, TRUE, 0);
 
@@ -3374,24 +3374,24 @@ void gui_init(dt_lib_module_t *self)
     gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
     gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
 
-    GtkWidget *lbl = gtk_label_new(_("suggested tags level of confidence"));
+    GtkWidget *lbl = gtk_label_new(_("Suggested tags level of confidence"));
     gtk_widget_set_halign(lbl, GTK_ALIGN_START);
     gtk_widget_set_hexpand(lbl, TRUE);
     GtkWidget *spin = gtk_spin_button_new_with_range(0, 100, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), dt_conf_get_int("plugins/lighttable/tagging/confidence"));
-    gtk_widget_set_tooltip_text(spin, _("level of confidence to include a tag in the suggestions list:"
+    gtk_widget_set_tooltip_text(spin, _("Level of confidence to include a tag in the suggestions list:"
                                         "\n0: all associated tags, 99: 99% matching tags,"
                                         "\n100: only the recently-used tags (faster)"));
     g_signal_connect(G_OBJECT(spin), "value-changed", G_CALLBACK(_confidence_changed), self);
     gtk_grid_attach(GTK_GRID(grid), lbl, 0, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), spin, 1, 0, 1, 1);
 
-    GtkWidget *lbl2 = gtk_label_new(_("number of recently attached tags"));
+    GtkWidget *lbl2 = gtk_label_new(_("Number of recently attached tags"));
     gtk_widget_set_halign(lbl2, GTK_ALIGN_START);
     gtk_widget_set_hexpand(lbl2, TRUE);
     GtkWidget *spin2 = gtk_spin_button_new_with_range(-1, 1000, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin2), dt_conf_get_int("plugins/lighttable/tagging/nb_recent_tags"));
-    gtk_widget_set_tooltip_text(spin2, _("number of recently attached tags shown in the suggestions list"
+    gtk_widget_set_tooltip_text(spin2, _("Number of recently attached tags shown in the suggestions list"
                                          "\n(-1 disables the recent-tags list)"));
     g_signal_connect(G_OBJECT(spin2), "value-changed", G_CALLBACK(_recent_tags_changed), self);
     gtk_grid_attach(GTK_GRID(grid), lbl2, 0, 1, 1, 1);
@@ -3402,7 +3402,7 @@ void gui_init(dt_lib_module_t *self)
 
   // "show system tags" checkbox: reveal the tags Ansel manages automatically (Ansel|…)
   d->dttags_check = gtk_check_button_new_with_label(_("Show system tags"));
-  gtk_widget_set_tooltip_text(d->dttags_check, _("show the tags automatically attached by Ansel (names starting with “Ansel|”)"));
+  gtk_widget_set_tooltip_text(d->dttags_check, _("Show the tags automatically attached by Ansel (names starting with “Ansel|”)"));
   d->dttags_flag = FALSE;
   g_signal_connect(G_OBJECT(d->dttags_check), "toggled", G_CALLBACK(_dttags_check_toggled), self);
   gtk_box_pack_start(GTK_BOX(self->widget), d->dttags_check, FALSE, TRUE, 0);
@@ -3569,7 +3569,7 @@ static gboolean _lib_tagging_tag_show_accel(GtkAccelGroup *accel_group, GObject 
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   if(d->tree_flag)
   {
-    dt_control_log(_("tag shortcut is not active with tag tree view. please switch to list view"));
+    dt_control_log(_("Tag shortcut is not active with tag tree view. please switch to list view"));
     return TRUE;  // doesn't work properly with tree treeview
   }
 
@@ -3679,7 +3679,7 @@ static void _size_recent_tags_list()
 // tag-suggestion settings that used to live in a separate "preferences" dialog
 void set_preferences(void *menu, dt_lib_module_t *self)
 {
-  GtkWidget *mi = gtk_menu_item_new_with_label(_("manage tags..."));
+  GtkWidget *mi = gtk_menu_item_new_with_label(_("Manage tags..."));
   g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_show_manage_window), self);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 }

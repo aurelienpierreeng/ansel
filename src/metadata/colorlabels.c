@@ -53,19 +53,19 @@ char * dt_colorlabels_get_name(const int label)
   switch(label)
   {
     case 0:
-      return _("red");
+      return _("Red");
     case 1:
-      return _("yellow");
+      return _("Yellow");
     case 2:
-      return _("green");
+      return _("Green");
     case 3:
-      return _("blue");
+      return _("Blue");
     case 4:
-      return _("purple");
+      return _("Purple");
     case 5:
-      return _("empty");
+      return _("Empty");
     default:
-      return _("unknown/invalid");
+      return _("Unknown/invalid");
   }
 }
 

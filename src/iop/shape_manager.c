@@ -53,7 +53,7 @@ typedef struct dt_iop_mask_manager_params_t dt_iop_mask_manager_data_t;
 
 const char *name()
 {
-  return _("shape manager");
+  return _("Shape manager");
 }
 
 int groups()

@@ -109,9 +109,9 @@ const char *name()
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("avoid magenta highlights and try to recover highlights colors"),
-                                _("corrective"), _("linear, raw, scene-referred"), _("reconstruction, raw"),
-                                _("linear, raw, scene-referred"));
+  return dt_iop_set_description(self, _("Avoid magenta highlights and try to recover highlights colors"),
+                                _("Corrective"), _("Linear, raw, scene-referred"), _("Reconstruction, raw"),
+                                _("Linear, raw, scene-referred"));
 }
 
 int default_group()
@@ -654,13 +654,13 @@ static const char *_highlights_mode_name(const dt_iop_highlights_mode_t mode)
 {
   switch(mode)
   {
-    case DT_IOP_HIGHLIGHTS_CLIP:      return N_("clip highlights");
-    case DT_IOP_HIGHLIGHTS_LCH:       return N_("reconstruct in LCh");
-    case DT_IOP_HIGHLIGHTS_INPAINT:   return N_("reconstruct color");
-    case DT_IOP_HIGHLIGHTS_LAPLACIAN: return N_("guided laplacians");
-    case DT_IOP_HIGHLIGHTS_HARMONIC:  return N_("harmonic transposition");
+    case DT_IOP_HIGHLIGHTS_CLIP:      return N_("Clip highlights");
+    case DT_IOP_HIGHLIGHTS_LCH:       return N_("Reconstruct in LCh");
+    case DT_IOP_HIGHLIGHTS_INPAINT:   return N_("Reconstruct color");
+    case DT_IOP_HIGHLIGHTS_LAPLACIAN: return N_("Guided laplacians");
+    case DT_IOP_HIGHLIGHTS_HARMONIC:  return N_("Harmonic transposition");
   }
-  return N_("unknown");
+  return N_("Unknown");
 }
 
 // Returns TRUE when `mode` has a real path for the given (roi-shifted) CFA descriptor. Any raw mosaic
@@ -819,7 +819,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
              "[highlights] mode \"%s\" has no reconstruction path for this image; falling back to clipping\n",
              _highlights_mode_name(d->mode));
     if(self->dev->gui_attached && pipe == self->dev->pipe)
-      dt_control_log(_("highlight reconstruction: \"%s\" is not available for this image type; clipping instead"),
+      dt_control_log(_("Highlight reconstruction: \"%s\" is not available for this image type; clipping instead"),
                      _(_highlights_mode_name(d->mode)));
   }
 
@@ -1248,10 +1248,10 @@ void gui_update(struct dt_iop_module_t *self)
   // capability entries, added once (moved here from reload_defaults so it never touches widgets off
   // the GUI thread / on a widget-less export dev)
   if(dt_bauhaus_combobox_length(g->mode) < DT_IOP_HIGHLIGHTS_LAPLACIAN + 1)
-    dt_bauhaus_combobox_add_full(g->mode, _("guided laplacians"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
+    dt_bauhaus_combobox_add_full(g->mode, _("Guided laplacians"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
                                  GINT_TO_POINTER(DT_IOP_HIGHLIGHTS_LAPLACIAN), NULL, TRUE);
   if(dt_bauhaus_combobox_length(g->mode) < DT_IOP_HIGHLIGHTS_HARMONIC + 1)
-    dt_bauhaus_combobox_add_full(g->mode, _("harmonic transposition"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
+    dt_bauhaus_combobox_add_full(g->mode, _("Harmonic transposition"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
                                  GINT_TO_POINTER(DT_IOP_HIGHLIGHTS_HARMONIC), NULL, TRUE);
 
   dt_bauhaus_widget_set_quad_active(g->clip, FALSE);
@@ -1312,11 +1312,11 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->mode = dt_bauhaus_combobox_from_params(self, "mode");
-  gtk_widget_set_tooltip_text(g->mode, _("highlight reconstruction method"));
+  gtk_widget_set_tooltip_text(g->mode, _("Highlight reconstruction method"));
 
   g->clip = dt_bauhaus_slider_from_params(self, "clip");
   dt_bauhaus_slider_set_digits(g->clip, 3);
-  gtk_widget_set_tooltip_text(g->clip, _("manually adjust the clipping threshold against "
+  gtk_widget_set_tooltip_text(g->clip, _("Manually adjust the clipping threshold against "
                                          "magenta highlights\nthe mask icon shows the clipped area\n"
                                          "(you shouldn't ever need to touch this)"));
   dt_bauhaus_widget_set_quad_paint(g->clip, dtgtk_cairo_paint_showmask, 0, NULL);
@@ -1325,26 +1325,26 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->clip), "quad-pressed", G_CALLBACK(_visualize_callback), self);
 
   g->noise_level = dt_bauhaus_slider_from_params(self, "noise_level");
-  gtk_widget_set_tooltip_text(g->noise_level, _("add noise to visually blend the reconstructed areas\n"
+  gtk_widget_set_tooltip_text(g->noise_level, _("Add noise to visually blend the reconstructed areas\n"
                                                 "into the rest of the noisy image. useful at high ISO."));
 
   g->iterations = dt_bauhaus_slider_from_params(self, "iterations");
   dt_bauhaus_slider_set_soft_range(g->iterations, 1, 256);
-  gtk_widget_set_tooltip_text(g->iterations, _("increase if magenta highlights don't get fully corrected\n"
+  gtk_widget_set_tooltip_text(g->iterations, _("Increase if magenta highlights don't get fully corrected\n"
                                                "each new iteration brings a performance penalty."));
 
   g->solid_color = dt_bauhaus_slider_from_params(self, "solid_color");
   dt_bauhaus_slider_set_format(g->solid_color, "%");
   gtk_widget_set_tooltip_text(g->solid_color,
-                              _("increase if magenta highlights don't get fully corrected.\n"
+                              _("Increase if magenta highlights don't get fully corrected.\n"
                                 "this may produce non-smooth boundaries between valid and clipped regions."));
 
   g->scales = dt_bauhaus_combobox_from_params(self, "scales");
-  gtk_widget_set_tooltip_text(g->scales, _("increase to correct larger clipped areas.\n"
+  gtk_widget_set_tooltip_text(g->scales, _("Increase to correct larger clipped areas.\n"
                                            "large values bring huge performance penalties"));
 
-  GtkWidget *monochromes = dt_ui_label_new(_("not applicable"));
-  gtk_widget_set_tooltip_text(monochromes, _("no highlights reconstruction for monochrome images"));
+  GtkWidget *monochromes = dt_ui_label_new(_("Not applicable"));
+  gtk_widget_set_tooltip_text(monochromes, _("No highlights reconstruction for monochrome images"));
 
   // start building top level widget
   self->gui->widget = gtk_stack_new();

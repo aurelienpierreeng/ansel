@@ -145,9 +145,9 @@ DT_MODULE_INTROSPECTION(5, dt_iop_filmicrgb_params_t)
 
 typedef enum dt_iop_filmicrgb_methods_type_t
 {
-  DT_FILMIC_METHOD_NONE = 0,              // $DESCRIPTION: "no"
-  DT_FILMIC_METHOD_MAX_RGB = 1,           // $DESCRIPTION: "max RGB"
-  DT_FILMIC_METHOD_LUMINANCE = 2,         // $DESCRIPTION: "luminance Y"
+  DT_FILMIC_METHOD_NONE = 0,              // $DESCRIPTION: "No"
+  DT_FILMIC_METHOD_MAX_RGB = 1,           // $DESCRIPTION: "Max RGB"
+  DT_FILMIC_METHOD_LUMINANCE = 2,         // $DESCRIPTION: "Luminance Y"
   DT_FILMIC_METHOD_POWER_NORM = 3,        // $DESCRIPTION: "RGB power norm"
   DT_FILMIC_METHOD_EUCLIDEAN_NORM_V2 = 5, // $DESCRIPTION: "RGB euclidean norm"
   DT_FILMIC_METHOD_EUCLIDEAN_NORM_V1 = 4, // $DESCRIPTION: "RGB euclidean norm (legacy)"
@@ -156,29 +156,29 @@ typedef enum dt_iop_filmicrgb_methods_type_t
 
 typedef enum dt_iop_filmicrgb_curve_type_t
 {
-  DT_FILMIC_CURVE_POLY_4 = 0, // $DESCRIPTION: "hard"
-  DT_FILMIC_CURVE_POLY_3 = 1,  // $DESCRIPTION: "soft"
-  DT_FILMIC_CURVE_RATIONAL = 2, // $DESCRIPTION: "safe"
+  DT_FILMIC_CURVE_POLY_4 = 0, // $DESCRIPTION: "Hard"
+  DT_FILMIC_CURVE_POLY_3 = 1,  // $DESCRIPTION: "Soft"
+  DT_FILMIC_CURVE_RATIONAL = 2, // $DESCRIPTION: "Safe"
   // Generalized-sigmoid toe/shoulder : monotone for any setting, C1 at the
   // transitions, exact endpoints, slope-matched power fallback on a degenerate
   // S. Its single power per side is the CIECAM16-J appearance match (see
   // dt_iop_filmic_rgb_compute_spline). Selectable per side like the others.
-  DT_FILMIC_CURVE_SIGMOID = 3, // $DESCRIPTION: "perceptual"
+  DT_FILMIC_CURVE_SIGMOID = 3, // $DESCRIPTION: "Perceptual"
 } dt_iop_filmicrgb_curve_type_t;
 
 
 typedef enum dt_iop_filmicrgb_colorscience_type_t
 {
-  DT_FILMIC_COLORSCIENCE_V1 = 0, // $DESCRIPTION: "v3 (2019)"
-  DT_FILMIC_COLORSCIENCE_V2 = 1, // $DESCRIPTION: "v4 (2020)"
-  DT_FILMIC_COLORSCIENCE_V3 = 2, // $DESCRIPTION: "v5 (2021)"
-  DT_FILMIC_COLORSCIENCE_V4 = 3, // $DESCRIPTION: "v6 (2022)"
-  DT_FILMIC_COLORSCIENCE_V5 = 4, // $DESCRIPTION: "v7 (2023)"
-  DT_FILMIC_COLORSCIENCE_V6 = 5, // $DESCRIPTION: "v8 (AgX, no bleach)"
-  DT_FILMIC_COLORSCIENCE_V7 = 6, // $DESCRIPTION: "v8 (AgX, low bleach)"
-  DT_FILMIC_COLORSCIENCE_V8 = 7, // $DESCRIPTION: "v8 (AgX, medium bleach)"
-  DT_FILMIC_COLORSCIENCE_V9 = 8, // $DESCRIPTION: "v8 (AgX, high bleach)"
-  DT_FILMIC_COLORSCIENCE_V10 = 9, // $DESCRIPTION: "v8 (AgX, extra bleach)"
+  DT_FILMIC_COLORSCIENCE_V1 = 0, // $DESCRIPTION: "V3 (2019)"
+  DT_FILMIC_COLORSCIENCE_V2 = 1, // $DESCRIPTION: "V4 (2020)"
+  DT_FILMIC_COLORSCIENCE_V3 = 2, // $DESCRIPTION: "V5 (2021)"
+  DT_FILMIC_COLORSCIENCE_V4 = 3, // $DESCRIPTION: "V6 (2022)"
+  DT_FILMIC_COLORSCIENCE_V5 = 4, // $DESCRIPTION: "V7 (2023)"
+  DT_FILMIC_COLORSCIENCE_V6 = 5, // $DESCRIPTION: "V8 (AgX, no bleach)"
+  DT_FILMIC_COLORSCIENCE_V7 = 6, // $DESCRIPTION: "V8 (AgX, low bleach)"
+  DT_FILMIC_COLORSCIENCE_V8 = 7, // $DESCRIPTION: "V8 (AgX, medium bleach)"
+  DT_FILMIC_COLORSCIENCE_V9 = 8, // $DESCRIPTION: "V8 (AgX, high bleach)"
+  DT_FILMIC_COLORSCIENCE_V10 = 9, // $DESCRIPTION: "V8 (AgX, extra bleach)"
 } dt_iop_filmicrgb_colorscience_type_t;
 
 // The three v8 "AgX" variants share the whole pixel path and differ ONLY by the
@@ -195,9 +195,9 @@ static inline gboolean _filmic_is_agx(const dt_iop_filmicrgb_colorscience_type_t
 
 typedef enum dt_iop_filmicrgb_spline_version_type_t
 {
-  DT_FILMIC_SPLINE_VERSION_V1 = 0, // $DESCRIPTION: "v1 (2019)"
-  DT_FILMIC_SPLINE_VERSION_V2 = 1, // $DESCRIPTION: "v2 (2020)"
-  DT_FILMIC_SPLINE_VERSION_V3 = 2, // $DESCRIPTION: "v3 (2021)"
+  DT_FILMIC_SPLINE_VERSION_V1 = 0, // $DESCRIPTION: "V1 (2019)"
+  DT_FILMIC_SPLINE_VERSION_V2 = 1, // $DESCRIPTION: "V2 (2020)"
+  DT_FILMIC_SPLINE_VERSION_V3 = 2, // $DESCRIPTION: "V3 (2021)"
   // NB : the enclosed enum only sets the node GEOMETRY (how latitude/balance/
   // contrast place the toe/shoulder nodes). The segment SHAPE between the nodes
   // is dt_iop_filmicrgb_curve_type_t (shadows/highlights), sigmoid included.
@@ -235,42 +235,42 @@ typedef enum dt_iop_filmic_rgb_gui_mode_t
 // copy enum definition for introspection
 typedef enum dt_iop_filmic_noise_distribution_t
 {
-  DT_FILMIC_NOISE_UNIFORM = DT_NOISE_UNIFORM,      // $DESCRIPTION: "uniform"
-  DT_FILMIC_NOISE_GAUSSIAN = DT_NOISE_GAUSSIAN,    // $DESCRIPTION: "gaussian"
-  DT_FILMIC_NOISE_POISSONIAN = DT_NOISE_POISSONIAN // $DESCRIPTION: "poissonian"
+  DT_FILMIC_NOISE_UNIFORM = DT_NOISE_UNIFORM,      // $DESCRIPTION: "Uniform"
+  DT_FILMIC_NOISE_GAUSSIAN = DT_NOISE_GAUSSIAN,    // $DESCRIPTION: "Gaussian"
+  DT_FILMIC_NOISE_POISSONIAN = DT_NOISE_POISSONIAN // $DESCRIPTION: "Poissonian"
 } dt_iop_filmic_noise_distribution_t;
 
 // clang-format off
 typedef struct dt_iop_filmicrgb_params_t
 {
-  float grey_point_source;     // $MIN: 0 $MAX: 100 $DEFAULT: 18.45 $DESCRIPTION: "middle gray luminance"
-  float black_point_source;    // $MIN: -16 $MAX: -0.1 $DEFAULT: -8.0 $DESCRIPTION: "black relative exposure"
-  float white_point_source;    // $MIN: 0.1 $MAX: 16 $DEFAULT: 4.0 $DESCRIPTION: "white relative exposure"
-  float reconstruct_threshold; // $MIN: -6.0 $MAX: 16.0 $DEFAULT: 16.0 $DESCRIPTION: "threshold"
-  float reconstruct_feather;   // $MIN: 0.25 $MAX: 6.0 $DEFAULT: 3.0 $DESCRIPTION: "transition"
-  float reconstruct_bloom_vs_details; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "bloom \342\206\224 reconstruct"
-  float reconstruct_grey_vs_color; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "gray \342\206\224 colorful details"
-  float reconstruct_structure_vs_texture; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "structure \342\206\224 texture"
-  float security_factor;                  // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "dynamic range scaling"
-  float grey_point_target;                // $MIN: 1 $MAX: 50 $DEFAULT: 18.45 $DESCRIPTION: "target middle gray"
-  float black_point_target; // $MIN: 0.000 $MAX: 20.000 $DEFAULT: 0.01517634 $DESCRIPTION: "target black luminance"
-  float white_point_target; // $MIN: 0 $MAX: 1600 $DEFAULT: 100 $DESCRIPTION: "target white luminance"
-  float output_power;       // $MIN: 1 $MAX: 10 $DEFAULT: 4.0 $DESCRIPTION: "hardness"
+  float grey_point_source;     // $MIN: 0 $MAX: 100 $DEFAULT: 18.45 $DESCRIPTION: "Middle gray luminance"
+  float black_point_source;    // $MIN: -16 $MAX: -0.1 $DEFAULT: -8.0 $DESCRIPTION: "Black relative exposure"
+  float white_point_source;    // $MIN: 0.1 $MAX: 16 $DEFAULT: 4.0 $DESCRIPTION: "White relative exposure"
+  float reconstruct_threshold; // $MIN: -6.0 $MAX: 16.0 $DEFAULT: 16.0 $DESCRIPTION: "Threshold"
+  float reconstruct_feather;   // $MIN: 0.25 $MAX: 6.0 $DEFAULT: 3.0 $DESCRIPTION: "Transition"
+  float reconstruct_bloom_vs_details; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "Bloom \342\206\224 reconstruct"
+  float reconstruct_grey_vs_color; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "Gray \342\206\224 colorful details"
+  float reconstruct_structure_vs_texture; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "Structure \342\206\224 texture"
+  float security_factor;                  // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "Dynamic range scaling"
+  float grey_point_target;                // $MIN: 1 $MAX: 50 $DEFAULT: 18.45 $DESCRIPTION: "Target middle gray"
+  float black_point_target; // $MIN: 0.000 $MAX: 20.000 $DEFAULT: 0.01517634 $DESCRIPTION: "Target black luminance"
+  float white_point_target; // $MIN: 0 $MAX: 1600 $DEFAULT: 100 $DESCRIPTION: "Target white luminance"
+  float output_power;       // $MIN: 1 $MAX: 10 $DEFAULT: 4.0 $DESCRIPTION: "Hardness"
   float latitude;           // $MIN: 0.01 $MAX: 99 $DEFAULT: 10.0
   float contrast;           // $MIN: 0 $MAX: 5 $DEFAULT: 1.18
-  float saturation;         // $MIN: -200 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "extreme luminance saturation"
-  float balance;            // $MIN: -50 $MAX: 50 $DEFAULT: 0.0 $DESCRIPTION: "shadows \342\206\224 highlights balance"
-  float noise_level;        // $MIN: 0.0 $MAX: 6.0 $DEFAULT: 0.05f $DESCRIPTION: "add noise in highlights"
-  dt_iop_filmicrgb_methods_type_t preserve_color; // $DEFAULT: DT_FILMIC_METHOD_MAX_RGB $DESCRIPTION: "preserve chrominance"
-  dt_iop_filmicrgb_colorscience_type_t version; // $DEFAULT: DT_FILMIC_COLORSCIENCE_V8 $DESCRIPTION: "color science"
-  gboolean auto_hardness;                       // $DEFAULT: TRUE $DESCRIPTION: "auto adjust hardness"
-  gboolean custom_grey;                         // $DEFAULT: FALSE $DESCRIPTION: "use custom middle-gray values"
-  int high_quality_reconstruction;       // $MIN: 0 $MAX: 10 $DEFAULT: 1 $DESCRIPTION: "iterations of color inpainting"
-  dt_iop_filmic_noise_distribution_t noise_distribution; // $DEFAULT: DT_NOISE_POISSONIAN $DESCRIPTION: "type of noise"
-  dt_iop_filmicrgb_curve_type_t shadows; // $DEFAULT: DT_FILMIC_CURVE_SIGMOID $DESCRIPTION: "contrast in shadows"
-  dt_iop_filmicrgb_curve_type_t highlights; // $DEFAULT: DT_FILMIC_CURVE_SIGMOID $DESCRIPTION: "contrast in highlights"
-  gboolean compensate_icc_black; // $DEFAULT: FALSE $DESCRIPTION: "compensate output ICC profile black point"
-  dt_iop_filmicrgb_spline_version_type_t spline_version; // $DEFAULT: DT_FILMIC_SPLINE_VERSION_V3 $DESCRIPTION: "spline handling"
+  float saturation;         // $MIN: -200 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "Extreme luminance saturation"
+  float balance;            // $MIN: -50 $MAX: 50 $DEFAULT: 0.0 $DESCRIPTION: "Shadows \342\206\224 highlights balance"
+  float noise_level;        // $MIN: 0.0 $MAX: 6.0 $DEFAULT: 0.05f $DESCRIPTION: "Add noise in highlights"
+  dt_iop_filmicrgb_methods_type_t preserve_color; // $DEFAULT: DT_FILMIC_METHOD_MAX_RGB $DESCRIPTION: "Preserve chrominance"
+  dt_iop_filmicrgb_colorscience_type_t version; // $DEFAULT: DT_FILMIC_COLORSCIENCE_V8 $DESCRIPTION: "Color science"
+  gboolean auto_hardness;                       // $DEFAULT: TRUE $DESCRIPTION: "Auto adjust hardness"
+  gboolean custom_grey;                         // $DEFAULT: FALSE $DESCRIPTION: "Use custom middle-gray values"
+  int high_quality_reconstruction;       // $MIN: 0 $MAX: 10 $DEFAULT: 1 $DESCRIPTION: "Iterations of color inpainting"
+  dt_iop_filmic_noise_distribution_t noise_distribution; // $DEFAULT: DT_NOISE_POISSONIAN $DESCRIPTION: "Type of noise"
+  dt_iop_filmicrgb_curve_type_t shadows; // $DEFAULT: DT_FILMIC_CURVE_SIGMOID $DESCRIPTION: "Contrast in shadows"
+  dt_iop_filmicrgb_curve_type_t highlights; // $DEFAULT: DT_FILMIC_CURVE_SIGMOID $DESCRIPTION: "Contrast in highlights"
+  gboolean compensate_icc_black; // $DEFAULT: FALSE $DESCRIPTION: "Compensate output ICC profile black point"
+  dt_iop_filmicrgb_spline_version_type_t spline_version; // $DEFAULT: DT_FILMIC_SPLINE_VERSION_V3 $DESCRIPTION: "Spline handling"
 } dt_iop_filmicrgb_params_t;
 // clang-format on
 
@@ -421,23 +421,23 @@ typedef struct dt_iop_filmicrgb_global_data_t
 
 const char *name()
 {
-  return _("fil_mic");
+  return _("Fil_mic");
 }
 
 const char *aliases()
 {
-  return _("tone mapping|curve|view transform|contrast|saturation|highlights");
+  return _("Tone mapping|curve|view transform|contrast|saturation|highlights");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("apply a view transform to prepare the scene-referred pipeline\n"
+  return dt_iop_set_description(self, _("Apply a view transform to prepare the scene-referred pipeline\n"
                                         "for display on SDR screens and paper prints\n"
                                         "while preventing clipping in non-destructive ways"),
-                                      _("corrective and creative"),
-                                      _("linear or non-linear, RGB, scene-referred"),
-                                      _("non-linear, RGB"),
-                                      _("non-linear, RGB, display-referred"));
+                                      _("Corrective and creative"),
+                                      _("Linear or non-linear, RGB, scene-referred"),
+                                      _("Non-linear, RGB"),
+                                      _("Non-linear, RGB, display-referred"));
 }
 
 int default_group()
@@ -815,38 +815,38 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   {
     typedef struct dt_iop_filmicrgb_params_v3_t
     {
-      float grey_point_source;     // $MIN: 0 $MAX: 100 $DEFAULT: 18.45 $DESCRIPTION: "middle gray luminance"
-      float black_point_source;    // $MIN: -16 $MAX: -0.1 $DEFAULT: -8.0 $DESCRIPTION: "black relative exposure"
-      float white_point_source;    // $MIN: 0 $MAX: 16 $DEFAULT: 4.0 $DESCRIPTION: "white relative exposure"
-      float reconstruct_threshold; // $MIN: -6.0 $MAX: 6.0 $DEFAULT: +3.0 $DESCRIPTION: "threshold"
-      float reconstruct_feather;   // $MIN: 0.25 $MAX: 6.0 $DEFAULT: 3.0 $DESCRIPTION: "transition"
+      float grey_point_source;     // $MIN: 0 $MAX: 100 $DEFAULT: 18.45 $DESCRIPTION: "Middle gray luminance"
+      float black_point_source;    // $MIN: -16 $MAX: -0.1 $DEFAULT: -8.0 $DESCRIPTION: "Black relative exposure"
+      float white_point_source;    // $MIN: 0 $MAX: 16 $DEFAULT: 4.0 $DESCRIPTION: "White relative exposure"
+      float reconstruct_threshold; // $MIN: -6.0 $MAX: 6.0 $DEFAULT: +3.0 $DESCRIPTION: "Threshold"
+      float reconstruct_feather;   // $MIN: 0.25 $MAX: 6.0 $DEFAULT: 3.0 $DESCRIPTION: "Transition"
       float reconstruct_bloom_vs_details; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION:
-                                          // "bloom/reconstruct"
-      float reconstruct_grey_vs_color;    // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "gray/colorful
+                                          // "Bloom/reconstruct"
+      float reconstruct_grey_vs_color;    // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "Gray/colorful
                                           // details"
       float reconstruct_structure_vs_texture; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION:
-                                              // "structure/texture"
-      float security_factor;    // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "dynamic range scaling"
-      float grey_point_target;  // $MIN: 1 $MAX: 50 $DEFAULT: 18.45 $DESCRIPTION: "target middle gray"
-      float black_point_target; // $MIN: 0 $MAX: 20 $DEFAULT: 0 $DESCRIPTION: "target black luminance"
-      float white_point_target; // $MIN: 0 $MAX: 1600 $DEFAULT: 100 $DESCRIPTION: "target white luminance"
-      float output_power;       // $MIN: 1 $MAX: 10 $DEFAULT: 4.0 $DESCRIPTION: "hardness"
+                                              // "Structure/texture"
+      float security_factor;    // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "Dynamic range scaling"
+      float grey_point_target;  // $MIN: 1 $MAX: 50 $DEFAULT: 18.45 $DESCRIPTION: "Target middle gray"
+      float black_point_target; // $MIN: 0 $MAX: 20 $DEFAULT: 0 $DESCRIPTION: "Target black luminance"
+      float white_point_target; // $MIN: 0 $MAX: 1600 $DEFAULT: 100 $DESCRIPTION: "Target white luminance"
+      float output_power;       // $MIN: 1 $MAX: 10 $DEFAULT: 4.0 $DESCRIPTION: "Hardness"
       float latitude;           // $MIN: 0.01 $MAX: 100 $DEFAULT: 33.0
       float contrast;           // $MIN: 0 $MAX: 5 $DEFAULT: 1.50
-      float saturation;         // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "extreme luminance saturation"
-      float balance;            // $MIN: -50 $MAX: 50 $DEFAULT: 0.0 $DESCRIPTION: "shadows/highlights balance"
-      float noise_level;        // $MIN: 0.0 $MAX: 6.0 $DEFAULT: 0.1f $DESCRIPTION: "add noise in highlights"
+      float saturation;         // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "Extreme luminance saturation"
+      float balance;            // $MIN: -50 $MAX: 50 $DEFAULT: 0.0 $DESCRIPTION: "Shadows/highlights balance"
+      float noise_level;        // $MIN: 0.0 $MAX: 6.0 $DEFAULT: 0.1f $DESCRIPTION: "Add noise in highlights"
       dt_iop_filmicrgb_methods_type_t preserve_color; // $DEFAULT: DT_FILMIC_METHOD_POWER_NORM $DESCRIPTION:
-                                                      // "preserve chrominance"
-      dt_iop_filmicrgb_colorscience_type_t version;   // $DEFAULT: DT_FILMIC_COLORSCIENCE_V3 $DESCRIPTION: "color
+                                                      // "Preserve chrominance"
+      dt_iop_filmicrgb_colorscience_type_t version;   // $DEFAULT: DT_FILMIC_COLORSCIENCE_V3 $DESCRIPTION: "Color
                                                       // science"
-      gboolean auto_hardness;                         // $DEFAULT: TRUE $DESCRIPTION: "auto adjust hardness"
-      gboolean custom_grey;            // $DEFAULT: FALSE $DESCRIPTION: "use custom middle-gray values"
-      int high_quality_reconstruction; // $MIN: 0 $MAX: 10 $DEFAULT: 1 $DESCRIPTION: "iterations of high-quality
+      gboolean auto_hardness;                         // $DEFAULT: TRUE $DESCRIPTION: "Auto adjust hardness"
+      gboolean custom_grey;            // $DEFAULT: FALSE $DESCRIPTION: "Use custom middle-gray values"
+      int high_quality_reconstruction; // $MIN: 0 $MAX: 10 $DEFAULT: 1 $DESCRIPTION: "Iterations of high-quality
                                        // reconstruction"
-      int noise_distribution;          // $DEFAULT: DT_NOISE_POISSONIAN $DESCRIPTION: "type of noise"
-      dt_iop_filmicrgb_curve_type_t shadows; // $DEFAULT: DT_FILMIC_CURVE_POLY_4 $DESCRIPTION: "contrast in shadows"
-      dt_iop_filmicrgb_curve_type_t highlights; // $DEFAULT: DT_FILMIC_CURVE_POLY_4 $DESCRIPTION: "contrast in
+      int noise_distribution;          // $DEFAULT: DT_NOISE_POISSONIAN $DESCRIPTION: "Type of noise"
+      dt_iop_filmicrgb_curve_type_t shadows; // $DEFAULT: DT_FILMIC_CURVE_POLY_4 $DESCRIPTION: "Contrast in shadows"
+      dt_iop_filmicrgb_curve_type_t highlights; // $DEFAULT: DT_FILMIC_CURVE_POLY_4 $DESCRIPTION: "Contrast in
                                                 // highlights"
     } dt_iop_filmicrgb_params_v3_t;
 
@@ -892,34 +892,34 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   {
     typedef struct dt_iop_filmicrgb_params_v4_t
     {
-      float grey_point_source;     // $MIN: 0 $MAX: 100 $DEFAULT: 18.45 $DESCRIPTION: "middle gray luminance"
-      float black_point_source;    // $MIN: -16 $MAX: -0.1 $DEFAULT: -8.0 $DESCRIPTION: "black relative exposure"
-      float white_point_source;    // $MIN: 0 $MAX: 16 $DEFAULT: 4.0 $DESCRIPTION: "white relative exposure"
-      float reconstruct_threshold; // $MIN: -6.0 $MAX: 6.0 $DEFAULT: +3.0 $DESCRIPTION: "threshold"
-      float reconstruct_feather;   // $MIN: 0.25 $MAX: 6.0 $DEFAULT: 3.0 $DESCRIPTION: "transition"
-      float reconstruct_bloom_vs_details; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "bloom \342\206\224 reconstruct"
-      float reconstruct_grey_vs_color; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "gray \342\206\224 colorful details"
-      float reconstruct_structure_vs_texture; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "structure \342\206\224 texture"
-      float security_factor;                  // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "dynamic range scaling"
-      float grey_point_target;                // $MIN: 1 $MAX: 50 $DEFAULT: 18.45 $DESCRIPTION: "target middle gray"
-      float black_point_target; // $MIN: 0.000 $MAX: 20.000 $DEFAULT: 0.01517634 $DESCRIPTION: "target black luminance"
-      float white_point_target; // $MIN: 0 $MAX: 1600 $DEFAULT: 100 $DESCRIPTION: "target white luminance"
-      float output_power;       // $MIN: 1 $MAX: 10 $DEFAULT: 4.0 $DESCRIPTION: "hardness"
+      float grey_point_source;     // $MIN: 0 $MAX: 100 $DEFAULT: 18.45 $DESCRIPTION: "Middle gray luminance"
+      float black_point_source;    // $MIN: -16 $MAX: -0.1 $DEFAULT: -8.0 $DESCRIPTION: "Black relative exposure"
+      float white_point_source;    // $MIN: 0 $MAX: 16 $DEFAULT: 4.0 $DESCRIPTION: "White relative exposure"
+      float reconstruct_threshold; // $MIN: -6.0 $MAX: 6.0 $DEFAULT: +3.0 $DESCRIPTION: "Threshold"
+      float reconstruct_feather;   // $MIN: 0.25 $MAX: 6.0 $DEFAULT: 3.0 $DESCRIPTION: "Transition"
+      float reconstruct_bloom_vs_details; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "Bloom \342\206\224 reconstruct"
+      float reconstruct_grey_vs_color; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "Gray \342\206\224 colorful details"
+      float reconstruct_structure_vs_texture; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "Structure \342\206\224 texture"
+      float security_factor;                  // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "Dynamic range scaling"
+      float grey_point_target;                // $MIN: 1 $MAX: 50 $DEFAULT: 18.45 $DESCRIPTION: "Target middle gray"
+      float black_point_target; // $MIN: 0.000 $MAX: 20.000 $DEFAULT: 0.01517634 $DESCRIPTION: "Target black luminance"
+      float white_point_target; // $MIN: 0 $MAX: 1600 $DEFAULT: 100 $DESCRIPTION: "Target white luminance"
+      float output_power;       // $MIN: 1 $MAX: 10 $DEFAULT: 4.0 $DESCRIPTION: "Hardness"
       float latitude;           // $MIN: 0.01 $MAX: 99 $DEFAULT: 50.0
       float contrast;           // $MIN: 0 $MAX: 5 $DEFAULT: 1.1
-      float saturation;         // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "extreme luminance saturation"
-      float balance;            // $MIN: -50 $MAX: 50 $DEFAULT: 0.0 $DESCRIPTION: "shadows \342\206\224 highlights balance"
-      float noise_level;        // $MIN: 0.0 $MAX: 6.0 $DEFAULT: 0.2f $DESCRIPTION: "add noise in highlights"
-      dt_iop_filmicrgb_methods_type_t preserve_color; // $DEFAULT: DT_FILMIC_METHOD_POWER_NORM $DESCRIPTION: "preserve chrominance"
-      dt_iop_filmicrgb_colorscience_type_t version; // $DEFAULT: DT_FILMIC_COLORSCIENCE_V3 $DESCRIPTION: "color science"
-      gboolean auto_hardness;                       // $DEFAULT: TRUE $DESCRIPTION: "auto adjust hardness"
-      gboolean custom_grey;                         // $DEFAULT: FALSE $DESCRIPTION: "use custom middle-gray values"
-      int high_quality_reconstruction;       // $MIN: 0 $MAX: 10 $DEFAULT: 1 $DESCRIPTION: "iterations of high-quality reconstruction"
-      dt_iop_filmic_noise_distribution_t noise_distribution; // $DEFAULT: DT_NOISE_GAUSSIAN $DESCRIPTION: "type of noise"
-      dt_iop_filmicrgb_curve_type_t shadows; // $DEFAULT: DT_FILMIC_CURVE_RATIONAL $DESCRIPTION: "contrast in shadows"
-      dt_iop_filmicrgb_curve_type_t highlights; // $DEFAULT: DT_FILMIC_CURVE_RATIONAL $DESCRIPTION: "contrast in highlights"
-      gboolean compensate_icc_black; // $DEFAULT: FALSE $DESCRIPTION: "compensate output ICC profile black point"
-      gint internal_version; // $DEFAULT: 2020 $DESCRIPTION: "version of the spline generator"
+      float saturation;         // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "Extreme luminance saturation"
+      float balance;            // $MIN: -50 $MAX: 50 $DEFAULT: 0.0 $DESCRIPTION: "Shadows \342\206\224 highlights balance"
+      float noise_level;        // $MIN: 0.0 $MAX: 6.0 $DEFAULT: 0.2f $DESCRIPTION: "Add noise in highlights"
+      dt_iop_filmicrgb_methods_type_t preserve_color; // $DEFAULT: DT_FILMIC_METHOD_POWER_NORM $DESCRIPTION: "Preserve chrominance"
+      dt_iop_filmicrgb_colorscience_type_t version; // $DEFAULT: DT_FILMIC_COLORSCIENCE_V3 $DESCRIPTION: "Color science"
+      gboolean auto_hardness;                       // $DEFAULT: TRUE $DESCRIPTION: "Auto adjust hardness"
+      gboolean custom_grey;                         // $DEFAULT: FALSE $DESCRIPTION: "Use custom middle-gray values"
+      int high_quality_reconstruction;       // $MIN: 0 $MAX: 10 $DEFAULT: 1 $DESCRIPTION: "Iterations of high-quality reconstruction"
+      dt_iop_filmic_noise_distribution_t noise_distribution; // $DEFAULT: DT_NOISE_GAUSSIAN $DESCRIPTION: "Type of noise"
+      dt_iop_filmicrgb_curve_type_t shadows; // $DEFAULT: DT_FILMIC_CURVE_RATIONAL $DESCRIPTION: "Contrast in shadows"
+      dt_iop_filmicrgb_curve_type_t highlights; // $DEFAULT: DT_FILMIC_CURVE_RATIONAL $DESCRIPTION: "Contrast in highlights"
+      gboolean compensate_icc_black; // $DEFAULT: FALSE $DESCRIPTION: "Compensate output ICC profile black point"
+      gint internal_version; // $DEFAULT: 2020 $DESCRIPTION: "Version of the spline generator"
     } dt_iop_filmicrgb_params_v4_t;
 
     dt_iop_filmicrgb_params_v4_t *o = (dt_iop_filmicrgb_params_v4_t *)old_params;
@@ -4480,13 +4480,13 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   pango_font_description_set_size(desc, font_size);
   pango_layout_set_font_description(layout, desc);
   if(g->gui_mode == DT_FILMIC_GUI_LOOK)
-    g_strlcpy(text, _("look only"), sizeof(text));
+    g_strlcpy(text, _("Look only"), sizeof(text));
   else if(g->gui_mode == DT_FILMIC_GUI_BASECURVE)
-    g_strlcpy(text, _("look + mapping (lin)"), sizeof(text));
+    g_strlcpy(text, _("Look + mapping (lin)"), sizeof(text));
   else if(g->gui_mode == DT_FILMIC_GUI_BASECURVE_LOG)
-    g_strlcpy(text, _("look + mapping (log)"), sizeof(text));
+    g_strlcpy(text, _("Look + mapping (log)"), sizeof(text));
   else if(g->gui_mode == DT_FILMIC_GUI_RANGES)
-    g_strlcpy(text, _("dynamic range mapping"), sizeof(text));
+    g_strlcpy(text, _("Dynamic range mapping"), sizeof(text));
 
   pango_layout_set_text(layout, text, -1);
   pango_layout_get_pixel_extents(layout, &g->ink, NULL);
@@ -4921,7 +4921,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     {
       // labels
       set_color(cr, dt_bauhaus_get_global()->graph_fg);
-      g_strlcpy(text, _("display"), sizeof(text));
+      g_strlcpy(text, _("Display"), sizeof(text));
       pango_layout_set_text(layout, text, -1);
       pango_layout_get_pixel_extents(layout, &g->ink, NULL);
       cairo_move_to(cr, 0., y_display - 0.5 * g->ink.height - g->ink.y);
@@ -4939,7 +4939,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       cairo_stroke(cr);
 
       set_color(cr, dt_bauhaus_get_global()->graph_fg);
-      g_strlcpy(text, _("scene"), sizeof(text));
+      g_strlcpy(text, _("Scene"), sizeof(text));
       pango_layout_set_text(layout, text, -1);
       pango_layout_get_pixel_extents(layout, &g->ink, NULL);
       cairo_move_to(cr, 0., y_scene - 0.5 * g->ink.height - g->ink.y);
@@ -5377,17 +5377,17 @@ static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpo
     if(g->active_button == DT_FILMIC_GUI_BUTTON_LAST && x < g->buttons[0].left)
     {
       // we are over the graph area
-      gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("use the parameters below to set the nodes.\n"
+      gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("Use the parameters below to set the nodes.\n"
                                                          "the bright curve is the filmic tone mapping curve\n"
                                                          "the dark curve is the desaturation curve."));
     }
     else if(g->active_button == DT_FILMIC_GUI_BUTTON_LABELS)
     {
-      gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("toggle axis labels and values display"));
+      gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("Toggle axis labels and values display"));
     }
     else if(g->active_button == DT_FILMIC_GUI_BUTTON_TYPE)
     {
-      gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("cycle through graph views.\n"
+      gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("Cycle through graph views.\n"
                                                          "left click: cycle forward.\n"
                                                          "right click: cycle backward.\n"
                                                          "double-click: reset to look view."));
@@ -5447,14 +5447,14 @@ void gui_init(dt_iop_module_t *self)
   dt_ui_notebook_set_picker_owner(g->notebook, self);
 
   // Page SCENE
-  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("scene"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("Scene"), NULL);
 
   g->grey_point_source
       = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "grey_point_source"));
   dt_bauhaus_slider_set_soft_range(g->grey_point_source, .1, 36.0);
   dt_bauhaus_slider_set_format(g->grey_point_source, "%");
   gtk_widget_set_tooltip_text(g->grey_point_source,
-                              _("adjust to match the average luminance of the image's subject.\n"
+                              _("Adjust to match the average luminance of the image's subject.\n"
                                 "the value entered here will then be remapped to 18.45%.\n"
                                 "decrease the value to increase the overall brightness."));
 
@@ -5464,7 +5464,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_soft_range(g->white_point_source, 2.0, 8.0);
   dt_bauhaus_slider_set_format(g->white_point_source, _(" EV"));
   gtk_widget_set_tooltip_text(g->white_point_source,
-                              _("number of stops between middle gray and pure white.\n"
+                              _("Number of stops between middle gray and pure white.\n"
                                 "this is a reading a lightmeter would give you on the scene.\n"
                                 "adjust so highlights clipping is avoided"));
 
@@ -5474,7 +5474,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_soft_range(g->black_point_source, -14.0, -3);
   dt_bauhaus_slider_set_format(g->black_point_source, _(" EV"));
   gtk_widget_set_tooltip_text(
-      g->black_point_source, _("number of stops between middle gray and pure black.\n"
+      g->black_point_source, _("Number of stops between middle gray and pure black.\n"
                                "this is a reading a lightmeter would give you on the scene.\n"
                                "increase to get more contrast.\ndecrease to recover more details in low-lights."));
 
@@ -5482,16 +5482,16 @@ void gui_init(dt_iop_module_t *self)
   g->security_factor = dt_bauhaus_slider_from_params(self, "security_factor");
   dt_bauhaus_slider_set_soft_max(g->security_factor, 50);
   dt_bauhaus_slider_set_format(g->security_factor, "%");
-  gtk_widget_set_tooltip_text(g->security_factor, _("symmetrically enlarge or shrink the computed dynamic range.\n"
+  gtk_widget_set_tooltip_text(g->security_factor, _("Symmetrically enlarge or shrink the computed dynamic range.\n"
                                                     "useful to give a safety margin to extreme luminances."));
 
   // Auto tune slider
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("auto tune levels")), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("Auto tune levels")), TRUE, TRUE, 0);
   g->auto_button = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, NULL);
   gtk_box_pack_start(GTK_BOX(hbox), g->auto_button, FALSE, FALSE, 0);
   dt_gui_add_class(g->auto_button, "dt_bauhaus_alignment");
-  gtk_widget_set_tooltip_text(g->auto_button, _("try to optimize the settings with some statistical assumptions.\n"
+  gtk_widget_set_tooltip_text(g->auto_button, _("Try to optimize the settings with some statistical assumptions.\n"
                                                 "this will fit the luminance range inside the histogram bounds.\n"
                                                 "works better for landscapes and evenly-lit pictures\n"
                                                 "but fails for high-keys, low-keys and high-ISO pictures.\n"
@@ -5499,27 +5499,27 @@ void gui_init(dt_iop_module_t *self)
                                                 "ensure you understand its assumptions before using it."));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, FALSE, FALSE, 0);
 
-  GtkWidget *label = dt_ui_section_label_new(_("advanced"));
+  GtkWidget *label = dt_ui_section_label_new(_("Advanced"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   g->custom_grey = dt_bauhaus_toggle_from_params(self, "custom_grey");
-  gtk_widget_set_tooltip_text(g->custom_grey, _("enable to input custom middle-gray values.\n"
+  gtk_widget_set_tooltip_text(g->custom_grey, _("Enable to input custom middle-gray values.\n"
                                                 "this is not recommended in general.\n"
                                                 "fix the global exposure in the exposure module instead.\n"
                                                 "disable to use standard 18.45 %% middle gray."));
 
   // Page RECONSTRUCT -- deprecated (issue #1084); kept for edits that already use it, hidden for the
   // rest by _filmic_update_hl_deprecation()
-  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("reconstruct"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("Reconstruct"), NULL);
   g->reconstruct_page = self->gui->widget;
 
-  label = dt_ui_section_label_new(_("highlights clipping"));
+  label = dt_ui_section_label_new(_("Highlights clipping"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   g->reconstruct_threshold = dt_bauhaus_slider_from_params(self, "reconstruct_threshold");
   dt_bauhaus_slider_set_format(g->reconstruct_threshold, _(" EV"));
   gtk_widget_set_tooltip_text(g->reconstruct_threshold,
-                              _("set the exposure threshold upon which\n"
+                              _("Set the exposure threshold upon which\n"
                                 "clipped highlights get reconstructed.\n"
                                 "values are relative to the scene white point.\n"
                                 "0 EV means the threshold is the same as the scene white point.\n"
@@ -5529,28 +5529,28 @@ void gui_init(dt_iop_module_t *self)
   g->reconstruct_feather = dt_bauhaus_slider_from_params(self, "reconstruct_feather");
   dt_bauhaus_slider_set_format(g->reconstruct_feather, _(" EV"));
   gtk_widget_set_tooltip_text(g->reconstruct_feather,
-                              _("soften the transition between clipped highlights and valid pixels.\n"
+                              _("Soften the transition between clipped highlights and valid pixels.\n"
                                 "decrease to make the transition harder and sharper,\n"
                                 "increase to make the transition softer and blurrier."));
 
   // Highlight Reconstruction Mask
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("display highlight reconstruction mask")), TRUE, TRUE, 0);
-  g->show_highlight_mask = dt_iop_togglebutton_new(self, NULL, N_("display highlight reconstruction mask"), NULL, G_CALLBACK(show_mask_callback),
+  gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("Display highlight reconstruction mask")), TRUE, TRUE, 0);
+  g->show_highlight_mask = dt_iop_togglebutton_new(self, NULL, N_("Display highlight reconstruction mask"), NULL, G_CALLBACK(show_mask_callback),
                                            FALSE, 0, 0, dtgtk_cairo_paint_showmask, hbox);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->show_highlight_mask), dtgtk_cairo_paint_showmask, 0, NULL);
   dt_gui_add_class(g->show_highlight_mask, "dt_bauhaus_alignment");
 
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, FALSE, FALSE, 0);
 
-  label = dt_ui_section_label_new(_("balance"));
+  label = dt_ui_section_label_new(_("Balance"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   g->reconstruct_structure_vs_texture = dt_bauhaus_slider_from_params(self, "reconstruct_structure_vs_texture");
   dt_bauhaus_slider_set_format(g->reconstruct_structure_vs_texture, "%");
   gtk_widget_set_tooltip_text(g->reconstruct_structure_vs_texture,
                               /* xgettext:no-c-format */
-                              _("decide which reconstruction strategy to favor,\n"
+                              _("Decide which reconstruction strategy to favor,\n"
                                 "between inpainting a smooth color gradient,\n"
                                 "or trying to recover the textured details.\n"
                                 "0% is an equal mix of both.\n"
@@ -5561,7 +5561,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->reconstruct_bloom_vs_details, "%");
   gtk_widget_set_tooltip_text(g->reconstruct_bloom_vs_details,
                               /* xgettext:no-c-format */
-                              _("decide which reconstruction strategy to favor,\n"
+                              _("Decide which reconstruction strategy to favor,\n"
                                 "between blooming highlights like film does,\n"
                                 "or trying to recover sharp details.\n"
                                 "0% is an equal mix of both.\n"
@@ -5573,51 +5573,51 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->reconstruct_grey_vs_color, "%");
   gtk_widget_set_tooltip_text(g->reconstruct_grey_vs_color,
                               /* xgettext:no-c-format */
-                              _("decide which reconstruction strategy to favor,\n"
+                              _("Decide which reconstruction strategy to favor,\n"
                                 "between recovering monochromatic highlights,\n"
                                 "or trying to recover colorful highlights.\n"
                                 "0% is an equal mix of both.\n"
                                 "increase if you want more color.\n"
                                 "decrease if you see magenta or out-of-gamut highlights."));
 
-  label = dt_ui_section_label_new(_("advanced"));
+  label = dt_ui_section_label_new(_("Advanced"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   // Color inpainting
   g->high_quality_reconstruction = dt_bauhaus_slider_from_params(self, "high_quality_reconstruction");
   gtk_widget_set_tooltip_text(g->high_quality_reconstruction,
-                              _("run extra passes of chromaticity reconstruction.\n"
+                              _("Run extra passes of chromaticity reconstruction.\n"
                                 "more iterations means more color propagation from neighbourhood.\n"
                                 "this will be slower but will yield more neutral highlights.\n"
                                 "it also helps with difficult cases of magenta highlights."));
 
   // Highlight noise
   g->noise_level = dt_bauhaus_slider_from_params(self, "noise_level");
-  gtk_widget_set_tooltip_text(g->noise_level, _("add statistical noise in reconstructed highlights.\n"
+  gtk_widget_set_tooltip_text(g->noise_level, _("Add statistical noise in reconstructed highlights.\n"
                                                 "this avoids highlights to look too smooth\n"
                                                 "when the picture is noisy overall,\n"
                                                 "so they blend with the rest of the picture."));
 
   // Noise distribution
   g->noise_distribution = dt_bauhaus_combobox_from_params(self, "noise_distribution");
-  gtk_widget_set_tooltip_text(g->noise_distribution, _("choose the statistical distribution of noise.\n"
+  gtk_widget_set_tooltip_text(g->noise_distribution, _("Choose the statistical distribution of noise.\n"
                                                        "this is useful to match natural sensor noise pattern.\n"));
 
   // Page LOOK
-  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("look"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("Look"), NULL);
 
-  label = dt_ui_section_label_new(_("tone mapping"));
+  label = dt_ui_section_label_new(_("Tone mapping"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   g->contrast = dt_bauhaus_slider_from_params(self, N_("contrast"));
   dt_bauhaus_slider_set_soft_range(g->contrast, 0.5, 3.0);
   dt_bauhaus_slider_set_digits(g->contrast, 3);
-  gtk_widget_set_tooltip_text(g->contrast, _("slope of the linear part of the curve\n"
+  gtk_widget_set_tooltip_text(g->contrast, _("Slope of the linear part of the curve\n"
                                              "affects mostly the mid-tones"));
 
   // brightness slider
   g->output_power = dt_bauhaus_slider_from_params(self, "output_power");
-  gtk_widget_set_tooltip_text(g->output_power, _("equivalent to paper grade in analog.\n"
+  gtk_widget_set_tooltip_text(g->output_power, _("Equivalent to paper grade in analog.\n"
                                                  "increase to make highlights brighter and less compressed.\n"
                                                  "decrease to mute highlights."));
 
@@ -5627,63 +5627,63 @@ void gui_init(dt_iop_module_t *self)
 
   g->shoulder = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->shoulder, FALSE, FALSE, 0);
-  dt_bauhaus_widget_set_label(g->shoulder, N_("highlights"));
+  dt_bauhaus_widget_set_label(g->shoulder, N_("Highlights"));
   dt_bauhaus_slider_set_soft_range(g->shoulder, 0.1f, 90.0f);
   dt_bauhaus_slider_set_format(g->shoulder, "%");
   gtk_widget_set_tooltip_text(g->shoulder,
-                              _("distance between middle gray and the start of the highlights roll-off.\n"
+                              _("Distance between middle gray and the start of the highlights roll-off.\n"
                                 "0% keeps the shoulder at middle gray, 100% pushes it to the point where the\n"
                                 "current slope would hit the output white level."));
   g_signal_connect(G_OBJECT(g->shoulder), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
 
   g->toe = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->toe, FALSE, FALSE, 0);
-  dt_bauhaus_widget_set_label(g->toe, N_("shadows"));
+  dt_bauhaus_widget_set_label(g->toe, N_("Shadows"));
   dt_bauhaus_slider_set_soft_range(g->toe, 0.1f, 90.0f);
   dt_bauhaus_slider_set_format(g->toe, "%");
   gtk_widget_set_tooltip_text(g->toe,
-                              _("distance between middle gray and the start of the shadows roll-off.\n"
+                              _("Distance between middle gray and the start of the shadows roll-off.\n"
                                 "0% keeps the toe at middle gray, 100% pushes it to the point where the\n"
                                 "current slope would hit the output black level."));
   g_signal_connect(G_OBJECT(g->toe), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
 
   // Curve type
   g->highlights = dt_bauhaus_combobox_from_params(self, "highlights");
-  gtk_widget_set_tooltip_text(g->highlights, _("shape of the highlights roll-off of the curve.\n"
+  gtk_widget_set_tooltip_text(g->highlights, _("Shape of the highlights roll-off of the curve.\n"
                                                "perceptual (default) is a generalized sigmoid derived from a\n"
                                                "perceptual appearance model: always smooth and monotonic.\n"
                                                "hard/soft/safe are the legacy polynomial/rational segments;\n"
                                                "hard compresses highlights more, soft less."));
 
   g->shadows = dt_bauhaus_combobox_from_params(self, "shadows");
-  gtk_widget_set_tooltip_text(g->shadows, _("shape of the shadows roll-off of the curve.\n"
+  gtk_widget_set_tooltip_text(g->shadows, _("Shape of the shadows roll-off of the curve.\n"
                                             "perceptual (default) is a generalized sigmoid derived from a\n"
                                             "perceptual appearance model: always smooth and monotonic.\n"
                                             "hard/soft/safe are the legacy polynomial/rational segments;\n"
                                             "hard compresses shadows more, soft less."));
 
-  label = dt_ui_section_label_new(_("color mapping"));
+  label = dt_ui_section_label_new(_("Color mapping"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   g->saturation = dt_bauhaus_slider_from_params(self, "saturation");
   dt_bauhaus_slider_set_soft_range(g->saturation, -100.0, 100.0);
   dt_bauhaus_slider_set_format(g->saturation, "%");
-  gtk_widget_set_tooltip_text(g->saturation, _("desaturates the output of the module\n"
+  gtk_widget_set_tooltip_text(g->saturation, _("Desaturates the output of the module\n"
                                                "specifically at extreme luminances.\n"
                                                "increase if shadows and/or highlights are under-saturated."));
 
   g->preserve_color = dt_bauhaus_combobox_from_params(self, "preserve_color");
-  gtk_widget_set_tooltip_text(g->preserve_color, _("ensure the original color are preserved.\n"
+  gtk_widget_set_tooltip_text(g->preserve_color, _("Ensure the original color are preserved.\n"
                                                    "may reinforce chromatic aberrations and chroma noise,\n"
                                                    "so ensure they are properly corrected elsewhere.\n"));
 
-  label = dt_ui_section_label_new(_("advanced"));
+  label = dt_ui_section_label_new(_("Advanced"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   // Color science
   g->version = dt_bauhaus_combobox_from_params(self, "version");
   gtk_widget_set_tooltip_text(g->version,
-                              _("v3 is darktable 3.0 desaturation method, same as color balance.\n"
+                              _("V3 is darktable 3.0 desaturation method, same as color balance.\n"
                                 "v4 is a newer desaturation method, based on spectral purity of light.\n"
                                 "v8 tone maps each RGB channel separately in an inset rendering space:\n"
                                 "highlights bleach toward white and hues drift as tonal compression\n"
@@ -5693,7 +5693,7 @@ void gui_init(dt_iop_module_t *self)
   // shadows/highlights curve type, not this control.
   g->spline_version = dt_bauhaus_combobox_from_params(self, "spline_version");
   gtk_widget_set_tooltip_text(g->spline_version,
-                              _("how the latitude, balance and contrast place the toe and\n"
+                              _("How the latitude, balance and contrast place the toe and\n"
                                 "shoulder nodes of the curve (not the shape between them —\n"
                                 "that is 'contrast in shadows/highlights').\n"
                                 "v3 (2021) is recommended; v1/v2 are kept for older edits."));
@@ -5701,32 +5701,32 @@ void gui_init(dt_iop_module_t *self)
 
   g->auto_hardness = dt_bauhaus_toggle_from_params(self, "auto_hardness");
   gtk_widget_set_tooltip_text(
-      g->auto_hardness, _("enable to auto-set the look hardness depending on the scene white and black points.\n"
+      g->auto_hardness, _("Enable to auto-set the look hardness depending on the scene white and black points.\n"
                           "this keeps the middle gray on the identity line and improves fast tuning.\n"
                           "disable if you want a manual control."));
 
   // Page DISPLAY
-  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("display"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("Display"), NULL);
 
   // Black slider
   g->black_point_target = dt_bauhaus_slider_from_params(self, "black_point_target");
   dt_bauhaus_slider_set_digits(g->black_point_target, 4);
   dt_bauhaus_slider_set_format(g->black_point_target, "%");
-  gtk_widget_set_tooltip_text(g->black_point_target, _("luminance of output pure black, "
+  gtk_widget_set_tooltip_text(g->black_point_target, _("Luminance of output pure black, "
                                                        "this should be 0%\nexcept if you want a faded look"));
 
   g->grey_point_target = dt_bauhaus_slider_from_params(self, "grey_point_target");
   dt_bauhaus_slider_set_digits(g->grey_point_target, 4);
   dt_bauhaus_slider_set_format(g->grey_point_target, "%");
   gtk_widget_set_tooltip_text(g->grey_point_target,
-                              _("middle gray value of the target display or color space.\n"
+                              _("Middle gray value of the target display or color space.\n"
                                 "you should never touch that unless you know what you are doing."));
 
   g->white_point_target = dt_bauhaus_slider_from_params(self, "white_point_target");
   dt_bauhaus_slider_set_soft_max(g->white_point_target, 100.0);
   dt_bauhaus_slider_set_digits(g->white_point_target, 4);
   dt_bauhaus_slider_set_format(g->white_point_target, "%");
-  gtk_widget_set_tooltip_text(g->white_point_target, _("luminance of output pure white, "
+  gtk_widget_set_tooltip_text(g->white_point_target, _("Luminance of output pure white, "
                                                        "this should be 100%\nexcept if you want a faded look"));
 
   // start building top level widget
@@ -5790,8 +5790,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   {
     if(_filmic_is_agx(p->version))
     {
-      dt_bauhaus_widget_set_label(g->saturation, N_("color preservation"));
-      gtk_widget_set_tooltip_text(g->saturation, _("how much of the per-channel hue drift to keep.\n"
+      dt_bauhaus_widget_set_label(g->saturation, N_("Color preservation"));
+      gtk_widget_set_tooltip_text(g->saturation, _("How much of the per-channel hue drift to keep.\n"
                                                    "saturation is not affected: valid diffuse colors\n"
                                                    "(skin tones, product colors) keep their saturation and\n"
                                                    "strongly compressed colors bleach, at any setting.\n"
@@ -5802,21 +5802,21 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     }
     else if(p->version == DT_FILMIC_COLORSCIENCE_V1 || p->version == DT_FILMIC_COLORSCIENCE_V4)
     {
-      dt_bauhaus_widget_set_label(g->saturation, N_("extreme luminance saturation"));
-      gtk_widget_set_tooltip_text(g->saturation, _("desaturates the output of the module\n"
+      dt_bauhaus_widget_set_label(g->saturation, N_("Extreme luminance saturation"));
+      gtk_widget_set_tooltip_text(g->saturation, _("Desaturates the output of the module\n"
                                                    "specifically at extreme luminances.\n"
                                                    "increase if shadows and/or highlights are under-saturated."));
     }
     else if(p->version == DT_FILMIC_COLORSCIENCE_V2 || p->version == DT_FILMIC_COLORSCIENCE_V3)
     {
-      dt_bauhaus_widget_set_label(g->saturation, N_("mid-tones saturation"));
-      gtk_widget_set_tooltip_text(g->saturation, _("desaturates the output of the module\n"
+      dt_bauhaus_widget_set_label(g->saturation, N_("Mid-tones saturation"));
+      gtk_widget_set_tooltip_text(g->saturation, _("Desaturates the output of the module\n"
                                                    "specifically at medium luminances.\n"
                                                    "increase if midtones are under-saturated."));
     }
     else if(p->version == DT_FILMIC_COLORSCIENCE_V5)
     {
-      dt_bauhaus_widget_set_label(g->saturation, N_("highlights saturation mix"));
+      dt_bauhaus_widget_set_label(g->saturation, N_("Highlights saturation mix"));
       gtk_widget_set_tooltip_text(g->saturation, _("Positive values ensure saturation is kept unchanged over the whole range.\n"
                                                    "Negative values bleache highlights at constant hue and luminance.\n"
                                                    "Zero is an equal mix of both strategies."));

@@ -5,7 +5,7 @@
     <name>themes/usercss</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>modify theme with user tweaks</shortdescription>
+    <shortdescription>Modify theme with user tweaks</shortdescription>
   </dtconfig>
   <dtconfig prefs="views" section="otherviews" restart="true">
     <name>/views/print/enable</name>
@@ -112,28 +112,28 @@
     <name>min_panel_width</name>
     <type>int</type>
     <default>150</default>
-    <shortdescription>minimum width of the side panels in pixels</shortdescription>
+    <shortdescription>Minimum width of the side panels in pixels</shortdescription>
     <longdescription>(needs a restart)</longdescription>
   </dtconfig>
   <dtconfig>
     <name>max_panel_width</name>
     <type>int</type>
     <default>1200</default>
-    <shortdescription>maximum width of the side panels in pixels</shortdescription>
+    <shortdescription>Maximum width of the side panels in pixels</shortdescription>
     <longdescription>(needs a restart)</longdescription>
   </dtconfig>
   <dtconfig>
     <name>min_panel_height</name>
     <type>int</type>
     <default>64</default>
-    <shortdescription>minimum width of the side panels in pixels</shortdescription>
+    <shortdescription>Minimum width of the side panels in pixels</shortdescription>
     <longdescription>(needs a restart)</longdescription>
   </dtconfig>
   <dtconfig>
     <name>max_panel_height</name>
     <type>int</type>
     <default>400</default>
-    <shortdescription>maximum width of the side panels in pixels</shortdescription>
+    <shortdescription>Maximum width of the side panels in pixels</shortdescription>
     <longdescription>(needs a restart)</longdescription>
   </dtconfig>
   <dtconfig prefs="views" section="slideshow">
@@ -230,39 +230,39 @@
     <name>opencl_devid_darkroom</name>
     <type>string</type>
     <default>*</default>
-    <shortdescription>priority of OpenCL devices for each pixelpipe type</shortdescription>
+    <shortdescription>Priority of OpenCL devices for each pixelpipe type</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>opencl_devid_preview</name>
     <type>string</type>
     <default>*</default>
-    <shortdescription>priority of OpenCL devices for each pixelpipe type</shortdescription>
+    <shortdescription>Priority of OpenCL devices for each pixelpipe type</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>opencl_devid_export</name>
     <type>string</type>
     <default>*</default>
-    <shortdescription>priority of OpenCL devices for each pixelpipe type</shortdescription>
+    <shortdescription>Priority of OpenCL devices for each pixelpipe type</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>opencl_devid_thumbnail</name>
     <type>string</type>
     <default>*</default>
-    <shortdescription>priority of OpenCL devices for each pixelpipe type</shortdescription>
+    <shortdescription>Priority of OpenCL devices for each pixelpipe type</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>opencl_mandatory_timeout</name>
     <type min="100">int</type>
     <default>400</default>
-    <shortdescription>timeout period for locking mandatory opencl device</shortdescription>
-    <longdescription>time period (in units of 5ms) after which we give up try-locking an opencl device for mandatory use. defaults to 400 (2 seconds).</longdescription>
+    <shortdescription>Timeout period for locking mandatory opencl device</shortdescription>
+    <longdescription>Time period (in units of 5ms) after which we give up try-locking an opencl device for mandatory use. defaults to 400 (2 seconds).</longdescription>
   </dtconfig>
   <dtconfig>
     <name>pixelpipe_synchronization_timeout</name>
     <type>int</type>
     <default>200</default>
-    <shortdescription>timeout period of pixelpipe synchronization</shortdescription>
-    <longdescription>time period (in units of 5ms) after which synchronization of preview and full pixelpipe is assumed to have failed. set to zero to omit pixelpipe synchronization. defaults to 200.</longdescription>
+    <shortdescription>Timeout period of pixelpipe synchronization</shortdescription>
+    <longdescription>Time period (in units of 5ms) after which synchronization of preview and full pixelpipe is assumed to have failed. set to zero to omit pixelpipe synchronization. defaults to 200.</longdescription>
   </dtconfig>
   <dtconfig prefs="storage" section="xmp">
     <name>write_sidecar_files</name>
@@ -375,15 +375,15 @@
     <name>plugins/lighttable/tagging/no_uncategorized</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>do not set the 'uncategorized' entry for tags</shortdescription>
-    <longdescription>do not set the 'uncategorized' entry for tags which do not have children</longdescription>
+    <shortdescription>Do not set the 'uncategorized' entry for tags</shortdescription>
+    <longdescription>Do not set the 'uncategorized' entry for tags which do not have children</longdescription>
   </dtconfig>
   <dtconfig>
     <name>opencl</name>
     <type>bool</type>
     <default>${DEFCONFIG_OPENCL}</default>
-    <shortdescription>activate OpenCL support</shortdescription>
-    <longdescription>if found, use OpenCL runtime on your system for improved processing speed. can be switched on and off at any time.</longdescription>
+    <shortdescription>Activate OpenCL support</shortdescription>
+    <longdescription>If found, use OpenCL runtime on your system for improved processing speed. can be switched on and off at any time.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>memory_opencl_headroom</name>
@@ -480,15 +480,15 @@
     <name>plugins/lighttable/recentcollect/max_items</name>
     <type min="1" max="50">int</type>
     <default>10</default>
-    <shortdescription>number of collections to be stored</shortdescription>
-    <longdescription>the number of recent collections to store and show in this list</longdescription>
+    <shortdescription>Number of collections to be stored</shortdescription>
+    <longdescription>The number of recent collections to store and show in this list</longdescription>
   </dtconfig>
   <dtconfig dialog="collect">
     <name>show_folder_levels</name>
     <type min="1" max="5">int</type>
     <default>1</default>
-    <shortdescription>number of folder levels to show in lists</shortdescription>
-    <longdescription>the number of folder levels to show in film roll names, starting from the right</longdescription>
+    <shortdescription>Number of folder levels to show in lists</shortdescription>
+    <longdescription>The number of folder levels to show in film roll names, starting from the right</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/collection/rating</name>
@@ -558,21 +558,21 @@
     <type>string</type>
     <default></default>
     <shortdescription>Base directory of projects</shortdescription>
-    <longdescription>part of full import path for an import session</longdescription>
+    <longdescription>Part of full import path for an import session</longdescription>
   </dtconfig>
   <dtconfig>
     <name>session/sub_directory_pattern</name>
     <type>string</type>
     <default>$(YEAR)-$(MONTH)-$(DAY)-$(JOBCODE)</default>
     <shortdescription>Project directory naming pattern</shortdescription>
-    <longdescription>part of full import path for an import session</longdescription>
+    <longdescription>Part of full import path for an import session</longdescription>
   </dtconfig>
   <dtconfig>
     <name>session/filename_pattern</name>
     <type>string</type>
     <default>$(JOBCODE)-$(FILE.NAME)-$(SEQUENCE).$(FILE.EXTENSION)</default>
     <shortdescription>Picture naming pattern</shortdescription>
-    <longdescription>file naming pattern used for a import session</longdescription>
+    <longdescription>File naming pattern used for a import session</longdescription>
   </dtconfig>
   <dtconfig dialog="collect">
     <name>plugins/collect/filmroll_sort</name>
@@ -583,15 +583,15 @@
       </enum>
     </type>
     <default>id</default>
-    <shortdescription>sort film rolls by</shortdescription>
-    <longdescription>sets the collections-list order for film rolls</longdescription>
+    <shortdescription>Sort film rolls by</shortdescription>
+    <longdescription>Sets the collections-list order for film rolls</longdescription>
   </dtconfig>
   <dtconfig dialog="collect">
     <name>plugins/collect/descending</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>sort collection descending</shortdescription>
-    <longdescription>sort the following collections in descending order: 'film roll' by folder, 'folder', 'times' (e.g. 'date taken')</longdescription>
+    <shortdescription>Sort collection descending</shortdescription>
+    <longdescription>Sort the following collections in descending order: 'film roll' by folder, 'folder', 'times' (e.g. 'date taken')</longdescription>
   </dtconfig>
   <dtconfig>
     <name>ui_last/colorpicker_model</name>
@@ -606,7 +606,7 @@
       </enum>
     </type>
     <default>RGB</default>
-    <shortdescription>color model with which to represent primary colorpicker</shortdescription>
+    <shortdescription>Color model with which to represent primary colorpicker</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -619,28 +619,28 @@
       </enum>
     </type>
     <default>mean</default>
-    <shortdescription>statistic used to describe colorpicker box</shortdescription>
+    <shortdescription>Statistic used to describe colorpicker box</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>ui_last/colorpicker_display_samples</name>
     <type>boolean</type>
     <default>false</default>
-    <shortdescription>display live sample areas on image</shortdescription>
+    <shortdescription>Display live sample areas on image</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>ui_last/colorpicker_restrict_histogram</name>
     <type>boolean</type>
     <default>false</default>
-    <shortdescription>restrict histogram to selection</shortdescription>
+    <shortdescription>Restrict histogram to selection</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>ui_last/colorpicker_large</name>
     <type>boolean</type>
     <default>false</default>
-    <shortdescription>display large colorpicker patch</shortdescription>
+    <shortdescription>Display large colorpicker patch</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -668,8 +668,8 @@
     <name>ui_last/grouping</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>grouping of images</shortdescription>
-    <longdescription>only show a single image for each set of grouped images in lighttable and filmstrip</longdescription>
+    <shortdescription>Grouping of images</shortdescription>
+    <longdescription>Only show a single image for each set of grouped images in lighttable and filmstrip</longdescription>
   </dtconfig>
   <dtconfig>
     <name>ui_last/view</name>
@@ -808,7 +808,7 @@
     <name>ui_last/import_last_directory</name>
     <type>string</type>
     <default/>
-    <shortdescription>last opened directory.</shortdescription>
+    <shortdescription>Last opened directory.</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -837,97 +837,97 @@
     <type>string</type>
     <default/>
     <shortdescription>Project date</shortdescription>
-    <longdescription>type a date in the form: YYYY:MM:DD[ hh:mm:ss[.sss]] if you want to override the current date/time used when expanding variables:\n$(YEAR), $(MONTH), $(DAY), $(HOUR), $(MINUTE), $(SECONDS), $(MSEC).\nlet the field empty otherwise</longdescription>
+    <longdescription>Type a date in the form: YYYY:MM:DD[ hh:mm:ss[.sss]] if you want to override the current date/time used when expanding variables:\n$(YEAR), $(MONTH), $(DAY), $(HOUR), $(MINUTE), $(SECONDS), $(MSEC).\nlet the field empty otherwise</longdescription>
   </dtconfig>
   <dtconfig>
     <name>studio_capture/folder</name>
     <type>string</type>
     <default/>
-    <shortdescription>folder surveyed for new images</shortdescription>
-    <longdescription>the folder and its subfolders are compared with the persisted file list on every scan</longdescription>
+    <shortdescription>Folder surveyed for new images</shortdescription>
+    <longdescription>The folder and its subfolders are compared with the persisted file list on every scan</longdescription>
   </dtconfig>
   <dtconfig>
     <name>studio_capture/interval</name>
     <type min="1" max="3600">int</type>
     <default>10</default>
-    <shortdescription>folder survey frequency in seconds</shortdescription>
-    <longdescription>delay between two scans of the configured ingest folder</longdescription>
+    <shortdescription>Folder survey frequency in seconds</shortdescription>
+    <longdescription>Delay between two scans of the configured ingest folder</longdescription>
   </dtconfig>
   <dtconfig>
     <name>studio_capture/copy</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>copy surveyed images before importing</shortdescription>
-    <longdescription>copy new images to the configured project directory instead of adding them to the library at their source location</longdescription>
+    <shortdescription>Copy surveyed images before importing</shortdescription>
+    <longdescription>Copy new images to the configured project directory instead of adding them to the library at their source location</longdescription>
   </dtconfig>
   <dtconfig>
     <name>studio_capture/delete_source</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>delete surveyed originals after verified copy</shortdescription>
-    <longdescription>delete each source image only after the destination has been imported and its complete byte stream matches the original</longdescription>
+    <shortdescription>Delete surveyed originals after verified copy</shortdescription>
+    <longdescription>Delete each source image only after the destination has been imported and its complete byte stream matches the original</longdescription>
   </dtconfig>
   <dtconfig>
     <name>studio_capture/on_conflict</name>
     <type min="0" max="2">int</type>
     <default>2</default>
-    <shortdescription>behaviour on destination name conflict for surveyed imports</shortdescription>
+    <shortdescription>Behaviour on destination name conflict for surveyed imports</shortdescription>
     <longdescription>0 = skip (keep the existing destination), 1 = overwrite, 2 = create a unique filename</longdescription>
   </dtconfig>
   <dtconfig>
     <name>studio_capture/datetime</name>
     <type>string</type>
     <default/>
-    <shortdescription>project date for surveyed imports</shortdescription>
-    <longdescription>date used by import naming variables; when empty, the date of the scan is used</longdescription>
+    <shortdescription>Project date for surveyed imports</shortdescription>
+    <longdescription>Date used by import naming variables; when empty, the date of the scan is used</longdescription>
   </dtconfig>
   <dtconfig>
     <name>studio_capture/jobcode</name>
     <type>string</type>
     <default>no_name</default>
-    <shortdescription>jobcode for surveyed imports</shortdescription>
-    <longdescription>project name expanded as $(JOBCODE) in folder survey import patterns</longdescription>
+    <shortdescription>Jobcode for surveyed imports</shortdescription>
+    <longdescription>Project name expanded as $(JOBCODE) in folder survey import patterns</longdescription>
   </dtconfig>
   <dtconfig>
     <name>studio_capture/base_directory_pattern</name>
     <type>string</type>
     <default/>
-    <shortdescription>base directory for surveyed imports</shortdescription>
-    <longdescription>base destination used when surveyed images are copied before import</longdescription>
+    <shortdescription>Base directory for surveyed imports</shortdescription>
+    <longdescription>Base destination used when surveyed images are copied before import</longdescription>
   </dtconfig>
   <dtconfig>
     <name>studio_capture/sub_directory_pattern</name>
     <type>string</type>
     <default>$(YEAR)-$(MONTH)-$(DAY)-$(JOBCODE)</default>
-    <shortdescription>project directory pattern for surveyed imports</shortdescription>
-    <longdescription>subdirectory naming pattern used when surveyed images are copied before import</longdescription>
+    <shortdescription>Project directory pattern for surveyed imports</shortdescription>
+    <longdescription>Subdirectory naming pattern used when surveyed images are copied before import</longdescription>
   </dtconfig>
   <dtconfig>
     <name>studio_capture/filename_pattern</name>
     <type>string</type>
     <default>$(JOBCODE)-$(FILE.NAME)-$(SEQUENCE).$(FILE.EXTENSION)</default>
-    <shortdescription>file naming pattern for surveyed imports</shortdescription>
-    <longdescription>file naming pattern used when surveyed images are copied before import</longdescription>
+    <shortdescription>File naming pattern for surveyed imports</shortdescription>
+    <longdescription>File naming pattern used when surveyed images are copied before import</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>ui_last/import_keep_open</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>keep this window open</shortdescription>
-    <longdescription>keep this window open to run several imports</longdescription>
+    <shortdescription>Keep this window open</shortdescription>
+    <longdescription>Keep this window open to run several imports</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/overlays/global</name>
     <type>int</type>
     <default>2</default>
-    <shortdescription>overlays for thumbnails</shortdescription>
+    <shortdescription>Overlays for thumbnails</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/group_borders</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>paint group borders in lighttable</shortdescription>
+    <shortdescription>Paint group borders in lighttable</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -951,7 +951,7 @@
     </type>
     <default>off</default>
     <shortdescription>Pen pressure mapping</shortdescription>
-    <longdescription>off - pressure reading ignored, fading/opacity/brush size - pressure reading controls specified attribute, absolute/relative - pressure reading is taken directly as attribute value or multiplied with pre-defined setting.</longdescription>
+    <longdescription>Off - pressure reading ignored, fading/opacity/brush size - pressure reading controls specified attribute, absolute/relative - pressure reading is taken directly as attribute value or multiplied with pre-defined setting.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/masks/scroll/plain</name>
@@ -1024,7 +1024,7 @@
     </type>
     <default>medium</default>
     <shortdescription>Brush strokes smoothing</shortdescription>
-    <longdescription>sets level for smoothing of brush strokes. stronger smoothing leads to less nodes and easier editing but with lower control of accuracy.</longdescription>
+    <longdescription>Sets level for smoothing of brush strokes. stronger smoothing leads to less nodes and easier editing but with lower control of accuracy.</longdescription>
   </dtconfig>
   <dtconfig prefs="views" section="darkroom">
     <name>channel_display</name>
@@ -1049,21 +1049,21 @@
     <name>plugins/darkroom/chromatic-adaptation</name>
     <type>string</type>
     <default>modern</default>
-    <shortdescription>white balance</shortdescription>
+    <shortdescription>White balance</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>database_cache_quality</name>
     <type>int</type>
     <default>89</default>
     <shortdescription>JPEG quality of on-disk thumbnails</shortdescription>
-    <longdescription>affects only the thumbnail cache used for quick startup.</longdescription>
+    <longdescription>Affects only the thumbnail cache used for quick startup.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/draw_group_borders</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>draw borders around grouped images</shortdescription>
-    <longdescription>draw borders around grouped images when grouping is turned off and the mouse hovers over one of the images of the group</longdescription>
+    <shortdescription>Draw borders around grouped images</shortdescription>
+    <longdescription>Draw borders around grouped images when grouping is turned off and the mouse hovers over one of the images of the group</longdescription>
   </dtconfig>
   <dtconfig prefs="misc" section="interface">
     <name>modules/default_presets_first</name>
@@ -1097,7 +1097,7 @@
     <name>plugins/lighttable/images_in_row</name>
     <type>int</type>
     <default>5</default>
-    <shortdescription>images per row</shortdescription>
+    <shortdescription>Images per row</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -1468,7 +1468,7 @@
     <name>plugins/darkroom/tagging/visible</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>show the tagging module in the darkroom view (as well as in lighttable)</shortdescription>
+    <shortdescription>Show the tagging module in the darkroom view (as well as in lighttable)</shortdescription>
     <longdescription/>
   </dtconfig>
 
@@ -1483,64 +1483,64 @@
     <name>plugins/lighttable/tagging/dttags</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>whether to show ansel internal tags</shortdescription>
+    <shortdescription>Whether to show ansel internal tags</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/tagging/nosuggestion</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>whether display suggestions</shortdescription>
+    <shortdescription>Whether display suggestions</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/tagging/treeview</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>whether display tags in list or tree</shortdescription>
+    <shortdescription>Whether display tags in list or tree</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/tagging/hidehierarchy</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>whether to show/hide the tag hierarchy</shortdescription>
+    <shortdescription>Whether to show/hide the tag hierarchy</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/tagging/listsortedbycount</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>whether to sort tags by count or by name</shortdescription>
+    <shortdescription>Whether to sort tags by count or by name</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/tagging/heightattachedwindow</name>
     <type>int</type>
     <default>100</default>
-    <shortdescription>height of the tagging attached view</shortdescription>
-    <longdescription>maximum height the tagging attached view will grow to before scrolling</longdescription>
+    <shortdescription>Height of the tagging attached view</shortdescription>
+    <longdescription>Maximum height the tagging attached view will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/tagging/heightdictionarywindow</name>
     <type>int</type>
     <default>200</default>
-    <shortdescription>height of the tagging dictionary view</shortdescription>
-    <longdescription>maximum height the tagging dictionary view will grow to before scrolling</longdescription>
+    <shortdescription>Height of the tagging dictionary view</shortdescription>
+    <longdescription>Maximum height the tagging dictionary view will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig dialog="tagging">
     <name>plugins/lighttable/tagging/confidence</name>
     <type min="0" max="100">int</type>
     <default>50</default>
-    <shortdescription>suggested tags level of confidence</shortdescription>
-    <longdescription>level of confidence to include the tag in the suggestions list, 0: all associated tags, 99: 99% matching associated tags, 100: no matching tag to show only recent tags (faster)</longdescription>
+    <shortdescription>Suggested tags level of confidence</shortdescription>
+    <longdescription>Level of confidence to include the tag in the suggestions list, 0: all associated tags, 99: 99% matching associated tags, 100: no matching tag to show only recent tags (faster)</longdescription>
   </dtconfig>
   <dtconfig dialog="tagging">
     <name>plugins/lighttable/tagging/nb_recent_tags</name>
     <type min="-1" max="1000">int</type>
     <default>20</default>
-    <shortdescription>number of recently attached tags</shortdescription>
-    <longdescription>number of recently attached tags which are included in the suggestions list. the value `-1' disables the recent list</longdescription>
+    <shortdescription>Number of recently attached tags</shortdescription>
+    <longdescription>Number of recently attached tags which are included in the suggestions list. the value `-1' disables the recent list</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/tagging/recent_tags</name>
@@ -1553,56 +1553,56 @@
     <name>plugins/lighttable/export/metadata_flags</name>
     <type>int</type>
     <default>43</default>
-    <shortdescription>metadata fields to write in files when exporting images</shortdescription>
+    <shortdescription>Metadata fields to write in files when exporting images</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/metadata/creator_text_height</name>
     <type>int</type>
     <default>1</default>
-    <shortdescription>height of the metadata creator field</shortdescription>
-    <longdescription>maximum height the metadata textview will grow to before scrolling</longdescription>
+    <shortdescription>Height of the metadata creator field</shortdescription>
+    <longdescription>Maximum height the metadata textview will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/metadata/publisher_text_height</name>
     <type>int</type>
     <default>1</default>
-    <shortdescription>height of the metadata publisher field</shortdescription>
-    <longdescription>maximum height the metadata textview will grow to before scrolling</longdescription>
+    <shortdescription>Height of the metadata publisher field</shortdescription>
+    <longdescription>Maximum height the metadata textview will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/metadata/title_text_height</name>
     <type>int</type>
     <default>1</default>
-    <shortdescription>height of the metadata title field</shortdescription>
-    <longdescription>maximum height the metadata textview will grow to before scrolling</longdescription>
+    <shortdescription>Height of the metadata title field</shortdescription>
+    <longdescription>Maximum height the metadata textview will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/metadata/description_text_height</name>
     <type>int</type>
     <default>1</default>
-    <shortdescription>height of the metadata description field</shortdescription>
-    <longdescription>maximum height the metadata textview will grow to before scrolling</longdescription>
+    <shortdescription>Height of the metadata description field</shortdescription>
+    <longdescription>Maximum height the metadata textview will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/metadata/rights_text_height</name>
     <type>int</type>
     <default>1</default>
-    <shortdescription>height of the metadata rights field</shortdescription>
-    <longdescription>maximum height the metadata textview will grow to before scrolling</longdescription>
+    <shortdescription>Height of the metadata rights field</shortdescription>
+    <longdescription>Maximum height the metadata textview will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/metadata/notes_text_height</name>
     <type>int</type>
     <default>1</default>
-    <shortdescription>height of the metadata notes field</shortdescription>
-    <longdescription>maximum height the metadata textview will grow to before scrolling</longdescription>
+    <shortdescription>Height of the metadata notes field</shortdescription>
+    <longdescription>Maximum height the metadata textview will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/metadata/version name_text_height</name>
     <type>int</type>
     <default>1</default>
-    <shortdescription>height of the metadata version name field</shortdescription>
-    <longdescription>maximum height the metadata textview will grow to before scrolling</longdescription>
+    <shortdescription>Height of the metadata version name field</shortdescription>
+    <longdescription>Maximum height the metadata textview will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig prefs="security" section="general">
     <name>plugins/lighttable/style/ask_before_delete_style</name>
@@ -1629,36 +1629,36 @@
     <name>plugins/map/show_map_osd</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>show OSD</shortdescription>
-    <longdescription>toggle the visibility of the map overlays</longdescription>
+    <shortdescription>Show OSD</shortdescription>
+    <longdescription>Toggle the visibility of the map overlays</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>plugins/map/filter_images_drawn</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>filtered images</shortdescription>
-    <longdescription>when set limit the images drawn to the current filmstrip</longdescription>
+    <shortdescription>Filtered images</shortdescription>
+    <longdescription>When set limit the images drawn to the current filmstrip</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>plugins/map/max_images_drawn</name>
     <type min="10" max="100000">int</type>
     <default>100</default>
-    <shortdescription>max images</shortdescription>
-    <longdescription>the maximum number of image thumbnails drawn on the map</longdescription>
+    <shortdescription>Max images</shortdescription>
+    <longdescription>The maximum number of image thumbnails drawn on the map</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>plugins/map/epsilon_factor</name>
     <type min="1" max="100">int</type>
     <default>25</default>
-    <shortdescription>group size factor</shortdescription>
-    <longdescription>increase or decrease the spatial size of images groups on the map. can influence the calculation time</longdescription>
+    <shortdescription>Group size factor</shortdescription>
+    <longdescription>Increase or decrease the spatial size of images groups on the map. can influence the calculation time</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>plugins/map/min_images_per_group</name>
     <type min="1" max="10">int</type>
     <default>1</default>
-    <shortdescription>min images per group</shortdescription>
-    <longdescription>the minimum number of images to set up an images group. can influence the calculation time.</longdescription>
+    <shortdescription>Min images per group</shortdescription>
+    <longdescription>The minimum number of images to set up an images group. can influence the calculation time.</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>plugins/map/images_thumbnail</name>
@@ -1670,8 +1670,8 @@
       </enum>
     </type>
     <default>thumbnail</default>
-    <shortdescription>thumbnail display</shortdescription>
-    <longdescription>three options are available: images thumbnails, only the count of images of the group or nothing</longdescription>
+    <shortdescription>Thumbnail display</shortdescription>
+    <longdescription>Three options are available: images thumbnails, only the count of images of the group or nothing</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/map/show_outline</name>
@@ -1684,8 +1684,8 @@
     <name>plugins/map/max_outline_nodes</name>
     <type>int</type>
     <default>10000</default>
-    <shortdescription>max polygon points</shortdescription>
-    <longdescription>limit the number of points imported with polygon in find location module</longdescription>
+    <shortdescription>Max polygon points</shortdescription>
+    <longdescription>Limit the number of points imported with polygon in find location module</longdescription>
   </dtconfig>
   <dtconfig prefs="views" section="geoloc">
     <name>plugins/lighttable/metadata_view/pretty_location</name>
@@ -1698,13 +1698,13 @@
     <name>darkroom/ui/overlay_contrast</name>
     <type>float</type>
     <default>0.5</default>
-    <shortdescription>contrast to use in darkroom overlays</shortdescription>
+    <shortdescription>Contrast to use in darkroom overlays</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>slideshow/ui/panel_collaps_state</name>
     <type>int</type>
     <default>1</default>
-    <shortdescription>panels collapsing state in slideshow</shortdescription>
+    <shortdescription>Panels collapsing state in slideshow</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -1716,69 +1716,69 @@
       </enum>
     </type>
     <default>auto</default>
-    <shortdescription>fast drawn mask rasterization</shortdescription>
-    <longdescription>how finely drawn masks (brush, polygon) are rasterized in the darkroom. auto: one sample per displayed pixel, so zoomed-out views cost less and 1:1 or closer stays exact. never: always pixel-accurate, at the cost of speed when zoomed out. Exports, thumbnails and snapshots are always pixel-accurate regardless of this setting.</longdescription>
+    <shortdescription>Fast drawn mask rasterization</shortdescription>
+    <longdescription>How finely drawn masks (brush, polygon) are rasterized in the darkroom. auto: one sample per displayed pixel, so zoomed-out views cost less and 1:1 or closer stays exact. never: always pixel-accurate, at the cost of speed when zoomed out. Exports, thumbnails and snapshots are always pixel-accurate regardless of this setting.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/ui/border_size</name>
     <type>int</type>
     <default>10</default>
-    <shortdescription>border around image in darkroom mode</shortdescription>
-    <longdescription>process the image in darkroom mode with a small border. set to 0 if you don't want any border.</longdescription>
+    <shortdescription>Border around image in darkroom mode</shortdescription>
+    <longdescription>Process the image in darkroom mode with a small border. set to 0 if you don't want any border.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>display/brightness</name>
     <type min="0" max="100">int</type>
     <default>50</default>
-    <shortdescription>background brightness to show pictures against</shortdescription>
+    <shortdescription>Background brightness to show pictures against</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorbalancergb/checker1/red</name>
     <type>float</type>
     <default>1.0</default>
-    <shortdescription>red component of the first mask preview checkerboard color</shortdescription>
+    <shortdescription>Red component of the first mask preview checkerboard color</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorbalancergb/checker1/green</name>
     <type>float</type>
     <default>1.0</default>
-    <shortdescription>green component of the first mask preview checkerboard color</shortdescription>
+    <shortdescription>Green component of the first mask preview checkerboard color</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorbalancergb/checker1/blue</name>
     <type>float</type>
     <default>1.0</default>
-    <shortdescription>blue component of the first mask preview checkerboard color</shortdescription>
+    <shortdescription>Blue component of the first mask preview checkerboard color</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorbalancergb/checker2/red</name>
     <type>float</type>
     <default>0.18</default>
-    <shortdescription>red component of the second mask preview checkerboard color</shortdescription>
+    <shortdescription>Red component of the second mask preview checkerboard color</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorbalancergb/checker2/green</name>
     <type>float</type>
     <default>0.18</default>
-    <shortdescription>green component of the second mask preview checkerboard color</shortdescription>
+    <shortdescription>Green component of the second mask preview checkerboard color</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorbalancergb/checker2/blue</name>
     <type>float</type>
     <default>0.18</default>
-    <shortdescription>blue component of the second mask preview checkerboard color</shortdescription>
+    <shortdescription>Blue component of the second mask preview checkerboard color</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorbalancergb/checker/size</name>
     <type min="2" max="32">int</type>
     <default>8</default>
-    <shortdescription>mask preview checkerboard size</shortdescription>
+    <shortdescription>Mask preview checkerboard size</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorbalancergb/mask_preview/greyscaled</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>show the image in black and white under mask previews</shortdescription>
+    <shortdescription>Show the image in black and white under mask previews</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>ui_last/expander_metadata</name>
@@ -1875,33 +1875,33 @@
     <name>plugins/darkroom/channelmixerrgb/gui_page</name>
     <type>int</type>
     <default>0</default>
-    <shortdescription>last page selected in channel mixer rgb notebook</shortdescription>
+    <shortdescription>Last page selected in channel mixer rgb notebook</shortdescription>
   </dtconfig>
    <dtconfig>
     <name>plugins/darkroom/negadoctor/gui_page</name>
     <type>int</type>
     <default>0</default>
-    <shortdescription>last page selected in negadoctor notebook</shortdescription>
+    <shortdescription>Last page selected in negadoctor notebook</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/retouch/default_algo</name>
     <type>int</type>
     <default>2</default>
-    <shortdescription>default algorithm for the retouch module</shortdescription>
+    <shortdescription>Default algorithm for the retouch module</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/demosaic/fdc_xover_iso</name>
     <type>int</type>
     <default>1600</default>
-    <shortdescription>crossover iso for X-Trans fdc demosaicing</shortdescription>
-    <longdescription>up to, and including, this iso, X-Trans frequency domain chroma demosaicing uses the hybrid mode for determining chroma; for all higher iso values the pure fdc is used.</longdescription>
+    <shortdescription>Crossover iso for X-Trans fdc demosaicing</shortdescription>
+    <longdescription>Up to, and including, this iso, X-Trans frequency domain chroma demosaicing uses the hybrid mode for determining chroma; for all higher iso values the pure fdc is used.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/denoiseprofile/show_compute_variance_mode</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>whether to show the compute variance mode in denoiseprofile</shortdescription>
-    <longdescription>adds a mode in denoiseprofile that allows to compute the variance after the generalized anscombe transform is performed</longdescription>
+    <shortdescription>Whether to show the compute variance mode in denoiseprofile</shortdescription>
+    <longdescription>Adds a mode in denoiseprofile that allows to compute the variance after the generalized anscombe transform is performed</longdescription>
   </dtconfig>
   <dtconfig prefs="processing" section="general">
     <name>plugins/lighttable/export/pixel_interpolator_warp</name>
@@ -1933,29 +1933,29 @@
     <name>plugins/lighttable/export/dimensions_type</name>
     <type min="0">int</type>
     <default>4</default>
-    <shortdescription>unit of the printing size</shortdescription>
-    <longdescription>unit in which to input the image size.</longdescription>
+    <shortdescription>Unit of the printing size</shortdescription>
+    <longdescription>Unit in which to input the image size.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/export/print_dpi</name>
     <type min="72" max="9600">int</type>
     <default>300</default>
     <shortdescription>DPI</shortdescription>
-    <longdescription>print resolusion in DPI.</longdescription>
+    <longdescription>Print resolusion in DPI.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/export/width</name>
     <type min="0">int</type>
     <default>0</default>
-    <shortdescription>width of the exported image</shortdescription>
-    <longdescription>width of the exported image, or 0 if no scaling should be done.</longdescription>
+    <shortdescription>Width of the exported image</shortdescription>
+    <longdescription>Width of the exported image, or 0 if no scaling should be done.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/export/height</name>
     <type min="0">int</type>
     <default>0</default>
-    <shortdescription>height of the exported image</shortdescription>
-    <longdescription>height of the exported image, or 0 if no scaling should be done.</longdescription>
+    <shortdescription>Height of the exported image</shortdescription>
+    <longdescription>Height of the exported image, or 0 if no scaling should be done.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/export/storage_name</name>
@@ -2003,21 +2003,21 @@
     <name>plugins/imageio/storage/email/client</name>
     <type>string</type>
     <default/>
-    <shortdescription>client to use, this overrides detection of default client.</shortdescription>
+    <shortdescription>Client to use, this overrides detection of default client.</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/imageio/storage/gphoto/id</name>
     <type>string</type>
     <default>642055548087-n01fgvugnbns7a9jq8jfucjsn5l1t6so.apps.googleusercontent.com</default>
-    <shortdescription>google photo client id</shortdescription>
+    <shortdescription>Google photo client id</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/imageio/storage/gphoto/secret</name>
     <type>string</type>
     <default>o29QcbsDWS5cauRqdmGdF3sP</default>
-    <shortdescription>google photo client secret</shortdescription>
+    <shortdescription>Google photo client secret</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -2206,21 +2206,21 @@
     <type>int</type>
     <default>1</default>
     <shortdescription>ICC profile type to use for export</shortdescription>
-    <longdescription>this overrides the per-image settings, if not set to -1.</longdescription>
+    <longdescription>This overrides the per-image settings, if not set to -1.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/export/iccprofile</name>
     <type>string</type>
     <default></default>
     <shortdescription>ICC profile filename to use for export</shortdescription>
-    <longdescription>this overrides the per-image settings, if icctype not set to -1.</longdescription>
+    <longdescription>This overrides the per-image settings, if icctype not set to -1.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/export/iccintent</name>
     <type>int</type>
     <default>1</default>
     <shortdescription>ICC rendering intent</shortdescription>
-    <longdescription>if non-negative, this overrides the per-image output color profile rendering intent on export.</longdescription>
+    <longdescription>If non-negative, this overrides the per-image output color profile rendering intent on export.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/moduletab</name>
@@ -2317,21 +2317,21 @@
     <name>plugins/darkroom/clipping/ratio_d</name>
     <type>int</type>
     <default>0</default>
-    <shortdescription>last chosen aspect ratio denominator</shortdescription>
+    <shortdescription>Last chosen aspect ratio denominator</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/clipping/ratio_n</name>
     <type>int</type>
     <default>0</default>
-    <shortdescription>last chosen aspect ratio numerator</shortdescription>
+    <shortdescription>Last chosen aspect ratio numerator</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/clipping/guide</name>
     <type>int</type>
     <default>0</default>
-    <shortdescription>last chosen guide style</shortdescription>
+    <shortdescription>Last chosen guide style</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -2366,64 +2366,64 @@
     <name>plugins/darkroom/atrous/aspect_percent</name>
     <type min="50" max="100">int</type>
     <default>56</default>
-    <shortdescription>aspect ratio of contrast equalizer gui in per cent</shortdescription>
-    <longdescription>aspect ratio of contrast equalizer gui in per cent</longdescription>
+    <shortdescription>Aspect ratio of contrast equalizer gui in per cent</shortdescription>
+    <longdescription>Aspect ratio of contrast equalizer gui in per cent</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/denoiseprofile/aspect_percent</name>
     <type min="50" max="100">int</type>
     <default>56</default>
-    <shortdescription>aspect ratio of denoise (profiled) wavelets gui in per cent</shortdescription>
-    <longdescription>aspect ratio of denoise (profiled) wavelets gui in per cent</longdescription>
+    <shortdescription>Aspect ratio of denoise (profiled) wavelets gui in per cent</shortdescription>
+    <longdescription>Aspect ratio of denoise (profiled) wavelets gui in per cent</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/rawdenoise/aspect_percent</name>
     <type min="50" max="100">int</type>
     <default>56</default>
-    <shortdescription>aspect ratio of raw denoise wavelets gui in per cent</shortdescription>
-    <longdescription>aspect ratio of raw denoise wavelets gui in per cent</longdescription>
+    <shortdescription>Aspect ratio of raw denoise wavelets gui in per cent</shortdescription>
+    <longdescription>Aspect ratio of raw denoise wavelets gui in per cent</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorzones/aspect_percent</name>
     <type min="50" max="100">int</type>
     <default>56</default>
-    <shortdescription>aspect ratio of color zones graph in per cent</shortdescription>
-    <longdescription>aspect ratio of color zones graph in per cent</longdescription>
+    <shortdescription>Aspect ratio of color zones graph in per cent</shortdescription>
+    <longdescription>Aspect ratio of color zones graph in per cent</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/lowlight/aspect_percent</name>
     <type min="50" max="100">int</type>
     <default>56</default>
-    <shortdescription>aspect ratio of lowlight graph in per cent</shortdescription>
-    <longdescription>aspect ratio of lowlight graph in per cent</longdescription>
+    <shortdescription>Aspect ratio of lowlight graph in per cent</shortdescription>
+    <longdescription>Aspect ratio of lowlight graph in per cent</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/levels/aspect_percent</name>
     <type min="25" max="100">int</type>
     <default>56</default>
-    <shortdescription>aspect ratio of levels graph in per cent</shortdescription>
-    <longdescription>aspect ratio of levels graph in per cent</longdescription>
+    <shortdescription>Aspect ratio of levels graph in per cent</shortdescription>
+    <longdescription>Aspect ratio of levels graph in per cent</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/rgblevels/aspect_percent</name>
     <type min="25" max="100">int</type>
     <default>56</default>
-    <shortdescription>aspect ratio of rgb levels graph in per cent</shortdescription>
-    <longdescription>aspect ratio of rgb levels graph in per cent</longdescription>
+    <shortdescription>Aspect ratio of rgb levels graph in per cent</shortdescription>
+    <longdescription>Aspect ratio of rgb levels graph in per cent</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/filmicrgb/aspect_percent</name>
     <type min="50" max="100">int</type>
     <default>56</default>
-    <shortdescription>aspect ratio of filmic rgb graph in per cent</shortdescription>
-    <longdescription>aspect ratio of filmic rgb graph in per cent</longdescription>
+    <shortdescription>Aspect ratio of filmic rgb graph in per cent</shortdescription>
+    <longdescription>Aspect ratio of filmic rgb graph in per cent</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorbalancergb/aspect_percent</name>
     <type min="50" max="100">int</type>
     <default>56</default>
-    <shortdescription>aspect ratio of color balance rgb graph in per cent</shortdescription>
-    <longdescription>aspect ratio of color balance rgb graph in per cent</longdescription>
+    <shortdescription>Aspect ratio of color balance rgb graph in per cent</shortdescription>
+    <longdescription>Aspect ratio of color balance rgb graph in per cent</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/masks/opacity</name>
@@ -2534,8 +2534,8 @@
     <name>plugins/darkroom/masks/heightview</name>
     <type min="100" max="1000">int</type>
     <default>300</default>
-    <shortdescription>height of shape manager view window</shortdescription>
-    <longdescription>maximum height the masks view in darkroom will grow to before scrolling</longdescription>
+    <shortdescription>Height of shape manager view window</shortdescription>
+    <longdescription>Maximum height the masks view in darkroom will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/ashift/near_delta</name>
@@ -2575,7 +2575,7 @@
       </enum>
     </type>
     <default>mm</default>
-    <shortdescription>measurement units</shortdescription>
+    <shortdescription>Measurement units</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -2651,136 +2651,136 @@
     <name>screen_dpi_overwrite</name>
     <type>float</type>
     <default>-1.0</default>
-    <shortdescription>overwrite the screen's dpi setting</shortdescription>
-    <longdescription>if this value is &gt; 0.0 then it is used as the screen's dpi setting which is used to scale the gui</longdescription>
+    <shortdescription>Overwrite the screen's dpi setting</shortdescription>
+    <longdescription>If this value is &gt; 0.0 then it is used as the screen's dpi setting which is used to scale the gui</longdescription>
   </dtconfig>
   <dtconfig>
     <name>ui_scale</name>
     <type>float</type>
     <default>1.0</default>
-    <shortdescription>global user interface zoom</shortdescription>
-    <longdescription>multiplies the size of the whole user interface. 1.0 is the reference size, 1.1 makes everything 10% bigger and 0.9 makes everything 10% smaller. Unlike the screen dpi override, this only changes how big the GUI is drawn, not the screen resolution Ansel reports.</longdescription>
+    <shortdescription>Global user interface zoom</shortdescription>
+    <longdescription>Multiplies the size of the whole user interface. 1.0 is the reference size, 1.1 makes everything 10% bigger and 0.9 makes everything 10% smaller. Unlike the screen dpi override, this only changes how big the GUI is drawn, not the screen resolution Ansel reports.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/preview/max_in_memory_images</name>
     <type>int</type>
     <default>4</default>
-    <shortdescription>maximum number of full-res images to load in memory</shortdescription>
-    <longdescription>if more images are display in expose mode, zooming will be deactivated</longdescription>
+    <shortdescription>Maximum number of full-res images to load in memory</shortdescription>
+    <longdescription>If more images are display in expose mode, zooming will be deactivated</longdescription>
   </dtconfig>
   <dtconfig>
     <name>allow_lab_output</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>allow XYZ and Lab color spaces as output</shortdescription>
-    <longdescription>this is mainly useful for debugging and to create colorchecker lut styles externally.</longdescription>
+    <shortdescription>Allow XYZ and Lab color spaces as output</shortdescription>
+    <longdescription>This is mainly useful for debugging and to create colorchecker lut styles externally.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/rawprepare/allow_editing_crop</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>allow editing raw cropping boundaries</shortdescription>
-    <longdescription>this is mainly useful for debugging and to add new camera support.</longdescription>
+    <shortdescription>Allow editing raw cropping boundaries</shortdescription>
+    <longdescription>This is mainly useful for debugging and to add new camera support.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>darkroom/modules/exposure/lightness</name>
     <type>float</type>
     <default>50.0</default>
-    <shortdescription>lightness spot in exposure compensation</shortdescription>
+    <shortdescription>Lightness spot in exposure compensation</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>darkroom/modules/channelmixerrgb/colorchecker</name>
     <type>string</type>
     <default>Xrite ColorChecker 24 before 2014</default>
-    <shortdescription>name of the current colorchecker model used</shortdescription>
+    <shortdescription>Name of the current colorchecker model used</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>darkroom/modules/channelmixerrgb/colorchecker_color</name>
     <type>string</type>
     <default></default>
-    <shortdescription>name of the CGATS reference values used with a user colorchecker</shortdescription>
+    <shortdescription>Name of the CGATS reference values used with a user colorchecker</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>darkroom/modules/channelmixerrgb/optimization</name>
     <type>int</type>
     <default>0</default>
-    <shortdescription>current colorchecker optimization mode</shortdescription>
+    <shortdescription>Current colorchecker optimization mode</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>darkroom/modules/channelmixerrgb/safety</name>
     <type>float</type>
     <default>0.5</default>
-    <shortdescription>patch scale, safety margin</shortdescription>
+    <shortdescription>Patch scale, safety margin</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/modulegroups_preset</name>
     <type>string</type>
     <default></default>
-    <shortdescription>preset use for defining iop layout</shortdescription>
-    <longdescription>preset use for defining iop layout</longdescription>
+    <shortdescription>Preset use for defining iop layout</shortdescription>
+    <longdescription>Preset use for defining iop layout</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/modulegroups_basics_sections_labels</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>show the name of the module of each basic widget</shortdescription>
-    <longdescription>show the name of the module of each basic widget</longdescription>
+    <shortdescription>Show the name of the module of each basic widget</shortdescription>
+    <longdescription>Show the name of the module of each basic widget</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/geotagging/heighttracklist</name>
     <type>int</type>
     <default>50</default>
-    <shortdescription>height of the track list</shortdescription>
-    <longdescription>maximum height the track list will grow to before scrolling</longdescription>
+    <shortdescription>Height of the track list</shortdescription>
+    <longdescription>Maximum height the track list will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>plugins/lighttable/geotagging/tz</name>
     <type>string</type>
     <default>UTC</default>
-    <shortdescription>camera time zone</shortdescription>
-    <longdescription>most cameras don't store the time zone in EXIF. give the correct time zone so the GPX data can be correctly matched</longdescription>
+    <shortdescription>Camera time zone</shortdescription>
+    <longdescription>Most cameras don't store the time zone in EXIF. give the correct time zone so the GPX data can be correctly matched</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/map/geotagging_search_url</name>
     <type>string</type>
     <default>https://nominatim.openstreetmap.org/search/%s?format=xml&amp;limit=%d&amp;polygon_text=1</default>
     <shortdescription>Geotagging search URL</shortdescription>
-    <longdescription>this can be changed when the default OpenStreetMap search URL is broken</longdescription>
+    <longdescription>This can be changed when the default OpenStreetMap search URL is broken</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/temperature/expand_coefficients</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>whether to show coefficients</shortdescription>
-    <longdescription>this is just for remembering whether to show coefficients or not and remember it</longdescription>
+    <shortdescription>Whether to show coefficients</shortdescription>
+    <longdescription>This is just for remembering whether to show coefficients or not and remember it</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/crop/expand_margins</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>whether to show margins</shortdescription>
-    <longdescription>this is just for remembering whether to show margins or not and remember it</longdescription>
+    <shortdescription>Whether to show margins</shortdescription>
+    <longdescription>This is just for remembering whether to show margins or not and remember it</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/ashift/expand_values</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>whether to show values</shortdescription>
-    <longdescription>this is just for remembering whether to show values or not</longdescription>
+    <shortdescription>Whether to show values</shortdescription>
+    <longdescription>This is just for remembering whether to show values or not</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/ashift/autocrop_value</name>
     <type>int</type>
     <default>1</default>
-    <shortdescription>auto-crop mode</shortdescription>
+    <shortdescription>Auto-crop mode</shortdescription>
     <longdescription>0=off ; 1= largest area ; 2= original image</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorzones/bg_sat_factor</name>
     <type min="0.1" max="1.0">float</type>
     <default>0.5</default>
-    <shortdescription>saturation factor of the color zones background</shortdescription>
-    <longdescription>higher value means more saturated backgrounds in color zones</longdescription>
+    <shortdescription>Saturation factor of the color zones background</shortdescription>
+    <longdescription>Higher value means more saturated backgrounds in color zones</longdescription>
   </dtconfig>
 
 
@@ -2790,84 +2790,84 @@
     <name>darkroom/ui/scale_step_multiplier</name>
     <type>float</type>
     <default>1.0</default>
-    <shortdescription>the multiplier that is applied to any slider value change</shortdescription>
-    <longdescription>any slider value change will be multiplied by this number, when changing slider while NOT holding SHIFT or CTRL modifiers</longdescription>
+    <shortdescription>The multiplier that is applied to any slider value change</shortdescription>
+    <longdescription>Any slider value change will be multiplied by this number, when changing slider while NOT holding SHIFT or CTRL modifiers</longdescription>
   </dtconfig>
   <dtconfig>
     <name>darkroom/ui/scale_rough_step_multiplier</name>
     <type>float</type>
     <default>10.0</default>
-    <shortdescription>the multiplier that is applied to any slider rough value change</shortdescription>
-    <longdescription>any slider value change will be multiplied by this number, when changing slider while holding SHIFT modifier</longdescription>
+    <shortdescription>The multiplier that is applied to any slider rough value change</shortdescription>
+    <longdescription>Any slider value change will be multiplied by this number, when changing slider while holding SHIFT modifier</longdescription>
   </dtconfig>
   <dtconfig>
     <name>darkroom/ui/scale_precise_step_multiplier</name>
     <type>float</type>
     <default>0.1</default>
-    <shortdescription>the multiplier that is applied to any slider precise value change</shortdescription>
-    <longdescription>any slider value change will be multiplied by this number, when changing slider while holding CTRL modifier</longdescription>
+    <shortdescription>The multiplier that is applied to any slider precise value change</shortdescription>
+    <longdescription>Any slider value change will be multiplied by this number, when changing slider while holding CTRL modifier</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/duplicate/windowheight</name>
     <type>int</type>
     <default>400</default>
-    <shortdescription>height of the duplicates view</shortdescription>
-    <longdescription>maximum height the duplicates view in darkroom will grow to before scrolling</longdescription>
+    <shortdescription>Height of the duplicates view</shortdescription>
+    <longdescription>Maximum height the duplicates view in darkroom will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorpicker/windowheight</name>
     <type>int</type>
     <default>200</default>
-    <shortdescription>height of the color picker list</shortdescription>
-    <longdescription>maximum height the color picker samples list in darkroom will grow to before scrolling</longdescription>
+    <shortdescription>Height of the color picker list</shortdescription>
+    <longdescription>Maximum height the color picker samples list in darkroom will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/history/windowheight</name>
     <type>int</type>
     <default>1000</default>
-    <shortdescription>height of the history list</shortdescription>
-    <longdescription>maximum height the history list in darkroom will grow to before scrolling</longdescription>
+    <shortdescription>Height of the history list</shortdescription>
+    <longdescription>Maximum height the history list in darkroom will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/metadata_view/windowheight</name>
     <type>int</type>
     <default>1000</default>
-    <shortdescription>height of the image information view</shortdescription>
-    <longdescription>maximum height the image information view in lighttable and darkroom will grow to before scrolling</longdescription>
+    <shortdescription>Height of the image information view</shortdescription>
+    <longdescription>Maximum height the image information view in lighttable and darkroom will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/recentcollect/windowheight</name>
     <type>int</type>
     <default>1000</default>
-    <shortdescription>height of the recent collections list</shortdescription>
-    <longdescription>maximum height the recent collections list in lighttable will grow to before scrolling</longdescription>
+    <shortdescription>Height of the recent collections list</shortdescription>
+    <longdescription>Maximum height the recent collections list in lighttable will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/snapshots/windowheight</name>
     <type>int</type>
     <default>200</default>
-    <shortdescription>height of the snapshots list</shortdescription>
-    <longdescription>maximum height the snapshots list in darkroom will grow to before scrolling</longdescription>
+    <shortdescription>Height of the snapshots list</shortdescription>
+    <longdescription>Maximum height the snapshots list in darkroom will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/style/windowheight</name>
     <type>int</type>
     <default>400</default>
-    <shortdescription>height of the styles list</shortdescription>
-    <longdescription>maximum height the styles list in lighttable will grow to before scrolling</longdescription>
+    <shortdescription>Height of the styles list</shortdescription>
+    <longdescription>Maximum height the styles list in lighttable will grow to before scrolling</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/toneequal/gui_page</name>
     <type>int</type>
     <default>0</default>
-    <shortdescription>active tab in tone equaliser module</shortdescription>
-    <longdescription>which of simple, advanced or masking tabs will show at startup</longdescription>
+    <shortdescription>Active tab in tone equaliser module</shortdescription>
+    <longdescription>Which of simple, advanced or masking tabs will show at startup</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/collect/windowheight</name>
     <type>int</type>
     <default>500</default>
-    <shortdescription>height of the collect list</shortdescription>
-    <longdescription>maximum height the collect list in lighttable will grow to before scrolling</longdescription>
+    <shortdescription>Height of the collect list</shortdescription>
+    <longdescription>Maximum height the collect list in lighttable will grow to before scrolling</longdescription>
   </dtconfig>
 </dtconfiglist>

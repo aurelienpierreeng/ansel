@@ -164,7 +164,7 @@ static gboolean dt_styles_create_style_header(const char *name, const char *desc
 {
   if(dt_styles_get_id_by_name(name) != 0)
   {
-    dt_history_message(_("style with name '%s' already exists"), name);
+    dt_history_message(_("Style with name '%s' already exists"), name);
     return FALSE;
   }
 
@@ -284,7 +284,7 @@ void dt_styles_create_from_style(const char *name, const char *newname, const ch
     /* backup style to disk */
     dt_styles_save_to_file(newname, NULL, FALSE);
 
-    dt_history_message(_("style named '%s' successfully created"), newname);
+    dt_history_message(_("Style named '%s' successfully created"), newname);
     dt_history_changed(DT_HISTORY_CHANGE_STYLES);
   }
 }
@@ -334,17 +334,17 @@ void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean
 
   if(IS_NULL_PTR(styles) && !list)
   {
-    dt_history_message(_("no images nor styles selected!"));
+    dt_history_message(_("No images nor styles selected!"));
     return;
   }
   else if(!styles)
   {
-    dt_history_message(_("no styles selected!"));
+    dt_history_message(_("No styles selected!"));
     return;
   }
   else if(!list)
   {
-    dt_history_message(_("no image selected!"));
+    dt_history_message(_("No image selected!"));
     return;
   }
 
@@ -361,7 +361,7 @@ void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean
   dt_undo_end_group(dt_undo_get_global());
 
   const guint styles_cnt = g_list_length(styles);
-  dt_history_message(ngettext("style successfully applied!", "styles successfully applied!", styles_cnt));
+  dt_history_message(ngettext("Style successfully applied!", "Styles successfully applied!", styles_cnt));
 }
 
 static const char *_dt_styles_normalize_multi_name(const char *multi_name)
@@ -408,7 +408,7 @@ static gboolean _dt_styles_apply_item_to_module(dt_iop_module_t *module, const d
     {
       fprintf(stderr, "[dt_styles_apply] module `%s' version mismatch: history is %d, dt %d.\n", module->op,
               style_item->module_version, module->version());
-      dt_history_message(_("module `%s' version mismatch: %d != %d"), module->op, module->version(),
+      dt_history_message(_("Module `%s' version mismatch: %d != %d"), module->op, module->version(),
                      style_item->module_version);
       ok = FALSE;
     }
@@ -947,13 +947,13 @@ void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolea
     {
       if(g_unlink(stylename))
       {
-        dt_history_message(_("failed to overwrite style file for %s"), style_name);
+        dt_history_message(_("Failed to overwrite style file for %s"), style_name);
         return;
       }
     }
     else
     {
-      dt_history_message(_("style file for %s exists"), style_name);
+      dt_history_message(_("Style file for %s exists"), style_name);
       return;
     }
   }
@@ -1170,7 +1170,7 @@ static void dt_style_save(StyleData *style)
   if((id = dt_styles_get_id_by_name(style->info->name->str)) != 0)
   {
     g_list_foreach(style->plugins, (GFunc)dt_style_plugin_save, GINT_TO_POINTER(id));
-    dt_history_message(_("style %s was successfully imported"), style->info->name->str);
+    dt_history_message(_("Style %s was successfully imported"), style->info->name->str);
   }
 }
 
@@ -1214,7 +1214,7 @@ void dt_styles_import_from_file(const char *style_path)
   else
   {
     // Failed to open file, clean up.
-    dt_history_message(_("could not read file `%s'"), style_path);
+    dt_history_message(_("Could not read file `%s'"), style_path);
     g_markup_parse_context_free(parser);
     dt_styles_style_data_free(style, TRUE);
     return;

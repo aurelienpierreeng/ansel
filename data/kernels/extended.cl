@@ -371,7 +371,7 @@ static inline float lookup_gamut(read_only image2d_t gamut_lut, const float x)
 typedef enum dt_iop_colorbalancrgb_saturation_t
 {
   DT_COLORBALANCE_SATURATION_JZAZBZ = 0, // $DESCRIPTION: "JzAzBz (2021)"
-  DT_COLORBALANCE_SATURATION_DTUCS = 1   // $DESCRIPTION: "darktable UCS (2022)"
+  DT_COLORBALANCE_SATURATION_DTUCS = 1   // $DESCRIPTION: "Darktable UCS (2022)"
 } dt_iop_colorbalancrgb_saturation_t;
 
 

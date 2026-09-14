@@ -1305,11 +1305,11 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
     return FALSE;
   }
 
-  const char *merge_mode = merge_iop_order ? _("merge") : _("destination");
+  const char *merge_mode = merge_iop_order ? _("Merge") : _("Destination");
   const char *strategy_name
-      = (strategy == DT_HISTORY_MERGE_APPEND) ? _("append")
-        : (strategy == DT_HISTORY_MERGE_PREPEND) ? _("prepend")
-        : _("replace");
+      = (strategy == DT_HISTORY_MERGE_APPEND) ? _("Append")
+        : (strategy == DT_HISTORY_MERGE_PREPEND) ? _("Prepend")
+        : _("Replace");
 
   gchar *title_text
       = g_strdup_printf(_("Copy, merging pipeline in %s and history in <b>%s</b> mode."), merge_mode, strategy_name);
@@ -1432,14 +1432,14 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
     const gchar *definition;
     gboolean symbol_markup;
   } legend_rows[] = {
-    { _("[ Module ]"),      _("inserted module"), FALSE },
-    { "  Module *",         _("module uses masks"), FALSE },
-    { _("<b> Module </b>"), _("moved module"), TRUE },
-    { txt_color,            _("disabled module (shown only if copied)"), TRUE },
-    { "→",                  _("parameters overridden on the same row"), FALSE },
-    { "↗ / ↘",              _("parameters overridden on an adjacent row"), FALSE },
-    { "↴",                  _("parameters overridden on a farther row"), FALSE },
-    { "→*",                 _("masks overridden"), FALSE },
+    { _("[ Module ]"),      _("Inserted module"), FALSE },
+    { "  Module *",         _("Module uses masks"), FALSE },
+    { _("<b> Module </b>"), _("Moved module"), TRUE },
+    { txt_color,            _("Disabled module (shown only if copied)"), TRUE },
+    { "→",                  _("Parameters overridden on the same row"), FALSE },
+    { "↗ / ↘",              _("Parameters overridden on an adjacent row"), FALSE },
+    { "↴",                  _("Parameters overridden on a farther row"), FALSE },
+    { "→*",                 _("Masks overridden"), FALSE },
   };
 
   /* Fill one two-column table so every symbol stays aligned with its explanation. */

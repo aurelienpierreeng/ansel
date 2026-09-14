@@ -1445,10 +1445,10 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, 
   checker->black = bwg[0];
   checker->white = bwg[1];
   checker->middle_grey = bwg[2];
-  dt_print(DT_DEBUG_VERBOSE, _("blackest patch: %s, middle grey patch: %s, white patch: %s\n"),
+  dt_print(DT_DEBUG_VERBOSE, _("Blackest patch: %s, middle grey patch: %s, white patch: %s\n"),
            checker->values[bwg[0]].name, checker->values[bwg[1]].name, checker->values[bwg[2]].name);
 
-  dt_print(DT_DEBUG_VERBOSE, _("it8 '%s' done\n"), color_filename);
+  dt_print(DT_DEBUG_VERBOSE, _("It8 '%s' done\n"), color_filename);
   goto end;
 
 error:

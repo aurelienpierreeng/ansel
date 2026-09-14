@@ -145,9 +145,9 @@ typedef enum dt_lib_colorpicker_model_t
 } dt_lib_colorpicker_model_t;
 
 const gchar *dt_lib_colorpicker_model_names[]
-  = { N_("RGB"), N_("Lab"), N_("LCh"), N_("HSL"), N_("HSV"), N_("none"), NULL };
+  = { N_("RGB"), N_("Lab"), N_("LCh"), N_("HSL"), N_("HSV"), N_("None"), NULL };
 const gchar *dt_lib_colorpicker_statistic_names[]
-  = { N_("mean"), N_("min"), N_("max"), NULL };
+  = { N_("Mean"), N_("Min"), N_("Max"), NULL };
 
 
 typedef struct dt_lib_histogram_t
@@ -643,7 +643,7 @@ static void _preview_cacheline_ready_callback(gpointer instance, const guint64 h
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("scopes");
+  return _("Scopes");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -2740,7 +2740,7 @@ static gboolean _sample_tooltip_callback(GtkWidget *widget, gint x, gint y, gboo
 
   dt_aligned_pixel_t color;
   dt_Lab_2_LCH(sample->lab[DT_LIB_COLORPICKER_STATISTIC_MEAN], color);
-  sample_parts[11] = g_strdup_printf("\n<big><b>%14s</b></big>", _("color"));
+  sample_parts[11] = g_strdup_printf("\n<big><b>%14s</b></big>", _("Color"));
   char *color_name = Lch_to_color_name(color);
   sample_parts[12] = g_strdup_printf("%6s", color_name);
   g_free(color_name);
@@ -2898,7 +2898,7 @@ static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
 
   sample->color_patch = gtk_drawing_area_new();
   gtk_widget_add_events(sample->color_patch, GDK_BUTTON_PRESS_MASK);
-  gtk_widget_set_tooltip_text(sample->color_patch, _("hover to highlight sample on canvas,\n"
+  gtk_widget_set_tooltip_text(sample->color_patch, _("Hover to highlight sample on canvas,\n"
                                                      "click to lock sample,\n"
                                                      "right-click to load sample area into active color picker"));
   g_signal_connect(G_OBJECT(sample->color_patch), "button-press-event", G_CALLBACK(_live_sample_button), sample);
@@ -3155,7 +3155,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(d->cs.container), picker_row, TRUE, TRUE, 0);
 
   d->statistic_selector = dt_bauhaus_combobox_new_full(
-      dt_bauhaus_get_global(), NULL, NULL, _("select which statistic to show"), d->statistic,
+      dt_bauhaus_get_global(), NULL, NULL, _("Select which statistic to show"), d->statistic,
       (GtkCallback)_statistic_changed, self, dt_lib_colorpicker_statistic_names);
   dt_bauhaus_combobox_set_entries_ellipsis(d->statistic_selector, PANGO_ELLIPSIZE_NONE);
   dt_bauhaus_widget_set_label(d->statistic_selector, NULL);
@@ -3163,7 +3163,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(picker_row), d->statistic_selector, TRUE, TRUE, 0);
 
   d->color_mode_selector = dt_bauhaus_combobox_new_full(
-      dt_bauhaus_get_global(), NULL, NULL, _("select which color mode to use"), d->model,
+      dt_bauhaus_get_global(), NULL, NULL, _("Select which color mode to use"), d->model,
       (GtkCallback)_color_mode_changed, self, dt_lib_colorpicker_model_names);
   dt_bauhaus_combobox_set_entries_ellipsis(d->color_mode_selector, PANGO_ELLIPSIZE_NONE);
   dt_bauhaus_widget_set_label(d->color_mode_selector, NULL);
@@ -3171,7 +3171,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(picker_row), d->color_mode_selector, TRUE, TRUE, 0);
 
   d->picker_button = dt_color_picker_new(NULL, DT_COLOR_PICKER_POINT_AREA, picker_row);
-  gtk_widget_set_tooltip_text(d->picker_button, _("turn on color picker\nctrl+click or right-click to select an area"));
+  gtk_widget_set_tooltip_text(d->picker_button, _("Turn on color picker\nctrl+click or right-click to select an area"));
   gtk_widget_set_name(GTK_WIDGET(d->picker_button), "color-picker-button");
   g_signal_connect(G_OBJECT(d->picker_button), "toggled", G_CALLBACK(_picker_button_toggled), d);
 

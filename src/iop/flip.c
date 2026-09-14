@@ -99,12 +99,12 @@ static void adjust_aabb(const int32_t *p, int32_t *aabb)
 
 const char *name()
 {
-  return _("orientation");
+  return _("Orientation");
 }
 
 const char *aliases()
 {
-  return _("rotation|flip");
+  return _("Rotation|flip");
 }
 
 int default_group()
@@ -129,9 +129,9 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("flip or rotate image by step of 90 degrees"), _("corrective"),
-                                _("linear, RGB, scene-referred"), _("geometric, RGB"),
-                                _("linear, RGB, scene-referred"));
+  return dt_iop_set_description(self, _("Flip or rotate image by step of 90 degrees"), _("Corrective"),
+                                _("Linear, RGB, scene-referred"), _("Geometric, RGB"),
+                                _("Linear, RGB, scene-referred"));
 }
 
 /** Merges raw camera orientation with user-specified orientation
@@ -557,32 +557,32 @@ void init_presets(dt_iop_module_so_t *self)
   dt_database_start_transaction();
 
   p.orientation = ORIENTATION_NULL;
-  dt_gui_presets_add_generic(_("autodetect"), self->op,
+  dt_gui_presets_add_generic(_("Autodetect"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
-  dt_gui_presets_update_autoapply(_("autodetect"), self->op, self->version(), 1);
+  dt_gui_presets_update_autoapply(_("Autodetect"), self->op, self->version(), 1);
 
   p.orientation = ORIENTATION_NONE;
-  dt_gui_presets_add_generic(_("no rotation"), self->op,
+  dt_gui_presets_add_generic(_("No rotation"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
 
   p.orientation = ORIENTATION_FLIP_HORIZONTALLY;
-  dt_gui_presets_add_generic(_("flip horizontally"), self->op,
+  dt_gui_presets_add_generic(_("Flip horizontally"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
 
   p.orientation = ORIENTATION_FLIP_VERTICALLY;
-  dt_gui_presets_add_generic(_("flip vertically"), self->op,
+  dt_gui_presets_add_generic(_("Flip vertically"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
 
   p.orientation = ORIENTATION_ROTATE_CW_90_DEG;
-  dt_gui_presets_add_generic(_("rotate by -90 degrees"), self->op,
+  dt_gui_presets_add_generic(_("Rotate by -90 degrees"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
 
   p.orientation = ORIENTATION_ROTATE_CCW_90_DEG;
-  dt_gui_presets_add_generic(_("rotate by  90 degrees"), self->op,
+  dt_gui_presets_add_generic(_("Rotate by  90 degrees"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
 
   p.orientation = ORIENTATION_ROTATE_180_DEG;
-  dt_gui_presets_add_generic(_("rotate by 180 degrees"), self->op,
+  dt_gui_presets_add_generic(_("Rotate by 180 degrees"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
 
   dt_database_release_transaction();
@@ -680,21 +680,21 @@ void gui_init(struct dt_iop_module_t *self)
 
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *label = dt_iop_gui_reset_label_new(_("transform"), self, &p->orientation, sizeof(int32_t));
+  GtkWidget *label = dt_iop_gui_reset_label_new(_("Transform"), self, &p->orientation, sizeof(int32_t));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, TRUE, TRUE, 0);
 
-  dt_iop_button_new(self, N_("rotate 90 degrees CCW."),
+  dt_iop_button_new(self, N_("Rotate 90 degrees CCW."),
                     G_CALLBACK(rotate_ccw), FALSE, GDK_KEY_bracketleft, 0,
                     dtgtk_cairo_paint_refresh, 0, self->gui->widget);
 
-  dt_iop_button_new(self, N_("rotate 90 degrees CW."),
+  dt_iop_button_new(self, N_("Rotate 90 degrees CW."),
                     G_CALLBACK(rotate_cw), FALSE, GDK_KEY_bracketright, 0,
                     dtgtk_cairo_paint_refresh, 1, self->gui->widget);
 
-  dt_iop_button_new(self, N_("flip horizontally."), G_CALLBACK(_flip_h), FALSE, 0, 0, dtgtk_cairo_paint_flip, 1,
+  dt_iop_button_new(self, N_("Flip horizontally."), G_CALLBACK(_flip_h), FALSE, 0, 0, dtgtk_cairo_paint_flip, 1,
                     self->gui->widget);
 
-  dt_iop_button_new(self, N_("flip vertically."), G_CALLBACK(_flip_v), FALSE, 0, 0, dtgtk_cairo_paint_flip, 0,
+  dt_iop_button_new(self, N_("Flip vertically."), G_CALLBACK(_flip_v), FALSE, 0, 0, dtgtk_cairo_paint_flip, 0,
                     self->gui->widget);
 }
 

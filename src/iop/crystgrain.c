@@ -55,12 +55,12 @@ DT_MODULE_INTROSPECTION(9, dt_iop_crystgrain_params_t)
 typedef enum dt_iop_crystgrain_mode_t
 {
   DT_CRYSTGRAIN_MONO = 0, // $DESCRIPTION: "B&W"
-  DT_CRYSTGRAIN_COLOR = 1 // $DESCRIPTION: "color"
+  DT_CRYSTGRAIN_COLOR = 1 // $DESCRIPTION: "Color"
 } dt_iop_crystgrain_mode_t;
 
 typedef struct dt_iop_crystgrain_params_t
 {
-  dt_iop_crystgrain_mode_t mode; // $DEFAULT: DT_CRYSTGRAIN_MONO $DESCRIPTION: "mode"
+  dt_iop_crystgrain_mode_t mode; // $DEFAULT: DT_CRYSTGRAIN_MONO $DESCRIPTION: "Mode"
   float filling;                 // $MIN: 0.0 $MAX: 95.0 $DEFAULT: 25.0 $DESCRIPTION: "Average layer filling"
   float grain_size;              // $MIN: 1.0 $MAX: 31.0 $DEFAULT: 4.0 $DESCRIPTION: "Crystals average size"
   int layers;                    // $MIN: 1 $MAX: 64 $DEFAULT: 30 $DESCRIPTION: "Crystals layers"
@@ -159,11 +159,11 @@ const char *name()
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("simulate photographic grain from stacked silver-halide crystal layers"),
-                                      _("creative"),
-                                      _("non-linear, RGB, scene-referred"),
-                                      _("non-linear, RGB"),
-                                      _("non-linear, RGB, scene-referred"));
+  return dt_iop_set_description(self, _("Simulate photographic grain from stacked silver-halide crystal layers"),
+                                      _("Creative"),
+                                      _("Non-linear, RGB, scene-referred"),
+                                      _("Non-linear, RGB"),
+                                      _("Non-linear, RGB, scene-referred"));
 }
 
 int flags()
@@ -193,7 +193,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.layer_capture = 0.0f;
   p.channel_correlation = 67.0f;
   p.colorspace_saturation = 67.0f;
-  dt_gui_presets_add_generic(_("color grain"), self->op, self->version(), &p, sizeof(p), 1,
+  dt_gui_presets_add_generic(_("Color grain"), self->op, self->version(), &p, sizeof(p), 1,
                              DEVELOP_BLEND_CS_RGB_SCENE);
 
   p.mode = DT_CRYSTGRAIN_MONO;
@@ -1787,21 +1787,21 @@ void gui_init(struct dt_iop_module_t *self)
   dt_iop_crystgrain_gui_data_t *g = IOP_GUI_ALLOC(crystgrain);
 
   g->mode = dt_bauhaus_combobox_from_params(self, "mode");
-  gtk_widget_set_tooltip_text(g->mode, _("simulate one shared B&W grain field or one shared blue/green/red-sensitive color grain stack"));
+  gtk_widget_set_tooltip_text(g->mode, _("Simulate one shared B&W grain field or one shared blue/green/red-sensitive color grain stack"));
   g_signal_connect(G_OBJECT(g->mode), "value-changed", G_CALLBACK(_mode_changed), self);
 
   g->filling = dt_bauhaus_slider_from_params(self, "filling");
   dt_bauhaus_slider_set_format(g->filling, "%");
-  gtk_widget_set_tooltip_text(g->filling, _("surface ratio occupied by silver-halide crystals in each layer"));
+  gtk_widget_set_tooltip_text(g->filling, _("Surface ratio occupied by silver-halide crystals in each layer"));
 
   g->grain_size = dt_bauhaus_slider_from_params(self, "grain_size");
   dt_bauhaus_slider_set_digits(g->grain_size, 0);
   dt_bauhaus_slider_set_format(g->grain_size, " px");
-  gtk_widget_set_tooltip_text(g->grain_size, _("average crystal diameter, in full-resolution pixels. The same crystals are simulated at every preview and export resolution, so the rendered grain stays consistent across sizes"));
+  gtk_widget_set_tooltip_text(g->grain_size, _("Average crystal diameter, in full-resolution pixels. The same crystals are simulated at every preview and export resolution, so the rendered grain stays consistent across sizes"));
 
   g->layers = dt_bauhaus_slider_from_params(self, "layers");
   dt_bauhaus_slider_set_digits(g->layers, 0);
-  gtk_widget_set_tooltip_text(g->layers, _("number of crystal layers stacked through the emulsion"));
+  gtk_widget_set_tooltip_text(g->layers, _("Number of crystal layers stacked through the emulsion"));
 
   g->layer_capture = dt_bauhaus_slider_from_params(self, "layer_capture");
   dt_bauhaus_slider_set_soft_range(g->layer_capture, -2.0f, 2.0f);
@@ -1810,14 +1810,14 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->channel_correlation = dt_bauhaus_slider_from_params(self, "channel_correlation");
   dt_bauhaus_slider_set_format(g->channel_correlation, "%");
-  gtk_widget_set_tooltip_text(g->channel_correlation, _("probability that blue-, green- and red-sensitive sub-layers reuse the same crystal births and shapes at matching depths"));
+  gtk_widget_set_tooltip_text(g->channel_correlation, _("Probability that blue-, green- and red-sensitive sub-layers reuse the same crystal births and shapes at matching depths"));
 
   g->colorspace_saturation = dt_bauhaus_slider_from_params(self, "colorspace_saturation");
   dt_bauhaus_slider_set_format(g->colorspace_saturation, "%");
-  gtk_widget_set_tooltip_text(g->colorspace_saturation, _("scale only the chromatic amplitude of the RGB grain residual while keeping its achromatic strength unchanged"));
+  gtk_widget_set_tooltip_text(g->colorspace_saturation, _("Scale only the chromatic amplitude of the RGB grain residual while keeping its achromatic strength unchanged"));
 
   g->size_stddev = dt_bauhaus_slider_from_params(self, "size_stddev");
-  gtk_widget_set_tooltip_text(g->size_stddev, _("log-normal standard deviation of crystal sizes"));
+  gtk_widget_set_tooltip_text(g->size_stddev, _("Log-normal standard deviation of crystal sizes"));
 
   gui_update(self);
 }
