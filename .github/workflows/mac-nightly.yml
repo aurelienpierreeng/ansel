@@ -215,10 +215,15 @@ jobs:
       - name: Build macOS package
         run: |
           ./src/packaging/macosx/3_make_hb_ansel_package.sh
+      # Nothing before this point looks at the .app: the steps above test the install tree,
+      # which had both of the binaries the bundle used to drop. This reads the bundle itself --
+      # every installed executable present, every load command resolving inside it.
+      - name: Check macOS bundle
+        run: |
+          "${SRC_DIR}/tools/check_macos_bundle.sh" "${INSTALL_PREFIX}"
       - name: Create DMG file
         run: |
           ./src/packaging/macosx/4_make_hb_ansel_dmg.sh
-      # TODO: check if dmg file runs too, for proper libs bundling
       - name: Package upload
         if: ${{ success() }}
         uses: actions/upload-artifact@v6

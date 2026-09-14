@@ -2684,6 +2684,39 @@ Intel failure used to discard the arm64 DMG too, `upload_to_release` having `nee
 the whole matrix with no `if:`, which cost five good Apple Silicon packages in five nights. It
 publishes per architecture now, so the Intel measures decide whether an Intel DMG exists and no
 longer whether a macOS nightly exists at all.
+### Only the macOS bundle is assembled by hand, and it may not name a binary
+
+Windows packages with CPack (`--target package`, the `DTApplication` component whole) and
+Linux with `make install`; neither enumerates anything, so a command gated on a build option
+ships wherever it was built. macOS is the exception: `packaging/macosx/3_make_hb_ansel_package.sh`
+copies an install tree into the `.app` itself.
+
+It used to do that from a hardcoded list — two of them, in fact, and both were wrong.
+`ansel-lens-db-update` (needs liblensfun) and `ansel-nn-parity` (needs OpenCL) were built,
+installed into `bin/`, and absent from `/Applications/Ansel.app/Contents/MacOS/`, while the
+Windows and Linux packages of the same commit carried them. The second list, `dtExecutables`,
+drives `install_dependencies()` and `reset_exec_path()`, so **fixing only the copy ships a
+binary that cannot start**: `ansel-lens-db-update` is the one binary linking liblensfun, and
+that list is what pulls the dylib into the bundle at all. It also named three binaries that no
+longer exist, and the `libexec/ansel/tools` test beside it asked about the script's own
+directory rather than the install tree, so it was never true.
+
+The copy is now `bin/*` and the roster is read back from the bundle. `tools/check_macos_bundle.sh`
+holds it, run from the nightly between the package and the DMG: every executable in `bin/` is
+in the `.app`, and every load command of every bundled binary and dylib resolves inside the
+bundle or to a system library. It is static on purpose — running each command would rebuild a
+database (`ansel-lens-db-update`) or write thumbnails (`ansel-generate-cache`), and
+`ansel --version` exercises no library resolution the loader would report.
+
+It exits **2 for "nothing was checked"** — not Darwin, no `otool`, no bundle — which is the same
+convention `check_it_runs.sh` uses and is not a pass. Only the macOS nightly calls it, and there
+it never hits that branch; adding it to a Linux gate run would fail the build on exit 2. The
+homebrew prefix it looks for is `/opt/homebrew` **and** `/usr/local` whatever `brew --prefix`
+says, since guessing one architecture's prefix turns the load-command half into a silent pass.
+
+`packaging/macosx/ansel.bundle` is a *second* macOS path — the MacPorts/gtk-mac-bundler route
+of `BUILD.txt`, used by no CI — and it is a manifest, so it does enumerate. It had the same
+omission. `src/apps/README.md` is the roster of what exists and what gates each one.
 
 ## Tools
 
