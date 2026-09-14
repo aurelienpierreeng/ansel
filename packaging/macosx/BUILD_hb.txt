@@ -22,7 +22,7 @@ LIMITATIONS:
 - Created DMG will only be compatible to the macOS version it was created upon.
 - Naturally the libraries that ansel is built upon will be as good as its currently provided homebrew packages. You might want to use "$ brew pin <package>" to lock your working/verified setup.
 - As of today homebrew ships lensfun 0.3.3 that is the successor of the last stable release 0.3.2. It is expected to be compatible and should not break existing edits based on 0.3.2 or before.
-- For now additional ansel tools like ansel-curve-tool or ansel-noiseprofile are not part of the default application bundle.
+- The bundle carries every executable the build installed, so which commands it holds is decided by the cmake options alone: ansel-curve-tool and ansel-noiseprofile need BUILD_CURVE_TOOLS/BUILD_NOISE_TOOLS, which 2_build_hb_ansel_custom.sh leaves OFF, and ansel-lens-db-update needs liblensfun.
 
 MACOS SECURITY:
 - The DMG is not notarized with/at Apple by using this approach. If it is still required see the official BUILD.txt for further instructions.

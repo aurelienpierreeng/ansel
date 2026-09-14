@@ -2,14 +2,21 @@
 
 One directory per program, **named after the binary it produces**.
 
-| directory | binary |
-|---|---|
-| `ansel/` | `ansel` — the application |
-| `ansel-cli/` | `ansel-cli` — headless export |
-| `ansel-cltest/` | `ansel-cltest` — OpenCL diagnostics |
-| `ansel-cmstest/` | `ansel-cmstest` — colour-management diagnostics |
-| `ansel-generate-cache/` | `ansel-generate-cache` — thumbnail pre-rendering |
-| `ansel-chart/` | *(none — see below)* |
+| directory | binary | built when |
+|---|---|---|
+| `ansel/` | `ansel` — the application | always |
+| `ansel-cli/` | `ansel-cli` — headless export | always |
+| `ansel-generate-cache/` | `ansel-generate-cache` — thumbnail pre-rendering | always |
+| `ansel-cltest/` | `ansel-cltest` — OpenCL diagnostics | `USE_OPENCL` |
+| `ansel-nn-parity/` | `ansel-nn-parity` — torch/CPU/OpenCL parity of the `.anselnn` executor | `USE_OPENCL` |
+| `ansel-lens-db-update/` | `ansel-lens-db-update` — rebuilds `lenses.db` from this machine's lensfun profiles | liblensfun found |
+| `ansel-cmstest/` | `ansel-cmstest` — colour-management diagnostics | `BUILD_CMSTEST` |
+| `ansel-chart/` | *(none — see below)* | never |
+
+A binary gated on a build option is absent from a package built without it, and that is the
+only legitimate reason for one to be missing: **packaging must never enumerate this table.**
+`make install` puts every one of them in `bin/`, CPack ships the `DTApplication` component
+whole, and `packaging/macosx/3_make_hb_ansel_package.sh` copies `bin/` as it finds it.
 
 Layer **10** — above everything, including the orchestrator. Each program's `main.c`
 includes `darktable.h` and calls into the library; nothing depends on `apps/`.
@@ -19,9 +26,9 @@ includes `darktable.h` and calls into the library; nothing depends on `apps/`.
 **`main.c` only.** A program's entry point sets up arguments and calls the library. Anything
 with logic worth testing belongs in a subsystem, not here.
 
-**`src/darktable.{c,h}` is NOT an app.** It is the orchestrator *library* that all five
-executables link, and it lives at `src/`. `apps/ansel/main.c` is only the entry point that
-calls `dt_init()`.
+**`src/darktable.{c,h}` is NOT an app.** It is the orchestrator *library* that every one of
+these executables links, and it lives at `src/`. `apps/ansel/main.c` is only the entry point
+that calls `dt_init()`.
 
 **The source lists are `FILE(GLOB)` patterns.** An entry matching no file is dropped with no
 configure error, so a wrong path here does not fail the build — it silently drops the file
