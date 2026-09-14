@@ -1737,26 +1737,69 @@ gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_ob
 
 void dt_canvas_route_midpoint(const dt_canvas_route_t *route, double *x, double *y)
 {
-  // By arc length, whatever the routing and however many points it was flattened to: the
-  // chord's middle only when the route has no length to walk.
+  dt_canvas_route_point_at(route, 0.5, x, y);
+}
+
+/** The whole length of a route's polyline. */
+static double _route_length(const dt_canvas_route_t *route)
+{
   double total = 0.0;
   for(int idx = 0; idx + 1 < route->point_count; idx++)
     total += hypot(route->points[2 * idx + 2] - route->points[2 * idx], route->points[2 * idx + 3] - route->points[2 * idx + 1]);
+  return total;
+}
+
+void dt_canvas_route_point_at(const dt_canvas_route_t *route, const double fraction, double *x, double *y)
+{
+  // By arc length, whatever the routing and however many points it was flattened to: the
+  // chord's point only when the route has no length to walk.
+  const double wanted = CLAMP(fraction, 0.0, 1.0);
+  const double total = _route_length(route);
   double walked = 0.0;
-  *x = (route->from_x + route->to_x) * 0.5;
-  *y = (route->from_y + route->to_y) * 0.5;
+  *x = route->from_x + (route->to_x - route->from_x) * wanted;
+  *y = route->from_y + (route->to_y - route->from_y) * wanted;
   for(int idx = 0; idx + 1 < route->point_count; idx++)
   {
     const double segment = hypot(route->points[2 * idx + 2] - route->points[2 * idx], route->points[2 * idx + 3] - route->points[2 * idx + 1]);
-    if(walked + segment >= total * 0.5 && segment > 0.0)
+    if(walked + segment >= total * wanted && segment > 0.0)
     {
-      const double fraction = (total * 0.5 - walked) / segment;
-      *x = route->points[2 * idx] + (route->points[2 * idx + 2] - route->points[2 * idx]) * fraction;
-      *y = route->points[2 * idx + 1] + (route->points[2 * idx + 3] - route->points[2 * idx + 1]) * fraction;
+      const double along = (total * wanted - walked) / segment;
+      *x = route->points[2 * idx] + (route->points[2 * idx + 2] - route->points[2 * idx]) * along;
+      *y = route->points[2 * idx + 1] + (route->points[2 * idx + 3] - route->points[2 * idx + 1]) * along;
       break;
     }
     walked += segment;
   }
+}
+
+double dt_canvas_route_fraction_at(const dt_canvas_route_t *route, const double x, const double y)
+{
+  if(IS_NULL_PTR(route)) return 0.5;
+  const double total = _route_length(route);
+  if(!(total > 0.0)) return 0.5;
+  double closest_distance = INFINITY;
+  double closest_walk = 0.0;
+  double walked = 0.0;
+  for(int idx = 0; idx + 1 < route->point_count; idx++)
+  {
+    const double start_x = route->points[2 * idx];
+    const double start_y = route->points[2 * idx + 1];
+    const double delta_x = route->points[2 * idx + 2] - start_x;
+    const double delta_y = route->points[2 * idx + 3] - start_y;
+    const double segment = hypot(delta_x, delta_y);
+    double along = 0.0;
+    if(segment > 0.0)
+      along = CLAMP(((x - start_x) * delta_x + (y - start_y) * delta_y) / (segment * segment), 0.0, 1.0);
+    const double distance = hypot(start_x + delta_x * along - x, start_y + delta_y * along - y);
+    // Strictly closer only: where two legs meet at the same distance, the earlier one keeps it.
+    if(distance < closest_distance)
+    {
+      closest_distance = distance;
+      closest_walk = walked + segment * along;
+    }
+    walked += segment;
+  }
+  return CLAMP(closest_walk / total, 0.0, 1.0);
 }
 
 void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connector)

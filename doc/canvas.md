@@ -1273,9 +1273,24 @@ Gestures: drag a frame to move it (the whole selection follows; snapping puts it
 neighbour one gutter away, in line with a neighbour, or on the grid), drag a corner handle to scale it around the
 opposite corner keeping its aspect ratio, drag the handle above it to rotate (Shift snaps to
 15°), drag on empty space for a rubber band, middle button or Alt-drag to pan, wheel to
-zoom about the pointer, Shift-wheel to pan sideways. Double-click opens a text frame's
-editor or an image in the darkroom. Right-click opens the context menu for what is under
-the pointer; "Connect to..." arms a connector whose end is the next frame clicked.
+zoom about the pointer, Shift-wheel to pan sideways. A single click, a drag or a rubber band
+never shows an object's properties: a double-click does (so do I and the context menu's
+"Properties"), and a double-click on an object whose properties are already showing goes
+into it -- a text frame's editor, an image in the darkroom, a drawing's file read again.
+Return does the same from the keyboard. What was on screen before the double click's own first
+press decides, and properties closed since do not count; a run of clicks -- presses of one
+button, each within the toolkit's double-click delay and distance of the previous one, the
+conditions GDK pairs presses with -- answers one double click at most, so a burst of four or
+five fast clicks opens the properties and never drills. The second double click, the one that
+drills, has to begin at least twice the delay after the first one began: GDK reports a press
+sooner than that as a triple click, and the press after it as a first press, so no double click
+reaches the view at all. The opening and the content action run from an idle, after the press,
+and a press handled before that idle -- or Escape -- takes them back. With Shift or Ctrl held a double click is two
+selection toggles and opens nothing. A handle takes a double click only when the first press
+took it too, since that press can only take the handles of what was already selected. The properties
+hide while a gesture moves things and come back when it settles; Escape closes them before
+it drops the selection. Right-click opens the context menu for what is under the pointer;
+"Connect to..." arms a connector whose end is the next frame clicked.
 Every edit is one undo record (`DT_UNDO_CANVAS`), a snapshot of the document before and
 after: objects are small and JPEG bytes are shared by reference, so a snapshot costs the
 records, not the pixels. A drag records its undo on release, and Escape mid-drag restores

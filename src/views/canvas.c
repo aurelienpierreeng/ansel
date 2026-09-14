@@ -89,6 +89,9 @@ DT_MODULE(1)
 #define CANVAS_FLOWER_MARGIN 22.0
 #define CANVAS_FLOWER_PAN_FRACTION 0.25
 #define CANVAS_FLOWER_ZOOM_STEP 1.5
+/** Where the canvas shortcuts live in the accel map, and the one a menu names by its binding. */
+#define CANVAS_ACCEL_SCOPE N_("Canvas/Actions")
+#define CANVAS_ACCEL_PROPERTIES N_("Show the properties of the selected object")
 
 /** The parts of the navigation flower, floating at the bottom right of the view. */
 typedef enum dt_canvas_flower_part_t
@@ -240,6 +243,15 @@ typedef struct dt_canvas_view_t
   gboolean bars_refilling;
   uint64_t bars_signature;              ///< selection + document state the bars were last filled for
   guint bars_idle;                      ///< pending placement, scheduled off the draw path
+  // The properties are OPEN for one object or for none, and only a double click, the I key or
+  // the context menu opens them; everything else can refill, move, hide or close them.
+  uint32_t props_id;                    ///< the object whose properties are open, 0 when closed
+  double props_anchor_u;                ///< a frame: where they were asked for, in its unit square,
+  double props_anchor_v;                ///< so the place follows the frame through moves and turns
+  double props_anchor_t;                ///< a connector: that place as a fraction of its route's length
+  gboolean props_suspended;             ///< open, but hidden while a gesture moves things under them
+  guint props_request_idle;             ///< the opening or the content action a gesture deferred
+  dt_canvas_click_sequence_t click_sequence; ///< the presses the double-click drill rule reads
   dt_cursor_t cursor;                   ///< the shape last queued, to queue only on change
 } dt_canvas_view_t;
 
@@ -256,7 +268,10 @@ static void _proxy_set_grid_size(dt_view_t *self, float size);
 static void _proxy_set_border(dt_view_t *self, const float *rgba, float width);
 static gboolean _proxy_is_connecting(dt_view_t *self);
 static void _bars_refresh(dt_view_t *self, gboolean force);
-static void _bars_request(dt_view_t *self);
+static void _props_sync(dt_view_t *self);
+static void _props_close(dt_view_t *self);
+static void _props_suspend(dt_view_t *self);
+static void _props_open(dt_view_t *self, uint32_t object_id, gboolean has_point, double x, double y);
 static void _connect_mode_set(dt_view_t *self, gboolean on);
 static gboolean _connector_handles(const dt_canvas_view_t *view, const dt_canvas_object_t *connector,
                                    dt_canvas_route_t *route);
@@ -299,6 +314,8 @@ static gboolean _interaction_settled(gpointer data)
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   view->interaction_timeout = 0;
   view->interacting = FALSE;
+  // The gesture has paused: properties it hid come back where the objects now are.
+  _props_sync(self);
   dt_control_queue_redraw_center();
   return G_SOURCE_REMOVE;
 }
@@ -306,11 +323,14 @@ static gboolean _interaction_settled(gpointer data)
 /**
  * A gesture moved the view or an object: the frames until it pauses are composited at half
  * the resolution and scaled up, then one full frame follows. Every motion re-arms the pause.
+ * The properties are hidden for as long: they would otherwise sit over whatever the wheel or
+ * the flower brought under them, and moving them per motion re-allocates the overlay.
  */
 static void _interaction_touch(dt_view_t *self)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   view->interacting = TRUE;
+  _props_suspend(self);
   if(view->interaction_timeout != 0) g_source_remove(view->interaction_timeout);
   view->interaction_timeout = g_timeout_add(CANVAS_INTERACTION_IDLE_MS, _interaction_settled, self);
 }
@@ -447,7 +467,8 @@ static void _undo_pop(gpointer user_data, dt_undo_type_t type, dt_undo_data_t it
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(record)) return;
   dt_canvas_restore(view->canvas, action == DT_ACTION_UNDO ? record->before : record->after);
   _selection_prune(view);
-  _bars_request(self);
+  // An undo that took the object away takes its properties with it.
+  _props_sync(self);
   dt_control_queue_redraw_center();
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
 }
@@ -565,7 +586,7 @@ static void _set_document(dt_view_t *self, dt_canvas_t *canvas)
   view->canvas = canvas;
   view->token++;
   _restore_viewport(view);
-  _bars_request(self);
+  _props_sync(self);
   _announce_document(self);
 }
 
@@ -1077,6 +1098,8 @@ static void _edit_text(dt_view_t *self, dt_canvas_object_t *object)
   }
   gtk_widget_destroy(dialog);
   dt_gui_refocus_parent(parent);
+  // The dialog may have changed the font and the frame's height, which the property bar shows.
+  _props_sync(self);
   dt_control_queue_redraw_center();
 }
 
@@ -1094,7 +1117,7 @@ static void _delete_selection(dt_view_t *self)
   g_array_set_size(view->selection, 0);
   view->hover = 0;
   _record_undo(self, before);
-  _bars_request(self);
+  _props_sync(self);
   dt_control_queue_redraw_center();
 }
 
@@ -1175,7 +1198,7 @@ static dt_canvas_object_t *_add_map(dt_view_t *self, const double x, const doubl
   _select_only(view, map->id);
   _record_undo(self, before);
   _start_map_render(self, map);
-  _bars_request(self);
+  _props_sync(self);
   dt_control_queue_redraw_center();
   return map;
 }
@@ -1228,6 +1251,7 @@ static void _show_sidecar_note(dt_view_t *self, dt_canvas_object_t *image)
   if(!IS_NULL_PTR(existing))
   {
     _select_only(view, existing->id);
+    _props_sync(self);
     dt_control_queue_redraw_center();
     return;
   }
@@ -1240,6 +1264,7 @@ static void _show_sidecar_note(dt_view_t *self, dt_canvas_object_t *image)
   }
   _select_only(view, text->id);
   _record_undo(self, before);
+  _props_sync(self);
   dt_control_queue_redraw_center();
 }
 
@@ -1330,10 +1355,50 @@ static GtkWidget *_menu_item(GtkWidget *menu, const char *label, void (*callback
   return item;
 }
 
+/**
+ * An item that names the key doing the same thing, the way a menu bar does. `shortcut` is a
+ * label already (NULL for none) and `tooltip` says what else does it; both are translated.
+ */
+static GtkWidget *_menu_item_with_shortcut(GtkWidget *menu, const char *label, const char *shortcut,
+                                           const char *tooltip, void (*callback)(GtkWidget *, gpointer),
+                                           dt_canvas_menu_context_t *context)
+{
+  GtkWidget *item = NULL;
+  if(IS_NULL_PTR(shortcut))
+    item = ctx_gtk_menu_item_new_with_icon(label, menu, callback, context, DT_MENU_ICON_NONE);
+  else
+    item = ctx_gtk_menu_item_new_with_markup_and_shortcut(label, shortcut, menu, callback, context);
+  g_object_set_data_full(G_OBJECT(item), "canvas-context", context, g_free);
+  if(!IS_NULL_PTR(tooltip)) gtk_widget_set_tooltip_text(item, tooltip);
+  return item;
+}
+
+/**
+ * The key a canvas action is bound to, as the user bound it, ready to show; NULL when it has
+ * none. Read from the accel map every time rather than from the table's default, since the
+ * binding is the user's to change.
+ */
+static gchar *_accel_label(const char *action_name)
+{
+  gchar *path = dt_accels_build_path(CANVAS_ACCEL_SCOPE, action_name);
+  GtkAccelKey key = { 0 };
+  const gboolean bound = gtk_accel_map_lookup_entry(path, &key) && key.accel_key != 0;
+  dt_free(path);
+  if(!bound) return NULL;
+  return gtk_accelerator_get_label(key.accel_key, dt_accels_display_mods(key.accel_mods));
+}
+
 static dt_canvas_object_t *_menu_object(const dt_canvas_menu_context_t *context)
 {
   const dt_canvas_view_t *view = (const dt_canvas_view_t *)context->self->data;
   return dt_canvas_find_object(view->canvas, context->object_id);
+}
+
+/** The properties of the object the menu was opened on, anchored where it was opened. */
+static void _menu_properties(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  _props_open(context->self, context->object_id, TRUE, context->x, context->y);
 }
 
 static void _menu_edit_text(GtkWidget *widget, gpointer data)
@@ -1558,7 +1623,7 @@ static void _menu_slider_changed(GtkRange *range, gpointer data)
       break;
   }
   dt_canvas_touch(view->canvas);
-  _bars_request(context->self);
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1629,7 +1694,7 @@ static void _menu_cutout_shape(GtkWidget *widget, gpointer data)
   dt_canvas_mask_set_shape(view->canvas, object, (uint32_t)CLAMP(context->value, 0, DT_CANVAS_MASK_GRADIENT));
   view->mask_editing = object->mask.shape != DT_CANVAS_MASK_NONE;
   _record_undo(context->self, before);
-  _bars_refresh(context->self, TRUE);
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1638,7 +1703,7 @@ static void _menu_cutout_edit(GtkWidget *widget, gpointer data)
   dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
   dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
   view->mask_editing = context->value != 0;
-  _bars_refresh(context->self, TRUE);
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1653,7 +1718,7 @@ static void _menu_cutout_invert(GtkWidget *widget, gpointer data)
   dt_canvas_touch(view->canvas);
   _record_undo(context->self, before);
   // The property bar carries this same flag as a toggle, and it shows what it last read.
-  _bars_refresh(context->self, TRUE);
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1761,6 +1826,8 @@ static void _menu_rotate(GtkWidget *widget, gpointer data)
     object->rotation += context->value * M_PI / 2.0;
   dt_canvas_touch(view->canvas);
   _record_undo(context->self, before);
+  // The property bar shows the angle, and it shows what it last read.
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1777,6 +1844,7 @@ static void _menu_duplicate(GtkWidget *widget, gpointer data)
   }
   _select_only(view, copy->id);
   _record_undo(context->self, before);
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1829,7 +1897,7 @@ static void _add_drawing(dt_view_t *self, const double x, const double y)
   }
   _select_only(view, drawing->id);
   _record_undo(self, before);
-  _bars_request(self);
+  _props_sync(self);
   dt_control_queue_redraw_center();
 }
 
@@ -1839,13 +1907,13 @@ static void _menu_add_drawing_here(GtkWidget *widget, gpointer data)
   _add_drawing(context->self, context->x, context->y);
 }
 
-/** Read the drawing's file again, for when it has been edited since it was placed. */
-static void _menu_reload_drawing(GtkWidget *widget, gpointer data)
+/**
+ * Read the drawing's file again, for when it has been edited since it was placed. The context
+ * menu asks for it, and so does a double click on a drawing whose properties are showing.
+ */
+static void _reload_drawing(dt_view_t *self, dt_canvas_object_t *object)
 {
-  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
-  dt_view_t *self = context->self;
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, context->object_id);
   if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_SVG) return;
   dt_canvas_t *before = _begin_edit(view);
   GError *error = NULL;
@@ -1864,7 +1932,14 @@ static void _menu_reload_drawing(GtkWidget *widget, gpointer data)
     return;
   }
   _record_undo(self, before);
+  _props_sync(self);
   dt_control_queue_redraw_center();
+}
+
+static void _menu_reload_drawing(GtkWidget *widget, gpointer data)
+{
+  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
+  _reload_drawing(context->self, _menu_object(context));
 }
 
 static void _menu_zoom_fit(GtkWidget *widget, gpointer data)
@@ -1878,6 +1953,19 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
 {
   GtkWidget *menu = gtk_menu_new();
   const uint32_t id = IS_NULL_PTR(object) ? 0 : object->id;
+  // What an object contains is also a double click away once its properties are showing, and
+  // Return reaches it from the keyboard: the items that open it say both.
+  gchar *return_label = gtk_accelerator_get_label(GDK_KEY_Return, 0);
+  const char *drill_hint = _("Double-clicking the object while its properties are showing does the same.");
+  if(!IS_NULL_PTR(object))
+  {
+    gchar *properties_label = _accel_label(CANVAS_ACCEL_PROPERTIES);
+    _menu_item_with_shortcut(menu, _("Properties"), properties_label,
+                             _("Double-clicking an object shows its properties too."), _menu_properties,
+                             _menu_context(self, id, x, y, 0));
+    dt_free(properties_label);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+  }
 
   if(IS_NULL_PTR(object))
   {
@@ -1903,7 +1991,8 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
   {
     if(object->kind == DT_CANVAS_OBJECT_TEXT)
     {
-      _menu_item(menu, _("Edit the text..."), _menu_edit_text, _menu_context(self, id, x, y, 0));
+      _menu_item_with_shortcut(menu, _("Edit the text..."), return_label, drill_hint, _menu_edit_text,
+                               _menu_context(self, id, x, y, 0));
       _menu_item(menu, _("Fit the frame to the text"), _menu_fit_text, _menu_context(self, id, x, y, 0));
       if(object->text.source == DT_CANVAS_TEXT_SOURCE_SIDECAR)
         _menu_item(menu, _("Reload the image's text note"), _menu_reload_sidecar, _menu_context(self, id, x, y, 0));
@@ -1914,12 +2003,13 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
     }
     else if(object->kind == DT_CANVAS_OBJECT_SVG)
     {
-      _menu_item(menu, _("Read the drawing's file again"), _menu_reload_drawing,
-                 _menu_context(self, id, x, y, 0));
+      _menu_item_with_shortcut(menu, _("Read the drawing's file again"), return_label, drill_hint,
+                               _menu_reload_drawing, _menu_context(self, id, x, y, 0));
     }
     else
     {
-      _menu_item(menu, _("Open in the darkroom"), _menu_open_darkroom, _menu_context(self, id, x, y, 0));
+      _menu_item_with_shortcut(menu, _("Open in the darkroom"), return_label, drill_hint, _menu_open_darkroom,
+                               _menu_context(self, id, x, y, 0));
       _menu_item(menu, _("Refresh from the library"), _menu_refresh_image, _menu_context(self, id, x, y, 0));
       _menu_item(menu, _("Show the image's text note"), _menu_show_note, _menu_context(self, id, x, y, 0));
       _menu_item(menu, _("Add a map of where it was taken"), _menu_map_of_image, _menu_context(self, id, x, y, 0));
@@ -2032,6 +2122,7 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
     _menu_item(menu, _("Duplicate"), _menu_duplicate, _menu_context(self, id, x, y, 0));
     _menu_item(menu, _("Delete"), _menu_delete, _menu_context(self, id, x, y, 0));
   }
+  dt_free(return_label);
   gtk_widget_show_all(menu);
   gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
 }
@@ -2120,8 +2211,11 @@ static void _connect_mode_set(dt_view_t *self, gboolean on)
   view->connect_from_anchor = DT_CANVAS_ANCHOR_AUTO;
   view->anchor_hover_id = 0;
   view->anchor_hover = DT_CANVAS_ANCHOR_AUTO;
+  // Drawing a connector is clicking frames one after the other: properties left open would be
+  // one object's while the clicks are about two others.
+  if(on) _props_close(self);
   if(on) dt_control_log(_("click an anchor point on the first frame, then one on the second; Escape leaves"));
-  _bars_request(self);
+  _props_sync(self);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
   dt_control_queue_redraw_center();
 }
@@ -2221,10 +2315,22 @@ static void _paint_connect_mode(cairo_t *cr, const dt_canvas_view_t *view)
 
 /* --- the floating property bars -------------------------------------------------------- */
 
-/** The one selected object, when exactly one is selected. */
+/**
+ * The object whose properties are open, while they still may be: it exists, it is the whole
+ * selection and no connector is being drawn. NULL otherwise, whatever `props_id` says --
+ * `_props_sync()` closes what this refuses.
+ */
+static dt_canvas_object_t *_props_object(const dt_canvas_view_t *view)
+{
+  if(view->props_id == 0 || view->connecting || view->selection->len != 1) return NULL;
+  if(g_array_index(view->selection, uint32_t, 0) != view->props_id) return NULL;
+  return dt_canvas_find_object(view->canvas, view->props_id);
+}
+
+/** The object the bar edits: the one whose properties are open. */
 static dt_canvas_object_t *_bar_target(const dt_canvas_view_t *view)
 {
-  return _single_selected(view);
+  return _props_object(view);
 }
 
 static dt_canvas_color_t _color_from_button(GtkWidget *button)
@@ -2278,7 +2384,7 @@ static void _bar_settle(dt_view_t *self, dt_canvas_object_t *object, dt_canvas_t
     }
     // The document generation did not move, so only a cleared signature makes the idle refill.
     view->bars_signature = 0;
-    _bars_request(self);
+    _props_sync(self);
     return;
   }
   if(effects & DT_CANVAS_EFFECT_SETTLE_ALL) dt_canvas_props_settle_all(view->canvas);
@@ -2293,7 +2399,7 @@ static void _bar_settle(dt_view_t *self, dt_canvas_object_t *object, dt_canvas_t
     dt_conf_set_float("canvas/map_longitude", (float)object->map.longitude);
   }
   if(effects & DT_CANVAS_EFFECT_COMMIT_RENDER) _start_map_render(self, object);
-  _bars_request(self);
+  _props_sync(self);
   dt_control_queue_redraw_center();
 }
 
@@ -2586,8 +2692,8 @@ static void _bar_cutout_shape_changed(GtkComboBox *combo, gpointer data)
   const uint32_t effects = dt_canvas_prop_write(view->canvas, object, DT_CANVAS_PROP_CUTOUT_SHAPE, &value);
   // A new shape is edited at once, and no shape has nothing to edit.
   if(effects & DT_CANVAS_EFFECT_VIEW) view->mask_editing = object->mask.shape != DT_CANVAS_MASK_NONE;
+  // The settle refills: which size fields apply moved with the shape, and the signature carries both.
   _bar_settle(self, object, before, effects);
-  _bars_refresh(self, TRUE);
 }
 
 static void _bar_cutout_feather_changed(GtkSpinButton *spin, gpointer data)
@@ -3140,14 +3246,6 @@ static void _bar_place(dt_canvas_view_t *view, const dt_canvas_object_t *object)
   }
 }
 
-/** Hide the bar at once, without waiting for the idle: a click on the background dismisses it. */
-static void _bars_hide_now(dt_canvas_view_t *view)
-{
-  if(IS_NULL_PTR(view->bar)) return;
-  gtk_widget_hide(view->bar);
-  view->bars_signature = 0;
-}
-
 /** Refill a spin button from the property table: the value the object is drawn with. */
 static void _bar_show_number(const dt_canvas_view_t *view, GtkWidget *spin, const dt_canvas_object_t *object,
                              const dt_canvas_prop_id_t prop_id)
@@ -3201,9 +3299,9 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view->bar)) return;
-  // No bar while a gesture is running: it would follow every motion through a re-allocation.
-  const gboolean dragging = view->drag != DT_CANVAS_DRAG_NONE;
-  const dt_canvas_object_t *object = (view->connecting || dragging) ? NULL : _bar_target(view);
+  // Only the open state decides what the bar shows: a press that has not moved yet leaves it
+  // where it is, and a gesture that did move has suspended it already.
+  const dt_canvas_object_t *object = _bar_target(view);
   const uint32_t kind = IS_NULL_PTR(object) ? DT_CANVAS_OBJECT_NONE : object->kind;
   const uint64_t signature = view->canvas->generation * 131u + (IS_NULL_PTR(object) ? 0u : object->id) * 7u + kind
                              + (view->mask_editing ? 3u : 0u);
@@ -3320,26 +3418,223 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
                              dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_CUTOUT_EDIT), object));
     }
     view->bars_refilling = FALSE;
-    gtk_widget_set_visible(view->bar, !IS_NULL_PTR(object));
   }
-  if(!IS_NULL_PTR(object)) _bar_place(view, object);
+  const gboolean shown = !IS_NULL_PTR(object) && !view->props_suspended;
+  gtk_widget_set_visible(view->bar, shown);
+  if(shown) _bar_place(view, object);
 }
 
-static gboolean _bars_idle(gpointer data)
+/* --- when the properties show ------------------------------------------------------------ */
+
+/**
+ * Commit what a spin button of the bar holds but has not applied yet: typed digits count once
+ * the field is left, and a close or a view switch leaves it without the focus ever moving.
+ */
+static void _props_commit_pending(dt_canvas_view_t *view)
+{
+  if(IS_NULL_PTR(view->bar)) return;
+  GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(dt_ui_main_window(dt_gui_get_ui())));
+  if(IS_NULL_PTR(focus) || !GTK_IS_SPIN_BUTTON(focus) || !gtk_widget_is_ancestor(focus, view->bar)) return;
+  gtk_spin_button_update(GTK_SPIN_BUTTON(focus));
+}
+
+/** Forget the opening or the content action a double click or Return deferred, if it has not run. */
+static void _props_request_drop(dt_canvas_view_t *view)
+{
+  if(view->props_request_idle == 0) return;
+  g_source_remove(view->props_request_idle);
+  view->props_request_idle = 0;
+}
+
+/**
+ * Close the properties: nothing reopens them but one of the gestures that open them. What was
+ * asked of them and has not run yet goes too, and the run of clicks forgets they were showing,
+ * so the next double click opens them again rather than going into the object.
+ */
+static void _props_close(dt_view_t *self)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(view->props_id == 0) return;
+  _props_commit_pending(view);
+  _props_request_drop(view);
+  dt_canvas_click_sequence_closed(&view->click_sequence);
+  view->props_id = 0;
+  view->props_suspended = FALSE;
+  view->bars_signature = 0;
+  if(!IS_NULL_PTR(view->bar)) gtk_widget_hide(view->bar);
+}
+
+/**
+ * Hide open properties for the gesture in flight, once: every later motion of it finds them
+ * hidden already. Only a gesture that actually moves something gets here, so the first click
+ * of a double click never makes them blink.
+ */
+static void _props_suspend(dt_view_t *self)
+{
+  if(IS_NULL_PTR(self)) return;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || view->props_id == 0 || view->props_suspended) return;
+  view->props_suspended = TRUE;
+  if(!IS_NULL_PTR(view->bar)) gtk_widget_hide(view->bar);
+}
+
+static gboolean _props_idle(gpointer data)
 {
   dt_view_t *self = (dt_view_t *)data;
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   view->bars_idle = 0;
+  if(view->props_id != 0 && IS_NULL_PTR(_props_object(view))) _props_close(self);
+  // Suspended properties come back once nothing is moving: no button held, no wheel turning.
+  if(view->props_suspended && view->drag == DT_CANVAS_DRAG_NONE && !view->interacting)
+    view->props_suspended = FALSE;
   _bars_refresh(self, FALSE);
   return G_SOURCE_REMOVE;
 }
 
-/** Schedule a placement off the draw path: moving an overlay child from inside a draw glitches. */
-static void _bars_request(dt_view_t *self)
+/**
+ * Bring the properties up to date with the document, the selection and the gesture: refill,
+ * place, bring back, hide or close them -- but never OPEN them, which is what keeps a click, a
+ * drag or a rubber band from making them appear. A selection that is no longer exactly the
+ * open object closes them at once, so they never linger over the next object; the rest is
+ * coalesced into one idle, off the draw path, since moving an overlay child from inside a draw
+ * glitches.
+ */
+static void _props_sync(dt_view_t *self)
+{
+  if(IS_NULL_PTR(self)) return;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view)) return;
+  if(view->props_id != 0 && IS_NULL_PTR(_props_object(view))) _props_close(self);
+  if(IS_NULL_PTR(view->bar) || view->bars_idle != 0) return;
+  view->bars_idle = g_idle_add(_props_idle, self);
+}
+
+/**
+ * Remember where on the object its properties were asked for, as a place ON the object rather
+ * than on the screen: a frame's unit-square point and a connector's fraction of its route both
+ * follow the object wherever it is moved, turned or stretched. Without a point, the middle of
+ * a frame's bottom edge and the middle of a route.
+ */
+static void _props_anchor_set(dt_canvas_view_t *view, const dt_canvas_object_t *object, const gboolean has_point,
+                              const double x, const double y)
+{
+  view->props_anchor_u = 0.5;
+  view->props_anchor_v = 1.0;
+  view->props_anchor_t = 0.5;
+  if(!has_point) return;
+  if(dt_canvas_object_is_frame(object) && object->width > 0.0 && object->height > 0.0)
+  {
+    double local_x = 0.0;
+    double local_y = 0.0;
+    dt_canvas_object_to_local(object, x, y, &local_x, &local_y);
+    view->props_anchor_u = CLAMP(local_x / object->width + 0.5, 0.0, 1.0);
+    view->props_anchor_v = CLAMP(local_y / object->height + 0.5, 0.0, 1.0);
+    return;
+  }
+  dt_canvas_route_t route;
+  if(object->kind == DT_CANVAS_OBJECT_CONNECTOR && dt_canvas_connector_route(view->canvas, object, &route))
+    view->props_anchor_t = dt_canvas_route_fraction_at(&route, x, y);
+}
+
+/** Open one object's properties: it becomes the whole selection, and they show at once. */
+static void _props_open(dt_view_t *self, const uint32_t object_id, const gboolean has_point, const double x,
+                        const double y)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->bar) || view->bars_idle != 0) return;
-  view->bars_idle = g_idle_add(_bars_idle, self);
+  const dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, object_id);
+  if(IS_NULL_PTR(object) || view->connecting) return;
+  _select_only(view, object_id);
+  view->props_id = object_id;
+  _props_anchor_set(view, object, has_point, x, y);
+  // Asked for with a button still held (the I key mid-drag), they wait for the gesture to end.
+  view->props_suspended = view->drag != DT_CANVAS_DRAG_NONE;
+  view->bars_signature = 0;
+  _bars_refresh(self, TRUE);
+  dt_control_queue_redraw_center();
+}
+
+/** What a double click on an object whose properties are showing goes into, and what Return does. */
+static void _props_content_action(dt_view_t *self, dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object)) return;
+  switch(object->kind)
+  {
+    case DT_CANVAS_OBJECT_TEXT:
+      _edit_text(self, object);
+      break;
+    case DT_CANVAS_OBJECT_IMAGE:
+      _open_in_darkroom(object);
+      break;
+    case DT_CANVAS_OBJECT_SVG:
+      _reload_drawing(self, object);
+      break;
+    default:
+      // A map and a connector have nothing inside them: their properties are all there is.
+      break;
+  }
+}
+
+/** An opening or a content action, deferred until the gesture that asked for it is over. */
+typedef struct dt_canvas_props_request_t
+{
+  dt_view_t *self;
+  uint64_t token;       ///< the document it was asked about
+  uint64_t press_count; ///< the presses counted when it was asked: one more, and it is dropped
+  uint32_t object_id;   ///< looked up again when it runs: the object may be gone by then
+  gboolean content;     ///< run the content action rather than open the properties
+  gboolean has_point;   ///< the canvas point it was asked at, for the anchor
+  double x;
+  double y;
+} dt_canvas_props_request_t;
+
+static gboolean _props_request_run(gpointer data)
+{
+  dt_canvas_props_request_t *request = (dt_canvas_props_request_t *)data;
+  dt_view_t *self = request->self;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view)) return G_SOURCE_REMOVE;
+  view->props_request_idle = 0;
+  if(request->token != view->token) return G_SOURCE_REMOVE;
+  if(dt_view_manager_get_current_view(dt_view_manager_get_global()) != self) return G_SOURCE_REMOVE;
+  // A press handled since it was asked answered something newer -- another object, the
+  // background, a third click arming a move -- and whatever it did stands. And no dialog runs
+  // with a gesture armed: its modal grab would swallow the release the gesture is owed.
+  if(request->press_count != view->click_sequence.press_count) return G_SOURCE_REMOVE;
+  if(view->drag != DT_CANVAS_DRAG_NONE) return G_SOURCE_REMOVE;
+  if(request->content)
+  {
+    _props_commit_pending(view);
+    _props_content_action(self, dt_canvas_find_object(view->canvas, request->object_id));
+  }
+  else
+    _props_open(self, request->object_id, request->has_point, request->x, request->y);
+  return G_SOURCE_REMOVE;
+}
+
+/**
+ * Defer an opening or a content action to an idle. A press handler must not run a modal
+ * dialog: the dialog's nested main loop would swallow the release the gesture is still owed,
+ * and a drag armed by that very press would be left to answer it afterwards.
+ *
+ * The idle runs ahead of the redraw the press queued. Behind it, it would wait for the paint,
+ * and on a heavy page a third click landing inside that paint is dispatched first and drops the
+ * request: a triple click would open nothing at all.
+ */
+static void _props_request(dt_view_t *self, const uint32_t object_id, const gboolean content,
+                           const gboolean has_point, const double x, const double y)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  _props_request_drop(view);
+  dt_canvas_props_request_t *request = g_new0(dt_canvas_props_request_t, 1);
+  request->self = self;
+  request->token = view->token;
+  request->press_count = view->click_sequence.press_count;
+  request->object_id = object_id;
+  request->content = content;
+  request->has_point = has_point;
+  request->x = x;
+  request->y = y;
+  view->props_request_idle = g_idle_add_full(G_PRIORITY_HIGH_IDLE, _props_request_run, request, g_free);
 }
 
 /**
@@ -3350,7 +3645,7 @@ static void _bars_request(dt_view_t *self)
  */
 static void _bars_canvas_changed(gpointer instance, gpointer user_data)
 {
-  _bars_request((dt_view_t *)user_data);
+  _props_sync((dt_view_t *)user_data);
 }
 
 /* --- drag and drop from the filmstrip ------------------------------------------------- */
@@ -3385,6 +3680,7 @@ static void _drop_images(dt_view_t *self, const uint32_t *imgids, const int coun
     _record_undo(self, before);
   else
     dt_canvas_free(before);
+  _props_sync(self);
   dt_control_queue_redraw_center();
 }
 
@@ -3491,7 +3787,7 @@ static void _flower_activate(dt_canvas_view_t *view, const dt_canvas_flower_part
     default:
       break;
   }
-  _bars_request(dt_view_manager_get_global()->proxy.canvas.view);
+  _props_sync(dt_view_manager_get_global()->proxy.canvas.view);
   dt_control_queue_redraw_center();
 }
 
@@ -4649,8 +4945,168 @@ static void _end_gesture(dt_view_t *self)
   view->guide_height_valid = FALSE;
   view->cursor = GDK_LEFT_PTR;
   dt_control_change_cursor(GDK_LEFT_PTR);
-  _bars_request(self);
+  // Properties the gesture hid come back; a rubber band that changed the selection closes them.
+  _props_sync(self);
   dt_control_queue_redraw_center();
+}
+
+/**
+ * Drop the gesture a press armed, leaving the document as it is: the second press of a double
+ * click arms a move before GDK reports the double click, and that move is not what the user
+ * asked for. Nothing has moved yet, so there is nothing to restore and no undo step to record.
+ */
+static void _gesture_cancel(dt_view_t *self)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  dt_canvas_free(view->drag_snapshot);
+  view->drag_snapshot = NULL;
+  view->drag = DT_CANVAS_DRAG_NONE;
+  view->drag_moved = FALSE;
+  view->guide_width_valid = FALSE;
+  view->guide_height_valid = FALSE;
+  view->cursor = GDK_LEFT_PTR;
+  dt_control_change_cursor(GDK_LEFT_PTR);
+}
+
+/** Snapshot the document for the gesture a press arms, dropping one a previous press left. */
+static void _gesture_snapshot(dt_canvas_view_t *view)
+{
+  dt_canvas_free(view->drag_snapshot);
+  view->drag_snapshot = _begin_edit(view);
+}
+
+/** The object whose properties are on screen right now, 0 when they are closed or hidden. */
+static uint32_t _props_shown_id(const dt_canvas_view_t *view)
+{
+  if(IS_NULL_PTR(view->bar) || view->props_suspended || !gtk_widget_get_visible(view->bar)) return 0;
+  const dt_canvas_object_t *object = _props_object(view);
+  return IS_NULL_PTR(object) ? 0 : object->id;
+}
+
+/**
+ * Count a press into its run of clicks, with the toolkit's own double-click delay and distance
+ * and the event's own timestamp, so the run ends where GDK stops pairing presses. Outside of an
+ * event dispatch there is no timestamp, and the monotonic clock stands in: a gap measured across
+ * the two clocks is meaningless, which only ever begins a new run.
+ */
+static void _click_sequence_press(dt_canvas_view_t *view, const double x, const double y, const int button)
+{
+  int delay_ms = 0;
+  int distance_px = 0;
+  g_object_get(gtk_settings_get_default(), "gtk-double-click-time", &delay_ms, "gtk-double-click-distance",
+               &distance_px, NULL);
+  guint32 time_ms = gtk_get_current_event_time();
+  if(time_ms == GDK_CURRENT_TIME) time_ms = (guint32)(g_get_monotonic_time() / 1000);
+  const dt_canvas_click_t click = { .time_ms = time_ms, .x = x, .y = y, .button = button };
+  dt_canvas_click_sequence_press(&view->click_sequence, &click, (guint)MAX(delay_ms, 0), (guint)MAX(distance_px, 0),
+                                 _props_shown_id(view));
+}
+
+/**
+ * A left press on one of the handles of what is selected: a cutout's node or edge, a connector's
+ * tangent or waypoint, a frame's corner or knob. They come before any object, since they sit over
+ * the objects they belong to. TRUE when a handle took the press.
+ */
+static gboolean _press_handles(dt_view_t *self, const double canvas_x, const double canvas_y, const int type,
+                               const gboolean primary, const gboolean shift)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  // The cutout's handles, when it is being edited: they sit over the frame they cut.
+  dt_canvas_object_t *mask_owner = _single_selected(view);
+  int mask_index = -1;
+  const dt_canvas_drag_t mask_drag = _mask_handle_at(view, mask_owner, canvas_x, canvas_y, &mask_index);
+  if(mask_drag != DT_CANVAS_DRAG_NONE)
+  {
+    if(mask_drag == DT_CANVAS_DRAG_MASK_NODE && type == GDK_2BUTTON_PRESS)
+    {
+      dt_canvas_t *before = _begin_edit(view);
+      _mask_node_toggle_smooth(&mask_owner->mask, (uint32_t)mask_index);
+      dt_canvas_touch(view->canvas);
+      _record_undo(self, before);
+      _end_gesture(self);
+      return TRUE;
+    }
+    if(mask_drag == DT_CANVAS_DRAG_MASK_NODE && shift)
+    {
+      dt_canvas_t *before = _begin_edit(view);
+      if(dt_canvas_mask_remove_node(view->canvas, mask_owner, (uint32_t)mask_index))
+        _record_undo(self, before);
+      else
+        dt_canvas_free(before);
+      dt_control_queue_redraw_center();
+      return TRUE;
+    }
+    _gesture_snapshot(view);
+    view->drag = mask_drag;
+    view->mask_handle = mask_index;
+    dt_control_change_cursor(GDK_FLEUR);
+    return TRUE;
+  }
+  if(primary && view->mask_editing && !IS_NULL_PTR(mask_owner))
+  {
+    const int segment = _mask_segment_at(view, mask_owner, canvas_x, canvas_y);
+    if(segment >= 0)
+    {
+      double local_x = 0.0;
+      double local_y = 0.0;
+      dt_canvas_object_to_local(mask_owner, canvas_x, canvas_y, &local_x, &local_y);
+      dt_canvas_t *before = _begin_edit(view);
+      if(dt_canvas_mask_insert_node(view->canvas, mask_owner, (uint32_t)segment + 1,
+                                    (float)(local_x / mask_owner->width + 0.5), (float)(local_y / mask_owner->height + 0.5)))
+        _record_undo(self, before);
+      else
+        dt_canvas_free(before);
+      dt_control_queue_redraw_center();
+      return TRUE;
+    }
+  }
+  dt_canvas_object_t *handle_owner = NULL;
+  int handle_sign = 1;
+  const dt_canvas_drag_t handle_drag = _tangent_handle_at(view, canvas_x, canvas_y, &handle_owner, &handle_sign);
+  if(handle_drag != DT_CANVAS_DRAG_NONE)
+  {
+    _select_only(view, handle_owner->id);
+    _gesture_snapshot(view);
+    view->drag = handle_drag;
+    view->handle_sign = handle_sign;
+    _props_sync(self);
+    dt_control_change_cursor(GDK_FLEUR);
+    return TRUE;
+  }
+  dt_canvas_object_t *via_owner = _via_handle_at(view, canvas_x, canvas_y);
+  if(!IS_NULL_PTR(via_owner))
+  {
+    _select_only(view, via_owner->id);
+    _gesture_snapshot(view);
+    view->drag = DT_CANVAS_DRAG_VIA;
+    _props_sync(self);
+    dt_control_change_cursor(GDK_FLEUR);
+    return TRUE;
+  }
+  // Handles of the selected frames come first: they overlap the frames they belong to.
+  for(guint idx = 0; idx < view->selection->len; idx++)
+  {
+    dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, g_array_index(view->selection, uint32_t, idx));
+    const int handle = _handle_at(view, object, canvas_x, canvas_y);
+    if(handle < 0) continue;
+    _select_only(view, object->id);
+    _gesture_snapshot(view);
+    _props_sync(self);
+    if(handle == 4)
+    {
+      view->drag = DT_CANVAS_DRAG_ROTATE;
+      view->gesture_start_rotation = object->rotation;
+      view->gesture_start_angle = atan2(canvas_y - object->y, canvas_x - object->x);
+    }
+    else
+    {
+      view->drag = DT_CANVAS_DRAG_SCALE;
+      view->scale_corner = handle;
+    }
+    dt_control_queue_redraw_center();
+    return TRUE;
+  }
+  return FALSE;
 }
 
 int button_pressed(dt_view_t *self, double x, double y, double pressure, int which, int type, uint32_t state)
@@ -4671,6 +5127,14 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   const gboolean primary = dt_modifier_is(state, DT_PRIMARY_MASK);
   const gboolean shift = dt_modifier_is(state, GDK_SHIFT_MASK);
   const double tolerance = DT_CANVAS_PICK_TOLERANCE_PIXELS / view->zoom;
+  // Nothing typed into the property bar is left to commit here: the view manager takes the focus
+  // away before the view hears of the press (view.c), and a spin button commits on focus-out.
+
+  // Every press of every button is counted into its run of clicks BEFORE it changes anything, so
+  // the run knows whose properties were on screen when it came. GDK reports the press completing
+  // a double or a triple click a second time, as GDK_2BUTTON_PRESS or GDK_3BUTTON_PRESS: those
+  // are not presses of their own.
+  if(type == GDK_BUTTON_PRESS) _click_sequence_press(view, x, y, which);
 
   // The flower floats over the plane: a press on it is navigation, never a pick.
   const dt_canvas_flower_part_t flower_part = _flower_hit(view, x, y);
@@ -4683,7 +5147,6 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   if(which == 2 || (which == 1 && dt_modifier_is(state, GDK_MOD1_MASK)))
   {
     view->drag = DT_CANVAS_DRAG_PAN;
-    _bars_hide_now(view);
     dt_control_change_cursor(GDK_FLEUR);
     return 1;
   }
@@ -4697,100 +5160,15 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
   if(which == 1)
   {
-    // The cutout's handles, when it is being edited: they sit over the frame they cut.
-    dt_canvas_object_t *mask_owner = _single_selected(view);
-    int mask_index = -1;
-    const dt_canvas_drag_t mask_drag = _mask_handle_at(view, mask_owner, canvas_x, canvas_y, &mask_index);
-    if(mask_drag != DT_CANVAS_DRAG_NONE)
+    // A double click takes a handle only where its first press took one: that first press can
+    // only take the handles of what was already selected, so on a frame it has just selected the
+    // second press finds handles the user never aimed at, a corner covering most of a small
+    // frame, and the double click belongs to the frame.
+    const gboolean handles_answer
+        = type != GDK_2BUTTON_PRESS || dt_canvas_click_sequence_began_on_handle(&view->click_sequence);
+    if(handles_answer && _press_handles(self, canvas_x, canvas_y, type, primary, shift))
     {
-      if(mask_drag == DT_CANVAS_DRAG_MASK_NODE && type == GDK_2BUTTON_PRESS)
-      {
-        dt_canvas_t *before = _begin_edit(view);
-        _mask_node_toggle_smooth(&mask_owner->mask, (uint32_t)mask_index);
-        dt_canvas_touch(view->canvas);
-        _record_undo(self, before);
-        _end_gesture(self);
-        return 1;
-      }
-      if(mask_drag == DT_CANVAS_DRAG_MASK_NODE && shift)
-      {
-        dt_canvas_t *before = _begin_edit(view);
-        if(dt_canvas_mask_remove_node(view->canvas, mask_owner, (uint32_t)mask_index))
-          _record_undo(self, before);
-        else
-          dt_canvas_free(before);
-        dt_control_queue_redraw_center();
-        return 1;
-      }
-      view->drag_snapshot = _begin_edit(view);
-      view->drag = mask_drag;
-      view->mask_handle = mask_index;
-      _bars_hide_now(view);
-      dt_control_change_cursor(GDK_FLEUR);
-      return 1;
-    }
-    if(primary && view->mask_editing && !IS_NULL_PTR(mask_owner))
-    {
-      const int segment = _mask_segment_at(view, mask_owner, canvas_x, canvas_y);
-      if(segment >= 0)
-      {
-        double local_x = 0.0;
-        double local_y = 0.0;
-        dt_canvas_object_to_local(mask_owner, canvas_x, canvas_y, &local_x, &local_y);
-        dt_canvas_t *before = _begin_edit(view);
-        if(dt_canvas_mask_insert_node(view->canvas, mask_owner, (uint32_t)segment + 1,
-                                      (float)(local_x / mask_owner->width + 0.5), (float)(local_y / mask_owner->height + 0.5)))
-          _record_undo(self, before);
-        else
-          dt_canvas_free(before);
-        dt_control_queue_redraw_center();
-        return 1;
-      }
-    }
-    dt_canvas_object_t *handle_owner = NULL;
-    int handle_sign = 1;
-    const dt_canvas_drag_t handle_drag = _tangent_handle_at(view, canvas_x, canvas_y, &handle_owner, &handle_sign);
-    if(handle_drag != DT_CANVAS_DRAG_NONE)
-    {
-      _select_only(view, handle_owner->id);
-      view->drag_snapshot = _begin_edit(view);
-      view->drag = handle_drag;
-      view->handle_sign = handle_sign;
-      _bars_hide_now(view);
-      dt_control_change_cursor(GDK_FLEUR);
-      return 1;
-    }
-    dt_canvas_object_t *via_owner = _via_handle_at(view, canvas_x, canvas_y);
-    if(!IS_NULL_PTR(via_owner))
-    {
-      _select_only(view, via_owner->id);
-      view->drag_snapshot = _begin_edit(view);
-      view->drag = DT_CANVAS_DRAG_VIA;
-      _bars_hide_now(view);
-      dt_control_change_cursor(GDK_FLEUR);
-      return 1;
-    }
-    // Handles of the selected frames come first: they overlap the frames they belong to.
-    for(guint idx = 0; idx < view->selection->len; idx++)
-    {
-      dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, g_array_index(view->selection, uint32_t, idx));
-      const int handle = _handle_at(view, object, canvas_x, canvas_y);
-      if(handle < 0) continue;
-      _select_only(view, object->id);
-      view->drag_snapshot = _begin_edit(view);
-      _bars_hide_now(view);
-      if(handle == 4)
-      {
-        view->drag = DT_CANVAS_DRAG_ROTATE;
-        view->gesture_start_rotation = object->rotation;
-        view->gesture_start_angle = atan2(canvas_y - object->y, canvas_x - object->x);
-      }
-      else
-      {
-        view->drag = DT_CANVAS_DRAG_SCALE;
-        view->scale_corner = handle;
-      }
-      dt_control_queue_redraw_center();
+      if(type == GDK_BUTTON_PRESS) dt_canvas_click_sequence_took_handle(&view->click_sequence);
       return 1;
     }
 
@@ -4799,10 +5177,25 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     {
       if(type == GDK_2BUTTON_PRESS)
       {
-        if(object->kind == DT_CANVAS_OBJECT_TEXT)
-          _edit_text(self, object);
-        else if(object->kind == DT_CANVAS_OBJECT_IMAGE)
-          _open_in_darkroom(object);
+        // The second press has just armed a move of the object, which the double click takes
+        // back before anything happens.
+        _gesture_cancel(self);
+        // With Shift or Ctrl held, a click adds to the selection or takes from it, and two of them
+        // are two toggles: the selection being built stays as they left it, and nothing opens.
+        if(primary || shift)
+        {
+          dt_control_queue_redraw_center();
+          return 1;
+        }
+        // The drill rule. The double click's own first press says whether this object's
+        // properties were on screen: if not, they open; if they were, the double click goes into
+        // the object. Both wait for an idle, so no dialog and no view switch runs inside the press.
+        const dt_canvas_double_click_t answer = dt_canvas_click_sequence_double(&view->click_sequence, object->id);
+        if(answer == DT_CANVAS_DOUBLE_CLICK_OPEN)
+          _props_request(self, object->id, FALSE, TRUE, canvas_x, canvas_y);
+        else if(answer == DT_CANVAS_DOUBLE_CLICK_DRILL && dt_canvas_props_has_content_action(object->kind))
+          _props_request(self, object->id, TRUE, TRUE, canvas_x, canvas_y);
+        dt_control_queue_redraw_center();
         return 1;
       }
       if(primary || shift)
@@ -4812,20 +5205,18 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       if(dt_canvas_object_is_frame(object) && _is_selected(view, object->id))
       {
         view->drag = DT_CANVAS_DRAG_MOVE;
-        view->drag_snapshot = _begin_edit(view);
-        _bars_hide_now(view);
+        _gesture_snapshot(view);
         dt_control_change_cursor(GDK_FLEUR);
       }
-      _bars_request(self);
+      _props_sync(self);
       dt_control_queue_redraw_center();
       return 1;
     }
 
-    // The background: the selection and its bar go at once, before the rubber band starts.
+    // The background: the selection and the properties go at once, before the rubber band starts.
     if(!primary && !shift) g_array_set_size(view->selection, 0);
-    _bars_hide_now(view);
     view->drag = DT_CANVAS_DRAG_RUBBERBAND;
-    _bars_request(self);
+    _props_sync(self);
     dt_control_queue_redraw_center();
     return 1;
   }
@@ -4834,7 +5225,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   {
     dt_canvas_object_t *object = dt_canvas_pick(view->canvas, canvas_x, canvas_y, tolerance);
     if(!IS_NULL_PTR(object) && !_is_selected(view, object->id)) _select_only(view, object->id);
-    _bars_request(self);
+    _props_sync(self);
     _popup_menu(self, object, canvas_x, canvas_y);
     dt_control_queue_redraw_center();
     return 1;
@@ -5098,6 +5489,12 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     }
   }
   if(_drag_changes_the_document(view->drag)) dt_canvas_touch(view->canvas);
+  // A gesture that has really moved something hides the properties until it settles. A rubber
+  // band moves nothing, so the same threshold as a move decides when it has started.
+  const gboolean band_started = view->drag == DT_CANVAS_DRAG_RUBBERBAND
+                                && hypot(x - view->press_screen_x, y - view->press_screen_y)
+                                       >= CANVAS_DRAG_THRESHOLD_PIXELS;
+  if(view->drag_moved || view->drag == DT_CANVAS_DRAG_PAN || band_started) _props_suspend(self);
   view->pointer_x = canvas_x;
   view->pointer_y = canvas_y;
   view->last_x = canvas_x;
@@ -5160,7 +5557,7 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
         edited->mask.feather = (float)CLAMP(edited->mask.feather + 0.01 * step, 0.0, 1.0);
       dt_canvas_touch(view->canvas);
       _record_undo(self, before);
-      _bars_request(self);
+      _props_sync(self);
       dt_control_queue_redraw_center();
       return 1;
     }
@@ -5175,7 +5572,7 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
   {
     _zoom_around(view, x, y, up ? CANVAS_ZOOM_STEP : 1.0 / CANVAS_ZOOM_STEP);
   }
-  _bars_request(self);
+  _props_sync(self);
   dt_control_queue_redraw_center();
   return 1;
 }
@@ -5185,23 +5582,40 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   const guint key = dt_keys_mainpad_alternatives(event->keyval);
   const gboolean primary = dt_modifiers_include(event->state, DT_PRIMARY_MASK);
+  // Keys the property bar's own controls did not take reach here; while one of them holds the
+  // focus, Return belongs to it and never to the object.
+  GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(dt_ui_main_window(dt_gui_get_ui())));
+  const gboolean focus_in_bar
+      = !IS_NULL_PTR(view->bar) && !IS_NULL_PTR(focus) && gtk_widget_is_ancestor(focus, view->bar);
   if(key == GDK_KEY_Escape)
   {
+    // One step back per press: out of connector drawing, out of the gesture, the properties
+    // closed, and only then the selection dropped. An opening or a content action still waiting
+    // to run is taken back whichever step this is.
+    _props_request_drop(view);
     if(view->connecting)
       _connect_mode_set(self, FALSE);
     else if(view->drag != DT_CANVAS_DRAG_NONE)
     {
       // Abort the gesture: put the document back the way it was before the press.
       if(!IS_NULL_PTR(view->drag_snapshot)) dt_canvas_restore(view->canvas, view->drag_snapshot);
-      dt_canvas_free(view->drag_snapshot);
-      view->drag_snapshot = NULL;
-      view->drag = DT_CANVAS_DRAG_NONE;
-      dt_control_change_cursor(GDK_LEFT_PTR);
+      _gesture_cancel(self);
     }
+    else if(view->props_id != 0)
+      _props_close(self);
     else
       g_array_set_size(view->selection, 0);
-    _bars_request(self);
+    _props_sync(self);
     dt_control_queue_redraw_center();
+    return 1;
+  }
+  if(key == GDK_KEY_Return && !focus_in_bar && !view->connecting && view->drag == DT_CANVAS_DRAG_NONE
+     && dt_modifier_is(event->state, 0))
+  {
+    // Return goes into the one selected object, the way a second double click does.
+    const dt_canvas_object_t *object = _single_selected(view);
+    if(IS_NULL_PTR(object) || !dt_canvas_props_has_content_action(object->kind)) return 0;
+    _props_request(self, object->id, TRUE, FALSE, 0.0, 0.0);
     return 1;
   }
   if(key == GDK_KEY_Delete || key == GDK_KEY_BackSpace)
@@ -5212,6 +5626,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   if(primary && (key == GDK_KEY_a || key == GDK_KEY_A))
   {
     _select_all(view);
+    _props_sync(self);
     return 1;
   }
   const double nudge = (event->state & GDK_SHIFT_MASK) ? 10.0 / view->zoom : 1.0 / view->zoom;
@@ -5227,7 +5642,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     _move_selection(view, nudge_x, nudge_y);
     dt_canvas_touch(view->canvas);
     _record_undo(self, before);
-    _bars_request(self);
+    _props_sync(self);
     dt_control_queue_redraw_center();
     return 1;
   }
@@ -5343,10 +5758,20 @@ static void _proxy_action(dt_view_t *self, int action)
     case DT_CANVAS_ACTION_CONNECT_MODE:
       _connect_mode_set(self, !view->connecting);
       break;
+    case DT_CANVAS_ACTION_PROPERTIES:
+    {
+      // The keyboard's way to what a double click opens, for the one selected object.
+      const dt_canvas_object_t *object = _single_selected(view);
+      if(IS_NULL_PTR(object))
+        dt_control_log(_("select one object to show its properties"));
+      else if(view->props_id != object->id)
+        _props_open(self, object->id, FALSE, 0.0, 0.0);
+      break;
+    }
     default:
       break;
   }
-  _bars_request(self);
+  _props_sync(self);
   _announce_document(self);
 }
 
@@ -5693,6 +6118,7 @@ static const dt_canvas_accel_t _accels[] = {
   { N_("Check the images against the library"), DT_CANVAS_ACTION_SYNC_CHECK, GDK_KEY_r, 0 },
   { N_("Refresh the stale images"), DT_CANVAS_ACTION_SYNC_REFRESH_STALE, GDK_KEY_r, DT_PRIMARY_MASK },
   { N_("Draw a connector"), DT_CANVAS_ACTION_CONNECT_MODE, GDK_KEY_c, 0 },
+  { CANVAS_ACCEL_PROPERTIES, DT_CANVAS_ACTION_PROPERTIES, GDK_KEY_i, 0 },
   { N_("Undo"), DT_CANVAS_ACTION_UNDO, GDK_KEY_z, DT_PRIMARY_MASK },
   { N_("Redo"), DT_CANVAS_ACTION_REDO, GDK_KEY_y, DT_PRIMARY_MASK },
 };
@@ -5771,7 +6197,7 @@ void gui_init(dt_view_t *self)
 {
   for(size_t idx = 0; idx < G_N_ELEMENTS(_accels); idx++)
   {
-    dt_accels_new_canvas_action(_accel_callback, (gpointer)&_accels[idx], NULL, N_("Canvas/Actions"), _accels[idx].name,
+    dt_accels_new_canvas_action(_accel_callback, (gpointer)&_accels[idx], NULL, CANVAS_ACCEL_SCOPE, _accels[idx].name,
                                 _accels[idx].key, _accels[idx].mods, NULL);
   }
 }
@@ -5790,6 +6216,7 @@ void cleanup(dt_view_t *self)
   }
   dt_view_manager_t *manager = dt_view_manager_get_global();
   if(manager->proxy.canvas.view == self) manager->proxy.canvas.view = NULL;
+  _props_request_drop(view);
   dt_free(view->text_features_font);
   view->text_features_font = NULL;
   dt_canvas_free(view->drag_snapshot);
@@ -5828,6 +6255,9 @@ void enter(dt_view_t *self)
   dt_thumbtable_show(dt_gui_get_ui()->thumbtable_filmstrip);
   dt_thumbtable_update_parent(dt_gui_get_ui()->thumbtable_filmstrip);
   _bars_create(self);
+  // Properties open when the atelier was left -- a double click into the darkroom, typically --
+  // are shown again on the way back, provided their object is still the whole selection.
+  _props_sync(self);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,
                                   G_CALLBACK(_filmstrip_drag_begin), self);
@@ -5867,6 +6297,11 @@ void leave(dt_view_t *self)
     view->dnd_connected = FALSE;
   }
   if(view->drag != DT_CANVAS_DRAG_NONE) _end_gesture(self);
+  // The widget goes with the view, but the open state stays for `enter()` to show again. An
+  // action a double click deferred is dropped: it was asked of the atelier being left.
+  _props_commit_pending(view);
+  _props_request_drop(view);
+  view->props_suspended = FALSE;
   _bars_destroy(self);
   view->cursor = GDK_LEFT_PTR;
   dt_control_change_cursor(GDK_LEFT_PTR);

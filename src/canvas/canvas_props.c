@@ -1576,6 +1576,66 @@ uint32_t dt_canvas_props_text_features(const dt_canvas_t *canvas, const dt_canva
   return offered;
 }
 
+gboolean dt_canvas_click_sequence_press(dt_canvas_click_sequence_t *sequence, const dt_canvas_click_t *click,
+                                        const guint delay_ms, const guint distance_px, const uint32_t shown_id)
+{
+  if(IS_NULL_PTR(sequence) || IS_NULL_PTR(click)) return FALSE;
+  const dt_canvas_click_t *last = &sequence->last;
+  // The difference of two unsigned timestamps is right across their wrap, where a signed one
+  // would read a pause of seven weeks.
+  const guint32 gap_ms = click->time_ms - last->time_ms;
+  const gboolean first_press = last->button == 0;
+  // GDK's own test for a second press, condition for condition: the same button, strictly
+  // sooner than the delay, and within the distance along each axis separately.
+  const gboolean paired = !first_press && click->button == last->button && gap_ms < delay_ms
+                          && fabs(click->x - last->x) <= (double)distance_px
+                          && fabs(click->y - last->y) <= (double)distance_px;
+  sequence->last = *click;
+  sequence->press_count++;
+  sequence->previous_shown_id = sequence->latest_shown_id;
+  sequence->latest_shown_id = shown_id;
+  sequence->previous_took_handle = sequence->latest_took_handle;
+  sequence->latest_took_handle = FALSE;
+  if(paired) return FALSE;
+  sequence->answered = FALSE;
+  return TRUE;
+}
+
+void dt_canvas_click_sequence_took_handle(dt_canvas_click_sequence_t *sequence)
+{
+  if(IS_NULL_PTR(sequence)) return;
+  sequence->latest_took_handle = TRUE;
+}
+
+gboolean dt_canvas_click_sequence_began_on_handle(const dt_canvas_click_sequence_t *sequence)
+{
+  if(IS_NULL_PTR(sequence)) return FALSE;
+  return sequence->previous_took_handle;
+}
+
+void dt_canvas_click_sequence_closed(dt_canvas_click_sequence_t *sequence)
+{
+  if(IS_NULL_PTR(sequence)) return;
+  sequence->previous_shown_id = 0;
+  sequence->latest_shown_id = 0;
+}
+
+dt_canvas_double_click_t dt_canvas_click_sequence_double(dt_canvas_click_sequence_t *sequence,
+                                                         const uint32_t object_id)
+{
+  if(IS_NULL_PTR(sequence) || object_id == 0 || sequence->answered) return DT_CANVAS_DOUBLE_CLICK_NOTHING;
+  sequence->answered = TRUE;
+  // The double click GDK reports is the latest press, so its own first press is the one before:
+  // drilling needs this object's properties to have been showing then, and ever since.
+  if(sequence->previous_shown_id == object_id) return DT_CANVAS_DOUBLE_CLICK_DRILL;
+  return DT_CANVAS_DOUBLE_CLICK_OPEN;
+}
+
+gboolean dt_canvas_props_has_content_action(const uint32_t kind)
+{
+  return kind == DT_CANVAS_OBJECT_TEXT || kind == DT_CANVAS_OBJECT_IMAGE || kind == DT_CANVAS_OBJECT_SVG;
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

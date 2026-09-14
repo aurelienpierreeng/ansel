@@ -419,6 +419,110 @@ typedef void (*dt_canvas_props_feature_cb)(const char *feature_tag, const char *
 uint32_t dt_canvas_props_text_features(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                                        dt_canvas_props_feature_cb callback, gpointer user_data);
 
+/* --- how the properties are asked for ------------------------------------------------ */
+
+/**
+ * What a double click on an object asks for. A single click, a drag or a rubber band never
+ * shows anyone's properties: laying a page out is clicking and dragging all day, and a panel
+ * that answered every click stood in the way of the next one. The first double click on an
+ * object shows its properties; a double click on an object whose properties are ALREADY
+ * showing goes one level further in, to what the object contains -- the drill rule.
+ */
+typedef enum dt_canvas_double_click_t
+{
+  DT_CANVAS_DOUBLE_CLICK_NOTHING = 0, ///< this run of clicks has already been answered once
+  DT_CANVAS_DOUBLE_CLICK_OPEN,        ///< show the object's properties
+  DT_CANVAS_DOUBLE_CLICK_DRILL,       ///< run the object's content action
+} dt_canvas_double_click_t;
+
+/**
+ * One press, as the toolkit reported it. The time is the event's OWN timestamp, never the
+ * moment the handler ran: GDK pairs presses into a double click from those timestamps, and a
+ * main loop held up by a slow paint dispatches two presses together whose events were far
+ * apart -- read from the handler's clock, they would disagree with the double click GDK then
+ * reports about where one run of clicks ends.
+ */
+typedef struct dt_canvas_click_t
+{
+  guint32 time_ms; ///< the event's timestamp, in milliseconds; it wraps, and only differences are read
+  double x;        ///< where, in the pixels of the widget the press went to
+  double y;
+  int button;      ///< 1 the left button, 2 the middle, 3 the right
+} dt_canvas_click_t;
+
+/**
+ * A run of presses of one button, each paired with the one before it the way GDK pairs two
+ * presses into a double click: sooner than the double-click delay and no farther than the
+ * double-click distance along either axis. A press of another button, a pause or a press
+ * elsewhere begins a new run, where GDK begins counting again too. GDK also begins again after
+ * a triple click, which a run does not: that is what keeps a burst of clicks to one answer.
+ *
+ * A double click is read against what was on screen before ITS OWN first press, which is the
+ * press before the one GDK reports as the double click -- not before the run's first press: a
+ * run can begin with a click that is no part of the double click, a click beside the object
+ * that closed its properties, say. Properties that close after that first press do not count
+ * either (`dt_canvas_click_sequence_closed()`), since a drill goes into an object whose
+ * properties are showing, not into one whose properties were showing a moment ago.
+ *
+ * And a run answers ONE double click at most. GDK reports the second press of a burst as a
+ * double click and the third as a triple, then starts counting again, so the fifth press of
+ * four or five fast clicks is another double click: it would find the properties the second
+ * one opened and drill into a dialog nobody asked for.
+ */
+typedef struct dt_canvas_click_sequence_t
+{
+  dt_canvas_click_t last;         ///< the latest press; its button is 0 before the first one
+  uint64_t press_count;           ///< every press so far: what a deferred action checks none came after it
+  uint32_t previous_shown_id;     ///< whose properties showed before the press before the latest, 0 for none
+  uint32_t latest_shown_id;       ///< whose properties showed before the latest press, 0 for none
+  gboolean previous_took_handle;  ///< the press before the latest took a handle
+  gboolean latest_took_handle;    ///< the latest press took a handle
+  gboolean answered;              ///< a double click of this run has already opened or drilled
+} dt_canvas_click_sequence_t;
+
+/**
+ * @brief Count a press into the run it belongs to. Only real presses are counted: the second
+ * report GDK makes of a press that completes a double or a triple click is not one.
+ * @param click       the press
+ * @param delay_ms    the toolkit's double-click delay (gtk-double-click-time)
+ * @param distance_px the toolkit's double-click distance (gtk-double-click-distance)
+ * @param shown_id    the object whose properties are on screen right now, BEFORE this press
+ *                    changed anything; 0 when they are closed or hidden
+ * @return TRUE when this press begins a new run.
+ */
+gboolean dt_canvas_click_sequence_press(dt_canvas_click_sequence_t *sequence, const dt_canvas_click_t *click,
+                                        guint delay_ms, guint distance_px, uint32_t shown_id);
+
+/** @brief Note that the latest press took a handle rather than an object or the background. */
+void dt_canvas_click_sequence_took_handle(dt_canvas_click_sequence_t *sequence);
+
+/**
+ * @brief Whether the double click just reported began on a handle, which is to say its first
+ * press took one. A press can only take the handles of what is ALREADY selected, so the first
+ * press of a double click on an unselected frame selects it and brings its handles out under
+ * the second: those were not there when the user aimed, and must not swallow the double click.
+ */
+gboolean dt_canvas_click_sequence_began_on_handle(const dt_canvas_click_sequence_t *sequence);
+
+/**
+ * @brief The properties just closed: whatever showed before the presses of the run so far no
+ * longer leads into anything.
+ */
+void dt_canvas_click_sequence_closed(dt_canvas_click_sequence_t *sequence);
+
+/**
+ * @brief Answer a double click on an object, once per run.
+ * @param object_id the object under the double click
+ */
+dt_canvas_double_click_t dt_canvas_click_sequence_double(dt_canvas_click_sequence_t *sequence,
+                                                         uint32_t object_id);
+
+/**
+ * @brief Whether a kind has something to drill into: a text frame its editor, a picture the
+ * darkroom, a drawing its file. A map and a connector are all properties.
+ */
+gboolean dt_canvas_props_has_content_action(uint32_t kind);
+
 #ifdef __cplusplus
 }
 #endif

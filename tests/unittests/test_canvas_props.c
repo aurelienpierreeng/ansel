@@ -1092,9 +1092,255 @@ static int _group_teardown(void **state)
   return 0;
 }
 
+/* --- the double-click drill rule ------------------------------------------------------------ */
+
+/** GTK's default double-click delay and distance. */
+#define DELAY_MS 400u
+#define DISTANCE_PX 5u
+/** A press this long after the previous one pairs with it. */
+#define FAST_MS 120u
+
+/** A place on the screen, and one far enough from it that GDK never pairs presses across the two. */
+static const double HERE_X = 300.0;
+static const double HERE_Y = 200.0;
+static const double THERE_X = 520.0;
+static const double THERE_Y = 90.0;
+
+/** The clock and the place a sequence of presses is played at. */
+typedef struct click_player_t
+{
+  dt_canvas_click_sequence_t sequence;
+  guint32 clock_ms;
+} click_player_t;
+
+static void _player_init(click_player_t *player, const guint32 clock_ms)
+{
+  memset(player, 0, sizeof(*player));
+  player->clock_ms = clock_ms;
+}
+
+/** A left press `gap_ms` after the previous one, at (x, y), with `shown_id`'s properties on screen. */
+static gboolean _press_at(click_player_t *player, const guint32 gap_ms, const double x, const double y,
+                          const uint32_t shown_id)
+{
+  player->clock_ms += gap_ms;
+  const dt_canvas_click_t click = { .time_ms = player->clock_ms, .x = x, .y = y, .button = 1 };
+  return dt_canvas_click_sequence_press(&player->sequence, &click, DELAY_MS, DISTANCE_PX, shown_id);
+}
+
+/**
+ * A press at the usual place and, when GDK reports it as completing a double click, the answer
+ * to that double click on `object_id`. `shown_id` is whose properties are on screen when the
+ * press happens -- which for a press after an opening is the object that opening showed.
+ */
+static dt_canvas_double_click_t _play(click_player_t *player, const guint32 gap_ms, const uint32_t shown_id,
+                                      const gboolean reported_double, const uint32_t object_id)
+{
+  _press_at(player, gap_ms, HERE_X, HERE_Y, shown_id);
+  if(!reported_double) return DT_CANVAS_DOUBLE_CLICK_NOTHING;
+  return dt_canvas_click_sequence_double(&player->sequence, object_id);
+}
+
+/** A double click on an object whose properties are closed opens them; a second one drills in. */
+static void _a_double_click_opens_and_a_second_one_drills(void **state)
+{
+  (void)state;
+  const uint32_t object_id = 7;
+  click_player_t player;
+  _player_init(&player, 1000);
+  assert_int_equal(_play(&player, 0, 0, FALSE, object_id), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+  assert_int_equal(_play(&player, FAST_MS, 0, TRUE, object_id), DT_CANVAS_DOUBLE_CLICK_OPEN);
+  // A pause, then another double click: its first press finds the properties showing.
+  assert_int_equal(_play(&player, 2 * DELAY_MS, object_id, FALSE, object_id), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+  assert_int_equal(_play(&player, FAST_MS, object_id, TRUE, object_id), DT_CANVAS_DOUBLE_CLICK_DRILL);
+}
+
+/**
+ * Five fast clicks: GDK reports a double click on the second press, a triple on the third, and
+ * another double on the fifth. From closed properties the burst opens them and goes no further,
+ * although by the fourth press the properties it opened are on screen.
+ */
+static void _a_burst_of_clicks_never_drills(void **state)
+{
+  (void)state;
+  const uint32_t object_id = 7;
+  click_player_t player;
+  _player_init(&player, 5000);
+  assert_int_equal(_play(&player, 0, 0, FALSE, object_id), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+  assert_int_equal(_play(&player, FAST_MS, 0, TRUE, object_id), DT_CANVAS_DOUBLE_CLICK_OPEN);
+  assert_int_equal(_play(&player, FAST_MS, object_id, FALSE, object_id), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+  assert_int_equal(_play(&player, FAST_MS, object_id, FALSE, object_id), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+  assert_int_equal(_play(&player, FAST_MS, object_id, TRUE, object_id), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+
+  // A burst that began with the properties showing drills once, on its first double click.
+  player.clock_ms += 2 * DELAY_MS;
+  assert_int_equal(_play(&player, 0, object_id, FALSE, object_id), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+  assert_int_equal(_play(&player, FAST_MS, object_id, TRUE, object_id), DT_CANVAS_DOUBLE_CLICK_DRILL);
+  assert_int_equal(_play(&player, FAST_MS, object_id, FALSE, object_id), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+  assert_int_equal(_play(&player, FAST_MS, object_id, FALSE, object_id), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+  assert_int_equal(_play(&player, FAST_MS, object_id, TRUE, object_id), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+}
+
+/**
+ * A run ends where GDK stops pairing presses: at the delay itself (GDK pairs strictly sooner),
+ * past the distance along either axis, and on another button. Timestamps wrap, and a pair across
+ * the wrap is still a pair.
+ */
+static void _a_run_ends_where_gdk_stops_pairing_presses(void **state)
+{
+  (void)state;
+  click_player_t player;
+  _player_init(&player, 1000);
+  assert_true(_press_at(&player, 0, HERE_X, HERE_Y, 0));
+  assert_false(_press_at(&player, DELAY_MS - 1, HERE_X, HERE_Y, 0));
+  assert_true(_press_at(&player, DELAY_MS, HERE_X, HERE_Y, 0));
+
+  // The distance is inclusive, from the previous press, and measured on each axis on its own
+  // rather than as a length: five pixels across and five down pair, though they are seven apart.
+  assert_false(_press_at(&player, FAST_MS, HERE_X + DISTANCE_PX, HERE_Y + DISTANCE_PX, 0));
+  assert_true(_press_at(&player, FAST_MS, HERE_X + DISTANCE_PX, HERE_Y + 2 * DISTANCE_PX + 1.0, 0));
+  assert_true(_press_at(&player, FAST_MS, HERE_X + 2 * DISTANCE_PX + 1.0, HERE_Y + 2 * DISTANCE_PX + 1.0, 0));
+
+  const dt_canvas_click_t right = { .time_ms = player.clock_ms + FAST_MS, .x = player.sequence.last.x,
+                                    .y = player.sequence.last.y, .button = 3 };
+  assert_true(dt_canvas_click_sequence_press(&player.sequence, &right, DELAY_MS, DISTANCE_PX, 0));
+  player.clock_ms = right.time_ms;
+  assert_true(_press_at(&player, FAST_MS, player.sequence.last.x, player.sequence.last.y, 0));
+
+  _player_init(&player, G_MAXUINT32 - 50u);
+  assert_true(_press_at(&player, 0, HERE_X, HERE_Y, 0));
+  assert_false(_press_at(&player, FAST_MS, HERE_X, HERE_Y, 0));
+  assert_true(player.clock_ms < FAST_MS);
+
+  // Every press is counted, paired or not: that is what a deferred action checks.
+  assert_int_equal(player.sequence.press_count, 2);
+}
+
+/**
+ * The double click GDK reports is read against what showed before ITS OWN first press, the press
+ * before the latest -- neither before the run's first press, nor before the latest press itself.
+ */
+static void _a_double_click_reads_its_own_first_press(void **state)
+{
+  (void)state;
+  const uint32_t object_id = 4;
+  click_player_t player;
+  _player_init(&player, 1000);
+  // The properties were open when the run began and are gone by the double click's first press.
+  _press_at(&player, 0, HERE_X, HERE_Y, object_id);
+  _press_at(&player, FAST_MS, HERE_X, HERE_Y, 0);
+  _press_at(&player, FAST_MS, HERE_X, HERE_Y, 0);
+  assert_int_equal(dt_canvas_click_sequence_double(&player.sequence, object_id), DT_CANVAS_DOUBLE_CLICK_OPEN);
+
+  // Closed at the first press, and open by the second: the double click still only opens them.
+  _player_init(&player, 1000);
+  _press_at(&player, 0, HERE_X, HERE_Y, 0);
+  _press_at(&player, FAST_MS, HERE_X, HERE_Y, object_id);
+  assert_int_equal(dt_canvas_click_sequence_double(&player.sequence, object_id), DT_CANVAS_DOUBLE_CLICK_OPEN);
+}
+
+/**
+ * A double click on 4, then at once one on 9, somewhere else: GDK pairs the second pair of
+ * presses on its own, and so does the run, whose one answer 4 had spent -- 9's properties open.
+ */
+static void _a_double_click_elsewhere_is_answered_on_its_own(void **state)
+{
+  (void)state;
+  click_player_t player;
+  _player_init(&player, 1000);
+  _press_at(&player, 0, HERE_X, HERE_Y, 0);
+  _press_at(&player, FAST_MS, HERE_X, HERE_Y, 0);
+  assert_int_equal(dt_canvas_click_sequence_double(&player.sequence, 4), DT_CANVAS_DOUBLE_CLICK_OPEN);
+  _press_at(&player, FAST_MS, THERE_X, THERE_Y, 4);
+  _press_at(&player, FAST_MS, THERE_X, THERE_Y, 0);
+  assert_int_equal(dt_canvas_click_sequence_double(&player.sequence, 9), DT_CANVAS_DOUBLE_CLICK_OPEN);
+}
+
+/**
+ * Properties that close after the double click's first press lead nowhere: a click on the
+ * background right beside the object closes them and pairs with the next press, on the object.
+ */
+static void _properties_closed_since_the_first_press_do_not_drill(void **state)
+{
+  (void)state;
+  const uint32_t object_id = 4;
+  click_player_t player;
+  _player_init(&player, 1000);
+  _press_at(&player, 0, HERE_X, HERE_Y, object_id);
+  dt_canvas_click_sequence_closed(&player.sequence);
+  _press_at(&player, FAST_MS, HERE_X + 2.0, HERE_Y, 0);
+  assert_int_equal(dt_canvas_click_sequence_double(&player.sequence, object_id), DT_CANVAS_DOUBLE_CLICK_OPEN);
+}
+
+/**
+ * Properties showing for another object do not drill into this one: the double click opens this
+ * one's. And a double click on nothing answers nothing and leaves the run's one answer unspent.
+ */
+static void _only_the_objects_own_properties_lead_into_it(void **state)
+{
+  (void)state;
+  click_player_t player;
+  _player_init(&player, 1000);
+  _play(&player, 0, 4, FALSE, 0);
+  assert_int_equal(_play(&player, FAST_MS, 4, TRUE, 0), DT_CANVAS_DOUBLE_CLICK_NOTHING);
+  assert_int_equal(dt_canvas_click_sequence_double(&player.sequence, 5), DT_CANVAS_DOUBLE_CLICK_OPEN);
+  player.clock_ms += 2 * DELAY_MS;
+  _play(&player, 0, 4, FALSE, 0);
+  _play(&player, FAST_MS, 4, FALSE, 0);
+  assert_int_equal(dt_canvas_click_sequence_double(&player.sequence, 4), DT_CANVAS_DOUBLE_CLICK_DRILL);
+}
+
+/**
+ * A handle takes a double click only when the double click's first press took one: a first press
+ * that selected the frame, bringing its handles out under the second, leaves the double click to
+ * the frame.
+ */
+static void _a_double_click_takes_a_handle_only_when_its_first_press_did(void **state)
+{
+  (void)state;
+  click_player_t player;
+  _player_init(&player, 1000);
+  _press_at(&player, 0, HERE_X, HERE_Y, 0);
+  _press_at(&player, FAST_MS, HERE_X, HERE_Y, 0);
+  dt_canvas_click_sequence_took_handle(&player.sequence);
+  assert_false(dt_canvas_click_sequence_began_on_handle(&player.sequence));
+
+  _press_at(&player, 2 * DELAY_MS, HERE_X, HERE_Y, 0);
+  dt_canvas_click_sequence_took_handle(&player.sequence);
+  _press_at(&player, FAST_MS, HERE_X, HERE_Y, 0);
+  dt_canvas_click_sequence_took_handle(&player.sequence);
+  assert_true(dt_canvas_click_sequence_began_on_handle(&player.sequence));
+
+  // And a handle the first press took does not stay taken for the presses after it.
+  _press_at(&player, 2 * DELAY_MS, HERE_X, HERE_Y, 0);
+  _press_at(&player, FAST_MS, HERE_X, HERE_Y, 0);
+  assert_false(dt_canvas_click_sequence_began_on_handle(&player.sequence));
+}
+
+/** Only what has something inside it is drilled into. */
+static void _only_texts_pictures_and_drawings_have_a_content_action(void **state)
+{
+  (void)state;
+  assert_true(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_TEXT));
+  assert_true(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_IMAGE));
+  assert_true(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_SVG));
+  assert_false(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_MAP));
+  assert_false(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_CONNECTOR));
+  assert_false(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_NONE));
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
+    cmocka_unit_test(_a_double_click_opens_and_a_second_one_drills),
+    cmocka_unit_test(_a_burst_of_clicks_never_drills),
+    cmocka_unit_test(_a_run_ends_where_gdk_stops_pairing_presses),
+    cmocka_unit_test(_a_double_click_reads_its_own_first_press),
+    cmocka_unit_test(_a_double_click_elsewhere_is_answered_on_its_own),
+    cmocka_unit_test(_properties_closed_since_the_first_press_do_not_drill),
+    cmocka_unit_test(_only_the_objects_own_properties_lead_into_it),
+    cmocka_unit_test(_a_double_click_takes_a_handle_only_when_its_first_press_did),
+    cmocka_unit_test(_only_texts_pictures_and_drawings_have_a_content_action),
     cmocka_unit_test(_every_property_is_described_once),
     cmocka_unit_test(_a_numbers_soft_range_and_neutral_lie_inside_its_hard_range),
     cmocka_unit_test(_pairs_point_at_each_other),

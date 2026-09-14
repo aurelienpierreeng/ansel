@@ -65,6 +65,7 @@ typedef enum dt_canvas_action_t
    * inserting one in the middle renumbers every action after it.
    */
   DT_CANVAS_ACTION_ADD_SVG,
+  DT_CANVAS_ACTION_PROPERTIES, ///< show the one selected object's properties, as a double click does
   DT_CANVAS_ACTION_LAST
 } dt_canvas_action_t;
 

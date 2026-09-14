@@ -1141,6 +1141,19 @@ gboolean dt_canvas_snap_to_pages(const dt_canvas_t *canvas, const dt_canvas_rect
  * without adding one -- dt_canvas_connector_add_via() touches the document.
  */
 void dt_canvas_route_midpoint(const dt_canvas_route_t *route, double *x, double *y);
+/**
+ * @brief The point a fraction of the way along a route, by arc length: 0 its start, 1 its end.
+ * @details The chord's point at that fraction when the route has no length to walk.
+ */
+void dt_canvas_route_point_at(const dt_canvas_route_t *route, double fraction, double *x, double *y);
+/**
+ * @brief How far along a route, by arc length, the route passes closest to a point.
+ * @details The inverse of dt_canvas_route_point_at() for a point on the route, so a place picked
+ * on a connector can be found again after the frames it joins have moved. One half for a route
+ * with no length.
+ * @return a fraction in [0, 1]
+ */
+double dt_canvas_route_fraction_at(const dt_canvas_route_t *route, double x, double y);
 /** @brief Put a waypoint on a connector, at the middle of its current route. */
 void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connector);
 /** @brief Remove a connector's waypoint. */

@@ -1100,9 +1100,65 @@ static void _a_waypoint_is_added_at_the_route_midpoint(void **state)
   dt_canvas_free(canvas);
 }
 
+/**
+ * A place picked on a connector is kept as a fraction of its route's length, and found again
+ * from it. On the bent route (100 along, 300 down) the corner is a quarter of the way; a point
+ * off the route counts where the route passes closest to it -- the corner itself for a point
+ * out beyond the bend, not a place on either leg's extension; and on every routing the fraction
+ * of a point taken at a fraction is that fraction.
+ */
+static void _a_place_on_a_route_is_a_fraction_of_its_length(void **state)
+{
+  (void)state;
+  dt_canvas_route_t bent;
+  memset(&bent, 0, sizeof(bent));
+  bent.to_x = 100.0;
+  bent.to_y = 300.0;
+  bent.point_count = 3;
+  const double bent_points[6] = { 0.0, 0.0, 100.0, 0.0, 100.0, 300.0 };
+  memcpy(bent.points, bent_points, sizeof(bent_points));
+  double corner_x = 0.0;
+  double corner_y = 0.0;
+  dt_canvas_route_point_at(&bent, 0.25, &corner_x, &corner_y);
+  assert_double_equal(corner_x, 100.0, 1e-12);
+  assert_double_equal(corner_y, 0.0, 1e-12);
+  assert_double_equal(dt_canvas_route_fraction_at(&bent, 100.0, 0.0), 0.25, 1e-12);
+  assert_double_equal(dt_canvas_route_fraction_at(&bent, 160.0, 200.0), 0.75, 1e-12);
+  assert_double_equal(dt_canvas_route_fraction_at(&bent, 130.0, -40.0), 0.25, 1e-12);
+  assert_double_equal(dt_canvas_route_fraction_at(&bent, -50.0, -40.0), 0.0, 1e-12);
+  assert_double_equal(dt_canvas_route_fraction_at(&bent, 90.0, 900.0), 1.0, 1e-12);
+
+  dt_canvas_route_t still;
+  memset(&still, 0, sizeof(still));
+  still.point_count = 2;
+  assert_double_equal(dt_canvas_route_fraction_at(&still, 10.0, 10.0), 0.5, 1e-12);
+
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *left = dt_canvas_add_image(canvas, 0.0, 0.0, 1000, 1000);
+  dt_canvas_object_t *right = dt_canvas_add_image(canvas, 1300.0, 700.0, 1000, 1000);
+  dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, left->id, right->id);
+  const uint32_t routings[3] = { DT_CANVAS_ROUTING_STRAIGHT, DT_CANVAS_ROUTING_SQUARE, DT_CANVAS_ROUTING_CUBIC };
+  for(int routing = 0; routing < 3; routing++)
+  {
+    connector->connector.routing = routings[routing];
+    dt_canvas_route_t route;
+    assert_true(dt_canvas_connector_route(canvas, connector, &route));
+    for(int step = 0; step <= 20; step++)
+    {
+      const double fraction = step / 20.0;
+      double x = 0.0;
+      double y = 0.0;
+      dt_canvas_route_point_at(&route, fraction, &x, &y);
+      assert_double_equal(dt_canvas_route_fraction_at(&route, x, y), fraction, 1e-9);
+    }
+  }
+  dt_canvas_free(canvas);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
+    cmocka_unit_test(_a_place_on_a_route_is_a_fraction_of_its_length),
     cmocka_unit_test(_every_site_catches_its_centre_and_lets_go_past_its_reach),
     cmocka_unit_test(_a_handle_that_is_not_a_number_catches_nothing),
     cmocka_unit_test(_the_knob_floats_a_screen_distance_above_a_turned_frame),
