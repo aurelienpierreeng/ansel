@@ -1827,13 +1827,13 @@ static void _a_drawing_is_drawn_at_the_size_it_is_shown_at(void **state)
   GBytes *bytes = g_bytes_new_take(contents, length);
 
   // Drawn at the size asked for: the square's edge is a hard one, whatever that size is.
-  cairo_surface_t *large = dt_canvas_render_svg(bytes, 512, 512);
+  cairo_surface_t *large = dt_canvas_render_svg(bytes, 512, 512, 0, 0);
   assert_non_null(large);
   assert_int_equal(cairo_image_surface_get_width(large), 512);
   assert_true(_sharpest_step(large) > 200);
 
   // Against the alternative: the file's own 32 points, blown up to the same 512 by resampling.
-  cairo_surface_t *small = dt_canvas_render_svg(bytes, 0, 0);
+  cairo_surface_t *small = dt_canvas_render_svg(bytes, 0, 0, 0, 0);
   assert_non_null(small);
   assert_int_equal(cairo_image_surface_get_width(small), 32);
   cairo_surface_t *stretched = dt_canvas_render_rescale(small, 512, 512);
@@ -1892,6 +1892,87 @@ static void _a_picture_and_a_drawing_keep_their_shape_unless_told_not_to(void **
 
   dt_canvas_free(restored);
   dt_canvas_free(canvas);
+  g_remove(path);
+  g_free(path);
+}
+
+
+static void _a_drawings_sprite_is_exactly_the_size_it_was_asked_for(void **state)
+{
+  (void)state;
+  /*
+   * The painter blits a sprite ONE PIXEL TO ONE at a corner it worked out itself, so a surface
+   * of any other size lands small in the corner of where it belongs -- reported as a drawing
+   * that vanishes or jumps as the zoom passes some threshold, which is where an internal
+   * ceiling on the raster used to change the size underneath the caller. A ceiling is still
+   * needed, so that a drawing across a wall-sized page cannot ask for a raster nobody has the
+   * memory for; it is applied to what is RENDERED and the result is brought back to the size
+   * that was asked for.
+   */
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' "
+                           "viewBox='0 0 300 200'><rect width='300' height='200' fill='#123456'/></svg>");
+  gchar *contents = NULL;
+  gsize length = 0;
+  assert_true(g_file_get_contents(path, &contents, &length, NULL));
+  GBytes *bytes = g_bytes_new_take(contents, length);
+  static const int wanted[][2] = { { 300, 200 }, { 301, 201 }, { 4000, 2667 }, { 6000, 4000 }, { 9000, 6000 } };
+  for(guint idx = 0; idx < G_N_ELEMENTS(wanted); idx++)
+  {
+    cairo_surface_t *sprite = dt_canvas_render_svg(bytes, wanted[idx][0], wanted[idx][1], 0, 0);
+    assert_non_null(sprite);
+    assert_int_equal(cairo_image_surface_get_width(sprite), wanted[idx][0]);
+    assert_int_equal(cairo_image_surface_get_height(sprite), wanted[idx][1]);
+    cairo_surface_destroy(sprite);
+  }
+  g_bytes_unref(bytes);
+  g_remove(path);
+  g_free(path);
+}
+
+static void _a_drawing_is_drawn_at_the_boxs_size_not_the_sprites(void **state)
+{
+  (void)state;
+  /*
+   * The painter asks for a sprite a pixel or two larger than the box the picture occupies, so
+   * that the clip and not the sprite's edge ends it. A photograph stretched over those extra
+   * pixels loses a sliver of photograph that nobody sees. A drawing stretched over them has
+   * its last row or two of ink pushed outside the clip -- the missing rows at the bottom of a
+   * drawing. Drawn at the box's size and centred in the sprite, the margin is empty and the
+   * clip trims nothing that was drawn.
+   */
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' "
+                           "viewBox='0 0 100 100'><rect width='100' height='100' fill='#000000'/></svg>");
+  gchar *contents = NULL;
+  gsize length = 0;
+  assert_true(g_file_get_contents(path, &contents, &length, NULL));
+  GBytes *bytes = g_bytes_new_take(contents, length);
+
+  // A sprite four pixels larger than the box, carrying a box-sized drawing.
+  cairo_surface_t *sprite = dt_canvas_render_svg(bytes, 104, 104, 100, 100);
+  assert_non_null(sprite);
+  assert_int_equal(cairo_image_surface_get_width(sprite), 104);
+  const uint8_t *pixels = cairo_image_surface_get_data(sprite);
+  const int stride = cairo_image_surface_get_stride(sprite);
+  // Two pixels of empty margin either side, and a hundred of solid ink between them: the ink
+  // ends where the box ends, which is where the clip is.
+  assert_int_equal(pixels[(size_t)0 * stride + 52 * 4 + 3], 0);
+  assert_int_equal(pixels[(size_t)1 * stride + 52 * 4 + 3], 0);
+  assert_int_equal(pixels[(size_t)2 * stride + 52 * 4 + 3], 255);
+  assert_int_equal(pixels[(size_t)101 * stride + 52 * 4 + 3], 255);
+  assert_int_equal(pixels[(size_t)102 * stride + 52 * 4 + 3], 0);
+  assert_int_equal(pixels[(size_t)103 * stride + 52 * 4 + 3], 0);
+  cairo_surface_destroy(sprite);
+
+  // Asked to fill the sprite, it fills the sprite: a photograph's bargain, unchanged.
+  cairo_surface_t *filled = dt_canvas_render_svg(bytes, 104, 104, 0, 0);
+  assert_non_null(filled);
+  const uint8_t *full = cairo_image_surface_get_data(filled);
+  const int full_stride = cairo_image_surface_get_stride(filled);
+  assert_int_equal(full[(size_t)0 * full_stride + 52 * 4 + 3], 255);
+  assert_int_equal(full[(size_t)103 * full_stride + 52 * 4 + 3], 255);
+  cairo_surface_destroy(filled);
+
+  g_bytes_unref(bytes);
   g_remove(path);
   g_free(path);
 }
@@ -2056,6 +2137,8 @@ int main(void)
     cmocka_unit_test(_an_auto_height_frame_grows_downward_and_settles),
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
     cmocka_unit_test(_a_feathered_cutout_covers_all_of_its_fade),
+    cmocka_unit_test(_a_drawings_sprite_is_exactly_the_size_it_was_asked_for),
+    cmocka_unit_test(_a_drawing_is_drawn_at_the_boxs_size_not_the_sprites),
     cmocka_unit_test(_a_drawing_arrives_at_the_size_its_file_states),
     cmocka_unit_test(_a_drawing_is_rasterised_whole_and_then_brought_into_the_layer),
     cmocka_unit_test(_text_flows_around_what_a_drawing_draws_not_its_box),

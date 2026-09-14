@@ -892,7 +892,8 @@ static gboolean _looks_like_svg(GBytes *bytes)
  * transparent pixel comes out at the wrong lightness -- which on an anti-aliased edge is every
  * pixel of every outline in the drawing.
  */
-cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const int want_height)
+cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const int want_height,
+                                      const int content_width, const int content_height)
 {
   gsize length = 0;
   const void *data = g_bytes_get_data(bytes, &length);
@@ -941,16 +942,38 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
     width = MAX((int)lround(points_wide), 1);
     height = MAX((int)lround(points_high), 1);
   }
+  /*
+   * The DRAWING's size within that surface, which is not always the surface's own: the painter
+   * asks for a sprite a pixel or two larger than the box it will occupy, so that the clip and
+   * not the sprite's edge ends the picture. A photograph stretched over those extra pixels
+   * loses a sliver of photograph and nobody sees it; a drawing stretched over them has its
+   * last row or two of ink pushed outside the clip, which is exactly the missing rows at the
+   * bottom of a drawing. Drawn at the box's own size and centred in the sprite instead, the
+   * clip trims empty margin and no ink is lost.
+   */
+  int drawn_width = content_width > 0 ? MIN(content_width, width) : width;
+  int drawn_height = content_height > 0 ? MIN(content_height, height) : height;
   const int longest = MAX(width, height);
+  gboolean capped = FALSE;
+  int surface_width = width;
+  int surface_height = height;
   if(longest > CANVAS_SVG_MAX_EDGE)
   {
-    // A ceiling, so a drawing placed across a wall-sized page cannot ask for a raster nobody
-    // has the memory for; at that size the scaling that follows is invisible anyway.
-    width = MAX(width * CANVAS_SVG_MAX_EDGE / longest, 1);
-    height = MAX(height * CANVAS_SVG_MAX_EDGE / longest, 1);
+    /*
+     * A ceiling, so a drawing across a wall-sized page cannot ask for a raster nobody has the
+     * memory for. The surface asked for is still the surface RETURNED -- the painter blits it
+     * one pixel to one and a sprite of another size lands small in the corner of where it
+     * belongs, which is a drawing that vanishes or jumps as the zoom crosses the ceiling --
+     * so the drawing is rendered smaller and scaled back up to the size that was asked for.
+     */
+    capped = TRUE;
+    surface_width = MAX(width * CANVAS_SVG_MAX_EDGE / longest, 1);
+    surface_height = MAX(height * CANVAS_SVG_MAX_EDGE / longest, 1);
+    drawn_width = MAX(drawn_width * CANVAS_SVG_MAX_EDGE / longest, 1);
+    drawn_height = MAX(drawn_height * CANVAS_SVG_MAX_EDGE / longest, 1);
   }
 
-  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, surface_width, surface_height);
   if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
   {
     cairo_surface_destroy(surface);
@@ -958,7 +981,10 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
     return NULL;
   }
   cairo_t *cr = cairo_create(surface);
-  RsvgRectangle viewport = { .x = 0.0, .y = 0.0, .width = (double)width, .height = (double)height };
+  RsvgRectangle viewport = { .x = (double)(surface_width - drawn_width) * 0.5,
+                             .y = (double)(surface_height - drawn_height) * 0.5,
+                             .width = (double)drawn_width,
+                             .height = (double)drawn_height };
   const gboolean drawn = rsvg_handle_render_document(handle, cr, &viewport, &error);
   cairo_destroy(cr);
   g_object_unref(handle);
@@ -975,10 +1001,10 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
   uint8_t *pixels = cairo_image_surface_get_data(surface);
   const int stride = cairo_image_surface_get_stride(surface);
   _layer_luts_init();
-  for(int row = 0; row < height; row++)
+  for(int row = 0; row < surface_height; row++)
   {
     uint8_t *line = pixels + (size_t)row * stride;
-    for(int column = 0; column < width; column++)
+    for(int column = 0; column < surface_width; column++)
     {
       uint8_t *pixel = line + (size_t)column * 4;
       const uint8_t alpha = pixel[3];
@@ -1006,7 +1032,11 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
     }
   }
   cairo_surface_mark_dirty(surface);
-  return surface;
+  if(!capped) return surface;
+  // Back to the size that was asked for, since that is what the caller will blit one to one.
+  cairo_surface_t *asked = dt_canvas_render_rescale(surface, width, height);
+  cairo_surface_destroy(surface);
+  return asked;
 }
 
 cairo_surface_t *dt_canvas_render_svg_coverage(GBytes *svg, const int width, const int height)
@@ -1066,7 +1096,7 @@ cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, const uint32_t colorspace
 {
   if(IS_NULL_PTR(jpeg)) return NULL;
   // No size asked for: the drawing's own, which is what the mask and the export start from.
-  if(_looks_like_svg(jpeg)) return dt_canvas_render_svg(jpeg, 0, 0);
+  if(_looks_like_svg(jpeg)) return dt_canvas_render_svg(jpeg, 0, 0, 0, 0);
   int width = 0;
   int height = 0;
   uint8_t *rgba = _decode_rgba(jpeg, &width, &height);
@@ -1668,7 +1698,8 @@ cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, c
 }
 
 cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
-                                                    const int width, const int height)
+                                                    const int width, const int height, const int content_width,
+                                                    const int content_height)
 {
   if(width <= 0 || height <= 0) return NULL;
   cairo_surface_t *source = dt_canvas_surface_cache_get(cache, object);
@@ -1702,7 +1733,8 @@ cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *c
    * oversample factor to guess at either.
    */
   cairo_surface_t *sprite = object->kind == DT_CANVAS_OBJECT_SVG
-                                ? dt_canvas_render_svg(dt_canvas_object_raster(object), width, height)
+                                ? dt_canvas_render_svg(dt_canvas_object_raster(object), width, height,
+                                                       content_width, content_height)
                                 : dt_canvas_render_rescale(source, width, height);
   if(IS_NULL_PTR(sprite)) return NULL;
   if(!IS_NULL_PTR(entry->sprite[oldest]))

@@ -372,6 +372,19 @@ drawn at size and under 60 stretched from its own. There is no oversample factor
 either, only a ceiling (`CANVAS_SVG_MAX_EDGE`) so a drawing across a wall-sized page cannot ask
 for a raster nobody has the memory for.
 
+Two things the sprite path demands of that, both of which a photograph is forgiving about and a
+drawing is not. **The surface returned is EXACTLY the size asked for**: the painter blits one
+pixel to one at a corner it worked out itself, so a surface of any other size lands small in the
+corner of where it belongs -- which is what an internal ceiling on the raster did as the zoom
+crossed it, reported as a drawing that vanishes or jumps at some zoom levels. The ceiling is
+still there, since a drawing across a wall-sized page must not ask for a raster nobody has the
+memory for; it applies to what is RENDERED, and the result is brought back to the size that was
+asked for. And **the drawing is drawn at the BOX's size, centred in the sprite**, not stretched
+over it: the painter asks for a sprite a pixel or two larger than the box so that the clip and
+not the sprite's edge ends the picture, a photograph stretched over that loses a sliver nobody
+sees, and a drawing stretched over it has its last row or two of ink pushed outside the clip --
+the missing rows at the bottom of a drawing.
+
 **A picture and a drawing keep their proportions unless told not to**
 (`dt_canvas_object_keeps_ratio()`, `DT_CANVAS_OBJECT_FLAG_FREE_RATIO`). The flag is stated the
 FREE way round so that zero is the careful answer: a photograph always kept its shape, a

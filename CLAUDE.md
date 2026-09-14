@@ -3546,6 +3546,15 @@ they are visible.
   shown at 512 pixels, a square's edge is a full step of 255 drawn at size and under 60
   stretched from its own, which is exactly the "blurry at 1:1" a fixed oversample factor buys
   as soon as a frame is bigger than the factor allowed for.
+- **A sprite is EXACTLY the size it was asked for, and a drawing is drawn at the BOX's size
+  inside it.** The painter blits one pixel to one at a corner it computed, so any other size
+  lands small in the corner of where it belongs -- an internal ceiling on an SVG's raster did
+  that as the zoom crossed it, reported as a drawing vanishing or jumping. A ceiling is still
+  needed; it applies to what is RENDERED and the result is scaled back to the size asked for.
+  And the painter deliberately asks for a sprite a pixel or two LARGER than the box so the clip
+  ends the picture: a photograph stretched over that loses a sliver nobody sees, a drawing
+  loses its last rows of ink to the clip, so `get_scaled()` takes the box's size too and a
+  drawing is centred in the padding rather than stretched into it.
 - **A picture and a drawing keep their proportions unless told not to**
   (`dt_canvas_object_keeps_ratio()`). `DT_CANVAS_OBJECT_FLAG_FREE_RATIO` is stated the FREE way
   round so ZERO is the careful answer, and one predicate answers for the corner drag and the

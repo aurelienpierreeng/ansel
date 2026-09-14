@@ -1304,7 +1304,12 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
         const double top = floor(corner_y);
         const int sprite_width = (int)(ceil(corner_x + extent_x) - left);
         const int sprite_height = (int)(ceil(corner_y + extent_y) - top);
-        cairo_surface_t *sprite = dt_canvas_surface_cache_get_scaled(options->cache, object, sprite_width, sprite_height);
+        // The box's own size as well as the sprite's: a drawing is drawn at the first and
+        // centred in the second, so the padding that lets the clip end the picture is empty
+        // rather than two rows of the drawing's own ink.
+        cairo_surface_t *sprite = dt_canvas_surface_cache_get_scaled(options->cache, object, sprite_width,
+                                                                     sprite_height, (int)lround(extent_x),
+                                                                     (int)lround(extent_y));
         if(!IS_NULL_PTR(sprite))
         {
           cairo_identity_matrix(cr);

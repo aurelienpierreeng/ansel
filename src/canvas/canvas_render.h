@@ -143,12 +143,21 @@ void dt_canvas_surface_cache_free(dt_canvas_surface_cache_t *cache);
 cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object);
 
 /**
- * @brief The object's render scaled to exactly `width` x `height` pixels, built once per size
- * and kept -- two sizes per object, so a gesture's reduced frames and the full frame after it
- * both keep theirs -- for the painter to blit pixel for pixel. NULL when there is no render.
+ * @brief The object's render at exactly `width` x `height` pixels, built once per size and
+ * kept -- two sizes per object, so a gesture's reduced frames and the full frame after it both
+ * keep theirs -- for the painter to blit pixel for pixel. NULL when there is no render.
+ *
+ * EXACTLY that size: the painter blits one pixel to one, so a surface of any other size lands
+ * small in the corner of where it belongs.
+ *
+ * `content_width`/`content_height` say how much of that surface the picture itself occupies,
+ * for a caller whose sprite is deliberately a pixel or two larger than the box so that the
+ * clip, and not the sprite's edge, ends the picture. A photograph is stretched over the whole
+ * sprite and loses a sliver nobody sees; a DRAWING is drawn at the content size and centred,
+ * because its last row of ink is a row of ink. 0 fills the surface.
  */
 cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
-                                                    int width, int height);
+                                                    int width, int height, int content_width, int content_height);
 
 /**
  * @brief An RGB24 surface rescaled to `width` x `height`: the average of the source pixels each
@@ -245,10 +254,16 @@ void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, size_t b
  *
  * A drawing has no resolution of its own, so the one to use is whatever it is about to be
  * shown at: pass the pixels wanted and the answer is exact, pass 0 and it comes at the size
- * the file states. Rendered in ONE pass, the way the specification composites an SVG, and only
- * then converted out of sRGB -- see the drawings section of doc/canvas.md.
+ * the file states. `content_width`/`content_height` say how big the DRAWING is inside that
+ * surface -- centred, the rest transparent -- for a caller whose sprite is deliberately larger
+ * than the box the drawing occupies; 0 fills the surface. The surface RETURNED is always the
+ * size asked for, whatever ceiling the renderer applies internally.
+ *
+ * Rendered in ONE pass, the way the specification composites an SVG, and only then converted
+ * out of sRGB -- see the drawings section of doc/canvas.md.
  */
-cairo_surface_t *dt_canvas_render_svg(GBytes *svg, int want_width, int want_height);
+cairo_surface_t *dt_canvas_render_svg(GBytes *svg, int want_width, int want_height, int content_width,
+                                      int content_height);
 
 cairo_surface_t *dt_canvas_render_svg_coverage(GBytes *svg, int width, int height);
 
