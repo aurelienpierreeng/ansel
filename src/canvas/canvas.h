@@ -893,6 +893,14 @@ void dt_canvas_object_corners(const dt_canvas_object_t *object, double corners[8
 /** @brief The axis-aligned box around the rotated frame. */
 dt_canvas_rect_t dt_canvas_object_bounds(const dt_canvas_object_t *object);
 
+/**
+ * @brief How far a point is from the nearest point of a segment, in the units of both.
+ * @details The one measure a connector is picked by: dt_canvas_object_contains() asks it of every
+ * leg, and a handle site shaped as a segment asks it too, so the band a line is caught in cannot
+ * be spelled two ways.
+ */
+double dt_canvas_segment_distance(double px, double py, double ax, double ay, double bx, double by);
+
 /** @brief Is the canvas point inside the rotated frame? Connectors answer by distance to their line. */
 gboolean dt_canvas_object_contains(const dt_canvas_t *canvas, const dt_canvas_object_t *object, double x, double y,
                                    double tolerance);
@@ -1127,6 +1135,12 @@ dt_canvas_rect_t dt_canvas_page_rect(const dt_canvas_t *canvas, int col, int row
 gboolean dt_canvas_snap_to_pages(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving, double threshold,
                                  uint32_t edges, double *delta_x, double *delta_y);
 
+/**
+ * @brief The middle of a route by arc length, where a waypoint added to it would sit.
+ * @details Pure: reads the route and nothing else, so a caller can ask where a waypoint WOULD go
+ * without adding one -- dt_canvas_connector_add_via() touches the document.
+ */
+void dt_canvas_route_midpoint(const dt_canvas_route_t *route, double *x, double *y);
 /** @brief Put a waypoint on a connector, at the middle of its current route. */
 void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connector);
 /** @brief Remove a connector's waypoint. */

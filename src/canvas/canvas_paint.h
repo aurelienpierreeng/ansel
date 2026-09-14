@@ -85,6 +85,18 @@ typedef struct dt_canvas_paint_stats_t
 
 dt_canvas_paint_stats_t dt_canvas_paint_last_stats(void);
 
+/**
+ * @brief How far from an arrowed end of a connector the painter lays ink, in canvas units.
+ *
+ * The head is sized to the line, so this grows with the width. A stored width of zero is
+ * painted two units wide and is answered for as such. The painter grows an object's box by it,
+ * and anything that must not cover an arrowhead asks the same question rather than guessing.
+ * Below a width of one unit it runs short of the head's own back corners, which stay about
+ * 14.9 units from the tip however thin the line: measured, 14.98 units of ink against 14.25 at a
+ * quarter of a unit. From one unit up it covers the head.
+ */
+double dt_canvas_paint_arrow_reach(double line_width);
+
 /** @brief Paint one object. */
 void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                             const dt_canvas_paint_options_t *options);

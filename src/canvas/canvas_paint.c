@@ -2538,6 +2538,12 @@ double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canva
 
 /* --- connectors --------------------------------------------------------------- */
 
+double dt_canvas_paint_arrow_reach(const double line_width)
+{
+  const double width = line_width > 0.0 ? line_width : 2.0;
+  return width + PAINT_ARROW_LENGTH * fmax(width / 2.0, 1.0);
+}
+
 static void _paint_arrow_head(cairo_t *cr, const double tip_x, const double tip_y, const double from_x,
                               const double from_y, const double scale)
 {
@@ -3640,8 +3646,7 @@ static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas
   {
     dt_canvas_route_t route;
     if(!dt_canvas_connector_route(canvas, object, &route) || route.point_count <= 0) return box;
-    const double line_width = object->connector.line_width > 0.0f ? object->connector.line_width : 2.0;
-    const double reach = (line_width + PAINT_ARROW_LENGTH * fmax(line_width / 2.0, 1.0)) * pixels_per_unit;
+    const double reach = dt_canvas_paint_arrow_reach(object->connector.line_width) * pixels_per_unit;
     box = _box_of_points(matrix, route.points, route.point_count, reach);
   }
   if(dt_canvas_shadow_visible(shadow) && shadow->blur > 0.0f)

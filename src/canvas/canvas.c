@@ -1236,8 +1236,8 @@ void dt_canvas_object_to_local(const dt_canvas_object_t *object, double x, doubl
   *local_y = offset_x * sin_r + offset_y * cos_r;
 }
 
-static double _segment_distance(const double px, const double py, const double ax, const double ay, const double bx,
-                                const double by)
+double dt_canvas_segment_distance(const double px, const double py, const double ax, const double ay, const double bx,
+                                  const double by)
 {
   const double segment_x = bx - ax;
   const double segment_y = by - ay;
@@ -1264,8 +1264,8 @@ gboolean dt_canvas_object_contains(const dt_canvas_t *canvas, const dt_canvas_ob
     const double reach = tolerance + object->connector.line_width;
     for(int idx = 0; idx + 1 < route.point_count; idx++)
     {
-      if(_segment_distance(x, y, route.points[2 * idx], route.points[2 * idx + 1], route.points[2 * idx + 2],
-                           route.points[2 * idx + 3])
+      if(dt_canvas_segment_distance(x, y, route.points[2 * idx], route.points[2 * idx + 1], route.points[2 * idx + 2],
+                                    route.points[2 * idx + 3])
          <= reach)
         return TRUE;
     }
@@ -1735,32 +1735,38 @@ gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_ob
   return route->point_count >= 2;
 }
 
+void dt_canvas_route_midpoint(const dt_canvas_route_t *route, double *x, double *y)
+{
+  // By arc length, whatever the routing and however many points it was flattened to: the
+  // chord's middle only when the route has no length to walk.
+  double total = 0.0;
+  for(int idx = 0; idx + 1 < route->point_count; idx++)
+    total += hypot(route->points[2 * idx + 2] - route->points[2 * idx], route->points[2 * idx + 3] - route->points[2 * idx + 1]);
+  double walked = 0.0;
+  *x = (route->from_x + route->to_x) * 0.5;
+  *y = (route->from_y + route->to_y) * 0.5;
+  for(int idx = 0; idx + 1 < route->point_count; idx++)
+  {
+    const double segment = hypot(route->points[2 * idx + 2] - route->points[2 * idx], route->points[2 * idx + 3] - route->points[2 * idx + 1]);
+    if(walked + segment >= total * 0.5 && segment > 0.0)
+    {
+      const double fraction = (total * 0.5 - walked) / segment;
+      *x = route->points[2 * idx] + (route->points[2 * idx + 2] - route->points[2 * idx]) * fraction;
+      *y = route->points[2 * idx + 1] + (route->points[2 * idx + 3] - route->points[2 * idx + 1]) * fraction;
+      break;
+    }
+    walked += segment;
+  }
+}
+
 void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connector)
 {
   if(IS_NULL_PTR(canvas) || IS_NULL_PTR(connector) || connector->kind != DT_CANVAS_OBJECT_CONNECTOR) return;
   dt_canvas_route_t route;
   connector->connector.via_count = 0;
   if(!dt_canvas_connector_route(canvas, connector, &route)) return;
-  // The middle of the current route by arc length, so adding a waypoint changes nothing
-  // until it is moved, whatever the routing and however many points it was flattened to.
-  double total = 0.0;
-  for(int idx = 0; idx + 1 < route.point_count; idx++)
-    total += hypot(route.points[2 * idx + 2] - route.points[2 * idx], route.points[2 * idx + 3] - route.points[2 * idx + 1]);
-  double walked = 0.0;
-  connector->connector.via_x = (route.from_x + route.to_x) * 0.5;
-  connector->connector.via_y = (route.from_y + route.to_y) * 0.5;
-  for(int idx = 0; idx + 1 < route.point_count; idx++)
-  {
-    const double segment = hypot(route.points[2 * idx + 2] - route.points[2 * idx], route.points[2 * idx + 3] - route.points[2 * idx + 1]);
-    if(walked + segment >= total * 0.5 && segment > 0.0)
-    {
-      const double fraction = (total * 0.5 - walked) / segment;
-      connector->connector.via_x = route.points[2 * idx] + (route.points[2 * idx + 2] - route.points[2 * idx]) * fraction;
-      connector->connector.via_y = route.points[2 * idx + 1] + (route.points[2 * idx + 3] - route.points[2 * idx + 1]) * fraction;
-      break;
-    }
-    walked += segment;
-  }
+  // The middle of the current route, so adding a waypoint changes nothing until it is moved.
+  dt_canvas_route_midpoint(&route, &connector->connector.via_x, &connector->connector.via_y);
   connector->connector.via_count = 1;
   dt_canvas_touch(canvas);
 }
