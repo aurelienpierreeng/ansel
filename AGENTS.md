@@ -10,6 +10,23 @@ Code should be documented through Doxygen docstrings. In particular, the design 
 
 Design decisions are documented in ./doc Markdown files. While these might be slightly outdated compared to current code, regarding implementation, they hold the initial intents that should prevail in case of misunderstanding of the codebase or disagreements between several APIs.
 
+## Modularity
+
+Features are split into self-enclosed modules that communicate with the core through interfaces. A module is unaware of other modules and unaware of the core; it cares about a minimal number of inputs and states to produce its output. The core orchestrates communication between modules. Modules do not communicate with each other.
+
+**A new job gets a new module.** When a change introduces work this tree did not do before -- listing a directory, scheduling a background job, keeping a cache in step with a row -- the question is not "where does this code fit" but "whose job is this". If no module owns that job, open one, with its own translation unit and its own published interface. Teaching the skill to whichever file happened to need it first is how one translation unit ends up doing three unrelated things, and how one computation ends up written five times in five places.
+
+Two symptoms say a file has taken on a job rather than deepened its own:
+
+- **Its correspondent list grows.** A file that starts including headers from directories it never wrote to before has a new job, not a better version of the old one.
+- **Its halves stop sharing anything.** One translation unit means one include list: each half then compiles against the other half's suppliers, whether it uses them or not.
+
+The test to apply is what the *second* caller would have to do. If the next file needing the same answer would have to copy the code rather than ask for it, the job needed a module and did not get one. Look for that second caller before concluding there is none -- a capability that feels specific is often already hand-rolled in a dozen files.
+
+This does not contradict the helper policy below. That policy forbids indirection that hides behavior, ownership or synchronization at a call site; it explicitly allows self-contained algorithms and data-structure utilities, which is what a module for a distinct job is. The line is not size: it is whether the thing has a job of its own, that can be named and asked a question without knowing who is asking.
+
+Split at the moment the job appears. A module carved out later has to be carved out of something, and the `doc/` plan describing that split is usually stale by then -- so a change that grows a file past the shape such a plan describes updates the plan in the same commit.
+
 ## Helper policy
 
 Do not introduce or keep helper functions whose main effect is to hide:
@@ -82,7 +99,7 @@ After non-trivial code changes, run the narrowest relevant build or test target 
 - Write C in an object-oriented mindset: `.h` are public API, `.c` are private, both should inherit from parent but not from children, they should depend on the least amount of external resources and be fully enclosed (modular). Data structures are classes, they take properties and can take callbacks as methods. Implement abstract API using preprocessor macros.
 - Never reference unused function input arguments as `(void)arg` inside functions. That only creates noise. API functions may have unused arguments, that's life.
 - SQL queries should be hidden behind C APIs to be reused in the C code, don't put SQL code into GUI code, or modules.
-- The code should be modular: features are split into self-enclosed modules that communicate with the core through interfaces. They should be unaware of other modules and unaware of the core, they should care about a minimal number of inputs and states to produce their output. The core is orchestrating communication between modules. Modules should not communicate with each other.
+- The code should be modular: see the Modularity section above.
 - Always use IS_NULL_PTR() and !IS_NULL_PTR() to test for null pointers.
 - Always use dt_free() and dt_free_align() to free pointers.
 - Don't create helper function if they are used at only one place in the code.
