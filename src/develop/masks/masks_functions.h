@@ -150,6 +150,11 @@ typedef struct dt_masks_functions_t
 /* Rasterisation entry points, dispatched only from inside the masks module: the group fold
  * calls get_mask_roi on its children, and the GUI outline builder calls get_points_border.
  * They were declared in the public header with no caller outside this directory. */
+/* A form with its type, its function table and one reference, and nothing else: no conf is
+ * sanitised and the supervisor is not told. For the module's own headless consumers, which
+ * have neither; dt_masks_create() is the one the darkroom uses. */
+dt_masks_form_t *dt_masks_form_new_silent(dt_masks_type_t type);
+
 dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                                                const dt_dev_pixelpipe_iop_t *const piece,
                                                dt_masks_form_t *const form, const dt_iop_roi_t *roi,

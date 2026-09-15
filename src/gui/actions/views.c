@@ -55,6 +55,7 @@ MACRO_VIEW(print);
 MACRO_VIEW(slideshow);
 MACRO_VIEW(map);
 MACRO_VIEW(studio_capture);
+MACRO_VIEW(canvas);
 
 
 void append_views(GtkWidget **menus, GList **lists, const dt_menus_t index)
@@ -77,6 +78,8 @@ void append_views(GtkWidget **menus, GList **lists, const dt_menus_t index)
       callback = view_switch_to_map;
     else if(!g_strcmp0(view->module_name, "studio_capture"))
       callback = view_switch_to_studio_capture;
+    else if(!g_strcmp0(view->module_name, "canvas"))
+      callback = view_switch_to_canvas;
 
     guint key = 0;
     if(!g_strcmp0(view->module_name, "lighttable"))
@@ -90,6 +93,8 @@ void append_views(GtkWidget **menus, GList **lists, const dt_menus_t index)
     else if(!g_strcmp0(view->module_name, "map"))
       key = 0;
     else if(!g_strcmp0(view->module_name, "studio_capture"))
+      key = 0;
+    else if(!g_strcmp0(view->module_name, "canvas"))
       key = 0;
 
     add_no_accel_sub_menu_entry(menus, lists, view->name(view), index, view->module_name, callback,

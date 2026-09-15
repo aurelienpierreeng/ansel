@@ -53,6 +53,9 @@ LAYERS = [
     ('gui', 4),
     ('develop', 5),
     ('iop', 6), ('imageio', 6),
+    # canvas/: the Canvas atelier's document and its renders. It exports library images
+    # through imageio/ (6) and is consumed only by views/ and libs/ (7).
+    ('canvas', 6.5),
     ('libs', 7), ('views', 7), ('chart', 7),
     ('apps', 10),   # executables link the orchestrator, so they sit ABOVE it
     ('app', 9),                       # main.c, darktable.c/h -- directly in src/

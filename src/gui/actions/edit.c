@@ -59,8 +59,10 @@ static gboolean undo_sensitive_callback()
     sensitive = dt_is_undo_list_populated(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   else if(!strcmp(cv->module_name, "darkroom"))
     sensitive = dt_is_undo_list_populated(dt_undo_get_global(), DT_UNDO_DEVELOP);
-  else if(!strcmp(cv->module_name, "darkroom"))
+  else if(!strcmp(cv->module_name, "map"))
     sensitive = dt_is_undo_list_populated(dt_undo_get_global(), DT_UNDO_MAP);
+  else if(!strcmp(cv->module_name, "canvas"))
+    sensitive = dt_is_undo_list_populated(dt_undo_get_global(), DT_UNDO_CANVAS);
 
   return sensitive;
 }
@@ -102,6 +104,7 @@ static gboolean undo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   if(!strcmp(cv->module_name, "lighttable"))    filter = DT_UNDO_LIGHTTABLE;
   else if(!strcmp(cv->module_name, "darkroom")) filter = DT_UNDO_DEVELOP;
   else if(!strcmp(cv->module_name, "map"))      filter = DT_UNDO_MAP;
+  else if(!strcmp(cv->module_name, "canvas"))   filter = DT_UNDO_CANVAS;
 
   if(filter)
   {
@@ -132,8 +135,10 @@ static gboolean redo_sensitive_callback()
     sensitive = dt_is_redo_list_populated(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   else if(!strcmp(cv->module_name, "darkroom"))
     sensitive = dt_is_redo_list_populated(dt_undo_get_global(), DT_UNDO_DEVELOP);
-  else if(!strcmp(cv->module_name, "darkroom"))
+  else if(!strcmp(cv->module_name, "map"))
     sensitive = dt_is_redo_list_populated(dt_undo_get_global(), DT_UNDO_MAP);
+  else if(!strcmp(cv->module_name, "canvas"))
+    sensitive = dt_is_redo_list_populated(dt_undo_get_global(), DT_UNDO_CANVAS);
 
   return sensitive;
 }
@@ -150,6 +155,7 @@ static gboolean redo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   if(!strcmp(cv->module_name, "lighttable"))    filter = DT_UNDO_LIGHTTABLE;
   else if(!strcmp(cv->module_name, "darkroom")) filter = DT_UNDO_DEVELOP;
   else if(!strcmp(cv->module_name, "map"))      filter = DT_UNDO_MAP;
+  else if(!strcmp(cv->module_name, "canvas"))   filter = DT_UNDO_CANVAS;
 
   if(filter)
   {

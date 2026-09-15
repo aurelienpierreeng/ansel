@@ -201,7 +201,7 @@ end:
 #undef SKIP_SPACES
 
 
-static const char *stream_encoder_filters[] = {"/ASCIIHexDecode", "/FlateDecode"};
+static const char *stream_encoder_filters[] = {"/ASCIIHexDecode", "/FlateDecode", "/DCTDecode"};
 
 static void _pdf_set_offset(dt_pdf_t *pdf, int id, size_t offset)
 {
@@ -310,6 +310,10 @@ static size_t _pdf_write_stream(dt_pdf_t *pdf, dt_pdf_stream_encoder_t encoder, 
     case DT_PDF_STREAM_ENCODER_FLATE:
       stream_size = _pdf_stream_encoder_Flate(pdf, data, len);
       break;
+    case DT_PDF_STREAM_ENCODER_DCT:
+      // The bytes are already a JPEG: dt_pdf_add_image_jpeg() writes them itself, and this
+      // path is never asked for them.
+      break;
   }
   return stream_size;
 }
@@ -372,7 +376,7 @@ int dt_pdf_add_icc_from_data(dt_pdf_t *pdf, const unsigned char *data, size_t si
 // this adds an image to the pdf file and returns the info needed to reference it later.
 // if icc_id is 0 then we suppose the pixel data to be in output device space, otherwise the ICC profile object is referenced.
 // if IS_NULL_PTR(image) only the outline can be shown later
-dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int width, int height, int bpp, int icc_id, float border)
+dt_pdf_image_t *dt_pdf_add_image_masked(dt_pdf_t *pdf, const unsigned char *image, int width, int height, int bpp, int icc_id, int smask_id, float border)
 {
   size_t stream_size = 0;
   size_t bytes_written = 0;
@@ -416,6 +420,8 @@ dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int 
     bytes_written += fprintf(pdf->fd, "/ColorSpace [ /ICCBased %d 0 R ]\n", icc_id);
   else
     bytes_written += fprintf(pdf->fd, "/ColorSpace /DeviceRGB\n");
+  // An image stream has no alpha channel; a /SMask is the grey plane that carries one.
+  if(smask_id > 0) bytes_written += fprintf(pdf->fd, "/SMask %d 0 R\n", smask_id);
   bytes_written += fprintf(pdf->fd,
     "/BitsPerComponent %d\n"
     "/Intent /Perceptual\n" // TODO: allow setting it from the outside
@@ -452,6 +458,104 @@ dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int 
   pdf_image->size = bytes_written;
 
   return pdf_image;
+}
+
+dt_pdf_image_t *dt_pdf_add_image_jpeg(dt_pdf_t *pdf, const unsigned char *jpeg, size_t jpeg_size, int width, int height, int icc_id, float border)
+{
+  size_t bytes_written = 0;
+
+  dt_pdf_image_t *pdf_image = calloc(1, sizeof(dt_pdf_image_t));
+  if(IS_NULL_PTR(pdf_image)) return NULL;
+
+  pdf_image->width = width;
+  pdf_image->height = height;
+  pdf_image->outline_mode = (IS_NULL_PTR(jpeg) || jpeg_size == 0);
+  pdf_image->bb_x = border;
+  pdf_image->bb_y = border;
+  pdf_image->bb_width = pdf->page_width - (2 * border);
+  pdf_image->bb_height = pdf->page_height - (2 * border);
+  if(pdf_image->outline_mode) return pdf_image;
+
+  pdf_image->object_id = pdf->next_id++;
+  pdf_image->name_id = pdf->next_image++;
+
+  _pdf_set_offset(pdf, pdf_image->object_id, pdf->bytes_written + bytes_written);
+  bytes_written += fprintf(pdf->fd,
+    "%d 0 obj\n"
+    "<<\n"
+    "/Type /XObject\n"
+    "/Subtype /Image\n"
+    "/Name /Im%d\n"
+    "/Filter [ /DCTDecode ]\n"
+    "/Width %d\n"
+    "/Height %d\n",
+    pdf_image->object_id, pdf_image->name_id, width, height
+  );
+  if(icc_id > 0)
+    bytes_written += fprintf(pdf->fd, "/ColorSpace [ /ICCBased %d 0 R ]\n", icc_id);
+  else
+    bytes_written += fprintf(pdf->fd, "/ColorSpace /DeviceRGB\n");
+  // The length is known before the stream is written, so it needs no indirect object.
+  bytes_written += fprintf(pdf->fd,
+    "/BitsPerComponent 8\n"
+    "/Intent /Perceptual\n"
+    "/Length %" G_GSIZE_FORMAT "\n"
+    ">>\n"
+    "stream\n",
+    jpeg_size
+  );
+  bytes_written += fwrite(jpeg, 1, jpeg_size, pdf->fd);
+  bytes_written += fprintf(pdf->fd,
+    "\n"
+    "endstream\n"
+    "endobj\n"
+  );
+
+  pdf->bytes_written += bytes_written;
+  pdf_image->size = bytes_written;
+
+  return pdf_image;
+}
+
+dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int width, int height, int bpp, int icc_id, float border)
+{
+  return dt_pdf_add_image_masked(pdf, image, width, height, bpp, icc_id, 0, border);
+}
+
+int dt_pdf_add_soft_mask(dt_pdf_t *pdf, const unsigned char *coverage, int width, int height)
+{
+  if(IS_NULL_PTR(pdf) || IS_NULL_PTR(coverage) || width <= 0 || height <= 0) return 0;
+  size_t bytes_written = 0;
+  const int object_id = pdf->next_id++;
+  const int length_id = pdf->next_id++;
+
+  _pdf_set_offset(pdf, object_id, pdf->bytes_written + bytes_written);
+  bytes_written += fprintf(pdf->fd,
+    "%d 0 obj\n"
+    "<<\n"
+    "/Type /XObject\n"
+    "/Subtype /Image\n"
+    "/Filter [ %s ]\n"
+    "/Width %d\n"
+    "/Height %d\n"
+    "/ColorSpace /DeviceGray\n"
+    "/BitsPerComponent 8\n"
+    "/Length %d 0 R\n"
+    ">>\n"
+    "stream\n",
+    object_id, stream_encoder_filters[pdf->default_encoder], width, height, length_id
+  );
+  const size_t stream_size = _pdf_write_stream(pdf, pdf->default_encoder, coverage, (size_t)width * height);
+  if(stream_size == 0) return 0;
+  bytes_written += stream_size;
+  bytes_written += fprintf(pdf->fd, "\nendstream\nendobj\n");
+  _pdf_set_offset(pdf, length_id, pdf->bytes_written + bytes_written);
+  bytes_written += fprintf(pdf->fd, "%d 0 obj\n"
+                                    "%" G_GSIZE_FORMAT "\n"
+                                    "endobj\n",
+                           length_id, stream_size);
+  pdf->bytes_written += bytes_written;
+  return object_id;
 }
 
 dt_pdf_page_t *dt_pdf_add_page(dt_pdf_t *pdf, dt_pdf_image_t **images, int n_images)
