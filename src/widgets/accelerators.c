@@ -1300,14 +1300,29 @@ gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
   // other primary shortcuts still reach the application from anywhere. The function keys are not
   // among them: no slider, toggle or button reads one, so F11 and the colour labels keep working
   // from inside the container exactly as they do from a darkroom slider.
+  //
+  // A text field inside such a container -- a spin button's number -- is one of its controls too.
+  // What it edits with, Ctrl+A, Ctrl+C, Ctrl+V, a word jump, is a key binding of its own class, so it
+  // is offered those bindings first and keeps them; any other key with a modifier goes on to the
+  // shortcuts. Bypassed outright, as a text field anywhere else is, Ctrl+Z and Ctrl+S did nothing at
+  // all while a spin button of the panel held the focus, which it keeps after every click on its arrows.
   if(event->type == GDK_KEY_PRESS || event->type == GDK_KEY_RELEASE)
   {
     GtkWidget *focused = gtk_window_get_focus(GTK_WINDOW(w));
     const gboolean function_key = keyval >= GDK_KEY_F1 && keyval <= GDK_KEY_F35;
     const gboolean key_for_controls = (mods & ~GDK_SHIFT_MASK) == 0 && !function_key;
-    if(!IS_NULL_PTR(focused)
-       && (GTK_IS_EDITABLE(focused) || GTK_IS_TEXT_VIEW(focused)
-           || (key_for_controls && _focus_blocks_plain_keys(focused))))
+    const gboolean blocking_container = !IS_NULL_PTR(focused) && _focus_blocks_plain_keys(focused);
+    const gboolean shortcut_from_field = blocking_container && GTK_IS_EDITABLE(focused) && !key_for_controls;
+    if(shortcut_from_field && event->type == GDK_KEY_PRESS
+       && gtk_bindings_activate_event(G_OBJECT(focused), &event->key))
+    {
+      accels->active_key.accel_key = 0;
+      accels->active_key.accel_mods = 0;
+      return TRUE;
+    }
+    const gboolean text_input = !IS_NULL_PTR(focused) && !shortcut_from_field
+                                && (GTK_IS_EDITABLE(focused) || GTK_IS_TEXT_VIEW(focused));
+    if(text_input || (key_for_controls && blocking_container))
     {
       accels->active_key.accel_key = 0;
       accels->active_key.accel_mods = 0;

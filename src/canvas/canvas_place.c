@@ -33,8 +33,6 @@
 #define PLACE_NEAREST_COLUMNS 64
 /** An anchor that moved this far or less leaves the properties exactly where they are. */
 #define PLACE_HYSTERESIS_PIXELS 2.0
-/** The card is never given more than this fraction of the view's height. */
-#define PLACE_CARD_VIEW_FRACTION 0.6
 /** The steps a pixel is cut into for the anchor and the press: see `_snap_fine()`. */
 #define PLACE_POINT_STEPS 256.0
 /** The most pixels a view spans, across and down; see dt_canvas_place_solve(). */
@@ -51,7 +49,6 @@
 #define PLACE_COST_SIDE 8.0
 #define PLACE_COST_SOFT 40.0
 #define PLACE_COST_MOVE 300.0
-#define PLACE_COST_SCROLL 30.0
 #define PLACE_COST_ROOM 20.0
 #define PLACE_COST_BODY 2000.0
 #define PLACE_COST_EDGE 100.0
@@ -107,8 +104,8 @@ typedef struct place_scene_t
   double width;
   double strip_height;
   gboolean card_open;
-  double card_want;          ///< what the card asks for, capped; 0 while it is closed
-  double card_min;
+  double card_want;          ///< the card's whole height, or the view's less the strip's; 0 while it is closed
+  gboolean card_placeable;   ///< the card is open, and the view is tall enough to show at least its least
   double last_card_height;
   double diagonal;
   place_box_t object;        ///< the box around the edited object's own HARD and BODY shapes
@@ -253,9 +250,14 @@ static void _scene_init(place_scene_t *scene, const dt_canvas_place_input_t *inp
   scene->strip_height = ceil(MAX(input->strip_height, 0.0));
   scene->card_open = input->card_open;
   const double view_height = MAX(scene->view.y1 - scene->view.y0, 0.0);
-  const double card_cap = MIN(input->card_max, PLACE_CARD_VIEW_FRACTION * view_height);
-  scene->card_want = input->card_open ? floor(MAX(MIN(input->card_content_height, card_cap), 0.0)) : 0.0;
-  scene->card_min = ceil(MAX(input->card_min, 0.0));
+  // The whole card, its height snapped up like the strip's so no fraction of a row is cut off. Only a
+  // view too short for it gives it less: all the height the strip leaves, where it scrolls -- and not
+  // even that below the card's least, where it is clipped instead.
+  const double card_whole = ceil(MAX(input->card_content_height, 0.0));
+  const double card_room = MAX(view_height - scene->strip_height, 0.0);
+  scene->card_want = input->card_open ? MIN(card_whole, card_room) : 0.0;
+  scene->card_placeable
+      = input->card_open && scene->card_want >= MIN(ceil(MAX(input->card_min, 0.0)), card_whole);
   scene->last_card_height = MAX(input->last_card_height, 0.0);
   scene->diagonal = MAX(hypot(scene->view.x1 - scene->view.x0, view_height), 1.0);
   scene->anchor_x = _snap_fine(input->anchor_x);
@@ -485,7 +487,7 @@ static double _side_rank(const place_box_t *strip, const place_box_t *object)
 }
 
 static double _cost(const place_scene_t *scene, const place_box_t *strip, const place_box_t *footprint,
-                    const int level, const double card, const double free_down, const double free_up)
+                    const int level, const double free_down, const double free_up)
 {
   double cost = PLACE_COST_DISTANCE * _distance_to_box(footprint, scene->anchor_x, scene->anchor_y) / scene->diagonal;
   cost += PLACE_COST_SIDE * _side_rank(strip, &scene->object);
@@ -495,7 +497,6 @@ static double _cost(const place_scene_t *scene, const place_box_t *strip, const 
     const double moved = hypot(strip->x0 - scene->previous->strip.x, strip->y0 - scene->previous->strip.y);
     cost += PLACE_COST_MOVE * moved / scene->diagonal;
   }
-  if(scene->card_open && card < scene->card_want) cost += PLACE_COST_SCROLL;
   // A closed card still has a height it will want: prefer a strip that leaves room for it.
   if(!scene->card_open && MAX(free_down, free_up) < scene->last_card_height) cost += PLACE_COST_ROOM;
   if(level == DT_CANVAS_PLACE_LEVEL_H)
@@ -872,10 +873,10 @@ static gboolean _better(const place_best_t *best, const double cost, const doubl
   return growth < best->growth;
 }
 
-/** The least free height a column must have for a rung: the strip, and the card's least when it is asked for. */
+/** The least free height a column must have for a rung: the strip, and the whole card when it is asked for. */
 static double _rung_height(const place_scene_t *scene, const gboolean with_card)
 {
-  return scene->strip_height + (with_card ? MIN(scene->card_min, scene->card_want) : 0.0);
+  return scene->strip_height + (with_card ? scene->card_want : 0.0);
 }
 
 /** Every top worth trying in one free stretch, moved into it: never out of it, never onto the object. */
@@ -931,11 +932,10 @@ static void _evaluate_column(place_scene_t *scene, const double x, const int lev
       for(int growth = DT_CANVAS_PLACE_DOWN; growth <= DT_CANVAS_PLACE_UP; growth++)
       {
         const double room = growth == DT_CANVAS_PLACE_DOWN ? free_down : free_up;
-        const double card = MIN(scene->card_want, room);
-        if(with_card && card < MIN(scene->card_min, scene->card_want)) continue;
-        const double shown = with_card ? card : 0.0;
+        if(with_card && room < scene->card_want) continue;
+        const double shown = with_card ? scene->card_want : 0.0;
         const place_box_t footprint = _footprint_box(&strip, (dt_canvas_place_growth_t)growth, shown);
-        const double cost = _cost(scene, &strip, &footprint, level, card, free_down, free_up);
+        const double cost = _cost(scene, &strip, &footprint, level, free_down, free_up);
         if(!_better(best, cost, y, x, (dt_canvas_place_growth_t)growth)) continue;
         best->found = TRUE;
         best->cost = cost;
@@ -963,6 +963,7 @@ static gboolean _search(place_scene_t *scene, const int level, const gboolean wi
   // The columns are clamped into the view on the promise that the strip fits across it.
   if(scene->width > scene->view.x1 - scene->view.x0) return FALSE;
   if(scene->strip_height > scene->view.y1 - scene->view.y0) return FALSE;
+  if(with_card && !scene->card_placeable) return FALSE;
   _columns_prepare(scene, level);
   const place_column_t *columns = scene->columns[level];
   const size_t count = scene->column_count[level];
@@ -1063,10 +1064,15 @@ static place_box_t _previous_strip(const place_scene_t *scene, const double shif
   return _strip_box(scene, previous->strip.x + shift_x, previous->strip.y + shift_y);
 }
 
-/** Fit the card on either side of a strip that stays where it is: its side first, then the other. */
+/**
+ * Fit the whole card on either side of a strip that stays where it is: its side first, then the other.
+ * Neither side holding all of it is no fit: the card is not cut down to the roomier side, since a card
+ * scrolling beside a view with room for all of it elsewhere hides rows for nothing.
+ */
 static gboolean _fit_card(const place_scene_t *scene, const place_box_t *strip, const double low, const double high,
                           const dt_canvas_place_growth_t preferred, dt_canvas_place_growth_t *growth, double *card)
 {
+  if(!scene->card_placeable) return FALSE;
   const double free_down = high - strip->y1;
   const double free_up = strip->y0 - low;
   const dt_canvas_place_growth_t other = preferred == DT_CANVAS_PLACE_DOWN ? DT_CANVAS_PLACE_UP : DT_CANVAS_PLACE_DOWN;
@@ -1079,15 +1085,7 @@ static gboolean _fit_card(const place_scene_t *scene, const place_box_t *strip, 
     *card = scene->card_want;
     return TRUE;
   }
-  // Neither side holds all of it: the roomier side, scrolling, if it holds the card's least.
-  dt_canvas_place_growth_t roomier = preferred;
-  if(free_down > free_up) roomier = DT_CANVAS_PLACE_DOWN;
-  if(free_up > free_down) roomier = DT_CANVAS_PLACE_UP;
-  const double room = roomier == DT_CANVAS_PLACE_DOWN ? free_down : free_up;
-  if(room < scene->card_min) return FALSE;
-  *growth = roomier;
-  *card = room;
-  return TRUE;
+  return FALSE;
 }
 
 /**
@@ -1167,17 +1165,17 @@ static gboolean _keep(place_scene_t *scene, dt_canvas_place_t *result)
   {
     // The anchor stays the one the strip was put at, so motions too small to move it add up.
     const place_box_t strip = _previous_strip(scene, 0.0, 0.0);
-    // The card is fitted again first, so a card that was scrolling or clipped grows back the moment
-    // there is room, whether or not the object happened to move past the threshold.
+    // The card is fitted again first, so a card that was clipped comes back the moment there is room,
+    // whether or not the object happened to move past the threshold.
     if(_keep_strip(scene, &strip, with_card, &growth, &card))
     {
       _result_fill(scene, result, &strip, growth, card, with_card, previous->level, previous->anchor_x,
                    previous->anchor_y);
       return TRUE;
     }
-    // Where it no longer fits, the card as it was shown -- capped, or clipped -- stays if it is still clear.
-    const gboolean shown = with_card && previous->card_shown;
-    const double kept_card = shown ? MIN(previous->card_height, scene->card_want) : 0.0;
+    // Where it no longer fits, the card as it was shown -- whole, or clipped -- stays if it is still clear.
+    const gboolean shown = with_card && previous->card_shown && scene->card_placeable;
+    const double kept_card = shown ? scene->card_want : 0.0;
     const place_box_t footprint = _footprint_box(&strip, previous->growth, kept_card);
     const gboolean body_kept = !over_body || _body_cover(scene, &footprint) <= previous->body + PLACE_BODY_SLACK;
     if(_valid(scene, &footprint, previous->level) && body_kept)

@@ -362,6 +362,8 @@ void dt_accels_detach_scroll_handler(dt_accels_t *accels);
  * F35 with or without Shift, which no control reads. That is what a panel of sliders and
  * toggles laid over a view needs, where the view binds single letters and Delete: typing at a
  * slider must not act on the view behind it, and undo must still work from inside the panel.
+ * A text field inside the container -- a spin button -- keeps the modified keys its own class
+ * binds (Ctrl+A, Ctrl+C, Ctrl+V, a word jump) and lets every other one through to the shortcuts.
  *
  * The tag is read from the focus widget and its ancestors on every keystroke, so it holds for
  * controls added to the container later and needs no removal: it goes with the container.

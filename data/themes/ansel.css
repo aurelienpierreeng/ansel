@@ -1870,27 +1870,51 @@ textview text selection {
   border-top: 2.4em solid @plugin_bg_color;
 }
 
-/* Canvas atelier: the property bar floating under the selected object must read over any picture. */
-.dt-canvas-floating {
-  background-color: @bg_color;
-  border: 1px solid @grey_30;
-  border-radius: 4px;
-  padding: 4px;
-}
-
 /* Canvas atelier: the properties floating beside an object, a strip that can grow a card. Opaque and
    framed, since they sit over any picture. Every size here is a pixel or two: the strip is one button
    row tall by construction, and the placement measures what this adds rather than assuming it -- which
    holds only on a widget that counts its CSS box. A GtkBox does; a GtkEventBox takes its child's size
-   and draws the frame over it, so this class goes on the box inside the event box, never on the latter. */
+   and draws the frame over it, so this class goes on the box inside the event box, never on the latter.
+
+   The surface is a darker grey than the panels' @bg_color, as the theme's tooltips are: what the
+   properties print besides titles and values -- a section's summary, a file name, a unit, a hint -- has to
+   read at 4.5:1 and still look secondary, and on @bg_color not even the titles reach 5:1, so no grey
+   lighter than a title's leaves room for both. Here @grey_80 reads at 4.57:1 on the surface and 5.44:1 on
+   a section's heading, under titles at 6.9 to 8.2:1 and values at 7.8:1 and more. */
 .dt-canvas-props {
-  background-color: @bg_color;
+  background-color: @grey_35;
   border: 1px solid @grey_30;
   border-radius: 4px;
 }
 
 .dt-canvas-props-strip {
   padding: 2px 4px;
+}
+
+/* The card's scrolled window paints @bg_color like every scrolled window, and a section heading and its
+   body paint @button_bg like every collapsible section: inside the properties, the headings are a band a
+   step darker than the surface, and the rest is the surface. */
+.dt-canvas-props .dt-canvas-props-card,
+.dt-canvas-props #collapsible,
+.dt-canvas-props #collapsible #bauhaus-slider {
+  background-color: transparent;
+}
+
+.dt-canvas-props .dt_section_expander,
+.dt-canvas-props .dt_section_expander label {
+  background-color: @grey_30;
+}
+
+/* A section's title keeps off the frame, its fold button off the other edge by as much, and the rows
+   under it start where the title does. In em, as the side panels' sections are inset, so the gap grows
+   with the text it frames. */
+.dt-canvas-props .dt_section_expander {
+  padding: 0.14em 0.42em;
+}
+
+.dt-canvas-props #collapsible {
+  padding-left: 0.42em;
+  padding-right: 0.42em;
 }
 
 /* The rule falls on whichever side of the card the strip is: below the strip when the properties grow
@@ -1904,9 +1928,9 @@ textview text selection {
   border-bottom: 1px solid @grey_30;
 }
 
-/* What a closed section holds, read without opening it. */
+/* What a closed section holds, read without opening it; and the strip's file name, a unit, a hint. */
 .dt_canvas_summary {
-  color: @grey_60;
+  color: @grey_80;
 }
 
 /* The rule between the rows most edits need and the ones under them. */
@@ -1921,7 +1945,7 @@ textview text selection {
    font name bright while its button is pressed or reached by the keyboard. */
 .dt-canvas-props .dt_canvas_inherited,
 .dt-canvas-props .dt_canvas_inherited label {
-  color: @grey_60;
+  color: @grey_80;
   font-style: italic;
 }
 

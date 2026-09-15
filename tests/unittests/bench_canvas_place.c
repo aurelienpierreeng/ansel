@@ -138,7 +138,6 @@ static void _bench(void **state)
   input.anchor_y = 940.0;
   input.width = 460.0;
   input.strip_height = 32.0;
-  input.card_max = 420.0;
   input.card_min = 120.0;
   input.reason = DT_CANVAS_PLACE_OPEN;
   dt_canvas_place_t opened;

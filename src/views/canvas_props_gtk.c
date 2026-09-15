@@ -829,10 +829,53 @@ static gboolean _kind_glyph_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
 
 /* --- building the rows ------------------------------------------------------------------------ */
 
-/** A control reached by the keyboard, never by a click: a click leaves the focus where it was. */
-static void _no_focus_on_click(GtkWidget *widget)
+/**
+ * Apply the digits typed into any spin button, through the spin button's own handler, as its focus
+ * leaving would: one ONCE edit each. Digits that parse to the value already there report nothing and
+ * hold nothing either. `typing` is cleared only after the update, since the handler reads it to tell
+ * a typed value from a step.
+ */
+static void _apply_typing(props_t *props)
+{
+  for(int prop_id = DT_CANVAS_PROP_NONE + 1; prop_id < DT_CANVAS_PROP_COUNT; prop_id++)
+  {
+    props_binding_t *binding = &props->bindings[prop_id];
+    if(!binding->typing || IS_NULL_PTR(binding->widget) || binding->prop->widget != DT_CANVAS_WIDGET_MEASURE) continue;
+    gtk_spin_button_update(GTK_SPIN_BUTTON(binding->widget));
+    binding->typing = FALSE;
+  }
+}
+
+/**
+ * A press on a control that does not take the focus applies the digits typed into a spin button first.
+ * A spin button applies what was typed when it loses the focus, and a click that leaves the focus where
+ * it was never takes it away: without this, a width typed and then followed by a click on the card
+ * button, a switch or a colour would stay unapplied behind that click, and be applied -- as a later undo
+ * step than the click's -- whenever the focus happened to move.
+ */
+static gboolean _apply_typing_pressed(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+{
+  props_t *props = (props_t *)user_data;
+  if(props->closing) return FALSE;
+  _apply_typing(props);
+  return FALSE;
+}
+
+/** Digits typed into a spin button are applied by a press on this control, which takes no focus itself. */
+static void _apply_typing_on_press(props_t *props, GtkWidget *widget)
+{
+  gtk_widget_add_events(widget, GDK_BUTTON_PRESS_MASK);
+  g_signal_connect(widget, "button-press-event", G_CALLBACK(_apply_typing_pressed), props);
+}
+
+/**
+ * A control reached by the keyboard, never by a click: a click leaves the focus where it was, and applies
+ * what was typed into a spin button on its way.
+ */
+static void _no_focus_on_click(props_t *props, GtkWidget *widget)
 {
   gtk_widget_set_focus_on_click(widget, FALSE);
+  _apply_typing_on_press(props, widget);
 }
 
 static GtkWidget *_row_label(const dt_canvas_prop_t *prop, const gboolean fixed_width)
@@ -955,7 +998,7 @@ static GtkWidget *_build_icons(props_binding_t *binding)
   {
     const props_glyph_t *glyph = _glyph(IS_NULL_PTR(prop->icons) ? NULL : prop->icons[choice]);
     GtkWidget *toggle = dtgtk_togglebutton_new(glyph->paint, glyph->flags, NULL);
-    _no_focus_on_click(toggle);
+    _no_focus_on_click(binding->owner, toggle);
     gtk_widget_set_tooltip_text(toggle, _(dt_canvas_prop_choice_label(prop, choice)));
     g_object_set_data(G_OBJECT(toggle), "dt-canvas-props-choice", GINT_TO_POINTER(choice));
     binding->toggles[choice] = toggle;
@@ -972,7 +1015,7 @@ static GtkWidget *_build_icon_flag(props_binding_t *binding)
   const dt_canvas_prop_t *prop = binding->prop;
   const props_glyph_t *glyph = _glyph(IS_NULL_PTR(prop->icons) ? NULL : prop->icons[0]);
   GtkWidget *toggle = dtgtk_togglebutton_new(glyph->paint, glyph->flags, NULL);
-  _no_focus_on_click(toggle);
+  _no_focus_on_click(binding->owner, toggle);
   gtk_widget_set_tooltip_text(toggle, _(prop->tooltip));
   binding->widget = toggle;
   binding->handler = g_signal_connect(toggle, "toggled", G_CALLBACK(_flag_toggled), binding);
@@ -983,7 +1026,7 @@ static GtkWidget *_build_flag(props_binding_t *binding)
 {
   const dt_canvas_prop_t *prop = binding->prop;
   GtkWidget *check = gtk_check_button_new_with_label(_(prop->label));
-  _no_focus_on_click(check);
+  _no_focus_on_click(binding->owner, check);
   gtk_widget_set_tooltip_text(check, _(prop->tooltip));
   binding->widget = check;
   binding->handler = g_signal_connect(check, "toggled", G_CALLBACK(_flag_toggled), binding);
@@ -994,6 +1037,8 @@ static GtkWidget *_build_color(props_binding_t *binding)
 {
   const dt_canvas_prop_t *prop = binding->prop;
   GtkWidget *button = dt_chooser_button_color_new(_(prop->tooltip), TRUE, _color_picked, binding);
+  // The chooser takes no focus on a click already.
+  _apply_typing_on_press(binding->owner, button);
   gtk_widget_set_tooltip_text(button, _(prop->tooltip));
   binding->widget = button;
   return button;
@@ -1003,6 +1048,7 @@ static GtkWidget *_build_font(props_binding_t *binding)
 {
   const dt_canvas_prop_t *prop = binding->prop;
   GtkWidget *button = dt_chooser_button_font_new(_(prop->label), PROPS_FONT_CHARS, _font_picked, binding);
+  _apply_typing_on_press(binding->owner, button);
   gtk_widget_set_tooltip_text(button, _(prop->tooltip));
   binding->widget = button;
   return button;
@@ -1060,7 +1106,7 @@ static GtkWidget *_build_action(props_binding_t *binding, const gboolean in_stri
     gtk_button_set_relief(GTK_BUTTON(button), GTK_RELIEF_NONE);
     gtk_widget_set_halign(button, GTK_ALIGN_START);
   }
-  _no_focus_on_click(button);
+  _no_focus_on_click(binding->owner, button);
   gtk_widget_set_tooltip_text(button, _(prop->tooltip));
   binding->widget = button;
   binding->handler = g_signal_connect(button, "clicked", G_CALLBACK(_action_clicked), binding);
@@ -1211,7 +1257,7 @@ static void _build_section(props_t *props, const dt_canvas_prop_section_t sectio
   dt_gui_new_collapsible_section(&section->collapsible, NULL, _(dt_canvas_prop_section_label(section_id, 0)),
                                  GTK_BOX(props->sections_box), GTK_PACK_START);
   dt_gui_collapsible_section_t *collapsible = &section->collapsible;
-  _no_focus_on_click(collapsible->toggle);
+  _no_focus_on_click(props, collapsible->toggle);
 
   // The heading reads "Border  canvas default · 2 pt": the summary sits inside the part a click
   // folds the section from, next to the title, and takes what width is left.
@@ -1234,7 +1280,7 @@ static void _build_section(props_t *props, const dt_canvas_prop_section_t sectio
 
   // The group's switch sits outside that event box, so flipping it never folds the section.
   section->own = dtgtk_togglebutton_new(dtgtk_cairo_paint_switch, CPF_NONE, NULL);
-  _no_focus_on_click(section->own);
+  _no_focus_on_click(props, section->own);
   gtk_widget_set_tooltip_text(section->own, _("Give this object its own values instead of the canvas's"));
   gtk_box_pack_start(GTK_BOX(collapsible->header), section->own, FALSE, FALSE, 0);
   gtk_box_reorder_child(GTK_BOX(collapsible->header), section->own, 1);
@@ -1270,21 +1316,21 @@ static void _build_strip(props_t *props)
   // Packed from the right edge: close, then the card, then the content action. Hiding the action
   // for a kind that has none moves neither of the other two.
   props->close_button = dtgtk_button_new(dtgtk_cairo_paint_cancel, CPF_NONE, NULL);
-  _no_focus_on_click(props->close_button);
+  _no_focus_on_click(props, props->close_button);
   gtk_widget_set_tooltip_text(props->close_button, _("Close the properties (Escape)"));
   gtk_widget_set_valign(props->close_button, GTK_ALIGN_CENTER);
   g_signal_connect(props->close_button, "clicked", G_CALLBACK(_close_clicked), props);
   gtk_box_pack_end(GTK_BOX(props->strip), props->close_button, FALSE, FALSE, 0);
 
   props->card_toggle = dtgtk_togglebutton_new(dtgtk_cairo_paint_solid_arrow, CPF_DIRECTION_DOWN, NULL);
-  _no_focus_on_click(props->card_toggle);
+  _no_focus_on_click(props, props->card_toggle);
   gtk_widget_set_tooltip_text(props->card_toggle, _("All the properties"));
   gtk_widget_set_valign(props->card_toggle, GTK_ALIGN_CENTER);
   props->card_toggle_handler = g_signal_connect(props->card_toggle, "toggled", G_CALLBACK(_card_toggled), props);
   gtk_box_pack_end(GTK_BOX(props->strip), props->card_toggle, FALSE, FALSE, 0);
 
   props->content_button = dtgtk_button_new(dtgtk_cairo_paint_edit_text, CPF_NONE, NULL);
-  _no_focus_on_click(props->content_button);
+  _no_focus_on_click(props, props->content_button);
   gtk_widget_set_valign(props->content_button, GTK_ALIGN_CENTER);
   gtk_widget_set_no_show_all(props->content_button, TRUE);
   g_signal_connect(props->content_button, "clicked", G_CALLBACK(_content_clicked), props);
@@ -1326,7 +1372,10 @@ dt_canvas_props_gtk_t *dt_canvas_props_gtk_new(const dt_canvas_props_host_t *hos
 
   props->card = gtk_scrolled_window_new(NULL, NULL);
   dt_gui_add_class(props->card, "dt-canvas-props-card");
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(props->card), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  // The host gives the card its whole height, and cuts it short only in a view too short for it: the
+  // wheel scrolls that one, and no scrollbar is ever drawn. A scrollbar the card could show would take
+  // its width from the rows and read as a card with more in it than a view with room had shown.
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(props->card), GTK_POLICY_NEVER, GTK_POLICY_EXTERNAL);
   gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(props->card), TRUE);
   gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(props->card), GTK_SHADOW_NONE);
   props->sections_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -1549,7 +1598,7 @@ static void _feature_add(const char *feature_tag, const char *label, const char 
 {
   props_binding_t *binding = (props_binding_t *)user_data;
   GtkWidget *check = gtk_check_button_new_with_label(label);
-  _no_focus_on_click(check);
+  _no_focus_on_click(binding->owner, check);
   gtk_widget_set_tooltip_text(check, hint);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(check), is_on);
   g_object_set_data_full(G_OBJECT(check), PROPS_FEATURE_TAG_KEY, g_strdup(feature_tag), dt_free_gpointer);
@@ -1935,9 +1984,9 @@ int dt_canvas_props_gtk_strip_width(dt_canvas_props_gtk_t *props)
 }
 
 /**
- * The least height the card can be drawn at: a scrolled window that may show its scrollbar is never
- * shorter than the scrollbar, whatever cap it is given. Asked of the card shown, since a hidden
- * widget reports no size at all.
+ * The least height the card can be drawn at, whatever cap it is given: its own boxes, and a scrollbar
+ * if a theme or a policy ever gives it one. Asked of the card shown, since a hidden widget reports no
+ * size at all.
  */
 static int _card_minimum_height(props_t *props)
 {
@@ -1962,7 +2011,7 @@ void dt_canvas_props_gtk_set_card(dt_canvas_props_gtk_t *props, const gboolean s
   // The arrow points at the side the card is on.
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(props->card_toggle), dtgtk_cairo_paint_solid_arrow,
                                grow_up ? CPF_DIRECTION_UP : CPF_DIRECTION_DOWN, NULL);
-  // Given less than its scrollbar, a card would come out taller than the room it was given, over
+  // Given less than its own least, a card would come out taller than the room it was given, over
   // whatever the host kept that room clear of: it is not shown, and says it had no room.
   const gboolean fits = !shown || max_height >= _card_minimum_height(props);
   const gboolean card_shown = shown && fits;
@@ -2027,6 +2076,37 @@ gboolean dt_canvas_props_gtk_card_open(dt_canvas_props_gtk_t *props)
 {
   if(IS_NULL_PTR(props) || props->closing) return FALSE;
   return gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(props->card_toggle));
+}
+
+gboolean dt_canvas_props_gtk_typing(dt_canvas_props_gtk_t *props)
+{
+  if(IS_NULL_PTR(props) || props->closing) return FALSE;
+  for(int prop_id = DT_CANVAS_PROP_NONE + 1; prop_id < DT_CANVAS_PROP_COUNT; prop_id++)
+  {
+    if(props->bindings[prop_id].typing) return TRUE;
+  }
+  return FALSE;
+}
+
+void dt_canvas_props_gtk_commit(dt_canvas_props_gtk_t *props)
+{
+  if(IS_NULL_PTR(props) || props->closing) return;
+  _apply_typing(props);
+  // A number pasted rather than typed is not tracked as typing, and is applied as the focus leaving
+  // would apply it: as a step, whose session is committed just below.
+  GtkWidget *toplevel = gtk_widget_get_toplevel(props->root);
+  GtkWidget *focus = GTK_IS_WINDOW(toplevel) ? gtk_window_get_focus(GTK_WINDOW(toplevel)) : NULL;
+  if(!IS_NULL_PTR(focus) && GTK_IS_SPIN_BUTTON(focus) && gtk_widget_is_ancestor(focus, props->root))
+    gtk_spin_button_update(GTK_SPIN_BUTTON(focus));
+  // Removes the timer with the session: left armed, it would send the control's value later, onto
+  // whatever the document has become by then -- an undo, a frame dragged by its corner.
+  _commit_live(props);
+}
+
+void dt_canvas_props_gtk_forget(dt_canvas_props_gtk_t *props)
+{
+  if(IS_NULL_PTR(props) || props->closing) return;
+  _drop_live(props);
 }
 
 gboolean dt_canvas_props_gtk_focus_inside(dt_canvas_props_gtk_t *props)

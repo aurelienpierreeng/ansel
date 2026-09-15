@@ -3051,6 +3051,94 @@
     <shortdescription>paint what the canvas object properties keep clear of, and where they were placed</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/canvas/props/section/text</name>
+    <type>
+      <enum>
+        <option>none</option>
+        <option>character</option>
+        <option>paragraph</option>
+        <option>text_box</option>
+        <option>arrange</option>
+        <option>fill</option>
+        <option>stroke</option>
+        <option>corners</option>
+        <option>shadow</option>
+        <option>cutout</option>
+      </enum>
+    </type>
+    <default>none</default>
+    <shortdescription>section the properties of a text frame open on</shortdescription>
+    <longdescription>The section of the canvas properties last left open on this kind of object, restored the next time its properties are shown. none - every section folded.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/canvas/props/section/image</name>
+    <type>
+      <enum>
+        <option>none</option>
+        <option>picture</option>
+        <option>arrange</option>
+        <option>fill</option>
+        <option>stroke</option>
+        <option>corners</option>
+        <option>shadow</option>
+        <option>cutout</option>
+      </enum>
+    </type>
+    <default>none</default>
+    <shortdescription>section the properties of a picture open on</shortdescription>
+    <longdescription>The section of the canvas properties last left open on this kind of object, restored the next time its properties are shown. none - every section folded.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/canvas/props/section/svg</name>
+    <type>
+      <enum>
+        <option>none</option>
+        <option>drawing</option>
+        <option>arrange</option>
+        <option>fill</option>
+        <option>stroke</option>
+        <option>corners</option>
+        <option>shadow</option>
+        <option>cutout</option>
+      </enum>
+    </type>
+    <default>none</default>
+    <shortdescription>section the properties of a drawing open on</shortdescription>
+    <longdescription>The section of the canvas properties last left open on this kind of object, restored the next time its properties are shown. none - every section folded.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/canvas/props/section/map</name>
+    <type>
+      <enum>
+        <option>none</option>
+        <option>map</option>
+        <option>arrange</option>
+        <option>fill</option>
+        <option>stroke</option>
+        <option>corners</option>
+        <option>shadow</option>
+        <option>cutout</option>
+      </enum>
+    </type>
+    <default>none</default>
+    <shortdescription>section the properties of a map open on</shortdescription>
+    <longdescription>The section of the canvas properties last left open on this kind of object, restored the next time its properties are shown. none - every section folded.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/canvas/props/section/connector</name>
+    <type>
+      <enum>
+        <option>none</option>
+        <option>fill</option>
+        <option>stroke</option>
+        <option>shadow</option>
+      </enum>
+    </type>
+    <default>none</default>
+    <shortdescription>section the properties of a connector open on</shortdescription>
+    <longdescription>The section of the canvas properties last left open on this kind of object, restored the next time its properties are shown. none - every section folded.</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>canvas/pdf/dpi</name>
     <type min="72" max="1200">int</type>
     <default>300</default>

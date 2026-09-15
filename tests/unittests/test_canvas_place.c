@@ -89,7 +89,6 @@ static void _scene_defaults(scene_t *scene)
 {
   memset(scene, 0, sizeof(*scene));
   scene->input.shapes = scene->shapes;
-  scene->input.card_max = 420.0;
   scene->input.card_min = 120.0;
   scene->input.reason = DT_CANVAS_PLACE_OPEN;
 }
@@ -170,7 +169,6 @@ static void _scene_random(scene_t *scene)
   scene->input.press_y = view_y + _random_unit() * view_height;
   scene->input.card_open = _random_unit() < 0.3;
   scene->input.card_content_height = _random_int(0, 160) + _maybe_fraction(fractional);
-  scene->input.card_max = _random_int(20, 200);
   scene->input.card_min = _random_int(4, 60) - _maybe_fraction(fractional);
   scene->input.last_card_height = _random_unit() < 0.5 ? 0.0 : _random_int(0, 120);
 }
@@ -216,7 +214,6 @@ static void _scene_random_crowded(scene_t *scene)
   scene->input.anchor_y = anchor_y;
   scene->input.card_open = _random_unit() < 0.3;
   scene->input.card_content_height = _random_int(0, 80);
-  scene->input.card_max = _random_int(10, 80);
   scene->input.card_min = _random_int(2, 30);
 }
 
@@ -232,7 +229,8 @@ typedef struct snapped_t
   int air;
   int width;
   int strip_height;
-  int least_card; ///< the smallest card a card rung accepts
+  int card;                ///< the card a card rung places: all of it, or all the view has
+  gboolean card_placeable; ///< the card is open and the view shows at least its least
 } snapped_t;
 
 static snapped_t _snap(const scene_t *scene)
@@ -247,9 +245,10 @@ static snapped_t _snap(const scene_t *scene)
   snapped.width = (int)ceil(MAX(input->width, 0.0));
   snapped.strip_height = (int)ceil(MAX(input->strip_height, 0.0));
   const double view_height = MAX(snapped.view_y1 - snapped.view_y0, 0);
-  const double cap = MIN(input->card_max, 0.6 * view_height);
-  const double want = input->card_open ? floor(MAX(MIN(input->card_content_height, cap), 0.0)) : 0.0;
-  snapped.least_card = (int)MIN(ceil(MAX(input->card_min, 0.0)), want);
+  const double whole = ceil(MAX(input->card_content_height, 0.0));
+  const double want = input->card_open ? MIN(whole, MAX(view_height - snapped.strip_height, 0.0)) : 0.0;
+  snapped.card = (int)want;
+  snapped.card_placeable = input->card_open && want >= MIN(ceil(MAX(input->card_min, 0.0)), whole);
   return snapped;
 }
 
@@ -369,7 +368,7 @@ static void _check(const scene_t *scene, const dt_canvas_place_t *place, const d
   const snapped_t snapped = _snap(scene);
   const int width = snapped.width;
   const int height = snapped.strip_height;
-  const int least = snapped.least_card;
+  const int card_whole = snapped.card;
   if(!place->visible)
   {
     // Nothing fits means nothing fits: not even over the body.
@@ -402,10 +401,14 @@ static void _check(const scene_t *scene, const dt_canvas_place_t *place, const d
   if(place->card_shown)
   {
     assert_true(input->card_open);
-    // Never more than it wants, the most it is given, or 60 % of the view; never less than its least.
-    assert_true(place->card_height <= input->card_content_height);
-    assert_true(place->card_height <= MIN(input->card_max, 0.6 * view->height));
-    assert_true(place->card_height >= least);
+    assert_true(snapped.card_placeable);
+    // All of it, snapped up to a whole pixel, or all the view has: never cut down to the room beside
+    // the strip, never less than its least.
+    assert_true(place->card_height == card_whole);
+    // Independently of how the solver snaps: shorter than its content only when it fills the view.
+    assert_true(place->card_height >= input->card_content_height
+                || footprint.height == snapped.view_y1 - snapped.view_y0);
+    assert_true(place->card_height >= MIN(ceil(MAX(input->card_min, 0.0)), ceil(MAX(input->card_content_height, 0.0))));
     const dt_canvas_place_rect_t card_rect
         = { footprint.x, place->growth == DT_CANVAS_PLACE_UP ? footprint.y : place->strip.y + place->strip.height,
             footprint.width, place->card_height };
@@ -422,7 +425,7 @@ static void _check(const scene_t *scene, const dt_canvas_place_t *place, const d
   {
     // Over the body only once nothing clear of it holds what is shown -- whatever the reason.
     if(place->card_shown)
-      assert_false(_exists(scene, DT_CANVAS_PLACE_LEVEL_HB, width, height + least));
+      assert_false(_exists(scene, DT_CANVAS_PLACE_LEVEL_HB, width, height + card_whole));
     else
       assert_false(_exists(scene, DT_CANVAS_PLACE_LEVEL_HB, width, height));
   }
@@ -431,11 +434,12 @@ static void _check(const scene_t *scene, const dt_canvas_place_t *place, const d
   // nowhere clear of the body -- nowhere at all, on a GROW; a looser level for the strip only once
   // the stricter one has nowhere.
   if(place->card_shown && place->level == DT_CANVAS_PLACE_LEVEL_HB)
-    assert_false(_exists(scene, DT_CANVAS_PLACE_LEVEL_HPB, width, height + least));
-  if(!place->card_shown && input->card_open)
+    assert_false(_exists(scene, DT_CANVAS_PLACE_LEVEL_HPB, width, height + card_whole));
+  if(!place->card_shown && snapped.card_placeable)
   {
-    assert_false(_exists(scene, DT_CANVAS_PLACE_LEVEL_HB, width, height + least));
-    if(input->reason == DT_CANVAS_PLACE_GROW) assert_false(_exists(scene, DT_CANVAS_PLACE_LEVEL_H, width, height + least));
+    assert_false(_exists(scene, DT_CANVAS_PLACE_LEVEL_HB, width, height + card_whole));
+    if(input->reason == DT_CANVAS_PLACE_GROW)
+      assert_false(_exists(scene, DT_CANVAS_PLACE_LEVEL_H, width, height + card_whole));
   }
   if(!place->card_shown && place->level >= DT_CANVAS_PLACE_LEVEL_HB)
     assert_false(_exists(scene, DT_CANVAS_PLACE_LEVEL_HPB, width, height));
@@ -1040,7 +1044,6 @@ static void _a_near_tie_resolves_the_same_way_wherever_the_scene_sits(void **sta
   scene.input.press_x = 34.491015083461761;
   scene.input.press_y = 84.640041332721154;
   scene.input.card_content_height = 38.0;
-  scene.input.card_max = 194.0;
   scene.input.card_min = 44.0;
   const double shapes[22][6] = {
     { DT_CANVAS_PLACE_BODY, 20, 21, 63, 31, 1 },       { DT_CANVAS_PLACE_BODY, 9, 52, 85, 31, 1 },
@@ -1254,50 +1257,44 @@ static void _growing_the_card_keeps_the_strip_and_collapsing_it_too(void **state
   _check(&up, &grown, &beside, TRUE);
   const double strip_bottom = strip_only.strip.y + strip_only.strip.height;
 
-  // Too little on both sides for all of it but enough for its least: it scrolls in place.
+  // Too little on both sides of the strip for all of it: the strip moves to where the whole card fits.
+  // Cut down to the room beside the strip, the card would hide its last rows behind a scrollbar in a
+  // view with room for every one of them.
   scene_t tight;
   _scene_copy(&tight, &scene);
   tight.input.view.height = strip_bottom + 150.0 - tight.input.view.y;
   tight.input.card_open = TRUE;
   tight.input.card_content_height = 400.0;
-  tight.input.card_max = 420.0;
   tight.input.card_min = 120.0;
   tight.input.reason = DT_CANVAS_PLACE_GROW;
   tight.input.previous = &strip_only;
   _solve(&tight, &grown);
-  assert_true(grown.card_shown);
-  assert_true(grown.strip.x == strip_only.strip.x && grown.strip.y == strip_only.strip.y);
-  assert_int_equal(grown.growth, DT_CANVAS_PLACE_DOWN);
-  assert_true(grown.card_height == 150.0);
-  _check(&tight, &grown, &strip_only, TRUE);
-
-  // The same card, once the view is tall again and nothing moved: it grows back, into all the room
-  // there now is below the strip.
-  scene_t roomy;
-  _scene_copy(&roomy, &tight);
-  roomy.input.view = scene.input.view;
-  roomy.input.reason = DT_CANVAS_PLACE_RESOLVE;
-  const dt_canvas_place_t scrolling = grown;
-  roomy.input.previous = &scrolling;
-  dt_canvas_place_t refitted;
-  _solve(&roomy, &refitted);
-  assert_true(refitted.strip.x == scrolling.strip.x && refitted.strip.y == scrolling.strip.y);
-  assert_true(refitted.card_shown);
-  const double room_below = roomy.input.view.y + roomy.input.view.height - (scrolling.strip.y + scrolling.strip.height);
-  assert_true(refitted.card_height > scrolling.card_height);
-  assert_true(refitted.card_height == MIN(400.0, room_below));
-  _check(&roomy, &refitted, &scrolling, FALSE);
-
-  // Less than its least on both sides: this is the one time the strip may move, and it moves to
-  // where the card fits -- capped at 60 % of the view, 354 pixels of the 400 it wants.
-  tight.input.card_min = 200.0;
-  _solve(&tight, &grown);
   assert_true(grown.visible);
   assert_true(grown.card_shown);
-  assert_true(grown.card_height >= tight.input.card_min);
-  assert_true(grown.card_height == 354.0);
+  assert_true(grown.card_height == 400.0);
   assert_false(grown.strip.x == strip_only.strip.x && grown.strip.y == strip_only.strip.y);
   _check(&tight, &grown, &strip_only, TRUE);
+
+  // A view shorter than the strip and the whole card: the card is given all the height the strip
+  // leaves -- the one card that scrolls -- wherever a column is clear from the view's top to its bottom.
+  scene_t short_view;
+  _scene_copy(&short_view, &tight);
+  short_view.input.view = (dt_canvas_place_rect_t){ 6.0, 6.0, 1188.0, 300.0 };
+  _solve(&short_view, &grown);
+  assert_true(grown.visible);
+  assert_true(grown.card_shown);
+  assert_true(grown.card_height == 300.0 - 32.0);
+  const dt_canvas_place_rect_t filling = dt_canvas_place_footprint(&grown);
+  assert_true(filling.y == 6.0 && filling.height == 300.0);
+  _check(&short_view, &grown, &strip_only, TRUE);
+
+  // And below the card's least even that is not shown: the strip alone, the card clipped.
+  short_view.input.card_min = 300.0;
+  _solve(&short_view, &grown);
+  assert_true(grown.visible);
+  assert_false(grown.card_shown);
+  assert_true(grown.clipped);
+  _check(&short_view, &grown, &strip_only, TRUE);
 }
 
 /**

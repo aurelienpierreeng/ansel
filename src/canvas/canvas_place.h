@@ -52,9 +52,13 @@
  *   opens is exactly what it was missing. A search that follows still offers the spot the
  *   properties are in, so staying costs nothing. A placement that was not visible is no previous
  *   placement at all;
- * - GROW keeps the strip where it is and fits the card on whichever side has the room, scrolling it
- *   when neither side holds all of it: opening the card never moves the strip under the pointer
- *   unless there is no room for even the card's smallest height.
+ * - GROW keeps the strip where it is and fits the card on whichever side holds all of it: opening
+ *   the card never moves the strip under the pointer unless neither side does.
+ *
+ * A card is placed WHOLE, at the height its content asks for, or not at all. The only card shorter
+ * than its content is one the view itself is too short for: it is given the view's height less the
+ * strip's, and scrolls. A card cut short anywhere else hid its last sections behind a scrollbar in a
+ * view with room to spare for all of them.
  *
  * A candidate top is only ever moved WITHIN a stretch of the view proven free, never clamped onto
  * the object, so a placement that covers something it must not cannot be produced by rounding
@@ -129,7 +133,7 @@ typedef struct dt_canvas_place_t
   gboolean visible;                 ///< FALSE when nothing fits: the properties stay hidden
   dt_canvas_place_rect_t strip;
   dt_canvas_place_growth_t growth;
-  double card_height;               ///< the height the card is given, which may be less than it wants: it scrolls
+  double card_height;               ///< the card's whole height, or all the view has when the view is shorter
   gboolean card_shown;
   gboolean clipped;                 ///< the card is open but there was no room for it here
   dt_canvas_place_level_t level;    ///< the level the placement is clear at
@@ -152,9 +156,8 @@ typedef struct dt_canvas_place_input_t
   double width;                     ///< the widget's width, strip and card alike
   double strip_height;
   gboolean card_open;
-  double card_content_height;       ///< the card's natural height
-  double card_max;                  ///< the most a card is given before it scrolls, before 60 % of the view caps it
-  double card_min;                  ///< the least a card is shown at; below this it is clipped instead
+  double card_content_height;       ///< the card's natural height, all of which it is given
+  double card_min;                  ///< a view too short for the card shows it scrolling down to this, and clips it below
   double last_card_height;          ///< a hint: the card this kind last opened, so the strip leaves room for it
   dt_canvas_place_reason_t reason;
   const dt_canvas_place_t *previous; ///< the placement shown so far, or NULL; ignored when OPENING

@@ -104,9 +104,9 @@ int dt_canvas_props_gtk_strip_width(dt_canvas_props_gtk_t *props);
  * @brief Attach the card, or take it away.
  * @param shown whether the card is on screen
  * @param grow_up TRUE puts the card above the strip, FALSE below it
- * @param max_height the most the card is given, frame and borders included; it scrolls past that.
- * A card is never shorter than its own scrollbar: given less than that, it is not shown, and its
- * button reads as clipped.
+ * @param max_height the height the card is given, frame and borders included: its whole content, or
+ * less in a view too short for it, where the wheel scrolls the rest and no scrollbar is drawn. Given
+ * less than its own boxes, it is not shown, and its button reads as clipped.
  * @param clipped the user asked for the card and there was no room for it: the card button says so
  *
  * The card button is set to whether the card is shown, reporting nothing, so a click on it always
@@ -124,6 +124,28 @@ void dt_canvas_props_gtk_set_section(dt_canvas_props_gtk_t *props, int section);
  * and the host has not answered with dt_canvas_props_gtk_set_card() yet.
  */
 gboolean dt_canvas_props_gtk_card_open(dt_canvas_props_gtk_t *props);
+
+/**
+ * @brief Whether digits typed into one of the spin buttons wait to be applied: Return, the focus leaving
+ * or a click on another control applies them. The widget moved now would move from under the keys.
+ */
+gboolean dt_canvas_props_gtk_typing(dt_canvas_props_gtk_t *props);
+
+/**
+ * @brief Report whatever is pending, now: digits typed into a spin button are applied, and the LIVE
+ * session a burst of steps or a click awaiting its second left open is committed, its timer removed.
+ * @details The host calls it before anything else reaches the document -- an undo, a gesture on the
+ * canvas, a key -- or before the properties change hands: a session left open would be committed by
+ * its timer afterwards, carrying the control's value onto the document as it has become since.
+ */
+void dt_canvas_props_gtk_commit(dt_canvas_props_gtk_t *props);
+
+/**
+ * @brief Forget whatever is pending without reporting it: the LIVE session, its timer, digits typed
+ * and not applied. For a host that can no longer record it, as the document is replaced under it.
+ * A button still held on a control reports nothing more until it comes up.
+ */
+void dt_canvas_props_gtk_forget(dt_canvas_props_gtk_t *props);
 
 /** @brief Whether the keyboard focus is inside the widget. */
 gboolean dt_canvas_props_gtk_focus_inside(dt_canvas_props_gtk_t *props);
