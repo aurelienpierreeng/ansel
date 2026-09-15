@@ -29,7 +29,7 @@ HB_PACKAGES=(
   adwaita-icon-theme
   cmake
   cmark
-  pkg-config
+  pkgconf            # `pkg-config' is the old name of this formula
   cmocka
   curl
   desktop-file-utils
@@ -39,7 +39,7 @@ HB_PACKAGES=(
   glib
   gtk-mac-integration
   gtk+3
-  icu4c
+  icu4c@78           # `icu4c' is an alias for the current versioned formula
   intltool
   iso-codes
   jpeg-turbo
@@ -61,7 +61,7 @@ HB_PACKAGES=(
   perl
   po4a
   pugixml
-  sdl2
+  sdl2-compat        # `sdl2' is an alias for this formula
   shared-mime-info
   webp
 )
@@ -88,8 +88,47 @@ if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "x86_64" ]; then
   unset _kept _pkg
 fi
 
+# Ask brew which of these another one already pulls in, and request only the rest. A single
+# `brew install' with a formula named both on its own and inside another's dependency set builds
+# it TWICE: measured on the Intel nightlies of 2026-09-10 and 09-14, librsvg (9-10 min) and
+# gtk+3 (3 min) each finished two installations of the same version, the second ending on
+# "This keg was marked linked already, continuing anyway". brew plans both before building
+# anything -- its plan names librsvg as a top-level formula AND as adwaita-icon-theme's
+# dependency -- and never reconciles the two. Ten of the entries above are redundant that way;
+# only the ones the runner image did not already carry actually cost a rebuild.
+#
+# The list above stays the declaration of what Ansel needs. This only trims what is redundant at
+# install time, from brew's own graph rather than from an assumption about it, which is what
+# makes it self-correcting: the day adwaita-icon-theme stops depending on librsvg, `brew deps'
+# stops naming it and it is requested again. Nothing trimmed here can be lost to `brew
+# autoremove' either, since by construction it is a dependency of something still requested.
+# And the verification below still checks every DECLARED package, however it arrived.
+#
+# Runtime dependencies only, no --include-build: a build-only dependency is not guaranteed to
+# stay, so trimming on that basis would be trading a rebuild for an absence. The comparison is
+# textual against brew's output, which is why the entries above must be canonical names -- an
+# alias would never match what `brew deps' prints.
+install_list=("${HB_PACKAGES[@]}")
+if implied="$(brew deps --union "${HB_PACKAGES[@]}" 2>/dev/null)"; then
+  kept=()
+  trimmed=()
+  for package in "${HB_PACKAGES[@]}"; do
+    if grep -qxF -- "${package}" <<< "${implied}"; then
+      trimmed+=("${package}")
+    else
+      kept+=("${package}")
+    fi
+  done
+  if (( ${#trimmed[@]} > 0 )); then
+    printf 'Already pulled in by another requested formula, not requested again: %s\n' "${trimmed[*]}"
+    install_list=("${kept[@]}")
+  fi
+else
+  echo "brew deps failed; requesting every formula as listed." >&2
+fi
+
 brew_install_status=0
-if brew install "${HB_PACKAGES[@]}"; then
+if brew install "${install_list[@]}"; then
   :
 else
   brew_install_status=$?
@@ -107,7 +146,13 @@ done
 
 if (( ${#missing_packages[@]} > 0 )); then
   printf 'Missing Homebrew packages after install: %s\n' "${missing_packages[*]}" >&2
-  exit "${brew_install_status:-1}"
+  # Never exit 0 here. `${brew_install_status:-1}' reads as a fallback to 1 and is not one:
+  # the variable is always SET, and it is 0 on the ordinary path where brew reported success
+  # and a package is nonetheless absent -- which is exactly the case this branch exists for.
+  # So the missing packages were printed and the script passed. This is also what makes the
+  # dedupe above safe: a formula trimmed from the request because another was expected to pull
+  # it in has nothing but this check standing behind it.
+  exit $(( brew_install_status == 0 ? 1 : brew_install_status ))
 fi
 
 if (( brew_install_status != 0 )); then
