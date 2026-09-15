@@ -66,6 +66,28 @@ HB_PACKAGES=(
   webp
 )
 
+# llvm comes as a bottle on arm64 (seconds) and is built from source on Intel macOS, where
+# Homebrew publishes no bottles any more: about four hours, of a CI job's six. All it buys is
+# test-compilation of the OpenCL kernels at build time -- CMakeLists.txt's
+# TESTBUILD_OPENCL_PROGRAMS, which turns itself off with a warning when LLVM is absent -- and
+# the arm64 CI does that on every commit. So Intel does without it, and mac-nightly.yml passes
+# -DTESTBUILD_OPENCL_PROGRAMS=OFF there to say so rather than lean on the fallback.
+#
+# This does NOT remove the other four-hour llvm build. librsvg and adwaita-icon-theme pull in
+# llvm@22, a different formula that no list here mentions, and it was scheduled alongside this
+# one on every measured nightly -- which is why the keg cache is the load-bearing fix and this
+# is only the margin on top of it. See doc/nightly-distribution.md.
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "x86_64" ]; then
+  echo "Intel macOS: skipping llvm, a ~4 h source build here. It only enables OpenCL kernel"
+  echo "test-compilation, which the arm64 CI performs on every commit."
+  _kept=()
+  for _pkg in "${HB_PACKAGES[@]}"; do
+    [ "${_pkg}" = "llvm" ] || _kept+=("${_pkg}")
+  done
+  HB_PACKAGES=("${_kept[@]}")
+  unset _kept _pkg
+fi
+
 brew_install_status=0
 if brew install "${HB_PACKAGES[@]}"; then
   :

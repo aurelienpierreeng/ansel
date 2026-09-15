@@ -86,6 +86,93 @@ Preferences ▸ Storage ▸ Privacy. `-d control` logs every decision.
 
 Self-builds and distribution packages never check: whoever built them updates them.
 
+## The Intel mac build cannot afford its own dependencies
+
+Homebrew publishes no bottles for Intel macOS any more — `brew` says so outright, `You are
+using macOS on Intel x86_64` — so `macos-15-intel` builds a large part of the tree from
+source. Two formulae dominate it, measured on the nightlies of 2026-09-10 to 09-14 against
+GitHub's 6-hour job ceiling:
+
+| formula | size | build | whose |
+|---|---|---|---|
+| `llvm` | 1.7 GB | 3 h 43 | ours, for `TESTBUILD_OPENCL_PROGRAMS` |
+| `llvm@22` | 1.6 GB | 4 h 04 – **over 4 h 54** | `librsvg`'s, through `rust` |
+| `rust` | 438 MB | 1 h 05 – 1 h 29 | `librsvg`'s — it is written in Rust |
+| everything else together | — | ~50 min | |
+
+Four nightlies in a row were killed at the wall, on 09-10 with the dependency step alone at
+5 h 52. The same step takes **1 min 17 s** on arm64, which pours 53 bottles and builds nothing.
+
+**Both llvms were scheduled on every one of those runs, and no run ever got through more than
+one** — `Would install 1 dependency for llvm: z3` for ours, and `llvm@22` inside
+`Would install 12 dependencies for librsvg`. That is about eight hours of llvm against a
+six-hour ceiling, and it is why reading the wall as one slow formula is wrong.
+
+Two measures, and only together do they fit:
+
+- **`install-deps-macos.sh` skips `llvm` on Intel**, and `mac-nightly.yml` passes
+  `-DTESTBUILD_OPENCL_PROGRAMS=OFF` there to say so rather than lean on CMake's absent-LLVM
+  fallback. All that option buys is test-compiling the OpenCL kernels at build time, which the
+  arm64 CI does on every commit. Worth ~4 h.
+- **The kegs `librsvg` pulls in are cached**, because they cannot be dropped: `llvm@22` and
+  `rust`. Without the cache, those two plus the ~50 min of everything else still come to about
+  6 h 23 — over the ceiling on their own. This is the load-bearing half.
+
+So the Intel job caches those kegs. `tools/brew_cache_key.sh` owns the keys, and both
+`mac-nightly.yml` and `mac-brew-cache.yml` call it — an entry saved by one must be the entry
+the other looks for. Three things about that cache are not obvious:
+
+- **A keg is cacheable without relocation** because a given architecture's prefix is identical
+  on every runner (`/usr/local` on Intel, `/opt/homebrew` on arm64), so a restored keg sits at
+  the paths it was built for. `brew` decides a formula is installed by reading
+  `INSTALL_RECEIPT.json` inside the keg, and that file travels with it.
+- **The key carries the version brew WOULD install**, never the installed one: `brew info
+  --json=v2` reports both, and keying on the latter restores a keg a formula bump has already
+  made useless — wasting the quota and hiding the bump. Each formula gets its own entry, so a
+  bump in one does not discard the others.
+- **`brew link --overwrite` after the restore, and never `--force`.** A restored keg carries
+  its own `opt` link, which is all a keg-only formula needs, but `rust` also publishes `cargo`
+  and `rustc` into the prefix's `bin`, and those symlinks live outside the cached paths.
+  `link` refuses on a keg-only formula, which is the right answer there. `--force` would put
+  `llvm`'s clang in the prefix's `bin` ahead of Xcode's, and the nightly compiles with `CC=cc`.
+
+**The kegs are banked as soon as they exist, not at the end of the job.** `actions/cache`'s own
+save is a post-step, and a job cancelled at the 6-hour ceiling never reaches it — visible in a
+killed run's step list as `Post Restore the rust keg`, still pending. On 2026-09-10 the
+dependency step *succeeded* at 5 h 52 and the budget then ran out during the build, so the four
+hours just spent on llvm went with the job. `actions/cache/restore` and an explicit
+`actions/cache/save` placed right after the dependency step mean a run that gets that far warms
+the cache for the next one even when it dies afterwards.
+
+**llvm@22's build time is not a constant, and that is the margin the warm-up lives on.** The
+nightly of 2026-09-15 — the first with our own llvm dropped, so llvm@22 had the step almost to
+itself — sat **4 h 54 inside a single `cmake --build .`** and was still there when the run was
+cancelled, having completed only `openssl@3`, `xz`, `libssh2` and `pkgconf` (about 14 min) beside
+it. `mac-brew-cache.yml` therefore runs at `timeout-minutes: 355`, nearly the whole ceiling, and
+a dispatch that still runs out is retried rather than reasoned about.
+
+**A cold cache still cannot warm itself from the nightly**, because the dependency step is what
+does not fit: llvm@22 + rust + the rest come to about 6 h 31 against the 5 h 55 the job has left
+after checkout, so the save is never reached either. That is what
+`mac-brew-cache.yml` is for — it builds nothing but the formulae it is given, so each gets the
+whole 6 hours. Warm in two dispatches, `llvm@22` then `rust`: their 5 h 41 together does not fit
+under one timeout, and the second dispatch restores `llvm@22` from the cache instead of building
+it again. Asking for both at once is the situation the workflow exists to escape.
+
+**None of this is what a failing Intel job used to cost.** `upload_to_release` carried `needs:
+MacOS` over the whole matrix with no `if:`, and `fail-fast` is off — so arm64 succeeded on
+09-10 through 09-14 and all five of its DMGs were discarded with the Intel job, and no macOS
+nightly shipped at all for five days, Apple Silicon included. It now runs under `always()` and
+fetches each architecture's artifact separately, so one of them is published whatever became of
+the other. `always()` and not the usually-preferred `!cancelled()`, because a job killed by the
+ceiling is *reported* as cancelled and that is the case this has to publish through; the cost is
+that a hand-cancelled run also publishes what it had. A check between the downloads and the
+release refuses to publish nothing, since with both downloads allowed to fail an empty workspace
+would otherwise reach `tip` as an empty file list and pass.
+
+So the Intel measures below decide whether an Intel DMG exists, and no longer whether a macOS
+nightly exists at all.
+
 ## Secrets and settings to create
 
 All on the `ansel` repository. Every one is optional in the sense that its step is

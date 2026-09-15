@@ -1,0 +1,149 @@
+# Warm the mac nightly's Homebrew keg cache, one formula at a time.
+#
+# mac-nightly.yml caches the kegs it cannot afford to build (see tools/brew_cache_key.sh), but
+# actions/cache only saves when the job succeeds, and the Intel job is killed at GitHub's
+# 6-hour ceiling precisely because those builds do not fit -- so a cold cache could never warm
+# itself from the nightly. This workflow does nothing but build the formulae it is given and
+# let the cache save, which gives each one the whole 6 hours to itself.
+#
+# Measured on the nightlies of 2026-09-10 to 09-15: llvm@22 3h43 to over 4h54, rust 1h05 to 1h29,
+# everything else about 50 minutes. Both are librsvg's dependencies -- it is written in Rust --
+# so unlike our own llvm, which install-deps-macos.sh now skips on Intel, neither can simply be
+# dropped. Their 5h41 together does not fit under one timeout, so warm in two dispatches:
+# `llvm@22' first, then `rust', which then restores llvm@22 from the cache instead of building
+# it again. Asking for both at once is the situation this workflow exists to escape.
+#
+# Nothing is scheduled: a warm cache is re-saved under a new key only when a formula's version
+# moves, and the nightly itself does that save once it stops being killed. Dispatch this again
+# after a version bump the nightly could not absorb.
+
+name: Mac Homebrew keg cache
+
+# Reading the repository is all this needs: it checks the tree out for the two scripts it
+# calls, installs Homebrew formulae, and writes nothing back. The caches it fills are not
+# governed by this token.
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      formulae:
+        description: "Formulae to build and cache (space-separated). Start with: llvm@22"
+        required: true
+        default: "llvm@22"
+
+jobs:
+  warm:
+    name: Warm the Homebrew keg cache
+    # Intel only: arm64 pours these from bottles in seconds and needs no cache.
+    runs-on: macos-15-intel
+    # Just below GitHub's 6-hour ceiling, so an overrun fails the step it is in and says so
+    # rather than cancelling the job with no indication of where the budget went, while still
+    # giving the build nearly every minute available. llvm@22 is not a stable 4 hours: 3h43 to
+    # 4h12 across the September nightlies, and 4h54 on 2026-09-15 without finishing, so the
+    # margin here is the difference between one dispatch and two.
+    timeout-minutes: 355
+    env:
+      SRC_DIR: ${{ github.workspace }}/src
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+          path: ${{ env.SRC_DIR }}
+      # The keys and the paths are the nightly's own, through the same script and the same
+      # brew queries: an entry saved here must be the entry the nightly looks for.
+      - name: Resolve the Homebrew keg cache keys
+        id: brewcache
+        run: |
+          brew update
+          "${SRC_DIR}/tools/brew_cache_key.sh" llvm@22 rust
+          {
+            echo "cellar=$(brew --cellar)"
+            echo "opt=$(brew --prefix)/opt"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore the llvm@22 keg
+        id: keg-llvm_22
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.brewcache.outputs.cellar }}/llvm@22
+            ${{ steps.brewcache.outputs.opt }}/llvm@22
+          key: ${{ steps.brewcache.outputs.llvm_22_key }}
+      - name: Restore the rust keg
+        id: keg-rust
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.brewcache.outputs.cellar }}/rust
+            ${{ steps.brewcache.outputs.opt }}/rust
+          key: ${{ steps.brewcache.outputs.rust_key }}
+      # Two different situations used to collapse into one tolerated `brew link' failure, and
+      # both printed `Error:' lines that read like a broken step: a keg that was never restored
+      # (a cache miss, the ordinary cold case) and a keg-only formula, which needs no link at
+      # all because its opt link travelled inside the cached keg. llvm@22 is keg-only, so even a
+      # cache HIT produced an error. Each case is now asked about before brew is called, so the
+      # log says what happened and a genuine link failure is a genuine failure of the step.
+      #
+      # NEVER add --force. llvm is keg-only on purpose: forcing it would put its clang in the
+      # prefix's bin ahead of Xcode's, and this build compiles with CC=cc.
+      - name: Relink the restored kegs
+        run: |
+          cellar="$(brew --cellar)"
+          for f in llvm@22 rust; do
+            if [ ! -d "${cellar}/${f}" ]; then
+              echo "${f}: not in the cache -- it will be built"
+              continue
+            fi
+            keg_only="$(brew info --json=v2 --formula "${f}" \
+              | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin)["formulae"][0]["keg_only"] else "no")')"
+            if [ "${keg_only}" = "yes" ]; then
+              echo "${f}: restored, keg-only -- its opt link came with the keg"
+              continue
+            fi
+            brew link --overwrite "${f}"
+            echo "${f}: restored and linked"
+          done
+      # The input reaches the shell through the environment, never through template
+      # expansion into the script body: `${{ inputs.formulae }}` written inline is substituted
+      # before any shell reads it, so a value carrying a `;' would run as a command of its own.
+      # $FORMULAE is deliberately unquoted -- the whole point is several formulae -- so the
+      # word splitting is the shell's, on data.
+      - name: Build the requested formulae
+        env:
+          FORMULAE: ${{ inputs.formulae }}
+        run: |
+          # Already-installed formulae are reported and skipped, so re-dispatching after a
+          # partial warm-up costs a minute rather than another build.
+          # shellcheck disable=SC2086
+          brew install ${FORMULAE}
+      # The kegs are banked here, as soon as they exist, and not by actions/cache's own save --
+      # that is a post-step at the end of the job, and a job cancelled at the 6-hour ceiling
+      # never reaches it. On the nightly of 2026-09-10 the dependency step SUCCEEDED at 5h52
+      # and the budget then ran out during the build, so the four hours it had just spent on
+      # llvm were thrown away with the job. Saving at this point means a run that gets this far
+      # warms the cache for the next one even when it dies afterwards.
+      - name: Save the llvm@22 keg
+        if: ${{ steps.keg-llvm_22.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ steps.brewcache.outputs.cellar }}/llvm@22
+            ${{ steps.brewcache.outputs.opt }}/llvm@22
+          key: ${{ steps.brewcache.outputs.llvm_22_key }}
+      - name: Save the rust keg
+        if: ${{ steps.keg-rust.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ steps.brewcache.outputs.cellar }}/rust
+            ${{ steps.brewcache.outputs.opt }}/rust
+          key: ${{ steps.brewcache.outputs.rust_key }}
+      - name: Report what the cache now holds
+        if: ${{ always() }}
+        run: |
+          for f in llvm@22 rust; do
+            printf '%-10s %s\n' "$f" "$(brew list --versions "$f" 2>/dev/null || echo 'not installed')"
+          done
+          du -sh "$(brew --cellar)"/{llvm@22,rust} 2>/dev/null || true

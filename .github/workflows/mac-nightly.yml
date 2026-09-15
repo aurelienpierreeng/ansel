@@ -55,7 +55,11 @@ jobs:
             xcode: 26.3, 
             deployment: 15.0, 
             tag: "intel64",
-            eco: "-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DDT_APPLE_X86_TARGET_CLONES=1",
+            # TESTBUILD_OPENCL_PROGRAMS needs llvm, which install-deps-macos.sh skips here:
+            # Homebrew has no Intel bottle for it any more and it is a ~4 h source build, for
+            # a check the arm64 CI performs on every commit. Stated rather than left to
+            # CMake's absent-LLVM fallback, which reaches the same result through warnings.
+            eco: "-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DDT_APPLE_X86_TARGET_CLONES=1 -DTESTBUILD_OPENCL_PROGRAMS=OFF",
              } # AppleClang 17, intel64
         btype:
           - RelWithDebInfo
@@ -90,9 +94,96 @@ jobs:
           submodules: true
           fetch-tags: true
           path: ${{ env.SRC_DIR }}
+      # Homebrew publishes no bottles for Intel macOS any more, so a large part of the tree
+      # is built from source there, and two formulae eat the job's 6-hour budget: llvm@22
+      # (3h43 to over 4h54) and rust (1h05 to 1h29). Both are librsvg's -- it is written in Rust --
+      # and so neither can be dropped the way our own llvm was. Their kegs are cached between
+      # runs; tools/brew_cache_key.sh carries the reasoning and owns the keys. arm64 pours
+      # bottles in 77 seconds and needs none of it, so the cache steps are Intel-only and the
+      # quota is left to the architecture that cannot do without it.
+      #
+      # Each formula gets its own entry, keyed on its own version, so a bump in one does not
+      # discard the other.
+      - name: Resolve the Homebrew keg cache keys
+        id: brewcache
+        if: ${{ runner.arch == 'X64' }}
+        run: |
+          brew update
+          "${SRC_DIR}/tools/brew_cache_key.sh" llvm@22 rust
+          {
+            echo "cellar=$(brew --cellar)"
+            echo "opt=$(brew --prefix)/opt"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore the llvm@22 keg
+        id: keg-llvm_22
+        if: ${{ runner.arch == 'X64' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.brewcache.outputs.cellar }}/llvm@22
+            ${{ steps.brewcache.outputs.opt }}/llvm@22
+          key: ${{ steps.brewcache.outputs.llvm_22_key }}
+      - name: Restore the rust keg
+        id: keg-rust
+        if: ${{ runner.arch == 'X64' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.brewcache.outputs.cellar }}/rust
+            ${{ steps.brewcache.outputs.opt }}/rust
+          key: ${{ steps.brewcache.outputs.rust_key }}
+      # Two different situations used to collapse into one tolerated `brew link' failure, and
+      # both printed `Error:' lines that read like a broken step: a keg that was never restored
+      # (a cache miss, the ordinary cold case) and a keg-only formula, which needs no link at
+      # all because its opt link travelled inside the cached keg. llvm@22 is keg-only, so even a
+      # cache HIT produced an error. Each case is now asked about before brew is called, so the
+      # log says what happened and a genuine link failure is a genuine failure of the step.
+      #
+      # NEVER add --force. llvm is keg-only on purpose: forcing it would put its clang in the
+      # prefix's bin ahead of Xcode's, and this build compiles with CC=cc.
+      - name: Relink the restored kegs
+        if: ${{ runner.arch == 'X64' }}
+        run: |
+          cellar="$(brew --cellar)"
+          for f in llvm@22 rust; do
+            if [ ! -d "${cellar}/${f}" ]; then
+              echo "${f}: not in the cache -- it will be built"
+              continue
+            fi
+            keg_only="$(brew info --json=v2 --formula "${f}" \
+              | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin)["formulae"][0]["keg_only"] else "no")')"
+            if [ "${keg_only}" = "yes" ]; then
+              echo "${f}: restored, keg-only -- its opt link came with the keg"
+              continue
+            fi
+            brew link --overwrite "${f}"
+            echo "${f}: restored and linked"
+          done
       - name: Install Base Dependencies
         run: |
           "${SRC_DIR}/packaging/install-deps-macos.sh"
+      # The kegs are banked here, as soon as they exist, and not by actions/cache's own save --
+      # that is a post-step at the end of the job, and a job cancelled at the 6-hour ceiling
+      # never reaches it. On the nightly of 2026-09-10 the dependency step SUCCEEDED at 5h52
+      # and the budget then ran out during the build, so the four hours it had just spent on
+      # llvm were thrown away with the job. Saving at this point means a run that gets this far
+      # warms the cache for the next one even when it dies afterwards.
+      - name: Save the llvm@22 keg
+        if: ${{ runner.arch == 'X64' && steps.keg-llvm_22.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ steps.brewcache.outputs.cellar }}/llvm@22
+            ${{ steps.brewcache.outputs.opt }}/llvm@22
+          key: ${{ steps.brewcache.outputs.llvm_22_key }}
+      - name: Save the rust keg
+        if: ${{ runner.arch == 'X64' && steps.keg-rust.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ steps.brewcache.outputs.cellar }}/rust
+            ${{ steps.brewcache.outputs.opt }}/rust
+          key: ${{ steps.brewcache.outputs.rust_key }}
       - name: Update lensfun data
         if: ${{ success() }}
         run: |
