@@ -42,8 +42,33 @@ ln -s /Applications package/ || true
 # Create a temporary rw image. Use a process-local filename so a stale mounted
 # image from a previous interrupted packaging attempt cannot make hdiutil report
 # "Resource busy" when the CI runner reuses the same install directory.
-hdiutil create -srcfolder package -volname "${PROGN}" -fs HFS+ \
-	-fsargs "-c c=64,a=16,e=16" -format UDRW "${temp_dmg}"
+#
+# Retried, because that is not the only way hdiutil says "Resource busy". What is MEASURED is
+# that this command fails intermittently on the same code: once in six nightly DMG builds, the
+# other five passing. What is INFERRED, and not observed, is which process held the folder --
+# the step before this one ends on `codesign --deep' over the whole bundle, and macOS answers a
+# newly signed application by looking at it, Spotlight indexing it and the security machinery
+# verifying it. The retry does not depend on that guess being right: it cures any transient
+# holder, whichever it was.
+#
+# A failed attempt leaves nothing behind that matters -- the image is named per process and the
+# EXIT trap removes it -- but hdiutil may have written a partial file, so each retry clears it
+# first or the next attempt fails on "file already exists" instead. The wait grows, since a
+# fixed short one is the version that would still lose to a slow indexer.
+dmg_attempts=3
+for dmg_attempt in $(seq 1 ${dmg_attempts}); do
+	if hdiutil create -srcfolder package -volname "${PROGN}" -fs HFS+ \
+		-fsargs "-c c=64,a=16,e=16" -format UDRW "${temp_dmg}"; then
+		break
+	fi
+	if [ "${dmg_attempt}" -eq "${dmg_attempts}" ]; then
+		echo "hdiutil create failed ${dmg_attempts} times; giving up." >&2
+		exit 1
+	fi
+	rm -f "${temp_dmg}"
+	echo "hdiutil create failed (attempt ${dmg_attempt}/${dmg_attempts}); retrying in $((dmg_attempt * 15)) s..." >&2
+	sleep $((dmg_attempt * 15))
+done
 
 # Mount image without autoopen to create window style params
 device=$(hdiutil attach -readwrite -noverify -autoopen "${temp_dmg}" |
