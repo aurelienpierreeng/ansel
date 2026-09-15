@@ -256,6 +256,91 @@ static void _a_bleed_grows_the_sheet_on_every_side(void **state)
   dt_canvas_free(canvas);
 }
 
+/**
+ * A line is content: a page holding nothing but a rule is a page, and is exported. The canvas
+ * has a frame on its first page and a line alone on its third, so the second page is empty
+ * and skipped, and exactly two leaves come out.
+ */
+static void _a_page_holding_only_a_line_is_exported(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = _canvas_of_pages(1);
+  double width = 0.0;
+  double height = 0.0;
+  assert_true(dt_canvas_paper_dimensions(canvas, &width, &height));
+  dt_canvas_line_style_t style = dt_canvas_line_style_default();
+  style.line_width = 6.0f;
+  style.color = dt_canvas_color(0.9f, 0.1f, 0.1f, 1.0f);
+  style.arrow_end = FALSE;
+  dt_canvas_add_line(canvas, 2.25 * width, 0.5 * height, 2.75 * width, 0.5 * height, DT_CANVAS_ROUTING_STRAIGHT,
+                     &style);
+  dt_canvas_export_options_t options = dt_canvas_export_options_default();
+  options.format = DT_CANVAS_EXPORT_PNG;
+  options.dpi = 72.0f;
+  gchar *path = _output("rule.png");
+  GError *error = NULL;
+  assert_true(dt_canvas_export(canvas, path, &options, &error));
+  assert_null(error);
+  gchar *first = _output("rule_01.png");
+  gchar *second = _output("rule_02.png");
+  gchar *third = _output("rule_03.png");
+  assert_false(g_file_test(path, G_FILE_TEST_EXISTS));
+  assert_true(g_file_test(first, G_FILE_TEST_EXISTS));
+  assert_true(g_file_test(second, G_FILE_TEST_EXISTS));
+  assert_false(g_file_test(third, G_FILE_TEST_EXISTS));
+  int page_width = 0;
+  int page_height = 0;
+  _png_size(second, &page_width, &page_height);
+  assert_int_equal(page_width, 298);
+  assert_int_equal(page_height, 420);
+  g_remove(first);
+  g_remove(second);
+  dt_free(first);
+  dt_free(second);
+  dt_free(third);
+  dt_free(path);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * A line brings a page only where its ink is. One runs ten units above the first page's bottom
+ * edge with its arrowhead, and an arc bows up to five units under its top edge: a box grown by
+ * the head's reach on every side, or bounding the arc by its control points, would cross into
+ * the pages below and above and export them as blank leaves. One page comes out, under the name
+ * it was asked for.
+ */
+static void _a_line_near_a_page_edge_brings_no_blank_page(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = _canvas_of_pages(1);
+  double width = 0.0;
+  double height = 0.0;
+  assert_true(dt_canvas_paper_dimensions(canvas, &width, &height));
+  dt_canvas_object_t *rule = dt_canvas_add_line(canvas, 0.25 * width, height - 10.0, 0.75 * width, height - 10.0,
+                                                DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  assert_true(rule->connector.style & DT_CANVAS_CONNECTOR_ARROW_END);
+  dt_canvas_object_t *arc = dt_canvas_add_line(canvas, 40.0, 35.0, 240.0, 35.0, DT_CANVAS_ROUTING_CUBIC, NULL);
+  dt_canvas_rect_t extent;
+  assert_true(dt_canvas_object_extent(canvas, rule, &extent));
+  assert_true(extent.y + extent.height < height);
+  assert_true(dt_canvas_object_extent(canvas, arc, &extent));
+  assert_true(extent.y > 0.0);
+  dt_canvas_export_options_t options = dt_canvas_export_options_default();
+  options.format = DT_CANVAS_EXPORT_PNG;
+  options.dpi = 72.0f;
+  gchar *path = _output("edge.png");
+  gchar *numbered = _output("edge_01.png");
+  GError *error = NULL;
+  assert_true(dt_canvas_export(canvas, path, &options, &error));
+  assert_null(error);
+  assert_true(g_file_test(path, G_FILE_TEST_EXISTS));
+  assert_false(g_file_test(numbered, G_FILE_TEST_EXISTS));
+  g_remove(path);
+  dt_free(numbered);
+  dt_free(path);
+  dt_canvas_free(canvas);
+}
+
 /** One file per page for PNG and JPEG, numbered; one file holding them all for PDF and TIFF. */
 static void _every_format_writes_every_page(void **state)
 {
@@ -440,6 +525,8 @@ int main(void)
     cmocka_unit_test(_a_page_is_rasterised_at_exactly_its_size_times_the_resolution),
     cmocka_unit_test(_a_spread_is_cut_at_its_folds),
     cmocka_unit_test(_a_bleed_grows_the_sheet_on_every_side),
+    cmocka_unit_test(_a_page_holding_only_a_line_is_exported),
+    cmocka_unit_test(_a_line_near_a_page_edge_brings_no_blank_page),
     cmocka_unit_test(_every_format_writes_every_page),
     cmocka_unit_test(_a_transparent_canvas_exports_as_a_hole),
     cmocka_unit_test(_a_pdf_page_is_a_photograph_not_a_bitmap),

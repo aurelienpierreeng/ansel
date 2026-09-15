@@ -1549,6 +1549,20 @@ static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object
       object->connector.from_anchor = object->connector.to_anchor;
       object->connector.to_id = from_id;
       object->connector.to_anchor = from_anchor;
+      // A free end carries its place and its tangent with it: the id alone would send a line's
+      // start to where its end was while leaving its point behind.
+      const double from_x = object->connector.from_x;
+      const double from_y = object->connector.from_y;
+      object->connector.from_x = object->connector.to_x;
+      object->connector.from_y = object->connector.to_y;
+      object->connector.to_x = from_x;
+      object->connector.to_y = from_y;
+      const float from_tangent_x = object->connector.from_tangent_x;
+      const float from_tangent_y = object->connector.from_tangent_y;
+      object->connector.from_tangent_x = object->connector.to_tangent_x;
+      object->connector.from_tangent_y = object->connector.to_tangent_y;
+      object->connector.to_tangent_x = from_tangent_x;
+      object->connector.to_tangent_y = from_tangent_y;
       return DT_CANVAS_EFFECT_CHANGED;
     }
     case DT_CANVAS_PROP_LINE_WIDTH:

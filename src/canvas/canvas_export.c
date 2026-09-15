@@ -114,7 +114,7 @@ static gchar *_page_path(const char *path, const guint page, const guint pages)
 
 /**
  * The pages the canvas asks for, in CANVAS UNITS. A canvas divided into pages gives one per
- * page holding a frame, empty ones skipped; a canvas without pages gives ONE page around
+ * page holding a frame or a line, empty ones skipped; a canvas without pages gives ONE page around
  * everything on it, grown by the canvas's margin -- not one page per frame. The page size is
  * the canvas's, never the exporter's, and what turns it into a physical size is the canvas's
  * own resolution.
@@ -153,16 +153,20 @@ static GArray *_pages_of(const dt_canvas_t *canvas, const double bleed)
         {
           const dt_canvas_rect_t page_rect = dt_canvas_page_rect(canvas, col, row);
           if(!(page_rect.width > 0.0)) continue;
-          gboolean holds_a_frame = FALSE;
-          for(guint idx = 0; idx < dt_canvas_object_count(canvas) && !holds_a_frame; idx++)
+          gboolean holds_an_object = FALSE;
+          for(guint idx = 0; idx < dt_canvas_object_count(canvas) && !holds_an_object; idx++)
           {
             const dt_canvas_object_t *object = dt_canvas_object_at(canvas, idx);
-            if(!dt_canvas_object_is_frame(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
-            const dt_canvas_rect_t frame = dt_canvas_object_bounds(object);
-            holds_a_frame = frame.x < page_rect.x + page_rect.width && frame.x + frame.width > page_rect.x
-                            && frame.y < page_rect.y + page_rect.height && frame.y + frame.height > page_rect.y;
+            // A line is content in its own right, so a page holding only a rule is a page; a
+            // connector anchored at both ends is not, since it sits on pages its frames bring.
+            const gboolean counted = dt_canvas_object_is_frame(object) || dt_canvas_connector_has_free_end(object);
+            if(!counted || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
+            dt_canvas_rect_t extent;
+            if(!dt_canvas_object_extent(canvas, object, &extent)) continue;
+            holds_an_object = extent.x < page_rect.x + page_rect.width && extent.x + extent.width > page_rect.x
+                              && extent.y < page_rect.y + page_rect.height && extent.y + extent.height > page_rect.y;
           }
-          if(!holds_a_frame) continue;
+          if(!holds_an_object) continue;
           // Each side gets whichever of the two it owes: a fold owes the bind gutter, a cut
           // owes the bleed. The bleed is added to every page below, so only the difference is
           // applied here and the fold sides take theirs back.

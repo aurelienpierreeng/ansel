@@ -23,6 +23,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
+#include <float.h>
 #include <glib/gi18n.h>
 #include <librsvg/rsvg.h>
 #include <math.h>
@@ -51,7 +52,14 @@
  */
 #define CANVAS_DEFAULT_IMAGE_LONG_EDGE_UNITS 144.0
 #define CANVAS_DUPLICATE_OFFSET 40.0
-#define CANVAS_CONNECTOR_LINE_WIDTH 2.0f
+/**
+ * How far out a free end's automatic control point sits, as a fraction of the distance to where
+ * the route heads next, and how long a seeded arc's tangents are against its chord. It stands in
+ * for the anchored ends' 40-unit floor, which a free end must not take: a line a few units long
+ * would otherwise loop out past both of its ends.
+ */
+#define CANVAS_FREE_REACH 0.4
+#define CANVAS_SEED_ANGLE (M_PI / 6.0) ///< how far to one side of the chord a seeded arc leaves and arrives
 #define CANVAS_DEFAULT_SHADOW_OFFSET 8.0f
 #define CANVAS_MASK_MAX_NODES 512u
 
@@ -748,6 +756,44 @@ gboolean dt_canvas_svg_reload(dt_canvas_t *canvas, dt_canvas_object_t *object, G
   return changed;
 }
 
+dt_canvas_line_style_t dt_canvas_line_style_default(void)
+{
+  dt_canvas_line_style_t style;
+  memset(&style, 0, sizeof(style));
+  style.line_width = DT_CANVAS_CONNECTOR_LINE_WIDTH;
+  style.color = dt_canvas_color(0.85f, 0.85f, 0.85f, 1.0f);
+  style.dashed = FALSE;
+  style.arrow_start = FALSE;
+  style.arrow_end = TRUE;
+  return style;
+}
+
+gboolean dt_canvas_line_style_get(const dt_canvas_object_t *object, dt_canvas_line_style_t *style)
+{
+  if(IS_NULL_PTR(object) || IS_NULL_PTR(style) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return FALSE;
+  const uint32_t bits = object->connector.style;
+  style->line_width = object->connector.line_width;
+  style->color = object->connector.color;
+  style->dashed = (bits & DT_CANVAS_CONNECTOR_DASHED) != 0;
+  style->arrow_start = (bits & DT_CANVAS_CONNECTOR_ARROW_START) != 0;
+  style->arrow_end = (bits & DT_CANVAS_CONNECTOR_ARROW_END) != 0;
+  return TRUE;
+}
+
+/** Write a style into a connector: the one spelling both a connector and a line are born through. */
+static void _connector_apply_style(dt_canvas_connector_t *connector, const dt_canvas_line_style_t *style)
+{
+  uint32_t bits = DT_CANVAS_CONNECTOR_PLAIN;
+  if(style->arrow_end) bits |= DT_CANVAS_CONNECTOR_ARROW_END;
+  if(style->arrow_start) bits |= DT_CANVAS_CONNECTOR_ARROW_START;
+  if(style->dashed) bits |= DT_CANVAS_CONNECTOR_DASHED;
+  connector->style = bits;
+  connector->color = style->color;
+  // A style handed down from somewhere else is not trusted to be a width; zero is, and paints two units.
+  const gboolean usable_width = isfinite(style->line_width) && style->line_width >= 0.0f;
+  connector->line_width = usable_width ? style->line_width : DT_CANVAS_CONNECTOR_LINE_WIDTH;
+}
+
 dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_id, uint32_t to_id)
 {
   if(IS_NULL_PTR(canvas) || from_id == to_id) return NULL;
@@ -757,9 +803,8 @@ dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_i
   dt_canvas_object_t *object = _object_new(canvas, DT_CANVAS_OBJECT_CONNECTOR, 0.0, 0.0, 0.0, 0.0);
   object->connector.from_id = from_id;
   object->connector.to_id = to_id;
-  object->connector.style = DT_CANVAS_CONNECTOR_ARROW_END;
-  object->connector.color = dt_canvas_color(0.85f, 0.85f, 0.85f, 1.0f);
-  object->connector.line_width = CANVAS_CONNECTOR_LINE_WIDTH;
+  const dt_canvas_line_style_t style = dt_canvas_line_style_default();
+  _connector_apply_style(&object->connector, &style);
   object->connector.from_anchor = DT_CANVAS_ANCHOR_AUTO;
   object->connector.to_anchor = DT_CANVAS_ANCHOR_AUTO;
   object->connector.routing = DT_CANVAS_ROUTING_CUBIC;
@@ -769,6 +814,59 @@ dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_i
   object->connector.via_tangent_x = 0.0;
   object->connector.via_tangent_y = 0.0;
   return object;
+}
+
+dt_canvas_object_t *dt_canvas_add_line(dt_canvas_t *canvas, const double x0, const double y0, const double x1,
+                                       const double y1, const dt_canvas_routing_t routing,
+                                       const dt_canvas_line_style_t *style)
+{
+  if(IS_NULL_PTR(canvas)) return NULL;
+  const dt_canvas_line_style_t fallback = dt_canvas_line_style_default();
+  const dt_canvas_line_style_t *applied = IS_NULL_PTR(style) ? &fallback : style;
+  dt_canvas_object_t *object = _object_new(canvas, DT_CANVAS_OBJECT_CONNECTOR, 0.0, 0.0, 0.0, 0.0);
+  // Both ids stay 0, which is what makes both ends free: no frame has that id.
+  object->connector.from_id = 0;
+  object->connector.to_id = 0;
+  _connector_apply_style(&object->connector, applied);
+  object->connector.from_anchor = DT_CANVAS_ANCHOR_AUTO;
+  object->connector.to_anchor = DT_CANVAS_ANCHOR_AUTO;
+  const gboolean known_routing = routing == DT_CANVAS_ROUTING_STRAIGHT || routing == DT_CANVAS_ROUTING_SQUARE
+                                 || routing == DT_CANVAS_ROUTING_CUBIC;
+  object->connector.routing = known_routing ? (uint32_t)routing : (uint32_t)DT_CANVAS_ROUTING_STRAIGHT;
+  object->connector.via_count = 0;
+  object->connector.from_x = x0;
+  object->connector.from_y = y0;
+  object->connector.to_x = x1;
+  object->connector.to_y = y1;
+  dt_canvas_route_t route;
+  if(object->connector.routing == DT_CANVAS_ROUTING_CUBIC && dt_canvas_connector_route(canvas, object, &route))
+    dt_canvas_connector_seed_curve(object, &route);
+  return object;
+}
+
+gboolean dt_canvas_connector_has_free_end(const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return FALSE;
+  return object->connector.from_id == 0 || object->connector.to_id == 0;
+}
+
+void dt_canvas_connector_translate(dt_canvas_object_t *object, const double dx, const double dy)
+{
+  if(!dt_canvas_connector_has_free_end(object)) return;
+  if(object->connector.from_id == 0)
+  {
+    object->connector.from_x += dx;
+    object->connector.from_y += dy;
+  }
+  if(object->connector.to_id == 0)
+  {
+    object->connector.to_x += dx;
+    object->connector.to_y += dy;
+  }
+  // The waypoint goes with whatever of the line moves: left behind, it would bend a moved line
+  // back to where it was. A line anchored at both ends never gets here, since its frames move it.
+  object->connector.via_x += dx;
+  object->connector.via_y += dy;
 }
 
 static gint _index_of(const dt_canvas_t *canvas, const uint32_t id)
@@ -783,7 +881,9 @@ static gint _index_of(const dt_canvas_t *canvas, const uint32_t id)
 
 gboolean dt_canvas_remove_object(dt_canvas_t *canvas, uint32_t id)
 {
-  if(IS_NULL_PTR(canvas)) return FALSE;
+  // 0 names no object -- it is what a free end holds -- and the cascade below would read it as
+  // every free end in the document.
+  if(IS_NULL_PTR(canvas) || id == 0) return FALSE;
   const gint index = _index_of(canvas, id);
   if(index < 0) return FALSE;
   g_ptr_array_remove_index(canvas->objects, (guint)index);
@@ -811,11 +911,22 @@ dt_canvas_object_t *dt_canvas_duplicate_object(dt_canvas_t *canvas, uint32_t id)
 {
   if(IS_NULL_PTR(canvas)) return NULL;
   const dt_canvas_object_t *source = dt_canvas_find_object(canvas, id);
-  if(!dt_canvas_object_is_frame(source)) return NULL;
+  // A line owns everything it is made of; a connector with an anchored end belongs to its frames,
+  // and a copy of it would lie exactly over the original.
+  const gboolean is_line = !IS_NULL_PTR(source) && source->kind == DT_CANVAS_OBJECT_CONNECTOR
+                           && source->connector.from_id == 0 && source->connector.to_id == 0;
+  if(!dt_canvas_object_is_frame(source) && !is_line) return NULL;
   dt_canvas_object_t *copy = _object_copy(source);
   copy->id = canvas->next_id++;
-  copy->x += CANVAS_DUPLICATE_OFFSET;
-  copy->y += CANVAS_DUPLICATE_OFFSET;
+  if(is_line)
+  {
+    dt_canvas_connector_translate(copy, CANVAS_DUPLICATE_OFFSET, CANVAS_DUPLICATE_OFFSET);
+  }
+  else
+  {
+    copy->x += CANVAS_DUPLICATE_OFFSET;
+    copy->y += CANVAS_DUPLICATE_OFFSET;
+  }
   copy->z = _top_z(canvas) + 1;
   g_ptr_array_add(canvas->objects, copy);
   _sort_objects(canvas);
@@ -1660,15 +1771,16 @@ static void _route_add_point(dt_canvas_route_t *route, const double x, const dou
   route->point_count++;
 }
 
-/** Square routing: a stub along each normal, then legs that are horizontal or vertical. */
-static void _route_square(dt_canvas_route_t *route)
+/**
+ * Square routing: a stub along each normal, then legs that are horizontal or vertical. The stubs
+ * are the caller's, since only it knows which ends are free.
+ */
+static void _route_square(dt_canvas_route_t *route, const double from_stub, const double to_stub)
 {
-  const double distance = hypot(route->to_x - route->from_x, route->to_y - route->from_y);
-  const double stub = CLAMP(distance * 0.25, 20.0, 60.0);
-  const double start_x = route->from_x + route->from_normal_x * stub;
-  const double start_y = route->from_y + route->from_normal_y * stub;
-  const double end_x = route->to_x + route->to_normal_x * stub;
-  const double end_y = route->to_y + route->to_normal_y * stub;
+  const double start_x = route->from_x + route->from_normal_x * from_stub;
+  const double start_y = route->from_y + route->from_normal_y * from_stub;
+  const double end_x = route->to_x + route->to_normal_x * to_stub;
+  const double end_y = route->to_y + route->to_normal_y * to_stub;
   const gboolean from_horizontal = fabs(route->from_normal_x) >= fabs(route->from_normal_y);
   const gboolean to_horizontal = fabs(route->to_normal_x) >= fabs(route->to_normal_y);
   _route_add_point(route, route->from_x, route->from_y);
@@ -1728,8 +1840,12 @@ static void _route_flatten_cubic(dt_canvas_route_t *route, const double start_x,
   }
 }
 
-/** Cubic routing: control points along the normals, flattened for hit tests. */
-static void _route_cubic(dt_canvas_route_t *route, const dt_canvas_connector_t *connector)
+/**
+ * Cubic routing: control points along the normals, flattened for hit tests. `floored` keeps the
+ * automatic lengths at least 40 units, which gives a curve room to leave a frame; a line with a
+ * free end has no frame to leave there, and a short one would loop out past its own ends.
+ */
+static void _route_cubic(dt_canvas_route_t *route, const dt_canvas_connector_t *connector, const gboolean floored)
 {
   if(route->segment_count == 2)
   {
@@ -1737,10 +1853,17 @@ static void _route_cubic(dt_canvas_route_t *route, const dt_canvas_connector_t *
     // the direction from start to end.
     double tangent_x = connector->via_tangent_x;
     double tangent_y = connector->via_tangent_y;
-    const double reach1_auto = fmax(40.0, hypot(route->via_x - route->from_x, route->via_y - route->from_y) * 0.4);
-    const double reach2_auto = fmax(40.0, hypot(route->to_x - route->via_x, route->to_y - route->via_y) * 0.4);
+    const double reach1_measured = hypot(route->via_x - route->from_x, route->via_y - route->from_y) * 0.4;
+    const double reach2_measured = hypot(route->to_x - route->via_x, route->to_y - route->via_y) * 0.4;
+    const double reach1_auto = fmax(40.0, reach1_measured);
+    const double reach2_auto = fmax(40.0, reach2_measured);
     const double reach1 = connector->from_reach > 0.0f ? connector->from_reach : reach1_auto;
     const double reach2 = connector->to_reach > 0.0f ? connector->to_reach : reach2_auto;
+    // A free end brings its own reach, so the floor above only reaches a line through the
+    // waypoint's automatic tangent. Unfloored, that tangent spans the shorter leg's share: it is
+    // laid along the chord on both sides of the waypoint, and a waypoint near one end would
+    // otherwise throw the curve out past that end.
+    const double tangent_reach = floored ? reach1_auto : fmin(reach1_measured, reach2_measured);
     if(hypot(tangent_x, tangent_y) < 1e-9)
     {
       tangent_x = route->to_x - route->from_x;
@@ -1748,8 +1871,8 @@ static void _route_cubic(dt_canvas_route_t *route, const dt_canvas_connector_t *
       const double tangent_length = hypot(tangent_x, tangent_y);
       if(tangent_length > 1e-9)
       {
-        tangent_x *= reach1_auto / tangent_length;
-        tangent_y *= reach1_auto / tangent_length;
+        tangent_x *= tangent_reach / tangent_length;
+        tangent_y *= tangent_reach / tangent_length;
       }
     }
     route->control1_x = route->from_x + route->from_normal_x * reach1;
@@ -1779,29 +1902,137 @@ static void _route_cubic(dt_canvas_route_t *route, const dt_canvas_connector_t *
                        route->control2_y, route->to_x, route->to_y, DT_CANVAS_ROUTE_MAX_POINTS - 1, FALSE);
 }
 
+/**
+ * A free end's normal and the reach its control point sits at. Its own tangent gives both when it
+ * has one. Otherwise it leaves toward where the route heads next, at a fraction of that distance
+ * rather than the anchored ends' floor, so a short line does not overshoot itself; and ends that
+ * coincide still leave along an axis, which keeps every normal finite and gives square routing's
+ * horizontal-or-vertical test a side to take.
+ * @return the distance to where the route heads next, which bounds a square stub the same way.
+ */
+static double _route_free_normal(const double end_x, const double end_y, const float tangent_x,
+                                 const float tangent_y, const double aim_x, const double aim_y,
+                                 const double fallback_x, double *normal_x, double *normal_y, float *reach)
+{
+  const double delta_x = aim_x - end_x;
+  const double delta_y = aim_y - end_y;
+  const double distance = hypot(delta_x, delta_y);
+  const double tangent_length = hypot((double)tangent_x, (double)tangent_y);
+  if(tangent_length > 0.0)
+  {
+    *normal_x = (double)tangent_x / tangent_length;
+    *normal_y = (double)tangent_y / tangent_length;
+    *reach = (float)tangent_length;
+    return distance;
+  }
+  if(distance > 1e-9)
+  {
+    *normal_x = delta_x / distance;
+    *normal_y = delta_y / distance;
+  }
+  else
+  {
+    *normal_x = fallback_x;
+    *normal_y = 0.0;
+  }
+  // Never zero: a zero reach means "automatic" to the cubic, which would put the 40-unit floor back.
+  *reach = fmaxf((float)(CANVAS_FREE_REACH * distance), FLT_MIN);
+  return distance;
+}
+
+/**
+ * A square stub. An anchored end's clears its frame, so it keeps its 20-unit floor. A free end's
+ * leaves toward where the route heads next and is held to half that distance, so a short line's
+ * stubs meet rather than cross and run past both of its ends.
+ */
+static double _route_square_stub(const double chord, const gboolean free_end, const double aim_distance)
+{
+  const double anchored_stub = CLAMP(chord * 0.25, 20.0, 60.0);
+  if(!free_end) return anchored_stub;
+  return MIN(anchored_stub, aim_distance * 0.5);
+}
+
 gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
                                    dt_canvas_route_t *route)
 {
   if(IS_NULL_PTR(connector) || IS_NULL_PTR(route) || connector->kind != DT_CANVAS_OBJECT_CONNECTOR) return FALSE;
-  const dt_canvas_object_t *from = dt_canvas_find_object(canvas, connector->connector.from_id);
-  const dt_canvas_object_t *to = dt_canvas_find_object(canvas, connector->connector.to_id);
-  if(!dt_canvas_object_is_frame(from) || !dt_canvas_object_is_frame(to)) return FALSE;
+  const dt_canvas_connector_t *line = &connector->connector;
+  // The four steps run in this order so nothing is circular: which ends are free, where the free
+  // ends are, where the anchored ends are (aiming at what step two placed), and only then which
+  // way the free ends leave (toward what steps two and three placed).
+  //
+  // 1. An anchored end must be on a frame; an id of 0 is free.
+  const gboolean from_free = line->from_id == 0;
+  const gboolean to_free = line->to_id == 0;
+  const dt_canvas_object_t *from = from_free ? NULL : dt_canvas_find_object(canvas, line->from_id);
+  const dt_canvas_object_t *to = to_free ? NULL : dt_canvas_find_object(canvas, line->to_id);
+  if(!from_free && !dt_canvas_object_is_frame(from)) return FALSE;
+  if(!to_free && !dt_canvas_object_is_frame(to)) return FALSE;
   memset(route, 0, sizeof(*route));
-  route->routing = connector->connector.routing;
-  route->segment_count = connector->connector.via_count > 0 ? 2 : 1;
-  route->via_x = connector->connector.via_x;
-  route->via_y = connector->connector.via_y;
-  dt_canvas_object_anchor_point(canvas, from, (dt_canvas_anchor_t)connector->connector.from_anchor, to->x, to->y,
-                                &route->from_x, &route->from_y, &route->from_normal_x, &route->from_normal_y);
-  dt_canvas_object_anchor_point(canvas, to, (dt_canvas_anchor_t)connector->connector.to_anchor, from->x, from->y,
-                                &route->to_x, &route->to_y, &route->to_normal_x, &route->to_normal_y);
+  route->routing = line->routing;
+  route->segment_count = line->via_count > 0 ? 2 : 1;
+  route->via_x = line->via_x;
+  route->via_y = line->via_y;
+  // 2. The free points.
+  if(from_free)
+  {
+    route->from_x = line->from_x;
+    route->from_y = line->from_y;
+  }
+  if(to_free)
+  {
+    route->to_x = line->to_x;
+    route->to_y = line->to_y;
+  }
+  // 3. An anchored end aims at the other frame's centre, exactly as it always has, so a document
+  //    from before free ends routes to the same bits; at the other end's point when that is free.
+  if(!from_free)
+  {
+    const double target_x = to_free ? route->to_x : to->x;
+    const double target_y = to_free ? route->to_y : to->y;
+    dt_canvas_object_anchor_point(canvas, from, (dt_canvas_anchor_t)line->from_anchor, target_x, target_y,
+                                  &route->from_x, &route->from_y, &route->from_normal_x, &route->from_normal_y);
+  }
+  if(!to_free)
+  {
+    const double target_x = from_free ? route->from_x : from->x;
+    const double target_y = from_free ? route->from_y : from->y;
+    dt_canvas_object_anchor_point(canvas, to, (dt_canvas_anchor_t)line->to_anchor, target_x, target_y,
+                                  &route->to_x, &route->to_y, &route->to_normal_x, &route->to_normal_y);
+  }
+  // 4. The free normals, and their reaches written into a copy: the routings below read a reach
+  //    from the connector, and the document's own record is not this function's to change.
+  dt_canvas_connector_t effective = *line;
+  double from_aim_distance = 0.0;
+  double to_aim_distance = 0.0;
+  if(from_free)
+  {
+    const double aim_x = route->segment_count == 2 ? route->via_x : route->to_x;
+    const double aim_y = route->segment_count == 2 ? route->via_y : route->to_y;
+    from_aim_distance = _route_free_normal(route->from_x, route->from_y, line->from_tangent_x, line->from_tangent_y,
+                                           aim_x, aim_y, 1.0, &route->from_normal_x, &route->from_normal_y,
+                                           &effective.from_reach);
+  }
+  if(to_free)
+  {
+    const double aim_x = route->segment_count == 2 ? route->via_x : route->from_x;
+    const double aim_y = route->segment_count == 2 ? route->via_y : route->from_y;
+    to_aim_distance = _route_free_normal(route->to_x, route->to_y, line->to_tangent_x, line->to_tangent_y, aim_x,
+                                         aim_y, -1.0, &route->to_normal_x, &route->to_normal_y,
+                                         &effective.to_reach);
+  }
   switch(route->routing)
   {
     case DT_CANVAS_ROUTING_SQUARE:
-      _route_square(route);
+    {
+      const double chord = hypot(route->to_x - route->from_x, route->to_y - route->from_y);
+      const double from_stub = _route_square_stub(chord, from_free, from_aim_distance);
+      const double to_stub = _route_square_stub(chord, to_free, to_aim_distance);
+      _route_square(route, from_stub, to_stub);
       break;
+    }
     case DT_CANVAS_ROUTING_CUBIC:
-      _route_cubic(route, &connector->connector);
+      _route_cubic(route, &effective, !from_free && !to_free);
       break;
     case DT_CANVAS_ROUTING_STRAIGHT:
     default:
@@ -1812,6 +2043,36 @@ gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_ob
       break;
   }
   return route->point_count >= 2;
+}
+
+gboolean dt_canvas_connector_seed_curve(dt_canvas_object_t *object, const dt_canvas_route_t *route)
+{
+  if(IS_NULL_PTR(object) || IS_NULL_PTR(route) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return FALSE;
+  dt_canvas_connector_t *line = &object->connector;
+  // A waypoint already bends the curve, and an anchored end leaves along its frame's normal.
+  if(line->routing != DT_CANVAS_ROUTING_CUBIC || line->via_count > 0) return FALSE;
+  const gboolean seed_from = line->from_id == 0 && line->from_tangent_x == 0.0f && line->from_tangent_y == 0.0f;
+  const gboolean seed_to = line->to_id == 0 && line->to_tangent_x == 0.0f && line->to_tangent_y == 0.0f;
+  if(!seed_from && !seed_to) return FALSE;
+  const double chord_x = route->to_x - route->from_x;
+  const double chord_y = route->to_y - route->from_y;
+  if(!(hypot(chord_x, chord_y) > 1e-9)) return FALSE;
+  // R(phi) = [cos -sin; sin cos] turns clockwise on screen, y being down. The start leaves along
+  // R(-30 degrees) of the chord and the end arrives along R(+30 degrees) of it, so both control
+  // points fall on the same side and the arc is symmetric about the chord's perpendicular.
+  const double cos_angle = cos(CANVAS_SEED_ANGLE);
+  const double sin_angle = sin(CANVAS_SEED_ANGLE);
+  if(seed_from)
+  {
+    line->from_tangent_x = (float)(CANVAS_FREE_REACH * (cos_angle * chord_x + sin_angle * chord_y));
+    line->from_tangent_y = (float)(CANVAS_FREE_REACH * (-sin_angle * chord_x + cos_angle * chord_y));
+  }
+  if(seed_to)
+  {
+    line->to_tangent_x = (float)(-CANVAS_FREE_REACH * (cos_angle * chord_x - sin_angle * chord_y));
+    line->to_tangent_y = (float)(-CANVAS_FREE_REACH * (sin_angle * chord_x + cos_angle * chord_y));
+  }
+  return TRUE;
 }
 
 void dt_canvas_route_midpoint(const dt_canvas_route_t *route, double *x, double *y)
@@ -1912,6 +2173,151 @@ gboolean dt_canvas_connector_endpoints(const dt_canvas_t *canvas, const dt_canva
   return TRUE;
 }
 
+double dt_canvas_stroke_reach(const double line_width, const uint32_t style)
+{
+  const double width = line_width > 0.0 ? line_width : DT_CANVAS_CONNECTOR_LINE_WIDTH;
+  if(style & (DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START))
+    return width + DT_CANVAS_ARROW_LENGTH * fmax(width / 2.0, 1.0);
+  return width / 2.0;
+}
+
+void dt_canvas_route_arrow_head(const dt_canvas_route_t *route, const gboolean at_end, const double line_width,
+                                double xy[6])
+{
+  const double width = line_width > 0.0 ? line_width : DT_CANVAS_CONNECTOR_LINE_WIDTH;
+  // A head is sized to its line, so a thick connector gets a proportionate one.
+  const double scale = fmax(width / 2.0, 1.0);
+  const int last = route->point_count - 1;
+  const double tip_x = at_end ? route->to_x : route->from_x;
+  const double tip_y = at_end ? route->to_y : route->from_y;
+  // It points along the leg it ends: for a straight line the chord, for the others the stub or
+  // the last flattened step of the curve.
+  const double behind_x = at_end ? route->points[2 * last - 2] : route->points[2];
+  const double behind_y = at_end ? route->points[2 * last - 1] : route->points[3];
+  const double angle = atan2(tip_y - behind_y, tip_x - behind_x);
+  const double length = DT_CANVAS_ARROW_LENGTH * scale;
+  const double half_width = DT_CANVAS_ARROW_HALF_WIDTH * scale;
+  const double base_x = tip_x - cos(angle) * length;
+  const double base_y = tip_y - sin(angle) * length;
+  const double normal_x = -sin(angle) * half_width;
+  const double normal_y = cos(angle) * half_width;
+  xy[0] = tip_x;
+  xy[1] = tip_y;
+  xy[2] = base_x + normal_x;
+  xy[3] = base_y + normal_y;
+  xy[4] = base_x - normal_x;
+  xy[5] = base_y - normal_y;
+}
+
+/**
+ * Grow [low, high] to hold one axis of a cubic Bezier. Its extremes are its ends and wherever the
+ * derivative, a quadratic, crosses zero inside the curve -- which the control points bound but
+ * rarely reach: a seeded arc peaks at three quarters of its controls' height.
+ */
+static void _cubic_axis_range(const double p0, const double p1, const double p2, const double p3, double *low,
+                              double *high)
+{
+  *low = fmin(*low, fmin(p0, p3));
+  *high = fmax(*high, fmax(p0, p3));
+  // B'(t) / 3 = a t^2 + b t + c.
+  const double a = -p0 + 3.0 * p1 - 3.0 * p2 + p3;
+  const double b = 2.0 * (p0 - 2.0 * p1 + p2);
+  const double c = p1 - p0;
+  double roots[2] = { -1.0, -1.0 };
+  const double scale = fabs(a) + fabs(b) + fabs(c);
+  if(!(scale > 0.0)) return;
+  if(fabs(a) <= 1e-12 * scale)
+  {
+    if(fabs(b) > 1e-12 * scale) roots[0] = -c / b;
+  }
+  else
+  {
+    const double discriminant = b * b - 4.0 * a * c;
+    if(discriminant >= 0.0)
+    {
+      const double root = sqrt(discriminant);
+      roots[0] = (-b + root) / (2.0 * a);
+      roots[1] = (-b - root) / (2.0 * a);
+    }
+  }
+  for(int idx = 0; idx < 2; idx++)
+  {
+    const double parameter = roots[idx];
+    if(!(parameter > 0.0 && parameter < 1.0)) continue;
+    const double remaining = 1.0 - parameter;
+    const double value = remaining * remaining * remaining * p0 + 3.0 * remaining * remaining * parameter * p1
+                         + 3.0 * remaining * parameter * parameter * p2 + parameter * parameter * parameter * p3;
+    *low = fmin(*low, value);
+    *high = fmax(*high, value);
+  }
+}
+
+gboolean dt_canvas_object_extent(const dt_canvas_t *canvas, const dt_canvas_object_t *object, dt_canvas_rect_t *out)
+{
+  if(IS_NULL_PTR(object) || IS_NULL_PTR(out)) return FALSE;
+  if(object->kind != DT_CANVAS_OBJECT_CONNECTOR)
+  {
+    *out = dt_canvas_object_bounds(object);
+    return TRUE;
+  }
+  dt_canvas_route_t route;
+  if(!dt_canvas_connector_route(canvas, object, &route) || route.point_count < 2) return FALSE;
+  double min_x = route.from_x;
+  double min_y = route.from_y;
+  double max_x = route.from_x;
+  double max_y = route.from_y;
+  if(route.routing == DT_CANVAS_ROUTING_CUBIC)
+  {
+    // The painter strokes the curve itself, not the polyline it is flattened to for hit tests.
+    const gboolean through_via = route.segment_count == 2;
+    const double first_end_x = through_via ? route.via_x : route.to_x;
+    const double first_end_y = through_via ? route.via_y : route.to_y;
+    _cubic_axis_range(route.from_x, route.control1_x, route.control2_x, first_end_x, &min_x, &max_x);
+    _cubic_axis_range(route.from_y, route.control1_y, route.control2_y, first_end_y, &min_y, &max_y);
+    if(through_via)
+    {
+      _cubic_axis_range(route.via_x, route.control3_x, route.control4_x, route.to_x, &min_x, &max_x);
+      _cubic_axis_range(route.via_y, route.control3_y, route.control4_y, route.to_y, &min_y, &max_y);
+    }
+  }
+  else
+  {
+    for(int idx = 0; idx < route.point_count; idx++)
+    {
+      min_x = fmin(min_x, route.points[2 * idx]);
+      max_x = fmax(max_x, route.points[2 * idx]);
+      min_y = fmin(min_y, route.points[2 * idx + 1]);
+      max_y = fmax(max_y, route.points[2 * idx + 1]);
+    }
+  }
+  // Round caps and joins keep the stroke within half its width of the path it follows.
+  const double half_width = dt_canvas_stroke_reach(object->connector.line_width, DT_CANVAS_CONNECTOR_PLAIN);
+  min_x -= half_width;
+  min_y -= half_width;
+  max_x += half_width;
+  max_y += half_width;
+  // A head is filled, not stroked, and reaches past the line only as far as its own triangle.
+  const uint32_t heads[2] = { DT_CANVAS_CONNECTOR_ARROW_START, DT_CANVAS_CONNECTOR_ARROW_END };
+  for(int end = 0; end < 2; end++)
+  {
+    if(!(object->connector.style & heads[end])) continue;
+    double triangle[6];
+    dt_canvas_route_arrow_head(&route, end == 1, object->connector.line_width, triangle);
+    for(int corner = 0; corner < 3; corner++)
+    {
+      min_x = fmin(min_x, triangle[2 * corner]);
+      max_x = fmax(max_x, triangle[2 * corner]);
+      min_y = fmin(min_y, triangle[2 * corner + 1]);
+      max_y = fmax(max_y, triangle[2 * corner + 1]);
+    }
+  }
+  out->x = min_x;
+  out->y = min_y;
+  out->width = max_x - min_x;
+  out->height = max_y - min_y;
+  return TRUE;
+}
+
 dt_canvas_rect_t dt_canvas_bounds(const dt_canvas_t *canvas)
 {
   dt_canvas_rect_t bounds = { 0.0, 0.0, 0.0, 0.0 };
@@ -1924,8 +2330,12 @@ dt_canvas_rect_t dt_canvas_bounds(const dt_canvas_t *canvas)
   for(guint idx = 0; idx < canvas->objects->len; idx++)
   {
     const dt_canvas_object_t *object = g_ptr_array_index(canvas->objects, idx);
-    if(!dt_canvas_object_is_frame(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
-    const dt_canvas_rect_t object_bounds = dt_canvas_object_bounds(object);
+    // A line is content of its own; a connector anchored at both ends lies between frames that
+    // are counted already, and leaving it out keeps an older document framed as it was.
+    const gboolean counted = dt_canvas_object_is_frame(object) || dt_canvas_connector_has_free_end(object);
+    if(!counted || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
+    dt_canvas_rect_t object_bounds;
+    if(!dt_canvas_object_extent(canvas, object, &object_bounds)) continue;
     if(first)
     {
       min_x = object_bounds.x;

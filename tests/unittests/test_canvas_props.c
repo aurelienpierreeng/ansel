@@ -1097,6 +1097,73 @@ static void _a_size_on_an_inheriting_font_writes_the_family_out(void **state)
   _fixture_free(&fixture);
 }
 
+/**
+ * cmocka's float and double comparisons both pass anything within FLT_EPSILON of the larger
+ * value, whatever tolerance they are handed -- 3.6e-5 at 300 units, measured -- so a check that
+ * means a tighter tolerance than that has to say so itself.
+ */
+#define assert_near(actual, expected, tolerance)                                                                 \
+  do                                                                                                            \
+  {                                                                                                             \
+    const double near_actual = (double)(actual);                                                                \
+    const double near_expected = (double)(expected);                                                            \
+    const double near_tolerance = (double)(tolerance);                                                          \
+    if(!(fabs(near_actual - near_expected) <= near_tolerance))                                                  \
+      fail_msg("%s is %.17g, expected %.17g within %g", #actual, near_actual, near_expected, near_tolerance);    \
+  } while(0)
+
+/**
+ * Reversing a line swaps what its ends are made of -- the points and the tangents, not only the
+ * ids -- so the curve is the same curve walked the other way. Nothing about a line with free
+ * ends is steered by the reaches or the waypoint's tangent, so this holds on its own.
+ */
+static void _reversing_a_line_walks_the_same_curve_backwards(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *line
+      = dt_canvas_add_line(fixture.canvas, -80.0, 30.0, 220.0, -45.0, DT_CANVAS_ROUTING_CUBIC, NULL);
+  line->connector.to_tangent_x = -15.0f;
+  line->connector.to_tangent_y = 90.0f;
+  dt_canvas_route_t before;
+  assert_true(dt_canvas_connector_route(fixture.canvas, line, &before));
+  const float from_tangent_x = line->connector.from_tangent_x;
+  const dt_canvas_prop_value_t nothing = _number(0.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, line, DT_CANVAS_PROP_CONNECTOR_REVERSE, &nothing)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(line->connector.from_x == 220.0);
+  assert_true(line->connector.to_y == 30.0);
+  assert_true(line->connector.from_tangent_x == -15.0f);
+  assert_true(line->connector.to_tangent_x == from_tangent_x);
+  dt_canvas_route_t after;
+  assert_true(dt_canvas_connector_route(fixture.canvas, line, &after));
+  assert_int_equal(after.point_count, before.point_count);
+  for(int idx = 0; idx < before.point_count; idx++)
+  {
+    const int mirrored = before.point_count - 1 - idx;
+    assert_near(after.points[2 * idx], before.points[2 * mirrored], 1e-9);
+    assert_near(after.points[2 * idx + 1], before.points[2 * mirrored + 1], 1e-9);
+  }
+
+  // Half free: the frame's end and the free end change places, and the straight chord with them.
+  dt_canvas_object_t *frame = fixture.objects[0];
+  dt_canvas_object_t *half
+      = dt_canvas_add_line(fixture.canvas, 0.0, 0.0, 900.0, 900.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  half->connector.from_id = frame->id;
+  assert_true(dt_canvas_connector_route(fixture.canvas, half, &before));
+  dt_canvas_prop_write(fixture.canvas, half, DT_CANVAS_PROP_CONNECTOR_REVERSE, &nothing);
+  assert_int_equal(half->connector.from_id, 0);
+  assert_int_equal(half->connector.to_id, frame->id);
+  assert_true(half->connector.from_x == 900.0);
+  assert_true(dt_canvas_connector_route(fixture.canvas, half, &after));
+  assert_near(after.from_x, before.to_x, 1e-9);
+  assert_near(after.from_y, before.to_y, 1e-9);
+  assert_near(after.to_x, before.from_x, 1e-9);
+  assert_near(after.to_y, before.from_y, 1e-9);
+  _fixture_free(&fixture);
+}
+
 static void _arrowheads_and_backgrounds_land_where_they_belong(void **state)
 {
   (void)state;
@@ -1610,6 +1677,7 @@ int main(void)
     cmocka_unit_test(_giving_the_font_back_refits_the_frame),
     cmocka_unit_test(_a_size_on_an_inheriting_font_writes_the_family_out),
     cmocka_unit_test(_arrowheads_and_backgrounds_land_where_they_belong),
+    cmocka_unit_test(_reversing_a_line_walks_the_same_curve_backwards),
     cmocka_unit_test(_rows_follow_what_they_depend_on),
     cmocka_unit_test(_the_inset_is_one_number_as_its_writer_counts_it),
     cmocka_unit_test(_a_folded_section_names_the_extras_it_hides),

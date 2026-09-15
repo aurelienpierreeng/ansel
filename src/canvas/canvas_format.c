@@ -202,6 +202,16 @@ static void _write_connector(GByteArray *out, const dt_canvas_connector_t *conne
   _w_f32(out, connector->to_reach);
   _w_f64(out, connector->via_tangent_x);
   _w_f64(out, connector->via_tangent_y);
+  // The free ends, taken from the reserved bytes: an older file holds zeros here, which is where
+  // a connector anchored at both ends never looks.
+  _w_f64(out, connector->from_x);
+  _w_f64(out, connector->from_y);
+  _w_f64(out, connector->to_x);
+  _w_f64(out, connector->to_y);
+  _w_f32(out, connector->from_tangent_x);
+  _w_f32(out, connector->from_tangent_y);
+  _w_f32(out, connector->to_tangent_x);
+  _w_f32(out, connector->to_tangent_y);
   _w_bytes(out, connector->reserved, sizeof(connector->reserved));
 }
 
@@ -543,6 +553,14 @@ static void _read_connector(dt_canvas_cursor_t *cursor, dt_canvas_connector_t *c
   connector->to_reach = _r_f32(cursor);
   connector->via_tangent_x = _r_f64(cursor);
   connector->via_tangent_y = _r_f64(cursor);
+  connector->from_x = _r_f64(cursor);
+  connector->from_y = _r_f64(cursor);
+  connector->to_x = _r_f64(cursor);
+  connector->to_y = _r_f64(cursor);
+  connector->from_tangent_x = _r_f32(cursor);
+  connector->from_tangent_y = _r_f32(cursor);
+  connector->to_tangent_x = _r_f32(cursor);
+  connector->to_tangent_y = _r_f32(cursor);
   _r_bytes(cursor, connector->reserved, sizeof(connector->reserved));
 }
 
@@ -751,9 +769,11 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
       g_set_error(error, DT_CANVAS_ERROR, DT_CANVAS_ERROR_CORRUPT, "object record %u does not parse", idx);
       return FALSE;
     }
-    if(object->kind == DT_CANVAS_OBJECT_NONE || dt_canvas_find_object(canvas, object->id) != NULL)
+    // No kind, a duplicated id, or the id 0 -- which is what a connector's free end holds, so an
+    // object carrying it would be taken for every free end at once, and removing it would take
+    // every line in the document with it: drop it rather than draw garbage.
+    if(object->kind == DT_CANVAS_OBJECT_NONE || object->id == 0 || dt_canvas_find_object(canvas, object->id) != NULL)
     {
-      // Unknown kind or a duplicated id: drop it rather than draw garbage.
       dt_free(object);
       continue;
     }

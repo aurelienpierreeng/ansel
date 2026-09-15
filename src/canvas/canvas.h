@@ -115,7 +115,7 @@ typedef enum dt_canvas_text_flag_t
 } dt_canvas_text_flag_t;
 #define DT_CANVAS_MAP_RESERVED 256
 #define DT_CANVAS_SVG_RESERVED 480 ///< 512 at format 1, minus the intrinsic size (8) and the load time (8)
-#define DT_CANVAS_CONNECTOR_RESERVED 72 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24)
+#define DT_CANVAS_CONNECTOR_RESERVED 24 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24), the free ends (48)
 
 /** The colour space a stored JPEG is encoded in. A file from before the field says 0: sRGB. */
 typedef enum dt_canvas_colorspace_t
@@ -312,6 +312,14 @@ typedef enum dt_canvas_connector_style_t
   DT_CANVAS_CONNECTOR_DASHED = 1 << 2,
 } dt_canvas_connector_style_t;
 
+/** The width a connector is born with, and the width a stored zero is painted at, in canvas units. */
+#define DT_CANVAS_CONNECTOR_LINE_WIDTH 2.0f
+/** An arrowhead's length and half its base, in canvas units, for a line two units wide: the painter
+ * scales both with a thicker line, and whatever must clear a head -- the bounds, the pages -- asks
+ * the same triangle through dt_canvas_route_arrow_head(). */
+#define DT_CANVAS_ARROW_LENGTH 14.0
+#define DT_CANVAS_ARROW_HALF_WIDTH 5.0
+
 /**
  * Where on a frame a connector attaches: the four edge midpoints, the four corners, or the
  * centre. They are the frame's own points, so they rotate with it. AUTO picks, of the four
@@ -360,8 +368,36 @@ typedef struct dt_canvas_connector_t
   float to_reach;       ///< the same at the end
   double via_tangent_x; ///< the waypoint's tangent handle, direction and length; (0, 0) is automatic
   double via_tangent_y;
+  /*
+   * A FREE end is one whose id is 0 -- ids start at 1, so no document before these fields has
+   * one -- and it sits at its own point instead of on a frame. A line or a curve is a connector
+   * with both ends free: every consumer reads the route, and the route resolves a free end first,
+   * so a line needs no kind of its own. The point and the tangent are read only while the id is 0.
+   */
+  double from_x;        ///< the start's point when from_id is 0, canvas units
+  double from_y;
+  double to_x;          ///< the end's point when to_id is 0
+  double to_y;
+  float from_tangent_x; ///< a free start's control offset, direction and length; (0, 0) is automatic
+  float from_tangent_y;
+  float to_tangent_x;   ///< the same at a free end
+  float to_tangent_y;
   uint8_t reserved[DT_CANVAS_CONNECTOR_RESERVED];
 } dt_canvas_connector_t;
+
+/**
+ * How a line is drawn, as distinct from where it goes: the connector's own styling and nothing
+ * else, so what the atelier remembers of the last line edited can be handed to the next one
+ * drawn without the document knowing where that memory lives.
+ */
+typedef struct dt_canvas_line_style_t
+{
+  float line_width;        ///< canvas units; 0 is painted two units wide, as a connector's is
+  dt_canvas_color_t color;
+  gboolean dashed;
+  gboolean arrow_start;    ///< a head at the line's first point
+  gboolean arrow_end;      ///< a head at its last
+} dt_canvas_line_style_t;
 
 /** The most points a routed connector is flattened to, cubic included. */
 #define DT_CANVAS_ROUTE_MAX_POINTS 40
@@ -781,6 +817,42 @@ void dt_canvas_svg_path(const dt_canvas_object_t *object, char *path, size_t len
 /** @brief Add a connector between two objects. Refuses self-links and unknown ids. */
 dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_id, uint32_t to_id);
 
+/** @brief What a connector is born with, and a line nobody has styled yet. */
+dt_canvas_line_style_t dt_canvas_line_style_default(void);
+
+/** @brief Read a connector's styling. FALSE, and `style` untouched, for anything else. */
+gboolean dt_canvas_line_style_get(const dt_canvas_object_t *object, dt_canvas_line_style_t *style);
+
+/**
+ * @brief Add a line with both ends free, from (x0, y0) to (x1, y1).
+ * @details A cubic line is seeded into an arc (dt_canvas_connector_seed_curve()): a free cubic
+ * with automatic tangents would follow its own chord and read as straight.
+ * @param style how it is drawn; NULL is dt_canvas_line_style_default().
+ */
+dt_canvas_object_t *dt_canvas_add_line(dt_canvas_t *canvas, double x0, double y0, double x1, double y1,
+                                       dt_canvas_routing_t routing, const dt_canvas_line_style_t *style);
+
+/** @brief Whether this is a connector with at least one end at its own point rather than on a frame. */
+gboolean dt_canvas_connector_has_free_end(const dt_canvas_object_t *object);
+
+/**
+ * @brief Move what a connector owns: its free points, and its waypoint when any end is free.
+ * @details An anchored end follows its frame and is not the connector's to move. The caller
+ * touches the canvas, once per gesture step, as for any in-place edit.
+ */
+void dt_canvas_connector_translate(dt_canvas_object_t *object, double dx, double dy);
+
+/**
+ * @brief Give a free cubic without a waypoint the tangents of a symmetric arc over its chord.
+ * @details Only the free ends whose tangent is still automatic (0, 0) are seeded, so a steered
+ * tangent is never overwritten; a caller that wants the arc again clears them first. The start
+ * leaves 30 degrees to one side of the chord and the end arrives 30 degrees to the same side,
+ * each at 0.4 of the chord's length, so the arc bulges up on screen for a line drawn rightward.
+ * @param route the connector's current route, which is where an anchored end is.
+ * @return TRUE when a tangent was written; the caller touches the canvas.
+ */
+gboolean dt_canvas_connector_seed_curve(dt_canvas_object_t *object, const dt_canvas_route_t *route);
+
 /**
  * @brief Remove an object.
  * @details Removing a frame also removes every connector attached to it, and unlinks any
@@ -788,7 +860,11 @@ dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_i
  */
 gboolean dt_canvas_remove_object(dt_canvas_t *canvas, uint32_t id);
 
-/** @brief Duplicate a frame, offset by a little so the copy is visible. Connectors are not duplicated. */
+/**
+ * @brief Duplicate a frame or a line, offset by a little so the copy is visible.
+ * @details A line -- a connector with both ends free -- is copied with its points and waypoint
+ * offset the same way. A connector with an anchored end belongs to its frames and is not duplicated.
+ */
 dt_canvas_object_t *dt_canvas_duplicate_object(dt_canvas_t *canvas, uint32_t id);
 
 dt_canvas_object_t *dt_canvas_find_object(const dt_canvas_t *canvas, uint32_t id);
@@ -961,19 +1037,58 @@ gboolean dt_canvas_object_covers(const dt_canvas_t *canvas, const dt_canvas_obje
 
 /**
  * @brief Resolve a connector to its geometry.
- * @return FALSE when either end is missing.
+ * @details A free end (id 0) sits at its own point and leaves along its own tangent, or when
+ * that is automatic toward the waypoint or the other end; an anchored end aims at the other
+ * frame's centre, or at the other end's point when that end is free.
+ * @return FALSE when an anchored end is missing.
  */
 gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
                                    dt_canvas_route_t *route);
 
 /**
- * @brief The two ends of a connector: its anchor points.
- * @return FALSE when either end is missing.
+ * @brief The two ends of a connector: its anchor points, or a free end's own point.
+ * @return FALSE when an anchored end is missing.
  */
 gboolean dt_canvas_connector_endpoints(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
                                        double *from_x, double *from_y, double *to_x, double *to_y);
 
-/** @brief The box around every visible frame. Empty (width 0) for an empty canvas. */
+/**
+ * @brief How far a connector's ink can reach past its route in any direction, in canvas units.
+ * @details Half the painted width for a plain line, whose caps are round; with an arrowhead at
+ * either end, the head's length grown with the width. It is one number for the whole route, so it
+ * over-counts everywhere but at a head: a box that must hold the ink and nothing else asks
+ * dt_canvas_object_extent() instead. A stored width of zero is painted
+ * DT_CANVAS_CONNECTOR_LINE_WIDTH wide and is answered for as such.
+ */
+double dt_canvas_stroke_reach(double line_width, uint32_t style);
+
+/**
+ * @brief The triangle an arrowhead is painted as, at one end of a resolved route.
+ * @details The tip is the route's end, and the head points along the last leg of the flattened
+ * route there; its length and base grow with the line's width. The painter fills exactly this.
+ * @param at_end TRUE for the head at the route's last point, FALSE for its first.
+ * @param xy receives the tip, then the two corners of the base: six numbers, canvas units.
+ */
+void dt_canvas_route_arrow_head(const dt_canvas_route_t *route, gboolean at_end, double line_width, double xy[6]);
+
+/**
+ * @brief The axis-aligned box an object's ink occupies, in canvas units.
+ * @details A frame's rotated bounds. A connector's stroke -- the true curve's extremes for a
+ * cubic, which lie inside its control points but rarely on them -- grown by half the painted
+ * width, together with the triangle of each arrowhead it has: the box a page or a sheet must hold
+ * for the line to be on it, and no more, so a line running near a page's edge does not bring the
+ * next page with it.
+ * @return FALSE when the object is a connector that cannot be routed.
+ */
+gboolean dt_canvas_object_extent(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                 dt_canvas_rect_t *out);
+
+/**
+ * @brief The box around every visible frame and every visible line with a free end. Empty
+ * (width 0) for an empty canvas.
+ * @details A connector anchored at both ends lies between frames already counted, and is left
+ * out so a document from before free ends is framed exactly as it was.
+ */
 dt_canvas_rect_t dt_canvas_bounds(const dt_canvas_t *canvas);
 
 /** @brief Round `value` to the grid when snapping is on, else return it unchanged. */

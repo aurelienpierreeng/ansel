@@ -34,8 +34,6 @@
 #define PAINT_GRID_MIN_PIXEL_SPACING 6.0
 #define PAINT_GRID_DOT_FRACTION 0.03   ///< dot radius as a fraction of the grid step: it scales with the zoom
 #define PAINT_GRID_DOT_MIN_PIXELS 0.75 ///< but never vanishes
-#define PAINT_ARROW_LENGTH 14.0
-#define PAINT_ARROW_HALF_WIDTH 5.0
 
 static void _paint_pages(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options);
 static void _paint_paper(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_paint_options_t *options);
@@ -2540,23 +2538,20 @@ double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canva
 
 double dt_canvas_paint_arrow_reach(const double line_width)
 {
-  const double width = line_width > 0.0 ? line_width : 2.0;
-  return width + PAINT_ARROW_LENGTH * fmax(width / 2.0, 1.0);
+  // The document answers how far a stroke reaches, so the bounds, the export's pages and the
+  // painter's own boxes cannot disagree about a head.
+  return dt_canvas_stroke_reach(line_width, DT_CANVAS_CONNECTOR_ARROW_END);
 }
 
-static void _paint_arrow_head(cairo_t *cr, const double tip_x, const double tip_y, const double from_x,
-                              const double from_y, const double scale)
+/** Fill the triangle the document says a head is, so the pages and the bounds hold what is painted. */
+static void _paint_arrow_head(cairo_t *cr, const dt_canvas_route_t *route, const gboolean at_end,
+                              const double line_width)
 {
-  const double angle = atan2(tip_y - from_y, tip_x - from_x);
-  const double length = PAINT_ARROW_LENGTH * scale;
-  const double half_width = PAINT_ARROW_HALF_WIDTH * scale;
-  const double base_x = tip_x - cos(angle) * length;
-  const double base_y = tip_y - sin(angle) * length;
-  const double normal_x = -sin(angle) * half_width;
-  const double normal_y = cos(angle) * half_width;
-  cairo_move_to(cr, tip_x, tip_y);
-  cairo_line_to(cr, base_x + normal_x, base_y + normal_y);
-  cairo_line_to(cr, base_x - normal_x, base_y - normal_y);
+  double triangle[6];
+  dt_canvas_route_arrow_head(route, at_end, line_width, triangle);
+  cairo_move_to(cr, triangle[0], triangle[1]);
+  cairo_line_to(cr, triangle[2], triangle[3]);
+  cairo_line_to(cr, triangle[4], triangle[5]);
   cairo_close_path(cr);
   cairo_fill(cr);
 }
@@ -2566,7 +2561,8 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
 {
   dt_canvas_route_t route;
   if(!dt_canvas_connector_route(canvas, object, &route)) return;
-  const double line_width = object->connector.line_width > 0.0f ? object->connector.line_width : 2.0;
+  const double line_width
+      = object->connector.line_width > 0.0f ? object->connector.line_width : DT_CANVAS_CONNECTOR_LINE_WIDTH;
   // Arrow heads are sized to the line, so a thick connector gets a proportionate head.
   const double head_scale = fmax(line_width / 2.0, 1.0);
 
@@ -2584,7 +2580,7 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
   // arrowed end is cut out of the stroke, so the tip is the triangle's alone and stays sharp.
   // The cut-out is bounded to the route's own box: cairo's coordinates are 24.8 fixed point,
   // and a "whole plane" rectangle overflows them under the zoom and clips everything away.
-  const double head_length = PAINT_ARROW_LENGTH * head_scale;
+  const double head_length = DT_CANVAS_ARROW_LENGTH * head_scale;
   cairo_save(cr);
   if(object->connector.style & (DT_CANVAS_CONNECTOR_ARROW_END | DT_CANVAS_CONNECTOR_ARROW_START))
   {
@@ -2636,11 +2632,8 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
 
   // A head points along the line it ends: the last leg of the route, which for a straight
   // connector is the chord itself and for the others the stub or tangent at that anchor.
-  const int last = route.point_count - 1;
-  if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_END)
-    _paint_arrow_head(cr, route.to_x, route.to_y, route.points[2 * last - 2], route.points[2 * last - 1], head_scale);
-  if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_START)
-    _paint_arrow_head(cr, route.from_x, route.from_y, route.points[2], route.points[3], head_scale);
+  if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_END) _paint_arrow_head(cr, &route, TRUE, line_width);
+  if(object->connector.style & DT_CANVAS_CONNECTOR_ARROW_START) _paint_arrow_head(cr, &route, FALSE, line_width);
   cairo_restore(cr);
 }
 

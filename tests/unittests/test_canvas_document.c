@@ -19,11 +19,12 @@
 #include "canvas/canvas.h"
 #include "system/mem_alloc.h"
 #include "canvas/canvas_format.h"
+#include "canvas/canvas_paint.h"
 
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <math.h>
-#include <setjmp.h>
+#include <setjmp.h>  // NOLINT(misc-include-cleaner)
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -632,6 +633,868 @@ static void _connectors_route_between_cardinal_anchors(void **state)
   const double middle_y = route.points[DT_CANVAS_ROUTE_MAX_POINTS + 1];
   assert_true(dt_canvas_object_contains(canvas, connector, middle_x, middle_y, 1.0));
   assert_false(dt_canvas_object_contains(canvas, connector, 100.0, 300.0, 1.0));
+  dt_canvas_free(canvas);
+}
+
+/**
+ * cmocka's float and double comparisons both pass anything within FLT_EPSILON of the larger
+ * value, whatever tolerance they are handed -- 3.6e-5 at 300 units, measured -- so a check that
+ * means a tighter tolerance than that has to say so itself.
+ */
+#define assert_near(actual, expected, tolerance)                                                                 \
+  do                                                                                                            \
+  {                                                                                                             \
+    const double near_actual = (double)(actual);                                                                \
+    const double near_expected = (double)(expected);                                                            \
+    const double near_tolerance = (double)(tolerance);                                                          \
+    if(!(fabs(near_actual - near_expected) <= near_tolerance))                                                  \
+      fail_msg("%s is %.17g, expected %.17g within %g", #actual, near_actual, near_expected, near_tolerance);    \
+  } while(0)
+
+/*
+ * The anchored routes, as they were before free ends. Free ends were added to the one resolver
+ * every route goes through, and a document laid out before them must come back to the lines it
+ * had. These hashes were taken from the resolver as it stood BEFORE free ends existed, over three
+ * frames (one rotated, one cut to an ellipse, one plain), every pairing, three anchor pairs
+ * covering AUTO, a cardinal, a corner and the centre, every routing, with and without a
+ * waypoint, and with the handles automatic and dragged.
+ *
+ * Every length is hashed ROUNDED to 1/65536 of a unit, never by its bit pattern. The library is
+ * built with -ffast-math and -ffp-contract=fast in some configurations and without either in
+ * others, so the last bit of a sum is the compiler's to choose and the resolver's source does not
+ * define it: the old resolver itself gave 44 of these 108 routes different bits in a gcc Debug
+ * build than in RelWithDebInfo, one ulp each. A quantum of 2^-16 sits far above that and far
+ * below any change in what a route IS -- measured, the value closest to a rounding boundary lies
+ * 7e-9 units from it, half a million ulps of that value -- and the same 108 hashes came out of
+ * the old resolver built as gcc Debug and as clang Debug, and out of the new one in gcc
+ * RelWithDebInfo with LTO, whose bits were the old resolver's in that build. Which fields a free
+ * end reads is pinned EXACTLY below, where both sides of the comparison come out of one build.
+ */
+#define GOLDEN_ROUTE_PAIRS 3
+#define GOLDEN_ROUTE_ANCHOR_SETS 3
+#define GOLDEN_ROUTE_ROUTINGS 3
+#define GOLDEN_ROUTE_VIAS 2
+#define GOLDEN_ROUTE_HANDLES 2
+#define GOLDEN_ROUTE_CASES                                                                                      \
+  (GOLDEN_ROUTE_PAIRS * GOLDEN_ROUTE_ANCHOR_SETS * GOLDEN_ROUTE_ROUTINGS * GOLDEN_ROUTE_VIAS * GOLDEN_ROUTE_HANDLES)
+#define GOLDEN_ROUTE_QUANTA_PER_UNIT 65536.0
+
+static uint64_t _golden_hash_bits(uint64_t hash, const uint64_t bits)
+{
+  for(int byte = 0; byte < 8; byte++)
+  {
+    hash ^= (bits >> (8 * byte)) & 0xFFu;
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
+static uint64_t _golden_hash_length(const uint64_t hash, const double value)
+{
+  return _golden_hash_bits(hash, (uint64_t)llround(value * GOLDEN_ROUTE_QUANTA_PER_UNIT));
+}
+
+/** Every field a route resolves to, in a fixed order: the counts as they are, the lengths rounded. */
+static uint64_t _golden_route_hash(const dt_canvas_route_t *route)
+{
+  uint64_t hash = 14695981039346656037ULL;
+  hash = _golden_hash_bits(hash, (uint64_t)route->routing);
+  hash = _golden_hash_length(hash, route->from_x);
+  hash = _golden_hash_length(hash, route->from_y);
+  hash = _golden_hash_length(hash, route->to_x);
+  hash = _golden_hash_length(hash, route->to_y);
+  hash = _golden_hash_length(hash, route->from_normal_x);
+  hash = _golden_hash_length(hash, route->from_normal_y);
+  hash = _golden_hash_length(hash, route->to_normal_x);
+  hash = _golden_hash_length(hash, route->to_normal_y);
+  hash = _golden_hash_bits(hash, (uint64_t)route->segment_count);
+  hash = _golden_hash_length(hash, route->via_x);
+  hash = _golden_hash_length(hash, route->via_y);
+  hash = _golden_hash_length(hash, route->control1_x);
+  hash = _golden_hash_length(hash, route->control1_y);
+  hash = _golden_hash_length(hash, route->control2_x);
+  hash = _golden_hash_length(hash, route->control2_y);
+  hash = _golden_hash_length(hash, route->control3_x);
+  hash = _golden_hash_length(hash, route->control3_y);
+  hash = _golden_hash_length(hash, route->control4_x);
+  hash = _golden_hash_length(hash, route->control4_y);
+  hash = _golden_hash_bits(hash, (uint64_t)route->point_count);
+  for(int idx = 0; idx < 2 * route->point_count; idx++) hash = _golden_hash_length(hash, route->points[idx]);
+  return hash;
+}
+
+/** The scene and the connector of one case, which the caller frees. */
+static dt_canvas_t *_golden_route_scene(const int index, dt_canvas_object_t **connector)
+{
+  static const uint32_t anchor_sets[GOLDEN_ROUTE_ANCHOR_SETS][2]
+      = { { DT_CANVAS_ANCHOR_AUTO, DT_CANVAS_ANCHOR_AUTO },
+          { DT_CANVAS_ANCHOR_SOUTH, DT_CANVAS_ANCHOR_NORTH_WEST },
+          { DT_CANVAS_ANCHOR_CENTRE, DT_CANVAS_ANCHOR_EAST } };
+  static const uint32_t pairs[GOLDEN_ROUTE_PAIRS][2] = { { 1, 2 }, { 2, 3 }, { 3, 1 } };
+  int rest = index;
+  const int handles = rest % GOLDEN_ROUTE_HANDLES;
+  rest /= GOLDEN_ROUTE_HANDLES;
+  const int via = rest % GOLDEN_ROUTE_VIAS;
+  rest /= GOLDEN_ROUTE_VIAS;
+  const int routing = rest % GOLDEN_ROUTE_ROUTINGS;
+  rest /= GOLDEN_ROUTE_ROUTINGS;
+  const int anchor_set = rest % GOLDEN_ROUTE_ANCHOR_SETS;
+  rest /= GOLDEN_ROUTE_ANCHOR_SETS;
+  const int pair = rest % GOLDEN_ROUTE_PAIRS;
+
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *rotated = dt_canvas_add_text(canvas, -250.0, 40.0, 300.0, 180.0, "rotated");
+  rotated->rotation = 0.3;
+  dt_canvas_object_t *plain = dt_canvas_add_text(canvas, 420.0, 310.0, 220.0, 260.0, "plain");
+  plain->corner_radius = 24.0f;
+  plain->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  dt_canvas_object_t *cut = dt_canvas_add_text(canvas, 60.0, -260.0, 200.0, 140.0, "cut");
+  dt_canvas_mask_set_shape(canvas, cut, DT_CANVAS_MASK_ELLIPSE);
+  *connector = dt_canvas_add_connector(canvas, pairs[pair][0], pairs[pair][1]);
+  (*connector)->connector.from_anchor = anchor_sets[anchor_set][0];
+  (*connector)->connector.to_anchor = anchor_sets[anchor_set][1];
+  (*connector)->connector.routing = (uint32_t)routing;
+  if(via)
+  {
+    (*connector)->connector.via_count = 1;
+    (*connector)->connector.via_x = 150.0;
+    (*connector)->connector.via_y = 420.0;
+  }
+  if(handles)
+  {
+    (*connector)->connector.from_reach = 77.0f;
+    (*connector)->connector.to_reach = 33.5f;
+    (*connector)->connector.via_tangent_x = 40.0;
+    (*connector)->connector.via_tangent_y = -10.0;
+  }
+  return canvas;
+}
+
+static const uint64_t _golden_route_hashes[GOLDEN_ROUTE_CASES] = {
+  0xb3dc146adf18eed7ULL, 0xb3dc146adf18eed7ULL, 0x28b3a1bb880d7b31ULL,
+  0x28b3a1bb880d7b31ULL, 0x5f5ed5321036290dULL, 0x5f5ed5321036290dULL,
+  0x6c4213d676583067ULL, 0x6c4213d676583067ULL, 0x64333667bea7f904ULL,
+  0xbea66eb3e68cde85ULL, 0x3e8b2dc82d6e0fd6ULL, 0x527264aed6af16a9ULL,
+  0xf0df0fad1db3455cULL, 0xf0df0fad1db3455cULL, 0x30e0ca73cd086fa2ULL,
+  0x30e0ca73cd086fa2ULL, 0xb0b2e4ecb1acf330ULL, 0xb0b2e4ecb1acf330ULL,
+  0x7b42c3d516be478cULL, 0x7b42c3d516be478cULL, 0xc4bbb7b27d71fd1fULL,
+  0x1d636ed46452179bULL, 0x234f0501c49e017aULL, 0x8d00ef80c162e272ULL,
+  0xd7c2c26259c66b7bULL, 0xd7c2c26259c66b7bULL, 0x330bb41c6f3d3b19ULL,
+  0x330bb41c6f3d3b19ULL, 0xc5287a100a482d86ULL, 0xc5287a100a482d86ULL,
+  0x2c2acd5b0fcc925cULL, 0x2c2acd5b0fcc925cULL, 0x8d5cc27ba89d6879ULL,
+  0xb5c11b5f66c76cf8ULL, 0x8956df32123a1483ULL, 0x0f2f88d2518a9caaULL,
+  0xa01551fa040eec3dULL, 0xa01551fa040eec3dULL, 0x43914548ba780e97ULL,
+  0x43914548ba780e97ULL, 0x6b2f530ff1788fd7ULL, 0x6b2f530ff1788fd7ULL,
+  0xfbb090af752cd0c9ULL, 0xfbb090af752cd0c9ULL, 0xb00f6206a3221835ULL,
+  0xcbe1d9284c5ff338ULL, 0xce95264420ca3f49ULL, 0xcb2d83fc73343383ULL,
+  0xb7a716723182227fULL, 0xb7a716723182227fULL, 0xc308f5e42fcac5fdULL,
+  0xc308f5e42fcac5fdULL, 0x7462db0c3e12546bULL, 0x7462db0c3e12546bULL,
+  0x6c10237b17543ab7ULL, 0x6c10237b17543ab7ULL, 0xd96b3dfcd58a93f1ULL,
+  0xf52f7c92c2df9340ULL, 0x1f3148fc84ef527dULL, 0x9e2e623f767b78b8ULL,
+  0xdf4f8a4173274505ULL, 0xdf4f8a4173274505ULL, 0x387e6c87020f142bULL,
+  0x387e6c87020f142bULL, 0xea730a2e560949bfULL, 0xea730a2e560949bfULL,
+  0xd702d3b386efdbf7ULL, 0xd702d3b386efdbf7ULL, 0xf21112c6eced5514ULL,
+  0x3a735b1205b0ef29ULL, 0xffd90adf31de19eeULL, 0x9a01674bb5c9246cULL,
+  0xfaca37641e403306ULL, 0xfaca37641e403306ULL, 0xbdcc51b92d06c53cULL,
+  0xbdcc51b92d06c53cULL, 0xfe7234c8a3b56245ULL, 0xfe7234c8a3b56245ULL,
+  0x5a7fbf967e5d4cc5ULL, 0x5a7fbf967e5d4cc5ULL, 0x8bce0be85eb37f17ULL,
+  0x4997e56ff6446046ULL, 0xf2f5310fdb9a78d0ULL, 0x05fce947dd601f1cULL,
+  0x7a808d1b3dc6a24dULL, 0x7a808d1b3dc6a24dULL, 0xc78fce96459c2123ULL,
+  0xc78fce96459c2123ULL, 0x624bdadddf537b4aULL, 0x624bdadddf537b4aULL,
+  0x129c92c89dc92530ULL, 0x129c92c89dc92530ULL, 0xe98879b8a972580fULL,
+  0xa31e7d02009c8984ULL, 0x96e5bab40d88315bULL, 0xe28745f95cc85de6ULL,
+  0x1b69cb09e45eae04ULL, 0x1b69cb09e45eae04ULL, 0xf15d4d03d1a97196ULL,
+  0xf15d4d03d1a97196ULL, 0x887681e2643da18bULL, 0x887681e2643da18bULL,
+  0x9c74eb1cdb21bde1ULL, 0x9c74eb1cdb21bde1ULL, 0xf6f8834dbab154a2ULL,
+  0x01df8662baecd09aULL, 0x07d011b6607c9327ULL, 0xcde832154a25ededULL
+};
+
+static void _anchored_routes_are_unchanged_by_free_ends(void **state)
+{
+  (void)state;
+  for(int index = 0; index < GOLDEN_ROUTE_CASES; index++)
+  {
+    dt_canvas_object_t *connector = NULL;
+    dt_canvas_t *canvas = _golden_route_scene(index, &connector);
+    dt_canvas_route_t route;
+    assert_true(dt_canvas_connector_route(canvas, connector, &route));
+    const uint64_t hash = _golden_route_hash(&route);
+    if(hash != _golden_route_hashes[index])
+      fail_msg("anchored route %d (pair %d, anchors %d, routing %u, via %u) moved: 0x%016llx, was 0x%016llx", index,
+               index / 36, (index / 12) % 3, route.routing, connector->connector.via_count, (unsigned long long)hash,
+               (unsigned long long)_golden_route_hashes[index]);
+
+    // Each anchored end still aims at the other frame's centre, as it did before free ends.
+    const dt_canvas_object_t *from = dt_canvas_find_object(canvas, connector->connector.from_id);
+    const dt_canvas_object_t *to = dt_canvas_find_object(canvas, connector->connector.to_id);
+    double anchor_x = 0.0;
+    double anchor_y = 0.0;
+    double normal_x = 0.0;
+    double normal_y = 0.0;
+    dt_canvas_object_anchor_point(canvas, from, (dt_canvas_anchor_t)connector->connector.from_anchor, to->x, to->y,
+                                  &anchor_x, &anchor_y, &normal_x, &normal_y);
+    assert_near(route.from_x, anchor_x, 1e-9);
+    assert_near(route.from_y, anchor_y, 1e-9);
+    assert_near(route.from_normal_x, normal_x, 1e-12);
+    assert_near(route.from_normal_y, normal_y, 1e-12);
+    dt_canvas_object_anchor_point(canvas, to, (dt_canvas_anchor_t)connector->connector.to_anchor, from->x, from->y,
+                                  &anchor_x, &anchor_y, &normal_x, &normal_y);
+    assert_near(route.to_x, anchor_x, 1e-9);
+    assert_near(route.to_y, anchor_y, 1e-9);
+    assert_near(route.to_normal_x, normal_x, 1e-12);
+    assert_near(route.to_normal_y, normal_y, 1e-12);
+
+    // A free end's point and tangent are read only while its id is 0: on a connector anchored at
+    // both ends, whatever those fields hold routes to the very same bits.
+    connector->connector.from_x = 1234.5;
+    connector->connector.from_y = -987.25;
+    connector->connector.to_x = -55.5;
+    connector->connector.to_y = 77.75;
+    connector->connector.from_tangent_x = 13.0f;
+    connector->connector.from_tangent_y = -7.0f;
+    connector->connector.to_tangent_x = 21.0f;
+    connector->connector.to_tangent_y = 3.0f;
+    dt_canvas_route_t with_junk;
+    assert_true(dt_canvas_connector_route(canvas, connector, &with_junk));
+    if(memcmp(&route, &with_junk, sizeof(route)) != 0)
+      fail_msg("anchored route %d reads the free-end fields", index);
+    dt_canvas_free(canvas);
+  }
+}
+
+/** A line: a connector with both ends at their own points, routed through the same resolver. */
+static void _a_free_line_routes_between_its_own_points(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *line = dt_canvas_add_line(canvas, -40.0, 25.0, 160.0, 75.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  assert_non_null(line);
+  assert_int_equal(line->kind, DT_CANVAS_OBJECT_CONNECTOR);
+  assert_int_equal(line->connector.from_id, 0);
+  assert_int_equal(line->connector.to_id, 0);
+  assert_true(dt_canvas_connector_has_free_end(line));
+  dt_canvas_route_t route;
+  assert_true(dt_canvas_connector_route(canvas, line, &route));
+  assert_int_equal(route.point_count, 2);
+  assert_near(route.points[0], -40.0, 1e-12);
+  assert_near(route.points[1], 25.0, 1e-12);
+  assert_near(route.points[2], 160.0, 1e-12);
+  assert_near(route.points[3], 75.0, 1e-12);
+  // Each free end leaves toward the other.
+  const double length = hypot(200.0, 50.0);
+  assert_near(route.from_normal_x, 200.0 / length, 1e-12);
+  assert_near(route.from_normal_y, 50.0 / length, 1e-12);
+  assert_near(route.to_normal_x, -200.0 / length, 1e-12);
+  assert_near(route.to_normal_y, -50.0 / length, 1e-12);
+  assert_true(dt_canvas_object_contains(canvas, line, 60.0, 50.0, 1.0));
+  assert_false(dt_canvas_object_contains(canvas, line, 60.0, 80.0, 1.0));
+
+  // A new line takes the style it is handed, and a connector anchored at both ends is not free.
+  dt_canvas_line_style_t style = dt_canvas_line_style_default();
+  style.line_width = 6.5f;
+  style.color = dt_canvas_color(0.1f, 0.2f, 0.3f, 0.4f);
+  style.dashed = TRUE;
+  style.arrow_start = TRUE;
+  style.arrow_end = FALSE;
+  dt_canvas_object_t *styled = dt_canvas_add_line(canvas, 0.0, 0.0, 10.0, 0.0, DT_CANVAS_ROUTING_SQUARE, &style);
+  assert_int_equal(styled->connector.routing, DT_CANVAS_ROUTING_SQUARE);
+  assert_int_equal(styled->connector.style, DT_CANVAS_CONNECTOR_DASHED | DT_CANVAS_CONNECTOR_ARROW_START);
+  dt_canvas_line_style_t read_back;
+  assert_true(dt_canvas_line_style_get(styled, &read_back));
+  assert_true(read_back.line_width == 6.5f);
+  assert_true(read_back.color.blue == 0.3f);
+  assert_true(read_back.dashed);
+  assert_true(read_back.arrow_start);
+  assert_false(read_back.arrow_end);
+  dt_canvas_object_t *left = dt_canvas_add_text(canvas, 0.0, 400.0, 100.0, 100.0, "");
+  dt_canvas_object_t *right = dt_canvas_add_text(canvas, 400.0, 400.0, 100.0, 100.0, "");
+  dt_canvas_object_t *anchored = dt_canvas_add_connector(canvas, left->id, right->id);
+  assert_false(dt_canvas_connector_has_free_end(anchored));
+  assert_false(dt_canvas_connector_has_free_end(left));
+  // The connector and the line nobody styled are born alike, so the two cannot drift apart.
+  const dt_canvas_line_style_t defaults = dt_canvas_line_style_default();
+  assert_true(dt_canvas_line_style_get(anchored, &read_back));
+  assert_true(memcmp(&read_back, &defaults, sizeof(defaults)) == 0);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * Two free ends in the same place: every routing gives the axis normals -- the start leaving
+ * rightward, the end arriving from the left -- and a polyline that stays on the point, where the
+ * anchored ends' floors would have drawn a 40-unit dash out of a line of no length.
+ */
+static void _coincident_free_ends_route_to_a_finite_point(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  const dt_canvas_routing_t routings[3]
+      = { DT_CANVAS_ROUTING_STRAIGHT, DT_CANVAS_ROUTING_SQUARE, DT_CANVAS_ROUTING_CUBIC };
+  for(int idx = 0; idx < 3; idx++)
+  {
+    dt_canvas_object_t *line = dt_canvas_add_line(canvas, 12.0, -7.0, 12.0, -7.0, routings[idx], NULL);
+    dt_canvas_route_t route;
+    assert_true(dt_canvas_connector_route(canvas, line, &route));
+    assert_true(route.point_count >= 2);
+    assert_true(route.from_normal_x == 1.0 && route.from_normal_y == 0.0);
+    assert_true(route.to_normal_x == -1.0 && route.to_normal_y == 0.0);
+    for(int point = 0; point < route.point_count; point++)
+    {
+      assert_near(route.points[2 * point], 12.0, 1e-9);
+      assert_near(route.points[2 * point + 1], -7.0, 1e-9);
+    }
+    if(routings[idx] == DT_CANVAS_ROUTING_CUBIC)
+    {
+      // Nothing to seed from.
+      assert_true(line->connector.from_tangent_x == 0.0f && line->connector.to_tangent_y == 0.0f);
+      assert_near(route.control1_x, 12.0, 1e-9);
+      assert_near(route.control2_y, -7.0, 1e-9);
+    }
+  }
+  dt_canvas_free(canvas);
+}
+
+/** One end on a frame, one free: the anchored end aims at the free point, not at a frame. */
+static void _a_half_free_connector_aims_its_anchor_at_the_free_point(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 200.0, 200.0, "");
+  dt_canvas_object_t *connector = dt_canvas_add_line(canvas, 0.0, 0.0, 0.0, 0.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  connector->connector.from_id = frame->id;
+  connector->connector.from_anchor = DT_CANVAS_ANCHOR_CENTRE;
+  connector->connector.to_x = 0.0;
+  connector->connector.to_y = 500.0;
+  dt_canvas_route_t route;
+  assert_true(dt_canvas_connector_route(canvas, connector, &route));
+  // Straight down from the centre, out through the bottom edge.
+  assert_near(route.from_x, 0.0, 1e-9);
+  assert_near(route.from_y, 100.0, 1e-9);
+  assert_near(route.from_normal_y, 1.0, 1e-12);
+  assert_near(route.to_y, 500.0, 1e-12);
+  connector->connector.to_x = -500.0;
+  connector->connector.to_y = 0.0;
+  assert_true(dt_canvas_connector_route(canvas, connector, &route));
+  assert_near(route.from_x, -100.0, 1e-9);
+  assert_near(route.from_y, 0.0, 1e-9);
+  // AUTO takes the cardinal nearest the free point too.
+  connector->connector.from_anchor = DT_CANVAS_ANCHOR_AUTO;
+  connector->connector.to_x = 20.0;
+  connector->connector.to_y = -900.0;
+  assert_true(dt_canvas_connector_route(canvas, connector, &route));
+  assert_near(route.from_y, -100.0, 1e-9);
+  // The anchored end still refuses a frame that is gone.
+  connector->connector.from_id = 999;
+  assert_false(dt_canvas_connector_route(canvas, connector, &route));
+  dt_canvas_free(canvas);
+}
+
+/** No point of a route runs past the box of its own two ends, grown by `margin` across the chord. */
+static void _assert_route_between_its_ends(const dt_canvas_route_t *route, const double margin)
+{
+  const double low_x = fmin(route->from_x, route->to_x);
+  const double high_x = fmax(route->from_x, route->to_x);
+  const double low_y = fmin(route->from_y, route->to_y) - margin;
+  const double high_y = fmax(route->from_y, route->to_y) + margin;
+  for(int point = 0; point < route->point_count; point++)
+  {
+    const double x = route->points[2 * point];
+    const double y = route->points[2 * point + 1];
+    if(x < low_x - 1e-9 || x > high_x + 1e-9 || y < low_y - 1e-9 || y > high_y + 1e-9)
+      fail_msg("route point %d (%g, %g) runs past its ends' box [%g, %g] x [%g, %g]", point, x, y, low_x, high_x,
+               low_y, high_y);
+  }
+}
+
+/** A free end's own tangent is its control point, less the float it is stored in. */
+static void _a_free_tangent_places_the_control_point(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *line = dt_canvas_add_line(canvas, 10.0, 20.0, 310.0, 20.0, DT_CANVAS_ROUTING_CUBIC, NULL);
+  line->connector.from_tangent_x = 30.0f;
+  line->connector.from_tangent_y = 80.0f;
+  line->connector.to_tangent_x = -45.5f;
+  line->connector.to_tangent_y = -12.25f;
+  dt_canvas_route_t route;
+  assert_true(dt_canvas_connector_route(canvas, line, &route));
+  assert_near(route.control1_x, 10.0 + 30.0, 1e-4);
+  assert_near(route.control1_y, 20.0 + 80.0, 1e-4);
+  assert_near(route.control2_x, 310.0 - 45.5, 1e-4);
+  assert_near(route.control2_y, 20.0 - 12.25, 1e-4);
+  // An automatic tangent heads for the other end at 0.4 of the chord, however short the line,
+  // where an anchored end's floor would have put it 40 units out.
+  dt_canvas_object_t *short_line = dt_canvas_add_line(canvas, 0.0, 0.0, 10.0, 0.0, DT_CANVAS_ROUTING_CUBIC, NULL);
+  short_line->connector.from_tangent_x = 0.0f;
+  short_line->connector.from_tangent_y = 0.0f;
+  short_line->connector.to_tangent_x = 0.0f;
+  short_line->connector.to_tangent_y = 0.0f;
+  assert_true(dt_canvas_connector_route(canvas, short_line, &route));
+  assert_near(route.control1_x, 4.0, 1e-5);
+  assert_near(route.control1_y, 0.0, 1e-12);
+  assert_near(route.control2_x, 6.0, 1e-5);
+  // Through a waypoint, each free end heads for the waypoint instead.
+  short_line->connector.via_count = 1;
+  short_line->connector.via_x = 5.0;
+  short_line->connector.via_y = 50.0;
+  assert_true(dt_canvas_connector_route(canvas, short_line, &route));
+  const double to_via = hypot(5.0, 50.0);
+  assert_near(route.from_normal_x, 5.0 / to_via, 1e-12);
+  assert_near(route.from_normal_y, 50.0 / to_via, 1e-12);
+  assert_near(route.to_normal_x, -5.0 / to_via, 1e-12);
+  assert_near(route.control1_y, 0.4 * 50.0, 1e-4);
+
+  // The waypoint's own automatic tangent takes no floor either. Added where adding puts it, on
+  // the middle of the route, a short line's curve stays between its ends; before, the tangent
+  // was 40 units and threw both halves out past them.
+  short_line->connector.via_count = 0;
+  dt_canvas_connector_add_via(canvas, short_line);
+  assert_near(short_line->connector.via_x, 5.0, 1e-9);
+  assert_true(dt_canvas_connector_route(canvas, short_line, &route));
+  assert_near(route.control2_x, 5.0 - 2.0, 1e-9);
+  assert_near(route.control3_x, 5.0 + 2.0, 1e-9);
+  _assert_route_between_its_ends(&route, 0.0);
+  // Near one end, the tangent is the shorter leg's share, or the curve runs past that end.
+  short_line->connector.via_x = 9.0;
+  assert_true(dt_canvas_connector_route(canvas, short_line, &route));
+  assert_near(route.control3_x, 9.0 + 0.4, 1e-9);
+  _assert_route_between_its_ends(&route, 0.0);
+  // A seeded arc keeps its steered tangents through a waypoint added on its middle.
+  dt_canvas_object_t *arc = dt_canvas_add_line(canvas, 0.0, 0.0, 10.0, 0.0, DT_CANVAS_ROUTING_CUBIC, NULL);
+  dt_canvas_connector_add_via(canvas, arc);
+  assert_true(dt_canvas_connector_route(canvas, arc, &route));
+  _assert_route_between_its_ends(&route, 4.0);
+
+  // A short free SQUARE line: its stubs meet in the middle instead of each running 20 units past
+  // the other end.
+  dt_canvas_object_t *square = dt_canvas_add_line(canvas, 0.0, 0.0, 10.0, 0.0, DT_CANVAS_ROUTING_SQUARE, NULL);
+  assert_true(dt_canvas_connector_route(canvas, square, &route));
+  _assert_route_between_its_ends(&route, 0.0);
+  // A long one keeps the anchored stubs, which never reach halfway.
+  square->connector.to_x = 1000.0;
+  assert_true(dt_canvas_connector_route(canvas, square, &route));
+  assert_near(route.points[2], 60.0, 1e-9);
+  // Through a waypoint, a stub stops halfway to it.
+  square->connector.to_x = 100.0;
+  square->connector.via_count = 1;
+  square->connector.via_x = 0.0;
+  square->connector.via_y = 16.0;
+  assert_true(dt_canvas_connector_route(canvas, square, &route));
+  assert_near(route.points[2], 0.0, 1e-9);
+  assert_near(route.points[3], 8.0, 1e-9);
+  // A connector anchored at one end keeps that end's floor: the stub clears the frame.
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  dt_canvas_object_t *half = dt_canvas_add_line(canvas, 0.0, 0.0, 0.0, 60.0, DT_CANVAS_ROUTING_SQUARE, NULL);
+  half->connector.from_id = frame->id;
+  half->connector.from_anchor = DT_CANVAS_ANCHOR_SOUTH;
+  assert_true(dt_canvas_connector_route(canvas, half, &route));
+  assert_near(route.from_y, 50.0, 1e-9);
+  assert_near(route.points[3], 50.0 + 20.0, 1e-9);
+  assert_near(route.points[2 * (route.point_count - 2) + 1], 55.0, 1e-9);
+  dt_canvas_free(canvas);
+}
+
+/** A cubic line is born an arc: symmetric control points either side, its middle off the chord. */
+static void _a_seeded_curve_is_a_symmetric_arc(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *curve = dt_canvas_add_line(canvas, 0.0, 0.0, 100.0, 0.0, DT_CANVAS_ROUTING_CUBIC, NULL);
+  dt_canvas_route_t route;
+  assert_true(dt_canvas_connector_route(canvas, curve, &route));
+  // 0.4 of the chord at 30 degrees: (34.64, -20) and (65.36, -20), bulging up on screen.
+  const double along = 40.0 * cos(M_PI / 6.0);
+  assert_near(route.control1_x, along, 1e-4);
+  assert_near(route.control1_y, -20.0, 1e-4);
+  assert_near(route.control2_x, 100.0 - along, 1e-4);
+  assert_near(route.control2_y, -20.0, 1e-4);
+  const int middle = (route.point_count - 1) / 2;
+  const double middle_x = 0.5 * (route.points[2 * middle] + route.points[2 * (route.point_count - 1 - middle)]);
+  const double middle_y = 0.5 * (route.points[2 * middle + 1] + route.points[2 * (route.point_count - 1 - middle) + 1]);
+  assert_near(middle_x, 50.0, 1e-3);
+  assert_true(middle_y < -10.0);
+  const float seeded_to_x = curve->connector.to_tangent_x;
+  const float seeded_to_y = curve->connector.to_tangent_y;
+
+  // Nothing left to seed: both tangents steered.
+  curve->connector.from_tangent_x = 3.0f;
+  curve->connector.from_tangent_y = 4.0f;
+  assert_false(dt_canvas_connector_seed_curve(curve, &route));
+  assert_true(curve->connector.from_tangent_x == 3.0f && curve->connector.from_tangent_y == 4.0f);
+  assert_true(curve->connector.to_tangent_x == seeded_to_x && curve->connector.to_tangent_y == seeded_to_y);
+  // One steered, one automatic: only the automatic one is seeded, and the steered one is kept.
+  curve->connector.to_tangent_x = 0.0f;
+  curve->connector.to_tangent_y = 0.0f;
+  assert_true(dt_canvas_connector_seed_curve(curve, &route));
+  assert_true(curve->connector.from_tangent_x == 3.0f && curve->connector.from_tangent_y == 4.0f);
+  assert_true(curve->connector.to_tangent_x == seeded_to_x && curve->connector.to_tangent_y == seeded_to_y);
+  // An anchored end is its frame's: a half-free cubic seeds its free end alone.
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, -300.0, 0.0, 100.0, 100.0, "");
+  dt_canvas_object_t *half = dt_canvas_add_line(canvas, 0.0, 0.0, 100.0, 0.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  half->connector.from_id = frame->id;
+  half->connector.routing = DT_CANVAS_ROUTING_CUBIC;
+  assert_true(dt_canvas_connector_route(canvas, half, &route));
+  assert_true(dt_canvas_connector_seed_curve(half, &route));
+  assert_true(half->connector.from_tangent_x == 0.0f && half->connector.from_tangent_y == 0.0f);
+  const double chord_x = route.to_x - route.from_x;
+  assert_near(half->connector.to_tangent_x, -0.4 * cos(M_PI / 6.0) * chord_x, 1e-4);
+  assert_near(half->connector.to_tangent_y, -0.4 * sin(M_PI / 6.0) * chord_x, 1e-4);
+  // Neither a straight line nor a curve through a waypoint is seeded.
+  dt_canvas_object_t *straight = dt_canvas_add_line(canvas, 0.0, 0.0, 100.0, 0.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  assert_true(dt_canvas_connector_route(canvas, straight, &route));
+  assert_false(dt_canvas_connector_seed_curve(straight, &route));
+  straight->connector.routing = DT_CANVAS_ROUTING_CUBIC;
+  straight->connector.via_count = 1;
+  assert_false(dt_canvas_connector_seed_curve(straight, &route));
+  straight->connector.via_count = 0;
+  assert_true(dt_canvas_connector_seed_curve(straight, &route));
+  assert_near(straight->connector.to_tangent_y, -20.0, 1e-4);
+  dt_canvas_free(canvas);
+}
+
+/** The free ends reach the disk and come back, beside every connector field that was there before. */
+static void _free_ends_round_trip_through_the_index(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  dt_canvas_object_t *line = dt_canvas_add_line(canvas, -12.5, 7.25, 1234.5, -987.125, DT_CANVAS_ROUTING_CUBIC, NULL);
+  line->connector.from_tangent_x = 11.5f;
+  line->connector.from_tangent_y = -3.25f;
+  line->connector.to_tangent_x = -0.5f;
+  line->connector.to_tangent_y = 99.0f;
+  line->connector.via_count = 1;
+  line->connector.via_x = 400.0;
+  line->connector.via_y = -300.0;
+  line->connector.reserved[DT_CANVAS_CONNECTOR_RESERVED - 1] = 0x5A;
+  dt_canvas_object_t *half = dt_canvas_add_line(canvas, 0.0, 0.0, 800.0, 90.0, DT_CANVAS_ROUTING_SQUARE, NULL);
+  half->connector.from_id = frame->id;
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  dt_canvas_t *restored = dt_canvas_new();
+  assert_true(dt_canvas_format_read_index(restored, index, NULL));
+  g_bytes_unref(index);
+  const dt_canvas_object_t *line_back = dt_canvas_find_object(restored, line->id);
+  assert_non_null(line_back);
+  assert_int_equal(line_back->connector.from_id, 0);
+  assert_int_equal(line_back->connector.to_id, 0);
+  assert_true(line_back->connector.from_x == -12.5);
+  assert_true(line_back->connector.from_y == 7.25);
+  assert_true(line_back->connector.to_x == 1234.5);
+  assert_true(line_back->connector.to_y == -987.125);
+  assert_true(line_back->connector.from_tangent_x == 11.5f);
+  assert_true(line_back->connector.from_tangent_y == -3.25f);
+  assert_true(line_back->connector.to_tangent_x == -0.5f);
+  assert_true(line_back->connector.to_tangent_y == 99.0f);
+  assert_int_equal(line_back->connector.via_count, 1);
+  assert_int_equal(line_back->connector.reserved[DT_CANVAS_CONNECTOR_RESERVED - 1], 0x5A);
+  const dt_canvas_object_t *half_back = dt_canvas_find_object(restored, half->id);
+  assert_int_equal(half_back->connector.from_id, frame->id);
+  assert_int_equal(half_back->connector.to_id, 0);
+  assert_true(half_back->connector.to_x == 800.0);
+  assert_int_equal(half_back->connector.routing, DT_CANVAS_ROUTING_SQUARE);
+  // Routed from the file as from memory.
+  dt_canvas_route_t before;
+  dt_canvas_route_t after;
+  assert_true(dt_canvas_connector_route(canvas, line, &before));
+  assert_true(dt_canvas_connector_route(restored, line_back, &after));
+  assert_true(memcmp(&before, &after, sizeof(before)) == 0);
+  assert_true(dt_canvas_connector_route(canvas, half, &before));
+  assert_true(dt_canvas_connector_route(restored, half_back, &after));
+  assert_true(memcmp(&before, &after, sizeof(before)) == 0);
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+}
+
+static uint32_t _index_u32(const uint8_t *bytes)
+{
+  return bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+}
+
+/** Where the record of the object with `id` starts in an index, or 0 when there is none. */
+static gsize _index_record_of(const uint8_t *data, const gsize size, const uint32_t id)
+{
+  gsize position = _index_u32(data + 12);
+  while(position + 12 <= size)
+  {
+    const uint32_t record_size = _index_u32(data + position + 4);
+    if(_index_u32(data + position + 8) == id) return position;
+    if(record_size < 12) return 0;
+    position += record_size;
+  }
+  return 0;
+}
+
+/**
+ * A connector anchored at both ends is written byte for byte as it was before free ends: the
+ * record keeps its size -- 496 bytes, measured on the writer as it stood -- and the 72 bytes that
+ * were reserved then, which now start with the free ends, are still zeros. A file from before free
+ * ends therefore holds exactly what this writer writes, and reads back to the same route.
+ */
+static void _an_anchored_connector_is_written_as_before_free_ends(void **state)
+{
+  (void)state;
+  assert_int_equal(sizeof(dt_canvas_connector_t), 160);
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *left = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "a");
+  dt_canvas_object_t *right = dt_canvas_add_text(canvas, 400.0, 0.0, 100.0, 100.0, "b");
+  dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, left->id, right->id);
+  connector->connector.via_count = 1;
+  connector->connector.via_x = 200.0;
+  connector->connector.via_y = 300.0;
+  connector->connector.from_reach = 50.0f;
+  connector->connector.via_tangent_x = 20.0;
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  gsize size = 0;
+  const uint8_t *data = g_bytes_get_data(index, &size);
+  const gsize record = _index_record_of(data, size, connector->id);
+  assert_true(record > 0);
+  assert_int_equal(_index_u32(data + record), DT_CANVAS_OBJECT_CONNECTOR);
+  const uint32_t record_size = _index_u32(data + record + 4);
+  assert_int_equal(record_size, 496);
+  for(uint32_t byte = record_size - 72; byte < record_size; byte++)
+  {
+    if(data[record + byte] != 0) fail_msg("byte %u of the connector record is %u, not 0", byte, data[record + byte]);
+  }
+  dt_canvas_t *restored = dt_canvas_new();
+  assert_true(dt_canvas_format_read_index(restored, index, NULL));
+  dt_canvas_route_t before;
+  dt_canvas_route_t after;
+  assert_true(dt_canvas_connector_route(canvas, connector, &before));
+  assert_true(dt_canvas_connector_route(restored, dt_canvas_find_object(restored, connector->id), &after));
+  assert_true(memcmp(&before, &after, sizeof(before)) == 0);
+  g_bytes_unref(index);
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * No object may carry the id 0, which is what a free end holds: a file that gives one an object is
+ * refused that object on load, and asking to remove id 0 removes nothing -- not every line whose
+ * end is free.
+ */
+static void _no_object_loads_with_the_id_a_free_end_holds(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 100.0, 100.0, "");
+  dt_canvas_object_t *line = dt_canvas_add_line(canvas, 0.0, 200.0, 300.0, 200.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  const uint32_t frame_id = frame->id;
+  const uint32_t line_id = line->id;
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  gsize size = 0;
+  uint8_t *data = g_bytes_unref_to_data(index, &size);
+  const gsize record = _index_record_of(data, size, frame_id);
+  assert_true(record > 0);
+  memset(data + record + 8, 0, 4);
+  GBytes *patched = g_bytes_new_take(data, size);
+  dt_canvas_t *restored = dt_canvas_new();
+  assert_true(dt_canvas_format_read_index(restored, patched, NULL));
+  g_bytes_unref(patched);
+  assert_int_equal(dt_canvas_object_count(restored), 1);
+  assert_non_null(dt_canvas_find_object(restored, line_id));
+  assert_false(dt_canvas_remove_object(restored, 0));
+  assert_int_equal(dt_canvas_object_count(restored), 1);
+  // An id-0 object put in memory by hand is not a way around it either.
+  dt_canvas_object_t *stray = dt_canvas_add_text(restored, 0.0, 0.0, 10.0, 10.0, "");
+  stray->id = 0;
+  assert_false(dt_canvas_remove_object(restored, 0));
+  assert_non_null(dt_canvas_find_object(restored, line_id));
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+}
+
+/** A line is copied whole and offset; a connector anchored to frames is not the copy's to make. */
+static void _duplicating_a_line_offsets_its_points_and_waypoint(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *line = dt_canvas_add_line(canvas, 10.0, 20.0, 110.0, 70.0, DT_CANVAS_ROUTING_CUBIC, NULL);
+  line->connector.via_count = 1;
+  line->connector.via_x = 60.0;
+  line->connector.via_y = -30.0;
+  const uint32_t line_id = line->id;
+  dt_canvas_object_t *copy = dt_canvas_duplicate_object(canvas, line_id);
+  assert_non_null(copy);
+  line = dt_canvas_find_object(canvas, line_id);
+  assert_int_not_equal(copy->id, line_id);
+  assert_int_equal(copy->connector.from_id, 0);
+  assert_int_equal(copy->connector.to_id, 0);
+  const double offset = copy->connector.from_x - line->connector.from_x;
+  assert_true(offset > 0.0);
+  assert_near(copy->connector.from_y - line->connector.from_y, offset, 1e-12);
+  assert_near(copy->connector.to_x - line->connector.to_x, offset, 1e-12);
+  assert_near(copy->connector.to_y - line->connector.to_y, offset, 1e-12);
+  assert_near(copy->connector.via_x - line->connector.via_x, offset, 1e-12);
+  assert_near(copy->connector.via_y - line->connector.via_y, offset, 1e-12);
+  assert_true(copy->connector.from_tangent_x == line->connector.from_tangent_x);
+  assert_true(copy->z > line->z);
+
+  // Translation moves what a connector owns, each axis by its own offset: both points of a line...
+  dt_canvas_connector_translate(copy, -5.0, 2.5);
+  assert_near(copy->connector.from_x, 10.0 + offset - 5.0, 1e-12);
+  assert_near(copy->connector.from_y, 20.0 + offset + 2.5, 1e-12);
+  assert_near(copy->connector.to_x, 110.0 + offset - 5.0, 1e-12);
+  assert_near(copy->connector.to_y, 70.0 + offset + 2.5, 1e-12);
+  assert_near(copy->connector.via_x, 60.0 + offset - 5.0, 1e-12);
+  assert_near(copy->connector.via_y, -30.0 + offset + 2.5, 1e-12);
+  // ...nothing of a connector anchored at both ends, whose frames move it...
+  dt_canvas_object_t *left = dt_canvas_add_text(canvas, 0.0, 400.0, 100.0, 100.0, "");
+  dt_canvas_object_t *right = dt_canvas_add_text(canvas, 400.0, 400.0, 100.0, 100.0, "");
+  dt_canvas_object_t *anchored = dt_canvas_add_connector(canvas, left->id, right->id);
+  anchored->connector.via_count = 1;
+  anchored->connector.via_x = 200.0;
+  dt_canvas_connector_translate(anchored, 50.0, 50.0);
+  assert_true(anchored->connector.via_x == 200.0);
+  assert_null(dt_canvas_duplicate_object(canvas, anchored->id));
+  // ...and only the free end of a half line, with the waypoint, leaving the anchored end's fields be.
+  anchored->connector.to_id = 0;
+  anchored->connector.to_x = 700.0;
+  anchored->connector.to_y = -3.0;
+  anchored->connector.from_x = 11.0;
+  anchored->connector.from_y = 13.0;
+  dt_canvas_connector_translate(anchored, 50.0, 7.0);
+  assert_true(anchored->connector.to_x == 750.0);
+  assert_true(anchored->connector.to_y == 4.0);
+  assert_true(anchored->connector.via_x == 250.0);
+  assert_true(anchored->connector.from_x == 11.0);
+  assert_true(anchored->connector.from_y == 13.0);
+  assert_null(dt_canvas_duplicate_object(canvas, anchored->id));
+
+  // Removing frames never takes a line with them: no frame has the id a free end holds.
+  const guint count = dt_canvas_object_count(canvas);
+  assert_true(dt_canvas_remove_object(canvas, right->id));
+  assert_int_equal(dt_canvas_object_count(canvas), count - 1);
+  assert_non_null(dt_canvas_find_object(canvas, line_id));
+  assert_non_null(dt_canvas_find_object(canvas, anchored->id));
+  assert_true(dt_canvas_remove_object(canvas, left->id));
+  assert_int_equal(dt_canvas_object_count(canvas), count - 3);
+  assert_non_null(dt_canvas_find_object(canvas, line_id));
+  dt_canvas_free(canvas);
+}
+
+/** The largest and smallest value one axis of a cubic takes, sampled finely enough to stand for the curve. */
+static void _sampled_cubic_range(const double p0, const double p1, const double p2, const double p3, double *low,
+                                 double *high)
+{
+  const int samples = 100000;
+  for(int idx = 0; idx <= samples; idx++)
+  {
+    const double t = (double)idx / (double)samples;
+    const double u = 1.0 - t;
+    const double value = u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3;
+    *low = fmin(*low, value);
+    *high = fmax(*high, value);
+  }
+}
+
+/**
+ * The canvas's bounds hold a line's ink and no more: the stroke grown by half its width, and each
+ * arrowhead's own triangle where it has one; a connector between frames adds nothing.
+ */
+static void _bounds_hold_a_free_line_and_its_arrowhead(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_line_style_t style = dt_canvas_line_style_default();
+  style.line_width = 4.0f;
+  style.arrow_end = TRUE;
+  style.arrow_start = FALSE;
+  dt_canvas_object_t *line = dt_canvas_add_line(canvas, 0.0, 0.0, 300.0, 0.0, DT_CANVAS_ROUTING_STRAIGHT, &style);
+  // The painter's boxes take one reach for the whole route, whichever end carries the head.
+  const double arrow = dt_canvas_stroke_reach(4.0, DT_CANVAS_CONNECTOR_ARROW_END);
+  assert_near(arrow, 4.0 + 14.0 * 2.0, 1e-12);
+  assert_near(dt_canvas_stroke_reach(4.0, DT_CANVAS_CONNECTOR_ARROW_START), arrow, 1e-12);
+  assert_near(dt_canvas_stroke_reach(4.0, DT_CANVAS_CONNECTOR_DASHED), 2.0, 1e-12);
+  assert_near(dt_canvas_stroke_reach(0.0, DT_CANVAS_CONNECTOR_PLAIN), DT_CANVAS_CONNECTOR_LINE_WIDTH / 2.0, 1e-12);
+  assert_true(dt_canvas_paint_arrow_reach(4.0) == arrow);
+  // A head at the end, pointing right: its tip is the end, its base 28 units back and 10 either side.
+  dt_canvas_rect_t bounds = dt_canvas_bounds(canvas);
+  assert_near(bounds.x, -2.0, 1e-12);
+  assert_near(bounds.y, -10.0, 1e-12);
+  assert_near(bounds.width, 304.0, 1e-12);
+  assert_near(bounds.height, 20.0, 1e-12);
+  // At the start instead, the head lies at the start; the far end is a round cap.
+  line->connector.style = DT_CANVAS_CONNECTOR_ARROW_START;
+  bounds = dt_canvas_bounds(canvas);
+  assert_near(bounds.x, -2.0, 1e-12);
+  assert_near(bounds.y, -10.0, 1e-12);
+  assert_near(bounds.width, 304.0, 1e-12);
+  dt_canvas_route_t route;
+  assert_true(dt_canvas_connector_route(canvas, line, &route));
+  double triangle[6];
+  dt_canvas_route_arrow_head(&route, FALSE, 4.0, triangle);
+  assert_near(triangle[0], 0.0, 1e-12);
+  assert_near(triangle[2], 28.0, 1e-12);
+  assert_near(fabs(triangle[3]), 10.0, 1e-12);
+  assert_near(triangle[4], 28.0, 1e-12);
+  assert_near(triangle[3] + triangle[5], 0.0, 1e-12);
+  // Without a head the ink reaches half the width past the round caps.
+  line->connector.style = DT_CANVAS_CONNECTOR_DASHED;
+  bounds = dt_canvas_bounds(canvas);
+  assert_near(bounds.x, -2.0, 1e-12);
+  assert_near(bounds.height, 4.0, 1e-12);
+  // A cubic line's bounds hold the curve, which reaches three quarters of the way to its controls.
+  line->connector.routing = DT_CANVAS_ROUTING_CUBIC;
+  assert_true(dt_canvas_connector_route(canvas, line, &route));
+  assert_true(dt_canvas_connector_seed_curve(line, &route));
+  assert_true(dt_canvas_connector_route(canvas, line, &route));
+  bounds = dt_canvas_bounds(canvas);
+  assert_near(bounds.y, 0.75 * route.control1_y - 2.0, 1e-9);
+  assert_near(bounds.height, -0.75 * route.control1_y + 4.0, 1e-9);
+
+  // Through a waypoint, away from the origin, with tangents that throw the first half up and the
+  // second out past the end: both halves' true extremes, sampled, are the box, and neither is a
+  // control point.
+  line->connector.from_tangent_x = 0.0f;
+  line->connector.from_tangent_y = -150.0f;
+  line->connector.to_tangent_x = 150.0f;
+  line->connector.to_tangent_y = 0.0f;
+  line->connector.from_x = 500.0;
+  line->connector.from_y = 500.0;
+  line->connector.to_x = 800.0;
+  line->connector.to_y = 500.0;
+  line->connector.via_count = 1;
+  line->connector.via_x = 650.0;
+  line->connector.via_y = 700.0;
+  line->connector.via_tangent_x = 200.0;
+  line->connector.via_tangent_y = 0.0;
+  assert_true(dt_canvas_connector_route(canvas, line, &route));
+  double low_x = route.from_x;
+  double high_x = route.from_x;
+  double low_y = route.from_y;
+  double high_y = route.from_y;
+  _sampled_cubic_range(route.from_x, route.control1_x, route.control2_x, route.via_x, &low_x, &high_x);
+  _sampled_cubic_range(route.from_y, route.control1_y, route.control2_y, route.via_y, &low_y, &high_y);
+  _sampled_cubic_range(route.via_x, route.control3_x, route.control4_x, route.to_x, &low_x, &high_x);
+  _sampled_cubic_range(route.via_y, route.control3_y, route.control4_y, route.to_y, &low_y, &high_y);
+  assert_true(high_x > route.to_x + 10.0);
+  assert_true(high_x < route.control4_x - 10.0);
+  assert_true(low_y < route.from_y - 10.0);
+  assert_true(low_y > route.control1_y + 10.0);
+  dt_canvas_rect_t extent;
+  assert_true(dt_canvas_object_extent(canvas, line, &extent));
+  assert_near(extent.x, low_x - 2.0, 1e-6);
+  assert_near(extent.y, low_y - 2.0, 1e-6);
+  assert_near(extent.x + extent.width, high_x + 2.0, 1e-6);
+  assert_near(extent.y + extent.height, high_y + 2.0, 1e-6);
+
+  // A hidden line is left out, and frames with a connector between them are framed as before.
+  line->flags |= DT_CANVAS_OBJECT_FLAG_HIDDEN;
+  dt_canvas_object_t *left = dt_canvas_add_text(canvas, 0.0, 400.0, 100.0, 100.0, "");
+  dt_canvas_object_t *right = dt_canvas_add_text(canvas, 400.0, 400.0, 100.0, 100.0, "");
+  dt_canvas_object_t *anchored = dt_canvas_add_connector(canvas, left->id, right->id);
+  anchored->connector.routing = DT_CANVAS_ROUTING_SQUARE;
+  anchored->connector.via_count = 1;
+  anchored->connector.via_y = 2000.0;
+  bounds = dt_canvas_bounds(canvas);
+  assert_near(bounds.x, -50.0, 1e-12);
+  assert_near(bounds.y, 350.0, 1e-12);
+  assert_near(bounds.width, 500.0, 1e-12);
+  assert_near(bounds.height, 100.0, 1e-12);
+  // The extent of a frame is its bounds; of an unroutable connector, nothing.
+  assert_true(dt_canvas_object_extent(canvas, left, &extent));
+  assert_near(extent.width, 100.0, 1e-12);
+  anchored->connector.to_id = 999;
+  assert_false(dt_canvas_object_extent(canvas, anchored, &extent));
   dt_canvas_free(canvas);
 }
 
@@ -1357,6 +2220,17 @@ int main(void)
     cmocka_unit_test(_draw_order_edits_keep_the_list_sorted),
     cmocka_unit_test(_rotated_frames_answer_hit_tests_and_bounds),
     cmocka_unit_test(_connectors_route_between_cardinal_anchors),
+    cmocka_unit_test(_anchored_routes_are_unchanged_by_free_ends),
+    cmocka_unit_test(_a_free_line_routes_between_its_own_points),
+    cmocka_unit_test(_coincident_free_ends_route_to_a_finite_point),
+    cmocka_unit_test(_a_half_free_connector_aims_its_anchor_at_the_free_point),
+    cmocka_unit_test(_a_free_tangent_places_the_control_point),
+    cmocka_unit_test(_a_seeded_curve_is_a_symmetric_arc),
+    cmocka_unit_test(_free_ends_round_trip_through_the_index),
+    cmocka_unit_test(_an_anchored_connector_is_written_as_before_free_ends),
+    cmocka_unit_test(_no_object_loads_with_the_id_a_free_end_holds),
+    cmocka_unit_test(_duplicating_a_line_offsets_its_points_and_waypoint),
+    cmocka_unit_test(_bounds_hold_a_free_line_and_its_arrowhead),
     cmocka_unit_test(_the_page_list_reads_in_order_and_stores_by_code),
     cmocka_unit_test(_a_page_carries_a_margin_inside_it_and_a_bleed_outside),
     cmocka_unit_test(_a_frame_offers_its_corners_and_its_centre_as_anchors),
