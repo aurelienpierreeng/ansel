@@ -1371,6 +1371,75 @@ static void _duplicating_a_line_offsets_its_points_and_waypoint(void **state)
   dt_canvas_free(canvas);
 }
 
+/**
+ * A dragged end snaps to the grid on both axes when nothing is held. Held to an angle step it lies
+ * where the pointer projects onto the nearest step's direction from the other end: exactly level or
+ * plumb on an axis, where it still snaps along the axis it moves on, and off the grid on a
+ * diagonal, whose angle is kept to the bit. A pointer on the other end is left there.
+ */
+static void _a_dragged_line_end_snaps_to_the_grid_or_holds_its_angle(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->grid_size = 20.0f;
+  canvas->grid_flags &= ~DT_CANVAS_GRID_SNAP;
+  double x = 133.0;
+  double y = 47.0;
+  dt_canvas_constrain_line_end(canvas, 3.0, 7.0, 0, &x, &y);
+  assert_true(x == 133.0 && y == 47.0);
+  canvas->grid_flags |= DT_CANVAS_GRID_SNAP;
+  dt_canvas_constrain_line_end(canvas, 3.0, 7.0, 0, &x, &y);
+  assert_true(x == 140.0 && y == 40.0);
+
+  // 16.7 degrees off level from (3, 7): 45-degree steps make it level, at the origin's own height,
+  // the pointer's x snapped to the grid.
+  x = 133.0;
+  y = 7.0 + 130.0 * tan(16.7 * M_PI / 180.0);
+  dt_canvas_constrain_line_end(canvas, 3.0, 7.0, 45, &x, &y);
+  assert_true(x == 140.0);
+  assert_true(y == 7.0);
+  // Straight up on screen, from beside it, and leftward.
+  x = 10.0;
+  y = -191.0;
+  dt_canvas_constrain_line_end(canvas, 3.0, 7.0, 45, &x, &y);
+  assert_true(x == 3.0);
+  assert_true(y == -200.0);
+  x = -251.0;
+  y = 30.0;
+  dt_canvas_constrain_line_end(canvas, 3.0, 7.0, 15, &x, &y);
+  assert_true(x == -260.0);
+  assert_true(y == 7.0);
+
+  // 40 degrees below level: 45-degree steps put it on the diagonal, the pointer's projection onto
+  // it, and the grid is left alone.
+  const double pointer_angle = 40.0 * M_PI / 180.0;
+  x = 3.0 + 200.0 * cos(pointer_angle);
+  y = 7.0 + 200.0 * sin(pointer_angle);
+  dt_canvas_constrain_line_end(canvas, 3.0, 7.0, 45, &x, &y);
+  const double along = 200.0 * cos(5.0 * M_PI / 180.0);
+  assert_near(x, 3.0 + along * M_SQRT1_2, 1e-9);
+  assert_near(y, 7.0 + along * M_SQRT1_2, 1e-9);
+  assert_near(atan2(y - 7.0, x - 3.0), M_PI_4, 1e-12);
+  // 15-degree steps take the same pointer to 45 as well, and one at 22 degrees to 15.
+  x = 3.0 + 200.0 * cos(22.0 * M_PI / 180.0);
+  y = 7.0 + 200.0 * sin(22.0 * M_PI / 180.0);
+  dt_canvas_constrain_line_end(canvas, 3.0, 7.0, 15, &x, &y);
+  assert_near(atan2(y - 7.0, x - 3.0), 15.0 * M_PI / 180.0, 1e-12);
+  assert_near(hypot(x - 3.0, y - 7.0), 200.0 * cos(7.0 * M_PI / 180.0), 1e-9);
+  // And at 22 degrees 45-degree steps return to level.
+  x = 3.0 + 200.0 * cos(22.0 * M_PI / 180.0);
+  y = 7.0 + 200.0 * sin(22.0 * M_PI / 180.0);
+  dt_canvas_constrain_line_end(canvas, 3.0, 7.0, 45, &x, &y);
+  assert_true(y == 7.0);
+
+  // On the other end itself there is no direction to hold.
+  x = 3.0;
+  y = 7.0;
+  dt_canvas_constrain_line_end(canvas, 3.0, 7.0, 45, &x, &y);
+  assert_true(x == 3.0 && y == 7.0);
+  dt_canvas_free(canvas);
+}
+
 /** The largest and smallest value one axis of a cubic takes, sampled finely enough to stand for the curve. */
 static void _sampled_cubic_range(const double p0, const double p1, const double p2, const double p3, double *low,
                                  double *high)
@@ -2230,6 +2299,7 @@ int main(void)
     cmocka_unit_test(_an_anchored_connector_is_written_as_before_free_ends),
     cmocka_unit_test(_no_object_loads_with_the_id_a_free_end_holds),
     cmocka_unit_test(_duplicating_a_line_offsets_its_points_and_waypoint),
+    cmocka_unit_test(_a_dragged_line_end_snaps_to_the_grid_or_holds_its_angle),
     cmocka_unit_test(_bounds_hold_a_free_line_and_its_arrowhead),
     cmocka_unit_test(_the_page_list_reads_in_order_and_stores_by_code),
     cmocka_unit_test(_a_page_carries_a_margin_inside_it_and_a_bleed_outside),

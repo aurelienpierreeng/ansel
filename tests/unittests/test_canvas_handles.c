@@ -137,13 +137,17 @@ static void _square_cusp_nodes(float nodes[4 * DT_CANVAS_MASK_NODE_FLOATS])
   }
 }
 
-/** Two frames of random size, turn and lock, the first one cut, joined by a random connector. */
+/**
+ * Two frames of random size, turn and lock, the first one cut, joined by a random connector; and a
+ * random line, free at both ends or anchored to the second frame at its end, sometimes locked.
+ */
 typedef struct handles_scene_t
 {
   dt_canvas_t *canvas;
   dt_canvas_object_t *first;
   dt_canvas_object_t *second;
   dt_canvas_object_t *connector;
+  dt_canvas_object_t *line;
 } handles_scene_t;
 
 static void _random_frame(dt_canvas_object_t *frame)
@@ -183,6 +187,24 @@ static void _scene_build(handles_scene_t *scene)
     scene->connector->connector.via_x += _random_range(-300.0, 300.0);
     scene->connector->connector.via_y += _random_range(-300.0, 300.0);
   }
+  const dt_canvas_routing_t line_routing = (dt_canvas_routing_t)(uint32_t)(_random_unit() * 3.0);
+  scene->line = dt_canvas_add_line(scene->canvas, _random_range(-2000.0, 2000.0), _random_range(-2000.0, 2000.0),
+                                   _random_range(-2000.0, 2000.0), _random_range(-2000.0, 2000.0), line_routing,
+                                   NULL);
+  scene->line->connector.line_width = (float)_random_range(0.0, 16.0);
+  scene->line->connector.style = (uint32_t)(_random_unit() * 4.0);
+  if(_random_unit() < 0.25)
+  {
+    scene->line->connector.to_id = scene->second->id;
+    scene->line->connector.to_anchor = (uint32_t)(_random_unit() * DT_CANVAS_ANCHOR_LAST);
+  }
+  if(_random_unit() < 0.5)
+  {
+    dt_canvas_connector_add_via(scene->canvas, scene->line);
+    scene->line->connector.via_x += _random_range(-300.0, 300.0);
+    scene->line->connector.via_y += _random_range(-300.0, 300.0);
+  }
+  if(_random_unit() < 0.25) scene->line->flags |= DT_CANVAS_OBJECT_FLAG_LOCKED;
 }
 
 /** A point `distance` from (x, y) along the direction `angle`. */
@@ -277,6 +299,13 @@ static handles_expected_t _expected_site(const dt_canvas_object_t *owner, const 
       expected.shape = DT_CANVAS_HANDLE_DISC;
       expected.reach_units = _expected_arrow_reach(owner->connector.line_width);
       break;
+    case DT_CANVAS_HANDLE_ENDPOINT:
+      // The waypoint's square, the same ten pixels along the canvas's own axes.
+      expected.shape = DT_CANVAS_HANDLE_SQUARE;
+      expected.reach_px = 10.0;
+      expected.turned = TRUE;
+      expected.angle = 0.0;
+      break;
     default:
       fail_msg("unknown role %u", site->role);
   }
@@ -369,17 +398,23 @@ static void _every_site_catches_its_centre_and_lets_go_past_its_reach(void **sta
 {
   (void)state;
   size_t checked_sites = 0;
-  size_t roles_seen[DT_CANVAS_HANDLE_MASK_EDGE + 1] = { 0 };
+  size_t roles_seen[DT_CANVAS_HANDLE_ROLE_COUNT] = { 0 };
   for(int scene_idx = 0; scene_idx < 300; scene_idx++)
   {
     handles_scene_t scene;
     _scene_build(&scene);
     const double zooms[3] = { 0.25, 4.0, _random_zoom() };
-    const dt_canvas_object_t *objects[3] = { scene.first, scene.second, scene.connector };
-    for(int object_idx = 0; object_idx < 3; object_idx++)
+    const dt_canvas_object_t *objects[4] = { scene.first, scene.second, scene.connector, scene.line };
+    for(int object_idx = 0; object_idx < 4; object_idx++)
     {
       dt_canvas_handle_site_t *sites = NULL;
       const size_t count = _sites(scene.canvas, objects[object_idx], DT_CANVAS_HANDLES_ALL, &sites);
+      // A free end is a handle unless its line is locked; an anchored end never is, frames' included.
+      const dt_canvas_object_t *owner = objects[object_idx];
+      size_t free_ends = 0;
+      if(owner->kind == DT_CANVAS_OBJECT_CONNECTOR && !(owner->flags & DT_CANVAS_OBJECT_FLAG_LOCKED))
+        free_ends = (owner->connector.from_id == 0 ? 1u : 0u) + (owner->connector.to_id == 0 ? 1u : 0u);
+      assert_int_equal(_count_role(sites, count, DT_CANVAS_HANDLE_ENDPOINT), free_ends);
       for(size_t idx = 0; idx < count; idx++)
       {
         roles_seen[sites[idx].role]++;
@@ -392,7 +427,7 @@ static void _every_site_catches_its_centre_and_lets_go_past_its_reach(void **sta
     dt_canvas_free(scene.canvas);
   }
   // The scenes must actually have exercised every kind of site, or the loop above proves nothing.
-  for(uint32_t role = DT_CANVAS_HANDLE_CORNER; role <= DT_CANVAS_HANDLE_MASK_EDGE; role++)
+  for(uint32_t role = DT_CANVAS_HANDLE_CORNER; role < DT_CANVAS_HANDLE_ROLE_COUNT; role++)
     assert_true(roles_seen[role] > 0);
   assert_true(checked_sites > 5000);
 }
@@ -625,6 +660,88 @@ static void _a_cubic_connector_offers_a_tangent_per_control_point(void **state)
   assert_int_equal(_count_role(sites, count, DT_CANVAS_HANDLE_TETHER), 0);
   assert_int_equal(_count_role(sites, count, DT_CANVAS_HANDLE_VIA), 1);
   dt_free(sites);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * A line's free ends are handles, where its route starts and ends, the start's before the end's
+ * and both before anything else the line offers: a press near an end and its control point takes
+ * the end. An end anchored to a frame is the frame's to move and offers nothing, so a half-free
+ * connector offers one and a connector between two frames none -- and a locked line keeps both of
+ * its ends, as a locked frame keeps its corners.
+ */
+static void _a_line_offers_its_free_ends_and_nothing_at_an_anchored_one(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *line = dt_canvas_add_line(canvas, 100.0, 50.0, 400.0, 250.0, DT_CANVAS_ROUTING_CUBIC, NULL);
+  dt_canvas_route_t route;
+  assert_true(dt_canvas_connector_route(canvas, line, &route));
+  dt_canvas_handle_site_t *sites = NULL;
+  size_t count = _sites(canvas, line, DT_CANVAS_HANDLES_ALL, &sites);
+  assert_true(count > 6);
+  const uint32_t leading_roles[6] = { DT_CANVAS_HANDLE_ENDPOINT, DT_CANVAS_HANDLE_ENDPOINT, DT_CANVAS_HANDLE_TANGENT,
+                                      DT_CANVAS_HANDLE_TETHER,   DT_CANVAS_HANDLE_TANGENT,  DT_CANVAS_HANDLE_TETHER };
+  for(int idx = 0; idx < 6; idx++)
+    assert_int_equal(sites[idx].role, leading_roles[idx]);
+  assert_int_equal(_count_role(sites, count, DT_CANVAS_HANDLE_ENDPOINT), 2);
+  assert_int_equal(sites[0].part, DT_CANVAS_HANDLE_PART_FROM);
+  assert_int_equal(sites[0].index, 0);
+  assert_int_equal(sites[1].part, DT_CANVAS_HANDLE_PART_TO);
+  assert_int_equal(sites[1].index, 1);
+  assert_true(sites[0].x0 == route.from_x && sites[0].y0 == route.from_y);
+  assert_true(sites[1].x0 == route.to_x && sites[1].y0 == route.to_y);
+  assert_true(route.from_x == 100.0 && route.from_y == 50.0);
+  assert_true(route.to_x == 400.0 && route.to_y == 250.0);
+  const double probe_zooms[2] = { 0.5, 3.0 };
+  for(int end = 0; end < 2; end++)
+  {
+    const dt_canvas_handle_site_t *site = &sites[end];
+    for(int zoom_idx = 0; zoom_idx < 2; zoom_idx++)
+    {
+      // Ten screen pixels either way along the canvas's axes, corners included: a square.
+      const double zoom = probe_zooms[zoom_idx];
+      assert_true(dt_canvas_handle_site_hit(site, site->x0 + 9.5 / zoom, site->y0 - 9.5 / zoom, zoom));
+      assert_true(dt_canvas_handle_site_hit(site, site->x0 - 9.5 / zoom, site->y0 + 9.5 / zoom, zoom));
+      assert_false(dt_canvas_handle_site_hit(site, site->x0 + 10.5 / zoom, site->y0, zoom));
+      assert_false(dt_canvas_handle_site_hit(site, site->x0, site->y0 - 10.5 / zoom, zoom));
+    }
+  }
+  dt_free(sites);
+  line->connector.style = DT_CANVAS_CONNECTOR_ARROW_START | DT_CANVAS_CONNECTOR_ARROW_END;
+  dt_canvas_connector_add_via(canvas, line);
+  _assert_truncates_cleanly(canvas, line, DT_CANVAS_HANDLES_ALL);
+
+  // Asked for the ends alone, the ends alone; locked, none.
+  assert_int_equal(dt_canvas_handle_sites(canvas, line, DT_CANVAS_HANDLES_ENDPOINTS, NULL, 0), 2);
+  assert_int_equal(dt_canvas_handle_sites(canvas, line, DT_CANVAS_HANDLES_TANGENTS | DT_CANVAS_HANDLES_VIA, NULL, 0),
+                   dt_canvas_handle_sites(canvas, line, DT_CANVAS_HANDLES_CONNECTOR, NULL, 0) - 2);
+  line->flags |= DT_CANVAS_OBJECT_FLAG_LOCKED;
+  assert_int_equal(dt_canvas_handle_sites(canvas, line, DT_CANVAS_HANDLES_ENDPOINTS, NULL, 0), 0);
+  line->flags &= ~DT_CANVAS_OBJECT_FLAG_LOCKED;
+
+  // Its end anchored to a frame: the start alone, still where the line starts.
+  dt_canvas_object_t *frame = dt_canvas_add_image(canvas, 900.0, 400.0, 1000, 1000);
+  line->connector.to_id = frame->id;
+  line->connector.to_anchor = DT_CANVAS_ANCHOR_WEST;
+  count = _sites(canvas, line, DT_CANVAS_HANDLES_ENDPOINTS, &sites);
+  assert_int_equal(count, 1);
+  assert_int_equal(sites[0].part, DT_CANVAS_HANDLE_PART_FROM);
+  assert_true(sites[0].x0 == 100.0 && sites[0].y0 == 50.0);
+  dt_free(sites);
+  line->connector.from_id = frame->id;
+  line->connector.to_id = 0;
+  count = _sites(canvas, line, DT_CANVAS_HANDLES_ENDPOINTS, &sites);
+  assert_int_equal(count, 1);
+  assert_int_equal(sites[0].part, DT_CANVAS_HANDLE_PART_TO);
+  assert_int_equal(sites[0].index, 1);
+  assert_true(sites[0].x0 == 400.0 && sites[0].y0 == 250.0);
+  dt_free(sites);
+
+  // Between two frames, no end of its own.
+  dt_canvas_object_t *other = dt_canvas_add_image(canvas, -900.0, 400.0, 1000, 1000);
+  dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, frame->id, other->id);
+  assert_int_equal(dt_canvas_handle_sites(canvas, connector, DT_CANVAS_HANDLES_ENDPOINTS, NULL, 0), 0);
   dt_canvas_free(canvas);
 }
 
@@ -1164,6 +1281,7 @@ int main(void)
     cmocka_unit_test(_the_knob_floats_a_screen_distance_above_a_turned_frame),
     cmocka_unit_test(_a_locked_frame_offers_no_frame_handles_but_keeps_its_cutout),
     cmocka_unit_test(_a_cubic_connector_offers_a_tangent_per_control_point),
+    cmocka_unit_test(_a_line_offers_its_free_ends_and_nothing_at_an_anchored_one),
     cmocka_unit_test(_a_polygon_offers_its_nodes_their_own_handles_and_its_edges),
     cmocka_unit_test(_a_square_polygon_hangs_a_node_handles_where_they_are_drawn),
     cmocka_unit_test(_the_cutout_handles_sit_where_the_shape_puts_them),

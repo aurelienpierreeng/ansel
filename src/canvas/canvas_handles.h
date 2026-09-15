@@ -23,14 +23,15 @@
  * @file canvas_handles.h
  * @brief Where an object can be taken hold of, as one list of sites.
  *
- * @details A frame's corners and its rotation knob, a cubic connector's tangents, its waypoint,
- * the band its line is picked in, a cutout's points and a polygon's nodes: every place the
- * pointer grabs something, and the lines drawn between them that a floating control must not
- * cover, are described here ONCE, as a site with a shape and a reach. The atelier's hit tests are
- * loops over these sites, so they cannot disagree about where a handle is or how far it catches.
- * The painters do not read the list: the frame handles, the tangents and the waypoint are drawn
- * from the same constants and routes, and the cutout's handles from the geometry below, so a
- * painted handle and its site agree through those and not through one list.
+ * @details A frame's corners and its rotation knob, a line's free ends, a cubic connector's
+ * tangents, its waypoint, the band its line is picked in, a cutout's points and a polygon's nodes:
+ * every place the pointer grabs something, and the lines drawn between them that a floating
+ * control must not cover, are described here ONCE, as a site with a shape and a reach. The
+ * atelier's hit tests are loops over these sites, so they cannot disagree about where a handle is
+ * or how far it catches.
+ * The painters do not read the list: the frame handles, a line's free ends, the tangents and the
+ * waypoint are drawn from the same constants and routes, and the cutout's handles from the geometry
+ * below, so a painted handle and its site agree through those and not through one list.
  *
  * A reach has two parts because a handle has two: the part that stays the same size on screen
  * whatever the zoom (a handle is eight pixels at any magnification) and the part that belongs
@@ -56,7 +57,7 @@ extern "C" {
 #define DT_CANVAS_ROTATE_HANDLE_OFFSET_PIXELS 28.0
 /** How far outside an object a press still picks it, on screen. */
 #define DT_CANVAS_PICK_TOLERANCE_PIXELS 4.0
-/** A connector's waypoint and tangent handles as drawn, on screen; they catch a little wider. */
+/** A connector's waypoint, tangent handles and free-end marks as drawn, on screen; they catch a little wider. */
 #define DT_CANVAS_VIA_HANDLE_PIXELS 7.0
 
 /** What a site is. The view maps each to the gesture it starts; see the fields each one uses. */
@@ -74,6 +75,8 @@ typedef enum dt_canvas_handle_role_t
   DT_CANVAS_HANDLE_MASK_NODE,     ///< a polygon node; `index` the node
   DT_CANVAS_HANDLE_MASK_NODE_OWN, ///< a node's own fall-off or control point, latent; `index` the node
   DT_CANVAS_HANDLE_MASK_EDGE,     ///< the straight edge from node `index` to the next
+  DT_CANVAS_HANDLE_ENDPOINT,      ///< a connector's free end; `part` FROM or TO, `index` 0 or 1
+  DT_CANVAS_HANDLE_ROLE_COUNT,    ///< how many roles there are; never a site's, never stored
 } dt_canvas_handle_role_t;
 
 /** How a site catches the pointer. */
@@ -107,9 +110,10 @@ typedef enum dt_canvas_handle_set_t
   DT_CANVAS_HANDLES_TANGENTS = 1 << 5,       ///< a cubic connector's control points and their tethers
   DT_CANVAS_HANDLES_VIA = 1 << 6,            ///< a connector's waypoint
   DT_CANVAS_HANDLES_CURVE = 1 << 7,          ///< the band a connector is picked in, and its arrowheads
+  DT_CANVAS_HANDLES_ENDPOINTS = 1 << 8,      ///< a connector's free ends; none on an anchored end or a locked line
   DT_CANVAS_HANDLES_MASK = DT_CANVAS_HANDLES_MASK_POINTS | DT_CANVAS_HANDLES_MASK_NODES
                            | DT_CANVAS_HANDLES_MASK_NODE_OWN | DT_CANVAS_HANDLES_MASK_EDGES,
-  DT_CANVAS_HANDLES_CONNECTOR = DT_CANVAS_HANDLES_TANGENTS | DT_CANVAS_HANDLES_VIA,
+  DT_CANVAS_HANDLES_CONNECTOR = DT_CANVAS_HANDLES_ENDPOINTS | DT_CANVAS_HANDLES_TANGENTS | DT_CANVAS_HANDLES_VIA,
   DT_CANVAS_HANDLES_ALL = DT_CANVAS_HANDLES_FRAME | DT_CANVAS_HANDLES_MASK | DT_CANVAS_HANDLES_CONNECTOR
                           | DT_CANVAS_HANDLES_CURVE,
 } dt_canvas_handle_set_t;
@@ -146,9 +150,12 @@ typedef struct dt_canvas_handle_site_t
  * - a cutout: its points by index, then a polygon's nodes by index, then every node's own
  *   handles grouped by node, each node's fall-off before its incoming and its outgoing control
  *   point, then the edges by index;
- * - a connector: its control points from the start to the end, each followed by its tether, then
- *   its waypoint, then the legs of its route from start to end, then the start's arrowhead before
- *   the end's.
+ * - a connector: its free ends, the start's before the end's, then its control points from the
+ *   start to the end, each followed by its tether, then its waypoint, then the legs of its route
+ *   from start to end, then the start's arrowhead before the end's. A free end comes before the
+ *   control point it leaves by: the point a line is drawn between is what a press near both means,
+ *   and a control point pulled back under its end is still reached by zooming in, the end's reach
+ *   being a screen distance and the control point's offset a length of the document.
  * A caller wanting another priority -- the cutout's outer points before its centre -- walks the
  * list backwards or filters it by role.
  *

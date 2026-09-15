@@ -2369,6 +2369,46 @@ double dt_canvas_snap(const dt_canvas_t *canvas, double value)
   return round(value / canvas->grid_size) * canvas->grid_size;
 }
 
+void dt_canvas_constrain_line_end(const dt_canvas_t *canvas, const double origin_x, const double origin_y,
+                                  const int step_degrees, double *x, double *y)
+{
+  if(IS_NULL_PTR(x) || IS_NULL_PTR(y)) return;
+  if(step_degrees <= 0)
+  {
+    *x = dt_canvas_snap(canvas, *x);
+    *y = dt_canvas_snap(canvas, *y);
+    return;
+  }
+  const double delta_x = *x - origin_x;
+  const double delta_y = *y - origin_y;
+  if(!(hypot(delta_x, delta_y) > 0.0)) return;
+  const long steps = lround(atan2(delta_y, delta_x) * 180.0 / M_PI / step_degrees);
+  // The step count is kept whole so the four axes are recognised exactly rather than by a cosine
+  // that only comes near zero: an end locked level must have its other end's height to the bit.
+  const long degrees = ((steps * step_degrees) % 360 + 360) % 360;
+  // On an axis the pointer's projection is simply its coordinate along that axis.
+  if(degrees == 0 || degrees == 180)
+  {
+    *x = dt_canvas_snap(canvas, *x);
+    *y = origin_y;
+    return;
+  }
+  if(degrees == 90 || degrees == 270)
+  {
+    *x = origin_x;
+    *y = dt_canvas_snap(canvas, *y);
+    return;
+  }
+  // A diagonal crosses the grid's points only at whole multiples of a cell on both axes, so
+  // snapping either coordinate would bend it off the angle that was asked for.
+  const double angle = degrees * M_PI / 180.0;
+  const double direction_x = cos(angle);
+  const double direction_y = sin(angle);
+  const double along = delta_x * direction_x + delta_y * direction_y;
+  *x = origin_x + along * direction_x;
+  *y = origin_y + along * direction_y;
+}
+
 dt_canvas_object_t *dt_canvas_pick(const dt_canvas_t *canvas, double x, double y, double tolerance)
 {
   if(IS_NULL_PTR(canvas)) return NULL;

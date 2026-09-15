@@ -242,6 +242,10 @@ static void _connector_predicted_add(GArray *shapes, const dt_canvas_place_view_
   {
     probes[probe_count] = *connector;
     probes[probe_count].connector.routing = DT_CANVAS_ROUTING_CUBIC;
+    // The Route writer bends a free line into an arc as it makes it cubic, and the tangents it
+    // would put on screen are that arc's, not the chord's.
+    if(dt_canvas_connector_route(canvas, &probes[probe_count], &route))
+      dt_canvas_connector_seed_curve(&probes[probe_count], &route);
     probe_count++;
   }
   if(without_via && dt_canvas_connector_route(canvas, connector, &route))
@@ -266,8 +270,10 @@ static void _connector_predicted_add(GArray *shapes, const dt_canvas_place_view_
     probes[probe_count].connector.routing = DT_CANVAS_ROUTING_CUBIC;
     probe_count++;
   }
+  // Only what the click adds: a free end is already on screen, and is kept clear as the line's own.
   for(int probe = 0; probe < probe_count; probe++)
-    _object_sites_add(shapes, view, canvas, &probes[probe], DT_CANVAS_HANDLES_CONNECTOR, DT_CANVAS_PLACE_PREDICTED);
+    _object_sites_add(shapes, view, canvas, &probes[probe], DT_CANVAS_HANDLES_TANGENTS | DT_CANVAS_HANDLES_VIA,
+                      DT_CANVAS_PLACE_PREDICTED);
   dt_free(probes);
 }
 

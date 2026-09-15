@@ -1094,6 +1094,19 @@ dt_canvas_rect_t dt_canvas_bounds(const dt_canvas_t *canvas);
 /** @brief Round `value` to the grid when snapping is on, else return it unchanged. */
 double dt_canvas_snap(const dt_canvas_t *canvas, double value);
 
+/**
+ * @brief Where a line's end goes when it is pulled to (x, y), about the line's other end.
+ * @details Without an angle step the point snaps to the grid on both axes, when snapping is on.
+ * With one, the direction from the other end is rounded to a multiple of the step and the end
+ * lands where the pointer's own position projects onto that direction, so along a locked axis it
+ * follows the pointer exactly; the angle wins over the grid there, except that an end locked onto
+ * an axis still snaps along the axis it moves on. A pointer on the other end has no direction and
+ * is left where it is.
+ * @param step_degrees 0 for no lock; 45 or 15 are what the atelier's modifiers ask for.
+ */
+void dt_canvas_constrain_line_end(const dt_canvas_t *canvas, double origin_x, double origin_y, int step_degrees,
+                                  double *x, double *y);
+
 /** @brief The object whose frame is under the point, frontmost first. NULL when none. */
 dt_canvas_object_t *dt_canvas_pick(const dt_canvas_t *canvas, double x, double y, double tolerance);
 

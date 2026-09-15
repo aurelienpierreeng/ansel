@@ -1527,8 +1527,17 @@ static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object
   switch(prop->id)
   {
     case DT_CANVAS_PROP_CONNECTOR_ROUTING:
+    {
       object->connector.routing = (uint32_t)CLAMP(in->choice, 0, 2);
+      // A free end with an automatic tangent leaves toward the other end, so a line made cubic
+      // would follow its own chord and look as straight as it was. It is bent into an arc instead;
+      // the seed leaves a steered tangent alone, so a curve made straight and cubic again comes back
+      // with the bend it had. Writing the value a connector already holds never gets here.
+      dt_canvas_route_t route;
+      if(object->connector.routing == DT_CANVAS_ROUTING_CUBIC && dt_canvas_connector_route(canvas, object, &route))
+        dt_canvas_connector_seed_curve(object, &route);
       return DT_CANVAS_EFFECT_CHANGED;
+    }
     case DT_CANVAS_PROP_CONNECTOR_ARROW_START:
       _set_bit(&object->connector.style, DT_CANVAS_CONNECTOR_ARROW_START, in->flag);
       return DT_CANVAS_EFFECT_CHANGED;

@@ -793,15 +793,102 @@ static void _a_straight_connector_leaves_room_for_the_tangents_a_click_would_add
   _check(&crowded, &place, NULL, TRUE);
 }
 
+/** Is a screen point inside a shape's rectangle? Closed, give or take rounding. */
+static gboolean _shape_holds_point(const dt_canvas_place_shape_t *shape, const double x, const double y)
+{
+  return x >= shape->rect.x - 1e-6 && x <= shape->rect.x + shape->rect.width + 1e-6 && y >= shape->rect.y - 1e-6
+         && y <= shape->rect.y + shape->rect.height + 1e-6;
+}
+
+/** Is a screen point inside one of the rectangles of a class? */
+static gboolean _covered_by_class(const GArray *shapes, const dt_canvas_place_class_t shape_class, const double x,
+                                  const double y)
+{
+  for(guint idx = 0; idx < shapes->len; idx++)
+  {
+    const dt_canvas_place_shape_t *shape = &g_array_index(shapes, dt_canvas_place_shape_t, idx);
+    if(shape->shape_class != shape_class) continue;
+    if(_shape_holds_point(shape, x, y)) return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * A line free at both ends keeps its two end handles clear, out to their corners, as surely as its
+ * band; an end anchored to a frame is no handle and keeps nothing clear past the band. And what the
+ * Route control would add to a straight line is the ARC it bends the line into, so the tangents it
+ * keeps clear are that arc's control points -- worked out on paper here, 30 degrees off a 600-unit
+ * chord at 0.4 of its length -- and not points along the chord.
+ */
+static void _a_free_line_keeps_its_ends_and_the_arc_a_click_would_bend_clear(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  // No arrowhead: a head's ink is kept clear in a disc round the tip that holds the corners too.
+  dt_canvas_line_style_t style = dt_canvas_line_style_default();
+  style.arrow_start = FALSE;
+  style.arrow_end = FALSE;
+  dt_canvas_object_t *line
+      = dt_canvas_add_line(canvas, 200.0, 300.0, 800.0, 300.0, DT_CANVAS_ROUTING_STRAIGHT, &style);
+  const dt_canvas_place_view_t projection = _unit_view(1000.0, 700.0);
+  GArray *shapes = g_array_new(FALSE, FALSE, sizeof(dt_canvas_place_shape_t));
+  dt_canvas_place_object_shapes(shapes, &projection, canvas, line, FALSE);
+  const double ends[4] = { 200.0, 300.0, 800.0, 300.0 };
+  const double corners[8] = { -9.5, -9.5, 9.5, -9.5, 9.5, 9.5, -9.5, 9.5 };
+  for(int end = 0; end < 2; end++)
+  {
+    for(int corner = 0; corner < 4; corner++)
+    {
+      const double x = ends[2 * end] + corners[2 * corner];
+      const double y = ends[2 * end + 1] + corners[2 * corner + 1];
+      assert_true(_covered_by_class(shapes, DT_CANVAS_PLACE_HARD, x, y));
+    }
+  }
+  const double arc_reach = 0.4 * 600.0;
+  const double seeded[4] = { 200.0 + arc_reach * cos(M_PI / 6.0), 300.0 - arc_reach * sin(M_PI / 6.0),
+                             800.0 - arc_reach * cos(M_PI / 6.0), 300.0 - arc_reach * sin(M_PI / 6.0) };
+  for(int control = 0; control < 2; control++)
+    assert_true(_covered_by_class(shapes, DT_CANVAS_PLACE_PREDICTED, seeded[2 * control], seeded[2 * control + 1]));
+  // Nothing the click would add sits where an unbent cubic would have put its control points.
+  assert_false(_covered_by_class(shapes, DT_CANVAS_PLACE_PREDICTED, 440.0, 300.0 + 9.0));
+  g_array_set_size(shapes, 0);
+
+  // The same line between two frames: its ends are theirs, and only the band is kept clear there.
+  dt_canvas_object_t *left = dt_canvas_add_image(canvas, 0.0, 0.0, 1000, 1000);
+  left->x = 150.0;
+  left->y = 300.0;
+  left->width = 100.0;
+  left->height = 100.0;
+  dt_canvas_object_t *right = dt_canvas_add_image(canvas, 0.0, 0.0, 1000, 1000);
+  right->x = 850.0;
+  right->y = 300.0;
+  right->width = 100.0;
+  right->height = 100.0;
+  line->connector.from_id = left->id;
+  line->connector.from_anchor = DT_CANVAS_ANCHOR_EAST;
+  line->connector.to_id = right->id;
+  line->connector.to_anchor = DT_CANVAS_ANCHOR_WEST;
+  dt_canvas_place_object_shapes(shapes, &projection, canvas, line, FALSE);
+  for(int end = 0; end < 2; end++)
+  {
+    for(int corner = 0; corner < 4; corner++)
+    {
+      const double x = ends[2 * end] + corners[2 * corner];
+      const double y = ends[2 * end + 1] + corners[2 * corner + 1];
+      assert_false(_covered_by_class(shapes, DT_CANVAS_PLACE_HARD, x, y));
+    }
+  }
+  g_array_free(shapes, TRUE);
+  dt_canvas_free(canvas);
+}
+
 /** Is a screen point inside one of the rectangles appended from `first` on? Closed, give or take rounding. */
 static gboolean _covered(const GArray *shapes, const guint first, const double x, const double y)
 {
   for(guint idx = first; idx < shapes->len; idx++)
   {
     const dt_canvas_place_shape_t *shape = &g_array_index(shapes, dt_canvas_place_shape_t, idx);
-    if(x >= shape->rect.x - 1e-6 && x <= shape->rect.x + shape->rect.width + 1e-6 && y >= shape->rect.y - 1e-6
-       && y <= shape->rect.y + shape->rect.height + 1e-6)
-      return TRUE;
+    if(_shape_holds_point(shape, x, y)) return TRUE;
   }
   return FALSE;
 }
@@ -1796,6 +1883,7 @@ int main(void)
     cmocka_unit_test(_a_placement_keeps_every_promise_in_ten_thousand_scenes),
     cmocka_unit_test(_a_cubic_connector_keeps_its_tangents_and_waypoint_clear),
     cmocka_unit_test(_a_straight_connector_leaves_room_for_the_tangents_a_click_would_add),
+    cmocka_unit_test(_a_free_line_keeps_its_ends_and_the_arc_a_click_would_bend_clear),
     cmocka_unit_test(_sites_become_rectangles_holding_every_point_they_catch),
     cmocka_unit_test(_a_scene_moved_by_whole_pixels_moves_its_placement_by_as_much),
     cmocka_unit_test(_a_small_motion_leaves_the_properties_where_they_are),

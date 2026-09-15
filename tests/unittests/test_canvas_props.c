@@ -122,6 +122,14 @@ static dt_canvas_prop_value_t _flag(const gboolean flag)
   return value;
 }
 
+static dt_canvas_prop_value_t _choice(const int choice)
+{
+  dt_canvas_prop_value_t value;
+  memset(&value, 0, sizeof(value));
+  value.choice = choice;
+  return value;
+}
+
 static dt_canvas_prop_value_t _color(const float red_value, const float green_value, const float blue_value,
                                      const float alpha_value)
 {
@@ -1249,6 +1257,63 @@ static void _reversing_a_connector_walks_the_same_curve_backwards(void **state)
   _fixture_free(&fixture);
 }
 
+/**
+ * A free line made cubic in its properties is bent into the seeded arc: left with automatic tangents
+ * its ends would aim at each other and it would stay as straight as it was. The arc is worked out on
+ * paper -- 30 degrees off a 300-unit chord, at 0.4 of it -- and a bend the user already gave the
+ * line survives being made straight and cubic again. A connector between frames, and a line
+ * through a waypoint, are left as they are.
+ */
+static void _making_a_line_cubic_bends_it_into_an_arc(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  const dt_canvas_prop_value_t cubic = _choice(DT_CANVAS_ROUTING_CUBIC);
+  const dt_canvas_prop_value_t straight = _choice(DT_CANVAS_ROUTING_STRAIGHT);
+  dt_canvas_object_t *line
+      = dt_canvas_add_line(fixture.canvas, 100.0, 50.0, 400.0, 50.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  assert_true(line->connector.from_tangent_x == 0.0f && line->connector.to_tangent_y == 0.0f);
+  assert_true(dt_canvas_prop_write(fixture.canvas, line, DT_CANVAS_PROP_CONNECTOR_ROUTING, &cubic)
+              & DT_CANVAS_EFFECT_CHANGED);
+  const double reach = 0.4 * 300.0;
+  assert_near(line->connector.from_tangent_x, reach * cos(M_PI / 6.0), 1e-4);
+  assert_near(line->connector.from_tangent_y, -reach * sin(M_PI / 6.0), 1e-4);
+  assert_near(line->connector.to_tangent_x, -reach * cos(M_PI / 6.0), 1e-4);
+  assert_near(line->connector.to_tangent_y, -reach * sin(M_PI / 6.0), 1e-4);
+  dt_canvas_route_t route;
+  assert_true(dt_canvas_connector_route(fixture.canvas, line, &route));
+  double middle_x = 0.0;
+  double middle_y = 0.0;
+  dt_canvas_route_midpoint(&route, &middle_x, &middle_y);
+  assert_true(middle_y < 50.0 - 10.0);
+
+  // A bend of the user's own is not re-seeded over.
+  line->connector.from_tangent_x = 17.0f;
+  line->connector.from_tangent_y = 90.0f;
+  assert_true(dt_canvas_prop_write(fixture.canvas, line, DT_CANVAS_PROP_CONNECTOR_ROUTING, &straight)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(dt_canvas_prop_write(fixture.canvas, line, DT_CANVAS_PROP_CONNECTOR_ROUTING, &cubic)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(line->connector.from_tangent_x == 17.0f && line->connector.from_tangent_y == 90.0f);
+
+  // Through a waypoint the waypoint bends it, and nothing is seeded.
+  dt_canvas_object_t *through
+      = dt_canvas_add_line(fixture.canvas, 0.0, 0.0, 300.0, 0.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  dt_canvas_connector_add_via(fixture.canvas, through);
+  assert_true(dt_canvas_prop_write(fixture.canvas, through, DT_CANVAS_PROP_CONNECTOR_ROUTING, &cubic)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(through->connector.from_tangent_x == 0.0f && through->connector.to_tangent_x == 0.0f);
+
+  // Between two frames, the normals of its anchors already bend it.
+  dt_canvas_object_t *anchored = fixture.objects[4];
+  anchored->connector.routing = DT_CANVAS_ROUTING_STRAIGHT;
+  assert_true(dt_canvas_prop_write(fixture.canvas, anchored, DT_CANVAS_PROP_CONNECTOR_ROUTING, &cubic)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(anchored->connector.from_tangent_x == 0.0f && anchored->connector.to_tangent_x == 0.0f);
+  _fixture_free(&fixture);
+}
+
 static void _arrowheads_and_backgrounds_land_where_they_belong(void **state)
 {
   (void)state;
@@ -1761,6 +1826,7 @@ int main(void)
     cmocka_unit_test(_the_inherited_value_is_what_giving_the_group_back_shows),
     cmocka_unit_test(_giving_the_font_back_refits_the_frame),
     cmocka_unit_test(_a_size_on_an_inheriting_font_writes_the_family_out),
+    cmocka_unit_test(_making_a_line_cubic_bends_it_into_an_arc),
     cmocka_unit_test(_arrowheads_and_backgrounds_land_where_they_belong),
     cmocka_unit_test(_reversing_a_connector_walks_the_same_curve_backwards),
     cmocka_unit_test(_rows_follow_what_they_depend_on),

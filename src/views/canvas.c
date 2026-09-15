@@ -124,7 +124,7 @@ typedef enum dt_canvas_drag_t
   DT_CANVAS_DRAG_ROTATE,
   DT_CANVAS_DRAG_RUBBERBAND,
   DT_CANVAS_DRAG_VIA,
-  DT_CANVAS_DRAG_HANDLE_FROM,   ///< the start's tangent handle: its length along the normal
+  DT_CANVAS_DRAG_HANDLE_FROM,   ///< the start's tangent handle: its length on the normal, anywhere at a free end
   DT_CANVAS_DRAG_HANDLE_TO,     ///< the end's
   DT_CANVAS_DRAG_HANDLE_VIA,    ///< the waypoint's tangent handle, either side
   DT_CANVAS_DRAG_MASK_CENTER,   ///< a cutout's centre, or the gradient's anchor
@@ -136,6 +136,8 @@ typedef enum dt_canvas_drag_t
   DT_CANVAS_DRAG_MASK_NODE_BORDER,   ///< one polygon node's own fall-off radius
   DT_CANVAS_DRAG_MASK_NODE_CTRL_IN,  ///< its control point on the previous node's side
   DT_CANVAS_DRAG_MASK_NODE_CTRL_OUT, ///< and on the next node's side
+  DT_CANVAS_DRAG_END_FROM,           ///< a line's free start, about its other end
+  DT_CANVAS_DRAG_END_TO,             ///< and its free end
 } dt_canvas_drag_t;
 
 typedef struct dt_canvas_view_t
@@ -1117,13 +1119,23 @@ static void _delete_selection(dt_view_t *self)
   dt_control_queue_redraw_center();
 }
 
+/**
+ * Whether the object is the user's to move: a frame, or a line with an end of its own. A connector
+ * anchored at both ends goes where its frames go and has nothing of its own to move, so the
+ * gestures that move a selection -- a drag, the arrow keys, a rubber band, Select All -- leave it out.
+ */
+static gboolean _object_moves(const dt_canvas_object_t *object)
+{
+  return dt_canvas_object_is_frame(object) || dt_canvas_connector_has_free_end(object);
+}
+
 static void _select_all(dt_canvas_view_t *view)
 {
   g_array_set_size(view->selection, 0);
   for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
   {
     const dt_canvas_object_t *object = dt_canvas_object_at(view->canvas, idx);
-    if(dt_canvas_object_is_frame(object)) g_array_append_val(view->selection, object->id);
+    if(_object_moves(object)) g_array_append_val(view->selection, object->id);
   }
   dt_control_queue_redraw_center();
 }
@@ -1133,8 +1145,17 @@ static void _apply_layout(dt_view_t *self, const dt_canvas_layout_t layout)
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   dt_canvas_t *before = _begin_edit(view);
   const int columns = dt_conf_get_int("canvas/masonry_columns");
-  // A single selected frame is not a group to arrange: lay the whole canvas out instead.
-  const GArray *ids = view->selection->len > 1 ? view->selection : NULL;
+  // A single selected frame is not a group to arrange: lay the whole canvas out instead. The frames
+  // are counted, not the selection: the layout places frames only, and a rubber band or Select All
+  // also gathers the free lines around them, so a band round one frame and a rule beside it is still
+  // one frame and still asks for the whole canvas.
+  guint selected_frames = 0;
+  for(guint idx = 0; idx < view->selection->len; idx++)
+  {
+    const uint32_t id = g_array_index(view->selection, uint32_t, idx);
+    if(dt_canvas_object_is_frame(dt_canvas_find_object(view->canvas, id))) selected_frames++;
+  }
+  const GArray *ids = selected_frames > 1 ? view->selection : NULL;
   const dt_canvas_sort_t sort = (dt_canvas_sort_t)CLAMP(dt_conf_get_int("canvas/layout_sort"), 0, DT_CANVAS_SORT_LAST - 1);
   dt_canvas_layout_apply(view->canvas, ids, layout, columns, sort);
   _record_undo(self, before);
@@ -1853,6 +1874,10 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
     _menu_item(order_menu, _("Send to back"), _menu_z_order, _menu_context(self, id, x, y, 3));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), order_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+    // A line owns both of its ends and can be copied beside itself; a connector with an anchored
+    // end belongs to its frames, and a copy would lie exactly over the original.
+    if(object->connector.from_id == 0 && object->connector.to_id == 0)
+      _menu_item(menu, _("Duplicate"), _menu_duplicate, _menu_context(self, id, x, y, 0));
     _menu_item(menu, _("Delete"), _menu_delete, _menu_context(self, id, x, y, 0));
   }
   else
@@ -1986,6 +2011,20 @@ static void _angle_lock(const int state, const double origin_x, const double ori
   const double angle = round(atan2(*y - origin_y, *x - origin_x) / step) * step;
   *x = origin_x + cos(angle) * reach;
   *y = origin_y + sin(angle) * reach;
+}
+
+/**
+ * The angle step a line's end is held to about its other end: Ctrl alone for 45 degrees, Shift
+ * alone for 15, the steps a frame's rotation takes. Each modifier is asked for exactly, as the
+ * rotation and the tangent handles' `_angle_lock()` ask, so Ctrl+Shift holds nothing on any of the
+ * three and one line's end and its control point never disagree about a key. 0 when no step is held,
+ * and the end then snaps to the grid instead.
+ */
+static int _line_end_step_degrees(const int state)
+{
+  if(dt_modifier_is(state, DT_PRIMARY_MASK)) return 45;
+  if(dt_modifier_is(state, GDK_SHIFT_MASK)) return 15;
+  return 0;
 }
 
 /* --- connector drawing mode ---------------------------------------------------------- */
@@ -3617,6 +3656,34 @@ static void _paint_handles(cairo_t *cr, const dt_canvas_view_t *view, const dt_c
   cairo_restore(cr);
 }
 
+/**
+ * A line's free ends as filled squares along the canvas's axes, where its handle sites are and at
+ * the size their catch is drawn from. A locked line offers no ends to take and shows none, as a
+ * locked frame shows no corners; an anchored end is its frame's and is not marked.
+ */
+static void _paint_line_ends(cairo_t *cr, const dt_canvas_view_t *view, const dt_canvas_object_t *object)
+{
+  if(!dt_canvas_connector_has_free_end(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)) return;
+  dt_canvas_route_t route;
+  if(!dt_canvas_connector_route(view->canvas, object, &route)) return;
+  const double half = (DT_CANVAS_VIA_HANDLE_PIXELS - 2.0) / view->zoom;
+  const gboolean end_free[2] = { object->connector.from_id == 0, object->connector.to_id == 0 };
+  const double end_x[2] = { route.from_x, route.to_x };
+  const double end_y[2] = { route.from_y, route.to_y };
+  cairo_save(cr);
+  for(int end = 0; end < 2; end++)
+  {
+    if(!end_free[end]) continue;
+    cairo_rectangle(cr, end_x[end] - half, end_y[end] - half, 2.0 * half, 2.0 * half);
+  }
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
+  cairo_fill_preserve(cr);
+  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.9);
+  cairo_set_line_width(cr, 1.5 / view->zoom);
+  cairo_stroke(cr);
+  cairo_restore(cr);
+}
+
 /* --- cutout handles ------------------------------------------------------------------ */
 
 /** The node whose own handles are showing: the nearest one the pointer is still working near. */
@@ -4135,7 +4202,8 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     dt_canvas_route_t route;
     if(_connector_handles(view, object, &route))
     {
-      // The tangent handles: one per end along its anchor's normal, two about the waypoint.
+      // The tangent handles: one per end, along its anchor's normal or wherever a free end's was
+      // pulled, and two about the waypoint.
       cairo_save(cr);
       _paint_tangent_handle(cr, view, route.from_x, route.from_y, route.control1_x, route.control1_y);
       if(route.segment_count == 2)
@@ -4167,6 +4235,16 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
       cairo_stroke(cr);
       cairo_restore(cr);
     }
+  }
+  // A line's free ends in a pass of their own, over every other handle of the selection: a press
+  // asks for the ends of every selected line before any control point, waypoint or frame corner
+  // (`_press_handles()`), so what is drawn on top must be what a press takes. The walk runs from the
+  // last selected to the first, leaving on top the first line's ends, the ones a press finds first.
+  for(guint idx = view->selection->len; idx > 0; idx--)
+  {
+    const uint32_t id = g_array_index(view->selection, uint32_t, idx - 1);
+    const dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, id);
+    if(!IS_NULL_PTR(object) && object->kind == DT_CANVAS_OBJECT_CONNECTOR) _paint_line_ends(cr, view, object);
   }
   if(view->hover != 0 && !_is_selected(view, view->hover))
   {
@@ -4361,6 +4439,35 @@ static dt_canvas_drag_t _tangent_handle_at(const dt_canvas_view_t *view, const d
   return DT_CANVAS_DRAG_NONE;
 }
 
+/**
+ * Which free end of a selected line is under the canvas point, and on which line. Asked before the
+ * control points, as the site list orders them. Where two selected lines' ends overlap, the line
+ * selected first answers: the end marks are painted last to first so that its mark is the one on top.
+ */
+static dt_canvas_drag_t _endpoint_handle_at(const dt_canvas_view_t *view, const double x, const double y,
+                                            dt_canvas_object_t **owner)
+{
+  for(guint idx = 0; idx < view->selection->len; idx++)
+  {
+    dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, g_array_index(view->selection, uint32_t, idx));
+    size_t count = 0;
+    dt_canvas_handle_site_t *sites = _handle_sites(view, object, DT_CANVAS_HANDLES_ENDPOINTS, &count);
+    dt_canvas_drag_t drag = DT_CANVAS_DRAG_NONE;
+    for(size_t site_idx = 0; site_idx < count && drag == DT_CANVAS_DRAG_NONE; site_idx++)
+    {
+      const dt_canvas_handle_site_t *site = &sites[site_idx];
+      if(!dt_canvas_handle_site_hit(site, x, y, view->zoom)) continue;
+      drag = site->part == DT_CANVAS_HANDLE_PART_FROM ? DT_CANVAS_DRAG_END_FROM : DT_CANVAS_DRAG_END_TO;
+    }
+    dt_free(sites);
+    if(drag == DT_CANVAS_DRAG_NONE) continue;
+    *owner = object;
+    return drag;
+  }
+  *owner = NULL;
+  return DT_CANVAS_DRAG_NONE;
+}
+
 static void _paint_tangent_handle(cairo_t *cr, const dt_canvas_view_t *view, const double anchor_x,
                                   const double anchor_y, const double handle_x, const double handle_y)
 {
@@ -4404,9 +4511,17 @@ static void _move_selection(dt_canvas_view_t *view, const double delta_x, const 
   for(guint idx = 0; idx < view->selection->len; idx++)
   {
     dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, g_array_index(view->selection, uint32_t, idx));
-    if(!dt_canvas_object_is_frame(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)) continue;
-    object->x += delta_x;
-    object->y += delta_y;
+    if(!_object_moves(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)) continue;
+    if(dt_canvas_object_is_frame(object))
+    {
+      object->x += delta_x;
+      object->y += delta_y;
+    }
+    else
+    {
+      // A line keeps no position of its own in x and y: it is its free points and its waypoint.
+      dt_canvas_connector_translate(object, delta_x, delta_y);
+    }
   }
 }
 
@@ -4417,8 +4532,21 @@ static void _move_selection(dt_canvas_view_t *view, const double delta_x, const 
 static void _snap_selection(dt_canvas_view_t *view, const uint32_t leader_id)
 {
   const dt_canvas_object_t *leader = dt_canvas_find_object(view->canvas, leader_id);
-  if(!dt_canvas_object_is_frame(leader)) return;
   const uint32_t rules = view->canvas->grid_flags;
+  if(dt_canvas_connector_has_free_end(leader))
+  {
+    // A line snaps by one of its own points, to the grid alone: it has no edges for a neighbour's
+    // padding or a page to line up with, and no frame lines up with it either.
+    if(!(rules & DT_CANVAS_GRID_SNAP)) return;
+    const gboolean from_free = leader->connector.from_id == 0;
+    const double point_x = from_free ? leader->connector.from_x : leader->connector.to_x;
+    const double point_y = from_free ? leader->connector.from_y : leader->connector.to_y;
+    const double line_delta_x = dt_canvas_snap(view->canvas, point_x) - point_x;
+    const double line_delta_y = dt_canvas_snap(view->canvas, point_y) - point_y;
+    if(line_delta_x != 0.0 || line_delta_y != 0.0) _move_selection(view, line_delta_x, line_delta_y);
+    return;
+  }
+  if(!dt_canvas_object_is_frame(leader)) return;
   dt_canvas_rect_t bounds = dt_canvas_object_bounds(leader);
   double delta_x = 0.0;
   double delta_y = 0.0;
@@ -4446,6 +4574,29 @@ static void _snap_selection(dt_canvas_view_t *view, const uint32_t leader_id)
     if(page_y != 0.0) delta_y = page_y;
   }
   if(delta_x != 0.0 || delta_y != 0.0) _move_selection(view, delta_x, delta_y);
+}
+
+/**
+ * The object a moved selection snaps by: its first frame, whose edges have neighbours and pages to
+ * meet, and only when it holds none its first line. A selection gathered by Select All or a rubber
+ * band lists objects in draw order, where a line can come before every frame; snapping by that line
+ * would have taken the frames' own snapping away from them. A locked object is never the leader: it
+ * does not move, so the offset it measures to the grid would stay the same on every motion and be
+ * handed to the rest of the selection each time, walking it away from the pointer. 0 when nothing
+ * selected moves.
+ */
+static uint32_t _snap_leader(const dt_canvas_view_t *view)
+{
+  uint32_t line_id = 0;
+  for(guint idx = 0; idx < view->selection->len; idx++)
+  {
+    const uint32_t id = g_array_index(view->selection, uint32_t, idx);
+    const dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, id);
+    if(IS_NULL_PTR(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)) continue;
+    if(dt_canvas_object_is_frame(object)) return id;
+    if(line_id == 0 && dt_canvas_connector_has_free_end(object)) line_id = id;
+  }
+  return line_id;
 }
 
 static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, const double x, const double y)
@@ -4605,8 +4756,11 @@ static void _end_gesture(dt_view_t *self)
     for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
     {
       const dt_canvas_object_t *object = dt_canvas_object_at(view->canvas, idx);
-      if(!dt_canvas_object_is_frame(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
-      const dt_canvas_rect_t bounds = dt_canvas_object_bounds(object);
+      if(!_object_moves(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
+      // The box of what is painted: a frame's turned bounds, a line's ink with its arrowheads, so
+      // a band drawn round a line as it looks takes it and a band round its chord alone does not.
+      dt_canvas_rect_t bounds;
+      if(!dt_canvas_object_extent(view->canvas, object, &bounds)) continue;
       const gboolean inside = bounds.x >= band.x && bounds.y >= band.y
                               && bounds.x + bounds.width <= band.x + band.width
                               && bounds.y + bounds.height <= band.y + band.height;
@@ -4736,6 +4890,18 @@ static gboolean _press_handles(dt_view_t *self, const double canvas_x, const dou
       dt_control_queue_redraw_center();
       return TRUE;
     }
+  }
+  // A line's free ends come before its control points, which may be pulled back over them.
+  dt_canvas_object_t *end_owner = NULL;
+  const dt_canvas_drag_t end_drag = _endpoint_handle_at(view, canvas_x, canvas_y, &end_owner);
+  if(end_drag != DT_CANVAS_DRAG_NONE)
+  {
+    _select_only(view, end_owner->id);
+    _gesture_snapshot(view);
+    view->drag = end_drag;
+    _props_sync(self);
+    dt_control_change_cursor(GDK_FLEUR);
+    return TRUE;
   }
   dt_canvas_object_t *handle_owner = NULL;
   int handle_sign = 1;
@@ -4882,7 +5048,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
         _select_toggle(view, object->id);
       else if(!_is_selected(view, object->id))
         _select_only(view, object->id);
-      if(dt_canvas_object_is_frame(object) && _is_selected(view, object->id))
+      if(_object_moves(object) && _is_selected(view, object->id))
       {
         view->drag = DT_CANVAS_DRAG_MOVE;
         _gesture_snapshot(view);
@@ -4932,6 +5098,10 @@ static void _queue_cursor_for(dt_view_t *self, const double screen_x, const doub
     cursor = view->anchor_hover != DT_CANVAS_ANCHOR_AUTO ? GDK_CROSSHAIR : GDK_LEFT_PTR;
   }
   else if(_mask_handle_at(view, _single_selected(view), x, y, &(int){ -1 }) != DT_CANVAS_DRAG_NONE)
+  {
+    cursor = GDK_FLEUR;
+  }
+  else if(_endpoint_handle_at(view, x, y, &(dt_canvas_object_t *){ NULL }) != DT_CANVAS_DRAG_NONE)
   {
     cursor = GDK_FLEUR;
   }
@@ -5028,7 +5198,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       view->drag_moved = TRUE;
       _interaction_touch(self);
       _move_selection(view, delta_x, delta_y);
-      if(view->selection->len > 0) _snap_selection(view, g_array_index(view->selection, uint32_t, 0));
+      if(view->selection->len > 0) _snap_selection(view, _snap_leader(view));
       break;
     case DT_CANVAS_DRAG_SCALE:
     {
@@ -5074,13 +5244,43 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     case DT_CANVAS_DRAG_HANDLE_FROM:
     case DT_CANVAS_DRAG_HANDLE_TO:
     {
-      // The handle stays on the anchor's normal, orthogonal to the frame's edge: only its length moves.
       dt_canvas_object_t *connector = _single_selected(view);
       dt_canvas_route_t route;
-      if(_connector_handles(view, connector, &route))
+      const gboolean start = view->drag == DT_CANVAS_DRAG_HANDLE_FROM;
+      const gboolean free_end = dt_canvas_connector_has_free_end(connector)
+                                && (start ? connector->connector.from_id == 0 : connector->connector.to_id == 0);
+      if(free_end && _connector_handles(view, connector, &route))
       {
+        // A free end has no frame edge to leave square to: its control point goes wherever it is
+        // pulled, direction and length both, and Ctrl holds the direction to 45 degree steps.
         view->drag_moved = TRUE;
-        const gboolean start = view->drag == DT_CANVAS_DRAG_HANDLE_FROM;
+        const double end_x = start ? route.from_x : route.to_x;
+        const double end_y = start ? route.from_y : route.to_y;
+        double handle_x = canvas_x;
+        double handle_y = canvas_y;
+        _angle_lock(which, end_x, end_y, &handle_x, &handle_y);
+        const float tangent_x = (float)(handle_x - end_x);
+        const float tangent_y = (float)(handle_y - end_y);
+        // (0, 0) is the automatic tangent, which would throw the control point back out along the
+        // chord the moment it is pulled onto its end: it stays where it last was instead.
+        if(tangent_x != 0.0f || tangent_y != 0.0f)
+        {
+          if(start)
+          {
+            connector->connector.from_tangent_x = tangent_x;
+            connector->connector.from_tangent_y = tangent_y;
+          }
+          else
+          {
+            connector->connector.to_tangent_x = tangent_x;
+            connector->connector.to_tangent_y = tangent_y;
+          }
+        }
+      }
+      else if(_connector_handles(view, connector, &route))
+      {
+        // The handle stays on the anchor's normal, orthogonal to the frame's edge: only its length moves.
+        view->drag_moved = TRUE;
         const double anchor_x = start ? route.from_x : route.to_x;
         const double anchor_y = start ? route.from_y : route.to_y;
         const double normal_x = start ? route.from_normal_x : route.to_normal_x;
@@ -5090,6 +5290,40 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
           connector->connector.from_reach = (float)reach;
         else
           connector->connector.to_reach = (float)reach;
+      }
+      break;
+    }
+    case DT_CANVAS_DRAG_END_FROM:
+    case DT_CANVAS_DRAG_END_TO:
+    {
+      // Nothing moves before the pointer really does: a press that only meant to take the line
+      // must not pull an end onto the grid.
+      if(!view->drag_moved
+         && hypot(x - view->press_screen_x, y - view->press_screen_y) < CANVAS_DRAG_THRESHOLD_PIXELS)
+        break;
+      dt_canvas_object_t *line = _single_selected(view);
+      const gboolean start = view->drag == DT_CANVAS_DRAG_END_FROM;
+      dt_canvas_route_t route;
+      if(!dt_canvas_connector_has_free_end(line) || (line->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)
+         || (start ? line->connector.from_id != 0 : line->connector.to_id != 0)
+         || !dt_canvas_connector_route(view->canvas, line, &route))
+        break;
+      view->drag_moved = TRUE;
+      _interaction_touch(self);
+      double end_x = canvas_x;
+      double end_y = canvas_y;
+      const double other_x = start ? route.to_x : route.from_x;
+      const double other_y = start ? route.to_y : route.from_y;
+      dt_canvas_constrain_line_end(view->canvas, other_x, other_y, _line_end_step_degrees(which), &end_x, &end_y);
+      if(start)
+      {
+        line->connector.from_x = end_x;
+        line->connector.from_y = end_y;
+      }
+      else
+      {
+        line->connector.to_x = end_x;
+        line->connector.to_y = end_y;
       }
       break;
     }
