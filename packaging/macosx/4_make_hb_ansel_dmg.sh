@@ -94,7 +94,37 @@ echo '
 # Finalizing creation
 chmod -Rf go-w /Volumes/"${PROGN}"
 sync
-hdiutil detach "${device}"
+
+# Detached with the same retry as the creation above, and for the same reason read from the other
+# end: the flake is not a command that refuses to start, it is the system holding the image. The
+# `attach' above is given -autoopen, which hands the volume to the Finder, and the osascript block
+# then drives the Finder to lay the window out -- a layout the Finder stores in a .DS_Store it
+# writes when it sees fit. So `sync' orders our own writes and says nothing about the Finder's, and
+# a detach issued right after gets `couldn't unmount "diskN" - Resource busy', exit 16. Measured on
+# the Intel nightly of 2026-09-15: creation succeeded, every earlier step passed, and this line
+# ended the job with no DMG.
+#
+# The last attempt forces it, which is what the EXIT trap has always done to clean up after a
+# failure. Forcing is safe at this point because every write to the volume is ours and `sync' has
+# flushed them: what -force overrides is another process still having the volume open, not
+# unwritten data of ours. Each attempt sits in an `if' so neither `set -e' nor the ERR trap fires
+# on one that is going to be retried, and `device' is cleared only on success, so the trap neither
+# detaches a volume that is already gone nor skips one that is not.
+detach_attempts=3
+for detach_attempt in $(seq 1 ${detach_attempts}); do
+	if [ "${detach_attempt}" -eq "${detach_attempts}" ]; then
+		if hdiutil detach -force "${device}"; then
+			break
+		fi
+		echo "hdiutil detach failed ${detach_attempts} times, -force included; giving up." >&2
+		exit 1
+	fi
+	if hdiutil detach "${device}"; then
+		break
+	fi
+	echo "hdiutil detach failed (attempt ${detach_attempt}/${detach_attempts}); retrying in $((detach_attempt * 5)) s..." >&2
+	sleep $((detach_attempt * 5))
+done
 device=""
 # Find repo root (a parent directory that contains `tools`) and use its script.
 search_dir="${scriptDir}"
