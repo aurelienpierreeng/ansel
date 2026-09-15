@@ -12,7 +12,7 @@ Layer **1**, alongside `common/`.
 | matrices | `matrices.h` |
 | linear solvers | `gaussian_elimination.h`, `QR_decomp.h`, `choleski.h`, `sparse_cholesky.{h,_cl.h}`, `svd.h` |
 | decompositions & optimisation | `polar_decomposition.h`, `nelder_mead_simplex.h` |
-| geometry | `homography.{c,h}` |
+| geometry | `homography.{c,h}`, `polygon_envelope.h` (regular polygons, stars and their rounded forms) |
 | curve interpolation | `splines.{cpp,h}` |
 | graphs | `topological_sort.{c,h}` |
 | expression evaluation | `calculator.{c,h}` |

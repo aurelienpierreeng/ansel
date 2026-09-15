@@ -47,6 +47,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_stroke_raster
   test_drawlayer_batch_raster
   test_import_jobs
+  test_polygon_envelope
   test_color_well
   test_canvas_zip
   test_canvas_document
