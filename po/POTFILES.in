@@ -166,6 +166,8 @@ src/apps/ansel-generate-cache/main.c
 src/widgets/accelerators.c
 src/gui/application.c
 src/widgets/gtkentry.c
+src/widgets/chooser_button.c
+src/widgets/color_well.c
 src/gui/guides.c
 src/gui/hist_dialog.c
 src/gui/preferences.c

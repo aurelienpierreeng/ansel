@@ -1887,6 +1887,26 @@ textview text selection {
   border-radius: 4px;
 }
 
+/* The colour window a colour button opens (widgets/chooser_button.c): the properties' surface, so
+   it reads as part of what opened it. Its title is secondary text, at the properties' contrast. */
+window.dt-color-well-popup {
+  background-color: @grey_35;
+}
+
+.dt-color-well-popup .dt-color-well-frame {
+  border: 1px solid @grey_30;
+  padding: 6px;
+}
+
+.dt-color-well-popup .dt-color-well-title {
+  color: @grey_80;
+}
+
+/* A hexadecimal number that does not read as a colour stays as typed, and says so. */
+.dt-color-well entry.error {
+  color: @orange_light;
+}
+
 .dt-canvas-props-strip {
   padding: 2px 4px;
 }

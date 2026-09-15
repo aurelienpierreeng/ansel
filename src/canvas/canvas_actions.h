@@ -69,6 +69,29 @@ typedef enum dt_canvas_action_t
   DT_CANVAS_ACTION_LAST
 } dt_canvas_action_t;
 
+/**
+ * The colours the toolbar sets for the whole canvas, as it names them to the view's colour edits.
+ * The guides' colours, the plane's background and the defaults every frame inherits.
+ */
+typedef enum dt_canvas_color_target_t
+{
+  DT_CANVAS_COLOR_GRID = 0,
+  DT_CANVAS_COLOR_TRIM,
+  DT_CANVAS_COLOR_MARGIN,
+  DT_CANVAS_COLOR_BLEED,
+  DT_CANVAS_COLOR_PADDING,
+  DT_CANVAS_COLOR_BACKGROUND,
+  DT_CANVAS_COLOR_BORDER,
+  DT_CANVAS_COLOR_SHADOW,
+  DT_CANVAS_COLOR_LAST
+} dt_canvas_color_target_t;
+
+/**
+ * The stored list of recently used colours every colour of the atelier shares, the object
+ * properties' and the toolbar's: a border matched to a text colour is found where that was picked.
+ */
+#define DT_CANVAS_COLOR_HISTORY_KEY "plugins/canvas/color_history"
+
 
 #ifdef __cplusplus
 }

@@ -435,6 +435,79 @@ static void _snapshot_restore_round_trips_the_objects(void **state)
   dt_canvas_free(canvas);
 }
 
+static void _abandoning_a_gesture_keeps_the_renders_and_the_saved_state(void **state)
+{
+  (void)state;
+  // A colour window left open while a picture renders and a map fetches its tiles, then closed with Escape.
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 0.0, 0.0, 300.0, 100.0, "A caption");
+  const uint32_t text_id = text->id;
+  text->text.text_color = dt_canvas_color(0.0f, 0.0f, 1.0f, 1.0f);
+  dt_canvas_object_t *image = dt_canvas_add_image(canvas, 500.0, 0.0, 6000, 4000);
+  const uint32_t image_id = image->id;
+  image->image.sync_status = DT_CANVAS_SYNC_RENDERING;
+  const double area = image->width * image->height;
+  dt_canvas_object_t *map = dt_canvas_add_map(canvas, 0.0, 500.0, 48.85, 2.35, 12, 0u);
+  const uint32_t map_id = map->id;
+  map->map.sync_status = DT_CANVAS_SYNC_RENDERING;
+  canvas->dirty = FALSE;
+  dt_canvas_t *snapshot = dt_canvas_copy(canvas);
+
+  text = dt_canvas_find_object(canvas, text_id);
+  text->text.text_color = dt_canvas_color(1.0f, 0.0f, 0.0f, 0.5f);
+  dt_canvas_touch(canvas);
+  const char picture_bytes[] = "\xff\xd8 picture\xff\xd9";
+  GBytes *picture = g_bytes_new(picture_bytes, sizeof(picture_bytes));
+  dt_canvas_image_set_render(canvas, dt_canvas_find_object(canvas, image_id), picture, 3000, 1000, 77u, 1234, 0u);
+  const char tiles_bytes[] = "\xff\xd8some tiles\xff\xd9";
+  GBytes *tiles = g_bytes_new(tiles_bytes, sizeof(tiles_bytes));
+  map = dt_canvas_find_object(canvas, map_id);
+  dt_canvas_map_set_render(canvas, map, tiles, 512, 256, 5678);
+  const uint64_t generation = canvas->generation;
+
+  dt_canvas_abandon(canvas, snapshot);
+  // What the gesture did goes back.
+  text = dt_canvas_find_object(canvas, text_id);
+  assert_float_equal(text->text.text_color.blue, 1.0f, 0.0f);
+  assert_float_equal(text->text.text_color.alpha, 1.0f, 0.0f);
+  // What landed meanwhile stays: without it the picture reads RENDERING with no job left to finish it.
+  image = dt_canvas_find_object(canvas, image_id);
+  assert_int_equal(image->image.sync_status, DT_CANVAS_SYNC_CURRENT);
+  assert_ptr_equal(image->image.jpeg, picture);
+  assert_int_equal(image->image.pixel_width, 3000);
+  assert_true(image->image.history_hash == 77u);
+  // The frame takes the render's proportions on the area it had, as a render landing does.
+  assert_float_equal(image->width / image->height, 3.0, 1e-9);
+  assert_float_equal(image->width * image->height, area, 1e-6);
+  map = dt_canvas_find_object(canvas, map_id);
+  assert_int_equal(map->map.sync_status, DT_CANVAS_SYNC_CURRENT);
+  assert_ptr_equal(map->map.jpeg, tiles);
+  assert_int_equal(map->map.pixel_height, 256);
+  assert_float_equal(map->map.latitude, 48.85, 1e-9);
+  // A render is written with the document: something to save, although the gesture was not.
+  assert_true(canvas->dirty);
+  assert_true(canvas->generation > generation);
+  // The snapshot keeps its own.
+  assert_int_equal(dt_canvas_find_object(snapshot, image_id)->image.sync_status, DT_CANVAS_SYNC_RENDERING);
+  g_bytes_unref(picture);
+  g_bytes_unref(tiles);
+  dt_canvas_free(snapshot);
+
+  // Nothing landed: a document saved before the gesture is saved after it, and still repaints.
+  canvas->dirty = FALSE;
+  snapshot = dt_canvas_copy(canvas);
+  text = dt_canvas_find_object(canvas, text_id);
+  text->text.text_color = dt_canvas_color(0.0f, 1.0f, 0.0f, 1.0f);
+  dt_canvas_touch(canvas);
+  const uint64_t edited = canvas->generation;
+  dt_canvas_abandon(canvas, snapshot);
+  assert_false(canvas->dirty);
+  assert_true(canvas->generation > edited);
+  assert_float_equal(dt_canvas_find_object(canvas, text_id)->text.text_color.green, 0.0f, 0.0f);
+  dt_canvas_free(snapshot);
+  dt_canvas_free(canvas);
+}
+
 static void _draw_order_edits_keep_the_list_sorted(void **state)
 {
   (void)state;
@@ -1280,6 +1353,7 @@ int main(void)
     cmocka_unit_test(_archive_round_trip_carries_jpegs_and_markdown),
     cmocka_unit_test(_removing_a_frame_takes_its_connectors_and_unlinks_sidecars),
     cmocka_unit_test(_snapshot_restore_round_trips_the_objects),
+    cmocka_unit_test(_abandoning_a_gesture_keeps_the_renders_and_the_saved_state),
     cmocka_unit_test(_draw_order_edits_keep_the_list_sorted),
     cmocka_unit_test(_rotated_frames_answer_hit_tests_and_bounds),
     cmocka_unit_test(_connectors_route_between_cardinal_anchors),

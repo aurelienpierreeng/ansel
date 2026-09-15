@@ -3139,6 +3139,13 @@
     <longdescription>The section of the canvas properties last left open on this kind of object, restored the next time its properties are shown. none - every section folded.</longdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/canvas/color_history</name>
+    <type>string</type>
+    <default></default>
+    <shortdescription>colours recently used in the canvas atelier</shortdescription>
+    <longdescription>Most recent first, as #RRGGBBAA separated by commas, shared by every colour window of the canvas atelier.</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>canvas/pdf/dpi</name>
     <type min="72" max="1200">int</type>
     <default>300</default>

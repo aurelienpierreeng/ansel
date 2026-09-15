@@ -241,13 +241,16 @@ enum
  * How an edit reaches the document. LIVE edits follow a control while it is being moved and
  * share one undo step; COMMIT ends the gesture and pays for what LIVE deferred -- the undo
  * record, the renders, the configuration; ONCE is a whole gesture in one go: a typed number, a
- * click. The writer does not read it; it is here so a frontend's header needs nothing else.
+ * click. CANCEL abandons a LIVE gesture: the document goes back to what it was before the
+ * gesture's first step, and nothing is recorded -- a colour window closed with Escape. The
+ * writer does not read it; it is here so a frontend's header needs nothing else.
  */
 typedef enum dt_canvas_edit_phase_t
 {
   DT_CANVAS_EDIT_LIVE = 0,
   DT_CANVAS_EDIT_COMMIT,
   DT_CANVAS_EDIT_ONCE,
+  DT_CANVAS_EDIT_CANCEL, ///< appended: a value the view may already have been handed
 } dt_canvas_edit_phase_t;
 
 /** Room in a value for a font description, a feature string or a line of description. */
@@ -599,7 +602,8 @@ typedef struct dt_canvas_props_host_t
 
   /**
    * One property changed. LIVE follows a control while it moves and COMMIT ends that gesture
-   * with the control's final value; ONCE is a whole gesture in one call. An ACTION row reports
+   * with the control's final value; ONCE is a whole gesture in one call; CANCEL abandons the LIVE
+   * gesture open on the property, and `value` carries nothing the host needs. An ACTION row reports
    * its click as a ONCE edit carrying no value: the table's writer says what it asks for, and
    * the host, which writes, reads that answer itself.
    */

@@ -704,6 +704,17 @@ dt_canvas_t *dt_canvas_copy(const dt_canvas_t *canvas);
  */
 void dt_canvas_restore(dt_canvas_t *canvas, const dt_canvas_t *snapshot);
 
+/**
+ * @brief Give back what an abandoned gesture changed: `canvas`'s content is `snapshot`'s again, except
+ * for the renders that landed or started since the snapshot was taken, which stay.
+ * @details A gesture can be held open for as long as the user likes -- a colour window, typically --
+ * and a picture's render finishing meanwhile is no part of it: put back as the snapshot had it, the
+ * picture would read RENDERING again with no job left to finish it. The document is left dirty only
+ * if the snapshot was, or a render landed; the generation moves, so the painter composites again.
+ * `snapshot` is not consumed.
+ */
+void dt_canvas_abandon(dt_canvas_t *canvas, const dt_canvas_t *snapshot);
+
 /* --- persistence ----------------------------------------------------------- */
 
 /**

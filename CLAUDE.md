@@ -3761,14 +3761,46 @@ they are visible.
   Ctrl+Z and Ctrl+S did nothing while a spin button of the properties had the focus. The view
   swallows the Delete, arrows and Return the controls did not take, or they delete, nudge or
   drill into the object being edited.
-- **No overlay pass-through, no popovers, and modal colour and font dialogs.** GDK still
+- **No overlay pass-through, no popovers, and modal colour and font choosers.** GDK still
   delivers events to a pass-through child's subwindows, so buttons catch clicks while the gaps
   between them leak to the canvas -- and the solved rectangle covers no handle, so there is
   nothing to pass through to. The old bar's popovers were each a surface with a placement nothing
   kept clear of the handles; the card holds every property, and only visibility changes inside
   it. GtkColorButton's and GtkFontButton's own dialogs cannot be relied on to be modal (and
-  GtkFontButton cannot ellipsise its label), so `widgets/chooser_button.c` opens modal ones and
-  reports a pick once, after the dialog is gone.
+  GtkFontButton cannot ellipsise its label), so `widgets/chooser_button.c` opens a modal font
+  dialog, reporting a pick once after it is gone, and a modal colour well
+  (`widgets/color_well.c`) in a POPUP window beside the button.
+- **A colour window is ONE gesture: LIVE while open, one COMMIT or one CANCEL when it closes.**
+  The well's own commits (a drag let go, a swatch, a typed number) are steps of that gesture, not
+  undo steps, which is what lets Escape give the colour back whole -- `DT_CANVAS_EDIT_CANCEL`
+  restores the session's snapshot and records nothing. Three traps, each measured on Broadway
+  with the fix removed: the chooser button's `get_color()` must return the LIVE colour while the
+  window is open, or a host that commits what is pending (an undo, a view switch) commits the
+  button's stale colour over the document's live one; a backend reporting an empty monitor work
+  area must not have the window clamped into it, or it lands at the screen's origin; and a
+  backend that gives the popup the focus makes the parent inactive the moment it maps, so "the
+  application lost the focus" has to ask the popup's own focus state too, or the window closes as
+  it opens. And `dt_canvas_props_gtk_close_dialogs()`
+  reports nothing, CANCEL included, although closing a window alone would send one: the host
+  commits before it closes them, and the binder closes them from inside a refill, where a CANCEL
+  restoring the document would free the objects the refill is reading. The toolbar's colours use
+  `proxy.canvas.edit_color()`, whose COMMIT restores the colour the window found BEFORE calling
+  the colour's setter: without it, measured on a scratch copy of the view, the setter compares the
+  kept colour with the live one already written, sees no change and records nothing at all.
+- **A CANCEL gives back the gesture, not the document as it was.** The window stays open as long
+  as the user likes, so `_props_session_cancel()` restores through `dt_canvas_abandon()`, which
+  keeps the renders that landed meanwhile and the saved state: `dt_canvas_restore()` alone put a
+  picture back to RENDERING with no job left to finish it and left an unchanged document marked
+  unsaved. And "changed" is decided TO THE BYTE (`dt_color_well_same_color()`): a recent colour is
+  bytes and a document colour is floats, so the swatch naming the colour at hand compared exactly
+  made an undo step nothing on screen could tell from none. Both measured failing with the fix
+  removed: `test_canvas_document`, and the well, chooser and view harnesses.
+- **`widgets/` keeps no preferences, a colour well's recent colours included.** The list is a
+  string stored through `dt_widget_store_string()`, which `gui/application.c` routes to conf;
+  the canvas names one key for all its colours, `DT_CANVAS_COLOR_HISTORY_KEY`. A well commits into
+  the list the way the window commits into the document: every commit since the colour was last
+  set REPLACES the visit's entry, so hesitating leaves one colour, and a cancel writes the list
+  back as it was.
 - **Three GTK facts the card's sizing rests on:** a scrolled window's
   natural height is NOT height-for-width, so the card's height comes from
   `dt_canvas_props_gtk_measure()` and never from the widget's own natural height (wrapped text

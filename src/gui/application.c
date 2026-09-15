@@ -1042,6 +1042,17 @@ static void _widget_store_bool(const char *key, gboolean value)
   dt_conf_set_bool(key, value);
 }
 
+static gchar *_widget_stored_string(const char *key)
+{
+  if(!dt_conf_key_exists(key)) return NULL;
+  return dt_conf_get_string(key);
+}
+
+static void _widget_store_string(const char *key, const char *value)
+{
+  dt_conf_set_string(key, value);
+}
+
 // The display profile can only be probed once the control loop is up: before that there is no
 // realised window to read an X atom or a colord property from. common/colorspaces.c does not
 // know what a control loop is, so the check lives here, with the three call sites it guards.
@@ -1399,6 +1410,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_widget_set_debug_overlays((dt_get_debug_flags() & DT_DEBUG_MASKS) != 0);
   dt_widget_set_storage_handlers(_widget_stored_int, _widget_store_int,
                                  _widget_stored_bool, _widget_store_bool);
+  dt_widget_set_string_storage_handlers(_widget_stored_string, _widget_store_string);
   dt_widget_set_notebook_page_handler(_notebook_page_changed);
   dt_widget_set_message_handler(_widget_message);
   dt_accels_set_global(gui->accels);

@@ -279,11 +279,8 @@ typedef struct dt_view_manager_t
       void (*set_padding)(struct dt_view_t *view, float padding);
       void (*set_snap_mode)(struct dt_view_t *view, int mode); ///< dt_canvas_grid_flags_t snap bits
       void (*set_background)(struct dt_view_t *view, const float *rgba, int style); ///< NULL / -1 leave one alone
-      void (*set_grid_color)(struct dt_view_t *view, const float *rgba);
       void (*set_paper)(struct dt_view_t *view, int paper, int landscape);        ///< -1 leaves one alone
       void (*set_guides)(struct dt_view_t *view, int mask, int value);            ///< dt_canvas_grid_flags_t bits
-      void (*set_page_color)(struct dt_view_t *view, const float *rgba);
-      void (*set_padding_color)(struct dt_view_t *view, const float *rgba);
       /** The default drop shadow; an alpha of 0 in `rgba` is no shadow. Offsets and blur in canvas units. */
       void (*set_shadow)(struct dt_view_t *view, const float *rgba, float offset_x, float offset_y, float blur);
       /** The paper texture's multipliers: contrast, detail, feature scale, grain; 1 is the paper as designed. */
@@ -293,8 +290,12 @@ typedef struct dt_view_manager_t
       void (*set_corner_radius)(struct dt_view_t *view, float radius); ///< the frames' default rounded corners
       /** The page's inner margin and the sheet's bleed outside it, in canvas units; < 0 leaves one alone. */
       void (*set_page_guides)(struct dt_view_t *view, float margin, float bleed);
-      void (*set_margin_color)(struct dt_view_t *view, const float *rgba);
-      void (*set_bleed_color)(struct dt_view_t *view, const float *rgba);
+      /**
+       * A colour the toolbar's colour window edits: `target` is a dt_canvas_color_target_t and `phase`
+       * a dt_canvas_edit_phase_t. LIVE shows each change, COMMIT sets the colour kept through the
+       * colour's own setter, CANCEL puts back the colour the window found.
+       */
+      void (*edit_color)(struct dt_view_t *view, int target, const float *rgba, int phase);
     } canvas;
   } proxy;
 

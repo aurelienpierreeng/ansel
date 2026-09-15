@@ -19,6 +19,7 @@
 #include "views/canvas_props_gtk.h"
 
 #include "canvas/canvas.h"            // dt_canvas_object_t, dt_canvas_color(), the text feature helpers
+#include "canvas/canvas_actions.h"    // DT_CANVAS_COLOR_HISTORY_KEY
 #include "system/macros.h"            // IS_NULL_PTR
 #include "system/mem_alloc.h"         // dt_free
 #include "widgets/accelerators.h"     // dt_accels_block_plain_keys_inside
@@ -188,6 +189,7 @@ struct dt_canvas_props_gtk_t
 
   GtkWidget *features_empty;   ///< "this font offers nothing" in the features row
   gboolean closing;            ///< nothing reaches the host or the controls any more
+  gboolean closing_dialogs;    ///< the dialogs are being closed for the host, which hears nothing of it
   gboolean destroyed;          ///< the root and every control are gone, destroyed by whoever held them
 };
 
@@ -352,6 +354,20 @@ static void _edit_live_debounced(props_binding_t *binding, const dt_canvas_prop_
 {
   _edit_live(binding, value);
   _commit_later(binding->owner, PROPS_DEBOUNCE_MS);
+}
+
+/**
+ * Abandon the LIVE session open on this control, if it is: the host puts the document back as the
+ * session found it and records nothing. A session already committed -- the host ends every gesture
+ * pending before an undo, a close or a new object -- is left alone: what it wrote stands as recorded.
+ */
+static void _cancel_live(props_binding_t *binding, const dt_canvas_prop_value_t *value)
+{
+  props_t *props = binding->owner;
+  if(props->live != binding->prop->id) return;
+  _debounce_remove(props);
+  props->live = DT_CANVAS_PROP_NONE;
+  _host_edit(binding, value, DT_CANVAS_EDIT_CANCEL);
 }
 
 /** A whole gesture at once: a click, a pick, a typed number. */
@@ -604,14 +620,38 @@ static void _flag_toggled(GtkToggleButton *toggle, gpointer user_data)
   _edit_once(binding, &value);
 }
 
-static void _color_picked(GtkWidget *button, const GdkRGBA *color, gpointer user_data)
+/**
+ * The colour window: one opening is one gesture. Its changes are the steps of a LIVE session, so the
+ * canvas shows the colour while it is dragged and the document is snapshot once; its closing keeping a
+ * colour commits the session, one undo step however many drags it held; and its closing giving the
+ * colour back cancels it, the document going back to the snapshot with nothing recorded.
+ */
+static void _color_changed(GtkWidget *button, const GdkRGBA *color, const dt_chooser_color_phase_t phase,
+                           gpointer user_data)
 {
   props_binding_t *binding = (props_binding_t *)user_data;
-  if(binding->owner->closing) return;
+  props_t *props = binding->owner;
+  // A window closed for the host gives back nothing: the host commits what it has pending before it
+  // closes them, and a CANCEL arriving from inside a refill would restore the document under it.
+  if(props->closing || props->closing_dialogs) return;
   dt_canvas_prop_value_t value;
   memset(&value, 0, sizeof(value));
   value.color = dt_canvas_color((float)color->red, (float)color->green, (float)color->blue, (float)color->alpha);
-  _edit_once(binding, &value);
+  switch(phase)
+  {
+    case DT_CHOOSER_COLOR_LIVE:
+      _edit_live(binding, &value);
+      break;
+    case DT_CHOOSER_COLOR_COMMIT:
+      // Carried as a last step, then committed: the session may have been ended already -- the host
+      // commits what is pending before an undo or a view switch -- and the colour kept must still land.
+      _edit_live(binding, &value);
+      _commit_live(props);
+      break;
+    case DT_CHOOSER_COLOR_CANCEL:
+      _cancel_live(binding, &value);
+      break;
+  }
 }
 
 static void _font_picked(GtkWidget *button, const char *font, gpointer user_data)
@@ -1036,7 +1076,8 @@ static GtkWidget *_build_flag(props_binding_t *binding)
 static GtkWidget *_build_color(props_binding_t *binding)
 {
   const dt_canvas_prop_t *prop = binding->prop;
-  GtkWidget *button = dt_chooser_button_color_new(_(prop->tooltip), TRUE, _color_picked, binding);
+  GtkWidget *button = dt_chooser_button_color_new(_(prop->tooltip), TRUE, DT_CANVAS_COLOR_HISTORY_KEY,
+                                                  _color_changed, binding);
   // The chooser takes no focus on a click already.
   _apply_typing_on_press(binding->owner, button);
   gtk_widget_set_tooltip_text(button, _(prop->tooltip));
@@ -2139,6 +2180,7 @@ void dt_canvas_props_gtk_focus_first(dt_canvas_props_gtk_t *props)
 void dt_canvas_props_gtk_close_dialogs(dt_canvas_props_gtk_t *props)
 {
   if(IS_NULL_PTR(props) || props->closing) return;
+  props->closing_dialogs = TRUE;
   for(int prop_id = DT_CANVAS_PROP_NONE + 1; prop_id < DT_CANVAS_PROP_COUNT; prop_id++)
   {
     props_binding_t *binding = &props->bindings[prop_id];
@@ -2146,6 +2188,7 @@ void dt_canvas_props_gtk_close_dialogs(dt_canvas_props_gtk_t *props)
     if(binding->prop->widget != DT_CANVAS_WIDGET_COLOR && binding->prop->widget != DT_CANVAS_WIDGET_FONT) continue;
     dt_chooser_button_close(binding->widget);
   }
+  props->closing_dialogs = FALSE;
 }
 
 void dt_canvas_props_gtk_free(dt_canvas_props_gtk_t *props)

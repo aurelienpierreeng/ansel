@@ -944,18 +944,55 @@ inconsistent, and unneeded, since the rectangle covers no handle anyway. An inpu
 footprint is a rectangle already. Popovers, revealers, stacks and notebooks: the old bar's three
 popovers were each a surface with a placement of its own, which nothing kept clear of the
 handles; the card is the one place a property lives, at a nesting depth of two at fixed places --
-the card button, then a section header -- and only visibility changes inside it. The colour and
-font buttons open MODAL `GtkColorChooserDialog` / `GtkFontChooserDialog` of their own
-(`widgets/chooser_button.c`): the dialogs GtkColorButton and GtkFontButton open cannot be relied
-on to be modal, and a modal one leaves no canvas click that could change the object a pick lands
-on. They report a pick once, after the dialog is gone, and do not take the focus on click, so the
-focus is not left on a button holding the plain keys.
+the card button, then a section header -- and only visibility changes inside it. The font button
+opens a MODAL `GtkFontChooserDialog` of its own (`widgets/chooser_button.c`): the dialog
+GtkFontButton opens cannot be relied on to be modal, and a modal one leaves no canvas click that
+could change the object a pick lands on. It reports a pick once, after the dialog is gone. Neither
+button takes the focus on click, so the focus is not left on a button holding the plain keys.
+
+**Every colour of the atelier is picked in a colour well** (`widgets/color_well.c`), which a colour
+button opens in a small modal window beside it -- the object properties' five colours and the
+toolbar's eight alike. GtkColorChooser showed a palette first and hid the precise colour, opacity
+included, behind "Custom"; the well shows at once the recent colours (one list for the whole
+atelier, `plugins/canvas/color_history`, most recent first, at most ten), a saturation/value field
+beside a hue strip, an opacity strip with a checkerboard under it, and the colour as
+#RRGGBB[AA] beside the colour it opened with. The window is a POPUP holding the grab, as bauhaus's
+popup is: keys reach its entry through the grab, a click anywhere else in the application closes
+it and goes no further, and it is placed under the button (above where the screen has no room) --
+by `gdk_window_move_to_rect()` on Wayland, where no client places a window, and by moving itself
+elsewhere. **One opening of the window is ONE gesture**: its changes reach the properties as LIVE
+steps (the canvas follows every motion from one snapshot), closing it -- its × button, a click
+outside, Return, the application losing the focus -- COMMITs once however many drags it held, and
+Escape CANCELs: the document goes back to the snapshot and nothing is recorded, a border the object
+inherited until the first drag included. A colour dragged away and back closes as a cancel too,
+rather than as an undo step that undoes nothing -- and back means back TO THE BYTE: a recent colour
+is stored as bytes and a document colour as floats, so the swatch naming the colour at hand is a hair
+away from it, and compared exactly it made a change nothing on screen showed. The well applies the
+same rule to its own commits. The window takes no focus from the window system on X11 or Wayland, so
+"the application lost the focus" is read from the button's toplevel; where a backend does give the
+popup the focus (Broadway, the moment it maps), the popup's own losing it is what counts, or it would
+close the instant it opened. A menu opened inside the window (the number's context menu) grabs the
+keyboard, which X11 reports as the parent losing the focus: the close waits while another grab than
+the window's is current. A close because the application lost the focus hands no focus back, where
+every other close does: the parent would be raised over the program the user went to.
+
+Every control of the well takes the keyboard: Tab moves between them, the arrows move the field and
+the strips by a hundredth (a tenth with Shift), each key a whole gesture, and walk the recent colours,
+where space or Return picks one -- Return then closes the window on it, the control with the keyboard
+having the key before the window. A well without opacity (the background's) offers only the opaque
+recent colours: the list is shared, and a transparent one would be picked as another, opaque colour.
 
 #### How an edit reaches the document
 
 Every change reaches the view tagged with its phase (`dt_canvas_edit_phase_t`): **LIVE** follows
 a control while it moves, **COMMIT** ends that gesture with the control's final value, **ONCE**
-is a whole gesture in one call -- a typed number, a click. The view pays for it as one edit
+is a whole gesture in one call -- a typed number, a click -- and **CANCEL** abandons a LIVE gesture:
+the document is restored from the session's snapshot by `dt_canvas_abandon()`, and nothing is
+recorded or announced (no LIVE step announced anything to give back). Only the colour window sends
+it, and a colour window stays open as long as the user likes, so the restore keeps what landed
+meanwhile: a picture's or a map's render (put back as the snapshot had it, the picture would read
+RENDERING with no job left to finish it), and the saved state -- a document with nothing to save
+before the gesture has nothing after it, unless a render landed. The view pays for it as one edit
 session per gesture: one snapshot at its first step; at every step the frames flowing around
 what moved refitted and the document touched ONCE, because the painter keeps the frame it last
 composited for a generation it has already seen; at its end one undo record, one map fetch, one
@@ -1466,6 +1503,19 @@ ones not refilled yet into the document. Measured offscreen with the blocking re
 during one refill, one of them a shadow radius of -500. The margin and bleed controls were never
 refilled at all until this was checked, so the first edit of the bleed after a restart wrote the
 margin's GTK default of 0 over the document's.
+
+The toolbar's colours go through `proxy.canvas.edit_color()` rather than their setters while their
+window is open. A LIVE change that changes the field writes it and touches the document -- no
+configuration, no undo record -- and remembers the colour the window found; CANCEL puts it back,
+leaving the document as saved as it was when nothing else touched it meanwhile. The default border
+and shadow raise `DT_SIGNAL_CANVAS_CHANGED` on each LIVE change and on the CANCEL, as their setters
+do: the properties of a frame inheriting them show them, and would go on showing the old colour
+while every inheriting frame is drawn in the new one. COMMIT
+puts it back FIRST and then calls the colour's own setter with the kept colour, so whatever that
+setter records and announces spans the whole visit: the default border and shadow keep their one
+undo step each (undoing to the colour before the window, not to a live one), the guide colours and
+the background still record none, and a colour kept equal to the one found records nothing. The
+background's window offers no opacity: a transparent canvas is one of its styles.
 
 The cursor names the action under the pointer: a hand over a frame or a connector, a corner
 cursor over a scale handle (turned with the frame), the exchange cursor over the rotation

@@ -227,6 +227,11 @@ typedef struct dt_canvas_view_t
   gboolean props_place_pending;         ///< a placement waited for the user to leave them
   gulong props_focus_handler;           ///< the main window's set-focus hook
   GArray *props_shapes;                 ///< dt_canvas_place_shape_t: what the last placement kept clear, for the debug overlay
+  // A colour the toolbar's colour window is editing, from its first change to its closing.
+  int toolbar_color_target;             ///< dt_canvas_color_target_t, -1 when none is being edited
+  dt_canvas_color_t toolbar_color_before; ///< the colour the window found
+  gboolean toolbar_color_dirty;         ///< whether the document had unsaved changes when the window found it
+  uint64_t toolbar_color_generation;    ///< the generation the window's last change left the document at
   dt_cursor_t cursor;                   ///< the shape last queued, to queue only on change
 } dt_canvas_view_t;
 
@@ -551,6 +556,8 @@ static void _set_document(dt_view_t *self, dt_canvas_t *canvas)
   view->props_snapshot = NULL;
   view->props_effects = 0u;
   view->props_live = FALSE;
+  // A toolbar colour still being dragged belonged to the document going away: the new one is not reset to it.
+  view->toolbar_color_target = -1;
   view->drag = DT_CANVAS_DRAG_NONE;
   view->connecting = FALSE;
   view->connect_from = 0;
@@ -2710,6 +2717,32 @@ static void _props_forget_pending(dt_view_t *self)
   view->props_effects = 0u;
 }
 
+/**
+ * Abandon the session a LIVE gesture opened: the document goes back to its snapshot and nothing is
+ * recorded, nor the toolbar told, since no step of a LIVE gesture told it anything. A session that
+ * is not LIVE -- ended already, or never opened -- has nothing to give back.
+ *
+ * Only what the gesture did goes back. A colour window stays open as long as the user likes, and a
+ * picture whose render finished meanwhile would otherwise read RENDERING again with no job left to
+ * finish it; and a document that was saved before the gesture is still saved after it.
+ */
+static void _props_session_cancel(dt_view_t *self)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  const gboolean live = view->props_live;
+  view->props_live = FALSE;
+  if(!live || IS_NULL_PTR(view->props_snapshot)) return;
+  dt_canvas_t *before = view->props_snapshot;
+  view->props_snapshot = NULL;
+  view->props_effects = 0u;
+  // Moves the generation, so the painter does not blit the last live frame again.
+  dt_canvas_abandon(view->canvas, before);
+  dt_canvas_free(before);
+  _selection_prune(view);
+  dt_control_queue_redraw_center();
+  _props_sync(self);
+}
+
 /** What the view holds of an edit rather than the document: whether the cutout's handles are out. */
 static void _props_view_state(dt_canvas_view_t *view, const dt_canvas_object_t *object,
                               const dt_canvas_prop_id_t prop_id, const dt_canvas_prop_value_t *value)
@@ -3038,6 +3071,12 @@ static void _props_host_edit(gpointer data, const dt_canvas_prop_id_t prop_id, c
   dt_view_t *self = (dt_view_t *)data;
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view) || IS_NULL_PTR(value)) return;
+  if(phase == DT_CANVAS_EDIT_CANCEL)
+  {
+    // Nothing is written: the snapshot is what the gesture found, renders landed since excepted.
+    _props_session_cancel(self);
+    return;
+  }
   dt_canvas_object_t *object = _props_object(view);
   if(IS_NULL_PTR(object))
   {
@@ -5754,6 +5793,129 @@ static void _proxy_set_border(dt_view_t *self, const float *rgba, float width)
   dt_control_queue_redraw_center();
 }
 
+/** Where the document keeps a colour the toolbar edits. */
+static dt_canvas_color_t *_toolbar_color_field(dt_canvas_t *canvas, const int target)
+{
+  switch(target)
+  {
+    case DT_CANVAS_COLOR_GRID:
+      return &canvas->grid_color;
+    case DT_CANVAS_COLOR_TRIM:
+      return &canvas->page_color;
+    case DT_CANVAS_COLOR_MARGIN:
+      return &canvas->margin_color;
+    case DT_CANVAS_COLOR_BLEED:
+      return &canvas->bleed_color;
+    case DT_CANVAS_COLOR_PADDING:
+      return &canvas->padding_color;
+    case DT_CANVAS_COLOR_BACKGROUND:
+      return &canvas->background;
+    case DT_CANVAS_COLOR_BORDER:
+      return &canvas->border_color;
+    case DT_CANVAS_COLOR_SHADOW:
+      return &canvas->shadow.color;
+    default:
+      return NULL;
+  }
+}
+
+/**
+ * Whether the properties show this toolbar colour: a frame that inherits its border or its shadow shows
+ * the canvas's, so a change to it is theirs to show as well.
+ */
+static gboolean _toolbar_color_inherited(const int target)
+{
+  return target == DT_CANVAS_COLOR_BORDER || target == DT_CANVAS_COLOR_SHADOW;
+}
+
+/**
+ * A colour of the whole canvas, edited in the toolbar's colour window. While the window is open each
+ * change is written to the document and shown -- one touch per change that changed something, and no
+ * configuration nor undo record. The properties are told of a colour they show, as its setter tells
+ * them. The window's closing puts the colour it found back first and hands the kept one to the colour's
+ * own setter, so whatever that setter records and announces spans the whole visit, as a single pick in a
+ * dialog did. Given back, the colour found stays, and a document that had nothing to save still has not.
+ */
+static void _proxy_edit_color(dt_view_t *self, const int target, const float *rgba, const int phase)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(rgba)) return;
+  dt_canvas_color_t *field = _toolbar_color_field(view->canvas, target);
+  if(IS_NULL_PTR(field)) return;
+
+  if(phase == DT_CANVAS_EDIT_LIVE)
+  {
+    if(view->toolbar_color_target != target)
+    {
+      // An edit still open in the properties is its own undo step, and an earlier one.
+      _props_commit_pending(self);
+      view->toolbar_color_target = target;
+      view->toolbar_color_before = *field;
+      view->toolbar_color_dirty = view->canvas->dirty;
+      view->toolbar_color_generation = view->canvas->generation;
+    }
+    // A background is opaque, as its setter makes it: transparency is one of its styles.
+    const float alpha = target == DT_CANVAS_COLOR_BACKGROUND ? 1.0f : rgba[3];
+    const dt_canvas_color_t color = dt_canvas_color(rgba[0], rgba[1], rgba[2], alpha);
+    // A step that changes nothing -- a release where the last motion was -- repaints nothing.
+    if(memcmp(&color, field, sizeof(color)) == 0) return;
+    *field = color;
+    dt_canvas_touch(view->canvas);
+    view->toolbar_color_generation = view->canvas->generation;
+    if(_toolbar_color_inherited(target))
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
+    dt_control_queue_redraw_center();
+    return;
+  }
+
+  const gboolean previewed = view->toolbar_color_target == target;
+  if(previewed) *field = view->toolbar_color_before;
+  view->toolbar_color_target = -1;
+  if(phase != DT_CANVAS_EDIT_COMMIT)
+  {
+    if(!previewed) return;
+    // Nothing but the window touched the document since it opened: it is as saved as the window found it.
+    const gboolean only_the_window = view->canvas->generation == view->toolbar_color_generation;
+    dt_canvas_touch(view->canvas);
+    if(only_the_window) view->canvas->dirty = view->toolbar_color_dirty;
+    if(_toolbar_color_inherited(target))
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
+    dt_control_queue_redraw_center();
+    return;
+  }
+
+  switch(target)
+  {
+    case DT_CANVAS_COLOR_GRID:
+      _proxy_set_grid_color(self, rgba);
+      break;
+    case DT_CANVAS_COLOR_TRIM:
+      _proxy_set_page_color(self, rgba);
+      break;
+    case DT_CANVAS_COLOR_MARGIN:
+      _proxy_set_margin_color(self, rgba);
+      break;
+    case DT_CANVAS_COLOR_BLEED:
+      _proxy_set_bleed_color(self, rgba);
+      break;
+    case DT_CANVAS_COLOR_PADDING:
+      _proxy_set_padding_color(self, rgba);
+      break;
+    case DT_CANVAS_COLOR_BACKGROUND:
+      _proxy_set_background(self, rgba, -1);
+      break;
+    case DT_CANVAS_COLOR_BORDER:
+      _proxy_set_border(self, rgba, -1.0f);
+      break;
+    case DT_CANVAS_COLOR_SHADOW:
+      _proxy_set_shadow(self, rgba, view->canvas->shadow.offset_x, view->canvas->shadow.offset_y,
+                        view->canvas->shadow.blur);
+      break;
+    default:
+      break;
+  }
+}
+
 static gboolean _proxy_is_connecting(dt_view_t *self)
 {
   const dt_canvas_view_t *view = (const dt_canvas_view_t *)self->data;
@@ -5816,6 +5978,7 @@ void init(dt_view_t *self)
   view->zoom = 1.0;
   view->token = 1;
   view->flower_hover = DT_CANVAS_FLOWER_NONE;
+  view->toolbar_color_target = -1;
 
   // A canvas left dirty at the last exit comes back, whatever the reason the exit happened.
   char recovery[DT_PATH_MAX] = { 0 };
@@ -5849,19 +6012,15 @@ void init(dt_view_t *self)
   manager->proxy.canvas.set_padding = _proxy_set_padding;
   manager->proxy.canvas.set_snap_mode = _proxy_set_snap_mode;
   manager->proxy.canvas.set_background = _proxy_set_background;
-  manager->proxy.canvas.set_grid_color = _proxy_set_grid_color;
   manager->proxy.canvas.set_paper = _proxy_set_paper;
   manager->proxy.canvas.set_guides = _proxy_set_guides;
-  manager->proxy.canvas.set_page_color = _proxy_set_page_color;
-  manager->proxy.canvas.set_padding_color = _proxy_set_padding_color;
   manager->proxy.canvas.set_shadow = _proxy_set_shadow;
   manager->proxy.canvas.set_texture = _proxy_set_texture;
   manager->proxy.canvas.set_resolution = _proxy_set_resolution;
   manager->proxy.canvas.set_spread = _proxy_set_spread;
   manager->proxy.canvas.set_corner_radius = _proxy_set_corner_radius;
   manager->proxy.canvas.set_page_guides = _proxy_set_page_guides;
-  manager->proxy.canvas.set_margin_color = _proxy_set_margin_color;
-  manager->proxy.canvas.set_bleed_color = _proxy_set_bleed_color;
+  manager->proxy.canvas.edit_color = _proxy_edit_color;
 }
 
 void gui_init(dt_view_t *self)

@@ -13,6 +13,7 @@ set(ANSEL_WIDGETS_SOURCES
   bauhaus.c
   button.c
   chooser_button.c
+  color_well.c
   collapsible_section.c
   container.c
   dialog.c

@@ -276,6 +276,85 @@ void dt_canvas_restore(dt_canvas_t *canvas, const dt_canvas_t *snapshot)
   dt_canvas_touch(canvas);
 }
 
+/** Whether a render landed on, or started for, `live` since `snapshot` was taken of the same object. */
+static gboolean _render_moved(const dt_canvas_object_t *snapshot, const dt_canvas_object_t *live)
+{
+  if(snapshot->kind != live->kind) return FALSE;
+  if(live->kind == DT_CANVAS_OBJECT_IMAGE)
+    return snapshot->image.jpeg != live->image.jpeg || snapshot->image.rendered_at != live->image.rendered_at
+           || snapshot->image.sync_status != live->image.sync_status;
+  if(live->kind == DT_CANVAS_OBJECT_MAP)
+    return snapshot->map.jpeg != live->map.jpeg || snapshot->map.rendered_at != live->map.rendered_at
+           || snapshot->map.sync_status != live->map.sync_status;
+  return FALSE;
+}
+
+/**
+ * Hand `live`'s render to `restored`, which holds the snapshot's copy of the same object. A picture's
+ * whole record goes -- it holds nothing but what the render and its source said -- and its frame takes
+ * the render's proportions on the snapshot's area, as dt_canvas_image_set_render() does, rather than the
+ * live frame's size, which the abandoned gesture may have changed. A map keeps its place, its zoom and its
+ * provider from the snapshot: only the tiles it fetched are the render's.
+ */
+static void _render_carry(dt_canvas_object_t *restored, const dt_canvas_object_t *live)
+{
+  if(live->kind == DT_CANVAS_OBJECT_IMAGE)
+  {
+    GBytes *previous = restored->image.jpeg;
+    restored->image = live->image;
+    if(!IS_NULL_PTR(restored->image.jpeg)) g_bytes_ref(restored->image.jpeg);
+    if(!IS_NULL_PTR(previous)) g_bytes_unref(previous);
+    const int32_t pixel_width = restored->image.pixel_width;
+    const int32_t pixel_height = restored->image.pixel_height;
+    if(pixel_width > 0 && pixel_height > 0)
+    {
+      const double area = restored->width * restored->height;
+      const double ratio = (double)pixel_width / (double)pixel_height;
+      restored->width = sqrt(area * ratio);
+      restored->height = restored->width / ratio;
+    }
+    return;
+  }
+  GBytes *previous = restored->map.jpeg;
+  restored->map.jpeg = IS_NULL_PTR(live->map.jpeg) ? NULL : g_bytes_ref(live->map.jpeg);
+  if(!IS_NULL_PTR(previous)) g_bytes_unref(previous);
+  restored->map.pixel_width = live->map.pixel_width;
+  restored->map.pixel_height = live->map.pixel_height;
+  restored->map.rendered_at = live->map.rendered_at;
+  restored->map.sync_status = live->map.sync_status;
+}
+
+void dt_canvas_abandon(dt_canvas_t *canvas, const dt_canvas_t *snapshot)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(snapshot)) return;
+  // The live objects outlive the restore by a moment, for the renders that landed on them meanwhile.
+  GPtrArray *live_objects = g_ptr_array_new_with_free_func(_object_free);
+  for(guint idx = 0; idx < canvas->objects->len; idx++)
+  {
+    g_ptr_array_add(live_objects, _object_copy(g_ptr_array_index(canvas->objects, idx)));
+  }
+  dt_canvas_restore(canvas, snapshot);
+  gboolean render_carried = FALSE;
+  for(guint idx = 0; idx < canvas->objects->len; idx++)
+  {
+    dt_canvas_object_t *restored = g_ptr_array_index(canvas->objects, idx);
+    for(guint live_idx = 0; live_idx < live_objects->len; live_idx++)
+    {
+      const dt_canvas_object_t *live = g_ptr_array_index(live_objects, live_idx);
+      if(live->id != restored->id) continue;
+      if(_render_moved(restored, live))
+      {
+        _render_carry(restored, live);
+        render_carried = TRUE;
+      }
+      break;
+    }
+  }
+  g_ptr_array_free(live_objects, TRUE);
+  // A render is written with the document, so one that landed is a change to save; the gesture was not.
+  canvas->dirty = snapshot->dirty || render_carried;
+}
+
 void dt_canvas_touch(dt_canvas_t *canvas)
 {
   if(IS_NULL_PTR(canvas)) return;

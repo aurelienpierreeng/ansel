@@ -21,23 +21,49 @@
 
 /* A flat button showing a colour or a font, which opens a MODAL chooser when clicked.
  *
- * GtkColorButton and GtkFontButton exist, and are not used for two reasons. Their dialogs cannot be
- * relied on to be modal, so a chooser left open lingers over whatever the button edits and writes
- * its answer to whatever that has become by the time it is closed. And GtkFontButton cannot
- * ellipsise its label, so a long family name makes the row it sits in as wide as the name.
+ * GtkColorButton and GtkFontButton exist, and are not used. Their dialogs cannot be relied on to
+ * be modal, so a chooser left open lingers over whatever the button edits and writes its answer
+ * to whatever that has become by the time it is closed. GtkFontButton cannot ellipsise its label,
+ * so a long family name makes the row it sits in as wide as the name. And GtkColorChooser shows a
+ * palette first and hides the precise colour, opacity included, behind "Custom".
  *
- * The button shows what it is told and nothing else. A pick is REPORTED, through the callback, and
- * never shown by the button itself: the caller applies it, and then tells the button what the
- * edited thing now holds -- which is the pick, or is not, when the edit was refused or changed
- * nothing. A button that displayed its own last pick would be a second copy of the value to go
- * stale. */
+ * A colour button opens a colour well (widgets/color_well.h) in a small window of its own, next
+ * to the button: the recent colours, a field, a hue and an opacity strip and the hexadecimal
+ * number, all at once, and every change on the canvas while it is dragged. The window is modal,
+ * and closes on Escape, on its close button, on a click outside it or when the application loses
+ * the focus. A font button opens GtkFontChooserDialog, modal too.
+ *
+ * The button shows what it is told. A font pick is REPORTED, through the callback, and never shown
+ * by the button itself: the caller applies it, and then tells the button what the edited thing now
+ * holds -- which is the pick, or is not, when the edit was refused or changed nothing. A colour
+ * window reports while it is open instead, and the button shows each colour it reports, since the
+ * caller shows it too: see dt_chooser_color_phase_t. */
 
 #include <gtk/gtk.h>
 
 G_BEGIN_DECLS
 
-/** A colour was chosen and the dialog confirmed. */
-typedef void (*dt_chooser_color_picked_t)(GtkWidget *button, const GdkRGBA *color, gpointer user_data);
+/**
+ * How a colour window reports. One opening of the window is ONE gesture, however many drags it
+ * holds, so a caller keeps a single undo step for it, and Escape can take it back whole.
+ */
+typedef enum dt_chooser_color_phase_t
+{
+  /** The colour changed while the window is open: a drag, a recent colour, a typed number. */
+  DT_CHOOSER_COLOR_LIVE = 0,
+  /** The window closed keeping a colour other than the one it opened with. Once, after LIVE ones. */
+  DT_CHOOSER_COLOR_COMMIT,
+  /**
+   * The window closed giving the colour back -- Escape, dt_chooser_button_close(), or a colour
+   * dragged back to where it started -- after LIVE changes were reported. Carries the colour it
+   * opened with, which the caller puts back without recording anything.
+   */
+  DT_CHOOSER_COLOR_CANCEL,
+} dt_chooser_color_phase_t;
+
+/** A colour window changed the colour, closed keeping it, or closed giving it back. */
+typedef void (*dt_chooser_color_changed_t)(GtkWidget *button, const GdkRGBA *color, dt_chooser_color_phase_t phase,
+                                           gpointer user_data);
 
 /**
  * A font was chosen and the dialog confirmed. @p font is a Pango font description of the family
@@ -47,22 +73,27 @@ typedef void (*dt_chooser_color_picked_t)(GtkWidget *button, const GdkRGBA *colo
 typedef void (*dt_chooser_font_picked_t)(GtkWidget *button, const char *font, gpointer user_data);
 
 /**
- * @brief A button painted with a colour swatch, opening a modal GtkColorChooserDialog.
+ * @brief A button painted with a colour swatch, opening a modal colour well next to it.
  *
  * A colour that is not opaque is painted over a checkerboard, so that its transparency shows.
  *
- * @param title the dialog's title.
- * @param use_alpha whether the dialog offers the alpha channel.
- * @param picked called once per confirmed dialog, never on cancel or close.
- * @param user_data handed back to @p picked.
+ * @param title shown at the top of the window.
+ * @param use_alpha whether the window offers the opacity; without it every colour reported is opaque.
+ * @param history_key the stored string of recent colours the well reads and writes, shared by every
+ * button naming the same key; NULL keeps none.
+ * @param changed called as dt_chooser_color_phase_t says, never while nothing changed.
+ * @param user_data handed back to @p changed.
  */
-GtkWidget *dt_chooser_button_color_new(const char *title, gboolean use_alpha, dt_chooser_color_picked_t picked,
-                                       gpointer user_data);
+GtkWidget *dt_chooser_button_color_new(const char *title, gboolean use_alpha, const char *history_key,
+                                       dt_chooser_color_changed_t changed, gpointer user_data);
 
-/** @brief Show a colour on the button, and offer it first the next time the dialog opens. Reports nothing. */
+/**
+ * @brief Show a colour on the button, and open the window on it next time. Reports nothing. While
+ * the window is open and has reported a change, the colour it holds wins and this is ignored.
+ */
 void dt_chooser_button_set_color(GtkWidget *button, const GdkRGBA *color);
 
-/** @brief The colour the button was last told to show. */
+/** @brief The colour the button shows: the colour last set, or the last one its window reported. */
 void dt_chooser_button_get_color(GtkWidget *button, GdkRGBA *color);
 
 /**
@@ -93,22 +124,23 @@ const char *dt_chooser_button_get_font(GtkWidget *button);
 GtkWidget *dt_chooser_button_get_label(GtkWidget *button);
 
 /**
- * @brief The window the dialog is kept above.
+ * @brief The window the dialog or the colour window is kept above.
  *
- * Unset, or once that window is gone, the dialog is transient for the button's own toplevel, and
- * failing that for the host's root window.
+ * Unset, or once that window is gone, it is transient for the button's own toplevel, and failing
+ * that for the host's root window.
  */
 void dt_chooser_button_set_parent(GtkWidget *button, GtkWindow *parent);
 
-/** @brief Whether the button's dialog is open. */
+/** @brief Whether the button's dialog or colour window is open. */
 gboolean dt_chooser_button_is_open(GtkWidget *button);
 
 /**
- * @brief Close the button's dialog, if it is open, reporting nothing.
+ * @brief Close the button's dialog or colour window, if it is open.
  *
- * For a caller whose target changed or went away while the dialog was open: the pick it would have
- * reported belongs to something that is no longer being edited. Destroying the button closes its
- * dialog the same way.
+ * For a caller whose target changed or went away while it was open. A font dialog reports nothing:
+ * its pick belongs to something no longer edited. A colour window that reported LIVE changes
+ * reports CANCEL, so a caller that has not ended the gesture itself puts the colour back. Destroying
+ * the button closes either the same way, but reports nothing at all.
  */
 void dt_chooser_button_close(GtkWidget *button);
 
