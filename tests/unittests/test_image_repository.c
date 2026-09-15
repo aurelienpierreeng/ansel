@@ -67,6 +67,53 @@ static void test_flag_among_multi_image(void **state)
   g_list_free(all);
 }
 
+/* dt_image_repository_set_flags_masked() writes the mask's bits and nothing else.
+ *
+ * The XMP crawler reads an image's whole `flags` word, then lists a directory -- a
+ * filesystem round-trip -- before deciding what to write back. Anything the user changes in
+ * that window (a star rating, a colour label) shares the word, so the crawl must write only
+ * the two bits it owns. This pins that. */
+static void test_set_flags_masked_leaves_other_bits(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/masked");
+  assert_true(film > 0);
+  const int32_t img = testdb_make_image(film, "masked.raw");
+  assert_true(img > 0);
+
+  // two bits the write will own, and one standing in for the rating the user sets meanwhile
+  const int owned_a = 1 << 4;
+  const int owned_b = 1 << 5;
+  const int mask = owned_a | owned_b;
+
+  GList *one = g_list_append(NULL, GINT_TO_POINTER(img));
+
+  // start with owned_a set and owned_b clear, plus the unrelated bit
+  assert_true(dt_image_repository_set_flag_among(one, owned_a | TEST_FLAG));
+
+  // the crawl's write: clear owned_a, set owned_b, say nothing about the rest
+  assert_true(dt_image_repository_set_flags_masked(img, mask, owned_b));
+
+  GList *got = dt_image_repository_get_ids_with_flag_among(one, owned_b);
+  assert_int_equal(g_list_length(got), 1);
+  g_list_free(got);
+
+  assert_null(dt_image_repository_get_ids_with_flag_among(one, owned_a));
+
+  // the bit outside the mask survived -- this is the whole point
+  got = dt_image_repository_get_ids_with_flag_among(one, TEST_FLAG);
+  assert_int_equal(g_list_length(got), 1);
+  g_list_free(got);
+
+  // an empty mask writes nothing and says so, rather than clearing the word
+  assert_false(dt_image_repository_set_flags_masked(img, 0, 0));
+  got = dt_image_repository_get_ids_with_flag_among(one, TEST_FLAG);
+  assert_int_equal(g_list_length(got), 1);
+  g_list_free(got);
+
+  g_list_free(one);
+}
+
 static void test_full_paths(void **state)
 {
   (void)state;
@@ -157,15 +204,47 @@ static void test_count_distinct_fields(void **state)
   assert_null(dt_image_repository_count_distinct_fields(NULL));
 }
 
+static gboolean _count_two_rows(const int32_t imgid, const int64_t write_timestamp,
+                                const int version, const char *image_path, const int flags,
+                                void *user_data)
+{
+  (void)imgid;
+  (void)write_timestamp;
+  (void)version;
+  (void)image_path;
+  (void)flags;
+  int *seen = (int *)user_data;
+  (*seen)++;
+  return *seen < 2; // refuse the second row
+}
+
+/* The walk ends at the first row the callback refuses. That is how the XMP crawler stops when
+ * Ansel quits; a walk that went on regardless would hold the quit up until the last image. */
+static void test_foreach_with_path_stops_when_asked(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/walk");
+  assert_true(film > 0);
+  assert_true(testdb_make_image(film, "w0.raw") > 0);
+  assert_true(testdb_make_image(film, "w1.raw") > 0);
+  assert_true(testdb_make_image(film, "w2.raw") > 0);
+
+  int seen = 0;
+  dt_image_repository_foreach_with_path(_count_two_rows, &seen);
+  assert_int_equal(seen, 2);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_flag_among_multi_image),
+    cmocka_unit_test(test_set_flags_masked_leaves_other_bits),
     cmocka_unit_test(test_full_paths),
     cmocka_unit_test(test_id_range),
     cmocka_unit_test(test_write_timestamp_is_64bit),
     cmocka_unit_test(test_group_member_rows),
     cmocka_unit_test(test_count_distinct_fields),
+    cmocka_unit_test(test_foreach_with_path_stops_when_asked),
   };
   return cmocka_run_group_tests(tests, testdb_setup, testdb_teardown);
 }

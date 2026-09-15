@@ -268,17 +268,30 @@ GList *dt_image_repository_get_full_paths(GList *imgids);
 /** @brief Every image id whose `flags` carry @p flag, in row order. */
 GList *dt_image_repository_get_ids_with_flag(const int flag);
 
-/** @brief Replace @p imgid's whole `flags` word. */
+/** @brief Replace @p imgid's whole `flags` word.
+ *
+ *  Read-modify-write on the caller's side: whatever it read earlier is written back over
+ *  every other bit. Only safe when the caller can rule out a concurrent change to the rest
+ *  of the word -- use dt_image_repository_set_flags_masked() otherwise. */
 gboolean dt_image_repository_set_flags(const int32_t imgid, const int flags);
 
+/** @brief Write only @p mask's bits of @p imgid's `flags`, taking them from @p value.
+ *
+ *  The row supplies everything outside @p mask, so a rating or colour label the user sets
+ *  between the caller's read and this write survives. That matters for any caller whose
+ *  read and write are separated by something slow -- the XMP crawler lists a directory in
+ *  between, which is a filesystem round-trip on a network share. */
+gboolean dt_image_repository_set_flags_masked(const int32_t imgid, const int mask, const int value);
+
 /** @brief One row of dt_image_repository_foreach_with_path(). @p image_path is borrowed:
- *  it lives until the callback returns. */
-typedef void (*dt_image_repository_path_row_cb)(const int32_t imgid,
-                                                const int64_t write_timestamp,
-                                                const int version,
-                                                const char *image_path,
-                                                const int flags,
-                                                void *user_data);
+ *  it lives until the callback returns.
+ *  @return TRUE to go on to the next row, FALSE to end the walk at this one. */
+typedef gboolean (*dt_image_repository_path_row_cb)(const int32_t imgid,
+                                                    const int64_t write_timestamp,
+                                                    const int version,
+                                                    const char *image_path,
+                                                    const int flags,
+                                                    void *user_data);
 
 /**
  * @brief Walk every image in the library, film roll by film roll, filename within each.
@@ -290,8 +303,12 @@ typedef void (*dt_image_repository_path_row_cb)(const int32_t imgid,
  *
  * The statement is prepared and finalised around the walk rather than cached, and no
  * internal lock is held while the callback runs: the callback is expected to write back
- * through this same repository (dt_image_repository_set_flags()), and a cached statement
- * under the shared statement mutex would deadlock on that re-entry.
+ * through this same repository (dt_image_repository_set_flags_masked()), and a cached
+ * statement under the shared statement mutex would deadlock on that re-entry.
+ *
+ * The walk ends at the first row the callback answers FALSE for. That is how a caller running
+ * as a job stops when it is cancelled or Ansel quits: the workers are joined on shutdown, so a
+ * walk that could not stop would hold the quit up until the last image of the library.
  */
 void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, void *user_data);
 

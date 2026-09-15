@@ -376,6 +376,17 @@ dt_image_t *dt_image_cache_testget(const int32_t imgid, char mode)
   return img;
 }
 
+dt_image_t *dt_image_cache_get_existing(const int32_t imgid, char mode)
+{
+  dt_image_cache_t *cache = _image_cache;
+  if(imgid <= 0) return NULL;
+
+  // contains() answers "is there an entry" without taking the entry's lock, which is the one
+  // question testget() conflates with "is it free right now"
+  if(!dt_cache_contains(&cache->cache, (uint32_t)imgid)) return NULL;
+  return dt_image_cache_get(imgid, mode);
+}
+
 // Always reload the cache entry from DB before returning it.
 // This is critical for IMAGE_INFO_CHANGED: other handlers will read from the cache.
 dt_image_t *dt_image_cache_get_reload(const int32_t imgid, char mode)
