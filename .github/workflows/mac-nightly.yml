@@ -270,6 +270,27 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ansel.stable-arm64.mac
+      # GitHub stores an asset name reduced to [A-Za-z0-9._-], so the `~' a version string
+      # carries is filed as `.'. tip decides what to REPLACE by comparing its local filenames
+      # against the release's assets (`asset.name == Path(artifact).name'), so a file still
+      # spelled with `~' never matches the asset it is meant to replace: tip treats it as new,
+      # GitHub normalises the name onto the one already there and answers 422 already_exists,
+      # and that exception is not caught on the new-asset path. The step then dies and takes
+      # the OTHER architecture's package with it, though that one had nothing to collide with
+      # -- measured on 2026-09-15, where a good Intel DMG was lost to the arm64 name.
+      #
+      # Renaming here hands tip the name the release will actually use, and its own
+      # replace-by-name works as documented. It is also the one place that knows this
+      # spelling, so nothing downstream has to convert it again.
+      - name: Name the packages the way the release will
+        run: |
+          for f in Ansel-*.dmg; do
+            [ -e "${f}" ] || continue
+            case "${f}" in
+              *'~'*) mv -- "${f}" "${f//\~/.}" ;;
+            esac
+          done
+
       # Publishing nothing is not a success. With both downloads allowed to fail, an empty
       # workspace would otherwise reach `tip' as an empty file list and the run would pass
       # having shipped nothing -- the failure this job exists to make visible.
@@ -284,13 +305,60 @@ jobs:
           printf 'Publishing %d package(s):\n' "${#dmgs[@]}"
           printf '  %s\n' "${dmgs[@]}"
           printf 'names=%s\n' "${dmgs[*]}" >> "$GITHUB_OUTPUT"
-      - name: Update nightly release
+      # One package per step, so one of them failing cannot take the other with it. tip ends on
+      # a bare loop -- `for artifact in artifacts: gh_release.upload_asset(artifact)', with no
+      # try/except -- so the first upload to raise kills the process and every file still
+      # queued behind it is never attempted. Handing it both packages at once made that order
+      # decide which architecture was lost: on 2026-09-15 arm64 came first alphabetically,
+      # collided with itself, and the Intel package behind it was never tried at all, though it
+      # was new and had nothing to collide with.
+      #
+      # continue-on-error on each, because whether the run as a whole succeeded is not this
+      # step's to decide: the check below asks the release what actually arrived, which is the
+      # only answer that cannot be wrong, and it runs after BOTH have been attempted.
+      #
+      # Each is skipped when its package was not built, since tip raises on an empty file list
+      # and an architecture that did not build is the ordinary case this job exists to survive.
+      - name: Publish the Apple Silicon package
+        if: ${{ hashFiles('Ansel-*-arm64.dmg') != '' }}
+        continue-on-error: true
         uses: aurelienpierreeng/tip@master
         with:
           tag: ${{ env.TAG }}
           rm: false
           token: ${{ secrets.GITHUB_TOKEN }}
-          files: Ansel-*.dmg
+          files: Ansel-*-arm64.dmg
+      - name: Publish the Intel package
+        if: ${{ hashFiles('Ansel-*-i386.dmg') != '' }}
+        continue-on-error: true
+        uses: aurelienpierreeng/tip@master
+        with:
+          tag: ${{ env.TAG }}
+          rm: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: Ansel-*-i386.dmg
+
+      # The release is asked what it holds, rather than the upload steps being believed. This
+      # is what makes continue-on-error above safe: a package that did not arrive fails the
+      # job here, by name, after every package has had its turn.
+      - name: Check every package reached the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          published="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.assets[].name')"
+          missing=()
+          for f in Ansel-*.dmg; do
+            [ -e "${f}" ] || continue
+            if grep -Fxq -- "${f}" <<< "${published}"; then
+              echo "published: ${f}"
+            else
+              missing+=("${f}")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'NOT published: %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
 
       - name: Install dependencies
         run: |
@@ -307,9 +375,7 @@ jobs:
           links=""
           count=0
           for f in ${NAMES}; do
-            # A release asset spells the version's `~' as `.'.
-            url_name="${f//\~/.}"
-            links="${links}${links:+ and }[${url_name}](${REPO}/releases/download/${TAG}/${url_name})"
+            links="${links}${links:+ and }[${f}](${REPO}/releases/download/${TAG}/${f})"
             count=$((count + 1))
           done
           if [ "${count}" -eq 1 ]; then

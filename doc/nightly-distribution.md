@@ -173,6 +173,27 @@ would otherwise reach `tip` as an empty file list and pass.
 So the Intel measures below decide whether an Intel DMG exists, and no longer whether a macOS
 nightly exists at all.
 
+**Each package is published by its own step, and the release is then asked what arrived.**
+`tip` ends on a bare loop — `for artifact in artifacts: gh_release.upload_asset(artifact)`, with
+no `try`/`except` — so the first upload to raise kills the process and every file queued behind
+it is never attempted. Handing it both packages at once let that order decide which architecture
+was lost: on 2026-09-15 arm64 came first alphabetically, collided with itself, and the Intel
+package behind it was never tried, though it was new and had nothing to collide with. One step
+per architecture, each `continue-on-error`, then a check that reads the release's asset list and
+fails by name on anything missing — after both have had their turn. Whether the run succeeded is
+that check's answer, not the upload steps', because the release is the only thing that cannot be
+wrong about what it holds.
+
+**The packages are renamed to the spelling the release will use, before `tip` sees them.**
+GitHub reduces an asset name to `[A-Za-z0-9._-]`, so the `~` a version string carries is filed
+as `.`. `tip` decides what to *replace* by comparing its local filenames against the release's
+assets (`asset.name == Path(artifact).name`), so a file still spelled with `~` never matches the
+asset it is meant to replace: it is treated as new, GitHub normalises the name onto the one
+already there, and the `422 already_exists` that comes back is not caught on the new-asset path.
+Measured on 2026-09-15: the step died on the arm64 name and took a perfectly good Intel DMG with
+it. The rename is also the one place that knows this spelling, so the Matrix notification uses
+the names verbatim instead of converting them again.
+
 ## Secrets and settings to create
 
 All on the `ansel` repository. Every one is optional in the sense that its step is
