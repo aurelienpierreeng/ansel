@@ -272,6 +272,7 @@ FILE(GLOB SOURCE_FILES
   "gui/actions/*.c"
   "libs/lib.c"
   "views/view.c"
+  "views/canvas_props_gtk.c"
   "views/dev_toolbox.c"
   "views/dev_backbuf.c"
   )

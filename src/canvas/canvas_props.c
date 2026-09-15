@@ -833,6 +833,173 @@ void dt_canvas_group_summary(const dt_canvas_t *canvas, const dt_canvas_object_t
   dt_free(value);
 }
 
+/* --- what a folded card says ------------------------------------------------------------------ */
+
+/** Whether a property is one side of a text frame's inset, which the uniform inset speaks for. */
+static gboolean _inset_side_prop(const dt_canvas_prop_id_t prop_id)
+{
+  return prop_id == DT_CANVAS_PROP_TEXT_INSET_TOP || prop_id == DT_CANVAS_PROP_TEXT_INSET_RIGHT
+         || prop_id == DT_CANVAS_PROP_TEXT_INSET_BOTTOM || prop_id == DT_CANVAS_PROP_TEXT_INSET_LEFT;
+}
+
+/** A number as its row shows it, with its unit. */
+static gchar *_summary_number(const dt_canvas_prop_t *prop, const double number)
+{
+  const int digits = MAX(prop->digits, 0);
+  if(IS_NULL_PTR(prop->unit)) return g_strdup_printf("%.*f", digits, number);
+  return g_strdup_printf("%.*f %s", digits, number, _(prop->unit));
+}
+
+/**
+ * One row's value as a summary names it; NULL for a row that has nothing to say there. An extra
+ * row is named by its label as well as its value, since unlike an essential one it is not the
+ * row everybody expects to find in the section.
+ */
+static gchar *_summary_piece(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                             const dt_canvas_prop_t *prop, const gboolean extra)
+{
+  dt_canvas_prop_value_t value;
+  dt_canvas_prop_read(canvas, object, prop->id, &value);
+  gchar *piece = NULL;
+  switch(prop->widget)
+  {
+    case DT_CANVAS_WIDGET_TUNE:
+    case DT_CANVAS_WIDGET_MEASURE:
+      if(prop->id == DT_CANVAS_PROP_TEXT_INSET && !dt_canvas_props_inset_uniform(object))
+      {
+        // Four sides apart are four numbers, top first, clockwise as CSS has it.
+        double margins[4];
+        dt_canvas_text_margins(object, margins);
+        const int digits = MAX(prop->digits, 0);
+        piece = g_strdup_printf("%.*f/%.*f/%.*f/%.*f %s", digits, margins[0], digits, margins[1], digits, margins[2],
+                                digits, margins[3], _(prop->unit));
+      }
+      else
+      {
+        piece = _summary_number(prop, value.number);
+      }
+      break;
+    case DT_CANVAS_WIDGET_ICONS:
+    case DT_CANVAS_WIDGET_CHOICE:
+    {
+      const char *label = dt_canvas_prop_choice_label(prop, value.choice);
+      // A map style is the provider's own name, spelled the provider's way.
+      if(!IS_NULL_PTR(label))
+        piece = IS_NULL_PTR(prop->choices) ? g_strdup(label) : g_utf8_strdown(_(label), -1);
+      break;
+    }
+    case DT_CANVAS_WIDGET_FLAG:
+      // A switch that is on is named; one that is off goes without saying.
+      if(value.flag) return g_utf8_strdown(_(prop->label), -1);
+      return NULL;
+    case DT_CANVAS_WIDGET_FEATURES:
+      if(value.text[0] != '\0') return g_strdup(_(prop->label));
+      return NULL;
+    case DT_CANVAS_WIDGET_INFO:
+      if(value.text[0] != '\0') piece = g_strdup(value.text);
+      break;
+    default:
+      break;
+  }
+  if(IS_NULL_PTR(piece) || !extra) return piece;
+  gchar *label = g_utf8_strdown(_(prop->label), -1);
+  gchar *named = g_strdup_printf("%s %s", label, piece);
+  dt_free(label);
+  dt_free(piece);
+  return named;
+}
+
+void dt_canvas_prop_section_summary(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                    const dt_canvas_prop_section_t section, char *buffer, const size_t length)
+{
+  if(IS_NULL_PTR(buffer) || length == 0) return;
+  buffer[0] = '\0';
+  if(IS_NULL_PTR(object) || section >= DT_CANVAS_SECTION_COUNT) return;
+  const dt_canvas_prop_group_t group = dt_canvas_prop_section_group(section, object->kind);
+  GString *text = g_string_new(NULL);
+  if(group != DT_CANVAS_GROUP_NONE)
+  {
+    char line[DT_CANVAS_PROP_TEXT_LEN] = { 0 };
+    dt_canvas_group_summary(canvas, object, group, line, sizeof(line));
+    g_string_append(text, line);
+  }
+  size_t count = 0;
+  const dt_canvas_prop_t *table = dt_canvas_props(&count);
+  for(size_t idx = 0; idx < count; idx++)
+  {
+    const dt_canvas_prop_t *prop = &table[idx];
+    if(prop->section != section || prop->tier == DT_CANVAS_TIER_STRIP || !dt_canvas_prop_applies(prop, object))
+      continue;
+    // The group's own line already says what its members hold, and the uniform inset names the sides.
+    if(prop->group != DT_CANVAS_GROUP_NONE || _inset_side_prop(prop->id)) continue;
+    const gboolean extra = prop->tier == DT_CANVAS_TIER_MORE;
+    if(extra && dt_canvas_prop_is_neutral(canvas, object, prop->id)) continue;
+    // An override section's essentials are its group's; any other section lists its own.
+    if(!extra && group != DT_CANVAS_GROUP_NONE) continue;
+    gchar *piece = _summary_piece(canvas, object, prop, extra);
+    if(IS_NULL_PTR(piece)) continue;
+    // The two halves of a pair read as one, "120, 80".
+    const gboolean second_half = prop->pair_with != DT_CANVAS_PROP_NONE && prop->pair_with < prop->id
+                                 && dt_canvas_prop_applies(dt_canvas_prop_get(prop->pair_with), object);
+    if(text->len > 0) g_string_append(text, second_half ? ", " : " · ");
+    g_string_append(text, piece);
+    dt_free(piece);
+  }
+  g_strlcpy(buffer, text->str, length);
+  g_string_free(text, TRUE);
+}
+
+gboolean dt_canvas_prop_section_opens_by_itself(const dt_canvas_prop_section_t section, const uint32_t kind)
+{
+  return dt_canvas_prop_section_group(section, kind) == DT_CANVAS_GROUP_NONE && section != DT_CANVAS_SECTION_CUTOUT;
+}
+
+gboolean dt_canvas_prop_section_stays_open(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                           const dt_canvas_prop_section_t section)
+{
+  if(IS_NULL_PTR(object)) return FALSE;
+  const dt_canvas_prop_group_t group = dt_canvas_prop_section_group(section, object->kind);
+  if(group == DT_CANVAS_GROUP_NONE) return TRUE;
+  return dt_canvas_group_state(canvas, object, group) == DT_CANVAS_OWN_CUSTOM;
+}
+
+gboolean dt_canvas_props_card_altered(const dt_canvas_t *canvas, const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object)) return FALSE;
+  // A group is counted by its switch, which sits in the card whether or not its members do:
+  // the font's are on the strip, and the font the frame chose is still the card's to point at.
+  for(int section = 0; section < DT_CANVAS_SECTION_COUNT; section++)
+  {
+    const dt_canvas_prop_group_t group = dt_canvas_prop_section_group((dt_canvas_prop_section_t)section, object->kind);
+    if(group == DT_CANVAS_GROUP_NONE || !_group_for_object(object, group)) continue;
+    if(dt_canvas_group_state(canvas, object, group) == DT_CANVAS_OWN_CUSTOM) return TRUE;
+  }
+  size_t count = 0;
+  const dt_canvas_prop_t *table = dt_canvas_props(&count);
+  for(size_t idx = 0; idx < count; idx++)
+  {
+    const dt_canvas_prop_t *prop = &table[idx];
+    if(prop->tier == DT_CANVAS_TIER_STRIP || !dt_canvas_prop_applies(prop, object)) continue;
+    if(!dt_canvas_prop_is_neutral(canvas, object, prop->id)) return TRUE;
+  }
+  return FALSE;
+}
+
+gboolean dt_canvas_props_inset_uniform(const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return TRUE;
+  // Compared as the uniform inset's writer compares a side with the value written, so that what
+  // shows one inset and what writes one never disagree about a float's rounding.
+  const dt_canvas_prop_t *prop = dt_canvas_prop_get(DT_CANVAS_PROP_TEXT_INSET);
+  double margins[4];
+  dt_canvas_text_margins(object, margins);
+  for(int side = 1; side < 4; side++)
+  {
+    if(!_numbers_same(prop, margins[0], margins[side])) return FALSE;
+  }
+  return TRUE;
+}
+
 /* --- reading -------------------------------------------------------------------------------- */
 
 static const char *_sync_word(const dt_canvas_sync_status_t status)
@@ -1074,6 +1241,54 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
     default:
       // The actions carry nothing, and editing the cutout is the view's state, not the document's.
       break;
+  }
+}
+
+void dt_canvas_prop_read_inherited(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                   const dt_canvas_prop_id_t prop_id, dt_canvas_prop_value_t *out)
+{
+  if(IS_NULL_PTR(out)) return;
+  memset(out, 0, sizeof(*out));
+  const dt_canvas_prop_t *prop = dt_canvas_prop_get(prop_id);
+  if(IS_NULL_PTR(prop) || IS_NULL_PTR(object) || !dt_canvas_prop_for_kind(prop, object->kind)) return;
+  // Asked of the resolvers with no object, which is what they answer for a group the object does
+  // not own: the reader and this one cannot then disagree about where the canvas's value lives.
+  switch(prop_id)
+  {
+    case DT_CANVAS_PROP_TEXT_FONT:
+      g_strlcpy(out->text, dt_canvas_text_effective_font(canvas, NULL), sizeof(out->text));
+      return;
+    case DT_CANVAS_PROP_TEXT_SIZE:
+      out->number = _font_size_points(canvas, dt_canvas_text_effective_font(canvas, NULL));
+      return;
+    case DT_CANVAS_PROP_BORDER_WIDTH:
+    case DT_CANVAS_PROP_BORDER_COLOR:
+    {
+      float width = 0.0f;
+      dt_canvas_object_effective_border(canvas, NULL, &out->color, &width);
+      out->number = width;
+      if(prop_id == DT_CANVAS_PROP_BORDER_WIDTH) memset(&out->color, 0, sizeof(out->color));
+      return;
+    }
+    case DT_CANVAS_PROP_CORNER_RADIUS:
+      out->number = IS_NULL_PTR(canvas) ? 0.0f : canvas->corner_radius;
+      return;
+    case DT_CANVAS_PROP_SHADOW_OFFSET_X:
+    case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
+    case DT_CANVAS_PROP_SHADOW_BLUR:
+    case DT_CANVAS_PROP_SHADOW_COLOR:
+    {
+      dt_canvas_shadow_t shadow;
+      dt_canvas_object_effective_shadow(canvas, NULL, &shadow);
+      if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_X) out->number = shadow.offset_x;
+      else if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_Y) out->number = shadow.offset_y;
+      else if(prop_id == DT_CANVAS_PROP_SHADOW_BLUR) out->number = shadow.blur;
+      else out->color = shadow.color;
+      return;
+    }
+    default:
+      dt_canvas_prop_read(canvas, object, prop_id, out);
+      return;
   }
 }
 
@@ -1634,6 +1849,21 @@ dt_canvas_double_click_t dt_canvas_click_sequence_double(dt_canvas_click_sequenc
 gboolean dt_canvas_props_has_content_action(const uint32_t kind)
 {
   return kind == DT_CANVAS_OBJECT_TEXT || kind == DT_CANVAS_OBJECT_IMAGE || kind == DT_CANVAS_OBJECT_SVG;
+}
+
+const char *dt_canvas_props_content_action_tooltip(const uint32_t kind)
+{
+  switch(kind)
+  {
+    case DT_CANVAS_OBJECT_TEXT:
+      return N_("Edit the text (Return, or double-click the frame again)");
+    case DT_CANVAS_OBJECT_IMAGE:
+      return N_("Develop the picture in the darkroom (Return, or double-click the frame again)");
+    case DT_CANVAS_OBJECT_SVG:
+      return N_("Read the drawing again from its file (Return, or double-click the frame again)");
+    default:
+      return NULL;
+  }
 }
 
 // clang-format off

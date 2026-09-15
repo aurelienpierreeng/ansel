@@ -290,9 +290,10 @@ typedef struct dt_canvas_prop_t
   double step;
   double factor;            ///< the stored value per shown unit (radians per degree); 1 when it is stored as shown
   /**
-   * The value that means "left as it is": a MORE row whose value is not this stays in view,
-   * so a setting nobody can see is never a setting nobody knows about. NAN for a property that
-   * has no such value -- a size, a position -- which is never kept in view for being set.
+   * The value that means "left as it is": a MORE row whose value is not this is named in the
+   * summary of its section while the section is folded, and marks the card as altered, so a
+   * setting nobody can see is never a setting nobody knows about. NAN for a property that has
+   * no such value -- a size, a position -- which is never named for being set.
    */
   double neutral;
   int digits;               ///< the precision a value is shown at, and an inherited one compared at
@@ -350,6 +351,16 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
                          dt_canvas_prop_value_t *out);
 
 /**
+ * @brief Read the value the object WOULD be drawn with if it gave the property's override group
+ * back to the canvas: the canvas's own border, radius, shadow or font, whatever the object holds.
+ * @details What a control inside an override group resets to, so that a reset lands on the value
+ * the writer recognises as inherited and leaves the object inheriting. A property outside any
+ * group has no canvas value to fall back on and reads exactly as dt_canvas_prop_read() does.
+ */
+void dt_canvas_prop_read_inherited(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                   dt_canvas_prop_id_t prop_id, dt_canvas_prop_value_t *out);
+
+/**
  * @brief Write one property, with every rule that comes with it.
  * @details Refuses a kind that does not have the property. A value equal to the one stored
  * changes nothing; an inherited value written while inheriting -- equal at the precision its
@@ -386,6 +397,45 @@ uint32_t dt_canvas_group_set_own(dt_canvas_t *canvas, dt_canvas_object_t *object
 /** @brief One line saying where a group's values come from and what they are, translated. */
 void dt_canvas_group_summary(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                              dt_canvas_prop_group_t group, char *buffer, size_t length);
+
+/**
+ * @brief One line saying what a folded section holds, translated.
+ * @details An override section says where its group's values come from and what they are; any
+ * other section lists its essentials' values. Either way it goes on to name every extra that is
+ * not at its neutral value -- "letter spacing 20 ‰ em" -- since an extra is the row a folded
+ * section hides best. Empty for a section the object's kind lacks.
+ */
+void dt_canvas_prop_section_summary(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                    dt_canvas_prop_section_t section, char *buffer, size_t length);
+
+/**
+ * @brief Whether a section may be opened on the user's behalf -- restored when the properties
+ * open, say. An override section shows what the object took from the canvas, and the cutout is a
+ * tool: neither is opened for anyone who did not ask.
+ */
+gboolean dt_canvas_prop_section_opens_by_itself(dt_canvas_prop_section_t section, uint32_t kind);
+
+/**
+ * @brief Whether a section left open for one object stays open when the next object of the same
+ * kind is shown. An override section stays open only for an object that chose values of its own:
+ * opened on another, it would show the canvas's values as though they were this one's.
+ */
+gboolean dt_canvas_prop_section_stays_open(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                           dt_canvas_prop_section_t section);
+
+/**
+ * @brief Whether the card -- everything off the strip -- holds anything that is not the default:
+ * a group the object chose values for, or a row moved off its neutral value. What a frontend
+ * marks the card's button with while the card is closed.
+ */
+gboolean dt_canvas_props_card_altered(const dt_canvas_t *canvas, const dt_canvas_object_t *object);
+
+/**
+ * @brief Whether a text frame's four insets are one number, compared as the uniform inset's
+ * writer compares them: what decides whether a frontend shows one inset or four. TRUE for
+ * anything that is not a text frame.
+ */
+gboolean dt_canvas_props_inset_uniform(const dt_canvas_object_t *object);
 
 /**
  * @brief Refit one text frame to its text, when its height follows its content.
@@ -522,6 +572,62 @@ dt_canvas_double_click_t dt_canvas_click_sequence_double(dt_canvas_click_sequenc
  * darkroom, a drawing its file. A map and a connector are all properties.
  */
 gboolean dt_canvas_props_has_content_action(uint32_t kind);
+
+/**
+ * @brief What a kind's content action does, and the two gestures that also reach it, as the
+ * button's tooltip: untranslated (N_()), NULL for a kind that has none.
+ */
+const char *dt_canvas_props_content_action_tooltip(uint32_t kind);
+
+/* --- what a frontend asks of whoever shows it ------------------------------------------ */
+
+/** The buttons a frontend shows beside the properties that are not a property themselves. */
+typedef enum dt_canvas_props_action_t
+{
+  DT_CANVAS_PROPS_ACTION_CONTENT = 0, ///< go into the object: edit the text, develop the picture, reload the drawing
+  DT_CANVAS_PROPS_ACTION_CLOSE,       ///< close the properties
+} dt_canvas_props_action_t;
+
+/**
+ * What a frontend of this table asks of the view that shows it. Declared with the table rather
+ * than with any one toolkit, so a second frontend answers to the same host. Every callback may
+ * be NULL.
+ */
+typedef struct dt_canvas_props_host_t
+{
+  gpointer data; ///< handed back to every callback
+
+  /**
+   * One property changed. LIVE follows a control while it moves and COMMIT ends that gesture
+   * with the control's final value; ONCE is a whole gesture in one call. An ACTION row reports
+   * its click as a ONCE edit carrying no value: the table's writer says what it asks for, and
+   * the host, which writes, reads that answer itself.
+   */
+  void (*edit)(gpointer data, dt_canvas_prop_id_t prop_id, const dt_canvas_prop_value_t *value,
+               dt_canvas_edit_phase_t phase);
+  /**
+   * A section's own switch was flipped: give the object its own values for the group, or give
+   * them back. Mostly a gesture of its own, reported with no LIVE session open. The one exception
+   * is a double click resetting a slider of the group: its first click already gave the object
+   * values of its own, so the reset gives the group back INSIDE the LIVE session that first
+   * click opened, and the COMMIT that follows ends both as one gesture.
+   */
+  void (*group_own)(gpointer data, dt_canvas_prop_group_t group, gboolean own);
+  /** A button that is not a property was clicked. */
+  void (*action)(gpointer data, dt_canvas_props_action_t action);
+  /** The card button was clicked; the host places the card and says whether it is shown. */
+  void (*card_toggled)(gpointer data, gboolean open);
+  /** A section was opened or folded by the user, or grew or shrank, which changes the card's height. */
+  void (*section_toggled)(gpointer data, dt_canvas_prop_section_t section, gboolean open);
+  /** The pointer entered or left the properties; moving between their own controls is neither. */
+  void (*pointer_inside)(gpointer data, gboolean inside);
+  /**
+   * The value of a property the VIEW holds rather than the document -- editing the cutout's shape
+   * is one. Asked for every property shown, at every refill, after the document's value is read.
+   * @return TRUE when the view holds this property and `value` was overwritten.
+   */
+  gboolean (*view_value)(gpointer data, dt_canvas_prop_id_t prop_id, dt_canvas_prop_value_t *value);
+} dt_canvas_props_host_t;
 
 #ifdef __cplusplus
 }

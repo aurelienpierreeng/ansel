@@ -917,6 +917,67 @@ static void _owning_a_group_changes_nothing_on_screen(void **state)
   _fixture_free(&fixture);
 }
 
+/**
+ * What a control inside an override group resets to: the value the object shows once the group is
+ * given back. Checked on an object that owns every group with values of its own, so a reader that
+ * answered with the object's fields instead of the canvas's shows.
+ */
+static void _the_inherited_value_is_what_giving_the_group_back_shows(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  fixture.canvas->shadow.offset_x = 3.0f;
+  fixture.canvas->shadow.offset_y = -2.0f;
+  fixture.canvas->shadow.color = dt_canvas_color(0.2f, 0.3f, 0.4f, 0.5f);
+  g_strlcpy(fixture.canvas->default_font, "Serif Bold 17", sizeof(fixture.canvas->default_font));
+  size_t count = 0;
+  const dt_canvas_prop_t *table = dt_canvas_props(&count);
+  for(int object_index = 0; object_index < 5; object_index++)
+  {
+    dt_canvas_object_t *object = fixture.objects[object_index];
+    const dt_canvas_prop_group_t groups[] = { DT_CANVAS_GROUP_BORDER, DT_CANVAS_GROUP_CORNER,
+                                              DT_CANVAS_GROUP_SHADOW, DT_CANVAS_GROUP_FONT };
+    for(size_t group_index = 0; group_index < G_N_ELEMENTS(groups); group_index++)
+    {
+      const dt_canvas_prop_group_t group = groups[group_index];
+      dt_canvas_group_set_own(fixture.canvas, object, group, TRUE);
+      // Values of the object's own, unlike the canvas's in every field.
+      object->border_width = 21.0f;
+      object->border_color = dt_canvas_color(0.9f, 0.1f, 0.1f, 1.0f);
+      object->corner_radius = 33.0f;
+      object->shadow.offset_x = 11.0f;
+      object->shadow.offset_y = 12.0f;
+      object->shadow.blur = -13.0f;
+      object->shadow.color = dt_canvas_color(0.7f, 0.7f, 0.1f, 0.9f);
+      if(object->kind == DT_CANVAS_OBJECT_TEXT)
+        g_strlcpy(object->text.font, "Monospace Italic 41", sizeof(object->text.font));
+      for(size_t idx = 0; idx < count; idx++)
+      {
+        const dt_canvas_prop_t *prop = &table[idx];
+        if(prop->group != group || !dt_canvas_prop_for_kind(prop, object->kind)) continue;
+        dt_canvas_prop_value_t inherited;
+        dt_canvas_prop_read_inherited(fixture.canvas, object, prop->id, &inherited);
+        dt_canvas_prop_value_t owned;
+        dt_canvas_prop_read(fixture.canvas, object, prop->id, &owned);
+        assert_true(memcmp(&inherited, &owned, sizeof(owned)) != 0);
+        dt_canvas_object_t given_back = *object;
+        dt_canvas_group_set_own(fixture.canvas, &given_back, group, FALSE);
+        dt_canvas_prop_value_t shown;
+        dt_canvas_prop_read(fixture.canvas, &given_back, prop->id, &shown);
+        assert_memory_equal(&inherited, &shown, sizeof(shown));
+      }
+    }
+  }
+  // Outside any group there is nothing to fall back on: the value read is the value.
+  dt_canvas_prop_value_t opacity_inherited;
+  dt_canvas_prop_read_inherited(fixture.canvas, fixture.objects[1], DT_CANVAS_PROP_OPACITY, &opacity_inherited);
+  dt_canvas_prop_value_t opacity;
+  dt_canvas_prop_read(fixture.canvas, fixture.objects[1], DT_CANVAS_PROP_OPACITY, &opacity);
+  assert_memory_equal(&opacity_inherited, &opacity, sizeof(opacity));
+  _fixture_free(&fixture);
+}
+
 static void _giving_the_font_back_refits_the_frame(void **state)
 {
   (void)state;
@@ -1317,6 +1378,126 @@ static void _a_double_click_takes_a_handle_only_when_its_first_press_did(void **
   assert_false(dt_canvas_click_sequence_began_on_handle(&player.sequence));
 }
 
+/* --- what a folded card says ----------------------------------------------------------------- */
+
+/** One inset or four is decided the way the uniform inset's writer decides it: a float's rounding is not a side apart. */
+static void _the_inset_is_one_number_as_its_writer_counts_it(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *text = fixture.objects[0];
+  assert_true(dt_canvas_props_inset_uniform(text));
+  // Sides a thousandth of a point apart: what a drag left, not what anybody set.
+  text->text.margins[DT_CANVAS_TEXT_MARGIN_TOP] = 3.0f;
+  text->text.margins[DT_CANVAS_TEXT_MARGIN_RIGHT] = 3.001f;
+  text->text.margins[DT_CANVAS_TEXT_MARGIN_BOTTOM] = 3.0f;
+  text->text.margins[DT_CANVAS_TEXT_MARGIN_LEFT] = 2.999f;
+  assert_true(dt_canvas_props_inset_uniform(text));
+  // ...and the writer agrees: the same number written over them is no edit.
+  const dt_canvas_prop_value_t three = _number(3.0);
+  assert_int_equal(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_TEXT_INSET, &three), 0);
+  text->text.margins[DT_CANVAS_TEXT_MARGIN_RIGHT] = 9.0f;
+  assert_false(dt_canvas_props_inset_uniform(text));
+  assert_true(dt_canvas_props_inset_uniform(fixture.objects[1]));
+  _fixture_free(&fixture);
+}
+
+/** A folded section names what it holds, and every extra that is not left as it was. */
+static void _a_folded_section_names_the_extras_it_hides(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *text = fixture.objects[0];
+  char line[DT_CANVAS_PROP_TEXT_LEN];
+
+  dt_canvas_prop_section_summary(fixture.canvas, text, DT_CANVAS_SECTION_PARAGRAPH, line, sizeof(line));
+  fprintf(stderr, "paragraph, untouched: \"%s\"\n", line);
+  assert_non_null(strstr(line, "1.00"));
+  assert_null(strstr(line, "indent"));
+  const dt_canvas_prop_value_t indent = _number(12.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_TEXT_FIRST_LINE_INDENT, &indent)
+              & DT_CANVAS_EFFECT_CHANGED);
+  dt_canvas_prop_section_summary(fixture.canvas, text, DT_CANVAS_SECTION_PARAGRAPH, line, sizeof(line));
+  fprintf(stderr, "paragraph, indented: \"%s\"\n", line);
+  assert_non_null(strstr(line, "first-line indent 12 pt"));
+
+  // An override section speaks for its group first, and still names its extras.
+  dt_canvas_prop_section_summary(fixture.canvas, text, DT_CANVAS_SECTION_CHARACTER, line, sizeof(line));
+  assert_non_null(strstr(line, "canvas default"));
+  assert_null(strstr(line, "letter spacing"));
+  const dt_canvas_prop_value_t tracking = _number(20.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_TEXT_LETTER_SPACING, &tracking)
+              & DT_CANVAS_EFFECT_CHANGED);
+  dt_canvas_prop_section_summary(fixture.canvas, text, DT_CANVAS_SECTION_CHARACTER, line, sizeof(line));
+  fprintf(stderr, "character, tracked: \"%s\"\n", line);
+  assert_non_null(strstr(line, "canvas default"));
+  assert_non_null(strstr(line, "letter spacing 20"));
+
+  // Four insets apart are one entry, not the inset and its four sides.
+  const dt_canvas_prop_value_t wide = _number(30.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_TEXT_INSET_RIGHT, &wide)
+              & DT_CANVAS_EFFECT_CHANGED);
+  dt_canvas_prop_section_summary(fixture.canvas, text, DT_CANVAS_SECTION_TEXT_BOX, line, sizeof(line));
+  fprintf(stderr, "text box, inset apart: \"%s\"\n", line);
+  assert_non_null(strstr(line, "inset 12/30/12/12 pt"));
+  assert_null(strstr(line, "right"));
+
+  // A kind without the section has nothing to say in it.
+  dt_canvas_prop_section_summary(fixture.canvas, fixture.objects[4], DT_CANVAS_SECTION_PARAGRAPH, line, sizeof(line));
+  assert_string_equal(line, "");
+  _fixture_free(&fixture);
+}
+
+/** The card is altered by a group the object chose values for, even one whose rows are on the strip. */
+static void _a_card_is_altered_by_a_font_of_its_own(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *text = fixture.objects[0];
+  assert_false(dt_canvas_props_card_altered(fixture.canvas, text));
+  const dt_canvas_prop_value_t face = _text("Monospace 12");
+  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_TEXT_FONT, &face)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, text, DT_CANVAS_GROUP_FONT), DT_CANVAS_OWN_CUSTOM);
+  assert_true(dt_canvas_props_card_altered(fixture.canvas, text));
+  dt_canvas_group_set_own(fixture.canvas, text, DT_CANVAS_GROUP_FONT, FALSE);
+  assert_false(dt_canvas_props_card_altered(fixture.canvas, text));
+  // A row moved off its neutral value alters the card as well.
+  const dt_canvas_prop_value_t indent = _number(12.0);
+  dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_TEXT_FIRST_LINE_INDENT, &indent);
+  assert_true(dt_canvas_props_card_altered(fixture.canvas, text));
+  _fixture_free(&fixture);
+}
+
+/** An override section and the cutout never open by themselves, and an override section stays open only for values of the object's own. */
+static void _override_sections_open_only_when_asked(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  assert_true(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_PARAGRAPH, DT_CANVAS_OBJECT_TEXT));
+  assert_true(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_ARRANGE, DT_CANVAS_OBJECT_IMAGE));
+  assert_false(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_STROKE, DT_CANVAS_OBJECT_IMAGE));
+  assert_false(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_SHADOW, DT_CANVAS_OBJECT_CONNECTOR));
+  assert_false(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_CUTOUT, DT_CANVAS_OBJECT_IMAGE));
+  // A connector's line is no override group: it is its own.
+  assert_true(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_STROKE, DT_CANVAS_OBJECT_CONNECTOR));
+
+  dt_canvas_object_t *image = fixture.objects[1];
+  assert_true(dt_canvas_prop_section_stays_open(fixture.canvas, image, DT_CANVAS_SECTION_ARRANGE));
+  assert_false(dt_canvas_prop_section_stays_open(fixture.canvas, image, DT_CANVAS_SECTION_STROKE));
+  const dt_canvas_prop_value_t width = _number(9.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, image, DT_CANVAS_PROP_BORDER_WIDTH, &width)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(dt_canvas_prop_section_stays_open(fixture.canvas, image, DT_CANVAS_SECTION_STROKE));
+  // A drawing owns no border by choice, only by birth: that is not a reason to stay open either.
+  assert_false(dt_canvas_prop_section_stays_open(fixture.canvas, fixture.objects[3], DT_CANVAS_SECTION_STROKE));
+  _fixture_free(&fixture);
+}
+
 /** Only what has something inside it is drilled into. */
 static void _only_texts_pictures_and_drawings_have_a_content_action(void **state)
 {
@@ -1327,6 +1508,12 @@ static void _only_texts_pictures_and_drawings_have_a_content_action(void **state
   assert_false(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_MAP));
   assert_false(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_CONNECTOR));
   assert_false(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_NONE));
+  // A button that exists says what it does; one that does not has nothing to say.
+  const uint32_t kinds[] = { DT_CANVAS_OBJECT_NONE, DT_CANVAS_OBJECT_TEXT, DT_CANVAS_OBJECT_IMAGE,
+                             DT_CANVAS_OBJECT_MAP, DT_CANVAS_OBJECT_SVG, DT_CANVAS_OBJECT_CONNECTOR };
+  for(size_t idx = 0; idx < G_N_ELEMENTS(kinds); idx++)
+    assert_int_equal(dt_canvas_props_content_action_tooltip(kinds[idx]) != NULL,
+                     dt_canvas_props_has_content_action(kinds[idx]));
 }
 
 int main(void)
@@ -1361,10 +1548,15 @@ int main(void)
     cmocka_unit_test(_a_kept_ratio_answers_a_width_with_a_height),
     cmocka_unit_test(_map_properties_ask_for_a_render_and_never_touch_conf),
     cmocka_unit_test(_owning_a_group_changes_nothing_on_screen),
+    cmocka_unit_test(_the_inherited_value_is_what_giving_the_group_back_shows),
     cmocka_unit_test(_giving_the_font_back_refits_the_frame),
     cmocka_unit_test(_a_size_on_an_inheriting_font_writes_the_family_out),
     cmocka_unit_test(_arrowheads_and_backgrounds_land_where_they_belong),
     cmocka_unit_test(_rows_follow_what_they_depend_on),
+    cmocka_unit_test(_the_inset_is_one_number_as_its_writer_counts_it),
+    cmocka_unit_test(_a_folded_section_names_the_extras_it_hides),
+    cmocka_unit_test(_a_card_is_altered_by_a_font_of_its_own),
+    cmocka_unit_test(_override_sections_open_only_when_asked),
   };
   return cmocka_run_group_tests(tests, _group_setup, _group_teardown);
 }
