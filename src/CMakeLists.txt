@@ -73,6 +73,8 @@ FILE(GLOB SOURCE_FILES
   "canvas/canvas_handles.c"
   "canvas/canvas_markdown.c"
   "canvas/canvas_paint.c"
+  "canvas/canvas_place.c"
+  "canvas/canvas_place_shapes.c"
   "canvas/canvas_props.c"
   "canvas/canvas_export.c"
   "canvas/canvas_render.c"

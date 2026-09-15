@@ -39,6 +39,8 @@
 #include "canvas/canvas_props.h"
 #include "canvas/canvas_export.h"
 #include "canvas/canvas_handles.h"
+#include "canvas/canvas_place.h"
+#include "canvas/canvas_place_shapes.h"
 #include "canvas/canvas_render.h"
 #include "colorprofiles/colorspaces.h"
 #include "common/conf.h"
@@ -89,6 +91,14 @@ DT_MODULE(1)
 #define CANVAS_FLOWER_MARGIN 22.0
 #define CANVAS_FLOWER_PAN_FRACTION 0.25
 #define CANVAS_FLOWER_ZOOM_STEP 1.5
+// The floating properties: the gap they keep around what they avoid and from the view's edges;
+// the pointer they never open under; the other frames they had better not cover; the card's least
+// and most.
+#define CANVAS_PROPS_AIR_PIXELS 6.0
+#define CANVAS_PROPS_POINTER_PIXELS 12.0
+#define CANVAS_PROPS_SOFT_FRAMES 64
+#define CANVAS_PROPS_CARD_MIN_PIXELS 120.0
+#define CANVAS_PROPS_CARD_MAX_PIXELS 420.0
 /** Where the canvas shortcuts live in the accel map, and the one a menu names by its binding. */
 #define CANVAS_ACCEL_SCOPE N_("Canvas/Actions")
 #define CANVAS_ACCEL_PROPERTIES N_("Show the properties of the selected object")
@@ -252,6 +262,19 @@ typedef struct dt_canvas_view_t
   gboolean props_suspended;             ///< open, but hidden while a gesture moves things under them
   guint props_request_idle;             ///< the opening or the content action a gesture deferred
   dt_canvas_click_sequence_t click_sequence; ///< the presses the double-click drill rule reads
+  // Where the properties are on screen. canvas_place.c decides, and never while the user is in
+  // them: under the pointer, typing into them, in one of their popovers or in the middle of an edit,
+  // a placement waits until they are left.
+  GtkWidget *bar_root;                  ///< the overlay child: an event box around the bar, to hear the pointer cross it
+  dt_canvas_place_t props_place;        ///< the last placement
+  gboolean props_placed;                ///< `props_place` is where the showing properties went: the next placement keeps it
+  gboolean props_toasted;               ///< this showing already said there is no room for them
+  gboolean props_pointer_inside;        ///< the pointer is over them
+  gboolean props_live;                  ///< an edit in them previews and has not committed yet
+  gboolean props_typing;                ///< digits typed into one of their spin buttons and not applied yet
+  gboolean props_place_pending;         ///< a placement waited for the user to leave them
+  gulong props_focus_handler;           ///< the main window's set-focus hook
+  GArray *props_shapes;                 ///< dt_canvas_place_shape_t: what the last placement kept clear, for the debug overlay
   dt_cursor_t cursor;                   ///< the shape last queued, to queue only on change
 } dt_canvas_view_t;
 
@@ -286,6 +309,9 @@ static int _mask_segment_at(const dt_canvas_view_t *view, const dt_canvas_object
                             const double y);
 static int _mask_node_at(const dt_canvas_view_t *view, const dt_canvas_object_t *object, const double x,
                          const double y);
+static void _flower_center(const dt_canvas_view_t *view, double *center_x, double *center_y);
+static gboolean _props_pointer_crossed(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data);
+static void _props_focus_changed(GtkWindow *window, GtkWidget *widget, gpointer user_data);
 
 /* --- module identity ---------------------------------------------------------- */
 
@@ -2717,6 +2743,10 @@ static void _bar_cutout_edit_toggled(GtkToggleButton *button, gpointer data)
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(view->bars_refilling) return;
   view->mask_editing = gtk_toggle_button_get_active(button);
+  // The cutout's handles turn from what one click would show into handles that can be grabbed: the
+  // properties must move off them, as the context menu's own Edit does. Held while the pointer is
+  // on the toggle, the placement runs once it leaves.
+  _props_sync(self);
   dt_control_queue_redraw_center();
 }
 
@@ -2794,6 +2824,39 @@ static GtkWidget *_bar_color_button(GtkWidget *row, const char *tooltip, GCallba
   return button;
 }
 
+/**
+ * A key typed into one of the bar's spin buttons: the text changes and nothing is applied until
+ * Return or the focus leaves, so the properties hold still until then. Read on the key rather than
+ * on the text changing: the spin button rewrites its own text whenever it formats a value, typed
+ * or not, and Return on an unchanged value formats it without any "value-changed" to say so.
+ */
+static gboolean _bar_spin_key_pressed(GtkWidget *widget, GdkEventKey *event, gpointer data)
+{
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view)) return FALSE;
+  const guint modifiers = GDK_CONTROL_MASK | GDK_MOD1_MASK | GDK_SUPER_MASK | GDK_META_MASK;
+  const gboolean shortcut = (event->state & modifiers) != 0;
+  // A printable character, or a deletion; not Return, Tab or Escape, which GDK also maps to a code.
+  const guint32 character = gdk_keyval_to_unicode(event->keyval);
+  const gboolean printable = character >= 0x20 && character != 0x7f;
+  const gboolean edits = printable || event->keyval == GDK_KEY_BackSpace || event->keyval == GDK_KEY_Delete
+                         || event->keyval == GDK_KEY_KP_Delete;
+  if(edits && !shortcut) view->props_typing = TRUE;
+  return FALSE;
+}
+
+/** What was typed is applied -- by Return, the arrows, the buttons or a value set -- and holds nothing any more. */
+static void _bar_spin_applied(GtkWidget *widget, gpointer data)
+{
+  dt_view_t *self = (dt_view_t *)data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view)) return;
+  view->props_typing = FALSE;
+  // A refill sets values too, from inside the placement's own idle: that is not the user applying anything.
+  if(!view->bars_refilling && view->props_place_pending) _props_sync(self);
+}
+
 static GtkWidget *_bar_spin(GtkWidget *row, const double low, const double high, const double step,
                             const int digits, const char *tooltip, GCallback callback, gpointer data)
 {
@@ -2802,6 +2865,10 @@ static GtkWidget *_bar_spin(GtkWidget *row, const double low, const double high,
   gtk_entry_set_width_chars(GTK_ENTRY(spin), 5);
   gtk_widget_set_tooltip_text(spin, tooltip);
   g_signal_connect(spin, "value-changed", callback, data);
+  g_signal_connect(spin, "key-press-event", G_CALLBACK(_bar_spin_key_pressed), data);
+  // After the spin button's own handlers, so Return has applied the value by the time it is read as applied.
+  g_signal_connect_after(spin, "value-changed", G_CALLBACK(_bar_spin_applied), data);
+  g_signal_connect_after(spin, "activate", G_CALLBACK(_bar_spin_applied), data);
   gtk_box_pack_start(GTK_BOX(row), spin, FALSE, FALSE, 0);
   return spin;
 }
@@ -2872,20 +2939,27 @@ static GtkWidget *_bar_popover(GtkWidget *row, const char *label, const char *to
 }
 
 /**
- * Where an overlay child goes: the position a placement stored on it. Answering the
- * overlay's own question is what keeps a move to a re-allocation of the overlay, where
- * a margin change is a resize that climbs to the toplevel and lays the window out again.
+ * Where the properties go: the rectangle the last placement solved. Answering the overlay's own
+ * question is what keeps a move to a re-allocation of the overlay, where a margin change is a
+ * resize that climbs to the toplevel and lays the window out again. Never below what the widget
+ * needs: a refill held back while the user was in the bar may have grown it since, and GTK
+ * refuses to allocate a widget less than its minimum -- the placement catches up once they leave.
  */
 static gboolean _bars_child_position(GtkOverlay *overlay, GtkWidget *widget, GdkRectangle *allocation,
                                      gpointer user_data)
 {
-  if(!GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "canvas-bar"))) return FALSE;
-  GtkRequisition natural;
-  gtk_widget_get_preferred_size(widget, NULL, &natural);
-  allocation->x = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "bar-left"));
-  allocation->y = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "bar-top"));
-  allocation->width = natural.width;
-  allocation->height = natural.height;
+  const dt_view_t *self = (const dt_view_t *)user_data;
+  const dt_canvas_view_t *view = (const dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->bar_root) || widget != view->bar_root) return FALSE;
+  int minimum_width = 0;
+  gtk_widget_get_preferred_width(widget, &minimum_width, NULL);
+  const int width = MAX((int)view->props_place.strip.width, minimum_width);
+  int minimum_height = 0;
+  gtk_widget_get_preferred_height_for_width(widget, width, &minimum_height, NULL);
+  allocation->x = (int)view->props_place.strip.x;
+  allocation->y = (int)view->props_place.strip.y;
+  allocation->width = width;
+  allocation->height = MAX((int)view->props_place.strip.height, minimum_height);
   return TRUE;
 }
 
@@ -2903,11 +2977,22 @@ static void _bars_create(dt_view_t *self)
 
   GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(3));
   dt_gui_add_class(bar, "dt-canvas-floating");
-  gtk_widget_set_halign(bar, GTK_ALIGN_START);
-  gtk_widget_set_valign(bar, GTK_ALIGN_START);
   gtk_container_set_border_width(GTK_CONTAINER(bar), DT_PIXEL_APPLY_DPI(4));
-  gtk_overlay_add_overlay(GTK_OVERLAY(base), bar);
+  // The bar sits in an event box with a window of its own: every control's window is then a child
+  // of that one, so the pointer moving onto a control crosses as INFERIOR and only leaving the bar
+  // altogether reads as leaving it. The box adds no padding, border or background of its own.
+  GtkWidget *root = gtk_event_box_new();
+  gtk_widget_set_halign(root, GTK_ALIGN_START);
+  gtk_widget_set_valign(root, GTK_ALIGN_START);
+  gtk_widget_add_events(root, GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
+  g_signal_connect(root, "enter-notify-event", G_CALLBACK(_props_pointer_crossed), self);
+  g_signal_connect(root, "leave-notify-event", G_CALLBACK(_props_pointer_crossed), self);
+  gtk_container_add(GTK_CONTAINER(root), bar);
+  gtk_overlay_add_overlay(GTK_OVERLAY(base), root);
   view->bar = bar;
+  view->bar_root = root;
+  view->props_focus_handler = g_signal_connect(dt_ui_main_window(dt_gui_get_ui()), "set-focus",
+                                               G_CALLBACK(_props_focus_changed), self);
 
   // 1. The kind's own row.
   view->row_text = _bar_row(bar, _("Text"));
@@ -3162,11 +3247,8 @@ static void _bars_create(dt_view_t *self)
                                            "The right-click menu edits the shape's properties and its nodes."),
                                          G_CALLBACK(_bar_cutout_edit_toggled), self);
 
-  gtk_widget_show_all(bar);
-  gtk_widget_hide(bar);
-  g_object_set_data(G_OBJECT(bar), "canvas-bar", GINT_TO_POINTER(1));
-  g_object_set_data(G_OBJECT(bar), "bar-left", GINT_TO_POINTER(-1));
-  g_object_set_data(G_OBJECT(bar), "bar-top", GINT_TO_POINTER(-1));
+  gtk_widget_show_all(root);
+  gtk_widget_hide(root);
 }
 
 static void _bars_destroy(dt_view_t *self)
@@ -3178,72 +3260,365 @@ static void _bars_destroy(dt_view_t *self)
     g_source_remove(view->bars_idle);
     view->bars_idle = 0;
   }
-  if(!IS_NULL_PTR(view->bar)) gtk_container_remove(GTK_CONTAINER(base), view->bar);
+  if(!IS_NULL_PTR(view->bar_root)) gtk_container_remove(GTK_CONTAINER(base), view->bar_root);
   if(view->bars_position_handler != 0)
   {
     g_signal_handler_disconnect(base, view->bars_position_handler);
     view->bars_position_handler = 0;
   }
+  if(view->props_focus_handler != 0)
+  {
+    g_signal_handler_disconnect(dt_ui_main_window(dt_gui_get_ui()), view->props_focus_handler);
+    view->props_focus_handler = 0;
+  }
   view->bar = NULL;
+  view->bar_root = NULL;
   view->bars_signature = 0;
+  // Shown again on the way back, the properties are placed afresh for the view they come back to.
+  view->props_placed = FALSE;
+  view->props_toasted = FALSE;
+  view->props_pointer_inside = FALSE;
+  view->props_typing = FALSE;
+  view->props_place_pending = FALSE;
 }
 
-/** The screen box of an object: its frame, or a connector's whole route. */
-static gboolean _object_screen_box(const dt_canvas_view_t *view, const dt_canvas_object_t *object, double *min_x,
-                                   double *min_y, double *max_x, double *max_y)
+/* --- where the properties go ----------------------------------------------------------- */
+
+/** A canvas point on screen, in the logical pixels configure() and the pointer events use. */
+static void _to_screen(const dt_canvas_view_t *view, const double canvas_x, const double canvas_y, double *screen_x,
+                       double *screen_y)
 {
-  *min_x = INFINITY;
-  *min_y = INFINITY;
-  *max_x = -INFINITY;
-  *max_y = -INFINITY;
-  if(dt_canvas_object_is_frame(object))
+  *screen_x = (canvas_x - view->center_x) * view->zoom + view->width * 0.5;
+  *screen_y = (canvas_y - view->center_y) * view->zoom + view->height * 0.5;
+}
+
+/** Hide the properties. A hidden widget is under no pointer, whatever the last crossing said. */
+static void _props_hide(dt_canvas_view_t *view)
+{
+  view->props_pointer_inside = FALSE;
+  if(!IS_NULL_PTR(view->bar_root)) gtk_widget_hide(view->bar_root);
+}
+
+/**
+ * Does the keyboard focus hold the properties where they are? Only inside one of their popovers:
+ * a popover open over the canvas moves with the button it drops from, and a popover's parent is the
+ * toplevel, not that button, so the walk follows what a popover is relative to.
+ *
+ * The focus anywhere else in them holds nothing. The old bar's buttons, toggles and spin buttons
+ * keep the focus once clicked, so a hold on the focus alone never ended by itself: a click on the +
+ * of a size, then the pointer back over the canvas, and the bar stayed over the corners the frame
+ * had just grown into until the canvas was clicked. What the focus does protect -- digits typed and
+ * not applied yet -- is held by `props_typing` instead.
+ */
+static gboolean _props_focus_holds(const dt_canvas_view_t *view, GtkWidget *widget)
+{
+  gboolean in_popover = FALSE;
+  GtkWidget *ancestor = widget;
+  while(!IS_NULL_PTR(ancestor))
   {
-    const dt_canvas_rect_t bounds = dt_canvas_object_bounds(object);
-    *min_x = (bounds.x - view->center_x) * view->zoom + view->width * 0.5;
-    *min_y = (bounds.y - view->center_y) * view->zoom + view->height * 0.5;
-    *max_x = *min_x + bounds.width * view->zoom;
-    *max_y = *min_y + bounds.height * view->zoom;
-    return TRUE;
+    if(ancestor == view->bar_root) return in_popover;
+    if(GTK_IS_POPOVER(ancestor))
+    {
+      in_popover = TRUE;
+      ancestor = gtk_popover_get_relative_to(GTK_POPOVER(ancestor));
+    }
+    else
+      ancestor = gtk_widget_get_parent(ancestor);
   }
-  dt_canvas_route_t route;
-  if(!dt_canvas_connector_route(view->canvas, object, &route)) return FALSE;
-  for(int idx = 0; idx < route.point_count; idx++)
-  {
-    const double screen_x = (route.points[2 * idx] - view->center_x) * view->zoom + view->width * 0.5;
-    const double screen_y = (route.points[2 * idx + 1] - view->center_y) * view->zoom + view->height * 0.5;
-    *min_x = fmin(*min_x, screen_x);
-    *min_y = fmin(*min_y, screen_y);
-    *max_x = fmax(*max_x, screen_x);
-    *max_y = fmax(*max_y, screen_y);
-  }
+  return FALSE;
+}
+
+/**
+ * Is the user in the properties right now? Then they must not move: a control jumping away from
+ * under the pointer, or from under the keys being typed into it, is the one thing a floating panel
+ * is never forgiven. The placement waits for the pointer to leave, the typing to be applied, the
+ * popover to close or the edit to commit.
+ */
+static gboolean _props_place_held(const dt_canvas_view_t *view)
+{
+  if(IS_NULL_PTR(view->bar_root) || !gtk_widget_get_visible(view->bar_root)) return FALSE;
+  if(view->props_pointer_inside || view->props_live || view->props_typing) return TRUE;
+  GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(dt_ui_main_window(dt_gui_get_ui())));
+  return !IS_NULL_PTR(focus) && _props_focus_holds(view, focus);
+}
+
+/** The pointer crossed the properties' edge; moving onto or off one of their own controls is not that. */
+static gboolean _props_pointer_crossed(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
+{
+  dt_view_t *self = (dt_view_t *)user_data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || event->detail == GDK_NOTIFY_INFERIOR) return FALSE;
+  view->props_pointer_inside = event->type == GDK_ENTER_NOTIFY;
+  if(!view->props_pointer_inside && view->props_place_pending) _props_sync(self);
+  return FALSE;
+}
+
+/**
+ * The main window's focus is about to move. A spin button losing it applies what was typed into
+ * it, so nothing typed is pending any more; and out of the properties' popovers, a placement held
+ * back can run -- from the idle `_props_sync()` schedules, by which time the focus has moved.
+ */
+static void _props_focus_changed(GtkWindow *window, GtkWidget *widget, gpointer user_data)
+{
+  dt_view_t *self = (dt_view_t *)user_data;
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view)) return;
+  view->props_typing = FALSE;
+  if(!view->props_place_pending) return;
+  if(!IS_NULL_PTR(widget) && _props_focus_holds(view, widget)) return;
+  _props_sync(self);
+}
+
+/**
+ * Where the pointer is on screen right now, when it is over the view. Read from the device, not
+ * from the last motion: the properties are opened from a context menu too, whose grab told the
+ * view the pointer had left, and the item was released somewhere else than the right click that
+ * opened the menu -- so neither the flag nor the last motion's point says where it is.
+ */
+static gboolean _props_pointer_position(const dt_canvas_view_t *view, double *screen_x, double *screen_y)
+{
+  GtkWidget *center = dt_gui_center_widget();
+  GdkWindow *window = IS_NULL_PTR(center) ? NULL : gtk_widget_get_window(center);
+  GdkDisplay *display = IS_NULL_PTR(window) ? NULL : gdk_window_get_display(window);
+  GdkSeat *seat = IS_NULL_PTR(display) ? NULL : gdk_display_get_default_seat(display);
+  GdkDevice *pointer = IS_NULL_PTR(seat) ? NULL : gdk_seat_get_pointer(seat);
+  if(IS_NULL_PTR(window) || IS_NULL_PTR(pointer)) return FALSE;
+  double pointer_x = 0.0;
+  double pointer_y = 0.0;
+  gdk_window_get_device_position_double(window, pointer, &pointer_x, &pointer_y, NULL);
+  if(pointer_x < 0.0 || pointer_y < 0.0 || pointer_x >= view->width || pointer_y >= view->height) return FALSE;
+  *screen_x = pointer_x;
+  *screen_y = pointer_y;
   return TRUE;
 }
 
-/** Place the bar immediately below the object, above it when there is no room below. */
-static void _bar_place(dt_canvas_view_t *view, const dt_canvas_object_t *object)
+/**
+ * Everything the properties must keep clear of, or had better, on screen: the object's handles,
+ * its line and its body; what one click in them would add; the flower; at an opening, the pointer
+ * that asked for them; and, softly, the other frames, the status line and the toast.
+ */
+static void _props_shapes(const dt_canvas_view_t *view, const dt_canvas_object_t *object,
+                          const dt_canvas_place_reason_t reason, GArray *shapes)
 {
-  double min_x = 0.0;
-  double min_y = 0.0;
-  double max_x = 0.0;
-  double max_y = 0.0;
-  if(!_object_screen_box(view, object, &min_x, &min_y, &max_x, &max_y)) return;
-  GtkWidget *bar = view->bar;
-  GtkRequisition natural;
-  gtk_widget_get_preferred_size(bar, NULL, &natural);
-  const int spacing = DT_PIXEL_APPLY_DPI(6);
-  int left = (int)lround(min_x);
-  int top = (int)lround(max_y) + spacing;
-  if(top + natural.height > view->height - spacing) top = (int)lround(min_y) - natural.height - spacing;
-  left = CLAMP(left, spacing, MAX(spacing, view->width - natural.width - spacing));
-  top = CLAMP(top, spacing, MAX(spacing, view->height - natural.height - spacing));
-  const int last_left = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(bar), "bar-left"));
-  const int last_top = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(bar), "bar-top"));
-  if(left != last_left || top != last_top)
+  const dt_canvas_place_view_t projection = { .center_x = view->center_x,
+                                              .center_y = view->center_y,
+                                              .zoom = view->zoom,
+                                              .width = view->width,
+                                              .height = view->height,
+                                              .margin = DT_PIXEL_APPLY_DPI(CANVAS_PROPS_AIR_PIXELS) + 1.0 };
+  dt_canvas_place_object_shapes(shapes, &projection, view->canvas, object, view->mask_editing);
+
+  double flower_x = 0.0;
+  double flower_y = 0.0;
+  _flower_center(view, &flower_x, &flower_y);
+  const double flower = DT_PIXEL_APPLY_DPI(CANVAS_FLOWER_RADIUS);
+  dt_canvas_place_shape_add(shapes, DT_CANVAS_PLACE_HARD, flower_x - flower, flower_y - flower, flower_x + flower,
+                            flower_y + flower, 0.0, FALSE);
+  double pointer_x = 0.0;
+  double pointer_y = 0.0;
+  if(reason == DT_CANVAS_PLACE_OPEN && _props_pointer_position(view, &pointer_x, &pointer_y))
   {
-    g_object_set_data(G_OBJECT(bar), "bar-left", GINT_TO_POINTER(left));
-    g_object_set_data(G_OBJECT(bar), "bar-top", GINT_TO_POINTER(top));
-    gtk_widget_queue_allocate(dt_ui_center_base(dt_gui_get_ui()));
+    // Only when they open: they must not appear under the pointer that asked for them. Afterwards
+    // it moves on its own, and following it would move them.
+    const double pointer = DT_PIXEL_APPLY_DPI(CANVAS_PROPS_POINTER_PIXELS);
+    dt_canvas_place_shape_add(shapes, DT_CANVAS_PLACE_HARD, pointer_x - pointer, pointer_y - pointer,
+                              pointer_x + pointer, pointer_y + pointer, 0.0, FALSE);
   }
+
+  const dt_canvas_rect_t visible = _visible_rect(view);
+  int frames = 0;
+  for(guint idx = dt_canvas_object_count(view->canvas); idx > 0 && frames < CANVAS_PROPS_SOFT_FRAMES; idx--)
+  {
+    const dt_canvas_object_t *other = dt_canvas_object_at(view->canvas, idx - 1);
+    if(other == object || !dt_canvas_object_is_frame(other) || (other->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN))
+      continue;
+    const dt_canvas_rect_t bounds = dt_canvas_object_bounds(other);
+    if(bounds.x > visible.x + visible.width || bounds.x + bounds.width < visible.x || bounds.y > visible.y + visible.height
+       || bounds.y + bounds.height < visible.y)
+      continue;
+    double left = 0.0;
+    double top = 0.0;
+    _to_screen(view, bounds.x, bounds.y, &left, &top);
+    dt_canvas_place_shape_add(shapes, DT_CANVAS_PLACE_SOFT, left, top, left + bounds.width * view->zoom,
+                              top + bounds.height * view->zoom, DT_CANVAS_PLACE_WEIGHT_FRAME, FALSE);
+    frames++;
+  }
+  // The status line along the bottom left, and the toast at the top in the middle.
+  dt_canvas_place_shape_add(shapes, DT_CANVAS_PLACE_SOFT, DT_PIXEL_APPLY_DPI(8), view->height - DT_PIXEL_APPLY_DPI(28),
+                            DT_PIXEL_APPLY_DPI(368), view->height - DT_PIXEL_APPLY_DPI(4), DT_CANVAS_PLACE_WEIGHT_BAND,
+                            FALSE);
+  dt_canvas_place_shape_add(shapes, DT_CANVAS_PLACE_SOFT, view->width * 0.25, 0.0, view->width * 0.75,
+                            DT_PIXEL_APPLY_DPI(40), DT_CANVAS_PLACE_WEIGHT_BAND, FALSE);
+}
+
+/** Where on screen the properties were asked for: the place remembered on the object, where the object now is. */
+static void _props_anchor_screen(const dt_canvas_view_t *view, const dt_canvas_object_t *object, double *screen_x,
+                                 double *screen_y)
+{
+  double canvas_x = object->x;
+  double canvas_y = object->y;
+  if(dt_canvas_object_is_frame(object))
+  {
+    const double local_x = (view->props_anchor_u - 0.5) * object->width;
+    const double local_y = (view->props_anchor_v - 0.5) * object->height;
+    const double cos_r = cos(object->rotation);
+    const double sin_r = sin(object->rotation);
+    canvas_x = object->x + local_x * cos_r - local_y * sin_r;
+    canvas_y = object->y + local_x * sin_r + local_y * cos_r;
+  }
+  else
+  {
+    dt_canvas_route_t route;
+    if(dt_canvas_connector_route(view->canvas, object, &route))
+      dt_canvas_route_point_at(&route, view->props_anchor_t, &canvas_x, &canvas_y);
+  }
+  _to_screen(view, canvas_x, canvas_y, screen_x, screen_y);
+}
+
+#ifdef _DEBUG
+/** No HARD shape, grown by the air the placement keeps, overlaps where the properties went. */
+static void _props_place_assert(const dt_canvas_view_t *view, const double air)
+{
+  if(!view->props_place.visible) return;
+  const dt_canvas_place_rect_t footprint = dt_canvas_place_footprint(&view->props_place);
+  for(guint idx = 0; idx < view->props_shapes->len; idx++)
+  {
+    const dt_canvas_place_shape_t *shape = &g_array_index(view->props_shapes, dt_canvas_place_shape_t, idx);
+    if(shape->shape_class != DT_CANVAS_PLACE_HARD) continue;
+    const gboolean overlaps = footprint.x < shape->rect.x + shape->rect.width + air
+                              && footprint.x + footprint.width > shape->rect.x - air
+                              && footprint.y < shape->rect.y + shape->rect.height + air
+                              && footprint.y + footprint.height > shape->rect.y - air;
+    g_assert(!overlaps);
+  }
+}
+#endif
+
+/**
+ * Place the properties: build what they must avoid, measure them, solve, and move the overlay
+ * child only when the rectangle changed. Runs from idles and toggle handlers, never from a draw or
+ * a motion: moving an overlay child from inside a draw glitches, and per motion it re-allocates the
+ * overlay. Held back while the user is in them, unless they are opening.
+ *
+ * The bar has no card yet, so it is placed as a strip. A strip's ladder ends at the level that may
+ * cover the object, which is what this bar, far larger than a strip, needs: where nothing clear of
+ * the object is left it goes over as little of it as it can, and only a view with no room at all
+ * hides it.
+ */
+static void _props_place(dt_view_t *self, const dt_canvas_place_reason_t reason)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  const dt_canvas_object_t *object = _props_object(view);
+  if(IS_NULL_PTR(view->bar_root) || IS_NULL_PTR(object) || view->width <= 0 || view->height <= 0) return;
+  // An opening is not a move: it is the properties of what was just asked for, wherever the
+  // previous ones stood.
+  if(reason != DT_CANVAS_PLACE_OPEN && _props_place_held(view))
+  {
+    view->props_place_pending = TRUE;
+    return;
+  }
+  view->props_place_pending = FALSE;
+  if(IS_NULL_PTR(view->props_shapes)) view->props_shapes = g_array_new(FALSE, FALSE, sizeof(dt_canvas_place_shape_t));
+  g_array_set_size(view->props_shapes, 0);
+  _props_shapes(view, object, reason, view->props_shapes);
+
+  // The bar is measured, not the event box around it: a hidden widget reports no size at all, and
+  // the box adds nothing to what it holds.
+  GtkRequisition natural;
+  gtk_widget_get_preferred_size(view->bar, NULL, &natural);
+  int minimum_height = 0;
+  int natural_height = 0;
+  gtk_widget_get_preferred_height_for_width(view->bar, natural.width, &minimum_height, &natural_height);
+
+  const double air = DT_PIXEL_APPLY_DPI(CANVAS_PROPS_AIR_PIXELS);
+  dt_canvas_place_input_t input;
+  memset(&input, 0, sizeof(input));
+  input.view.x = air;
+  input.view.y = air;
+  input.view.width = view->width - 2.0 * air;
+  input.view.height = view->height - 2.0 * air;
+  input.air = air;
+  input.shapes = (const dt_canvas_place_shape_t *)view->props_shapes->data;
+  input.shape_count = view->props_shapes->len;
+  _props_anchor_screen(view, object, &input.anchor_x, &input.anchor_y);
+  input.has_press = view->click_sequence.press_count > 0;
+  input.press_x = view->press_screen_x;
+  input.press_y = view->press_screen_y;
+  // The bar is as wide as its widest row and no zoom changes that. In a view narrower than the bar
+  // it is placed as if it were as wide as the view, and the overlay cuts off what does not fit:
+  // hiding it there instead, with a toast telling the user to zoom out, asked for what could not help.
+  input.width = MIN(natural.width, input.view.width);
+  input.strip_height = MIN(MAX(natural_height, minimum_height), input.view.height);
+  input.card_open = FALSE;
+  input.card_max = DT_PIXEL_APPLY_DPI(CANVAS_PROPS_CARD_MAX_PIXELS);
+  input.card_min = DT_PIXEL_APPLY_DPI(CANVAS_PROPS_CARD_MIN_PIXELS);
+  input.reason = reason;
+  input.previous = view->props_placed ? &view->props_place : NULL;
+  dt_canvas_place_t place;
+  dt_canvas_place_solve(&input, &place);
+
+  const gboolean was_shown = gtk_widget_get_visible(view->bar_root);
+  const gboolean moved = !view->props_placed || place.strip.x != view->props_place.strip.x
+                         || place.strip.y != view->props_place.strip.y
+                         || place.strip.width != view->props_place.strip.width
+                         || place.strip.height != view->props_place.strip.height;
+  view->props_place = place;
+  view->props_placed = TRUE;
+#ifdef _DEBUG
+  _props_place_assert(view, air);
+#endif
+  if(dt_conf_get_bool("canvas/debug/placement")) dt_control_queue_redraw_center();
+  if(!place.visible)
+  {
+    _props_hide(view);
+    // Once per showing: a pan that finds no room either should not say it again.
+    if(!view->props_toasted) dt_toast_log(_("No room for the properties here: zoom out"));
+    view->props_toasted = TRUE;
+    return;
+  }
+  gtk_widget_show(view->bar_root);
+  // A placement that changed nothing repaints nothing: invalidating the overlay child repaints the
+  // canvas under it through the toplevel, and a held placement released on leaving the bar, or an
+  // edit that moved nothing, would pay a canvas paint for no change on screen.
+  if(!moved && was_shown) return;
+  gtk_widget_queue_allocate(dt_ui_center_base(dt_gui_get_ui()));
+  gtk_widget_queue_draw(view->bar_root);
+}
+
+/** The debug overlay: what the last placement kept clear, and where the properties went. */
+static void _paint_props_placement(cairo_t *cr, const dt_canvas_view_t *view)
+{
+  if(IS_NULL_PTR(view->props_shapes) || !view->props_placed || view->props_id == 0 || view->props_suspended) return;
+  if(!dt_conf_get_bool("canvas/debug/placement")) return;
+  cairo_save(cr);
+  cairo_set_line_width(cr, 1.0);
+  for(guint idx = 0; idx < view->props_shapes->len; idx++)
+  {
+    const dt_canvas_place_shape_t *shape = &g_array_index(view->props_shapes, dt_canvas_place_shape_t, idx);
+    double red = 1.0;
+    double green = 0.0;
+    if(shape->shape_class == DT_CANVAS_PLACE_PREDICTED)
+      green = 0.55;
+    else if(shape->shape_class == DT_CANVAS_PLACE_BODY)
+      green = 0.9;
+    else if(shape->shape_class != DT_CANVAS_PLACE_HARD)
+      continue;
+    cairo_rectangle(cr, shape->rect.x, shape->rect.y, shape->rect.width, shape->rect.height);
+    cairo_set_source_rgba(cr, red, green, 0.0, 0.15);
+    cairo_fill_preserve(cr);
+    cairo_set_source_rgba(cr, red, green, 0.0, 0.8);
+    cairo_stroke(cr);
+  }
+  if(view->props_place.visible)
+  {
+    const dt_canvas_place_rect_t footprint = dt_canvas_place_footprint(&view->props_place);
+    cairo_rectangle(cr, footprint.x, footprint.y, footprint.width, footprint.height);
+    cairo_set_source_rgba(cr, 0.1, 0.85, 0.2, 0.2);
+    cairo_fill_preserve(cr);
+    cairo_set_source_rgba(cr, 0.1, 0.85, 0.2, 0.9);
+    cairo_stroke(cr);
+  }
+  cairo_restore(cr);
 }
 
 /** Refill a spin button from the property table: the value the object is drawn with. */
@@ -3419,9 +3794,14 @@ static void _bars_refresh(dt_view_t *self, gboolean force)
     }
     view->bars_refilling = FALSE;
   }
-  const gboolean shown = !IS_NULL_PTR(object) && !view->props_suspended;
-  gtk_widget_set_visible(view->bar, shown);
-  if(shown) _bar_place(view, object);
+  if(IS_NULL_PTR(object) || view->props_suspended)
+  {
+    _props_hide(view);
+    return;
+  }
+  // Shown for the first time since they opened, the properties search the whole view; after that
+  // they keep their place relative to the object for as long as it stays clear.
+  _props_place(self, view->props_placed ? DT_CANVAS_PLACE_RESOLVE : DT_CANVAS_PLACE_OPEN);
 }
 
 /* --- when the properties show ------------------------------------------------------------ */
@@ -3461,7 +3841,11 @@ static void _props_close(dt_view_t *self)
   view->props_id = 0;
   view->props_suspended = FALSE;
   view->bars_signature = 0;
-  if(!IS_NULL_PTR(view->bar)) gtk_widget_hide(view->bar);
+  view->props_placed = FALSE;
+  view->props_live = FALSE;
+  view->props_typing = FALSE;
+  view->props_place_pending = FALSE;
+  _props_hide(view);
 }
 
 /**
@@ -3475,7 +3859,7 @@ static void _props_suspend(dt_view_t *self)
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view) || view->props_id == 0 || view->props_suspended) return;
   view->props_suspended = TRUE;
-  if(!IS_NULL_PTR(view->bar)) gtk_widget_hide(view->bar);
+  _props_hide(view);
 }
 
 static gboolean _props_idle(gpointer data)
@@ -3546,6 +3930,9 @@ static void _props_open(dt_view_t *self, const uint32_t object_id, const gboolea
   _select_only(view, object_id);
   view->props_id = object_id;
   _props_anchor_set(view, object, has_point, x, y);
+  // A new showing searches the whole view again, and may say once more that there is no room.
+  view->props_placed = FALSE;
+  view->props_toasted = FALSE;
   // Asked for with a button still held (the I key mid-drag), they wait for the gesture to end.
   view->props_suspended = view->drag != DT_CANVAS_DRAG_NONE;
   view->bars_signature = 0;
@@ -4619,6 +5006,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   cairo_restore(cr);
 
   _paint_flower(cr, view);
+  _paint_props_placement(cr, view);
 }
 
 /* --- gestures ---------------------------------------------------------------------- */
@@ -4978,7 +5366,7 @@ static void _gesture_snapshot(dt_canvas_view_t *view)
 /** The object whose properties are on screen right now, 0 when they are closed or hidden. */
 static uint32_t _props_shown_id(const dt_canvas_view_t *view)
 {
-  if(IS_NULL_PTR(view->bar) || view->props_suspended || !gtk_widget_get_visible(view->bar)) return 0;
+  if(IS_NULL_PTR(view->bar_root) || view->props_suspended || !gtk_widget_get_visible(view->bar_root)) return 0;
   const dt_canvas_object_t *object = _props_object(view);
   return IS_NULL_PTR(object) ? 0 : object->id;
 }
@@ -5321,6 +5709,14 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   double canvas_y = 0.0;
   _to_canvas(view, x, y, &canvas_x, &canvas_y);
   view->pointer_inside = TRUE;
+  if(view->props_pointer_inside)
+  {
+    // The drawing area only hears the pointer that is not over the properties: whatever crossing
+    // was missed, it has left them, and a placement they held back can run -- from an idle, never
+    // from here.
+    view->props_pointer_inside = FALSE;
+    if(view->props_place_pending) _props_sync(self);
+  }
   const double delta_x = canvas_x - view->last_x;
   const double delta_y = canvas_y - view->last_y;
 
@@ -6223,6 +6619,7 @@ void cleanup(dt_view_t *self)
   dt_canvas_free(view->canvas);
   dt_canvas_surface_cache_free(view->cache);
   g_array_free(view->selection, TRUE);
+  if(!IS_NULL_PTR(view->props_shapes)) g_array_free(view->props_shapes, TRUE);
   dt_free(view);
   self->data = NULL;
 }
@@ -6319,8 +6716,12 @@ void configure(dt_view_t *self, int width, int height)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(dt_view_manager_get_current_view(dt_view_manager_get_global()) != self) return;
+  const gboolean resized = view->width != width || view->height != height;
   view->width = width;
   view->height = height;
+  // A new size changes what fits where. Only on a real change: moving the properties re-allocates
+  // the overlay, which configures the drawing area again at the same size.
+  if(resized) _props_sync(self);
 }
 
 void reset(dt_view_t *self)

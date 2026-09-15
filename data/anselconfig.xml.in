@@ -3045,6 +3045,12 @@
     <shortdescription>folder the last canvas was opened from or saved to</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>canvas/debug/placement</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>paint what the canvas object properties keep clear of, and where they were placed</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>canvas/pdf/dpi</name>
     <type min="72" max="1200">int</type>
     <default>300</default>
