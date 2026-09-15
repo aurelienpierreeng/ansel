@@ -36,6 +36,7 @@
 #include "canvas/canvas_actions.h"
 #include "canvas/canvas_props.h"      // dt_canvas_edit_phase_t
 #include "common/conf.h"
+#include "common/gui_module_api.h"    // DT_GUI_MODULE
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "gui/window_manager.h"
@@ -44,6 +45,8 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "views/view.h"
+#include "widgets/accelerators.h"     // dt_accels_block_plain_keys_inside
+#include "widgets/bauhaus.h"          // the texture sliders
 #include "widgets/chooser_button.h"
 #include "widgets/widget_settings.h"
 #include "widgets/widget_style.h"
@@ -91,11 +94,12 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *padding_show;
   GtkWidget *padding_color;
   GtkWidget *size_snap;
-  // the shadow popover
+  // the texture popover
   GtkWidget *texture_contrast;
   GtkWidget *texture_detail;
   GtkWidget *texture_scale;
   GtkWidget *texture_grain;
+  // the shadow popover
   GtkWidget *shadow_offset_x;
   GtkWidget *shadow_offset_y;
   GtkWidget *shadow_blur;
@@ -379,11 +383,22 @@ static void _texture_changed(GtkWidget *widget, gpointer user_data)
   dt_view_t *view = NULL;
   if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_texture)) return;
-  dt_view_manager_get_global()->proxy.canvas.set_texture(
-      view, (float)gtk_range_get_value(GTK_RANGE(toolbar->texture_contrast)),
-      (float)gtk_range_get_value(GTK_RANGE(toolbar->texture_detail)),
-      (float)gtk_range_get_value(GTK_RANGE(toolbar->texture_scale)),
-      (float)gtk_range_get_value(GTK_RANGE(toolbar->texture_grain)));
+  const float contrast = dt_bauhaus_slider_get(toolbar->texture_contrast);
+  const float detail = dt_bauhaus_slider_get(toolbar->texture_detail);
+  const float scale = dt_bauhaus_slider_get(toolbar->texture_scale);
+  const float grain = dt_bauhaus_slider_get(toolbar->texture_grain);
+  // A bauhaus slider announces the value it already sent: once more when a drag's button comes up,
+  // and on every motion whether the pointer moved or not -- measured, a drag over two positions
+  // announced four times. Each announcement would cost the view four conf writes and a recomposite
+  // of the whole canvas for a paper that did not change, so the document is asked first. It holds
+  // the setter's clamped value, which a slider bounded by the same clamps sends back unchanged.
+  float held_contrast = 1.0f;
+  float held_detail = 1.0f;
+  float held_scale = 1.0f;
+  float held_grain = 1.0f;
+  dt_canvas_texture_get(_document(), &held_contrast, &held_detail, &held_scale, &held_grain);
+  if(contrast == held_contrast && detail == held_detail && scale == held_scale && grain == held_grain) return;
+  dt_view_manager_get_global()->proxy.canvas.set_texture(view, contrast, detail, scale, grain);
 }
 
 static void _texture_reset(GtkWidget *widget, gpointer user_data)
@@ -499,10 +514,13 @@ static void _refill(dt_lib_module_t *self)
   float scale = 1.0f;
   float grain = 1.0f;
   dt_canvas_texture_get(canvas, &contrast, &detail, &scale, &grain);
-  gtk_range_set_value(GTK_RANGE(toolbar->texture_contrast), contrast);
-  gtk_range_set_value(GTK_RANGE(toolbar->texture_detail), detail);
-  gtk_range_set_value(GTK_RANGE(toolbar->texture_scale), scale);
-  gtk_range_set_value(GTK_RANGE(toolbar->texture_grain), grain);
+  // A bauhaus slider announces every value it is given, whether or not it moved, so these four rely
+  // on the block above like every other control here: awake, each one would send all four sliders
+  // back to the document while the ones after it still showed the previous paper.
+  dt_bauhaus_slider_set(toolbar->texture_contrast, contrast);
+  dt_bauhaus_slider_set(toolbar->texture_detail, detail);
+  dt_bauhaus_slider_set(toolbar->texture_scale, scale);
+  dt_bauhaus_slider_set(toolbar->texture_grain, grain);
   _refilled_handlers_block(toolbar, FALSE);
 }
 
@@ -572,24 +590,27 @@ static GtkWidget *_popover_button(GtkWidget *box, const char *label, const char 
   return button;
 }
 
-/** A slider row of a popover: a label, a scale, its value. */
-static GtkWidget *_popover_slider(dt_lib_module_t *self, GtkWidget *grid, const int row, const char *label,
-                                  const double low, const double high, const double step, const char *tooltip,
-                                  GCallback callback)
+/**
+ * A texture slider of the popover. The hard range is what the view's setter clamps to, so the
+ * fine-tune popup can type any value the document accepts and a document holding one past the soft
+ * span shows it rather than a slider pinned at its end; the soft range is the span a drag covers.
+ */
+static GtkWidget *_texture_slider(dt_lib_module_t *self, GtkWidget *box, const char *label, const float hard_min,
+                                  const float hard_max, const float soft_min, const float soft_max,
+                                  const char *tooltip)
 {
-  GtkWidget *name = gtk_label_new(label);
-  gtk_widget_set_halign(name, GTK_ALIGN_START);
-  gtk_grid_attach(GTK_GRID(grid), name, 0, row, 1, 1);
-  GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, low, high, step);
-  gtk_scale_set_draw_value(GTK_SCALE(scale), TRUE);
-  gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_RIGHT);
-  gtk_scale_set_digits(GTK_SCALE(scale), 2);
-  gtk_widget_set_size_request(scale, DT_PIXEL_APPLY_DPI(220), -1);
-  gtk_widget_set_hexpand(scale, TRUE);
-  gtk_widget_set_tooltip_text(scale, tooltip);
-  _connect_refilled(self, scale, "value-changed", callback);
-  gtk_grid_attach(GTK_GRID(grid), scale, 1, row, 3, 1);
-  return scale;
+  GtkWidget *slider = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), hard_min,
+                                                       hard_max, 0.05f, 1.0f, 2);
+  dt_bauhaus_slider_set_soft_range(slider, soft_min, soft_max);
+  dt_bauhaus_widget_set_label(slider, label);
+  gtk_widget_set_tooltip_text(slider, tooltip);
+  // No width is asked for. A popover's parent is the window, not a side panel, so the slider takes
+  // bauhaus's own fallback, 300 pixels at the screen's density, and the popover comes out about as
+  // wide as the scale rows it replaces. A size request would change nothing: the slider rewrites
+  // its own on every style update, and a request only ever raises a natural width, never lowers it.
+  _connect_refilled(self, slider, "value-changed", G_CALLBACK(_texture_changed));
+  gtk_box_pack_start(GTK_BOX(box), slider, FALSE, FALSE, 0);
+  return slider;
 }
 
 /** A guides checkbox bound to one flag bit. */
@@ -603,16 +624,75 @@ static GtkWidget *_guide_check(dt_lib_module_t *self, GtkWidget *grid, const int
   return check;
 }
 
-static GtkWidget *_section_label(GtkWidget *grid, const int row, const char *text)
+/** A popover's bold heading. */
+static GtkWidget *_bold_label(const char *text)
 {
   GtkWidget *label = gtk_label_new(NULL);
   gchar *markup = g_markup_printf_escaped("<b>%s</b>", text);
   gtk_label_set_markup(GTK_LABEL(label), markup);
   dt_free(markup);
   gtk_widget_set_halign(label, GTK_ALIGN_START);
+  return label;
+}
+
+static GtkWidget *_section_label(GtkWidget *grid, const int row, const char *text)
+{
+  GtkWidget *label = _bold_label(text);
   gtk_widget_set_margin_top(label, DT_PIXEL_APPLY_DPI(row == 0 ? 0 : 8));
   gtk_grid_attach(GTK_GRID(grid), label, 0, row, 4, 1);
   return label;
+}
+
+/**
+ * The keys the view reads from the main window itself, typed at a control of a toolbar popover that
+ * did not take them. They are no shortcut, so the tag does not stop them: once every widget has
+ * declined Delete or BackSpace, the view deletes the selected objects behind the popover. Connected
+ * after the popover's own handler, which is what hands a key to the focused control first, so a spin
+ * button still edits its number with both. Measured, the arrows and Return never get this far: the
+ * window's own key bindings take them first, to move the focus and to activate the default.
+ */
+static gboolean _popover_key_pressed(GtkWidget *popover, GdkEventKey *event, gpointer user_data)
+{
+  const guint key = event->keyval;
+  return key == GDK_KEY_Delete || key == GDK_KEY_KP_Delete || key == GDK_KEY_BackSpace;
+}
+
+/**
+ * Give the focus to the popover's first control when opening it left the focus outside. A modal
+ * popover asks GTK for its first focusable child, and a bauhaus slider answers yes without taking
+ * the focus, so a popover opening on one kept none -- the keys then went where they would with no
+ * popover at all, a T adding a text frame behind it. Connected after the popover's own show, which
+ * is where GTK makes that choice -- measured, a focus given here is still there once the popover is
+ * up; a control GTK did focus keeps it.
+ */
+static void _popover_shown(GtkWidget *popover, gpointer user_data)
+{
+  GtkWidget *first_control = GTK_WIDGET(user_data);
+  GtkWidget *window = gtk_widget_get_toplevel(popover);
+  if(!GTK_IS_WINDOW(window)) return;
+  GtkWidget *focused = gtk_window_get_focus(GTK_WINDOW(window));
+  if(!IS_NULL_PTR(focused) && gtk_widget_is_ancestor(focused, popover)) return;
+  gtk_widget_grab_focus(first_control);
+}
+
+/**
+ * A toolbar popover around its content. The view binds single letters and digits -- T, M, D, 1 to
+ * 4 -- and a slider, a toggle or a check box of the popover keeps the focus once clicked, so without
+ * the tag every one of those keys typed at a control would act on the canvas behind it. The tag is
+ * read from the focus widget up, so it covers every control inside, added now or later -- once the
+ * focus IS inside, which is what the first control is for. And it stops shortcuts only; the keys the
+ * view reads itself are what the key handler is for.
+ * @param first_control the control focused on opening when GTK focused none: pass the first one.
+ */
+static GtkWidget *_popover_around(GtkWidget *content, GtkWidget *first_control)
+{
+  GtkWidget *popover = gtk_popover_new(NULL);
+  dt_accels_block_plain_keys_inside(popover);
+  g_signal_connect_after(popover, "key-press-event", G_CALLBACK(_popover_key_pressed), NULL);
+  g_signal_connect_after(popover, "show", G_CALLBACK(_popover_shown), first_control);
+  gtk_container_add(GTK_CONTAINER(popover), content);
+  gtk_widget_show_all(content);
+  return popover;
 }
 
 static GtkWidget *_labelled(GtkWidget *grid, const int row, const int col, const char *label, GtkWidget *widget)
@@ -739,10 +819,7 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   toolbar->size_snap = _guide_check(self, grid, 13, 0, _("Snap sizes to neighbours"), DT_CANVAS_SNAP_SIZE);
   gtk_widget_set_hexpand(toolbar->size_snap, TRUE);
 
-  GtkWidget *popover = gtk_popover_new(NULL);
-  gtk_container_add(GTK_CONTAINER(popover), grid);
-  gtk_widget_show_all(grid);
-  return popover;
+  return _popover_around(grid, toolbar->grid_show);
 }
 
 /** The shadow popover: the default drop shadow of every object that has no shadow of its own. */
@@ -770,10 +847,7 @@ static GtkWidget *_shadow_popover(dt_lib_module_t *self)
   toolbar->shadow_color = _color_button(_("Default shadow colour"), _("Colour and strength of the shadow"),
                                         DT_CANVAS_COLOR_SHADOW, TRUE, self);
   _labelled(grid, 2, 2, _("Colour"), toolbar->shadow_color);
-  GtkWidget *popover = gtk_popover_new(NULL);
-  gtk_container_add(GTK_CONTAINER(popover), grid);
-  gtk_widget_show_all(grid);
-  return popover;
+  return _popover_around(grid, toolbar->shadow_offset_x);
 }
 
 /** The borders popover: the uniform border of every frame that has none of its own. */
@@ -797,10 +871,7 @@ static GtkWidget *_borders_popover(dt_lib_module_t *self)
                               _("Default radius of the frames' rounded corners, in canvas units; 0 is square"));
   _connect_refilled(self, toolbar->corner_radius, "value-changed", G_CALLBACK(_corner_changed));
   _labelled(grid, 2, 0, _("Corners"), toolbar->corner_radius);
-  GtkWidget *popover = gtk_popover_new(NULL);
-  gtk_container_add(GTK_CONTAINER(popover), grid);
-  gtk_widget_show_all(grid);
-  return popover;
+  return _popover_around(grid, toolbar->border_width);
 }
 
 /**
@@ -811,31 +882,24 @@ static GtkWidget *_borders_popover(dt_lib_module_t *self)
 static GtkWidget *_texture_popover(dt_lib_module_t *self)
 {
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
-  GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(4));
-  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(10));
-  gtk_container_set_border_width(GTK_CONTAINER(grid), DT_PIXEL_APPLY_DPI(10));
-  _section_label(grid, 0, _("Paper texture"));
-  toolbar->texture_contrast = _popover_slider(self, grid, 1, _("Contrast"), 0.05, 4.0, 0.05,
-                                              _("The relief's body: the mottle, the tooth, the clouds. 1 is the paper as designed."),
-                                              G_CALLBACK(_texture_changed));
-  toolbar->texture_detail = _popover_slider(self, grid, 2, _("Detail"), 0.0, 4.0, 0.05,
-                                            _("The fine structure: fibres, pores, wrinkles, the mesh's imprint. 0 leaves only the body."),
-                                            G_CALLBACK(_texture_changed));
-  toolbar->texture_scale = _popover_slider(self, grid, 3, _("Scale"), 0.25, 4.0, 0.05,
-                                           _("The size of the features: 2 makes them twice as large. Rebuilds the paper."),
-                                           G_CALLBACK(_texture_changed));
-  toolbar->texture_grain = _popover_slider(self, grid, 4, _("Grain"), 0.0, 4.0, 0.05,
-                                           _("The pixel-level grain that finishes the paper, scaled with the zoom"),
-                                           G_CALLBACK(_texture_changed));
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(4));
+  gtk_container_set_border_width(GTK_CONTAINER(box), DT_PIXEL_APPLY_DPI(10));
+  gtk_box_pack_start(GTK_BOX(box), _bold_label(_("Paper texture")), FALSE, FALSE, 0);
+  // The hard ranges are _proxy_set_texture()'s clamps (views/canvas.c): keep the two together.
+  toolbar->texture_contrast = _texture_slider(self, box, _("Contrast"), 0.05f, 8.0f, 0.05f, 4.0f,
+                                              _("The relief's body: the mottle, the tooth, the clouds. 1 is the paper as designed."));
+  toolbar->texture_detail = _texture_slider(self, box, _("Detail"), 0.0f, 8.0f, 0.0f, 4.0f,
+                                            _("The fine structure: fibres, pores, wrinkles, the mesh's imprint. 0 leaves only the body."));
+  toolbar->texture_scale = _texture_slider(self, box, _("Scale"), 0.1f, 8.0f, 0.25f, 4.0f,
+                                           _("The size of the features: 2 makes them twice as large. Rebuilds the paper."));
+  toolbar->texture_grain = _texture_slider(self, box, _("Grain"), 0.0f, 8.0f, 0.0f, 4.0f,
+                                           _("The pixel-level grain that finishes the paper, scaled with the zoom"));
   GtkWidget *reset = gtk_button_new_with_label(_("Reset"));
   gtk_widget_set_tooltip_text(reset, _("The paper as designed"));
+  gtk_widget_set_halign(reset, GTK_ALIGN_END);
   g_signal_connect(reset, "clicked", G_CALLBACK(_texture_reset), self);
-  gtk_grid_attach(GTK_GRID(grid), reset, 3, 5, 1, 1);
-  GtkWidget *popover = gtk_popover_new(NULL);
-  gtk_container_add(GTK_CONTAINER(popover), grid);
-  gtk_widget_show_all(grid);
-  return popover;
+  gtk_box_pack_start(GTK_BOX(box), reset, FALSE, FALSE, 0);
+  return _popover_around(box, toolbar->texture_contrast);
 }
 
 void gui_init(dt_lib_module_t *self)
