@@ -24,6 +24,10 @@ which it needs to render, below `views/` and `libs/`, which are its only consume
 | `canvas_markdown.h/.c` | Markdown to Pango markup |
 | `canvas_export.h/.c` | the pages, colour-managed, as PDF, PNG, JPEG or TIFF |
 | `canvas_actions.h` | the action vocabulary shared by the view and its toolbar |
+| `canvas_props.h/.c` | every per-object property described once, its reader and its writer, the double-click rule |
+| `canvas_handles.h/.c` | every place an object is taken hold of, as one list of sites the hit tests walk |
+| `canvas_place.h/.c` | where an object's floating properties go: a search over rectangles |
+| `canvas_place_shapes.h/.c` | an object's handle sites and body as the rectangles that search keeps clear of |
 
 Four kinds of object share one struct, `dt_canvas_object_t`: an **image frame** (a
 library render), a **text frame** (Markdown, or the `.txt` sidecar of an image frame), a
@@ -190,7 +194,7 @@ outside the frame is uncovered, and a zero padding read it as covered and thinne
 wherever a cutout came near its own frame. An outset plane pads with zeros: nothing casts
 there. The canvas carries a default one, set from the toolbar's
 Shadow popover, and an object overrides it with its own under
-`DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE`, from its bar -- the same shape as the borders, and
+`DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE`, from its properties -- the same shape as the borders, and
 `dt_canvas_object_effective_shadow()` resolves it the same way. Connectors get shadows too.
 The shadow is derived from the object's alpha after its cutout, its border and its opacity,
 so it starts at the solid border, a feathered frame casts a feathered shadow and a translucent
@@ -237,10 +241,10 @@ rasterised at three times the resolution (two past a megapixel) and box-filtered
 is the anti-aliasing of their edges; the band's distance transform runs at the fine
 resolution, so its two edges are anti-aliased too.
 
-The view edits a cutout with handles over the frame when the bar's Edit toggle is on: the
-centre or anchor, the radius or radii (the ellipse's first radius handle also sets its
-rotation), the feather on the circle's or the ellipse's dashed ring, the gradient's reach
-across its line, and the polygon's nodes.
+The view edits a cutout with handles over the frame while Edit is on in the Cutout section of its
+properties: the centre or anchor, the radius or radii (the ellipse's first radius handle also
+sets its rotation), the feather on the circle's or the ellipse's dashed ring, the gradient's
+reach across its line, and the polygon's nodes.
 
 **A polygon node owns two things the shape does not**, both the darkroom's own, and both
 reached from the node the pointer is working near -- one node's at a time, since every node's
@@ -275,16 +279,18 @@ short tether its curve, the dashed tether's end its fall-off. Over the frame, th
 Shift the opacity, with Ctrl the gradient's curvature or the ellipse's rotation. On a
 polygon, Ctrl+click on an edge inserts a node, Shift+click on a node removes it and a double
 click switches it between cusp and smooth -- the same one call the context menu's entry uses,
-so the two cannot drift. The context menu offers the shapes, editing, inverting, and the node
-actions for the node or edge under the pointer: switch the node's kind, give a steered one its
-computed curve back, remove it, or add one on the edge.
+so the two cannot drift. The shape, the feather, the inversion and the edit mode are the
+properties' (Cutout section); the context menu offers only what a pointer names, the node or
+edge under it: while the shape is edited, switch the node's kind, give a steered one its
+computed curve back, remove it, or add one on the edge; while it is not, the way into the edit
+mode for the node under the pointer.
 
 **The menu asks its own question of the geometry, not the drag's.** `_mask_handle_at()`
 answers what a drag would grab and refuses everything while the shape is not being edited,
 which is right for a drag and wrong for a menu: for as long as the cutout submenu keyed its
 node entries on it, they were a duplicate of the top-level ones whenever the shape was being
 edited and unreachable the rest of the time. `_mask_node_at()` is the geometric question, and
-the submenu offers the way into the edit mode instead. Every drag and
+it is what lets the menu offer the way into the edit mode on a node it does not draw. Every drag and
 every wheel step is one undo record.
 
 A text frame carries **four inner margins** rather than one, top, right, bottom, left. All
@@ -320,9 +326,10 @@ stays where they put it; and it iterates to a fixed point rather than taking one
 paint, which downward growth makes monotone -- every existing line keeps the obstacles it had
 and the height only opens room below. The same run settles in two: 616 -> 1191 -> 1045.
 
-Every path that changes what the text or its box is owes that call: each property-bar handler
-(through `BAR_EDIT_END()`), the text editor -- whose "fit height" button was this measurement
-open-coded, growing about the centre -- the sidecar note frames, and the end of any gesture
+Every path that changes what the text or its box is owes that call: every edit in the properties
+(the property table's writer refits the frame it edits and reports `DT_CANVAS_EFFECT_SETTLE_ALL`
+when it moved what other frames flow around), the text editor -- whose "fit height" button was
+this measurement open-coded, growing about the centre -- the sidecar note frames, and the end of any gesture
 that moved geometry, since a frame dragged over a column changes that column's flow as surely
 as editing the column does. Measured after: the same paragraph breaks at the same fourteen
 byte offsets at zoom 0.42, 0.55 and 1.1, at full and interactive quality alike.
@@ -414,9 +421,9 @@ two slots.
 (`dt_canvas_object_keeps_ratio()`, `DT_CANVAS_OBJECT_FLAG_FREE_RATIO`). The flag is stated the
 FREE way round so that zero is the careful answer: a photograph always kept its shape, a
 drawing needs it more -- a stretched logo is almost always a mistake -- and the one time it is
-not, the flag says so. One predicate answers for the corner drag and for the property bar's two
-size spins alike, so the two cannot disagree; on the bar, whichever of the pair was edited leads
-and the other follows.
+not, the flag says so. One predicate answers for the corner drag and for the properties' Width
+and Height alike, so the two cannot disagree; in the properties, whichever of the pair was edited
+leads and the other follows.
 
 **Text flows around what the drawing DRAWS.** `dt_canvas_render_svg_coverage()` renders the
 document to an A8 coverage surface at the occupancy map's own pitch -- a fraction of a full
@@ -446,7 +453,7 @@ repeats. HarfBuzz costs no build change: pango requires it publicly, so its incl
 `-lharfbuzz` are already on the line, and `tools/mingw_syntax_check.py` compiles the file
 (verified by a tripwire, since a skipped file reports success just as loudly).
 
-The property bar's checkboxes are keyed on the four-character TAG, never on a position in a
+The properties' feature checkboxes are keyed on the four-character TAG, never on a position in a
 table. `dt_canvas_text_feature_label()` names a tag where this build has a name for it, names
 the numbered families from their number -- `ss04` is "Stylistic set 4", `cv12` "Character
 variant 12", since only the font knows what they draw -- and answers NULL otherwise, where the
@@ -455,8 +462,8 @@ owns out of the panel altogether: glyph composition, mark placement, cursive joi
 the language's own substitutions are what make text shapeable at all, HarfBuzz turns them on
 and off as the script requires, and a checkbox overriding that breaks the rendering rather than
 styling it. Linux Libertine ships five of them among its 32, so without the filter the panel
-would invite exactly that. The popover is rebuilt only when the face changes, so ticking a box
-does not destroy the box being ticked.
+would invite exactly that. The list is rebuilt only when the face changes, not its size, so
+ticking a box does not destroy the box being ticked.
 
 **The feature string outgrew the record's fixed field, and did it silently.** 64 bytes holds
 eight tags, and a document with seven set refused the ninth with no error -- reported as the
@@ -566,8 +573,8 @@ never ends.
 The map is anchored on the TEXT AREA's corner, less the margin above, and
 not on the frame's -- taken from the frame while the extent is the inner size, every obstacle
 sits one padding to the left of where the lines think it is. The GAP the text keeps around what it
-avoids is the user's ("Gap" on the property bar, `wrap_standoff` in the document) and is grown
-on the merged map, on top of every obstacle's own reach, by a separable dilation rather than
+avoids is the user's ("Gap" in the Text box section of the properties, `wrap_standoff` in the
+document) and is grown on the merged map, on top of every obstacle's own reach, by a separable dilation rather than
 asked of each shape: it then costs the same
 whatever the obstacle is and reaches a raster as well as a rectangle, and the corner of an
 obstacle keeps the gap along its diagonal too, which is what a rectangular offset does in
@@ -731,8 +738,8 @@ shows its **tangent handles**: one at each end, held on the anchor's normal (ort
 the frame's edge) so only its length is dragged, and two about the waypoint, whose direction
 and length are free; a handle left alone stays automatic. The line stops short of an arrow's
 tip: a disc of the head's length around the arrowed end is cut out of the stroke, so the tip
-is the triangle's alone and stays sharp. All of it is in the connector's floating bar, with
-dashes, colour and width.
+is the triangle's alone and stays sharp. All of it is in the connector's properties: route,
+arrowheads, waypoint and direction on the strip, dashes, colour and width in its Line section.
 
 **Ctrl while dragging a handle locks it.** A handle free to go anywhere -- a cutout's centre,
 radius, feather or node, a connector's waypoint -- keeps to one axis, the one it has
@@ -762,49 +769,236 @@ dark just outside it. A single pale line is legible on a dark plane and gone on 
 and a canvas is as often one as the other. The hover pair sits wholly past the frame's edge,
 so it never covers what it is outlining.
 
-### The floating property bar
+### The floating properties
 
-The bar is one vertical box of rows, one per topic, so the bars of two kinds differ only by
-their first row: the kind's own properties (font, alignment and colour; route, arrows and
-waypoint; place, zoom and provider), then **Geometry** (centre, size, angle), **Opacity**
-with the background colour, **Frame** (border width, corner radius, colour -- a connector's
-is its **Line**: width, dashes, colour), **Shadow** (the two offsets, the blur, the colour),
-and **Cutout**. Rows a kind has no use for are hidden at refill; every row keeps a
-70-pixel topic label so the controls line up from row to row, and where a row carries a
-colour it is the last control on it.
+One object's properties float beside it, as **one widget: a STRIP, one row, that can grow a
+CARD** below or above it. The strip holds the kind's glyph or a line about the object, the
+kind's everyday controls (a text frame's font, size, colour and alignment; a connector's route,
+arrowheads, waypoint and direction; a map's zoom), then the content action, the card button and
+a close button. The card is an accordion of sections in one fixed order for every kind -- the
+kind's own sections, then Arrange, Fill, the stroke (a frame's Border, a connector's Line, the
+same slot), Corners, Shadow and Cutout -- each a folded header with a one-line summary of what
+it holds, its essentials, a rule, and what an expert reaches for. A section a kind lacks is
+absent, never greyed out. One section is open at a time, and the one left open is remembered per
+kind (`plugins/canvas/props/section/<kind>`, stored by NAME, since the enum's order is the
+screen's and may change); the card itself is never remembered open, and an override section or
+the cutout never opens by itself. Measured offscreen at 96 dpi, the strip is 35 px tall for every
+kind and 472 px wide for a text frame, 381 for a picture or a drawing, 340 for a map or a
+connector; the card is the strip's width, so the card button and the close button do not move
+when it opens, whichever side it grows on.
 
-**A property with a canvas-wide default has no toggle: the value is the switch.** The border
-width, the corner radius and the shadow's blur read `default` at -1, which is the object
-inheriting the canvas's; any other value is the object's own. Leaving the sentinel seeds the
-object with the property that was on screen -- the colour and the offsets come across with
-it -- so an edit starts from what the user was looking at rather than from zero. It is the
-same shape as the shadow's radius, which has always been its own on/off at 0, and it is why
-there is no "Canvas default" button anywhere on the bar. **Nor is there a "Transparent"
-button**: every colour on the bar is an alpha-capable picker, so an alpha of zero is how a
-background, a border or a text is made to disappear.
+**Everything about a property is described once, in `canvas/canvas_props.c`**: its label, the
+kinds that have it, its section and tier, the control its nature gets, its range, what "left as
+it is" means for it, the override group it belongs to and what row it depends on. Edits go
+through `dt_canvas_prop_write()`, GTK-free and conf-free, which applies every rule the edit comes
+with -- a picture that keeps its proportions answers a width with a height, a font equal to the
+canvas's is stored as none, a text frame whose height follows its text is refitted -- and
+returns what the caller owes as effect bits: an undo step, a refit of the frames flowing around
+it, a map render, the next map's defaults, a restructure of the rows. `test_canvas_props`
+round-trips every property on every kind. The GTK face, `views/canvas_props_gtk.c`, builds every
+row of every kind ONCE, and a refill only shows, hides and fills them; it lives in `views/`
+because `gui/` sits below `canvas/` in the layering. **The same nature is the same control
+wherever it sits** -- a spin button for an exact number (a position, a size, a type size), a
+bauhaus slider for a bounded perceptual one, a row of glyphs for a few choices -- so a property
+does not change shape between the strip and the card, or between two kinds. No slider sits on
+the strip: a bauhaus slider is a line and seven tenths tall, and every strip is one button tall.
 
-While a cutout is being edited, the context menu opens on the shape's properties as sliders
--- feather, opacity, size, rotation, extent and curvature, whichever the shape has -- the way
-the darkroom's mask menu does: a scale inside a menu item, the item's pointer events
-forwarded to it, its activation blocked so the menu stays open, and one undo record for the
-whole menu taken when it opens and written when it closes if anything moved.
+**An override group reads what the object is DRAWN with.** Border, corners, shadow and font
+are the canvas's until the object takes its own. Editing one field while the object inherits
+seeds the whole group from what is on screen, applies the edit and sets the flag; writing the
+inherited value while inheriting changes nothing at all, so a control reset to the canvas's
+value leaves the object following the canvas. The section's own switch takes the group without
+changing anything on screen, and gives it back to the canvas. The floating bar these properties
+replaced carried those rules in its handlers, one copy each, behind an in-band `-1` "default" in
+its spin buttons, and two copies had drifted into data bugs: an offset edited while the blur
+read "default" was written into a shadow the object did not own, and picking a border colour
+made the frame own a border of whatever width its field happened to hold.
 
-Selecting exactly one object floats an opaque bar immediately below it (above, when there is
-no room below) with that object's properties: a text frame's font family and size, text
-colour and background; an image frame's border width and colour and a "Canvas default"
-button that drops its override; a connector's route, arrow heads, direction, width, dashes,
-colour and waypoint; text and image bars carry the border width, colour with opacity, and a
-button back to the canvas's uniform border. One bar per kind, overlay children of the centre,
-positioned through the overlay's `get-child-position` signal from a stored position, so a
-move is one allocation pass of the overlay rather than a margin change, which is a resize
-that climbs to the toplevel and lays the whole window out again -- what made panning and
-clicking sluggish. They are hidden for the length of a drag, placed at its end, and a click
-on the background dismisses them at once. Placement is never done from the draw path --
-moving an overlay child from inside a draw glitches -- but from
-an idle scheduled by every event that moves the object or the viewport; the bar is refilled
-only when the selection or the document changed (a signature of both), with its handlers
-blocked during a refill so a refill never writes back. The canvas-level defaults (grid,
-padding, border) stay in the toolbar.
+#### When they show
+
+A single click, a drag or a rubber band **never** shows anyone's properties: laying a page out is
+clicking and dragging all day, and a panel that answered every click stood over the next thing
+to grab. Three things open them -- a double click on an object, the `I` key and the context
+menu's "Properties" entry -- and entering the atelier after a darkroom round trip shows them
+again, as a strip, while their object is still the whole selection; `I` pressed while they show
+takes the keyboard to their first control. Everything else goes through `_props_sync()`, which
+refills, places, hides or closes them and never opens them. They close when the selection
+stops being exactly that object, on Escape (after connect mode and the drag, before the
+selection) and when connect mode starts. Leaving the atelier does NOT close them: it commits
+what they hold and takes the widget down but keeps them open, so `enter()` shows them again as
+a strip while their object is still the whole selection. They hide while a gesture really moves
+something (a move or a scale past the threshold, a pan, the wheel, a rubber band past 3 px) and
+come back when it settles, so the first click of a double click never makes them blink.
+
+**The drill rule**: a double click on an object whose properties are ALREADY showing goes into
+it instead -- a text frame's Markdown editor, a picture in the darkroom, a drawing's file read
+again -- and so does Return. What decides is `dt_canvas_click_sequence_t`, pure logic that
+follows GDK 3.24's own pairing, read from `_gdk_event_button_generate` rather than assumed: the
+same button, strictly sooner than `gtk-double-click-time`, within `gtk-double-click-distance` on
+each axis, timed by the events' own timestamps, never the handler's clock. A double click is
+read against what showed before ITS OWN first press, which is the press before the one GDK
+reports -- not the run's first press, which may be a click beside the object that closed its
+properties. A run answers once, so four or five fast clicks open the properties and never
+drill, though GDK reports the fifth press as another double click. The opening and the content
+action run from an idle at `G_PRIORITY_HIGH_IDLE`, ahead of the redraw the press queued, and a
+press handled since takes them back: the old double-click branch ran the text editor's modal
+dialog from the press handler while the second press's move and its snapshot were still armed.
+
+#### Where they go
+
+`canvas/canvas_place.c` answers it, GTK-free and document-free: plain rectangles in, a rectangle
+out. What is on screen reaches it as shapes with a CLASS, already grown by how far each catches
+the pointer:
+
+- **HARD is never covered**, whatever else fails: frame corners, the rotation knob and its stem,
+  a connector's tangents and tethers, its waypoint, the band its line is picked in, its
+  arrowheads, a cutout's handles and a polygon's nodes while the shape is edited, the navigation
+  flower, and at an opening the pointer that asked;
+- **PREDICTED** is what one click in the properties would add -- a straight connector's cubic
+  tangents and waypoint, a cutout's handles before Edit -- and is covered only when nothing else
+  fits;
+- **BODY** is the object itself, cut into slabs along its turned quadrilateral, and is covered
+  only once every spot clear of it has failed;
+- **SOFT** -- the other frames, the status line, the toast -- only weighs in the cost.
+
+**Every site comes from one list.** `canvas/canvas_handles.c` enumerates an object's handle
+sites -- each a square, a disc or a segment, with a reach in screen pixels that does not zoom
+and one in canvas units that does -- in the order that is the hit tests' priority, and the
+view's `_handle_at()`, `_tangent_handle_at()`, `_via_handle_at()`, `_mask_handle_at()`,
+`_mask_node_at()` and `_mask_segment_at()` are loops over it. `canvas/canvas_place_shapes.c`
+turns the same list into the placement's HARD shapes, so the placement avoids exactly what a
+press catches. Before it, six hand-written hit tests each carried their own copy of where a
+handle is and how far it catches, and the old bar's box read only the route's points: it covered
+a cubic connector's tangents, its waypoint and the knob 28 px above a frame, then clamped itself
+back over the object when there was no room below. A scratch harness compiled the old hit tests
+against the new ones: 25,035,084 comparisons over 3000 random scenes, no mismatch. PREDICTED
+shapes are asked of a COPY of the connector with the click applied, which only the route and the
+site list read: the real edits touch the document, and setting a cutout's shape on a shallow copy
+frees the nodes the original still points at.
+
+Two things the list inherited are not fixed. A circle lists four cutout points like an ellipse, so
+that its feather keeps index 3, and its unused [2] is left at the frame's centre: while the shape is
+edited a dot is painted there, a press there drags a second radius the circle does not have --
+which, walked outer points first, also shadows the centre handle of a circle left where it is
+born -- and the placement keeps clear of it like any handle. `test_canvas_handles` leaves that
+point unpinned on purpose; the fix is for the circle to list only the points it has. And the view's
+priorities between roles -- the hovered node's own handles before the nodes, a cutout's outer
+points before its centre -- live in static functions of the view plugin, where no committed test
+reaches them.
+
+The search runs level by level, from clear of HARD, PREDICTED and BODY to clear of HARD alone,
+and a candidate top is only ever moved **within a stretch of the view proven free, never clamped
+onto the object** -- which is what makes the old bar's failure impossible by construction rather
+than by care. Three reasons ask for a placement. OPEN searches everything. RESOLVE -- a pan, a
+zoom, a refill -- keeps the placement for a motion of two pixels or less and translates it
+rigidly with the object otherwise, while it is still clear at the level it was found at, so the
+properties follow the object instead of jumping; one that had to cover the body is kept only
+while no spot clear of it exists and it covers no more of it. GROW -- the card opened, a section
+grew -- keeps the strip where it is and fits the card on whichever side holds all of it, so
+opening the card never moves the button under the pointer unless neither side can. **A card is
+placed whole or not at all**: the first version capped it at 420 px and 60 % of the view and
+scrolled it in whatever room the strip's column had, and a drawing's card showed six of its
+seven sections over a scrollbar in a view with room for all of them. Only a view shorter than
+the strip and the card scrolls it, with `GTK_POLICY_EXTERNAL`, so the wheel scrolls it and no
+scrollbar is drawn. A view narrower or shorter than the strip itself does not hide them either:
+they are placed as if they were the view's size and the overlay cuts off what does not fit.
+Hiding them there, with a toast telling the user to zoom out, asked for what could not help, since
+no zoom makes the view any larger. They hide, and say so once per showing, only where the HARD
+shapes leave them no room at all.
+
+Inputs are snapped to whole pixels -- the view inward, every shape outward, the air and the
+widget up -- and the anchor and the press to a 256th of a pixel: from a raw anchor, moving a
+whole scene by whole pixels changed the rounding of a near tie, and the same pan resolved to two
+spots. A placement that found no room is no previous placement: its all-zero strip once made the
+next search pay a movement cost from the view's top-left corner and go there.
+`test_canvas_place` checks every placement of 10,000 scenes against a brute force over every
+pixel -- never a handle, the body only when nothing clear of it holds the strip or the card --
+and `bench_canvas_place` holds each case to 10 ms: 2048 shapes open in 0.32 ms, over the body in
+0.35, and a view crowded with handles everywhere but a corner, card open, in 3.0.
+
+**`canvas/debug/placement` paints what the last placement kept clear** -- HARD red, PREDICTED
+orange, BODY yellow, the footprint green -- and a Debug build asserts that no HARD rectangle,
+grown by the air, overlaps the footprint. A report of the properties landing on a handle is
+answered by switching it on, not by reasoning about the solver.
+
+**They never move while the user is in them.** A placement waits while the pointer is over
+them, while digits typed into a spin button are not applied yet, and while an edit is LIVE; it
+runs on leave, on Return, on a focus change or on canvas motion. The keyboard focus ALONE holds
+nothing: a slider and a spin button keep the focus once clicked, so a hold on the focus never
+ended, and after a click on a width's + the properties stayed over the corners the frame had just
+grown into until the canvas was clicked. The root is an event box, so crossing between its
+controls is an INFERIOR crossing and not the pointer leaving; grab crossings (a dialog, a popup)
+are not leaving either.
+
+The widget is **one overlay child of the centre**, placed by answering the overlay's own
+`get-child-position` with the solved rectangle -- a margin change is a resize that climbs to the
+toplevel and lays the window out again -- measured height-for-width and never below its minimum.
+A placement runs from idles and from the card's and the sections' own handlers, never from a
+draw (moving an overlay child from inside a draw glitches) nor per motion, and a placement that
+moved nothing queues no redraw of it, since invalidating an overlay child repaints the canvas
+under it. GtkOverlay sizes by its main child only, so opening the card never resizes the window.
+
+**What was not used, and why.** Overlay pass-through: GDK still delivers events to a child's
+subwindows, so the buttons would catch clicks while the gaps between them leaked to the canvas --
+inconsistent, and unneeded, since the rectangle covers no handle anyway. An input shape: the
+footprint is a rectangle already. Popovers, revealers, stacks and notebooks: the old bar's three
+popovers were each a surface with a placement of its own, which nothing kept clear of the
+handles; the card is the one place a property lives, at a nesting depth of two at fixed places --
+the card button, then a section header -- and only visibility changes inside it. The colour and
+font buttons open MODAL `GtkColorChooserDialog` / `GtkFontChooserDialog` of their own
+(`widgets/chooser_button.c`): the dialogs GtkColorButton and GtkFontButton open cannot be relied
+on to be modal, and a modal one leaves no canvas click that could change the object a pick lands
+on. They report a pick once, after the dialog is gone, and do not take the focus on click, so the
+focus is not left on a button holding the plain keys.
+
+#### How an edit reaches the document
+
+Every change reaches the view tagged with its phase (`dt_canvas_edit_phase_t`): **LIVE** follows
+a control while it moves, **COMMIT** ends that gesture with the control's final value, **ONCE**
+is a whole gesture in one call -- a typed number, a click. The view pays for it as one edit
+session per gesture: one snapshot at its first step; at every step the frames flowing around
+what moved refitted and the document touched ONCE, because the painter keeps the frame it last
+composited for a generation it has already seen; at its end one undo record, one map fetch, one
+configuration write and one `DT_SIGNAL_CANVAS_CHANGED`. A held button -- a slider dragged, a spin
+arrow held past the debounce -- is one session until it comes up; a wheel burst, a run of arrow
+keys or a combobox's notches are debounced 400 ms into one; and a click on a slider that did not
+drag commits after the double-click time, so the double click that resets it lands in the same
+gesture.
+
+**What the properties hold is committed before anything else reaches the document**
+(`_props_commit_pending()`): a press on the canvas, a key that acts, an undo, a toolbar setter
+that records undo, a change of object, a close, leaving the atelier. The binder's own debounced
+session is committed through the host and its timer removed FIRST: left armed, a Ctrl+Z inside
+the 400 ms window was undone and then re-done by the timer, wiping the redo list, and a corner
+drag right after a wheel step got the old width written into it. The Edit menu's undo is the one
+place that cannot record, since the undo stack is locked while it pops; it forgets the session
+instead (`dt_canvas_props_gtk_forget()`).
+
+**A refill never writes back.** Every handler a refill could wake is blocked by its stored id
+while it writes, with `dt_gui_widget_freeze()` around the bauhaus sets, and the control being
+dragged is left alone; a drag still held when the object changes is marked stale and reports
+nothing until release. The properties refill on `DT_SIGNAL_CANVAS_CHANGED`, so a canvas default
+set from the toolbar shows at once in every inheriting summary.
+
+**Keys.** While the focus is inside the properties, a key with no modifier or Shift alone reaches
+the control rather than a single-letter shortcut (`dt_accels_block_plain_keys_inside()`, read on
+every keystroke so nothing can stick), and Primary shortcuts and the function keys still fire; a
+text field there keeps only the modified keys its own class binds (Ctrl+A, Ctrl+C, a word jump).
+The view swallows Delete, BackSpace, the arrows and Return the controls did not take -- they
+would delete, nudge or drill into the object being edited -- and Escape gives the focus back to
+the canvas, so a second Escape closes the properties.
+
+**The properties are the one home of a property.** The context menu keeps what they cannot
+offer -- what only a pointer can name, the polygon node or edge under it, and the object-level
+actions: Order, Rotate, Duplicate, Delete, and the content actions with their Return shortcut.
+The cutout's shape, its inversion, its edit mode and its sliders (feather, opacity, size,
+rotation, extent, curvature) left the menu when the properties went live, as did the Markdown
+editor's Font button: a second writer of the same field, with its own copy of the rule that a
+font equal to the canvas's is stored as none. The menu's Size was not quite a duplicate: on an
+ellipse it scaled both radii, and nothing else did -- a handle drags one radius, the wheel sets
+the feather -- so the properties' Size now scales an ellipse whole and Size Y alone changes its
+proportions (`test_canvas_props`). **A menu entry that changes
+what the properties show or what they keep clear of calls `_props_sync()`**, like any other edit.
 
 ### Borders, the padding, and snapping to neighbours
 
@@ -1140,7 +1334,8 @@ room clear, and it changes nothing about what is exported.
 
 A text frame has a font, a text colour, a background that can be transparent, and a
 horizontal (left, centred, right, justified) and vertical (top, middle, bottom) alignment,
-all in its floating bar.
+all in its properties: font, size, colour and horizontal alignment on the strip, the rest in the
+card's Character, Paragraph and Text box sections.
 
 ### Map frames
 
@@ -1154,15 +1349,15 @@ render. Providers are the map view's when it is built (`osm-gps-map`'s valid sou
 their URI templates), OpenStreetMap otherwise; the provider's attribution is painted along
 the frame's bottom edge, as its terms ask. The toolbar's Map button adds one at the centre
 of the view at the last place used; an image's context menu adds one of where it was taken,
-from its geotag; the frame's floating bar edits the place, the zoom and the provider, each
+from its geotag; the frame's properties edit the place, the zoom and the provider, each
 change fetching the tiles again. A map keeps its own ratio: it covers the frame, centred,
 and is cropped by it rather than stretched, and a resized frame fetches again at its new
 size so the crop it shows is at full detail.
 
 ### Waypoints
 
-A connector may pass by one point, to go around other frames: the bar's "Waypoint" toggle
-adds it at the middle of the current route, so nothing moves until it is dragged; it is drawn
+A connector may pass by one point, to go around other frames: the Waypoint toggle on the strip
+of its properties adds it at the middle of the current route, so nothing moves until it is dragged; it is drawn
 as a diamond on the selected connector. Straight routes bend at it, square routes reach it
 with one elbow and leave it with another, cubic routes become two curves sharing a tangent
 there. It took 20 more of the connector record's reserved bytes, again without a format bump.
@@ -1247,7 +1442,8 @@ the cutout re-rasterisation at each power of two (about 100 ms per cut frame on 
 
 The toolbar (`libs/tools/canvas_toolbar.c`) reads left to right as labelled groups: the
 three flat menus (Canvas, Object, Guides, each ending in an ellipsis), **Add** (Text, Notes,
-Map, Connector), **Background** (style, colour, Texture), **Frames** (Borders, Shadows),
+Map, Drawing, Connector), **Background** (style, colour, Texture), **Frames** (Borders, with the
+corners, and Shadows: the defaults every frame inherits until its properties say otherwise),
 **Zoom** (Fit, 1:1) and **Arrange** (the layout, a "Sort by" like the lighttable's --
 canvas order, filename, captured, id, full path -- and Auto to apply). The sort is a
 `dt_canvas_sort_t` handed to `dt_canvas_layout_apply()`: images compare on the key, then on
@@ -1261,8 +1457,15 @@ toggle, the background, the default border, Fit and 1:1, the layout chooser.
 `src/views/canvas.c` owns one document and everything about editing it. It registers the
 `canvas` accelerator group, exposes its actions through `proxy.canvas` for the toolbar
 (`libs/tools/canvas_toolbar.c`), and raises `DT_SIGNAL_CANVAS_CHANGED` whenever the
-document is replaced, saved or reconfigured, so the toolbar refills its grid and border
-controls from the document -- with its handlers blocked, so a refill never writes back.
+document is replaced, saved or reconfigured, so the toolbar refills every control that mirrors a
+document setting, and so do the floating properties. **The toolbar blocks every handler a refill
+could wake, by its stored id** (`_connect_refilled()` is the only way such a handler is
+connected), rather than raising a flag the handlers check: a handler that reads SEVERAL controls
+-- the margin with the bleed, the shadow's three spins -- woken halfway through a refill sends the
+ones not refilled yet into the document. Measured offscreen with the blocking removed: 9 writes
+during one refill, one of them a shadow radius of -500. The margin and bleed controls were never
+refilled at all until this was checked, so the first edit of the bleed after a restart wrote the
+margin's GTK default of 0 over the document's.
 
 The cursor names the action under the pointer: a hand over a frame or a connector, a corner
 cursor over a scale handle (turned with the frame), the exchange cursor over the rotation

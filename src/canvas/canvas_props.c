@@ -384,8 +384,8 @@ static const dt_canvas_prop_t _props[] = {
     .widget = DT_CANVAS_WIDGET_ICON_FLAG, .max = 1.0, .factor = 1.0, .neutral = NAN, .icons = _edit_icons,
     .visible_if = DT_CANVAS_PROP_CUTOUT_SHAPE, .visible_values = SHAPES_ANY },
   { .id = DT_CANVAS_PROP_CUTOUT_SIZE_X, .key = "cutout.size_x", .label = N_("Size"),
-    .tooltip = N_("The circle's radius, the ellipse's horizontal radius or the gradient's extent, percent of the "
-                  "frame's shorter side"),
+    .tooltip = N_("The circle's radius, the gradient's extent, or the ellipse's horizontal radius with its "
+                  "vertical one scaled in proportion, percent of the frame's shorter side"),
     .unit = N_("%"), .kinds = KINDS_FRAMES, .section = DT_CANVAS_SECTION_CUTOUT, .tier = DT_CANVAS_TIER_MORE,
     .widget = DT_CANVAS_WIDGET_TUNE, .min = 0.05, .max = 200.0, .soft_min = 0.5, .soft_max = 100.0, .step = 0.5,
     .factor = 0.01, .neutral = NAN, .digits = 1, .pair_with = DT_CANVAS_PROP_CUTOUT_SIZE_Y,
@@ -393,7 +393,8 @@ static const dt_canvas_prop_t _props[] = {
     .visible_values = SHAPE_BIT(DT_CANVAS_MASK_CIRCLE) | SHAPE_BIT(DT_CANVAS_MASK_ELLIPSE)
                       | SHAPE_BIT(DT_CANVAS_MASK_GRADIENT) },
   { .id = DT_CANVAS_PROP_CUTOUT_SIZE_Y, .key = "cutout.size_y", .label = N_("Size Y"),
-    .tooltip = N_("The ellipse's vertical radius, percent of the frame's shorter side"), .unit = N_("%"),
+    .tooltip = N_("The ellipse's vertical radius alone, which changes its proportions, percent of the frame's "
+                  "shorter side"), .unit = N_("%"),
     .kinds = KINDS_FRAMES, .section = DT_CANVAS_SECTION_CUTOUT, .tier = DT_CANVAS_TIER_MORE,
     .widget = DT_CANVAS_WIDGET_TUNE, .min = 0.5, .max = 200.0, .soft_min = 0.5, .soft_max = 100.0, .step = 0.5,
     .factor = 0.01, .neutral = NAN, .digits = 1, .pair_with = DT_CANVAS_PROP_CUTOUT_SIZE_X,
@@ -1676,10 +1677,19 @@ static uint32_t _write_shared(dt_canvas_t *canvas, dt_canvas_object_t *object, c
       const double size = _clamp_number(prop, in->number) * prop->factor;
       // The gradient's extent is a fraction of the frame; a radius may reach past it.
       if(object->mask.shape == DT_CANVAS_MASK_GRADIENT)
+      {
         object->mask.radius_x = (float)CLAMP(size, 0.0005, 1.0);
-      else
-        object->mask.radius_x = (float)CLAMP(size, 0.005, 2.0);
-      return OBSTACLE_EFFECTS;
+        return OBSTACLE_EFFECTS;
+      }
+      const double previous_radius = object->mask.radius_x;
+      object->mask.radius_x = (float)CLAMP(size, 0.005, 2.0);
+      if(object->mask.shape != DT_CANVAS_MASK_ELLIPSE || !(previous_radius > 0.0)) return OBSTACLE_EFFECTS;
+      // The size of an ellipse scales it whole, so it keeps its proportions; the vertical radius alone
+      // is what changes them. Nothing else resizes an ellipse in proportion -- a handle drags one radius,
+      // the wheel sets the feather -- and the context menu's Size, which did, is gone.
+      const double scale = object->mask.radius_x / previous_radius;
+      object->mask.radius_y = (float)CLAMP(object->mask.radius_y * scale, 0.005, 2.0);
+      return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_COUPLED;
     }
     case DT_CANVAS_PROP_CUTOUT_SIZE_Y:
       object->mask.radius_y = (float)CLAMP(_clamp_number(prop, in->number) * prop->factor, 0.005, 2.0);

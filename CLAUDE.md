@@ -3186,7 +3186,15 @@ they are visible.
   drag. Keyed on it, the cutout submenu's node entries were a duplicate of the top-level ones
   whenever the shape was being edited and dead code the rest of the time -- reported as "the
   context menu option to toggle nodes cusps <-> smooth is missing", and it was there twice.
-  `_mask_node_at()` is the question a menu wants.
+  `_mask_node_at()` is the question a menu wants. The cutout submenu itself is gone now -- the
+  shape, feather, inversion and edit mode are the properties' -- and what the menu keeps is what
+  only a pointer can name: the node or edge under it while the shape is edited, and the way into
+  the edit mode for a node while it is not. `_mask_node_at()` answering outside the edit mode is
+  what makes that second entry possible. **A control removed as a duplicate is checked against what
+  its handler DID, not against the name of the property it wrote**: the menu's Size looked like
+  `DT_CANVAS_PROP_CUTOUT_SIZE_X` and scaled an ellipse's two radii together, which nothing left
+  could do, so that writer now scales the vertical radius with it and Size Y alone changes the
+  proportions.
 - **A polygon node's record may grow, and the file says how wide it was.** The node chunk's
   size divided by the node count is the stride it was written with: a shorter record reads as
   zero in the fields it lacks, a longer one is stepped over. Never assume the current width
@@ -3212,11 +3220,20 @@ they are visible.
   refills the toolbar itself. Without that the Reset button reached the document and nothing
   else: the sliders kept their positions, so it read as doing nothing at all, and the next
   touch of any slider sent all four stale values back and undid it. The same shape lives in
-  the view's context menu, whose handlers change fields the property bar shows and must call
-  `_bars_refresh(self, TRUE)`: the cutout's shape and the edit mode did, its Invert did not.
-  **Sweep for this by function, not by eye** -- and grep for all three spellings
-  (`_bars_refresh`, `_bars_request`, `_announce_document`), since a sweep that misses one
-  reports every correct handler as broken.
+  the view's context menu, whose handlers change what the floating properties show or keep clear
+  of and must call `_props_sync()` -- a node added or removed from the menu changes the handles
+  the placement keeps clear of. **Sweep for this by function, not by eye** -- and grep for every spelling
+  (`_props_sync`, `_props_refresh`, `_announce_document`, a raw `DT_SIGNAL_CANVAS_CHANGED`
+  raise), since a sweep that misses one reports every correct handler as broken.
+  **A refill blocks every handler it could wake by its STORED id, never a flag the handlers
+  check** (`_connect_refilled()` in the toolbar is the only way such a handler is connected). A
+  handler that reads several controls -- the margin with the bleed, the shadow's three spins --
+  woken halfway through a refill sends the ones not refilled yet: measured offscreen with the
+  blocking removed, 9 writes during one refill, one of them a shadow radius of -500, the spin's
+  range minimum GTK starts it at. And **a control that mirrors a document setting is refilled, or
+  it is state**: the margin and bleed controls never were, so they showed 0 whatever the document
+  held and the first edit of the bleed after a restart wrote the margin's 0 over the document's
+  (measured against the previous toolbar: margin 36 in, 0 out).
 - **The ZIP is ours** (`canvas_zip.c`, store + deflate, no ZIP64) because no archive library
   is linked and zlib is. `unzip -t` is run on the writer's output in the unit test when
   available; keep it passing.
@@ -3575,7 +3592,7 @@ they are visible.
 - **A picture and a drawing keep their proportions unless told not to**
   (`dt_canvas_object_keeps_ratio()`). `DT_CANVAS_OBJECT_FLAG_FREE_RATIO` is stated the FREE way
   round so ZERO is the careful answer, and one predicate answers for the corner drag and the
-  property bar's two size spins alike -- two spellings of that question is how they come to
+  properties' Width and Height alike -- two spellings of that question is how they come to
   disagree.
 - **A drawing's obstacle silhouette is its own ink** (`dt_canvas_render_svg_coverage()`, an A8
   render at the occupancy map's pitch), so text flows past the shape the file draws rather than
@@ -3633,15 +3650,136 @@ they are visible.
   are not offered**: glyph composition, mark placement, cursive joining forms and the
   language's own substitutions are what make text shapeable, HarfBuzz turns them on and off as
   the script requires, and a checkbox overriding that breaks the rendering rather than styling
-  it. Linux Libertine ships five of them among its 32. The popover is rebuilt only when the
-  face changes, so ticking a box does not destroy the box being ticked.
+  it. Linux Libertine ships five of them among its 32. The list is rebuilt only when the face
+  changes, not its size, so ticking a box does not destroy the box being ticked.
 - **The feature string outgrew the record's fixed field, and silently.** 64 bytes holds eight
   tags; a document with seven set refused the ninth and every one after it with no error,
   reported as the feature checkboxes having stopped working. The whole string is a tagged CHUNK
   beside the record now -- the mechanism the polygon's nodes already use -- and the fixed field
   keeps as many WHOLE tags as fit, for a reader that predates the chunk: half a tag is not a
   feature, and Pango reads a malformed feature string as nothing at all.
-- **A property with a canvas default has no toggle on the property bar: -1 in its spin button
-  is the "inherit" code** (`CANVAS_BAR_INHERIT`), rendered as `default` through the spin's
-  `output` signal, and leaving it seeds the object from the effective property. Colours carry
-  their own alpha, so nothing has a "Transparent" button either.
+- **Every per-object property is described once, in `canvas/canvas_props.c`, and edited through
+  `dt_canvas_prop_write()`, which returns what the caller owes as effect bits.** A frontend
+  never carries an edit's rules in its handlers: the bar the floating properties replaced did, and
+  two of those copies had drifted into data bugs -- an offset edited while the shadow's blur read
+  "default" was written into a shadow the frame did not own, so nothing drawn changed, and picking
+  a border colour made the frame own a border of whatever width its field held. **An override
+  group reads what the object is DRAWN with**: editing one field while inheriting seeds the whole
+  group from the screen first, and writing the inherited value while inheriting changes nothing,
+  so a control reset to the canvas's value leaves the object inheriting. That comparison is at
+  the precision the row SHOWS, since a reset rounds there; a value the object owns is compared
+  as stored, so typing 100 over a frame dragged to 100.4 still snaps it level. There is no in-band
+  "-1 means default" any more, and colours carry their own alpha, so nothing has a
+  "Transparent" button either.
+- **An object's properties open on a double click, the I key or the context menu's
+  "Properties" -- never on a click -- and `_props_sync()` never opens them.** It refills,
+  places, hides or closes; opening is `_props_open()`, reached from the double click's idle, the
+  I action and the menu entry, and `enter()` only shows again what was left open. The bar they
+  replaced answered "one object selected", so it appeared on every click, came back after every
+  drag and sat over the next thing to grab. A new code path that wants the properties current calls
+  `_props_sync()`; one that calls `_props_open()` has decided the user asked. `doc/canvas.md`
+  "The floating properties" is the full account.
+- **A double click on an object whose properties are showing DRILLS into it, and "showing" is
+  read before that double click's OWN first press.** `dt_canvas_click_sequence_t`
+  (`canvas_props.c`) pairs presses exactly as GDK 3.24's `_gdk_event_button_generate` does --
+  read from the source, not assumed: the same button, strictly sooner than
+  `gtk-double-click-time`, within `gtk-double-click-distance` on EACH axis, timed with the
+  events' own timestamps and unsigned differences across the wrap. The first version defined a
+  run by the handler's clock and read the run's first press: it drilled into an object whose
+  properties a click beside it had just closed, and swallowed a real double click on a second
+  object. A run answers ONCE, because GDK reports the fifth press of a fast burst as another
+  double click, which would find the properties the second one opened and drill into a dialog
+  nobody asked for. A handle takes a double click only when its first press took one: that press
+  selects a small frame, and the second then lands on corners that were not there when the user
+  aimed. The action runs from an idle at `G_PRIORITY_HIGH_IDLE`: the old double-click branch ran a
+  modal dialog from the press handler while the second press's move and its snapshot were still
+  armed, and an idle queued behind the press's redraw would let a triple click's third press, on a
+  slow page, get in first and drop it. GDK
+  reports a press less than twice the delay after a double click began as a triple, so a
+  deliberate second double click has to wait that long -- that is the toolkit, not a bug here.
+- **Every handle a press can grab is listed ONCE, in `canvas/canvas_handles.c`, and both the hit
+  tests and the placement walk that list.** Six hand-written hit tests each had their own copy of
+  where a handle sits and how far it catches, and the old bar's box read only a route's points, so
+  it covered a cubic connector's tangents, its waypoint and the knob 28 px above a frame. A new
+  handle is a new site role, never a new hit test. Ask a site "within reach", never "not further
+  than": the old tests skipped a handle when its distance was GREATER than the reach, so a node
+  whose position was not a number -- the file reader copies floats as they stand -- caught every
+  press made while it showed. Verified by compiling the old tests against the new: 25,035,084
+  comparisons over 3000 random scenes, no mismatch. **Two things it inherited and does not fix**:
+  a circle lists four cutout points like an ellipse so its feather keeps index 3, and its unused
+  [2] is left at the frame's centre -- a dot is painted there while the shape is edited, a press
+  there drags a second radius the circle does not have (walked outer points first, it also shadows
+  the centre handle of a circle left where it is born), and the placement keeps clear of it as a
+  handle. Read from the code, not
+  seen in the atelier; `test_canvas_handles` deliberately does not pin that point. And the view's
+  priorities BETWEEN roles (the hovered node's own handles before the nodes, a cutout's outer points
+  before its centre) live in static functions of the view plugin, which no committed test reaches.
+- **What one click in the properties would add is predicted on a COPY that nothing but a read
+  ever sees** (`canvas_place_shapes.c`). The obvious way is wrong both ways it can be done:
+  `dt_canvas_connector_add_via()` touches the document, and `dt_canvas_mask_set_shape()` on a
+  shallow copy frees the nodes the original still points at.
+- **A placement is never clamped onto the object: a candidate top only moves within a stretch
+  proven free** (`canvas/canvas_place.c`). The old bar went below the object, then clamped itself
+  back into the view -- over the object and the handles the user was about to grab. The search is by level (clear
+  of HARD, PREDICTED and BODY; then of HARD and BODY; then of HARD alone), so the body is covered
+  only once every spot clear of it has failed, by construction and not by care. **A card is placed
+  whole or not at all**: a cap of 420 px and 60 % of the view, scrolled in whatever room the
+  strip's column had, showed a drawing's card as six of its seven sections over a scrollbar in a
+  view with room for all seven; only a view shorter than strip plus card scrolls it, with
+  `GTK_POLICY_EXTERNAL`. **Snap the inputs**: from a raw anchor, moving a whole scene by whole
+  pixels changed the rounding of a near tie and one pan resolved to two spots; the anchor and the
+  press are snapped to a 256th of a pixel, the rest to whole pixels. **A placement that found no
+  room is no previous placement**: its all-zero strip made the next search pay a movement cost
+  from the view's top-left corner, and go there. `test_canvas_place` checks 10,000 scenes against a
+  brute force over every pixel; each rule above was put back and failed it.
+- **`canvas/debug/placement` paints what the last placement kept clear, and a Debug build
+  asserts no HARD rectangle overlaps the footprint.** Answer "the properties sit on a handle" by
+  switching it on, not by reasoning about the solver.
+- **The properties never move while the user is in them, and the keyboard focus ALONE holds
+  nothing.** A placement waits for the pointer over them, digits typed and not applied, or a
+  LIVE edit, and runs on leave, Return, a focus change or canvas motion. A slider or a spin
+  button keeps the focus once clicked, so a hold on the focus never ended: after a click on a
+  width's +, the properties stayed over the corners the frame had grown into until the canvas was
+  clicked. The root is an EVENT BOX so a crossing between its controls is INFERIOR, and a grab
+  crossing (a dialog, a popup) is not the pointer leaving either.
+- **An edit in the properties is one session: one snapshot, one `dt_canvas_touch()` per step,
+  and one undo record, map fetch, conf write and `DT_SIGNAL_CANVAS_CHANGED` at its end.** Edits
+  arrive tagged LIVE, COMMIT or ONCE (`dt_canvas_edit_phase_t`). **Commit what the properties
+  hold before anything else reaches the document -- and the binder's own debounced session
+  FIRST** (`_props_commit_pending()` calls `dt_canvas_props_gtk_commit()`): ending only the view's
+  session left the binder's 400 ms timer armed, so a Ctrl+Z inside that window was undone and then
+  re-done by the timer, wiping the redo list, and a corner drag right after a wheel step had the
+  old width written into it. The Edit menu's undo cannot record (the undo stack is locked while it
+  pops), so it FORGETS the session instead (`dt_canvas_props_gtk_forget()`). And `key_pressed()`
+  commits only in the branches that act: a bare Shift or Ctrl committing cut typed digits and a
+  Shift+arrow burst into several undo steps.
+- **Plain keys belong to the controls while the focus is inside the properties, modified keys
+  to the shortcuts.** `dt_accels_block_plain_keys_inside()` tags the root and is read on every
+  keystroke, so nothing can stick; function keys still fire (blocking them again silences F11 and
+  Shift+F11 from a control inside). A text field inside such a container keeps only the modified
+  keys its own class binds -- Ctrl+A, Ctrl+C, a word jump -- and sends the rest on: before that,
+  Ctrl+Z and Ctrl+S did nothing while a spin button of the properties had the focus. The view
+  swallows the Delete, arrows and Return the controls did not take, or they delete, nudge or
+  drill into the object being edited.
+- **No overlay pass-through, no popovers, and modal colour and font dialogs.** GDK still
+  delivers events to a pass-through child's subwindows, so buttons catch clicks while the gaps
+  between them leak to the canvas -- and the solved rectangle covers no handle, so there is
+  nothing to pass through to. The old bar's popovers were each a surface with a placement nothing
+  kept clear of the handles; the card holds every property, and only visibility changes inside
+  it. GtkColorButton's and GtkFontButton's own dialogs cannot be relied on to be modal (and
+  GtkFontButton cannot ellipsise its label), so `widgets/chooser_button.c` opens modal ones and
+  reports a pick once, after the dialog is gone.
+- **Three GTK facts the card's sizing rests on:** a scrolled window's
+  natural height is NOT height-for-width, so the card's height comes from
+  `dt_canvas_props_gtk_measure()` and never from the widget's own natural height (wrapped text
+  asks for its height at its narrowest); `max-content-height` caps the VIEWPORT's outer height, so
+  the cap is taken off the scrolled window's own box only; and a GtkEventBox does not count a CSS
+  border -- measured 53 px wide around 53 px of content despite a 1 px border, 55 around 53 with
+  the class on the box inside it. The binder's root carries its own destroy handler that stops
+  every timer and focus-out, because a parent destroyed first otherwise reached freed controls:
+  valgrind counted 239 invalid reads without it and none with it.
+- **Secondary text on the properties must reach 4.5:1 against what it sits on, and still read
+  dimmer than the titles.** On the sections' former `#777777` no grey can do both (summaries
+  read 1.42:1, titles 3.96:1), so the properties take a darker surface as the tooltips do:
+  `@grey_35`, `@grey_30` headings, `@grey_80` for what is secondary -- 4.57:1 on the surface and
+  5.44:1 on a heading, under titles at 8.23:1.

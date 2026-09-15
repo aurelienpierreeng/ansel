@@ -18,13 +18,18 @@
 
 /**
  * @file libs/tools/canvas_toolbar.c
- * @brief The Canvas atelier's toolbar: file and object menus, creation buttons, the guides popover.
+ * @brief The Canvas atelier's toolbar: what belongs to the whole canvas.
  *
- * @details The toolbar holds no document state. Every button asks the view for an action
- * through `proxy.canvas` (see canvas/canvas_actions.h) and the controls that mirror
- * document settings -- the guides popover, the default border, the background -- are
- * refilled from the document on DT_SIGNAL_CANVAS_CHANGED, with their handlers blocked so
- * a refill never writes back.
+ * @details The canvas and object menus, the guides, the buttons that add frames, the plane's
+ * background and texture, the defaults every frame inherits (borders, corners, shadows), the zoom
+ * and the layouts. What belongs to ONE object is not here: it is in that object's floating
+ * properties, which the view owns (views/canvas_props_gtk.h).
+ *
+ * The toolbar holds no document state. Every button asks the view for an action through
+ * `proxy.canvas` (see canvas/canvas_actions.h), and every control that mirrors a document setting is
+ * refilled from the document on DT_SIGNAL_CANVAS_CHANGED and on entering the atelier. A refill
+ * blocks every handler it could wake, one stored handler id at a time, so a value written into a
+ * control never reaches the view back as an edit.
  */
 
 #include "canvas/canvas.h"
@@ -45,6 +50,13 @@
 #include <gtk/gtk.h>
 
 DT_MODULE(1)
+
+/** A handler on a control the document refills, kept so a refill can block it. */
+typedef struct dt_lib_canvas_toolbar_handler_t
+{
+  GObject *instance;
+  gulong handler_id;
+} dt_lib_canvas_toolbar_handler_t;
 
 typedef struct dt_lib_canvas_toolbar_t
 {
@@ -94,7 +106,7 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *corner_radius;
   GtkWidget *layout;
   GtkWidget *sort;
-  gboolean refilling; ///< handlers ignore changes while the controls are refilled from the document
+  GArray *refilled_handlers; ///< dt_lib_canvas_toolbar_handler_t: every handler a refill blocks
 } dt_lib_canvas_toolbar_t;
 
 const char *name(dt_lib_module_t *self)
@@ -149,12 +161,40 @@ static void _action_clicked(GtkWidget *widget, gpointer user_data)
   _ask((dt_canvas_action_t)GPOINTER_TO_INT(user_data));
 }
 
-static gboolean _live(dt_lib_module_t *self, dt_view_t **view)
+/** The atelier's view, when there is one to send an edit to. */
+static gboolean _live(dt_view_t **view)
 {
-  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
-  if(toolbar->refilling) return FALSE;
   *view = _canvas_view();
   return !IS_NULL_PTR(*view);
+}
+
+/**
+ * Connect a handler on a control the document refills. Every such handler goes through here and
+ * nowhere else, so none can be missed by the refill that must block it: a handler left awake writes
+ * the value being refilled straight back into the document, and a handler that reads SEVERAL controls
+ * -- the margin with the bleed, the three spread spins -- writes every one of them as the refill left
+ * it so far, which is not the document yet.
+ */
+static void _connect_refilled(dt_lib_module_t *self, GtkWidget *widget, const char *signal, GCallback callback)
+{
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  dt_lib_canvas_toolbar_handler_t handler;
+  handler.instance = G_OBJECT(widget);
+  handler.handler_id = g_signal_connect(widget, signal, callback, self);
+  g_array_append_val(toolbar->refilled_handlers, handler);
+}
+
+static void _refilled_handlers_block(dt_lib_canvas_toolbar_t *toolbar, const gboolean block)
+{
+  for(guint idx = 0; idx < toolbar->refilled_handlers->len; idx++)
+  {
+    const dt_lib_canvas_toolbar_handler_t *handler
+        = &g_array_index(toolbar->refilled_handlers, dt_lib_canvas_toolbar_handler_t, idx);
+    if(block)
+      g_signal_handler_block(handler->instance, handler->handler_id);
+    else
+      g_signal_handler_unblock(handler->instance, handler->handler_id);
+  }
 }
 
 static void _rgba_of(GtkWidget *button, float rgba[4])
@@ -178,7 +218,7 @@ static void _rgba_to(GtkWidget *button, const dt_canvas_color_t *color, const gb
 static void _connect_toggled(GtkToggleButton *button, gpointer user_data)
 {
   dt_view_t *view = NULL;
-  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.is_connecting)) return;
   if(gtk_toggle_button_get_active(button) != dt_view_manager_get_global()->proxy.canvas.is_connecting(view))
     _ask(DT_CANVAS_ACTION_CONNECT_MODE);
@@ -188,7 +228,7 @@ static void _connect_toggled(GtkToggleButton *button, gpointer user_data)
 static void _guide_flag_toggled(GtkToggleButton *button, gpointer user_data)
 {
   dt_view_t *view = NULL;
-  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_guides)) return;
   const int flag = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "guide-flag"));
   dt_view_manager_get_global()->proxy.canvas.set_guides(view, flag, gtk_toggle_button_get_active(button) ? flag : 0);
@@ -199,7 +239,7 @@ static void _spread_changed(GtkSpinButton *spin, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
   dt_view_t *view = NULL;
-  if(!_live(self, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_spread)) return;
   dt_view_manager_get_global()->proxy.canvas.set_spread(
       view, (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->spread_cols)),
@@ -210,7 +250,7 @@ static void _spread_changed(GtkSpinButton *spin, gpointer user_data)
 static void _resolution_changed(GtkSpinButton *spin, gpointer user_data)
 {
   dt_view_t *view = NULL;
-  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_resolution)) return;
   dt_view_manager_get_global()->proxy.canvas.set_resolution(view, (float)gtk_spin_button_get_value(spin));
 }
@@ -218,7 +258,7 @@ static void _resolution_changed(GtkSpinButton *spin, gpointer user_data)
 static void _grid_size_changed(GtkSpinButton *spin, gpointer user_data)
 {
   dt_view_t *view = NULL;
-  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_grid_size)) return;
   dt_view_manager_get_global()->proxy.canvas.set_grid_size(view, (float)gtk_spin_button_get_value(spin));
 }
@@ -226,7 +266,7 @@ static void _grid_size_changed(GtkSpinButton *spin, gpointer user_data)
 static void _padding_changed(GtkSpinButton *spin, gpointer user_data)
 {
   dt_view_t *view = NULL;
-  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_padding)) return;
   dt_view_manager_get_global()->proxy.canvas.set_padding(view, (float)gtk_spin_button_get_value(spin));
 }
@@ -234,7 +274,7 @@ static void _padding_changed(GtkSpinButton *spin, gpointer user_data)
 static void _grid_color_set(GtkWidget *button, gpointer user_data)
 {
   dt_view_t *view = NULL;
-  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_grid_color)) return;
   float rgba[4];
   _rgba_of(button, rgba);
@@ -244,7 +284,7 @@ static void _grid_color_set(GtkWidget *button, gpointer user_data)
 static void _page_color_set(GtkWidget *button, gpointer user_data)
 {
   dt_view_t *view = NULL;
-  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_page_color)) return;
   float rgba[4];
   _rgba_of(button, rgba);
@@ -254,7 +294,7 @@ static void _page_color_set(GtkWidget *button, gpointer user_data)
 static void _padding_color_set(GtkWidget *button, gpointer user_data)
 {
   dt_view_t *view = NULL;
-  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_padding_color)) return;
   float rgba[4];
   _rgba_of(button, rgba);
@@ -267,7 +307,7 @@ static void _shadow_changed(GtkWidget *widget, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
   dt_view_t *view = NULL;
-  if(!_live(self, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_shadow)) return;
   float rgba[4];
   _rgba_of(toolbar->shadow_color, rgba);
@@ -282,7 +322,7 @@ static void _page_guides_changed(GtkWidget *widget, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
   dt_view_t *view = NULL;
-  if(!_live(self, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_page_guides)) return;
   dt_view_manager_get_global()->proxy.canvas.set_page_guides(
       view, (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->margin_size)),
@@ -291,9 +331,8 @@ static void _page_guides_changed(GtkWidget *widget, gpointer user_data)
 
 static void _margin_color_set(GtkWidget *widget, gpointer user_data)
 {
-  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_view_t *view = NULL;
-  if(!_live(self, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_margin_color)) return;
   float rgba[4];
   _rgba_of(widget, rgba);
@@ -302,9 +341,8 @@ static void _margin_color_set(GtkWidget *widget, gpointer user_data)
 
 static void _bleed_color_set(GtkWidget *widget, gpointer user_data)
 {
-  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_view_t *view = NULL;
-  if(!_live(self, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_bleed_color)) return;
   float rgba[4];
   _rgba_of(widget, rgba);
@@ -316,7 +354,7 @@ static void _page_changed(GtkWidget *widget, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
   dt_view_t *view = NULL;
-  if(!_live(self, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_paper)) return;
   // The list's order is not the stored value: a size appended to the enum shows where it belongs.
   const int position = gtk_combo_box_get_active(GTK_COMBO_BOX(toolbar->page_size));
@@ -330,7 +368,7 @@ static void _background_changed(GtkWidget *widget, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
   dt_view_t *view = NULL;
-  if(!_live(self, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_background)) return;
   if(widget == toolbar->background_style)
   {
@@ -352,7 +390,7 @@ static void _texture_changed(GtkWidget *widget, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
   dt_view_t *view = NULL;
-  if(!_live(self, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_texture)) return;
   dt_view_manager_get_global()->proxy.canvas.set_texture(
       view, (float)gtk_range_get_value(GTK_RANGE(toolbar->texture_contrast)),
@@ -365,7 +403,7 @@ static void _texture_reset(GtkWidget *widget, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_view_t *view = NULL;
-  if(!_live(self, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_texture)) return;
   dt_view_manager_get_global()->proxy.canvas.set_texture(view, 1.0f, 1.0f, 1.0f, 1.0f);
   // Every other caller of set_texture is one of the four sliders sending its own value, and
@@ -382,7 +420,7 @@ static void _border_changed(GtkWidget *widget, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
   dt_view_t *view = NULL;
-  if(!_live(self, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_border)) return;
   float rgba[4];
   _rgba_of(toolbar->border_color, rgba);
@@ -392,7 +430,7 @@ static void _border_changed(GtkWidget *widget, gpointer user_data)
 static void _corner_changed(GtkSpinButton *spin, gpointer user_data)
 {
   dt_view_t *view = NULL;
-  if(!_live((dt_lib_module_t *)user_data, &view)) return;
+  if(!_live(&view)) return;
   if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_corner_radius)) return;
   dt_view_manager_get_global()->proxy.canvas.set_corner_radius(view, (float)gtk_spin_button_get_value(spin));
 }
@@ -420,7 +458,7 @@ static void _refill(dt_lib_module_t *self)
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
   const dt_canvas_t *canvas = _document();
   if(IS_NULL_PTR(canvas) || IS_NULL_PTR(toolbar)) return;
-  toolbar->refilling = TRUE;
+  _refilled_handlers_block(toolbar, TRUE);
   dt_view_t *view = _canvas_view();
   const gboolean connecting = !IS_NULL_PTR(view) && !IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.is_connecting)
                               && dt_view_manager_get_global()->proxy.canvas.is_connecting(view);
@@ -446,6 +484,17 @@ static void _refill(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->size_snap), (flags & DT_CANVAS_SNAP_SIZE) != 0);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->padding_show), (flags & DT_CANVAS_PADDING_VISIBLE) != 0);
   _rgba_to(toolbar->padding_color, &canvas->padding_color, TRUE);
+  // The margin and the bleed are one setter, and a change to either sends both spins. Never refilled,
+  // they showed 0 whatever the document or the last session held, and the first edit of one wrote the
+  // other's 0 into the document.
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->margin_show), (flags & DT_CANVAS_MARGIN_VISIBLE) != 0);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->margin_snap), (flags & DT_CANVAS_SNAP_MARGIN) != 0);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->margin_size), canvas->page_margin);
+  _rgba_to(toolbar->margin_color, &canvas->margin_color, TRUE);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->bleed_show), (flags & DT_CANVAS_BLEED_VISIBLE) != 0);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->bleed_snap), (flags & DT_CANVAS_SNAP_BLEED) != 0);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->bleed_size), canvas->page_bleed);
+  _rgba_to(toolbar->bleed_color, &canvas->bleed_color, TRUE);
 
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_x), canvas->shadow.offset_x);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_y), canvas->shadow.offset_y);
@@ -467,7 +516,7 @@ static void _refill(dt_lib_module_t *self)
   gtk_range_set_value(GTK_RANGE(toolbar->texture_detail), detail);
   gtk_range_set_value(GTK_RANGE(toolbar->texture_scale), scale);
   gtk_range_set_value(GTK_RANGE(toolbar->texture_grain), grain);
-  toolbar->refilling = FALSE;
+  _refilled_handlers_block(toolbar, FALSE);
 }
 
 static void _canvas_changed(gpointer instance, gpointer user_data)
@@ -537,9 +586,9 @@ static GtkWidget *_popover_button(GtkWidget *box, const char *label, const char 
 }
 
 /** A slider row of a popover: a label, a scale, its value. */
-static GtkWidget *_popover_slider(GtkWidget *grid, const int row, const char *label, const double low,
-                                  const double high, const double step, const char *tooltip, GCallback callback,
-                                  gpointer data)
+static GtkWidget *_popover_slider(dt_lib_module_t *self, GtkWidget *grid, const int row, const char *label,
+                                  const double low, const double high, const double step, const char *tooltip,
+                                  GCallback callback)
 {
   GtkWidget *name = gtk_label_new(label);
   gtk_widget_set_halign(name, GTK_ALIGN_START);
@@ -551,7 +600,7 @@ static GtkWidget *_popover_slider(GtkWidget *grid, const int row, const char *la
   gtk_widget_set_size_request(scale, DT_PIXEL_APPLY_DPI(220), -1);
   gtk_widget_set_hexpand(scale, TRUE);
   gtk_widget_set_tooltip_text(scale, tooltip);
-  g_signal_connect(scale, "value-changed", callback, data);
+  _connect_refilled(self, scale, "value-changed", callback);
   gtk_grid_attach(GTK_GRID(grid), scale, 1, row, 3, 1);
   return scale;
 }
@@ -562,7 +611,7 @@ static GtkWidget *_guide_check(dt_lib_module_t *self, GtkWidget *grid, const int
 {
   GtkWidget *check = gtk_check_button_new_with_label(label);
   g_object_set_data(G_OBJECT(check), "guide-flag", GINT_TO_POINTER(flag));
-  g_signal_connect(check, "toggled", G_CALLBACK(_guide_flag_toggled), self);
+  _connect_refilled(self, check, "toggled", G_CALLBACK(_guide_flag_toggled));
   gtk_grid_attach(GTK_GRID(grid), check, col, row, 1, 1);
   return check;
 }
@@ -602,12 +651,12 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   toolbar->grid_snap = _guide_check(self, grid, 1, 1, _("Snap"), DT_CANVAS_GRID_SNAP);
   toolbar->grid_size = gtk_spin_button_new_with_range(5.0, 1000.0, 5.0);
   gtk_widget_set_tooltip_text(toolbar->grid_size, _("Grid spacing, in canvas units"));
-  g_signal_connect(toolbar->grid_size, "value-changed", G_CALLBACK(_grid_size_changed), self);
+  _connect_refilled(self, toolbar->grid_size, "value-changed", G_CALLBACK(_grid_size_changed));
   _labelled(grid, 1, 2, _("Size"), toolbar->grid_size);
   toolbar->grid_color = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->grid_color), TRUE);
   gtk_widget_set_tooltip_text(toolbar->grid_color, _("Colour of the grid dots"));
-  g_signal_connect(toolbar->grid_color, "color-set", G_CALLBACK(_grid_color_set), self);
+  _connect_refilled(self, toolbar->grid_color, "color-set", G_CALLBACK(_grid_color_set));
   _labelled(grid, 1, 3, _("Colour"), toolbar->grid_color);
 
   _section_label(grid, 2, _("Page borders"));
@@ -618,7 +667,7 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
                               _("Dots per inch the page is rasterised at when it is exported. It moves nothing "
                                 "on the canvas -- the plane is measured in points, so a size on it is a size on "
                                 "the paper -- and only decides how many pixels an export carries."));
-  g_signal_connect(toolbar->resolution, "value-changed", G_CALLBACK(_resolution_changed), self);
+  _connect_refilled(self, toolbar->resolution, "value-changed", G_CALLBACK(_resolution_changed));
   _labelled(grid, 2, 2, _("Export DPI"), toolbar->resolution);
   toolbar->page_show = _guide_check(self, grid, 3, 0, _("Show"), DT_CANVAS_PAGE_VISIBLE);
   toolbar->page_snap = _guide_check(self, grid, 3, 1, _("Snap"), DT_CANVAS_SNAP_PAGE);
@@ -632,17 +681,17 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->page_size,
                               _("Divide the canvas into pages of this size, one exported page each. One canvas unit is one "
                                 "point, so a print size is its size in points and a screen size is its size in pixels at 72 dpi."));
-  g_signal_connect(toolbar->page_size, "changed", G_CALLBACK(_page_changed), self);
+  _connect_refilled(self, toolbar->page_size, "changed", G_CALLBACK(_page_changed));
   _labelled(grid, 3, 2, _("Size"), toolbar->page_size);
   toolbar->page_color = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->page_color), TRUE);
   gtk_widget_set_tooltip_text(toolbar->page_color, _("Colour of the page borders"));
-  g_signal_connect(toolbar->page_color, "color-set", G_CALLBACK(_page_color_set), self);
+  _connect_refilled(self, toolbar->page_color, "color-set", G_CALLBACK(_page_color_set));
   _labelled(grid, 3, 3, _("Colour"), toolbar->page_color);
   toolbar->page_orientation = gtk_combo_box_text_new();
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_orientation), _("Portrait"));
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_orientation), _("Landscape"));
-  g_signal_connect(toolbar->page_orientation, "changed", G_CALLBACK(_page_changed), self);
+  _connect_refilled(self, toolbar->page_orientation, "changed", G_CALLBACK(_page_changed));
   _labelled(grid, 4, 2, _("Orientation"), toolbar->page_orientation);
 
   _section_label(grid, 5, _("Spread"));
@@ -650,18 +699,18 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->spread_cols,
                               _("Pages across one sheet. A book is 2, a poster taped together as many as it takes. "
                                 "0 tiles the plane uniformly, with no fold anywhere."));
-  g_signal_connect(toolbar->spread_cols, "value-changed", G_CALLBACK(_spread_changed), self);
+  _connect_refilled(self, toolbar->spread_cols, "value-changed", G_CALLBACK(_spread_changed));
   _labelled(grid, 6, 0, _("Across"), toolbar->spread_cols);
   toolbar->spread_rows = gtk_spin_button_new_with_range(0.0, 64.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->spread_rows, _("Pages down one sheet. 0 tiles the plane uniformly."));
-  g_signal_connect(toolbar->spread_rows, "value-changed", G_CALLBACK(_spread_changed), self);
+  _connect_refilled(self, toolbar->spread_rows, "value-changed", G_CALLBACK(_spread_changed));
   _labelled(grid, 6, 1, _("Down"), toolbar->spread_rows);
   toolbar->bind_gutter = gtk_spin_button_new_with_range(0.0, 2000.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->bind_gutter,
                               _("The binding's own allowance, kept clear inside a page AT A FOLD only -- what a "
                                 "perfect binding swallows out of the middle of a picture crossing it. It is added "
                                 "to the page margin on those sides, and to no others."));
-  g_signal_connect(toolbar->bind_gutter, "value-changed", G_CALLBACK(_spread_changed), self);
+  _connect_refilled(self, toolbar->bind_gutter, "value-changed", G_CALLBACK(_spread_changed));
   _labelled(grid, 6, 2, _("Bind gutter"), toolbar->bind_gutter);
 
   _section_label(grid, 7, _("Page margins"));
@@ -671,12 +720,12 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->margin_size,
                               _("Kept clear inside every page edge, in canvas units. A guide and a snapping rule only: "
                                 "nothing is moved and the page is unchanged."));
-  g_signal_connect(toolbar->margin_size, "value-changed", G_CALLBACK(_page_guides_changed), self);
+  _connect_refilled(self, toolbar->margin_size, "value-changed", G_CALLBACK(_page_guides_changed));
   _labelled(grid, 8, 2, _("Size"), toolbar->margin_size);
   toolbar->margin_color = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->margin_color), TRUE);
   gtk_widget_set_tooltip_text(toolbar->margin_color, _("Colour of the margin lines"));
-  g_signal_connect(toolbar->margin_color, "color-set", G_CALLBACK(_margin_color_set), self);
+  _connect_refilled(self, toolbar->margin_color, "color-set", G_CALLBACK(_margin_color_set));
   _labelled(grid, 8, 3, _("Colour"), toolbar->margin_color);
 
   _section_label(grid, 9, _("Bleed"));
@@ -687,12 +736,12 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
                               _("How far past every page edge the sheet keeps going, in canvas units. A frame a page break "
                                 "cuts in two carries on into the bleed on both sheets, which is what a binding folds around "
                                 "and a trim cuts into. The export writes it."));
-  g_signal_connect(toolbar->bleed_size, "value-changed", G_CALLBACK(_page_guides_changed), self);
+  _connect_refilled(self, toolbar->bleed_size, "value-changed", G_CALLBACK(_page_guides_changed));
   _labelled(grid, 10, 2, _("Size"), toolbar->bleed_size);
   toolbar->bleed_color = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->bleed_color), TRUE);
   gtk_widget_set_tooltip_text(toolbar->bleed_color, _("Colour of the bleed lines"));
-  g_signal_connect(toolbar->bleed_color, "color-set", G_CALLBACK(_bleed_color_set), self);
+  _connect_refilled(self, toolbar->bleed_color, "color-set", G_CALLBACK(_bleed_color_set));
   _labelled(grid, 10, 3, _("Colour"), toolbar->bleed_color);
 
   _section_label(grid, 11, _("Paddings"));
@@ -703,12 +752,12 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   toolbar->padding_size = gtk_spin_button_new_with_range(0.0, 500.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->padding_size,
                               _("The clear margin every frame keeps around itself, in canvas units. Side by side, two frames are two of these apart."));
-  g_signal_connect(toolbar->padding_size, "value-changed", G_CALLBACK(_padding_changed), self);
+  _connect_refilled(self, toolbar->padding_size, "value-changed", G_CALLBACK(_padding_changed));
   _labelled(grid, 12, 2, _("Size"), toolbar->padding_size);
   toolbar->padding_color = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->padding_color), TRUE);
   gtk_widget_set_tooltip_text(toolbar->padding_color, _("Colour of the padding frames"));
-  g_signal_connect(toolbar->padding_color, "color-set", G_CALLBACK(_padding_color_set), self);
+  _connect_refilled(self, toolbar->padding_color, "color-set", G_CALLBACK(_padding_color_set));
   _labelled(grid, 12, 3, _("Colour"), toolbar->padding_color);
   toolbar->size_snap = _guide_check(self, grid, 13, 0, _("Snap sizes to neighbours"), DT_CANVAS_SNAP_SIZE);
   gtk_widget_set_hexpand(toolbar->size_snap, TRUE);
@@ -730,21 +779,21 @@ static GtkWidget *_shadow_popover(dt_lib_module_t *self)
   _section_label(grid, 0, _("Shadow"));
   toolbar->shadow_offset_x = gtk_spin_button_new_with_range(-500.0, 500.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->shadow_offset_x, _("Offset to the right, in canvas units"));
-  g_signal_connect(toolbar->shadow_offset_x, "value-changed", G_CALLBACK(_shadow_changed), self);
+  _connect_refilled(self, toolbar->shadow_offset_x, "value-changed", G_CALLBACK(_shadow_changed));
   _labelled(grid, 1, 1, _("Right"), toolbar->shadow_offset_x);
   toolbar->shadow_offset_y = gtk_spin_button_new_with_range(-500.0, 500.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->shadow_offset_y, _("Offset downwards, in canvas units"));
-  g_signal_connect(toolbar->shadow_offset_y, "value-changed", G_CALLBACK(_shadow_changed), self);
+  _connect_refilled(self, toolbar->shadow_offset_y, "value-changed", G_CALLBACK(_shadow_changed));
   _labelled(grid, 1, 2, _("Down"), toolbar->shadow_offset_y);
   toolbar->shadow_blur = gtk_spin_button_new_with_range(-500.0, 500.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->shadow_blur,
-                              _("Radius, in canvas units: 0 is no shadow, positive drops it outside every object, negative casts it inside along their edges. An object's own bar can override it."));
-  g_signal_connect(toolbar->shadow_blur, "value-changed", G_CALLBACK(_shadow_changed), self);
+                              _("Radius, in canvas units: 0 is no shadow, positive drops it outside every object, negative casts it inside along their edges. An object's own properties can override it."));
+  _connect_refilled(self, toolbar->shadow_blur, "value-changed", G_CALLBACK(_shadow_changed));
   _labelled(grid, 2, 1, _("Radius"), toolbar->shadow_blur);
   toolbar->shadow_color = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->shadow_color), TRUE);
   gtk_widget_set_tooltip_text(toolbar->shadow_color, _("Colour and strength of the shadow"));
-  g_signal_connect(toolbar->shadow_color, "color-set", G_CALLBACK(_shadow_changed), self);
+  _connect_refilled(self, toolbar->shadow_color, "color-set", G_CALLBACK(_shadow_changed));
   _labelled(grid, 2, 2, _("Colour"), toolbar->shadow_color);
   GtkWidget *popover = gtk_popover_new(NULL);
   gtk_container_add(GTK_CONTAINER(popover), grid);
@@ -763,17 +812,17 @@ static GtkWidget *_borders_popover(dt_lib_module_t *self)
   _section_label(grid, 0, _("Borders"));
   toolbar->border_width = gtk_spin_button_new_with_range(0.0, 200.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->border_width, _("Default border width of the frames, in canvas units"));
-  g_signal_connect(toolbar->border_width, "value-changed", G_CALLBACK(_border_changed), self);
+  _connect_refilled(self, toolbar->border_width, "value-changed", G_CALLBACK(_border_changed));
   _labelled(grid, 1, 0, _("Width"), toolbar->border_width);
   toolbar->border_color = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(toolbar->border_color), TRUE);
   gtk_widget_set_tooltip_text(toolbar->border_color, _("Default border colour of the frames"));
-  g_signal_connect(toolbar->border_color, "color-set", G_CALLBACK(_border_changed), self);
+  _connect_refilled(self, toolbar->border_color, "color-set", G_CALLBACK(_border_changed));
   _labelled(grid, 1, 1, _("Colour"), toolbar->border_color);
   toolbar->corner_radius = gtk_spin_button_new_with_range(0.0, 5000.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->corner_radius,
                               _("Default radius of the frames' rounded corners, in canvas units; 0 is square"));
-  g_signal_connect(toolbar->corner_radius, "value-changed", G_CALLBACK(_corner_changed), self);
+  _connect_refilled(self, toolbar->corner_radius, "value-changed", G_CALLBACK(_corner_changed));
   _labelled(grid, 2, 0, _("Corners"), toolbar->corner_radius);
   GtkWidget *popover = gtk_popover_new(NULL);
   gtk_container_add(GTK_CONTAINER(popover), grid);
@@ -794,18 +843,18 @@ static GtkWidget *_texture_popover(dt_lib_module_t *self)
   gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(10));
   gtk_container_set_border_width(GTK_CONTAINER(grid), DT_PIXEL_APPLY_DPI(10));
   _section_label(grid, 0, _("Paper texture"));
-  toolbar->texture_contrast = _popover_slider(grid, 1, _("Contrast"), 0.05, 4.0, 0.05,
+  toolbar->texture_contrast = _popover_slider(self, grid, 1, _("Contrast"), 0.05, 4.0, 0.05,
                                               _("The relief's body: the mottle, the tooth, the clouds. 1 is the paper as designed."),
-                                              G_CALLBACK(_texture_changed), self);
-  toolbar->texture_detail = _popover_slider(grid, 2, _("Detail"), 0.0, 4.0, 0.05,
+                                              G_CALLBACK(_texture_changed));
+  toolbar->texture_detail = _popover_slider(self, grid, 2, _("Detail"), 0.0, 4.0, 0.05,
                                             _("The fine structure: fibres, pores, wrinkles, the mesh's imprint. 0 leaves only the body."),
-                                            G_CALLBACK(_texture_changed), self);
-  toolbar->texture_scale = _popover_slider(grid, 3, _("Scale"), 0.25, 4.0, 0.05,
+                                            G_CALLBACK(_texture_changed));
+  toolbar->texture_scale = _popover_slider(self, grid, 3, _("Scale"), 0.25, 4.0, 0.05,
                                            _("The size of the features: 2 makes them twice as large. Rebuilds the paper."),
-                                           G_CALLBACK(_texture_changed), self);
-  toolbar->texture_grain = _popover_slider(grid, 4, _("Grain"), 0.0, 4.0, 0.05,
+                                           G_CALLBACK(_texture_changed));
+  toolbar->texture_grain = _popover_slider(self, grid, 4, _("Grain"), 0.0, 4.0, 0.05,
                                            _("The pixel-level grain that finishes the paper, scaled with the zoom"),
-                                           G_CALLBACK(_texture_changed), self);
+                                           G_CALLBACK(_texture_changed));
   GtkWidget *reset = gtk_button_new_with_label(_("Reset"));
   gtk_widget_set_tooltip_text(reset, _("The paper as designed"));
   g_signal_connect(reset, "clicked", G_CALLBACK(_texture_reset), self);
@@ -819,6 +868,7 @@ static GtkWidget *_texture_popover(dt_lib_module_t *self)
 void gui_init(dt_lib_module_t *self)
 {
   dt_lib_canvas_toolbar_t *toolbar = g_new0(dt_lib_canvas_toolbar_t, 1);
+  toolbar->refilled_handlers = g_array_new(FALSE, FALSE, sizeof(dt_lib_canvas_toolbar_handler_t));
   self->data = toolbar;
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
@@ -858,7 +908,7 @@ void gui_init(dt_lib_module_t *self)
   toolbar->connect_toggle = gtk_toggle_button_new_with_label(_("Connector"));
   gtk_widget_set_tooltip_text(toolbar->connect_toggle,
                               _("Draw a connector: click an anchor point on one frame, then on another"));
-  g_signal_connect(toolbar->connect_toggle, "toggled", G_CALLBACK(_connect_toggled), self);
+  _connect_refilled(self, toolbar->connect_toggle, "toggled", G_CALLBACK(_connect_toggled));
   gtk_box_pack_start(GTK_BOX(box), toolbar->connect_toggle, FALSE, FALSE, 0);
   _separator(box);
 
@@ -869,11 +919,11 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->background_style,
                               _("What the canvas is painted with. Transparent leaves it a hole, shown here as a chequerboard "
                                 "and carried out by any export format with an alpha channel."));
-  g_signal_connect(toolbar->background_style, "changed", G_CALLBACK(_background_changed), self);
+  _connect_refilled(self, toolbar->background_style, "changed", G_CALLBACK(_background_changed));
   gtk_box_pack_start(GTK_BOX(box), toolbar->background_style, FALSE, FALSE, 0);
   toolbar->background_color = gtk_color_button_new();
   gtk_widget_set_tooltip_text(toolbar->background_color, _("Background colour: the plain colour, or the paper's own"));
-  g_signal_connect(toolbar->background_color, "color-set", G_CALLBACK(_background_changed), self);
+  _connect_refilled(self, toolbar->background_color, "color-set", G_CALLBACK(_background_changed));
   gtk_box_pack_start(GTK_BOX(box), toolbar->background_color, FALSE, FALSE, 0);
   _popover_button(box, _("Texture"), _("The paper's relief, detail, scale and grain"), _texture_popover(self));
   _separator(box);
@@ -928,6 +978,8 @@ void view_enter(dt_lib_module_t *self, dt_view_t *old_view, dt_view_t *new_view)
 void gui_cleanup(dt_lib_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_canvas_changed), self);
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  if(!IS_NULL_PTR(toolbar)) g_array_free(toolbar->refilled_handlers, TRUE);
   dt_free(self->data);
 }
 

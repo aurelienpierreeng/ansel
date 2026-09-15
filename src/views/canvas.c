@@ -180,7 +180,6 @@ typedef struct dt_canvas_view_t
 
   gboolean dnd_connected;
 
-  dt_canvas_t *menu_snapshot;           ///< the document when a slider menu opened, for one undo record on close
   gboolean interacting;                 ///< a gesture is in flight: frames are composited at half the resolution
   guint interaction_timeout;            ///< the full-quality repaint once the gesture pauses
   // same-size guides, shown while a resize snaps to a neighbour's size
@@ -1060,13 +1059,11 @@ static void _edit_text(dt_view_t *self, dt_canvas_object_t *object)
   gtk_container_add(GTK_CONTAINER(scroll), text_view);
   gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
 
-  GtkWidget *font_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(6));
-  gtk_box_pack_start(GTK_BOX(font_row), gtk_label_new(_("Font")), FALSE, FALSE, 0);
-  GtkWidget *font_button = gtk_font_button_new_with_font(dt_canvas_text_effective_font(view->canvas, object));
-  gtk_box_pack_start(GTK_BOX(font_row), font_button, TRUE, TRUE, 0);
+  // The dialog edits what the frame says. How it is set -- the font among the rest -- is in the frame's
+  // properties, once: a second font control here would be a second writer of the same field, with its
+  // own copy of the rule that a font equal to the canvas's is stored as none.
   GtkWidget *fit_height = gtk_check_button_new_with_label(_("fit the frame height to the text"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(fit_height), TRUE);
-  gtk_box_pack_start(GTK_BOX(box), font_row, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(box), fit_height, FALSE, FALSE, 0);
 
   gtk_widget_show_all(dialog);
@@ -1080,25 +1077,17 @@ static void _edit_text(dt_view_t *self, dt_canvas_object_t *object)
     gchar *markdown = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
     dt_canvas_text_set_markdown(view->canvas, object, markdown);
     dt_free(markdown);
-    gchar *font = gtk_font_chooser_get_font(GTK_FONT_CHOOSER(font_button));
-    if(!IS_NULL_PTR(font))
-    {
-      // A font equal to the canvas default is stored as "no font of its own".
-      if(!g_strcmp0(font, view->canvas->default_font))
-        object->text.font[0] = '\0';
-      else
-        g_strlcpy(object->text.font, font, sizeof(object->text.font));
-      dt_free(font);
-    }
     if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(fit_height))
        || (object->text.text_flags & DT_CANVAS_TEXT_AUTO_HEIGHT))
       dt_canvas_paint_text_fit_height(view->canvas, object);
+    // What the frame says and how tall it is are what the other frames' text flows around.
+    dt_canvas_props_settle_all(view->canvas);
     dt_canvas_touch(view->canvas);
     _record_undo(self, before);
   }
   gtk_widget_destroy(dialog);
   dt_gui_refocus_parent(parent);
-  // The dialog may have changed the font and the frame's height, which the properties show.
+  // The dialog may have changed the frame's height, which the properties show.
   _props_sync(self);
   dt_control_queue_redraw_center();
 }
@@ -1407,22 +1396,31 @@ static void _menu_edit_text(GtkWidget *widget, gpointer data)
   _edit_text(context->self, _menu_object(context));
 }
 
+/**
+ * Fit a text frame's height to its text, the way an auto-height frame is fitted: grown downward so
+ * the top edge the user placed stays put, and iterated to a fixed point, since a frame flowing around
+ * its neighbours asks for a little more height once it has grown. Setting the natural height once,
+ * about the centre, moved that edge and left a flowing frame short of its text.
+ */
 static void _menu_fit_text(GtkWidget *widget, gpointer data)
 {
   dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
   dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
   dt_canvas_object_t *object = _menu_object(context);
   if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT) return;
-  cairo_surface_t *scratch = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
-  cairo_t *cr = cairo_create(scratch);
-  const double natural = dt_canvas_paint_text_natural_height(cr, view->canvas, object);
-  cairo_destroy(cr);
-  cairo_surface_destroy(scratch);
-  if(natural <= 0.0) return;
   dt_canvas_t *before = _begin_edit(view);
-  object->height = natural;
+  if(!dt_canvas_paint_text_fit_height(view->canvas, object))
+  {
+    dt_canvas_free(before);
+    return;
+  }
+  // The frame's new height is geometry the other frames' text flows around.
+  dt_canvas_props_settle_all(view->canvas);
   dt_canvas_touch(view->canvas);
   _record_undo(context->self, before);
+  // The properties show the height and keep clear of the corners the frame grew into, and the menu
+  // was opened after they last read the frame.
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1432,10 +1430,15 @@ static void _menu_reload_sidecar(GtkWidget *widget, gpointer data)
   dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
   dt_canvas_object_t *object = _menu_object(context);
   dt_canvas_t *before = _begin_edit(view);
-  if(_load_sidecar_text(view, object))
-    _record_undo(context->self, before);
-  else
+  if(!_load_sidecar_text(view, object))
+  {
     dt_canvas_free(before);
+    return;
+  }
+  // A new text refits an auto-height frame, and a new height moves what the other frames flow around.
+  if(dt_canvas_props_settle_all(view->canvas)) dt_canvas_touch(view->canvas);
+  _record_undo(context->self, before);
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1537,140 +1540,12 @@ static void _menu_z_order(GtkWidget *widget, gpointer data)
       dt_canvas_object_to_back(view->canvas, context->object_id);
       break;
   }
+  // A text frame flows around the frames laid OVER it, so a new order is a new obstacle map for every
+  // auto-height frame, and their heights are what the properties show and keep clear of.
+  if(dt_canvas_props_settle_all(view->canvas)) dt_canvas_touch(view->canvas);
   _record_undo(context->self, before);
-  dt_control_queue_redraw_center();
-}
-
-/* The cutout's properties as sliders in the context menu, the way the darkroom's mask menu
- * offers a shape's: a scale inside a menu item, the item's pointer events forwarded to it,
- * its activation blocked so the menu stays open. One undo record for the whole menu, taken
- * when it opens and written when it closes if anything moved. */
-
-typedef enum dt_canvas_menu_property_t
-{
-  DT_CANVAS_MENU_FEATHER = 0,
-  DT_CANVAS_MENU_OPACITY,
-  DT_CANVAS_MENU_SIZE,
-  DT_CANVAS_MENU_ROTATION,
-  DT_CANVAS_MENU_CURVATURE,
-  DT_CANVAS_MENU_EXTENT,
-} dt_canvas_menu_property_t;
-
-static void _menu_slider_block_activate(GtkWidget *item, gpointer data)
-{
-  g_signal_stop_emission_by_name(item, "activate");
-}
-
-static gboolean _menu_slider_forward_event(GtkWidget *item, GdkEvent *event, gpointer data)
-{
-  GtkWidget *scale = GTK_WIDGET(data);
-  GdkWindow *scale_window = gtk_widget_get_window(scale);
-  if(IS_NULL_PTR(scale_window)) return FALSE;
-  // The event's coordinates are the item's: move them into the scale's window.
-  GtkAllocation allocation;
-  gtk_widget_get_allocation(scale, &allocation);
-  GdkEvent *copy = gdk_event_copy(event);
-  double *x = NULL;
-  double *y = NULL;
-  if(copy->type == GDK_BUTTON_PRESS || copy->type == GDK_BUTTON_RELEASE || copy->type == GDK_2BUTTON_PRESS)
-  {
-    x = &copy->button.x;
-    y = &copy->button.y;
-  }
-  else if(copy->type == GDK_MOTION_NOTIFY)
-  {
-    x = &copy->motion.x;
-    y = &copy->motion.y;
-  }
-  else if(copy->type == GDK_SCROLL)
-  {
-    x = &copy->scroll.x;
-    y = &copy->scroll.y;
-  }
-  if(!IS_NULL_PTR(x))
-  {
-    gint item_x = 0;
-    gint item_y = 0;
-    gtk_widget_translate_coordinates(item, scale, (gint)*x, (gint)*y, &item_x, &item_y);
-    *x = item_x;
-    *y = item_y;
-  }
-  if(!IS_NULL_PTR(copy->any.window)) g_object_unref(copy->any.window);
-  copy->any.window = g_object_ref(scale_window);
-  copy->any.send_event = TRUE;
-  gtk_widget_event(scale, copy);
-  gdk_event_free(copy);
-  return TRUE;
-}
-
-static void _menu_slider_changed(GtkRange *range, gpointer data)
-{
-  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
-  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
-  dt_canvas_object_t *object = _menu_object(context);
-  if(!dt_canvas_object_is_frame(object)) return;
-  const float value = (float)gtk_range_get_value(range);
-  switch((dt_canvas_menu_property_t)context->value)
-  {
-    case DT_CANVAS_MENU_FEATHER:
-      object->mask.feather = CLAMP(value / 100.0f, 0.0f, 1.0f);
-      break;
-    case DT_CANVAS_MENU_OPACITY:
-      object->transparency = 1.0f - CLAMP(value / 100.0f, 0.0f, 1.0f);
-      break;
-    case DT_CANVAS_MENU_SIZE:
-    {
-      // Both radii scale together, so an ellipse keeps its shape.
-      const float scale = object->mask.radius_x > 0.0f ? value / 100.0f / object->mask.radius_x : 1.0f;
-      object->mask.radius_x = CLAMP(value / 100.0f, 0.005f, 2.0f);
-      if(object->mask.shape == DT_CANVAS_MASK_ELLIPSE) object->mask.radius_y = CLAMP(object->mask.radius_y * scale, 0.005f, 2.0f);
-      break;
-    }
-    case DT_CANVAS_MENU_ROTATION:
-      object->mask.rotation = value;
-      break;
-    case DT_CANVAS_MENU_CURVATURE:
-      object->mask.radius_y = CLAMP(value, -2.0f, 2.0f);
-      break;
-    case DT_CANVAS_MENU_EXTENT:
-      object->mask.radius_x = CLAMP(value / 100.0f, 0.0005f, 1.0f);
-      break;
-    default:
-      break;
-  }
-  dt_canvas_touch(view->canvas);
   _props_sync(context->self);
   dt_control_queue_redraw_center();
-}
-
-static GtkWidget *_menu_slider(GtkWidget *menu, const char *label, const double low, const double high,
-                               const double step, const double value, dt_canvas_menu_context_t *context)
-{
-  GtkWidget *item = gtk_menu_item_new();
-  gtk_widget_set_can_focus(item, FALSE);
-  g_signal_connect(item, "activate", G_CALLBACK(_menu_slider_block_activate), NULL);
-  gtk_widget_add_events(item, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_POINTER_MOTION_MASK | GDK_SCROLL_MASK);
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(6));
-  GtkWidget *name = gtk_label_new(label);
-  gtk_widget_set_size_request(name, DT_PIXEL_APPLY_DPI(80), -1);
-  gtk_widget_set_halign(name, GTK_ALIGN_START);
-  gtk_box_pack_start(GTK_BOX(box), name, FALSE, FALSE, 0);
-  GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, low, high, step);
-  gtk_scale_set_draw_value(GTK_SCALE(scale), TRUE);
-  gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_RIGHT);
-  gtk_range_set_value(GTK_RANGE(scale), value);
-  gtk_widget_set_size_request(scale, DT_PIXEL_APPLY_DPI(220), -1);
-  gtk_widget_set_hexpand(scale, TRUE);
-  gtk_box_pack_start(GTK_BOX(box), scale, TRUE, TRUE, 0);
-  gtk_container_add(GTK_CONTAINER(item), box);
-  g_object_set_data_full(G_OBJECT(item), "canvas-context", context, g_free);
-  g_signal_connect(scale, "value-changed", G_CALLBACK(_menu_slider_changed), context);
-  g_signal_connect(item, "button-press-event", G_CALLBACK(_menu_slider_forward_event), scale);
-  g_signal_connect(item, "button-release-event", G_CALLBACK(_menu_slider_forward_event), scale);
-  g_signal_connect(item, "motion-notify-event", G_CALLBACK(_menu_slider_forward_event), scale);
-  g_signal_connect(item, "scroll-event", G_CALLBACK(_menu_slider_forward_event), scale);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-  return item;
 }
 
 /** A title line in a menu: what the menu is about, not something to click. */
@@ -1687,53 +1562,16 @@ static void _menu_title(GtkWidget *menu, const char *text)
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 }
 
-/** The menu closed: one undo record for whatever its sliders moved. */
-static void _menu_closed(GtkWidget *menu, gpointer data)
-{
-  dt_view_t *self = (dt_view_t *)data;
-  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  if(IS_NULL_PTR(view->menu_snapshot)) return;
-  if(view->menu_snapshot->generation != view->canvas->generation)
-    _record_undo(self, view->menu_snapshot);
-  else
-    dt_canvas_free(view->menu_snapshot);
-  view->menu_snapshot = NULL;
-}
-
-static void _menu_cutout_shape(GtkWidget *widget, gpointer data)
-{
-  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
-  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
-  dt_canvas_object_t *object = _menu_object(context);
-  if(!dt_canvas_object_is_frame(object)) return;
-  dt_canvas_t *before = _begin_edit(view);
-  dt_canvas_mask_set_shape(view->canvas, object, (uint32_t)CLAMP(context->value, 0, DT_CANVAS_MASK_GRADIENT));
-  view->mask_editing = object->mask.shape != DT_CANVAS_MASK_NONE;
-  _record_undo(context->self, before);
-  _props_sync(context->self);
-  dt_control_queue_redraw_center();
-}
-
+/**
+ * The way into a polygon node from a shape that is not being edited: its handles come out, and the
+ * next right click on the node finds the node's own entries. The properties' Edit toggle reads the
+ * same mode, and they show what they last read.
+ */
 static void _menu_cutout_edit(GtkWidget *widget, gpointer data)
 {
   dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
   dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
   view->mask_editing = context->value != 0;
-  _props_sync(context->self);
-  dt_control_queue_redraw_center();
-}
-
-static void _menu_cutout_invert(GtkWidget *widget, gpointer data)
-{
-  dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
-  dt_canvas_view_t *view = (dt_canvas_view_t *)context->self->data;
-  dt_canvas_object_t *object = _menu_object(context);
-  if(!dt_canvas_object_is_frame(object)) return;
-  dt_canvas_t *before = _begin_edit(view);
-  object->mask.flags ^= DT_CANVAS_MASK_INVERT;
-  dt_canvas_touch(view->canvas);
-  _record_undo(context->self, before);
-  // The properties carry this same flag as a toggle, and they show what they last read.
   _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
@@ -1754,6 +1592,7 @@ static void _menu_cutout_add_node(GtkWidget *widget, gpointer data)
     _record_undo(context->self, before);
   else
     dt_canvas_free(before);
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1768,6 +1607,7 @@ static void _menu_cutout_remove_node(GtkWidget *widget, gpointer data)
     _record_undo(context->self, before);
   else
     dt_canvas_free(before);
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1810,6 +1650,7 @@ static void _menu_cutout_smooth_node(GtkWidget *widget, gpointer data)
   _mask_node_toggle_smooth(&object->mask, (uint32_t)context->value);
   dt_canvas_touch(view->canvas);
   _record_undo(context->self, before);
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1826,6 +1667,7 @@ static void _menu_cutout_reset_node(GtkWidget *widget, gpointer data)
   node[DT_CANVAS_MASK_NODE_SMOOTH] = (float)DT_CANVAS_MASK_NODE_AUTO;
   dt_canvas_touch(view->canvas);
   _record_undo(context->self, before);
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -1962,6 +1804,9 @@ static void _menu_zoom_fit(GtkWidget *widget, gpointer data)
 {
   dt_canvas_menu_context_t *context = (dt_canvas_menu_context_t *)data;
   _zoom_fit((dt_canvas_view_t *)context->self->data);
+  // A right click on the background keeps the selection, and with it properties that were showing:
+  // they follow their object to where the new zoom puts it, as after the flower's and the key's fit.
+  _props_sync(context->self);
   dt_control_queue_redraw_center();
 }
 
@@ -2041,90 +1886,48 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
     _menu_item(order_menu, _("Send to back"), _menu_z_order, _menu_context(self, id, x, y, 3));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), order_item);
 
-    dt_canvas_view_t *canvas_view = (dt_canvas_view_t *)self->data;
-    // The cutout: its shape, editing it, and the node under the pointer when there is one.
-    GtkWidget *cutout_item = gtk_menu_item_new_with_label(_("Cutout"));
-    GtkWidget *cutout_menu = gtk_menu_new();
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(cutout_item), cutout_menu);
-    _menu_item(cutout_menu, _("None"), _menu_cutout_shape, _menu_context(self, id, x, y, DT_CANVAS_MASK_NONE));
-    _menu_item(cutout_menu, _("Circle"), _menu_cutout_shape, _menu_context(self, id, x, y, DT_CANVAS_MASK_CIRCLE));
-    _menu_item(cutout_menu, _("Ellipse"), _menu_cutout_shape, _menu_context(self, id, x, y, DT_CANVAS_MASK_ELLIPSE));
-    _menu_item(cutout_menu, _("Polygon"), _menu_cutout_shape, _menu_context(self, id, x, y, DT_CANVAS_MASK_POLYGON));
-    _menu_item(cutout_menu, _("Gradient"), _menu_cutout_shape, _menu_context(self, id, x, y, DT_CANVAS_MASK_GRADIENT));
-    if(object->mask.shape != DT_CANVAS_MASK_NONE && canvas_view->mask_editing)
+    // The cutout's shape, its feather, whether it is inverted and whether it is being edited are all in
+    // the properties (I), once. What stays here is what the properties cannot offer: the polygon node or
+    // edge under the pointer, which only a pointer can name.
+    if(object->mask.shape == DT_CANVAS_MASK_POLYGON)
     {
-      // Editing: the shape's properties as sliders, at the top of the main menu, the darkroom's way.
-      static const char *shape_names[] = { "", N_("Circle"), N_("Ellipse"), N_("Polygon"), N_("Gradient") };
-      int hovered_index = -1;
-      const dt_canvas_drag_t hovered = _mask_handle_at(canvas_view, object, x, y, &hovered_index);
-      gchar *title = hovered == DT_CANVAS_DRAG_MASK_NODE
-                         ? g_strdup_printf(_("%s cutout, node %d"), _(shape_names[CLAMP(object->mask.shape, 0, 4)]), hovered_index)
-                         : g_strdup_printf(_("%s cutout"), _(shape_names[CLAMP(object->mask.shape, 0, 4)]));
-      _menu_title(menu, title);
-      dt_free(title);
-      if(IS_NULL_PTR(canvas_view->menu_snapshot)) canvas_view->menu_snapshot = _begin_edit(canvas_view);
-      g_signal_connect(menu, "deactivate", G_CALLBACK(_menu_closed), self);
-      if(object->mask.shape != DT_CANVAS_MASK_GRADIENT)
-        _menu_slider(menu, _("Feather"), 0.0, 100.0, 1.0, object->mask.feather * 100.0,
-                     _menu_context(self, id, x, y, DT_CANVAS_MENU_FEATHER));
-      _menu_slider(menu, _("Opacity"), 0.0, 100.0, 1.0, (1.0 - object->transparency) * 100.0,
-                   _menu_context(self, id, x, y, DT_CANVAS_MENU_OPACITY));
-      if(object->mask.shape == DT_CANVAS_MASK_CIRCLE || object->mask.shape == DT_CANVAS_MASK_ELLIPSE)
-        _menu_slider(menu, _("Size"), 0.5, 200.0, 0.5, object->mask.radius_x * 100.0,
-                     _menu_context(self, id, x, y, DT_CANVAS_MENU_SIZE));
-      if(object->mask.shape == DT_CANVAS_MASK_ELLIPSE || object->mask.shape == DT_CANVAS_MASK_GRADIENT)
-        _menu_slider(menu, _("Rotation"), -180.0, 180.0, 1.0, object->mask.rotation,
-                     _menu_context(self, id, x, y, DT_CANVAS_MENU_ROTATION));
-      if(object->mask.shape == DT_CANVAS_MASK_GRADIENT)
+      dt_canvas_view_t *canvas_view = (dt_canvas_view_t *)self->data;
+      const int node_here = _mask_node_at(canvas_view, object, x, y);
+      const int segment = node_here < 0 && canvas_view->mask_editing ? _mask_segment_at(canvas_view, object, x, y) : -1;
+      if(node_here >= 0 || segment >= 0)
       {
-        _menu_slider(menu, _("Extent"), 0.05, 100.0, 0.5, object->mask.radius_x * 100.0,
-                     _menu_context(self, id, x, y, DT_CANVAS_MENU_EXTENT));
-        _menu_slider(menu, _("Curvature"), -2.0, 2.0, 0.05, object->mask.radius_y,
-                     _menu_context(self, id, x, y, DT_CANVAS_MENU_CURVATURE));
-      }
-      // A polygon's nodes: the node or the edge under the pointer, right here in the menu.
-      if(object->mask.shape == DT_CANVAS_MASK_POLYGON)
-      {
-        const int node_here = _mask_node_at(canvas_view, object, x, y);
-        const int segment = node_here < 0 ? _mask_segment_at(canvas_view, object, x, y) : -1;
-        if(node_here >= 0)
-        {
-          const float *node = object->mask.nodes + (size_t)node_here * DT_CANVAS_MASK_NODE_FLOATS;
-          const gboolean smooth = node[DT_CANVAS_MASK_NODE_SMOOTH] != (float)DT_CANVAS_MASK_NODE_CUSP;
-          _menu_item(menu, smooth ? _("Switch to a cusp node") : _("Switch to a smooth node"),
-                     _menu_cutout_smooth_node, _menu_context(self, id, x, y, node_here));
-          if(node[DT_CANVAS_MASK_NODE_SMOOTH] == (float)DT_CANVAS_MASK_NODE_STEERED)
-            _menu_item(menu, _("Give this node its computed curve back"), _menu_cutout_reset_node,
-                       _menu_context(self, id, x, y, node_here));
-          _menu_item(menu, _("Remove this node"), _menu_cutout_remove_node, _menu_context(self, id, x, y, node_here));
-        }
-        else if(segment >= 0)
-        {
-          _menu_item(menu, _("Add a node here"), _menu_cutout_add_node, _menu_context(self, id, x, y, segment));
-        }
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+        gchar *title = node_here >= 0 ? g_strdup_printf(_("%s cutout, node %d"), _("Polygon"), node_here)
+                                      : g_strdup_printf(_("%s cutout"), _("Polygon"));
+        _menu_title(menu, title);
+        dt_free(title);
       }
-    }
-    if(object->mask.shape != DT_CANVAS_MASK_NONE)
-    {
-      gtk_menu_shell_append(GTK_MENU_SHELL(cutout_menu), gtk_separator_menu_item_new());
-      _menu_item(cutout_menu, canvas_view->mask_editing ? _("Stop editing the shape") : _("Edit the shape"),
-                 _menu_cutout_edit, _menu_context(self, id, x, y, canvas_view->mask_editing ? 0 : 1));
-      _menu_item(cutout_menu, (object->mask.flags & DT_CANVAS_MASK_INVERT) ? _("Keep the inside") : _("Keep the outside"),
-                 _menu_cutout_invert, _menu_context(self, id, x, y, 0));
-      // The node entries live once, at the top of the menu, and only while the shape is being
-      // edited: this submenu used to carry a second copy of them keyed on `_mask_handle_at()`,
-      // which answers NOTHING outside the edit mode -- so they were a duplicate whenever they
-      // showed and dead the rest of the time. What a polygon offers here is the way in.
-      if(object->mask.shape == DT_CANVAS_MASK_POLYGON && !canvas_view->mask_editing
-         && _mask_node_at(canvas_view, object, x, y) >= 0)
+      if(node_here >= 0 && canvas_view->mask_editing)
       {
-        gtk_menu_shell_append(GTK_MENU_SHELL(cutout_menu), gtk_separator_menu_item_new());
-        _menu_item(cutout_menu, _("Edit the shape to work on this node"), _menu_cutout_edit,
-                   _menu_context(self, id, x, y, 1));
+        const float *node = object->mask.nodes + (size_t)node_here * DT_CANVAS_MASK_NODE_FLOATS;
+        const gboolean smooth = node[DT_CANVAS_MASK_NODE_SMOOTH] != (float)DT_CANVAS_MASK_NODE_CUSP;
+        _menu_item(menu, smooth ? _("Switch to a cusp node") : _("Switch to a smooth node"),
+                   _menu_cutout_smooth_node, _menu_context(self, id, x, y, node_here));
+        if(node[DT_CANVAS_MASK_NODE_SMOOTH] == (float)DT_CANVAS_MASK_NODE_STEERED)
+          _menu_item(menu, _("Give this node its computed curve back"), _menu_cutout_reset_node,
+                     _menu_context(self, id, x, y, node_here));
+        _menu_item(menu, _("Remove this node"), _menu_cutout_remove_node, _menu_context(self, id, x, y, node_here));
       }
+      else if(node_here >= 0)
+      {
+        // The node entries live once, and only while the shape is being edited, where its nodes are
+        // drawn: a node the pointer found on a shape that is not being edited gets the way in instead.
+        // `_mask_node_at()` answers without the edit mode, which is what lets the menu know a node is
+        // there at all -- `_mask_handle_at()`, the drag's question, refuses everything outside it.
+        _menu_item(menu, _("Edit the shape to work on this node"), _menu_cutout_edit, _menu_context(self, id, x, y, 1));
+      }
+      else if(segment >= 0)
+      {
+        _menu_item(menu, _("Add a node here"), _menu_cutout_add_node, _menu_context(self, id, x, y, segment));
+      }
+      if(node_here >= 0 || segment >= 0)
+        gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
     }
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), cutout_item);
 
     GtkWidget *rotate_item = gtk_menu_item_new_with_label(_("Rotate"));
     GtkWidget *rotate_menu = gtk_menu_new();

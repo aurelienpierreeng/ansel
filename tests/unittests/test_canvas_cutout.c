@@ -1868,7 +1868,7 @@ static void _a_picture_and_a_drawing_keep_their_shape_unless_told_not_to(void **
   assert_non_null(text);
 
   // A drawing keeps its shape out of the box, and says so through one predicate the drag and
-  // the property bar's two spin buttons all read.
+  // the properties' two size spin buttons all read.
   assert_true(dt_canvas_object_keeps_ratio(drawing));
   drawing->flags |= DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
   assert_false(dt_canvas_object_keeps_ratio(drawing));

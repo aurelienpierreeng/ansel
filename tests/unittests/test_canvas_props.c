@@ -521,8 +521,8 @@ static void _every_property_round_trips_on_every_kind(void **state)
 static void _a_shadow_offset_edited_while_inheriting_is_kept_and_owned(void **state)
 {
   (void)state;
-  // The bar used to throw this edit away whenever the blur read "default": the offset was
-  // written into a shadow the object did not own, so nothing drawn changed.
+  // The floating bar these properties replaced threw this edit away whenever the blur read
+  // "default": the offset was written into a shadow the object did not own, so nothing drawn changed.
   props_fixture_t fixture;
   _fixture_build(&fixture);
   dt_canvas_object_t *image = fixture.objects[1];
@@ -746,9 +746,9 @@ static void _an_inherited_value_written_while_inheriting_changes_nothing(void **
 static void _owning_first_keeps_a_value_equal_to_the_canvas(void **state)
 {
   (void)state;
-  // The property bar's spin has no reset to the canvas's value but its "default" sentinel, so
-  // stepping off it onto the canvas's own number -- a square corner, the default everywhere --
-  // owns the group first and writes second. The number must stick when the canvas changes later.
+  // A section's own switch turned on, then the canvas's own number typed -- a square corner, the
+  // default everywhere -- owns the group first and writes second. The number must stick when the
+  // canvas changes later, or the switch meant nothing.
   props_fixture_t fixture;
   _fixture_build(&fixture);
   fixture.canvas->corner_radius = 0.0f;
@@ -814,6 +814,63 @@ static void _a_kept_ratio_answers_a_width_with_a_height(void **state)
                & DT_CANVAS_EFFECT_COUPLED);
   assert_float_equal(image->width, 600.0, 1e-9);
   assert_float_equal(image->height, 500.0, 1e-9);
+  _fixture_free(&fixture);
+}
+
+/**
+ * An ellipse's Size scales the whole ellipse and Size Y alone changes its proportions. The context
+ * menu's Size slider did that, and when the cutout sliders left the menu nothing else could: a handle
+ * drags one radius and the wheel sets the feather.
+ */
+static void _an_ellipse_size_keeps_its_proportions(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *image = fixture.objects[1];
+  dt_canvas_prop_value_t shape;
+  memset(&shape, 0, sizeof(shape));
+  shape.choice = DT_CANVAS_MASK_ELLIPSE;
+  dt_canvas_prop_write(fixture.canvas, image, DT_CANVAS_PROP_CUTOUT_SHAPE, &shape);
+  image->mask.radius_x = 0.2f;
+  image->mask.radius_y = 0.3f;
+  // Twice as large: both radii double, and the vertical one is a coupled row to refill.
+  const dt_canvas_prop_value_t larger = _number(40.0);
+  const uint32_t effects = dt_canvas_prop_write(fixture.canvas, image, DT_CANVAS_PROP_CUTOUT_SIZE_X, &larger);
+  assert_true(effects & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(effects & DT_CANVAS_EFFECT_COUPLED);
+  assert_float_equal(image->mask.radius_x, 0.4, 1e-6);
+  assert_float_equal(image->mask.radius_y, 0.6, 1e-6);
+  // A drag of the slider is a run of LIVE writes: the proportions hold across the steps, not only for one.
+  const double steps[3] = { 33.0, 71.5, 25.0 };
+  for(int idx = 0; idx < 3; idx++)
+  {
+    const dt_canvas_prop_value_t step = _number(steps[idx]);
+    dt_canvas_prop_write(fixture.canvas, image, DT_CANVAS_PROP_CUTOUT_SIZE_X, &step);
+  }
+  assert_float_equal(image->mask.radius_x, 0.25, 1e-6);
+  assert_float_equal(image->mask.radius_y, 0.375, 1e-5);
+  // Size Y moves the vertical radius alone.
+  const dt_canvas_prop_value_t taller = _number(50.0);
+  assert_false(dt_canvas_prop_write(fixture.canvas, image, DT_CANVAS_PROP_CUTOUT_SIZE_Y, &taller)
+               & DT_CANVAS_EFFECT_COUPLED);
+  assert_float_equal(image->mask.radius_x, 0.25, 1e-6);
+  assert_float_equal(image->mask.radius_y, 0.5, 1e-6);
+  // A circle has no second radius to scale, and a gradient's size is its extent, which leaves the
+  // curvature kept in the same field alone.
+  const uint32_t others[2] = { DT_CANVAS_MASK_CIRCLE, DT_CANVAS_MASK_GRADIENT };
+  for(int idx = 0; idx < 2; idx++)
+  {
+    shape.choice = (int)others[idx];
+    dt_canvas_prop_write(fixture.canvas, image, DT_CANVAS_PROP_CUTOUT_SHAPE, &shape);
+    image->mask.radius_x = 0.2f;
+    image->mask.radius_y = 0.3f;
+    const dt_canvas_prop_value_t size = _number(10.0);
+    assert_false(dt_canvas_prop_write(fixture.canvas, image, DT_CANVAS_PROP_CUTOUT_SIZE_X, &size)
+                 & DT_CANVAS_EFFECT_COUPLED);
+    assert_float_equal(image->mask.radius_x, 0.1, 1e-6);
+    assert_float_equal(image->mask.radius_y, 0.3, 1e-6);
+  }
   _fixture_free(&fixture);
 }
 
@@ -1546,6 +1603,7 @@ int main(void)
     cmocka_unit_test(_owning_first_keeps_a_value_equal_to_the_canvas),
     cmocka_unit_test(_a_typed_number_snaps_a_dragged_one),
     cmocka_unit_test(_a_kept_ratio_answers_a_width_with_a_height),
+    cmocka_unit_test(_an_ellipse_size_keeps_its_proportions),
     cmocka_unit_test(_map_properties_ask_for_a_render_and_never_touch_conf),
     cmocka_unit_test(_owning_a_group_changes_nothing_on_screen),
     cmocka_unit_test(_the_inherited_value_is_what_giving_the_group_back_shows),
