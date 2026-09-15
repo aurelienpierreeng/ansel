@@ -2668,6 +2668,23 @@ every nightly, and that file drives the website buttons, the in-app check
 script's `FORMATS` and in `dt_updates_runtime_format()` must agree. `doc/nightly-distribution.md`
 is the manual: secrets, retention, R2, signing costs, GHCR for later.
 
+Homebrew ships no bottles for Intel macOS any more, so `macos-15-intel` builds from source and
+four nightlies in a row died at GitHub's 6-hour ceiling — the same dependency step takes 77 s on
+arm64. **Two llvms were scheduled on every one of them**, four hours and more each — and not a stable
+four: `llvm@22` sat 4 h 54 in one `cmake --build .` on 2026-09-15 without finishing. One is ours,
+for `TESTBUILD_OPENCL_PROGRAMS`; the other is `llvm@22`, which `librsvg` pulls in through `rust`. So two
+measures, and only together do they fit — `install-deps-macos.sh` skips ours on Intel (with
+`-DTESTBUILD_OPENCL_PROGRAMS=OFF` to say so), and `librsvg`'s two, which cannot be dropped, are
+cached. `tools/brew_cache_key.sh` owns the keys for both workflows that touch them, and
+`mac-brew-cache.yml` exists because `actions/cache` saves only on success: a cold cache cannot
+warm itself from the job the builds are killing. The traps — why a keg needs no relocation, why
+the key must carry the version brew *would* install, and why `brew link` must never be given
+`--force` — are in `doc/nightly-distribution.md`. That file also carries the other half: an
+Intel failure used to discard the arm64 DMG too, `upload_to_release` having `needs: MacOS` over
+the whole matrix with no `if:`, which cost five good Apple Silicon packages in five nights. It
+publishes per architecture now, so the Intel measures decide whether an Intel DMG exists and no
+longer whether a macOS nightly exists at all.
+
 ## Tools
 
 **Sentry crash issues:** `tools/sentry-fetch-issue.sh <issue-id|url>` pulls a Sentry issue's
