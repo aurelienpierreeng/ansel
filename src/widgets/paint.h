@@ -72,6 +72,22 @@ typedef enum dtgtk_cairo_paint_flags_t
   CPF_SPECIAL_FLAG = 1 << 15, // this needs to be the last one. also update shift in dtgtk_cairo_paint_alignment
 } dtgtk_cairo_paint_flags_t;
 
+/* The variants of the canvas glyphs below, spelled for the call site. The direction bits carry
+ * the ones that ARE a direction -- where a text keeps to, which end of a line takes a head -- and
+ * the special bits carry the connector's route, so none of them meets the state bits a button
+ * adds (CPF_ACTIVE, CPF_PRELIGHT, CPF_FOCUS) when it paints. */
+#define CPF_TEXT_ALIGN_LEFT CPF_DIRECTION_LEFT
+#define CPF_TEXT_ALIGN_CENTER CPF_NONE
+#define CPF_TEXT_ALIGN_RIGHT CPF_DIRECTION_RIGHT
+#define CPF_TEXT_ALIGN_JUSTIFY (CPF_DIRECTION_LEFT | CPF_DIRECTION_RIGHT) ///< both edges at once
+#define CPF_TEXT_VALIGN_TOP CPF_DIRECTION_UP
+#define CPF_TEXT_VALIGN_MIDDLE CPF_NONE
+#define CPF_TEXT_VALIGN_BOTTOM CPF_DIRECTION_DOWN
+#define CPF_ROUTE_STRAIGHT CPF_NONE
+#define CPF_ROUTE_SQUARE CPF_SPECIAL_FLAG
+#define CPF_ROUTE_CUBIC (CPF_SPECIAL_FLAG << 1)
+#define CPF_ARROWHEAD_START CPF_DIRECTION_LEFT
+#define CPF_ARROWHEAD_END CPF_DIRECTION_RIGHT
 
 typedef void (*DTGTKCairoPaintIconFunc)(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint nothing */
@@ -360,6 +376,25 @@ void dtgtk_cairo_paint_lt_mode_culling_fixed(cairo_t *cr, gint x, gint y, gint w
 void dtgtk_cairo_paint_lt_mode_culling_dynamic(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Lighttable: Full Preview */
 void dtgtk_cairo_paint_lt_mode_fullpreview(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+
+// Canvas atelier
+
+/** Paint lines of type kept to the left, the centre, the right, or both edges: CPF_TEXT_ALIGN_* */
+void dtgtk_cairo_paint_text_align(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a block of type at the top, the middle or the bottom of its frame: CPF_TEXT_VALIGN_* */
+void dtgtk_cairo_paint_text_valign(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a line joining two nodes, straight, in square legs or as a curve: CPF_ROUTE_* */
+void dtgtk_cairo_paint_route(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a line with a head at its start, its end, both or neither: CPF_ARROWHEAD_* */
+void dtgtk_cairo_paint_arrowhead(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a line bent through a node it passes by */
+void dtgtk_cairo_paint_waypoint(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint two opposed arrows: swap a line's ends */
+void dtgtk_cairo_paint_reverse(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a pencil over a baseline: edit the text */
+void dtgtk_cairo_paint_edit_text(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a lens aperture: develop the picture in the darkroom */
+void dtgtk_cairo_paint_darkroom(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 
 /** Paint a link icon for basic adjustments */
 void dtgtk_cairo_paint_link(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);

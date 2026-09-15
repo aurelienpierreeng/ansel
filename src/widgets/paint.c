@@ -3540,6 +3540,297 @@ void dtgtk_cairo_paint_lt_mode_fullpreview(cairo_t *cr, gint x, gint y, gint w, 
   FINISH
 }
 
+/* --- canvas atelier ------------------------------------------------------------------------
+ *
+ * Every one of these is drawn in the unit square PREAMBLE scales to the widget's content box, and
+ * keeps every coordinate a twentieth of the square inside it or more: a round cap or a stroke
+ * centred on the last coordinate reaches half a line width past it, and the square is all a
+ * button hands over. Nothing here is in pixels, so a HiDPI surface only gets sharper edges.
+ */
+
+void dtgtk_cairo_paint_text_align(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  const gboolean keeps_left = (flags & CPF_DIRECTION_LEFT) != 0;
+  const gboolean keeps_right = (flags & CPF_DIRECTION_RIGHT) != 0;
+  const gboolean justified = keeps_left && keeps_right;
+  const double left_edge = 0.1;
+  const double right_edge = 0.9;
+  const double short_length = 0.5;
+
+  // Four lines of type. Justified, only the paragraph's last line falls short, which is what tells
+  // it apart from a text kept to the left, where every other line does.
+  for(int line = 0; line < 4; line++)
+  {
+    const double baseline = 0.2 + 0.2 * line;
+    const gboolean falls_short = justified ? (line == 3) : (line % 2 == 1);
+    double start = left_edge;
+    double end = right_edge;
+    if(falls_short)
+    {
+      if(keeps_left)
+      {
+        end = left_edge + short_length;
+      }
+      else if(keeps_right)
+      {
+        start = right_edge - short_length;
+      }
+      else
+      {
+        start = 0.5 - 0.5 * short_length;
+        end = 0.5 + 0.5 * short_length;
+      }
+    }
+    cairo_move_to(cr, start, baseline);
+    cairo_line_to(cr, end, baseline);
+  }
+  cairo_stroke(cr);
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_text_valign(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  // The frame's top and bottom edges, full width, then two lines of type between them.
+  cairo_move_to(cr, 0.1, 0.1);
+  cairo_line_to(cr, 0.9, 0.1);
+  cairo_move_to(cr, 0.1, 0.9);
+  cairo_line_to(cr, 0.9, 0.9);
+  cairo_stroke(cr);
+
+  double first_line = 0.425;
+  if(flags & CPF_DIRECTION_UP)
+    first_line = 0.28;
+  else if(flags & CPF_DIRECTION_DOWN)
+    first_line = 0.57;
+  const double line_gap = 0.15;
+  cairo_move_to(cr, 0.25, first_line);
+  cairo_line_to(cr, 0.75, first_line);
+  cairo_move_to(cr, 0.25, first_line + line_gap);
+  cairo_line_to(cr, 0.75, first_line + line_gap);
+  cairo_stroke(cr);
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_route(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  const double from_x = 0.15;
+  const double from_y = 0.8;
+  const double to_x = 0.85;
+  const double to_y = 0.2;
+  const double node_radius = 0.08;
+
+  cairo_move_to(cr, from_x, from_y);
+  if(flags & CPF_ROUTE_SQUARE)
+  {
+    // Horizontal and vertical legs, meeting half way across.
+    const double middle_x = 0.5 * (from_x + to_x);
+    cairo_line_to(cr, middle_x, from_y);
+    cairo_line_to(cr, middle_x, to_y);
+    cairo_line_to(cr, to_x, to_y);
+  }
+  else if(flags & CPF_ROUTE_CUBIC)
+  {
+    // Leaving each node horizontally, the way a cubic route leaves a frame along its normal.
+    cairo_curve_to(cr, 0.6, from_y, 0.4, to_y, to_x, to_y);
+  }
+  else
+  {
+    cairo_line_to(cr, to_x, to_y);
+  }
+  cairo_stroke(cr);
+
+  cairo_arc(cr, from_x, from_y, node_radius, 0.0, 2.0 * M_PI);
+  cairo_fill(cr);
+  cairo_arc(cr, to_x, to_y, node_radius, 0.0, 2.0 * M_PI);
+  cairo_fill(cr);
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_arrowhead(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  const gboolean head_at_start = (flags & CPF_DIRECTION_LEFT) != 0;
+  const gboolean head_at_end = (flags & CPF_DIRECTION_RIGHT) != 0;
+  const double start_x = 0.1;
+  const double end_x = 0.9;
+  const double axis_y = 0.5;
+  const double head_length = 0.3;
+  const double head_half_width = 0.2;
+
+  // The line stops at the base of a head, so the head's point is the only ink past it.
+  const double line_start = head_at_start ? start_x + head_length : start_x;
+  const double line_end = head_at_end ? end_x - head_length : end_x;
+  cairo_move_to(cr, line_start, axis_y);
+  cairo_line_to(cr, line_end, axis_y);
+  cairo_stroke(cr);
+
+  if(head_at_start)
+  {
+    cairo_move_to(cr, start_x, axis_y);
+    cairo_line_to(cr, start_x + head_length, axis_y - head_half_width);
+    cairo_line_to(cr, start_x + head_length, axis_y + head_half_width);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+  }
+  if(head_at_end)
+  {
+    cairo_move_to(cr, end_x, axis_y);
+    cairo_line_to(cr, end_x - head_length, axis_y - head_half_width);
+    cairo_line_to(cr, end_x - head_length, axis_y + head_half_width);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+  }
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_waypoint(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  const double node_x = 0.5;
+  const double node_y = 0.3;
+  const double node_radius = 0.13;
+
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+  cairo_move_to(cr, 0.1, 0.85);
+  cairo_line_to(cr, node_x, node_y);
+  cairo_line_to(cr, 0.9, 0.85);
+  cairo_stroke(cr);
+
+  cairo_arc(cr, node_x, node_y, node_radius, 0.0, 2.0 * M_PI);
+  cairo_fill(cr);
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_reverse(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+  // Upper arrow, pointing right.
+  cairo_move_to(cr, 0.15, 0.32);
+  cairo_line_to(cr, 0.85, 0.32);
+  cairo_move_to(cr, 0.7, 0.17);
+  cairo_line_to(cr, 0.85, 0.32);
+  cairo_line_to(cr, 0.7, 0.47);
+
+  // Lower arrow, pointing left.
+  cairo_move_to(cr, 0.85, 0.68);
+  cairo_line_to(cr, 0.15, 0.68);
+  cairo_move_to(cr, 0.3, 0.53);
+  cairo_line_to(cr, 0.15, 0.68);
+  cairo_line_to(cr, 0.3, 0.83);
+  cairo_stroke(cr);
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_edit_text(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  // A pencil laid on the diagonal, its point on the line it writes: the tip sits at the baseline's
+  // height, and the whole pencil moves down with it so its end stays inside the square.
+  const double tip_x = 0.16;
+  const double tip_y = 0.9;
+  const double end_x = 0.84;
+  const double end_y = 0.22;
+  const double axis_length = hypot(end_x - tip_x, end_y - tip_y);
+  const double axis_x = (end_x - tip_x) / axis_length;
+  const double axis_y = (end_y - tip_y) / axis_length;
+  const double normal_x = -axis_y;
+  const double normal_y = axis_x;
+  const double half_width = 0.09;
+  const double point_length = 0.18;
+  const double eraser_length = 0.14;
+  const double point_base_x = tip_x + axis_x * point_length;
+  const double point_base_y = tip_y + axis_y * point_length;
+  const double eraser_x = end_x - axis_x * eraser_length;
+  const double eraser_y = end_y - axis_y * eraser_length;
+
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+  // The body, from the base of the point to the end.
+  cairo_move_to(cr, point_base_x + normal_x * half_width, point_base_y + normal_y * half_width);
+  cairo_line_to(cr, end_x + normal_x * half_width, end_y + normal_y * half_width);
+  cairo_line_to(cr, end_x - normal_x * half_width, end_y - normal_y * half_width);
+  cairo_line_to(cr, point_base_x - normal_x * half_width, point_base_y - normal_y * half_width);
+  cairo_close_path(cr);
+  cairo_stroke(cr);
+
+  // The eraser's ferrule across the body.
+  cairo_move_to(cr, eraser_x + normal_x * half_width, eraser_y + normal_y * half_width);
+  cairo_line_to(cr, eraser_x - normal_x * half_width, eraser_y - normal_y * half_width);
+  cairo_stroke(cr);
+
+  // The sharpened point, solid.
+  cairo_move_to(cr, tip_x, tip_y);
+  cairo_line_to(cr, point_base_x + normal_x * half_width, point_base_y + normal_y * half_width);
+  cairo_line_to(cr, point_base_x - normal_x * half_width, point_base_y - normal_y * half_width);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+
+  // The baseline it writes on.
+  cairo_move_to(cr, 0.1, 0.9);
+  cairo_line_to(cr, 0.6, 0.9);
+  cairo_stroke(cr);
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_darkroom(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  const double centre_x = 0.5;
+  const double centre_y = 0.5;
+  const double outer_radius = 0.44;
+  const double inner_radius = 0.18;
+  const int blades = 6;
+
+  cairo_arc(cr, centre_x, centre_y, outer_radius, 0.0, 2.0 * M_PI);
+  cairo_stroke(cr);
+
+  // Each blade's edge runs from one corner of the opening through the next one and on to the rim,
+  // which is what draws the iris of an aperture rather than a hexagon in a circle.
+  for(int blade = 0; blade < blades; blade++)
+  {
+    const double angle = 2.0 * M_PI * blade / blades - 0.5 * M_PI;
+    const double next_angle = 2.0 * M_PI * (blade + 1) / blades - 0.5 * M_PI;
+    const double corner_x = centre_x + inner_radius * cos(angle);
+    const double corner_y = centre_y + inner_radius * sin(angle);
+    const double next_x = centre_x + inner_radius * cos(next_angle);
+    const double next_y = centre_y + inner_radius * sin(next_angle);
+    const double edge_length = hypot(next_x - corner_x, next_y - corner_y);
+    const double direction_x = (next_x - corner_x) / edge_length;
+    const double direction_y = (next_y - corner_y) / edge_length;
+    // Where the edge meets the rim: |corner + t * direction - centre| = outer_radius, for t > 0.
+    const double offset_x = corner_x - centre_x;
+    const double offset_y = corner_y - centre_y;
+    const double along = offset_x * direction_x + offset_y * direction_y;
+    const double offset_squared = offset_x * offset_x + offset_y * offset_y;
+    const double reach = -along + sqrt(along * along - offset_squared + outer_radius * outer_radius);
+    cairo_move_to(cr, corner_x, corner_y);
+    cairo_line_to(cr, corner_x + direction_x * reach, corner_y + direction_y * reach);
+  }
+  cairo_stroke(cr);
+
+  FINISH
+}
+
 void dtgtk_cairo_paint_link(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)

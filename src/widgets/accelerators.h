@@ -28,6 +28,10 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+
+#ifndef DT_WIDGETS_ACCELERATORS_H
+#define DT_WIDGETS_ACCELERATORS_H
+
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 #ifdef GDK_WINDOWING_WAYLAND
@@ -40,6 +44,8 @@ G_BEGIN_DECLS
 
 #define DT_ACCELS_WIDGET_SHORTCUT_KEY "dt-accel-shortcut"
 #define DT_ACCELS_WIDGET_TOOLTIP_DISABLED_KEY "dt-accel-tooltip-disabled"
+/** Object data marking a container whose controls keep plain keys, see dt_accels_block_plain_keys_inside(). */
+#define DT_ACCELS_BLOCK_PLAIN_KEYS "dt-accels-block"
 
 /**
  * @file accelerators.h
@@ -115,9 +121,6 @@ G_BEGIN_DECLS
  * remove the corresponding parent and children, wherever they are in the
  * stack, and then rewire the shortcut with the new last item.
  **/
-
-#ifndef DT_WIDGETS_ACCELERATORS_H
-#define DT_WIDGETS_ACCELERATORS_H
 
 /* Ansel's accelerator system is fully custom (see dt_accels_dispatch()) and never
  * goes through GTK's own accelerator string parser, so it gets none of the
@@ -349,6 +352,25 @@ void dt_accels_attach_scroll_handler(dt_accels_t *accels, gboolean (*callback)(G
                                      void *data);
 
 void dt_accels_detach_scroll_handler(dt_accels_t *accels);
+
+/**
+ * @brief Keep the plain keys for the controls inside @p container while one of them has the focus.
+ *
+ * A key with no modifier, or with Shift alone, then reaches the focused control instead of firing
+ * the shortcut bound to it, exactly as it does while a text entry has the focus; a key held with
+ * Ctrl, Alt or the primary modifier still fires its shortcut, and so do the function keys F1 to
+ * F35 with or without Shift, which no control reads. That is what a panel of sliders and
+ * toggles laid over a view needs, where the view binds single letters and Delete: typing at a
+ * slider must not act on the view behind it, and undo must still work from inside the panel.
+ *
+ * The tag is read from the focus widget and its ancestors on every keystroke, so it holds for
+ * controls added to the container later and needs no removal: it goes with the container.
+ * Unlike dt_accels_disable(), nothing is switched on focus-in and off on focus-out, so a missed
+ * focus change cannot leave the shortcuts disabled.
+ *
+ * @param container the widget whose descendants keep the plain keys.
+ */
+void dt_accels_block_plain_keys_inside(GtkWidget *container);
 
 
 // Temporarily enable/disable keyboard accels, for example during GtkEntry typing.

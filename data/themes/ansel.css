@@ -1877,3 +1877,93 @@ textview text selection {
   border-radius: 4px;
   padding: 4px;
 }
+
+/* Canvas atelier: the properties floating beside an object, a strip that can grow a card. Opaque and
+   framed, since they sit over any picture. Every size here is a pixel or two: the strip is one button
+   row tall by construction, and the placement measures what this adds rather than assuming it -- which
+   holds only on a widget that counts its CSS box. A GtkBox does; a GtkEventBox takes its child's size
+   and draws the frame over it, so this class goes on the box inside the event box, never on the latter. */
+.dt-canvas-props {
+  background-color: @bg_color;
+  border: 1px solid @grey_30;
+  border-radius: 4px;
+}
+
+.dt-canvas-props-strip {
+  padding: 2px 4px;
+}
+
+/* The rule falls on whichever side of the card the strip is: below the strip when the properties grow
+   down, above it when they grow up and the box puts the card first. A side with no sibling is the
+   frame's own edge and takes no second line. */
+.dt-canvas-props-card:not(:first-child) {
+  border-top: 1px solid @grey_30;
+}
+
+.dt-canvas-props-card:not(:last-child) {
+  border-bottom: 1px solid @grey_30;
+}
+
+/* What a closed section holds, read without opening it. */
+.dt_canvas_summary {
+  color: @grey_60;
+}
+
+/* The rule between the rows most edits need and the ones under them. */
+.dt_canvas_more {
+  border-top: 1px dotted @grey_60;
+  margin-top: 2px;
+  padding-top: 2px;
+}
+
+/* A value the object takes from the canvas instead of holding its own. Scoped to the properties so it
+   outranks `button:focus label` and `button:active label`, which would otherwise print an inherited
+   font name bright while its button is pressed or reached by the keyboard. */
+.dt-canvas-props .dt_canvas_inherited,
+.dt-canvas-props .dt_canvas_inherited label {
+  color: @grey_60;
+  font-style: italic;
+}
+
+/* Dots on the card toggle, so a closed card still tells what it hides: something in it differs from
+   the defaults (top right), or the card is cut short and scrolls (bottom right). Painted as
+   backgrounds, since a glyph button has no child to carry a badge; a toggle can be both at once,
+   and one background-image replaces the other, hence the rule naming the pair. */
+.dt-canvas-props .dt_canvas_altered,
+.dt-canvas-props .dt_canvas_clipped {
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.dt-canvas-props .dt_canvas_altered {
+  background-image: radial-gradient(circle closest-side, @orange_light 70%, transparent 100%);
+  background-position: 100% 0%;
+}
+
+.dt-canvas-props .dt_canvas_clipped {
+  background-image: radial-gradient(circle closest-side, @fg_color 70%, transparent 100%);
+  background-position: 100% 100%;
+}
+
+.dt-canvas-props .dt_canvas_altered.dt_canvas_clipped {
+  background-image: radial-gradient(circle closest-side, @orange_light 70%, transparent 100%),
+                    radial-gradient(circle closest-side, @fg_color 70%, transparent 100%);
+  background-position: 100% 0%, 100% 100%;
+}
+
+/* Linked buttons read as one control: the universal reset zeroed every radius and `button` gave all
+   four corners back, so the corners they share are squared again here, and nothing separates them. */
+.dt-canvas-props .linked > button {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.dt-canvas-props .linked > button:not(:first-child) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.dt-canvas-props .linked > button:not(:last-child) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}

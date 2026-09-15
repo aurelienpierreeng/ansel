@@ -12,6 +12,7 @@ set(ANSEL_WIDGETS_SOURCES
   accelerators.c
   bauhaus.c
   button.c
+  chooser_button.c
   collapsible_section.c
   container.c
   dialog.c
