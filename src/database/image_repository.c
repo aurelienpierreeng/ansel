@@ -16,6 +16,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <math.h>   // NAN, the "no colour matrix" sentinel restored below
 #include <string.h>
 
 #include "database/image_repository.h"
@@ -136,8 +137,19 @@ static void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
     uint32_t tmp = sqlite3_column_int(stmt, 34);
     memcpy(&img->legacy_flip, &tmp, sizeof(dt_image_raw_parameters_t));
   }
+  /* Size the copy from the blob, not from the destination. The writer binds exactly
+   * sizeof(d65_color_matrix) (see dt_image_repository_store()), so a short blob means a row this
+   * schema did not write -- a library inherited from darktable -- and reading nine floats out of
+   * it walks off sqlite's buffer. A partial matrix is not a usable one either, so anything that
+   * is not the full 3x3 restores the documented "no matrix" sentinel instead: every consumer
+   * (imageio_profile.c, imageio_rgbe.c) tests isnan(d65_color_matrix[0]), and leaving the field
+   * at the calloc'd zeroes would hand them an all-zero matrix that reads as valid. */
   const void *color_matrix = sqlite3_column_blob(stmt, 35);
-  if(color_matrix) memcpy(img->d65_color_matrix, color_matrix, sizeof(img->d65_color_matrix));
+  const int color_matrix_size = sqlite3_column_bytes(stmt, 35);
+  if(color_matrix && color_matrix_size == (int)sizeof(img->d65_color_matrix))
+    memcpy(img->d65_color_matrix, color_matrix, sizeof(img->d65_color_matrix));
+  else
+    img->d65_color_matrix[0] = NAN;
   if(sqlite3_column_type(stmt, 36) != SQLITE_NULL) img->colorspace = sqlite3_column_int(stmt, 36);
   if(sqlite3_column_type(stmt, 37) != SQLITE_NULL) img->raw_black_level = sqlite3_column_int(stmt, 37);
   if(sqlite3_column_type(stmt, 38) != SQLITE_NULL) img->raw_white_point = sqlite3_column_int(stmt, 38);
