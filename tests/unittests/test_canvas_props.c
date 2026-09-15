@@ -1113,49 +1113,134 @@ static void _a_size_on_an_inheriting_font_writes_the_family_out(void **state)
   } while(0)
 
 /**
- * Reversing a line swaps what its ends are made of -- the points and the tangents, not only the
- * ids -- so the curve is the same curve walked the other way. Nothing about a line with free
- * ends is steered by the reaches or the waypoint's tangent, so this holds on its own.
+ * Reverses a connector and measures how far its new route strays from the one it had, walked from
+ * the other end: each point against its mirror. The point counts must agree.
+ * @return the largest gap along either axis, in canvas units.
  */
-static void _reversing_a_line_walks_the_same_curve_backwards(void **state)
+static double _reverse_largest_mirror_gap(dt_canvas_t *canvas, dt_canvas_object_t *connector)
+{
+  dt_canvas_route_t before;
+  assert_true(dt_canvas_connector_route(canvas, connector, &before));
+  const dt_canvas_prop_value_t nothing = _number(0.0);
+  assert_true(dt_canvas_prop_write(canvas, connector, DT_CANVAS_PROP_CONNECTOR_REVERSE, &nothing)
+              & DT_CANVAS_EFFECT_CHANGED);
+  dt_canvas_route_t after;
+  assert_true(dt_canvas_connector_route(canvas, connector, &after));
+  assert_int_equal(after.point_count, before.point_count);
+  double largest_gap = 0.0;
+  for(int idx = 0; idx < before.point_count; idx++)
+  {
+    const int mirrored = before.point_count - 1 - idx;
+    largest_gap = fmax(largest_gap, fabs(after.points[2 * idx] - before.points[2 * mirrored]));
+    largest_gap = fmax(largest_gap, fabs(after.points[2 * idx + 1] - before.points[2 * mirrored + 1]));
+  }
+  return largest_gap;
+}
+
+/** Reverses a connector and fails, naming the gap, unless its route is the same one walked back. */
+static void _assert_reverse_walks_back(dt_canvas_t *canvas, dt_canvas_object_t *connector)
+{
+  const double largest_gap = _reverse_largest_mirror_gap(canvas, connector);
+  if(largest_gap > 1e-9) fail_msg("the reversed route strays %g units from the mirror of the old one", largest_gap);
+}
+
+/**
+ * Reversing a connector swaps everything its ends are made of, so the curve is the same curve
+ * walked the other way. Each case below is steered by one thing an id swap alone leaves behind:
+ * the reaches of the handles at an anchored end, a free end's point and tangent, and the
+ * waypoint's tangent, which points toward the end and so has to turn round with it.
+ */
+static void _reversing_a_connector_walks_the_same_curve_backwards(void **state)
 {
   (void)state;
   props_fixture_t fixture;
   _fixture_build(&fixture);
+
+  // A free cubic, bent by one end's tangent and by the seed at the other.
   dt_canvas_object_t *line
       = dt_canvas_add_line(fixture.canvas, -80.0, 30.0, 220.0, -45.0, DT_CANVAS_ROUTING_CUBIC, NULL);
   line->connector.to_tangent_x = -15.0f;
   line->connector.to_tangent_y = 90.0f;
-  dt_canvas_route_t before;
-  assert_true(dt_canvas_connector_route(fixture.canvas, line, &before));
   const float from_tangent_x = line->connector.from_tangent_x;
-  const dt_canvas_prop_value_t nothing = _number(0.0);
-  assert_true(dt_canvas_prop_write(fixture.canvas, line, DT_CANVAS_PROP_CONNECTOR_REVERSE, &nothing)
-              & DT_CANVAS_EFFECT_CHANGED);
+  _assert_reverse_walks_back(fixture.canvas, line);
   assert_true(line->connector.from_x == 220.0);
   assert_true(line->connector.to_y == 30.0);
   assert_true(line->connector.from_tangent_x == -15.0f);
   assert_true(line->connector.to_tangent_x == from_tangent_x);
-  dt_canvas_route_t after;
-  assert_true(dt_canvas_connector_route(fixture.canvas, line, &after));
-  assert_int_equal(after.point_count, before.point_count);
-  for(int idx = 0; idx < before.point_count; idx++)
-  {
-    const int mirrored = before.point_count - 1 - idx;
-    assert_near(after.points[2 * idx], before.points[2 * mirrored], 1e-9);
-    assert_near(after.points[2 * idx + 1], before.points[2 * mirrored + 1], 1e-9);
-  }
+
+  // The same free cubic through a waypoint whose tangent was dragged off the chord.
+  line->connector.via_count = 1;
+  line->connector.via_x = 60.0;
+  line->connector.via_y = 140.0;
+  line->connector.via_tangent_x = 70.0;
+  line->connector.via_tangent_y = -25.0;
+  _assert_reverse_walks_back(fixture.canvas, line);
+  assert_true(line->connector.via_tangent_x == -70.0);
+  assert_true(line->connector.via_tangent_y == 25.0);
+
+  // A steered cubic between two frames: each end's handle dragged to a length of its own, far
+  // enough apart that a reach left at its old end bends the curve visibly.
+  dt_canvas_object_t *steered = fixture.objects[4];
+  steered->connector.routing = DT_CANVAS_ROUTING_CUBIC;
+  steered->connector.from_anchor = DT_CANVAS_ANCHOR_EAST;
+  steered->connector.to_anchor = DT_CANVAS_ANCHOR_NORTH;
+  steered->connector.from_reach = 25.0f;
+  steered->connector.to_reach = 180.0f;
+  _assert_reverse_walks_back(fixture.canvas, steered);
+  assert_true(steered->connector.from_reach == 180.0f);
+  assert_true(steered->connector.to_reach == 25.0f);
+
+  // An anchored cubic through a waypoint with a dragged tangent. The reaches are left automatic,
+  // so only the tangent's turn is on trial here; the automatic tangent is the next case's.
+  dt_canvas_object_t *through
+      = dt_canvas_add_connector(fixture.canvas, fixture.objects[0]->id, fixture.objects[3]->id);
+  assert_non_null(through);
+  through->connector.routing = DT_CANVAS_ROUTING_CUBIC;
+  through->connector.via_count = 1;
+  through->connector.via_x = 150.0;
+  through->connector.via_y = 900.0;
+  through->connector.via_tangent_x = 120.0;
+  through->connector.via_tangent_y = 45.0;
+  _assert_reverse_walks_back(fixture.canvas, through);
+  assert_true(through->connector.via_tangent_x == -120.0);
+
+  // The same connector with the waypoint's tangent left automatic. Between two frames its length is
+  // 0.4 of the leg that leaves the START, floored at 40 units, so the curve is the same walked back
+  // only where both legs are as long. Which leg leaves the start is exactly what Reverse changes,
+  // and nothing it writes can make that length not care: the routing would have to, and that moves
+  // every anchored cubic through an automatic waypoint in every existing document, which the golden
+  // routes in test_canvas_document pin. It is left for a decision, and both halves are pinned here.
+  // A waypoint on the perpendicular bisector of the two ends, far enough out that neither leg sits
+  // on the floor, walks back exactly...
+  through->connector.via_tangent_x = 0.0;
+  through->connector.via_tangent_y = 0.0;
+  dt_canvas_route_t ends;
+  assert_true(dt_canvas_connector_route(fixture.canvas, through, &ends));
+  const double chord_x = ends.to_x - ends.from_x;
+  const double chord_y = ends.to_y - ends.from_y;
+  const double chord = hypot(chord_x, chord_y);
+  assert_true(chord > 100.0);
+  through->connector.via_x = 0.5 * (ends.from_x + ends.to_x) - 300.0 * chord_y / chord;
+  through->connector.via_y = 0.5 * (ends.from_y + ends.to_y) + 300.0 * chord_x / chord;
+  _assert_reverse_walks_back(fixture.canvas, through);
+  // ...and the same waypoint slid toward one end does not. Should this start failing, the routing
+  // has been made symmetric on purpose: drop this half and let the one above take any waypoint.
+  through->connector.via_x += 0.3 * chord_x;
+  through->connector.via_y += 0.3 * chord_y;
+  assert_true(_reverse_largest_mirror_gap(fixture.canvas, through) > 10.0);
 
   // Half free: the frame's end and the free end change places, and the straight chord with them.
   dt_canvas_object_t *frame = fixture.objects[0];
   dt_canvas_object_t *half
       = dt_canvas_add_line(fixture.canvas, 0.0, 0.0, 900.0, 900.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
   half->connector.from_id = frame->id;
+  dt_canvas_route_t before;
   assert_true(dt_canvas_connector_route(fixture.canvas, half, &before));
-  dt_canvas_prop_write(fixture.canvas, half, DT_CANVAS_PROP_CONNECTOR_REVERSE, &nothing);
+  _assert_reverse_walks_back(fixture.canvas, half);
   assert_int_equal(half->connector.from_id, 0);
   assert_int_equal(half->connector.to_id, frame->id);
   assert_true(half->connector.from_x == 900.0);
+  dt_canvas_route_t after;
   assert_true(dt_canvas_connector_route(fixture.canvas, half, &after));
   assert_near(after.from_x, before.to_x, 1e-9);
   assert_near(after.from_y, before.to_y, 1e-9);
@@ -1677,7 +1762,7 @@ int main(void)
     cmocka_unit_test(_giving_the_font_back_refits_the_frame),
     cmocka_unit_test(_a_size_on_an_inheriting_font_writes_the_family_out),
     cmocka_unit_test(_arrowheads_and_backgrounds_land_where_they_belong),
-    cmocka_unit_test(_reversing_a_line_walks_the_same_curve_backwards),
+    cmocka_unit_test(_reversing_a_connector_walks_the_same_curve_backwards),
     cmocka_unit_test(_rows_follow_what_they_depend_on),
     cmocka_unit_test(_the_inset_is_one_number_as_its_writer_counts_it),
     cmocka_unit_test(_a_folded_section_names_the_extras_it_hides),

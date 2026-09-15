@@ -1563,6 +1563,15 @@ static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object
       object->connector.from_tangent_y = object->connector.to_tangent_y;
       object->connector.to_tangent_x = from_tangent_x;
       object->connector.to_tangent_y = from_tangent_y;
+      // An anchored end's handle length belongs to that end, not to the start or the finish, so it
+      // follows its end across the swap; left behind, the curve bends at the wrong frame.
+      const float from_reach = object->connector.from_reach;
+      object->connector.from_reach = object->connector.to_reach;
+      object->connector.to_reach = from_reach;
+      // The waypoint's tangent points toward the finish, and the finish is now the other end: the
+      // same handle read the other way round is its negation.
+      object->connector.via_tangent_x = -object->connector.via_tangent_x;
+      object->connector.via_tangent_y = -object->connector.via_tangent_y;
       return DT_CANVAS_EFFECT_CHANGED;
     }
     case DT_CANVAS_PROP_LINE_WIDTH:

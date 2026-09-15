@@ -1862,7 +1862,10 @@ static void _route_cubic(dt_canvas_route_t *route, const dt_canvas_connector_t *
     // A free end brings its own reach, so the floor above only reaches a line through the
     // waypoint's automatic tangent. Unfloored, that tangent spans the shorter leg's share: it is
     // laid along the chord on both sides of the waypoint, and a waypoint near one end would
-    // otherwise throw the curve out past that end.
+    // otherwise throw the curve out past that end. Floored, it is the start leg's share alone, which
+    // is what every route between two frames through a waypoint has always drawn and still draws; it
+    // is also why such a curve depends on which end is the start, so a reversed connector walks the
+    // same curve back only once that tangent has been dragged or both legs ask for one length.
     const double tangent_reach = floored ? reach1_auto : fmin(reach1_measured, reach2_measured);
     if(hypot(tangent_x, tangent_y) < 1e-9)
     {
