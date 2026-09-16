@@ -341,6 +341,14 @@ const char *dt_canvas_prop_choice_label(const dt_canvas_prop_t *prop, int choice
  */
 const char *dt_canvas_prop_section_label(dt_canvas_prop_section_t section, uint32_t kind);
 
+/**
+ * @brief A section's name as a configuration writes it down, untranslated; NULL outside the enum.
+ * @details The enum's order is the order sections are shown in and may change; a name already
+ * written in somebody's configuration may not, so the names are pinned to the enum here rather
+ * than spelled again by whichever frontend happens to store one.
+ */
+const char *dt_canvas_prop_section_name(dt_canvas_prop_section_t section);
+
 /** @brief The override group a section shows, for a kind; DT_CANVAS_GROUP_NONE for most. */
 dt_canvas_prop_group_t dt_canvas_prop_section_group(dt_canvas_prop_section_t section, uint32_t kind);
 

@@ -530,6 +530,26 @@ const char *dt_canvas_prop_section_label(const dt_canvas_prop_section_t section,
   }
 }
 
+/**
+ * What each section is called where the value outlives the build that wrote it -- a configuration
+ * file. The labels above are translated, and the enum's order is the screen's, which is free to
+ * change; neither can name a section in a file read years later, so these names do, and they never
+ * move. The assert is what makes a section added to the enum arrive with a name of its own rather
+ * than take its neighbour's.
+ */
+static const char *const _section_names[] = {
+  "character", "paragraph", "text_box", "picture", "drawing", "map", "route",
+  "arrange",   "fill",      "stroke",   "corners", "shadow",  "cutout",
+};
+
+G_STATIC_ASSERT(G_N_ELEMENTS(_section_names) == DT_CANVAS_SECTION_COUNT);
+
+const char *dt_canvas_prop_section_name(const dt_canvas_prop_section_t section)
+{
+  if((int)section < 0 || section >= DT_CANVAS_SECTION_COUNT) return NULL;
+  return _section_names[section];
+}
+
 dt_canvas_prop_group_t dt_canvas_prop_section_group(const dt_canvas_prop_section_t section, const uint32_t kind)
 {
   switch(section)

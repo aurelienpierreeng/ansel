@@ -140,7 +140,7 @@ typedef struct props_section_t
   gulong toggle_handler;
   GtkWidget *essential_box;
   GtkWidget *more_box;         ///< the rows under the dotted rule
-  gboolean present;            ///< the kind shown has rows in it
+  gboolean present;            ///< one of this section's own card rows applies to the object shown
 } props_section_t;
 
 struct dt_canvas_props_gtk_t
@@ -1579,20 +1579,23 @@ static void _structure_pass(props_t *props, const dt_canvas_t *canvas, const dt_
     props_section_t *section = &props->sections[section_id];
     gboolean essential = FALSE;
     gboolean more = FALSE;
-    gboolean for_kind = FALSE;
+    gboolean any_row_applies = FALSE;
     for(int prop_id = DT_CANVAS_PROP_NONE + 1; prop_id < DT_CANVAS_PROP_COUNT; prop_id++)
     {
       const props_binding_t *binding = &props->bindings[prop_id];
       if(IS_NULL_PTR(binding->prop) || binding->in_strip || (int)binding->prop->section != section_id) continue;
-      if(dt_canvas_prop_for_kind(binding->prop, props->kind)) for_kind = TRUE;
+      // A section is here because one of its rows applies to this object, not because its kind owns
+      // rows in the table: a section whose every row a shape or a switch has closed has nothing left
+      // to show, and a heading over nothing is a heading that lies.
+      if(props->applies[prop_id]) any_row_applies = TRUE;
       if(!row_shown[prop_id]) continue;
       if(binding->prop->tier == DT_CANVAS_TIER_MORE)
         more = TRUE;
       else
         essential = TRUE;
     }
-    // A section the kind lacks is absent, never greyed out.
-    section->present = for_kind;
+    // A section with nothing to show is absent, never greyed out.
+    section->present = any_row_applies;
     gtk_widget_set_visible(section->essential_box, essential);
     gtk_widget_set_visible(section->more_box, more);
     // The rule is drawn above the extras only when something sits above it.
@@ -1600,7 +1603,7 @@ static void _structure_pass(props_t *props, const dt_canvas_t *canvas, const dt_
       dt_gui_add_class(section->more_box, "dt_canvas_more");
     else
       dt_gui_remove_class(section->more_box, "dt_canvas_more");
-    gtk_widget_set_visible(section->collapsible.expander, for_kind);
+    gtk_widget_set_visible(section->collapsible.expander, any_row_applies);
     if(kind_changed)
     {
       gchar *title = g_strdup(_(dt_canvas_prop_section_label((dt_canvas_prop_section_t)section_id, props->kind)));

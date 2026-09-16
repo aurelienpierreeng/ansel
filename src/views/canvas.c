@@ -2308,16 +2308,10 @@ static dt_canvas_object_t *_props_object(const dt_canvas_view_t *view)
 }
 
 /**
- * The section a kind's properties open on, stored by name, one key per kind. The enum's order is the
- * order sections are shown in and may change; a value in the configuration may not. These names are a
- * storage format, declared with their keys in anselconfig.xml.in: never translate them, never reorder
- * them against dt_canvas_prop_section_t.
+ * The section a kind's properties open on is stored by name, one key per kind. The names come from
+ * dt_canvas_prop_section_name(), which pins them to the enum: they are a storage format, declared
+ * with their keys in anselconfig.xml.in, and the view only reads and writes them.
  */
-static const char *const _props_section_names[] = {
-  "character", "paragraph", "text_box", "picture", "drawing", "map", "route",
-  "arrange",   "fill",      "stroke",   "corners", "shadow",  "cutout",
-};
-G_STATIC_ASSERT(G_N_ELEMENTS(_props_section_names) == DT_CANVAS_SECTION_COUNT);
 #define CANVAS_PROPS_SECTION_NONE "none"
 
 /** The key a kind's open section is stored under; FALSE for a kind that has no properties. */
@@ -2357,7 +2351,7 @@ static int _props_section_stored(const uint32_t kind)
   if(IS_NULL_PTR(stored)) return -1;
   for(int section = 0; section < DT_CANVAS_SECTION_COUNT; section++)
   {
-    if(strcmp(stored, _props_section_names[section]) == 0) return section;
+    if(strcmp(stored, dt_canvas_prop_section_name((dt_canvas_prop_section_t)section)) == 0) return section;
   }
   return -1;
 }
@@ -2367,8 +2361,8 @@ static void _props_section_store(const uint32_t kind, const int section)
 {
   char key[128] = { 0 };
   if(!_props_section_key(kind, key, sizeof(key))) return;
-  const gboolean named = section >= 0 && section < DT_CANVAS_SECTION_COUNT;
-  dt_conf_set_string(key, named ? _props_section_names[section] : CANVAS_PROPS_SECTION_NONE);
+  const char *name = dt_canvas_prop_section_name((dt_canvas_prop_section_t)section);
+  dt_conf_set_string(key, IS_NULL_PTR(name) ? CANVAS_PROPS_SECTION_NONE : name);
 }
 
 /* --- where the properties go ----------------------------------------------------------- */

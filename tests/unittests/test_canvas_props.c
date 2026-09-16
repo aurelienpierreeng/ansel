@@ -1467,6 +1467,152 @@ static void _rows_follow_what_they_depend_on(void **state)
   _fixture_free(&fixture);
 }
 
+/**
+ * The card's sections, as the properties binder decides them: a section is there when one of its
+ * own rows applies to this object. The strip is not a section -- its rows carry no heading and
+ * cannot bring one back -- so only the rows the card would hold are counted.
+ */
+static uint32_t _sections_present(const dt_canvas_object_t *object)
+{
+  size_t count = 0;
+  const dt_canvas_prop_t *table = dt_canvas_props(&count);
+  uint32_t sections = 0;
+  for(size_t idx = 0; idx < count; idx++)
+  {
+    const dt_canvas_prop_t *prop = &table[idx];
+    if(prop->tier == DT_CANVAS_TIER_STRIP) continue;
+    if(dt_canvas_prop_applies(prop, object)) sections |= 1u << prop->section;
+  }
+  return sections;
+}
+
+/** The rule the binder followed before: a section was there when the KIND owned one of its rows. */
+static uint32_t _sections_for_kind(const uint32_t kind)
+{
+  size_t count = 0;
+  const dt_canvas_prop_t *table = dt_canvas_props(&count);
+  uint32_t sections = 0;
+  for(size_t idx = 0; idx < count; idx++)
+  {
+    const dt_canvas_prop_t *prop = &table[idx];
+    if(prop->tier == DT_CANVAS_TIER_STRIP) continue;
+    if(dt_canvas_prop_for_kind(prop, kind)) sections |= 1u << prop->section;
+  }
+  return sections;
+}
+
+/** How many of the card's rows apply right now: what tells one state of an object from another. */
+static int _card_rows_applying(const dt_canvas_object_t *object)
+{
+  size_t count = 0;
+  const dt_canvas_prop_t *table = dt_canvas_props(&count);
+  int rows = 0;
+  for(size_t idx = 0; idx < count; idx++)
+  {
+    const dt_canvas_prop_t *prop = &table[idx];
+    if(prop->tier == DT_CANVAS_TIER_STRIP) continue;
+    rows += dt_canvas_prop_applies(prop, object) ? 1 : 0;
+  }
+  return rows;
+}
+
+/**
+ * Deciding a section by what applies rather than by what the kind owns moves no section of any
+ * kind there is today: every gated row sits beside an ungated one, so a section closed by a shape
+ * or a switch has never been a section closed altogether. The day a kind arrives whose section is
+ * gated throughout -- a rectangle has nothing to say about a polygon's sides -- this is where the
+ * two rules part company, and it should be that kind that parts them, not one of these.
+ */
+static void _a_section_is_there_when_one_of_its_rows_applies(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  for(size_t kind_index = 0; kind_index < G_N_ELEMENTS(_kinds); kind_index++)
+  {
+    dt_canvas_object_t *object = fixture.objects[kind_index];
+    const uint32_t owned = _sections_for_kind(_kinds[kind_index]);
+    assert_true(owned != 0);
+    assert_int_equal(_sections_present(object), owned);
+    if(_kinds[kind_index] == DT_CANVAS_OBJECT_CONNECTOR) continue;
+    // Every state the gated rows can put a frame in: the cutout's five shapes, and under each of
+    // them the text's flow switch, which the other kinds refuse and stay as they were.
+    int rows_uncut[2] = { 0, 0 };
+    int rows_cut[2] = { 0, 0 };
+    for(int flowing = 0; flowing < 2; flowing++)
+    {
+      const dt_canvas_prop_value_t wrap = _flag(flowing != 0);
+      dt_canvas_prop_write(fixture.canvas, object, DT_CANVAS_PROP_TEXT_WRAP, &wrap);
+      for(int choice = DT_CANVAS_MASK_NONE; choice <= DT_CANVAS_MASK_GRADIENT; choice++)
+      {
+        const dt_canvas_prop_value_t shape = _choice(choice);
+        dt_canvas_prop_write(fixture.canvas, object, DT_CANVAS_PROP_CUTOUT_SHAPE, &shape);
+        assert_int_equal(_sections_present(object), owned);
+        if(choice == DT_CANVAS_MASK_NONE) rows_uncut[flowing] = _card_rows_applying(object);
+        if(choice == DT_CANVAS_MASK_ELLIPSE) rows_cut[flowing] = _card_rows_applying(object);
+      }
+    }
+    // BOTH axes are real states, or the agreement above is a state agreeing with itself. An ellipse
+    // opens rows an uncut frame has none of, whichever way the flow switch is set; and the switch
+    // itself opens one more row on the text, which is the only kind that has it -- the others own no
+    // such row, so their two passes must come out at exactly the same count.
+    for(int flowing = 0; flowing < 2; flowing++) assert_true(rows_cut[flowing] > rows_uncut[flowing]);
+    if(_kinds[kind_index] == DT_CANVAS_OBJECT_TEXT)
+      assert_true(rows_uncut[1] > rows_uncut[0]);
+    else
+      assert_int_equal(rows_uncut[1], rows_uncut[0]);
+  }
+  // A line whose ends need no frame is a connector as far as the card is concerned: no connector row
+  // is gated on anything, so having free ends closes none of them. The day one is -- a route a free
+  // line cannot take -- this is the line that parts the two rules for the kind that already exists.
+  dt_canvas_object_t *free_line
+      = dt_canvas_add_line(fixture.canvas, 0.0, 1500.0, 300.0, 1500.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  assert_non_null(free_line);
+  assert_int_equal(_sections_present(free_line), _sections_present(fixture.objects[4]));
+  assert_int_equal(_card_rows_applying(free_line), _card_rows_applying(fixture.objects[4]));
+  _fixture_free(&fixture);
+}
+
+/**
+ * The section names are what a configuration file holds, so they are pinned twice over: each name
+ * against the section it belongs to, and each section against its place in the enum. Reordering the
+ * enum -- which the screen order is free to ask for -- must not quietly rename anybody's stored
+ * section.
+ */
+static void _section_names_are_pinned_to_the_enum(void **state)
+{
+  (void)state;
+  static const struct
+  {
+    dt_canvas_prop_section_t section;
+    const char *name;
+  } pinned[] = {
+    { DT_CANVAS_SECTION_CHARACTER, "character" }, { DT_CANVAS_SECTION_PARAGRAPH, "paragraph" },
+    { DT_CANVAS_SECTION_TEXT_BOX, "text_box" },   { DT_CANVAS_SECTION_PICTURE, "picture" },
+    { DT_CANVAS_SECTION_DRAWING, "drawing" },     { DT_CANVAS_SECTION_MAP, "map" },
+    { DT_CANVAS_SECTION_ROUTE, "route" },         { DT_CANVAS_SECTION_ARRANGE, "arrange" },
+    { DT_CANVAS_SECTION_FILL, "fill" },           { DT_CANVAS_SECTION_STROKE, "stroke" },
+    { DT_CANVAS_SECTION_CORNERS, "corners" },     { DT_CANVAS_SECTION_SHADOW, "shadow" },
+    { DT_CANVAS_SECTION_CUTOUT, "cutout" },
+  };
+  assert_int_equal(G_N_ELEMENTS(pinned), DT_CANVAS_SECTION_COUNT);
+  GHashTable *seen = g_hash_table_new(g_str_hash, g_str_equal);
+  for(size_t idx = 0; idx < G_N_ELEMENTS(pinned); idx++)
+  {
+    assert_int_equal((int)pinned[idx].section, (int)idx);
+    const char *name = dt_canvas_prop_section_name(pinned[idx].section);
+    assert_non_null(name);
+    assert_string_equal(name, pinned[idx].name);
+    // One name per section, and none of them the sentinel a folded card is stored as.
+    assert_false(g_hash_table_contains(seen, name));
+    assert_string_not_equal(name, "none");
+    g_hash_table_add(seen, (gpointer)name);
+  }
+  g_hash_table_destroy(seen);
+  assert_null(dt_canvas_prop_section_name(DT_CANVAS_SECTION_COUNT));
+  assert_null(dt_canvas_prop_section_name((dt_canvas_prop_section_t)-1));
+}
+
 static int _group_setup(void **state)
 {
   (void)state;
@@ -1895,6 +2041,8 @@ int main(void)
     cmocka_unit_test(_arrowheads_and_backgrounds_land_where_they_belong),
     cmocka_unit_test(_reversing_a_connector_walks_the_same_curve_backwards),
     cmocka_unit_test(_rows_follow_what_they_depend_on),
+    cmocka_unit_test(_a_section_is_there_when_one_of_its_rows_applies),
+    cmocka_unit_test(_section_names_are_pinned_to_the_enum),
     cmocka_unit_test(_the_inset_is_one_number_as_its_writer_counts_it),
     cmocka_unit_test(_a_folded_section_names_the_extras_it_hides),
     cmocka_unit_test(_a_card_is_altered_by_a_font_of_its_own),
