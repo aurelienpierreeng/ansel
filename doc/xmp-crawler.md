@@ -149,6 +149,14 @@ GTK dialog leaves separately, as PR 7 of `control-split.md`.
 
 ## What has NOT been exercised
 
+These runs are read with `-d control`. The job traces bracket the crawl (`[run_job+]` and
+`[run_job-]`, both carrying the job's description, `crawl XMP files`), and the crawl itself ends
+with one summary line — `[crawler] done: N images, M folder listings, K to report, T s`, or
+`cancelled:` when it stopped early. The brackets alone would not do: they say the function
+returned, not that it walked anything, so a crawl that stopped at its first check looks exactly
+like one that visited the whole library. The per-image and per-folder lines stay for the
+exceptions only — a missing image, a newer sidecar, a folder that could not be listed.
+
 The unit tests cover the logic, not the threading move this work exists for. Still to run by
 hand, and to record here when they have been:
 

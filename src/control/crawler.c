@@ -199,6 +199,8 @@ typedef struct dt_crawler_walk_t
   GList **result;
   GHashTable *folders; // dirname -> dt_crawler_folder_t *
   dt_job_t *job;       // NULL for a crawl the user asked for from the menu: it runs to its end
+  int images;          // rows walked, for the one line this prints at the end
+  int listings;        // directories enumerated; a re-listing past the cache cap counts twice
 } dt_crawler_walk_t;
 
 /* A crawl run as a job stops when the job is cancelled, and when Ansel quits. Nothing cancels a
@@ -232,6 +234,7 @@ static dt_crawler_folder_t *_crawler_folder(dt_crawler_walk_t *walk, const char 
   folder->path = g_strdup(dirname);
   folder->exact = g_hash_table_new_full(g_str_hash, g_str_equal,
                                         dt_free_gpointer, dt_free_gpointer);
+  walk->listings++;
 
   /* GIO rather than readdir()/stat(): it is the one spelling that works on all three
    * platforms, and on Windows it takes the UTF-8 path this database stores and does the
@@ -353,6 +356,8 @@ static gboolean _crawl_image(const int32_t id,
 {
   dt_crawler_walk_t *walk = (dt_crawler_walk_t *)user_data;
   if(_job_cancelled(walk->job)) return FALSE;
+
+  walk->images++;
 
   gboolean go_on = TRUE;
   gchar *dirname = g_path_get_dirname(image_path);
@@ -480,6 +485,7 @@ done:
 static GList *_crawler_run(dt_job_t *job)
 {
   GList *result = NULL;
+  const gint64 started = g_get_monotonic_time();
   dt_crawler_walk_t walk
       = { .result = &result,
           .folders = g_hash_table_new_full(g_str_hash, g_str_equal,
@@ -509,6 +515,17 @@ static GList *_crawler_run(dt_job_t *job)
   dt_image_repository_foreach_with_path(_crawl_image, &walk);
 
   g_hash_table_destroy(walk.folders);
+
+  /* One line, at the end, for the one thing the job traces cannot say. [run_job-] reports that
+   * this function returned, not that it walked anything: a crawl that stopped at its first
+   * check -- cancelled, or a library whose folders are all unreachable -- prints exactly the
+   * same pair of brackets as one that visited every image. Per folder would be 18 lines on the
+   * library this was measured against and per image 1969, which is itself enough I/O to move
+   * the number it would be reporting. */
+  dt_print(DT_DEBUG_CONTROL,
+           "[crawler] %s: %d images, %d folder listings, %d to report, %.2f s\n",
+           _job_cancelled(job) ? "cancelled" : "done", walk.images, walk.listings,
+           g_list_length(result), (double)(g_get_monotonic_time() - started) / 1.0e6);
 
   return g_list_reverse(result); // list was built in reverse order, so un-reverse it
 }
