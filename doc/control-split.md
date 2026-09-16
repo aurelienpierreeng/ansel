@@ -63,7 +63,7 @@ progress objects that describe it, the signal bus that announces it, the flag th
 the loop is alive. `jobs.c` already names nothing but dtpthread, a clock, a logger and a thread
 count; `signal.c` touches control in exactly two places (`signal.c:372`, `:444`). What leaves is
 the GTK: the input router, the cursor, the view-switch shims, the log/toast rendering,
-`crawler.c`'s 580-line GtkTreeView, `control_jobs.c`'s 324 GTK lines.
+`crawler.c`'s 585-line GtkTreeView, `control_jobs.c`'s 324 GTK lines.
 
 Three grafts decide the shape. **Every header split lands in place, at the same layer, before any
 file moves** — `control/user_message.h` sits at layer 3 exactly like `control/control.h`, so the
@@ -72,9 +72,10 @@ tree-wide `dt_control_log` rename would detonate the in-flight `t4b…t6a` stack
 call sites in 84 files). **The closure is a ratchet in `check_module_boundaries.sh`**, alongside
 the six that already exist. **The final act is a one-line layer move, measured not assumed**:
 `('control', 1)` in `tools/include_graph.py` gives **184 → 165, cycles 0** today — the 22 inbound
-violations retire while the three `control/ → widgets/` includes (`control.c:57`, `crawler.c:49,50`,
-legal only because widgets is 2.5) flip. Land it **after** the GTK half is out, or the ratchet
-stops measuring the debt it exists to measure.
+violations retire while the three `control/ → widgets/` includes (`control.c:57`, and
+`crawler.c`'s `widget_settings.h` and `widget_style.h`, legal only because widgets is 2.5)
+flip. Land it **after** the GTK half is out, or the ratchet stops measuring the debt it
+exists to measure.
 
 ## The sequence
 
@@ -90,7 +91,7 @@ with `include_graph.py --what-if` before the PR opens; any PR whose count falls 
 | **4** | Progress vtable → `dt_progress_handlers_t { void *ctx; … }`, installed and retracted as one call; `control.h` still includes `libs/lib.h`. Fixes `libs/backgroundjobs.c:162-166` (nulls 5 of 6 slots) and `progress.c:344-359` (cancel destroys the mutex it holds — user-triggerable on a queued job). | cancel a not-yet-started import under ASAN | **184** |
 | **5** | **Delete `control.h:56`.** Whole content: the 9 `dt_view_t` files plus a resolver for `common/folder_survey.c:281` (layer 1 — adding the include there would *raise* the ratchet). Delete `dt_ctl_switch_mode_to_by_view` (zero callers, sole `dt_view_t` user in the header). | per-file table in the PR body; `build-nofeatures` | **183** |
 | **6** | `control.c`'s GUI half → `gui/` (expose, busy paint, event router, view-switch shims, log/toast rendering). `develop->progress.*` inverts through the existing `develop/pipeline_notify.h`; `control.c:58 darktable.h` goes (`dt_get_main_message()` is declared 426 lines above the site that ignores it). Closes the `main_message` UAF. | `-d control`; thumbnail + slideshow expose during a darkroom render | **180** |
-| **7** | `crawler.c` splits at line 245: scanner (168 lines, 0 GTK) → `database/`; dialog (580 lines) → `gui/dialogs/`. | crawler run on a scratch library | **179** |
+| **7** | `crawler.c` splits at line 571: scanner (570 lines, 0 GTK) → a module of its own; dialog (585 lines) → `gui/dialogs/`. **Not `database/` any more**: the scanner runs as a background job and names `control/control.h` and `control/jobs.h`, so it sits at layer 3 like the dialog it leaves. It also enumerates directories, which 17 other files in the tree do by hand — `xmp-crawler.md` argues the inventory is the module, and the scanner its first caller. | crawler run on a scratch library | **179** |
 | **8** | `control/jobs/` dissolves **per job, never wholesale**: `control_jobs.c` → `imageio/export_job.c` + `gui/actions/` + `common/`; `film_jobs.c`, `import_jobs.c` likewise; delete `jobs/image_jobs.c` (93 lines, zero callers). | export + HDR-merge pixel A/B; folder import | **≈172** |
 | **9** | Type relocation: `dt_history_merge_strategy_t`/`dt_hm_batch_state_t` → `history/`; `FC`/`FCxtrans` → `pixel/`; `DT_CTL_WORKER_RESERVED` → `system/sys_resources.h`. Delete `control/settings.h` (both its types have zero users; its 9 includers want `control/signal.h`). | four configs | **≈168** |
 | **10** | Lifecycle symmetry: one init/cleanup pair, every mutex initialised and destroyed on both paths, matched allocator (`calloc` at `darktable.c:897` vs `dt_free` at `:2006`), teardown reordered above `dt_control_signal_cleanup`. Delete `proxy.hinter` and the ignored `s` parameter (−21 accessor sites). | clean `rm -rf build && ninja install`, **staged** binary, ASAN | **≈168** |
