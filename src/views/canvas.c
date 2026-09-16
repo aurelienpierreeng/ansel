@@ -282,6 +282,11 @@ typedef struct dt_canvas_view_t
   dt_canvas_color_t toolbar_color_before; ///< the colour the window found
   gboolean toolbar_color_dirty;         ///< whether the document had unsaved changes when the window found it
   uint64_t toolbar_color_generation;    ///< the generation the window's last change left the document at
+  // A canvas-wide number a toolbar slider is editing, from its first step to the end of the gesture.
+  int toolbar_number_prop;              ///< dt_canvas_prop_id_t, DT_CANVAS_PROP_NONE when none is being edited
+  float toolbar_number_before;          ///< the number the gesture found
+  gboolean toolbar_number_dirty;        ///< whether the document had unsaved changes when the gesture found it
+  uint64_t toolbar_number_generation;   ///< the generation the gesture's last step left the document at
   dt_cursor_t cursor;                   ///< the shape last queued, to queue only on change
 } dt_canvas_view_t;
 
@@ -612,6 +617,7 @@ static void _set_document(dt_view_t *self, dt_canvas_t *canvas)
   view->props_live = FALSE;
   // A toolbar colour still being dragged belonged to the document going away: the new one is not reset to it.
   view->toolbar_color_target = -1;
+  view->toolbar_number_prop = DT_CANVAS_PROP_NONE;
   view->drag = DT_CANVAS_DRAG_NONE;
   // A new document puts the tool away without a word: the toolbar is told with the document itself.
   view->tool = DT_CANVAS_TOOL_NONE;
@@ -6662,10 +6668,18 @@ static void _proxy_set_shadow(dt_view_t *self, const float *rgba, float offset_x
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(rgba)) return;
+  // A shadow the canvas already carries is no edit, as the border's and the corners' setters have
+  // always held: a gesture that ended where it started owes no undo step, and its caller must not
+  // have to know which of the four members it moved to say so.
+  const dt_canvas_color_t wanted = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  if(memcmp(&wanted, &view->canvas->shadow.color, sizeof(wanted)) == 0
+     && offset_x == view->canvas->shadow.offset_x && offset_y == view->canvas->shadow.offset_y
+     && blur == view->canvas->shadow.blur)
+    return;
   // An edit still open in the properties is its own undo step, and an earlier one.
   _props_commit_pending(self);
   dt_canvas_t *before = _begin_edit(view);
-  view->canvas->shadow.color = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  view->canvas->shadow.color = wanted;
   view->canvas->shadow.offset_x = offset_x;
   view->canvas->shadow.offset_y = offset_y;
   view->canvas->shadow.blur = blur;
@@ -6893,6 +6907,131 @@ static void _proxy_edit_color(dt_view_t *self, const int target, const float *rg
   }
 }
 
+/**
+ * Where the document keeps a canvas-wide number the toolbar's sliders edit. The property table is
+ * what names them, so the toolbar's slider, an object's own card and the document cannot come to
+ * spell one setting three ways.
+ */
+static float *_toolbar_number_field(dt_canvas_t *canvas, const int prop)
+{
+  switch(prop)
+  {
+    case DT_CANVAS_PROP_BORDER_WIDTH:
+      return &canvas->border_width;
+    case DT_CANVAS_PROP_CORNER_RADIUS:
+      return &canvas->corner_radius;
+    case DT_CANVAS_PROP_SHADOW_OFFSET_X:
+      return &canvas->shadow.offset_x;
+    case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
+      return &canvas->shadow.offset_y;
+    case DT_CANVAS_PROP_SHADOW_BLUR:
+      return &canvas->shadow.blur;
+    default:
+      return NULL;
+  }
+}
+
+/** Nothing outside the row's hard range is ever stored, as the card's own control enforces. */
+static float _toolbar_number_clamp(const int prop, const float value)
+{
+  const dt_canvas_prop_t *row = dt_canvas_prop_get((dt_canvas_prop_id_t)prop);
+  if(IS_NULL_PTR(row)) return value;
+  return CLAMP(value, (float)row->min, (float)row->max);
+}
+
+/**
+ * Hand the number a gesture kept to the setting's own setter: the one call that writes the
+ * configuration, records the undo step and tells whoever else shows the setting.
+ */
+static void _toolbar_number_apply(dt_view_t *self, const int prop, const float value)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  const dt_canvas_shadow_t shadow = view->canvas->shadow;
+  const float rgba[4] = { shadow.color.red, shadow.color.green, shadow.color.blue, shadow.color.alpha };
+  switch(prop)
+  {
+    case DT_CANVAS_PROP_BORDER_WIDTH:
+      // No colour: this gesture moved a width, and the border keeps the colour it has.
+      _proxy_set_border(self, NULL, value);
+      break;
+    case DT_CANVAS_PROP_CORNER_RADIUS:
+      _proxy_set_corner_radius(self, value);
+      break;
+    case DT_CANVAS_PROP_SHADOW_OFFSET_X:
+      _proxy_set_shadow(self, rgba, value, shadow.offset_y, shadow.blur);
+      break;
+    case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
+      _proxy_set_shadow(self, rgba, shadow.offset_x, value, shadow.blur);
+      break;
+    case DT_CANVAS_PROP_SHADOW_BLUR:
+      _proxy_set_shadow(self, rgba, shadow.offset_x, shadow.offset_y, value);
+      break;
+    default:
+      break;
+  }
+}
+
+/**
+ * A number of the whole canvas, edited by a slider of the toolbar. It takes the shape the toolbar's
+ * colours already take, and for the same reason: a dragged control reports every value it passes
+ * through, and a setter recording an undo step per call would turn one drag into dozens of them,
+ * each holding two whole copies of the document, with a configuration write and a repaint apiece.
+ * So while the gesture lasts each step only writes the field and touches the document -- no
+ * configuration, no undo record -- and the number the gesture found is remembered; its end puts that
+ * number back FIRST and then calls the setting's own setter with the kept one, so whatever that
+ * setter records and announces spans the whole gesture, exactly as one typed number did.
+ *
+ * Every LIVE step announces itself: a frame inheriting the border, the corners or the shadow shows
+ * these numbers in its own properties, and would otherwise go on showing the old one while it is
+ * drawn with the new. The toolbar's refill answers that announcement and leaves alone any slider
+ * already showing what the document holds -- which, mid-gesture, is the slider being dragged.
+ */
+static void _proxy_edit_number(dt_view_t *self, const int prop, const float value, const int phase)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  float *field = _toolbar_number_field(view->canvas, prop);
+  if(IS_NULL_PTR(field)) return;
+  const float wanted = _toolbar_number_clamp(prop, value);
+
+  if(phase == DT_CANVAS_EDIT_LIVE)
+  {
+    if(view->toolbar_number_prop != prop)
+    {
+      // An edit still open in the properties is its own undo step, and an earlier one.
+      _props_commit_pending(self);
+      view->toolbar_number_prop = prop;
+      view->toolbar_number_before = *field;
+      view->toolbar_number_dirty = view->canvas->dirty;
+      view->toolbar_number_generation = view->canvas->generation;
+    }
+    // A step that changes nothing -- a release where the last motion was -- repaints nothing.
+    if(wanted == *field) return;
+    *field = wanted;
+    dt_canvas_touch(view->canvas);
+    view->toolbar_number_generation = view->canvas->generation;
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
+    dt_control_queue_redraw_center();
+    return;
+  }
+
+  const gboolean previewed = view->toolbar_number_prop == prop;
+  if(previewed) *field = view->toolbar_number_before;
+  view->toolbar_number_prop = DT_CANVAS_PROP_NONE;
+  if(phase != DT_CANVAS_EDIT_COMMIT)
+  {
+    if(!previewed) return;
+    // Nothing but the gesture touched the document since it started: it is as saved as it found it.
+    const gboolean only_the_gesture = view->canvas->generation == view->toolbar_number_generation;
+    dt_canvas_touch(view->canvas);
+    if(only_the_gesture) view->canvas->dirty = view->toolbar_number_dirty;
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
+    dt_control_queue_redraw_center();
+    return;
+  }
+  _toolbar_number_apply(self, prop, wanted);
+}
+
 static int _proxy_armed_tool(dt_view_t *self)
 {
   const dt_canvas_view_t *view = (const dt_canvas_view_t *)self->data;
@@ -6999,20 +7138,18 @@ void init(dt_view_t *self)
   manager->proxy.canvas.action = _proxy_action;
   manager->proxy.canvas.document = _proxy_document;
   manager->proxy.canvas.set_grid_size = _proxy_set_grid_size;
-  manager->proxy.canvas.set_border = _proxy_set_border;
   manager->proxy.canvas.armed_tool = _proxy_armed_tool;
   manager->proxy.canvas.set_padding = _proxy_set_padding;
   manager->proxy.canvas.set_snap_mode = _proxy_set_snap_mode;
   manager->proxy.canvas.set_background = _proxy_set_background;
   manager->proxy.canvas.set_paper = _proxy_set_paper;
   manager->proxy.canvas.set_guides = _proxy_set_guides;
-  manager->proxy.canvas.set_shadow = _proxy_set_shadow;
   manager->proxy.canvas.set_texture = _proxy_set_texture;
   manager->proxy.canvas.set_resolution = _proxy_set_resolution;
   manager->proxy.canvas.set_spread = _proxy_set_spread;
-  manager->proxy.canvas.set_corner_radius = _proxy_set_corner_radius;
   manager->proxy.canvas.set_page_guides = _proxy_set_page_guides;
   manager->proxy.canvas.edit_color = _proxy_edit_color;
+  manager->proxy.canvas.edit_number = _proxy_edit_number;
 }
 
 void gui_init(dt_view_t *self)

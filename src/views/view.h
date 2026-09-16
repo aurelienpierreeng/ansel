@@ -274,20 +274,16 @@ typedef struct dt_view_manager_t
       void (*action)(struct dt_view_t *view, int action);
       const struct dt_canvas_t *(*document)(struct dt_view_t *view);
       void (*set_grid_size)(struct dt_view_t *view, float size);
-      void (*set_border)(struct dt_view_t *view, const float *rgba, float width);
       int (*armed_tool)(struct dt_view_t *view); ///< the dt_canvas_tool_t a press on the plane draws with
       void (*set_padding)(struct dt_view_t *view, float padding);
       void (*set_snap_mode)(struct dt_view_t *view, int mode); ///< dt_canvas_grid_flags_t snap bits
       void (*set_background)(struct dt_view_t *view, const float *rgba, int style); ///< NULL / -1 leave one alone
       void (*set_paper)(struct dt_view_t *view, int paper, int landscape);        ///< -1 leaves one alone
       void (*set_guides)(struct dt_view_t *view, int mask, int value);            ///< dt_canvas_grid_flags_t bits
-      /** The default drop shadow; an alpha of 0 in `rgba` is no shadow. Offsets and blur in canvas units. */
-      void (*set_shadow)(struct dt_view_t *view, const float *rgba, float offset_x, float offset_y, float blur);
       /** The paper texture's multipliers: contrast, detail, feature scale, grain; 1 is the paper as designed. */
       void (*set_texture)(struct dt_view_t *view, float contrast, float detail, float scale, float grain);
       void (*set_resolution)(struct dt_view_t *view, float resolution);
       void (*set_spread)(struct dt_view_t *view, int cols, int rows, float bind_gutter);
-      void (*set_corner_radius)(struct dt_view_t *view, float radius); ///< the frames' default rounded corners
       /** The page's inner margin and the sheet's bleed outside it, in canvas units; < 0 leaves one alone. */
       void (*set_page_guides)(struct dt_view_t *view, float margin, float bleed);
       /**
@@ -296,6 +292,17 @@ typedef struct dt_view_manager_t
        * colour's own setter, CANCEL puts back the colour the window found.
        */
       void (*edit_color)(struct dt_view_t *view, int target, const float *rgba, int phase);
+      /**
+       * A number belonging to the whole canvas -- the frames' default border width and corner
+       * radius, the default shadow's two offsets and its blur: `prop` is the
+       * dt_canvas_prop_id_t the property table describes it by and `phase` a dt_canvas_edit_phase_t.
+       * LIVE writes it and shows it, costing no configuration write and no undo record; COMMIT puts
+       * the number the gesture found back and hands the kept one to the setting's own setter, so a
+       * slider dragged through fifty values is the one undo step a gesture owes. This is the only
+       * way in: these numbers have no plain setter of their own in the proxy, precisely so a new
+       * control cannot be wired to one and record a step per motion event.
+       */
+      void (*edit_number)(struct dt_view_t *view, int prop, float value, int phase);
     } canvas;
   } proxy;
 

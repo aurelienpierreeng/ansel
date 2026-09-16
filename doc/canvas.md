@@ -1498,11 +1498,37 @@ document is replaced, saved or reconfigured, so the toolbar refills every contro
 document setting, and so do the floating properties. **The toolbar blocks every handler a refill
 could wake, by its stored id** (`_connect_refilled()` is the only way such a handler is
 connected), rather than raising a flag the handlers check: a handler that reads SEVERAL controls
--- the margin with the bleed, the shadow's three spins -- woken halfway through a refill sends the
+-- the margin with the bleed, the shadow's three sliders -- woken halfway through a refill sends the
 ones not refilled yet into the document. Measured offscreen with the blocking removed: 9 writes
-during one refill, one of them a shadow radius of -500. The margin and bleed controls were never
-refilled at all until this was checked, so the first edit of the bleed after a restart wrote the
-margin's GTK default of 0 over the document's.
+during one refill, one of them a shadow radius of -500, the hard minimum of that row in the
+property table. The margin and bleed controls were never refilled at all until this was checked, so
+the first edit of the bleed after a restart wrote the margin's GTK default of 0 over the document's.
+
+The Borders and Shadows popovers hold bauhaus sliders, and a dragged control asks for two things a
+spin button did not. What it SENDS is one value per motion event, so the five numbers they edit --
+the frames' default border width and corner radius, the default shadow's two offsets and its blur --
+have no plain setter in `proxy.canvas` at all: `set_border`, `set_shadow` and `set_corner_radius`
+were withdrawn from the proxy and are now static to the view, and the only way in is the
+phase-aware `proxy.canvas.edit_number()`, taking the `dt_canvas_prop_id_t` and a phase the way
+`edit_color()` takes a colour target. A LIVE step writes the field, touches the document and raises
+`DT_SIGNAL_CANVAS_CHANGED` -- no configuration write, no undo record -- and the COMMIT that ends the
+gesture puts the number it found back first, then hands the kept one to the setting's own setter, so
+that setter's undo step spans the whole gesture. Measured, a 40-position drag: 39 undo steps through
+the old per-call setter, every one before the button came up; 1 through `edit_number()`, on the
+release. A gesture nothing holds -- a wheel step, an arrow key, the fine-tune popup -- ends on a
+400 ms debounce instead, and a click that did not drag waits out `gtk-double-click-time` so that the
+double click which resets a slider is one undo step and not two (measured: 2 against 1).
+
+What a slider is GIVEN is the other half, and here blocking the handler is NOT enough. A refill
+must leave alone any slider that already shows what the document holds, because
+`dt_bauhaus_slider_set()` rewrites the display range around the value it is handed: a slider showing
+a number past its soft end has that range collapse onto the value under the pointer. Measured on a
+document holding a 300 pt shadow blur against a soft maximum of 100, pressed at half the bar and
+then eight motion events at the same x: 127.30 then 26.00 with the refill writing back, 127.30
+throughout without it. Mid-gesture the document holds exactly what the slider shows, so that test is
+precisely the slider being dragged; a `pressed` flag covers a refill raised from elsewhere -- an
+undo, a document opened -- while a button is down. The texture sliders need none of this only
+because `set_texture()` raises no signal, so no refill ever runs under them.
 
 The toolbar's colours go through `proxy.canvas.edit_color()` rather than their setters while their
 window is open. A LIVE change that changes the field writes it and touches the document -- no

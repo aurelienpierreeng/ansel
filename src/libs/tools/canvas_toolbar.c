@@ -30,11 +30,17 @@
  * refilled from the document on DT_SIGNAL_CANVAS_CHANGED and on entering the atelier. A refill
  * blocks every handler it could wake, one stored handler id at a time, so a value written into a
  * control never reaches the view back as an edit.
+ *
+ * A slider needs more than that, in both directions, and both are paid for here. What it SENDS is
+ * one value per motion event, so the settings it edits are asked for through the phase-aware
+ * `proxy.canvas.edit_number` and a whole gesture is one undo step. What it is GIVEN rewrites its
+ * display range, so a refill skips a slider already showing what the document holds rather than
+ * merely blocking its handler -- writing it back would collapse the range under the pointer.
  */
 
 #include "canvas/canvas.h"
 #include "canvas/canvas_actions.h"
-#include "canvas/canvas_props.h"      // dt_canvas_edit_phase_t
+#include "canvas/canvas_props.h"      // dt_canvas_edit_phase_t, the rows the number sliders read
 #include "common/conf.h"
 #include "common/gui_module_api.h"    // DT_GUI_MODULE
 #include "common/module_versioning.h"
@@ -46,7 +52,7 @@
 #include "system/mem_alloc.h"
 #include "views/view.h"
 #include "widgets/accelerators.h"     // dt_accels_block_plain_keys_inside, dt_accels_build_path
-#include "widgets/bauhaus.h"          // the texture sliders
+#include "widgets/bauhaus.h"          // the popover sliders
 #include "widgets/button.h"           // dtgtk_button_new
 #include "widgets/chooser_button.h"
 #include "widgets/paint.h"            // the glyphs the icon groups show
@@ -56,6 +62,7 @@
 
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
+#include <math.h>
 
 DT_MODULE(1)
 
@@ -65,6 +72,29 @@ typedef struct dt_lib_canvas_toolbar_handler_t
   GObject *instance;
   gulong handler_id;
 } dt_lib_canvas_toolbar_handler_t;
+
+/** How many sliders edit a canvas-wide number: the border's width and the corners' radius, the
+ * shadow's two offsets and its blur. */
+#define DT_CANVAS_TOOLBAR_NUMBERS 5
+
+/** How long a gesture nothing holds -- a wheel step, an arrow key, the fine-tune popup -- waits
+ * for the next step before it counts as over. */
+#define DT_CANVAS_TOOLBAR_DEBOUNCE_MS 400
+
+/**
+ * One popover slider bound to a canvas-wide number, and whatever gesture the user has open on it.
+ * The slider is what shows the number; the document is what holds it, and the view is asked for
+ * every change through `proxy.canvas.edit_number` -- see `_number_edit_live()`.
+ */
+typedef struct dt_lib_canvas_number_t
+{
+  dt_lib_module_t *self;
+  GtkWidget *slider;
+  int prop;                ///< the dt_canvas_prop_id_t the slider edits
+  gboolean pressed;        ///< button 1 is down on it
+  gboolean double_clicked; ///< the press now down is the second click of a double click
+  float press_number;      ///< what the slider showed when that button went down
+} dt_lib_canvas_number_t;
 
 typedef struct dt_lib_canvas_toolbar_t
 {
@@ -105,19 +135,19 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *texture_scale;
   GtkWidget *texture_grain;
   // the shadow popover
-  GtkWidget *shadow_offset_x;
-  GtkWidget *shadow_offset_y;
-  GtkWidget *shadow_blur;
   GtkWidget *shadow_color;
   // the rest of the row
   GtkWidget *background_color;
   GtkWidget *background_style;
-  GtkWidget *border_width;
   GtkWidget *border_color;
-  GtkWidget *corner_radius;
   GtkWidget *layout;
   GtkWidget *sort;
-  GArray *refilled_handlers; ///< dt_lib_canvas_toolbar_handler_t: every handler a refill blocks
+  /** The sliders of the Borders and Shadows popovers, in the order they were built. */
+  dt_lib_canvas_number_t numbers[DT_CANVAS_TOOLBAR_NUMBERS];
+  int number_count;
+  int number_live;            ///< the dt_canvas_prop_id_t a LIVE session is open on, NONE for none
+  guint number_commit_source; ///< the timer ending a session nothing holds
+  GArray *refilled_handlers;  ///< dt_lib_canvas_toolbar_handler_t: every handler a refill blocks
 } dt_lib_canvas_toolbar_t;
 
 const char *name(dt_lib_module_t *self)
@@ -186,13 +216,20 @@ static gboolean _live(dt_view_t **view)
  * -- the margin with the bleed, the three spread spins -- writes every one of them as the refill left
  * it so far, which is not the document yet.
  */
-static void _connect_refilled(dt_lib_module_t *self, GtkWidget *widget, const char *signal, GCallback callback)
+static void _connect_refilled_data(dt_lib_module_t *self, GtkWidget *widget, const char *signal,
+                                   GCallback callback, gpointer user_data)
 {
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
   dt_lib_canvas_toolbar_handler_t handler;
   handler.instance = G_OBJECT(widget);
-  handler.handler_id = g_signal_connect(widget, signal, callback, self);
+  handler.handler_id = g_signal_connect(widget, signal, callback, user_data);
   g_array_append_val(toolbar->refilled_handlers, handler);
+}
+
+/** The usual form: the handler is handed the module, as every control but the number sliders wants. */
+static void _connect_refilled(dt_lib_module_t *self, GtkWidget *widget, const char *signal, GCallback callback)
+{
+  _connect_refilled_data(self, widget, signal, callback, self);
 }
 
 static void _refilled_handlers_block(dt_lib_canvas_toolbar_t *toolbar, const gboolean block)
@@ -206,16 +243,6 @@ static void _refilled_handlers_block(dt_lib_canvas_toolbar_t *toolbar, const gbo
     else
       g_signal_handler_unblock(handler->instance, handler->handler_id);
   }
-}
-
-static void _rgba_of(GtkWidget *button, float rgba[4])
-{
-  GdkRGBA color;
-  dt_chooser_button_get_color(button, &color);
-  rgba[0] = (float)color.red;
-  rgba[1] = (float)color.green;
-  rgba[2] = (float)color.blue;
-  rgba[3] = (float)color.alpha;
 }
 
 /** Show a document colour on its button. The button reports nothing when told, so no handler is blocked. */
@@ -339,20 +366,203 @@ static GtkWidget *_color_button(const char *title, const char *tooltip, const dt
   return button;
 }
 
-/** Any shadow control: the whole shadow is read back and applied as the canvas default. */
-static void _shadow_changed(GtkWidget *widget, gpointer user_data)
+/**
+ * Whether a slider already shows a given number, at the precision its property is shown to. Two
+ * questions are asked with it: has the document already got what the slider is announcing (a slider
+ * announces the value it just sent -- once more as a drag's button comes up, and on every motion
+ * whether the pointer moved or not), and has a refill anything to write into a slider at all.
+ *
+ * Asked at the SHOWN precision, as the card's own sliders ask it (`_shown_equal()`,
+ * views/canvas_props_gtk.c), because a slider keeps a normalised position and multiplies it out
+ * again: measured, one refilled with 3 answers 2.99999714 and one refilled with 9 answers
+ * 9.00000191, which no exact comparison stops.
+ * Nothing found is no match, so an edit is let through rather than lost.
+ */
+static gboolean _slider_shows(GtkWidget *slider, const dt_canvas_prop_id_t prop_id, const float held)
 {
-  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
-  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  const dt_canvas_prop_t *prop = dt_canvas_prop_get(prop_id);
+  if(IS_NULL_PTR(prop) || IS_NULL_PTR(slider)) return FALSE;
+  const double quantum = pow(10.0, -(double)MAX(prop->digits, 0));
+  return fabs((double)dt_bauhaus_slider_get(slider) - (double)held) < quantum * 0.5;
+}
+
+/** What the document holds for one of the numbers those sliders edit. */
+static gboolean _number_held(const dt_canvas_t *canvas, const int prop, float *held)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(held)) return FALSE;
+  switch(prop)
+  {
+    case DT_CANVAS_PROP_BORDER_WIDTH:
+      *held = canvas->border_width;
+      return TRUE;
+    case DT_CANVAS_PROP_CORNER_RADIUS:
+      *held = canvas->corner_radius;
+      return TRUE;
+    case DT_CANVAS_PROP_SHADOW_OFFSET_X:
+      *held = canvas->shadow.offset_x;
+      return TRUE;
+    case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
+      *held = canvas->shadow.offset_y;
+      return TRUE;
+    case DT_CANVAS_PROP_SHADOW_BLUR:
+      *held = canvas->shadow.blur;
+      return TRUE;
+    default:
+      return FALSE;
+  }
+}
+
+/** Whether the slider already shows what the document holds for the number it edits. */
+static gboolean _number_at_rest(const dt_lib_canvas_number_t *number)
+{
+  float held = 0.0f;
+  if(IS_NULL_PTR(number) || !_number_held(_document(), number->prop, &held)) return FALSE;
+  return _slider_shows(number->slider, (dt_canvas_prop_id_t)number->prop, held);
+}
+
+/* --- one gesture on a number slider is one undo step ------------------------------------- */
+
+/**
+ * A step of the gesture, told to the view. The whole point of going through `edit_number` rather
+ * than the setting's own setter is that a dragged slider reports every value it passes through:
+ * LIVE steps write and show the number and cost nothing else, and the COMMIT that ends the gesture
+ * is what writes the configuration and records the one undo step the gesture owes.
+ */
+static void _number_host_edit(const dt_lib_canvas_number_t *number, const float value, const int phase)
+{
   dt_view_t *view = NULL;
-  if(!_live(&view)) return;
-  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_shadow)) return;
-  float rgba[4];
-  _rgba_of(toolbar->shadow_color, rgba);
-  dt_view_manager_get_global()->proxy.canvas.set_shadow(
-      view, rgba, (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_x)),
-      (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_y)),
-      (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->shadow_blur)));
+  if(IS_NULL_PTR(number) || !_live(&view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.edit_number)) return;
+  dt_view_manager_get_global()->proxy.canvas.edit_number(view, number->prop, value, phase);
+}
+
+static dt_lib_canvas_number_t *_number_by_prop(dt_lib_canvas_toolbar_t *toolbar, const int prop)
+{
+  if(prop == DT_CANVAS_PROP_NONE) return NULL;
+  for(int idx = 0; idx < toolbar->number_count; idx++)
+    if(toolbar->numbers[idx].prop == prop) return &toolbar->numbers[idx];
+  return NULL;
+}
+
+static void _number_debounce_remove(dt_lib_canvas_toolbar_t *toolbar)
+{
+  if(toolbar->number_commit_source == 0) return;
+  g_source_remove(toolbar->number_commit_source);
+  toolbar->number_commit_source = 0;
+}
+
+/**
+ * End the open session, if there is one, with what its slider now shows. The session is closed
+ * BEFORE the view hears of it, so the refill the COMMIT raises writes the slider back to whatever
+ * the document settled on rather than finding a gesture still in flight.
+ */
+static void _number_commit_live(dt_lib_canvas_toolbar_t *toolbar)
+{
+  _number_debounce_remove(toolbar);
+  const dt_lib_canvas_number_t *number = _number_by_prop(toolbar, toolbar->number_live);
+  toolbar->number_live = DT_CANVAS_PROP_NONE;
+  if(IS_NULL_PTR(number)) return;
+  _number_host_edit(number, dt_bauhaus_slider_get(number->slider), DT_CANVAS_EDIT_COMMIT);
+}
+
+static gboolean _number_debounce_fired(gpointer user_data)
+{
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)user_data;
+  toolbar->number_commit_source = 0;
+  _number_commit_live(toolbar);
+  return G_SOURCE_REMOVE;
+}
+
+/** Close the session later, unless another step or a press comes first. */
+static void _number_commit_later(dt_lib_canvas_toolbar_t *toolbar, const guint delay_ms)
+{
+  _number_debounce_remove(toolbar);
+  toolbar->number_commit_source = g_timeout_add(delay_ms, _number_debounce_fired, toolbar);
+}
+
+/** One step of a session on this slider, ending any other slider's session first. */
+static void _number_edit_live(dt_lib_canvas_number_t *number, const float value)
+{
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)number->self->data;
+  if(toolbar->number_live != DT_CANVAS_PROP_NONE && toolbar->number_live != number->prop)
+    _number_commit_live(toolbar);
+  _number_debounce_remove(toolbar);
+  toolbar->number_live = number->prop;
+  _number_host_edit(number, value, DT_CANVAS_EDIT_LIVE);
+}
+
+/** How long the toolkit waits for the second click of a double click. */
+static guint _double_click_ms(GtkWidget *widget)
+{
+  gint delay_ms = 400;
+  g_object_get(gtk_widget_get_settings(widget), "gtk-double-click-time", &delay_ms, NULL);
+  return (guint)MAX(delay_ms, 1);
+}
+
+/**
+ * A number slider announcing a value. A button held on it is a gesture whose end its release says;
+ * a step nothing holds -- the wheel, an arrow key, the fine-tune popup -- has nothing to say when
+ * it is over, so a burst of them ends when the steps stop coming and is one undo step.
+ */
+static void _number_changed(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_canvas_number_t *number = (dt_lib_canvas_number_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)number->self->data;
+  // A slider announces the value it already sent -- once more as a drag's button comes up, and on
+  // every motion whether the pointer moved or not -- and the document already holds it.
+  if(_number_at_rest(number)) return;
+  _number_edit_live(number, dt_bauhaus_slider_get(widget));
+  if(!number->pressed) _number_commit_later(toolbar, DT_CANVAS_TOOLBAR_DEBOUNCE_MS);
+}
+
+/**
+ * A button pressed on or released from a number slider. Read AFTER the slider handled the event: it
+ * moves to a click on its bar in its own press handler and stops the press from reaching anything
+ * else, resets itself on a double click in that same handler, and emits its last value from its own
+ * release handler. `event-after` runs once those have, whatever they returned.
+ *
+ * A click that did not drag is committed only once no second click came, because GDK delivers a
+ * double click as a press, a RELEASE, a press and then the double-click press: committed on that
+ * release, the position clicked would be an undo step of its own and the reset another, and one
+ * Ctrl+Z after a double click would put back a number the user never chose.
+ */
+static void _number_event_after(GtkWidget *widget, GdkEvent *event, gpointer user_data)
+{
+  dt_lib_canvas_number_t *number = (dt_lib_canvas_number_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)number->self->data;
+  if(event->type == GDK_BUTTON_PRESS && event->button.button == 1)
+  {
+    number->pressed = TRUE;
+    number->double_clicked = FALSE;
+    number->press_number = dt_bauhaus_slider_get(widget);
+    // A held button continues the session already open on this slider, and the timer a wheel step
+    // or a first click left must not close it under the button; a session open on any other slider
+    // ends here.
+    if(toolbar->number_live == number->prop)
+      _number_debounce_remove(toolbar);
+    else
+      _number_commit_live(toolbar);
+    // The slider moved to the click on its bar without announcing it: opening the session here is
+    // what makes the plane follow the click instead of waiting for a drag.
+    if(!_number_at_rest(number)) _number_edit_live(number, number->press_number);
+  }
+  else if(event->type == GDK_2BUTTON_PRESS && event->button.button == 1)
+  {
+    number->double_clicked = TRUE;
+  }
+  else if(event->type == GDK_BUTTON_RELEASE && event->button.button == 1 && number->pressed)
+  {
+    number->pressed = FALSE;
+    if(toolbar->number_live != number->prop) return;
+    // A press that ends where it began moved nothing: it is a click, and may yet be half of a
+    // double one.
+    const gboolean clicked = !number->double_clicked && _slider_shows(widget, (dt_canvas_prop_id_t)number->prop,
+                                                                     number->press_number);
+    if(clicked)
+      _number_commit_later(toolbar, _double_click_ms(widget));
+    else
+      _number_commit_live(toolbar);
+  }
 }
 
 static void _page_guides_changed(GtkWidget *widget, gpointer user_data)
@@ -440,26 +650,6 @@ static void _texture_reset(GtkWidget *widget, gpointer user_data)
   _refill(self);
 }
 
-static void _border_changed(GtkWidget *widget, gpointer user_data)
-{
-  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
-  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
-  dt_view_t *view = NULL;
-  if(!_live(&view)) return;
-  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_border)) return;
-  float rgba[4];
-  _rgba_of(toolbar->border_color, rgba);
-  dt_view_manager_get_global()->proxy.canvas.set_border(view, rgba, (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->border_width)));
-}
-
-static void _corner_changed(GtkSpinButton *spin, gpointer user_data)
-{
-  dt_view_t *view = NULL;
-  if(!_live(&view)) return;
-  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_corner_radius)) return;
-  dt_view_manager_get_global()->proxy.canvas.set_corner_radius(view, (float)gtk_spin_button_get_value(spin));
-}
-
 static void _sort_changed(GtkComboBox *combo, gpointer user_data)
 {
   dt_conf_set_int("canvas/layout_sort", CLAMP(gtk_combo_box_get_active(combo), 0, DT_CANVAS_SORT_LAST - 1));
@@ -525,14 +715,25 @@ static void _refill(dt_lib_module_t *self)
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->bleed_size), canvas->page_bleed);
   _rgba_to(toolbar->bleed_color, &canvas->bleed_color, TRUE);
 
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_x), canvas->shadow.offset_x);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_offset_y), canvas->shadow.offset_y);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->shadow_blur), canvas->shadow.blur);
   _rgba_to(toolbar->shadow_color, &canvas->shadow.color, TRUE);
-
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->border_width), canvas->border_width);
   _rgba_to(toolbar->border_color, &canvas->border_color, TRUE);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->corner_radius), canvas->corner_radius);
+  // A slider already showing what the document holds is left strictly alone, and NOT merely
+  // blocked. `dt_bauhaus_slider_set()` rewrites the display range around the value it is given, so
+  // a slider showing a number past its soft end -- a 120 pt border, where a drag covers 50 -- would
+  // have that range collapse onto the value under the pointer mid-drag: the handle jumps to the far
+  // end while the pointer has not moved, and the next motion reads against a range eight times
+  // smaller. A gesture keeps the document at the value the slider shows, so this is precisely the
+  // slider being dragged; the `pressed` test covers the other way in, a refill raised by something
+  // else entirely -- an undo, a document opened -- while a button is down.
+  for(int idx = 0; idx < toolbar->number_count; idx++)
+  {
+    dt_lib_canvas_number_t *number = &toolbar->numbers[idx];
+    float held = 0.0f;
+    if(IS_NULL_PTR(number->slider) || number->pressed) continue;
+    if(!_number_held(canvas, number->prop, &held)) continue;
+    if(_slider_shows(number->slider, (dt_canvas_prop_id_t)number->prop, held)) continue;
+    dt_bauhaus_slider_set(number->slider, held);
+  }
   _rgba_to(toolbar->background_color, &canvas->background, FALSE);
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->background_style),
                            dt_canvas_background_position(canvas->background_style));
@@ -541,9 +742,10 @@ static void _refill(dt_lib_module_t *self)
   float scale = 1.0f;
   float grain = 1.0f;
   dt_canvas_texture_get(canvas, &contrast, &detail, &scale, &grain);
-  // A bauhaus slider announces every value it is given, whether or not it moved, so these four rely
-  // on the block above like every other control here: awake, each one would send all four sliders
-  // back to the document while the ones after it still showed the previous paper.
+  // These four are written unconditionally, unlike the numbers above, and may be: `set_texture`
+  // raises nothing, so no refill ever runs under a texture slider the user is holding. They rely on
+  // the block alone -- awake, each would send all four back to the document while the ones after it
+  // still showed the previous paper.
   dt_bauhaus_slider_set(toolbar->texture_contrast, contrast);
   dt_bauhaus_slider_set(toolbar->texture_detail, detail);
   dt_bauhaus_slider_set(toolbar->texture_scale, scale);
@@ -691,6 +893,25 @@ static GtkWidget *_popover_button(GtkWidget *box, const char *label, const char 
 }
 
 /**
+ * The half every popover slider shares: its name, what it does, the handler a refill blocks, and
+ * its place in the popover.
+ *
+ * No width is asked for. A popover's parent is the window, not a side panel, so a slider takes
+ * bauhaus's own fallback, 300 pixels at the screen's density, and a popover comes out about as
+ * wide as the rows it replaces. A size request would change nothing: the slider rewrites its own
+ * on every style update, and a request only ever raises a natural width, never lowers it.
+ */
+static GtkWidget *_popover_slider(dt_lib_module_t *self, GtkWidget *box, GtkWidget *slider, const char *label,
+                                  const char *tooltip, GCallback callback, gpointer user_data)
+{
+  dt_bauhaus_widget_set_label(slider, label);
+  gtk_widget_set_tooltip_text(slider, tooltip);
+  _connect_refilled_data(self, slider, "value-changed", callback, user_data);
+  gtk_box_pack_start(GTK_BOX(box), slider, FALSE, FALSE, 0);
+  return slider;
+}
+
+/**
  * A texture slider of the popover. The hard range is what the view's setter clamps to, so the
  * fine-tune popup can type any value the document accepts and a document holding one past the soft
  * span shows it rather than a slider pinned at its end; the soft range is the span a drag covers.
@@ -702,15 +923,51 @@ static GtkWidget *_texture_slider(dt_lib_module_t *self, GtkWidget *box, const c
   GtkWidget *slider = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), hard_min,
                                                        hard_max, 0.05f, 1.0f, 2);
   dt_bauhaus_slider_set_soft_range(slider, soft_min, soft_max);
-  dt_bauhaus_widget_set_label(slider, label);
-  gtk_widget_set_tooltip_text(slider, tooltip);
-  // No width is asked for. A popover's parent is the window, not a side panel, so the slider takes
-  // bauhaus's own fallback, 300 pixels at the screen's density, and the popover comes out about as
-  // wide as the scale rows it replaces. A size request would change nothing: the slider rewrites
-  // its own on every style update, and a request only ever raises a natural width, never lowers it.
-  _connect_refilled(self, slider, "value-changed", G_CALLBACK(_texture_changed));
-  gtk_box_pack_start(GTK_BOX(box), slider, FALSE, FALSE, 0);
-  return slider;
+  return _popover_slider(self, box, slider, label, tooltip, G_CALLBACK(_texture_changed), self);
+}
+
+/**
+ * A slider for one canvas-wide default, described by the property table row the same setting has
+ * on an object's own card: the hard range nothing outside of is ever stored, the soft range a drag
+ * covers, the step, the precision and the unit. Read there rather than written again here, so what
+ * a frame inherits and what a card overrides it with cannot come to offer different numbers -- the
+ * border spin stopped at 200 where the card's row goes to 500, and the corner spin offered every
+ * whole unit up to 5000 where the card covers 200 and is typed past.
+ *
+ * The label and the tooltip stay the toolbar's own: these edit what every frame INHERITS, which the
+ * card's wording, written for one object, does not say. The value a double click goes back to is 0
+ * -- no border, square corners, no shadow -- and expressly not the row's minimum, which for a
+ * shadow offset is -500: the number one unblocked refill once wrote into the document.
+ *
+ * Every such slider is registered as a number the gestures above are open on, so the value it sends
+ * reaches the view through `edit_number` and not through a setter of its own: see
+ * `_number_edit_live()` for why a dragged control may not be given one.
+ */
+static GtkWidget *_prop_slider(dt_lib_module_t *self, GtkWidget *box, const dt_canvas_prop_id_t prop_id,
+                               const char *label, const char *tooltip)
+{
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  // An id this file does not name a row for, or one slider more than there is room for, would be a
+  // slider with no range and no document field behind it: better no row than a dead one.
+  const dt_canvas_prop_t *prop = dt_canvas_prop_get(prop_id);
+  if(IS_NULL_PTR(prop) || toolbar->number_count >= DT_CANVAS_TOOLBAR_NUMBERS) return NULL;
+  GtkWidget *slider = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), (float)prop->min,
+                                                       (float)prop->max, (float)prop->step, 0.0f, prop->digits);
+  dt_bauhaus_slider_set_soft_range(slider, (float)prop->soft_min, (float)prop->soft_max);
+  if(!IS_NULL_PTR(prop->unit))
+  {
+    gchar *format = g_strdup_printf(" %s", _(prop->unit));
+    dt_bauhaus_slider_set_format(slider, format);
+    dt_free(format);
+  }
+  dt_lib_canvas_number_t *number = &toolbar->numbers[toolbar->number_count++];
+  number->self = self;
+  number->slider = slider;
+  number->prop = (int)prop_id;
+  // The buttons are watched outside the refill's blocking: a refill synthesises no pointer event,
+  // and what this handler reads is the gesture, never a value.
+  g_signal_connect(slider, "event-after", G_CALLBACK(_number_event_after), number);
+  return _popover_slider(self, box, slider, label, tooltip, G_CALLBACK(_number_changed), number);
 }
 
 /** A guides checkbox bound to one flag bit. */
@@ -793,6 +1050,21 @@ static GtkWidget *_popover_around(GtkWidget *content, GtkWidget *first_control)
   gtk_container_add(GTK_CONTAINER(popover), content);
   gtk_widget_show_all(content);
   return popover;
+}
+
+/**
+ * A row of a popover laid out as a box: what the control is at the start, the control itself at the
+ * end, so a colour button lines up with the right edge of the sliders above it.
+ */
+static GtkWidget *_labelled_row(GtkWidget *box, const char *label, GtkWidget *widget)
+{
+  GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
+  GtkWidget *text = gtk_label_new(label);
+  gtk_widget_set_halign(text, GTK_ALIGN_START);
+  gtk_box_pack_start(GTK_BOX(row), text, FALSE, FALSE, 0);
+  gtk_box_pack_end(GTK_BOX(row), widget, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 0);
+  return widget;
 }
 
 static GtkWidget *_labelled(GtkWidget *grid, const int row, const int col, const char *label, GtkWidget *widget)
@@ -926,52 +1198,35 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
 static GtkWidget *_shadow_popover(dt_lib_module_t *self)
 {
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
-  GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(4));
-  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(10));
-  gtk_container_set_border_width(GTK_CONTAINER(grid), DT_PIXEL_APPLY_DPI(10));
-  _section_label(grid, 0, _("Shadow"));
-  toolbar->shadow_offset_x = gtk_spin_button_new_with_range(-500.0, 500.0, 1.0);
-  gtk_widget_set_tooltip_text(toolbar->shadow_offset_x, _("Offset to the right, in canvas units"));
-  _connect_refilled(self, toolbar->shadow_offset_x, "value-changed", G_CALLBACK(_shadow_changed));
-  _labelled(grid, 1, 1, _("Right"), toolbar->shadow_offset_x);
-  toolbar->shadow_offset_y = gtk_spin_button_new_with_range(-500.0, 500.0, 1.0);
-  gtk_widget_set_tooltip_text(toolbar->shadow_offset_y, _("Offset downwards, in canvas units"));
-  _connect_refilled(self, toolbar->shadow_offset_y, "value-changed", G_CALLBACK(_shadow_changed));
-  _labelled(grid, 1, 2, _("Down"), toolbar->shadow_offset_y);
-  toolbar->shadow_blur = gtk_spin_button_new_with_range(-500.0, 500.0, 1.0);
-  gtk_widget_set_tooltip_text(toolbar->shadow_blur,
-                              _("Radius, in canvas units: 0 is no shadow, positive drops it outside every object, negative casts it inside along their edges. An object's own properties can override it."));
-  _connect_refilled(self, toolbar->shadow_blur, "value-changed", G_CALLBACK(_shadow_changed));
-  _labelled(grid, 2, 1, _("Radius"), toolbar->shadow_blur);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(4));
+  gtk_container_set_border_width(GTK_CONTAINER(box), DT_PIXEL_APPLY_DPI(10));
+  gtk_box_pack_start(GTK_BOX(box), _bold_label(_("Shadow")), FALSE, FALSE, 0);
+  GtkWidget *first = _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_OFFSET_X, _("Right"),
+                                  _("Offset to the right, in canvas units"));
+  _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_OFFSET_Y, _("Down"), _("Offset downwards, in canvas units"));
+  _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_BLUR, _("Radius"),
+               _("Radius, in canvas units: 0 is no shadow, positive drops it outside every object, negative casts it inside along their edges. An object's own properties can override it."));
   toolbar->shadow_color = _color_button(_("Default shadow colour"), _("Colour and strength of the shadow"),
                                         DT_CANVAS_COLOR_SHADOW, TRUE, self);
-  _labelled(grid, 2, 2, _("Colour"), toolbar->shadow_color);
-  return _popover_around(grid, toolbar->shadow_offset_x);
+  _labelled_row(box, _("Colour"), toolbar->shadow_color);
+  return _popover_around(box, first);
 }
 
 /** The borders popover: the uniform border of every frame that has none of its own. */
 static GtkWidget *_borders_popover(dt_lib_module_t *self)
 {
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
-  GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(4));
-  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(10));
-  gtk_container_set_border_width(GTK_CONTAINER(grid), DT_PIXEL_APPLY_DPI(10));
-  _section_label(grid, 0, _("Borders"));
-  toolbar->border_width = gtk_spin_button_new_with_range(0.0, 200.0, 1.0);
-  gtk_widget_set_tooltip_text(toolbar->border_width, _("Default border width of the frames, in canvas units"));
-  _connect_refilled(self, toolbar->border_width, "value-changed", G_CALLBACK(_border_changed));
-  _labelled(grid, 1, 0, _("Width"), toolbar->border_width);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(4));
+  gtk_container_set_border_width(GTK_CONTAINER(box), DT_PIXEL_APPLY_DPI(10));
+  gtk_box_pack_start(GTK_BOX(box), _bold_label(_("Borders")), FALSE, FALSE, 0);
+  GtkWidget *first = _prop_slider(self, box, DT_CANVAS_PROP_BORDER_WIDTH, _("Width"),
+                                  _("Default border width of the frames, in canvas units"));
   toolbar->border_color = _color_button(_("Default border colour"), _("Default border colour of the frames"),
                                         DT_CANVAS_COLOR_BORDER, TRUE, self);
-  _labelled(grid, 1, 1, _("Colour"), toolbar->border_color);
-  toolbar->corner_radius = gtk_spin_button_new_with_range(0.0, 5000.0, 1.0);
-  gtk_widget_set_tooltip_text(toolbar->corner_radius,
-                              _("Default radius of the frames' rounded corners, in canvas units; 0 is square"));
-  _connect_refilled(self, toolbar->corner_radius, "value-changed", G_CALLBACK(_corner_changed));
-  _labelled(grid, 2, 0, _("Corners"), toolbar->corner_radius);
-  return _popover_around(grid, toolbar->border_width);
+  _labelled_row(box, _("Colour"), toolbar->border_color);
+  _prop_slider(self, box, DT_CANVAS_PROP_CORNER_RADIUS, _("Corners"),
+               _("Default radius of the frames' rounded corners, in canvas units; 0 is square"));
+  return _popover_around(box, first);
 }
 
 /**
@@ -1006,6 +1261,7 @@ void gui_init(dt_lib_module_t *self)
 {
   dt_lib_canvas_toolbar_t *toolbar = g_new0(dt_lib_canvas_toolbar_t, 1);
   toolbar->refilled_handlers = g_array_new(FALSE, FALSE, sizeof(dt_lib_canvas_toolbar_handler_t));
+  toolbar->number_live = DT_CANVAS_PROP_NONE;
   self->data = toolbar;
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
@@ -1144,6 +1400,22 @@ void gui_init(dt_lib_module_t *self)
   _refill(self);
 }
 
+/**
+ * A session still open when the atelier is left is CLOSED here, not dropped. Its LIVE steps are
+ * already written into the document, so dropping it would leave the number the user landed on in
+ * place with no undo step recording it. The view's own `leave()` runs first and leaves both the
+ * document and `proxy.canvas.view` alone -- only a new document resets the view's half of the
+ * session -- so the commit still lands on the document the gesture belonged to.
+ */
+void view_leave(dt_lib_module_t *self, dt_view_t *old_view, dt_view_t *new_view)
+{
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  if(IS_NULL_PTR(toolbar)) return;
+  // A button cannot still be down once the popover holding it has gone with the view.
+  for(int idx = 0; idx < toolbar->number_count; idx++) toolbar->numbers[idx].pressed = FALSE;
+  _number_commit_live(toolbar);
+}
+
 void view_enter(dt_lib_module_t *self, dt_view_t *old_view, dt_view_t *new_view)
 {
   _refill(self);
@@ -1153,7 +1425,12 @@ void gui_cleanup(dt_lib_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_canvas_changed), self);
   dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
-  if(!IS_NULL_PTR(toolbar)) g_array_free(toolbar->refilled_handlers, TRUE);
+  if(!IS_NULL_PTR(toolbar))
+  {
+    // The timer holds the toolbar it would commit through: it must not outlive it.
+    _number_debounce_remove(toolbar);
+    g_array_free(toolbar->refilled_handlers, TRUE);
+  }
   dt_free(self->data);
 }
 

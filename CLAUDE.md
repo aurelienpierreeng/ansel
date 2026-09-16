@@ -3227,13 +3227,50 @@ they are visible.
   raise), since a sweep that misses one reports every correct handler as broken.
   **A refill blocks every handler it could wake by its STORED id, never a flag the handlers
   check** (`_connect_refilled()` in the toolbar is the only way such a handler is connected). A
-  handler that reads several controls -- the margin with the bleed, the shadow's three spins --
+  handler that reads several controls -- the margin with the bleed, the shadow's three sliders --
   woken halfway through a refill sends the ones not refilled yet: measured offscreen with the
-  blocking removed, 9 writes during one refill, one of them a shadow radius of -500, the spin's
-  range minimum GTK starts it at. And **a control that mirrors a document setting is refilled, or
-  it is state**: the margin and bleed controls never were, so they showed 0 whatever the document
-  held and the first edit of the bleed after a restart wrote the margin's 0 over the document's
-  (measured against the previous toolbar: margin 36 in, 0 out).
+  blocking removed, 9 writes during one refill, one of them a shadow radius of -500, the hard
+  minimum of that row in the property table. And **a control that mirrors a document setting is
+  refilled, or it is state**: the margin and bleed controls never were, so they showed 0 whatever
+  the document held and the first edit of the bleed after a restart wrote the margin's 0 over the
+  document's (measured against the previous toolbar: margin 36 in, 0 out).
+  **A DRAGGED control needs two more things, and a spin button needed neither**, which is why
+  the Borders and Shadows popovers only met them when their spins became bauhaus sliders. What it
+  SENDS is one value per motion event, so a setter that records an undo step per call turns one
+  drag into dozens, each holding two whole `dt_canvas_copy()` snapshots of the document plus a
+  configuration write and a repaint. Measured on a 40-position drag, driving real button and motion
+  events at a bauhaus slider: **39 undo steps, every one of them before the button came up**;
+  through the phase-aware path, **1, recorded only on the release**. So these five numbers have NO
+  plain setter in `proxy.canvas` at all -- `set_border`, `set_shadow` and `set_corner_radius` were
+  withdrawn from it and are now static to `views/canvas.c` -- and the only way in is
+  `proxy.canvas.edit_number()`, which takes the `dt_canvas_prop_id_t` and a `dt_canvas_edit_phase_t`
+  exactly as `edit_color()` already did: LIVE writes the field, touches and announces, costing no
+  configuration write and no undo record; COMMIT puts the number the gesture found back FIRST and
+  hands the kept one to the setting's own static setter, so whatever that setter records and
+  announces spans the whole gesture. **Withdrawing the setters is the point**, not a tidy-up: a
+  control that cannot reach one cannot be wired to record per motion event, which is how this
+  regression arrived in the first place.
+  What a slider is GIVEN is the other half. **A refill must LEAVE ALONE a slider that already shows
+  what the document holds, not merely block its handler**: `dt_bauhaus_slider_set()` rewrites the
+  display range around the value it is given (`d->max = rrpos < 1.f ? d->soft_max : rpos`,
+  `_dt_bauhaus_slider_set_with_raise()`), so a slider showing a number past its soft end has that
+  range collapse onto the value under the pointer. Measured, a document holding a 300 pt shadow blur
+  against a soft maximum of 100, pressed at half the bar and then eight motion events at the SAME x:
+  **127.30 then 26.00** with the refill writing back, 127.30 throughout without it -- the handle
+  leaping to the far end and the value falling by a fifth while the pointer never moved. A gesture
+  keeps the document at the value its slider shows, so "already shows it" is precisely the slider
+  being dragged; a `pressed` flag covers the other way in, a refill raised by an undo or a document
+  opened while a button is down. The texture sliders escape all of this only because `set_texture`
+  raises no signal, so no refill ever runs under them; they are not the pattern to copy.
+  **A gesture nothing HOLDS ends on a debounce, and a click waits out the double-click time.**
+  A wheel step, an arrow key and the fine-tune popup have no release to end on, so a burst of them
+  is one session, closed once the steps stop coming. And GDK delivers a double click as press,
+  RELEASE, press, `GDK_2BUTTON_PRESS`, release -- so a click committed on that first release makes
+  the clicked position one undo step and the reset another: measured, **2 undo steps for one double
+  click** against 1 when the release waits out `gtk-double-click-time`, which is one Ctrl+Z putting
+  back a number the user never chose. `_number_event_after()` reads the buttons from `event-after`,
+  which runs after bauhaus's own handlers have moved the slider to the click, reset it on the double
+  and emitted from the release, whatever those returned.
 - **The ZIP is ours** (`canvas_zip.c`, store + deflate, no ZIP64) because no archive library
   is linked and zlib is. `unzip -t` is run on the writer's output in the unit test when
   available; keep it passing.
