@@ -34,7 +34,8 @@
 #define KINDS_MAP KIND_BIT(DT_CANVAS_OBJECT_MAP)
 #define KINDS_SVG KIND_BIT(DT_CANVAS_OBJECT_SVG)
 #define KINDS_CONNECTOR KIND_BIT(DT_CANVAS_OBJECT_CONNECTOR)
-#define KINDS_FRAMES (KINDS_TEXT | KINDS_IMAGE | KINDS_MAP | KINDS_SVG)
+#define KINDS_SHAPE KIND_BIT(DT_CANVAS_OBJECT_SHAPE)
+#define KINDS_FRAMES (KINDS_TEXT | KINDS_IMAGE | KINDS_MAP | KINDS_SVG | KINDS_SHAPE)
 #define KINDS_ALL (KINDS_FRAMES | KINDS_CONNECTOR)
 
 /** A switch's value as a bit of `visible_values`: bit 0 while it is off, bit 1 while it is on. */
@@ -60,6 +61,11 @@ static const char *const _arrow_start_icons[] = { "arrowhead_start", NULL };
 static const char *const _arrow_end_icons[] = { "arrowhead_end", NULL };
 static const char *const _waypoint_icons[] = { "waypoint", NULL };
 static const char *const _reverse_icons[] = { "reverse", NULL };
+/* Only the rectangle, until the polygon and the star arrive: a geometry is APPENDED here, never
+ * inserted, because the choice's index is what the writer reads and what the strip's buttons carry. */
+static const char *const _geometry_choices[] = { N_("Rectangle"), NULL };
+static const char *const _geometry_icons[] = { "shape_rectangle", NULL };
+static const char *const _filled_icons[] = { "shape_filled", NULL };
 static const char *const _refresh_icons[] = { "refresh", NULL };
 static const char *const _link_icons[] = { "link", NULL };
 static const char *const _invert_icons[] = { "masks_inverse", NULL };
@@ -257,6 +263,18 @@ static const dt_canvas_prop_t _props[] = {
     .tooltip = N_("Swap the start and the end"), .kinds = KINDS_CONNECTOR, .section = DT_CANVAS_SECTION_ROUTE,
     .tier = DT_CANVAS_TIER_STRIP, .widget = DT_CANVAS_WIDGET_ACTION, .factor = 1.0, .neutral = NAN,
     .icons = _reverse_icons },
+
+  /* --- shape ---------------------------------------------------------------------------- */
+  { .id = DT_CANVAS_PROP_SHAPE_GEOMETRY, .key = "shape.geometry", .label = N_("Geometry"),
+    .tooltip = N_("What the shape's outline is made of"), .kinds = KINDS_SHAPE,
+    .section = DT_CANVAS_SECTION_SHAPE, .tier = DT_CANVAS_TIER_STRIP, .widget = DT_CANVAS_WIDGET_ICONS,
+    .max = 0.0, .soft_max = 0.0, .step = 1.0, .factor = 1.0, .neutral = NAN, .choices = _geometry_choices,
+    .icons = _geometry_icons },
+  { .id = DT_CANVAS_PROP_SHAPE_FILLED, .key = "shape.filled", .label = N_("Filled"),
+    .tooltip = N_("Paint the shape's colour inside its outline. Off, only the border is drawn and what is "
+                  "behind shows through -- clicks included."),
+    .kinds = KINDS_SHAPE, .section = DT_CANVAS_SECTION_SHAPE, .tier = DT_CANVAS_TIER_STRIP,
+    .widget = DT_CANVAS_WIDGET_ICON_FLAG, .max = 1.0, .factor = 1.0, .neutral = NAN, .icons = _filled_icons },
 
   /* --- arrange -------------------------------------------------------------------------- */
   { .id = DT_CANVAS_PROP_X, .key = "arrange.x", .label = N_("X"),
@@ -513,6 +531,8 @@ const char *dt_canvas_prop_section_label(const dt_canvas_prop_section_t section,
       return N_("Map");
     case DT_CANVAS_SECTION_ROUTE:
       return N_("Route");
+    case DT_CANVAS_SECTION_SHAPE:
+      return N_("Shape");
     case DT_CANVAS_SECTION_ARRANGE:
       return N_("Arrange");
     case DT_CANVAS_SECTION_FILL:
@@ -538,8 +558,8 @@ const char *dt_canvas_prop_section_label(const dt_canvas_prop_section_t section,
  * than take its neighbour's.
  */
 static const char *const _section_names[] = {
-  "character", "paragraph", "text_box", "picture", "drawing", "map", "route",
-  "arrange",   "fill",      "stroke",   "corners", "shadow",  "cutout",
+  "character", "paragraph", "text_box", "picture", "drawing", "map",    "route",
+  "shape",     "arrange",   "fill",     "stroke",  "corners", "shadow", "cutout",
 };
 
 G_STATIC_ASSERT(G_N_ELEMENTS(_section_names) == DT_CANVAS_SECTION_COUNT);
@@ -728,14 +748,22 @@ dt_canvas_own_state_t dt_canvas_group_state(const dt_canvas_t *canvas, const dt_
 {
   if(!_group_for_object(object, group)) return DT_CANVAS_OWN_INHERIT;
   if(!_group_owned(object, group)) return DT_CANVAS_OWN_INHERIT;
-  // Only a drawing is born owning anything, and what it owns is nothing: no border, no shadow.
-  // Those values are its kind's, not a choice, until they are edited.
-  if(object->kind == DT_CANVAS_OBJECT_SVG)
+  // A drawing and a shape are the two kinds that own a group holding NOTHING. A drawing is born
+  // that way -- ink on nothing, no card and no rule around it -- and a shape comes by it through
+  // the style the last shape taught it, which carries the override flags as well as the values.
+  // Either way the values are the kind's, not a choice, until somebody edits them: a card marked
+  // altered by them would be marked for something nobody did.
+  if(object->kind == DT_CANVAS_OBJECT_SVG || object->kind == DT_CANVAS_OBJECT_SHAPE)
   {
     if(group == DT_CANVAS_GROUP_BORDER && !(object->border_width > 0.0f)) return DT_CANVAS_OWN_KIND_DEFAULT;
     if(group == DT_CANVAS_GROUP_SHADOW && object->shadow.offset_x == 0.0f && object->shadow.offset_y == 0.0f
        && object->shadow.blur == 0.0f && object->shadow.color.red == 0.0f && object->shadow.color.green == 0.0f
        && object->shadow.color.blue == 0.0f && object->shadow.color.alpha == 0.0f)
+      return DT_CANVAS_OWN_KIND_DEFAULT;
+    // A shape's corners are its own the moment its geometry has no corners to round; a drawing's
+    // radius is never written for it, so this reads only for a shape.
+    if(group == DT_CANVAS_GROUP_CORNER && object->kind == DT_CANVAS_OBJECT_SHAPE
+       && !(object->corner_radius > 0.0f))
       return DT_CANVAS_OWN_KIND_DEFAULT;
   }
   return DT_CANVAS_OWN_CUSTOM;
@@ -747,9 +775,15 @@ uint32_t dt_canvas_group_set_own(dt_canvas_t *canvas, dt_canvas_object_t *object
   if(!_group_for_object(object, group)) return 0u;
   const gboolean owned = _group_owned(object, group);
   if(owned == take_ownership) return 0u;
+  // WHICH groups a shape owns is as much a part of its style as their values are: the next shape
+  // is drawn with the border, the corners and the shadow the last one was given, and handing one
+  // back is a choice the same way taking it is. Taking it is always followed by a value write that
+  // asks to be remembered; handing it back stands alone, and without this the next shape is born
+  // with the override the user has just removed. A font is a text frame's alone and never gets here.
+  const uint32_t remembered = object->kind == DT_CANVAS_OBJECT_SHAPE ? DT_CANVAS_EFFECT_COMMIT_CONF : 0u;
   if(!take_ownership)
   {
-    uint32_t effects = DT_CANVAS_EFFECT_CHANGED | DT_CANVAS_EFFECT_SETTLE_ALL;
+    uint32_t effects = DT_CANVAS_EFFECT_CHANGED | DT_CANVAS_EFFECT_SETTLE_ALL | remembered;
     // The font has no flag of its own: an empty field is the inheritance, and giving it back is
     // another face, whose features are other rows. Any other group keeps its fields: they are
     // what the object would get back, and undo restores them anyway.
@@ -794,7 +828,7 @@ uint32_t dt_canvas_group_set_own(dt_canvas_t *canvas, dt_canvas_object_t *object
       break;
   }
   object->flags |= _group_flag(group);
-  return DT_CANVAS_EFFECT_CHANGED | DT_CANVAS_EFFECT_SETTLE_ALL;
+  return DT_CANVAS_EFFECT_CHANGED | DT_CANVAS_EFFECT_SETTLE_ALL | remembered;
 }
 
 void dt_canvas_group_summary(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
@@ -806,7 +840,9 @@ void dt_canvas_group_summary(const dt_canvas_t *canvas, const dt_canvas_object_t
   const dt_canvas_own_state_t state = dt_canvas_group_state(canvas, object, group);
   if(state == DT_CANVAS_OWN_KIND_DEFAULT)
   {
-    g_strlcpy(buffer, _("none (drawing)"), length);
+    // Which kind it is matters here: a reader wants to know why the object has nothing where the
+    // canvas offers something, and "the kind is drawn without one" is that answer.
+    g_strlcpy(buffer, object->kind == DT_CANVAS_OBJECT_SHAPE ? _("none (shape)") : _("none (drawing)"), length);
     return;
   }
   gchar *value = NULL;
@@ -1176,6 +1212,15 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
     case DT_CANVAS_PROP_CONNECTOR_WAYPOINT:
       out->flag = object->connector.via_count > 0;
       break;
+    case DT_CANVAS_PROP_SHAPE_GEOMETRY:
+      // The rectangle is the only geometry this build offers, and it is what a geometry this
+      // build does not know is drawn as: either way the row shows the shape on screen.
+      out->choice = 0;
+      break;
+    case DT_CANVAS_PROP_SHAPE_FILLED:
+      // Filled is the fill's own opacity: there is no second switch to fall out of step with it.
+      out->flag = object->background.alpha > 0.0f;
+      break;
     case DT_CANVAS_PROP_X:
       out->number = object->x;
       break;
@@ -1542,6 +1587,30 @@ static uint32_t _write_map(dt_canvas_object_t *object, const dt_canvas_prop_t *p
 }
 
 /**
+ * Whether the row is part of what a shape's STYLE is: what the atelier keeps of the last shape
+ * edited and draws the next one with. Where it sits, how big it is and which way it is turned are
+ * not style -- the next shape is drawn where it is drawn -- so those rows teach the next one nothing.
+ */
+static gboolean _shape_style_row(const dt_canvas_prop_id_t prop_id)
+{
+  switch(prop_id)
+  {
+    case DT_CANVAS_PROP_SHAPE_FILLED:
+    case DT_CANVAS_PROP_BACKGROUND:
+    case DT_CANVAS_PROP_BORDER_WIDTH:
+    case DT_CANVAS_PROP_BORDER_COLOR:
+    case DT_CANVAS_PROP_CORNER_RADIUS:
+    case DT_CANVAS_PROP_SHADOW_OFFSET_X:
+    case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
+    case DT_CANVAS_PROP_SHADOW_BLUR:
+    case DT_CANVAS_PROP_SHADOW_COLOR:
+      return TRUE;
+    default:
+      return FALSE;
+  }
+}
+
+/**
  * The effects of a change to how a connector is drawn. A LINE's style is what the next line is drawn
  * with, so the caller is asked to remember it, once. A connector holding a frame is always born with
  * the defaults and teaches the next line nothing -- both ends free is the whole test, not one end, or
@@ -1629,6 +1698,48 @@ static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object
   }
 }
 
+/** What a shape is given to stand in for a fill it has just lost: two units of its own colour. */
+#define SHAPE_RESCUE_BORDER 2.0f
+
+static uint32_t _write_shape(dt_canvas_t *canvas, dt_canvas_object_t *object, const dt_canvas_prop_t *prop,
+                             const dt_canvas_prop_value_t *in)
+{
+  switch(prop->id)
+  {
+    case DT_CANVAS_PROP_SHAPE_GEOMETRY:
+      // The rectangle is the only geometry offered, so the writer has nothing to change yet; the
+      // row is here so the strip reads the same on every shape and the polygon can be slotted in.
+      return 0u;
+    case DT_CANVAS_PROP_SHAPE_FILLED:
+    {
+      if(in->flag)
+      {
+        object->background.alpha = 1.0f;
+        return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_COUPLED;
+      }
+      // The colour is KEPT and only its opacity goes, so switching the fill back on brings the
+      // colour the user chose rather than a grey they never asked for.
+      object->background.alpha = 0.0f;
+      dt_canvas_color_t border_color;
+      float border_width = 0.0f;
+      dt_canvas_object_effective_border(canvas, object, &border_color, &border_width);
+      if(!(border_width > 0.0f) || !(border_color.alpha > 0.0f))
+      {
+        // A shape with neither a fill nor a border is nothing at all, and a control that makes an
+        // object vanish reads as a broken control: it is given a border of its own, in the colour
+        // its fill had, so what was a filled shape becomes the outline of the same shape.
+        dt_canvas_group_set_own(canvas, object, DT_CANVAS_GROUP_BORDER, TRUE);
+        object->border_width = SHAPE_RESCUE_BORDER;
+        object->border_color = object->background;
+        object->border_color.alpha = 1.0f;
+      }
+      return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_COUPLED;
+    }
+    default:
+      return 0u;
+  }
+}
+
 /** A width or a height: a frame that keeps its proportions answers one with the other. */
 static uint32_t _write_size(dt_canvas_object_t *object, const dt_canvas_prop_t *prop,
                             const dt_canvas_prop_value_t *in)
@@ -1701,13 +1812,18 @@ static uint32_t _write_shared(dt_canvas_t *canvas, dt_canvas_object_t *object, c
         object->text.background = in->color;
       else
         object->background = in->color;
-      return DT_CANVAS_EFFECT_CHANGED;
+      // A shape IS its fill: a fill with nothing of it leaves a hole with a rule round it, which
+      // text runs through. That is the same change the FILLED switch makes, and which of the two
+      // ways it was made must not decide whether a frame flowing around it is refitted.
+      return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_BORDER_WIDTH:
       object->border_width = (float)_clamp_number(prop, in->number);
       return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_BORDER_COLOR:
+      // Its strength decides whether the border is drawn at all, and an unfilled shape is nothing
+      // BUT its border: the band text keeps off comes and goes with it, as the shadow's does.
       object->border_color = in->color;
-      return DT_CANVAS_EFFECT_CHANGED;
+      return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_CORNER_RADIUS:
       object->corner_radius = (float)_clamp_number(prop, in->number);
       return OBSTACLE_EFFECTS;
@@ -1805,6 +1921,9 @@ uint32_t dt_canvas_prop_write(dt_canvas_t *canvas, dt_canvas_object_t *object, c
     case DT_CANVAS_SECTION_ROUTE:
       effects = _write_connector(canvas, object, prop, in);
       break;
+    case DT_CANVAS_SECTION_SHAPE:
+      effects = _write_shape(canvas, object, prop, in);
+      break;
     case DT_CANVAS_SECTION_STROKE:
       effects = object->kind == DT_CANVAS_OBJECT_CONNECTOR ? _write_connector(canvas, object, prop, in)
                                                            : _write_shared(canvas, object, prop, in);
@@ -1813,6 +1932,11 @@ uint32_t dt_canvas_prop_write(dt_canvas_t *canvas, dt_canvas_object_t *object, c
       effects = _write_shared(canvas, object, prop, in);
       break;
   }
+
+  // A shape's style is the next shape's, the way a line's style is the next line's: the writer
+  // says which edits are worth remembering and the caller, which owns the configuration, keeps them.
+  if((effects & DT_CANVAS_EFFECT_CHANGED) && object->kind == DT_CANVAS_OBJECT_SHAPE && _shape_style_row(prop_id))
+    effects |= DT_CANVAS_EFFECT_COMMIT_CONF;
 
   // A text frame whose height follows its content is refitted at edit time and never at paint
   // time: nearly anything about it -- its font, its insets, its width, where it sits among the

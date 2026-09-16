@@ -1233,6 +1233,42 @@ static void _paint_placeholder(cairo_t *cr, const dt_canvas_t *canvas, const dt_
   cairo_restore(cr);
 }
 
+/**
+ * What a frame paints with no content at all: its border, then its own colour inside it.
+ *
+ * A picture that has not rendered yet, a rectangle that never had anything to show: the two are
+ * the SAME picture, and they are the same picture because this is the one place that paints it.
+ * The fill stops at the border rather than running under it, the way `_paint_image()`'s inset
+ * fill always did, so a translucent border shows the canvas through it and not the fill.
+ */
+static void _paint_frame_ground(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                const dt_canvas_paint_options_t *options)
+{
+  _paint_border(cr, canvas, object, options);
+  const dt_canvas_color_t background = dt_canvas_object_background(object);
+  if(!(background.alpha > 0.0f) || _object_cut(object)) return;
+  cairo_save(cr);
+  _set_color(cr, &background, options->for_display);
+  _frame_path(cr, canvas, object, _border_inset(canvas, object));
+  cairo_fill(cr);
+  cairo_restore(cr);
+}
+
+/**
+ * A drawn shape: its outline, filled and bordered, and nothing else.
+ *
+ * A rectangle is the frame itself, so it is exactly the ground every frame paints -- which is
+ * why it must never go through `_paint_image()`: that one, handed no raster, draws the grey
+ * placeholder cross a picture waiting on its render shows, and a rectangle is waiting on nothing.
+ * A geometry this build does not know is drawn as its frame too, so a document from a newer one
+ * still shows something where its shape is.
+ */
+static void _paint_shape(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                         const dt_canvas_paint_options_t *options)
+{
+  _paint_frame_ground(cr, canvas, object, options);
+}
+
 static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                          const dt_canvas_paint_options_t *options)
 {
@@ -1249,17 +1285,9 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
                                                                             : DT_CANVAS_COLORSPACE_SRGB);
     surface = owned;
   }
-  _paint_border(cr, canvas, object, options);
-  const dt_canvas_color_t background = dt_canvas_object_background(object);
-  if(background.alpha > 0.0f && !_object_cut(object))
-  {
-    // Under the picture, inside the border: what shows through a translucent or missing render.
-    cairo_save(cr);
-    _set_color(cr, &background, options->for_display);
-    _frame_path(cr, canvas, object, _border_inset(canvas, object));
-    cairo_fill(cr);
-    cairo_restore(cr);
-  }
+  // The border and, under the picture and inside it, the frame's own colour: what shows through
+  // a translucent render and what stands there while one is missing.
+  _paint_frame_ground(cr, canvas, object, options);
   if(IS_NULL_PTR(surface))
   {
     if(options->draw_placeholders) _paint_placeholder(cr, canvas, object, options);
@@ -1831,7 +1859,10 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
   {
     const dt_canvas_object_t *other = g_ptr_array_index(over, idx);
     const gboolean drawing = other->kind == DT_CANVAS_OBJECT_SVG && !IS_NULL_PTR(other->svg.svg);
-    if(other->mask.shape == DT_CANVAS_MASK_NONE && !drawing) continue;
+    // A drawn shape is asked for its own ink for the same reason a drawing is: an outline box is
+    // a hole with a rule round it, and a rectangle of nothing is not what the text has to clear.
+    const gboolean shape = dt_canvas_shape_needs_coverage(other);
+    if(other->mask.shape == DT_CANVAS_MASK_NONE && !drawing && !shape) continue;
     /*
      * One raster pixel per occupancy cell, so the silhouette the cells read is at least as
      * fine as the cells themselves. A flat cap instead makes the raster COARSER than the grid
@@ -1849,9 +1880,12 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
      * file actually draws. It costs a render at the map's pitch, which is a fraction of the
      * one the page gets.
      */
-    rasters[idx] = drawing && other->mask.shape == DT_CANVAS_MASK_NONE
-                       ? dt_canvas_render_svg_coverage(other->svg.svg, mask_width, mask_height)
-                       : dt_canvas_render_mask(other, mask_width, mask_height, 0, 0);
+    if(shape)
+      rasters[idx] = dt_canvas_render_shape_coverage(canvas, other, mask_width, mask_height);
+    else if(drawing && other->mask.shape == DT_CANVAS_MASK_NONE)
+      rasters[idx] = dt_canvas_render_svg_coverage(other->svg.svg, mask_width, mask_height);
+    else
+      rasters[idx] = dt_canvas_render_mask(other, mask_width, mask_height, 0, 0);
   }
 
   // Object-major, because each obstacle is grown by ITS OWN reach before being merged in.
@@ -3342,6 +3376,8 @@ static void _paint_object_pixels(cairo_t *cr, const dt_canvas_t *canvas, const d
     _paint_image(cr, canvas, object, options);
   else if(object->kind == DT_CANVAS_OBJECT_TEXT)
     _paint_text(cr, canvas, object, options);
+  else if(object->kind == DT_CANVAS_OBJECT_SHAPE)
+    _paint_shape(cr, canvas, object, options);
   cairo_restore(cr);
 }
 

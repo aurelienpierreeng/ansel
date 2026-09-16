@@ -21,6 +21,7 @@
 #include "canvas/canvas_format.h"
 #include "canvas/canvas_paint.h"
 
+#include <cairo.h>
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <math.h>
@@ -2343,6 +2344,231 @@ static void _a_layout_sorts_images_by_a_key_and_keeps_the_rest_after(void **stat
   dt_canvas_free(canvas);
 }
 
+/* --- drawn shapes -------------------------------------------------------------------------- */
+
+/** A rectangle, styled and cut, comes back from the index exactly as it went in. */
+static void _a_shape_round_trips_with_its_reserved_bytes(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.fill = dt_canvas_color(0.2f, 0.4f, 0.6f, 0.8f);
+  style.border_override = TRUE;
+  style.border_width = 7.5f;
+  style.border_color = dt_canvas_color(1.0f, 0.0f, 0.5f, 1.0f);
+  style.corner_override = TRUE;
+  style.corner_radius = 12.0f;
+  style.sides = 9;
+  style.depth = 0.3f;
+  style.roundness = 0.6f;
+  const dt_canvas_rect_t box = { -50.0, -30.0, 200.0, 120.0 };
+  dt_canvas_object_t *shape = dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, &style);
+  assert_non_null(shape);
+  assert_int_equal(shape->kind, DT_CANVAS_OBJECT_SHAPE);
+  // The box is a rectangle on the plane and the object's own x/y is its middle.
+  assert_float_equal(shape->x, 50.0, 1e-9);
+  assert_float_equal(shape->y, 30.0, 1e-9);
+  assert_float_equal(shape->width, 200.0, 1e-9);
+  assert_float_equal(shape->height, 120.0, 1e-9);
+  shape->shape.reserved[3] = 0x5A;
+  const uint32_t shape_id = shape->id;
+
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  assert_non_null(index);
+  dt_canvas_t *restored = dt_canvas_new();
+  assert_true(dt_canvas_format_read_index(restored, index, NULL));
+  g_bytes_unref(index);
+  const dt_canvas_object_t *back = dt_canvas_find_object(restored, shape_id);
+  assert_non_null(back);
+  assert_int_equal(back->kind, DT_CANVAS_OBJECT_SHAPE);
+  assert_int_equal(back->shape.geometry, DT_CANVAS_SHAPE_RECTANGLE);
+  assert_int_equal(back->shape.sides, 9);
+  assert_float_equal(back->shape.depth, 0.3f, 1e-6);
+  assert_float_equal(back->shape.roundness, 0.6f, 1e-6);
+  assert_int_equal(back->shape.reserved[3], 0x5A);
+  assert_float_equal(back->background.alpha, 0.8f, 1e-6);
+  assert_float_equal(back->border_width, 7.5f, 1e-6);
+  assert_float_equal(back->corner_radius, 12.0f, 1e-6);
+  assert_true((back->flags & DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE) != 0);
+  assert_true((back->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE) != 0);
+  assert_false((back->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE) != 0);
+  // A shape is a frame: it snaps, it is bounded, it takes handles and it is exported.
+  assert_true(dt_canvas_object_is_frame(back));
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+}
+
+/** The cutout's node chunk follows a shape's record as it follows any other frame's. */
+static void _a_cut_rectangle_keeps_its_cutout_nodes(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  const dt_canvas_rect_t box = { 0.0, 0.0, 300.0, 200.0 };
+  dt_canvas_object_t *shape = dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, NULL);
+  assert_non_null(shape);
+  dt_canvas_mask_set_shape(canvas, shape, DT_CANVAS_MASK_POLYGON);
+  assert_int_equal(shape->mask.shape, DT_CANVAS_MASK_POLYGON);
+  assert_true(shape->mask.node_count >= 3);
+  const uint32_t nodes = shape->mask.node_count;
+  const float first_x = shape->mask.nodes[DT_CANVAS_MASK_NODE_X];
+  const uint32_t shape_id = shape->id;
+
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  assert_non_null(index);
+  dt_canvas_t *restored = dt_canvas_new();
+  assert_true(dt_canvas_format_read_index(restored, index, NULL));
+  g_bytes_unref(index);
+  const dt_canvas_object_t *back = dt_canvas_find_object(restored, shape_id);
+  assert_non_null(back);
+  assert_int_equal(back->mask.shape, DT_CANVAS_MASK_POLYGON);
+  assert_int_equal(back->mask.node_count, nodes);
+  assert_non_null(back->mask.nodes);
+  assert_float_equal(back->mask.nodes[DT_CANVAS_MASK_NODE_X], first_x, 1e-6);
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * A kind from a build this one has never heard of: the record is stepped over by its own size, the
+ * object keeps its place in the document, and nothing that walks the objects trips over it.
+ */
+static void _an_unknown_kind_is_kept_and_draws_nothing(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  const dt_canvas_rect_t box = { 0.0, 0.0, 200.0, 100.0 };
+  dt_canvas_object_t *shape = dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, NULL);
+  assert_non_null(shape);
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 400.0, 0.0, 200.0, 100.0, "beside it");
+  assert_non_null(text);
+  const uint32_t unknown_id = shape->id;
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  assert_non_null(index);
+  gsize length = 0;
+  const uint8_t *bytes = g_bytes_get_data(index, &length);
+  uint8_t *edited = g_memdup2(bytes, length);
+  // The first object record starts where the header ends, and its first field is the kind. The
+  // header is the magic (8), the format version (4), then the header's own size.
+  const uint32_t header_size = (uint32_t)edited[12] | ((uint32_t)edited[13] << 8) | ((uint32_t)edited[14] << 16)
+                               | ((uint32_t)edited[15] << 24);
+  assert_true(header_size + 8 <= length);
+  edited[header_size] = 99;
+  edited[header_size + 1] = 0;
+  edited[header_size + 2] = 0;
+  edited[header_size + 3] = 0;
+  GBytes *patched = g_bytes_new_take(edited, length);
+  g_bytes_unref(index);
+
+  dt_canvas_t *restored = dt_canvas_new();
+  assert_true(dt_canvas_format_read_index(restored, patched, NULL));
+  g_bytes_unref(patched);
+  const dt_canvas_object_t *kept = dt_canvas_find_object(restored, unknown_id);
+  assert_non_null(kept);
+  assert_int_equal(kept->kind, 99);
+  // The record after it still parses: the unknown one was stepped over whole, not read into.
+  assert_int_equal(dt_canvas_object_count(restored), 2);
+  assert_non_null(dt_canvas_find_object(restored, text->id));
+  // It is no frame, so nothing asks it for a raster, a route or an outline.
+  assert_false(dt_canvas_object_is_frame(kept));
+  dt_canvas_pick(restored, 0.0, 0.0, 4.0);
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 64, 64);
+  cairo_t *cr = cairo_create(surface);
+  const dt_canvas_rect_t whole = { -500.0, -500.0, 1000.0, 1000.0 };
+  dt_canvas_paint_options_t options = dt_canvas_paint_options_export(NULL, 1.0, whole);
+  dt_canvas_paint(cr, restored, &options);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+  GBytes *again = dt_canvas_format_write_index(restored);
+  assert_non_null(again);
+  g_bytes_unref(again);
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+}
+
+/** What comes back from the configuration was written by whatever wrote it; a shape is born sound. */
+static void _a_shape_style_from_outside_is_made_sound(void **state)
+{
+  (void)state;
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  assert_true(dt_canvas_shape_style_sanitize(&style));
+  assert_float_equal(style.fill.alpha, 1.0f, 1e-6);
+  assert_false(style.border_override);
+  assert_int_equal(style.sides, DT_CANVAS_SHAPE_DEFAULT_SIDES);
+  assert_float_equal(style.depth, 0.0f, 1e-6);
+
+  dt_canvas_shape_style_t damaged = style;
+  damaged.fill.red = NAN;
+  damaged.fill.alpha = 4.0f;
+  damaged.border_width = -3.0f;
+  damaged.corner_radius = INFINITY;
+  damaged.shadow.blur = NAN;
+  damaged.shadow.offset_x = -INFINITY;
+  damaged.sides = 40;
+  damaged.depth = 2.0f;
+  damaged.roundness = -1.0f;
+  damaged.border_override = 7;
+  assert_false(dt_canvas_shape_style_sanitize(&damaged));
+  assert_float_equal(damaged.fill.red, 0.0f, 1e-6);
+  assert_float_equal(damaged.fill.alpha, 1.0f, 1e-6);
+  assert_float_equal(damaged.border_width, 0.0f, 1e-6);
+  assert_true(isfinite(damaged.corner_radius));
+  // A number nobody can read is NONE of the length, not the far end of what the range allows:
+  // the end of a signed range is the most extreme value there is, and a shadow thrown five
+  // hundred units off the shape is the last thing a mistyped configuration key should produce.
+  assert_float_equal(damaged.shadow.blur, 0.0f, 1e-6);
+  assert_float_equal(damaged.shadow.offset_x, 0.0f, 1e-6);
+  assert_int_equal(damaged.sides, DT_CANVAS_SHAPE_MAX_SIDES);
+  assert_float_equal(damaged.depth, DT_CANVAS_SHAPE_MAX_DEPTH, 1e-6);
+  assert_float_equal(damaged.roundness, 0.0f, 1e-6);
+  assert_int_equal(damaged.border_override, TRUE);
+
+  // A style nobody trusts still makes a shape, and the shape it makes is sound.
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_shape_style_t wild = style;
+  wild.sides = 1;
+  const dt_canvas_rect_t sliver = { 0.0, 0.0, 0.5, 0.0 };
+  const dt_canvas_object_t *shape = dt_canvas_add_shape(canvas, (dt_canvas_shape_geometry_t)77, &sliver, &wild);
+  assert_non_null(shape);
+  assert_int_equal(shape->shape.geometry, DT_CANVAS_SHAPE_RECTANGLE);
+  assert_int_equal(shape->shape.sides, DT_CANVAS_SHAPE_MIN_SIDES);
+  // Neither side is left too small to take hold of.
+  assert_true(shape->width >= 4.0);
+  assert_true(shape->height >= 4.0);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * A whole-canvas arrangement gathers the pictures. A shape is placed against something else --
+ * a panel behind a caption -- so sweeping it into the grid would move it away from what it was
+ * drawn for; named in a selection, it is arranged like anything else.
+ */
+static void _a_whole_canvas_arrangement_leaves_shapes_where_they_are(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *image = dt_canvas_add_image(canvas, 800.0, 500.0, 6000, 4000);
+  const dt_canvas_rect_t box = { 1000.0, 1000.0, 200.0, 120.0 };
+  dt_canvas_object_t *shape = dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, NULL);
+  assert_non_null(image);
+  assert_non_null(shape);
+  const double shape_x = shape->x;
+  const double shape_y = shape->y;
+  dt_canvas_layout_apply(canvas, NULL, DT_CANVAS_LAYOUT_GRID, 0, DT_CANVAS_SORT_CANVAS);
+  assert_float_equal(shape->x, shape_x, 1e-9);
+  assert_float_equal(shape->y, shape_y, 1e-9);
+
+  GArray *ids = g_array_new(FALSE, FALSE, sizeof(uint32_t));
+  g_array_append_val(ids, image->id);
+  g_array_append_val(ids, shape->id);
+  dt_canvas_layout_apply(canvas, ids, DT_CANVAS_LAYOUT_ROW, 0, DT_CANVAS_SORT_CANVAS);
+  g_array_free(ids, TRUE);
+  // Named in a selection it is arranged like anything else: the row anchors on the leftmost of the
+  // two and lays the shape beside the picture, a long way from where it stood.
+  assert_true(shape->x != shape_x || shape->y != shape_y);
+  assert_true(shape->x > image->x);
+  dt_canvas_free(canvas);
+}
+
 static void _colours_parse_and_format(void **state)
 {
   (void)state;
@@ -2398,6 +2624,11 @@ int main(void)
     cmocka_unit_test(_paper_tiles_the_plane_from_the_origin),
     cmocka_unit_test(_layouts_arrange_without_moving_the_group),
     cmocka_unit_test(_a_layout_sorts_images_by_a_key_and_keeps_the_rest_after),
+    cmocka_unit_test(_a_shape_round_trips_with_its_reserved_bytes),
+    cmocka_unit_test(_a_cut_rectangle_keeps_its_cutout_nodes),
+    cmocka_unit_test(_an_unknown_kind_is_kept_and_draws_nothing),
+    cmocka_unit_test(_a_shape_style_from_outside_is_made_sound),
+    cmocka_unit_test(_a_whole_canvas_arrangement_leaves_shapes_where_they_are),
     cmocka_unit_test(_colours_parse_and_format),
   };
   return cmocka_run_group_tests(tests, NULL, NULL);

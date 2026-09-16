@@ -116,6 +116,7 @@ typedef enum dt_canvas_text_flag_t
 #define DT_CANVAS_MAP_RESERVED 256
 #define DT_CANVAS_SVG_RESERVED 480 ///< 512 at format 1, minus the intrinsic size (8) and the load time (8)
 #define DT_CANVAS_CONNECTOR_RESERVED 24 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24), the free ends (48)
+#define DT_CANVAS_SHAPE_RESERVED 112 ///< 128 at birth, minus the geometry (4), the sides (4), the depth (4) and the roundness (4)
 
 /** The colour space a stored JPEG is encoded in. A file from before the field says 0: sRGB. */
 typedef enum dt_canvas_colorspace_t
@@ -141,6 +142,14 @@ typedef enum dt_canvas_object_kind_t
   DT_CANVAS_OBJECT_CONNECTOR = 3,
   DT_CANVAS_OBJECT_MAP = 4,
   DT_CANVAS_OBJECT_SVG = 5,
+  DT_CANVAS_OBJECT_SHAPE = 6, ///< a drawn shape: a rectangle today, a polygon and a star to come
+  /**
+   * How many kinds this build knows. RUNTIME ONLY, never stored: a file holds the kind's own
+   * value and nothing else, so an unknown one arrives from a newer build, is kept whole and
+   * draws nothing. It is here so an array indexed by kind cannot be sized by hand and then
+   * forgotten when a kind is appended.
+   */
+  DT_CANVAS_OBJECT_KIND_COUNT = 7,
 } dt_canvas_object_kind_t;
 
 typedef enum dt_canvas_object_flags_t
@@ -565,6 +574,65 @@ typedef struct dt_canvas_svg_t
   dt_canvas_sync_status_t sync_status;
 } dt_canvas_svg_t;
 
+/**
+ * What a shape's outline is made of. STORED in the document, so new geometries are APPENDED
+ * and never inserted; a value this build does not know is kept verbatim and drawn as its frame.
+ */
+typedef enum dt_canvas_shape_geometry_t
+{
+  DT_CANVAS_SHAPE_RECTANGLE = 0, ///< the frame itself, with the frame's own rounded corners
+  DT_CANVAS_SHAPE_POLYGON = 1,   ///< a regular polygon, or a star once its depth is above zero
+  DT_CANVAS_SHAPE_LAST = 2,
+} dt_canvas_shape_geometry_t;
+
+/** The deepest a star's notches go: past this the inner radius reaches zero and the shape degenerates. */
+#define DT_CANVAS_SHAPE_MAX_DEPTH 0.95f
+/** How many sides a polygon may have, either end of the range. */
+#define DT_CANVAS_SHAPE_MIN_SIDES 3u
+#define DT_CANVAS_SHAPE_MAX_SIDES 12u
+/** What a polygon is born with, and what a rectangle carries so that switching geometry has a value. */
+#define DT_CANVAS_SHAPE_DEFAULT_SIDES 6u
+/** The pentagram's notch depth: five points, the depth at which the star's edges run straight through. */
+#define DT_CANVAS_SHAPE_STAR_DEPTH 0.527864f
+
+/**
+ * A drawn shape: an outline the atelier fills, strokes or both, with no content behind it.
+ *
+ * Everything else a shape needs -- its fill (`background`), its border band, its corner radius,
+ * its shadow, its opacity, its cutout, its box and its rotation -- is a field every object
+ * already has, which is why one kind covers the rectangle, the polygon and the star instead of
+ * three. The record is written for every geometry, so the tagged chunks that follow the union
+ * stay aligned whichever geometry a shape holds.
+ */
+typedef struct dt_canvas_shape_t
+{
+  uint32_t geometry;  ///< dt_canvas_shape_geometry_t
+  uint32_t sides;     ///< 3..12, kept for a rectangle too so a geometry switch has a value
+  float depth;        ///< 0..DT_CANVAS_SHAPE_MAX_DEPTH: 0 is a convex polygon, above it a star
+  float roundness;    ///< 0..1: 0 straight sides, 1 a circle
+  uint8_t reserved[DT_CANVAS_SHAPE_RESERVED];
+} dt_canvas_shape_t;
+
+/**
+ * How a shape is drawn, as distinct from where it sits: everything the atelier remembers of the
+ * last shape edited and hands to the next one drawn, so the document never learns where that
+ * memory lives. The geometry is NOT here -- it is what the tool asked for, not a style.
+ */
+typedef struct dt_canvas_shape_style_t
+{
+  dt_canvas_color_t fill;        ///< the shape's own colour; an alpha of 0 leaves it an outline
+  gboolean border_override;      ///< the shape carries its own border instead of the canvas's
+  float border_width;            ///< canvas units, read only while `border_override`
+  dt_canvas_color_t border_color;
+  gboolean corner_override;      ///< the shape carries its own corner radius
+  float corner_radius;           ///< canvas units, read only while `corner_override`
+  gboolean shadow_override;      ///< the shape carries its own shadow
+  dt_canvas_shadow_t shadow;     ///< read only while `shadow_override`
+  uint32_t sides;                ///< what a polygon or a star would be born with
+  float depth;
+  float roundness;
+} dt_canvas_shape_style_t;
+
 typedef struct dt_canvas_object_t
 {
   uint32_t id;        ///< unique within the canvas, never reused
@@ -591,6 +659,7 @@ typedef struct dt_canvas_object_t
     dt_canvas_connector_t connector;
     dt_canvas_map_t map;
     dt_canvas_svg_t svg;
+    dt_canvas_shape_t shape;
   };
 } dt_canvas_object_t;
 
@@ -874,6 +943,62 @@ void dt_canvas_connector_translate(dt_canvas_object_t *object, double dx, double
  * @return TRUE when a tangent was written; the caller touches the canvas.
  */
 gboolean dt_canvas_connector_seed_curve(dt_canvas_object_t *object, const dt_canvas_route_t *route);
+
+/** @brief What a shape is born with before anybody has drawn or styled one: filled neutral grey,
+ * the canvas's own border, a hexagon's six sides and straight edges. */
+dt_canvas_shape_style_t dt_canvas_shape_style_default(void);
+
+/** @brief Read a shape's styling. FALSE, and `style` untouched, for anything else. */
+gboolean dt_canvas_shape_style_get(const dt_canvas_object_t *object, dt_canvas_shape_style_t *style);
+
+/**
+ * @brief Make a style handed in from outside the document one a shape can be born with.
+ * @details The atelier remembers the last shape's style between sessions, and what comes back from
+ * there was written by whatever wrote it: a colour channel is held to 0..1 (one that is not a number
+ * to 0, so a damaged colour stays a colour), a width and a radius to what their rows allow, the sides
+ * to 3..12, the depth to 0..DT_CANVAS_SHAPE_MAX_DEPTH, the roundness to 0..1, and every switch reads
+ * as plain TRUE or FALSE.
+ * @return TRUE when the style was already sound and nothing was changed.
+ */
+gboolean dt_canvas_shape_style_sanitize(dt_canvas_shape_style_t *style);
+
+/**
+ * @brief Add a shape of `geometry` filling `box`, styled as `style`.
+ * @param box the frame, as a rectangle on the plane: the object's own centre is its middle. Either
+ * side under a couple of units is held up to it, so no shape is born too small to take hold of.
+ * @param style how it is drawn; NULL is dt_canvas_shape_style_default().
+ * @return the object, owned by the canvas.
+ */
+dt_canvas_object_t *dt_canvas_add_shape(dt_canvas_t *canvas, dt_canvas_shape_geometry_t geometry,
+                                        const dt_canvas_rect_t *box, const dt_canvas_shape_style_t *style);
+
+/** The most points a shape's outline is sampled to: a rectangle needs a handful, a rounded star the lot. */
+#define DT_CANVAS_SHAPE_OUTLINE_MAX 512
+
+/**
+ * @brief A shape's outline, in the FRAME'S OWN coordinates: the centre is (0, 0) and the corners
+ * are at plus or minus half the width and half the height, before the object's rotation.
+ *
+ * ONE outline answers for the shape's edge wherever it is asked about -- the hit test, the coverage
+ * raster text flows against, and the outline the painter will stroke once a geometry arrives that
+ * cairo cannot draw as a frame path -- so those cannot disagree about where the edge is. A
+ * rectangle's is the very path `_frame_path()` draws, corner radius included. It is a closed
+ * polyline: the last point joins the first, and the closing segment is not repeated.
+ *
+ * @param xy receives x0, y0, x1, y1, ...; at least `2 * max` doubles.
+ * @param max how many POINTS the caller has room for; DT_CANVAS_SHAPE_OUTLINE_MAX is always enough.
+ * @return how many points were written, 0 for an object that is not a shape.
+ */
+size_t dt_canvas_shape_outline(const dt_canvas_t *canvas, const dt_canvas_object_t *object, double *xy, size_t max);
+
+/**
+ * @brief Whether text flowing under this shape must be given its RASTER rather than its frame.
+ * @details A filled rectangle covers its frame exactly, and the rounded-rectangle reach already
+ * says so. Anything else -- an outline box, whose middle is a hole, and every polygon -- covers
+ * only where it puts ink, and only a raster of the outline says where that is. A shape with a
+ * cutout is asked for the cutout, as any other cut frame is.
+ */
+gboolean dt_canvas_shape_needs_coverage(const dt_canvas_object_t *object);
 
 /**
  * @brief Remove an object.

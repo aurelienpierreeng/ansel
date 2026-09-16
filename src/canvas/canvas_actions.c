@@ -30,6 +30,8 @@ dt_canvas_tool_t dt_canvas_tool_for_action(const dt_canvas_action_t action)
       return DT_CANVAS_TOOL_LINE;
     case DT_CANVAS_ACTION_DRAW_CURVE:
       return DT_CANVAS_TOOL_CURVE;
+    case DT_CANVAS_ACTION_DRAW_RECTANGLE:
+      return DT_CANVAS_TOOL_RECTANGLE;
     default:
       return DT_CANVAS_TOOL_NONE;
   }
@@ -47,6 +49,16 @@ dt_canvas_tool_t dt_canvas_tool_toggled(const dt_canvas_tool_t armed, const dt_c
 gboolean dt_canvas_tool_draws_line(const dt_canvas_tool_t tool)
 {
   return tool == DT_CANVAS_TOOL_LINE || tool == DT_CANVAS_TOOL_CURVE;
+}
+
+gboolean dt_canvas_tool_draws_shape(const dt_canvas_tool_t tool)
+{
+  return tool == DT_CANVAS_TOOL_RECTANGLE;
+}
+
+gboolean dt_canvas_tool_draws(const dt_canvas_tool_t tool)
+{
+  return dt_canvas_tool_draws_line(tool) || dt_canvas_tool_draws_shape(tool);
 }
 
 /*
@@ -79,6 +91,7 @@ static const char *const _accel_names[DT_CANVAS_ACTION_LAST] = {
   [DT_CANVAS_ACTION_PROPERTIES] = N_("Show the properties of the selected object"),
   [DT_CANVAS_ACTION_DRAW_LINE] = N_("Draw a line"),
   [DT_CANVAS_ACTION_DRAW_CURVE] = N_("Draw a curve"),
+  [DT_CANVAS_ACTION_DRAW_RECTANGLE] = N_("Draw a rectangle"),
 };
 
 const char *dt_canvas_action_accel_name(const dt_canvas_action_t action)

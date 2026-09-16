@@ -45,7 +45,7 @@
 static char *_rcfile = NULL;
 
 static const uint32_t _kinds[] = { DT_CANVAS_OBJECT_TEXT, DT_CANVAS_OBJECT_IMAGE, DT_CANVAS_OBJECT_MAP,
-                                   DT_CANVAS_OBJECT_SVG, DT_CANVAS_OBJECT_CONNECTOR };
+                                   DT_CANVAS_OBJECT_SVG, DT_CANVAS_OBJECT_CONNECTOR, DT_CANVAS_OBJECT_SHAPE };
 
 static gchar *_write_svg(const char *body)
 {
@@ -57,11 +57,11 @@ static gchar *_write_svg(const char *body)
   return path;
 }
 
-/** A canvas with one object of every kind: a text, a picture, a map, a drawing and a connector. */
+/** A canvas with one object of every kind: a text, a picture, a map, a drawing, a connector and a shape. */
 typedef struct props_fixture_t
 {
   dt_canvas_t *canvas;
-  dt_canvas_object_t *objects[5]; ///< in `_kinds` order
+  dt_canvas_object_t *objects[6]; ///< in `_kinds` order
   gchar *svg_path;
 } props_fixture_t;
 
@@ -89,7 +89,9 @@ static void _fixture_build(props_fixture_t *fixture)
   fixture->objects[3] = dt_canvas_add_svg(fixture->canvas, 600.0, 600.0, fixture->svg_path, &error);
   assert_null(error);
   fixture->objects[4] = dt_canvas_add_connector(fixture->canvas, fixture->objects[1]->id, fixture->objects[2]->id);
-  for(int idx = 0; idx < 5; idx++)
+  const dt_canvas_rect_t shape_box = { 1000.0, 0.0, 200.0, 120.0 };
+  fixture->objects[5] = dt_canvas_add_shape(fixture->canvas, DT_CANVAS_SHAPE_RECTANGLE, &shape_box, NULL);
+  for(int idx = 0; idx < 6; idx++)
     assert_non_null(fixture->objects[idx]);
   // Every frame is born holding a copy of the canvas's border in its own fields. Moved on from
   // that copy, the canvas's border and a frame's own differ, so a read that takes the wrong one --
@@ -178,7 +180,7 @@ static void _every_property_is_described_once(void **state)
     assert_true(prop->kinds != 0);
     const uint32_t known = (1u << DT_CANVAS_OBJECT_TEXT) | (1u << DT_CANVAS_OBJECT_IMAGE)
                            | (1u << DT_CANVAS_OBJECT_MAP) | (1u << DT_CANVAS_OBJECT_SVG)
-                           | (1u << DT_CANVAS_OBJECT_CONNECTOR);
+                           | (1u << DT_CANVAS_OBJECT_CONNECTOR) | (1u << DT_CANVAS_OBJECT_SHAPE);
     assert_int_equal(prop->kinds & ~known, 0);
     assert_true(prop->section < DT_CANVAS_SECTION_COUNT);
     assert_true(prop->factor != 0.0);
@@ -508,6 +510,10 @@ static void _every_property_round_trips_on_every_kind(void **state)
   g_string_append_printf(expected, "arrange.height@%u;", (unsigned)DT_CANVAS_OBJECT_TEXT);
   if(dt_canvas_map_source_count() < 2)
     g_string_append_printf(expected, "map.style@%u;", (unsigned)DT_CANVAS_OBJECT_MAP);
+  // The rectangle is the only geometry this build offers, so its row has nothing to round-trip
+  // through; the line goes when the polygon and the star join it. It comes last because the kinds
+  // are walked in `_kinds` order and the shape is the last of them.
+  g_string_append_printf(expected, "shape.geometry@%u;", (unsigned)DT_CANVAS_OBJECT_SHAPE);
   fprintf(stderr, "round trip: %d writes, skipped %s, excused %s\n", written, skipped->str, excused->str);
   assert_string_equal(skipped->str, expected->str);
   // Only a text frame's centre is ever excused, and only when its refit moved it.
@@ -998,7 +1004,7 @@ static void _the_inherited_value_is_what_giving_the_group_back_shows(void **stat
   g_strlcpy(fixture.canvas->default_font, "Serif Bold 17", sizeof(fixture.canvas->default_font));
   size_t count = 0;
   const dt_canvas_prop_t *table = dt_canvas_props(&count);
-  for(int object_index = 0; object_index < 5; object_index++)
+  for(int object_index = 0; object_index < 6; object_index++)
   {
     dt_canvas_object_t *object = fixture.objects[object_index];
     const dt_canvas_prop_group_t groups[] = { DT_CANVAS_GROUP_BORDER, DT_CANVAS_GROUP_CORNER,
@@ -1590,10 +1596,10 @@ static void _section_names_are_pinned_to_the_enum(void **state)
     { DT_CANVAS_SECTION_CHARACTER, "character" }, { DT_CANVAS_SECTION_PARAGRAPH, "paragraph" },
     { DT_CANVAS_SECTION_TEXT_BOX, "text_box" },   { DT_CANVAS_SECTION_PICTURE, "picture" },
     { DT_CANVAS_SECTION_DRAWING, "drawing" },     { DT_CANVAS_SECTION_MAP, "map" },
-    { DT_CANVAS_SECTION_ROUTE, "route" },         { DT_CANVAS_SECTION_ARRANGE, "arrange" },
-    { DT_CANVAS_SECTION_FILL, "fill" },           { DT_CANVAS_SECTION_STROKE, "stroke" },
-    { DT_CANVAS_SECTION_CORNERS, "corners" },     { DT_CANVAS_SECTION_SHADOW, "shadow" },
-    { DT_CANVAS_SECTION_CUTOUT, "cutout" },
+    { DT_CANVAS_SECTION_ROUTE, "route" },         { DT_CANVAS_SECTION_SHAPE, "shape" },
+    { DT_CANVAS_SECTION_ARRANGE, "arrange" },     { DT_CANVAS_SECTION_FILL, "fill" },
+    { DT_CANVAS_SECTION_STROKE, "stroke" },       { DT_CANVAS_SECTION_CORNERS, "corners" },
+    { DT_CANVAS_SECTION_SHADOW, "shadow" },       { DT_CANVAS_SECTION_CUTOUT, "cutout" },
   };
   assert_int_equal(G_N_ELEMENTS(pinned), DT_CANVAS_SECTION_COUNT);
   GHashTable *seen = g_hash_table_new(g_str_hash, g_str_equal);
@@ -1982,6 +1988,272 @@ static void _override_sections_open_only_when_asked(void **state)
   _fixture_free(&fixture);
 }
 
+/* --- drawn shapes -------------------------------------------------------------------------- */
+
+/**
+ * Filled is the fill's own opacity and nothing else, so the switch and the colour well can never
+ * disagree; the colour is KEPT when it is switched off, so switching it back on brings the colour
+ * the user chose rather than a grey they never asked for.
+ */
+static void _the_filled_switch_is_the_fills_own_opacity(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  const dt_canvas_prop_value_t chosen = _color(0.1f, 0.7f, 0.3f, 1.0f);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_BACKGROUND, &chosen)
+              & DT_CANVAS_EFFECT_CHANGED);
+
+  dt_canvas_prop_value_t filled;
+  dt_canvas_prop_read(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_FILLED, &filled);
+  assert_true(filled.flag);
+
+  // The shape owns a border already, so nothing is rescued: only the opacity goes.
+  const dt_canvas_prop_value_t six = _number(6.0);
+  const dt_canvas_prop_value_t unfilled = _flag(FALSE);
+  const dt_canvas_prop_value_t refilled = _flag(TRUE);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_BORDER_WIDTH, &six)
+              & DT_CANVAS_EFFECT_CHANGED);
+  const uint32_t off = dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_FILLED, &unfilled);
+  assert_true(off & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(off & DT_CANVAS_EFFECT_COUPLED);
+  // What a shape's style is worth remembering by: the view keeps it for the next shape drawn.
+  assert_true(off & DT_CANVAS_EFFECT_COMMIT_CONF);
+  assert_float_equal(shape->background.alpha, 0.0f, 1e-6);
+  assert_float_equal(shape->background.red, 0.1f, 1e-6);
+  assert_float_equal(shape->background.green, 0.7f, 1e-6);
+  assert_float_equal(shape->background.blue, 0.3f, 1e-6);
+  assert_float_equal(shape->border_width, 6.0f, 1e-6);
+  dt_canvas_prop_read(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_FILLED, &filled);
+  assert_false(filled.flag);
+
+  // Back on: the opacity alone comes back, and with it the colour that was kept.
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_FILLED, &refilled)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_float_equal(shape->background.alpha, 1.0f, 1e-6);
+  assert_float_equal(shape->background.green, 0.7f, 1e-6);
+  _fixture_free(&fixture);
+}
+
+/** A shape with neither a fill nor a border is nothing at all, so switching the fill off gives it one. */
+static void _switching_the_fill_off_rescues_a_shape_that_would_vanish(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  // The canvas's own border is what the shape inherits, and it is nothing.
+  fixture.canvas->border_width = 0.0f;
+  const dt_canvas_prop_value_t red = _color(0.9f, 0.2f, 0.1f, 1.0f);
+  const dt_canvas_prop_value_t unfilled = _flag(FALSE);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_BACKGROUND, &red)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, shape, DT_CANVAS_GROUP_BORDER), DT_CANVAS_OWN_INHERIT);
+
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_FILLED, &unfilled)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_float_equal(shape->background.alpha, 0.0f, 1e-6);
+  assert_true((shape->flags & DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE) != 0);
+  dt_canvas_color_t border_color;
+  float border_width = 0.0f;
+  dt_canvas_object_effective_border(fixture.canvas, shape, &border_color, &border_width);
+  assert_true(border_width > 0.0f);
+  // In the colour the fill had, so what was a filled shape becomes the outline of the same shape.
+  assert_float_equal(border_color.red, 0.9f, 1e-6);
+  assert_float_equal(border_color.green, 0.2f, 1e-6);
+  assert_float_equal(border_color.alpha, 1.0f, 1e-6);
+  _fixture_free(&fixture);
+}
+
+/**
+ * A shape is born inheriting, as decided: the canvas's border, radius and shadow apply until it is
+ * given its own. A zero one it was GIVEN reads as the kind's default rather than as a choice, so a
+ * card is never marked altered for a border nobody chose.
+ */
+static void _a_shape_inherits_at_birth_and_a_zero_it_owns_is_no_choice(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, shape, DT_CANVAS_GROUP_BORDER), DT_CANVAS_OWN_INHERIT);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, shape, DT_CANVAS_GROUP_CORNER), DT_CANVAS_OWN_INHERIT);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, shape, DT_CANVAS_GROUP_SHADOW), DT_CANVAS_OWN_INHERIT);
+  assert_false(dt_canvas_props_card_altered(fixture.canvas, shape));
+
+  // A shape born from a remembered style that owns nothing at all: the flags are its own, the
+  // values are the kind's.
+  dt_canvas_shape_style_t bare = dt_canvas_shape_style_default();
+  bare.border_override = TRUE;
+  bare.border_width = 0.0f;
+  bare.corner_override = TRUE;
+  bare.corner_radius = 0.0f;
+  bare.shadow_override = TRUE;
+  const dt_canvas_rect_t box = { 1400.0, 0.0, 100.0, 100.0 };
+  dt_canvas_object_t *plain = dt_canvas_add_shape(fixture.canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, &bare);
+  assert_non_null(plain);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, plain, DT_CANVAS_GROUP_BORDER),
+                   DT_CANVAS_OWN_KIND_DEFAULT);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, plain, DT_CANVAS_GROUP_CORNER),
+                   DT_CANVAS_OWN_KIND_DEFAULT);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, plain, DT_CANVAS_GROUP_SHADOW),
+                   DT_CANVAS_OWN_KIND_DEFAULT);
+  assert_false(dt_canvas_props_card_altered(fixture.canvas, plain));
+  // And a value somebody chose is a choice again.
+  const dt_canvas_prop_value_t five = _number(5.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, plain, DT_CANVAS_PROP_BORDER_WIDTH, &five)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, plain, DT_CANVAS_GROUP_BORDER), DT_CANVAS_OWN_CUSTOM);
+  assert_true(dt_canvas_props_card_altered(fixture.canvas, plain));
+  _fixture_free(&fixture);
+}
+
+/**
+ * A shape's style is the next shape's; where it sits and how big it is are not. The writer says
+ * which is which through COMMIT_CONF, and the view -- which owns the configuration -- keeps it.
+ */
+static void _only_a_shapes_style_is_worth_remembering(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  const struct
+  {
+    dt_canvas_prop_id_t prop;
+    dt_canvas_prop_value_t value;
+    gboolean remembered;
+  } edits[] = {
+    { DT_CANVAS_PROP_BACKGROUND, _color(0.3f, 0.6f, 0.9f, 1.0f), TRUE },
+    { DT_CANVAS_PROP_BORDER_WIDTH, _number(13.0), TRUE },
+    { DT_CANVAS_PROP_BORDER_COLOR, _color(1.0f, 1.0f, 0.0f, 1.0f), TRUE },
+    { DT_CANVAS_PROP_CORNER_RADIUS, _number(9.0), TRUE },
+    { DT_CANVAS_PROP_SHADOW_BLUR, _number(7.0), TRUE },
+    { DT_CANVAS_PROP_X, _number(1234.0), FALSE },
+    { DT_CANVAS_PROP_WIDTH, _number(321.0), FALSE },
+    { DT_CANVAS_PROP_ROTATION, _number(15.0), FALSE },
+    { DT_CANVAS_PROP_OPACITY, _number(50.0), FALSE },
+  };
+  for(size_t idx = 0; idx < G_N_ELEMENTS(edits); idx++)
+  {
+    const uint32_t effects = dt_canvas_prop_write(fixture.canvas, shape, edits[idx].prop, &edits[idx].value);
+    assert_true(effects & DT_CANVAS_EFFECT_CHANGED);
+    assert_int_equal((effects & DT_CANVAS_EFFECT_COMMIT_CONF) != 0, edits[idx].remembered);
+  }
+  // The same rows on a picture teach nothing: only a shape's style is a shape's style.
+  const dt_canvas_prop_value_t eleven = _number(11.0);
+  const uint32_t picture
+      = dt_canvas_prop_write(fixture.canvas, fixture.objects[1], DT_CANVAS_PROP_BORDER_WIDTH, &eleven);
+  assert_true(picture & DT_CANVAS_EFFECT_CHANGED);
+  assert_int_equal(picture & DT_CANVAS_EFFECT_COMMIT_CONF, 0);
+
+  // And what the object reads back is what the style says, field for field.
+  dt_canvas_shape_style_t style;
+  assert_true(dt_canvas_shape_style_get(shape, &style));
+  assert_float_equal(style.fill.blue, 0.9f, 1e-6);
+  assert_true(style.border_override);
+  assert_float_equal(style.border_width, 13.0f, 1e-6);
+  assert_float_equal(style.border_color.red, 1.0f, 1e-6);
+  assert_true(style.corner_override);
+  assert_float_equal(style.corner_radius, 9.0f, 1e-6);
+  assert_true(style.shadow_override);
+  assert_float_equal(style.shadow.blur, 7.0f, 1e-6);
+  assert_false(dt_canvas_shape_style_get(fixture.objects[1], &style));
+  _fixture_free(&fixture);
+}
+
+/**
+ * Whether a shape is there at all, for the text flowing around it, is decided by two alphas: its
+ * fill's and its border's. Writing either is therefore the same change to the plane the FILLED
+ * switch makes, and owes the frames flowing around it the refit an obstacle's move owes them --
+ * which of the two ways a fill was emptied must not decide whether the column beside it settles.
+ */
+static void _emptying_a_shapes_colours_refits_the_text_beside_it(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 0.0, 0.0, 400.0, 400.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+      "zoom, because the page is the thing being designed and the screen is only a window onto it, and "
+      "the measure a line is set to belongs to the page rather than to the window looking at it.");
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND | DT_CANVAS_TEXT_AUTO_HEIGHT;
+  text->text.wrap_standoff = 0.0f;
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.border_override = TRUE;
+  style.border_width = 4.0f;
+  style.border_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  // Over the text from its very first line: an obstacle the column has not reached yet says
+  // nothing about whether it would have had to go round it.
+  const dt_canvas_rect_t box = { -110.0, -190.0, 220.0, 220.0 };
+  dt_canvas_object_t *shape = dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, &style);
+  assert_non_null(shape);
+  dt_canvas_props_settle_all(canvas);
+  const double walled = text->height;
+
+  // The view settles the whole plane when the writer asks it to, and only then.
+  const dt_canvas_prop_value_t emptied = _color(0.5f, 0.5f, 0.5f, 0.0f);
+  const uint32_t fill = dt_canvas_prop_write(canvas, shape, DT_CANVAS_PROP_BACKGROUND, &emptied);
+  assert_true(fill & DT_CANVAS_EFFECT_SETTLE_ALL);
+  if(fill & DT_CANVAS_EFFECT_SETTLE_ALL) dt_canvas_props_settle_all(canvas);
+  const double outlined = text->height;
+  fprintf(stderr, "text under a shape: walled %f -> outlined %f\n", walled, outlined);
+  // The hole in the middle is the column's again, so the same paragraph takes less height.
+  assert_true(outlined < walled);
+
+  // And the band itself goes with the border's own strength, which is the other alpha.
+  const dt_canvas_prop_value_t invisible = _color(1.0f, 1.0f, 1.0f, 0.0f);
+  const uint32_t border = dt_canvas_prop_write(canvas, shape, DT_CANVAS_PROP_BORDER_COLOR, &invisible);
+  assert_true(border & DT_CANVAS_EFFECT_SETTLE_ALL);
+  if(border & DT_CANVAS_EFFECT_SETTLE_ALL) dt_canvas_props_settle_all(canvas);
+  const double gone = text->height;
+  fprintf(stderr, "text under a shape: outlined %f -> gone %f\n", outlined, gone);
+  assert_true(gone < outlined);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * Handing a group back is as much a shape's style as taking it: what the next shape is drawn with
+ * is the border, the corners and the shadow the last one was left with, override flags included.
+ * Taking a group is always followed by a value write that asks to be remembered; handing it back
+ * stands alone, and was the one edit the memory never heard about.
+ */
+static void _handing_a_group_back_is_a_shapes_style_too(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  const dt_canvas_prop_value_t six = _number(6.0);
+  const uint32_t taken = dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_BORDER_WIDTH, &six);
+  assert_true(taken & DT_CANVAS_EFFECT_COMMIT_CONF);
+  dt_canvas_shape_style_t style;
+  assert_true(dt_canvas_shape_style_get(shape, &style));
+  assert_true(style.border_override);
+
+  const uint32_t given_back = dt_canvas_group_set_own(fixture.canvas, shape, DT_CANVAS_GROUP_BORDER, FALSE);
+  assert_true(given_back & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(given_back & DT_CANVAS_EFFECT_COMMIT_CONF);
+  assert_true(dt_canvas_shape_style_get(shape, &style));
+  assert_false(style.border_override);
+  // Taking one is worth remembering for the same reason, whichever way round the switch went.
+  assert_true(dt_canvas_group_set_own(fixture.canvas, shape, DT_CANVAS_GROUP_SHADOW, TRUE)
+              & DT_CANVAS_EFFECT_COMMIT_CONF);
+  assert_true(dt_canvas_group_set_own(fixture.canvas, shape, DT_CANVAS_GROUP_CORNER, TRUE)
+              & DT_CANVAS_EFFECT_COMMIT_CONF);
+
+  // A picture teaches the next shape nothing: only a shape's style is a shape's style.
+  dt_canvas_object_t *picture = fixture.objects[1];
+  assert_int_equal(dt_canvas_group_set_own(fixture.canvas, picture, DT_CANVAS_GROUP_BORDER, TRUE)
+                       & DT_CANVAS_EFFECT_COMMIT_CONF,
+                   0);
+  assert_int_equal(dt_canvas_group_set_own(fixture.canvas, picture, DT_CANVAS_GROUP_BORDER, FALSE)
+                       & DT_CANVAS_EFFECT_COMMIT_CONF,
+                   0);
+  _fixture_free(&fixture);
+}
+
 /** Only what has something inside it is drilled into. */
 static void _only_texts_pictures_and_drawings_have_a_content_action(void **state)
 {
@@ -1991,10 +2263,13 @@ static void _only_texts_pictures_and_drawings_have_a_content_action(void **state
   assert_true(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_SVG));
   assert_false(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_MAP));
   assert_false(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_CONNECTOR));
+  // A shape holds nothing to go into: it IS its own outline, and every row it has is on the card.
+  assert_false(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_SHAPE));
   assert_false(dt_canvas_props_has_content_action(DT_CANVAS_OBJECT_NONE));
   // A button that exists says what it does; one that does not has nothing to say.
-  const uint32_t kinds[] = { DT_CANVAS_OBJECT_NONE, DT_CANVAS_OBJECT_TEXT, DT_CANVAS_OBJECT_IMAGE,
-                             DT_CANVAS_OBJECT_MAP, DT_CANVAS_OBJECT_SVG, DT_CANVAS_OBJECT_CONNECTOR };
+  const uint32_t kinds[] = { DT_CANVAS_OBJECT_NONE, DT_CANVAS_OBJECT_TEXT,      DT_CANVAS_OBJECT_IMAGE,
+                             DT_CANVAS_OBJECT_MAP,  DT_CANVAS_OBJECT_CONNECTOR, DT_CANVAS_OBJECT_SVG,
+                             DT_CANVAS_OBJECT_SHAPE };
   for(size_t idx = 0; idx < G_N_ELEMENTS(kinds); idx++)
     assert_int_equal(dt_canvas_props_content_action_tooltip(kinds[idx]) != NULL,
                      dt_canvas_props_has_content_action(kinds[idx]));
@@ -2012,6 +2287,12 @@ int main(void)
     cmocka_unit_test(_only_the_objects_own_properties_lead_into_it),
     cmocka_unit_test(_a_double_click_takes_a_handle_only_when_its_first_press_did),
     cmocka_unit_test(_only_texts_pictures_and_drawings_have_a_content_action),
+    cmocka_unit_test(_the_filled_switch_is_the_fills_own_opacity),
+    cmocka_unit_test(_switching_the_fill_off_rescues_a_shape_that_would_vanish),
+    cmocka_unit_test(_a_shape_inherits_at_birth_and_a_zero_it_owns_is_no_choice),
+    cmocka_unit_test(_only_a_shapes_style_is_worth_remembering),
+    cmocka_unit_test(_emptying_a_shapes_colours_refits_the_text_beside_it),
+    cmocka_unit_test(_handing_a_group_back_is_a_shapes_style_too),
     cmocka_unit_test(_every_property_is_described_once),
     cmocka_unit_test(_a_numbers_soft_range_and_neutral_lie_inside_its_hard_range),
     cmocka_unit_test(_pairs_point_at_each_other),

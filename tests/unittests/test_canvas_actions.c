@@ -41,6 +41,7 @@ static void _each_tool_action_arms_its_own_tool(void **state)
   assert_int_equal(dt_canvas_tool_for_action(DT_CANVAS_ACTION_CONNECT_MODE), DT_CANVAS_TOOL_CONNECTOR);
   assert_int_equal(dt_canvas_tool_for_action(DT_CANVAS_ACTION_DRAW_LINE), DT_CANVAS_TOOL_LINE);
   assert_int_equal(dt_canvas_tool_for_action(DT_CANVAS_ACTION_DRAW_CURVE), DT_CANVAS_TOOL_CURVE);
+  assert_int_equal(dt_canvas_tool_for_action(DT_CANVAS_ACTION_DRAW_RECTANGLE), DT_CANVAS_TOOL_RECTANGLE);
   int tools = 0;
   for(int action = 0; action < DT_CANVAS_ACTION_LAST; action++)
     if(dt_canvas_tool_for_action((dt_canvas_action_t)action) != DT_CANVAS_TOOL_NONE) tools++;
@@ -83,8 +84,27 @@ static void _the_line_and_the_curve_are_the_line_tools(void **state)
   assert_true(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_LINE));
   assert_true(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_CURVE));
   assert_false(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_CONNECTOR));
+  assert_false(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_RECTANGLE));
   assert_false(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_NONE));
   assert_false(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_COUNT));
+}
+
+/**
+ * Every tool but the connector draws a new object with one gesture of its own, which is what the
+ * crosshair, the start marker and "a press draws instead of picking" all ask. The connector joins
+ * two frames that are there already and answers a click on each.
+ */
+static void _every_tool_but_the_connector_draws_an_object(void **state)
+{
+  (void)state;
+  assert_true(dt_canvas_tool_draws_shape(DT_CANVAS_TOOL_RECTANGLE));
+  assert_false(dt_canvas_tool_draws_shape(DT_CANVAS_TOOL_LINE));
+  assert_false(dt_canvas_tool_draws_shape(DT_CANVAS_TOOL_CONNECTOR));
+  assert_false(dt_canvas_tool_draws_shape(DT_CANVAS_TOOL_NONE));
+  for(int tool = DT_CANVAS_TOOL_CONNECTOR; tool < DT_CANVAS_TOOL_COUNT; tool++)
+    assert_int_equal(dt_canvas_tool_draws((dt_canvas_tool_t)tool), tool != DT_CANVAS_TOOL_CONNECTOR);
+  assert_false(dt_canvas_tool_draws(DT_CANVAS_TOOL_NONE));
+  assert_false(dt_canvas_tool_draws(DT_CANVAS_TOOL_COUNT));
 }
 
 /**
@@ -123,6 +143,7 @@ static void _published_accel_names_are_fixed(void **state)
                       "Show the properties of the selected object");
   assert_string_equal(dt_canvas_action_accel_name(DT_CANVAS_ACTION_DRAW_LINE), "Draw a line");
   assert_string_equal(dt_canvas_action_accel_name(DT_CANVAS_ACTION_DRAW_CURVE), "Draw a curve");
+  assert_string_equal(dt_canvas_action_accel_name(DT_CANVAS_ACTION_DRAW_RECTANGLE), "Draw a rectangle");
   assert_string_equal(dt_canvas_action_accel_scope(), "Canvas/Actions");
   // Every tool is reachable from the keyboard, and no two actions share a path.
   for(int action = 0; action < DT_CANVAS_ACTION_LAST; action++)
@@ -148,6 +169,7 @@ int main(void)
     cmocka_unit_test(_each_tool_action_arms_its_own_tool),
     cmocka_unit_test(_asking_for_the_armed_tool_puts_it_away),
     cmocka_unit_test(_the_line_and_the_curve_are_the_line_tools),
+    cmocka_unit_test(_every_tool_but_the_connector_draws_an_object),
     cmocka_unit_test(_published_accel_names_are_fixed),
   };
   return cmocka_run_group_tests(tests, NULL, NULL);

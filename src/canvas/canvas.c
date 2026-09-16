@@ -917,6 +917,214 @@ void dt_canvas_connector_translate(dt_canvas_object_t *object, const double dx, 
   object->connector.via_y += dy;
 }
 
+/* --- shapes ------------------------------------------------------------------------- */
+
+/** The smallest side a shape is born with: below this there is nothing left to take hold of. */
+#define CANVAS_SHAPE_MIN_SIDE 4.0
+/*
+ * What a remembered style may hold, the same numbers the property rows allow: a style comes back
+ * from wherever the atelier kept it, and a width no row could have produced is not a width.
+ */
+#define CANVAS_SHAPE_BORDER_MAX 500.0f
+#define CANVAS_SHAPE_CORNER_MAX 5000.0f
+#define CANVAS_SHAPE_SHADOW_MAX 500.0f
+
+dt_canvas_shape_style_t dt_canvas_shape_style_default(void)
+{
+  dt_canvas_shape_style_t style;
+  memset(&style, 0, sizeof(style));
+  // Filled, in a grey that belongs to no palette: a shape nobody has styled yet must be VISIBLE,
+  // and a neutral is the one fill that reads as a placeholder rather than as a choice.
+  style.fill = dt_canvas_color(0.5f, 0.5f, 0.5f, 1.0f);
+  style.border_override = FALSE;
+  style.border_width = 0.0f;
+  style.border_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  style.corner_override = FALSE;
+  style.corner_radius = 0.0f;
+  style.shadow_override = FALSE;
+  style.sides = DT_CANVAS_SHAPE_DEFAULT_SIDES;
+  // A convex polygon, not a star: the star's own depth is DT_CANVAS_SHAPE_STAR_DEPTH and is the
+  // star TOOL's to ask for, so that a polygon born from this style is the polygon it was asked for.
+  style.depth = 0.0f;
+  style.roundness = 0.0f;
+  return style;
+}
+
+gboolean dt_canvas_shape_style_get(const dt_canvas_object_t *object, dt_canvas_shape_style_t *style)
+{
+  if(IS_NULL_PTR(object) || IS_NULL_PTR(style) || object->kind != DT_CANVAS_OBJECT_SHAPE) return FALSE;
+  memset(style, 0, sizeof(*style));
+  style->fill = object->background;
+  style->border_override = (object->flags & DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE) != 0;
+  style->border_width = object->border_width;
+  style->border_color = object->border_color;
+  style->corner_override = (object->flags & DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE) != 0;
+  style->corner_radius = object->corner_radius;
+  style->shadow_override = (object->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE) != 0;
+  style->shadow = object->shadow;
+  style->sides = object->shape.sides;
+  style->depth = object->shape.depth;
+  style->roundness = object->shape.roundness;
+  return TRUE;
+}
+
+/** A length held to a range, saying whether it had to be: one that is not a number is none of it. */
+static float _sound_length(const float value, const float lowest, const float highest, gboolean *sound)
+{
+  if(!isfinite(value))
+  {
+    *sound = FALSE;
+    // None of it, held to the range: nothing for a length that only grows, and the neutral middle
+    // for an offset that goes either way. The range's own end would be the most extreme value it
+    // allows, which is the last thing a number nobody can read should become -- a shadow thrown
+    // five hundred units off the shape, from a configuration key somebody mistyped.
+    return CLAMP(0.0f, lowest, highest);
+  }
+  if(value < lowest || value > highest) *sound = FALSE;
+  return CLAMP(value, lowest, highest);
+}
+
+/** A colour whose every channel is a colour's, saying whether it already was. */
+static dt_canvas_color_t _sound_color(const dt_canvas_color_t color, gboolean *sound)
+{
+  dt_canvas_color_t held;
+  held.red = _unit_channel(color.red, sound);
+  held.green = _unit_channel(color.green, sound);
+  held.blue = _unit_channel(color.blue, sound);
+  held.alpha = _unit_channel(color.alpha, sound);
+  return held;
+}
+
+gboolean dt_canvas_shape_style_sanitize(dt_canvas_shape_style_t *style)
+{
+  if(IS_NULL_PTR(style)) return FALSE;
+  gboolean sound = TRUE;
+  style->fill = _sound_color(style->fill, &sound);
+  style->border_color = _sound_color(style->border_color, &sound);
+  style->border_width = _sound_length(style->border_width, 0.0f, CANVAS_SHAPE_BORDER_MAX, &sound);
+  style->corner_radius = _sound_length(style->corner_radius, 0.0f, CANVAS_SHAPE_CORNER_MAX, &sound);
+  style->shadow.color = _sound_color(style->shadow.color, &sound);
+  style->shadow.offset_x
+      = _sound_length(style->shadow.offset_x, -CANVAS_SHAPE_SHADOW_MAX, CANVAS_SHAPE_SHADOW_MAX, &sound);
+  style->shadow.offset_y
+      = _sound_length(style->shadow.offset_y, -CANVAS_SHAPE_SHADOW_MAX, CANVAS_SHAPE_SHADOW_MAX, &sound);
+  style->shadow.blur = _sound_length(style->shadow.blur, -CANVAS_SHAPE_SHADOW_MAX, CANVAS_SHAPE_SHADOW_MAX, &sound);
+  if(style->sides < DT_CANVAS_SHAPE_MIN_SIDES || style->sides > DT_CANVAS_SHAPE_MAX_SIDES)
+  {
+    style->sides = CLAMP(style->sides, DT_CANVAS_SHAPE_MIN_SIDES, DT_CANVAS_SHAPE_MAX_SIDES);
+    sound = FALSE;
+  }
+  style->depth = _sound_length(style->depth, 0.0f, DT_CANVAS_SHAPE_MAX_DEPTH, &sound);
+  style->roundness = _sound_length(style->roundness, 0.0f, 1.0f, &sound);
+  // A switch compared against TRUE elsewhere must hold TRUE itself, not merely something that is not 0.
+  const gboolean border_override = style->border_override != FALSE;
+  const gboolean corner_override = style->corner_override != FALSE;
+  const gboolean shadow_override = style->shadow_override != FALSE;
+  if(border_override != style->border_override || corner_override != style->corner_override
+     || shadow_override != style->shadow_override)
+    sound = FALSE;
+  style->border_override = border_override;
+  style->corner_override = corner_override;
+  style->shadow_override = shadow_override;
+  return sound;
+}
+
+dt_canvas_object_t *dt_canvas_add_shape(dt_canvas_t *canvas, const dt_canvas_shape_geometry_t geometry,
+                                        const dt_canvas_rect_t *box, const dt_canvas_shape_style_t *style)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(box)) return NULL;
+  const dt_canvas_shape_style_t fallback = dt_canvas_shape_style_default();
+  dt_canvas_shape_style_t applied = IS_NULL_PTR(style) ? fallback : *style;
+  dt_canvas_shape_style_sanitize(&applied);
+  const double width = fmax(box->width, CANVAS_SHAPE_MIN_SIDE);
+  const double height = fmax(box->height, CANVAS_SHAPE_MIN_SIDE);
+  dt_canvas_object_t *object
+      = _object_new(canvas, DT_CANVAS_OBJECT_SHAPE, box->x + box->width * 0.5, box->y + box->height * 0.5, width,
+                    height);
+  const gboolean known_geometry = geometry >= DT_CANVAS_SHAPE_RECTANGLE && geometry < DT_CANVAS_SHAPE_LAST;
+  object->shape.geometry = known_geometry ? (uint32_t)geometry : (uint32_t)DT_CANVAS_SHAPE_RECTANGLE;
+  object->shape.sides = applied.sides;
+  object->shape.depth = applied.depth;
+  object->shape.roundness = applied.roundness;
+  // A shape IS its fill and its border: both come from the style, and each override flag says
+  // whether the canvas's own value still applies -- which is what makes a shape drawn with no
+  // border of its own follow a canvas whose border is changed afterwards.
+  object->background = applied.fill;
+  if(applied.border_override)
+  {
+    object->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+    object->border_width = applied.border_width;
+    object->border_color = applied.border_color;
+  }
+  if(applied.corner_override)
+  {
+    object->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+    object->corner_radius = applied.corner_radius;
+  }
+  if(applied.shadow_override)
+  {
+    object->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+    object->shadow = applied.shadow;
+  }
+  return object;
+}
+
+/** One point into the caller's buffer, if there is room for it. */
+static void _outline_point(double *xy, const size_t max, size_t *count, const double x, const double y)
+{
+  if(*count >= max) return;
+  xy[2 * *count] = x;
+  xy[2 * *count + 1] = y;
+  (*count)++;
+}
+
+size_t dt_canvas_shape_outline(const dt_canvas_t *canvas, const dt_canvas_object_t *object, double *xy,
+                               const size_t max)
+{
+  if(IS_NULL_PTR(object) || IS_NULL_PTR(xy) || max < 4) return 0;
+  if(object->kind != DT_CANVAS_OBJECT_SHAPE) return 0;
+  const double half_width = object->width * 0.5;
+  const double half_height = object->height * 0.5;
+  const double radius
+      = CLAMP(dt_canvas_object_effective_corner_radius(canvas, object), 0.0, fmin(half_width, half_height));
+  size_t count = 0;
+  if(!(radius > 0.0))
+  {
+    _outline_point(xy, max, &count, -half_width, -half_height);
+    _outline_point(xy, max, &count, half_width, -half_height);
+    _outline_point(xy, max, &count, half_width, half_height);
+    _outline_point(xy, max, &count, -half_width, half_height);
+    return count;
+  }
+  // The same four arcs _frame_path() draws, in the same order, sampled finely enough that no
+  // chord strays more than a fraction of a unit from the arc it stands in for.
+  static const int steps = 12;
+  const double corners[4][2] = { { half_width - radius, -half_height + radius },
+                                 { half_width - radius, half_height - radius },
+                                 { -half_width + radius, half_height - radius },
+                                 { -half_width + radius, -half_height + radius } };
+  for(int corner = 0; corner < 4; corner++)
+  {
+    const double start = -M_PI / 2.0 + corner * M_PI / 2.0;
+    for(int step = 0; step <= steps; step++)
+    {
+      const double angle = start + (M_PI / 2.0) * (double)step / (double)steps;
+      _outline_point(xy, max, &count, corners[corner][0] + radius * cos(angle),
+                     corners[corner][1] + radius * sin(angle));
+    }
+  }
+  return count;
+}
+
+gboolean dt_canvas_shape_needs_coverage(const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_SHAPE) return FALSE;
+  // A cut shape is asked for its cutout, like every other cut frame; that path knows nothing of
+  // the outline and must not be diverted here.
+  if(object->mask.shape != DT_CANVAS_MASK_NONE) return FALSE;
+  return object->shape.geometry != DT_CANVAS_SHAPE_RECTANGLE || !(object->background.alpha > 0.0f);
+}
+
 static gint _index_of(const dt_canvas_t *canvas, const uint32_t id)
 {
   for(guint idx = 0; idx < canvas->objects->len; idx++)
@@ -1411,7 +1619,8 @@ gboolean dt_canvas_object_is_frame(const dt_canvas_object_t *object)
 {
   if(IS_NULL_PTR(object)) return FALSE;
   return object->kind == DT_CANVAS_OBJECT_IMAGE || object->kind == DT_CANVAS_OBJECT_TEXT
-         || object->kind == DT_CANVAS_OBJECT_MAP || object->kind == DT_CANVAS_OBJECT_SVG;
+         || object->kind == DT_CANVAS_OBJECT_MAP || object->kind == DT_CANVAS_OBJECT_SVG
+         || object->kind == DT_CANVAS_OBJECT_SHAPE;
 }
 
 gboolean dt_canvas_object_keeps_ratio(const dt_canvas_object_t *object)
@@ -1490,6 +1699,37 @@ double dt_canvas_segment_distance(const double px, const double py, const double
   return hypot(px - closest_x, py - closest_y);
 }
 
+/** How far a point is from the nearest segment of a closed polyline; the closing segment counts. */
+static double _outline_distance(const double *xy, const size_t points, const double x, const double y)
+{
+  double nearest = INFINITY;
+  for(size_t idx = 0; idx < points; idx++)
+  {
+    const size_t next = (idx + 1) % points;
+    nearest = fmin(nearest, dt_canvas_segment_distance(x, y, xy[2 * idx], xy[2 * idx + 1], xy[2 * next],
+                                                       xy[2 * next + 1]));
+  }
+  return nearest;
+}
+
+/** Whether a closed polyline encloses a point: the crossing count of a ray, which is the nonzero
+ * winding rule for the simple outlines a shape draws. */
+static gboolean _outline_encloses(const double *xy, const size_t points, const double x, const double y)
+{
+  if(points < 3) return FALSE;
+  gboolean inside = FALSE;
+  for(size_t idx = 0, previous = points - 1; idx < points; previous = idx++)
+  {
+    const double this_x = xy[2 * idx];
+    const double this_y = xy[2 * idx + 1];
+    const double last_x = xy[2 * previous];
+    const double last_y = xy[2 * previous + 1];
+    if((this_y > y) == (last_y > y)) continue;
+    if(x < (last_x - this_x) * (y - this_y) / (last_y - this_y) + this_x) inside = !inside;
+  }
+  return inside;
+}
+
 gboolean dt_canvas_object_contains(const dt_canvas_t *canvas, const dt_canvas_object_t *object, double x, double y,
                                    double tolerance)
 {
@@ -1511,6 +1751,29 @@ gboolean dt_canvas_object_contains(const dt_canvas_t *canvas, const dt_canvas_ob
   double local_x = 0.0;
   double local_y = 0.0;
   dt_canvas_object_to_local(object, x, y, &local_x, &local_y);
+  if(object->kind == DT_CANVAS_OBJECT_SHAPE && object->mask.shape == DT_CANVAS_MASK_NONE)
+  {
+    double outline[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+    const size_t points = dt_canvas_shape_outline(canvas, object, outline, DT_CANVAS_SHAPE_OUTLINE_MAX);
+    if(points >= 3)
+    {
+      const double to_edge = _outline_distance(outline, points, local_x, local_y);
+      if(to_edge <= tolerance) return TRUE;
+      if(!_outline_encloses(outline, points, local_x, local_y)) return FALSE;
+      // A shape with no fill is picked by the BAND it actually paints, not by the box it stands
+      // in: an outline box drawn over a photograph would otherwise take every click meant for
+      // the picture inside it, and there is nothing of the shape there to click on.
+      if(object->background.alpha > 0.0f) return TRUE;
+      dt_canvas_color_t border_color;
+      float border_width = 0.0f;
+      dt_canvas_object_effective_border(canvas, object, &border_color, &border_width);
+      // The band is what the border PAINTS, and a border painted in nothing paints none of it:
+      // the painter and the coverage the text reads both ask its strength, so a hit test that did
+      // not would hand the picture's clicks to a shape with nothing of itself on screen. Its
+      // outline still answers above, so such a shape is never left with no way to take hold of it.
+      return border_color.alpha > 0.0f && to_edge <= (double)border_width + tolerance;
+    }
+  }
   return fabs(local_x) <= object->width * 0.5 + tolerance && fabs(local_y) <= object->height * 0.5 + tolerance;
 }
 
@@ -3187,6 +3450,11 @@ static GPtrArray *_layout_frames(const dt_canvas_t *canvas, const GArray *ids)
     for(guint idx = 0; idx < canvas->objects->len; idx++)
     {
       dt_canvas_object_t *object = g_ptr_array_index(canvas->objects, idx);
+      // A whole-canvas arrangement gathers the PICTURES and what goes with them. A shape is
+      // decoration -- a rule under a title, a panel behind a caption -- placed where it is
+      // against something else, so sweeping it into the grid with the photographs would move it
+      // away from the thing it was drawn for. A shape named in a selection is still arranged.
+      if(object->kind == DT_CANVAS_OBJECT_SHAPE) continue;
       if(dt_canvas_object_is_frame(object) && !(object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN))
         g_ptr_array_add(frames, object);
     }

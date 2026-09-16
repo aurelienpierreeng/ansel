@@ -70,6 +70,7 @@ typedef enum dt_canvas_action_t
   DT_CANVAS_ACTION_PROPERTIES, ///< show the one selected object's properties, as a double click does
   DT_CANVAS_ACTION_DRAW_LINE,  ///< arm the line tool, or put it away when it is the one armed
   DT_CANVAS_ACTION_DRAW_CURVE, ///< the same for the curve tool
+  DT_CANVAS_ACTION_DRAW_RECTANGLE, ///< the same for the rectangle tool
   DT_CANVAS_ACTION_LAST
 } dt_canvas_action_t;
 
@@ -85,6 +86,7 @@ typedef enum dt_canvas_tool_t
   DT_CANVAS_TOOL_CONNECTOR, ///< a click on one frame's anchor, then on another's
   DT_CANVAS_TOOL_LINE,      ///< a straight line with both ends free, dragged or placed with a click
   DT_CANVAS_TOOL_CURVE,     ///< the same, bent into an arc
+  DT_CANVAS_TOOL_RECTANGLE, ///< a drawn rectangle, its box dragged or placed with a click
   DT_CANVAS_TOOL_COUNT
 } dt_canvas_tool_t;
 
@@ -103,6 +105,17 @@ dt_canvas_tool_t dt_canvas_tool_toggled(dt_canvas_tool_t armed, dt_canvas_tool_t
 
 /** @brief Whether the tool draws a line with both ends free, as the line and the curve do. */
 gboolean dt_canvas_tool_draws_line(dt_canvas_tool_t tool);
+
+/** @brief Whether the tool draws a shape by its box, as the rectangle does. */
+gboolean dt_canvas_tool_draws_shape(dt_canvas_tool_t tool);
+
+/**
+ * @brief Whether the tool draws a new object on the plane, by a drag or by a click.
+ * @details Every tool but the connector, which joins two frames that are there already and so
+ * takes two clicks on their anchors rather than one gesture of its own. It is what the crosshair,
+ * the start marker and the "a press draws instead of picking" rule all ask.
+ */
+gboolean dt_canvas_tool_draws(dt_canvas_tool_t tool);
 
 /**
  * @brief The name an action's shortcut is registered under, untranslated, or NULL for an action no

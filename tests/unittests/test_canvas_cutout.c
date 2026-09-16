@@ -2143,9 +2143,235 @@ static void _text_flows_around_what_is_laid_over_it(void **state)
   dt_canvas_free(canvas);
 }
 
+/* --- drawn shapes -------------------------------------------------------------------------- */
+
+/** The whole canvas painted into a square surface at one pixel per unit; the caller destroys it. */
+static cairo_surface_t *_painted_surface(const dt_canvas_t *canvas, const int size, const gboolean placeholders)
+{
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, size, size);
+  cairo_t *cr = cairo_create(surface);
+  cairo_translate(cr, size * 0.5, size * 0.5);
+  const dt_canvas_rect_t whole = { -size * 0.5, -size * 0.5, (double)size, (double)size };
+  dt_canvas_paint_options_t options = dt_canvas_paint_options_export(NULL, 1.0, whole);
+  options.draw_placeholders = placeholders;
+  dt_canvas_paint(cr, canvas, &options);
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+  return surface;
+}
+
+/** How many pixels of two equally sized surfaces differ at all. */
+static int _pixels_differing(cairo_surface_t *first, cairo_surface_t *second, const int size)
+{
+  const uint8_t *left = cairo_image_surface_get_data(first);
+  const uint8_t *right = cairo_image_surface_get_data(second);
+  const int left_stride = cairo_image_surface_get_stride(first);
+  const int right_stride = cairo_image_surface_get_stride(second);
+  int differing = 0;
+  for(int row = 0; row < size; row++)
+    for(int column = 0; column < size; column++)
+    {
+      const uint32_t a = *(const uint32_t *)(left + (size_t)row * left_stride + (size_t)column * 4) & 0xFFFFFFu;
+      const uint32_t b = *(const uint32_t *)(right + (size_t)row * right_stride + (size_t)column * 4) & 0xFFFFFFu;
+      if(a != b) differing++;
+    }
+  return differing;
+}
+
+/** A canvas with nothing on it but the plane: what every shape test below starts from. */
+static dt_canvas_t *_bare_canvas(void)
+{
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->background = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  canvas->border_width = 0.0f;
+  return canvas;
+}
+
+/**
+ * A filled rectangle is exactly what a picture frame with no picture paints, to the pixel: the
+ * border and the colour inside it come from ONE function, so a rectangle can never drift from the
+ * ground every frame stands on. And no placeholder: a rectangle is waiting for nothing.
+ */
+static void _a_filled_rectangle_paints_a_frames_own_ground(void **state)
+{
+  (void)state;
+  dt_canvas_t *with_image = _bare_canvas();
+  dt_canvas_object_t *image = dt_canvas_add_image(with_image, 0.0, 0.0, 100, 100);
+  image->width = 120.0;
+  image->height = 80.0;
+  image->background = dt_canvas_color(0.2f, 0.6f, 0.9f, 1.0f);
+  image->border_width = 8.0f;
+  image->border_color = dt_canvas_color(1.0f, 0.4f, 0.0f, 1.0f);
+  image->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  image->corner_radius = 14.0f;
+  image->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+
+  dt_canvas_t *with_shape = _bare_canvas();
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.fill = image->background;
+  style.border_override = TRUE;
+  style.border_width = image->border_width;
+  style.border_color = image->border_color;
+  style.corner_override = TRUE;
+  style.corner_radius = image->corner_radius;
+  const dt_canvas_rect_t box = { -60.0, -40.0, 120.0, 80.0 };
+  dt_canvas_object_t *shape = dt_canvas_add_shape(with_shape, DT_CANVAS_SHAPE_RECTANGLE, &box, &style);
+  assert_non_null(shape);
+
+  cairo_surface_t *painted_image = _painted_surface(with_image, 200, FALSE);
+  cairo_surface_t *painted_shape = _painted_surface(with_shape, 200, FALSE);
+  assert_int_equal(_pixels_differing(painted_image, painted_shape, 200), 0);
+  cairo_surface_destroy(painted_image);
+  cairo_surface_destroy(painted_shape);
+
+  // With placeholders on, the picture waiting for its render grows the grey cross; the shape does
+  // not move a pixel, because it is not waiting for anything.
+  cairo_surface_t *plain_shape = _painted_surface(with_shape, 200, FALSE);
+  cairo_surface_t *marked_shape = _painted_surface(with_shape, 200, TRUE);
+  cairo_surface_t *marked_image = _painted_surface(with_image, 200, TRUE);
+  assert_int_equal(_pixels_differing(plain_shape, marked_shape, 200), 0);
+  assert_true(_pixels_differing(marked_image, marked_shape, 200) > 100);
+  cairo_surface_destroy(plain_shape);
+  cairo_surface_destroy(marked_shape);
+  cairo_surface_destroy(marked_image);
+  dt_canvas_free(with_image);
+  dt_canvas_free(with_shape);
+}
+
+/** A shape is a frame, so its cutout and the band around it are the frame machinery's, unchanged. */
+static void _a_cut_rectangle_paints_its_cutout_and_its_band(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = _bare_canvas();
+  const dt_canvas_rect_t box = { -50.0, -50.0, 100.0, 100.0 };
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.fill = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  style.border_override = TRUE;
+  style.border_width = 10.0f;
+  style.border_color = dt_canvas_color(1.0f, 0.0f, 0.0f, 1.0f);
+  dt_canvas_object_t *shape = dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, &style);
+  assert_non_null(shape);
+  const uint32_t red = _layer_code(1.0, 0.0, 0.0);
+  // Rectangular: the border sits inside the edge, the fill within it.
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0xFFFFFFu);
+  assert_true(_within(_painted_pixel(canvas, 200, 53, 100), red, 1));
+  assert_int_equal(_painted_pixel(canvas, 200, 47, 100), 0x000000u);
+  // Cut to an ellipse: the fill fills the ellipse, the band follows its edge outward, and past
+  // the band there is nothing but the plane -- the corners of the frame included.
+  dt_canvas_mask_set_shape(canvas, shape, DT_CANVAS_MASK_ELLIPSE);
+  shape->mask.radius_x = 0.4f;
+  shape->mask.radius_y = 0.2f;
+  shape->mask.feather = 0.0f;
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel(canvas, 200, 130, 100), 0xFFFFFFu);
+  assert_true(_within(_painted_pixel(canvas, 200, 143, 100), red, 1));
+  assert_true(_within(_painted_pixel(canvas, 200, 100, 124), red, 1));
+  assert_int_equal(_painted_pixel(canvas, 200, 55, 55), 0x000000u);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * An outline box laid over a photograph must not take the clicks meant for the picture: a shape
+ * with no fill is picked by the BAND it paints, and there is nothing of it in the middle.
+ */
+static void _an_unfilled_rectangle_is_picked_by_its_band(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = _bare_canvas();
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.fill.alpha = 0.0f;
+  style.border_override = TRUE;
+  style.border_width = 10.0f;
+  style.border_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  const dt_canvas_rect_t box = { -100.0, -100.0, 200.0, 200.0 };
+  dt_canvas_object_t *shape = dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, &style);
+  assert_non_null(shape);
+  assert_false(dt_canvas_object_contains(canvas, shape, 0.0, 0.0, 0.0));
+  assert_true(dt_canvas_object_contains(canvas, shape, 95.0, 0.0, 0.0));
+  assert_true(dt_canvas_object_contains(canvas, shape, 0.0, -95.0, 0.0));
+  // The outline itself answers whatever the fill is, and a tolerance reaches over the edge.
+  assert_true(dt_canvas_object_contains(canvas, shape, 100.0, 0.0, 0.0));
+  assert_true(dt_canvas_object_contains(canvas, shape, 104.0, 0.0, 5.0));
+  assert_false(dt_canvas_object_contains(canvas, shape, 120.0, 0.0, 5.0));
+  // Just inside the band's inner edge is no longer the shape: that is the picture's own click.
+  assert_false(dt_canvas_object_contains(canvas, shape, 80.0, 0.0, 0.0));
+
+  // A border painted in nothing paints no band, so it takes no click either: the painter and the
+  // coverage the text reads both ask the colour's strength, and the hit test must ask the same
+  // question or a shape with nothing at all on screen swallows the picture's clicks.
+  shape->border_color.alpha = 0.0f;
+  assert_false(dt_canvas_object_contains(canvas, shape, 95.0, 0.0, 0.0));
+  assert_false(dt_canvas_object_contains(canvas, shape, 0.0, 0.0, 0.0));
+  // Its outline still answers, so it is never left with nothing to take hold of.
+  assert_true(dt_canvas_object_contains(canvas, shape, 100.0, 0.0, 0.0));
+  shape->border_color.alpha = 1.0f;
+
+  // Filled, the whole box is the shape's again.
+  shape->background.alpha = 1.0f;
+  assert_true(dt_canvas_object_contains(canvas, shape, 0.0, 0.0, 0.0));
+  assert_true(dt_canvas_object_contains(canvas, shape, 80.0, 0.0, 0.0));
+  dt_canvas_free(canvas);
+}
+
+/** The natural height of a text frame with `shape` laid over its middle, or none. */
+static double _flowed_height_under_a_shape(const gboolean with_shape, const gboolean filled)
+{
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 0.0, 0.0, 400.0, 400.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+      "zoom, because the page is the thing being designed and the screen is only a window onto it, and "
+      "the measure a line is set to belongs to the page rather than to the window looking at it.");
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND;
+  text->text.wrap_standoff = 0.0f;
+  if(with_shape)
+  {
+    dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+    style.fill.alpha = filled ? 1.0f : 0.0f;
+    style.border_override = TRUE;
+    style.border_width = 4.0f;
+    style.border_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+    // Over the text from its very first line: an obstacle the column has not reached yet says
+    // nothing about whether it would have to go round it.
+    const dt_canvas_rect_t box = { -110.0, -190.0, 220.0, 220.0 };
+    dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, &style);
+  }
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double height = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+  dt_canvas_free(canvas);
+  return height;
+}
+
+/**
+ * Text set under an outline box runs THROUGH it: an obstacle covers where it puts ink, and an
+ * unfilled shape puts none in its middle. Filled, the same box is a wall and the column has to go
+ * round it, which is what tells the two apart rather than the box they share.
+ */
+static void _text_flows_inside_an_outline_box(void **state)
+{
+  (void)state;
+  const double plain = _flowed_height_under_a_shape(FALSE, FALSE);
+  const double outline = _flowed_height_under_a_shape(TRUE, FALSE);
+  const double filled = _flowed_height_under_a_shape(TRUE, TRUE);
+  assert_true(plain > 0.0);
+  assert_true(filled > plain);
+  assert_true(outline < filled);
+  // The band is still an obstacle: the outline costs the column something, just not the hole.
+  assert_true(outline >= plain);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
+    cmocka_unit_test(_a_filled_rectangle_paints_a_frames_own_ground),
+    cmocka_unit_test(_a_cut_rectangle_paints_its_cutout_and_its_band),
+    cmocka_unit_test(_an_unfilled_rectangle_is_picked_by_its_band),
+    cmocka_unit_test(_text_flows_inside_an_outline_box),
     cmocka_unit_test(_a_circle_is_full_inside_empty_outside_and_feathers_between),
     cmocka_unit_test(_a_polygon_fills_its_interior),
     cmocka_unit_test(_a_polygon_node_carries_its_own_fall_off),

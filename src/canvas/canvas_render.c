@@ -1135,6 +1135,55 @@ cairo_surface_t *dt_canvas_render_svg_coverage(GBytes *svg, const int width, con
   return coverage;
 }
 
+cairo_surface_t *dt_canvas_render_shape_coverage(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                                const int width, const int height)
+{
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_SHAPE || width <= 0 || height <= 0) return NULL;
+  double outline[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+  const size_t points = dt_canvas_shape_outline(canvas, object, outline, DT_CANVAS_SHAPE_OUTLINE_MAX);
+  if(points < 3) return NULL;
+  cairo_surface_t *coverage = cairo_image_surface_create(CAIRO_FORMAT_A8, width, height);
+  if(cairo_surface_status(coverage) != CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_destroy(coverage);
+    return NULL;
+  }
+  cairo_t *cr = cairo_create(coverage);
+  // The outline is in the frame's own units, centred on it; the surface is the frame's box.
+  cairo_scale(cr, (double)width / fmax(object->width, 1e-6), (double)height / fmax(object->height, 1e-6));
+  cairo_translate(cr, object->width * 0.5, object->height * 0.5);
+  cairo_new_path(cr);
+  cairo_move_to(cr, outline[0], outline[1]);
+  for(size_t idx = 1; idx < points; idx++) cairo_line_to(cr, outline[2 * idx], outline[2 * idx + 1]);
+  cairo_close_path(cr);
+  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0);
+  if(object->background.alpha > 0.0f)
+  {
+    cairo_fill(cr);
+  }
+  else
+  {
+    dt_canvas_color_t border_color;
+    float border_width = 0.0f;
+    dt_canvas_object_effective_border(canvas, object, &border_color, &border_width);
+    if(border_width > 0.0f && border_color.alpha > 0.0f)
+    {
+      // The band sits INSIDE the outline, as the painter's own border does: clipped to the
+      // shape and stroked at twice the width, so the half that would fall outside is cut away.
+      cairo_clip_preserve(cr);
+      cairo_set_line_width(cr, 2.0 * (double)border_width);
+      cairo_stroke(cr);
+    }
+    else
+    {
+      cairo_new_path(cr);
+    }
+  }
+  cairo_destroy(cr);
+  cairo_surface_flush(coverage);
+  return coverage;
+}
+
 cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, const uint32_t colorspace)
 {
   if(IS_NULL_PTR(jpeg)) return NULL;

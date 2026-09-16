@@ -93,6 +93,10 @@ static const props_glyph_t _glyphs[] = {
   { "masks_gradient", dtgtk_cairo_paint_masks_gradient, CPF_NONE },
   { "masks_inverse", dtgtk_cairo_paint_masks_inverse, CPF_NONE },
   { "masks_edit", dtgtk_cairo_paint_masks_edit, CPF_NONE },
+  // The shape glyphs stand in the existing icons until the drawn ones arrive with the polygon and
+  // the star: a rectangle's own outline, and a fill for the switch that puts colour inside it.
+  { "shape_rectangle", dtgtk_cairo_paint_rect_landscape, CPF_NONE },
+  { "shape_filled", dtgtk_cairo_paint_tool_fill, CPF_NONE },
 };
 
 /** The glyph for an id; a text label for one this frontend does not know, so a new id shows as something. */
@@ -1485,6 +1489,7 @@ static void _structure_kind(props_t *props)
   static const props_glyph_t map_glyph = { NULL, dtgtk_cairo_paint_map_pin, CPF_NONE };
   static const props_glyph_t svg_glyph = { NULL, dtgtk_cairo_paint_draw_structure, CPF_NONE };
   static const props_glyph_t connector_glyph = { NULL, dtgtk_cairo_paint_route, CPF_ROUTE_CUBIC };
+  static const props_glyph_t shape_glyph = { NULL, dtgtk_cairo_paint_rect_landscape, CPF_NONE };
   const props_glyph_t *glyph = NULL;
   switch(props->kind)
   {
@@ -1503,6 +1508,11 @@ static void _structure_kind(props_t *props)
     case DT_CANVAS_OBJECT_MAP:
       glyph = &map_glyph;
       break;
+    case DT_CANVAS_OBJECT_SHAPE:
+      // A shape holds nothing to go into: it IS its own outline, and every row it has is here.
+      glyph = &shape_glyph;
+      break;
+    case DT_CANVAS_OBJECT_CONNECTOR:
     default:
       glyph = &connector_glyph;
       break;

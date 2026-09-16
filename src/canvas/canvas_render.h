@@ -271,6 +271,20 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *svg, int want_width, int want_heig
 
 cairo_surface_t *dt_canvas_render_svg_coverage(GBytes *svg, int width, int height);
 
+/**
+ * @brief A drawn shape's own silhouette, as an A8 coverage surface of the given size.
+ *
+ * Where the shape puts ink, and nowhere else: a filled shape covers its outline, an unfilled one
+ * covers only the band its border paints, so text set under an outline box runs THROUGH it rather
+ * than round a rectangle of nothing. An unfilled shape with no border covers nothing at all, and
+ * says so with an empty surface rather than with NULL -- NULL means "ask the silhouette instead",
+ * which for a rectangle is the whole frame.
+ *
+ * @return the surface, the caller's to destroy, or NULL when the object is not a shape.
+ */
+cairo_surface_t *dt_canvas_render_shape_coverage(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                                 int width, int height);
+
 cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, uint32_t colorspace);
 
 /**

@@ -215,6 +215,15 @@ static void _write_connector(GByteArray *out, const dt_canvas_connector_t *conne
   _w_bytes(out, connector->reserved, sizeof(connector->reserved));
 }
 
+static void _write_shape(GByteArray *out, const dt_canvas_shape_t *shape)
+{
+  _w_u32(out, shape->geometry);
+  _w_u32(out, shape->sides);
+  _w_f32(out, shape->depth);
+  _w_f32(out, shape->roundness);
+  _w_bytes(out, shape->reserved, sizeof(shape->reserved));
+}
+
 static void _write_map(GByteArray *out, const dt_canvas_map_t *map)
 {
   _w_f64(out, map->latitude);
@@ -272,6 +281,9 @@ static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
       break;
     case DT_CANVAS_OBJECT_SVG:
       _write_svg(out, &object->svg);
+      break;
+    case DT_CANVAS_OBJECT_SHAPE:
+      _write_shape(out, &object->shape);
       break;
     default:
       break;
@@ -564,6 +576,15 @@ static void _read_connector(dt_canvas_cursor_t *cursor, dt_canvas_connector_t *c
   _r_bytes(cursor, connector->reserved, sizeof(connector->reserved));
 }
 
+static void _read_shape(dt_canvas_cursor_t *cursor, dt_canvas_shape_t *shape)
+{
+  shape->geometry = _r_u32(cursor);
+  shape->sides = _r_u32(cursor);
+  shape->depth = _r_f32(cursor);
+  shape->roundness = _r_f32(cursor);
+  _r_bytes(cursor, shape->reserved, sizeof(shape->reserved));
+}
+
 static void _read_map(dt_canvas_cursor_t *cursor, dt_canvas_map_t *map)
 {
   map->latitude = _r_f64(cursor);
@@ -630,6 +651,9 @@ static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *obj
       break;
     case DT_CANVAS_OBJECT_SVG:
       _read_svg(cursor, &object->svg);
+      break;
+    case DT_CANVAS_OBJECT_SHAPE:
+      _read_shape(cursor, &object->shape);
       break;
     default:
       // A kind this version does not know: keep its place in the file, draw nothing.

@@ -100,6 +100,11 @@ DT_MODULE(1)
 #define CANVAS_PROPS_CARD_MIN_PIXELS 120.0
 /** A line placed with a click rather than dragged: this long, level, starting where the click was. */
 #define CANVAS_DRAW_PLACE_LENGTH 160.0
+/** A shape placed with a click rather than dragged: this box, centred on the click. */
+#define CANVAS_DRAW_PLACE_WIDTH 160.0
+#define CANVAS_DRAW_PLACE_HEIGHT 120.0
+/** The smallest box a drawn shape is given, either side: below it there is nothing to take hold of. */
+#define CANVAS_DRAW_MIN_SIDE 4.0
 /** The ring marking where a drawing tool's next line would start, in screen pixels. */
 #define CANVAS_DRAW_MARKER_PIXELS 5.0
 /** What the atelier remembers of the last line edited or drawn, for the next line it draws. */
@@ -108,6 +113,20 @@ DT_MODULE(1)
 #define CANVAS_NEW_LINE_DASHED_KEY "plugins/canvas/new_line/dashed"
 #define CANVAS_NEW_LINE_ARROW_START_KEY "plugins/canvas/new_line/arrow_start"
 #define CANVAS_NEW_LINE_ARROW_END_KEY "plugins/canvas/new_line/arrow_end"
+#define CANVAS_NEW_SHAPE_FILL_KEY "plugins/canvas/new_shape/fill"
+#define CANVAS_NEW_SHAPE_BORDER_OWN_KEY "plugins/canvas/new_shape/border_own"
+#define CANVAS_NEW_SHAPE_BORDER_WIDTH_KEY "plugins/canvas/new_shape/border_width"
+#define CANVAS_NEW_SHAPE_BORDER_COLOR_KEY "plugins/canvas/new_shape/border_color"
+#define CANVAS_NEW_SHAPE_CORNER_OWN_KEY "plugins/canvas/new_shape/corner_own"
+#define CANVAS_NEW_SHAPE_CORNER_RADIUS_KEY "plugins/canvas/new_shape/corner_radius"
+#define CANVAS_NEW_SHAPE_SHADOW_OWN_KEY "plugins/canvas/new_shape/shadow_own"
+#define CANVAS_NEW_SHAPE_SHADOW_OFFSET_X_KEY "plugins/canvas/new_shape/shadow_offset_x"
+#define CANVAS_NEW_SHAPE_SHADOW_OFFSET_Y_KEY "plugins/canvas/new_shape/shadow_offset_y"
+#define CANVAS_NEW_SHAPE_SHADOW_BLUR_KEY "plugins/canvas/new_shape/shadow_blur"
+#define CANVAS_NEW_SHAPE_SHADOW_COLOR_KEY "plugins/canvas/new_shape/shadow_color"
+#define CANVAS_NEW_SHAPE_SIDES_KEY "plugins/canvas/new_shape/sides"
+#define CANVAS_NEW_SHAPE_DEPTH_KEY "plugins/canvas/new_shape/depth"
+#define CANVAS_NEW_SHAPE_ROUNDNESS_KEY "plugins/canvas/new_shape/roundness"
 
 /** The parts of the navigation flower, floating at the bottom right of the view. */
 typedef enum dt_canvas_flower_part_t
@@ -146,6 +165,7 @@ typedef enum dt_canvas_drag_t
   DT_CANVAS_DRAG_END_FROM,           ///< a line's free start, about its other end
   DT_CANVAS_DRAG_END_TO,             ///< and its free end
   DT_CANVAS_DRAG_DRAW_LINE,          ///< a line or a curve being drawn from the press, `draw_id` once it exists
+  DT_CANVAS_DRAG_DRAW_SHAPE,         ///< a shape's box being dragged from the press, `draw_id` once it exists
 } dt_canvas_drag_t;
 
 typedef struct dt_canvas_view_t
@@ -184,6 +204,7 @@ typedef struct dt_canvas_view_t
   double draw_start_x;                  ///< where it starts: the press, on the grid when snapping
   double draw_start_y;
   dt_canvas_routing_t draw_routing;     ///< straight for the line tool, cubic for the curve
+  dt_canvas_shape_geometry_t draw_geometry; ///< what the armed shape tool draws
   gboolean draw_marker_valid;           ///< the start marker is shown, at the two below
   double draw_marker_x;                 ///< where a press would start the next line, canvas units
   double draw_marker_y;
@@ -226,7 +247,7 @@ typedef struct dt_canvas_view_t
   gboolean props_filled_editing;
   gboolean props_refill_owed;           ///< a render's status changed, which moves no generation
   gboolean props_card_open;             ///< the user asked for the card; never remembered past a showing
-  double props_last_card_height[DT_CANVAS_OBJECT_SVG + 1]; ///< per kind, the card last shown: room kept for it
+  double props_last_card_height[DT_CANVAS_OBJECT_KIND_COUNT]; ///< per kind, the card last shown: room kept for it
   dt_canvas_place_t props_card_told;    ///< the card as the widget was last told to show it
   gboolean props_card_told_valid;
   // An edit in the properties, from its first step to its commit: one snapshot, one undo step.
@@ -273,6 +294,7 @@ static void _tool_set(dt_view_t *self, dt_canvas_tool_t tool);
 static void _draw_abort(dt_view_t *self);
 static void _gesture_snapshot(dt_canvas_view_t *view);
 static void _line_style_remember(const dt_canvas_object_t *object);
+static void _shape_style_remember(const dt_canvas_object_t *object);
 static gboolean _connector_handles(const dt_canvas_view_t *view, const dt_canvas_object_t *connector,
                                    dt_canvas_route_t *route);
 static void _paint_tangent_handle(cairo_t *cr, const dt_canvas_view_t *view, const double anchor_x,
@@ -1907,8 +1929,13 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
   }
   else
   {
+    // Whether the kind put anything of its own here, which is what the rule below closes: a rule
+    // under a block that added nothing is a second rule under the first, and a shape's menu opens
+    // with two of them.
+    gboolean kind_items = FALSE;
     if(object->kind == DT_CANVAS_OBJECT_TEXT)
     {
+      kind_items = TRUE;
       _menu_item_with_shortcut(menu, _("Edit the text..."), return_label, drill_hint, _menu_edit_text,
                                _menu_context(self, id, x, y, 0));
       _menu_item(menu, _("Fit the frame to the text"), _menu_fit_text, _menu_context(self, id, x, y, 0));
@@ -1917,22 +1944,29 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
     }
     else if(object->kind == DT_CANVAS_OBJECT_MAP)
     {
+      kind_items = TRUE;
       _menu_item(menu, _("Fetch the map again"), _menu_refresh_image, _menu_context(self, id, x, y, 0));
     }
     else if(object->kind == DT_CANVAS_OBJECT_SVG)
     {
+      kind_items = TRUE;
       _menu_item_with_shortcut(menu, _("Read the drawing's file again"), return_label, drill_hint,
                                _menu_reload_drawing, _menu_context(self, id, x, y, 0));
     }
-    else
+    else if(object->kind == DT_CANVAS_OBJECT_IMAGE)
     {
+      kind_items = TRUE;
       _menu_item_with_shortcut(menu, _("Open in the darkroom"), return_label, drill_hint, _menu_open_darkroom,
                                _menu_context(self, id, x, y, 0));
       _menu_item(menu, _("Refresh from the library"), _menu_refresh_image, _menu_context(self, id, x, y, 0));
       _menu_item(menu, _("Show the image's text note"), _menu_show_note, _menu_context(self, id, x, y, 0));
       _menu_item(menu, _("Add a map of where it was taken"), _menu_map_of_image, _menu_context(self, id, x, y, 0));
     }
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+    // A shape has nothing of its own here: it holds no content to open, nothing to refresh and
+    // no source to go back to. What it shares with every frame -- the order, the cutout, the
+    // duplicate, the delete -- follows below, and the rest is in its properties. So does a kind
+    // this build has never heard of, from a document a newer one wrote.
+    if(kind_items) gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
     GtkWidget *order_item = gtk_menu_item_new_with_label(_("Order"));
     GtkWidget *order_menu = gtk_menu_new();
@@ -2101,7 +2135,7 @@ static gboolean _anchor_at(const dt_canvas_view_t *view, const double x, const d
 static gboolean _draw_marker_update(dt_canvas_view_t *view)
 {
   const gboolean valid
-      = dt_canvas_tool_draws_line(view->tool) && view->pointer_inside && view->drag == DT_CANVAS_DRAG_NONE;
+      = dt_canvas_tool_draws(view->tool) && view->pointer_inside && view->drag == DT_CANVAS_DRAG_NONE;
   const double marker_x = valid ? dt_canvas_snap(view->canvas, view->pointer_x) : 0.0;
   const double marker_y = valid ? dt_canvas_snap(view->canvas, view->pointer_y) : 0.0;
   const gboolean changed = valid != view->draw_marker_valid || marker_x != view->draw_marker_x
@@ -2122,8 +2156,8 @@ static gboolean _draw_marker_update(dt_canvas_view_t *view)
 static void _tool_set(dt_view_t *self, const dt_canvas_tool_t tool)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  // A line half drawn belongs to the tool drawing it, and goes with it.
-  if(view->drag == DT_CANVAS_DRAG_DRAW_LINE) _draw_abort(self);
+  // An object half drawn belongs to the tool drawing it, and goes with it.
+  if(view->drag == DT_CANVAS_DRAG_DRAW_LINE || view->drag == DT_CANVAS_DRAG_DRAW_SHAPE) _draw_abort(self);
   view->tool = tool;
   view->connect_from = 0;
   view->connect_from_anchor = DT_CANVAS_ANCHOR_AUTO;
@@ -2132,7 +2166,7 @@ static void _tool_set(dt_view_t *self, const dt_canvas_tool_t tool)
   // A press no longer picks what is under the pointer once a tool draws, so nothing is outlined as
   // though it would. The repaint below shows it at once; waiting for the next motion would leave the
   // object the pointer rests on promising a pick that has already gone.
-  if(dt_canvas_tool_draws_line(tool)) view->hover = 0;
+  if(dt_canvas_tool_draws(tool)) view->hover = 0;
   // Drawing is pressing on the plane over and over, about a different object each time: properties
   // left open would be one object's while the presses are about others.
   if(tool != DT_CANVAS_TOOL_NONE) _props_close(self);
@@ -2150,6 +2184,10 @@ static void _tool_set(dt_view_t *self, const dt_canvas_tool_t tool)
       dt_control_log(_("drag to draw a curve, or click to place one; Ctrl holds it to 45 degree steps, Shift to "
                        "15; Escape or a right click leaves"));
       break;
+    case DT_CANVAS_TOOL_RECTANGLE:
+      dt_control_log(_("drag its box to draw a rectangle, or click to place one; Ctrl holds it square, Shift "
+                       "draws it from its centre; Escape or a right click leaves"));
+      break;
     default:
       break;
   }
@@ -2158,7 +2196,7 @@ static void _tool_set(dt_view_t *self, const dt_canvas_tool_t tool)
   // pointer elsewhere, and the cursor is named again the moment it comes back over the plane.
   if(view->pointer_inside && view->drag == DT_CANVAS_DRAG_NONE)
   {
-    const dt_cursor_t cursor = dt_canvas_tool_draws_line(tool) ? GDK_CROSSHAIR : GDK_LEFT_PTR;
+    const dt_cursor_t cursor = dt_canvas_tool_draws(tool) ? GDK_CROSSHAIR : GDK_LEFT_PTR;
     if(cursor != view->cursor)
     {
       view->cursor = cursor;
@@ -2259,6 +2297,28 @@ static void _paint_draw_marker(cairo_t *cr, const dt_canvas_view_t *view)
 /** What the armed tool shows over the plane: a connector's anchors, a line's starting point. */
 static void _paint_tool_overlay(cairo_t *cr, const dt_canvas_view_t *view)
 {
+  if(dt_canvas_tool_draws_shape(view->tool))
+  {
+    // The shape being dragged is the painter's own, so there is nothing to preview -- except its
+    // BOX, which a shape with no fill and no border of its own draws nothing of. A hairline says
+    // where the drag stands whatever style the shape was born with.
+    const dt_canvas_object_t *drawn = dt_canvas_find_object(view->canvas, view->draw_id);
+    if(IS_NULL_PTR(drawn))
+    {
+      _paint_draw_marker(cr, view);
+      return;
+    }
+    cairo_save(cr);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.5);
+    cairo_set_line_width(cr, 1.0 / view->zoom);
+    const double dashes[2] = { 6.0 / view->zoom, 4.0 / view->zoom };
+    cairo_set_dash(cr, dashes, 2, 0.0);
+    cairo_rectangle(cr, drawn->x - drawn->width * 0.5, drawn->y - drawn->height * 0.5, drawn->width, drawn->height);
+    cairo_stroke(cr);
+    cairo_set_dash(cr, NULL, 0, 0.0);
+    cairo_restore(cr);
+    return;
+  }
   if(dt_canvas_tool_draws_line(view->tool))
   {
     _paint_draw_marker(cr, view);
@@ -2334,6 +2394,9 @@ static gboolean _props_section_key(const uint32_t kind, char *key, const size_t 
       break;
     case DT_CANVAS_OBJECT_CONNECTOR:
       kind_name = "connector";
+      break;
+    case DT_CANVAS_OBJECT_SHAPE:
+      kind_name = "shape";
       break;
     default:
       return FALSE;
@@ -2820,7 +2883,12 @@ static void _props_session_end(dt_view_t *self)
   // A line's style is the next line's, the way a map's settings are the next map's: the writer says
   // which edits are worth remembering, and only a line with a free end is asked about -- a connector
   // between two frames is always born with the defaults.
-  if(!IS_NULL_PTR(object) && (effects & DT_CANVAS_EFFECT_COMMIT_CONF)) _line_style_remember(object);
+  if(!IS_NULL_PTR(object) && (effects & DT_CANVAS_EFFECT_COMMIT_CONF))
+  {
+    _line_style_remember(object);
+    // And a shape's style is the next shape's, for the same reason and through the same effect bit.
+    _shape_style_remember(object);
+  }
   if(effects & DT_CANVAS_EFFECT_CHANGED)
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
   if(effects != 0u) dt_control_queue_redraw_center();
@@ -4876,10 +4944,115 @@ static void _line_style_remember(const dt_canvas_object_t *object)
   dt_conf_set_bool(CANVAS_NEW_LINE_ARROW_END_KEY, style.arrow_end);
 }
 
+/**
+ * The style the next shape is drawn with: what the last shape edited or drawn was left at, kept in
+ * the configuration between sessions. A key nobody has written yet leaves the default standing --
+ * an empty colour is what says "the one a shape is born with", the other keys each having a value
+ * of their own that means something.
+ */
+static dt_canvas_shape_style_t _shape_style_recalled(void)
+{
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  dt_canvas_color_parse(dt_conf_get_string_const(CANVAS_NEW_SHAPE_FILL_KEY), &style.fill);
+  style.border_override = dt_conf_get_bool(CANVAS_NEW_SHAPE_BORDER_OWN_KEY);
+  style.border_width = dt_conf_get_float(CANVAS_NEW_SHAPE_BORDER_WIDTH_KEY);
+  dt_canvas_color_parse(dt_conf_get_string_const(CANVAS_NEW_SHAPE_BORDER_COLOR_KEY), &style.border_color);
+  style.corner_override = dt_conf_get_bool(CANVAS_NEW_SHAPE_CORNER_OWN_KEY);
+  style.corner_radius = dt_conf_get_float(CANVAS_NEW_SHAPE_CORNER_RADIUS_KEY);
+  style.shadow_override = dt_conf_get_bool(CANVAS_NEW_SHAPE_SHADOW_OWN_KEY);
+  style.shadow.offset_x = dt_conf_get_float(CANVAS_NEW_SHAPE_SHADOW_OFFSET_X_KEY);
+  style.shadow.offset_y = dt_conf_get_float(CANVAS_NEW_SHAPE_SHADOW_OFFSET_Y_KEY);
+  style.shadow.blur = dt_conf_get_float(CANVAS_NEW_SHAPE_SHADOW_BLUR_KEY);
+  dt_canvas_color_parse(dt_conf_get_string_const(CANVAS_NEW_SHAPE_SHADOW_COLOR_KEY), &style.shadow.color);
+  style.sides = (uint32_t)MAX(dt_conf_get_int(CANVAS_NEW_SHAPE_SIDES_KEY), 0);
+  style.depth = dt_conf_get_float(CANVAS_NEW_SHAPE_DEPTH_KEY);
+  style.roundness = dt_conf_get_float(CANVAS_NEW_SHAPE_ROUNDNESS_KEY);
+  // What comes back from the configuration was written by whatever wrote it, this build or another.
+  dt_canvas_shape_style_sanitize(&style);
+  return style;
+}
+
+/**
+ * Keep a shape's style as the next shape's, once a change to it is committed and once a shape is
+ * drawn. Remembering is not a change to the document and is no part of its undo step: one undo still
+ * takes the shape away, and the style it taught stays taught -- which is what the user asked for by
+ * setting it.
+ */
+static void _shape_style_remember(const dt_canvas_object_t *object)
+{
+  dt_canvas_shape_style_t style;
+  if(!dt_canvas_shape_style_get(object, &style)) return;
+  char fill[16] = { 0 };
+  char border[16] = { 0 };
+  char shadow[16] = { 0 };
+  dt_canvas_color_format(&style.fill, fill, sizeof(fill));
+  dt_canvas_color_format(&style.border_color, border, sizeof(border));
+  dt_canvas_color_format(&style.shadow.color, shadow, sizeof(shadow));
+  dt_conf_set_string(CANVAS_NEW_SHAPE_FILL_KEY, fill);
+  dt_conf_set_bool(CANVAS_NEW_SHAPE_BORDER_OWN_KEY, style.border_override);
+  dt_conf_set_float(CANVAS_NEW_SHAPE_BORDER_WIDTH_KEY, style.border_width);
+  dt_conf_set_string(CANVAS_NEW_SHAPE_BORDER_COLOR_KEY, border);
+  dt_conf_set_bool(CANVAS_NEW_SHAPE_CORNER_OWN_KEY, style.corner_override);
+  dt_conf_set_float(CANVAS_NEW_SHAPE_CORNER_RADIUS_KEY, style.corner_radius);
+  dt_conf_set_bool(CANVAS_NEW_SHAPE_SHADOW_OWN_KEY, style.shadow_override);
+  dt_conf_set_float(CANVAS_NEW_SHAPE_SHADOW_OFFSET_X_KEY, style.shadow.offset_x);
+  dt_conf_set_float(CANVAS_NEW_SHAPE_SHADOW_OFFSET_Y_KEY, style.shadow.offset_y);
+  dt_conf_set_float(CANVAS_NEW_SHAPE_SHADOW_BLUR_KEY, style.shadow.blur);
+  dt_conf_set_string(CANVAS_NEW_SHAPE_SHADOW_COLOR_KEY, shadow);
+  dt_conf_set_int(CANVAS_NEW_SHAPE_SIDES_KEY, (int)style.sides);
+  dt_conf_set_float(CANVAS_NEW_SHAPE_DEPTH_KEY, style.depth);
+  dt_conf_set_float(CANVAS_NEW_SHAPE_ROUNDNESS_KEY, style.roundness);
+}
+
 /** The routing the armed tool draws with: the line tool a segment, the curve tool an arc. */
 static dt_canvas_routing_t _tool_routing(const dt_canvas_tool_t tool)
 {
   return tool == DT_CANVAS_TOOL_CURVE ? DT_CANVAS_ROUTING_CUBIC : DT_CANVAS_ROUTING_STRAIGHT;
+}
+
+/** The geometry the armed tool draws. */
+static dt_canvas_shape_geometry_t _tool_geometry(const dt_canvas_tool_t tool)
+{
+  switch(tool)
+  {
+    case DT_CANVAS_TOOL_RECTANGLE:
+    default:
+      // The rectangle is the only shape this build draws. The polygon and the star arrive as cases
+      // of their own here, which is the one place a shape tool says what it draws.
+      return DT_CANVAS_SHAPE_RECTANGLE;
+  }
+}
+
+/**
+ * The box a shape drag has made: the press corner to the pointer, or -- from the centre -- the press
+ * point at its middle. Ctrl holds it square, on the longer side, so a square grows the way the
+ * pointer went rather than snapping back to the shorter one.
+ */
+static dt_canvas_rect_t _shape_drag_box(const dt_canvas_view_t *view, const double corner_x, const double corner_y,
+                                        const gboolean square, const gboolean from_centre)
+{
+  double width = corner_x - view->draw_start_x;
+  double height = corner_y - view->draw_start_y;
+  if(square)
+  {
+    const double side = fmax(fabs(width), fabs(height));
+    width = width < 0.0 ? -side : side;
+    height = height < 0.0 ? -side : side;
+  }
+  dt_canvas_rect_t box;
+  if(from_centre)
+  {
+    box.x = view->draw_start_x - fabs(width);
+    box.y = view->draw_start_y - fabs(height);
+    box.width = 2.0 * fabs(width);
+    box.height = 2.0 * fabs(height);
+    return box;
+  }
+  box.x = fmin(view->draw_start_x, view->draw_start_x + width);
+  box.y = fmin(view->draw_start_y, view->draw_start_y + height);
+  box.width = fabs(width);
+  box.height = fabs(height);
+  return box;
 }
 
 /** The press that starts a drawing: where it starts, and the snapshot its one undo step is made from. */
@@ -4887,10 +5060,11 @@ static void _draw_begin(dt_view_t *self, const double canvas_x, const double can
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   _gesture_snapshot(view);
-  view->drag = DT_CANVAS_DRAG_DRAW_LINE;
+  view->drag = dt_canvas_tool_draws_shape(view->tool) ? DT_CANVAS_DRAG_DRAW_SHAPE : DT_CANVAS_DRAG_DRAW_LINE;
   view->drag_moved = FALSE;
   view->draw_id = 0;
   view->draw_routing = _tool_routing(view->tool);
+  view->draw_geometry = _tool_geometry(view->tool);
   // The far end follows the pointer through the same constraint, so both ends of a line answer the
   // grid and the modifiers the same way.
   view->draw_start_x = dt_canvas_snap(view->canvas, canvas_x);
@@ -4916,7 +5090,7 @@ static dt_canvas_object_t *_draw_object(const dt_canvas_view_t *view)
  */
 static void _cursor_for_armed_tool(dt_canvas_view_t *view)
 {
-  const dt_cursor_t cursor = dt_canvas_tool_draws_line(view->tool) ? GDK_CROSSHAIR : GDK_LEFT_PTR;
+  const dt_cursor_t cursor = dt_canvas_tool_draws(view->tool) ? GDK_CROSSHAIR : GDK_LEFT_PTR;
   view->cursor = cursor;
   dt_control_change_cursor(cursor);
   _draw_marker_update(view);
@@ -4961,33 +5135,54 @@ static void _draw_abort(dt_view_t *self)
 }
 
 /**
- * The release that ends a drawing. A press that never moved places a line of its own length, level,
- * starting where the press was -- the click-to-place every drawing tool offers -- and a drag keeps the
- * line it has been showing all along, which is the painter's own output rather than a preview of it.
+ * The release that ends a drawing. A press that never moved places an object of its own size where
+ * the press was -- the click-to-place every drawing tool offers -- and a drag keeps the object it has
+ * been showing all along, which is the painter's own output rather than a preview of it.
  *
  * One undo step per object, recorded here whatever happened: `_end_gesture()` records nothing for a
- * gesture that did not move, and a line placed with a click is a whole object made by a gesture that
- * did not. The tool stays armed for the next line, and the new line is selected, so its own ends and
- * handles can adjust it without putting the tool away.
+ * gesture that did not move, and an object placed with a click is a whole object made by a gesture
+ * that did not. The tool stays armed for the next one, and the new object is selected, so its own
+ * ends, corners and handles can adjust it without putting the tool away.
  *
- * @param place whether a press that made no line yet may place one -- a release does, a view being
- * left does not: nobody asked for a line by walking away from the atelier.
+ * @param place whether a press that made no object yet may place one -- a release does, a view being
+ * left does not: nobody asked for a rectangle by walking away from the atelier.
  */
 static void _draw_finish(dt_view_t *self, const gboolean place)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  dt_canvas_object_t *line = _draw_object(view);
-  // A line the drawing made and no longer finds was taken out from under it: a Delete or an undo
+  const gboolean drawing_shape = view->drag == DT_CANVAS_DRAG_DRAW_SHAPE;
+  dt_canvas_object_t *drawn = _draw_object(view);
+  // An object the drawing made and no longer finds was taken out from under it: a Delete or an undo
   // reached by the keyboard while the button was still down, and either is an edit of its own. The
   // document is left as that edit made it -- restoring the press's snapshot would take the edit back,
-  // and recording a step from it would reinstate what was undone -- and no line is placed: the press
+  // and recording a step from it would reinstate what was undone -- and nothing is placed: the press
   // was answered already.
-  if(IS_NULL_PTR(line) && view->draw_id != 0)
+  if(IS_NULL_PTR(drawn) && view->draw_id != 0)
   {
     _draw_forget(self);
     return;
   }
-  if(IS_NULL_PTR(line))
+  if(IS_NULL_PTR(drawn) && drawing_shape)
+  {
+    if(!place)
+    {
+      _draw_abort(self);
+      return;
+    }
+    // A shape placed with a click is centred on it, the way a click places every other object where
+    // it was asked for rather than off to one side of it.
+    const dt_canvas_rect_t box = { view->draw_start_x - CANVAS_DRAW_PLACE_WIDTH * 0.5,
+                                   view->draw_start_y - CANVAS_DRAW_PLACE_HEIGHT * 0.5, CANVAS_DRAW_PLACE_WIDTH,
+                                   CANVAS_DRAW_PLACE_HEIGHT };
+    const dt_canvas_shape_style_t style = _shape_style_recalled();
+    drawn = dt_canvas_add_shape(view->canvas, view->draw_geometry, &box, &style);
+    if(IS_NULL_PTR(drawn))
+    {
+      _draw_abort(self);
+      return;
+    }
+  }
+  if(IS_NULL_PTR(drawn))
   {
     if(!place)
     {
@@ -5006,19 +5201,20 @@ static void _draw_finish(dt_view_t *self, const gboolean place)
     if(end_x == view->draw_start_x && end_y == view->draw_start_y)
       end_x = view->draw_start_x + CANVAS_DRAW_PLACE_LENGTH;
     const dt_canvas_line_style_t style = _line_style_recalled();
-    line = dt_canvas_add_line(view->canvas, view->draw_start_x, view->draw_start_y, end_x, end_y,
+    drawn = dt_canvas_add_line(view->canvas, view->draw_start_x, view->draw_start_y, end_x, end_y,
                               view->draw_routing, &style);
-    if(IS_NULL_PTR(line))
+    if(IS_NULL_PTR(drawn))
     {
       _draw_abort(self);
       return;
     }
   }
-  _line_style_remember(line);
-  // The line is final, so every auto-height frame is fitted to what it now flows around, once.
+  _line_style_remember(drawn);
+  _shape_style_remember(drawn);
+  // The object is final, so every auto-height frame is fitted to what it now flows around, once.
   dt_canvas_props_settle_all(view->canvas);
   dt_canvas_touch(view->canvas);
-  _select_only(view, line->id);
+  _select_only(view, drawn->id);
   _record_undo(self, view->drag_snapshot);
   view->drag_snapshot = NULL;
   _draw_clear(view);
@@ -5030,7 +5226,7 @@ static void _end_gesture(dt_view_t *self)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   // A drawing pays for itself: its own undo step, its own clearing up, and the tool left armed.
-  if(view->drag == DT_CANVAS_DRAG_DRAW_LINE)
+  if(view->drag == DT_CANVAS_DRAG_DRAW_LINE || view->drag == DT_CANVAS_DRAG_DRAW_SHAPE)
   {
     _draw_finish(self, TRUE);
     return;
@@ -5301,7 +5497,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   {
     // A middle press with the left button still down takes the pan: the line drawn so far is finished
     // first, with its own undo step, rather than left in the document with nothing to take it back.
-    if(view->drag == DT_CANVAS_DRAG_DRAW_LINE) _draw_finish(self, FALSE);
+    if(view->drag == DT_CANVAS_DRAG_DRAW_LINE || view->drag == DT_CANVAS_DRAG_DRAW_SHAPE)
+      _draw_finish(self, FALSE);
     view->drag = DT_CANVAS_DRAG_PAN;
     dt_control_change_cursor(GDK_FLEUR);
     return 1;
@@ -5467,7 +5664,7 @@ static void _queue_cursor_for(dt_view_t *self, const double screen_x, const doub
     }
     // A tool armed draws wherever no handle answers, whatever object is under the pointer: the
     // crosshair says so, where the hand would promise a pick that no longer happens.
-    if(!on_handle && dt_canvas_tool_draws_line(view->tool))
+    if(!on_handle && dt_canvas_tool_draws(view->tool))
       cursor = GDK_CROSSHAIR;
     else if(!on_handle && !IS_NULL_PTR(under))
       cursor = under->kind == DT_CANVAS_OBJECT_CONNECTOR ? GDK_HAND1
@@ -5714,6 +5911,52 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       _interaction_touch(self);
       break;
     }
+    case DT_CANVAS_DRAG_DRAW_SHAPE:
+    {
+      // Nothing is drawn before the pointer really moves: a press that meant to click places a shape
+      // of its own at the release, and a hand that shook must not leave a rectangle a pixel wide.
+      if(!view->drag_moved
+         && hypot(x - view->press_screen_x, y - view->press_screen_y) < CANVAS_DRAG_THRESHOLD_PIXELS)
+        break;
+      const gboolean square = dt_modifier_is(which, DT_PRIMARY_MASK);
+      const gboolean from_centre = dt_modifier_is(which, GDK_SHIFT_MASK);
+      const double corner_x = dt_canvas_snap(view->canvas, canvas_x);
+      const double corner_y = dt_canvas_snap(view->canvas, canvas_y);
+      const dt_canvas_rect_t box = _shape_drag_box(view, corner_x, corner_y, square, from_centre);
+      // A box that has opened on NEITHER axis is no shape, and the screen pixels above cannot say
+      // so: a grid cell is wider than the threshold, so a pointer can travel well past it and land
+      // back on the press, and a press that ends there still places a shape of its own size at the
+      // release. One axis is enough. Asking for both would answer a deliberate drag along the grid
+      // -- a rule three hundred units long and half a cell tall, which snaps to no height at all --
+      // with the box a CLICK places, centred on the press and nowhere near the pointer that drew
+      // it. Each side is instead held up to the smallest a shape may have, exactly as
+      // `dt_canvas_add_shape()` holds the one a shape is born with, so the drag and the birth agree
+      // and a shape already drawn keeps the last box it had rather than collapsing onto its corner.
+      if(!(box.width > 0.0) && !(box.height > 0.0)) break;
+      const double side_x = fmax(box.width, CANVAS_DRAW_MIN_SIDE);
+      const double side_y = fmax(box.height, CANVAS_DRAW_MIN_SIDE);
+      dt_canvas_object_t *shape = _draw_object(view);
+      if(IS_NULL_PTR(shape))
+      {
+        // The object is made as soon as there is a shape to show, and shown by the painter itself:
+        // what the drag draws is the shape, not a sketch of it.
+        const dt_canvas_shape_style_t style = _shape_style_recalled();
+        shape = dt_canvas_add_shape(view->canvas, view->draw_geometry, &box, &style);
+        if(IS_NULL_PTR(shape)) break;
+        view->draw_id = shape->id;
+        _select_only(view, shape->id);
+      }
+      else
+      {
+        shape->x = box.x + box.width * 0.5;
+        shape->y = box.y + box.height * 0.5;
+        shape->width = side_x;
+        shape->height = side_y;
+      }
+      view->drag_moved = TRUE;
+      _interaction_touch(self);
+      break;
+    }
     case DT_CANVAS_DRAG_HANDLE_VIA:
     {
       dt_canvas_object_t *connector = _single_selected(view);
@@ -5771,7 +6014,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
           = flower_part == DT_CANVAS_FLOWER_NONE ? dt_canvas_pick(view->canvas, canvas_x, canvas_y, tolerance) : NULL;
       // While a tool draws, a press no longer picks what is under the pointer: nothing is outlined
       // as though it would.
-      const uint32_t hover = IS_NULL_PTR(object) || dt_canvas_tool_draws_line(view->tool) ? 0 : object->id;
+      const uint32_t hover = IS_NULL_PTR(object) || dt_canvas_tool_draws(view->tool) ? 0 : object->id;
       if(hover != view->hover)
       {
         view->hover = hover;
@@ -5917,11 +6160,11 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     // to run is taken back whichever step this is.
     //
     // The gesture comes before the tool because a tool stays armed for as long as the user wants
-    // it: Escape mid-drawing takes back the line, not the tool that was drawing it, and the next
+    // it: Escape mid-drawing takes back the object, not the tool that was drawing it, and the next
     // Escape puts the tool away. A connector waiting for its second anchor is such a drawing,
     // though it is no drag, and takes the step before the tool for the same reason.
     _props_request_drop(view);
-    if(view->drag == DT_CANVAS_DRAG_DRAW_LINE)
+    if(view->drag == DT_CANVAS_DRAG_DRAW_LINE || view->drag == DT_CANVAS_DRAG_DRAW_SHAPE)
       _draw_abort(self);
     else if(view->drag != DT_CANVAS_DRAG_NONE)
     {
@@ -6101,6 +6344,7 @@ static void _proxy_action(dt_view_t *self, int action)
     case DT_CANVAS_ACTION_CONNECT_MODE:
     case DT_CANVAS_ACTION_DRAW_LINE:
     case DT_CANVAS_ACTION_DRAW_CURVE:
+    case DT_CANVAS_ACTION_DRAW_RECTANGLE:
       // A tool's action is a toggle: it arms its tool, takes the armed one's place, or -- asked again
       // by the same key or the same button -- puts its own away.
       _tool_set(self, dt_canvas_tool_toggled(view->tool, dt_canvas_tool_for_action((dt_canvas_action_t)action)));
@@ -6605,6 +6849,9 @@ static const dt_canvas_accel_t _accels[] = {
   // Ctrl+Shift+L is the only L the application binds elsewhere, so both are free.
   { DT_CANVAS_ACTION_DRAW_LINE, GDK_KEY_l, 0 },
   { DT_CANVAS_ACTION_DRAW_CURVE, GDK_KEY_l, GDK_SHIFT_MASK },
+  // B for the box, R being the library check the atelier inherits: the application binds no plain B
+  // anywhere, so the key is the tool's own.
+  { DT_CANVAS_ACTION_DRAW_RECTANGLE, GDK_KEY_b, 0 },
   { DT_CANVAS_ACTION_PROPERTIES, GDK_KEY_i, 0 },
   { DT_CANVAS_ACTION_UNDO, GDK_KEY_z, DT_PRIMARY_MASK },
   { DT_CANVAS_ACTION_REDO, GDK_KEY_y, DT_PRIMARY_MASK },
@@ -6783,9 +7030,9 @@ void leave(dt_view_t *self)
     gtk_drag_dest_unset(center);
     view->dnd_connected = FALSE;
   }
-  // A drawing the user walked away from is given up rather than finished: a press that made no line
-  // yet would otherwise place one nobody asked for.
-  if(view->drag == DT_CANVAS_DRAG_DRAW_LINE)
+  // A drawing the user walked away from is given up rather than finished: a press that made no
+  // object yet would otherwise place one nobody asked for.
+  if(view->drag == DT_CANVAS_DRAG_DRAW_LINE || view->drag == DT_CANVAS_DRAG_DRAW_SHAPE)
     _draw_finish(self, FALSE);
   else if(view->drag != DT_CANVAS_DRAG_NONE)
     _end_gesture(self);
