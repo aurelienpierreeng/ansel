@@ -44,6 +44,16 @@ static inline float rcd_hdiff_local(local const float *buf)
   return sqrf(buf[-3] - 3.0f * buf[-2] - buf[-1] + 6.0f * buf[0] - buf[1] - 3.0f * buf[2] + buf[3]);
 }
 
+// Index of pixel (row, col) in a half-width buffer: one cell per pair of columns.
+// The CPU path computes `indx / 2` on tiles RCD_TILESIZE wide, which is even, so the key is
+// row * (RCD_TILESIZE / 2) + col / 2. `(row * w + col) / 2` only equals that when w is even: on
+// an odd width the column pairing flips on every other row and the diagonal statistics read
+// their neighbour two columns away. Every packed buffer goes through this helper instead.
+static inline int rcd_half_idx(const int row, const int col, const int w)
+{
+  return mad24(row, (w + 1) / 2, col / 2);
+}
+
 // Populate cfa and rgb data by normalized input
 __kernel void rcd_populate (__read_only image2d_t in, global float *cfa, global float *rgb0, global float *rgb1, global float *rgb2, const int w, const int height, const unsigned int filters, const float scale)
 {
@@ -121,7 +131,7 @@ __kernel void rcd_step_2_1(global float *lpf, global float *cfa, const int w, co
   if((col > w - 2) || (row > height - 2)) return;
   const int idx = mad24(row, w, col);
 
-  lpf[idx / 2] = cfa[idx]
+  lpf[rcd_half_idx(row, col, w)] = cfa[idx]
      + 0.5f * (cfa[idx - w    ] + cfa[idx + w    ] + cfa[idx     - 1] + cfa[idx     + 1])
     + 0.25f * (cfa[idx - w - 1] + cfa[idx - w + 1] + cfa[idx + w - 1] + cfa[idx + w + 1]);
 }
@@ -133,7 +143,8 @@ __kernel void rcd_step_3_1(global float *lpf, global float *cfa, global float *r
   const int col = 4 + (FC(row, 0, filters) & 1) + 2 * get_global_id(0);
   if((col > w - 5) || (row > height - 5)) return;
   const int idx = mad24(row, w, col);
-  const int lidx = idx / 2;
+  const int lidx = rcd_half_idx(row, col, w);
+  const int hw2 = 2 * ((w + 1) / 2); // two rows in the half-width buffer
   const int w2 = 2 * w;
   const int w3 = 3 * w;
   const int w4 = 4 * w;
@@ -153,8 +164,8 @@ __kernel void rcd_step_3_1(global float *lpf, global float *cfa, global float *r
 
   const float lfpi = lpf[lidx];
   // Cardinal pixel estimations
-  const float N_Est = cfa[idx - w] * (lfpi + lfpi) / (eps + lfpi + lpf[lidx - w]);
-  const float S_Est = cfa[idx + w] * (lfpi + lfpi) / (eps + lfpi + lpf[lidx + w]);
+  const float N_Est = cfa[idx - w] * (lfpi + lfpi) / (eps + lfpi + lpf[lidx - hw2]);
+  const float S_Est = cfa[idx + w] * (lfpi + lfpi) / (eps + lfpi + lpf[lidx + hw2]);
   const float W_Est = cfa[idx - 1] * (lfpi + lfpi) / (eps + lfpi + lpf[lidx - 1]);
   const float E_Est = cfa[idx + 1] * (lfpi + lfpi) / (eps + lfpi + lpf[lidx + 1]);
 
@@ -173,7 +184,7 @@ __kernel void rcd_step_4_1(global float *cfa, global float *p_diff, global float
   const int col = 3 + 2 * get_global_id(0);
   if((col > w - 4) || (row > height - 4)) return;
   const int idx = mad24(row, w, col);
-  const int idx2 = idx / 2;
+  const int idx2 = rcd_half_idx(row, col, w);
   const int w2 = 2 * w;
   const int w3 = 3 * w;
 
@@ -189,10 +200,9 @@ __kernel void rcd_step_4_2(global float *PQ_dir, global float *p_diff, global fl
   const int row = 2 + get_global_id(1);
   const int col = 2 + (FC(row, 0, filters) & 1) + 2 *get_global_id(0);
   if((col > w - 3) || (row > height - 3)) return;
-  const int idx = mad24(row, w, col);
-  const int idx2 = idx / 2;
-  const int idx3 = (idx - w - 1) / 2;
-  const int idx4 = (idx + w - 1) / 2;
+  const int idx2 = rcd_half_idx(row, col, w);
+  const int idx3 = rcd_half_idx(row - 1, col - 1, w);
+  const int idx4 = rcd_half_idx(row + 1, col - 1, w);
   const float eps = 1e-10f;
 
   const float P_Stat = fmax(eps, p_diff[idx3]     + p_diff[idx2] + p_diff[idx4 + 1]);
@@ -214,9 +224,9 @@ __kernel void rcd_step_5_1(global float *PQ_dir, global float *rgb0, global floa
   else if(color == 2) rgbc = rgb2;
 
   const int idx = mad24(row, w, col);
-  const int pqidx = idx / 2;
-  const int pqidx2 = (idx - w - 1) / 2;
-  const int pqidx3 = (idx + w - 1) / 2;
+  const int pqidx = rcd_half_idx(row, col, w);
+  const int pqidx2 = rcd_half_idx(row - 1, col - 1, w);
+  const int pqidx3 = rcd_half_idx(row + 1, col - 1, w);
   const int w2 = 2 * w;
   const int w3 = 3 * w;
   const float eps = 1e-5f;
