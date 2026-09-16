@@ -1858,6 +1858,33 @@ Two things about those counters a future editor should not "improve":
   reading a masks form on the right. It is stable, so it costs nothing; chasing it would mean
   excluding the file, which would hide real writes appearing there later.
 
+### A mask or channel preview is converted back like any output; the conversion keeps alpha
+
+The blend authors a preview in the BLENDING space so that the ordinary conversion back to the
+module's output space lands it where `gamma` expects it: Lab blending renders its grey channel
+values in RGB and converts them to Lab on purpose (`blendif_lab.c`, the `is_lab` branch of
+`blendop_display_channel`), and the mask itself rides in alpha. `pixelpipe_cpu.c` and
+`pixelpipe_gpu.c` therefore convert a preview back exactly as they convert pixels. Skipping that
+conversion for previews -- a raw copy of the blend buffer -- is correct only when the blending space
+equals the module's, and flattens every preview otherwise: a Lab module blended in RGB (scene)
+hands RGB greys to a downstream that reads them as Lab. The copy existed to dodge
+`_transform_rgb_to_lab_matrix()` (`colorprofiles/iop_profile.c`) dropping alpha, which is now
+preserved there as its Lab-to-RGB sibling and the OpenCL kernels already did. Any colorspace
+transform a preview can cross owes the same: carry channel 3 through.
+
+The picker behind the blending tabs converts the sampled buffer in two steps
+(`_color_picker_convert_buffer()`, `common/color_picker.c`): first into the family the tab derives
+from -- Lab for Lab/LCh, RGB for RGB/HSL/JzCzhz, the only step needing the profile -- then into the
+tab's space. Enumerating direct pairs missed Lab -> JzCzhz, Lab -> HSL and RGB -> LCh, i.e. every
+module blended outside its own family, and those tabs fell back to raw statistics of the wrong space.
+
+Those pickers are fed by `DT_SIGNAL_CONTROL_PICKERDATA_READY`, the same signal as a module's own
+picker, dispatched by `_iop_color_picker_data_ready_callback()` (`develop/imageop_gui.c`) to
+`blend_color_picker_apply()` first. Every module that blends subscribes, not only the ones with a
+`color_picker_apply` of their own: gated on the latter, the blend pickers of some forty modules
+(atrous, sharpen, vignette, ...) sampled on every move and never showed it, refreshing only when
+re-activated through another path.
+
 ## IOP modules
 
 ### ashift: preview buffer and crop geometry

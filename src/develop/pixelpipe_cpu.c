@@ -149,10 +149,6 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     blend_input_dsc = process_input_dsc;
     blend_output = output;
     blend_output_dsc = piece->dsc_out;
-    const dt_dev_pixelpipe_display_mask_t request_mask_display
-        = (module->dev->gui_attached && (module == module->dev->gui_module) && (pipe == module->dev->pipe))
-              ? module->request_mask_display
-              : DT_DEV_PIXELPIPE_DISPLAY_NONE;
 
     const dt_pixelpipe_blend_transform_t blend_transforms
         = dt_dev_pixelpipe_transform_for_blend(module, piece, &piece->dsc_out);
@@ -222,17 +218,11 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
     if(!err && (blend_transforms & DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT))
     {
-      if(request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY)
-      {
-        memcpy(output, blend_output,
-               (size_t)piece->roi_out.width * piece->roi_out.height * piece->dsc_out.bpp);
-      }
-      else
-      {
-        dt_colorspaces_apply_profile(module->op, module->multi_name, blend_output, output, piece->roi_out.width,
-                                            piece->roi_out.height, blend_output_dsc.cst, piece->dsc_out.cst,
-                                            &blend_output_dsc.cst, work_profile);
-      }
+      // A mask or channel preview is converted like any output: the preview is authored in the
+      // blending space precisely so this conversion lands it where the display expects it.
+      dt_colorspaces_apply_profile(module->op, module->multi_name, blend_output, output, piece->roi_out.width,
+                                   piece->roi_out.height, blend_output_dsc.cst, piece->dsc_out.cst,
+                                   &blend_output_dsc.cst, work_profile);
     }
   }
 

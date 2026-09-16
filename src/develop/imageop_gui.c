@@ -416,14 +416,23 @@ static void _iop_color_picker_data_ready_callback(gpointer instance, gpointer us
   GtkWidget *picker = NULL;
   dt_dev_pixelpipe_t *pipe = NULL;
   const dt_dev_pixelpipe_iop_t *piece = NULL;
-  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->color_picker_apply)) return;
+  if(IS_NULL_PTR(module)) return;
   if(dt_iop_color_picker_get_ready_data(module, &picker, &pipe, &piece)) return;
 
   dt_print(DT_DEBUG_DEV, "[picker] dispatch module=%s picker=%p pipe=%p hash=%" PRIu64 "\n",
            module->op, (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
 
-  if(!module->gui->blend_data || !blend_color_picker_apply(module, picker, pipe, (dt_dev_pixelpipe_iop_t *)piece))
+  if((!module->gui->blend_data || !blend_color_picker_apply(module, picker, pipe, (dt_dev_pixelpipe_iop_t *)piece))
+     && module->color_picker_apply)
     module->color_picker_apply(module, picker, pipe, (dt_dev_pixelpipe_iop_t *)piece);
+}
+
+/* The pickers of the blending panel are fed by the same signal as a module's own. A module with no
+ * picker of its own still has those as soon as it blends, so both kinds subscribe: gating on
+ * color_picker_apply alone left every such module's blend picker updated only when (re)activated. */
+static gboolean _iop_listens_to_picker_data(const dt_iop_module_t *module)
+{
+  return module->color_picker_apply || (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING);
 }
 
 static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
@@ -1046,7 +1055,7 @@ void dt_iop_gui_init(dt_iop_module_t *module)
 
   // We absolutely need to init the module controls after the module object
   if(module->gui_init) module->gui_init(module);
-  if(module->color_picker_apply)
+  if(_iop_listens_to_picker_data(module))
   {
     DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PICKERDATA_READY,
                                     G_CALLBACK(_iop_color_picker_data_ready_callback), module);
@@ -1122,7 +1131,7 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   dt_free(m->view);
   m->view = NULL;
 
-  if(module->color_picker_apply)
+  if(_iop_listens_to_picker_data(module))
   {
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_iop_color_picker_data_ready_callback), module);
   }
