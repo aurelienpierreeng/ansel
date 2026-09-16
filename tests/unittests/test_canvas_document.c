@@ -17,6 +17,7 @@
 */
 
 #include "canvas/canvas.h"
+#include "math/polygon_envelope.h"
 #include "system/mem_alloc.h"
 #include "canvas/canvas_format.h"
 #include "canvas/canvas_paint.h"
@@ -2652,6 +2653,22 @@ static void _a_fitted_outline_fills_the_frame_it_stands_in(void **state)
 }
 
 /**
+ * The four numbers a shape is bounded by are the polygon envelope's, written again in canvas.h
+ * because a document holds them as its own types and `src/canvas` does not take a dependency on
+ * `src/math` for a constant. Written again is written twice, so this is what keeps them one
+ * number: the toolbar's star glyph draws from the envelope's side of the pair, and a drift would
+ * show as an icon that is not the shape the tool makes.
+ */
+static void _the_shape_bounds_are_the_polygon_envelope_s(void **state)
+{
+  (void)state;
+  assert_float_equal(DT_CANVAS_SHAPE_STAR_DEPTH, (float)DT_POLYGON_PENTAGRAM_DEPTH, 0.0f);
+  assert_float_equal(DT_CANVAS_SHAPE_MAX_DEPTH, (float)DT_POLYGON_MAX_DEPTH, 0.0f);
+  assert_int_equal((int)DT_CANVAS_SHAPE_MIN_SIDES, DT_POLYGON_MIN_SIDES);
+  assert_int_equal((int)DT_CANVAS_SHAPE_MAX_SIDES, DT_POLYGON_MAX_SIDES);
+}
+
+/**
  * A polygon and a star are regular, and the proportion they keep is their own outline's: a hexagon
  * is `sqrt(3) / 2` as wide as it is tall and stays so however its sides, its notches or its
  * roundness are edited. A rectangle has no such shape to keep, and neither has a polygon told to
@@ -3112,6 +3129,7 @@ int main(void)
     cmocka_unit_test(_a_shape_style_from_outside_is_made_sound),
     cmocka_unit_test(_a_whole_canvas_arrangement_leaves_shapes_where_they_are),
     cmocka_unit_test(_a_fitted_outline_fills_the_frame_it_stands_in),
+    cmocka_unit_test(_the_shape_bounds_are_the_polygon_envelope_s),
     cmocka_unit_test(_a_polygon_is_born_and_stays_at_its_own_ratio),
     cmocka_unit_test(_a_fillet_stops_where_its_neighbour_starts),
     cmocka_unit_test(_a_filled_star_is_not_picked_in_its_notches),

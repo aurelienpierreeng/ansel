@@ -49,6 +49,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "math/polygon_envelope.h"
 #include "system/mem_alloc.h"
 #include "widgets/widget_settings.h"
 #include "widgets/paint.h"
@@ -3617,6 +3618,24 @@ void dtgtk_cairo_paint_text_valign(cairo_t *cr, gint x, gint y, gint w, gint h, 
   FINISH
 }
 
+/* Where a ray leaves the axis-aligned square of half-size @p half_size about (@p centre_x,
+ * @p centre_y): the point the route's line stops at, so the square at the end is the only ink
+ * there. The direction need not be a unit vector; a null one leaves the centre. */
+static void _square_exit(const double centre_x, const double centre_y, const double direction_x,
+                         const double direction_y, const double half_size, double *const exit_x,
+                         double *const exit_y)
+{
+  const double longest_axis = fmax(fabs(direction_x), fabs(direction_y));
+  if(!(longest_axis > 0.0))
+  {
+    *exit_x = centre_x;
+    *exit_y = centre_y;
+    return;
+  }
+  *exit_x = centre_x + direction_x * half_size / longest_axis;
+  *exit_y = centre_y + direction_y * half_size / longest_axis;
+}
+
 void dtgtk_cairo_paint_route(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)
@@ -3626,31 +3645,66 @@ void dtgtk_cairo_paint_route(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
   const double to_x = 0.85;
   const double to_y = 0.2;
   const double node_radius = 0.08;
+  const double frame_half_size = 0.085;
+  // The two end variants name one thing each and are never both asked for; were they, the frames
+  // would win, since a square says more about an end than the absence of a mark does. A free end
+  // takes no mark at all: the round cap PREAMBLE gives every line is what ends it there.
+  const gboolean joins_frames = (flags & CPF_ROUTE_FRAMES) != 0;
+  const gboolean free_ends = (flags & CPF_ROUTE_FREE) != 0;
+  // A square route's first leg and a cubic's tangent both set out horizontally, the way a route
+  // leaves a frame along its normal; a straight one sets out along its own chord.
+  const gboolean leaves_flat = (flags & (CPF_ROUTE_SQUARE | CPF_ROUTE_CUBIC)) != 0;
+  const double leaves_x = leaves_flat ? 1.0 : to_x - from_x;
+  const double leaves_y = leaves_flat ? 0.0 : to_y - from_y;
 
-  cairo_move_to(cr, from_x, from_y);
+  double start_x = from_x;
+  double start_y = from_y;
+  double end_x = to_x;
+  double end_y = to_y;
+  if(joins_frames)
+  {
+    _square_exit(from_x, from_y, leaves_x, leaves_y, frame_half_size, &start_x, &start_y);
+    _square_exit(to_x, to_y, -leaves_x, -leaves_y, frame_half_size, &end_x, &end_y);
+  }
+
+  cairo_move_to(cr, start_x, start_y);
   if(flags & CPF_ROUTE_SQUARE)
   {
     // Horizontal and vertical legs, meeting half way across.
     const double middle_x = 0.5 * (from_x + to_x);
-    cairo_line_to(cr, middle_x, from_y);
-    cairo_line_to(cr, middle_x, to_y);
-    cairo_line_to(cr, to_x, to_y);
+    cairo_line_to(cr, middle_x, start_y);
+    cairo_line_to(cr, middle_x, end_y);
+    cairo_line_to(cr, end_x, end_y);
   }
   else if(flags & CPF_ROUTE_CUBIC)
   {
-    // Leaving each node horizontally, the way a cubic route leaves a frame along its normal.
-    cairo_curve_to(cr, 0.6, from_y, 0.4, to_y, to_x, to_y);
+    // The controls sit level with the ends and well inside them, which is the S a cubic route
+    // draws between two frames facing each other.
+    cairo_curve_to(cr, 0.6, start_y, 0.4, end_y, end_x, end_y);
   }
   else
   {
-    cairo_line_to(cr, to_x, to_y);
+    cairo_line_to(cr, end_x, end_y);
   }
   cairo_stroke(cr);
 
-  cairo_arc(cr, from_x, from_y, node_radius, 0.0, 2.0 * M_PI);
-  cairo_fill(cr);
-  cairo_arc(cr, to_x, to_y, node_radius, 0.0, 2.0 * M_PI);
-  cairo_fill(cr);
+  if(joins_frames)
+  {
+    // Hollow squares: the frames a connector joins, which is what tells it from a line drawn
+    // between two points of the plane.
+    cairo_rectangle(cr, from_x - frame_half_size, from_y - frame_half_size, 2.0 * frame_half_size,
+                    2.0 * frame_half_size);
+    cairo_rectangle(cr, to_x - frame_half_size, to_y - frame_half_size, 2.0 * frame_half_size,
+                    2.0 * frame_half_size);
+    cairo_stroke(cr);
+  }
+  else if(!free_ends)
+  {
+    cairo_arc(cr, from_x, from_y, node_radius, 0.0, 2.0 * M_PI);
+    cairo_fill(cr);
+    cairo_arc(cr, to_x, to_y, node_radius, 0.0, 2.0 * M_PI);
+    cairo_fill(cr);
+  }
 
   FINISH
 }
@@ -3733,6 +3787,141 @@ void dtgtk_cairo_paint_reverse(cairo_t *cr, gint x, gint y, gint w, gint h, gint
   cairo_move_to(cr, 0.3, 0.53);
   cairo_line_to(cr, 0.15, 0.68);
   cairo_line_to(cr, 0.3, 0.83);
+  cairo_stroke(cr);
+
+  FINISH
+}
+
+/** The star the glyph draws is the pentagram, whose depth is the geometry's own and is shared:
+ * DT_POLYGON_PENTAGRAM_DEPTH, which the canvas spells DT_CANVAS_SHAPE_STAR_DEPTH for its
+ * documents. The hexagon's six sides are not shared, because six is the canvas's choice of what
+ * a polygon is born with rather than anything the geometry decides, and src/widgets sits below
+ * src/canvas and cannot read it; a hexagon is also what the word "polygon" draws as, so the icon
+ * would say six whatever the document's default became. */
+#define GLYPH_SHAPE_STAR_SIDES 5
+#define GLYPH_SHAPE_POLYGON_SIDES 6
+/** The most points the glyph's own shapes have: the star's two per side, against the hexagon's
+ * one each. A rounded outline -- which the glyph never asks for -- would need
+ * DT_POLYGON_OUTLINE_MAX_POINTS instead: sixty times the stack, on every icon GTK draws. */
+#define GLYPH_SHAPE_MAX_POINTS (2 * GLYPH_SHAPE_STAR_SIDES)
+/** How much of the glyph's square the outline is fitted into, leaving a tenth clear on every side. */
+#define GLYPH_SHAPE_SPAN 0.8
+
+void dtgtk_cairo_paint_shape(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  // The polygon and the star come from the envelope the canvas fits into a frame, so the icon is
+  // the shape the tool draws rather than a drawing of one. A rectangle is not the envelope's to
+  // describe -- it is the frame itself -- and is written here as its four corners, a little wider
+  // than it is tall so that nothing reads it as a four-sided polygon.
+  double outline[2 * GLYPH_SHAPE_MAX_POINTS];
+  int point_count = 0;
+  if(flags & CPF_SHAPE_STAR)
+    point_count = dt_polygon_unit_outline(GLYPH_SHAPE_STAR_SIDES, DT_POLYGON_PENTAGRAM_DEPTH, 0.0, outline,
+                                          GLYPH_SHAPE_MAX_POINTS);
+  else if(flags & CPF_SHAPE_POLYGON)
+    point_count = dt_polygon_unit_outline(GLYPH_SHAPE_POLYGON_SIDES, 0.0, 0.0, outline, GLYPH_SHAPE_MAX_POINTS);
+  else
+  {
+    static const double rectangle[8] = { -1.0, -0.8, 1.0, -0.8, 1.0, 0.8, -1.0, 0.8 };
+    for(int index = 0; index < 8; index++) outline[index] = rectangle[index];
+    point_count = 4;
+  }
+
+  // An outline too big for the buffer comes back empty rather than truncated, so the count is
+  // what says there is a shape to draw at all.
+  if(point_count >= 3)
+  {
+    double box_left = 0.0;
+    double box_right = 0.0;
+    double box_top = 0.0;
+    double box_bottom = 0.0;
+    dt_polygon_points_box(outline, point_count, &box_left, &box_right, &box_top, &box_bottom);
+    const double box_width = box_right - box_left;
+    const double box_height = box_bottom - box_top;
+    // Both axes take the one factor, unlike the canvas, which stretches the unit box onto whatever
+    // frame the shape stands in: the glyph's frame is a square and a stretched hexagon is not the
+    // shape the tool draws. The frame a shape is born into has the outline's own proportions, so
+    // the two agree on everything but the box.
+    const double scale = fmin(GLYPH_SHAPE_SPAN / box_width, GLYPH_SHAPE_SPAN / box_height);
+    const double centre_x = 0.5 * (box_left + box_right);
+    const double centre_y = 0.5 * (box_top + box_bottom);
+
+    // Round joints: a star's tips meet at 36 degrees, and a mitre there reaches half again as far
+    // past the tip as the line is wide -- measured, that takes the ink to the very edge of a 12 px
+    // box and past the edge of a 10 px one, while the fit reserves a tenth of the box either side.
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    for(int index = 0; index < point_count; index++)
+    {
+      const double point_x = 0.5 + (outline[2 * index] - centre_x) * scale;
+      const double point_y = 0.5 + (outline[2 * index + 1] - centre_y) * scale;
+      if(index == 0)
+        cairo_move_to(cr, point_x, point_y);
+      else
+        cairo_line_to(cr, point_x, point_y);
+    }
+    cairo_close_path(cr);
+
+    if(flags & CPF_SHAPE_FILLED)
+    {
+      // The colour the icon is drawn in, at half its strength: enough to read as filled beside the
+      // same outline empty, and not so much that the outline is lost in it. A source that is not
+      // one colour -- nothing a button sets -- is filled as it stands rather than not at all.
+      double red = 0.0;
+      double green = 0.0;
+      double blue = 0.0;
+      double alpha = 1.0;
+      cairo_save(cr);
+      if(cairo_pattern_get_rgba(cairo_get_source(cr), &red, &green, &blue, &alpha) == CAIRO_STATUS_SUCCESS)
+        cairo_set_source_rgba(cr, red, green, blue, alpha * 0.5);
+      cairo_fill_preserve(cr);
+      cairo_restore(cr);
+    }
+    cairo_stroke(cr);
+  }
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_note(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  const double left = 0.19;
+  const double right = 0.81;
+  const double top = 0.08;
+  const double bottom = 0.92;
+  const double fold = 0.18;
+
+  // The sheet, its top corner turned down: the outline stops short of that corner along both
+  // edges meeting there and crosses the gap.
+  cairo_move_to(cr, left, top);
+  cairo_line_to(cr, right - fold, top);
+  cairo_line_to(cr, right, top + fold);
+  cairo_line_to(cr, right, bottom);
+  cairo_line_to(cr, left, bottom);
+  cairo_close_path(cr);
+  cairo_stroke(cr);
+
+  // The flap's own two edges, which is what tells a folded corner from a cut one.
+  cairo_move_to(cr, right - fold, top);
+  cairo_line_to(cr, right - fold, top + fold);
+  cairo_line_to(cr, right, top + fold);
+  cairo_stroke(cr);
+
+  // Three ruled lines, the last falling short the way a paragraph's does.
+  const double rule_left = left + 0.1;
+  const double rule_right = right - 0.1;
+  const double first_rule = 0.42;
+  const double rule_gap = 0.16;
+  for(int rule = 0; rule < 3; rule++)
+  {
+    const double baseline = first_rule + rule_gap * rule;
+    const double rule_end = (rule == 2) ? 0.5 * (rule_left + rule_right) : rule_right;
+    cairo_move_to(cr, rule_left, baseline);
+    cairo_line_to(cr, rule_end, baseline);
+  }
   cairo_stroke(cr);
 
   FINISH

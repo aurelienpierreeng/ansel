@@ -159,13 +159,18 @@ static void _a_star_alternates_tips_and_notches(void **state)
 static void _the_pentagram_is_the_five_point_star_whose_notches_meet_the_far_tips_chords(void **state)
 {
   (void)state;
-  /* the golden-ratio inner radius of the pentagram, (3 - sqrt 5) / 2, and the depth giving it */
+  /* the golden-ratio inner radius of the pentagram, (3 - sqrt 5) / 2, and the depth giving it.
+   * DT_POLYGON_PENTAGRAM_DEPTH is that depth rounded to six places, and this is what holds it
+   * there: the canvas and the toolbar's star glyph both draw from it, and a drift would show as
+   * a star that is no longer the figure long before anything else complained. */
   const double pentagram_radius = (3.0 - sqrt(5.0)) / 2.0;
   const double exact_depth = 1.0 - pentagram_radius / cos(TEST_PI / 5.0);
-  _assert_near(exact_depth, 0.527864, 1e-6, "pentagram depth", 5, 0);
-  _assert_near(dt_polygon_inner_radius(5, 0.527864), 0.381966, 1e-6, "pentagram inner radius", 5, 0);
+  _assert_near(exact_depth, DT_POLYGON_PENTAGRAM_DEPTH, 1e-6, "pentagram depth", 5, 0);
+  _assert_near(dt_polygon_inner_radius(5, DT_POLYGON_PENTAGRAM_DEPTH), 0.381966, 1e-6,
+               "pentagram inner radius", 5, 0);
   _assert_near(dt_polygon_concavity_for_depth(5, exact_depth), 3.0, 1e-12, "pentagram concavity", 5, 0);
-  _assert_near(dt_polygon_concavity_for_depth(5, 0.527864), 3.0, 1e-6, "rounded pentagram concavity", 5, 0);
+  _assert_near(dt_polygon_concavity_for_depth(5, DT_POLYGON_PENTAGRAM_DEPTH), 3.0, 1e-6,
+               "rounded pentagram concavity", 5, 0);
 
   double points[2 * DT_POLYGON_OUTLINE_MAX_POINTS];
   const int point_count = dt_polygon_unit_outline(5, exact_depth, 0.0, points, DT_POLYGON_OUTLINE_MAX_POINTS);
@@ -593,6 +598,50 @@ static void _a_rounded_outline_stays_close_to_its_curve(void **state)
       }
 }
 
+/* The box helper is what every caller fitting an outline into a frame asks first -- the canvas
+ * to stretch a shape onto its object, the toolbar glyph to centre one in its square -- so it is
+ * held against a loop written out here rather than against either of them. */
+static void _the_box_of_an_outline_spans_exactly_its_points(void **state)
+{
+  (void)state;
+  const double depths[] = { 0.0, DT_POLYGON_PENTAGRAM_DEPTH, DT_POLYGON_MAX_DEPTH };
+  const double roundnesses[] = { 0.0, 0.3, 1.0 };
+  double points[2 * DT_POLYGON_OUTLINE_MAX_POINTS];
+  for(int sides = 3; sides <= DT_POLYGON_MAX_SIDES; sides++)
+    for(int j = 0; j < 3; j++)
+      for(int k = 0; k < 3; k++)
+      {
+        const int point_count
+            = dt_polygon_unit_outline(sides, depths[j], roundnesses[k], points, DT_POLYGON_OUTLINE_MAX_POINTS);
+        assert_true(point_count >= 3);
+        double expected_left = points[0];
+        double expected_right = points[0];
+        double expected_top = points[1];
+        double expected_bottom = points[1];
+        for(int i = 1; i < point_count; i++)
+        {
+          if(points[2 * i] < expected_left) expected_left = points[2 * i];
+          if(points[2 * i] > expected_right) expected_right = points[2 * i];
+          if(points[2 * i + 1] < expected_top) expected_top = points[2 * i + 1];
+          if(points[2 * i + 1] > expected_bottom) expected_bottom = points[2 * i + 1];
+        }
+
+        double box_left = 0.0;
+        double box_right = 0.0;
+        double box_top = 0.0;
+        double box_bottom = 0.0;
+        dt_polygon_points_box(points, point_count, &box_left, &box_right, &box_top, &box_bottom);
+        /* the same numbers, not merely close ones: the helper walks the same points */
+        assert_true(box_left == expected_left);
+        assert_true(box_right == expected_right);
+        assert_true(box_top == expected_top);
+        assert_true(box_bottom == expected_bottom);
+        /* and it is the box the aspect is taken over */
+        _assert_near((box_right - box_left) / (box_bottom - box_top),
+                     dt_polygon_unit_aspect(sides, depths[j], roundnesses[k]), 1e-12, "box aspect", sides, j);
+      }
+}
+
 static void _the_aspect_is_the_box_of_the_outline(void **state)
 {
   (void)state;
@@ -605,8 +654,8 @@ static void _the_aspect_is_the_box_of_the_outline(void **state)
                1e-12, "pentagon aspect", 5, 0);
   _assert_near(dt_polygon_unit_aspect(4, 0.0, 0.0), 1.0, 1e-12, "square aspect", 4, 0);
   /* a star's notches sit inside its tips' box, so the pentagram is as wide as the pentagon */
-  _assert_near(dt_polygon_unit_aspect(5, 0.527864, 0.0), dt_polygon_unit_aspect(5, 0.0, 0.0), 1e-12,
-               "pentagram aspect", 5, 0);
+  _assert_near(dt_polygon_unit_aspect(5, DT_POLYGON_PENTAGRAM_DEPTH, 0.0), dt_polygon_unit_aspect(5, 0.0, 0.0),
+               1e-12, "pentagram aspect", 5, 0);
 
   const double depths[] = { 0.0, 0.4, DT_POLYGON_MAX_DEPTH };
   const double roundnesses[] = { 0.0, 0.3, 0.8 };
@@ -649,6 +698,7 @@ int main(void)
     cmocka_unit_test(_a_rounded_outline_meets_the_straight_one_at_its_tips_and_notches),
     cmocka_unit_test(_a_rounded_outline_is_the_lens_blur_curve),
     cmocka_unit_test(_a_rounded_outline_stays_close_to_its_curve),
+    cmocka_unit_test(_the_box_of_an_outline_spans_exactly_its_points),
     cmocka_unit_test(_the_aspect_is_the_box_of_the_outline),
   };
   return cmocka_run_group_tests(tests, NULL, NULL);

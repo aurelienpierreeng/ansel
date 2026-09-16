@@ -592,7 +592,13 @@ typedef enum dt_canvas_shape_geometry_t
 #define DT_CANVAS_SHAPE_MAX_SIDES 12u
 /** What a polygon is born with, and what a rectangle carries so that switching geometry has a value. */
 #define DT_CANVAS_SHAPE_DEFAULT_SIDES 6u
-/** The pentagram's notch depth: five points, the depth at which the star's edges run straight through. */
+/**
+ * The pentagram's notch depth: five points, the depth at which the star's edges run straight
+ * through. The geometry's own number, spelled here in the float a record holds; it is
+ * `math/polygon_envelope.h`'s DT_POLYGON_PENTAGRAM_DEPTH, which the toolbar's star glyph uses
+ * directly, and test_canvas_document pins the two against each other rather than this header
+ * taking a dependency on that one for a constant.
+ */
 #define DT_CANVAS_SHAPE_STAR_DEPTH 0.527864f
 
 /**

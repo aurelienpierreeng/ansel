@@ -99,6 +99,18 @@
 #define DT_POLYGON_MAX_DEPTH 0.95
 /** The shallowest notch that is one; anything shallower is read as 0, the convex polygon. */
 #define DT_POLYGON_MIN_DEPTH 1e-6
+/**
+ * The depth that makes a five-pointed star the pentagram: its notches sit on the chords joining
+ * the tips either side of them, so the five edges run straight through and the star is the one
+ * drawn in a single stroke. dt_polygon_inner_radius() then gives `1 / phi^2`, which fixes the
+ * depth at `1 - 2 / phi^3` since `cos(pi / 5)` is `phi / 2`.
+ *
+ * It lives here, with the geometry, because it is not any one caller's choice of a good-looking
+ * star: it is the depth the figure has. Everything drawing a star at its canonical depth -- the
+ * canvas's own DT_CANVAS_SHAPE_STAR_DEPTH, the toolbar glyph -- is the same number, and
+ * test_polygon_envelope pins it against the closed form.
+ */
+#define DT_POLYGON_PENTAGRAM_DEPTH 0.527864
 /** Samples of a rounded outline from one tip to the next notch. */
 #define DT_POLYGON_SAMPLES_PER_HALF_BLADE 16
 /** How far a rounded outline's samples crowd towards its tips (and away from its notches). */
@@ -273,6 +285,35 @@ static inline int dt_polygon_unit_outline(const int sides, const double depth, c
                            &points[2 * i], &points[2 * i + 1]);
   }
   return point_count;
+}
+
+/**
+ * @brief The box around an outline's points: the extent of exactly what it draws.
+ *
+ * @param points Interleaved x, y pairs, as dt_polygon_unit_outline() writes them.
+ * @param point_count How many points, at least one.
+ * @param box_left, box_right, box_top, box_bottom Receive the box; y grows downward, so the
+ * top is the smallest.
+ *
+ * @details Every caller fitting an outline into a frame needs this first, and each of them was
+ * writing the loop again. dt_polygon_unit_aspect() takes the same box over the same points
+ * without materialising them, which is why it does not call this.
+ */
+static inline void dt_polygon_points_box(const double *const points, const int point_count,
+                                         double *const box_left, double *const box_right,
+                                         double *const box_top, double *const box_bottom)
+{
+  *box_left = HUGE_VAL;
+  *box_right = -HUGE_VAL;
+  *box_top = HUGE_VAL;
+  *box_bottom = -HUGE_VAL;
+  for(int i = 0; i < point_count; i++)
+  {
+    *box_left = fmin(*box_left, points[2 * i]);
+    *box_right = fmax(*box_right, points[2 * i]);
+    *box_top = fmin(*box_top, points[2 * i + 1]);
+    *box_bottom = fmax(*box_bottom, points[2 * i + 1]);
+  }
 }
 
 /**

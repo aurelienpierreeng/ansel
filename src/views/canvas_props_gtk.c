@@ -93,13 +93,16 @@ static const props_glyph_t _glyphs[] = {
   { "masks_gradient", dtgtk_cairo_paint_masks_gradient, CPF_NONE },
   { "masks_inverse", dtgtk_cairo_paint_masks_inverse, CPF_NONE },
   { "masks_edit", dtgtk_cairo_paint_masks_edit, CPF_NONE },
-  // The shape glyphs stand in existing icons until the drawn ones arrive: a rectangle's own outline,
-  // the closest polygon and star the application already ships, and a fill for the switch that puts
-  // colour inside them.
-  { "shape_rectangle", dtgtk_cairo_paint_rect_landscape, CPF_NONE },
-  { "shape_polygon", dtgtk_cairo_paint_polygon, CPF_NONE },
-  { "shape_star", dtgtk_cairo_paint_star, CPF_NONE },
-  { "shape_filled", dtgtk_cairo_paint_tool_fill, CPF_NONE },
+  // One glyph draws all four: the geometries come out of the envelope the canvas fits into a frame,
+  // so the button offering a hexagon draws the hexagon the tool would. The Filled switch is that
+  // glyph with no geometry -- a rectangle with colour in it -- because what it names is the fill
+  // and not the shape: it is one switch on a row of its own, standing beside the three buttons
+  // that do say which geometry is armed, and a glyph changing under the user as they pick a star
+  // would read as a second, disagreeing answer to a question already asked next to it.
+  { "shape_rectangle", dtgtk_cairo_paint_shape, CPF_SHAPE_RECTANGLE },
+  { "shape_polygon", dtgtk_cairo_paint_shape, CPF_SHAPE_POLYGON },
+  { "shape_star", dtgtk_cairo_paint_shape, CPF_SHAPE_STAR },
+  { "shape_filled", dtgtk_cairo_paint_shape, CPF_SHAPE_FILLED },
 };
 
 /** The glyph for an id; a text label for one this frontend does not know, so a new id shows as something. */
@@ -1492,7 +1495,9 @@ static void _structure_kind(props_t *props)
   static const props_glyph_t map_glyph = { NULL, dtgtk_cairo_paint_map_pin, CPF_NONE };
   static const props_glyph_t svg_glyph = { NULL, dtgtk_cairo_paint_draw_structure, CPF_NONE };
   static const props_glyph_t connector_glyph = { NULL, dtgtk_cairo_paint_route, CPF_ROUTE_CUBIC };
-  static const props_glyph_t shape_glyph = { NULL, dtgtk_cairo_paint_rect_landscape, CPF_NONE };
+  // The kind's glyph, not the geometry's: this runs when the kind changes, and a shape's geometry
+  // is a row of its own right beside it, which the strip redraws whenever it moves.
+  static const props_glyph_t shape_glyph = { NULL, dtgtk_cairo_paint_shape, CPF_SHAPE_RECTANGLE };
   const props_glyph_t *glyph = NULL;
   switch(props->kind)
   {

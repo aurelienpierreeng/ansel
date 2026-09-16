@@ -74,8 +74,17 @@ typedef enum dtgtk_cairo_paint_flags_t
 
 /* The variants of the canvas glyphs below, spelled for the call site. The direction bits carry
  * the ones that ARE a direction -- where a text keeps to, which end of a line takes a head -- and
- * the special bits carry the connector's route, so none of them meets the state bits a button
- * adds (CPF_ACTIVE, CPF_PRELIGHT, CPF_FOCUS) when it paints. */
+ * the rest sit at CPF_SPECIAL_FLAG and above.
+ *
+ * What a variant must miss is the state: a button ORs CPF_ACTIVE, CPF_PRELIGHT and CPF_FOCUS into
+ * the flags it was built with, and clears them again, on every draw (togglebutton.c), so those
+ * three bits are the button's and a glyph reading one of them as a variant would change shape
+ * under the pointer. CPF_ALTER is spoken for the same way. Bits 5 to 10 are unspoken for, but a
+ * family whose variants are contiguous is one a reader can take in at a glance, and the special
+ * bits are where the alignment glyph already keeps its own.
+ *
+ * Each glyph reads only its own bits, so the route's and the shape's may share values: nothing
+ * paints both. */
 #define CPF_TEXT_ALIGN_LEFT CPF_DIRECTION_LEFT
 #define CPF_TEXT_ALIGN_CENTER CPF_NONE
 #define CPF_TEXT_ALIGN_RIGHT CPF_DIRECTION_RIGHT
@@ -86,8 +95,16 @@ typedef enum dtgtk_cairo_paint_flags_t
 #define CPF_ROUTE_STRAIGHT CPF_NONE
 #define CPF_ROUTE_SQUARE CPF_SPECIAL_FLAG
 #define CPF_ROUTE_CUBIC (CPF_SPECIAL_FLAG << 1)
+/** Both ends free, so nothing marks either: the round cap the line already has is what ends it. */
+#define CPF_ROUTE_FREE (CPF_SPECIAL_FLAG << 2)
+/** The ends are frames, drawn as the small hollow squares the route stops against. */
+#define CPF_ROUTE_FRAMES (CPF_SPECIAL_FLAG << 3)
 #define CPF_ARROWHEAD_START CPF_DIRECTION_LEFT
 #define CPF_ARROWHEAD_END CPF_DIRECTION_RIGHT
+#define CPF_SHAPE_RECTANGLE CPF_NONE
+#define CPF_SHAPE_POLYGON CPF_SPECIAL_FLAG
+#define CPF_SHAPE_STAR (CPF_SPECIAL_FLAG << 1)
+#define CPF_SHAPE_FILLED (CPF_SPECIAL_FLAG << 2) ///< colour inside the outline, at half its strength
 
 typedef void (*DTGTKCairoPaintIconFunc)(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint nothing */
@@ -391,6 +408,10 @@ void dtgtk_cairo_paint_arrowhead(cairo_t *cr, gint x, gint y, gint w, gint h, gi
 void dtgtk_cairo_paint_waypoint(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint two opposed arrows: swap a line's ends */
 void dtgtk_cairo_paint_reverse(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a drawn shape: a rectangle, or the polygon or star of its variant: CPF_SHAPE_* */
+void dtgtk_cairo_paint_shape(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a sheet of notes: a folded corner over its ruled lines */
+void dtgtk_cairo_paint_note(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a pencil over a baseline: edit the text */
 void dtgtk_cairo_paint_edit_text(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a lens aperture: develop the picture in the darkroom */

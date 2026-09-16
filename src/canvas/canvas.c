@@ -1285,17 +1285,11 @@ static size_t _polygon_outline(const dt_canvas_t *canvas, const dt_canvas_object
   const int unit_points = dt_polygon_unit_outline((int)object->shape.sides, (double)object->shape.depth, roundness,
                                                   unit, DT_POLYGON_OUTLINE_MAX_POINTS);
   if(unit_points < 3) return 0;
-  double box_left = HUGE_VAL;
-  double box_right = -HUGE_VAL;
-  double box_top = HUGE_VAL;
-  double box_bottom = -HUGE_VAL;
-  for(int idx = 0; idx < unit_points; idx++)
-  {
-    box_left = fmin(box_left, unit[2 * idx]);
-    box_right = fmax(box_right, unit[2 * idx]);
-    box_top = fmin(box_top, unit[2 * idx + 1]);
-    box_bottom = fmax(box_bottom, unit[2 * idx + 1]);
-  }
+  double box_left = 0.0;
+  double box_right = 0.0;
+  double box_top = 0.0;
+  double box_bottom = 0.0;
+  dt_polygon_points_box(unit, unit_points, &box_left, &box_right, &box_top, &box_bottom);
   const double unit_width = box_right - box_left;
   const double unit_height = box_bottom - box_top;
   if(!(unit_width > 0.0) || !(unit_height > 0.0)) return 0;
