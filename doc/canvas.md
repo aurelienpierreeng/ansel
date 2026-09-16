@@ -29,13 +29,26 @@ which it needs to render, below `views/` and `libs/`, which are its only consume
 | `canvas_place.h/.c` | where an object's floating properties go: a search over rectangles |
 | `canvas_place_shapes.h/.c` | an object's handle sites and body as the rectangles that search keeps clear of |
 
-Four kinds of object share one struct, `dt_canvas_object_t`: an **image frame** (a
-library render), a **text frame** (Markdown, or the `.txt` sidecar of an image frame), a
-**connector** (a line from one frame to another, see below) and a **map frame** (a slippy
-map around a point, see below). Every object has an id unique within
-the canvas, never reused, which is what connectors and sidecar links refer to. Frames have
-a centre, a size, a rotation, a draw order and an optional border of their own; the canvas
-carries the default border, the grid, the background and the saved viewport.
+Six kinds of object share one struct, `dt_canvas_object_t`, and the stored kind is an index,
+so a kind is APPENDED and never inserted:
+
+| kind | what it is |
+| --- | --- |
+| `IMAGE` | a library render, with the identity that finds the original again |
+| `TEXT` | Markdown, or the `.txt` sidecar of an image frame |
+| `CONNECTOR` | a route between two frames, or -- with both ends free -- a line or a curve of its own (see below) |
+| `MAP` | a slippy map around a point (see below) |
+| `SVG` | a drawing read from a file, carried in the archive (see below) |
+| `SHAPE` | a drawn rectangle, polygon or star: an outline the atelier fills, strokes or both (see below) |
+
+Every one of them but the connector is a **frame**: it has a centre, a size, a rotation, a
+draw order, a fill, an optional border, corners, a shadow and a cutout of its own -- which is
+why a shape needs no fields beyond the geometry and the three numbers its outline is made of,
+and why `dt_canvas_object_is_frame()` is the question nearly everything asks rather than the
+kind itself. The canvas carries the default border, the grid, the background and the saved
+viewport, and a frame inherits them until it takes its own. Every object has an id unique
+within the canvas, never reused, which is what connectors and sidecar links refer to; **the id
+0 is never an object's**, and that is what a connector's free end holds.
 
 Coordinates are canvas units, and one unit is one POINT -- see "Pages, spreads and the unit"
 below. At zoom 1 it is also one screen pixel, which is what makes a point-measured plane
@@ -45,7 +58,10 @@ is.
 
 The four layouts leave two paddings between frames -- each keeps one all round -- and, with
 snapping on, start on the grid and round every cell up to whole grid steps, frames sitting
-top-left in their cell.
+top-left in their cell. A WHOLE-CANVAS arrangement gathers the pictures and what goes with them
+and skips shapes: a shape is decoration, placed where it is against something else, so sweeping
+it into the grid with the photographs would move it away from the thing it was drawn for. A shape
+named in a selection is arranged like any other frame.
 
 ### The file
 
@@ -337,7 +353,7 @@ byte offsets at zoom 0.42, 0.55 and 1.1, at full and interactive quality alike.
 ## Drawings
 
 It is reached three ways, all through one action (`DT_CANVAS_ACTION_ADD_SVG`): the toolbar's
-"Drawing" button and the `d` key place one at the centre of the view, and the plane's context
+drawing button and the `d` key place one at the centre of the view, and the plane's context
 menu places one where the menu was opened. The action is APPENDED to the enum rather than
 slotted in beside the other "add" actions, because those values are what the toolbar's buttons
 and the shortcut table carry and inserting one renumbers every action after it.
@@ -706,9 +722,147 @@ box against frame, which is what read as odd and crossing. Box against box they 
 line. The snapping, the masonry run detection and `dt_canvas_layout_apply()` all carry the
 same factor of two, or an arranged layout would not be one the snapping can reproduce by hand.
 
-### Connectors
+### Shapes
 
-A connector joins two frames at **anchors**: nine per frame -- the four edge midpoints, the
+A shape is a frame like any other -- it has a fill, a border, corners, a shadow, a cutout, an
+opacity, a box, a rotation and a place in the order -- and it draws nothing else. That is why
+one kind covers the rectangle, the polygon and the star instead of three, and why its record
+holds only what its outline is made of: a geometry (`RECTANGLE` or `POLYGON`, stored by index
+and so appended, never inserted), a side count, a notch depth and a roundness, taken from the
+object record's reserved bytes with the format unchanged. A document a newer build wrote keeps
+the geometry this one does not know and draws it as its frame.
+
+**The outline is one function and every question asks it.** `dt_canvas_shape_outline()` answers
+in the FRAME's own coordinates, and the hit test, the coverage raster, the silhouette reach a
+connector stops against and the painter all read the same points -- a shape whose click test and
+whose ink disagreed would be a shape that cannot be grabbed where it is seen.
+
+#### The envelope, and why the depth is what is stored
+
+A polygon and a star are one polar curve, `src/math/polygon_envelope.h`, the same closed form
+the lens blur draws its diaphragm with: `n` blades, a concavity `m` and a linearity `k`. It is a
+regular n-gon at `m = 1, k = 1`, a star for larger `m`, a circle at `k = 0`.
+
+**`m` is only valid while `2 asin k + pi m < n pi`**, so a stored `m` would turn invalid the
+moment the user lowered the number of sides under it -- at `n = 3, m = 2, k = 1` the shape
+collapses to its centre and past it the radius goes negative. What the document stores is
+therefore a **depth**: the fraction of the way the notch between two tips is pushed from the
+straight edge towards the centre, so the inner radius is `(1 - depth) cos(pi / n)` and `m` is
+derived for the sides in force. Any depth below 1 keeps the inner radius above zero, hence `m`
+below `n - 1` for every `n`. The **roundness** is `1 - k`, so 0 is straight sides and 1 a
+circle. Depth 0 is the convex polygon, and a depth under `DT_POLYGON_MIN_DEPTH` (1e-6) is read
+as none, for two reasons at two scales: a notch pushed in by less than a millionth of the tip
+radius still lies on the straight edge to rounding, which is what sets the threshold where it is;
+and below about 1e-16 `1 - depth` IS 1, so the two edges meeting at a notch are exactly opposite
+and anything taking their bisector divides nought by nought.
+
+`DT_POLYGON_PENTAGRAM_DEPTH` (0.527864) is the depth at which a five-pointed star's edges run
+straight through -- the figure's own number, not a choice of a good-looking star -- and it lives
+with the geometry, so the canvas's `DT_CANVAS_SHAPE_STAR_DEPTH` and the toolbar's star glyph are
+the same number; `test_canvas_document` pins the two against each other rather than making
+`canvas.h` depend on `math/` for a constant.
+
+At `k = 1` the curve is straight lines and is drawn as its vertices alone: sampling would only
+lay points along a segment its two ends already describe. A rounded outline IS sampled, and not
+evenly -- close to straight the curve turns nearly its whole corner within a sliver of angle
+either side of a tip, so the samples crowd towards the tips, which brings the worst polyline
+error over 3 to 12 sides, every depth and every roundness down to 1.75e-3 of the tip radius
+from 1.36e-2.
+
+#### Fitting the outline to the frame
+
+The unit shape's tips sit on the unit circle; its own box is stretched onto the frame's, so the
+shape touches all four edges and the frame's handles, the snapping and the layouts hug what is
+drawn rather than a box around it. A frame of the outline's own ratio
+(`dt_canvas_shape_unit_aspect()`: `2 / sqrt(3)` for a triangle, `sqrt(3) / 2` for a hexagon)
+scales both axes alike, and that is the ratio `dt_canvas_object_keeps_ratio()` holds a regular
+shape at. Every write to the sides, the depth or the roundness therefore owes
+`dt_canvas_shape_refit_height()`, which takes the height back to the one the outline asks for
+about the shape's own centre.
+
+**`dt_canvas_shape_hold_minimum()` is the one place a box is held up to the smallest a shape may
+have, and it lifts BOTH sides by the one factor the smaller needs.** Held up side by side, a
+hexagon dragged out three units across lands in a SQUARE box -- and since a shape keeps whatever
+ratio it is given, that square then survives every later resize. The drag in flight, the birth of
+the shape it draws and the refit all go through it.
+
+#### Fillets
+
+The corner radius rounds a straight shape's vertices, and only a straight one's: a rounded shape
+is smooth everywhere already and has no corner for a radius to take, so `_polygon_outline()`
+drops the radius once the roundness leaves zero.
+
+A fillet of radius `r` at a corner of interior angle `beta` touches both edges at
+`r / tan(beta / 2)`. Where two neighbouring fillets would overlap, **the two ends of an edge
+SHARE it in proportion to what each asked for** -- never a cap at half the edge, which
+`polygon_envelope.h` warns this caller against by name: a star's segment is only half of the
+convex polygon's side, so such a cap would halve a tip's largest fillet the instant the depth
+left zero while the shape itself has barely moved. Measured continuity across depth zero: a
+hexagon's tip fillet 25.9989 units at depth 0 against 26.1794 at 1e-3.
+
+**The sharing is taken from the UNSHARED demands of a vertex and its two neighbours, in one
+symmetric formula, never from a walk that rewrites the array as it goes.** A walk hands the
+second end of every edge a reach the first end was already cut down to, and never revisits the
+edge that wraps: measured, an equilateral triangle 400 units wide at a radius of 150 came out
+with arcs of 108.4, 100.5 and 122.5 units at three corners that are the same corner three times
+over, and a 12-point star at its deepest notch with a spread of 190 to 1 between its notches --
+across sides 3 to 12 the worst ratio reached 1700. Read symmetrically, the two ends of an edge
+still sum to at most its length, so nothing overlaps.
+
+The arc's sample count is nudged off the exact multiple it lands on: every corner of a regular
+shape turns by `2 pi / n`, which the six-degree step divides, and `atan2` falls either side of
+the multiple by an ulp, so a plain ceiling gives one corner thirteen samples and the next twelve
+for two arcs that are the same arc. `DT_CANVAS_SHAPE_OUTLINE_MAX` is 1024 because the worst case
+over every side count, depth and radius is a straight 12-point star filleted, at 684 points.
+
+#### Fill, border, and what a shape is picked by
+
+**A shape's fill is not a backdrop, it IS the shape.** An outline box is a hole with a rule
+round it, so an unfilled shape is picked by the BAND it paints and text flows through the middle
+of it: measured on a 400-unit column, a filled 220-unit box costs it 247.5 units of height, the
+same box unfilled 121.8, and a column with nothing over it 93.8. Whether the fill is there is
+decided by an ALPHA, and so is whether the border is -- which makes both colours obstacle edits,
+so a frame flowing round the shape is refitted whichever of the two ways the fill was emptied,
+the Filled switch or the colour well, and a border painted in nothing paints no band and takes
+no click either. A filled rectangle and an image frame given the same ground, border and radius
+paint identically: 0 of 40000 pixels differ.
+
+The border is a BAND, not a stroke: the outline clipped to itself and stroked at twice the
+width, so the half that would fall outside is cut away. It is laid with `CAIRO_OPERATOR_SOURCE`,
+which replaces rather than composites, so **it must be painted inside a group bounded by the
+frame -- and only when there IS a band.** A fill is laid with OVER and isolating it changes not
+one byte, measured on a transparent destination and on a filled one at three fill opacities,
+while a group costs a frame-sized allocation, a clear and a composite: 0.05 ms on a small
+shape's layer and 0.77 ms on a large one, per shape per repaint. The join is MITRED for the
+NOTCHES -- a tip's join sits outside the shape and the clip discards it, while a notch's lies
+inside and rounding it would blunt the one corner of a star's band that shows. Measured on a
+pentagram 320 units wide with a 12-unit band, 362 pixels differ between a mitred and a bevelled
+band and none of them is at a tip; the limit is never reached, a notch's miter needing at most
+3.9 of it.
+
+A polygon's silhouette -- what a connector stops against -- is capped against the frame's PLAIN
+box, never the box rounded by the corner radius, since the outline does not take that radius
+when it is rounded: capping with it cut the silhouette back inside a shape the painter fills to
+the frame's edges, measured at up to 23.7% of the reach on a three-pointed star at roundness
+0.25, which `dt_canvas_object_covers()` then reads as uncovered. And a polygon is never **cut**:
+`dt_canvas_object_is_cut()` answers FALSE for one whatever mask it carries, the cutout chooser
+is offered on a shape only while its geometry is the rectangle, and a polygon reads its cutout
+back as NONE so the rows chained to it leave the card with it.
+
+For text flow, `dt_canvas_shape_needs_coverage()` says a shape must be given its RASTER rather
+than its frame: a polygon's outline is nothing a rectangle's reach can describe, filled or not,
+and an unfilled rectangle covers only the band it paints. `dt_canvas_render_shape_coverage()`
+rasterises the same outline -- filled when the fill is there, stroked as the band otherwise -- at
+the occupancy grid's own pitch.
+
+### Connectors, lines and curves
+
+A connector joins two frames at **anchors**, or has ends of its own and joins nothing: an end
+whose `from_id`/`to_id` is 0 is **free**, and a connector with both ends free is what the
+atelier calls a line or a curve. There is no kind for it, because everything that reads a
+connector reads its route and the route resolves a free end first -- see "Free ends" below.
+
+An anchored end takes one of nine anchors per frame -- the four edge midpoints, the
 four corners, and the centre -- all of them the frame's own points, so they rotate with it;
 or `AUTO`, which picks of the four midpoints the one nearest the other end's frame. A
 corner's normal is its diagonal, so a route leaves it at 45 degrees rather than running
@@ -751,16 +905,176 @@ terms an angle has. A frame's rotation reads it the same way, 45 degree steps, w
 reads 15. A handle already confined to a line, like a connector's reach along its anchor's
 normal, has nothing to lock.
 
-Connectors are drawn from the toolbar's **Connect** button (or C): in that mode the frame
+Connectors are drawn with the connector tool, armed from the toolbar or with C: the frame
 under the pointer shows its four cardinal anchor dots, the first click picks the source
 anchor, the second the target anchor -- the user chooses the anchors, nothing is resolved
-automatically -- and the mode ends with the connector selected. Escape or a right click
-leaves it.
+automatically -- and the connector is selected as soon as it exists. The tool stays armed for
+the next connector, as every drawing tool does; Escape gives back a first anchor already
+chosen, a second Escape or a right click puts the tool away. See "The drawing tools" below.
+
+#### Free ends
+
+A free end holds the id 0, and ids start at 1, so no document written before free ends
+existed can have one: the fields they need sit in what was the connector's reserved block (48
+of its 72 bytes), the record keeps its size, and the format is not bumped. A free end carries
+its own point and its own control offset -- a tangent of (0, 0) meaning "automatic", the way a
+waypoint's does -- and is read only while the id is 0.
+
+`dt_canvas_connector_route()` resolves them in **four steps, in this order, so that nothing is
+circular**: which ends are free; where the free ends are; where the anchored ends are, each
+aiming at the other end's frame centre or, when that end is free, at the point step two placed;
+and only then which way the free ends leave, toward what steps two and three placed. An
+anchored connector therefore routes to exactly the bytes it always did, whatever its free-end
+fields hold.
+
+**The fixed lengths of the anchored world must not reach a free end.** A waypoint's automatic
+tangent had a 40-unit floor and a square routing's stub a 20-unit one, both sized to clear a
+frame a free end does not have: a ten-unit line through a waypoint at its middle put its control
+points at -35 and 45, and a square-routed line of no length painted a 40-unit dash. A free end's
+own tangent spans a fraction of the distance to where the route heads next, its square stub stops
+halfway to it, and a waypoint's automatic tangent -- floored to the START leg's share between two
+frames, which is what every such route has always drawn -- takes the SHORTER leg's share once
+either end is free, so a waypoint near one end cannot throw the curve out past it.
+
+**The extent of a line is its ink**: the true Bezier extremes grown by half the stroke width,
+plus each arrowhead's own triangle, which the painter fills from the same function. Growing the
+arrowhead's reach on all four sides and bounding a curve by its control points is what made a
+line ten units above a page edge export a blank page below it.
+
+**Reverse walks the same curve back.** Swapping the two ends' ids, anchors, points and tangents
+is not enough: a tangent handle's reach belongs to its end, and the waypoint's tangent points
+towards the finish, which is now the other end. Reverse swaps `from_reach`/`to_reach` and
+negates `via_tangent` as well. Measured as the largest gap between the reversed route and the
+old one walked backwards: a free cubic through a dragged waypoint 62.09 units before, 7.1e-14
+after; a steered cubic between two frames 68.89 before, 1.7e-13 after. One asymmetry survives
+and is pinned rather than hidden -- between two frames the automatic waypoint tangent's length
+is 0.4 of the leg leaving the START, so a waypoint slid towards one end walks back 46.5 units
+off. No Reverse writer can mend that, and making the length symmetric would move every anchored
+cubic in every existing document.
+
+A free end is edited like any other handle: it has a site of its own on the selected line,
+listed ahead of the control points so that a press near both takes the end, and the end marks
+are painted in a pass after the rest of the selection, last selected first, so the mark on top
+is the one a press takes. Dragging one snaps to the grid, or holds 45 degrees under Ctrl and 15
+under Shift about the other end (`dt_canvas_constrain_line_end()`, which is GTK-free and is what
+the drawing tools use too). A line with a free end also moves with a drag, the arrow keys, a
+rubber band (tested against the painted extent, arrowheads included) and Select All, and its
+context menu offers Duplicate -- a connector anchored at both ends has no place of its own to be
+copied to. A move snaps by the selection's first unlocked FRAME, else its first unlocked line: a
+locked leader never moves, so the offset it measured was handed to the rest of the selection on
+every motion. And Auto arrange counts the selected FRAMES to decide between the selection and the
+whole canvas, since a rubber band now gathers lines as well.
+
+### The drawing tools
+
+A press on the plane picks, moves and selects; with a **tool** armed it draws instead. At most
+one tool is armed at a time (`dt_canvas_tool_t`, never stored -- a document knows nothing of how
+its objects were drawn), and **it stays armed across the objects it draws**: C the connector, L a
+line, Shift+L a curve, B a rectangle, P a polygon, Shift+P a star. A tool is put away by Escape
+with no drawing in flight, a right click, arming another tool, pressing its own key or toggle
+again, leaving the atelier, or a new document.
+
+**Every arming and disarming the user asks for goes through `_tool_set()`, and it raises
+`DT_SIGNAL_CANVAS_CHANGED`**, whatever path the change took -- a key, the toolbar's toggle,
+Escape, a right click. That is what lets the toolbar own no state and still show the tool the
+view holds. Leaving the atelier and replacing the document put the tool away without a word,
+since the toolbar is refilled with the view and with the document anyway.
+
+Escape unwinds in one order, and the gesture comes before the tool because a tool stays armed for
+as long as the user wants it: the drawing in flight, then any other gesture, then a connector
+waiting for its second anchor (which gives the first one back and keeps the tool), then the tool,
+then the properties, then the selection.
+
+**The handles of what is SELECTED answer a press first**, so the line or the shape just drawn is
+adjusted by its own ends and corners without putting the tool away. Everything else under the
+pointer draws, an object included -- that is what having a tool armed means, and the crosshair
+says so where the hand would promise a pick that no longer happens.
+
+**The drag draws the object itself.** It exists in the document from the first frame past the
+threshold, so what the drag shows is the painter's own line or shape rather than a sketch of one.
+A far end follows the pointer through `dt_canvas_constrain_line_end()` -- the grid, Ctrl at 45
+degrees, Shift at 15 -- and a shape's box follows it with Ctrl holding it square and Shift taking
+the press point for its centre.
+
+**"The pointer really moved" is decided on the CONSTRAINED geometry, not on screen pixels.** The
+threshold is three pixels and a grid cell is twelve units, so a drag shorter than a cell made a
+line of NO length: measured through the constraint, a pointer 8 units from an on-grid origin comes
+back AT the origin, and the axis locks land on it too. A press that ends there still places its own
+object at the release. The same rule the other way round for a shape: refusing a box that opened on
+one axis only answered a deliberate three-hundred-unit drag half a grid cell tall with the box a
+CLICK places, at the press and nowhere near the pointer. Each side is held up to the smallest a
+shape may have instead.
+
+A regular shape's drag is always regular, and **it takes whichever side the pointer went further
+along, measured in the shape's own proportions** -- taken from the horizontal travel alone, a drag
+straight down drew nothing at all, the snapping putting both ends of it on the same grid line.
+Ctrl has nothing left to constrain there: a regular shape is already square in the only sense it
+can be.
+
+A click that never moved **places** an object of its own: a line 160 units long whose far end goes
+through the same constraint, level, so it is the only line end in the atelier that would otherwise
+sit off the grid (with the asked-for length standing where a grid coarser than the line would
+collapse it); or a box centred on the click, at the shape's own ratio. Either way it is one undo
+step, recorded at the release, and the new object is selected.
+
+A drawing whose object is taken out from under it -- Delete or Ctrl+Z reached by the keyboard with
+the button still down -- leaves the document as that edit made it and records nothing: restoring
+the press's snapshot would take the edit back, and recording a step from it would reinstate what
+was undone.
+
+Every gesture ends through `_cursor_for_armed_tool()`, because a gesture leaves the tool exactly
+as it found it: an ending that named the arrow outright would stop naming a tool that is still
+armed, and after an Escape there is no motion coming to name it again. The same call moves the
+start marker, the ring where the armed tool would begin its next object. The floating properties
+close whenever a tool is armed: drawing is pressing on the plane over and over, about a different
+object each time.
+
+#### The style memory
+
+**A new object is born with the style the last one of its sort was left at.** A line takes the
+width, colour, dashes and arrowheads of the last free line drawn or edited; a shape takes the
+fill, the border override and its width and colour, the corner override and its radius, and the
+shadow override and its values. How a shape is COLOURED is one memory for all three shape tools;
+what its outline is MADE OF is one per tool -- the polygon tool remembers its sides and roundness,
+the star tool its points, notch depth and roundness -- since a polygon and a star are two
+different things to reach for.
+
+The memory lives in the configuration (`plugins/canvas/new_line/*`,
+`plugins/canvas/new_shape/*`) and **is the VIEW's alone**: `src/canvas` knows nothing of conf, and
+what crosses the boundary is a GTK-free `dt_canvas_line_style_t` / `dt_canvas_shape_style_t`,
+sanitised on the way in because what comes back from a configuration was written by whatever wrote
+it. The property writer says which edits are worth remembering
+(`DT_CANVAS_EFFECT_COMMIT_CONF`), and only a line with BOTH ends free teaches a line style --
+a connector holding a frame is born with the defaults and styling one teaches the next line
+nothing. Remembering is not a change to the document and is no part of its undo step: one undo
+still takes the object away, and the style it taught stays taught.
+
+Two rules that are not obvious from either side. **Which groups a shape owns is as much a part of
+its style as their values are**: taking one is always followed by a value write that asks to be
+remembered, but handing one back stands alone, so `dt_canvas_group_set_own()` reports
+`COMMIT_CONF` for a shape either way -- without it the next shape was born with the override the
+user had just removed. And **a shape drawn with a regular tool is born owning a corner radius of
+NOTHING whenever the memory says to inherit the canvas's**, which is the rule the card's own
+geometry writer already states where a rectangle is turned into a polygon: on a canvas whose
+Corners had been raised, Shift+P drew a star with filleted points while the card's Geometry gave
+sharp ones, and the Corners row read "inherited" and said nothing about why.
+
+### The overlays
 
 Selection handles, hover outlines, the rubber band, the connector being drawn, the status
 line and the navigation flower are the view's and are painted after the document. The status
 line is inked dark or light against the plane's luminance, with a halo of the opposite, so
 it reads on any background colour or paper and over a picture.
+
+A tool armed adds two of its own (`_paint_tool_overlay()`), and no more, because the line or the
+shape being dragged is the painter's own and needs no sketch of it: the **start marker**, a small
+ringed dot under any tool that draws an object of its own -- so every one but the connector --
+while nothing is being dragged, sitting with snapping on at the grid point the object will take,
+which is the one thing the crosshair cannot say; and a **dashed hairline box** around the frame of
+the shape a shape tool has begun, since a shape born with neither fill nor border draws nothing of
+its own and the drag would otherwise show nothing at all. The connector tool paints neither: it
+shows the hovered frame's anchor dots and, once a first anchor is chosen, a dashed lead line from
+it to the pointer.
 
 **Every overlay line carries its own opposite**, for the same reason and by the same trick
 seen three ways: the status line's halo; the selected frame's solid light rectangle under a
@@ -774,18 +1088,24 @@ so it never covers what it is outlining.
 One object's properties float beside it, as **one widget: a STRIP, one row, that can grow a
 CARD** below or above it. The strip holds the kind's glyph or a line about the object, the
 kind's everyday controls (a text frame's font, size, colour and alignment; a connector's route,
-arrowheads, waypoint and direction; a map's zoom), then the content action, the card button and
+arrowheads, waypoint and direction; a map's zoom; a shape's geometry and its Filled switch), then
+the content action, the card button and
 a close button. The card is an accordion of sections in one fixed order for every kind -- the
 kind's own sections, then Arrange, Fill, the stroke (a frame's Border, a connector's Line, the
 same slot), Corners, Shadow and Cutout -- each a folded header with a one-line summary of what
-it holds, its essentials, a rule, and what an expert reaches for. A section a kind lacks is
-absent, never greyed out. One section is open at a time, and the one left open is remembered per
+it holds, its essentials, a rule, and what an expert reaches for. **A section is present when
+one of its rows APPLIES to the object in front of it, not when the KIND owns rows in the table**:
+a section every one of whose rows a geometry or a switch has closed has nothing left to show, and
+a heading over nothing is a heading that lies. A section a kind lacks is absent, never greyed
+out. One section is open at a time, and the one left open is remembered per
 kind (`plugins/canvas/props/section/<kind>`, stored by NAME, since the enum's order is the
 screen's and may change); the card itself is never remembered open, and an override section or
-the cutout never opens by itself. Measured offscreen at 96 dpi, the strip is 35 px tall for every
-kind and 472 px wide for a text frame, 381 for a picture or a drawing, 340 for a map or a
-connector; the card is the strip's width, so the card button and the close button do not move
-when it opens, whichever side it grows on.
+the cutout never opens by itself. Measured offscreen at 96 dpi against the shipped theme, the strip
+is 35 px tall for every kind and 472 px wide for a text frame, 381 for a picture or a drawing, and
+340 for a map, a connector or a shape -- 340 being `PROPS_MIN_WIDTH_PIXELS`, the floor the width is
+held up to, which is why those three kinds report the same number rather than three close ones. The
+card is the strip's width, so the card button and the close button do not move when it opens,
+whichever side it grows on.
 
 **Everything about a property is described once, in `canvas/canvas_props.c`**: its label, the
 kinds that have it, its section and tier, the control its nature gets, its range, what "left as
@@ -1044,18 +1364,19 @@ inside the edge and the picture (or the text) is inset by it, so widening a bord
 the picture and never grows the frame, and the anchors, which sit on the frame's edge, stay
 on the outer border.
 
-The canvas carries a **gutter**, the margin frames keep from each other, and a **snapping
+The canvas carries a **padding**, the margin every frame keeps around itself, and a **snapping
 mode** chosen in the toolbar: any combination of three rules, applied in this order to a
 move and to a resize, each later rule that triggers replacing the earlier answer. The grid
-rounds positions and sizes to the grid step. The gutter lands an edge next to a neighbour
-one gutter away or in line with a neighbour's edge, within eight screen pixels
+rounds positions and sizes to the grid step. The padding lands an edge next to a neighbour
+**two paddings away** -- each frame keeping its own, so their margin boxes meet on one line --
+or in line with a neighbour's edge, within eight screen pixels
 (`dt_canvas_snap_to_neighbours()`; on a resize only the dragged edges may snap). Same size
 gives a resized frame a neighbour's width or height within reach (`dt_canvas_snap_size()`),
-or the combined width or height of a run of neighbours stacked one gutter apart (masonry
+or the combined width or height of a run of neighbours stacked two paddings apart (masonry
 style); while it snaps, the frame(s) the size was taken from are outlined and a guide line
 runs along the matched dimension on both.
 An image frame resizes proportionally and follows its width; a text frame resizes freely.
-The layouts space frames by the gutter too.
+The layouts leave two paddings between frames too.
 
 ### The plane: background, grid, paper
 
@@ -1200,7 +1521,7 @@ anchored to the canvas origin so it does not shimmer under a pan.
 **The guides are drawn in the prepress palette, which is InDesign's and therefore every
 print shop's template**: the page border is the **trim** and is black, the **bleed** red, the
 **margin** violet. All three are solid lines -- on a dieline a cut is solid and a crease is
-dashed, so the dash is reserved for the fold and means something. The **gutter** is no
+dashed, so the dash is reserved for the fold and means something. The **padding** is no
 prepress object at all, being a layout aid rather than anything that reaches the press, so it
 takes the one family the convention leaves free here, the blue of the slug. Every guide is
 stroked twice, a white keyline under its own colour: the convention assumes a light
@@ -1211,7 +1532,7 @@ configuration that already holds the old ones.
 
 The page guides are drawn UNDER the content by default and over it with
 `DT_CANVAS_GUIDES_OVER`, which is what makes a frame deliberately crossing a page break
-placeable against a trim line it is covering. The gutter boxes are always over: they belong
+placeable against a trim line it is covering. The padding boxes are always over: they belong
 to the frames, not to the sheet.
 
 The grid dots have a colour of their own and a radius that is a fraction of the grid step,
@@ -1225,7 +1546,7 @@ border, never one rectangle per page -- a shared edge stroked twice with two das
 fills its own gaps and reads as solid -- each line starting on a multiple of the dash
 period from the origin, so the dashes neither crawl under a pan nor differ between the
 horizontal and the vertical. Page borders are a snapping rule of their own, applied after
-the gutter and before the size.
+the padding and before the size.
 
 **One canvas unit is a POINT** -- a seventy-second of an inch, the typographer's own -- and
 every length on the plane is one: a page's size, a frame's, a border's width, a text frame's
@@ -1477,19 +1798,49 @@ the cutout re-rasterisation at each power of two (about 100 ms per cut frame on 
 
 ## The view
 
-The toolbar (`libs/tools/canvas_toolbar.c`) reads left to right as labelled groups: the
-three flat menus (Canvas, Object, Guides, each ending in an ellipsis), **Add** (Text, Notes,
-Map, Drawing, Connector), **Background** (style, colour, Texture), **Frames** (Borders, with the
-corners, and Shadows: the defaults every frame inherits until its properties say otherwise),
-**Zoom** (Fit, 1:1) and **Arrange** (the layout, a "Sort by" like the lighttable's --
+The toolbar (`libs/tools/canvas_toolbar.c`) reads left to right: the three flat menus --
+**Canvas** (new, open, save, save as, export as PDF), **Object** (check against the library,
+refresh the stale images and notes, refresh every image) and **Guides** (a popover of seven groups:
+the grid, the page borders with the export DPI and whether they are drawn over the content, the
+spread with its bind gutter, the page margins, the bleed, the paddings, and snapping sizes to
+neighbours -- each guide with the show, snap, size and colour it has), each ending in an ellipsis -- then
+two linked groups of glyph buttons, then **Background** (style, colour, Texture), the frame
+defaults (Borders, with the corners, and Shadows: what every frame inherits until its properties
+say otherwise), Fit and 1:1, and **Arrange** (the layout, a "Sort by" like the lighttable's --
 canvas order, filename, captured, id, full path -- and Auto to apply). The sort is a
 `dt_canvas_sort_t` handed to `dt_canvas_layout_apply()`: images compare on the key, then on
-their draw order, and frames that are not images follow in draw order. Historically: **Canvas**
-(new, open, save, save as, export as PDF), **Object** (check against the library, refresh
-the stale images and notes, refresh every image), **Guides** (a popover: the grid's show,
-snap, size and colour; the page borders' show, snap, size, orientation and colour; the
-gutters' snap and size, and snapping sizes to neighbours), then Text, Notes, the Connect
-toggle, the background, the default border, Fit and 1:1, the layout chooser.
+their draw order, and frames that are not images follow in draw order.
+
+**The two groups offer an object as a picture of it.** One PLACES an object -- text, notes, map,
+drawing -- and one ARMS a tool to draw one -- connector, line, curve, rectangle, polygon, star.
+Each icon shows what it makes, so the "Add", "Frames" and "Zoom" captions that used to tell the
+words under them apart are gone; what a picture cannot say, the gesture and the key, is in the
+tooltip, and the user's own binding is appended to it at hover time from the accel path each
+button carries. Measured against the same toolbar built of words, it asks for 1511 px where that
+one asked for 1747 -- 236 px and 13.5% narrower. **Fit stays a word**: the one picture the toolkit has for zooming is a
+magnifying glass, which says "zoom" over an action that means "fit", beside a "1:1" that is also
+a zoom.
+
+**The tool toggles are a VIEW on the armed tool and keep no state.** `tool_toggles[]` is indexed
+by the tool each toggle arms, its action lives in the button's object data, the handler asks the
+view only when the button and the view disagree, and `_refill()` presses the one `armed_tool`
+names with every handler blocked by stored id. Exclusivity lives in the view. Both halves are
+load-bearing and each covers the other, so neither may be simplified away because the tests pass
+without it: dropping both at once does not merely miscount, it recurses until the process dies.
+And **a toolbar button gives the keyboard straight back** (`focus_on_click` FALSE, as the
+properties strip already does): GtkWindow offers a key to the focus widget and to its own
+move-focus bindings before the application's handler sees it, so a focused toggle answered Space
+and ate the arrow keys the plane nudges with.
+
+**A popover keeps the keyboard for its own controls, which takes three things and not one.**
+`dt_accels_block_plain_keys_inside()` (`_popover_around()`) stops the single letters and digits the
+view binds as shortcuts, and only those: Delete, KP_Delete and BackSpace the view reads from the
+main window itself, so a popover swallows those three from a handler connected AFTER its own --
+after, so the focused control is offered the key first and a spin button still edits its number
+with both. A popover also has to name the control that takes the focus on opening, since a bauhaus
+slider answers GTK's focus walk without taking the focus and a popover full of them opened holding
+none, leaving every key to act on the plane behind it. And a popover's handler compares its value
+with the document before writing, or one drag is announced once per motion event.
 
 `src/views/canvas.c` owns one document and everything about editing it. It registers the
 `canvas` accelerator group, exposes its actions through `proxy.canvas` for the toolbar
@@ -1545,11 +1896,11 @@ background's window offers no opacity: a transparent canvas is one of its styles
 
 The cursor names the action under the pointer: a hand over a frame or a connector, a corner
 cursor over a scale handle (turned with the frame), the exchange cursor over the rotation
-handle, a crosshair over an anchor in connect mode and anywhere a drawing tool would draw, a
-hand over the flower, a cross-arrows cursor over a waypoint and while moving.
+handle, a crosshair over an anchor while the connector tool is armed and anywhere else a drawing
+tool would draw, a hand over the flower, a cross-arrows cursor over a waypoint and while moving.
 
 Gestures: drag a frame to move it (the whole selection follows; snapping puts it next to a
-neighbour one gutter away, in line with a neighbour, or on the grid), drag a corner handle to scale it around the
+neighbour two paddings away, in line with a neighbour, or on the grid), drag a corner handle to scale it around the
 opposite corner keeping its aspect ratio, drag the handle above it to rotate (Shift snaps to
 15°), drag on empty space for a rubber band, middle button or Alt-drag to pan, wheel to
 zoom about the pointer, Shift-wheel to pan sideways. A single click, a drag or a rubber band
@@ -1568,8 +1919,8 @@ and a press handled before that idle -- or Escape -- takes them back. With Shift
 selection toggles and opens nothing. A handle takes a double click only when the first press
 took it too, since that press can only take the handles of what was already selected. The properties
 hide while a gesture moves things and come back when it settles; Escape closes them before
-it drops the selection. Right-click opens the context menu for what is under the pointer;
-"Connect to..." arms a connector whose end is the next frame clicked.
+it drops the selection. Right-click opens the context menu for what is under the pointer -- and, with a tool armed, puts
+the tool away instead.
 Every edit is one undo record (`DT_UNDO_CANVAS`), a snapshot of the document before and
 after: objects are small and JPEG bytes are shared by reference, so a snapshot costs the
 records, not the pixels. A drag records its undo on release, and Escape mid-drag restores
@@ -1581,7 +1932,7 @@ so the destination must accept it or GTK refuses every drop without a word: each
 an image frame at the drop point, staggered so a multi-drop is not one pile, and a render is
 started for each.
 
-The **Notes** toolbar button (or Shift+T) adds, under each selected image frame -- every
+The **notes** button on the toolbar (or Shift+T) adds, under each selected image frame -- every
 image frame when none is selected -- a text frame linked to it, showing the `.txt` note the
 library keeps next to the raw; images without a note are skipped, and an image whose note is
 already on the canvas is not duplicated. "Refresh" reloads the linked notes.
@@ -1602,8 +1953,8 @@ layer in `tools/include_graph.py`.
 
 ## What is not there yet
 
-- Text and connectors are rasterised in the PDF. A vector export would need a second
-  painter or a cairo PDF surface with its own colour path.
+- Text, connectors and shapes are rasterised in the PDF, as everything else on the page is. A
+  vector export would need a second painter or a cairo PDF surface with its own colour path.
 - Sidecar text frames are refreshed on "Refresh", not watched.
 - The image render is one size per canvas (`image_long_edge`), chosen when the canvas is
   created; changing it takes a "Refresh all".

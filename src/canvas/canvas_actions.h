@@ -60,7 +60,7 @@ typedef enum dt_canvas_action_t
   DT_CANVAS_ACTION_TOGGLE_SNAP,
   DT_CANVAS_ACTION_UNDO,
   DT_CANVAS_ACTION_REDO,
-  DT_CANVAS_ACTION_CONNECT_MODE, ///< toggle the connector-drawing mode
+  DT_CANVAS_ACTION_CONNECT_MODE, ///< arm the connector tool, or put it away when it is the one armed
   /**
    * Place a drawing read from an SVG file. APPENDED, not slotted in beside the other "add"
    * actions: these values are what the toolbar's buttons and the shortcut table carry, so

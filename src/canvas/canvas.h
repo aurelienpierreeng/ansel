@@ -142,7 +142,7 @@ typedef enum dt_canvas_object_kind_t
   DT_CANVAS_OBJECT_CONNECTOR = 3,
   DT_CANVAS_OBJECT_MAP = 4,
   DT_CANVAS_OBJECT_SVG = 5,
-  DT_CANVAS_OBJECT_SHAPE = 6, ///< a drawn shape: a rectangle today, a polygon and a star to come
+  DT_CANVAS_OBJECT_SHAPE = 6, ///< a drawn shape: a rectangle, a regular polygon or a star
   /**
    * How many kinds this build knows. RUNTIME ONLY, never stored: a file holds the kind's own
    * value and nothing else, so an unknown one arrives from a newer build, is kept whole and
@@ -1163,7 +1163,7 @@ uint64_t dt_canvas_mask_hash(const dt_canvas_mask_t *mask);
 
 /* --- geometry --------------------------------------------------------------- */
 
-/** @brief Is this object a frame (image, text or map) rather than a connector? */
+/** @brief Is this object a frame -- anything with a box of its own -- rather than a connector? */
 gboolean dt_canvas_object_is_frame(const dt_canvas_object_t *object);
 
 /**
@@ -1494,8 +1494,8 @@ void dt_canvas_route_point_at(const dt_canvas_route_t *route, double fraction, d
 /**
  * @brief How far along a route, by arc length, the route passes closest to a point.
  * @details The inverse of dt_canvas_route_point_at() for a point on the route, so a place picked
- * on a connector can be found again after the frames it joins have moved. One half for a route
- * with no length.
+ * on a connector can be found again after the frames it joins -- or its own free ends -- have
+ * moved. One half for a route with no length.
  * @return a fraction in [0, 1]
  */
 double dt_canvas_route_fraction_at(const dt_canvas_route_t *route, double x, double y);

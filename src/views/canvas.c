@@ -2234,7 +2234,7 @@ static void _tool_set(dt_view_t *self, const dt_canvas_tool_t tool)
   dt_control_queue_redraw_center();
 }
 
-/** A click in connector mode: pick the source anchor, then the target anchor. */
+/** A click while the connector tool is armed: pick the source anchor, then the target anchor. */
 static void _connect_click(dt_view_t *self, const double x, const double y)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -2907,8 +2907,8 @@ static void _props_session_end(dt_view_t *self)
     if(effects & DT_CANVAS_EFFECT_COMMIT_RENDER) _start_map_render(self, object);
   }
   // A line's style is the next line's, the way a map's settings are the next map's: the writer says
-  // which edits are worth remembering, and only a line with a free end is asked about -- a connector
-  // between two frames is always born with the defaults.
+  // which edits are worth remembering, and only a line with BOTH ends free is asked about -- a
+  // connector holding a frame is always born with the defaults.
   if(!IS_NULL_PTR(object) && (effects & DT_CANVAS_EFFECT_COMMIT_CONF))
   {
     _line_style_remember(object);

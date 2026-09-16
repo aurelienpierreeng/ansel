@@ -3271,6 +3271,40 @@ they are visible.
   back a number the user never chose. `_number_event_after()` reads the buttons from `event-after`,
   which runs after bauhaus's own handlers have moved the slider to the click, reset it on the double
   and emitted from the release, whatever those returned.
+- **A toolbar popover keeps the keyboard for its own controls, and the plain-key tag is only HALF
+  of that.** `dt_accels_block_plain_keys_inside()` stops SHORTCUTS -- the single letters and digits
+  the view binds, T, M, D, 1 to 4 -- and nothing else, so Delete, KP_Delete and BackSpace, which
+  `views/canvas.c` reads from the main window itself, went on deleting the selected objects behind
+  an open popover as the user typed at a slider, a check box or a colour button. `_popover_around()`
+  (`libs/tools/canvas_toolbar.c`) therefore adds a key handler that swallows those three, connected
+  with `g_signal_connect_after()`: the popover's own handler runs first and is what hands the key to
+  the focused control, so a spin button still edits its number with both -- connected BEFORE it, "57"
+  stayed "57". The arrows and Return never get that far, the window's own bindings taking them to
+  move the focus and to activate the default. The other half is that **a popover can open holding no
+  focus at all**: a modal popover asks GTK for its first focusable child and a bauhaus slider answers
+  yes without taking the focus, so the Texture popover kept none and T added a text frame behind it.
+  Each popover names its first control, focused on `show` (connected after the popover's own, which is where
+  GTK makes that choice) only when GTK gave the focus to nothing inside. And **a popover's handler
+  compares with the document before writing**: a drag over two positions announced its value four
+  times -- three motions, one of them repeated, and the release -- each costing four conf writes and
+  a recomposite; measured two sends with the equality test. Measured on a private broadway server
+  through real GTK key routing, 42 key and gesture checks at dpi factor 1.0 and 1.5: 0 failures, 9
+  before the fixes. Each fix was put back in a scratch copy and caught -- no key handler 7 failures,
+  no first-control focus 1, the key handler connected ahead of the popover's 3, no equality test 1.
+- **The toolbar's tool toggles are a VIEW on the armed tool, and every arm and disarm goes through
+  `_tool_set()`, which raises `DT_SIGNAL_CANVAS_CHANGED`.** `tool_toggles[]` is indexed by the tool
+  each toggle arms, the action lives in the button's object data, the handler asks the view only
+  when the button and the view DISAGREE, and `_refill()` presses the one `armed_tool()` names with
+  every handler blocked by stored id. Exclusivity lives in the view, so a tool armed by a key, a
+  menu, an Escape or the atelier being left moves the pressed button without the toolbar keeping a
+  thing. The two guards cover each other and neither may be simplified away because the tests pass
+  without it: with a stand-in view that refills from inside the still-running `"toggled"` emission
+  -- which is what `_tool_set()`'s raise really does -- dropping BOTH the disagreement guard and the
+  refill's blocking does not merely miscount, it recurses until the process dies; dropping either
+  one alone still scores 0. **And a toolbar button must give the keyboard straight back**
+  (`focus_on_click` FALSE, as the properties strip already does): GtkWindow offers a key to the
+  focus widget and to its own move-focus bindings before the application's handler sees it, so a
+  focused toggle answered Space and ate the arrow keys the plane nudges with.
 - **The ZIP is ours** (`canvas_zip.c`, store + deflate, no ZIP64) because no archive library
   is linked and zlib is. `unzip -t` is run on the writer's output in the unit test when
   available; keep it passing.
@@ -3852,3 +3886,128 @@ they are visible.
   read 1.42:1, titles 3.96:1), so the properties take a darker surface as the tooltips do:
   `@grey_35`, `@grey_30` headings, `@grey_80` for what is secondary -- 4.57:1 on the surface and
   5.44:1 on a heading, under titles at 8.23:1.
+- **A connector's free end is the id 0, and the route resolves the free ends FIRST.** Ids start at
+  1, so no document written before free ends existed can hold one, and a line or a curve is simply
+  a connector with both ends free -- no kind of its own, because every consumer reads the route.
+  `dt_canvas_connector_route()` runs four steps in one order so that nothing is circular: which
+  ends are free; where the free ends are; where the anchored ends are, each aiming at the other
+  end's frame centre or at the point step two placed; and only then which way the free ends leave.
+  Two consequences a reader will otherwise trip on. **The id 0 must be refused wherever an id is
+  looked up, and no object may be LOADED with it**: `dt_canvas_remove_object(canvas, 0)` used to
+  cascade over "every connector attached to object 0" and take every line in the document with it. And **the fixed lengths sized to clear
+  a FRAME must not reach a free end**: a waypoint's automatic tangent had a 40-unit floor and a
+  square stub a 20-unit one, so a ten-unit line through its middle waypoint put its control points
+  at -35 and 45, and a square-routed line of no length painted a 40-unit dash. Verify such a change
+  by hashing the golden routes ROUNDED, not bit-exactly: the library is built with
+  `-ffast-math -ffp-contract=fast` in RelWithDebInfo and without it in Debug, and 44 of the 108
+  golden routes already differed by one ulp between the two builds before any of this; the test
+  hashes lengths rounded to 2^-16 unit, whose closest value to a boundary sits 7e-9 away -- half a
+  million ulps -- and still fails when one automatic reach moves by 1e-4.
+- **Reversing a route means walking the same curve back, and the ends' REACHES and the waypoint's
+  TANGENT are part of it.** A reach belongs to its end and the waypoint's tangent points toward the
+  finish, so swapping ids, anchors, free points and free-end tangents alone bent the curve at the
+  wrong frame and turned the waypoint round. Measured as the largest gap between the reversed route
+  and the old one walked backwards: a free cubic through a dragged waypoint **62.09 units before,
+  7.1e-14 after**; a steered cubic between two frames 68.89 before, 1.7e-13 after. One asymmetry no
+  Reverse writer can mend is PINNED rather than hidden -- between two frames the automatic waypoint
+  tangent's length is 0.4 of the leg leaving the START, so a waypoint slid 0.3 of the chord toward
+  one end strays 46.5 units when reversed. Making it symmetric would move every anchored cubic in
+  every existing document, which the golden routes pin, so the test asserts the asymmetry instead
+  and a change to the routing cannot land without revisiting it.
+- **A shape stores a DEPTH, normalised; the blur's concavity `m` it is derived from is never
+  stored.** `math/polygon_envelope.h` is the lens blur's own polar curve (`n` blades, concavity
+  `m`, linearity `k`), and `m` is valid only while `2 asin k + pi m < n pi`: at `n = 3, m = 2,
+  k = 1` the shape collapses to its centre and past it the radius goes negative, so a stored `m`
+  would turn invalid the moment the user lowered the number of sides under it. The document holds
+  the fraction of the way the notch is pushed from the straight edge towards the centre instead --
+  inner radius `(1 - depth) cos(pi / n)` -- and `m` is derived for the sides in force, which keeps
+  every combination of the three numbers inside the domain by construction. Roundness is `1 - k`.
+  At the shallow end, a depth under `DT_POLYGON_MIN_DEPTH` (1e-6) reads as none, and the two
+  reasons sit ten orders of magnitude apart: a notch pushed in by less than a millionth of the tip
+  radius still lies on the straight edge to rounding, which is what puts the threshold where it is;
+  and below about 1e-16 `1 - depth` IS 1, so the two edges meeting at a notch are exactly opposite
+  and anything taking their bisector divides nought by nought (measured: a bisector of exactly zero
+  at 5, 6, 7, 8 and 10 sides for a depth of 1e-20, and one 6e-5 rad off at 1e-12). Quoting the
+  second alone reads as a threshold near 1e-16. `DT_POLYGON_PENTAGRAM_DEPTH` lives with the geometry rather than
+  with any caller because it is the figure's own number, not a choice of a good-looking star;
+  `canvas.h` re-spells it in the float a record holds and `test_canvas_document` pins the two
+  against each other rather than taking a dependency on `math/` for a constant.
+- **Two fillets that would overlap SHARE their edge in proportion to what each asked for, computed
+  from the UNSHARED demands in one symmetric formula -- never capped at half an edge, and never by
+  a walk that rewrites the array as it goes.** The cap is wrong because a star's segment is only
+  half of the convex polygon's side, so it would halve a tip's largest fillet the instant the depth
+  left zero while the shape has barely moved (`polygon_envelope.h` warns this caller by name);
+  measured continuity across depth zero with the sharing, a hexagon's tip fillet 25.9989 units at
+  depth 0 against 26.1794 at 1e-3. The walk is wrong because it hands the second end of every edge
+  a reach the first end was already cut down to, and never revisits the edge that wraps: measured,
+  an equilateral triangle 400 units wide at a radius of 150 came out with arcs of **108.4, 100.5
+  and 122.5 units at three corners that are the same corner three times over**, and a 12-point star
+  at its deepest notch with a spread of 190 to 1 between its notches -- worst ratio 1700 across
+  sides 3 to 12. Read symmetrically the two ends of an edge still sum to at most its length, so
+  nothing overlaps. One more tie-break belongs to regular shapes specifically: **nudge the arc's
+  sample count off the exact multiple it lands on**, since every corner turns by `2 pi / n`, which
+  the six-degree step divides, and `atan2` falls either side of the multiple by an ulp -- a plain
+  ceiling gives one corner thirteen samples and the next twelve for two arcs that are the same arc.
+- **A shape's text-flow silhouette is its COVERAGE RASTER, and whether it is filled decides what
+  that raster holds.** `dt_canvas_shape_needs_coverage()` answers TRUE for every polygon, filled or
+  not -- an outline is nothing a rectangle's reach can describe -- and for an unfilled rectangle,
+  which covers only the band it paints. A shape's fill is not a backdrop, it IS the shape: measured
+  on a 400-unit column, a filled 220-unit box costs it 247.5 units of height, the same box unfilled
+  121.8, and a column with nothing over it 93.8. Whether the fill is there is decided by an ALPHA,
+  and so is whether the border is, **which makes both COLOURS obstacle edits as much as the Filled
+  switch is** -- a frame flowing round the shape is refitted whichever of the two ways the fill was
+  emptied, and a border painted in nothing paints no band and takes no click either. Also: a
+  polygon's silhouette is capped against the frame's PLAIN box, never the box rounded by the corner
+  radius, since the outline drops that radius once the shape is rounded -- capping with it cut the
+  silhouette back inside a shape the painter fills to the frame's edges, measured at up to 23.7% of
+  the reach on a three-pointed star at roundness 0.25, which `dt_canvas_object_covers()` then reads
+  as uncovered and a connector stops short of.
+- **A `CAIRO_OPERATOR_SOURCE` band must be painted inside a group BOUNDED by the frame, and only
+  when there IS a band.** Replacing is what SOURCE does to whatever else is already on the layer,
+  so a shape's border band -- the outline clipped to itself and stroked at twice the width -- has to
+  be isolated. The "only when there is a band" half is measured, not prudence: a fill is laid with
+  OVER and isolating it changes not one byte (checked on a transparent destination and on a filled
+  one at three fill opacities), while a group costs a frame-sized allocation, a clear and a
+  composite -- **0.05 ms on a small shape's layer and 0.77 ms on a large one, per shape per
+  repaint**. The join is MITRED for the NOTCHES: a tip's join sits outside the shape and the clip
+  discards it, while a notch's lies inside and rounding it would blunt the one corner of a star's
+  band that shows. Measured on a pentagram 320 units wide with a 12-unit band, 362 pixels differ
+  between a mitred and a bevelled band and none of them is at a tip; the limit is never reached, a
+  notch's miter needing at most 3.9 of it.
+- **A drawing gesture asks "did the pointer really move?" of the CONSTRAINED geometry, never of
+  screen pixels.** The threshold is three pixels and a grid cell is twelve units, so a drag shorter
+  than a cell made a line of NO length: measured through `dt_canvas_constrain_line_end()`, a pointer
+  8 units from an on-grid origin comes back AT the origin, and the axis locks land on it too. A
+  press that ends there still places its own object at the release, which is what a click-to-place
+  is. The same rule the other way for a shape: refusing a box that opened on one axis only answered
+  a deliberate three-hundred-unit drag half a grid cell tall with the box a CLICK places, at the
+  press and three hundred units from the pointer that asked for it -- each side is held up to the
+  smallest a shape may have instead. And a REGULAR shape's drag takes whichever side the pointer
+  went further along **measured in the shape's own proportions**: taken from the horizontal travel
+  alone, a drag straight down drew nothing at all, the snapping putting both ends of it on the same
+  grid line.
+- **`dt_canvas_shape_hold_minimum()` is the one place a box is held up to the smallest a shape may
+  have, and it lifts BOTH sides by the one factor the smaller needs.** Held up side by side, a
+  hexagon dragged out three units across lands in a SQUARE box -- and since a shape keeps whatever
+  ratio it is given, that square survives every later resize. The drag in flight, the birth of the
+  shape it draws and `dt_canvas_shape_refit_height()` all go through it, so a drag and its release
+  cannot disagree about what was drawn.
+- **The style a new object is born with lives in conf and belongs to the VIEW; `src/canvas` takes a
+  GTK-free style struct and knows nothing of it.** The property writer says which edits are worth
+  remembering (`DT_CANVAS_EFFECT_COMMIT_CONF`) and the view, which owns the configuration, keeps
+  them; what comes back is sanitised, because a value read from a configuration was written by
+  whatever wrote it, and **a value that is not a number becomes NONE of the length -- zero, held to
+  the range -- never the range's own end**, which is the most extreme value it allows and for a
+  shadow offset is a shadow thrown five hundred units off the shape. Only a connector with BOTH ends
+  free teaches a line style (`dt_canvas_connector_is_line()`, not `..._has_free_end()`, which
+  answers for EITHER end): a connector left half free by a hand-edited file would otherwise style
+  every line after it. Two rules that are easy to miss from either side. **Which override groups a
+  shape OWNS is as much a part of its style as their values are**: taking one is always followed by
+  a value write that asks to be remembered, but handing one back stands alone, so
+  `dt_canvas_group_set_own()` must report `COMMIT_CONF` for a shape either way -- without it the
+  next shape was born with the override the user had just removed. And **a shape drawn with a
+  regular tool is born OWNING a corner radius of nothing whenever the memory says to inherit the
+  canvas's**, the same rule the card's geometry writer states where a rectangle is turned into a
+  polygon: on a canvas whose Corners had been raised, Shift+P drew a star with filleted points
+  while the card's Geometry gave sharp ones, and the Corners row read "inherited" and said nothing
+  about why.
