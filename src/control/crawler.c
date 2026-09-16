@@ -34,6 +34,7 @@
 #include <glib.h>
 #include "common/paths.h"   // DT_PATH_MAX
 #include <gio/gio.h>
+#include <gtk/gtk.h>
 #include <glib/gstdio.h>
 #include <stdio.h>
 #include <string.h>
@@ -47,7 +48,6 @@
 #include "control/jobs.h"
 #include "database/image_repository.h"
 #include "common/image.h"
-#include "common/utility.h"
 #include "crawler.h"
 #include "gui/application.h"
 #include "widgets/widget_settings.h"
