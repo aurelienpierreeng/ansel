@@ -363,10 +363,6 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
     if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
     {
-      const dt_dev_pixelpipe_display_mask_t request_mask_display
-          = (module->dev->gui_attached && (module == module->dev->gui_module) && (pipe == module->dev->pipe))
-                ? module->request_mask_display
-                : DT_DEV_PIXELPIPE_DISPLAY_NONE;
       const dt_pixelpipe_blend_transform_t blend_transforms
           = dt_dev_pixelpipe_transform_for_blend(module, piece, &piece->dsc_out);
       cl_mem_blend_input = cl_mem_process_input;
@@ -432,21 +428,13 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       if(dt_develop_blend_process_cl(module, pipe, piece, cl_mem_blend_input, cl_mem_blend_output))
         goto error;
 
+      // a mask or channel preview is converted like any output, see pixelpipe_cpu.c
       if((blend_transforms & DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT)
-         && request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY)
-      {
-        size_t origin[] = { 0, 0, 0 };
-        size_t region[] = { piece->roi_out.width, piece->roi_out.height, 1 };
-        if(dt_opencl_enqueue_copy_image(pipe->devid, cl_mem_blend_output, cl_mem_output, origin, origin,
-                                        region) != CL_SUCCESS)
-          goto error;
-      }
-      else if((blend_transforms & DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT)
-              && !dt_colorspaces_apply_profile_cl(module->op, module->multi_name, pipe->devid, cl_mem_blend_output,
-                                                         cl_mem_output, piece->roi_out.width,
-                                                         piece->roi_out.height, blend_output_dsc.cst,
-                                                         piece->dsc_out.cst, &blend_output_dsc.cst,
-                                                         work_profile))
+         && !dt_colorspaces_apply_profile_cl(module->op, module->multi_name, pipe->devid, cl_mem_blend_output,
+                                             cl_mem_output, piece->roi_out.width,
+                                             piece->roi_out.height, blend_output_dsc.cst,
+                                             piece->dsc_out.cst, &blend_output_dsc.cst,
+                                             work_profile))
         goto error;
 
       *pixelpipe_flow |= PIXELPIPE_FLOW_BLENDED_ON_GPU;
@@ -530,10 +518,6 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     void *blend_output = output;
     blend_output_dsc = piece->dsc_out;
 
-    const dt_dev_pixelpipe_display_mask_t request_mask_display
-        = (module->dev->gui_attached && (module == module->dev->gui_module) && (pipe == module->dev->pipe))
-              ? module->request_mask_display
-              : DT_DEV_PIXELPIPE_DISPLAY_NONE;
     const dt_pixelpipe_blend_transform_t blend_transforms
         = dt_dev_pixelpipe_transform_for_blend(module, piece, &piece->dsc_out);
     if(blend_transforms != DT_DEV_PIXELPIPE_BLEND_TRANSFORM_NONE)
@@ -589,17 +573,11 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
     if((blend_transforms & DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT))
     {
-      if(request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY)
-      {
-        memcpy(output, blend_output,
-               (size_t)piece->roi_out.width * piece->roi_out.height * piece->dsc_out.bpp);
-      }
-      else
-      {
-        dt_colorspaces_apply_profile(module->op, module->multi_name, blend_output, output, piece->roi_out.width,
-                                            piece->roi_out.height, blend_output_dsc.cst, piece->dsc_out.cst,
-                                            &blend_output_dsc.cst, work_profile);
-      }
+      // A mask or channel preview is converted like any output: the preview is authored in the
+      // blending space precisely so this conversion lands it where the display expects it.
+      dt_colorspaces_apply_profile(module->op, module->multi_name, blend_output, output, piece->roi_out.width,
+                                   piece->roi_out.height, blend_output_dsc.cst, piece->dsc_out.cst,
+                                   &blend_output_dsc.cst, work_profile);
     }
 
     if(input_locked)
