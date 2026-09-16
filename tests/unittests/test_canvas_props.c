@@ -510,10 +510,6 @@ static void _every_property_round_trips_on_every_kind(void **state)
   g_string_append_printf(expected, "arrange.height@%u;", (unsigned)DT_CANVAS_OBJECT_TEXT);
   if(dt_canvas_map_source_count() < 2)
     g_string_append_printf(expected, "map.style@%u;", (unsigned)DT_CANVAS_OBJECT_MAP);
-  // The rectangle is the only geometry this build offers, so its row has nothing to round-trip
-  // through; the line goes when the polygon and the star join it. It comes last because the kinds
-  // are walked in `_kinds` order and the shape is the last of them.
-  g_string_append_printf(expected, "shape.geometry@%u;", (unsigned)DT_CANVAS_OBJECT_SHAPE);
   fprintf(stderr, "round trip: %d writes, skipped %s, excused %s\n", written, skipped->str, excused->str);
   assert_string_equal(skipped->str, expected->str);
   // Only a text frame's centre is ever excused, and only when its refit moved it.
@@ -1523,11 +1519,15 @@ static int _card_rows_applying(const dt_canvas_object_t *object)
 }
 
 /**
- * Deciding a section by what applies rather than by what the kind owns moves no section of any
- * kind there is today: every gated row sits beside an ungated one, so a section closed by a shape
- * or a switch has never been a section closed altogether. The day a kind arrives whose section is
- * gated throughout -- a rectangle has nothing to say about a polygon's sides -- this is where the
- * two rules part company, and it should be that kind that parts them, not one of these.
+ * Deciding a section by what applies rather than by what the kind owns moves no section of the kinds
+ * that were there before the drawn shape: every gated row of theirs sits beside an ungated one, so a
+ * section closed by a cutout or by a switch has never been a section closed altogether.
+ *
+ * The shape is the kind that parts the two rules, exactly as this test said it would be. A shape's
+ * own section holds three card rows and all three belong to a polygon, so a RECTANGLE's card has no
+ * Shape section at all -- there is nothing in it to show, the geometry and the fill switch both
+ * living on the strip. The kind's own tally cannot say that, because the kind owns those rows all
+ * the same; only what applies can.
  */
 static void _a_section_is_there_when_one_of_its_rows_applies(void **state)
 {
@@ -1537,8 +1537,14 @@ static void _a_section_is_there_when_one_of_its_rows_applies(void **state)
   for(size_t kind_index = 0; kind_index < G_N_ELEMENTS(_kinds); kind_index++)
   {
     dt_canvas_object_t *object = fixture.objects[kind_index];
-    const uint32_t owned = _sections_for_kind(_kinds[kind_index]);
+    uint32_t owned = _sections_for_kind(_kinds[kind_index]);
     assert_true(owned != 0);
+    if(_kinds[kind_index] == DT_CANVAS_OBJECT_SHAPE)
+    {
+      // The fixture's shape is a rectangle, whose Shape section is gated away whole.
+      assert_true((owned & (1u << DT_CANVAS_SECTION_SHAPE)) != 0);
+      owned &= ~(1u << DT_CANVAS_SECTION_SHAPE);
+    }
     assert_int_equal(_sections_present(object), owned);
     if(_kinds[kind_index] == DT_CANVAS_OBJECT_CONNECTOR) continue;
     // Every state the gated rows can put a frame in: the cutout's five shapes, and under each of
@@ -2254,6 +2260,251 @@ static void _handing_a_group_back_is_a_shapes_style_too(void **state)
   _fixture_free(&fixture);
 }
 
+/* --- polygons and stars ---------------------------------------------------------------------- */
+
+/**
+ * Switching a shape's geometry to a polygon or a star settles three things besides the geometry
+ * itself, and each of them is a decision. The cutout goes, because a polygon is not cut and a mask
+ * left behind would be one the card could no longer reach. The corner radius becomes the shape's
+ * own, at nothing, when the shape was inheriting the canvas's -- a radius meant to soften a
+ * picture's corners has no business blunting the points of a star. And the height goes back to the
+ * ratio the new outline states, since the box a rectangle was dragged into is not a hexagon's.
+ */
+static void _a_geometry_switch_clears_the_cutout_and_refits_the_shape(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  // A rectangle, cut, and inheriting the canvas's six units of corner radius.
+  const dt_canvas_prop_value_t ellipse = _choice(DT_CANVAS_MASK_ELLIPSE);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_CUTOUT_SHAPE, &ellipse)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_int_equal(shape->mask.shape, DT_CANVAS_MASK_ELLIPSE);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, shape, DT_CANVAS_GROUP_CORNER), DT_CANVAS_OWN_INHERIT);
+  assert_float_equal(dt_canvas_object_effective_corner_radius(fixture.canvas, shape), 6.0, 1e-9);
+  const double width_before = shape->width;
+
+  const dt_canvas_prop_value_t polygon = _choice(1);
+  const uint32_t effects = dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &polygon);
+  assert_true(effects & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(effects & DT_CANVAS_EFFECT_RESTRUCTURE);
+  assert_true(effects & DT_CANVAS_EFFECT_COUPLED);
+  assert_true(dt_canvas_shape_is_polygon(shape));
+  assert_int_equal(shape->mask.shape, DT_CANVAS_MASK_NONE);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, shape, DT_CANVAS_GROUP_CORNER),
+                   DT_CANVAS_OWN_KIND_DEFAULT);
+  assert_float_equal(dt_canvas_object_effective_corner_radius(fixture.canvas, shape), 0.0, 1e-9);
+  // The width the user dragged is kept; the height is the one the hexagon asks for.
+  assert_float_equal(shape->width, width_before, 1e-9);
+  assert_float_equal(shape->width / shape->height,
+                     dt_canvas_shape_unit_aspect(shape->shape.sides, 0.0f, 0.0f), 1e-9);
+
+  // A radius the user then asks for is theirs, and switching to a star does not take it away again:
+  // the rule is about an INHERITED radius nobody chose for this shape.
+  const dt_canvas_prop_value_t radius = _number(9.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_CORNER_RADIUS, &radius)
+              & DT_CANVAS_EFFECT_CHANGED);
+  const dt_canvas_prop_value_t star = _choice(2);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &star)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_float_equal(dt_canvas_object_effective_corner_radius(fixture.canvas, shape), 9.0, 1e-9);
+  // A star IS a polygon whose notches have a depth, and the row reads it back as one.
+  assert_float_equal(shape->shape.depth, DT_CANVAS_SHAPE_STAR_DEPTH, 1e-6);
+  dt_canvas_prop_value_t read;
+  dt_canvas_prop_read(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &read);
+  assert_int_equal(read.choice, 2);
+  assert_float_equal(shape->width / shape->height,
+                     dt_canvas_shape_unit_aspect(shape->shape.sides, shape->shape.depth, 0.0f), 1e-9);
+
+  // Back to a polygon, the notches go and the row says so; back to a rectangle, the numbers stay
+  // where they are so the next switch finds the shape that was there.
+  const dt_canvas_prop_value_t back_to_polygon = _choice(1);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &back_to_polygon)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_float_equal(shape->shape.depth, 0.0f, 1e-9);
+  const dt_canvas_prop_value_t rectangle = _choice(0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &rectangle)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_int_equal(shape->shape.geometry, DT_CANVAS_SHAPE_RECTANGLE);
+  assert_int_equal(shape->shape.sides, DT_CANVAS_SHAPE_DEFAULT_SIDES);
+  dt_canvas_prop_read(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &read);
+  assert_int_equal(read.choice, 0);
+  _fixture_free(&fixture);
+}
+
+/** The three numbers an outline is made of are held to what an outline can be made of. */
+static void _a_shapes_outline_numbers_are_held_to_their_range(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  const dt_canvas_prop_value_t polygon = _choice(1);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &polygon);
+
+  const dt_canvas_prop_value_t two_sides = _number(2.0);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_SIDES, &two_sides);
+  assert_int_equal(shape->shape.sides, DT_CANVAS_SHAPE_MIN_SIDES);
+  const dt_canvas_prop_value_t twenty_sides = _number(20.0);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_SIDES, &twenty_sides);
+  assert_int_equal(shape->shape.sides, DT_CANVAS_SHAPE_MAX_SIDES);
+  // Every write refits: a shape of twelve sides is not the shape three sides was.
+  assert_float_equal(shape->width / shape->height, dt_canvas_shape_unit_aspect(12, 0.0f, 0.0f), 1e-9);
+
+  const dt_canvas_prop_value_t deep = _number(400.0);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_DEPTH, &deep);
+  assert_float_equal(shape->shape.depth, DT_CANVAS_SHAPE_MAX_DEPTH, 1e-6);
+  const dt_canvas_prop_value_t shallow = _number(-50.0);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_DEPTH, &shallow);
+  // The row itself does not offer a star with no notch at all: five percent is the shallowest.
+  assert_float_equal(shape->shape.depth, 0.05f, 1e-6);
+
+  const dt_canvas_prop_value_t too_round = _number(300.0);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_ROUNDNESS, &too_round);
+  assert_float_equal(shape->shape.roundness, 1.0f, 1e-6);
+  const dt_canvas_prop_value_t straight = _number(-1.0);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_ROUNDNESS, &straight);
+  assert_float_equal(shape->shape.roundness, 0.0f, 1e-6);
+  _fixture_free(&fixture);
+}
+
+/** Which rows a shape shows is its geometry's business, and no other kind's. */
+static void _a_polygons_card_offers_its_outline_and_no_cutout(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  static const dt_canvas_prop_id_t outline_rows[]
+      = { DT_CANVAS_PROP_SHAPE_SIDES, DT_CANVAS_PROP_SHAPE_ROUNDNESS, DT_CANVAS_PROP_KEEP_RATIO };
+  static const dt_canvas_prop_id_t cutout_rows[]
+      = { DT_CANVAS_PROP_CUTOUT_SHAPE, DT_CANVAS_PROP_CUTOUT_FEATHER, DT_CANVAS_PROP_CUTOUT_INVERT,
+          DT_CANVAS_PROP_CUTOUT_EDIT,  DT_CANVAS_PROP_CUTOUT_SIZE_X,  DT_CANVAS_PROP_CUTOUT_SIZE_Y };
+
+  // A rectangle: the cutout is its own, and it has no outline to describe.
+  for(size_t idx = 0; idx < G_N_ELEMENTS(outline_rows); idx++)
+    assert_false(dt_canvas_prop_applies(dt_canvas_prop_get(outline_rows[idx]), shape));
+  assert_true(dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_CUTOUT_SHAPE), shape));
+  assert_false(dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_SHAPE_DEPTH), shape));
+
+  const dt_canvas_prop_value_t polygon = _choice(1);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &polygon);
+  for(size_t idx = 0; idx < G_N_ELEMENTS(outline_rows); idx++)
+    assert_true(dt_canvas_prop_applies(dt_canvas_prop_get(outline_rows[idx]), shape));
+  for(size_t idx = 0; idx < G_N_ELEMENTS(cutout_rows); idx++)
+    assert_false(dt_canvas_prop_applies(dt_canvas_prop_get(cutout_rows[idx]), shape));
+  // The depth belongs to the star alone: a polygon with a depth is a star, so the row that sets it
+  // is the row that would contradict the choice above it.
+  assert_false(dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_SHAPE_DEPTH), shape));
+  const dt_canvas_prop_value_t star = _choice(2);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &star);
+  assert_true(dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_SHAPE_DEPTH), shape));
+
+  // Even carrying a mask it should not have, a polygon offers no cutout row: the reader answers
+  // NONE for it, exactly as the painter and the hit test read it.
+  dt_canvas_mask_set_shape(fixture.canvas, shape, DT_CANVAS_MASK_CIRCLE);
+  assert_int_equal(shape->mask.shape, DT_CANVAS_MASK_CIRCLE);
+  dt_canvas_prop_value_t cutout;
+  dt_canvas_prop_read(fixture.canvas, shape, DT_CANVAS_PROP_CUTOUT_SHAPE, &cutout);
+  assert_int_equal(cutout.choice, DT_CANVAS_MASK_NONE);
+  for(size_t idx = 0; idx < G_N_ELEMENTS(cutout_rows); idx++)
+    assert_false(dt_canvas_prop_applies(dt_canvas_prop_get(cutout_rows[idx]), shape));
+
+  // A picture and a drawing are untouched by any of it: they keep their proportions row and their
+  // cutout, and a shape's geometry is no condition on a kind that has none.
+  for(int which = 1; which <= 3; which += 2)
+  {
+    dt_canvas_object_t *other = fixture.objects[which];
+    assert_true(dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_KEEP_RATIO), other));
+    for(size_t idx = 0; idx < G_N_ELEMENTS(cutout_rows); idx++)
+    {
+      const dt_canvas_prop_t *row = dt_canvas_prop_get(cutout_rows[idx]);
+      // The chained rows still follow the cutout's own shape, which is the condition they carry.
+      if(row->visible_if == DT_CANVAS_PROP_CUTOUT_SHAPE) continue;
+      assert_true(dt_canvas_prop_applies(row, other));
+    }
+  }
+  // A text frame has no proportions to keep, geometry or no geometry.
+  assert_false(dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_KEEP_RATIO), fixture.objects[0]));
+  _fixture_free(&fixture);
+}
+
+/**
+ * A polygon stretched by hand goes back to its own shape the moment it is told to keep its
+ * proportions again -- here, and not at the next resize, which is when the user would have stopped
+ * looking for it.
+ */
+static void _asking_for_proportions_back_takes_a_polygon_back_to_its_shape(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  const dt_canvas_prop_value_t polygon = _choice(1);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &polygon);
+  const double aspect = dt_canvas_shape_unit_aspect(shape->shape.sides, 0.0f, 0.0f);
+
+  const dt_canvas_prop_value_t freed = _flag(FALSE);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_KEEP_RATIO, &freed)
+              & DT_CANVAS_EFFECT_CHANGED);
+  const dt_canvas_prop_value_t tall = _number(600.0);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_HEIGHT, &tall);
+  assert_float_equal(shape->height, 600.0, 1e-9);
+  assert_true(fabs(shape->width / shape->height - aspect) > 0.1);
+
+  const dt_canvas_prop_value_t kept = _flag(TRUE);
+  const uint32_t effects = dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_KEEP_RATIO, &kept);
+  assert_true(effects & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(effects & DT_CANVAS_EFFECT_COUPLED);
+  assert_float_equal(shape->width / shape->height, aspect, 1e-9);
+
+  // A picture keeps whatever proportions it was last left at: only a shape's are its outline's.
+  dt_canvas_object_t *picture = fixture.objects[1];
+  dt_canvas_prop_write(fixture.canvas, picture, DT_CANVAS_PROP_KEEP_RATIO, &freed);
+  const double picture_height = picture->height;
+  assert_int_equal(dt_canvas_prop_write(fixture.canvas, picture, DT_CANVAS_PROP_KEEP_RATIO, &kept)
+                       & DT_CANVAS_EFFECT_COUPLED,
+                   0);
+  assert_float_equal(picture->height, picture_height, 1e-9);
+  _fixture_free(&fixture);
+}
+
+/**
+ * A polygon's sides, its notches and its roundness are its style, the way its colour is: the tool
+ * that drew a five-pointed star draws the next one with five points. The geometry is NOT -- what a
+ * shape IS was asked for by the tool, and is not something one shape teaches another.
+ */
+static void _an_outline_number_is_a_shapes_style_and_the_geometry_is_not(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  const dt_canvas_prop_value_t polygon = _choice(1);
+  assert_int_equal(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &polygon)
+                       & DT_CANVAS_EFFECT_COMMIT_CONF,
+                   0);
+  const dt_canvas_prop_value_t seven = _number(7.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_SIDES, &seven)
+              & DT_CANVAS_EFFECT_COMMIT_CONF);
+  const dt_canvas_prop_value_t rounded = _number(40.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_ROUNDNESS, &rounded)
+              & DT_CANVAS_EFFECT_COMMIT_CONF);
+  const dt_canvas_prop_value_t star = _choice(2);
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_GEOMETRY, &star);
+  const dt_canvas_prop_value_t deeper = _number(70.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_DEPTH, &deeper)
+              & DT_CANVAS_EFFECT_COMMIT_CONF);
+  // And the style carries them out to whoever keeps it.
+  dt_canvas_shape_style_t style;
+  assert_true(dt_canvas_shape_style_get(shape, &style));
+  assert_int_equal(style.sides, 7);
+  assert_float_equal(style.depth, 0.7f, 1e-6);
+  assert_float_equal(style.roundness, 0.4f, 1e-6);
+  _fixture_free(&fixture);
+}
+
 /** Only what has something inside it is drilled into. */
 static void _only_texts_pictures_and_drawings_have_a_content_action(void **state)
 {
@@ -2286,6 +2537,11 @@ int main(void)
     cmocka_unit_test(_properties_closed_since_the_first_press_do_not_drill),
     cmocka_unit_test(_only_the_objects_own_properties_lead_into_it),
     cmocka_unit_test(_a_double_click_takes_a_handle_only_when_its_first_press_did),
+    cmocka_unit_test(_a_geometry_switch_clears_the_cutout_and_refits_the_shape),
+    cmocka_unit_test(_a_shapes_outline_numbers_are_held_to_their_range),
+    cmocka_unit_test(_a_polygons_card_offers_its_outline_and_no_cutout),
+    cmocka_unit_test(_asking_for_proportions_back_takes_a_polygon_back_to_its_shape),
+    cmocka_unit_test(_an_outline_number_is_a_shapes_style_and_the_geometry_is_not),
     cmocka_unit_test(_only_texts_pictures_and_drawings_have_a_content_action),
     cmocka_unit_test(_the_filled_switch_is_the_fills_own_opacity),
     cmocka_unit_test(_switching_the_fill_off_rescues_a_shape_that_would_vanish),

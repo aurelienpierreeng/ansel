@@ -2569,6 +2569,488 @@ static void _a_whole_canvas_arrangement_leaves_shapes_where_they_are(void **stat
   dt_canvas_free(canvas);
 }
 
+/* --- polygons and stars ---------------------------------------------------------------------- */
+
+/** A shape of the given geometry, filling `width` x `height` at the origin, with no corner radius. */
+static dt_canvas_object_t *_polygon(dt_canvas_t *canvas, const uint32_t sides, const float depth,
+                                    const float roundness, const double width, const double height)
+{
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.sides = sides;
+  style.depth = depth;
+  style.roundness = roundness;
+  const dt_canvas_rect_t box = { -0.5 * width, -0.5 * height, width, height };
+  return dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_POLYGON, &box, &style);
+}
+
+/** The box around an outline, as four numbers. */
+static void _outline_box(const double *outline, const size_t points, double *left, double *right, double *top,
+                         double *bottom)
+{
+  *left = HUGE_VAL;
+  *right = -HUGE_VAL;
+  *top = HUGE_VAL;
+  *bottom = -HUGE_VAL;
+  for(size_t idx = 0; idx < points; idx++)
+  {
+    *left = fmin(*left, outline[2 * idx]);
+    *right = fmax(*right, outline[2 * idx]);
+    *top = fmin(*top, outline[2 * idx + 1]);
+    *bottom = fmax(*bottom, outline[2 * idx + 1]);
+  }
+}
+
+/**
+ * The shape touches all four edges of the frame it stands in, whatever it is: that is what makes
+ * the frame's handles, the snapping, the layout and the body hug the shape rather than a box drawn
+ * loosely around it. It holds for the convex polygon, the star and the rounded forms of both,
+ * and in a frame of any proportions -- the fit stretches each axis on its own.
+ */
+static void _a_fitted_outline_fills_the_frame_it_stands_in(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  static const struct
+  {
+    uint32_t sides;
+    float depth;
+    float roundness;
+  } cases[] = {
+    { 3, 0.0f, 0.0f },  { 5, 0.0f, 0.0f },  { 6, 0.0f, 0.0f },  { 12, 0.0f, 0.0f },
+    { 5, DT_CANVAS_SHAPE_STAR_DEPTH, 0.0f }, { 7, 0.9f, 0.0f },  { 3, 0.0f, 1.0f },
+    { 6, 0.5f, 0.35f }, { 8, 0.0f, 0.5f },  { 12, 0.95f, 0.02f },
+  };
+  static const double boxes[][2] = { { 200.0, 140.0 }, { 97.0, 313.0 }, { 640.0, 640.0 } };
+  for(size_t idx = 0; idx < G_N_ELEMENTS(cases); idx++)
+  {
+    for(size_t box = 0; box < G_N_ELEMENTS(boxes); box++)
+    {
+      dt_canvas_object_t *shape
+          = _polygon(canvas, cases[idx].sides, cases[idx].depth, cases[idx].roundness, boxes[box][0], boxes[box][1]);
+      assert_non_null(shape);
+      // Built by hand rather than by dt_canvas_add_shape(), which holds a polygon at its own ratio.
+      shape->flags |= DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
+      shape->width = boxes[box][0];
+      shape->height = boxes[box][1];
+      double outline[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+      const size_t points = dt_canvas_shape_outline(canvas, shape, outline, DT_CANVAS_SHAPE_OUTLINE_MAX);
+      assert_true(points >= 3);
+      double left = 0.0;
+      double right = 0.0;
+      double top = 0.0;
+      double bottom = 0.0;
+      _outline_box(outline, points, &left, &right, &top, &bottom);
+      assert_float_equal(right - left, boxes[box][0], 1e-9);
+      assert_float_equal(bottom - top, boxes[box][1], 1e-9);
+      // Centred on the frame's own centre, which is where the object sits.
+      assert_float_equal(left + right, 0.0, 1e-9);
+      assert_float_equal(top + bottom, 0.0, 1e-9);
+      dt_canvas_remove_object(canvas, shape->id);
+    }
+  }
+  dt_canvas_free(canvas);
+}
+
+/**
+ * A polygon and a star are regular, and the proportion they keep is their own outline's: a hexagon
+ * is `sqrt(3) / 2` as wide as it is tall and stays so however its sides, its notches or its
+ * roundness are edited. A rectangle has no such shape to keep, and neither has a polygon told to
+ * keep none.
+ */
+static void _a_polygon_is_born_and_stays_at_its_own_ratio(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *hexagon = _polygon(canvas, 6, 0.0f, 0.0f, 240.0, 240.0);
+  assert_non_null(hexagon);
+  assert_true(dt_canvas_object_keeps_ratio(hexagon));
+  assert_true(dt_canvas_shape_refit_height(hexagon));
+  const double hexagon_aspect = dt_canvas_shape_unit_aspect(6, 0.0f, 0.0f);
+  assert_float_equal(hexagon_aspect, sqrt(3.0) / 2.0, 1e-9);
+  assert_float_equal(hexagon->width / hexagon->height, hexagon_aspect, 1e-9);
+  // Once fitted it is fitted: asking again moves nothing.
+  assert_false(dt_canvas_shape_refit_height(hexagon));
+
+  // The triangle's is 2 / sqrt(3), and a five-pointed star's is its own: every one of them comes
+  // from the same points the outline draws, so the frame and the shape cannot disagree.
+  assert_float_equal(dt_canvas_shape_unit_aspect(3, 0.0f, 0.0f), 2.0 / sqrt(3.0), 1e-9);
+  hexagon->shape.sides = 5;
+  hexagon->shape.depth = DT_CANVAS_SHAPE_STAR_DEPTH;
+  assert_true(dt_canvas_shape_refit_height(hexagon));
+  assert_float_equal(hexagon->width / hexagon->height,
+                     dt_canvas_shape_unit_aspect(5, DT_CANVAS_SHAPE_STAR_DEPTH, 0.0f), 1e-9);
+
+  // Told to keep none, it is left stretched as it was stretched.
+  hexagon->flags |= DT_CANVAS_OBJECT_FLAG_FREE_RATIO;
+  hexagon->height = 1000.0;
+  assert_false(dt_canvas_object_keeps_ratio(hexagon));
+  assert_false(dt_canvas_shape_refit_height(hexagon));
+  assert_float_equal(hexagon->height, 1000.0, 1e-9);
+
+  // A rectangle has no ratio of its own, whatever numbers it carries for a geometry switch.
+  const dt_canvas_rect_t box = { 0.0, 0.0, 300.0, 100.0 };
+  dt_canvas_object_t *rectangle = dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, NULL);
+  assert_non_null(rectangle);
+  assert_false(dt_canvas_object_keeps_ratio(rectangle));
+  assert_false(dt_canvas_shape_refit_height(rectangle));
+
+  // A shape too small to be one is held up to the smallest a shape may have, and that hold keeps
+  // its proportions: lifting each side on its own puts a hexagon dragged out three units across
+  // into a SQUARE box, and since a polygon keeps whatever ratio it is given, that square is then
+  // what every later resize preserves.
+  const dt_canvas_rect_t speck = { 0.0, 0.0, 3.0, 3.0 / (sqrt(3.0) / 2.0) };
+  dt_canvas_shape_style_t tiny_style = dt_canvas_shape_style_default();
+  tiny_style.sides = 6;
+  dt_canvas_object_t *tiny = dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_POLYGON, &speck, &tiny_style);
+  assert_non_null(tiny);
+  fprintf(stderr, "a hexagon dragged out three units across is born %.3f by %.3f\n", tiny->width, tiny->height);
+  assert_true(tiny->width >= 4.0 - 1e-9);
+  assert_true(tiny->height >= 4.0 - 1e-9);
+  assert_float_equal(tiny->width / tiny->height, hexagon_aspect, 1e-9);
+  // And the refit agrees with the birth on the same box: a shape narrower than the minimum grows
+  // both ways rather than coming out square.
+  tiny->width = 3.0;
+  tiny->height = 3.0;
+  assert_true(dt_canvas_shape_refit_height(tiny));
+  assert_true(tiny->width >= 4.0 - 1e-9);
+  assert_true(tiny->height >= 4.0 - 1e-9);
+  assert_float_equal(tiny->width / tiny->height, hexagon_aspect, 1e-9);
+  dt_canvas_free(canvas);
+}
+
+/** How far a point is from the nearest point of an outline. */
+static double _outline_nearest(const double *outline, const size_t points, const double x, const double y)
+{
+  double nearest = HUGE_VAL;
+  for(size_t idx = 0; idx < points; idx++)
+    nearest = fmin(nearest, hypot(outline[2 * idx] - x, outline[2 * idx + 1] - y));
+  return nearest;
+}
+
+/** How far a point is from the nearest SEGMENT of a closed outline, the closing one included. */
+static double _outline_edge_distance(const double *outline, const size_t points, const double x, const double y)
+{
+  double nearest = HUGE_VAL;
+  for(size_t idx = 0; idx < points; idx++)
+  {
+    const size_t next = (idx + 1) % points;
+    nearest = fmin(nearest, dt_canvas_segment_distance(x, y, outline[2 * idx], outline[2 * idx + 1],
+                                                       outline[2 * next], outline[2 * next + 1]));
+  }
+  return nearest;
+}
+
+/** Whether two segments cross each other anywhere but at a shared end. */
+static gboolean _segments_cross(const double ax, const double ay, const double bx, const double by,
+                                const double cx, const double cy, const double dx, const double dy)
+{
+  const double first_x = bx - ax;
+  const double first_y = by - ay;
+  const double second_x = dx - cx;
+  const double second_y = dy - cy;
+  const double denominator = first_x * second_y - first_y * second_x;
+  if(fabs(denominator) < 1e-12) return FALSE;
+  const double along = ((cx - ax) * second_y - (cy - ay) * second_x) / denominator;
+  const double across = ((cx - ax) * first_y - (cy - ay) * first_x) / denominator;
+  // Strictly inside both, so two segments meeting end to end are not a crossing.
+  return along > 1e-9 && along < 1.0 - 1e-9 && across > 1e-9 && across < 1.0 - 1e-9;
+}
+
+/** How many pairs of an outline's segments cross, the adjacent ones excepted: a simple outline has none. */
+static int _outline_self_crossings(const double *outline, const size_t points)
+{
+  int crossings = 0;
+  for(size_t first = 0; first < points; first++)
+  {
+    const size_t first_next = (first + 1) % points;
+    for(size_t second = first + 2; second < points; second++)
+    {
+      const size_t second_next = (second + 1) % points;
+      if(second_next == first) continue;
+      if(_segments_cross(outline[2 * first], outline[2 * first + 1], outline[2 * first_next],
+                         outline[2 * first_next + 1], outline[2 * second], outline[2 * second + 1],
+                         outline[2 * second_next], outline[2 * second_next + 1]))
+        crossings++;
+    }
+  }
+  return crossings;
+}
+
+/**
+ * A fillet stops where the edge it shares with its neighbour runs out, and the two share that edge
+ * in proportion to what each asked for -- NOT half each. `math/polygon_envelope.h` warns this caller
+ * by name against the half-edge cap, and the second half of this test is why: a star's segment is
+ * half of the convex polygon's side, so a cap at half of it would halve the largest fillet a tip can
+ * take the instant the notches gained a depth, while the shape itself has barely moved. Sharing in
+ * proportion is continuous there, because a notch that has barely left the straight edge asks for
+ * almost nothing and leaves the whole segment to the tip.
+ *
+ * What the sharing owes is that no fillet passes the corner beside it -- an arc that did would run
+ * back along the edge it shares and cross both its neighbour and the straight piece between them. A
+ * twelve-pointed star at the deepest notch, with a radius larger than the whole shape, is the
+ * hardest case there is: every one of its twenty-four corners asks for more than it can have.
+ */
+static void _a_fillet_stops_where_its_neighbour_starts(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *star = _polygon(canvas, 12, (float)DT_CANVAS_SHAPE_MAX_DEPTH, 0.0f, 400.0, 400.0);
+  assert_non_null(star);
+  double corners[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+  const size_t corner_count = dt_canvas_shape_outline(canvas, star, corners, DT_CANVAS_SHAPE_OUTLINE_MAX);
+  assert_int_equal(corner_count, 24);
+  assert_int_equal(_outline_self_crossings(corners, corner_count), 0);
+
+  star->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  star->corner_radius = 10000.0f;
+  double rounded[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+  const size_t rounded_count = dt_canvas_shape_outline(canvas, star, rounded, DT_CANVAS_SHAPE_OUTLINE_MAX);
+  assert_true(rounded_count > corner_count);
+  // The worst case the buffer is sized for, and it fits.
+  assert_true(rounded_count <= DT_CANVAS_SHAPE_OUTLINE_MAX);
+  const int crossings = _outline_self_crossings(rounded, rounded_count);
+  fprintf(stderr, "fillets on a 12-point star: %zu corners -> %zu points, %d self-crossings\n", corner_count,
+          rounded_count, crossings);
+  assert_int_equal(crossings, 0);
+  // And inside the frame the corners stood in: rounding a corner never grows a shape past its box.
+  double left = 0.0;
+  double right = 0.0;
+  double top = 0.0;
+  double bottom = 0.0;
+  _outline_box(rounded, rounded_count, &left, &right, &top, &bottom);
+  assert_true(left >= -0.5 * star->width - 1e-9);
+  assert_true(right <= 0.5 * star->width + 1e-9);
+  assert_true(top >= -0.5 * star->height - 1e-9);
+  assert_true(bottom <= 0.5 * star->height + 1e-9);
+
+  // The continuity the half-edge cap would have cost: a hexagon whose notches have barely left the
+  // straight edge rounds its tips by what the convex hexagon rounds them by.
+  double reach_at[2] = { 0.0, 0.0 };
+  const float depths[2] = { 0.0f, 1e-3f };
+  for(int which = 0; which < 2; which++)
+  {
+    dt_canvas_object_t *hexagon = _polygon(canvas, 6, depths[which], 0.0f, 400.0, 400.0);
+    assert_non_null(hexagon);
+    hexagon->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+    hexagon->corner_radius = 10000.0f;
+    const size_t points = dt_canvas_shape_outline(canvas, hexagon, rounded, DT_CANVAS_SHAPE_OUTLINE_MAX);
+    assert_true(points > 6);
+    assert_int_equal(_outline_self_crossings(rounded, points), 0);
+    // How far the rounded outline stands off the tip it rounds: the size of that tip's fillet.
+    reach_at[which] = _outline_nearest(rounded, points, 0.0, -0.5 * hexagon->height);
+    dt_canvas_remove_object(canvas, hexagon->id);
+  }
+  fprintf(stderr, "tip fillet across depth zero: %.4f units at depth 0, %.4f at depth 1e-3\n", reach_at[0],
+          reach_at[1]);
+  assert_true(reach_at[0] > 1.0);
+  assert_true(fabs(reach_at[1] - reach_at[0]) < 0.02 * reach_at[0]);
+
+  // And every corner of a regular shape is rounded by the SAME arc as every other corner of its
+  // kind, because the shape's own symmetry says they are the same corner over and over. A pass that
+  // shared each edge as it walked broke exactly this: the reach it cut down at one end of an edge
+  // was the reach the next edge then shared against, and the edge that wraps was never revisited.
+  const float symmetry_depths[2] = { 0.0f, (float)DT_CANVAS_SHAPE_STAR_DEPTH };
+  for(int which = 0; which < 2; which++)
+  {
+    dt_canvas_object_t *regular = _polygon(canvas, 5, symmetry_depths[which], 0.0f, 400.0, 400.0);
+    assert_non_null(regular);
+    assert_true(dt_canvas_shape_refit_height(regular));
+    double corner_points[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+    const size_t corners_here
+        = dt_canvas_shape_outline(canvas, regular, corner_points, DT_CANVAS_SHAPE_OUTLINE_MAX);
+    assert_int_equal(corners_here, symmetry_depths[which] > 0.0f ? 10u : 5u);
+    regular->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+    // Big enough that the neighbours really do have to share their edge: at a radius no edge is
+    // short for, every reach is the one it asked for and the sharing is never reached at all.
+    regular->corner_radius = 200.0f;
+    double filleted[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+    const size_t filleted_points
+        = dt_canvas_shape_outline(canvas, regular, filleted, DT_CANVAS_SHAPE_OUTLINE_MAX);
+    assert_true(filleted_points > corners_here);
+    // How far each corner was pulled in by its own fillet, corner by corner around the shape.
+    double pulled_in[2] = { -1.0, -1.0 };
+    for(size_t idx = 0; idx < corners_here; idx++)
+    {
+      const double pull = _outline_edge_distance(filleted, filleted_points, corner_points[2 * idx],
+                                                 corner_points[2 * idx + 1]);
+      // The tips are the even corners and the notches the odd ones, the outline starting at a tip.
+      const size_t kind = (symmetry_depths[which] > 0.0f) ? idx % 2 : 0;
+      if(pulled_in[kind] < 0.0)
+      {
+        pulled_in[kind] = pull;
+        assert_true(pull > 1.0);
+        continue;
+      }
+      fprintf(stderr, "fillet symmetry at depth %.3f, corner %zu: %.6f against %.6f\n",
+              (double)symmetry_depths[which], idx, pull, pulled_in[kind]);
+      assert_float_equal(pull, pulled_in[kind], 1e-9);
+    }
+    dt_canvas_remove_object(canvas, regular->id);
+  }
+
+  // A shape with no corners left has nothing for a radius to take: a circle is a circle.
+  star->shape.roundness = 1.0f;
+  const size_t circle_count = dt_canvas_shape_outline(canvas, star, rounded, DT_CANVAS_SHAPE_OUTLINE_MAX);
+  assert_int_equal(circle_count, 2 * 12 * 16);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * A star's notches are holes in the shape, and the hit test knows it: a point out in a notch is not
+ * the star, even filled and even well inside the box the star stands in. That is what stops an
+ * ornament laid over a photograph from taking the clicks meant for the picture between its points.
+ */
+static void _a_filled_star_is_not_picked_in_its_notches(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *star = _polygon(canvas, 5, DT_CANVAS_SHAPE_STAR_DEPTH, 0.0f, 400.0, 400.0);
+  assert_non_null(star);
+  assert_true(dt_canvas_shape_refit_height(star));
+  assert_true(dt_canvas_object_contains(canvas, star, star->x, star->y, 0.0));
+
+  // Straight up is the first point; a tenth of a turn round is the notch between it and the next.
+  const double tip_angle = 0.0;
+  const double notch_angle = M_PI / 5.0;
+  double tip_reach = 0.0;
+  double notch_reach = 0.0;
+  for(int step = 1; step <= 400; step++)
+  {
+    const double radius = (double)step;
+    if(dt_canvas_object_contains(canvas, star, star->x + radius * sin(tip_angle),
+                                 star->y - radius * cos(tip_angle), 0.0))
+      tip_reach = radius;
+    if(dt_canvas_object_contains(canvas, star, star->x + radius * sin(notch_angle),
+                                 star->y - radius * cos(notch_angle), 0.0))
+      notch_reach = radius;
+  }
+  fprintf(stderr, "star hit test: %.0f units toward a point, %.0f into a notch\n", tip_reach, notch_reach);
+  // The point sits on the frame's top edge, half the fitted height out; the probes step by the unit.
+  assert_true(tip_reach >= 0.5 * star->height - 1.0);
+  // The notch's own radius is (1 - depth) cos(pi / 5) of the tip's, scaled by the fit: a hair over
+  // a third. Anything past it is between the points and is not the star.
+  assert_true(notch_reach < 0.45 * tip_reach);
+  assert_false(dt_canvas_object_contains(canvas, star, star->x + 0.9 * tip_reach * sin(notch_angle),
+                                         star->y - 0.9 * tip_reach * cos(notch_angle), 0.0));
+  assert_true(dt_canvas_object_contains(canvas, star, star->x + 0.9 * tip_reach * sin(tip_angle),
+                                        star->y - 0.9 * tip_reach * cos(tip_angle), 0.0));
+  dt_canvas_free(canvas);
+}
+
+/**
+ * What a connector anchored on a polygon's centre touches, and what text flowing round it clears, is
+ * the polygon's own edge: a ray out of a triangle meets its slanted side long before it would meet
+ * the corner of the box the triangle stands in.
+ */
+static void _a_polygons_silhouette_is_its_outline_not_its_box(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *triangle = _polygon(canvas, 3, 0.0f, 0.0f, 200.0, 200.0);
+  assert_non_null(triangle);
+  assert_true(dt_canvas_shape_refit_height(triangle));
+  const double half_width = 0.5 * triangle->width;
+  const double half_height = 0.5 * triangle->height;
+
+  // The apex sits on the middle of the frame's top edge, and the reach that way is its distance.
+  assert_float_equal(dt_canvas_object_silhouette_reach(canvas, triangle, 0.0, -1.0), half_height, 1e-9);
+  // The two other vertices are the frame's own bottom corners.
+  assert_float_equal(dt_canvas_object_silhouette_reach(canvas, triangle, half_width, half_height),
+                     hypot(half_width, half_height), 1e-9);
+
+  // Up and to the right, the ray leaves by the slanted side between the apex (0, -h/2) and the
+  // bottom-right corner (w/2, h/2), a long way inside the corner of the box.
+  const double apex_x = 0.0;
+  const double apex_y = -half_height;
+  const double corner_x = half_width;
+  const double corner_y = half_height;
+  const double unit = 1.0 / sqrt(2.0);
+  // Solve apex + s (corner - apex) = t (unit, -unit) for t, the crossing's distance.
+  const double edge_x = corner_x - apex_x;
+  const double edge_y = corner_y - apex_y;
+  const double denominator = unit * edge_y - (-unit) * edge_x;
+  const double along = (apex_x * edge_y - apex_y * edge_x) / denominator;
+  const double diagonal = dt_canvas_object_silhouette_reach(canvas, triangle, 1.0, -1.0);
+  fprintf(stderr, "triangle silhouette: %.3f up the diagonal against %.3f to the frame's corner\n", diagonal,
+          hypot(half_width, half_height));
+  assert_float_equal(diagonal, along, 1e-9);
+  assert_true(diagonal < 0.5 * hypot(half_width, half_height));
+  // It never reads past what the frame draws: the fit puts the whole outline inside the box.
+  for(int step = 0; step < 72; step++)
+  {
+    const double angle = step * M_PI / 36.0;
+    const double reach = dt_canvas_object_silhouette_reach(canvas, triangle, cos(angle), sin(angle));
+    assert_true(reach <= hypot(half_width, half_height) + 1e-9);
+    assert_true(reach > 0.0);
+  }
+
+  // A ROUNDED shape takes no corner radius -- it has no corner left for one -- so the reach may not
+  // be held back by one either. Capped against the frame rounded by a radius the outline never
+  // used, the silhouette stopped short of a shape the painter fills to the frame's own edges, by up
+  // to a quarter of it.
+  dt_canvas_object_t *rounded = _polygon(canvas, 5, (float)DT_CANVAS_SHAPE_STAR_DEPTH, 0.5f, 400.0, 400.0);
+  assert_non_null(rounded);
+  assert_true(dt_canvas_shape_refit_height(rounded));
+  rounded->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  rounded->corner_radius = 0.4f * (float)fmin(rounded->width, rounded->height);
+  double soft[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+  const size_t soft_points = dt_canvas_shape_outline(canvas, rounded, soft, DT_CANVAS_SHAPE_OUTLINE_MAX);
+  assert_true(soft_points > 3);
+  double worst_short = 0.0;
+  for(size_t idx = 0; idx < soft_points; idx++)
+  {
+    const double sample_x = soft[2 * idx];
+    const double sample_y = soft[2 * idx + 1];
+    const double distance = hypot(sample_x, sample_y);
+    if(!(distance > 1.0)) continue;
+    const double reach = dt_canvas_object_silhouette_reach(canvas, rounded, sample_x, sample_y);
+    worst_short = fmax(worst_short, (distance - reach) / distance);
+  }
+  fprintf(stderr, "a rounded star's silhouette falls short of its own outline by at most %.4f%%\n",
+          100.0 * worst_short);
+  // Every sample of the outline IS the silhouette that way, to the tolerance a ray crossing costs.
+  assert_true(worst_short < 1e-9);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * Nothing in the atelier cuts a polygon, so a mask left on one by a hand-edited file or by a
+ * geometry it has since left is ignored -- by the painter, by the hit test, by the silhouette and by
+ * the handles alike. One predicate answers for all of them, which is what stops any two of them from
+ * drawing different shapes.
+ */
+static void _a_polygon_is_never_cut_whatever_mask_it_carries(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_object_t *polygon = _polygon(canvas, 6, 0.0f, 0.0f, 300.0, 300.0);
+  assert_non_null(polygon);
+  assert_true(dt_canvas_shape_refit_height(polygon));
+  double before[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+  const size_t before_points = dt_canvas_shape_outline(canvas, polygon, before, DT_CANVAS_SHAPE_OUTLINE_MAX);
+  const double reach_before = dt_canvas_object_silhouette_reach(canvas, polygon, 1.0, 0.0);
+
+  dt_canvas_mask_set_shape(canvas, polygon, DT_CANVAS_MASK_CIRCLE);
+  assert_int_equal(polygon->mask.shape, DT_CANVAS_MASK_CIRCLE);
+  assert_false(dt_canvas_object_is_cut(polygon));
+  assert_true(dt_canvas_shape_needs_coverage(polygon));
+  double after[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+  const size_t after_points = dt_canvas_shape_outline(canvas, polygon, after, DT_CANVAS_SHAPE_OUTLINE_MAX);
+  assert_int_equal(after_points, before_points);
+  for(size_t idx = 0; idx < 2 * before_points; idx++) assert_float_equal(after[idx], before[idx], 1e-12);
+  assert_float_equal(dt_canvas_object_silhouette_reach(canvas, polygon, 1.0, 0.0), reach_before, 1e-9);
+
+  // A RECTANGLE with the same mask is cut, which is what makes the answer above a decision and not
+  // an accident of the shape kind.
+  const dt_canvas_rect_t box = { 1000.0, 0.0, 300.0, 300.0 };
+  dt_canvas_object_t *rectangle = dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_RECTANGLE, &box, NULL);
+  assert_non_null(rectangle);
+  dt_canvas_mask_set_shape(canvas, rectangle, DT_CANVAS_MASK_CIRCLE);
+  assert_true(dt_canvas_object_is_cut(rectangle));
+  assert_false(dt_canvas_shape_needs_coverage(rectangle));
+  dt_canvas_free(canvas);
+}
+
 static void _colours_parse_and_format(void **state)
 {
   (void)state;
@@ -2629,6 +3111,12 @@ int main(void)
     cmocka_unit_test(_an_unknown_kind_is_kept_and_draws_nothing),
     cmocka_unit_test(_a_shape_style_from_outside_is_made_sound),
     cmocka_unit_test(_a_whole_canvas_arrangement_leaves_shapes_where_they_are),
+    cmocka_unit_test(_a_fitted_outline_fills_the_frame_it_stands_in),
+    cmocka_unit_test(_a_polygon_is_born_and_stays_at_its_own_ratio),
+    cmocka_unit_test(_a_fillet_stops_where_its_neighbour_starts),
+    cmocka_unit_test(_a_filled_star_is_not_picked_in_its_notches),
+    cmocka_unit_test(_a_polygons_silhouette_is_its_outline_not_its_box),
+    cmocka_unit_test(_a_polygon_is_never_cut_whatever_mask_it_carries),
     cmocka_unit_test(_colours_parse_and_format),
   };
   return cmocka_run_group_tests(tests, NULL, NULL);

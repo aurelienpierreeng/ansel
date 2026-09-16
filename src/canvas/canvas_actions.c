@@ -32,6 +32,10 @@ dt_canvas_tool_t dt_canvas_tool_for_action(const dt_canvas_action_t action)
       return DT_CANVAS_TOOL_CURVE;
     case DT_CANVAS_ACTION_DRAW_RECTANGLE:
       return DT_CANVAS_TOOL_RECTANGLE;
+    case DT_CANVAS_ACTION_DRAW_POLYGON:
+      return DT_CANVAS_TOOL_POLYGON;
+    case DT_CANVAS_ACTION_DRAW_STAR:
+      return DT_CANVAS_TOOL_STAR;
     default:
       return DT_CANVAS_TOOL_NONE;
   }
@@ -53,7 +57,12 @@ gboolean dt_canvas_tool_draws_line(const dt_canvas_tool_t tool)
 
 gboolean dt_canvas_tool_draws_shape(const dt_canvas_tool_t tool)
 {
-  return tool == DT_CANVAS_TOOL_RECTANGLE;
+  return tool == DT_CANVAS_TOOL_RECTANGLE || dt_canvas_tool_draws_regular(tool);
+}
+
+gboolean dt_canvas_tool_draws_regular(const dt_canvas_tool_t tool)
+{
+  return tool == DT_CANVAS_TOOL_POLYGON || tool == DT_CANVAS_TOOL_STAR;
 }
 
 gboolean dt_canvas_tool_draws(const dt_canvas_tool_t tool)
@@ -92,6 +101,8 @@ static const char *const _accel_names[DT_CANVAS_ACTION_LAST] = {
   [DT_CANVAS_ACTION_DRAW_LINE] = N_("Draw a line"),
   [DT_CANVAS_ACTION_DRAW_CURVE] = N_("Draw a curve"),
   [DT_CANVAS_ACTION_DRAW_RECTANGLE] = N_("Draw a rectangle"),
+  [DT_CANVAS_ACTION_DRAW_POLYGON] = N_("Draw a polygon"),
+  [DT_CANVAS_ACTION_DRAW_STAR] = N_("Draw a star"),
 };
 
 const char *dt_canvas_action_accel_name(const dt_canvas_action_t action)

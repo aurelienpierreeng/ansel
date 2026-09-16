@@ -42,6 +42,8 @@ static void _each_tool_action_arms_its_own_tool(void **state)
   assert_int_equal(dt_canvas_tool_for_action(DT_CANVAS_ACTION_DRAW_LINE), DT_CANVAS_TOOL_LINE);
   assert_int_equal(dt_canvas_tool_for_action(DT_CANVAS_ACTION_DRAW_CURVE), DT_CANVAS_TOOL_CURVE);
   assert_int_equal(dt_canvas_tool_for_action(DT_CANVAS_ACTION_DRAW_RECTANGLE), DT_CANVAS_TOOL_RECTANGLE);
+  assert_int_equal(dt_canvas_tool_for_action(DT_CANVAS_ACTION_DRAW_POLYGON), DT_CANVAS_TOOL_POLYGON);
+  assert_int_equal(dt_canvas_tool_for_action(DT_CANVAS_ACTION_DRAW_STAR), DT_CANVAS_TOOL_STAR);
   int tools = 0;
   for(int action = 0; action < DT_CANVAS_ACTION_LAST; action++)
     if(dt_canvas_tool_for_action((dt_canvas_action_t)action) != DT_CANVAS_TOOL_NONE) tools++;
@@ -85,6 +87,8 @@ static void _the_line_and_the_curve_are_the_line_tools(void **state)
   assert_true(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_CURVE));
   assert_false(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_CONNECTOR));
   assert_false(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_RECTANGLE));
+  assert_false(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_POLYGON));
+  assert_false(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_STAR));
   assert_false(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_NONE));
   assert_false(dt_canvas_tool_draws_line(DT_CANVAS_TOOL_COUNT));
 }
@@ -98,9 +102,22 @@ static void _every_tool_but_the_connector_draws_an_object(void **state)
 {
   (void)state;
   assert_true(dt_canvas_tool_draws_shape(DT_CANVAS_TOOL_RECTANGLE));
+  assert_true(dt_canvas_tool_draws_shape(DT_CANVAS_TOOL_POLYGON));
+  assert_true(dt_canvas_tool_draws_shape(DT_CANVAS_TOOL_STAR));
   assert_false(dt_canvas_tool_draws_shape(DT_CANVAS_TOOL_LINE));
   assert_false(dt_canvas_tool_draws_shape(DT_CANVAS_TOOL_CONNECTOR));
   assert_false(dt_canvas_tool_draws_shape(DT_CANVAS_TOOL_NONE));
+  // A regular shape asks for a width and takes its height from the outline, so it is the subset of
+  // the shape tools that Ctrl has nothing left to constrain.
+  assert_true(dt_canvas_tool_draws_regular(DT_CANVAS_TOOL_POLYGON));
+  assert_true(dt_canvas_tool_draws_regular(DT_CANVAS_TOOL_STAR));
+  assert_false(dt_canvas_tool_draws_regular(DT_CANVAS_TOOL_RECTANGLE));
+  assert_false(dt_canvas_tool_draws_regular(DT_CANVAS_TOOL_LINE));
+  assert_false(dt_canvas_tool_draws_regular(DT_CANVAS_TOOL_NONE));
+  assert_false(dt_canvas_tool_draws_regular(DT_CANVAS_TOOL_COUNT));
+  for(int tool = DT_CANVAS_TOOL_CONNECTOR; tool < DT_CANVAS_TOOL_COUNT; tool++)
+    if(dt_canvas_tool_draws_regular((dt_canvas_tool_t)tool))
+      assert_true(dt_canvas_tool_draws_shape((dt_canvas_tool_t)tool));
   for(int tool = DT_CANVAS_TOOL_CONNECTOR; tool < DT_CANVAS_TOOL_COUNT; tool++)
     assert_int_equal(dt_canvas_tool_draws((dt_canvas_tool_t)tool), tool != DT_CANVAS_TOOL_CONNECTOR);
   assert_false(dt_canvas_tool_draws(DT_CANVAS_TOOL_NONE));
@@ -144,6 +161,8 @@ static void _published_accel_names_are_fixed(void **state)
   assert_string_equal(dt_canvas_action_accel_name(DT_CANVAS_ACTION_DRAW_LINE), "Draw a line");
   assert_string_equal(dt_canvas_action_accel_name(DT_CANVAS_ACTION_DRAW_CURVE), "Draw a curve");
   assert_string_equal(dt_canvas_action_accel_name(DT_CANVAS_ACTION_DRAW_RECTANGLE), "Draw a rectangle");
+  assert_string_equal(dt_canvas_action_accel_name(DT_CANVAS_ACTION_DRAW_POLYGON), "Draw a polygon");
+  assert_string_equal(dt_canvas_action_accel_name(DT_CANVAS_ACTION_DRAW_STAR), "Draw a star");
   assert_string_equal(dt_canvas_action_accel_scope(), "Canvas/Actions");
   // Every tool is reachable from the keyboard, and no two actions share a path.
   for(int action = 0; action < DT_CANVAS_ACTION_LAST; action++)

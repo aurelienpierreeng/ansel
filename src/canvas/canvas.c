@@ -20,6 +20,7 @@
 
 #include "canvas/canvas_format.h"
 #include "canvas/canvas_zip.h"
+#include "math/polygon_envelope.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
@@ -1029,6 +1030,20 @@ gboolean dt_canvas_shape_style_sanitize(dt_canvas_shape_style_t *style)
   return sound;
 }
 
+void dt_canvas_shape_hold_minimum(double *width, double *height)
+{
+  if(IS_NULL_PTR(width) || IS_NULL_PTR(height)) return;
+  if(!(*width > 0.0) || !(*height > 0.0))
+  {
+    *width = fmax(*width, CANVAS_SHAPE_MIN_SIDE);
+    *height = fmax(*height, CANVAS_SHAPE_MIN_SIDE);
+    return;
+  }
+  const double lift = fmax(fmax(CANVAS_SHAPE_MIN_SIDE / *width, CANVAS_SHAPE_MIN_SIDE / *height), 1.0);
+  *width *= lift;
+  *height *= lift;
+}
+
 dt_canvas_object_t *dt_canvas_add_shape(dt_canvas_t *canvas, const dt_canvas_shape_geometry_t geometry,
                                         const dt_canvas_rect_t *box, const dt_canvas_shape_style_t *style)
 {
@@ -1036,8 +1051,9 @@ dt_canvas_object_t *dt_canvas_add_shape(dt_canvas_t *canvas, const dt_canvas_sha
   const dt_canvas_shape_style_t fallback = dt_canvas_shape_style_default();
   dt_canvas_shape_style_t applied = IS_NULL_PTR(style) ? fallback : *style;
   dt_canvas_shape_style_sanitize(&applied);
-  const double width = fmax(box->width, CANVAS_SHAPE_MIN_SIDE);
-  const double height = fmax(box->height, CANVAS_SHAPE_MIN_SIDE);
+  double width = box->width;
+  double height = box->height;
+  dt_canvas_shape_hold_minimum(&width, &height);
   dt_canvas_object_t *object
       = _object_new(canvas, DT_CANVAS_OBJECT_SHAPE, box->x + box->width * 0.5, box->y + box->height * 0.5, width,
                     height);
@@ -1069,6 +1085,43 @@ dt_canvas_object_t *dt_canvas_add_shape(dt_canvas_t *canvas, const dt_canvas_sha
   return object;
 }
 
+gboolean dt_canvas_shape_is_polygon(const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_SHAPE) return FALSE;
+  return object->shape.geometry == DT_CANVAS_SHAPE_POLYGON;
+}
+
+gboolean dt_canvas_object_is_cut(const dt_canvas_object_t *object)
+{
+  if(!dt_canvas_object_is_frame(object) || object->mask.shape == DT_CANVAS_MASK_NONE) return FALSE;
+  // A polygon draws its own outline and nothing offers to cut one, so a mask on one came from a
+  // hand-edited file or from a geometry switch that has since cleared it. Answering TRUE here would
+  // hand the painter a cutout the outline knows nothing of, and the two would draw different shapes.
+  return !dt_canvas_shape_is_polygon(object);
+}
+
+double dt_canvas_shape_unit_aspect(const uint32_t sides, const float depth, const float roundness)
+{
+  return dt_polygon_unit_aspect((int)sides, depth, roundness);
+}
+
+gboolean dt_canvas_shape_refit_height(dt_canvas_object_t *object)
+{
+  if(!dt_canvas_shape_is_polygon(object) || !dt_canvas_object_keeps_ratio(object)) return FALSE;
+  const double aspect
+      = dt_canvas_shape_unit_aspect(object->shape.sides, object->shape.depth, object->shape.roundness);
+  if(!(aspect > 0.0) || !(object->width > 0.0)) return FALSE;
+  double fitted_width = object->width;
+  double fitted_height = object->width / aspect;
+  dt_canvas_shape_hold_minimum(&fitted_width, &fitted_height);
+  if(fabs(fitted_height - object->height) < 1e-9 && fabs(fitted_width - object->width) < 1e-9) return FALSE;
+  // The centre stays put: `x` and `y` ARE the middle, so writing the sides alone grows the shape
+  // evenly either side of where the user left it.
+  object->width = fitted_width;
+  object->height = fitted_height;
+  return TRUE;
+}
+
 /** One point into the caller's buffer, if there is room for it. */
 static void _outline_point(double *xy, const size_t max, size_t *count, const double x, const double y)
 {
@@ -1078,11 +1131,202 @@ static void _outline_point(double *xy, const size_t max, size_t *count, const do
   (*count)++;
 }
 
+/**
+ * How far along each edge a vertex's fillet reaches, for every vertex of a closed polyline.
+ *
+ * A fillet of radius `radius` at a corner of interior angle `beta` touches both edges at
+ * `radius / tan(beta / 2)` from the vertex. Two neighbouring fillets would then overlap wherever
+ * that leaves no edge between them, and the cure is NOT to cap each at half its edges: a star's
+ * segment is only half of the convex polygon's side, so such a cap would halve the largest radius a
+ * tip can take the moment the depth left zero, while the shape itself has barely moved (the warning
+ * `math/polygon_envelope.h` gives this caller by name). The two ends of an edge SHARE it instead,
+ * in proportion to what each asked for. That is continuous through depth zero, where the notch's
+ * angle goes flat and asks for nothing, leaving the whole of the half-side to the tip -- exactly
+ * what the convex polygon's own vertices get.
+ *
+ * Each reach is taken from the UNSHARED demands of the vertex and of its two neighbours, never from
+ * a running rewrite of the array: a walk that shrank the array as it went would hand the second end
+ * of every edge a reach the first end had already been cut down to, and the last edge, the one that
+ * wraps, would never be walked again to make up for it. The shape's own symmetry is what that costs
+ * -- measured on an equilateral triangle 400 units wide at a radius of 150, three arcs of 108.4,
+ * 100.5 and 122.5 units where the corners are the same corner three times over, and on a 12-point
+ * star at the deepest notch a spread of 190 to 1 between the notches. Read this way the two ends of
+ * an edge still sum to at most its length, so nothing overlaps, and every corner of a regular shape
+ * gets the same arc whichever one the walk started at.
+ */
+static void _fillet_reaches(const double *xy, const size_t points, const double radius, double *reach)
+{
+  double asked[DT_POLYGON_OUTLINE_MAX_POINTS];
+  for(size_t idx = 0; idx < points; idx++)
+  {
+    const size_t previous = (idx + points - 1) % points;
+    const size_t next = (idx + 1) % points;
+    const double in_x = xy[2 * previous] - xy[2 * idx];
+    const double in_y = xy[2 * previous + 1] - xy[2 * idx + 1];
+    const double out_x = xy[2 * next] - xy[2 * idx];
+    const double out_y = xy[2 * next + 1] - xy[2 * idx + 1];
+    const double in_length = hypot(in_x, in_y);
+    const double out_length = hypot(out_x, out_y);
+    asked[idx] = 0.0;
+    if(!(in_length > 0.0) || !(out_length > 0.0)) continue;
+    const double cosine = CLAMP((in_x * out_x + in_y * out_y) / (in_length * out_length), -1.0, 1.0);
+    const double half_angle = 0.5 * acos(cosine);
+    const double tangent = tan(half_angle);
+    // A corner whose two edges DOUBLE BACK on each other has no bisector to stand an arc on and no
+    // angle to turn through: the arc would be a degenerate one of radius nothing, so the corner is
+    // left as the corner it is. A corner the edges run straight THROUGH is not this case -- there
+    // the tangent is enormous rather than nothing, and the reach it asks for is duly nothing.
+    if(!(tangent > 1e-9)) continue;
+    asked[idx] = radius / tangent;
+  }
+  for(size_t idx = 0; idx < points; idx++)
+  {
+    const size_t previous = (idx + points - 1) % points;
+    const size_t next = (idx + 1) % points;
+    const double in_edge = hypot(xy[2 * previous] - xy[2 * idx], xy[2 * previous + 1] - xy[2 * idx + 1]);
+    const double out_edge = hypot(xy[2 * next] - xy[2 * idx], xy[2 * next + 1] - xy[2 * idx + 1]);
+    const double in_demand = asked[idx] + asked[previous];
+    const double out_demand = asked[idx] + asked[next];
+    reach[idx] = asked[idx];
+    if(in_demand > 0.0) reach[idx] = fmin(reach[idx], in_edge * asked[idx] / in_demand);
+    if(out_demand > 0.0) reach[idx] = fmin(reach[idx], out_edge * asked[idx] / out_demand);
+  }
+}
+
+/** The degrees of turn between two samples of a fillet's arc: fine enough that no chord shows. */
+#define CANVAS_FILLET_ARC_STEP (M_PI / 30.0)
+
+/**
+ * Replace each vertex of a closed polyline by the arc that rounds it, in place of the corner.
+ *
+ * The arc runs from the point where it leaves the incoming edge to the point where it meets the
+ * outgoing one, about a centre on the corner's bisector. A notch is a corner like any other -- its
+ * bisector points out of the shape rather than into it, which is what puts its arc on the side that
+ * fills the notch in -- so stars need no case of their own.
+ */
+static size_t _outline_fillet(const double *xy, const size_t points, const double *reach, double *out,
+                              const size_t max)
+{
+  size_t count = 0;
+  for(size_t idx = 0; idx < points; idx++)
+  {
+    const size_t previous = (idx + points - 1) % points;
+    const size_t next = (idx + 1) % points;
+    const double corner_x = xy[2 * idx];
+    const double corner_y = xy[2 * idx + 1];
+    const double in_length = hypot(xy[2 * previous] - corner_x, xy[2 * previous + 1] - corner_y);
+    const double out_length = hypot(xy[2 * next] - corner_x, xy[2 * next + 1] - corner_y);
+    if(!(reach[idx] > 0.0) || !(in_length > 0.0) || !(out_length > 0.0))
+    {
+      _outline_point(out, max, &count, corner_x, corner_y);
+      continue;
+    }
+    const double in_x = (xy[2 * previous] - corner_x) / in_length;
+    const double in_y = (xy[2 * previous + 1] - corner_y) / in_length;
+    const double out_x = (xy[2 * next] - corner_x) / out_length;
+    const double out_y = (xy[2 * next + 1] - corner_y) / out_length;
+    const double cosine = CLAMP(in_x * out_x + in_y * out_y, -1.0, 1.0);
+    const double half_angle = 0.5 * acos(cosine);
+    const double sine = sin(half_angle);
+    const double bisector_x = in_x + out_x;
+    const double bisector_y = in_y + out_y;
+    const double bisector_length = hypot(bisector_x, bisector_y);
+    if(!(sine > 1e-9) || !(bisector_length > 1e-9))
+    {
+      _outline_point(out, max, &count, corner_x, corner_y);
+      continue;
+    }
+    const double arc_radius = reach[idx] * tan(half_angle);
+    const double centre_distance = arc_radius / sine;
+    const double centre_x = corner_x + centre_distance * bisector_x / bisector_length;
+    const double centre_y = corner_y + centre_distance * bisector_y / bisector_length;
+    const double from_x = corner_x + reach[idx] * in_x;
+    const double from_y = corner_y + reach[idx] * in_y;
+    const double to_x = corner_x + reach[idx] * out_x;
+    const double to_y = corner_y + reach[idx] * out_y;
+    const double from_angle = atan2(from_y - centre_y, from_x - centre_x);
+    const double to_angle = atan2(to_y - centre_y, to_x - centre_x);
+    // The short way round: a fillet turns by pi less the corner's own angle, which is never more
+    // than half a turn, so the signed difference brought into (-pi, pi] is the sweep itself.
+    double sweep = to_angle - from_angle;
+    while(sweep <= -M_PI) sweep += 2.0 * M_PI;
+    while(sweep > M_PI) sweep -= 2.0 * M_PI;
+    // A sweep that is an exact multiple of the step is the common case, not the odd one -- every
+    // corner of a regular shape turns by 2 pi / n, and the step divides that for every n this draws
+    // -- and `atan2` lands on either side of the multiple by an ulp, so a plain ceiling gives one
+    // corner thirteen samples and the next twelve, for two arcs that are the same arc. The nudge
+    // settles the tie the same way at every corner, and is far below any sweep a corner really has.
+    const int steps = MAX((int)ceil(fabs(sweep) / CANVAS_FILLET_ARC_STEP - 1e-9), 1);
+    for(int step = 0; step <= steps; step++)
+    {
+      const double angle = from_angle + sweep * (double)step / (double)steps;
+      _outline_point(out, max, &count, centre_x + arc_radius * cos(angle), centre_y + arc_radius * sin(angle));
+    }
+  }
+  return count;
+}
+
+/**
+ * A polygon's or a star's outline, fitted to the frame and filleted at its corners.
+ *
+ * The unit shape comes from `math/polygon_envelope.h`, tips on the unit circle; its own box is
+ * stretched onto the frame's, so the shape touches all four edges and the frame's handles, snapping
+ * and layout hug what is drawn rather than a box around it. A frame of the shape's own aspect scales
+ * both axes alike, which is what `dt_canvas_object_keeps_ratio()` keeps it at.
+ *
+ * The corner radius fillets the vertices, and only where there are vertices: a rounded shape is
+ * smooth everywhere already, and has no corner for a radius to take.
+ */
+static size_t _polygon_outline(const dt_canvas_t *canvas, const dt_canvas_object_t *object, double *xy,
+                               const size_t max)
+{
+  double unit[2 * DT_POLYGON_OUTLINE_MAX_POINTS];
+  const double roundness = CLAMP((double)object->shape.roundness, 0.0, 1.0);
+  const int unit_points = dt_polygon_unit_outline((int)object->shape.sides, (double)object->shape.depth, roundness,
+                                                  unit, DT_POLYGON_OUTLINE_MAX_POINTS);
+  if(unit_points < 3) return 0;
+  double box_left = HUGE_VAL;
+  double box_right = -HUGE_VAL;
+  double box_top = HUGE_VAL;
+  double box_bottom = -HUGE_VAL;
+  for(int idx = 0; idx < unit_points; idx++)
+  {
+    box_left = fmin(box_left, unit[2 * idx]);
+    box_right = fmax(box_right, unit[2 * idx]);
+    box_top = fmin(box_top, unit[2 * idx + 1]);
+    box_bottom = fmax(box_bottom, unit[2 * idx + 1]);
+  }
+  const double unit_width = box_right - box_left;
+  const double unit_height = box_bottom - box_top;
+  if(!(unit_width > 0.0) || !(unit_height > 0.0)) return 0;
+  const double scale_x = object->width / unit_width;
+  const double scale_y = object->height / unit_height;
+  double fitted[2 * DT_POLYGON_OUTLINE_MAX_POINTS];
+  for(int idx = 0; idx < unit_points; idx++)
+  {
+    fitted[2 * idx] = (unit[2 * idx] - 0.5 * (box_left + box_right)) * scale_x;
+    fitted[2 * idx + 1] = (unit[2 * idx + 1] - 0.5 * (box_top + box_bottom)) * scale_y;
+  }
+
+  const double radius = fmax(dt_canvas_object_effective_corner_radius(canvas, object), 0.0);
+  if(!(radius > 0.0) || roundness > 0.0)
+  {
+    size_t count = 0;
+    for(int idx = 0; idx < unit_points; idx++)
+      _outline_point(xy, max, &count, fitted[2 * idx], fitted[2 * idx + 1]);
+    return count;
+  }
+  double reach[DT_POLYGON_OUTLINE_MAX_POINTS];
+  _fillet_reaches(fitted, (size_t)unit_points, radius, reach);
+  return _outline_fillet(fitted, (size_t)unit_points, reach, xy, max);
+}
+
 size_t dt_canvas_shape_outline(const dt_canvas_t *canvas, const dt_canvas_object_t *object, double *xy,
                                const size_t max)
 {
   if(IS_NULL_PTR(object) || IS_NULL_PTR(xy) || max < 4) return 0;
   if(object->kind != DT_CANVAS_OBJECT_SHAPE) return 0;
+  if(object->shape.geometry == DT_CANVAS_SHAPE_POLYGON) return _polygon_outline(canvas, object, xy, max);
   const double half_width = object->width * 0.5;
   const double half_height = object->height * 0.5;
   const double radius
@@ -1119,10 +1363,13 @@ size_t dt_canvas_shape_outline(const dt_canvas_t *canvas, const dt_canvas_object
 gboolean dt_canvas_shape_needs_coverage(const dt_canvas_object_t *object)
 {
   if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_SHAPE) return FALSE;
-  // A cut shape is asked for its cutout, like every other cut frame; that path knows nothing of
-  // the outline and must not be diverted here.
+  // A polygon's outline is nothing a rectangle's reach can describe, filled or not, and no mask
+  // stands between it and what it paints.
+  if(dt_canvas_shape_is_polygon(object)) return TRUE;
+  // A cut rectangle is asked for its cutout, like every other cut frame; that path knows nothing
+  // of the outline and must not be diverted here.
   if(object->mask.shape != DT_CANVAS_MASK_NONE) return FALSE;
-  return object->shape.geometry != DT_CANVAS_SHAPE_RECTANGLE || !(object->background.alpha > 0.0f);
+  return !(object->background.alpha > 0.0f);
 }
 
 static gint _index_of(const dt_canvas_t *canvas, const uint32_t id)
@@ -1627,7 +1874,11 @@ gboolean dt_canvas_object_keeps_ratio(const dt_canvas_object_t *object)
 {
   if(IS_NULL_PTR(object)) return FALSE;
   if(object->flags & DT_CANVAS_OBJECT_FLAG_FREE_RATIO) return FALSE;
-  return object->kind == DT_CANVAS_OBJECT_IMAGE || object->kind == DT_CANVAS_OBJECT_SVG;
+  // A polygon and a star are REGULAR, which is a proportion the shape itself states rather than one
+  // a source file brought: a hexagon stretched sideways is no longer the hexagon that was drawn. A
+  // rectangle has none, being whatever box it was given.
+  return object->kind == DT_CANVAS_OBJECT_IMAGE || object->kind == DT_CANVAS_OBJECT_SVG
+         || dt_canvas_shape_is_polygon(object);
 }
 
 void dt_canvas_object_corners(const dt_canvas_object_t *object, double corners[8])
@@ -1751,7 +2002,7 @@ gboolean dt_canvas_object_contains(const dt_canvas_t *canvas, const dt_canvas_ob
   double local_x = 0.0;
   double local_y = 0.0;
   dt_canvas_object_to_local(object, x, y, &local_x, &local_y);
-  if(object->kind == DT_CANVAS_OBJECT_SHAPE && object->mask.shape == DT_CANVAS_MASK_NONE)
+  if(object->kind == DT_CANVAS_OBJECT_SHAPE && !dt_canvas_object_is_cut(object))
   {
     double outline[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
     const size_t points = dt_canvas_shape_outline(canvas, object, outline, DT_CANVAS_SHAPE_OUTLINE_MAX);
@@ -1903,8 +2154,39 @@ double dt_canvas_object_silhouette_reach(const dt_canvas_t *canvas, const dt_can
   const double corner = dt_canvas_object_effective_corner_radius(canvas, frame);
   const double outer = _rounded_rect_reach(half_x, half_y, corner, unit_x, unit_y);
 
+  // A polygon's silhouette is its own outline, wherever that leaves the frame's rectangle: the
+  // ray's farthest crossing, as a dented cutout's is, because a star's ray can leave through two
+  // edges and it is the outer one that says how far the shape reaches that way. Never past the
+  // frame's own BOX, which the fit guarantees and the cap below states -- and the box, not the box
+  // rounded by the corner radius, because a rounded polygon is smooth already and its outline does
+  // not take that radius (`_polygon_outline()` drops it): capping against the rounded form would
+  // cut the silhouette back inside a shape the painter fills to the frame's edges, measured at up
+  // to 23.7% of the reach on a three-pointed star at roundness 0.25.
+  if(dt_canvas_shape_is_polygon(frame))
+  {
+    double outline[2 * DT_CANVAS_SHAPE_OUTLINE_MAX];
+    const size_t points = dt_canvas_shape_outline(canvas, frame, outline, DT_CANVAS_SHAPE_OUTLINE_MAX);
+    double along_outline = -1.0;
+    for(size_t idx = 0; idx < points; idx++)
+    {
+      const size_t next = (idx + 1) % points;
+      const double from_x = outline[2 * idx];
+      const double from_y = outline[2 * idx + 1];
+      const double edge_x = outline[2 * next] - from_x;
+      const double edge_y = outline[2 * next + 1] - from_y;
+      const double denominator = _cross(unit_x, unit_y, edge_x, edge_y);
+      if(fabs(denominator) < 1e-12) continue;
+      const double along = _cross(from_x, from_y, edge_x, edge_y) / denominator;
+      const double across = _cross(from_x, from_y, unit_x, unit_y) / denominator;
+      if(along <= 0.0 || across < 0.0 || across > 1.0) continue;
+      if(along > along_outline) along_outline = along;
+    }
+    const double box = _rounded_rect_reach(half_x, half_y, 0.0, unit_x, unit_y);
+    return along_outline > 0.0 ? fmin(along_outline, box) : box;
+  }
+
   const dt_canvas_mask_t *mask = &frame->mask;
-  const gboolean cut = dt_canvas_object_is_frame(frame) && mask->shape != DT_CANVAS_MASK_NONE;
+  const gboolean cut = dt_canvas_object_is_cut(frame);
   // An inverted cutout keeps what is outside the shape, so the frame's own edge is the
   // silhouette; a gradient covers the frame and comes to the same thing.
   if(!cut || (mask->flags & DT_CANVAS_MASK_INVERT) || mask->shape == DT_CANVAS_MASK_GRADIENT) return outer;

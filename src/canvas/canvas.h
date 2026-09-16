@@ -972,8 +972,13 @@ gboolean dt_canvas_shape_style_sanitize(dt_canvas_shape_style_t *style);
 dt_canvas_object_t *dt_canvas_add_shape(dt_canvas_t *canvas, dt_canvas_shape_geometry_t geometry,
                                         const dt_canvas_rect_t *box, const dt_canvas_shape_style_t *style);
 
-/** The most points a shape's outline is sampled to: a rectangle needs a handful, a rounded star the lot. */
-#define DT_CANVAS_SHAPE_OUTLINE_MAX 512
+/**
+ * The most points a shape's outline is sampled to: a rectangle needs a handful, a rounded star the
+ * lot. The worst case is a STRAIGHT twelve-pointed star whose vertices are filleted -- twenty-four
+ * corners, each an arc of up to half a turn laid down every six degrees -- rather than a rounded
+ * one, which has no corner to fillet and is sampled at `DT_POLYGON_OUTLINE_MAX_POINTS`.
+ */
+#define DT_CANVAS_SHAPE_OUTLINE_MAX 1024
 
 /**
  * @brief A shape's outline, in the FRAME'S OWN coordinates: the centre is (0, 0) and the corners
@@ -999,6 +1004,52 @@ size_t dt_canvas_shape_outline(const dt_canvas_t *canvas, const dt_canvas_object
  * cutout is asked for the cutout, as any other cut frame is.
  */
 gboolean dt_canvas_shape_needs_coverage(const dt_canvas_object_t *object);
+
+/**
+ * @brief Whether the object's own outline is what it draws, rather than the frame it stands in.
+ * @details True of a polygon and of a star, which is a polygon whose notches have a depth. It is
+ * the one question the painter, the hit test, the silhouette and the coverage raster all ask before
+ * reaching for the frame's rectangle, so none of them can answer it differently from the others --
+ * a cutout among them: a polygon is not cut, whatever mask a hand-edited file left on it.
+ */
+gboolean dt_canvas_shape_is_polygon(const dt_canvas_object_t *object);
+
+/**
+ * @brief Whether a cutout stands between this frame and its own rectangle.
+ * @details A frame carrying a drawn mask is cut out of its box, and its border follows the cutout
+ * instead of its edge. A polygon answers FALSE whatever its mask holds: its outline is its own, and
+ * nothing in the atelier offers to cut one.
+ */
+gboolean dt_canvas_object_is_cut(const dt_canvas_object_t *object);
+
+/**
+ * @brief Width over height of the box around a polygon's or a star's own outline.
+ * @details A frame of that shape holds the outline with every side of it touching the frame and
+ * nothing stretched: a triangle is `2 / sqrt(3)` wide for its height, a hexagon `sqrt(3) / 2`. The
+ * arguments are held to what a shape may carry, so any three numbers give a usable ratio.
+ */
+double dt_canvas_shape_unit_aspect(uint32_t sides, float depth, float roundness);
+
+/**
+ * @brief Hold a box up to the smallest a shape may have, without changing its proportions.
+ * @details Both sides are lifted by the one factor the smaller of them needs, never one at a time:
+ * a regular shape held up side by side is not that shape any more -- a hexagon dragged out three
+ * units across is 3 by 3.46 and would land in a SQUARE box -- and since a polygon keeps whatever
+ * ratio it is given, that square is then what every later resize preserves. A box with no width or
+ * no height states no proportions to keep, and each side is simply held up. This is the one place
+ * that answers the question, so a drag in flight and the birth of the shape it draws agree.
+ */
+void dt_canvas_shape_hold_minimum(double *width, double *height);
+
+/**
+ * @brief Take the shape's height back to the one its outline asks for, about its own centre.
+ * @details A polygon is regular: the sides, the notch depth and the roundness decide the shape of
+ * its box, so every write to one of the three owes this. A shape told to keep no proportions
+ * (`DT_CANVAS_OBJECT_FLAG_FREE_RATIO`) is left stretched as the user stretched it, and a rectangle
+ * has no ratio of its own to go back to.
+ * @return TRUE when the height moved.
+ */
+gboolean dt_canvas_shape_refit_height(dt_canvas_object_t *object);
 
 /**
  * @brief Remove an object.
@@ -1112,7 +1163,9 @@ gboolean dt_canvas_object_is_frame(const dt_canvas_object_t *object);
 /**
  * @brief Whether resizing this frame must keep its proportions.
  *
- * A picture and a drawing have a shape of their own to keep; a text frame does not. The flag
+ * A picture and a drawing have a shape of their own to keep; a text frame does not, and neither
+ * does a rectangle. A polygon and a star do, and theirs is not a source file's but their own
+ * outline's -- dt_canvas_shape_unit_aspect() -- so a regular shape stays regular. The flag
  * only frees what would otherwise be kept, so everything that has proportions keeps them
  * until it is told otherwise.
  */

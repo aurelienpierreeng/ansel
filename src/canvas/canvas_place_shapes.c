@@ -286,8 +286,9 @@ void dt_canvas_place_object_shapes(GArray *shapes, const dt_canvas_place_view_t 
     _object_sites_add(shapes, view, canvas, object, DT_CANVAS_HANDLES_FRAME, DT_CANVAS_PLACE_HARD);
     // A cutout's handles are there to grab while it is edited, and one click on Edit away when it
     // is not. A frame without a cutout needs nothing: its default shapes lie inside it, within the
-    // body's own tolerance.
-    if(object->mask.shape != DT_CANVAS_MASK_NONE)
+    // body's own tolerance. A polygon is never cut, so a mask left on one by a hand-edited file
+    // offers no handles here either -- there is nothing on screen for them to sit on.
+    if(dt_canvas_object_is_cut(object))
       _object_sites_add(shapes, view, canvas, object, DT_CANVAS_HANDLES_MASK,
                         mask_editing ? DT_CANVAS_PLACE_HARD : DT_CANVAS_PLACE_PREDICTED);
     dt_canvas_place_body_add(shapes, view, object);

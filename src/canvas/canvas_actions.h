@@ -71,6 +71,8 @@ typedef enum dt_canvas_action_t
   DT_CANVAS_ACTION_DRAW_LINE,  ///< arm the line tool, or put it away when it is the one armed
   DT_CANVAS_ACTION_DRAW_CURVE, ///< the same for the curve tool
   DT_CANVAS_ACTION_DRAW_RECTANGLE, ///< the same for the rectangle tool
+  DT_CANVAS_ACTION_DRAW_POLYGON,   ///< the same for the polygon tool
+  DT_CANVAS_ACTION_DRAW_STAR,      ///< the same for the star tool
   DT_CANVAS_ACTION_LAST
 } dt_canvas_action_t;
 
@@ -78,7 +80,7 @@ typedef enum dt_canvas_action_t
  * What a left press on the plane does while the atelier is in a drawing mode, as opposed to picking,
  * moving and selecting. At most one tool is armed at a time, and it stays armed across the objects it
  * draws until it is put away. Never stored: a document knows nothing of how its objects were drawn, so
- * the tools still to come -- the rectangle, the polygon, the star -- may be appended or slotted in.
+ * a tool may be appended or slotted in without a file ever noticing.
  */
 typedef enum dt_canvas_tool_t
 {
@@ -87,6 +89,8 @@ typedef enum dt_canvas_tool_t
   DT_CANVAS_TOOL_LINE,      ///< a straight line with both ends free, dragged or placed with a click
   DT_CANVAS_TOOL_CURVE,     ///< the same, bent into an arc
   DT_CANVAS_TOOL_RECTANGLE, ///< a drawn rectangle, its box dragged or placed with a click
+  DT_CANVAS_TOOL_POLYGON,   ///< a regular polygon, always regular: the drag gives one side
+  DT_CANVAS_TOOL_STAR,      ///< the same, with notches between its points
   DT_CANVAS_TOOL_COUNT
 } dt_canvas_tool_t;
 
@@ -106,8 +110,16 @@ dt_canvas_tool_t dt_canvas_tool_toggled(dt_canvas_tool_t armed, dt_canvas_tool_t
 /** @brief Whether the tool draws a line with both ends free, as the line and the curve do. */
 gboolean dt_canvas_tool_draws_line(dt_canvas_tool_t tool);
 
-/** @brief Whether the tool draws a shape by its box, as the rectangle does. */
+/** @brief Whether the tool draws a shape by its box, as the rectangle, the polygon and the star do. */
 gboolean dt_canvas_tool_draws_shape(dt_canvas_tool_t tool);
+
+/**
+ * @brief Whether the tool draws a shape that is REGULAR: one whose height follows its width.
+ * @details The polygon and the star. Their drag gives whichever side the pointer went further along,
+ * measured in the shape's own proportions, and the outline's ratio gives the other -- so Ctrl has
+ * nothing left to constrain: a regular shape is already square in the only sense it can be.
+ */
+gboolean dt_canvas_tool_draws_regular(dt_canvas_tool_t tool);
 
 /**
  * @brief Whether the tool draws a new object on the plane, by a drag or by a click.

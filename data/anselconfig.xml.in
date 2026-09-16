@@ -3257,22 +3257,34 @@
     <shortdescription>colour of the shadow the next shape drawn in the canvas atelier carries, #rrggbbaa</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>plugins/canvas/new_shape/sides</name>
+    <name>plugins/canvas/new_shape/polygon_sides</name>
     <type min="3" max="12">int</type>
     <default>6</default>
-    <shortdescription>how many sides the next polygon or star drawn in the canvas atelier has</shortdescription>
+    <shortdescription>how many sides the next polygon drawn in the canvas atelier has</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>plugins/canvas/new_shape/depth</name>
-    <type min="0.0" max="0.95">float</type>
-    <default>0</default>
-    <shortdescription>how deep the notches of the next star drawn in the canvas atelier are; 0 is a convex polygon</shortdescription>
-  </dtconfig>
-  <dtconfig>
-    <name>plugins/canvas/new_shape/roundness</name>
+    <name>plugins/canvas/new_shape/polygon_roundness</name>
     <type min="0.0" max="1.0">float</type>
     <default>0</default>
-    <shortdescription>how round the sides of the next polygon or star drawn in the canvas atelier are; 0 is straight</shortdescription>
+    <shortdescription>how round the sides of the next polygon drawn in the canvas atelier are; 0 is straight</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/canvas/new_shape/star_sides</name>
+    <type min="3" max="12">int</type>
+    <default>5</default>
+    <shortdescription>how many points the next star drawn in the canvas atelier has</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/canvas/new_shape/star_depth</name>
+    <type min="0.05" max="0.95">float</type>
+    <default>0.527864</default>
+    <shortdescription>how deep the notches between the points of the next star drawn in the canvas atelier are</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/canvas/new_shape/star_roundness</name>
+    <type min="0.0" max="1.0">float</type>
+    <default>0</default>
+    <shortdescription>how round the sides of the next star drawn in the canvas atelier are; 0 is straight</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/canvas/color_history</name>

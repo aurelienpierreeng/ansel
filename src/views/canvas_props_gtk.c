@@ -93,9 +93,12 @@ static const props_glyph_t _glyphs[] = {
   { "masks_gradient", dtgtk_cairo_paint_masks_gradient, CPF_NONE },
   { "masks_inverse", dtgtk_cairo_paint_masks_inverse, CPF_NONE },
   { "masks_edit", dtgtk_cairo_paint_masks_edit, CPF_NONE },
-  // The shape glyphs stand in the existing icons until the drawn ones arrive with the polygon and
-  // the star: a rectangle's own outline, and a fill for the switch that puts colour inside it.
+  // The shape glyphs stand in existing icons until the drawn ones arrive: a rectangle's own outline,
+  // the closest polygon and star the application already ships, and a fill for the switch that puts
+  // colour inside them.
   { "shape_rectangle", dtgtk_cairo_paint_rect_landscape, CPF_NONE },
+  { "shape_polygon", dtgtk_cairo_paint_polygon, CPF_NONE },
+  { "shape_star", dtgtk_cairo_paint_star, CPF_NONE },
   { "shape_filled", dtgtk_cairo_paint_tool_fill, CPF_NONE },
 };
 

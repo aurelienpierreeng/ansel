@@ -103,8 +103,6 @@ DT_MODULE(1)
 /** A shape placed with a click rather than dragged: this box, centred on the click. */
 #define CANVAS_DRAW_PLACE_WIDTH 160.0
 #define CANVAS_DRAW_PLACE_HEIGHT 120.0
-/** The smallest box a drawn shape is given, either side: below it there is nothing to take hold of. */
-#define CANVAS_DRAW_MIN_SIDE 4.0
 /** The ring marking where a drawing tool's next line would start, in screen pixels. */
 #define CANVAS_DRAW_MARKER_PIXELS 5.0
 /** What the atelier remembers of the last line edited or drawn, for the next line it draws. */
@@ -124,9 +122,18 @@ DT_MODULE(1)
 #define CANVAS_NEW_SHAPE_SHADOW_OFFSET_Y_KEY "plugins/canvas/new_shape/shadow_offset_y"
 #define CANVAS_NEW_SHAPE_SHADOW_BLUR_KEY "plugins/canvas/new_shape/shadow_blur"
 #define CANVAS_NEW_SHAPE_SHADOW_COLOR_KEY "plugins/canvas/new_shape/shadow_color"
-#define CANVAS_NEW_SHAPE_SIDES_KEY "plugins/canvas/new_shape/sides"
-#define CANVAS_NEW_SHAPE_DEPTH_KEY "plugins/canvas/new_shape/depth"
-#define CANVAS_NEW_SHAPE_ROUNDNESS_KEY "plugins/canvas/new_shape/roundness"
+/*
+ * The sides, the notch depth and the roundness are remembered PER TOOL, where the fill, the border,
+ * the corners and the shadow above are remembered for every shape alike: a polygon with six straight
+ * sides and a five-pointed star are two different things to reach for, and a user who has both in a
+ * document wants each key to go on drawing what it drew last time. The star keeps its own depth; the
+ * polygon has none to keep, being the shape a depth of nothing makes.
+ */
+#define CANVAS_NEW_POLYGON_SIDES_KEY "plugins/canvas/new_shape/polygon_sides"
+#define CANVAS_NEW_POLYGON_ROUNDNESS_KEY "plugins/canvas/new_shape/polygon_roundness"
+#define CANVAS_NEW_STAR_SIDES_KEY "plugins/canvas/new_shape/star_sides"
+#define CANVAS_NEW_STAR_DEPTH_KEY "plugins/canvas/new_shape/star_depth"
+#define CANVAS_NEW_STAR_ROUNDNESS_KEY "plugins/canvas/new_shape/star_roundness"
 
 /** The parts of the navigation flower, floating at the bottom right of the view. */
 typedef enum dt_canvas_flower_part_t
@@ -205,6 +212,11 @@ typedef struct dt_canvas_view_t
   double draw_start_y;
   dt_canvas_routing_t draw_routing;     ///< straight for the line tool, cubic for the curve
   dt_canvas_shape_geometry_t draw_geometry; ///< what the armed shape tool draws
+  /** The style the shape being drawn is born with, recalled once at the press: a gesture draws ONE
+   * shape, so the style it started from is the style it finishes with whatever the configuration
+   * does under it. */
+  dt_canvas_shape_style_t draw_shape_style;
+  double draw_shape_aspect;             ///< width over height a regular shape's outline asks for, 0 for the rest
   gboolean draw_marker_valid;           ///< the start marker is shown, at the two below
   double draw_marker_x;                 ///< where a press would start the next line, canvas units
   double draw_marker_y;
@@ -2187,6 +2199,14 @@ static void _tool_set(dt_view_t *self, const dt_canvas_tool_t tool)
     case DT_CANVAS_TOOL_RECTANGLE:
       dt_control_log(_("drag its box to draw a rectangle, or click to place one; Ctrl holds it square, Shift "
                        "draws it from its centre; Escape or a right click leaves"));
+      break;
+    case DT_CANVAS_TOOL_POLYGON:
+      dt_control_log(_("drag to draw a polygon, or click to place one; it is regular, so its width is all it "
+                       "asks for; Shift draws it from its centre; Escape or a right click leaves"));
+      break;
+    case DT_CANVAS_TOOL_STAR:
+      dt_control_log(_("drag to draw a star, or click to place one; it is regular, so its width is all it "
+                       "asks for; Shift draws it from its centre; Escape or a right click leaves"));
       break;
     default:
       break;
@@ -4945,12 +4965,24 @@ static void _line_style_remember(const dt_canvas_object_t *object)
 }
 
 /**
- * The style the next shape is drawn with: what the last shape edited or drawn was left at, kept in
- * the configuration between sessions. A key nobody has written yet leaves the default standing --
- * an empty colour is what says "the one a shape is born with", the other keys each having a value
- * of their own that means something.
+ * The style the next shape drawn by `tool` is born with: what the last shape edited or drawn was
+ * left at, kept in the configuration between sessions. A key nobody has written yet leaves the
+ * default standing -- an empty colour is what says "the one a shape is born with", the other keys
+ * each having a value of their own that means something.
+ *
+ * How a shape is COLOURED is one memory for all three tools; what its outline is MADE OF is one per
+ * tool, since a polygon and a star are two different things to reach for.
+ *
+ * A regular shape is born owning a corner radius of NOTHING whenever the memory says to inherit the
+ * canvas's, which is the rule `_write_geometry()` (canvas_props.c) states where a rectangle is
+ * turned into one: a radius meant to soften a picture's corners has no business blunting the points
+ * of a star nobody asked it about. Without it the two ways of making the same star disagree -- on a
+ * canvas whose Corners have been raised, Shift+P drew one with filleted points while the card's
+ * Geometry gave sharp ones, and the Corners row read "inherited" and said nothing about why. The
+ * shape so born then TEACHES a radius of its own at nothing, the corner memory being one for all
+ * three tools; the card's own inherit code on any later shape teaches inheriting back.
  */
-static dt_canvas_shape_style_t _shape_style_recalled(void)
+static dt_canvas_shape_style_t _shape_style_recalled(const dt_canvas_tool_t tool)
 {
   dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
   dt_canvas_color_parse(dt_conf_get_string_const(CANVAS_NEW_SHAPE_FILL_KEY), &style.fill);
@@ -4964,9 +4996,26 @@ static dt_canvas_shape_style_t _shape_style_recalled(void)
   style.shadow.offset_y = dt_conf_get_float(CANVAS_NEW_SHAPE_SHADOW_OFFSET_Y_KEY);
   style.shadow.blur = dt_conf_get_float(CANVAS_NEW_SHAPE_SHADOW_BLUR_KEY);
   dt_canvas_color_parse(dt_conf_get_string_const(CANVAS_NEW_SHAPE_SHADOW_COLOR_KEY), &style.shadow.color);
-  style.sides = (uint32_t)MAX(dt_conf_get_int(CANVAS_NEW_SHAPE_SIDES_KEY), 0);
-  style.depth = dt_conf_get_float(CANVAS_NEW_SHAPE_DEPTH_KEY);
-  style.roundness = dt_conf_get_float(CANVAS_NEW_SHAPE_ROUNDNESS_KEY);
+  if(tool == DT_CANVAS_TOOL_STAR)
+  {
+    style.sides = (uint32_t)MAX(dt_conf_get_int(CANVAS_NEW_STAR_SIDES_KEY), 0);
+    style.depth = dt_conf_get_float(CANVAS_NEW_STAR_DEPTH_KEY);
+    style.roundness = dt_conf_get_float(CANVAS_NEW_STAR_ROUNDNESS_KEY);
+  }
+  else
+  {
+    // The rectangle draws with the polygon's numbers too: it carries them unused, so that a
+    // rectangle switched to a polygon on the card becomes the polygon the user last drew rather
+    // than a hexagon they never asked for. A polygon's depth is nothing -- that is what makes it one.
+    style.sides = (uint32_t)MAX(dt_conf_get_int(CANVAS_NEW_POLYGON_SIDES_KEY), 0);
+    style.depth = 0.0f;
+    style.roundness = dt_conf_get_float(CANVAS_NEW_POLYGON_ROUNDNESS_KEY);
+  }
+  if(dt_canvas_tool_draws_regular(tool) && !style.corner_override)
+  {
+    style.corner_override = TRUE;
+    style.corner_radius = 0.0f;
+  }
   // What comes back from the configuration was written by whatever wrote it, this build or another.
   dt_canvas_shape_style_sanitize(&style);
   return style;
@@ -4999,9 +5048,19 @@ static void _shape_style_remember(const dt_canvas_object_t *object)
   dt_conf_set_float(CANVAS_NEW_SHAPE_SHADOW_OFFSET_Y_KEY, style.shadow.offset_y);
   dt_conf_set_float(CANVAS_NEW_SHAPE_SHADOW_BLUR_KEY, style.shadow.blur);
   dt_conf_set_string(CANVAS_NEW_SHAPE_SHADOW_COLOR_KEY, shadow);
-  dt_conf_set_int(CANVAS_NEW_SHAPE_SIDES_KEY, (int)style.sides);
-  dt_conf_set_float(CANVAS_NEW_SHAPE_DEPTH_KEY, style.depth);
-  dt_conf_set_float(CANVAS_NEW_SHAPE_ROUNDNESS_KEY, style.roundness);
+  // Which set of the three the shape teaches is the shape it IS, read exactly as the card reads it:
+  // a rectangle carries numbers it draws nothing with and teaches neither tool, and a star is a
+  // polygon whose notches have a depth.
+  if(!dt_canvas_shape_is_polygon(object)) return;
+  if(style.depth > 0.0f)
+  {
+    dt_conf_set_int(CANVAS_NEW_STAR_SIDES_KEY, (int)style.sides);
+    dt_conf_set_float(CANVAS_NEW_STAR_DEPTH_KEY, style.depth);
+    dt_conf_set_float(CANVAS_NEW_STAR_ROUNDNESS_KEY, style.roundness);
+    return;
+  }
+  dt_conf_set_int(CANVAS_NEW_POLYGON_SIDES_KEY, (int)style.sides);
+  dt_conf_set_float(CANVAS_NEW_POLYGON_ROUNDNESS_KEY, style.roundness);
 }
 
 /** The routing the armed tool draws with: the line tool a segment, the curve tool an arc. */
@@ -5010,30 +5069,46 @@ static dt_canvas_routing_t _tool_routing(const dt_canvas_tool_t tool)
   return tool == DT_CANVAS_TOOL_CURVE ? DT_CANVAS_ROUTING_CUBIC : DT_CANVAS_ROUTING_STRAIGHT;
 }
 
-/** The geometry the armed tool draws. */
+/**
+ * The geometry the armed tool draws. A star has none of its own: it is a polygon whose notches have
+ * a depth, and the depth comes with the style the star tool recalls.
+ */
 static dt_canvas_shape_geometry_t _tool_geometry(const dt_canvas_tool_t tool)
 {
-  switch(tool)
-  {
-    case DT_CANVAS_TOOL_RECTANGLE:
-    default:
-      // The rectangle is the only shape this build draws. The polygon and the star arrive as cases
-      // of their own here, which is the one place a shape tool says what it draws.
-      return DT_CANVAS_SHAPE_RECTANGLE;
-  }
+  return dt_canvas_tool_draws_regular(tool) ? DT_CANVAS_SHAPE_POLYGON : DT_CANVAS_SHAPE_RECTANGLE;
 }
 
 /**
  * The box a shape drag has made: the press corner to the pointer, or -- from the centre -- the press
  * point at its middle. Ctrl holds it square, on the longer side, so a square grows the way the
  * pointer went rather than snapping back to the shorter one.
+ *
+ * A polygon and a star are drawn ALWAYS REGULAR: the drag gives one size and the outline's own ratio
+ * gives the other, so a hexagon dragged out is a hexagon and not a hexagon flattened. There is
+ * nothing left for Ctrl to hold, which is why it is the shape's own aspect that is asked here rather
+ * than the modifier.
+ *
+ * That one size is the FURTHER the pointer has gone along either axis, measured in the shape's own
+ * proportions -- exactly as the square constraint beside it takes the longer side. Taken from the
+ * horizontal travel alone, a drag straight down draws nothing at all: the snapping puts both ends of
+ * it on the same grid line, the box is empty on both axes, and the release then places a shape of
+ * its own size at the press, three hundred units from the pointer that asked for it.
  */
 static dt_canvas_rect_t _shape_drag_box(const dt_canvas_view_t *view, const double corner_x, const double corner_y,
                                         const gboolean square, const gboolean from_centre)
 {
   double width = corner_x - view->draw_start_x;
   double height = corner_y - view->draw_start_y;
-  if(square)
+  if(view->draw_shape_aspect > 0.0)
+  {
+    // The sign is the pointer's: a shape dragged up and to the left grows that way, as every other
+    // box does, and the corner it is anchored at is the press.
+    const double regular_width = fmax(fabs(width), fabs(height) * view->draw_shape_aspect);
+    width = width < 0.0 ? -regular_width : regular_width;
+    const double regular_height = regular_width / view->draw_shape_aspect;
+    height = height < 0.0 ? -regular_height : regular_height;
+  }
+  else if(square)
   {
     const double side = fmax(fabs(width), fabs(height));
     width = width < 0.0 ? -side : side;
@@ -5065,6 +5140,12 @@ static void _draw_begin(dt_view_t *self, const double canvas_x, const double can
   view->draw_id = 0;
   view->draw_routing = _tool_routing(view->tool);
   view->draw_geometry = _tool_geometry(view->tool);
+  view->draw_shape_style = _shape_style_recalled(view->tool);
+  view->draw_shape_aspect
+      = dt_canvas_tool_draws_regular(view->tool)
+            ? dt_canvas_shape_unit_aspect(view->draw_shape_style.sides, view->draw_shape_style.depth,
+                                          view->draw_shape_style.roundness)
+            : 0.0;
   // The far end follows the pointer through the same constraint, so both ends of a line answer the
   // grid and the modifiers the same way.
   view->draw_start_x = dt_canvas_snap(view->canvas, canvas_x);
@@ -5170,12 +5251,15 @@ static void _draw_finish(dt_view_t *self, const gboolean place)
       return;
     }
     // A shape placed with a click is centred on it, the way a click places every other object where
-    // it was asked for rather than off to one side of it.
+    // it was asked for rather than off to one side of it. A regular shape is placed at its own
+    // ratio, for the same reason its drag holds it: what is placed must be the shape asked for.
+    const double placed_height = view->draw_shape_aspect > 0.0
+                                     ? CANVAS_DRAW_PLACE_WIDTH / view->draw_shape_aspect
+                                     : CANVAS_DRAW_PLACE_HEIGHT;
     const dt_canvas_rect_t box = { view->draw_start_x - CANVAS_DRAW_PLACE_WIDTH * 0.5,
-                                   view->draw_start_y - CANVAS_DRAW_PLACE_HEIGHT * 0.5, CANVAS_DRAW_PLACE_WIDTH,
-                                   CANVAS_DRAW_PLACE_HEIGHT };
-    const dt_canvas_shape_style_t style = _shape_style_recalled();
-    drawn = dt_canvas_add_shape(view->canvas, view->draw_geometry, &box, &style);
+                                   view->draw_start_y - placed_height * 0.5, CANVAS_DRAW_PLACE_WIDTH,
+                                   placed_height };
+    drawn = dt_canvas_add_shape(view->canvas, view->draw_geometry, &box, &view->draw_shape_style);
     if(IS_NULL_PTR(drawn))
     {
       _draw_abort(self);
@@ -5928,20 +6012,21 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       // back on the press, and a press that ends there still places a shape of its own size at the
       // release. One axis is enough. Asking for both would answer a deliberate drag along the grid
       // -- a rule three hundred units long and half a cell tall, which snaps to no height at all --
-      // with the box a CLICK places, centred on the press and nowhere near the pointer that drew
-      // it. Each side is instead held up to the smallest a shape may have, exactly as
-      // `dt_canvas_add_shape()` holds the one a shape is born with, so the drag and the birth agree
-      // and a shape already drawn keeps the last box it had rather than collapsing onto its corner.
+      // with the box a CLICK places, centred on the press and nowhere near the pointer that drew it.
       if(!(box.width > 0.0) && !(box.height > 0.0)) break;
-      const double side_x = fmax(box.width, CANVAS_DRAW_MIN_SIDE);
-      const double side_y = fmax(box.height, CANVAS_DRAW_MIN_SIDE);
+      // The box is then held up to the smallest a shape may have, through the same function
+      // `dt_canvas_add_shape()` holds the one a shape is born with, so a drag in flight and the
+      // shape it draws agree and a shape already drawn keeps the last box it had rather than
+      // collapsing onto its corner.
+      double side_x = box.width;
+      double side_y = box.height;
+      dt_canvas_shape_hold_minimum(&side_x, &side_y);
       dt_canvas_object_t *shape = _draw_object(view);
       if(IS_NULL_PTR(shape))
       {
         // The object is made as soon as there is a shape to show, and shown by the painter itself:
         // what the drag draws is the shape, not a sketch of it.
-        const dt_canvas_shape_style_t style = _shape_style_recalled();
-        shape = dt_canvas_add_shape(view->canvas, view->draw_geometry, &box, &style);
+        shape = dt_canvas_add_shape(view->canvas, view->draw_geometry, &box, &view->draw_shape_style);
         if(IS_NULL_PTR(shape)) break;
         view->draw_id = shape->id;
         _select_only(view, shape->id);
@@ -6345,6 +6430,8 @@ static void _proxy_action(dt_view_t *self, int action)
     case DT_CANVAS_ACTION_DRAW_LINE:
     case DT_CANVAS_ACTION_DRAW_CURVE:
     case DT_CANVAS_ACTION_DRAW_RECTANGLE:
+    case DT_CANVAS_ACTION_DRAW_POLYGON:
+    case DT_CANVAS_ACTION_DRAW_STAR:
       // A tool's action is a toggle: it arms its tool, takes the armed one's place, or -- asked again
       // by the same key or the same button -- puts its own away.
       _tool_set(self, dt_canvas_tool_toggled(view->tool, dt_canvas_tool_for_action((dt_canvas_action_t)action)));
@@ -6852,6 +6939,10 @@ static const dt_canvas_accel_t _accels[] = {
   // B for the box, R being the library check the atelier inherits: the application binds no plain B
   // anywhere, so the key is the tool's own.
   { DT_CANVAS_ACTION_DRAW_RECTANGLE, GDK_KEY_b, 0 },
+  // P and its shifted twin, as the line and the curve are: the atelier's own Ctrl+P exports, and the
+  // only other P the application binds is Ctrl+Shift+P, so both plain keys are free.
+  { DT_CANVAS_ACTION_DRAW_POLYGON, GDK_KEY_p, 0 },
+  { DT_CANVAS_ACTION_DRAW_STAR, GDK_KEY_p, GDK_SHIFT_MASK },
   { DT_CANVAS_ACTION_PROPERTIES, GDK_KEY_i, 0 },
   { DT_CANVAS_ACTION_UNDO, GDK_KEY_z, DT_PRIMARY_MASK },
   { DT_CANVAS_ACTION_REDO, GDK_KEY_y, DT_PRIMARY_MASK },

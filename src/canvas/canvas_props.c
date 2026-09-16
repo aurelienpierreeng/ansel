@@ -61,10 +61,20 @@ static const char *const _arrow_start_icons[] = { "arrowhead_start", NULL };
 static const char *const _arrow_end_icons[] = { "arrowhead_end", NULL };
 static const char *const _waypoint_icons[] = { "waypoint", NULL };
 static const char *const _reverse_icons[] = { "reverse", NULL };
-/* Only the rectangle, until the polygon and the star arrive: a geometry is APPENDED here, never
- * inserted, because the choice's index is what the writer reads and what the strip's buttons carry. */
-static const char *const _geometry_choices[] = { N_("Rectangle"), NULL };
-static const char *const _geometry_icons[] = { "shape_rectangle", NULL };
+/* A geometry is APPENDED here, never inserted: the choice's index is what the writer reads and what
+ * the strip's buttons carry. The star is not a geometry of its own in the document -- it is a
+ * polygon whose notches have a depth -- but it IS a choice here, because "add a star" and "add a
+ * hexagon" are two different things to ask for and one row with a depth slider is not either of them. */
+static const char *const _geometry_choices[] = { N_("Rectangle"), N_("Polygon"), N_("Star"), NULL };
+static const char *const _geometry_icons[] = { "shape_rectangle", "shape_polygon", "shape_star", NULL };
+
+/** A geometry choice as the bit `visible_values` tests, in the order `_geometry_choices` lists them. */
+#define GEOMETRY_BIT(choice) (1u << (choice))
+#define GEOMETRY_RECTANGLE GEOMETRY_BIT(0)
+#define GEOMETRY_POLYGON GEOMETRY_BIT(1)
+#define GEOMETRY_STAR GEOMETRY_BIT(2)
+#define GEOMETRIES_WITH_SIDES (GEOMETRY_POLYGON | GEOMETRY_STAR)
+
 static const char *const _filled_icons[] = { "shape_filled", NULL };
 static const char *const _refresh_icons[] = { "refresh", NULL };
 static const char *const _link_icons[] = { "link", NULL };
@@ -268,13 +278,33 @@ static const dt_canvas_prop_t _props[] = {
   { .id = DT_CANVAS_PROP_SHAPE_GEOMETRY, .key = "shape.geometry", .label = N_("Geometry"),
     .tooltip = N_("What the shape's outline is made of"), .kinds = KINDS_SHAPE,
     .section = DT_CANVAS_SECTION_SHAPE, .tier = DT_CANVAS_TIER_STRIP, .widget = DT_CANVAS_WIDGET_ICONS,
-    .max = 0.0, .soft_max = 0.0, .step = 1.0, .factor = 1.0, .neutral = NAN, .choices = _geometry_choices,
+    .max = 2.0, .soft_max = 2.0, .step = 1.0, .factor = 1.0, .neutral = NAN, .choices = _geometry_choices,
     .icons = _geometry_icons },
   { .id = DT_CANVAS_PROP_SHAPE_FILLED, .key = "shape.filled", .label = N_("Filled"),
     .tooltip = N_("Paint the shape's colour inside its outline. Off, only the border is drawn and what is "
                   "behind shows through -- clicks included."),
     .kinds = KINDS_SHAPE, .section = DT_CANVAS_SECTION_SHAPE, .tier = DT_CANVAS_TIER_STRIP,
     .widget = DT_CANVAS_WIDGET_ICON_FLAG, .max = 1.0, .factor = 1.0, .neutral = NAN, .icons = _filled_icons },
+  { .id = DT_CANVAS_PROP_SHAPE_SIDES, .key = "shape.sides", .label = N_("Sides"),
+    .tooltip = N_("How many sides a polygon has, or how many points a star has"), .kinds = KINDS_SHAPE,
+    .section = DT_CANVAS_SECTION_SHAPE, .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_TUNE,
+    .min = (double)DT_CANVAS_SHAPE_MIN_SIDES, .max = (double)DT_CANVAS_SHAPE_MAX_SIDES,
+    .soft_min = (double)DT_CANVAS_SHAPE_MIN_SIDES, .soft_max = (double)DT_CANVAS_SHAPE_MAX_SIDES, .step = 1.0,
+    .factor = 1.0, .neutral = NAN, .digits = 0, .visible_if = DT_CANVAS_PROP_SHAPE_GEOMETRY,
+    .visible_values = GEOMETRIES_WITH_SIDES },
+  { .id = DT_CANVAS_PROP_SHAPE_DEPTH, .key = "shape.depth", .label = N_("Depth"),
+    .tooltip = N_("How far the notches between a star's points are pushed towards its centre"), .unit = N_("%"),
+    .kinds = KINDS_SHAPE, .section = DT_CANVAS_SECTION_SHAPE, .tier = DT_CANVAS_TIER_ESSENTIAL,
+    .widget = DT_CANVAS_WIDGET_TUNE, .min = 5.0, .max = 100.0 * (double)DT_CANVAS_SHAPE_MAX_DEPTH,
+    .soft_min = 5.0, .soft_max = 100.0 * (double)DT_CANVAS_SHAPE_MAX_DEPTH, .step = 1.0, .factor = 0.01,
+    .neutral = NAN, .digits = 0, .visible_if = DT_CANVAS_PROP_SHAPE_GEOMETRY, .visible_values = GEOMETRY_STAR },
+  { .id = DT_CANVAS_PROP_SHAPE_ROUNDNESS, .key = "shape.roundness", .label = N_("Roundness"),
+    .tooltip = N_("How round the sides are, between straight and a circle. A rounded shape has no corners "
+                  "left for the corner radius to take."),
+    .unit = N_("%"), .kinds = KINDS_SHAPE, .section = DT_CANVAS_SECTION_SHAPE,
+    .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_TUNE, .min = 0.0, .max = 100.0,
+    .soft_min = 0.0, .soft_max = 100.0, .step = 1.0, .factor = 0.01, .neutral = 0.0, .digits = 0,
+    .visible_if = DT_CANVAS_PROP_SHAPE_GEOMETRY, .visible_values = GEOMETRIES_WITH_SIDES },
 
   /* --- arrange -------------------------------------------------------------------------- */
   { .id = DT_CANVAS_PROP_X, .key = "arrange.x", .label = N_("X"),
@@ -294,10 +324,12 @@ static const dt_canvas_prop_t _props[] = {
     .soft_max = PROP_PLANE_LIMIT, .step = 1.0, .factor = 1.0, .neutral = NAN, .digits = 0,
     .pair_with = DT_CANVAS_PROP_HEIGHT },
   { .id = DT_CANVAS_PROP_KEEP_RATIO, .key = "arrange.keep_ratio", .label = N_("Proportions"),
-    .tooltip = N_("Keep the frame's shape when it is resized, so a picture or a drawing is never stretched. Off, "
-                  "the two sides move independently."),
-    .kinds = KINDS_IMAGE | KINDS_SVG, .section = DT_CANVAS_SECTION_ARRANGE, .tier = DT_CANVAS_TIER_ESSENTIAL,
-    .widget = DT_CANVAS_WIDGET_ICON_FLAG, .max = 1.0, .factor = 1.0, .neutral = NAN, .icons = _link_icons },
+    .tooltip = N_("Keep the frame's shape when it is resized, so a picture, a drawing or a regular polygon is "
+                  "never stretched. Off, the two sides move independently."),
+    .kinds = KINDS_IMAGE | KINDS_SVG | KINDS_SHAPE, .section = DT_CANVAS_SECTION_ARRANGE,
+    .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_ICON_FLAG, .max = 1.0, .factor = 1.0,
+    .neutral = NAN, .icons = _link_icons, .visible_if = DT_CANVAS_PROP_SHAPE_GEOMETRY,
+    .visible_values = GEOMETRIES_WITH_SIDES },
   { .id = DT_CANVAS_PROP_HEIGHT, .key = "arrange.height", .label = N_("H"), .tooltip = N_("Height, canvas units"),
     .unit = N_("pt"), .kinds = KINDS_FRAMES, .section = DT_CANVAS_SECTION_ARRANGE,
     .tier = DT_CANVAS_TIER_ESSENTIAL,
@@ -381,7 +413,8 @@ static const dt_canvas_prop_t _props[] = {
     .tooltip = N_("A drawn shape that cuts the frame out of its rectangle, with a fall-off past its edge"),
     .kinds = KINDS_FRAMES, .section = DT_CANVAS_SECTION_CUTOUT, .tier = DT_CANVAS_TIER_ESSENTIAL,
     .widget = DT_CANVAS_WIDGET_ICONS, .max = 4.0, .soft_max = 4.0, .step = 1.0, .factor = 1.0, .neutral = 0.0,
-    .choices = _shape_choices, .icons = _shape_icons },
+    .choices = _shape_choices, .icons = _shape_icons, .visible_if = DT_CANVAS_PROP_SHAPE_GEOMETRY,
+    .visible_values = GEOMETRY_RECTANGLE },
   { .id = DT_CANVAS_PROP_CUTOUT_FEATHER, .key = "cutout.feather", .label = N_("Feather"),
     .tooltip = N_("Fall-off past the shape's edge, percent of the frame's shorter side. The wheel over the frame "
                   "changes it while editing."),
@@ -1213,13 +1246,29 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
       out->flag = object->connector.via_count > 0;
       break;
     case DT_CANVAS_PROP_SHAPE_GEOMETRY:
-      // The rectangle is the only geometry this build offers, and it is what a geometry this
-      // build does not know is drawn as: either way the row shows the shape on screen.
-      out->choice = 0;
+      // The star is READ, not stored: a star IS a polygon whose notches have a depth, so the two
+      // choices answer for the one geometry and a depth dragged to nothing turns a star back into
+      // the polygon it has become. A geometry this build does not know is drawn as a rectangle, and
+      // the row says so: either way it shows the shape that is on screen.
+      if(!dt_canvas_shape_is_polygon(object))
+        out->choice = 0;
+      else if(object->shape.depth > 0.0f)
+        out->choice = 2;
+      else
+        out->choice = 1;
       break;
     case DT_CANVAS_PROP_SHAPE_FILLED:
       // Filled is the fill's own opacity: there is no second switch to fall out of step with it.
       out->flag = object->background.alpha > 0.0f;
+      break;
+    case DT_CANVAS_PROP_SHAPE_SIDES:
+      out->number = (double)object->shape.sides;
+      break;
+    case DT_CANVAS_PROP_SHAPE_DEPTH:
+      out->number = (double)object->shape.depth / prop->factor;
+      break;
+    case DT_CANVAS_PROP_SHAPE_ROUNDNESS:
+      out->number = (double)object->shape.roundness / prop->factor;
       break;
     case DT_CANVAS_PROP_X:
       out->number = object->x;
@@ -1284,7 +1333,12 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
       break;
     }
     case DT_CANVAS_PROP_CUTOUT_SHAPE:
-      out->choice = CLAMP((int)object->mask.shape, 0, DT_CANVAS_MASK_GRADIENT);
+      // A polygon is not cut, whatever mask a hand-edited file or a geometry since switched left on
+      // it: `dt_canvas_object_is_cut()` says so to the painter, the hit test, the silhouette and the
+      // handles alike, and the rows that follow this one -- each gated on the value read here --
+      // must be told the same thing, or the card offers a feather for a cutout nobody can see.
+      out->choice = dt_canvas_object_is_cut(object) ? CLAMP((int)object->mask.shape, 0, DT_CANVAS_MASK_GRADIENT)
+                                                    : DT_CANVAS_MASK_NONE;
       break;
     case DT_CANVAS_PROP_CUTOUT_FEATHER:
       out->number = object->mask.feather / prop->factor;
@@ -1595,6 +1649,13 @@ static gboolean _shape_style_row(const dt_canvas_prop_id_t prop_id)
 {
   switch(prop_id)
   {
+    // The sides, the depth and the roundness are a shape's style as much as its colour is: the tool
+    // that drew a five-pointed star draws the next one with five points too. They are remembered per
+    // tool by the caller, which is why the geometry itself is not here -- what a shape IS was asked
+    // for by the tool, and is not something one shape teaches another.
+    case DT_CANVAS_PROP_SHAPE_SIDES:
+    case DT_CANVAS_PROP_SHAPE_DEPTH:
+    case DT_CANVAS_PROP_SHAPE_ROUNDNESS:
     case DT_CANVAS_PROP_SHAPE_FILLED:
     case DT_CANVAS_PROP_BACKGROUND:
     case DT_CANVAS_PROP_BORDER_WIDTH:
@@ -1701,15 +1762,70 @@ static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object
 /** What a shape is given to stand in for a fill it has just lost: two units of its own colour. */
 #define SHAPE_RESCUE_BORDER 2.0f
 
+/**
+ * What every write to a shape's own outline owes: a height back at the shape's own ratio, the text
+ * beside it refitted against a silhouette that has just moved, and the card told that the height it
+ * is showing has changed under it.
+ */
+static uint32_t _shape_outline_effects(dt_canvas_object_t *object)
+{
+  dt_canvas_shape_refit_height(object);
+  return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_COUPLED;
+}
+
+/**
+ * Turn a shape into a polygon, or into a star, which is a polygon whose notches have a depth.
+ *
+ * Three things go with the geometry itself. The cutout goes, because a polygon is not cut and a
+ * mask left behind would be one the card could no longer reach. The corner radius becomes the
+ * shape's OWN, at nothing, whenever the shape was inheriting the canvas's -- a radius meant to
+ * soften a picture's corners has no business blunting the points of a star nobody asked it about,
+ * and the row is still there for a fillet the user does ask for. And the height goes back to the
+ * ratio the new outline states, since the box a rectangle was dragged into is not a hexagon's.
+ */
+static uint32_t _write_geometry(dt_canvas_t *canvas, dt_canvas_object_t *object, const int choice)
+{
+  if(choice <= 0)
+  {
+    // The sides, the depth and the roundness are KEPT: a rectangle carries them so that switching
+    // back gives the polygon that was there rather than a default.
+    object->shape.geometry = DT_CANVAS_SHAPE_RECTANGLE;
+    // Nothing else moves: the box is the box it was, and the outline rows simply leave the card.
+    return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_RESTRUCTURE;
+  }
+  object->shape.geometry = DT_CANVAS_SHAPE_POLYGON;
+  if(choice == 1)
+    object->shape.depth = 0.0f;
+  else if(!(object->shape.depth > 0.0f))
+    object->shape.depth = DT_CANVAS_SHAPE_STAR_DEPTH;
+  dt_canvas_mask_set_shape(canvas, object, DT_CANVAS_MASK_NONE);
+  if(dt_canvas_group_state(canvas, object, DT_CANVAS_GROUP_CORNER) == DT_CANVAS_OWN_INHERIT)
+  {
+    dt_canvas_group_set_own(canvas, object, DT_CANVAS_GROUP_CORNER, TRUE);
+    object->corner_radius = 0.0f;
+  }
+  return _shape_outline_effects(object) | DT_CANVAS_EFFECT_RESTRUCTURE;
+}
+
 static uint32_t _write_shape(dt_canvas_t *canvas, dt_canvas_object_t *object, const dt_canvas_prop_t *prop,
                              const dt_canvas_prop_value_t *in)
 {
   switch(prop->id)
   {
     case DT_CANVAS_PROP_SHAPE_GEOMETRY:
-      // The rectangle is the only geometry offered, so the writer has nothing to change yet; the
-      // row is here so the strip reads the same on every shape and the polygon can be slotted in.
-      return 0u;
+      return _write_geometry(canvas, object, in->choice);
+    case DT_CANVAS_PROP_SHAPE_SIDES:
+      object->shape.sides
+          = (uint32_t)CLAMP((int)lround(_clamp_number(prop, in->number)), (int)DT_CANVAS_SHAPE_MIN_SIDES,
+                            (int)DT_CANVAS_SHAPE_MAX_SIDES);
+      return _shape_outline_effects(object);
+    case DT_CANVAS_PROP_SHAPE_DEPTH:
+      object->shape.depth
+          = (float)CLAMP(_clamp_number(prop, in->number) * prop->factor, 0.0, (double)DT_CANVAS_SHAPE_MAX_DEPTH);
+      return _shape_outline_effects(object);
+    case DT_CANVAS_PROP_SHAPE_ROUNDNESS:
+      object->shape.roundness = (float)CLAMP(_clamp_number(prop, in->number) * prop->factor, 0.0, 1.0);
+      return _shape_outline_effects(object);
     case DT_CANVAS_PROP_SHAPE_FILLED:
     {
       if(in->flag)
@@ -1797,8 +1913,13 @@ static uint32_t _write_shared(dt_canvas_t *canvas, dt_canvas_object_t *object, c
     case DT_CANVAS_PROP_HEIGHT:
       return _write_size(object, prop, in);
     case DT_CANVAS_PROP_KEEP_RATIO:
+    {
       _set_bit(&object->flags, DT_CANVAS_OBJECT_FLAG_FREE_RATIO, !in->flag);
-      return DT_CANVAS_EFFECT_CHANGED;
+      // A picture keeps whatever proportions it was left at; a polygon's are its outline's, so
+      // asking for them back is asking for the shape back, here and not at the next resize.
+      if(!dt_canvas_shape_refit_height(object)) return DT_CANVAS_EFFECT_CHANGED;
+      return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_COUPLED;
+    }
     case DT_CANVAS_PROP_ROTATION:
       object->rotation = _clamp_number(prop, in->number) * prop->factor;
       return OBSTACLE_EFFECTS;

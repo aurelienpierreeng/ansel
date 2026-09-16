@@ -32,7 +32,8 @@
 #include <unistd.h>
 #include <jpeglib.h>
 #include <math.h>
-#include <setjmp.h>
+// cmocka.h declares `extern jmp_buf global_expect_assert_env' without including <setjmp.h>.
+#include <setjmp.h>  // NOLINT(misc-include-cleaner)
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -2365,6 +2366,238 @@ static void _text_flows_inside_an_outline_box(void **state)
   assert_true(outline >= plain);
 }
 
+/** A polygon of `sides` at `depth`, `width` across and at its own ratio, on a bare canvas. */
+static dt_canvas_object_t *_painted_polygon(dt_canvas_t *canvas, const uint32_t sides, const float depth,
+                                            const double width, const dt_canvas_shape_style_t *style)
+{
+  const double height = width / dt_canvas_shape_unit_aspect(sides, depth, 0.0f);
+  dt_canvas_shape_style_t applied = IS_NULL_PTR(style) ? dt_canvas_shape_style_default() : *style;
+  applied.sides = sides;
+  applied.depth = depth;
+  applied.roundness = 0.0f;
+  const dt_canvas_rect_t box = { -0.5 * width, -0.5 * height, width, height };
+  return dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_POLYGON, &box, &applied);
+}
+
+/**
+ * A polygon's border is a BAND that REPLACES the fill it covers, not a colour laid over it: a
+ * translucent border shows the plane through it, exactly as a rectangular frame's border does by
+ * being stroked with the fill inset inside it. The proof is that the band reads the same over a
+ * filled shape as over an empty one -- and reads nothing like the colour it would have been over
+ * the fill, which is what says the two cases are telling us something.
+ */
+static void _a_polygons_band_replaces_its_fill_rather_than_lying_over_it(void **state)
+{
+  (void)state;
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.fill = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  style.border_override = TRUE;
+  style.border_width = 20.0f;
+  style.border_color = dt_canvas_color(1.0f, 0.0f, 0.0f, 0.5f);
+
+  dt_canvas_t *filled = _bare_canvas();
+  dt_canvas_object_t *hexagon = _painted_polygon(filled, 6, 0.0f, 160.0, &style);
+  assert_non_null(hexagon);
+  // The right side of a hexagon this wide is a vertical edge at 80 units out; the band runs from
+  // there 20 units in, so its middle is at 70 and the fill's own ground is at the centre.
+  const uint32_t in_band = _painted_pixel(filled, 200, 170, 100);
+  const uint32_t at_centre = _painted_pixel(filled, 200, 100, 100);
+  assert_int_equal(at_centre, 0xFFFFFFu);
+  // Outside the outline, inside the frame's box: the plane, and nothing of the shape.
+  assert_int_equal(_painted_pixel(filled, 200, 178, 190), 0x000000u);
+
+  dt_canvas_t *empty = _bare_canvas();
+  style.fill.alpha = 0.0f;
+  dt_canvas_object_t *outline = _painted_polygon(empty, 6, 0.0f, 160.0, &style);
+  assert_non_null(outline);
+  const uint32_t in_band_unfilled = _painted_pixel(empty, 200, 170, 100);
+  assert_int_equal(_painted_pixel(empty, 200, 100, 100), 0x000000u);
+  fprintf(stderr, "polygon band: %06x over a filled shape, %06x over an empty one, %06x had it lain over\n",
+          in_band, in_band_unfilled, _layer_code(1.0, 0.5, 0.5));
+  // The band is the border over the PAPER either way, to a code.
+  assert_true(_within(in_band, in_band_unfilled, 1));
+  // And not the border over the white fill, which is what an OVER would have given.
+  assert_false(_within(in_band, _layer_code(1.0, 0.5, 0.5), 8));
+  dt_canvas_free(filled);
+  dt_canvas_free(empty);
+}
+
+/**
+ * The band is painted with SOURCE, which REPLACES whatever it is laid on rather than blending into
+ * it -- so it is painted inside a group of its own, bounded by the frame. `dt_canvas_paint_object()`
+ * hands the painter the caller's own surface, and without the group a translucent border would take
+ * the plane, the paper and every object under it away with the fill it was only meant to cover.
+ *
+ * The group is pushed for a BAND and for nothing else: a fill is laid with OVER and isolating it
+ * changes not one byte (measured, on a transparent destination and on a filled one, at three fill
+ * opacities), while costing a frame-sized allocation, clear and composite -- 0.05 ms on a small
+ * shape's layer and 0.77 ms on a large one. The fill-only shape is the common one, so this test
+ * gives the star a border and no fill, which is the case that needs the group.
+ */
+static void _a_polygons_band_clears_nothing_outside_itself(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = _bare_canvas();
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.fill.alpha = 0.0f;
+  style.border_override = TRUE;
+  style.border_width = 12.0f;
+  // TRANSLUCENT, which is what tells the two apart: an opaque band writes the same opaque pixels
+  // whichever way it is composited, and says nothing about what it did to the surface beneath.
+  style.border_color = dt_canvas_color(1.0f, 0.0f, 0.0f, 0.5f);
+  dt_canvas_object_t *star = _painted_polygon(canvas, 5, DT_CANVAS_SHAPE_STAR_DEPTH, 160.0, &style);
+  assert_non_null(star);
+
+  // A surface already carrying something of its own, the way the compositor's does.
+  const int size = 200;
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size, size);
+  cairo_t *cr = cairo_create(surface);
+  cairo_set_source_rgba(cr, 0.0, 0.0, 1.0, 1.0);
+  cairo_paint(cr);
+  cairo_translate(cr, size * 0.5, size * 0.5);
+  const dt_canvas_rect_t whole = { -size * 0.5, -size * 0.5, (double)size, (double)size };
+  const dt_canvas_paint_options_t options = dt_canvas_paint_options_export(NULL, 1.0, whole);
+  dt_canvas_paint_object(cr, canvas, star, &options);
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+
+  int cleared = 0;
+  int painted = 0;
+  for(int row = 0; row < size; row++)
+  {
+    for(int col = 0; col < size; col++)
+    {
+      const uint32_t pixel = *(const uint32_t *)(pixels + (size_t)row * stride + (size_t)col * 4);
+      const uint32_t alpha = pixel >> 24;
+      if(alpha < 250)
+        cleared++;
+      else if((pixel & 0xFFFFFFu) != 0x0000FFu)
+        painted++;
+    }
+  }
+  fprintf(stderr, "a star painted onto a filled surface: %d pixels painted, %d cleared\n", painted, cleared);
+  // The band painted plenty, and took nothing away: every pixel is still opaque.
+  assert_true(painted > 1000);
+  assert_int_equal(cleared, 0);
+  cairo_surface_destroy(surface);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * Nothing in the atelier cuts a polygon, so a mask left on one by a hand-edited file is ignored by
+ * the painter too: the shape it draws is the shape every other reader of it reports.
+ */
+static void _a_polygon_with_a_stale_mask_paints_uncut(void **state)
+{
+  (void)state;
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.fill = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+
+  dt_canvas_t *plain = _bare_canvas();
+  assert_non_null(_painted_polygon(plain, 6, 0.0f, 160.0, &style));
+  dt_canvas_t *masked = _bare_canvas();
+  dt_canvas_object_t *stale = _painted_polygon(masked, 6, 0.0f, 160.0, &style);
+  assert_non_null(stale);
+  dt_canvas_mask_set_shape(masked, stale, DT_CANVAS_MASK_CIRCLE);
+  stale->mask.radius_x = 0.2f;
+  stale->mask.radius_y = 0.2f;
+
+  cairo_surface_t *without = _painted_surface(plain, 200, FALSE);
+  cairo_surface_t *with = _painted_surface(masked, 200, FALSE);
+  assert_int_equal(_pixels_differing(without, with, 200), 0);
+  cairo_surface_destroy(without);
+  cairo_surface_destroy(with);
+  dt_canvas_free(plain);
+  dt_canvas_free(masked);
+}
+
+/** A column of text, added FIRST so that anything put on the canvas after it is laid OVER it. */
+static dt_canvas_object_t *_flowing_column(dt_canvas_t *canvas)
+{
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 0.0, 0.0, 400.0, 400.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+      "zoom, because the page is the thing being designed and the screen is only a window onto it, and "
+      "the measure a line is set to belongs to the page rather than to the window looking at it.");
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND;
+  text->text.wrap_standoff = 0.0f;
+  return text;
+}
+
+/** The height that column needs, once everything on the canvas is where it is going to be. */
+static double _flowed_height(dt_canvas_t *canvas, const dt_canvas_object_t *text)
+{
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double height = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+  return height;
+}
+
+/**
+ * Text flows INTO a star's notches. An obstacle covers where it puts ink, and the ink of a star is
+ * the star -- so a column set under one costs less height than the same column under the rectangle
+ * the star stands in, which is the box a silhouette taken as a reach would have handed the text.
+ */
+static void _text_flows_into_a_stars_notches(void **state)
+{
+  (void)state;
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.fill = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  const double width = 240.0;
+  const double height = width / dt_canvas_shape_unit_aspect(5, DT_CANVAS_SHAPE_STAR_DEPTH, 0.0f);
+  // Over the column from its very first line: an obstacle the text has not reached yet says nothing
+  // about whether it would have had to go round it.
+  const dt_canvas_rect_t box = { -0.5 * width, -190.0, width, height };
+
+  dt_canvas_t *plain = dt_canvas_new();
+  const double bare = _flowed_height(plain, _flowing_column(plain));
+
+  dt_canvas_t *with_star = dt_canvas_new();
+  const dt_canvas_object_t *star_column = _flowing_column(with_star);
+  dt_canvas_shape_style_t star_style = style;
+  star_style.sides = 5;
+  star_style.depth = DT_CANVAS_SHAPE_STAR_DEPTH;
+  assert_non_null(dt_canvas_add_shape(with_star, DT_CANVAS_SHAPE_POLYGON, &box, &star_style));
+  const double starred = _flowed_height(with_star, star_column);
+
+  dt_canvas_t *with_box = dt_canvas_new();
+  const dt_canvas_object_t *box_column = _flowing_column(with_box);
+  assert_non_null(dt_canvas_add_shape(with_box, DT_CANVAS_SHAPE_RECTANGLE, &box, &style));
+  const double boxed = _flowed_height(with_box, box_column);
+
+  // An UNFILLED star is a hole with a rule round it: its middle is free, and a line set across it
+  // is broken into the runs either side of the band rather than turned away altogether. Only a
+  // raster of what the shape PAINTS can say that -- a ray out of the frame's centre, which is all a
+  // silhouette reach is, reports the same solid star for both. So it is this reading, and not the
+  // filled star above, that says the shape's own ink is what the text was given.
+  dt_canvas_t *with_outline = dt_canvas_new();
+  const dt_canvas_object_t *outline_column = _flowing_column(with_outline);
+  dt_canvas_shape_style_t outline_style = star_style;
+  outline_style.fill.alpha = 0.0f;
+  outline_style.border_override = TRUE;
+  outline_style.border_width = 4.0f;
+  outline_style.border_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  assert_non_null(dt_canvas_add_shape(with_outline, DT_CANVAS_SHAPE_POLYGON, &box, &outline_style));
+  const double outlined = _flowed_height(with_outline, outline_column);
+
+  fprintf(stderr, "text under a star: %.1f bare, %.1f under the star, %.1f under its outline, %.1f under its box\n",
+          bare, starred, outlined, boxed);
+  assert_true(bare > 0.0);
+  assert_true(starred > bare);
+  assert_true(starred < boxed);
+  assert_true(outlined < boxed);
+  assert_true(outlined > bare);
+  assert_true(fabs(outlined - starred) > 2.0);
+  dt_canvas_free(plain);
+  dt_canvas_free(with_star);
+  dt_canvas_free(with_box);
+  dt_canvas_free(with_outline);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -2372,6 +2605,10 @@ int main(void)
     cmocka_unit_test(_a_cut_rectangle_paints_its_cutout_and_its_band),
     cmocka_unit_test(_an_unfilled_rectangle_is_picked_by_its_band),
     cmocka_unit_test(_text_flows_inside_an_outline_box),
+    cmocka_unit_test(_a_polygons_band_replaces_its_fill_rather_than_lying_over_it),
+    cmocka_unit_test(_a_polygons_band_clears_nothing_outside_itself),
+    cmocka_unit_test(_a_polygon_with_a_stale_mask_paints_uncut),
+    cmocka_unit_test(_text_flows_into_a_stars_notches),
     cmocka_unit_test(_a_circle_is_full_inside_empty_outside_and_feathers_between),
     cmocka_unit_test(_a_polygon_fills_its_interior),
     cmocka_unit_test(_a_polygon_node_carries_its_own_fall_off),

@@ -21,12 +21,20 @@
  * .anselcanvas; passes trivially otherwise, so the suite stays green on every machine. Run:
  *
  *   CANVAS_BENCH_FILE=/path/to/some.anselcanvas ./tests/unittests/bench_canvas_paint
+ *
+ * CANVAS_BENCH_STARS=<n> builds a document instead of reading one: a column of flowing text with
+ * `n` stars laid over it, which is what a drawn shape costs both the painter and the text that has
+ * to go round it. Zero is the same page with no shape on it -- the reading the star's own cost is
+ * measured against.
+ *
+ *   CANVAS_BENCH_STARS=20 ./tests/unittests/bench_canvas_paint
  */
 
 #include "caches/pixelpipe_cache.h"
 #include "canvas/canvas.h"
 #include "canvas/canvas_paint.h"
 #include "canvas/canvas_export.h"
+#include "canvas/canvas_props.h"
 #include "canvas/canvas_render.h"
 #include "colorprofiles/colorspaces.h"
 #include "common/conf.h"
@@ -37,7 +45,8 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <math.h>
-#include <setjmp.h>
+// cmocka.h declares `extern jmp_buf global_expect_assert_env' without including <setjmp.h>.
+#include <setjmp.h>  // NOLINT(misc-include-cleaner)
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -116,17 +125,65 @@ static double _paint_once(cairo_surface_t *surface, const dt_canvas_t *canvas, d
   return _paint_once_quality(surface, canvas, cache, zoom, center_x, center_y, width, height, for_display, 1.0);
 }
 
+/**
+ * A page of flowing text with `stars` stars laid over it, at the size and spacing a reader would
+ * lay ornaments out at. The text is added FIRST so that everything after it is laid OVER it and is
+ * an obstacle its lines must clear -- which is where a polygon's coverage raster is paid for.
+ */
+static dt_canvas_t *_stars_over_text(const int stars)
+{
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->grid_flags = 0;
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 0.0, 0.0, 1400.0, 1800.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way whatever the "
+      "zoom, because the page is the thing being designed and the screen is only a window onto it, and the "
+      "measure a line is set to belongs to the page rather than to the window looking at it. A line is set "
+      "across every clear stretch of its band, not the widest one, so a picture in the middle of a column "
+      "leaves space either side and the line carries on past it. What has to clear a picture is the glyphs, "
+      "and a logical box carries the font's full ascent above the tallest of them.");
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND;
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.fill = dt_canvas_color(0.85f, 0.2f, 0.1f, 1.0f);
+  style.border_override = TRUE;
+  style.border_width = 6.0f;
+  style.border_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 0.6f);
+  style.sides = 5;
+  style.depth = DT_CANVAS_SHAPE_STAR_DEPTH;
+  const double width = 180.0;
+  const double height = width / dt_canvas_shape_unit_aspect(style.sides, style.depth, style.roundness);
+  for(int idx = 0; idx < stars; idx++)
+  {
+    const dt_canvas_rect_t box = { -600.0 + 260.0 * (idx % 5), -800.0 + 380.0 * (idx / 5), width, height };
+    assert_non_null(dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_POLYGON, &box, &style));
+  }
+  dt_canvas_props_settle_all(canvas);
+  return canvas;
+}
+
 static void _bench(void **state)
 {
   (void)state;
   const char *path = g_getenv("CANVAS_BENCH_FILE");
-  if(IS_NULL_PTR(path))
+  const char *stars_env = g_getenv("CANVAS_BENCH_STARS");
+  if(IS_NULL_PTR(path) && IS_NULL_PTR(stars_env))
   {
-    printf("CANVAS_BENCH_FILE not set: nothing to bench\n");
+    printf("neither CANVAS_BENCH_FILE nor CANVAS_BENCH_STARS set: nothing to bench\n");
     return;
   }
   GError *error = NULL;
-  dt_canvas_t *canvas = dt_canvas_load(path, &error);
+  dt_canvas_t *canvas = NULL;
+  if(IS_NULL_PTR(path))
+  {
+    const int stars = CLAMP(atoi(stars_env), 0, 200);
+    canvas = _stars_over_text(stars);
+    path = "<stars over flowing text>";
+    printf("built %d stars over a flowing column\n", stars);
+  }
+  else
+  {
+    canvas = dt_canvas_load(path, &error);
+  }
   assert_non_null(canvas);
   // A 2560x1440 viewport on a 2x screen, fitted to the canvas.
   const int width = 2560;
