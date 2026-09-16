@@ -3645,7 +3645,11 @@ void dtgtk_cairo_paint_route(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
   const double to_x = 0.85;
   const double to_y = 0.2;
   const double node_radius = 0.08;
-  const double frame_half_size = 0.085;
+  // A square of a side under three device pixels is a smudge, not a frame: at the toolbar's own
+  // size -- a 20 px button, so a 16 px glyph box -- 0.085 gave a 2.7 px square outlined at the
+  // 0.71 px stroke PREAMBLE sets, and one pixel of it was hollow. 0.12 gives 3.8 px around a hole
+  // of 2.4, and the whole picture still sits inside the unit square.
+  const double frame_half_size = 0.12;
   // The two end variants name one thing each and are never both asked for; were they, the frames
   // would win, since a square says more about an end than the absence of a mark does. A free end
   // takes no mark at all: the round cap PREAMBLE gives every line is what ends it there.
@@ -3675,6 +3679,27 @@ void dtgtk_cairo_paint_route(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
     cairo_line_to(cr, middle_x, start_y);
     cairo_line_to(cr, middle_x, end_y);
     cairo_line_to(cr, end_x, end_y);
+  }
+  else if((flags & CPF_ROUTE_CUBIC) && free_ends)
+  {
+    // A curve drawn between two points of the plane is ONE arc to a single side of its chord: it
+    // leaves and arrives a sixth of a turn off the chord, reaching four tenths of its length, which
+    // is the construction dt_canvas_connector_seed_curve() (canvas/canvas.c) seeds a free cubic
+    // with -- the numbers are repeated rather than shared, this being a toolkit file that knows
+    // nothing of a canvas. The anchored S below is the wrong picture here twice over: it is the
+    // connector's, and a picture that leaves its chord and comes back is a straight line at a
+    // glyph's size. Measured in the 16 px box a 20 px button gives, against the 0.71 px stroke
+    // PREAMBLE sets: the S wanders [-1.35, +1.35] px either side of its own chord, the arc
+    // [-2.21, 0.00] px to one side of it.
+    const double seed_reach = 0.4;
+    const double seed_cos = cos(M_PI / 6.0);
+    const double seed_sin = sin(M_PI / 6.0);
+    const double chord_x = end_x - start_x;
+    const double chord_y = end_y - start_y;
+    cairo_curve_to(cr, start_x + seed_reach * (seed_cos * chord_x + seed_sin * chord_y),
+                   start_y + seed_reach * (-seed_sin * chord_x + seed_cos * chord_y),
+                   end_x - seed_reach * (seed_cos * chord_x - seed_sin * chord_y),
+                   end_y - seed_reach * (seed_sin * chord_x + seed_cos * chord_y), end_x, end_y);
   }
   else if(flags & CPF_ROUTE_CUBIC)
   {

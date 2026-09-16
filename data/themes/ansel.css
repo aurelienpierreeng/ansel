@@ -1996,18 +1996,23 @@ window.dt-color-well-popup {
 }
 
 /* Linked buttons read as one control: the universal reset zeroed every radius and `button` gave all
-   four corners back, so the corners they share are squared again here, and nothing separates them. */
-.dt-canvas-props .linked > button {
+   four corners back, so the corners they share are squared again here, and nothing separates them.
+   The Canvas toolbar's two icon groups -- what adds an object, what draws one -- are the same
+   control and take the same three rules. */
+.dt-canvas-props .linked > button,
+.dt-canvas-toolbar .linked > button {
   margin-left: 0;
   margin-right: 0;
 }
 
-.dt-canvas-props .linked > button:not(:first-child) {
+.dt-canvas-props .linked > button:not(:first-child),
+.dt-canvas-toolbar .linked > button:not(:first-child) {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
 
-.dt-canvas-props .linked > button:not(:last-child) {
+.dt-canvas-props .linked > button:not(:last-child),
+.dt-canvas-toolbar .linked > button:not(:last-child) {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }

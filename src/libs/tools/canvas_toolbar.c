@@ -45,9 +45,12 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "views/view.h"
-#include "widgets/accelerators.h"     // dt_accels_block_plain_keys_inside
+#include "widgets/accelerators.h"     // dt_accels_block_plain_keys_inside, dt_accels_build_path
 #include "widgets/bauhaus.h"          // the texture sliders
+#include "widgets/button.h"           // dtgtk_button_new
 #include "widgets/chooser_button.h"
+#include "widgets/paint.h"            // the glyphs the icon groups show
+#include "widgets/togglebutton.h"     // dtgtk_togglebutton_new
 #include "widgets/widget_settings.h"
 #include "widgets/widget_style.h"
 
@@ -65,7 +68,9 @@ typedef struct dt_lib_canvas_toolbar_handler_t
 
 typedef struct dt_lib_canvas_toolbar_t
 {
-  GtkWidget *connect_toggle;
+  /** The DRAW group, indexed by the tool each toggle arms; the slot of DT_CANVAS_TOOL_NONE stays
+   * NULL, since no button offers "no tool" -- putting one away is the armed button pressed again. */
+  GtkWidget *tool_toggles[DT_CANVAS_TOOL_COUNT];
   // the guides popover
   GtkWidget *grid_show;
   GtkWidget *grid_snap;
@@ -231,14 +236,22 @@ static dt_canvas_tool_t _armed_tool(void)
   return (dt_canvas_tool_t)dt_view_manager_get_global()->proxy.canvas.armed_tool(view);
 }
 
-static void _connect_toggled(GtkToggleButton *button, gpointer user_data)
+/** Where a tool's toggle keeps the action that arms it; the tool itself is the toggle's index. */
+#define TOOLBAR_TOOL_ACTION_KEY "dt-canvas-tool-action"
+
+static void _tool_toggled(GtkToggleButton *button, gpointer user_data)
 {
   dt_view_t *view = NULL;
   if(!_live(&view)) return;
-  // Asked only when the button and the view disagree: the action is a toggle, and a button already
-  // showing what the view holds would otherwise put the tool away again.
-  const gboolean armed = _armed_tool() == DT_CANVAS_TOOL_CONNECTOR;
-  if(gtk_toggle_button_get_active(button) != armed) _ask(DT_CANVAS_ACTION_CONNECT_MODE);
+  const dt_canvas_action_t action
+      = (dt_canvas_action_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), TOOLBAR_TOOL_ACTION_KEY));
+  const dt_canvas_tool_t tool = dt_canvas_tool_for_action(action);
+  // A toggle with no action on it reads as action 0, which is New canvas: nothing here may act on an
+  // action that arms no tool, or a lost tag would throw the document away instead of doing nothing.
+  if(tool == DT_CANVAS_TOOL_NONE) return;
+  // Asked only when the button and the view disagree: a tool's action is a toggle, and a button
+  // already showing what the view holds would otherwise put the tool away again.
+  if(gtk_toggle_button_get_active(button) != (_armed_tool() == tool)) _ask(action);
 }
 
 /** A guides checkbox: its flag bit is in "guide-flag". */
@@ -471,7 +484,14 @@ static void _refill(dt_lib_module_t *self)
   const dt_canvas_t *canvas = _document();
   if(IS_NULL_PTR(canvas) || IS_NULL_PTR(toolbar)) return;
   _refilled_handlers_block(toolbar, TRUE);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->connect_toggle), _armed_tool() == DT_CANVAS_TOOL_CONNECTOR);
+  // Which tool is armed is the view's answer and the toolbar keeps none of its own, so exactly one
+  // toggle can be pressed however the arming happened -- a key, a menu, the canvas being left.
+  const dt_canvas_tool_t armed = _armed_tool();
+  for(int tool = DT_CANVAS_TOOL_NONE + 1; tool < DT_CANVAS_TOOL_COUNT; tool++)
+  {
+    if(IS_NULL_PTR(toolbar->tool_toggles[tool])) continue;
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->tool_toggles[tool]), tool == (int)armed);
+  }
 
   const uint32_t flags = canvas->grid_flags;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->grid_show), (flags & DT_CANVAS_GRID_VISIBLE) != 0);
@@ -538,13 +558,86 @@ static void _canvas_changed(gpointer instance, gpointer user_data)
 
 /* --- building ------------------------------------------------------------------------------ */
 
+/**
+ * A control's tooltip: what the gesture is, and under it the key the user has for the same thing.
+ * Only the first half is written here -- the widget is tagged with the accel path the view
+ * registered the action under, and the global query-tooltip hook appends the binding at hover
+ * time, so a key rebound in the shortcuts dialog shows without anything being rebuilt. The path is
+ * asked of `canvas_actions.h` rather than spelled again, since a name spelled twice is a tooltip
+ * that quietly stops finding its shortcut the day one of the two is edited.
+ */
+static void _tooltip_with_accel(GtkWidget *widget, const char *tooltip, const dt_canvas_action_t action)
+{
+  gtk_widget_set_tooltip_text(widget, tooltip);
+  const char *action_name = dt_canvas_action_accel_name(action);
+  if(IS_NULL_PTR(action_name)) return;
+  g_object_set_data_full(G_OBJECT(widget), "accel-path",
+                         dt_accels_build_path(dt_canvas_action_accel_scope(), action_name), dt_free_gpointer);
+}
+
+/**
+ * A button here asks for one thing and gives the keyboard straight back: the plane is what answers
+ * to the arrow keys, to Escape and to Space, and a button holding the focus answers to them first --
+ * GtkWindow offers a key to the focus widget and to its own move-focus bindings before the
+ * application's handler ever sees it (gui/application.c connects _key_pressed *after* the class
+ * handler). The properties strip makes the same arrangement for the same widgets, through
+ * `_no_focus_on_click()` (views/canvas_props_gtk.c). Tab still reaches every one of them.
+ */
+static void _no_focus_on_click(GtkWidget *widget)
+{
+  gtk_widget_set_focus_on_click(widget, FALSE);
+}
+
 static GtkWidget *_button(GtkWidget *box, const char *label, const char *tooltip, const dt_canvas_action_t action)
 {
   GtkWidget *button = gtk_button_new_with_label(label);
-  gtk_widget_set_tooltip_text(button, tooltip);
+  _no_focus_on_click(button);
+  _tooltip_with_accel(button, tooltip, action);
   g_signal_connect(button, "clicked", G_CALLBACK(_action_clicked), GINT_TO_POINTER(action));
   gtk_box_pack_start(GTK_BOX(box), button, FALSE, FALSE, 0);
   return button;
+}
+
+/** A box of buttons the theme draws as one control, squaring the corners they share. */
+static GtkWidget *_linked_group(GtkWidget *box)
+{
+  GtkWidget *group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  dt_gui_add_class(group, "linked");
+  gtk_box_pack_start(GTK_BOX(box), group, FALSE, FALSE, 0);
+  return group;
+}
+
+/** A glyph button of a group: one action, the gesture it takes, and the key it answers to. */
+static GtkWidget *_icon_button(GtkWidget *box, DTGTKCairoPaintIconFunc paint, const gint flags,
+                               const char *tooltip, const dt_canvas_action_t action)
+{
+  GtkWidget *button = dtgtk_button_new(paint, flags, NULL);
+  _no_focus_on_click(button);
+  _tooltip_with_accel(button, tooltip, action);
+  g_signal_connect(button, "clicked", G_CALLBACK(_action_clicked), GINT_TO_POINTER(action));
+  gtk_box_pack_start(GTK_BOX(box), button, FALSE, FALSE, 0);
+  return button;
+}
+
+/**
+ * A glyph toggle showing whether its tool is the one armed. It holds no state: the handler asks the
+ * view for the action and the refill puts the answer back, so arming from a key or from a menu
+ * presses the same button as clicking it does.
+ */
+static GtkWidget *_tool_toggle(dt_lib_module_t *self, GtkWidget *box, DTGTKCairoPaintIconFunc paint,
+                               const gint flags, const char *tooltip, const dt_canvas_action_t action)
+{
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  const dt_canvas_tool_t tool = dt_canvas_tool_for_action(action);
+  if(tool <= DT_CANVAS_TOOL_NONE || tool >= DT_CANVAS_TOOL_COUNT) return NULL;
+  GtkWidget *toggle = dtgtk_togglebutton_new(paint, flags, NULL);
+  _no_focus_on_click(toggle);
+  _tooltip_with_accel(toggle, tooltip, action);
+  g_object_set_data(G_OBJECT(toggle), TOOLBAR_TOOL_ACTION_KEY, GINT_TO_POINTER(action));
+  _connect_refilled(self, toggle, "toggled", G_CALLBACK(_tool_toggled));
+  gtk_box_pack_start(GTK_BOX(box), toggle, FALSE, FALSE, 0);
+  toolbar->tool_toggles[tool] = toggle;
+  return toggle;
 }
 
 static void _separator(GtkWidget *box)
@@ -938,23 +1031,55 @@ void gui_init(dt_lib_module_t *self)
                   _guides_popover(self));
   _separator(box);
 
-  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Add")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
-  _button(box, _("Text"), _("Add a text frame at the centre of the view"), DT_CANVAS_ACTION_ADD_TEXT);
-  _button(box, _("Notes"), _("Add the .txt notes of the selected images as text frames (of every image when none is selected)"),
-          DT_CANVAS_ACTION_ADD_NOTES);
-  _button(box, _("Map"), _("Add a map frame at the centre of the view; an image's context menu adds a map of where it was taken"),
-          DT_CANVAS_ACTION_ADD_MAP);
-  _button(box, _("Drawing"),
-          _("Place a drawing read from an SVG file, at the size the file states. Its own bytes travel in the "
-            "canvas, so the document carries the drawing; its context menu reads the file again when it has "
-            "been edited since."),
-          DT_CANVAS_ACTION_ADD_SVG);
-  toolbar->connect_toggle = gtk_toggle_button_new_with_label(_("Connector"));
-  gtk_widget_set_tooltip_text(toolbar->connect_toggle,
-                              _("Draw a connector: click an anchor point on one frame, then on another. The tool "
-                                "stays armed for the next connector; Escape or a right click leaves it"));
-  _connect_refilled(self, toolbar->connect_toggle, "toggled", G_CALLBACK(_connect_toggled));
-  gtk_box_pack_start(GTK_BOX(box), toolbar->connect_toggle, FALSE, FALSE, 0);
+  // What an object is made of, and how: a group of buttons that each place one, and a group of
+  // toggles that each arm a tool to draw one. Each icon shows what it makes, so a caption reading
+  // "Add" over four pictures of what they add would only say it a second time; what a picture
+  // cannot say -- the gesture, and the key -- is in the tooltip.
+  GtkWidget *add_group = _linked_group(box);
+  _icon_button(add_group, dtgtk_cairo_paint_text_label, CPF_NONE,
+               _("Add a text frame at the centre of the view"), DT_CANVAS_ACTION_ADD_TEXT);
+  _icon_button(add_group, dtgtk_cairo_paint_note, CPF_NONE,
+               _("Add the .txt notes of the selected images as text frames (of every image when none is selected)"),
+               DT_CANVAS_ACTION_ADD_NOTES);
+  _icon_button(add_group, dtgtk_cairo_paint_map_pin, CPF_NONE,
+               _("Add a map frame at the centre of the view; an image's context menu adds a map of where it was taken"),
+               DT_CANVAS_ACTION_ADD_MAP);
+  _icon_button(add_group, dtgtk_cairo_paint_draw_structure, CPF_NONE,
+               _("Place a drawing read from an SVG file, at the size the file states. Its own bytes travel in the "
+                 "canvas, so the document carries the drawing; its context menu reads the file again when it has "
+                 "been edited since."),
+               DT_CANVAS_ACTION_ADD_SVG);
+  _separator(box);
+
+  GtkWidget *draw_group = _linked_group(box);
+  _tool_toggle(self, draw_group, dtgtk_cairo_paint_route, CPF_ROUTE_CUBIC | CPF_ROUTE_FRAMES,
+               _("Draw a connector: click an anchor point on one frame, then on another. The tool "
+                 "stays armed for the next connector; Escape or a right click leaves it"),
+               DT_CANVAS_ACTION_CONNECT_MODE);
+  _tool_toggle(self, draw_group, dtgtk_cairo_paint_route, CPF_ROUTE_STRAIGHT | CPF_ROUTE_FREE,
+               _("Draw a line between two points of the plane: drag from one end to the other, or click to "
+                 "place one. Ctrl holds it to 45 degrees, Shift to 15. It takes the width, colour, dashes and "
+                 "arrowheads of the last line; the tool stays armed until Escape or a right click"),
+               DT_CANVAS_ACTION_DRAW_LINE);
+  _tool_toggle(self, draw_group, dtgtk_cairo_paint_route, CPF_ROUTE_CUBIC | CPF_ROUTE_FREE,
+               _("Draw a curve between two points of the plane: the same gesture as a line, bent into an arc "
+                 "over the chord the drag gives"),
+               DT_CANVAS_ACTION_DRAW_CURVE);
+  _tool_toggle(self, draw_group, dtgtk_cairo_paint_shape, CPF_SHAPE_RECTANGLE,
+               _("Draw a rectangle: drag its box, or click to place one. Ctrl for a square, Shift from the "
+                 "centre. It takes the fill, border and corners of the last shape; the tool stays armed until "
+                 "Escape or a right click"),
+               DT_CANVAS_ACTION_DRAW_RECTANGLE);
+  _tool_toggle(self, draw_group, dtgtk_cairo_paint_shape, CPF_SHAPE_POLYGON,
+               _("Draw a regular polygon: drag its box, or click to place one; Shift from the centre. It takes "
+                 "the sides and corner rounding of the last polygon, and the fill, border and corners of the "
+                 "last shape"),
+               DT_CANVAS_ACTION_DRAW_POLYGON);
+  _tool_toggle(self, draw_group, dtgtk_cairo_paint_shape, CPF_SHAPE_STAR,
+               _("Draw a star: drag its box, or click to place one; Shift from the centre. It takes the points, "
+                 "notch depth and corner rounding of the last star, and the fill, border and corners of the "
+                 "last shape"),
+               DT_CANVAS_ACTION_DRAW_STAR);
   _separator(box);
 
   gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Background")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
@@ -973,12 +1098,16 @@ void gui_init(dt_lib_module_t *self)
   _popover_button(box, _("Texture"), _("The paper's relief, detail, scale and grain"), _texture_popover(self));
   _separator(box);
 
-  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Frames")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
+  // No caption over these two: what each opens is named on the button itself, and "Frames" over
+  // "Borders..." and "Shadows..." was a heading for a list of two that already read as one.
   _popover_button(box, _("Borders"), _("The uniform border of every frame without one of its own"), _borders_popover(self));
   _popover_button(box, _("Shadows"), _("The default shadow of every object without one of its own"), _shadow_popover(self));
   _separator(box);
 
-  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(_("Zoom")), FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
+  // No caption over these two, and no glyph either. The rule the groups above are built on is that
+  // an icon shows what it makes; the one picture the toolkit has for zooming is a magnifying glass,
+  // which says "zoom" over an action that means "fit", beside a "1:1" that is also a zoom -- and
+  // the caption that used to tell the pair apart is what this step removes. Two words say it.
   _button(box, _("Fit"), _("Fit the view to the canvas"), DT_CANVAS_ACTION_ZOOM_FIT);
   _button(box, _("1:1"), _("Zoom to 100%"), DT_CANVAS_ACTION_ZOOM_100);
   _separator(box);
