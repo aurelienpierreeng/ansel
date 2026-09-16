@@ -49,6 +49,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_import_jobs
   test_polygon_envelope
   test_color_well
+  test_canvas_actions
   test_canvas_zip
   test_canvas_document
   test_canvas_props

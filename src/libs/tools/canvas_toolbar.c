@@ -222,13 +222,23 @@ static void _rgba_to(GtkWidget *button, const dt_canvas_color_t *color, const gb
 
 /* --- handlers ------------------------------------------------------------------------- */
 
+/** The tool the view has armed: the toggles show it and never keep a state of their own. */
+static dt_canvas_tool_t _armed_tool(void)
+{
+  dt_view_t *view = _canvas_view();
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.armed_tool))
+    return DT_CANVAS_TOOL_NONE;
+  return (dt_canvas_tool_t)dt_view_manager_get_global()->proxy.canvas.armed_tool(view);
+}
+
 static void _connect_toggled(GtkToggleButton *button, gpointer user_data)
 {
   dt_view_t *view = NULL;
   if(!_live(&view)) return;
-  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.is_connecting)) return;
-  if(gtk_toggle_button_get_active(button) != dt_view_manager_get_global()->proxy.canvas.is_connecting(view))
-    _ask(DT_CANVAS_ACTION_CONNECT_MODE);
+  // Asked only when the button and the view disagree: the action is a toggle, and a button already
+  // showing what the view holds would otherwise put the tool away again.
+  const gboolean armed = _armed_tool() == DT_CANVAS_TOOL_CONNECTOR;
+  if(gtk_toggle_button_get_active(button) != armed) _ask(DT_CANVAS_ACTION_CONNECT_MODE);
 }
 
 /** A guides checkbox: its flag bit is in "guide-flag". */
@@ -461,10 +471,7 @@ static void _refill(dt_lib_module_t *self)
   const dt_canvas_t *canvas = _document();
   if(IS_NULL_PTR(canvas) || IS_NULL_PTR(toolbar)) return;
   _refilled_handlers_block(toolbar, TRUE);
-  dt_view_t *view = _canvas_view();
-  const gboolean connecting = !IS_NULL_PTR(view) && !IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.is_connecting)
-                              && dt_view_manager_get_global()->proxy.canvas.is_connecting(view);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->connect_toggle), connecting);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->connect_toggle), _armed_tool() == DT_CANVAS_TOOL_CONNECTOR);
 
   const uint32_t flags = canvas->grid_flags;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->grid_show), (flags & DT_CANVAS_GRID_VISIBLE) != 0);
@@ -944,7 +951,8 @@ void gui_init(dt_lib_module_t *self)
           DT_CANVAS_ACTION_ADD_SVG);
   toolbar->connect_toggle = gtk_toggle_button_new_with_label(_("Connector"));
   gtk_widget_set_tooltip_text(toolbar->connect_toggle,
-                              _("Draw a connector: click an anchor point on one frame, then on another"));
+                              _("Draw a connector: click an anchor point on one frame, then on another. The tool "
+                                "stays armed for the next connector; Escape or a right click leaves it"));
   _connect_refilled(self, toolbar->connect_toggle, "toggled", G_CALLBACK(_connect_toggled));
   gtk_box_pack_start(GTK_BOX(box), toolbar->connect_toggle, FALSE, FALSE, 0);
   _separator(box);

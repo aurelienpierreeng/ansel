@@ -823,10 +823,10 @@ menu's "Properties" entry -- and entering the atelier after a darkroom round tri
 again, as a strip, while their object is still the whole selection; `I` pressed while they show
 takes the keyboard to their first control. Everything else goes through `_props_sync()`, which
 refills, places, hides or closes them and never opens them. They close when the selection
-stops being exactly that object, on Escape (after connect mode and the drag, before the
-selection) and when connect mode starts. Leaving the atelier does NOT close them: it commits
-what they hold and takes the widget down but keeps them open, so `enter()` shows them again as
-a strip while their object is still the whole selection. They hide while a gesture really moves
+stops being exactly that object, on Escape (after the drawing in flight and the armed tool,
+before the selection) and whenever a tool is armed. Leaving the atelier does NOT close them:
+it commits what they hold and takes the widget down but keeps them open, so `enter()` shows
+them again as a strip while their object is still the whole selection. They hide while a gesture really moves
 something (a move or a scale past the threshold, a pan, the wheel, a rubber band past 3 px) and
 come back when it settles, so the first click of a double click never makes them blink.
 
@@ -1519,8 +1519,8 @@ background's window offers no opacity: a transparent canvas is one of its styles
 
 The cursor names the action under the pointer: a hand over a frame or a connector, a corner
 cursor over a scale handle (turned with the frame), the exchange cursor over the rotation
-handle, a crosshair over an anchor in connect mode, a hand over the flower, a cross-arrows
-cursor over a waypoint and while moving.
+handle, a crosshair over an anchor in connect mode and anywhere a drawing tool would draw, a
+hand over the flower, a cross-arrows cursor over a waypoint and while moving.
 
 Gestures: drag a frame to move it (the whole selection follows; snapping puts it next to a
 neighbour one gutter away, in line with a neighbour, or on the grid), drag a corner handle to scale it around the

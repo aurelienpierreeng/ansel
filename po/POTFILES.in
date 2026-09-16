@@ -315,6 +315,7 @@ src/libs/tools/filter.c
 src/libs/tools/lighttable.c
 src/libs/tools/module_toolbox.c
 src/libs/tools/canvas_toolbar.c
+src/canvas/canvas_actions.c
 src/canvas/canvas_render.c
 src/views/canvas.c
 src/views/darkroom.c

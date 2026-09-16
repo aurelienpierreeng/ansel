@@ -1314,6 +1314,70 @@ static void _making_a_line_cubic_bends_it_into_an_arc(void **state)
   _fixture_free(&fixture);
 }
 
+/**
+ * How a LINE is drawn is what the next line drawn is styled with, so the writer asks the caller to
+ * remember it -- the same COMMIT_CONF a map's settings ask for. A connector holding a frame is always
+ * born with the defaults, so styling one asks for nothing: both ends free is the whole test, and a
+ * connector left HALF free by a hand-edited file would otherwise style every line drawn after it,
+ * since that state is modelled, loads verbatim and routes. Where a line GOES is nobody's default
+ * either: only its style is remembered.
+ */
+static void _a_line_style_is_the_next_line_s_and_a_connector_s_is_not(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *line
+      = dt_canvas_add_line(fixture.canvas, 0.0, 900.0, 200.0, 900.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  assert_non_null(line);
+  // One end on a frame, the other at its own point: it owns something, so it has a free end, but it
+  // is not a line and its style is its frame's business.
+  dt_canvas_object_t *half
+      = dt_canvas_add_line(fixture.canvas, 0.0, 1200.0, 200.0, 1200.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  assert_non_null(half);
+  half->connector.from_id = fixture.objects[1]->id;
+  half->connector.from_anchor = DT_CANVAS_ANCHOR_CENTRE;
+  assert_true(dt_canvas_connector_has_free_end(half));
+  assert_false(dt_canvas_connector_is_line(half));
+  dt_canvas_object_t *const styled[3] = { line, fixture.objects[4], half };
+  const dt_canvas_prop_id_t style_props[5]
+      = { DT_CANVAS_PROP_LINE_WIDTH, DT_CANVAS_PROP_LINE_COLOR, DT_CANVAS_PROP_LINE_DASHED,
+          DT_CANVAS_PROP_CONNECTOR_ARROW_START, DT_CANVAS_PROP_CONNECTOR_ARROW_END };
+  for(int idx = 0; idx < 5; idx++)
+  {
+    const dt_canvas_prop_id_t prop_id = style_props[idx];
+    dt_canvas_prop_value_t current;
+    dt_canvas_prop_value_t wanted;
+    for(int object_index = 0; object_index < 3; object_index++)
+    {
+      dt_canvas_object_t *object = styled[object_index];
+      dt_canvas_prop_read(fixture.canvas, object, prop_id, &current);
+      if(prop_id == DT_CANVAS_PROP_LINE_WIDTH)
+        wanted = _number(current.number + 3.0);
+      else if(prop_id == DT_CANVAS_PROP_LINE_COLOR)
+        wanted = _color(0.2f, 0.4f, 0.6f, 0.8f);
+      else
+        wanted = _flag(!current.flag);
+      const uint32_t effects = dt_canvas_prop_write(fixture.canvas, object, prop_id, &wanted);
+      assert_true(effects & DT_CANVAS_EFFECT_CHANGED);
+      if(object_index == 0)
+        assert_true(effects & DT_CANVAS_EFFECT_COMMIT_CONF);
+      else
+        assert_false(effects & DT_CANVAS_EFFECT_COMMIT_CONF);
+    }
+  }
+  // Where a line goes is its own: the route is not asked to be remembered for the next one.
+  const dt_canvas_prop_value_t cubic = _choice(DT_CANVAS_ROUTING_CUBIC);
+  const uint32_t routed = dt_canvas_prop_write(fixture.canvas, line, DT_CANVAS_PROP_CONNECTOR_ROUTING, &cubic);
+  assert_true(routed & DT_CANVAS_EFFECT_CHANGED);
+  assert_false(routed & DT_CANVAS_EFFECT_COMMIT_CONF);
+  const dt_canvas_prop_value_t waypoint = _flag(TRUE);
+  const uint32_t bent = dt_canvas_prop_write(fixture.canvas, line, DT_CANVAS_PROP_CONNECTOR_WAYPOINT, &waypoint);
+  assert_true(bent & DT_CANVAS_EFFECT_CHANGED);
+  assert_false(bent & DT_CANVAS_EFFECT_COMMIT_CONF);
+  _fixture_free(&fixture);
+}
+
 static void _arrowheads_and_backgrounds_land_where_they_belong(void **state)
 {
   (void)state;
@@ -1827,6 +1891,7 @@ int main(void)
     cmocka_unit_test(_giving_the_font_back_refits_the_frame),
     cmocka_unit_test(_a_size_on_an_inheriting_font_writes_the_family_out),
     cmocka_unit_test(_making_a_line_cubic_bends_it_into_an_arc),
+    cmocka_unit_test(_a_line_style_is_the_next_line_s_and_a_connector_s_is_not),
     cmocka_unit_test(_arrowheads_and_backgrounds_land_where_they_belong),
     cmocka_unit_test(_reversing_a_connector_walks_the_same_curve_backwards),
     cmocka_unit_test(_rows_follow_what_they_depend_on),

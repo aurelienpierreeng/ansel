@@ -780,18 +780,60 @@ gboolean dt_canvas_line_style_get(const dt_canvas_object_t *object, dt_canvas_li
   return TRUE;
 }
 
+/** A colour channel held to what a colour can be; a channel that is not a number is none of it. */
+static float _unit_channel(const float value, gboolean *sound)
+{
+  if(!isfinite(value))
+  {
+    *sound = FALSE;
+    return 0.0f;
+  }
+  if(value < 0.0f || value > 1.0f) *sound = FALSE;
+  return CLAMP(value, 0.0f, 1.0f);
+}
+
+gboolean dt_canvas_line_style_sanitize(dt_canvas_line_style_t *style)
+{
+  if(IS_NULL_PTR(style)) return FALSE;
+  gboolean sound = TRUE;
+  if(!isfinite(style->line_width))
+  {
+    style->line_width = DT_CANVAS_CONNECTOR_LINE_WIDTH;
+    sound = FALSE;
+  }
+  else if(style->line_width < 0.0f || style->line_width > DT_CANVAS_LINE_WIDTH_MAX)
+  {
+    style->line_width = CLAMP(style->line_width, 0.0f, DT_CANVAS_LINE_WIDTH_MAX);
+    sound = FALSE;
+  }
+  style->color.red = _unit_channel(style->color.red, &sound);
+  style->color.green = _unit_channel(style->color.green, &sound);
+  style->color.blue = _unit_channel(style->color.blue, &sound);
+  style->color.alpha = _unit_channel(style->color.alpha, &sound);
+  // A switch compared against TRUE elsewhere must hold TRUE itself, not merely something that is not 0.
+  const gboolean dashed = style->dashed != FALSE;
+  const gboolean arrow_start = style->arrow_start != FALSE;
+  const gboolean arrow_end = style->arrow_end != FALSE;
+  if(dashed != style->dashed || arrow_start != style->arrow_start || arrow_end != style->arrow_end) sound = FALSE;
+  style->dashed = dashed;
+  style->arrow_start = arrow_start;
+  style->arrow_end = arrow_end;
+  return sound;
+}
+
 /** Write a style into a connector: the one spelling both a connector and a line are born through. */
 static void _connector_apply_style(dt_canvas_connector_t *connector, const dt_canvas_line_style_t *style)
 {
+  // A style handed down from somewhere else is not trusted as it comes; a zero width is, and paints two units.
+  dt_canvas_line_style_t sound = *style;
+  dt_canvas_line_style_sanitize(&sound);
   uint32_t bits = DT_CANVAS_CONNECTOR_PLAIN;
-  if(style->arrow_end) bits |= DT_CANVAS_CONNECTOR_ARROW_END;
-  if(style->arrow_start) bits |= DT_CANVAS_CONNECTOR_ARROW_START;
-  if(style->dashed) bits |= DT_CANVAS_CONNECTOR_DASHED;
+  if(sound.arrow_end) bits |= DT_CANVAS_CONNECTOR_ARROW_END;
+  if(sound.arrow_start) bits |= DT_CANVAS_CONNECTOR_ARROW_START;
+  if(sound.dashed) bits |= DT_CANVAS_CONNECTOR_DASHED;
   connector->style = bits;
-  connector->color = style->color;
-  // A style handed down from somewhere else is not trusted to be a width; zero is, and paints two units.
-  const gboolean usable_width = isfinite(style->line_width) && style->line_width >= 0.0f;
-  connector->line_width = usable_width ? style->line_width : DT_CANVAS_CONNECTOR_LINE_WIDTH;
+  connector->color = sound.color;
+  connector->line_width = sound.line_width;
 }
 
 dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_id, uint32_t to_id)
@@ -848,6 +890,12 @@ gboolean dt_canvas_connector_has_free_end(const dt_canvas_object_t *object)
 {
   if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return FALSE;
   return object->connector.from_id == 0 || object->connector.to_id == 0;
+}
+
+gboolean dt_canvas_connector_is_line(const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return FALSE;
+  return object->connector.from_id == 0 && object->connector.to_id == 0;
 }
 
 void dt_canvas_connector_translate(dt_canvas_object_t *object, const double dx, const double dy)
@@ -913,8 +961,7 @@ dt_canvas_object_t *dt_canvas_duplicate_object(dt_canvas_t *canvas, uint32_t id)
   const dt_canvas_object_t *source = dt_canvas_find_object(canvas, id);
   // A line owns everything it is made of; a connector with an anchored end belongs to its frames,
   // and a copy of it would lie exactly over the original.
-  const gboolean is_line = !IS_NULL_PTR(source) && source->kind == DT_CANVAS_OBJECT_CONNECTOR
-                           && source->connector.from_id == 0 && source->connector.to_id == 0;
+  const gboolean is_line = dt_canvas_connector_is_line(source);
   if(!dt_canvas_object_is_frame(source) && !is_line) return NULL;
   dt_canvas_object_t *copy = _object_copy(source);
   copy->id = canvas->next_id++;

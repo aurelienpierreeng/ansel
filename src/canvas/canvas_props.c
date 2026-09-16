@@ -318,8 +318,8 @@ static const dt_canvas_prop_t _props[] = {
   { .id = DT_CANVAS_PROP_LINE_WIDTH, .key = "stroke.line_width", .label = N_("Width"),
     .tooltip = N_("Line width, in canvas units"), .unit = N_("pt"), .kinds = KINDS_CONNECTOR,
     .section = DT_CANVAS_SECTION_STROKE, .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_TUNE,
-    .min = 1.0, .max = 100.0, .soft_min = 1.0, .soft_max = 20.0, .step = 1.0, .factor = 1.0, .neutral = NAN,
-    .digits = 1 },
+    .min = 1.0, .max = DT_CANVAS_LINE_WIDTH_MAX, .soft_min = 1.0, .soft_max = 20.0, .step = 1.0, .factor = 1.0,
+    .neutral = NAN, .digits = 1 },
   { .id = DT_CANVAS_PROP_LINE_COLOR, .key = "stroke.line_color", .label = N_("Colour"),
     .tooltip = N_("Line colour and opacity"), .kinds = KINDS_CONNECTOR, .section = DT_CANVAS_SECTION_STROKE,
     .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_COLOR, .factor = 1.0, .neutral = NAN },
@@ -1521,6 +1521,18 @@ static uint32_t _write_map(dt_canvas_object_t *object, const dt_canvas_prop_t *p
   }
 }
 
+/**
+ * The effects of a change to how a connector is drawn. A LINE's style is what the next line is drawn
+ * with, so the caller is asked to remember it, once. A connector holding a frame is always born with
+ * the defaults and teaches the next line nothing -- both ends free is the whole test, not one end, or
+ * a connector left half free by a hand-edited file would style every line drawn after it.
+ */
+static uint32_t _line_style_effects(const dt_canvas_object_t *object)
+{
+  const uint32_t remembered = dt_canvas_connector_is_line(object) ? DT_CANVAS_EFFECT_COMMIT_CONF : 0u;
+  return DT_CANVAS_EFFECT_CHANGED | remembered;
+}
+
 static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object, const dt_canvas_prop_t *prop,
                                  const dt_canvas_prop_value_t *in)
 {
@@ -1540,10 +1552,10 @@ static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object
     }
     case DT_CANVAS_PROP_CONNECTOR_ARROW_START:
       _set_bit(&object->connector.style, DT_CANVAS_CONNECTOR_ARROW_START, in->flag);
-      return DT_CANVAS_EFFECT_CHANGED;
+      return _line_style_effects(object);
     case DT_CANVAS_PROP_CONNECTOR_ARROW_END:
       _set_bit(&object->connector.style, DT_CANVAS_CONNECTOR_ARROW_END, in->flag);
-      return DT_CANVAS_EFFECT_CHANGED;
+      return _line_style_effects(object);
     case DT_CANVAS_PROP_CONNECTOR_WAYPOINT:
       if(in->flag)
         dt_canvas_connector_add_via(canvas, object);
@@ -1585,13 +1597,13 @@ static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object
     }
     case DT_CANVAS_PROP_LINE_WIDTH:
       object->connector.line_width = (float)_clamp_number(prop, in->number);
-      return DT_CANVAS_EFFECT_CHANGED;
+      return _line_style_effects(object);
     case DT_CANVAS_PROP_LINE_COLOR:
       object->connector.color = in->color;
-      return DT_CANVAS_EFFECT_CHANGED;
+      return _line_style_effects(object);
     case DT_CANVAS_PROP_LINE_DASHED:
       _set_bit(&object->connector.style, DT_CANVAS_CONNECTOR_DASHED, in->flag);
-      return DT_CANVAS_EFFECT_CHANGED;
+      return _line_style_effects(object);
     default:
       return 0u;
   }

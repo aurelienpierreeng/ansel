@@ -275,7 +275,7 @@ typedef struct dt_view_manager_t
       const struct dt_canvas_t *(*document)(struct dt_view_t *view);
       void (*set_grid_size)(struct dt_view_t *view, float size);
       void (*set_border)(struct dt_view_t *view, const float *rgba, float width);
-      gboolean (*is_connecting)(struct dt_view_t *view);
+      int (*armed_tool)(struct dt_view_t *view); ///< the dt_canvas_tool_t a press on the plane draws with
       void (*set_padding)(struct dt_view_t *view, float padding);
       void (*set_snap_mode)(struct dt_view_t *view, int mode); ///< dt_canvas_grid_flags_t snap bits
       void (*set_background)(struct dt_view_t *view, const float *rgba, int style); ///< NULL / -1 leave one alone

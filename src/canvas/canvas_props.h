@@ -229,7 +229,8 @@ enum
   DT_CANVAS_EFFECT_COUPLED = 1 << 2,
   /** a map's tiles must be fetched again, once, when the gesture ends */
   DT_CANVAS_EFFECT_COMMIT_RENDER = 1 << 3,
-  /** the map's settings are the next map's defaults: store them, once */
+  /** what was edited is what the next object of its sort starts from -- a map's settings, a line's
+   * style: store it, once */
   DT_CANVAS_EFFECT_COMMIT_CONF = 1 << 4,
   /** the view holds this state or carries this action: the caller acts on it */
   DT_CANVAS_EFFECT_VIEW = 1 << 5,

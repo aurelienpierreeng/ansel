@@ -919,6 +919,68 @@ static void _a_free_line_routes_between_its_own_points(void **state)
 }
 
 /**
+ * A style comes back from the atelier's memory of the last line, which is a configuration file
+ * anything may have written: it is made into a style a line can be born with before it is used, and
+ * a line born from a wild one holds the sound values rather than the wild ones.
+ */
+static void _a_line_style_from_outside_is_made_sound(void **state)
+{
+  (void)state;
+  dt_canvas_line_style_t style = dt_canvas_line_style_default();
+  const dt_canvas_line_style_t untouched = style;
+  // What the atelier itself writes is already sound, and sanitising it changes nothing at all.
+  assert_true(dt_canvas_line_style_sanitize(&style));
+  assert_true(memcmp(&style, &untouched, sizeof(style)) == 0);
+
+  // A width that is not a number is no width: the default stands. Out of range, it is held to it.
+  style.line_width = NAN;
+  assert_false(dt_canvas_line_style_sanitize(&style));
+  assert_true(style.line_width == DT_CANVAS_CONNECTOR_LINE_WIDTH);
+  style.line_width = -3.0f;
+  assert_false(dt_canvas_line_style_sanitize(&style));
+  assert_true(style.line_width == 0.0f);
+  style.line_width = 500.0f;
+  assert_false(dt_canvas_line_style_sanitize(&style));
+  assert_true(style.line_width == DT_CANVAS_LINE_WIDTH_MAX);
+  // Zero is a width: the painter draws it two units wide, as a connector's stored zero is drawn.
+  style.line_width = 0.0f;
+  assert_true(dt_canvas_line_style_sanitize(&style));
+  assert_true(style.line_width == 0.0f);
+
+  // A damaged colour stays a colour: each channel is held to what a channel can be.
+  style.color = dt_canvas_color(1.5f, -0.2f, 0.5f, 2.0f);
+  style.color.green = -0.2f;
+  assert_false(dt_canvas_line_style_sanitize(&style));
+  assert_true(style.color.red == 1.0f);
+  assert_true(style.color.green == 0.0f);
+  assert_true(style.color.blue == 0.5f);
+  assert_true(style.color.alpha == 1.0f);
+  style.color.blue = NAN;
+  assert_false(dt_canvas_line_style_sanitize(&style));
+  assert_true(style.color.blue == 0.0f);
+
+  // A switch read back as some other non-zero number answers TRUE, which is what it is compared to.
+  style.dashed = 2;
+  style.arrow_start = -1;
+  assert_false(dt_canvas_line_style_sanitize(&style));
+  assert_int_equal(style.dashed, TRUE);
+  assert_int_equal(style.arrow_start, TRUE);
+  assert_false(dt_canvas_line_style_sanitize(NULL));
+
+  // A line born from a wild style holds the sound one, so nothing downstream sees the wild values.
+  dt_canvas_t *canvas = dt_canvas_new();
+  dt_canvas_line_style_t wild = dt_canvas_line_style_default();
+  wild.line_width = 4000.0f;
+  wild.color = dt_canvas_color(-1.0f, 0.25f, 0.5f, 1.0f);
+  dt_canvas_object_t *line = dt_canvas_add_line(canvas, 0.0, 0.0, 50.0, 0.0, DT_CANVAS_ROUTING_STRAIGHT, &wild);
+  assert_non_null(line);
+  assert_true(line->connector.line_width == DT_CANVAS_LINE_WIDTH_MAX);
+  assert_true(line->connector.color.red == 0.0f);
+  assert_true(line->connector.color.green == 0.25f);
+  dt_canvas_free(canvas);
+}
+
+/**
  * Two free ends in the same place: every routing gives the axis normals -- the start leaving
  * rightward, the end arriving from the left -- and a polyline that stays on the point, where the
  * anchored ends' floors would have drawn a 40-unit dash out of a line of no length.
@@ -964,6 +1026,14 @@ static void _a_half_free_connector_aims_its_anchor_at_the_free_point(void **stat
   connector->connector.from_anchor = DT_CANVAS_ANCHOR_CENTRE;
   connector->connector.to_x = 0.0;
   connector->connector.to_y = 500.0;
+  // It owns its far point, so it has a free end -- but it is not a LINE: the frame it holds is what
+  // it is for. The two questions are asked of different callers and must not answer alike.
+  assert_true(dt_canvas_connector_has_free_end(connector));
+  assert_false(dt_canvas_connector_is_line(connector));
+  assert_true(dt_canvas_connector_is_line(dt_canvas_add_line(canvas, 0.0, 0.0, 10.0, 10.0,
+                                                             DT_CANVAS_ROUTING_STRAIGHT, NULL)));
+  assert_false(dt_canvas_connector_is_line(frame));
+  assert_false(dt_canvas_connector_is_line(NULL));
   dt_canvas_route_t route;
   assert_true(dt_canvas_connector_route(canvas, connector, &route));
   // Straight down from the centre, out through the bottom edge.
@@ -1437,6 +1507,20 @@ static void _a_dragged_line_end_snaps_to_the_grid_or_holds_its_angle(void **stat
   y = 7.0;
   dt_canvas_constrain_line_end(canvas, 3.0, 7.0, 45, &x, &y);
   assert_true(x == 3.0 && y == 7.0);
+
+  // The fact a tool drawing a line has to be written against: from an origin ON the grid, a pointer
+  // that has travelled several times the drag threshold -- three screen pixels, three canvas units
+  // at 1:1 -- comes back AT the origin, the cell being wider than the travel. A drawing that decided
+  // "the pointer really moved" on the screen delta alone would make a line with no length at all.
+  x = 44.0;
+  y = 33.0;
+  dt_canvas_constrain_line_end(canvas, 40.0, 40.0, 0, &x, &y);
+  assert_true(x == 40.0 && y == 40.0);
+  // The axis locks land on it too: level takes the origin's own height and snaps the pointer's x.
+  x = 47.0;
+  y = 41.0;
+  dt_canvas_constrain_line_end(canvas, 40.0, 40.0, 45, &x, &y);
+  assert_true(x == 40.0 && y == 40.0);
   dt_canvas_free(canvas);
 }
 
@@ -2294,6 +2378,7 @@ int main(void)
     cmocka_unit_test(_coincident_free_ends_route_to_a_finite_point),
     cmocka_unit_test(_a_half_free_connector_aims_its_anchor_at_the_free_point),
     cmocka_unit_test(_a_free_tangent_places_the_control_point),
+    cmocka_unit_test(_a_line_style_from_outside_is_made_sound),
     cmocka_unit_test(_a_seeded_curve_is_a_symmetric_arc),
     cmocka_unit_test(_free_ends_round_trip_through_the_index),
     cmocka_unit_test(_an_anchored_connector_is_written_as_before_free_ends),

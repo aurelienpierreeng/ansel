@@ -29,6 +29,8 @@
  * the two stay strangers.
  */
 
+#include <glib.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -66,8 +68,53 @@ typedef enum dt_canvas_action_t
    */
   DT_CANVAS_ACTION_ADD_SVG,
   DT_CANVAS_ACTION_PROPERTIES, ///< show the one selected object's properties, as a double click does
+  DT_CANVAS_ACTION_DRAW_LINE,  ///< arm the line tool, or put it away when it is the one armed
+  DT_CANVAS_ACTION_DRAW_CURVE, ///< the same for the curve tool
   DT_CANVAS_ACTION_LAST
 } dt_canvas_action_t;
+
+/**
+ * What a left press on the plane does while the atelier is in a drawing mode, as opposed to picking,
+ * moving and selecting. At most one tool is armed at a time, and it stays armed across the objects it
+ * draws until it is put away. Never stored: a document knows nothing of how its objects were drawn, so
+ * the tools still to come -- the rectangle, the polygon, the star -- may be appended or slotted in.
+ */
+typedef enum dt_canvas_tool_t
+{
+  DT_CANVAS_TOOL_NONE = 0,  ///< presses pick, move and select
+  DT_CANVAS_TOOL_CONNECTOR, ///< a click on one frame's anchor, then on another's
+  DT_CANVAS_TOOL_LINE,      ///< a straight line with both ends free, dragged or placed with a click
+  DT_CANVAS_TOOL_CURVE,     ///< the same, bent into an arc
+  DT_CANVAS_TOOL_COUNT
+} dt_canvas_tool_t;
+
+/**
+ * @brief The tool an action arms, or DT_CANVAS_TOOL_NONE for an action that is not a tool's.
+ */
+dt_canvas_tool_t dt_canvas_tool_for_action(dt_canvas_action_t action);
+
+/**
+ * @brief The tool left armed when `asked` is asked for while `armed` is.
+ * @details A tool's action is a toggle: asked again, it puts its tool away; asked while another is
+ * armed, it takes that one's place, since two tools cannot both answer the same press. Anything that
+ * is not a tool asks for nothing and leaves nothing armed.
+ */
+dt_canvas_tool_t dt_canvas_tool_toggled(dt_canvas_tool_t armed, dt_canvas_tool_t asked);
+
+/** @brief Whether the tool draws a line with both ends free, as the line and the curve do. */
+gboolean dt_canvas_tool_draws_line(dt_canvas_tool_t tool);
+
+/**
+ * @brief The name an action's shortcut is registered under, untranslated, or NULL for an action no
+ * shortcut is offered for.
+ * @details These names ARE the accel map's paths, which is where the user's own bindings are saved:
+ * renaming one orphans the key a user gave it, so they are fixed once published. The atelier's shortcut
+ * table, its menus and its tooltips all ask here, so a name cannot be spelled two ways.
+ */
+const char *dt_canvas_action_accel_name(dt_canvas_action_t action);
+
+/** @brief The scope the atelier's shortcuts are grouped under in the accel map, untranslated. */
+const char *dt_canvas_action_accel_scope(void);
 
 /**
  * The colours the toolbar sets for the whole canvas, as it names them to the view's colour edits.

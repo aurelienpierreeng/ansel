@@ -98,9 +98,16 @@ DT_MODULE(1)
 #define CANVAS_PROPS_POINTER_PIXELS 12.0
 #define CANVAS_PROPS_SOFT_FRAMES 64
 #define CANVAS_PROPS_CARD_MIN_PIXELS 120.0
-/** Where the canvas shortcuts live in the accel map, and the one a menu names by its binding. */
-#define CANVAS_ACCEL_SCOPE N_("Canvas/Actions")
-#define CANVAS_ACCEL_PROPERTIES N_("Show the properties of the selected object")
+/** A line placed with a click rather than dragged: this long, level, starting where the click was. */
+#define CANVAS_DRAW_PLACE_LENGTH 160.0
+/** The ring marking where a drawing tool's next line would start, in screen pixels. */
+#define CANVAS_DRAW_MARKER_PIXELS 5.0
+/** What the atelier remembers of the last line edited or drawn, for the next line it draws. */
+#define CANVAS_NEW_LINE_WIDTH_KEY "plugins/canvas/new_line/width"
+#define CANVAS_NEW_LINE_COLOR_KEY "plugins/canvas/new_line/color"
+#define CANVAS_NEW_LINE_DASHED_KEY "plugins/canvas/new_line/dashed"
+#define CANVAS_NEW_LINE_ARROW_START_KEY "plugins/canvas/new_line/arrow_start"
+#define CANVAS_NEW_LINE_ARROW_END_KEY "plugins/canvas/new_line/arrow_end"
 
 /** The parts of the navigation flower, floating at the bottom right of the view. */
 typedef enum dt_canvas_flower_part_t
@@ -138,6 +145,7 @@ typedef enum dt_canvas_drag_t
   DT_CANVAS_DRAG_MASK_NODE_CTRL_OUT, ///< and on the next node's side
   DT_CANVAS_DRAG_END_FROM,           ///< a line's free start, about its other end
   DT_CANVAS_DRAG_END_TO,             ///< and its free end
+  DT_CANVAS_DRAG_DRAW_LINE,          ///< a line or a curve being drawn from the press, `draw_id` once it exists
 } dt_canvas_drag_t;
 
 typedef struct dt_canvas_view_t
@@ -171,7 +179,14 @@ typedef struct dt_canvas_view_t
   int mask_node_hover;                  ///< the polygon node whose own handles are showing, -1 for none
   double gesture_start_rotation;
   double gesture_start_angle;
-  gboolean connecting;                  ///< connector-drawing mode, armed from the toolbar
+  dt_canvas_tool_t tool;                ///< the drawing tool armed, DT_CANVAS_TOOL_NONE when presses pick
+  uint32_t draw_id;                     ///< the line the draw in flight made, 0 until the pointer really moved
+  double draw_start_x;                  ///< where it starts: the press, on the grid when snapping
+  double draw_start_y;
+  dt_canvas_routing_t draw_routing;     ///< straight for the line tool, cubic for the curve
+  gboolean draw_marker_valid;           ///< the start marker is shown, at the two below
+  double draw_marker_x;                 ///< where a press would start the next line, canvas units
+  double draw_marker_y;
   uint32_t connect_from;                ///< the source frame once its anchor was clicked, 0 before
   uint32_t connect_from_anchor;         ///< dt_canvas_anchor_t chosen on the source
   uint32_t anchor_hover_id;             ///< frame whose anchors are shown, 0 when none
@@ -248,13 +263,16 @@ static void _proxy_action(dt_view_t *self, int action);
 static const dt_canvas_t *_proxy_document(dt_view_t *self);
 static void _proxy_set_grid_size(dt_view_t *self, float size);
 static void _proxy_set_border(dt_view_t *self, const float *rgba, float width);
-static gboolean _proxy_is_connecting(dt_view_t *self);
+static int _proxy_armed_tool(dt_view_t *self);
 static void _props_sync(dt_view_t *self);
 static void _props_forget_pending(dt_view_t *self);
 static void _props_close(dt_view_t *self);
 static void _props_suspend(dt_view_t *self);
 static void _props_open(dt_view_t *self, uint32_t object_id, gboolean has_point, double x, double y);
-static void _connect_mode_set(dt_view_t *self, gboolean on);
+static void _tool_set(dt_view_t *self, dt_canvas_tool_t tool);
+static void _draw_abort(dt_view_t *self);
+static void _gesture_snapshot(dt_canvas_view_t *view);
+static void _line_style_remember(const dt_canvas_object_t *object);
 static gboolean _connector_handles(const dt_canvas_view_t *view, const dt_canvas_object_t *connector,
                                    dt_canvas_route_t *route);
 static void _paint_tangent_handle(cairo_t *cr, const dt_canvas_view_t *view, const double anchor_x,
@@ -561,7 +579,13 @@ static void _set_document(dt_view_t *self, dt_canvas_t *canvas)
   // A toolbar colour still being dragged belonged to the document going away: the new one is not reset to it.
   view->toolbar_color_target = -1;
   view->drag = DT_CANVAS_DRAG_NONE;
-  view->connecting = FALSE;
+  // A new document puts the tool away without a word: the toolbar is told with the document itself.
+  view->tool = DT_CANVAS_TOOL_NONE;
+  view->draw_id = 0;
+  view->draw_marker_valid = FALSE;
+  // The crosshair named the tool that has just gone, and nothing draws until one is armed again.
+  view->cursor = GDK_LEFT_PTR;
+  dt_control_change_cursor(GDK_LEFT_PTR);
   view->connect_from = 0;
   view->anchor_hover_id = 0;
   view->hover = 0;
@@ -1397,7 +1421,8 @@ static GtkWidget *_menu_item_with_shortcut(GtkWidget *menu, const char *label, c
  */
 static gchar *_accel_label(const char *action_name)
 {
-  gchar *path = dt_accels_build_path(CANVAS_ACCEL_SCOPE, action_name);
+  if(IS_NULL_PTR(action_name)) return NULL;
+  gchar *path = dt_accels_build_path(dt_canvas_action_accel_scope(), action_name);
   GtkAccelKey key = { 0 };
   const gboolean bound = gtk_accel_map_lookup_entry(path, &key) && key.accel_key != 0;
   dt_free(path);
@@ -1848,7 +1873,7 @@ static void _popup_menu(dt_view_t *self, dt_canvas_object_t *object, const doubl
   const char *drill_hint = _("Double-clicking the object while its properties are showing does the same.");
   if(!IS_NULL_PTR(object))
   {
-    gchar *properties_label = _accel_label(CANVAS_ACCEL_PROPERTIES);
+    gchar *properties_label = _accel_label(dt_canvas_action_accel_name(DT_CANVAS_ACTION_PROPERTIES));
     _menu_item_with_shortcut(menu, _("Properties"), properties_label,
                              _("Double-clicking an object shows its properties too."), _menu_properties,
                              _menu_context(self, id, x, y, 0));
@@ -2068,18 +2093,78 @@ static gboolean _anchor_at(const dt_canvas_view_t *view, const double x, const d
   return found;
 }
 
-static void _connect_mode_set(dt_view_t *self, gboolean on)
+/**
+ * Where a press would start the next line, while a line tool is armed and nothing is being dragged: the
+ * pointer, taken to the grid when snapping is on. TRUE when the marker moved, appeared or went, so the
+ * caller repaints only then.
+ */
+static gboolean _draw_marker_update(dt_canvas_view_t *view)
+{
+  const gboolean valid
+      = dt_canvas_tool_draws_line(view->tool) && view->pointer_inside && view->drag == DT_CANVAS_DRAG_NONE;
+  const double marker_x = valid ? dt_canvas_snap(view->canvas, view->pointer_x) : 0.0;
+  const double marker_y = valid ? dt_canvas_snap(view->canvas, view->pointer_y) : 0.0;
+  const gboolean changed = valid != view->draw_marker_valid || marker_x != view->draw_marker_x
+                           || marker_y != view->draw_marker_y;
+  view->draw_marker_valid = valid;
+  view->draw_marker_x = marker_x;
+  view->draw_marker_y = marker_y;
+  return changed;
+}
+
+/**
+ * Arm a tool, or put the armed one away with DT_CANVAS_TOOL_NONE. Every arming and disarming the user
+ * asks for comes through here -- a key, the toolbar's toggle, Escape, a right click -- and every one
+ * tells the toolbar, which is what lets it own no state and still show the tool the view holds whatever
+ * path the change took. Leaving the atelier and replacing the document put the tool away without a
+ * word instead: the toolbar is refilled with the view and with the document anyway.
+ */
+static void _tool_set(dt_view_t *self, const dt_canvas_tool_t tool)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
-  view->connecting = on;
+  // A line half drawn belongs to the tool drawing it, and goes with it.
+  if(view->drag == DT_CANVAS_DRAG_DRAW_LINE) _draw_abort(self);
+  view->tool = tool;
   view->connect_from = 0;
   view->connect_from_anchor = DT_CANVAS_ANCHOR_AUTO;
   view->anchor_hover_id = 0;
   view->anchor_hover = DT_CANVAS_ANCHOR_AUTO;
-  // Drawing a connector is clicking frames one after the other: properties left open would be
-  // one object's while the clicks are about two others.
-  if(on) _props_close(self);
-  if(on) dt_control_log(_("click an anchor point on the first frame, then one on the second; Escape leaves"));
+  // A press no longer picks what is under the pointer once a tool draws, so nothing is outlined as
+  // though it would. The repaint below shows it at once; waiting for the next motion would leave the
+  // object the pointer rests on promising a pick that has already gone.
+  if(dt_canvas_tool_draws_line(tool)) view->hover = 0;
+  // Drawing is pressing on the plane over and over, about a different object each time: properties
+  // left open would be one object's while the presses are about others.
+  if(tool != DT_CANVAS_TOOL_NONE) _props_close(self);
+  switch(tool)
+  {
+    case DT_CANVAS_TOOL_CONNECTOR:
+      dt_control_log(_("click an anchor point on the first frame, then one on the second; Escape or a right "
+                       "click leaves"));
+      break;
+    case DT_CANVAS_TOOL_LINE:
+      dt_control_log(_("drag to draw a line, or click to place one; Ctrl holds it to 45 degree steps, Shift to "
+                       "15; Escape or a right click leaves"));
+      break;
+    case DT_CANVAS_TOOL_CURVE:
+      dt_control_log(_("drag to draw a curve, or click to place one; Ctrl holds it to 45 degree steps, Shift to "
+                       "15; Escape or a right click leaves"));
+      break;
+    default:
+      break;
+  }
+  _draw_marker_update(view);
+  // A tool armed from the keyboard shows on the pointer at once. One armed from the toolbar has the
+  // pointer elsewhere, and the cursor is named again the moment it comes back over the plane.
+  if(view->pointer_inside && view->drag == DT_CANVAS_DRAG_NONE)
+  {
+    const dt_cursor_t cursor = dt_canvas_tool_draws_line(tool) ? GDK_CROSSHAIR : GDK_LEFT_PTR;
+    if(cursor != view->cursor)
+    {
+      view->cursor = cursor;
+      dt_control_change_cursor(cursor);
+    }
+  }
   _props_sync(self);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
   dt_control_queue_redraw_center();
@@ -2111,7 +2196,11 @@ static void _connect_click(dt_view_t *self, const double x, const double y)
   connector->connector.to_anchor = anchor;
   _select_only(view, connector->id);
   _record_undo(self, before);
-  _connect_mode_set(self, FALSE);
+  // The tool stays armed for the next connector, which starts from a first frame of its own.
+  view->connect_from = 0;
+  view->connect_from_anchor = DT_CANVAS_ANCHOR_AUTO;
+  _props_sync(self);
+  dt_control_queue_redraw_center();
 }
 
 static void _paint_anchor_dots(cairo_t *cr, const dt_canvas_view_t *view, const dt_canvas_object_t *frame,
@@ -2147,9 +2236,35 @@ static void _paint_anchor_dots(cairo_t *cr, const dt_canvas_view_t *view, const 
   }
 }
 
-static void _paint_connect_mode(cairo_t *cr, const dt_canvas_view_t *view)
+/**
+ * Where a press with a line tool would start the line: a small ring with a dark halo, so it reads on a
+ * light plane and on a picture alike. With snapping on it sits on the grid point the line will take,
+ * which the crosshair alone cannot say.
+ */
+static void _paint_draw_marker(cairo_t *cr, const dt_canvas_view_t *view)
 {
-  if(!view->connecting) return;
+  if(!view->draw_marker_valid) return;
+  const double radius = CANVAS_DRAW_MARKER_PIXELS / view->zoom;
+  cairo_save(cr);
+  cairo_arc(cr, view->draw_marker_x, view->draw_marker_y, radius, 0.0, 2.0 * M_PI);
+  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.7);
+  cairo_set_line_width(cr, 3.0 / view->zoom);
+  cairo_stroke_preserve(cr);
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
+  cairo_set_line_width(cr, 1.0 / view->zoom);
+  cairo_stroke(cr);
+  cairo_restore(cr);
+}
+
+/** What the armed tool shows over the plane: a connector's anchors, a line's starting point. */
+static void _paint_tool_overlay(cairo_t *cr, const dt_canvas_view_t *view)
+{
+  if(dt_canvas_tool_draws_line(view->tool))
+  {
+    _paint_draw_marker(cr, view);
+    return;
+  }
+  if(view->tool != DT_CANVAS_TOOL_CONNECTOR) return;
   cairo_save(cr);
   const dt_canvas_object_t *from = dt_canvas_find_object(view->canvas, view->connect_from);
   if(!IS_NULL_PTR(from))
@@ -2182,12 +2297,12 @@ static void _paint_connect_mode(cairo_t *cr, const dt_canvas_view_t *view)
 
 /**
  * The object whose properties are open, while they still may be: it exists, it is the whole
- * selection and no connector is being drawn. NULL otherwise, whatever `props_id` says --
+ * selection and no tool is armed. NULL otherwise, whatever `props_id` says --
  * `_props_sync()` closes what this refuses.
  */
 static dt_canvas_object_t *_props_object(const dt_canvas_view_t *view)
 {
-  if(view->props_id == 0 || view->connecting || view->selection->len != 1) return NULL;
+  if(view->props_id == 0 || view->tool != DT_CANVAS_TOOL_NONE || view->selection->len != 1) return NULL;
   if(g_array_index(view->selection, uint32_t, 0) != view->props_id) return NULL;
   return dt_canvas_find_object(view->canvas, view->props_id);
 }
@@ -2708,6 +2823,10 @@ static void _props_session_end(dt_view_t *self)
     }
     if(effects & DT_CANVAS_EFFECT_COMMIT_RENDER) _start_map_render(self, object);
   }
+  // A line's style is the next line's, the way a map's settings are the next map's: the writer says
+  // which edits are worth remembering, and only a line with a free end is asked about -- a connector
+  // between two frames is always born with the defaults.
+  if(!IS_NULL_PTR(object) && (effects & DT_CANVAS_EFFECT_COMMIT_CONF)) _line_style_remember(object);
   if(effects & DT_CANVAS_EFFECT_CHANGED)
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
   if(effects != 0u) dt_control_queue_redraw_center();
@@ -2987,7 +3106,7 @@ static void _props_open(dt_view_t *self, const uint32_t object_id, const gboolea
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   const dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, object_id);
-  if(IS_NULL_PTR(object) || view->connecting) return;
+  if(IS_NULL_PTR(object) || view->tool != DT_CANVAS_TOOL_NONE) return;
   _props_commit_pending(self);
   // The commit may have written to the document: find the object again.
   object = dt_canvas_find_object(view->canvas, object_id);
@@ -4331,7 +4450,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     cairo_stroke(cr);
     cairo_restore(cr);
   }
-  _paint_connect_mode(cr, view);
+  _paint_tool_overlay(cr, view);
   cairo_restore(cr);
 
   // Status line: file name, zoom, and what the pointer is over.
@@ -4723,9 +4842,205 @@ static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, co
   object->height = new_height;
 }
 
+/* --- drawing a line ------------------------------------------------------------------- */
+
+/**
+ * The style the next line is drawn with: what the last free line edited or drawn was left at, kept in
+ * the configuration between sessions. A key nobody has written yet leaves the connector's own default
+ * standing -- the colour's empty string is what says "the one a connector is born with", the other
+ * keys each having a value of their own that means something.
+ */
+static dt_canvas_line_style_t _line_style_recalled(void)
+{
+  dt_canvas_line_style_t style = dt_canvas_line_style_default();
+  style.line_width = dt_conf_get_float(CANVAS_NEW_LINE_WIDTH_KEY);
+  dt_canvas_color_parse(dt_conf_get_string_const(CANVAS_NEW_LINE_COLOR_KEY), &style.color);
+  style.dashed = dt_conf_get_bool(CANVAS_NEW_LINE_DASHED_KEY);
+  style.arrow_start = dt_conf_get_bool(CANVAS_NEW_LINE_ARROW_START_KEY);
+  style.arrow_end = dt_conf_get_bool(CANVAS_NEW_LINE_ARROW_END_KEY);
+  // What comes back from the configuration was written by whatever wrote it, this build or another.
+  dt_canvas_line_style_sanitize(&style);
+  return style;
+}
+
+/**
+ * Keep a line's style as the next line's, once a change to it is committed and once a line is drawn.
+ * Only a line's -- both ends free, the same test the writer asks COMMIT_CONF by: a connector holding a
+ * frame is born with the defaults, and styling one teaches the next line nothing. Remembering is not a
+ * change to the document and is no part of its undo step.
+ */
+static void _line_style_remember(const dt_canvas_object_t *object)
+{
+  dt_canvas_line_style_t style;
+  if(!dt_canvas_connector_is_line(object) || !dt_canvas_line_style_get(object, &style)) return;
+  char color[16] = { 0 };
+  dt_canvas_color_format(&style.color, color, sizeof(color));
+  dt_conf_set_float(CANVAS_NEW_LINE_WIDTH_KEY, style.line_width);
+  dt_conf_set_string(CANVAS_NEW_LINE_COLOR_KEY, color);
+  dt_conf_set_bool(CANVAS_NEW_LINE_DASHED_KEY, style.dashed);
+  dt_conf_set_bool(CANVAS_NEW_LINE_ARROW_START_KEY, style.arrow_start);
+  dt_conf_set_bool(CANVAS_NEW_LINE_ARROW_END_KEY, style.arrow_end);
+}
+
+/** The routing the armed tool draws with: the line tool a segment, the curve tool an arc. */
+static dt_canvas_routing_t _tool_routing(const dt_canvas_tool_t tool)
+{
+  return tool == DT_CANVAS_TOOL_CURVE ? DT_CANVAS_ROUTING_CUBIC : DT_CANVAS_ROUTING_STRAIGHT;
+}
+
+/** The press that starts a drawing: where it starts, and the snapshot its one undo step is made from. */
+static void _draw_begin(dt_view_t *self, const double canvas_x, const double canvas_y)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  _gesture_snapshot(view);
+  view->drag = DT_CANVAS_DRAG_DRAW_LINE;
+  view->drag_moved = FALSE;
+  view->draw_id = 0;
+  view->draw_routing = _tool_routing(view->tool);
+  // The far end follows the pointer through the same constraint, so both ends of a line answer the
+  // grid and the modifiers the same way.
+  view->draw_start_x = dt_canvas_snap(view->canvas, canvas_x);
+  view->draw_start_y = dt_canvas_snap(view->canvas, canvas_y);
+  view->draw_marker_valid = FALSE;
+  view->cursor = GDK_CROSSHAIR;
+  dt_control_change_cursor(GDK_CROSSHAIR);
+}
+
+/** The line a draw in flight has made, NULL while the pointer has not left the press yet. */
+static dt_canvas_object_t *_draw_object(const dt_canvas_view_t *view)
+{
+  if(view->draw_id == 0) return NULL;
+  return dt_canvas_find_object(view->canvas, view->draw_id);
+}
+
+/**
+ * The pointer between gestures: the crosshair wherever the armed tool would draw, the arrow
+ * otherwise, and the start marker where the tool would start its next line. Every gesture ends
+ * through here, whatever it was, because a gesture leaves the tool exactly as it found it: an ending
+ * that named the arrow outright would stop naming the tool that is still armed, and after an Escape
+ * there is no motion coming to name it again.
+ */
+static void _cursor_for_armed_tool(dt_canvas_view_t *view)
+{
+  const dt_cursor_t cursor = dt_canvas_tool_draws_line(view->tool) ? GDK_CROSSHAIR : GDK_LEFT_PTR;
+  view->cursor = cursor;
+  dt_control_change_cursor(cursor);
+  _draw_marker_update(view);
+}
+
+/** Clear the draw state a gesture held, leaving the tool armed and the document as it stands. */
+static void _draw_clear(dt_canvas_view_t *view)
+{
+  view->draw_id = 0;
+  view->drag = DT_CANVAS_DRAG_NONE;
+  view->drag_moved = FALSE;
+  view->guide_width_valid = FALSE;
+  view->guide_height_valid = FALSE;
+  _cursor_for_armed_tool(view);
+}
+
+/**
+ * Let go of the drawing in flight, leaving the document exactly as it stands and recording nothing.
+ * The snapshot the press took goes with it: what is on the plane is what the user is left with.
+ */
+static void _draw_forget(dt_view_t *self)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  dt_canvas_free(view->drag_snapshot);
+  view->drag_snapshot = NULL;
+  _draw_clear(view);
+  _selection_prune(view);
+  _props_sync(self);
+  dt_control_queue_redraw_center();
+}
+
+/**
+ * Give up the line being drawn: the document goes back to the snapshot the press took, and nothing is
+ * recorded. `dt_canvas_abandon()` rather than a plain restore, so a picture whose render landed while
+ * the line was being drawn keeps it, and a document that was saved before the press is still saved.
+ */
+static void _draw_abort(dt_view_t *self)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(!IS_NULL_PTR(view->drag_snapshot)) dt_canvas_abandon(view->canvas, view->drag_snapshot);
+  _draw_forget(self);
+}
+
+/**
+ * The release that ends a drawing. A press that never moved places a line of its own length, level,
+ * starting where the press was -- the click-to-place every drawing tool offers -- and a drag keeps the
+ * line it has been showing all along, which is the painter's own output rather than a preview of it.
+ *
+ * One undo step per object, recorded here whatever happened: `_end_gesture()` records nothing for a
+ * gesture that did not move, and a line placed with a click is a whole object made by a gesture that
+ * did not. The tool stays armed for the next line, and the new line is selected, so its own ends and
+ * handles can adjust it without putting the tool away.
+ *
+ * @param place whether a press that made no line yet may place one -- a release does, a view being
+ * left does not: nobody asked for a line by walking away from the atelier.
+ */
+static void _draw_finish(dt_view_t *self, const gboolean place)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  dt_canvas_object_t *line = _draw_object(view);
+  // A line the drawing made and no longer finds was taken out from under it: a Delete or an undo
+  // reached by the keyboard while the button was still down, and either is an edit of its own. The
+  // document is left as that edit made it -- restoring the press's snapshot would take the edit back,
+  // and recording a step from it would reinstate what was undone -- and no line is placed: the press
+  // was answered already.
+  if(IS_NULL_PTR(line) && view->draw_id != 0)
+  {
+    _draw_forget(self);
+    return;
+  }
+  if(IS_NULL_PTR(line))
+  {
+    if(!place)
+    {
+      _draw_abort(self);
+      return;
+    }
+    // The far end answers the grid like every other line end -- placed between two grid points it
+    // would be the only end in the atelier that did, and its first drag would jump it by up to half
+    // a cell. Asked for level steps, the constraint keeps the origin's own height and takes the far
+    // end to the grid, which is exactly what a placed line wants.
+    double end_x = view->draw_start_x + CANVAS_DRAW_PLACE_LENGTH;
+    double end_y = view->draw_start_y;
+    dt_canvas_constrain_line_end(view->canvas, view->draw_start_x, view->draw_start_y, 45, &end_x, &end_y);
+    // A grid coarser than the line is long takes that end back onto the start, and a line of nothing
+    // is worse than a line between two grid points: the length asked for stands instead.
+    if(end_x == view->draw_start_x && end_y == view->draw_start_y)
+      end_x = view->draw_start_x + CANVAS_DRAW_PLACE_LENGTH;
+    const dt_canvas_line_style_t style = _line_style_recalled();
+    line = dt_canvas_add_line(view->canvas, view->draw_start_x, view->draw_start_y, end_x, end_y,
+                              view->draw_routing, &style);
+    if(IS_NULL_PTR(line))
+    {
+      _draw_abort(self);
+      return;
+    }
+  }
+  _line_style_remember(line);
+  // The line is final, so every auto-height frame is fitted to what it now flows around, once.
+  dt_canvas_props_settle_all(view->canvas);
+  dt_canvas_touch(view->canvas);
+  _select_only(view, line->id);
+  _record_undo(self, view->drag_snapshot);
+  view->drag_snapshot = NULL;
+  _draw_clear(view);
+  _props_sync(self);
+  dt_control_queue_redraw_center();
+}
+
 static void _end_gesture(dt_view_t *self)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  // A drawing pays for itself: its own undo step, its own clearing up, and the tool left armed.
+  if(view->drag == DT_CANVAS_DRAG_DRAW_LINE)
+  {
+    _draw_finish(self, TRUE);
+    return;
+  }
   if(view->drag == DT_CANVAS_DRAG_MOVE || view->drag == DT_CANVAS_DRAG_SCALE || view->drag == DT_CANVAS_DRAG_ROTATE
      || view->drag == DT_CANVAS_DRAG_VIA || view->drag == DT_CANVAS_DRAG_HANDLE_FROM
      || view->drag == DT_CANVAS_DRAG_HANDLE_TO || view->drag == DT_CANVAS_DRAG_HANDLE_VIA
@@ -4773,8 +5088,7 @@ static void _end_gesture(dt_view_t *self)
   view->drag_moved = FALSE;
   view->guide_width_valid = FALSE;
   view->guide_height_valid = FALSE;
-  view->cursor = GDK_LEFT_PTR;
-  dt_control_change_cursor(GDK_LEFT_PTR);
+  _cursor_for_armed_tool(view);
   // Properties the gesture hid come back; a rubber band that changed the selection closes them.
   _props_sync(self);
   dt_control_queue_redraw_center();
@@ -4794,8 +5108,7 @@ static void _gesture_cancel(dt_view_t *self)
   view->drag_moved = FALSE;
   view->guide_width_valid = FALSE;
   view->guide_height_valid = FALSE;
-  view->cursor = GDK_LEFT_PTR;
-  dt_control_change_cursor(GDK_LEFT_PTR);
+  _cursor_for_armed_tool(view);
 }
 
 /** Snapshot the document for the gesture a press arms, dropping one a previous press left. */
@@ -4992,15 +5305,41 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
   if(which == 2 || (which == 1 && dt_modifier_is(state, GDK_MOD1_MASK)))
   {
+    // A middle press with the left button still down takes the pan: the line drawn so far is finished
+    // first, with its own undo step, rather than left in the document with nothing to take it back.
+    if(view->drag == DT_CANVAS_DRAG_DRAW_LINE) _draw_finish(self, FALSE);
     view->drag = DT_CANVAS_DRAG_PAN;
     dt_control_change_cursor(GDK_FLEUR);
     return 1;
   }
 
-  if(view->connecting)
+  if(view->tool != DT_CANVAS_TOOL_NONE)
   {
-    if(which == 1) _connect_click(self, canvas_x, canvas_y);
-    else if(which == 3) _connect_mode_set(self, FALSE);
+    // A right click puts the tool away, and takes with it the line it was in the middle of drawing.
+    if(which == 3)
+    {
+      _tool_set(self, DT_CANVAS_TOOL_NONE);
+      return 1;
+    }
+    if(which != 1) return 1;
+    if(view->tool == DT_CANVAS_TOOL_CONNECTOR)
+    {
+      _connect_click(self, canvas_x, canvas_y);
+      return 1;
+    }
+    // GDK reports the press completing a double click a second time: it is no new drawing, and the
+    // first press of the pair has already made one.
+    if(type != GDK_BUTTON_PRESS) return 1;
+    // The handles of what is selected answer first, so the line just drawn can be adjusted by its own
+    // ends and corners without putting the tool away. Everything else under the pointer draws, an
+    // object included: that is what having a tool armed means.
+    if(_press_handles(self, canvas_x, canvas_y, type, FALSE, FALSE))
+    {
+      dt_canvas_click_sequence_took_handle(&view->click_sequence);
+      return 1;
+    }
+    _draw_begin(self, canvas_x, canvas_y);
+    dt_control_queue_redraw_center();
     return 1;
   }
 
@@ -5093,7 +5432,7 @@ static void _queue_cursor_for(dt_view_t *self, const double screen_x, const doub
   {
     cursor = GDK_HAND2;
   }
-  else if(view->connecting)
+  else if(view->tool == DT_CANVAS_TOOL_CONNECTOR)
   {
     cursor = view->anchor_hover != DT_CANVAS_ANCHOR_AUTO ? GDK_CROSSHAIR : GDK_LEFT_PTR;
   }
@@ -5132,7 +5471,11 @@ static void _queue_cursor_for(dt_view_t *self, const double screen_x, const doub
         cursor = _corner_cursors[((handle + quarter) % 4 + 4) % 4];
       }
     }
-    if(!on_handle && !IS_NULL_PTR(under))
+    // A tool armed draws wherever no handle answers, whatever object is under the pointer: the
+    // crosshair says so, where the hand would promise a pick that no longer happens.
+    if(!on_handle && dt_canvas_tool_draws_line(view->tool))
+      cursor = GDK_CROSSHAIR;
+    else if(!on_handle && !IS_NULL_PTR(under))
       cursor = under->kind == DT_CANVAS_OBJECT_CONNECTOR ? GDK_HAND1
                : (under->flags & DT_CANVAS_OBJECT_FLAG_LOCKED) ? GDK_LEFT_PTR : GDK_HAND1;
   }
@@ -5327,6 +5670,56 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       }
       break;
     }
+    case DT_CANVAS_DRAG_DRAW_LINE:
+    {
+      // Nothing is drawn before the pointer really moves: a press that meant to click places a line
+      // of its own at the release, and a hand that shook must not leave a line a pixel long.
+      if(!view->drag_moved
+         && hypot(x - view->press_screen_x, y - view->press_screen_y) < CANVAS_DRAG_THRESHOLD_PIXELS)
+        break;
+      double end_x = canvas_x;
+      double end_y = canvas_y;
+      dt_canvas_constrain_line_end(view->canvas, view->draw_start_x, view->draw_start_y,
+                                   _line_end_step_degrees(which), &end_x, &end_y);
+      // A line that ends where it starts is no line, and the screen pixels above cannot say so: the
+      // far end is taken to the grid, and with a cell wider than the threshold -- twelve units
+      // against three pixels, as the atelier is shipped -- a pointer can travel well past it and
+      // land back on the start. Nothing is drawn until the end really leaves, so a press that ends
+      // there still places a line of its own length at the release; a line already drawn holds the
+      // last end it had rather than collapsing onto its own start.
+      if(end_x == view->draw_start_x && end_y == view->draw_start_y) break;
+      dt_canvas_object_t *line = _draw_object(view);
+      if(IS_NULL_PTR(line))
+      {
+        // The object is made as soon as there is a line to show, and shown by the painter itself:
+        // what the drag draws is the line, not a sketch of it.
+        const dt_canvas_line_style_t style = _line_style_recalled();
+        line = dt_canvas_add_line(view->canvas, view->draw_start_x, view->draw_start_y, end_x, end_y,
+                                  view->draw_routing, &style);
+        if(IS_NULL_PTR(line)) break;
+        view->draw_id = line->id;
+        _select_only(view, line->id);
+      }
+      else
+      {
+        line->connector.to_x = end_x;
+        line->connector.to_y = end_y;
+        // A curve is seeded over its chord, and the chord is moving: the tangents go back to automatic
+        // so the arc is seeded again over the chord the pointer is at now.
+        if(line->connector.routing == DT_CANVAS_ROUTING_CUBIC)
+        {
+          line->connector.from_tangent_x = 0.0f;
+          line->connector.from_tangent_y = 0.0f;
+          line->connector.to_tangent_x = 0.0f;
+          line->connector.to_tangent_y = 0.0f;
+          dt_canvas_route_t route;
+          if(dt_canvas_connector_route(view->canvas, line, &route)) dt_canvas_connector_seed_curve(line, &route);
+        }
+      }
+      view->drag_moved = TRUE;
+      _interaction_touch(self);
+      break;
+    }
     case DT_CANVAS_DRAG_HANDLE_VIA:
     {
       dt_canvas_object_t *connector = _single_selected(view);
@@ -5382,13 +5775,15 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       const double tolerance = DT_CANVAS_PICK_TOLERANCE_PIXELS / view->zoom;
       const dt_canvas_object_t *object
           = flower_part == DT_CANVAS_FLOWER_NONE ? dt_canvas_pick(view->canvas, canvas_x, canvas_y, tolerance) : NULL;
-      const uint32_t hover = IS_NULL_PTR(object) ? 0 : object->id;
+      // While a tool draws, a press no longer picks what is under the pointer: nothing is outlined
+      // as though it would.
+      const uint32_t hover = IS_NULL_PTR(object) || dt_canvas_tool_draws_line(view->tool) ? 0 : object->id;
       if(hover != view->hover)
       {
         view->hover = hover;
         dt_control_queue_redraw_center();
       }
-      if(view->connecting)
+      if(view->tool == DT_CANVAS_TOOL_CONNECTOR)
       {
         // The anchors of the frame under the pointer are shown; the one within reach lights up.
         uint32_t anchor_frame = 0;
@@ -5405,6 +5800,9 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       _queue_cursor_for(self, x, y, canvas_x, canvas_y, flower_part, object);
       view->pointer_x = canvas_x;
       view->pointer_y = canvas_y;
+      // The marker reads the pointer the two lines above have just moved: asked before them it would
+      // show where the previous motion left it, one event behind the crosshair it belongs to.
+      if(_draw_marker_update(view)) dt_control_queue_redraw_center();
       view->last_x = canvas_x;
       view->last_y = canvas_y;
       return;
@@ -5441,6 +5839,8 @@ void mouse_leave(dt_view_t *self)
     view->cursor = GDK_LEFT_PTR;
     dt_control_change_cursor(GDK_LEFT_PTR);
   }
+  // Where the next line would start is where the pointer is, and the pointer has gone.
+  if(_draw_marker_update(view)) dt_control_queue_redraw_center();
   if(view->hover != 0 || view->flower_hover != DT_CANVAS_FLOWER_NONE || view->mask_node_hover >= 0)
   {
     view->hover = 0;
@@ -5518,18 +5918,32 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   if(key == GDK_KEY_Escape)
   {
     _props_commit_pending(self);
-    // One step back per press: out of connector drawing, out of the gesture, the properties
+    // One step back per press: the gesture in flight given up, the tool put away, the properties
     // closed, and only then the selection dropped. An opening or a content action still waiting
     // to run is taken back whichever step this is.
+    //
+    // The gesture comes before the tool because a tool stays armed for as long as the user wants
+    // it: Escape mid-drawing takes back the line, not the tool that was drawing it, and the next
+    // Escape puts the tool away. A connector waiting for its second anchor is such a drawing,
+    // though it is no drag, and takes the step before the tool for the same reason.
     _props_request_drop(view);
-    if(view->connecting)
-      _connect_mode_set(self, FALSE);
+    if(view->drag == DT_CANVAS_DRAG_DRAW_LINE)
+      _draw_abort(self);
     else if(view->drag != DT_CANVAS_DRAG_NONE)
     {
       // Abort the gesture: put the document back the way it was before the press.
       if(!IS_NULL_PTR(view->drag_snapshot)) dt_canvas_restore(view->canvas, view->drag_snapshot);
       _gesture_cancel(self);
     }
+    else if(view->tool == DT_CANVAS_TOOL_CONNECTOR && view->connect_from != 0)
+    {
+      // A connector waiting for its second anchor is a drawing in flight as much as a line being
+      // dragged is: the first anchor is given back and the tool stays armed to be aimed again.
+      view->connect_from = 0;
+      view->connect_from_anchor = DT_CANVAS_ANCHOR_AUTO;
+    }
+    else if(view->tool != DT_CANVAS_TOOL_NONE)
+      _tool_set(self, DT_CANVAS_TOOL_NONE);
     else if(view->props_id != 0)
       _props_close(self);
     else
@@ -5538,7 +5952,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     dt_control_queue_redraw_center();
     return 1;
   }
-  if(key == GDK_KEY_Return && !view->connecting && view->drag == DT_CANVAS_DRAG_NONE
+  if(key == GDK_KEY_Return && view->tool == DT_CANVAS_TOOL_NONE && view->drag == DT_CANVAS_DRAG_NONE
      && dt_modifier_is(event->state, 0))
   {
     // Return goes into the one selected object, the way a second double click does.
@@ -5691,7 +6105,11 @@ static void _proxy_action(dt_view_t *self, int action)
       dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_CANVAS);
       break;
     case DT_CANVAS_ACTION_CONNECT_MODE:
-      _connect_mode_set(self, !view->connecting);
+    case DT_CANVAS_ACTION_DRAW_LINE:
+    case DT_CANVAS_ACTION_DRAW_CURVE:
+      // A tool's action is a toggle: it arms its tool, takes the armed one's place, or -- asked again
+      // by the same key or the same button -- puts its own away.
+      _tool_set(self, dt_canvas_tool_toggled(view->tool, dt_canvas_tool_for_action((dt_canvas_action_t)action)));
       break;
     case DT_CANVAS_ACTION_PROPERTIES:
     {
@@ -6150,44 +6568,52 @@ static void _proxy_edit_color(dt_view_t *self, const int target, const float *rg
   }
 }
 
-static gboolean _proxy_is_connecting(dt_view_t *self)
+static int _proxy_armed_tool(dt_view_t *self)
 {
   const dt_canvas_view_t *view = (const dt_canvas_view_t *)self->data;
-  return !IS_NULL_PTR(view) && view->connecting;
+  return IS_NULL_PTR(view) ? (int)DT_CANVAS_TOOL_NONE : (int)view->tool;
 }
 
+/**
+ * The keys the atelier is bound to. The action carries its own name -- `dt_canvas_action_accel_name()`
+ * is where every name lives, so the table, the menus and the tooltips cannot spell one two ways -- and
+ * what is here is only which key an action is offered under before the user says otherwise.
+ */
 typedef struct dt_canvas_accel_t
 {
-  const char *name;
   dt_canvas_action_t action;
   guint key;
   GdkModifierType mods;
 } dt_canvas_accel_t;
 
 static const dt_canvas_accel_t _accels[] = {
-  { N_("New canvas"), DT_CANVAS_ACTION_NEW, GDK_KEY_n, DT_PRIMARY_MASK },
-  { N_("Open a canvas"), DT_CANVAS_ACTION_OPEN, GDK_KEY_o, DT_PRIMARY_MASK },
-  { N_("Save the canvas"), DT_CANVAS_ACTION_SAVE, GDK_KEY_s, DT_PRIMARY_MASK },
-  { N_("Save the canvas as"), DT_CANVAS_ACTION_SAVE_AS, GDK_KEY_s, DT_PRIMARY_MASK | GDK_SHIFT_MASK },
-  { N_("Export the canvas..."), DT_CANVAS_ACTION_EXPORT, GDK_KEY_p, DT_PRIMARY_MASK },
-  { N_("Add a text frame"), DT_CANVAS_ACTION_ADD_TEXT, GDK_KEY_t, 0 },
-  { N_("Add the text notes of the selected images"), DT_CANVAS_ACTION_ADD_NOTES, GDK_KEY_t, GDK_SHIFT_MASK },
-  { N_("Add a map"), DT_CANVAS_ACTION_ADD_MAP, GDK_KEY_m, 0 },
-  { N_("Place a drawing"), DT_CANVAS_ACTION_ADD_SVG, GDK_KEY_d, 0 },
-  { N_("Fit the view to the canvas"), DT_CANVAS_ACTION_ZOOM_FIT, GDK_KEY_0, DT_PRIMARY_MASK },
-  { N_("Zoom to 100%"), DT_CANVAS_ACTION_ZOOM_100, GDK_KEY_1, DT_PRIMARY_MASK },
-  { N_("Toggle the grid"), DT_CANVAS_ACTION_TOGGLE_GRID, GDK_KEY_g, 0 },
-  { N_("Toggle snapping to the grid"), DT_CANVAS_ACTION_TOGGLE_SNAP, GDK_KEY_g, GDK_SHIFT_MASK },
-  { N_("Arrange as a grid"), DT_CANVAS_ACTION_LAYOUT_GRID, GDK_KEY_1, 0 },
-  { N_("Arrange as a masonry"), DT_CANVAS_ACTION_LAYOUT_MASONRY, GDK_KEY_2, 0 },
-  { N_("Arrange as a row"), DT_CANVAS_ACTION_LAYOUT_ROW, GDK_KEY_3, 0 },
-  { N_("Arrange as a column"), DT_CANVAS_ACTION_LAYOUT_COLUMN, GDK_KEY_4, 0 },
-  { N_("Check the images against the library"), DT_CANVAS_ACTION_SYNC_CHECK, GDK_KEY_r, 0 },
-  { N_("Refresh the stale images"), DT_CANVAS_ACTION_SYNC_REFRESH_STALE, GDK_KEY_r, DT_PRIMARY_MASK },
-  { N_("Draw a connector"), DT_CANVAS_ACTION_CONNECT_MODE, GDK_KEY_c, 0 },
-  { CANVAS_ACCEL_PROPERTIES, DT_CANVAS_ACTION_PROPERTIES, GDK_KEY_i, 0 },
-  { N_("Undo"), DT_CANVAS_ACTION_UNDO, GDK_KEY_z, DT_PRIMARY_MASK },
-  { N_("Redo"), DT_CANVAS_ACTION_REDO, GDK_KEY_y, DT_PRIMARY_MASK },
+  { DT_CANVAS_ACTION_NEW, GDK_KEY_n, DT_PRIMARY_MASK },
+  { DT_CANVAS_ACTION_OPEN, GDK_KEY_o, DT_PRIMARY_MASK },
+  { DT_CANVAS_ACTION_SAVE, GDK_KEY_s, DT_PRIMARY_MASK },
+  { DT_CANVAS_ACTION_SAVE_AS, GDK_KEY_s, DT_PRIMARY_MASK | GDK_SHIFT_MASK },
+  { DT_CANVAS_ACTION_EXPORT, GDK_KEY_p, DT_PRIMARY_MASK },
+  { DT_CANVAS_ACTION_ADD_TEXT, GDK_KEY_t, 0 },
+  { DT_CANVAS_ACTION_ADD_NOTES, GDK_KEY_t, GDK_SHIFT_MASK },
+  { DT_CANVAS_ACTION_ADD_MAP, GDK_KEY_m, 0 },
+  { DT_CANVAS_ACTION_ADD_SVG, GDK_KEY_d, 0 },
+  { DT_CANVAS_ACTION_ZOOM_FIT, GDK_KEY_0, DT_PRIMARY_MASK },
+  { DT_CANVAS_ACTION_ZOOM_100, GDK_KEY_1, DT_PRIMARY_MASK },
+  { DT_CANVAS_ACTION_TOGGLE_GRID, GDK_KEY_g, 0 },
+  { DT_CANVAS_ACTION_TOGGLE_SNAP, GDK_KEY_g, GDK_SHIFT_MASK },
+  { DT_CANVAS_ACTION_LAYOUT_GRID, GDK_KEY_1, 0 },
+  { DT_CANVAS_ACTION_LAYOUT_MASONRY, GDK_KEY_2, 0 },
+  { DT_CANVAS_ACTION_LAYOUT_ROW, GDK_KEY_3, 0 },
+  { DT_CANVAS_ACTION_LAYOUT_COLUMN, GDK_KEY_4, 0 },
+  { DT_CANVAS_ACTION_SYNC_CHECK, GDK_KEY_r, 0 },
+  { DT_CANVAS_ACTION_SYNC_REFRESH_STALE, GDK_KEY_r, DT_PRIMARY_MASK },
+  { DT_CANVAS_ACTION_CONNECT_MODE, GDK_KEY_c, 0 },
+  // The line and the curve are one key and its shifted twin, as the text frame and its notes are:
+  // Ctrl+Shift+L is the only L the application binds elsewhere, so both are free.
+  { DT_CANVAS_ACTION_DRAW_LINE, GDK_KEY_l, 0 },
+  { DT_CANVAS_ACTION_DRAW_CURVE, GDK_KEY_l, GDK_SHIFT_MASK },
+  { DT_CANVAS_ACTION_PROPERTIES, GDK_KEY_i, 0 },
+  { DT_CANVAS_ACTION_UNDO, GDK_KEY_z, DT_PRIMARY_MASK },
+  { DT_CANVAS_ACTION_REDO, GDK_KEY_y, DT_PRIMARY_MASK },
 };
 
 static gboolean _accel_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods,
@@ -6242,7 +6668,7 @@ void init(dt_view_t *self)
   manager->proxy.canvas.document = _proxy_document;
   manager->proxy.canvas.set_grid_size = _proxy_set_grid_size;
   manager->proxy.canvas.set_border = _proxy_set_border;
-  manager->proxy.canvas.is_connecting = _proxy_is_connecting;
+  manager->proxy.canvas.armed_tool = _proxy_armed_tool;
   manager->proxy.canvas.set_padding = _proxy_set_padding;
   manager->proxy.canvas.set_snap_mode = _proxy_set_snap_mode;
   manager->proxy.canvas.set_background = _proxy_set_background;
@@ -6261,8 +6687,10 @@ void gui_init(dt_view_t *self)
 {
   for(size_t idx = 0; idx < G_N_ELEMENTS(_accels); idx++)
   {
-    dt_accels_new_canvas_action(_accel_callback, (gpointer)&_accels[idx], NULL, CANVAS_ACCEL_SCOPE, _accels[idx].name,
-                                _accels[idx].key, _accels[idx].mods, NULL);
+    const char *action_name = dt_canvas_action_accel_name(_accels[idx].action);
+    if(IS_NULL_PTR(action_name)) continue;
+    dt_accels_new_canvas_action(_accel_callback, (gpointer)&_accels[idx], NULL, dt_canvas_action_accel_scope(),
+                                action_name, _accels[idx].key, _accels[idx].mods, NULL);
   }
 }
 
@@ -6361,7 +6789,12 @@ void leave(dt_view_t *self)
     gtk_drag_dest_unset(center);
     view->dnd_connected = FALSE;
   }
-  if(view->drag != DT_CANVAS_DRAG_NONE) _end_gesture(self);
+  // A drawing the user walked away from is given up rather than finished: a press that made no line
+  // yet would otherwise place one nobody asked for.
+  if(view->drag == DT_CANVAS_DRAG_DRAW_LINE)
+    _draw_finish(self, FALSE);
+  else if(view->drag != DT_CANVAS_DRAG_NONE)
+    _end_gesture(self);
   // The widget goes with the view, but the open state stays for `enter()` to show again. An
   // action a double click deferred is dropped: it was asked of the atelier being left.
   _props_commit_pending(self);
@@ -6370,7 +6803,10 @@ void leave(dt_view_t *self)
   _props_destroy(self);
   view->cursor = GDK_LEFT_PTR;
   dt_control_change_cursor(GDK_LEFT_PTR);
-  view->connecting = FALSE;
+  // The tool goes with the atelier, silently: `enter()` refills the toolbar from the view anyway.
+  view->tool = DT_CANVAS_TOOL_NONE;
+  view->draw_id = 0;
+  view->draw_marker_valid = FALSE;
   view->connect_from = 0;
   view->anchor_hover_id = 0;
   view->hover = 0;

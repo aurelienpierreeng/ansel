@@ -314,6 +314,8 @@ typedef enum dt_canvas_connector_style_t
 
 /** The width a connector is born with, and the width a stored zero is painted at, in canvas units. */
 #define DT_CANVAS_CONNECTOR_LINE_WIDTH 2.0f
+/** The widest line the properties offer, and so the widest a line is ever born with. */
+#define DT_CANVAS_LINE_WIDTH_MAX 100.0f
 /** An arrowhead's length and half its base, in canvas units, for a line two units wide: the painter
  * scales both with a thicker line, and whatever must clear a head -- the bounds, the pages -- asks
  * the same triangle through dt_canvas_route_arrow_head(). */
@@ -824,6 +826,16 @@ dt_canvas_line_style_t dt_canvas_line_style_default(void);
 gboolean dt_canvas_line_style_get(const dt_canvas_object_t *object, dt_canvas_line_style_t *style);
 
 /**
+ * @brief Make a style handed in from outside the document one a line can be born with.
+ * @details The atelier remembers the last line's style between sessions, and what comes back from
+ * there was written by whatever wrote it: a width that is not a number goes back to the default, one
+ * out of range is held to 0..DT_CANVAS_LINE_WIDTH_MAX, a colour channel is held to 0..1 (one that is not
+ * a number to 0, so a damaged colour stays a colour), and the three switches read as plain TRUE or FALSE.
+ * @return TRUE when the style was already sound and nothing was changed.
+ */
+gboolean dt_canvas_line_style_sanitize(dt_canvas_line_style_t *style);
+
+/**
  * @brief Add a line with both ends free, from (x0, y0) to (x1, y1).
  * @details A cubic line is seeded into an arc (dt_canvas_connector_seed_curve()): a free cubic
  * with automatic tangents would follow its own chord and read as straight.
@@ -834,6 +846,16 @@ dt_canvas_object_t *dt_canvas_add_line(dt_canvas_t *canvas, double x0, double y0
 
 /** @brief Whether this is a connector with at least one end at its own point rather than on a frame. */
 gboolean dt_canvas_connector_has_free_end(const dt_canvas_object_t *object);
+
+/**
+ * @brief Whether this is a LINE: a connector with BOTH ends at their own points and no frame at all.
+ * @details What the line and the curve tools draw, and what the atelier owns outright -- it moves,
+ * duplicates and is styled as itself, and its style is what the next line is drawn with. One end on a
+ * frame makes it that frame's connector however the other end is spelled, so the two questions must
+ * never be asked with one word: dt_canvas_connector_has_free_end() answers the other one, which is
+ * about what a connector owns rather than about what it is.
+ */
+gboolean dt_canvas_connector_is_line(const dt_canvas_object_t *object);
 
 /**
  * @brief Move what a connector owns: its free points, and its waypoint when any end is free.

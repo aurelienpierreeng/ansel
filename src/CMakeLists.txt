@@ -69,6 +69,7 @@ FILE(GLOB SOURCE_FILES
   "pixel/box_filters.c"
   "caches/cache.c"
   "canvas/canvas.c"
+  "canvas/canvas_actions.c"
   "canvas/canvas_format.c"
   "canvas/canvas_handles.c"
   "canvas/canvas_markdown.c"
