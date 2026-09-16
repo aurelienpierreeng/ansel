@@ -1644,6 +1644,10 @@ GtkWidget *dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_t *bh, dt_gu
 
 static void _style_updated(GtkWidget *widget)
 {
+  // GTK's own handler applies the CSS opacity (the theme dims *:disabled) and queues the redraw;
+  // without it, a widget keeps the opacity of whichever state its style was first computed in.
+  GTK_WIDGET_CLASS(dt_bh_parent_class)->style_updated(widget);
+
   struct dt_bauhaus_widget_t *w = (struct dt_bauhaus_widget_t *)widget;
   _margins_retrieve(w);
 

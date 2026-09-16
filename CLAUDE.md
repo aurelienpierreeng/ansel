@@ -2309,6 +2309,27 @@ The views are plugins: `ninja ansel` does NOT compile `src/views/*.c`. Build eve
 (`ninja`) before trusting a darkroom edit; a use of an undeclared variable in `darkroom.c`
 survived an `ansel` build here.
 
+### A GTK class overriding `style_updated` must chain up, or CSS opacity freezes
+
+`GtkWidget`'s own `style_updated` is what turns the CSS `opacity` into the alpha the widget is
+painted with (`gtk_widget_update_alpha()`), besides queuing the resize/redraw a style change owes.
+A subclass that replaces the vfunc without calling `GTK_WIDGET_CLASS(parent_class)->style_updated`
+keeps the opacity of the state its style was first computed in. The theme dims `*:disabled` to 0.5,
+so a bauhaus slider created insensitive and enabled later -- the blend panel's boost factor --
+stayed half transparent while fully sensitive: it looked disabled and took every input. Measured,
+not guessed: the widget and every ancestor reported sensitive, with the same text colour as its
+neighbours; only the painted alpha differed. `_style_updated()` (`widgets/bauhaus.c`) chains up
+first.
+
+The omission is a GObject trap, not a typo: a `"style-updated"` *signal handler* runs after the
+class handler, so connecting one keeps GTK's work; a *vfunc override* replaces it. `53f1ae442a`
+moved bauhaus from the first to the second. It stayed invisible for four years because the theme
+greyed `*:disabled` with a `color`, which bauhaus reads from the current state at every draw;
+`73fbeacda9` switched that rule to `opacity: 0.5`, the one property the override had stopped
+updating. So a theme rule moving from one CSS property to another can expose a widget class that
+only ever honoured the first: after such a change, check every class overriding `style_updated`
+(`grep -rn "style_updated = " src`) chains up.
+
 ### A rotated GtkLabel sizes the column it sits in
 
 A `GtkLabel` with `gtk_label_set_angle()` requests the width of its *slanted* bounding box, so a
