@@ -110,6 +110,7 @@ FILE(GLOB SOURCE_FILES
   "history/history.c"
   "history/notify.c"
   "common/history_actions.c"
+  "common/length.c"
   "develop/history_merge.c"
   "gui/common/collection_gui.c"
   "gui/common/database_gui.c"
