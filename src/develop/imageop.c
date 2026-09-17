@@ -822,6 +822,55 @@ void dt_iop_reload_defaults(dt_iop_module_t *module)
 }
 
 
+/* dt_gui_presets_add_generic() cannot name a blending space: init_presets() is handed the module
+ * type, and only an instance answers blend_colorspace(). Resolve every preset still carrying
+ * DEVELOP_BLEND_CS_NONE here, so the database, the history rows auto-applied presets become and
+ * every binary comparison against a module's blend params only ever see a real space. There is
+ * no pipe here, so the space is the one of a module in the working space. The rows are listed
+ * again rather than reusing the caller's list, which was read before the legacy upgrades above
+ * rewrote some of them. */
+static void _resolve_presets_blend_colorspace(dt_iop_module_so_t *module_so)
+{
+  if(!(module_so->flags() & IOP_FLAGS_SUPPORTS_BLENDING)) return;
+
+  dt_iop_module_t *module = NULL;
+  GList *presets = dt_preset_repository_list_for_upgrade(module_so->op);
+  for(GList *l = presets; l; l = g_list_next(l))
+  {
+    const dt_module_preset_t *preset = (const dt_module_preset_t *)l->data;
+    if(IS_NULL_PTR(preset->blendop_params) || preset->blendop_version != dt_develop_blend_version()
+       || preset->blendop_params_size != (int)sizeof(dt_develop_blend_params_t))
+      continue;
+
+    dt_develop_blend_params_t blend_params;
+    memcpy(&blend_params, preset->blendop_params, sizeof(blend_params));
+    if(blend_params.blend_cst != DEVELOP_BLEND_CS_NONE) continue;
+
+    if(IS_NULL_PTR(module))
+    {
+      module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
+      if(IS_NULL_PTR(module) || dt_iop_load_module_by_so(module, module_so, NULL))
+      {
+        dt_free(module);
+        break;
+      }
+    }
+
+    // a module can support blending and still answer IOP_CS_NONE, which has no space to write back
+    dt_develop_blend_resolve_default_colorspace(module, &blend_params);
+    if(blend_params.blend_cst == DEVELOP_BLEND_CS_NONE) continue;
+    dt_preset_repository_set_blend_params(module_so->op, preset->name, dt_develop_blend_version(), &blend_params,
+                                          sizeof(blend_params));
+  }
+  g_list_free_full(presets, dt_module_preset_free);
+
+  if(!IS_NULL_PTR(module))
+  {
+    dt_iop_cleanup_module(module);
+    dt_free(module);
+  }
+}
+
 static void _init_presets(dt_iop_module_so_t *module_so)
 {
   // Skip auto-preset regeneration when the build + UI language haven't changed.
@@ -974,6 +1023,8 @@ static void _init_presets(dt_iop_module_so_t *module_so)
     }
   }
   g_list_free_full(presets, dt_module_preset_free);
+
+  _resolve_presets_blend_colorspace(module_so);
 }
 
 
@@ -1188,10 +1239,7 @@ void dt_iop_commit_blend_params(dt_iop_module_t *module, const dt_develop_blend_
   if(module->blend_params != blendop_params)
     memcpy(module->blend_params, blendop_params, sizeof(dt_develop_blend_params_t));
 
-  if(blendop_params->blend_cst == DEVELOP_BLEND_CS_NONE)
-  {
-    module->blend_params->blend_cst = dt_develop_blend_default_module_blend_colorspace(module);
-  }
+  dt_develop_blend_resolve_default_colorspace(module, module->blend_params);
   dt_iop_set_mask_mode(module, blendop_params->mask_mode);
 
   // This assumes that the module providing raster mask to the current one is ALWAYS

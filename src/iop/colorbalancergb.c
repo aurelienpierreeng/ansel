@@ -477,7 +477,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.saturation_midtones = 0.05f;
   p.saturation_highlights = -0.05f;
 
-  dt_gui_presets_add_generic(_("add basic colorfulness (legacy)"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("add basic colorfulness (legacy)"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.saturation_formula = DT_COLORBALANCE_SATURATION_DTUCS;
   p.chroma_global = 0.f;
@@ -486,22 +486,22 @@ void init_presets(dt_iop_module_so_t *self)
   p.saturation_shadows = 0.30f;
   p.saturation_midtones = 0.f;
   p.saturation_highlights = 0.f;
-  dt_gui_presets_add_generic(_("basic colorfulness: natural skin"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("basic colorfulness: natural skin"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.saturation_global = 0.2f;
   p.saturation_shadows = 0.5f;
   p.saturation_midtones = 0.f;
   p.saturation_highlights = 0.0f;
-  dt_gui_presets_add_generic(_("basic colorfulness: vibrant colors"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("basic colorfulness: vibrant colors"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.saturation_global = 0.2f;
   p.saturation_shadows = 0.25f;
   p.saturation_midtones = 0.f;
   p.saturation_highlights = 0.0f;
-  dt_gui_presets_add_generic(_("basic colorfulness: standard"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("basic colorfulness: standard"), self->op, self->version(), &p, sizeof(p), 1);
 
   // Duplicate and alias for auto-apply in develop.c
-  dt_gui_presets_add_generic(_("scene-referred default"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("scene-referred default"), self->op, self->version(), &p, sizeof(p), 1);
   dt_gui_presets_update_ldr(_("scene-referred default"), self->op, self->version(), FOR_RAW);
 }
 

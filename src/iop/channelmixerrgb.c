@@ -445,7 +445,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.f;
 
   dt_gui_presets_add_generic(_("B&W: luminance-based"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // film emulations
 
@@ -474,7 +474,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.48737156f;
 
   dt_gui_presets_add_generic(_("B&W: ILFORD HP5+"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // ILFORD Delta 100
   // https://www.ilfordphoto.com/amfile/file/download/file/3/product/681/
@@ -483,7 +483,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.50081619f;
 
   dt_gui_presets_add_generic(_("B&W: ILFORD DELTA 100"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // ILFORD Delta 400 and 3200 - they have the same curve
   // https://www.ilfordphoto.com/amfile/file/download/file/1915/product/685/
@@ -493,7 +493,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.52009729f;
 
   dt_gui_presets_add_generic(_("B&W: ILFORD DELTA 400 - 3200"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // ILFORD FP4+
   // https://www.ilfordphoto.com/amfile/file/download/file/1919/product/690/
@@ -502,7 +502,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.53701643f;
 
   dt_gui_presets_add_generic(_("B&W: ILFORD FP4+"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // Fuji Acros 100
   // https://dacnard.wordpress.com/2013/02/15/the-real-shades-of-gray-bw-film-is-a-matter-of-heart-pt-1/
@@ -511,7 +511,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.353f;
 
   dt_gui_presets_add_generic(_("B&W: Fuji Acros 100"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // Kodak ?
   // can't find spectral sensitivity curves and the illuminant under which they are produced,
@@ -528,7 +528,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.normalize_grey = FALSE;
   p.clip = FALSE;
   dt_gui_presets_add_generic(_("basic channel mixer"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // swap G-B
   p.red[0] = 1.f;
@@ -541,7 +541,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.blue[1] = 1.f;
   p.blue[2] = 0.f;
   dt_gui_presets_add_generic(_("swap G and B"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // swap G-R
   p.red[0] = 0.f;
@@ -554,7 +554,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.blue[1] = 0.f;
   p.blue[2] = 1.f;
   dt_gui_presets_add_generic(_("swap G and R"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // swap R-B
   p.red[0] = 0.f;
@@ -567,7 +567,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.blue[1] = 0.f;
   p.blue[2] = 0.f;
   dt_gui_presets_add_generic(_("swap R and B"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 }
 
 

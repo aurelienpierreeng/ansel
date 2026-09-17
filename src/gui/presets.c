@@ -134,11 +134,11 @@ void dt_gui_presets_cleanup()
 
 void dt_gui_presets_add_generic(const char *name, dt_dev_operation_t op, const int32_t version,
                                 const void *params, const int32_t params_size,
-                                const int32_t enabled,
-                                const dt_develop_blend_colorspace_t blend_cst)
+                                const int32_t enabled)
 {
+  // DEVELOP_BLEND_CS_NONE only until _init_presets() (develop/imageop.c) writes the module's own space
   dt_develop_blend_params_t default_blendop_params;
-  dt_develop_blend_init_blend_parameters(&default_blendop_params, blend_cst);
+  dt_develop_blend_init_blend_parameters(&default_blendop_params, DEVELOP_BLEND_CS_NONE);
   dt_gui_presets_add_with_blendop(
       name, op, version, params, params_size,
       &default_blendop_params, enabled);

@@ -193,8 +193,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.layer_capture = 0.0f;
   p.channel_correlation = 67.0f;
   p.colorspace_saturation = 67.0f;
-  dt_gui_presets_add_generic(_("color grain"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("color grain"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.mode = DT_CRYSTGRAIN_MONO;
   p.filling = 25.0f;
@@ -204,8 +203,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.layer_capture = 0.0f;
   p.channel_correlation = 67.0f;
   p.colorspace_saturation = 67.0f;
-  dt_gui_presets_add_generic(_("B&W grain"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("B&W grain"), self->op, self->version(), &p, sizeof(p), 1);
 }
 
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version, void *new_params,

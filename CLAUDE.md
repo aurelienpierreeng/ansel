@@ -1881,6 +1881,17 @@ and RGB (scene) after it. The mask options menu (`_blendif_options_callback()`, 
 all three spaces and greys out the incompatible ones, except the one the edit already uses: an edit
 loaded from an older version, or a module moved since, must still show its own space as selectable.
 
+Generated presets name no blending space: `init_presets()` is handed the module TYPE, and only an
+instance answers `blend_colorspace()`. `dt_gui_presets_add_generic()` stores
+`DEVELOP_BLEND_CS_NONE`, and `_resolve_presets_blend_colorspace()` (`develop/imageop.c`, end of
+`_init_presets()`) rewrites every such row with the space of an instance built without a pipe,
+through `dt_develop_blend_resolve_default_colorspace()` (space plus the boost factors that space
+starts from). NONE must not survive in the database: auto-applied presets are copied into history
+rows and XMP as they are, and several readers compare blend params byte for byte against a module's
+own -- `_process_history_db_entry()` clears an auto-applied preset's `DEVELOP_MASK_ENABLED` only on
+an exact match with `default_blendop_params`, and the presets menu finds the active and the default
+preset the same way.
+
 ### A mask or channel preview is converted back like any output; the conversion keeps alpha
 
 The blend authors a preview in the BLENDING space so that the ordinary conversion back to the
