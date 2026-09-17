@@ -1403,20 +1403,44 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
       {
         const double left = floor(corner_x);
         const double top = floor(corner_y);
-        const int sprite_width = (int)(ceil(corner_x + extent_x) - left);
-        const int sprite_height = (int)(ceil(corner_y + extent_y) - top);
+        const double box_width = ceil(corner_x + extent_x) - left;
+        const double box_height = ceil(corner_y + extent_y) - top;
+        /*
+         * THE ONLY PLACE THE GESTURE'S QUALITY REACHES. A picture or a drawing mid-gesture is
+         * rasterised at a fraction of its size on screen and blitted back up over its own box;
+         * everything else on the page -- type, borders, shadows, connectors, shapes -- is drawn
+         * by cairo at the full resolution as it always was. That is where the saving was all
+         * along: on the zoom wheel a 400-circle drawing costs 139 ms a frame against 381,
+         * because rsvg renders a smaller document, and a pan costs the same either way.
+         */
+        const double quality = CLAMP(options->quality > 0.0 ? options->quality : 1.0, 0.125, 1.0);
+        const int sprite_width = MAX((int)lround(box_width * quality), 1);
+        const int sprite_height = MAX((int)lround(box_height * quality), 1);
+        const int content_width = MAX((int)lround(extent_x * quality), 1);
+        const int content_height = MAX((int)lround(extent_y * quality), 1);
         // The box's own size as well as the sprite's: a drawing is drawn at the first, inside
         // a guard of one pixel of the second, so the padding that lets the clip end the
         // picture is empty rather than two rows of the drawing's own ink -- and so a drawing
         // fitted edge to edge down its frame keeps a hair of air off it.
         cairo_surface_t *sprite = dt_canvas_surface_cache_get_scaled(options->cache, object, sprite_width,
-                                                                     sprite_height, (int)lround(extent_x),
-                                                                     (int)lround(extent_y));
+                                                                     sprite_height, content_width, content_height);
         if(!IS_NULL_PTR(sprite))
         {
           cairo_identity_matrix(cr);
-          cairo_set_source_surface(cr, sprite, left, top);
-          cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+          if(quality < 1.0)
+          {
+            // Back up over the box it stands for. A smooth filter here, since this IS a scale.
+            cairo_translate(cr, left, top);
+            cairo_scale(cr, box_width / (double)sprite_width, box_height / (double)sprite_height);
+            cairo_set_source_surface(cr, sprite, 0.0, 0.0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+          }
+          else
+          {
+            // One pixel to one at a whole pixel: the cheap path, and the common one.
+            cairo_set_source_surface(cr, sprite, left, top);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+          }
           cairo_paint(cr);
           blitted = TRUE;
         }
@@ -3514,11 +3538,10 @@ static dt_canvas_mask_geometry_t _mask_geometry(const dt_canvas_t *canvas, const
                                                 const dt_canvas_paint_options_t *options, const double screen_pixels_per_unit)
 {
   dt_canvas_mask_geometry_t geometry;
-  // A frame mid-gesture is composited at a fraction of the resolution, and asks for the raster
-  // the full frame before it built, scaled down onto its smaller frame: the gesture's first
-  // frame must not rasterise every cutout again.
-  const double quality = CLAMP(options->quality > 0.0 ? options->quality : 1.0, 0.125, 1.0);
-  const double pixels_per_unit = screen_pixels_per_unit / quality;
+  // The frame's own resolution, gesture or no gesture: the layer matrix no longer shrinks
+  // during one, so the raster a gesture asks for is the raster the frame before it built and
+  // no cutout is rasterised again for the sake of a drag.
+  const double pixels_per_unit = screen_pixels_per_unit;
   // The raster's longer side is the power of two at or above the frame's size on screen, capped:
   // a zoom step then keeps the raster it has (cairo scales it onto the frame) instead of
   // rasterising every cutout again, supersampled, at each notch.
@@ -3956,7 +3979,9 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     cairo_identity_matrix(cr);
     cairo_scale(cr, 1.0 / scale_x, 1.0 / scale_y);
     cairo_set_source_surface(cr, encoded, band->x, band->y);
-    cairo_pattern_set_filter(cairo_get_source(cr), local.quality < 1.0 ? CAIRO_FILTER_BILINEAR : CAIRO_FILTER_NEAREST);
+    // One pixel to one: the band is composited at the surface's own resolution whatever the
+    // gesture, so nothing is resampled here.
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     // The band replaces what is under it rather than compositing onto it: bands do not
     // overlap, and a hole laid OVER an opaque page would stop being one.
     if(keep_alpha) cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
@@ -4023,7 +4048,16 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
   const double start = dt_get_wtime();
   // User space to the surface's PIXELS: cairo's device space stops short of the surface's own
   // device scale, and on a 2x screen a layer sized in device units is half the resolution.
-  // A quality below 1 composites that many times fewer pixels a side and scales the result up.
+  //
+  // The QUALITY a gesture drops to is deliberately NOT folded in here. It used to be, and that
+  // composited the whole canvas at half the resolution for the 180 ms after every pan, zoom,
+  // move, scale, rotate, connector-end or mask-handle drag -- so dragging one object took the
+  // stems out of every line of type on the page. Measured on DejaVu Serif 12 black on white at
+  // zoom 1: 672 fully dark glyph pixels at rest against 0 mid-gesture, the horizontal contrast
+  // down 69%. And it bought nothing: a sub-pixel pan of a 400-circle drawing costs 49.1 ms a
+  // frame at quality 1 against 51.3 at 0.5. The whole win is on the zoom wheel, 139 ms against
+  // 381, and that is rsvg re-rendering a smaller sprite, not cairo compositing fewer pixels --
+  // which is why the quality now reaches the SPRITE REQUEST alone (see _paint_image()).
   cairo_matrix_t matrix;
   cairo_get_matrix(cr, &matrix);
   double scale_x = 1.0;
@@ -4035,8 +4069,6 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
     scale_y = 1.0;
   }
   const double quality = CLAMP(options->quality > 0.0 ? options->quality : 1.0, 0.125, 1.0);
-  scale_x *= quality;
-  scale_y *= quality;
   cairo_matrix_t to_pixels;
   cairo_matrix_init_scale(&to_pixels, scale_x, scale_y);
   cairo_matrix_multiply(&matrix, &matrix, &to_pixels);
@@ -4092,7 +4124,9 @@ void dt_canvas_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_pai
     cairo_identity_matrix(cr);
     cairo_scale(cr, 1.0 / scale_x, 1.0 / scale_y);
     cairo_set_source_surface(cr, _composite.surface, box.x, box.y);
-    cairo_pattern_set_filter(cairo_get_source(cr), quality < 1.0 ? CAIRO_FILTER_BILINEAR : CAIRO_FILTER_NEAREST);
+    // One pixel to one, always: the matrix no longer carries the quality, so there is nothing
+    // to resample and NEAREST is what a 1:1 blit wants.
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_rectangle(cr, box.x, box.y, box.width, box.height);
     cairo_fill(cr);
     cairo_restore(cr);

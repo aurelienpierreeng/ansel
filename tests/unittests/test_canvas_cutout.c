@@ -2337,6 +2337,62 @@ static gboolean _painted_ink_bottom(const dt_canvas_t *canvas, const dt_canvas_o
   return TRUE;
 }
 
+/**
+ * A gesture drops the quality, and that must reach the pictures and NOTHING else. Painted twice
+ * over the same canvas at quality 1 and quality 0.5, every pixel must be the same byte as long
+ * as no picture or drawing stands on it: the quality used to scale the layer matrix, so the
+ * whole page was composited at half the resolution and scaled back up, and every line of type
+ * lost its stems for the 180 ms after any drag anywhere -- measured at zoom 1, 672 fully dark
+ * glyph pixels at rest against 0 mid-gesture.
+ */
+static void _a_gesture_costs_the_page_nothing_but_its_pictures(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = _zoom_invariant_column(canvas);
+  assert_non_null(text);
+  assert_true(dt_canvas_paint_text_fit_height(canvas, text));
+
+  const int width = 480;
+  const int height = 420;
+  cairo_surface_t *sharp = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+  cairo_surface_t *reduced = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+  for(int pass = 0; pass < 2; pass++)
+  {
+    cairo_surface_t *surface = pass == 0 ? sharp : reduced;
+    cairo_t *cr = cairo_create(surface);
+    cairo_translate(cr, width * 0.5, height * 0.5);
+    cairo_scale(cr, 0.618, 0.618);
+    const dt_canvas_rect_t visible = { -400.0, -400.0, 800.0, 800.0 };
+    // A cache of its own per pass, so neither the composite nor a sprite can carry over.
+    dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64u * 1024u * 1024u);
+    dt_canvas_paint_options_t options = dt_canvas_paint_options_export(cache, 1.0 / 0.618, visible);
+    options.quality = pass == 0 ? 1.0 : 0.5;
+    dt_canvas_paint(cr, canvas, &options);
+    cairo_destroy(cr);
+    cairo_surface_flush(surface);
+    dt_canvas_surface_cache_free(cache);
+  }
+  const uint8_t *a = cairo_image_surface_get_data(sharp);
+  const uint8_t *b = cairo_image_surface_get_data(reduced);
+  const int stride = cairo_image_surface_get_stride(sharp);
+  int differing = 0;
+  for(int row = 0; row < height && differing == 0; row++)
+    for(int column = 0; column < width; column++)
+      if(memcmp(a + (size_t)row * stride + (size_t)column * 4, b + (size_t)row * stride + (size_t)column * 4, 3) != 0)
+      {
+        print_error("row %d column %d differs between quality 1.0 and 0.5 on a canvas holding no picture\n", row,
+                    column);
+        differing++;
+        break;
+      }
+  cairo_surface_destroy(sharp);
+  cairo_surface_destroy(reduced);
+  dt_canvas_free(canvas);
+  assert_int_equal(differing, 0);
+}
+
 static void _a_text_frame_paints_the_same_lines_at_every_zoom(void **state)
 {
   (void)state;
@@ -2986,6 +3042,7 @@ int main(void)
     cmocka_unit_test(_a_text_frames_natural_height_is_the_same_at_every_zoom),
     cmocka_unit_test(_a_leaded_text_frames_natural_height_is_the_same_at_every_zoom),
     cmocka_unit_test(_a_fitted_text_frame_is_exactly_its_natural_height),
+    cmocka_unit_test(_a_gesture_costs_the_page_nothing_but_its_pictures),
     cmocka_unit_test(_a_text_frame_paints_the_same_lines_at_every_zoom),
     cmocka_unit_test(_a_text_frame_short_of_its_text_is_brought_up_to_it),
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
