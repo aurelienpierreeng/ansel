@@ -127,6 +127,12 @@ gboolean dt_length_parse(const char *text, const char *fallback_unit, double *po
 /**
  * @brief Write a length in the given unit, with its unit after it.
  *
+ * THE DECIMAL SEPARATOR IS THE LOCALE'S, because this is text a person reads and types back: a
+ * French or German keyboard puts a comma there, and `dt_length_parse()` accepts both whatever
+ * the locale is. So this is not a round trip through a FILE -- nothing stored goes through
+ * here, only what a field shows. A caller comparing the result against a literal must either
+ * fix the locale or build its expectation the same way.
+ *
  * @param unit the unit to write it in. NULL, or a name that is not a unit, writes the number of
  *        points with no unit after it.
  * @param digits decimals to show. Negative takes the unit's own.

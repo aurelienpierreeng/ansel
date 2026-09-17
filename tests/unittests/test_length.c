@@ -32,6 +32,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <locale.h>
 #include <string.h>
 #include <cmocka.h>
 
@@ -184,9 +185,34 @@ static void _what_is_not_a_length_leaves_the_field_alone(void **state)
   assert_false(dt_length_parse("12mm", NULL, NULL, NULL));
 }
 
+static void _a_length_reads_back_wherever_the_decimal_separator_is(void **state)
+{
+  (void)state;
+  /* A comma is a decimal point to half of Europe, and the field that shows it is the field it
+   * is typed back into. Skipped where the locale is not installed, which is most build hosts. */
+  if(setlocale(LC_NUMERIC, "fr_FR.UTF-8") == NULL && setlocale(LC_NUMERIC, "de_DE.UTF-8") == NULL)
+  {
+    setlocale(LC_NUMERIC, "C");
+    return;
+  }
+  char text[64];
+  dt_length_format(595.2756, "mm", -1, text, sizeof(text));
+  assert_non_null(strchr(text, ','));
+  double back = 0.0;
+  const char *unit = NULL;
+  assert_true(dt_length_parse(text, NULL, &back, &unit));
+  assert_string_equal(unit, "mm");
+  _assert_close(back, 595.2756, 0.05, text);
+  // And a length typed with a POINT still reads, wherever the locale puts its separator.
+  assert_true(dt_length_parse("210.5 mm", NULL, &back, NULL));
+  _assert_close(back, 210.5 * 72.0 / 25.4, 1e-9, "210.5 mm under a comma locale");
+  setlocale(LC_NUMERIC, "C");
+}
+
 static void _a_length_written_in_a_unit_reads_back_as_itself(void **state)
 {
   (void)state;
+  setlocale(LC_NUMERIC, "C");
   /* The round trip at each unit's own precision: written with the decimals that unit shows and
    * read back, a length may only have moved by the rounding that writing it cost. */
   static const char *units[] = { "pt", "px", "mm", "cm", "in" };
@@ -277,6 +303,10 @@ static void _every_spelling_of_a_unit_answers_for_it(void **state)
 static void _a_formatted_length_says_which_unit_it_is_in(void **state)
 {
   (void)state;
+  /* The separator is the LOCALE's -- this is text a person reads and types back, and a French
+   * keyboard puts a comma there. A test comparing literals therefore has to say which locale it
+   * means; a bare test binary is already in "C", and this says so rather than relying on it. */
+  setlocale(LC_NUMERIC, "C");
   char text[64];
   dt_length_format(595.2756, "mm", -1, text, sizeof(text));
   assert_string_equal(text, "210.0 mm");
@@ -311,6 +341,7 @@ int main(void)
     cmocka_unit_test(_the_longest_spelling_wins),
     cmocka_unit_test(_what_is_not_a_length_leaves_the_field_alone),
     cmocka_unit_test(_a_length_written_in_a_unit_reads_back_as_itself),
+    cmocka_unit_test(_a_length_reads_back_wherever_the_decimal_separator_is),
     cmocka_unit_test(_a_unit_names_what_it_is_worth_and_how_finely_it_is_shown),
     cmocka_unit_test(_every_spelling_of_a_unit_answers_for_it),
     cmocka_unit_test(_a_formatted_length_says_which_unit_it_is_in),

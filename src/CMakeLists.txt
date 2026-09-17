@@ -111,6 +111,7 @@ FILE(GLOB SOURCE_FILES
   "history/notify.c"
   "common/history_actions.c"
   "common/length.c"
+  "widgets/length_field.c"
   "develop/history_merge.c"
   "gui/common/collection_gui.c"
   "gui/common/database_gui.c"

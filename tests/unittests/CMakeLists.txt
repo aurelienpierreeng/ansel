@@ -50,6 +50,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_polygon_envelope
   test_color_well
   test_length
+  test_length_field
   test_canvas_actions
   test_canvas_zip
   test_canvas_document
@@ -103,3 +104,5 @@ target_sources(test_tagging_completion PRIVATE
 target_sources(test_tagging_completion_model PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
 set_tests_properties(test_tagging_completion PROPERTIES SKIP_RETURN_CODE 77)
+# The length field is a real GtkSpinButton and needs a display; without one it skips.
+set_tests_properties(test_length_field PROPERTIES SKIP_RETURN_CODE 77)
