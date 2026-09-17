@@ -446,6 +446,34 @@ is `_a_drawing_fills_its_box_and_sits_in_the_callers_air`. The one thing the pad
 is the fast path that hands back the intrinsic decode when it happens to be the size asked for:
 it carries no padding, so it may not answer a padded request.
 
+**A sprite is blitted at a WHOLE pixel, so a DRAWING is rendered at the fraction.** Blitting one
+pixel to one under an identity matrix is what makes the sprite path cheap, and it quantises the
+picture's position to the pixel grid. Measured on a drawing panned in eighth-pixel steps, an edge
+inside the document stood at the same column for **eight frames** and then jumped a whole one,
+hard-edged, while the frame's own border and every glyph beside it slid smoothly by an eighth
+each time -- a picture crabbing against the page it is on, and the "content transiently shifts"
+half of the glitch report. The frame's clip hides it at the frame's own edges, since the clip was
+always at its true sub-pixel position, which is why it has to be looked for inside the drawing.
+
+So `dt_canvas_render_phase_snap()` splits the device corner into the whole pixel the sprite is
+blitted at and the fraction the document is rendered at, and rsvg draws the drawing at that
+fraction with real anti-aliasing -- a shifted blit would have to resample, which is the cost the
+sprite path exists to avoid. The fraction is snapped to `DT_CANVAS_SVG_PHASE_STEPS` (two per
+axis) because **a sprite is now keyed on its phase as well as its size**: four sprites per size,
+at most a quarter of a pixel of residue instead of a whole one, and `CANVAS_SPRITE_SLOTS` raised
+from 2 to 8 in the same change so a diagonal pan does not become one render per frame. Measured
+over a 32-frame pan with one cache, with the phase and without it: 106 ms against 108 ms.
+`_a_drawing_slides_with_the_page_instead_of_crabbing_against_it` reads the edge's sub-pixel
+position out of the coverage code and asks that it never be more than 0.3 px from where it
+belongs and never move backwards.
+
+**A photograph keeps the whole pixel**, and its phase is 0. Its sprite is a resample rather than
+a render, so a fraction there means shifting the resampler's own sampling grid -- one term in the
+enlarging branch and a fractional weighted box in the shrinking one, which is the hot parallel
+loop. A photograph is also continuous tone, where a drawing's edges are vector-hard: the same
+whole-pixel step that reads as a jump in a diagram is invisible in a picture. It remains a real
+residue and is written down here rather than fixed.
+
 **A picture and a drawing keep their proportions unless told not to**
 (`dt_canvas_object_keeps_ratio()`, `DT_CANVAS_OBJECT_FLAG_FREE_RATIO`). The flag is stated the
 FREE way round so that zero is the careful answer: a photograph always kept its shape, a

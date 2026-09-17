@@ -1401,8 +1401,29 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
       cairo_user_to_device_distance(cr, &extent_x, &extent_y);
       if(extent_x > 0.0 && extent_y > 0.0)
       {
-        const double left = floor(corner_x);
-        const double top = floor(corner_y);
+        /*
+         * The whole pixel the sprite is blitted at, and the fraction the DRAWING is rendered
+         * at inside it. Blitting one pixel to one is what makes this path cheap, and it
+         * quantises the picture's position to the pixel grid: measured on a drawing panned in
+         * eighth-pixel steps, its interior stood at the same column for eight frames and then
+         * jumped a whole one, hard-edged, while the frame's own border and every glyph beside
+         * it slid smoothly -- a picture crabbing against the page it is on. A drawing is
+         * re-rendered at the fraction instead, which rsvg anti-aliases; a photograph's sprite
+         * is a resample and has no such offer, so it keeps the whole pixel and its phase is 0.
+         */
+        double left = 0.0;
+        double top = 0.0;
+        double phase_x = 0.0;
+        double phase_y = 0.0;
+        dt_canvas_render_phase_snap(corner_x, &left, &phase_x);
+        dt_canvas_render_phase_snap(corner_y, &top, &phase_y);
+        if(object->kind != DT_CANVAS_OBJECT_SVG)
+        {
+          left = floor(corner_x);
+          top = floor(corner_y);
+          phase_x = 0.0;
+          phase_y = 0.0;
+        }
         const double box_width = ceil(corner_x + extent_x) - left;
         const double box_height = ceil(corner_y + extent_y) - top;
         /*
@@ -1431,8 +1452,10 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
         const int box_pixels_y = MAX((int)lround(box_height * quality), 1);
         const int sprite_width = pad > 0 ? content_width + 2 * pad : box_pixels_x;
         const int sprite_height = pad > 0 ? content_height + 2 * pad : box_pixels_y;
-        cairo_surface_t *sprite = dt_canvas_surface_cache_get_scaled(options->cache, object, sprite_width,
-                                                                     sprite_height, content_width, content_height);
+        // In the SPRITE's own pixels, which a gesture's reduced raster measures differently.
+        cairo_surface_t *sprite
+            = dt_canvas_surface_cache_get_scaled(options->cache, object, sprite_width, sprite_height, content_width,
+                                                 content_height, phase_x * quality, phase_y * quality);
         if(!IS_NULL_PTR(sprite))
         {
           cairo_identity_matrix(cr);

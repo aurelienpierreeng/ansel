@@ -144,21 +144,29 @@ cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, c
 
 /**
  * @brief The object's render at exactly `width` x `height` pixels, built once per size and
- * kept -- two sizes per object, so a gesture's reduced frames and the full frame after it both
- * keep theirs -- for the painter to blit pixel for pixel. NULL when there is no render.
+ * per sub-pixel phase and kept -- a handful per object, so a gesture's reduced frames, the full
+ * frame after it and a pan's phases all keep theirs -- for the painter to blit pixel for pixel.
+ * NULL when there is no render.
  *
  * EXACTLY that size: the painter blits one pixel to one, so a surface of any other size lands
  * small in the corner of where it belongs.
  *
  * `content_width`/`content_height` say how much of that surface the picture itself occupies,
- * for a caller whose sprite is deliberately a pixel or two larger than the box so that the
- * clip, and not the sprite's edge, ends the picture. A photograph is stretched over the whole
- * sprite and loses a sliver nobody sees; a DRAWING is drawn at the content size, inside a guard
- * of one pixel, because its last row of ink is a row of ink and a drawing fitted edge to edge
- * down its frame would otherwise sit on the clip. 0 fills the surface.
+ * for a caller whose sprite is deliberately larger than the box so that the clip, and not the
+ * sprite's edge, ends the picture. A photograph is stretched over the whole sprite and loses a
+ * sliver nobody sees; a DRAWING is drawn at the content size and centred in the rest, because
+ * its last row of ink is a row of ink and a drawing fitted edge to edge down its frame would
+ * otherwise sit on the clip. 0 fills the surface.
+ *
+ * `phase_x`/`phase_y` say where in a pixel the caller's box begins, so a DRAWING can be drawn
+ * at that fraction rather than quantised to the grid the blit lands on; they are part of the
+ * key, and a caller that does not snap them (dt_canvas_render_phase_snap()) will thrash it.
+ * A photograph ignores them: its sprite is a resample, and a phase would cost the sprite path
+ * the whole reason it exists.
  */
 cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
-                                                    int width, int height, int content_width, int content_height);
+                                                    int width, int height, int content_width, int content_height,
+                                                    double phase_x, double phase_y);
 
 /**
  * @brief An RGB24 surface rescaled to `width` x `height`: the average of the source pixels each
@@ -262,11 +270,17 @@ void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, size_t b
  * for. The surface RETURNED is always the size asked for, whatever ceiling the renderer
  * applies internally.
  *
+ * `phase_x`/`phase_y` move the drawing off that centre by a FRACTION of a pixel, for a caller
+ * whose box does not begin on one: a sprite blitted at a whole pixel otherwise quantises the
+ * drawing's own position, and it is drawn here rather than shifted afterwards because rsvg
+ * renders the fractional offset with real anti-aliasing, where a shifted blit would have to
+ * resample. See `DT_CANVAS_SVG_PHASE_STEPS` for how few of them there may be.
+ *
  * Rendered in ONE pass, the way the specification composites an SVG, and only then converted
  * out of sRGB -- see the drawings section of doc/canvas.md.
  */
 cairo_surface_t *dt_canvas_render_svg(GBytes *svg, int want_width, int want_height, int content_width,
-                                      int content_height);
+                                      int content_height, double phase_x, double phase_y);
 
 /**
  * @brief Pixels of air a caller leaves around a drawing, on every side of its sprite.
@@ -287,7 +301,33 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *svg, int want_width, int want_heig
  */
 #define DT_CANVAS_SVG_GUARD 2
 
+/**
+ * @brief Distinct sub-pixel positions a sprite is rendered at, per axis.
+ *
+ * A sprite is blitted one pixel to one at a WHOLE pixel -- that is what makes it cheap, and
+ * what the compositing measurements in doc/canvas.md bought -- so a box that begins at a
+ * fractional pixel has its content quantised to the pixel grid: measured on a drawing panned
+ * in eighth-pixel steps, its interior stood at the same column for eight frames and then
+ * jumped a whole one, hard-edged, while the frame's own border and every glyph beside it slid
+ * smoothly. That is a picture crabbing against the page it is on.
+ *
+ * The answer is to render the drawing at the fraction instead of blitting it there, and the
+ * only cost is that a sprite is now keyed on its phase as well as its size: two steps per axis
+ * is four sprites for one size, leaves at most a quarter of a pixel of residue, and fits the
+ * slots below with room for a size change mid-pan.
+ */
+#define DT_CANVAS_SVG_PHASE_STEPS 2
+
 cairo_surface_t *dt_canvas_render_svg_coverage(GBytes *svg, int width, int height);
+
+/**
+ * @brief Snap a fractional position to the sprite phases, in `whole` and `phase`.
+ *
+ * `whole` is the pixel the sprite is blitted at and `phase` the fraction it was drawn with,
+ * so `whole + phase` is `position` to within half a step. The caller keeps the two apart
+ * because only the second belongs in the sprite's cache key.
+ */
+void dt_canvas_render_phase_snap(double position, double *whole, double *phase);
 
 /**
  * @brief A drawn shape's own silhouette, as an A8 coverage surface of the given size.

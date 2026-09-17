@@ -1828,13 +1828,13 @@ static void _a_drawing_is_drawn_at_the_size_it_is_shown_at(void **state)
   GBytes *bytes = g_bytes_new_take(contents, length);
 
   // Drawn at the size asked for: the square's edge is a hard one, whatever that size is.
-  cairo_surface_t *large = dt_canvas_render_svg(bytes, 512, 512, 0, 0);
+  cairo_surface_t *large = dt_canvas_render_svg(bytes, 512, 512, 0, 0, 0.0, 0.0);
   assert_non_null(large);
   assert_int_equal(cairo_image_surface_get_width(large), 512);
   assert_true(_sharpest_step(large) > 200);
 
   // Against the alternative: the file's own 32 points, blown up to the same 512 by resampling.
-  cairo_surface_t *small = dt_canvas_render_svg(bytes, 0, 0, 0, 0);
+  cairo_surface_t *small = dt_canvas_render_svg(bytes, 0, 0, 0, 0, 0.0, 0.0);
   assert_non_null(small);
   assert_int_equal(cairo_image_surface_get_width(small), 32);
   cairo_surface_t *stretched = dt_canvas_render_rescale(small, 512, 512);
@@ -1919,7 +1919,7 @@ static void _a_drawings_sprite_is_exactly_the_size_it_was_asked_for(void **state
   static const int wanted[][2] = { { 300, 200 }, { 301, 201 }, { 4000, 2667 }, { 6000, 4000 }, { 9000, 6000 } };
   for(guint idx = 0; idx < G_N_ELEMENTS(wanted); idx++)
   {
-    cairo_surface_t *sprite = dt_canvas_render_svg(bytes, wanted[idx][0], wanted[idx][1], 0, 0);
+    cairo_surface_t *sprite = dt_canvas_render_svg(bytes, wanted[idx][0], wanted[idx][1], 0, 0, 0.0, 0.0);
     assert_non_null(sprite);
     assert_int_equal(cairo_image_surface_get_width(sprite), wanted[idx][0]);
     assert_int_equal(cairo_image_surface_get_height(sprite), wanted[idx][1]);
@@ -1963,7 +1963,7 @@ static void _a_drawing_fills_its_box_and_sits_in_the_callers_air(void **state)
   {
     const int pad = pads[idx];
     const int edge = 100 + 2 * pad;
-    cairo_surface_t *sprite = dt_canvas_render_svg(bytes, edge, edge, 100, 100);
+    cairo_surface_t *sprite = dt_canvas_render_svg(bytes, edge, edge, 100, 100, 0.0, 0.0);
     assert_non_null(sprite);
     assert_int_equal(cairo_image_surface_get_width(sprite), edge);
     const uint8_t *pixels = cairo_image_surface_get_data(sprite);
@@ -1983,7 +1983,7 @@ static void _a_drawing_fills_its_box_and_sits_in_the_callers_air(void **state)
 
   // Asked to fill the sprite, it fills the sprite: a photograph's bargain, and the path an
   // export takes, where there is no fractional box and so nothing to guard against.
-  cairo_surface_t *filled = dt_canvas_render_svg(bytes, 104, 104, 0, 0);
+  cairo_surface_t *filled = dt_canvas_render_svg(bytes, 104, 104, 0, 0, 0.0, 0.0);
   assert_non_null(filled);
   const uint8_t *full = cairo_image_surface_get_data(filled);
   const int full_stride = cairo_image_surface_get_stride(filled);
@@ -2415,6 +2415,107 @@ static gboolean _painted_drawing_span(const dt_canvas_t *canvas, const double zo
  * proportions, so the ink's span IS the frame's, to within the pixel the box's own fractional
  * position costs and the half a threshold costs at each edge.
  */
+/**
+ * Where a hard vertical edge inside a drawing stands, to a fraction of a device pixel.
+ *
+ * The first column that is not the page's white holds the edge: what is left of it is the
+ * white the edge did not cover, and the layer's own 563/256 gamma turns that code back into
+ * the fraction. Spelled here rather than borrowed, so the check does not depend on the
+ * encoder it is checking.
+ */
+static gboolean _painted_edge_position(const dt_canvas_t *canvas, const double device_scale, const double phase,
+                                       const int from_column, double *position)
+{
+  const int size = (int)lround(1024.0 * device_scale);
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, size, size);
+  cairo_surface_set_device_scale(surface, device_scale, device_scale);
+  cairo_t *cr = cairo_create(surface);
+  const double half = 0.5 * size / device_scale;
+  cairo_translate(cr, half + phase / device_scale, half + phase / device_scale);
+  const dt_canvas_rect_t whole = { -half, -half, 2.0 * half, 2.0 * half };
+  dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64u * 1024u * 1024u);
+  dt_canvas_paint_options_t options = dt_canvas_paint_options_export(cache, 1.0, whole);
+  dt_canvas_paint(cr, canvas, &options);
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  const int row = size / 2;
+  gboolean found = FALSE;
+  for(int col = from_column; col < size && !found; col++)
+  {
+    const int green = (int)((*(const uint32_t *)(pixels + (size_t)row * stride + (size_t)col * 4) >> 8) & 0xFF);
+    if(green >= 255) continue;
+    *position = (double)col + pow((double)green / 255.0, 563.0 / 256.0);
+    found = TRUE;
+  }
+  dt_canvas_surface_cache_free(cache);
+  cairo_surface_destroy(surface);
+  return found;
+}
+
+/**
+ * A drawing slides with the page instead of crabbing against it.
+ *
+ * A sprite is blitted one pixel to one at a WHOLE pixel -- that is what makes the sprite path
+ * cheap -- so a box that begins at a fractional pixel had its content quantised to the grid:
+ * measured on a drawing panned in eighth-pixel steps, an edge inside it stood at the same
+ * column for EIGHT frames and then jumped a whole one, hard-edged, while the frame's own
+ * border and every glyph beside it slid smoothly by an eighth each time. Against a border the
+ * canvas draws at its true position, that is a picture that will not sit still.
+ *
+ * The drawing is rendered at the fraction instead of blitted there, snapped to
+ * DT_CANVAS_SVG_PHASE_STEPS so the sprite cache stays small: the edge then advances in halves
+ * with real anti-aliasing at each one, never more than a quarter of a pixel from where it
+ * belongs, and never backwards. The edge measured here is INSIDE the document, so it is the
+ * sprite's own placement being read and not the frame's clip, which was always at its true
+ * sub-pixel position and hid the defect at both edges of the frame.
+ */
+static void _a_drawing_slides_with_the_page_instead_of_crabbing_against_it(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  canvas->grid_flags = 0;
+  canvas->background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  // A stripe a hundred units in, so neither of its edges is the frame's own.
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240' "
+                           "viewBox='0 0 240 240'><rect x='100' y='0' width='40' height='240' "
+                           "fill='#000000'/></svg>");
+  GError *error = NULL;
+  dt_canvas_object_t *drawing = dt_canvas_add_svg(canvas, 0.0, 0.0, path, &error);
+  assert_non_null(drawing);
+  drawing->x = 0.0;
+  drawing->y = 0.0;
+
+  for(int device_scale = 1; device_scale <= 2; device_scale++)
+  {
+    double previous = -1.0;
+    for(int step = 0; step <= 16; step++)
+    {
+      const double phase = 0.125 * step;
+      const double frame_left = 0.5 * 1024.0 * device_scale + phase - 0.5 * drawing->width * device_scale;
+      const double wanted = frame_left + 100.0 * device_scale;
+      double edge = 0.0;
+      assert_true(_painted_edge_position(canvas, (double)device_scale, phase,
+                                         (int)floor(frame_left) + 1, &edge));
+      if(fabs(edge - wanted) > 0.3 || edge < previous)
+        print_error("scale %d pan %5.3f: the edge stands at %8.3f, wanted %8.3f, after %8.3f\n", device_scale,
+                    phase, edge, wanted, previous);
+      // A quarter of a pixel is the most a half-pixel phase can be out by; the rest is the
+      // renderer's own rounding of the coverage into a code.
+      assert_true(fabs(edge - wanted) <= 0.3);
+      // And it never goes backwards while the page goes forwards.
+      assert_true(edge >= previous);
+      previous = edge;
+    }
+  }
+
+  dt_canvas_free(canvas);
+  g_remove(path);
+  g_free(path);
+}
+
 static void _a_drawing_fills_its_frame_at_every_zoom(void **state)
 {
   (void)state;
@@ -3162,6 +3263,7 @@ int main(void)
     cmocka_unit_test(_a_fitted_text_frame_is_exactly_its_natural_height),
     cmocka_unit_test(_a_gesture_costs_the_page_nothing_but_its_pictures),
     cmocka_unit_test(_a_drawing_fills_its_frame_at_every_zoom),
+    cmocka_unit_test(_a_drawing_slides_with_the_page_instead_of_crabbing_against_it),
     cmocka_unit_test(_a_text_frame_paints_the_same_lines_at_every_zoom),
     cmocka_unit_test(_a_text_frame_short_of_its_text_is_brought_up_to_it),
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),

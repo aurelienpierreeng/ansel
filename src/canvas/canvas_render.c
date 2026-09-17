@@ -864,6 +864,23 @@ void dt_canvas_render_srgb8_to_layer8(uint8_t *pixels, const size_t count, const
 /** The longest side an SVG is rasterised to, whatever it says its size is. */
 #define CANVAS_SVG_MAX_EDGE 4096
 
+void dt_canvas_render_phase_snap(const double position, double *whole, double *phase)
+{
+  if(IS_NULL_PTR(whole) || IS_NULL_PTR(phase)) return;
+  const double floored = floor(position);
+  const double steps = (double)DT_CANVAS_SVG_PHASE_STEPS;
+  double snapped = round((position - floored) * steps) / steps;
+  double carried = floored;
+  // A fraction that rounds up to a whole pixel IS the next pixel, with no phase of its own.
+  if(snapped >= 1.0)
+  {
+    snapped = 0.0;
+    carried += 1.0;
+  }
+  *whole = carried;
+  *phase = snapped;
+}
+
 /** Does this look like an SVG document rather than a photograph? */
 static gboolean _looks_like_svg(GBytes *bytes)
 {
@@ -893,7 +910,8 @@ static gboolean _looks_like_svg(GBytes *bytes)
  * pixel of every outline in the drawing.
  */
 cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const int want_height,
-                                      const int content_width, const int content_height)
+                                      const int content_width, const int content_height,
+                                      const double phase_x, const double phase_y)
 {
   gsize length = 0;
   const void *data = g_bytes_get_data(bytes, &length);
@@ -984,6 +1002,14 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
    */
   const int drawn_guard_x = MAX((surface_width - drawn_width) / 2, 0);
   const int drawn_guard_y = MAX((surface_height - drawn_height) / 2, 0);
+  /*
+   * And the fraction of a pixel the caller's box begins at, in the surface's own pixels, so a
+   * ceiling that renders smaller and scales back carries it too. Drawn rather than shifted
+   * afterwards: rsvg anti-aliases a fractional offset, a blit would have to resample.
+   */
+  const double phase_scale = width > 0 ? (double)surface_width / (double)width : 1.0;
+  const double drawn_phase_x = CLAMP(phase_x, 0.0, 1.0) * phase_scale;
+  const double drawn_phase_y = CLAMP(phase_y, 0.0, 1.0) * (height > 0 ? (double)surface_height / (double)height : 1.0);
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, surface_width, surface_height);
   if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
@@ -995,8 +1021,8 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
   cairo_t *cr = cairo_create(surface);
   // Centred in the padding: with no content size to honour there is none, and the drawing
   // fills the surface.
-  RsvgRectangle viewport = { .x = (double)drawn_guard_x,
-                             .y = (double)drawn_guard_y,
+  RsvgRectangle viewport = { .x = (double)drawn_guard_x + drawn_phase_x,
+                             .y = (double)drawn_guard_y + drawn_phase_y,
                              .width = (double)drawn_width,
                              .height = (double)drawn_height };
   const gboolean drawn = rsvg_handle_render_document(handle, cr, &viewport, &error);
@@ -1159,7 +1185,7 @@ cairo_surface_t *dt_canvas_render_decode(GBytes *jpeg, const uint32_t colorspace
 {
   if(IS_NULL_PTR(jpeg)) return NULL;
   // No size asked for: the drawing's own, which is what the mask and the export start from.
-  if(_looks_like_svg(jpeg)) return dt_canvas_render_svg(jpeg, 0, 0, 0, 0);
+  if(_looks_like_svg(jpeg)) return dt_canvas_render_svg(jpeg, 0, 0, 0, 0, 0.0, 0.0);
   int width = 0;
   int height = 0;
   uint8_t *rgba = _decode_rgba(jpeg, &width, &height);
@@ -1209,7 +1235,13 @@ void dt_canvas_render_color(const dt_canvas_color_t *color, gboolean for_display
 
 /* --- the surface cache -------------------------------------------------------- */
 
-#define CANVAS_SPRITE_SLOTS 2
+/*
+ * Four phases of one size, with room for the size to change under a pan: a sprite is now keyed
+ * on where in the pixel it was drawn as well as how big it is (DT_CANVAS_SVG_PHASE_STEPS), and
+ * two slots would make a diagonal pan one rsvg render per frame. The budget still bounds this
+ * -- _cache_evict_to_budget() counts every sprite in the entry's own bytes.
+ */
+#define CANVAS_SPRITE_SLOTS 8
 typedef struct dt_canvas_cached_surface_t
 {
   uint32_t object_id;
@@ -1220,6 +1252,8 @@ typedef struct dt_canvas_cached_surface_t
   uint64_t last_use;
   cairo_surface_t *sprite[CANVAS_SPRITE_SLOTS]; ///< the render at a size the screen showed
   uint64_t sprite_use[CANVAS_SPRITE_SLOTS];
+  float sprite_phase_x[CANVAS_SPRITE_SLOTS];   ///< and at the sub-pixel phase it was shown at
+  float sprite_phase_y[CANVAS_SPRITE_SLOTS];
 } dt_canvas_cached_surface_t;
 
 static size_t _surface_bytes(cairo_surface_t *surface)
@@ -1762,7 +1796,8 @@ cairo_surface_t *dt_canvas_surface_cache_get(dt_canvas_surface_cache_t *cache, c
 
 cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *cache, const dt_canvas_object_t *object,
                                                     const int width, const int height, const int content_width,
-                                                    const int content_height)
+                                                    const int content_height, const double phase_x,
+                                                    const double phase_y)
 {
   if(width <= 0 || height <= 0) return NULL;
   cairo_surface_t *source = dt_canvas_surface_cache_get(cache, object);
@@ -1776,7 +1811,8 @@ cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *c
    * filling it edge to edge, a guard larger than its box and a guard off from it.
    */
   const gboolean padded = object->kind == DT_CANVAS_OBJECT_SVG && content_width > 0 && content_height > 0
-                          && (content_width != width || content_height != height);
+                          && (content_width != width || content_height != height || phase_x != 0.0
+                              || phase_y != 0.0);
   if(!padded && cairo_image_surface_get_width(source) == width
      && cairo_image_surface_get_height(source) == height)
     return source;
@@ -1784,8 +1820,11 @@ cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *c
   for(int slot = 0; slot < CANVAS_SPRITE_SLOTS; slot++)
   {
     cairo_surface_t *sprite = entry->sprite[slot];
+    // The size AND the phase: two sprites the same size, drawn at different fractions of a
+    // pixel, are different pictures, and serving one for the other is the crab this cures.
     if(!IS_NULL_PTR(sprite) && cairo_image_surface_get_width(sprite) == width
-       && cairo_image_surface_get_height(sprite) == height)
+       && cairo_image_surface_get_height(sprite) == height && entry->sprite_phase_x[slot] == (float)phase_x
+       && entry->sprite_phase_y[slot] == (float)phase_y)
     {
       entry->sprite_use[slot] = ++cache->clock;
       return sprite;
@@ -1807,7 +1846,7 @@ cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *c
    */
   cairo_surface_t *sprite = object->kind == DT_CANVAS_OBJECT_SVG
                                 ? dt_canvas_render_svg(dt_canvas_object_raster(object), width, height,
-                                                       content_width, content_height)
+                                                       content_width, content_height, phase_x, phase_y)
                                 : dt_canvas_render_rescale(source, width, height);
   if(IS_NULL_PTR(sprite)) return NULL;
   if(!IS_NULL_PTR(entry->sprite[oldest]))
@@ -1819,6 +1858,8 @@ cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *c
   }
   entry->sprite[oldest] = sprite;
   entry->sprite_use[oldest] = ++cache->clock;
+  entry->sprite_phase_x[oldest] = (float)phase_x;
+  entry->sprite_phase_y[oldest] = (float)phase_y;
   const size_t added = _surface_bytes(sprite);
   entry->bytes += added;
   cache->used += added;
