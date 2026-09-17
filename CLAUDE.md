@@ -3643,23 +3643,50 @@ they are visible.
   ends the picture: a photograph stretched over that loses a sliver nobody sees, a drawing
   loses its last rows of ink to the clip, so `get_scaled()` takes the box's size too and a
   drawing is drawn at it rather than stretched into it.
-- **A drawing is drawn inside a GUARD of one pixel of the sprite, and that guard is HEADROOM,
-  not a repair.** A drawing is FITTED to its frame, so a frame proportionally taller than the
-  document is filled by height and the ink runs edge to edge down it -- measured, a 2341 x 1600
-  frame around a 340.3 x 243.2 diagram fills the height exactly and letterboxes 51 px each side.
-  An author who drew to the edge of the page, which is most of them, then has the last line of
-  type sitting on the frame's boundary; that diagram's ink touches all four sides of its own
-  viewBox, and the quarter-unit of anti-aliasing past it is clipped by librsvg at the viewport
-  whatever we ask for, because that is what an SVG's `overflow` means. Flush, it reads as shaved
-  off -- reported as text clipped on a drawing. **The sub-pixel story is NOT the cause and the
-  measurement says so**: sweeping sixteen sub-pixel pan alignments, the bottom line of type keeps
-  its ink to within 0.07% with the guard and without it, with one surface cache across the sweep
-  (what the atelier does) exactly as with a fresh one per frame. An earlier 2.1% reading did not
-  survive a clean A/B against a verified binary -- with an LTO tree and several builds in flight,
-  assert which side you built before believing a number. The guard is two pixels, asked for by
-  name. Do not "improve" this into an exact sub-pixel placement: it would need a render per
-  alignment, 13 ms at that drawing's screen size and 160 ms at four times it, per frame of a
-  pan, against a sprite cache of two slots.
+- **The GUARD around a drawing is the CALLER's air, added to the sprite it asks for and paid
+  back at the blit -- it may never come out of the drawing.** A drawing is FITTED to its frame, so
+  a frame proportionally taller than the document is filled by height and the ink runs edge to
+  edge down it -- measured, a 2341 x 1600 frame around a 340.3 x 243.2 diagram fills the height
+  exactly and letterboxes 51 px each side. An author who drew to the edge of the page, which is
+  most of them, then has the last line of type sitting on the frame's boundary; that diagram's ink
+  touches all four sides of its own viewBox, and the quarter-unit of anti-aliasing past it is
+  clipped by librsvg at the viewport whatever we ask for, because that is what an SVG's `overflow`
+  means. Flush, it reads as shaved off -- reported as text clipped on a drawing. **The sub-pixel
+  story is NOT what was taking that ink and the measurement says so**: sweeping sixteen sub-pixel
+  pan alignments, the bottom line of type keeps its ink to within 0.07% with the guard and without
+  it, with one surface cache across the sweep (what the atelier does) exactly as with a fresh one
+  per frame. An earlier 2.1% reading did not survive a clean A/B against a verified binary -- with
+  an LTO tree and several builds in flight, assert which side you built before believing a number.
+  So the guard is headroom, `DT_CANVAS_SVG_GUARD`, two pixels, asked for by name.
+  **Taken out of the DRAWING instead, which is how it was first written, it is a fixed number of
+  SCREEN pixels charged to a box whose size is the ZOOM's**: the same drawing filled 84.0% of its
+  frame at a quarter zoom and 98.7% at three times, so it breathed against its own border on every
+  wheel click, and subtracting it from both axes changed the drawn box's proportions as well --
+  rsvg's default `xMidYMid meet` then letterboxed the document inside it, a second inset, also the
+  zoom's, that moved the drawing off its own corner. The painter pads the sprite and blits a guard
+  out; the renderer draws the document at the box's own size, centred in the rest; and the fast
+  path that hands back the intrinsic decode may not answer a padded request, since that decode
+  carries no padding.
+- **A drawing IS placed at the fraction of a pixel its box begins at, in two steps per axis.** The
+  sprite is blitted at a whole pixel, which quantises the picture's position: measured on a
+  drawing panned in eighth-pixel steps, an edge INSIDE the document stood at the same column for
+  eight frames and then jumped a whole one, hard-edged, while the frame's border and every glyph
+  beside it slid smoothly -- a picture crabbing against its own page, and the "content transiently
+  shifts" half of the glitch report. Look for it inside the drawing: the frame's clip is at its
+  true sub-pixel position and hides it at both edges of the frame.
+  `dt_canvas_render_phase_snap()` splits the device corner into the whole pixel the sprite is
+  blitted at and the fraction the document is RENDERED at, which rsvg anti-aliases; a shifted blit
+  would have to resample, which is the cost this path exists to avoid. The fraction is snapped to
+  `DT_CANVAS_SVG_PHASE_STEPS` because **a sprite is keyed on its phase as well as its size** --
+  four sprites per size, a quarter of a pixel of residue instead of a whole one, and
+  `CANVAS_SPRITE_SLOTS` is 8 for it, or a diagonal pan is one rsvg render per frame. Measured over
+  a 32-frame pan with one cache, with the phase and without it: 106 ms against 108. An earlier
+  note here said not to attempt this, pricing it at one render per alignment; that is the cost of
+  an EXACT placement, and two steps per axis is not one. **A photograph keeps the whole pixel and
+  a phase of 0**: its sprite is a resample, so a fraction means shifting the resampler's own grid
+  -- a fractional weighted box in the shrinking branch, the hot parallel loop -- and continuous
+  tone does not show the step a vector edge does. That residue is real and is written down in
+  doc/canvas.md rather than fixed.
 - **A picture and a drawing keep their proportions unless told not to**
   (`dt_canvas_object_keeps_ratio()`). `DT_CANVAS_OBJECT_FLAG_FREE_RATIO` is stated the FREE way
   round so ZERO is the careful answer, and one predicate answers for the corner drag and the
