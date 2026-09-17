@@ -864,28 +864,6 @@ void dt_canvas_render_srgb8_to_layer8(uint8_t *pixels, const size_t count, const
 /** The longest side an SVG is rasterised to, whatever it says its size is. */
 #define CANVAS_SVG_MAX_EDGE 4096
 
-/**
- * Pixels of the sprite a drawing is kept clear of on every side.
- *
- * A drawing is fitted to its frame, so a frame proportionally taller than the document is
- * filled by HEIGHT and the ink runs edge to edge down it -- and an author who drew to the edge
- * of the page, which is most of them, then has type sitting exactly on the frame's boundary,
- * anti-aliased against whatever is behind it and reading as shaved off. A photograph wants no
- * such air (a frame crops it and that is the point); a drawing is ink on nothing and wants a
- * hair of it.
- *
- * The guard is also what a sprite blitted at a WHOLE pixel owes a box that sits at a fractional
- * one: the caller's clip lies up to a pixel inside the sprite's own edge, so a whole pixel of
- * guard puts the ink inside that clip at every sub-pixel alignment. Measured, that margin was
- * not what the clip was actually taking -- the bottom line of type in a real diagram keeps its
- * ink to within 0.07% across every sub-pixel alignment with the guard and without it -- so this
- * is headroom, not a repair. Two pixels, which is what was asked for when a diagram's last line
- * of type was reported as clipped against its frame; it costs the drawing four pixels of its box
- * in each direction, a fifth of a percent of a nine-hundred-pixel frame, and it is the same two
- * screen pixels at any zoom, since the guard is measured where the sprite is.
- */
-#define CANVAS_SVG_GUARD 2
-
 /** Does this look like an SVG document rather than a photograph? */
 static gboolean _looks_like_svg(GBytes *bytes)
 {
@@ -972,13 +950,12 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
    * last row or two of ink pushed outside the clip, which is exactly the missing rows at the
    * bottom of a drawing.
    *
-   * So the drawing is drawn at the box's own size, less a GUARD of one pixel on every side of
-   * the sprite: see CANVAS_SVG_GUARD for what that guard is for and, as importantly, what it
-   * is NOT for.
+   * So the drawing is drawn at the box's own size and CENTRED in what is left over, which is
+   * the caller's padding: see DT_CANVAS_SVG_GUARD for whose that is and why it may not come
+   * out of the drawing.
    */
-  const int guard = (content_width > 0 && content_height > 0) ? CANVAS_SVG_GUARD : 0;
-  int drawn_width = content_width > 0 ? MIN(content_width, width) - 2 * guard : width;
-  int drawn_height = content_height > 0 ? MIN(content_height, height) - 2 * guard : height;
+  int drawn_width = content_width > 0 ? MIN(content_width, width) : width;
+  int drawn_height = content_height > 0 ? MIN(content_height, height) : height;
   drawn_width = MAX(drawn_width, 1);
   drawn_height = MAX(drawn_height, 1);
   const int longest = MAX(width, height);
@@ -1001,18 +978,12 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
     drawn_height = MAX(drawn_height * CANVAS_SVG_MAX_EDGE / longest, 1);
   }
   /*
-   * The guard, in the surface that is actually drawn into. Below the ceiling that is the
-   * sprite itself and the guard is the pixel it was asked for; above it the drawing is
-   * rendered smaller and scaled back, so the guard has to shrink with it or the rescale puts
-   * the drawing back somewhere other than where the box is.
+   * Where the drawing sits in the surface that is actually drawn into: centred in the padding
+   * the caller asked for around it, which the ceiling above has already scaled down with the
+   * rest, so the rescale puts the drawing back exactly where the box is.
    */
-  int drawn_guard_x = MAX((surface_width - drawn_width) / 2, 0);
-  int drawn_guard_y = MAX((surface_height - drawn_height) / 2, 0);
-  if(!capped)
-  {
-    drawn_guard_x = MIN(guard, MAX(surface_width - drawn_width, 0));
-    drawn_guard_y = MIN(guard, MAX(surface_height - drawn_height, 0));
-  }
+  const int drawn_guard_x = MAX((surface_width - drawn_width) / 2, 0);
+  const int drawn_guard_y = MAX((surface_height - drawn_height) / 2, 0);
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, surface_width, surface_height);
   if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
@@ -1022,8 +993,8 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
     return NULL;
   }
   cairo_t *cr = cairo_create(surface);
-  // At the guard, never centred: see the guard's own note above. Without a content size to
-  // honour there is no guard and no padding either, so the two spellings agree.
+  // Centred in the padding: with no content size to honour there is none, and the drawing
+  // fills the surface.
   RsvgRectangle viewport = { .x = (double)drawn_guard_x,
                              .y = (double)drawn_guard_y,
                              .width = (double)drawn_width,
@@ -1798,7 +1769,17 @@ cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *c
   if(IS_NULL_PTR(source)) return NULL;
   dt_canvas_cached_surface_t *entry = g_hash_table_lookup(cache->entries, GUINT_TO_POINTER(object->id));
   if(IS_NULL_PTR(entry)) return NULL;
-  if(cairo_image_surface_get_width(source) == width && cairo_image_surface_get_height(source) == height) return source;
+  /*
+   * The decode as it stands, when that is exactly what was asked for. It carries no padding --
+   * dt_canvas_render_decode() asks for none -- so it may not answer a request that wants some:
+   * a drawing whose intrinsic size happened to land on the padded sprite's would come back
+   * filling it edge to edge, a guard larger than its box and a guard off from it.
+   */
+  const gboolean padded = object->kind == DT_CANVAS_OBJECT_SVG && content_width > 0 && content_height > 0
+                          && (content_width != width || content_height != height);
+  if(!padded && cairo_image_surface_get_width(source) == width
+     && cairo_image_surface_get_height(source) == height)
+    return source;
   int oldest = 0;
   for(int slot = 0; slot < CANVAS_SPRITE_SLOTS; slot++)
   {

@@ -402,11 +402,12 @@ corner of where it belongs -- which is what an internal ceiling on the raster di
 crossed it, reported as a drawing that vanishes or jumps at some zoom levels. The ceiling is
 still there, since a drawing across a wall-sized page must not ask for a raster nobody has the
 memory for; it applies to what is RENDERED, and the result is brought back to the size that was
-asked for. And **the drawing is drawn at the BOX's size, inside a guard of one pixel**, not
-stretched over the sprite: the painter asks for a sprite a pixel or two larger than the box so
-that the clip and not the sprite's edge ends the picture, a photograph stretched over that loses
-a sliver nobody sees, and a drawing stretched over it has its last row or two of ink pushed
-outside the clip -- the missing rows at the bottom of a drawing.
+asked for. And **the drawing is drawn at the BOX's size and centred in whatever is left over**,
+never stretched over the sprite and never shrunk to make room in it: the painter asks for a
+sprite larger than the box so that the clip and not the sprite's edge ends the picture, a
+photograph stretched over that loses a sliver nobody sees, and a drawing stretched over it has
+its last row or two of ink pushed outside the clip -- the missing rows at the bottom of a
+drawing.
 
 The guard is headroom, and it is there because a drawing is FITTED to its frame. A frame whose
 proportions differ from the document's is filled along one axis and letterboxed along the other,
@@ -425,13 +426,25 @@ is not what was taking the ink, and the measurement says so: sweeping sixteen su
 alignments, the bottom line of type keeps its ink to within **0.07%** both with the guard and
 without it, and with one surface cache across the sweep (what the atelier does) exactly as with a
 fresh one per frame. An earlier reading of 2.1% did not survive a clean A/B against a verified
-binary and is not evidence of anything. So this is headroom, not a repair. It is two pixels,
-which is what was asked for by name, and costs the drawing four pixels of its box in each
-direction -- a fifth of a percent of a nine-hundred-pixel frame, and the same two screen pixels
-at any zoom, since the guard is measured where the sprite is -- and the alternative, placing the
-drawing at the box's exact sub-pixel position, would need a render per alignment: 13 ms at this
-drawing's screen size and 160 ms at four times it, per frame of a pan, against a sprite cache of
-two slots.
+binary and is not evidence of anything. So this is headroom, not a repair. The alternative,
+placing the drawing at the box's exact sub-pixel position, would need a render per alignment:
+13 ms at this drawing's screen size and 160 ms at four times it, per frame of a pan, against a
+sprite cache of a few slots.
+
+**The guard is the CALLER's air, added around the sprite and paid back at the blit -- it may not
+come out of the drawing.** The painter asks for a sprite `DT_CANVAS_SVG_GUARD` larger on every
+side and blits it that much further out; the renderer draws the document at the box's own size
+and centres it in what is left. Taken out of the drawing instead, which is what it did when it
+was first written, it is a fixed number of SCREEN pixels charged to a box whose size is the
+ZOOM's: the same drawing filled **84.0%** of its frame at a quarter zoom and **98.7%** at three
+times, so it breathed against its own border on every wheel click, and subtracting it from both
+axes changed the drawn box's proportions as well -- rsvg's default `xMidYMid meet` then
+letterboxed the document inside it, a second inset, also the zoom's, that moved the drawing off
+its own corner. `_a_drawing_fills_its_frame_at_every_zoom` sweeps zoom x quality x device scale
+x sub-pixel phase and asks for the frame's span to within two device pixels; the renderer's half
+is `_a_drawing_fills_its_box_and_sits_in_the_callers_air`. The one thing the padding then costs
+is the fast path that hands back the intrinsic decode when it happens to be the size asked for:
+it carries no padding, so it may not answer a padded request.
 
 **A picture and a drawing keep their proportions unless told not to**
 (`dt_canvas_object_keeps_ratio()`, `DT_CANVAS_OBJECT_FLAG_FREE_RATIO`). The flag is stated the

@@ -1414,14 +1414,23 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
          * because rsvg renders a smaller document, and a pan costs the same either way.
          */
         const double quality = CLAMP(options->quality > 0.0 ? options->quality : 1.0, 0.125, 1.0);
-        const int sprite_width = MAX((int)lround(box_width * quality), 1);
-        const int sprite_height = MAX((int)lround(box_height * quality), 1);
         const int content_width = MAX((int)lround(extent_x * quality), 1);
         const int content_height = MAX((int)lround(extent_y * quality), 1);
-        // The box's own size as well as the sprite's: a drawing is drawn at the first, inside
-        // a guard of one pixel of the second, so the padding that lets the clip end the
-        // picture is empty rather than two rows of the drawing's own ink -- and so a drawing
-        // fitted edge to edge down its frame keeps a hair of air off it.
+        /*
+         * A DRAWING is asked for with a guard of air around it and blitted back a guard out,
+         * so the padding that lets the clip end the picture is empty rather than two rows of
+         * the drawing's own ink -- and so a drawing fitted edge to edge down its frame keeps a
+         * hair of air off it. The air is the SPRITE's, added here and paid back below: taken
+         * out of the DRAWING it would be a fixed number of screen pixels charged to a box whose
+         * size is the zoom's, which is a drawing that shrinks inside its own frame as the page
+         * is zoomed out. A photograph wants none of it -- a frame crops it and that is the
+         * point -- and takes the box's own size, a rounding pixel wider than its extent.
+         */
+        const int pad = object->kind == DT_CANVAS_OBJECT_SVG ? DT_CANVAS_SVG_GUARD : 0;
+        const int box_pixels_x = MAX((int)lround(box_width * quality), 1);
+        const int box_pixels_y = MAX((int)lround(box_height * quality), 1);
+        const int sprite_width = pad > 0 ? content_width + 2 * pad : box_pixels_x;
+        const int sprite_height = pad > 0 ? content_height + 2 * pad : box_pixels_y;
         cairo_surface_t *sprite = dt_canvas_surface_cache_get_scaled(options->cache, object, sprite_width,
                                                                      sprite_height, content_width, content_height);
         if(!IS_NULL_PTR(sprite))
@@ -1429,16 +1438,20 @@ static void _paint_image(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
           cairo_identity_matrix(cr);
           if(quality < 1.0)
           {
-            // Back up over the box it stands for. A smooth filter here, since this IS a scale.
+            // Back up over the box it stands for, the guard scaling with it: a drawing's own
+            // extent over the pixels it was drawn into, a photograph's whole sprite over the
+            // whole box. A smooth filter here, since this IS a scale.
+            const double back_x = pad > 0 ? extent_x / (double)content_width : box_width / (double)sprite_width;
+            const double back_y = pad > 0 ? extent_y / (double)content_height : box_height / (double)sprite_height;
             cairo_translate(cr, left, top);
-            cairo_scale(cr, box_width / (double)sprite_width, box_height / (double)sprite_height);
-            cairo_set_source_surface(cr, sprite, 0.0, 0.0);
+            cairo_scale(cr, back_x, back_y);
+            cairo_set_source_surface(cr, sprite, (double)-pad, (double)-pad);
             cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
           }
           else
           {
             // One pixel to one at a whole pixel: the cheap path, and the common one.
-            cairo_set_source_surface(cr, sprite, left, top);
+            cairo_set_source_surface(cr, sprite, left - pad, top - pad);
             cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
           }
           cairo_paint(cr);

@@ -257,17 +257,35 @@ void *dt_canvas_surface_cache_scratch(dt_canvas_surface_cache_t *cache, size_t b
  * shown at: pass the pixels wanted and the answer is exact, pass 0 and it comes at the size
  * the file states. `content_width`/`content_height` say how big the DRAWING is inside that
  * surface, for a caller whose sprite is deliberately larger than the box the drawing occupies;
- * 0 fills the surface. Given one, the drawing is kept a GUARD of one pixel inside the sprite on
- * every side -- placed at the guard, and that much smaller -- so that a drawing fitted edge to
- * edge down its frame keeps a hair of air off the caller's clip; see CANVAS_SVG_GUARD. The
- * surface RETURNED is always the size asked for, whatever ceiling the renderer applies
- * internally.
+ * 0 fills the surface. Given one, the drawing is drawn at exactly that size and CENTRED in
+ * whatever is left over -- the caller's own padding, which is what `DT_CANVAS_SVG_GUARD` is
+ * for. The surface RETURNED is always the size asked for, whatever ceiling the renderer
+ * applies internally.
  *
  * Rendered in ONE pass, the way the specification composites an SVG, and only then converted
  * out of sRGB -- see the drawings section of doc/canvas.md.
  */
 cairo_surface_t *dt_canvas_render_svg(GBytes *svg, int want_width, int want_height, int content_width,
                                       int content_height);
+
+/**
+ * @brief Pixels of air a caller leaves around a drawing, on every side of its sprite.
+ *
+ * A drawing is fitted to its frame, so a frame proportionally taller than the document is
+ * filled by HEIGHT and the ink runs edge to edge down it -- and an author who drew to the edge
+ * of the page, which is most of them, then has type sitting exactly on the frame's boundary,
+ * anti-aliased against whatever is behind it and reading as shaved off. It is also what a
+ * sprite blitted at a WHOLE pixel owes a box that sits at a fractional one: the caller's clip
+ * lies up to a pixel inside the sprite's own edge. A photograph wants no such air (a frame
+ * crops it and that is the point); a drawing is ink on nothing and wants a hair of it.
+ *
+ * It is the CALLER's, added around the sprite it asks for and paid back at the blit -- never
+ * taken out of the drawing. Taken out of the drawing, which is what this did until the zoom
+ * glitch was measured, it made a drawing's size a function of the viewport: a fixed number of
+ * screen pixels is a fraction of the frame that grows as the zoom falls, so the same drawing
+ * filled 84% of its frame at a quarter zoom and 98.7% at three times.
+ */
+#define DT_CANVAS_SVG_GUARD 2
 
 cairo_surface_t *dt_canvas_render_svg_coverage(GBytes *svg, int width, int height);
 

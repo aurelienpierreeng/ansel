@@ -1930,7 +1930,7 @@ static void _a_drawings_sprite_is_exactly_the_size_it_was_asked_for(void **state
   g_free(path);
 }
 
-static void _a_drawing_keeps_a_guard_pixel_inside_the_box(void **state)
+static void _a_drawing_fills_its_box_and_sits_in_the_callers_air(void **state)
 {
   (void)state;
   /*
@@ -1942,11 +1942,12 @@ static void _a_drawing_keeps_a_guard_pixel_inside_the_box(void **state)
    * shaved off: that is what was reported as text clipped on a drawing, with two pixels of
    * headroom asked for by name.
    *
-   * The guard is the hair of air that answers it, and it is headroom rather than a repair --
-   * the sub-pixel placement of the sprite was measured and is NOT what takes the ink (the
-   * bottom line of type in a real diagram keeps it to within 0.07% at every alignment, guard
-   * or no guard). What it pins here is that the ink is a whole pixel clear of the sprite's
-   * edges whatever padding the sprite carries, so a drawing never lands on its frame.
+   * The air that answers it is the CALLER's, added around the sprite and paid back at the
+   * blit, and this is the renderer's half of that bargain: a drawing is drawn at exactly the
+   * box it was given and centred in whatever is left over. Subtracting the air from the
+   * drawing instead -- what this did until the zoom glitch was measured -- charges a fixed
+   * number of screen pixels to a box whose size is the zoom's, so a drawing shrinks inside its
+   * own frame as the page is zoomed out.
    */
   gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' "
                            "viewBox='0 0 100 100'><rect width='100' height='100' fill='#000000'/></svg>");
@@ -1955,12 +1956,13 @@ static void _a_drawing_keeps_a_guard_pixel_inside_the_box(void **state)
   assert_true(g_file_get_contents(path, &contents, &length, NULL));
   GBytes *bytes = g_bytes_new_take(contents, length);
 
-  // A sprite four pixels larger than the box, carrying a box-sized drawing: the ink starts one
-  // pixel in and ends one pixel before the box does, whatever padding the sprite carries.
-  static const int sprites[] = { 100, 101, 102, 104 };
-  for(guint idx = 0; idx < G_N_ELEMENTS(sprites); idx++)
+  // Whatever air the caller leaves, the ink is a hundred pixels of it, starting where the air
+  // ends: the drawing's size is the BOX's and owes the padding nothing.
+  static const int pads[] = { 0, 1, 2, 4 };
+  for(guint idx = 0; idx < G_N_ELEMENTS(pads); idx++)
   {
-    const int edge = sprites[idx];
+    const int pad = pads[idx];
+    const int edge = 100 + 2 * pad;
     cairo_surface_t *sprite = dt_canvas_render_svg(bytes, edge, edge, 100, 100);
     assert_non_null(sprite);
     assert_int_equal(cairo_image_surface_get_width(sprite), edge);
@@ -1974,10 +1976,8 @@ static void _a_drawing_keeps_a_guard_pixel_inside_the_box(void **state)
       if(first < 0) first = row;
       last = row;
     }
-    // At least two pixels of air at the top, and the ink stopping at least two before the
-    // box's own bottom edge, whatever padding the sprite happens to carry.
-    assert_true(first >= 2);
-    assert_true(last <= 97);
+    assert_int_equal(first, pad);
+    assert_int_equal(last, edge - 1 - pad);
     cairo_surface_destroy(sprite);
   }
 
@@ -2345,6 +2345,124 @@ static gboolean _painted_ink_bottom(const dt_canvas_t *canvas, const dt_canvas_o
  * lost its stems for the 180 ms after any drag anywhere -- measured at zoom 1, 672 fully dark
  * glyph pixels at rest against 0 mid-gesture.
  */
+/**
+ * The black square of a drawing, in the surface's own pixels, painted through the whole page.
+ *
+ * `phase` shifts the whole page by that many device pixels before the zoom, which is what a pan
+ * does between two frames: the sprite is blitted at a WHOLE pixel and the box it stands for is
+ * not, so every sub-pixel alignment has to give the same answer or a drawing breathes as the
+ * page is dragged.
+ */
+static gboolean _painted_drawing_span(const dt_canvas_t *canvas, const double zoom, const double device_scale,
+                                      const double quality, const double phase, double *span_x, double *span_y)
+{
+  const int size = (int)lround(1024.0 * device_scale);
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, size, size);
+  cairo_surface_set_device_scale(surface, device_scale, device_scale);
+  cairo_t *cr = cairo_create(surface);
+  const double half = 0.5 * size / device_scale;
+  cairo_translate(cr, half + phase / device_scale, half + phase / device_scale);
+  cairo_scale(cr, zoom, zoom);
+  const dt_canvas_rect_t whole = { -half / zoom, -half / zoom, 2.0 * half / zoom, 2.0 * half / zoom };
+  dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64u * 1024u * 1024u);
+  dt_canvas_paint_options_t options = dt_canvas_paint_options_export(cache, 1.0 / zoom, whole);
+  options.quality = quality;
+  dt_canvas_paint(cr, canvas, &options);
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  int first_row = -1;
+  int last_row = -1;
+  int first_col = size;
+  int last_col = -1;
+  for(int row = 0; row < size; row++)
+  {
+    for(int col = 0; col < size; col++)
+    {
+      const uint32_t pixel = *(const uint32_t *)(pixels + (size_t)row * stride + (size_t)col * 4) & 0xFFFFFFu;
+      const int luminance = (int)(((pixel >> 16) & 0xFF) + ((pixel >> 8) & 0xFF) + (pixel & 0xFF)) / 3;
+      // Half way up the ink's own ramp, so an edge is found where it actually lies whether the
+      // sprite was blitted one pixel to one or scaled back up from a gesture's raster.
+      if(luminance >= 128) continue;
+      if(first_row < 0) first_row = row;
+      last_row = row;
+      if(col < first_col) first_col = col;
+      if(col > last_col) last_col = col;
+    }
+  }
+  dt_canvas_surface_cache_free(cache);
+  cairo_surface_destroy(surface);
+  if(first_row < 0 || last_col < first_col) return FALSE;
+  *span_x = (double)(last_col - first_col + 1);
+  *span_y = (double)(last_row - first_row + 1);
+  return TRUE;
+}
+
+/**
+ * A drawing fills the frame it was given, at every zoom, quality, screen and sub-pixel phase.
+ *
+ * The air a drawing wants around it is the CALLER's, added around the sprite and paid back at
+ * the blit. Taken out of the DRAWING, which is what the guard did until this was measured, it
+ * is a fixed number of SCREEN pixels charged to a box whose size is the zoom's: the same
+ * drawing filled 84.0% of its frame at a quarter zoom and 98.7% at three times, so it breathed
+ * against its own border on every wheel click. Subtracting it from both axes changed the drawn
+ * box's proportions as well, and rsvg's default `xMidYMid meet` then letterboxed the document
+ * inside it -- a second inset, also the zoom's, that moved the drawing off its own corner.
+ *
+ * Measured in absolute device pixels rather than as a fraction, because that is what the defect
+ * is: a fixed cost. The drawing here fills its document, and its frame carries the document's
+ * proportions, so the ink's span IS the frame's, to within the pixel the box's own fractional
+ * position costs and the half a threshold costs at each edge.
+ */
+static void _a_drawing_fills_its_frame_at_every_zoom(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  canvas->grid_flags = 0;
+  canvas->background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240' "
+                           "viewBox='0 0 240 240'><rect width='240' height='240' fill='#000000'/></svg>");
+  GError *error = NULL;
+  dt_canvas_object_t *drawing = dt_canvas_add_svg(canvas, 0.0, 0.0, path, &error);
+  assert_non_null(drawing);
+  drawing->x = 0.0;
+  drawing->y = 0.0;
+  const double frame_width = drawing->width;
+  const double frame_height = drawing->height;
+  assert_true(frame_width > 0.0 && frame_height > 0.0);
+
+  static const double zooms[] = { 0.25, 0.5, 1.0, 3.1 };
+  static const double qualities[] = { 0.5, 1.0 };
+  static const double phases[] = { 0.0, 0.5 };
+  for(guint zoom_idx = 0; zoom_idx < G_N_ELEMENTS(zooms); zoom_idx++)
+    for(guint quality_idx = 0; quality_idx < G_N_ELEMENTS(qualities); quality_idx++)
+      for(int device_scale = 1; device_scale <= 2; device_scale++)
+        for(guint phase_idx = 0; phase_idx < G_N_ELEMENTS(phases); phase_idx++)
+        {
+          const double zoom = zooms[zoom_idx];
+          const double quality = qualities[quality_idx];
+          double span_x = 0.0;
+          double span_y = 0.0;
+          assert_true(_painted_drawing_span(canvas, zoom, (double)device_scale, quality, phases[phase_idx],
+                                            &span_x, &span_y));
+          const double wanted_x = frame_width * zoom * device_scale;
+          const double wanted_y = frame_height * zoom * device_scale;
+          if(fabs(span_x - wanted_x) > 2.0 || fabs(span_y - wanted_y) > 2.0)
+            print_error("zoom %.2f quality %.2f scale %d phase %.3f: %.0f x %.0f painted of %.1f x %.1f "
+                        "(%.1f%% x %.1f%%)\n",
+                        zoom, quality, device_scale, phases[phase_idx], span_x, span_y, wanted_x, wanted_y,
+                        100.0 * span_x / wanted_x, 100.0 * span_y / wanted_y);
+          assert_true(fabs(span_x - wanted_x) <= 2.0);
+          assert_true(fabs(span_y - wanted_y) <= 2.0);
+        }
+
+  dt_canvas_free(canvas);
+  g_remove(path);
+  g_free(path);
+}
+
 static void _a_gesture_costs_the_page_nothing_but_its_pictures(void **state)
 {
   (void)state;
@@ -3043,12 +3161,13 @@ int main(void)
     cmocka_unit_test(_a_leaded_text_frames_natural_height_is_the_same_at_every_zoom),
     cmocka_unit_test(_a_fitted_text_frame_is_exactly_its_natural_height),
     cmocka_unit_test(_a_gesture_costs_the_page_nothing_but_its_pictures),
+    cmocka_unit_test(_a_drawing_fills_its_frame_at_every_zoom),
     cmocka_unit_test(_a_text_frame_paints_the_same_lines_at_every_zoom),
     cmocka_unit_test(_a_text_frame_short_of_its_text_is_brought_up_to_it),
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
     cmocka_unit_test(_a_feathered_cutout_covers_all_of_its_fade),
     cmocka_unit_test(_a_drawings_sprite_is_exactly_the_size_it_was_asked_for),
-    cmocka_unit_test(_a_drawing_keeps_a_guard_pixel_inside_the_box),
+    cmocka_unit_test(_a_drawing_fills_its_box_and_sits_in_the_callers_air),
     cmocka_unit_test(_a_drawing_arrives_at_the_size_its_file_states),
     cmocka_unit_test(_a_drawing_is_rasterised_whole_and_then_brought_into_the_layer),
     cmocka_unit_test(_text_flows_around_what_a_drawing_draws_not_its_box),
