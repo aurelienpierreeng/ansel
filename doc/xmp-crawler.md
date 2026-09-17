@@ -147,25 +147,58 @@ habit is one subject per branch. What stays with the crawler afterwards is the p
 images to report, how the flags are reconciled with the cache — and the job that drives it; the
 GTK dialog leaves separately, as PR 7 of `control-split.md`.
 
-## What has NOT been exercised
+## What the manual runs showed
 
-These runs are read with `-d control`. The job traces bracket the crawl (`[run_job+]` and
-`[run_job-]`, both carrying the job's description, `crawl XMP files`), and the crawl itself ends
-with one summary line — `[crawler] done: N images, M folder listings, K to report, T s`, or
-`cancelled:` when it stopped early. The brackets alone would not do: they say the function
-returned, not that it walked anything, so a crawl that stopped at its first check looks exactly
-like one that visited the whole library. The per-image and per-folder lines stay for the
-exceptions only — a missing image, a newer sidecar, a folder that could not be listed.
+Run on 2026-09-17 against the installed build (`0.0.0+5028~gcbfd00a510`) on the machine these
+numbers come from: the real library, 1963 images in 18 film rolls on the GVFS/SMB share.
 
-The unit tests cover the logic, not the threading move this work exists for. Still to run by
-hand, and to record here when they have been:
+They are read with `-d control`. The job traces bracket the crawl — `[run_job+]` and
+`[run_job-]`, both carrying the job's description, `crawl XMP files` — and the walk itself ends
+with one summary line: `[crawler] done: N images, M folder listings, K to report, T s`, or
+`cancelled:` when it stopped early. The brackets alone would not do, since they say that the
+function returned and not that it walked anything. The per-image and per-folder lines are for
+the exceptions only: a missing image, a newer sidecar, a folder that could not be listed.
 
-- the background job under a live GUI, on a real network share;
-- quitting mid-crawl;
-- the dialog itself, on a library where a sidecar really is newer than the row;
-- a share that goes offline between two folders.
+**The job no longer gates the window.** The crawl was picked up at 3.066 s, `[init] startup
+took` printed at 3.068 s, and the walk ended at 3.641 s with `done: 1963 images, 18 folder
+listings, 0 to report, 0.58 s`. The two overlap: initialisation finished while the walk was
+still running, and the walk outlived it by 0.57 s. Against the 98-102 s it used to hold the
+window back, the measurement that matters here is not the duration but the overlap.
 
-What the tests do pin: the walk's early exit (`test_image_repository.c`), the cache-writeback
-rules and the miscased-name answer (`test_image_cache_flags_writeback.c`, which skips itself on
-a filesystem that folds case). The listing rewrite was checked against the per-file `stat()`
-version on the real library — 1969 images, **0 divergences** — before it replaced it.
+**The dialog was exercised twice, and both times it wrote.** An earlier run of the same test
+found a genuinely newer sidecar in the library, `2026-08-13_DSF2454.RAF.xmp`, and reported `1 to
+report`; the dialog opened and the newer XMP was taken into the database. The next run reported
+none. The synthetic case behaved the same — a copied folder with a `touch`ed sidecar under a
+throwaway configdir: `done: 7 images, 1 folder listings, 1 to report, 0.01 s`, the dialog
+listing that one image, synchronised from it.
+
+**Cancellation stops the walk; a call already in flight is what a quit still waits for.** With
+the SMB daemon frozen (`pkill -STOP gvfsd-smb`) and Ansel asked to quit, the window closed and
+the process stayed alive, blocked inside a listing, then exited once the daemon was thawed:
+`cancelled: 1758 images, 18 folder listings, 0 to report, 21.24 s` — 205 images short of the
+library, the last crawler line naming the folder it was in. One attempt of several took a few
+seconds more to exit after the thaw, which is the same limitation seen from the other side: the
+blocked call has to return before anything can be noticed.
+
+**A folder that cannot be listed loses no flag.** Share unmounted before launch: 18 `cannot
+list`, 1963 `is missing`, `done: 1963 images, 18 folder listings, 0 to report, 0.03 s`. Share
+killed mid-crawl, the daemon stopped and then killed: two folders unreadable and exactly their
+215 images (9 + 206) read as missing, the rest of the walk unaffected, `done: 1963 images, 18
+folder listings, 0 to report, 2.57 s`. The flag snapshot taken around both runs is identical,
+image for image — nothing was cleared, which is the claim those two runs exist to check.
+
+**Still not exercised: a listing that fails part-way.** Killing the daemon made the enumeration
+call itself fail — `cannot list`, the folder memoised empty — rather than breaking a read
+already under way, so the `failed part-way` branch has never run. Reaching it needs a filesystem
+that fails mid-read on cue.
+
+A SIGSEGV was seen once during that session, on quit, in `libs/modulegroups.c`'s
+`_ensure_page_widgets()` reached from `dt_cleanup()`'s main-context drain. It is recorded here
+only so that nobody repeating these runs attributes it to the crawl: the dump carries 32 threads
+and not one of them is anywhere in this file.
+
+What the unit tests pin, alongside all of the above: the walk's early exit
+(`test_image_repository.c`), the cache-writeback rules and the miscased-name answer
+(`test_image_cache_flags_writeback.c`, which skips itself on a filesystem that folds case). The
+listing rewrite was checked against the per-file `stat()` version on the real library — 1969
+images at the time, **0 divergences** — before it replaced it.
