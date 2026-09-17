@@ -463,6 +463,28 @@ axis) because **a sprite is now keyed on its phase as well as its size**: four s
 at most a quarter of a pixel of residue instead of a whole one, and `CANVAS_SPRITE_SLOTS` raised
 from 2 to 8 in the same change so a diagonal pan does not become one render per frame. Measured
 over a 32-frame pan with one cache, with the phase and without it: 106 ms against 108 ms.
+
+**Those eight are a drawing's; a picture keeps two** (`_sprite_slots()`). A picture has no phase,
+so the extra six could only hold extra SIZES, at 14 MB apiece for a full-screen one -- and
+`_cache_evict_to_budget()` sheds whole entries and never a cold slot of the object it is being
+asked to paint, so the budget cannot take them back. `_a_picture_keeps_fewer_sprites_than_a_drawing`
+pins both halves, by identity, holding a reference so a freed sprite cannot come back at the same
+address and read as a hit.
+
+**Above the renderer's ceiling the drawing is placed in the units that were ASKED for, and the
+ceiling is a cairo TRANSFORM.** `CANVAS_SVG_MAX_EDGE` renders a huge sprite smaller and scales it
+back, and the box, the padding and the fit inside it are then the same arithmetic capped or not.
+Derived a second time in the smaller raster's own integers -- which is how this was first written
+-- three truncations do not cancel and the guard comes back anywhere between nothing and two and a
+half pixels; and because a capped surface's two dimensions are independently truncated integers,
+its aspect is not quite the one asked for, so rsvg's `xMidYMid meet` letterboxes the drawing
+inside its own box. Measured on a 25:1 drawing in a 25:1 box at a 5004-pixel sprite, where there
+is nothing to letterbox at all: 15 pixels either side, the drawing 4970 wide where its box was
+5000. Under a transform the viewport carries the box's own aspect, `meet` has nothing to do, and a
+drawing whose frame really is a different shape is still letterboxed by exactly the right amount.
+The one residue left is the ceiling's own: the guard survives while it is still worth half a pixel
+of the smaller raster, i.e. a sprite up to 16384 px, and past that it is sub-pixel there and the
+scale back smears the ink into it.
 `_a_drawing_slides_with_the_page_instead_of_crabbing_against_it` reads the edge's sub-pixel
 position out of the coverage code and asks that it never be more than 0.3 px from where it
 belongs and never move backwards.

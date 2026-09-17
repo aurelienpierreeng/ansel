@@ -3680,13 +3680,38 @@ they are visible.
   `DT_CANVAS_SVG_PHASE_STEPS` because **a sprite is keyed on its phase as well as its size** --
   four sprites per size, a quarter of a pixel of residue instead of a whole one, and
   `CANVAS_SPRITE_SLOTS` is 8 for it, or a diagonal pan is one rsvg render per frame. Measured over
-  a 32-frame pan with one cache, with the phase and without it: 106 ms against 108. An earlier
+  a 32-frame pan with one cache, with the phase and without it: 106 ms against 108. **Those eight
+  are a DRAWING's and a picture keeps two** (`_sprite_slots()`): a picture has no phase, so the
+  rest could only hold extra sizes at 14 MB apiece, and `_cache_evict_to_budget()` sheds whole
+  entries and never a cold slot of the object being painted. **And a test of the phase key must
+  share ONE cache across the pan, as the view does** -- a cache built per frame hands every call
+  an empty entry, whose NULL sprite short-circuits the slot loop before a phase is ever compared,
+  so the key was pinned by nothing: measured under gdb, 203 calls into the cache over the whole
+  suite, 66 of them a drawing, not one meeting a filled slot. An earlier
   note here said not to attempt this, pricing it at one render per alignment; that is the cost of
   an EXACT placement, and two steps per axis is not one. **A photograph keeps the whole pixel and
   a phase of 0**: its sprite is a resample, so a fraction means shifting the resampler's own grid
   -- a fractional weighted box in the shrinking branch, the hot parallel loop -- and continuous
   tone does not show the step a vector edge does. That residue is real and is written down in
   doc/canvas.md rather than fixed.
+- **Above `CANVAS_SVG_MAX_EDGE` the ceiling is a cairo TRANSFORM, and the drawing is placed in the
+  units that were ASKED for.** Derive the placement a second time in the smaller raster's own
+  integers and three truncations fail to cancel -- the guard came back anywhere between nothing
+  and two and a half pixels -- while the capped surface's independently truncated dimensions give
+  it an aspect that is not quite the one asked for, so rsvg's `xMidYMid meet` letterboxes the
+  drawing inside its own box: measured on a 25:1 drawing in a 25:1 box at a 5004-pixel sprite,
+  15 px either side and the drawing 4970 wide where its box was 5000. Under a transform the
+  viewport carries the box's own aspect and `meet` has nothing to do -- which is also what keeps a
+  drawing whose frame really IS a different shape letterboxed by the right amount. The residue
+  that remains is the ceiling's own: the guard survives while it is worth half a pixel of the
+  smaller raster, a sprite up to 16384 px.
+- **A glyph that measures text and then scales by what it measured must turn METRICS HINTING OFF
+  first.** Cairo quantises a hinted glyph's metrics to whole device pixels under whatever
+  transform is in force, so the extents solved for are not the metrics the glyphs are hinted to
+  under the fit computed from them. Measured on `dtgtk_cairo_paint_drawing_svg()`: the ink's width
+  swung between 0.969 and 1.125 of the icon and 10.7% of it fell outside an 8 px button, 3.4%
+  outside a 20 px one; with hinting off it is 1.0000 at every size and nothing leaves the box.
+  This is the same rule the canvas's own text already follows, for the same reason.
 - **A picture and a drawing keep their proportions unless told not to**
   (`dt_canvas_object_keeps_ratio()`). `DT_CANVAS_OBJECT_FLAG_FREE_RATIO` is stated the FREE way
   round so ZERO is the careful answer, and one predicate answers for the corner drag and the

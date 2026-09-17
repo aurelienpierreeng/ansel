@@ -1981,6 +1981,73 @@ static void _a_drawing_fills_its_box_and_sits_in_the_callers_air(void **state)
     cairo_surface_destroy(sprite);
   }
 
+  /*
+   * And past the renderer's own ceiling, where the document is drawn into a smaller raster and
+   * scaled back to the size that was asked for. The box, the padding and the fit inside it are
+   * all arithmetic in the size ASKED for, with the ceiling applied as a transform, so the
+   * answer is the same one: derived a second time in the smaller raster's own integers, as this
+   * was first written, the three truncations did not cancel and the guard came back anywhere
+   * between nothing and two and a half pixels, while the raster's own truncated aspect -- not
+   * quite the one asked for -- made rsvg letterbox the drawing inside its own box, measured at
+   * 15 pixels either side of a 5000-pixel box with nothing to letterbox at all.
+   *
+   * A 25:1 drawing in a 25:1 box: no frame/document mismatch, so every pixel of the box is the
+   * drawing's and anything short of it is the defect. The guard survives the ceiling while it
+   * is still worth half a pixel of the smaller raster, which is a sprite up to 16384 px;
+   * past that it is sub-pixel there and the scale back smears the ink into it, which is a
+   * property of the ceiling and not of the placement.
+   */
+  gchar *wide = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='250' height='10' "
+                           "viewBox='0 0 250 10'><rect width='250' height='10' fill='#000000'/></svg>");
+  gchar *wide_contents = NULL;
+  gsize wide_length = 0;
+  assert_true(g_file_get_contents(wide, &wide_contents, &wide_length, NULL));
+  GBytes *wide_bytes = g_bytes_new_take(wide_contents, wide_length);
+  static const int capped[][2] = { { 2000, 80 }, { 5000, 200 }, { 8000, 320 } };
+  for(guint idx = 0; idx < G_N_ELEMENTS(capped); idx++)
+  {
+    const int pad = DT_CANVAS_SVG_GUARD;
+    const int content_x = capped[idx][0];
+    const int content_y = capped[idx][1];
+    cairo_surface_t *sprite
+        = dt_canvas_render_svg(wide_bytes, content_x + 2 * pad, content_y + 2 * pad, content_x, content_y, 0.0, 0.0);
+    assert_non_null(sprite);
+    assert_int_equal(cairo_image_surface_get_width(sprite), content_x + 2 * pad);
+    const uint8_t *pixels = cairo_image_surface_get_data(sprite);
+    const int stride = cairo_image_surface_get_stride(sprite);
+    const int middle_row = (content_y + 2 * pad) / 2;
+    const int middle_col = (content_x + 2 * pad) / 2;
+    int first_row = -1;
+    int last_row = -1;
+    int first_col = -1;
+    int last_col = -1;
+    // Half coverage, so what is found is where the edge IS and not how far its fade reaches.
+    for(int row = 0; row < content_y + 2 * pad; row++)
+      if(pixels[(size_t)row * stride + middle_col * 4 + 3] >= 128)
+      {
+        if(first_row < 0) first_row = row;
+        last_row = row;
+      }
+    for(int col = 0; col < content_x + 2 * pad; col++)
+      if(pixels[(size_t)middle_row * stride + col * 4 + 3] >= 128)
+      {
+        if(first_col < 0) first_col = col;
+        last_col = col;
+      }
+    if(first_row != pad || first_col != pad || last_row != content_y + pad - 1 || last_col != content_x + pad - 1)
+      print_error("a %d x %d drawing sits at rows [%d..%d] cols [%d..%d], wanted [%d..%d] and [%d..%d]\n",
+                  content_x, content_y, first_row, last_row, first_col, last_col, pad, content_y + pad - 1, pad,
+                  content_x + pad - 1);
+    assert_int_equal(first_row, pad);
+    assert_int_equal(first_col, pad);
+    assert_int_equal(last_row, content_y + pad - 1);
+    assert_int_equal(last_col, content_x + pad - 1);
+    cairo_surface_destroy(sprite);
+  }
+  g_bytes_unref(wide_bytes);
+  g_remove(wide);
+  g_free(wide);
+
   // Asked to fill the sprite, it fills the sprite: a photograph's bargain, and the path an
   // export takes, where there is no fractional box and so nothing to guard against.
   cairo_surface_t *filled = dt_canvas_render_svg(bytes, 104, 104, 0, 0, 0.0, 0.0);
@@ -2423,8 +2490,9 @@ static gboolean _painted_drawing_span(const dt_canvas_t *canvas, const double zo
  * the fraction. Spelled here rather than borrowed, so the check does not depend on the
  * encoder it is checking.
  */
-static gboolean _painted_edge_position(const dt_canvas_t *canvas, const double device_scale, const double phase,
-                                       const int from_column, double *position)
+static gboolean _painted_edge_position(const dt_canvas_t *canvas, dt_canvas_surface_cache_t *cache,
+                                       const double device_scale, const double phase, const int from_column,
+                                       double *position)
 {
   const int size = (int)lround(1024.0 * device_scale);
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, size, size);
@@ -2433,7 +2501,6 @@ static gboolean _painted_edge_position(const dt_canvas_t *canvas, const double d
   const double half = 0.5 * size / device_scale;
   cairo_translate(cr, half + phase / device_scale, half + phase / device_scale);
   const dt_canvas_rect_t whole = { -half, -half, 2.0 * half, 2.0 * half };
-  dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64u * 1024u * 1024u);
   dt_canvas_paint_options_t options = dt_canvas_paint_options_export(cache, 1.0, whole);
   dt_canvas_paint(cr, canvas, &options);
   cairo_destroy(cr);
@@ -2449,7 +2516,6 @@ static gboolean _painted_edge_position(const dt_canvas_t *canvas, const double d
     *position = (double)col + pow((double)green / 255.0, 563.0 / 256.0);
     found = TRUE;
   }
-  dt_canvas_surface_cache_free(cache);
   cairo_surface_destroy(surface);
   return found;
 }
@@ -2471,6 +2537,77 @@ static gboolean _painted_edge_position(const dt_canvas_t *canvas, const double d
  * sprite's own placement being read and not the frame's clip, which was always at its true
  * sub-pixel position and hid the defect at both edges of the frame.
  */
+/**
+ * A picture keeps fewer sprites than a drawing, because it has fewer to keep.
+ *
+ * The slots exist for a DRAWING's sub-pixel phases -- four of them, at the gesture's quality
+ * beside the one at rest -- and a picture has no phase at all, its sprite being a resample. So
+ * the eight the drawing needs would let one picture hold four times the sprites it can use, at
+ * 14 MB apiece for a full-screen one, and `_cache_evict_to_budget()` sheds whole entries and
+ * never a cold slot of the object it is painting: the budget cannot take it back.
+ *
+ * Read by identity, with a reference held on the sprite under test so that a freed one cannot
+ * be handed back at the same address and read as a hit.
+ */
+static void _a_picture_keeps_fewer_sprites_than_a_drawing(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->grid_flags = 0;
+  dt_canvas_object_t *picture = dt_canvas_add_image(canvas, 0.0, 0.0, 64, 64);
+  assert_non_null(picture);
+  GBytes *jpeg = _flat_jpeg(64, 64, 10, 20, 30);
+  dt_canvas_image_set_render(canvas, picture, jpeg, 64, 64, 0, 0, DT_CANVAS_COLORSPACE_SRGB);
+  g_bytes_unref(jpeg);
+
+  gchar *path = _write_svg("<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' "
+                           "viewBox='0 0 64 64'><rect width='64' height='64' fill='#000000'/></svg>");
+  GError *error = NULL;
+  dt_canvas_object_t *drawing = dt_canvas_add_svg(canvas, 0.0, 0.0, path, &error);
+  assert_non_null(drawing);
+
+  dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 256u * 1024u * 1024u);
+
+  // Three sizes of the picture, and the first is gone: two is what it may keep.
+  cairo_surface_t *first = dt_canvas_surface_cache_get_scaled(cache, picture, 100, 100, 0, 0, 0.0, 0.0);
+  assert_non_null(first);
+  cairo_surface_reference(first);
+  assert_non_null(dt_canvas_surface_cache_get_scaled(cache, picture, 200, 200, 0, 0, 0.0, 0.0));
+  assert_non_null(dt_canvas_surface_cache_get_scaled(cache, picture, 300, 300, 0, 0, 0.0, 0.0));
+  cairo_surface_t *again = dt_canvas_surface_cache_get_scaled(cache, picture, 100, 100, 0, 0, 0.0, 0.0);
+  assert_non_null(again);
+  assert_ptr_not_equal(again, first);
+  cairo_surface_destroy(first);
+
+  /*
+   * The drawing's four phases of ONE size all survive, which is the whole reason the slots were
+   * raised: a diagonal pan visits every one of them and would otherwise be an rsvg render per
+   * frame. The padding is the caller's, so the sprite is the box plus two guards either way.
+   */
+  const int pad = DT_CANVAS_SVG_GUARD;
+  const int sprite = 100 + 2 * pad;
+  cairo_surface_t *phases[4] = { NULL, NULL, NULL, NULL };
+  for(int at = 0; at < 4; at++)
+  {
+    phases[at] = dt_canvas_surface_cache_get_scaled(cache, drawing, sprite, sprite, 100, 100,
+                                                    0.5 * (at & 1), 0.5 * ((at >> 1) & 1));
+    assert_non_null(phases[at]);
+    for(int earlier = 0; earlier < at; earlier++) assert_ptr_not_equal(phases[at], phases[earlier]);
+  }
+  for(int at = 0; at < 4; at++)
+  {
+    cairo_surface_t *kept = dt_canvas_surface_cache_get_scaled(cache, drawing, sprite, sprite, 100, 100,
+                                                               0.5 * (at & 1), 0.5 * ((at >> 1) & 1));
+    if(kept != phases[at]) print_error("the drawing lost the sprite for phase %d\n", at);
+    assert_ptr_equal(kept, phases[at]);
+  }
+
+  dt_canvas_surface_cache_free(cache);
+  dt_canvas_free(canvas);
+  g_remove(path);
+  g_free(path);
+}
+
 static void _a_drawing_slides_with_the_page_instead_of_crabbing_against_it(void **state)
 {
   (void)state;
@@ -2490,6 +2627,16 @@ static void _a_drawing_slides_with_the_page_instead_of_crabbing_against_it(void 
 
   for(int device_scale = 1; device_scale <= 2; device_scale++)
   {
+    /*
+     * ONE cache across the whole pan, which is what the atelier does -- the view builds a
+     * surface cache for its lifetime and clears it only when the document or the profile
+     * changes. A cache built and freed per frame, which is what this checked at first, hands
+     * every call an empty entry: the slot loop short-circuits on the NULL sprite before it ever
+     * compares a phase, so the key this test exists for was never once exercised. Measured
+     * under gdb over the whole suite: 203 calls into the sprite cache, 66 of them a drawing,
+     * not one of them meeting a filled slot.
+     */
+    dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64u * 1024u * 1024u);
     double previous = -1.0;
     for(int step = 0; step <= 16; step++)
     {
@@ -2497,7 +2644,7 @@ static void _a_drawing_slides_with_the_page_instead_of_crabbing_against_it(void 
       const double frame_left = 0.5 * 1024.0 * device_scale + phase - 0.5 * drawing->width * device_scale;
       const double wanted = frame_left + 100.0 * device_scale;
       double edge = 0.0;
-      assert_true(_painted_edge_position(canvas, (double)device_scale, phase,
+      assert_true(_painted_edge_position(canvas, cache, (double)device_scale, phase,
                                          (int)floor(frame_left) + 1, &edge));
       if(fabs(edge - wanted) > 0.3 || edge < previous)
         print_error("scale %d pan %5.3f: the edge stands at %8.3f, wanted %8.3f, after %8.3f\n", device_scale,
@@ -2509,6 +2656,7 @@ static void _a_drawing_slides_with_the_page_instead_of_crabbing_against_it(void 
       assert_true(edge >= previous);
       previous = edge;
     }
+    dt_canvas_surface_cache_free(cache);
   }
 
   dt_canvas_free(canvas);
@@ -3264,6 +3412,7 @@ int main(void)
     cmocka_unit_test(_a_gesture_costs_the_page_nothing_but_its_pictures),
     cmocka_unit_test(_a_drawing_fills_its_frame_at_every_zoom),
     cmocka_unit_test(_a_drawing_slides_with_the_page_instead_of_crabbing_against_it),
+    cmocka_unit_test(_a_picture_keeps_fewer_sprites_than_a_drawing),
     cmocka_unit_test(_a_text_frame_paints_the_same_lines_at_every_zoom),
     cmocka_unit_test(_a_text_frame_short_of_its_text_is_brought_up_to_it),
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),

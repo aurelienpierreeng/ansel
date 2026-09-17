@@ -972,10 +972,13 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
    * the caller's padding: see DT_CANVAS_SVG_GUARD for whose that is and why it may not come
    * out of the drawing.
    */
-  int drawn_width = content_width > 0 ? MIN(content_width, width) : width;
-  int drawn_height = content_height > 0 ? MIN(content_height, height) : height;
-  drawn_width = MAX(drawn_width, 1);
-  drawn_height = MAX(drawn_height, 1);
+  const double box_width = MAX(content_width > 0 ? (double)MIN(content_width, width) : (double)width, 1.0);
+  const double box_height = MAX(content_height > 0 ? (double)MIN(content_height, height) : (double)height, 1.0);
+  // The air either side of it, in the size that was ASKED for. This is the caller's own
+  // padding and is what the caller pays back at the blit, so it is the one number the
+  // placement below must reproduce exactly.
+  const double pad_x = 0.5 * ((double)width - box_width);
+  const double pad_y = 0.5 * ((double)height - box_height);
   const int longest = MAX(width, height);
   gboolean capped = FALSE;
   int surface_width = width;
@@ -992,24 +995,26 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
     capped = TRUE;
     surface_width = MAX(width * CANVAS_SVG_MAX_EDGE / longest, 1);
     surface_height = MAX(height * CANVAS_SVG_MAX_EDGE / longest, 1);
-    drawn_width = MAX(drawn_width * CANVAS_SVG_MAX_EDGE / longest, 1);
-    drawn_height = MAX(drawn_height * CANVAS_SVG_MAX_EDGE / longest, 1);
   }
   /*
-   * Where the drawing sits in the surface that is actually drawn into: centred in the padding
-   * the caller asked for around it, which the ceiling above has already scaled down with the
-   * rest, so the rescale puts the drawing back exactly where the box is.
+   * Where the drawing goes in the surface that is actually drawn into, and how big it is there.
+   *
+   * ONE conversion, from the size that was asked for into the surface's own, applied to the
+   * padding and to the box alike -- never a separate integer for each, and never a centring.
+   * dt_canvas_render_rescale() below maps this surface onto the size that was asked for, so a
+   * position scaled through this ratio comes back exactly where the caller put it, and the
+   * uncapped case is the identity. Derived per axis and per number instead, as this was first
+   * written, the ceiling's three integer truncations do not cancel: the guard came back
+   * anywhere between nothing and two and a half pixels -- measured, an 8195 x 1169 drawing had
+   * its ink on the sprite's first row where the painter blits two rows of air, so the top of
+   * the drawing fell outside the frame's clip and the frame's ground showed along the bottom.
    */
-  const int drawn_guard_x = MAX((surface_width - drawn_width) / 2, 0);
-  const int drawn_guard_y = MAX((surface_height - drawn_height) / 2, 0);
-  /*
-   * And the fraction of a pixel the caller's box begins at, in the surface's own pixels, so a
-   * ceiling that renders smaller and scales back carries it too. Drawn rather than shifted
-   * afterwards: rsvg anti-aliases a fractional offset, a blit would have to resample.
-   */
-  const double phase_scale = width > 0 ? (double)surface_width / (double)width : 1.0;
-  const double drawn_phase_x = CLAMP(phase_x, 0.0, 1.0) * phase_scale;
-  const double drawn_phase_y = CLAMP(phase_y, 0.0, 1.0) * (height > 0 ? (double)surface_height / (double)height : 1.0);
+  const double to_surface_x = width > 0 ? (double)surface_width / (double)width : 1.0;
+  const double to_surface_y = height > 0 ? (double)surface_height / (double)height : 1.0;
+  // The padding, plus the fraction of a pixel the caller's box begins at. Drawn rather than
+  // shifted afterwards: rsvg anti-aliases a fractional offset, a blit would have to resample.
+  const double box_x = pad_x + CLAMP(phase_x, 0.0, 1.0);
+  const double box_y = pad_y + CLAMP(phase_y, 0.0, 1.0);
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, surface_width, surface_height);
   if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
@@ -1019,12 +1024,26 @@ cairo_surface_t *dt_canvas_render_svg(GBytes *bytes, const int want_width, const
     return NULL;
   }
   cairo_t *cr = cairo_create(surface);
-  // Centred in the padding: with no content size to honour there is none, and the drawing
-  // fills the surface.
-  RsvgRectangle viewport = { .x = (double)drawn_guard_x + drawn_phase_x,
-                             .y = (double)drawn_guard_y + drawn_phase_y,
-                             .width = (double)drawn_width,
-                             .height = (double)drawn_height };
+  /*
+   * THE CEILING IS A TRANSFORM, never a second geometry. Under this the drawing is placed in
+   * the units that were ASKED for, so the box, the padding and the fit inside it are the same
+   * arithmetic capped or not, and dt_canvas_render_rescale() below -- which maps each axis
+   * independently onto the size asked for -- undoes exactly this.
+   *
+   * Scaling the VIEWPORT instead, as this was first written, does not work, because a capped
+   * surface's two dimensions are independently truncated integers and its aspect is therefore
+   * not quite the one asked for: rsvg fits a document into its viewport with `xMidYMid meet`
+   * and letterboxes whatever aspect it is handed, so that truncation came back as a margin
+   * inside the drawing's own box. Measured on a 25:1 drawing in a 25:1 box at a 5004-pixel
+   * sprite, where there is nothing to letterbox at all: 15 pixels of it either side, the
+   * drawing 4970 wide where its box was 5000. Under a transform the viewport carries the box's
+   * own aspect and `meet` has nothing to do -- which is also what keeps a drawing whose frame
+   * really is a different shape letterboxed by the right amount.
+   */
+  cairo_scale(cr, to_surface_x, to_surface_y);
+  // The box, with the drawing fitted and centred inside it by rsvg; the padding is the
+  // caller's air, and with no content size to honour there is none and the drawing fills it.
+  RsvgRectangle viewport = { .x = box_x, .y = box_y, .width = box_width, .height = box_height };
   const gboolean drawn = rsvg_handle_render_document(handle, cr, &viewport, &error);
   cairo_destroy(cr);
   g_object_unref(handle);
@@ -1255,6 +1274,21 @@ typedef struct dt_canvas_cached_surface_t
   float sprite_phase_x[CANVAS_SPRITE_SLOTS];   ///< and at the sub-pixel phase it was shown at
   float sprite_phase_y[CANVAS_SPRITE_SLOTS];
 } dt_canvas_cached_surface_t;
+
+/**
+ * How many sizes and phases ONE object may keep.
+ *
+ * A drawing is keyed on its sub-pixel phase as well as its size -- four phases, and a size at
+ * the gesture's quality beside the one at rest -- which is what the eight are for. A photograph
+ * has no phase at all (its sprite is a resample, so `_paint_image()` asks for phase 0), so the
+ * same eight would let one picture keep four times the sprites it can use: a 2560 x 1440 sprite
+ * is 14 MB, and `_cache_evict_to_budget()` sheds whole entries and never a cold slot of the
+ * object it is being asked to paint.
+ */
+static int _sprite_slots(const dt_canvas_object_t *object)
+{
+  return object->kind == DT_CANVAS_OBJECT_SVG ? CANVAS_SPRITE_SLOTS : 2;
+}
 
 static size_t _surface_bytes(cairo_surface_t *surface)
 {
@@ -1817,7 +1851,8 @@ cairo_surface_t *dt_canvas_surface_cache_get_scaled(dt_canvas_surface_cache_t *c
      && cairo_image_surface_get_height(source) == height)
     return source;
   int oldest = 0;
-  for(int slot = 0; slot < CANVAS_SPRITE_SLOTS; slot++)
+  const int slots = _sprite_slots(object);
+  for(int slot = 0; slot < slots; slot++)
   {
     cairo_surface_t *sprite = entry->sprite[slot];
     // The size AND the phase: two sprites the same size, drawn at different fractions of a
