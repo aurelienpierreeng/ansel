@@ -300,6 +300,19 @@ int dt_develop_blend_version(void);
 /** returns the default blend color space for the given module */
 dt_develop_blend_colorspace_t dt_develop_blend_default_module_blend_colorspace(dt_iop_module_t *module);
 
+/**
+ * @brief Whether the given module may blend in the given color space.
+ *
+ * Answered from the module's own color space and, for Lab, from its position against colorin and
+ * colorout: the blend reaches Lab through the working profile, which describes neither camera RGB
+ * nor the display encoding. The module must belong to a develop with an iop order list.
+ *
+ * @param module The module to blend.
+ * @param cst The candidate blending color space.
+ * @return TRUE when blending in cst is meaningful for this module.
+ */
+gboolean dt_develop_blend_colorspace_is_compatible(dt_iop_module_t *module, dt_develop_blend_colorspace_t cst);
+
 /** initializes the default blend parameters for the given color space in blend_params */
 void dt_develop_blend_init_blend_parameters(dt_develop_blend_params_t *blend_params,
                                             dt_develop_blend_colorspace_t cst);

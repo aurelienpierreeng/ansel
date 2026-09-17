@@ -1858,6 +1858,29 @@ Two things about those counters a future editor should not "improve":
   reading a masks form on the right. It is stable, so it costs nothing; chasing it would mean
   excluding the file, which would hide real writes appearing there later.
 
+### Which blending spaces a module may use follows the profile each conversion uses
+
+`dt_develop_blend_default_module_blend_colorspace()` (`develop/blend.c`) answers from the module's
+`blend_colorspace()` alone: Lab for a Lab module, RGB (scene) for an RGB one, whatever its place in
+the pipe.
+
+`dt_develop_blend_colorspace_is_compatible()` answers "may this module blend in that space" from the
+profile each conversion actually uses, not from the space's name. The Lab conversion always goes
+through the pipe's working profile (`pixelpipe_cpu.c`), so Lab is offered only to Lab modules and
+RGB modules whose position answers to the working profile. RGB (scene) takes the profile of the
+module's own position -- input, working or output, TRC included -- in
+`dt_develop_blendif_init_masking_profile()`, so it is valid everywhere, display-encoded data
+included. Which profile a position answers to is decided once, by
+`dt_ioppr_get_module_profile_stage()` (`develop/iop_profile.c`), which
+`dt_ioppr_get_pipe_current_profile_info()` also picks its profile from: the blending code asks it
+rather than comparing orders against `colorin`/`colorout` itself, so the menu cannot drift from the
+conversion. An instance parked at `INT_MAX`, not placed in the pipe yet, counts as the working
+space. Where a module sits against a tone mapper is deliberately NOT a rule:
+which module tone-maps, if any, is the edit's choice, so RGB (display) stays offered before filmic
+and RGB (scene) after it. The mask options menu (`_blendif_options_callback()`, `blend_gui.c`) lists
+all three spaces and greys out the incompatible ones, except the one the edit already uses: an edit
+loaded from an older version, or a module moved since, must still show its own space as selectable.
+
 ### A mask or channel preview is converted back like any output; the conversion keeps alpha
 
 The blend authors a preview in the BLENDING space so that the ordinary conversion back to the
