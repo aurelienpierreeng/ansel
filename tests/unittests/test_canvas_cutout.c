@@ -2096,6 +2096,373 @@ static void _an_auto_height_frame_grows_downward_and_settles(void **state)
   dt_canvas_free(canvas);
 }
 
+/**
+ * The frame the zoom glitch was reported on: a flowing, auto-height column with a star laid
+ * over its upper half, so its height depends on what stands above each line and its lines
+ * depend on the height. Shared by the four checks below, which differ only in what they ask
+ * of it.
+ */
+static dt_canvas_object_t *_zoom_invariant_column(dt_canvas_t *canvas)
+{
+  dt_canvas_object_t *text = dt_canvas_add_text(
+      canvas, 0.0, 0.0, 520.0, 420.0,
+      "Typography on an infinite plane demands that a paragraph break its lines the same way "
+      "whatever the zoom, because the page is the thing being designed and the screen is only a "
+      "window onto it, and the measure a line is set to belongs to the page rather than to the "
+      "window looking at it. A line is set across every clear stretch of its band, not the widest "
+      "one, so a picture in the middle of a column leaves space either side, and the line carries "
+      "on past it; what has to clear a picture is the glyphs, and a logical box carries the "
+      "font's full ascent above the tallest of them.");
+  if(IS_NULL_PTR(text)) return NULL;
+  g_strlcpy(text->text.font, "DejaVu Serif 12", DT_CANVAS_FONT_LEN);
+  text->text.padding = 10.0f;
+  text->text.wrap_standoff = 12.0f;
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND | DT_CANVAS_TEXT_AUTO_HEIGHT;
+  /*
+   * Black type on a white ground, where a frame ships light type on a dark one, and a white
+   * star: the painted check below reads a glyph as a pixel darker than the page, and none of
+   * these colours reaches the layout -- an obstacle covers wherever it paints anything,
+   * whatever colour it paints it in, so the star's geometry is the one that was reported. The
+   * frame's own shadow goes for the same reason, a soft grey at its edge being indistinguishable
+   * from type; the star keeps the canvas's, so what the text must flow around is untouched.
+   */
+  text->text.text_color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  text->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  memset(&text->shadow, 0, sizeof(text->shadow));
+  text->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  canvas->grid_flags = 0;
+  canvas->background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  dt_canvas_shape_style_t style = dt_canvas_shape_style_default();
+  style.fill = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  style.sides = 5;
+  style.depth = DT_CANVAS_SHAPE_STAR_DEPTH;
+  const dt_canvas_rect_t box = { -40.0, -200.0, 200.0, 140.0 };
+  if(IS_NULL_PTR(dt_canvas_add_shape(canvas, DT_CANVAS_SHAPE_POLYGON, &box, &style))) return NULL;
+  return text;
+}
+
+/** What the text frame comes to, measured on a scratch context carrying this matrix. */
+static double _natural_height_at(const dt_canvas_t *canvas, const dt_canvas_object_t *text, const double ctm)
+{
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  cairo_scale(cr, ctm, ctm);
+  const double height = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+  return height;
+}
+
+/** The ten viewports the glitch was measured over, from a quarter zoom to five times. */
+static const double _glitch_ctms[] = { 0.2, 0.37, 0.5, 0.618, 0.8, 1.0, 1.37, 2.0, 3.1, 5.0 };
+
+static void _a_text_frames_natural_height_is_the_same_at_every_zoom(void **state)
+{
+  (void)state;
+  /*
+   * `pango_cairo_create_layout()` copies the cairo CTM into the Pango context, so a font's
+   * metrics come back rounded to a Pango unit AT DEVICE SCALE: DejaVu Serif 12's line box is
+   * 13.968750 units at every viewport but 0.370, where it is 13.969727 -- a 1024th of a unit,
+   * accumulating to 0.0238 down this frame. A height is a property of the DOCUMENT, so the
+   * viewport that happens to ask must not be able to move it by any amount at all; the flow
+   * engine works in 256ths of a unit for exactly that reason. Measured before the quantum:
+   * 173.666992 at 0.2 and 0.37, 173.656250 at 0.5, 173.645508 at 0.8 -- three answers to one
+   * question.
+   */
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = _zoom_invariant_column(canvas);
+  assert_non_null(text);
+  const double reference = _natural_height_at(canvas, text, _glitch_ctms[0]);
+  assert_true(reference > 0.0);
+  for(size_t idx = 1; idx < sizeof(_glitch_ctms) / sizeof(_glitch_ctms[0]); idx++)
+  {
+    const double height = _natural_height_at(canvas, text, _glitch_ctms[idx]);
+    if(height != reference)
+    {
+      print_error("natural height %.6f at a CTM of %.3f against %.6f at %.3f\n", height, _glitch_ctms[idx],
+                  reference, _glitch_ctms[0]);
+      fail();
+    }
+  }
+  dt_canvas_free(canvas);
+}
+
+static void _a_leaded_text_frames_natural_height_is_the_same_at_every_zoom(void **state)
+{
+  (void)state;
+  /*
+   * The same question asked of a frame whose lines are led apart. A leading is a context
+   * metric like the line box, and drifts with the viewport the same way: measured before the
+   * quantum, this frame came to 222.565430 at two viewports, 222.546875 at seven and
+   * 222.537109 at one. It needs its own check because the flow engine reads the leading from
+   * `pango_layout_get_spacing()`, which is only ever non-zero when a frame asks for a line
+   * height of its own -- so a frame that leaves the leading alone never exercises it, and the
+   * quantum there could be removed with every other check still green.
+   */
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = _zoom_invariant_column(canvas);
+  assert_non_null(text);
+  text->text.line_height = 1.5f;
+  dt_canvas_touch(canvas);
+  const double reference = _natural_height_at(canvas, text, _glitch_ctms[0]);
+  assert_true(reference > 0.0);
+  for(size_t idx = 1; idx < sizeof(_glitch_ctms) / sizeof(_glitch_ctms[0]); idx++)
+  {
+    const double height = _natural_height_at(canvas, text, _glitch_ctms[idx]);
+    if(height != reference)
+    {
+      print_error("led natural height %.6f at a CTM of %.3f against %.6f at %.3f\n", height, _glitch_ctms[idx],
+                  reference, _glitch_ctms[0]);
+      fail();
+    }
+  }
+  dt_canvas_free(canvas);
+}
+
+static void _a_fitted_text_frame_is_exactly_its_natural_height(void **state)
+{
+  (void)state;
+  /*
+   * `_flow_text()`'s cut is exact -- deliberately, since a tolerance there would let a line
+   * overflow a frame the user sized by hand -- so the fit must leave the frame exactly as tall
+   * as its text came to, not within a hundredth of a unit of it. Breaking before the
+   * assignment left it short, and the last line then fell the wrong side of the cut.
+   *
+   * The sweep covers the products the painter's own layer matrix produces, zoom times device
+   * scale times the quality a gesture drops to. The painter folds all three into ONE scalar
+   * (`cairo_matrix_init_scale()` then `cairo_matrix_multiply()` in `_paint_canvas()`, applied
+   * by `_layer_context()`), so a product is the whole of what the metrics are rounded at and
+   * the twenty triples below are sixteen distinct matrices -- the duplicates cost nothing and
+   * are kept because the triple is how a reader thinks of a viewport. A frame shorter than the
+   * natural height at any one of them drops its last line there.
+   */
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = _zoom_invariant_column(canvas);
+  assert_non_null(text);
+  assert_true(dt_canvas_paint_text_fit_height(canvas, text));
+  // Settled: asking again changes nothing, and reports that nothing changed.
+  assert_false(dt_canvas_paint_text_fit_height(canvas, text));
+
+  const double zooms[] = { 0.2, 0.37, 0.5, 1.0, 2.0 };
+  for(size_t idx = 0; idx < sizeof(zooms) / sizeof(zooms[0]); idx++)
+  {
+    for(int device_scale = 1; device_scale <= 2; device_scale++)
+    {
+      for(int reduced = 0; reduced <= 1; reduced++)
+      {
+        const double ctm = zooms[idx] * (double)device_scale * (reduced ? 0.5 : 1.0);
+        const double height = _natural_height_at(canvas, text, ctm);
+        if(height != text->height)
+        {
+          print_error("zoom %.3f x device scale %d x quality %.1f: the frame stands at %.6f and its text "
+                      "comes to %.6f\n",
+                      zooms[idx], device_scale, reduced ? 0.5 : 1.0, text->height, height);
+          fail();
+        }
+      }
+    }
+  }
+  for(size_t idx = 0; idx < sizeof(_glitch_ctms) / sizeof(_glitch_ctms[0]); idx++)
+  {
+    const double height = _natural_height_at(canvas, text, _glitch_ctms[idx]);
+    if(height != text->height)
+    {
+      print_error("CTM %.3f: the frame stands at %.6f and its text comes to %.6f\n", _glitch_ctms[idx],
+                  text->height, height);
+      fail();
+    }
+  }
+  dt_canvas_free(canvas);
+}
+
+/**
+ * Paint the whole canvas at this viewport and report the lowest inked row WITHIN the text
+ * frame's own box, in CANVAS units measured down from the plane's origin. Black type on a
+ * white page and a white star, so anything darker than the page inside the box is a glyph and
+ * nothing else. The row is converted back through the viewport, so viewports that rasterise at
+ * wildly different densities give comparable answers.
+ * @return FALSE when no type was painted inside the frame at all.
+ */
+static gboolean _painted_ink_bottom(const dt_canvas_t *canvas, const dt_canvas_object_t *text, const double zoom,
+                                    const double device_scale, const double quality, double *bottom)
+{
+  const int size = (int)(760.0 * device_scale);
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, size, size);
+  cairo_surface_set_device_scale(surface, device_scale, device_scale);
+  cairo_t *cr = cairo_create(surface);
+  const double half = 0.5 * size / device_scale;
+  cairo_translate(cr, half, half);
+  cairo_scale(cr, zoom, zoom);
+  const dt_canvas_rect_t whole = { -half / zoom, -half / zoom, 2.0 * half / zoom, 2.0 * half / zoom };
+  dt_canvas_surface_cache_t *cache = dt_canvas_surface_cache_new(FALSE, 64u * 1024u * 1024u);
+  dt_canvas_paint_options_t options = dt_canvas_paint_options_export(cache, 1.0 / zoom, whole);
+  options.quality = quality;
+  dt_canvas_paint(cr, canvas, &options);
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  /* the frame's box in the surface's own pixels, so nothing outside the column is read */
+  const double top_edge = (text->y - text->height * 0.5) * zoom + half;
+  const double bottom_edge = (text->y + text->height * 0.5) * zoom + half;
+  const double left_edge = (text->x - text->width * 0.5) * zoom + half;
+  const double right_edge = (text->x + text->width * 0.5) * zoom + half;
+  const int first_row = CLAMP((int)floor(top_edge * device_scale), 0, size - 1);
+  const int last_row = CLAMP((int)ceil(bottom_edge * device_scale), 0, size - 1);
+  const int first_col = CLAMP((int)floor(left_edge * device_scale), 0, size - 1);
+  const int last_col = CLAMP((int)ceil(right_edge * device_scale), 0, size - 1);
+  int lowest = -1;
+  for(int row = last_row; row >= first_row && lowest < 0; row--)
+  {
+    for(int col = first_col; col <= last_col; col++)
+    {
+      const uint32_t pixel = *(const uint32_t *)(pixels + (size_t)row * stride + (size_t)col * 4) & 0xFFFFFFu;
+      const int luminance = (int)(((pixel >> 16) & 0xFF) + ((pixel >> 8) & 0xFF) + (pixel & 0xFF)) / 3;
+      // Generous, because the coarsest viewport here rasterises a stem across a fifth of a
+      // pixel: a threshold tight enough to want a solid black found no type at all there.
+      if(luminance < 215)
+      {
+        lowest = row;
+        break;
+      }
+    }
+  }
+  dt_canvas_surface_cache_free(cache);
+  cairo_surface_destroy(surface);
+  if(lowest < 0) return FALSE;
+  *bottom = ((double)lowest / device_scale - half) / zoom;
+  return TRUE;
+}
+
+static void _a_text_frame_paints_the_same_lines_at_every_zoom(void **state)
+{
+  (void)state;
+  /*
+   * The visible half of the same defect: of these twenty viewports, five painted twenty-one
+   * lines and fifteen painted twenty-two, the last line -- "full ascent above the tallest of
+   * them." -- present at rest and gone for the duration of any drag, because a gesture drops
+   * the quality and so changes the matrix the metrics were rounded at. The lowest inked row is
+   * what says which happened: a dropped line lifts it by a whole line, 13.97 units, where the
+   * viewports that agree land it within one of their own pixels of each other.
+   */
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = _zoom_invariant_column(canvas);
+  assert_non_null(text);
+  assert_true(dt_canvas_paint_text_fit_height(canvas, text));
+
+  const double zooms[] = { 0.37, 0.5, 1.0, 2.0, 3.1 };
+  double reference = 0.0;
+  gboolean have_reference = FALSE;
+  for(size_t idx = 0; idx < sizeof(zooms) / sizeof(zooms[0]); idx++)
+  {
+    for(int device_scale = 1; device_scale <= 2; device_scale++)
+    {
+      for(int reduced = 0; reduced <= 1; reduced++)
+      {
+        const double quality = reduced ? 0.5 : 1.0;
+        double bottom = 0.0;
+        assert_true(_painted_ink_bottom(canvas, text, zooms[idx], (double)device_scale, quality, &bottom));
+        if(!have_reference)
+        {
+          reference = bottom;
+          have_reference = TRUE;
+        }
+        /*
+         * Measured with the last line dropped at some viewports and not at others: the twenty-
+         * one-line readings came to -62.16 and -60.81 units, the twenty-two-line ones spread
+         * from -51.35 to -49.03 -- 9.5 units between the two groups against 2.3 within the
+         * larger one, the spread being what a stem rasterised across a fifth of a pixel does to
+         * the threshold above rather than anything the flow engine decided. Five units sits
+         * between the two with room either side.
+         */
+        /*
+         * And an absolute anchor, or a change that dropped the last line at EVERY viewport
+         * would pass: the lowest type must sit within two lines of the frame's own inner
+         * bottom edge, which is where a frame fitted to its text puts it.
+         */
+        const double inner_bottom = text->y + text->height * 0.5 - (double)text->text.padding;
+        if(bottom < inner_bottom - 2.0 * 13.97)
+        {
+          print_error("zoom %.2f x device scale %d x quality %.1f: the lowest type sits at %.3f units, more "
+                      "than two lines above the frame's inner bottom edge at %.3f\n",
+                      zooms[idx], device_scale, quality, bottom, inner_bottom);
+          fail();
+        }
+        if(fabs(bottom - reference) > 5.0)
+        {
+          print_error("zoom %.2f x device scale %d x quality %.1f: the lowest type sits at %.3f units "
+                      "against %.3f at the first viewport -- %.3f units apart, most of a line\n",
+                      zooms[idx], device_scale, quality, bottom, reference, fabs(bottom - reference));
+          fail();
+        }
+      }
+    }
+  }
+  dt_canvas_free(canvas);
+}
+
+static void _a_text_frame_short_of_its_text_is_brought_up_to_it(void **state)
+{
+  (void)state;
+  /*
+   * The fit is asked to make a frame as tall as its text, and the cut that decides which lines
+   * fit is EXACT -- deliberately, since a tolerance there would let a line overflow a frame the
+   * user sized by hand. So a frame five THOUSANDTHS of a unit short of its text already paints
+   * one line fewer, and the fit, finding itself inside its own settle tolerance, used to break
+   * before assigning and report that there was nothing to do. Measured: 22 lines at the natural
+   * height, 21 at five thousandths under it, and the fit left it there.
+   *
+   * A frame arrives in that state whenever a height is written by something other than this
+   * loop -- typed into the card, read back from a document written before the metrics were
+   * quantised, or scaled by a drag.
+   */
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = _zoom_invariant_column(canvas);
+  assert_non_null(text);
+  assert_true(dt_canvas_paint_text_fit_height(canvas, text));
+  const double settled = text->height;
+  const double top = text->y - text->height * 0.5;
+  double whole = 0.0;
+  assert_true(_painted_ink_bottom(canvas, text, 1.0, 1.0, 1.0, &whole));
+
+  text->height = settled - 0.005;
+  text->y -= 0.0025;
+  dt_canvas_touch(canvas);
+  double clipped = 0.0;
+  assert_true(_painted_ink_bottom(canvas, text, 1.0, 1.0, 1.0, &clipped));
+  // The shortfall really does cost a line: a tenth of a line apart would prove nothing.
+  assert_true(whole - clipped > 5.0);
+
+  assert_true(dt_canvas_paint_text_fit_height(canvas, text));
+  if(text->height != settled)
+  {
+    print_error("the fit left the frame at %.6f where its text comes to %.6f\n", text->height, settled);
+    fail();
+  }
+  /*
+   * Grown downward, as it always is: the edge the user placed is not the fit's to move. The
+   * tolerance has to be far below what the correction moves, or the check passes whether or
+   * not the correction is there: this shortfall is five thousandths of a unit, so the line
+   * that moves the top edge contributes half of that, and a hundredth of a unit would be four
+   * times the whole quantity under test.
+   */
+  if(fabs(top - (text->y - text->height * 0.5)) > 1.0e-9)
+  {
+    print_error("the fit moved the top edge from %.9f to %.9f\n", top, text->y - text->height * 0.5);
+    fail();
+  }
+  dt_canvas_touch(canvas);
+  double restored = 0.0;
+  assert_true(_painted_ink_bottom(canvas, text, 1.0, 1.0, 1.0, &restored));
+  assert_float_equal(whole, restored, 0.01);
+  dt_canvas_free(canvas);
+}
+
 static void _the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map(void **state)
 {
   (void)state;
@@ -2616,6 +2983,11 @@ int main(void)
     cmocka_unit_test(_text_flows_around_what_is_laid_over_it),
     cmocka_unit_test(_the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map),
     cmocka_unit_test(_an_auto_height_frame_grows_downward_and_settles),
+    cmocka_unit_test(_a_text_frames_natural_height_is_the_same_at_every_zoom),
+    cmocka_unit_test(_a_leaded_text_frames_natural_height_is_the_same_at_every_zoom),
+    cmocka_unit_test(_a_fitted_text_frame_is_exactly_its_natural_height),
+    cmocka_unit_test(_a_text_frame_paints_the_same_lines_at_every_zoom),
+    cmocka_unit_test(_a_text_frame_short_of_its_text_is_brought_up_to_it),
     cmocka_unit_test(_text_keeps_off_what_an_obstacle_paints_not_just_its_silhouette),
     cmocka_unit_test(_a_feathered_cutout_covers_all_of_its_fade),
     cmocka_unit_test(_a_drawings_sprite_is_exactly_the_size_it_was_asked_for),

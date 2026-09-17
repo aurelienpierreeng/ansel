@@ -2097,6 +2097,30 @@ static int _obstacles_runs(const dt_text_obstacles_t *obstacles, const double to
   return found;
 }
 
+/**
+ * Round a vertical metric to a 256th of a unit, which is what makes a line fall in the same
+ * place on the page at every zoom.
+ *
+ * `pango_cairo_create_layout()` copies the cairo CTM into the Pango context, so a font's
+ * metrics come back rounded to a Pango unit AT DEVICE SCALE. Measured on DejaVu Serif 12, a
+ * line box is 13.968750 units at every viewport except a CTM of 0.370, where it is 13.969727 --
+ * one Pango unit, a 1024th of a unit; 9 pt drifts at 0.618, 40 pt at three viewports of ten,
+ * and the context's own ascent plus descent, which the leading and the first line's band are
+ * taken from, drifts with them. Accumulated down a frame that came to 0.0238 units, and an
+ * exact cut needs no more than that to drop the last line: of 20 (zoom, device scale, quality)
+ * triples, 15 painted 22 lines and 5 painted 21.
+ *
+ * A 256th of a unit is 0.0039 pt -- a thousandth of a millimetre, below anything a page can
+ * show -- and it absorbs a 1024th with a factor of two in hand: 13.968750 x 256 = 3576.00 and
+ * 13.969727 x 256 = 3576.25 both round to 3576. Nothing here is consulted by the rasteriser
+ * and the CTM is never read, so the glyphs go on being drawn from the metrics Pango built them
+ * with; this is the flow engine agreeing with itself about where the lines go.
+ */
+static inline double _metric_quantum(const double units)
+{
+  return round(units * 256.0) / 256.0;
+}
+
 /** What setting one piece of a line came to: how much text it took, and what it occupies. */
 typedef struct dt_text_piece_t
 {
@@ -2213,10 +2237,13 @@ static gboolean _flow_piece(cairo_t *cr, const dt_canvas_t *canvas, const dt_can
   pango_layout_line_get_extents(line, &ink, &logical);
   piece->line = line;
   piece->hang = hang;
-  piece->height = fmax((double)logical.height / PANGO_SCALE, 1.0);
-  piece->logical_top = (double)logical.y / PANGO_SCALE;
-  piece->ink_top = (double)(ink.y - logical.y) / PANGO_SCALE;
-  piece->ink_height = fmax((double)ink.height / PANGO_SCALE, 1.0);
+  // Quantised on the way out, so the flow engine downstream of here works in numbers that do
+  // not move with the viewport that asked. The floors stay outside the rounding: a floor is a
+  // decision, not a measurement.
+  piece->height = fmax(_metric_quantum((double)logical.height / PANGO_SCALE), 1.0);
+  piece->logical_top = _metric_quantum((double)logical.y / PANGO_SCALE);
+  piece->ink_top = _metric_quantum((double)(ink.y - logical.y) / PANGO_SCALE);
+  piece->ink_height = fmax(_metric_quantum((double)ink.height / PANGO_SCALE), 1.0);
   piece->consumed = *cached_offset + line->start_index + line->length;
   /*
    * A break eats the space it broke on: step over what the line did not take, or the next
@@ -2272,8 +2299,9 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
         = pango_context_get_metrics(pango_layout_get_context(probe), pango_layout_get_font_description(probe), NULL);
     if(!IS_NULL_PTR(metrics))
     {
-      nominal = (double)(pango_font_metrics_get_ascent(metrics) + pango_font_metrics_get_descent(metrics))
-                / PANGO_SCALE;
+      const int ascent_and_descent
+          = pango_font_metrics_get_ascent(metrics) + pango_font_metrics_get_descent(metrics);
+      nominal = _metric_quantum((double)ascent_and_descent / PANGO_SCALE);
       pango_font_metrics_unref(metrics);
     }
     g_object_unref(probe);
@@ -2401,7 +2429,7 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
         cairo_restore(cr);
       }
       line_height = fmax(line_height, piece.height);
-      leading_gap = fmax(leading_gap, (double)pango_layout_get_spacing(layout) / PANGO_SCALE);
+      leading_gap = fmax(leading_gap, _metric_quantum((double)pango_layout_get_spacing(layout) / PANGO_SCALE));
       // A line that took no text is still a line that was set -- the empty one Pango draws for
       // the blank line between two paragraphs -- so the layout moves on whatever it took, or
       // the band is asked for again with nothing changed and the walk never ends. It does end
@@ -2599,12 +2627,23 @@ gboolean dt_canvas_paint_text_fit_height(const dt_canvas_t *canvas, dt_canvas_ob
   for(int round = 0; round < TEXT_AUTO_HEIGHT_ROUNDS; round++)
   {
     const double natural = dt_canvas_paint_text_natural_height(cr, canvas, object);
-    if(!(natural > 0.0) || fabs(natural - object->height) < 0.01) break;
+    if(!(natural > 0.0)) break;
+    /*
+     * The height is ASSIGNED before the loop breaks, settled or not. `_flow_text()`'s cut is
+     * exact -- deliberately, since a tolerance there would let a line overflow a frame the
+     * user sized by hand -- so a frame left even a hundredth of a unit short of what its text
+     * came to drops its last line. Breaking before the assignment left exactly that: the
+     * round that found itself within the tolerance went home without writing the number it
+     * had just measured.
+     */
+    const gboolean settled = fabs(natural - object->height) < 0.01;
     const double growth = natural - object->height;
     object->x -= growth * 0.5 * sin(object->rotation);
     object->y += growth * 0.5 * cos(object->rotation);
     object->height = natural;
-    moved = TRUE;
+    // Only a real change is reported, so a settled frame asked again touches nothing.
+    if(growth != 0.0) moved = TRUE;
+    if(settled) break;
   }
   cairo_destroy(cr);
   cairo_surface_destroy(scratch);
