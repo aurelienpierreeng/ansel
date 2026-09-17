@@ -378,18 +378,22 @@ static void test_crawl_reads_a_miscased_name_as_the_filesystem_does(void **state
   gchar *as_named = g_build_filename(d.dir, "SHOT.raw", NULL);
   const gboolean folds_case = g_file_test(as_named, G_FILE_TEST_EXISTS);
   g_free(as_named);
-  if(folds_case)
+
+  if(!folds_case)
   {
-    _crawl_dir_free(&d);
-    skip();
+    GList *changed = dt_control_crawler_run();
+    assert_null(changed);
+
+    // `SHOT.raw' names no file in this directory, so `shot.txt' is not its companion
+    assert_false(_row_has(d.img, DT_IMAGE_HAS_TXT));
   }
 
-  GList *changed = dt_control_crawler_run();
-  assert_null(changed);
-
-  // `SHOT.raw' names no file in this directory, so `shot.txt' is not its companion
-  assert_false(_row_has(d.img, DT_IMAGE_HAS_TXT));
+  /* One exit, one free. skip() does not return -- it longjmps to the runner -- so freeing
+   * inside the skipped branch and again at the end would be two frees on one path for
+   * anything that cannot see CMOCKA_NORETURN, and a real double free the day someone copies
+   * this shape without the skip. The directory is cleaned up either way. */
   _crawl_dir_free(&d);
+  if(folds_case) skip();
 }
 
 int main(void)
