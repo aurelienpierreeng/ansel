@@ -9,6 +9,9 @@ This note is the reasoning behind the shape it has now. The numbers are measured
 and one library, named where they are used; the library is on a GVFS/SMB mount, which is what
 made every cost here visible in the first place.
 
+The machine used in the tests is a Thinkpad P16v Gen1 (AMD Ryzen 7 PRO 7840HS, without GPU card)
+running under LinuxMint 22.3.
+
 ## The cost is round-trips, not work
 
 The crawl used to ask the filesystem up to six questions per image, one `stat()` each: does the
@@ -116,36 +119,39 @@ changed is that it waits for one call, not for every remaining folder.
 ends at the first `FALSE`. `dt_control_crawler_run()` — the menu's synchronous entry point — has
 no job and runs to its end, as it always did.
 
-## The modularity decision, taken on purpose
+## This file should be several modules
 
-This branch added three genuinely new jobs to `crawler.c`: the folder inventory, the
-background-job orchestration, and keeping the image cache in step. The file already had two of
-its own — deciding what to report, and the GTK dialog that reports it — and is **1155 lines**,
-570 of scanner and 585 of dialog sharing one include list.
+`crawler.c` holds five jobs at once: deciding which images to report, the GTK dialog that
+reports them, the directory inventory that decision reads, the background job driving the whole
+thing, and keeping the image cache in step with the rows it writes. That is 1155 lines — 570 of
+scanner and 585 of dialog — sharing one include list.
 
-**The decision is that the folder inventory becomes a module of its own, and that it does not
-happen on this branch.** Both halves are deliberate.
+The inventory is the piece that most clearly belongs elsewhere, and the evidence for that sits
+in the tree rather than in taste. **Seventeen** files in `src/` (22 counting vendored code)
+enumerate a directory by hand. The "name of the file beside this one" computation — scan back to
+the last `.`, put another extension there — is written out at **five** sites in three files:
+three in `common/image.c` (`dt_image_get_audio_path_from_path()`,
+`_text_path_legacy_if_exists()`, `_text_path_legacy_build()`), one in
+`control/jobs/control_jobs.c`, and one here.
 
-It should be a module because nothing about it is the crawler's. **Seventeen** files in `src/`
-(22 counting vendored code) enumerate a directory by hand today. And the "name of the file
-beside this one" computation — scan back to the last `.`, put another extension there — is
-written out at **five** sites in three files: three in `common/image.c`
-(`dt_image_get_audio_path_from_path()`, `_text_path_legacy_if_exists()`,
-`_text_path_legacy_build()`), one in `control/jobs/control_jobs.c`, and the one added here,
-which is literally the fifth copy.
+That duplication is not free. The copy here searched the last `.` of the *file name* where the
+ones it was modelled on searched the whole *path*; for a name with no extension in a folder
+whose path has a dot, the two answer differently — the older spelling points beside the folder,
+outside the image's own directory — and it took a review to notice. An inventory module
+answering *does this name exist in this folder, and when was it last written*, carrying the
+casefold-then-`stat()` rule and one sibling-name helper, turns the fifth copy into the first
+shared one.
 
-That duplication is not free: the copy in this file searched the last `.` of the *file name*
-where the ones it was modelled on searched the whole *path*. For a name with no extension in a
-folder whose path has a dot, the two answer differently — the older spelling points outside the
-image's own directory — and it took a review to notice. An inventory answering *does this name
-exist in this folder, and when was it last written* — with the casefold-then-`stat()` rule and
-one sibling-name helper inside it — turns the fifth copy into the first shared one.
+**Why the split did not come with the code.** When this was written, the project had not settled
+the rule that a new job gets a new module — it was being written down while this work was
+reviewed — and what landed here was a series of behavioural fixes. Folding a refactor into them
+would have made both harder to judge and harder to revert. So the split is owed, as a piece of
+work of its own, and this section is the argument for it rather than a note about how it was
+avoided.
 
-It does not happen here because this branch is a reviewed series of behavioural fixes, and
-folding a refactor into it would make both harder to judge and harder to revert. The repo's
-habit is one subject per branch. What stays with the crawler afterwards is the policy — which
-images to report, how the flags are reconciled with the cache — and the job that drives it; the
-GTK dialog leaves separately, as PR 7 of `control-split.md`.
+What stays with the crawler when that happens is the policy — which images to report, how the
+flags are reconciled with the cache — and the job that drives it. The GTK dialog leaves on its
+own account, as PR 7 of `control-split.md`.
 
 ## What the manual runs showed
 
