@@ -101,6 +101,25 @@ dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_input_profile_info(const struc
 
 dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_output_profile_info(const struct dt_dev_pixelpipe_t *pipe);
 
+/** The profile a module's position in the pipe answers to. */
+typedef enum dt_ioppr_profile_stage_t
+{
+  DT_IOPPR_PROFILE_STAGE_INPUT = 0, // before colorin
+  DT_IOPPR_PROFILE_STAGE_WORK = 1,  // from colorin up to colorout
+  DT_IOPPR_PROFILE_STAGE_OUTPUT = 2 // from colorout on
+} dt_ioppr_profile_stage_t;
+
+/**
+ * @brief Which of the pipe's input, working and output profiles applies at a module's position.
+ *
+ * This is the one place deciding it: dt_ioppr_get_pipe_current_profile_info() picks its profile from
+ * the answer, and anything that must agree with that choice asks here instead of comparing orders.
+ *
+ * @param module Module whose iop_order is placed against colorin and colorout.
+ * @return The stage the module's position belongs to.
+ */
+dt_ioppr_profile_stage_t dt_ioppr_get_module_profile_stage(const struct dt_iop_module_t *module);
+
 /** Get the relevant RGB -> XYZ profile at the position of current module */
 dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_current_profile_info(struct dt_iop_module_t *module,
                                                                        const struct dt_dev_pixelpipe_t *pipe);

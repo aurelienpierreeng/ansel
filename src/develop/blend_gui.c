@@ -2865,6 +2865,7 @@ static gboolean _blendif_change_blend_colorspace(dt_iop_module_t *module, dt_dev
       cst = dt_develop_blend_default_module_blend_colorspace(module);
       break;
   }
+  if(!dt_develop_blend_colorspace_is_compatible(module, cst)) return FALSE;
   if(cst != module->blend_params->blend_cst)
   {
     dt_develop_blend_init_blendif_parameters(module->blend_params, cst);
@@ -2940,6 +2941,23 @@ static void _blendif_hide_output_channels(GtkMenuItem *menuitem, dt_iop_module_t
   }
 }
 
+static void _blendif_append_colorspace_item(GtkMenu *menu, dt_iop_module_t *module, const char *label,
+                                            const dt_develop_blend_colorspace_t cst)
+{
+  GtkWidget *mi = gtk_check_menu_item_new_with_label(label);
+  const gboolean current = module->blend_params->blend_cst == cst;
+  if(current)
+  {
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
+    dt_gui_add_class(mi, "active_menu_item");
+  }
+  // the space an edit already uses stays readable as such, even where it would not be offered
+  gtk_widget_set_sensitive(mi, current || dt_develop_blend_colorspace_is_compatible(module, cst));
+  g_object_set_data_full(G_OBJECT(mi), "dt-blend-cst", GINT_TO_POINTER(cst), NULL);
+  g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
+}
+
 static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
 {
   if(event->button != 1 && event->button != 2) return;
@@ -2954,7 +2972,6 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
 
   // add a section to switch blending color spaces
   const dt_develop_blend_colorspace_t module_cst = dt_develop_blend_default_module_blend_colorspace(module);
-  const dt_develop_blend_colorspace_t module_blend_cst = module->blend_params->blend_cst;
   if(module_cst == DEVELOP_BLEND_CS_LAB || module_cst == DEVELOP_BLEND_CS_RGB_DISPLAY
       || module_cst == DEVELOP_BLEND_CS_RGB_SCENE)
   {
@@ -2964,43 +2981,10 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
     g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 
-    // only show Lab blending when the module is a Lab module to avoid using it at the wrong place (Lab blending
-    // should not be activated for RGB modules before colorin and after colorout)
-    if(module_cst == DEVELOP_BLEND_CS_LAB)
-    {
-      mi = gtk_check_menu_item_new_with_label(_("Lab"));
-
-      if(module_blend_cst == DEVELOP_BLEND_CS_LAB)
-      {
-        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
-        dt_gui_add_class(mi, "active_menu_item");
-      }
-      g_object_set_data_full(G_OBJECT(mi), "dt-blend-cst", GINT_TO_POINTER(DEVELOP_BLEND_CS_LAB), NULL);
-      g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
-      gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
-    }
-
-    mi = gtk_check_menu_item_new_with_label(_("RGB (display)"));
-
-    if(module_blend_cst == DEVELOP_BLEND_CS_RGB_DISPLAY)
-    {
-      gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
-      dt_gui_add_class(mi, "active_menu_item");
-    }
-    g_object_set_data_full(G_OBJECT(mi), "dt-blend-cst", GINT_TO_POINTER(DEVELOP_BLEND_CS_RGB_DISPLAY), NULL);
-    g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
-
-    mi = gtk_check_menu_item_new_with_label(_("RGB (scene)"));
-
-    if(module_blend_cst == DEVELOP_BLEND_CS_RGB_SCENE)
-    {
-      gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
-      dt_gui_add_class(mi, "active_menu_item");
-    }
-    g_object_set_data_full(G_OBJECT(mi), "dt-blend-cst", GINT_TO_POINTER(DEVELOP_BLEND_CS_RGB_SCENE), NULL);
-    g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
+    // every blending space is listed, the ones this module cannot blend in are greyed out
+    _blendif_append_colorspace_item(menu, module, _("Lab"), DEVELOP_BLEND_CS_LAB);
+    _blendif_append_colorspace_item(menu, module, _("RGB (display)"), DEVELOP_BLEND_CS_RGB_DISPLAY);
+    _blendif_append_colorspace_item(menu, module, _("RGB (scene)"), DEVELOP_BLEND_CS_RGB_SCENE);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
