@@ -317,18 +317,15 @@ void init_presets(dt_iop_module_so_t *self)
 
   p.radius = 8;
   p.iterations = 8;
-  dt_gui_presets_add_generic(_("lens deblur: soft"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("lens deblur: soft"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.radius = 10;
   p.iterations = 16;
-  dt_gui_presets_add_generic(_("lens deblur: medium"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("lens deblur: medium"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.radius = 12;
   p.iterations = 24;
-  dt_gui_presets_add_generic(_("lens deblur: hard"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("lens deblur: hard"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.iterations = 10;
   p.radius = 512;
@@ -346,8 +343,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.anisotropy_third = 2.f;
   p.anisotropy_fourth = 0.f;
 
-  dt_gui_presets_add_generic(_("dehaze"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("dehaze"), self->op, self->version(), &p, sizeof(p), 1);
 
   /* Denoise presets, retuned for issue #879 (they were too faint to see).
    * Values are the RMSE optimum of a two-stage parametric sweep over
@@ -379,7 +375,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.second = 0.f;
   p.third = +0.10f;
   p.fourth = 0.f;
-  dt_gui_presets_add_generic(_("denoise: fine"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("denoise: fine"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.radius = 3;
   p.radius_center = 4;
@@ -388,7 +384,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.second = 0.f;
   p.third = +0.10f;
   p.fourth = 0.f;
-  dt_gui_presets_add_generic(_("denoise: medium"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("denoise: medium"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.radius = 6;
   p.radius_center = 8;
@@ -397,7 +393,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.second = 0.f;
   p.third = +0.25f;
   p.fourth = 0.f;
-  dt_gui_presets_add_generic(_("denoise: coarse"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("denoise: coarse"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.radius_center = 0;
 
@@ -417,7 +413,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.second = +1.f;
   p.third = +1.f;
   p.fourth = +1.f;
-  dt_gui_presets_add_generic(_("surface blur"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("surface blur"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.iterations = 1;
   p.radius = 32;
@@ -435,7 +431,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.second = +0.5f;
   p.third = +0.5f;
   p.fourth = +0.5f;
-  dt_gui_presets_add_generic(_("bloom"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("bloom"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.iterations = 1;
   p.radius = 4;
@@ -453,12 +449,10 @@ void init_presets(dt_iop_module_so_t *self)
   p.second = -0.25f;
   p.third = -0.25f;
   p.fourth = -0.25f;
-  dt_gui_presets_add_generic(_("sharpen demosaicing (no AA filter)"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("sharpen demosaicing (no AA filter)"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.radius = 8;
-  dt_gui_presets_add_generic(_("sharpen demosaicing (AA filter)"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("sharpen demosaicing (AA filter)"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.iterations = 4;
   p.radius = 64;
@@ -476,7 +470,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.second = 0.f;
   p.third = +0.5f;
   p.fourth = +0.5f;
-  dt_gui_presets_add_generic(_("simulate watercolor"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("simulate watercolor"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.iterations = 50;
   p.radius = 64;
@@ -494,7 +488,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.second = -1.f;
   p.third = -1.f;
   p.fourth = -1.f;
-  dt_gui_presets_add_generic(_("simulate line drawing"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("simulate line drawing"), self->op, self->version(), &p, sizeof(p), 1);
 
   // local contrast
   p.sharpness = 0.0f;
@@ -515,8 +509,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.radius = 333;
   p.radius_center = 512;
   p.regularization = 0.1f;
-  dt_gui_presets_add_generic(_("add local contrast"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("add local contrast"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.iterations = 32;
   p.radius = 4;
@@ -535,7 +528,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.second = +0.0f;
   p.third = +0.0f;
   p.fourth = +0.5f;
-  dt_gui_presets_add_generic(_("inpaint highlights"), self->op, self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("inpaint highlights"), self->op, self->version(), &p, sizeof(p), 1);
 
   // fast presets for slow hardware
   p.radius_center = 0;
@@ -556,8 +549,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.fourth = 0.f;
 
   p.iterations = 1;
-  dt_gui_presets_add_generic(_("fast sharpness"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("fast sharpness"), self->op, self->version(), &p, sizeof(p), 1);
 
   p.radius_center = 512;
   p.radius = 512;
@@ -578,8 +570,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.fourth = 0.f;
 
   p.iterations = 1;
-  dt_gui_presets_add_generic(_("fast local contrast"), self->op, self->version(), &p, sizeof(p), 1,
-                             DEVELOP_BLEND_CS_RGB_SCENE);
+  dt_gui_presets_add_generic(_("fast local contrast"), self->op, self->version(), &p, sizeof(p), 1);
 }
 
 void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)

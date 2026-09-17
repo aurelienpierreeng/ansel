@@ -202,6 +202,13 @@ static void _blend_init_blendif_boost_parameters(dt_develop_blend_params_t *blen
   }
 }
 
+void dt_develop_blend_resolve_default_colorspace(dt_iop_module_t *module, dt_develop_blend_params_t *blend_params)
+{
+  if(blend_params->blend_cst != DEVELOP_BLEND_CS_NONE) return;
+  blend_params->blend_cst = dt_develop_blend_default_module_blend_colorspace(module);
+  _blend_init_blendif_boost_parameters(blend_params, blend_params->blend_cst);
+}
+
 void dt_develop_blend_init_blend_parameters(dt_develop_blend_params_t *blend_params,
                                             dt_develop_blend_colorspace_t cst)
 {

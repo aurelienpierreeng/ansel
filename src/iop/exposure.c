@@ -318,7 +318,7 @@ void init_presets (dt_iop_module_so_t *self)
                                                          .deflicker_percentile = 50.0f,
                                                          .deflicker_target_level = -4.0f,
                                                          .compensate_exposure_bias = FALSE},
-                             sizeof(dt_iop_exposure_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             sizeof(dt_iop_exposure_params_t), 1);
 
 
   // For scene-referred workflow, since filmic doesn't brighten as base curve does,
@@ -331,7 +331,7 @@ void init_presets (dt_iop_module_so_t *self)
                                                          .deflicker_percentile = 50.0f,
                                                          .deflicker_target_level = -4.0f,
                                                          .compensate_exposure_bias = TRUE},
-                             sizeof(dt_iop_exposure_params_t), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             sizeof(dt_iop_exposure_params_t), 1);
 
   dt_gui_presets_update_ldr(_("scene-referred default"), self->op,
                             self->version(), FOR_RAW);

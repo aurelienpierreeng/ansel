@@ -313,6 +313,17 @@ dt_develop_blend_colorspace_t dt_develop_blend_default_module_blend_colorspace(d
  */
 gboolean dt_develop_blend_colorspace_is_compatible(dt_iop_module_t *module, dt_develop_blend_colorspace_t cst);
 
+/**
+ * @brief Replace DEVELOP_BLEND_CS_NONE, which stands for "whichever space this module blends in", by
+ * the module's own blending space and the boost factors that space starts from.
+ *
+ * Any other space is left alone, boost factors included: it is the space the edit or the preset chose.
+ *
+ * @param module Module the space is read from.
+ * @param blend_params Blending parameters, rewritten in place when they carry NONE.
+ */
+void dt_develop_blend_resolve_default_colorspace(dt_iop_module_t *module, dt_develop_blend_params_t *blend_params);
+
 /** initializes the default blend parameters for the given color space in blend_params */
 void dt_develop_blend_init_blend_parameters(dt_develop_blend_params_t *blend_params,
                                             dt_develop_blend_colorspace_t cst);

@@ -138,7 +138,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.hib = 3.0f;
   p.saturation = 1.0f;
   dt_gui_presets_add_generic(_("warm tone"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             self->version(), &p, sizeof(p), 1);
 
   p.loa = 3.55f;
   p.lob = 0.0f;
@@ -146,7 +146,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.hib = 4.5f;
   p.saturation = 1.0f;
   dt_gui_presets_add_generic(_("warming filter"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             self->version(), &p, sizeof(p), 1);
 
   p.loa = -3.55f;
   p.lob = -0.0f;
@@ -154,7 +154,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.hib = -4.5f;
   p.saturation = 1.0f;
   dt_gui_presets_add_generic(_("cooling filter"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             self->version(), &p, sizeof(p), 1);
 }
 
 __DT_CLONE_TARGETS__
