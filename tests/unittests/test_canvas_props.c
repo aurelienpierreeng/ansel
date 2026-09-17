@@ -24,6 +24,7 @@
 #include "canvas/canvas_props.h"
 #include "canvas/canvas_render.h"
 #include "common/conf.h"
+#include "common/length.h"
 #include "darktable.h"
 #include "system/macros.h"
 
@@ -217,6 +218,81 @@ static void _a_numbers_soft_range_and_neutral_lie_inside_its_hard_range(void **s
     {
       assert_true(prop->neutral >= prop->min);
       assert_true(prop->neutral <= prop->max);
+    }
+  }
+}
+
+static void _every_unit_in_the_table_is_a_length_or_is_named_here(void **state)
+{
+  (void)state;
+  /*
+   * The properties' card decides which rows may be typed in millimetres by asking
+   * `dt_length_unit_points(prop->unit) > 0` -- one question of the table, so nobody keeps a
+   * list of length rows that a new row could be left out of. That only works while every unit
+   * in the table is either one the parser knows or one it deliberately does not, so the ones it
+   * does not are named HERE: a unit added without a thought lands in neither and fails.
+   */
+  static const char *const not_lengths[] = {
+    "°",      // an angle
+    "%",      // a fraction of something the row itself names
+    "‰ em",   // letter spacing, in thousandths of the type's own size
+    "\xc3\x97",  // a multiplier: the line height, in lines
+  };
+  size_t count = 0;
+  const dt_canvas_prop_t *table = dt_canvas_props(&count);
+  size_t lengths = 0;
+  for(size_t idx = 0; idx < count; idx++)
+  {
+    const dt_canvas_prop_t *prop = &table[idx];
+    if(IS_NULL_PTR(prop->unit)) continue;
+    if(dt_length_unit_points(prop->unit) > 0.0)
+    {
+      lengths++;
+      /* Spelled as the parser prints it, or the field would open showing a unit the table does
+       * not name and the two would disagree about the same row. */
+      assert_string_equal(dt_length_unit_canonical(prop->unit), prop->unit);
+      // And only a number can be typed, so only a number may claim a unit the field will show.
+      assert_true(prop->widget == DT_CANVAS_WIDGET_MEASURE || prop->widget == DT_CANVAS_WIDGET_TUNE);
+      continue;
+    }
+    gboolean named = FALSE;
+    for(size_t which = 0; which < G_N_ELEMENTS(not_lengths); which++)
+      if(g_strcmp0(prop->unit, not_lengths[which]) == 0) named = TRUE;
+    if(!named)
+    {
+      print_error("\"%s\" is the unit of %s and is neither a length nor named as not one\n", prop->unit,
+                  prop->key);
+      fail();
+    }
+  }
+  // And the table really does have lengths in it, so this cannot pass by describing nothing.
+  assert_true(lengths >= 10);
+
+  /* The rows a person actually types a size into, named so that one quietly losing its unit --
+   * and with it the ability to be typed in millimetres -- fails here rather than in use. Named
+   * rather than counted: every later commit adds rows, and a count would only churn. */
+  static const char *const surely_lengths[] = {
+    "arrange.x", "arrange.y", "arrange.width", "arrange.height", "text.size",
+    "stroke.border_width", "corners.radius", "shadow.offset_x", "shadow.blur",
+  };
+  for(size_t which = 0; which < G_N_ELEMENTS(surely_lengths); which++)
+  {
+    gboolean seen = FALSE;
+    for(size_t idx = 0; idx < count && !seen; idx++)
+      if(g_strcmp0(table[idx].key, surely_lengths[which]) == 0)
+      {
+        seen = TRUE;
+        if(dt_length_unit_points(table[idx].unit) <= 0.0)
+        {
+          print_error("%s is no longer a length: its unit is \"%s\"\n", table[idx].key,
+                      IS_NULL_PTR(table[idx].unit) ? "(none)" : table[idx].unit);
+          fail();
+        }
+      }
+    if(!seen)
+    {
+      print_error("%s is not in the table at all\n", surely_lengths[which]);
+      fail();
     }
   }
 }
@@ -2551,6 +2627,7 @@ int main(void)
     cmocka_unit_test(_handing_a_group_back_is_a_shapes_style_too),
     cmocka_unit_test(_every_property_is_described_once),
     cmocka_unit_test(_a_numbers_soft_range_and_neutral_lie_inside_its_hard_range),
+    cmocka_unit_test(_every_unit_in_the_table_is_a_length_or_is_named_here),
     cmocka_unit_test(_pairs_point_at_each_other),
     cmocka_unit_test(_every_kind_reads_its_sections_in_screen_order),
     cmocka_unit_test(_groups_belong_to_their_sections),

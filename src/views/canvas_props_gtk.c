@@ -20,6 +20,7 @@
 
 #include "canvas/canvas.h"            // dt_canvas_object_t, dt_canvas_color(), the text feature helpers
 #include "canvas/canvas_actions.h"    // DT_CANVAS_COLOR_HISTORY_KEY
+#include "common/length.h"            // dt_length_unit_points(): which rows are lengths
 #include "system/macros.h"            // IS_NULL_PTR
 #include "system/mem_alloc.h"         // dt_free
 #include "widgets/accelerators.h"     // dt_accels_block_plain_keys_inside
@@ -27,6 +28,7 @@
 #include "widgets/button.h"           // dtgtk_button_new
 #include "widgets/chooser_button.h"   // the colour and font buttons
 #include "widgets/collapsible_section.h"
+#include "widgets/length_field.h"    // the spin button a length is typed into
 #include "widgets/container.h"        // dt_gui_flow_box_as_layout
 #include "widgets/paint.h"            // the glyphs
 #include "widgets/togglebutton.h"     // dtgtk_togglebutton_new
@@ -944,6 +946,25 @@ static GtkWidget *_row_label(const dt_canvas_prop_t *prop, const gboolean fixed_
   return label;
 }
 
+/**
+ * Is this row a LENGTH, i.e. something `common/length.h` can read and write?
+ *
+ * Asked of the table rather than kept as a list, so a row added with a length's unit is one the
+ * day it is added: `dt_length_unit_points()` answers 0 for everything that is not a unit, which
+ * is every degree, per cent and per mille in the table. Against `prop->unit` itself and never
+ * `_(prop->unit)` -- the table's is the name the parser knows, the translation is for the eye.
+ */
+static gboolean _prop_is_length(const dt_canvas_prop_t *prop)
+{
+  return !IS_NULL_PTR(prop->unit) && dt_length_unit_points(prop->unit) > 0.0;
+}
+
+/** Where a row remembers the unit it was last left in. */
+static gchar *_prop_unit_key(const dt_canvas_prop_t *prop)
+{
+  return g_strdup_printf("canvas/props/unit/%s", prop->key);
+}
+
 static GtkWidget *_unit_label(const dt_canvas_prop_t *prop)
 {
   GtkWidget *label = gtk_label_new(IS_NULL_PTR(prop->unit) ? "" : _(prop->unit));
@@ -1016,16 +1037,36 @@ static int _spin_chars(const dt_canvas_prop_t *prop)
   const int sign = prop->soft_min < 0.0 ? 1 : 0;
   const int decimals = prop->digits > 0 ? prop->digits + 1 : 0;
   // A plane position is typed, not read at a glance: six characters show every page of a document
-  // and the entry scrolls for the rest.
-  return CLAMP(integer_digits + sign + decimals, 2, 6);
+  // and the entry scrolls for the rest. A LENGTH carries its unit in the same entry -- that is
+  // what lets it be typed -- so it is given room for the space and two letters after it.
+  const int room = _prop_is_length(prop) ? 9 : 6;
+  return CLAMP(integer_digits + sign + decimals, 2, room);
 }
 
 static GtkWidget *_build_spin(props_binding_t *binding)
 {
   const dt_canvas_prop_t *prop = binding->prop;
-  GtkWidget *spin = gtk_spin_button_new_with_range(prop->min, prop->max, prop->step > 0.0 ? prop->step : 1.0);
-  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(spin), (guint)MAX(prop->digits, 0));
-  gtk_spin_button_set_numeric(GTK_SPIN_BUTTON(spin), TRUE);
+  const double step = prop->step > 0.0 ? prop->step : 1.0;
+  GtkWidget *spin = NULL;
+  if(_prop_is_length(prop))
+  {
+    /*
+     * A length is typed in whatever unit the person thinks in, and the field goes on showing
+     * the one they used. It IS a GtkSpinButton and its value is still the row's own number, so
+     * every handler below is connected to it unchanged; it sets its own digits, wide enough for
+     * the unit as well as for this row's precision, and refuses nothing a person types -- a
+     * number it cannot read leaves the row at what it held.
+     */
+    gchar *unit_key = _prop_unit_key(prop);
+    spin = dt_length_field_new(unit_key, prop->unit, MAX(prop->digits, 0), prop->min, prop->max, step);
+    g_free(unit_key);
+  }
+  else
+  {
+    spin = gtk_spin_button_new_with_range(prop->min, prop->max, step);
+    gtk_spin_button_set_digits(GTK_SPIN_BUTTON(spin), (guint)MAX(prop->digits, 0));
+    gtk_spin_button_set_numeric(GTK_SPIN_BUTTON(spin), TRUE);
+  }
   gtk_entry_set_width_chars(GTK_ENTRY(spin), _spin_chars(prop));
   gtk_widget_set_tooltip_text(spin, _(prop->tooltip));
   binding->widget = spin;
@@ -1202,7 +1243,9 @@ static void _build_strip_row(props_t *props, props_binding_t *binding)
   GtkWidget *control = _build_control(binding, TRUE);
   if(IS_NULL_PTR(control)) return;
   GtkWidget *row = control;
-  if(binding->prop->widget == DT_CANVAS_WIDGET_MEASURE && !IS_NULL_PTR(binding->prop->unit))
+  // A length writes its unit in the entry itself, so a label beside it would say it twice.
+  if(binding->prop->widget == DT_CANVAS_WIDGET_MEASURE && !IS_NULL_PTR(binding->prop->unit)
+     && !_prop_is_length(binding->prop))
   {
     row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(2));
     gtk_box_pack_start(GTK_BOX(row), control, FALSE, FALSE, 0);
@@ -1281,7 +1324,8 @@ static void _build_card_row(props_t *props, props_binding_t *binding)
       }
       else
       {
-        row = _labelled_row(prop, control, IS_NULL_PTR(prop->unit) ? NULL : _unit_label(prop));
+        row = _labelled_row(prop, control,
+                            IS_NULL_PTR(prop->unit) || _prop_is_length(prop) ? NULL : _unit_label(prop));
       }
       break;
     case DT_CANVAS_WIDGET_ICONS:
