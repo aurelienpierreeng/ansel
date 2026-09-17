@@ -4045,6 +4045,78 @@ void dtgtk_cairo_paint_darkroom(cairo_t *cr, gint x, gint y, gint w, gint h, gin
   FINISH
 }
 
+/**
+ * A map marker: the teardrop every map application draws, with the eye of it cut out.
+ *
+ * Not `dtgtk_cairo_paint_map_pin()`, which is the callout TAIL hanging under a thumbnail in the
+ * map view -- a triangle, correctly, since it points at a place on a map already on screen. As
+ * an icon on a button that ADDS a map, a bare triangle says nothing, which is what was reported.
+ *
+ * The tail is the pair of tangents from the tip to the head, so the outline is one curve with no
+ * corner where the two meet: the angle between the line to the tip and either tangent is
+ * `acos(radius / distance)`, and the arc runs the long way round the top between them.
+ */
+void dtgtk_cairo_paint_map_marker(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  const double centre_x = 0.5;
+  const double centre_y = 0.36;
+  const double radius = 0.30;
+  const double tip_y = 1.0;
+  const double distance = tip_y - centre_y;
+  const double half_angle = acos(CLAMP(radius / distance, -1.0, 1.0));
+  // Cairo's angles turn clockwise on screen, so half a turn is straight down: the tangents sit
+  // either side of it and the arc between them, taken forwards, is the head.
+  const double start = 0.5 * M_PI + half_angle;
+  const double end = 0.5 * M_PI - half_angle + 2.0 * M_PI;
+
+  cairo_arc(cr, centre_x, centre_y, radius, start, end);
+  cairo_line_to(cr, centre_x, tip_y);
+  cairo_close_path(cr);
+  // The eye, as a second sub-path: even-odd cuts it out of the drop rather than drawing over it,
+  // so the marker reads on any ground the button happens to sit on.
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, centre_x, centre_y, radius * 0.40, 0.0, 2.0 * M_PI);
+  cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+  cairo_fill(cr);
+
+  FINISH
+}
+
+/**
+ * The three letters, because a drawing has no shape of its own to draw.
+ *
+ * This borrowed ashift's `draw_structure` -- a rectangle with a node at each corner -- which
+ * reads as a mask or a perspective tool and was reported as unclear. A drawing is whatever its
+ * author drew, so there is no picture of one; the format's own name is what a file manager, a
+ * browser and every drawing application put on it, and it is the one label nobody has to learn.
+ *
+ * Measured at size 1 and fitted to the box afterwards, so the icon does not depend on which
+ * sans-serif the system resolves: the letters are made to fill their width and a cap height
+ * whatever face answers, which is also what keeps them legible at a button's size.
+ */
+void dtgtk_cairo_paint_drawing_svg(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+  cairo_set_font_size(cr, 1.0);
+  cairo_text_extents_t extents;
+  cairo_text_extents(cr, "SVG", &extents);
+  if(extents.width > 0.0 && extents.height > 0.0)
+  {
+    cairo_translate(cr, 0.5, 0.5);
+    cairo_scale(cr, 0.98 / extents.width, 0.62 / extents.height);
+    // The ink's own box centred on the origin: a font's bearings are not symmetric, and its
+    // logical box carries an ascent no glyph here reaches.
+    cairo_move_to(cr, -0.5 * extents.width - extents.x_bearing, -0.5 * extents.height - extents.y_bearing);
+    cairo_show_text(cr, "SVG");
+  }
+
+  FINISH
+}
+
 void dtgtk_cairo_paint_link(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)

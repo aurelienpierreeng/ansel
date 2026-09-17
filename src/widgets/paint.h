@@ -416,6 +416,10 @@ void dtgtk_cairo_paint_note(cairo_t *cr, gint x, gint y, gint w, gint h, gint fl
 void dtgtk_cairo_paint_edit_text(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a lens aperture: develop the picture in the darkroom */
 void dtgtk_cairo_paint_darkroom(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a map marker: the teardrop with an eye, not dtgtk_cairo_paint_map_pin()'s callout tail */
+void dtgtk_cairo_paint_map_marker(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint the letters SVG: a drawing has no shape of its own, so its format's name is the icon */
+void dtgtk_cairo_paint_drawing_svg(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 
 /** Paint a link icon for basic adjustments */
 void dtgtk_cairo_paint_link(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);

@@ -1492,8 +1492,8 @@ static void _structure_kind(props_t *props)
 {
   static const props_glyph_t text_glyph = { NULL, dtgtk_cairo_paint_text_label, CPF_NONE };
   static const props_glyph_t image_glyph = { NULL, dtgtk_cairo_paint_camera, CPF_NONE };
-  static const props_glyph_t map_glyph = { NULL, dtgtk_cairo_paint_map_pin, CPF_NONE };
-  static const props_glyph_t svg_glyph = { NULL, dtgtk_cairo_paint_draw_structure, CPF_NONE };
+  static const props_glyph_t map_glyph = { NULL, dtgtk_cairo_paint_map_marker, CPF_NONE };
+  static const props_glyph_t svg_glyph = { NULL, dtgtk_cairo_paint_drawing_svg, CPF_NONE };
   static const props_glyph_t connector_glyph = { NULL, dtgtk_cairo_paint_route, CPF_ROUTE_CUBIC };
   // The kind's glyph, not the geometry's: this runs when the kind changes, and a shape's geometry
   // is a row of its own right beside it, which the strip redraws whenever it moves.

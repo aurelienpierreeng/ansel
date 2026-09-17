@@ -1297,10 +1297,10 @@ void gui_init(dt_lib_module_t *self)
   _icon_button(add_group, dtgtk_cairo_paint_note, CPF_NONE,
                _("Add the .txt notes of the selected images as text frames (of every image when none is selected)"),
                DT_CANVAS_ACTION_ADD_NOTES);
-  _icon_button(add_group, dtgtk_cairo_paint_map_pin, CPF_NONE,
+  _icon_button(add_group, dtgtk_cairo_paint_map_marker, CPF_NONE,
                _("Add a map frame at the centre of the view; an image's context menu adds a map of where it was taken"),
                DT_CANVAS_ACTION_ADD_MAP);
-  _icon_button(add_group, dtgtk_cairo_paint_draw_structure, CPF_NONE,
+  _icon_button(add_group, dtgtk_cairo_paint_drawing_svg, CPF_NONE,
                _("Place a drawing read from an SVG file, at the size the file states. Its own bytes travel in the "
                  "canvas, so the document carries the drawing; its context menu reads the file again when it has "
                  "been edited since."),
