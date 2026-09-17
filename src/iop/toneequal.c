@@ -126,7 +126,6 @@
 #include "common/collection.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

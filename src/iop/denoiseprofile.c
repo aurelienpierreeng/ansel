@@ -74,7 +74,6 @@
 #include "pixel/nlmeans_core.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
-#include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"

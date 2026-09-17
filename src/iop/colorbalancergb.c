@@ -50,7 +50,6 @@
 #include "pixel/chromatic_adaptation.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/opencl.h"
-#include "develop/blend.h"
 #include "develop/imageop.h"
 #include "math/openmp_maths.h"
 #include "develop/imageop_gui.h"
