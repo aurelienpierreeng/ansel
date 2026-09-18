@@ -315,7 +315,30 @@ typedef struct dt_canvas_prop_t
   uint32_t visible_values;          ///< bit `choice` for ICONS and CHOICE, bit 0 (off) or bit 1 (on) for a switch
   dt_canvas_prop_id_t sensitive_if; ///< the row is editable only while this one's value is in `sensitive_values`
   uint32_t sensitive_values;
+  /**
+   * Kinds that ALSO show this row on the strip, beside the row it already has in its section.
+   *
+   * COLOUR ONLY, and a subset of `kinds`. A colour is the one nature whose control is
+   * byte-identical in both places and whose edit path holds no per-control gesture state: the
+   * builder ignores which of the two it is making, the handler takes the binding and never
+   * looks at the widget, and the refill is one call. So a mirror is one property, one remembered
+   * key and one undo step -- not a second row that can drift from the first. Anything that
+   * tracks a gesture (a slider's press, a spin's typing, the live property) has one control per
+   * property by construction and cannot be mirrored without giving that state two homes.
+   */
+  uint32_t strip_kinds;
+  dt_canvas_prop_id_t strip_if;     ///< the MIRROR alone is conditional on this; the section's row is not
+  uint32_t strip_values;
 } dt_canvas_prop_t;
+
+/**
+ * @brief Does this row show a mirror of itself on `kind`'s strip?
+ *
+ * The mirror's own condition is asked here as well, so a caller gets one answer: a shape's fill
+ * colour is on the strip only while the shape is filled, while the card's row for it is not
+ * conditional at all -- an unfilled shape must still let a colour be chosen for when it is.
+ */
+gboolean dt_canvas_prop_mirrors_on_strip(const dt_canvas_prop_t *prop, const dt_canvas_object_t *object);
 
 /** @brief The whole table, in screen order; `table[idx].id == idx + 1`. */
 const dt_canvas_prop_t *dt_canvas_props(size_t *count);

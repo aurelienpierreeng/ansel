@@ -139,6 +139,16 @@ typedef struct props_binding_t
   gboolean typing;             ///< digits typed into a spin button and not applied yet
   double rest_number;          ///< TUNE, MEASURE: the value last shown to or reported by the control
   double press_number;         ///< TUNE, MEASURE: the value the control held once the button went down
+  /**
+   * A COLOUR row's second control, on the strip, beside the one in its section.
+   *
+   * One binding, two controls: the colour path is the one that allows it, holding no gesture
+   * state of its own (see `strip_kinds` in canvas_props.h). Both are written by the same refill
+   * and both report through the same handler, so there is one key, one undo step and nothing
+   * that can drift.
+   */
+  GtkWidget *strip_widget;
+  GtkWidget *strip_row;
 } props_binding_t;
 
 typedef struct props_section_t
@@ -1136,6 +1146,27 @@ static GtkWidget *_build_color(props_binding_t *binding)
   return button;
 }
 
+/**
+ * The strip's copy of a colour row, beside the row it keeps in its section.
+ *
+ * It does NOT go through `_build_control()`: that writes `binding->widget`, which belongs to the
+ * section's row, and sets `in_strip`. This builds the chooser directly and hangs it off the
+ * mirror's own two fields.
+ */
+static void _build_strip_mirror(props_t *props, props_binding_t *binding)
+{
+  const dt_canvas_prop_t *prop = binding->prop;
+  if(prop->strip_kinds == 0) return;
+  GtkWidget *button = dt_chooser_button_color_new(_(prop->tooltip), TRUE, DT_CANVAS_COLOR_HISTORY_KEY,
+                                                  _color_changed, binding);
+  _apply_typing_on_press(props, button);
+  gtk_widget_set_tooltip_text(button, _(prop->tooltip));
+  gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
+  binding->strip_widget = button;
+  binding->strip_row = button;
+  gtk_box_pack_start(GTK_BOX(props->strip), button, FALSE, FALSE, 0);
+}
+
 static GtkWidget *_build_font(props_binding_t *binding)
 {
   const dt_canvas_prop_t *prop = binding->prop;
@@ -1495,6 +1526,8 @@ dt_canvas_props_gtk_t *dt_canvas_props_gtk_new(const dt_canvas_props_host_t *hos
       _build_strip_row(props, binding);
     else
       _build_card_row(props, binding);
+    // And, for the few rows that ask for it, a second control of the same property on the strip.
+    _build_strip_mirror(props, binding);
   }
   // The spacer between the kind's controls and the trailing group, so the latter keeps to the edge.
   GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -1507,6 +1540,11 @@ dt_canvas_props_gtk_t *dt_canvas_props_gtk_new(const dt_canvas_props_host_t *hos
   for(int prop_id = DT_CANVAS_PROP_NONE + 1; prop_id < DT_CANVAS_PROP_COUNT; prop_id++)
   {
     props_binding_t *binding = &props->bindings[prop_id];
+    if(!IS_NULL_PTR(binding->strip_row))
+    {
+      gtk_widget_hide(binding->strip_row);
+      gtk_widget_set_no_show_all(binding->strip_row, TRUE);
+    }
     if(IS_NULL_PTR(binding->row)) continue;
     gtk_widget_hide(binding->row);
     gtk_widget_set_no_show_all(binding->row, TRUE);
@@ -1634,6 +1672,17 @@ static void _structure_pass(props_t *props, const dt_canvas_t *canvas, const dt_
       shown = shown || _row_wanted(props, binding->prop->pair_with);
     row_shown[prop_id] = shown;
     if(gtk_widget_get_visible(binding->row) != shown) gtk_widget_set_visible(binding->row, shown);
+  }
+
+  // The strip's mirrors, on their own condition. Never hidden while one is the live control: a
+  // fill's alpha dragged to nothing would take the well out from under the pointer, with its
+  // window still open on it.
+  for(int prop_id = DT_CANVAS_PROP_NONE + 1; prop_id < DT_CANVAS_PROP_COUNT; prop_id++)
+  {
+    props_binding_t *binding = &props->bindings[prop_id];
+    if(IS_NULL_PTR(binding->strip_row)) continue;
+    const gboolean shown = dt_canvas_prop_mirrors_on_strip(binding->prop, object) || _binding_busy(binding);
+    if(gtk_widget_get_visible(binding->strip_row) != shown) gtk_widget_set_visible(binding->strip_row, shown);
   }
 
   for(int section_id = 0; section_id < DT_CANVAS_SECTION_COUNT; section_id++)
@@ -1841,9 +1890,11 @@ static void _fill_binding(props_t *props, props_binding_t *binding, const dt_can
       break;
     case DT_CANVAS_WIDGET_COLOR:
     {
-      // The chooser reports nothing when told what to show.
+      // The chooser reports nothing when told what to show. Both controls of the one property,
+      // so the strip and the card can never show different colours for the same thing.
       const GdkRGBA rgba = { value.color.red, value.color.green, value.color.blue, value.color.alpha };
       dt_chooser_button_set_color(widget, &rgba);
+      if(!IS_NULL_PTR(binding->strip_widget)) dt_chooser_button_set_color(binding->strip_widget, &rgba);
       break;
     }
     case DT_CANVAS_WIDGET_FONT:
@@ -2024,14 +2075,19 @@ static void _settle_strip_size(props_t *props)
   for(int prop_id = DT_CANVAS_PROP_NONE + 1; prop_id < DT_CANVAS_PROP_COUNT; prop_id++)
   {
     props_binding_t *binding = &props->bindings[prop_id];
-    if(!binding->in_strip || IS_NULL_PTR(binding->row)) continue;
-    const gboolean visible = gtk_widget_get_visible(binding->row);
-    if(!visible) gtk_widget_show(binding->row);
-    int minimum = 0;
-    int natural = 0;
-    gtk_widget_get_preferred_height(binding->row, &minimum, &natural);
-    if(!visible) gtk_widget_hide(binding->row);
-    tallest = MAX(tallest, MAX(minimum, natural));
+    // A mirror stands on the strip beside the rest and is as much of its height as any of them.
+    GtkWidget *rows[2] = { binding->in_strip ? binding->row : NULL, binding->strip_row };
+    for(int which = 0; which < 2; which++)
+    {
+      if(IS_NULL_PTR(rows[which])) continue;
+      const gboolean visible = gtk_widget_get_visible(rows[which]);
+      if(!visible) gtk_widget_show(rows[which]);
+      int minimum = 0;
+      int natural = 0;
+      gtk_widget_get_preferred_height(rows[which], &minimum, &natural);
+      if(!visible) gtk_widget_hide(rows[which]);
+      tallest = MAX(tallest, MAX(minimum, natural));
+    }
   }
   GtkWidget *trail[3] = { props->content_button, props->card_toggle, props->close_button };
   for(int idx = 0; idx < 3; idx++)
@@ -2231,6 +2287,13 @@ void dt_canvas_props_gtk_focus_first(dt_canvas_props_gtk_t *props)
   for(int prop_id = DT_CANVAS_PROP_NONE + 1; prop_id < DT_CANVAS_PROP_COUNT; prop_id++)
   {
     props_binding_t *binding = &props->bindings[prop_id];
+    // A mirror is on the strip too, and the keyboard reaches it where it stands.
+    if(!IS_NULL_PTR(binding->strip_row) && gtk_widget_get_visible(binding->strip_row)
+       && gtk_widget_get_can_focus(binding->strip_widget) && gtk_widget_is_sensitive(binding->strip_widget))
+    {
+      gtk_widget_grab_focus(binding->strip_widget);
+      return;
+    }
     if(!binding->in_strip || IS_NULL_PTR(binding->row) || !gtk_widget_get_visible(binding->row)) continue;
     GtkWidget *target = binding->prop->widget == DT_CANVAS_WIDGET_ICONS && binding->toggle_count > 0
                             ? binding->toggles[0]
@@ -2252,6 +2315,8 @@ void dt_canvas_props_gtk_close_dialogs(dt_canvas_props_gtk_t *props)
     if(IS_NULL_PTR(binding->prop) || IS_NULL_PTR(binding->widget)) continue;
     if(binding->prop->widget != DT_CANVAS_WIDGET_COLOR && binding->prop->widget != DT_CANVAS_WIDGET_FONT) continue;
     dt_chooser_button_close(binding->widget);
+    // The mirror has a window of its own to close, and it is the one likeliest to be open.
+    if(!IS_NULL_PTR(binding->strip_widget)) dt_chooser_button_close(binding->strip_widget);
   }
   props->closing_dialogs = FALSE;
 }

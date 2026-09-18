@@ -297,6 +297,47 @@ static void _every_unit_in_the_table_is_a_length_or_is_named_here(void **state)
   }
 }
 
+static void _a_strip_mirror_is_a_colour_and_nothing_else(void **state)
+{
+  (void)state;
+  /*
+   * A mirror is ONE property with TWO controls, and that is only safe for a nature whose control
+   * holds no gesture state: the colour path takes the binding and never looks at the widget, so
+   * both controls report the same edit and are written by the same refill. Anything that tracks
+   * a press, typed digits or the live property has one control per property by construction, and
+   * a second would give that state two homes.
+   */
+  size_t count = 0;
+  const dt_canvas_prop_t *table = dt_canvas_props(&count);
+  for(size_t idx = 0; idx < count; idx++)
+  {
+    const dt_canvas_prop_t *prop = &table[idx];
+    if(prop->strip_kinds == 0)
+    {
+      // And a condition on a mirror nobody shows is a condition nobody reads.
+      assert_int_equal(prop->strip_if, DT_CANVAS_PROP_NONE);
+      assert_int_equal(prop->strip_values, 0u);
+      continue;
+    }
+    if(prop->widget != DT_CANVAS_WIDGET_COLOR)
+    {
+      print_error("%s is mirrored onto a strip and is not a colour\n", prop->key);
+      fail();
+    }
+    // A row already ON the strip has nothing to mirror: it would stand there twice.
+    assert_true(prop->tier != DT_CANVAS_TIER_STRIP);
+    // Only onto kinds that have the row at all.
+    if((prop->strip_kinds & ~prop->kinds) != 0)
+    {
+      print_error("%s is mirrored onto a kind that does not have it\n", prop->key);
+      fail();
+    }
+    /* A paired row shares one widget with its partner and is special-cased throughout the
+     * builder; mirroring one would have to answer which half the strip shows. */
+    assert_int_equal(prop->pair_with, DT_CANVAS_PROP_NONE);
+  }
+}
+
 static void _pairs_point_at_each_other(void **state)
 {
   (void)state;
@@ -335,6 +376,10 @@ static void _every_kind_reads_its_sections_in_screen_order(void **state)
       assert_true((int)prop->tier >= last_tier);
       last_section = (int)prop->section;
       last_tier = (int)prop->tier;
+      // A colour MIRRORED onto this kind's strip stands there beside the strip's own rows and
+      // costs the same width, so it counts against the same cap -- but it keeps its section's
+      // place in the card and is not held to the strip's own rules below.
+      if(prop->strip_kinds & (1u << _kinds[kind_index])) strip_rows++;
       if(prop->tier != DT_CANVAS_TIER_STRIP) continue;
       // The strip carries only the kind's own everyday controls, one button row tall.
       strip_rows++;
@@ -344,7 +389,7 @@ static void _every_kind_reads_its_sections_in_screen_order(void **state)
                   || prop->widget == DT_CANVAS_WIDGET_FONT || prop->widget == DT_CANVAS_WIDGET_INFO
                   || prop->widget == DT_CANVAS_WIDGET_ACTION);
     }
-    assert_true(strip_rows <= 5);
+    assert_true(strip_rows <= 6);
   }
 }
 
@@ -2628,6 +2673,7 @@ int main(void)
     cmocka_unit_test(_every_property_is_described_once),
     cmocka_unit_test(_a_numbers_soft_range_and_neutral_lie_inside_its_hard_range),
     cmocka_unit_test(_every_unit_in_the_table_is_a_length_or_is_named_here),
+    cmocka_unit_test(_a_strip_mirror_is_a_colour_and_nothing_else),
     cmocka_unit_test(_pairs_point_at_each_other),
     cmocka_unit_test(_every_kind_reads_its_sections_in_screen_order),
     cmocka_unit_test(_groups_belong_to_their_sections),

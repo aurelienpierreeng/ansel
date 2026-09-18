@@ -522,6 +522,15 @@ gboolean dt_canvas_prop_applies(const dt_canvas_prop_t *prop, const dt_canvas_ob
   return _condition_holds(object, prop->visible_if, prop->visible_values);
 }
 
+gboolean dt_canvas_prop_mirrors_on_strip(const dt_canvas_prop_t *prop, const dt_canvas_object_t *object)
+{
+  if(IS_NULL_PTR(prop) || IS_NULL_PTR(object)) return FALSE;
+  if(!(prop->strip_kinds & (1u << object->kind))) return FALSE;
+  // The row it already has must apply too: a mirror of a row that is not there is not a row.
+  if(!dt_canvas_prop_applies(prop, object)) return FALSE;
+  return _condition_holds(object, prop->strip_if, prop->strip_values);
+}
+
 gboolean dt_canvas_prop_sensitive(const dt_canvas_prop_t *prop, const dt_canvas_t *canvas,
                                   const dt_canvas_object_t *object)
 {
