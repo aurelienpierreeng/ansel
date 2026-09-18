@@ -75,8 +75,10 @@ typedef struct dt_lib_canvas_toolbar_handler_t
 } dt_lib_canvas_toolbar_handler_t;
 
 /** How many sliders edit a canvas-wide number: the border's width and the corners' radius, the
- * shadow's two offsets and its blur. */
-#define DT_CANVAS_TOOLBAR_NUMBERS 5
+ * shadow's two offsets and its blur, and the line's width. `_prop_slider()` builds NO slider
+ * once this is full rather than overrun the array, so a row added without raising it is a row
+ * that silently does not appear. */
+#define DT_CANVAS_TOOLBAR_NUMBERS 6
 
 /** How long a gesture nothing holds -- a wheel step, an arrow key, the fine-tune popup -- waits
  * for the next step before it counts as over. */
@@ -141,6 +143,7 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *background_color;
   GtkWidget *background_style;
   GtkWidget *border_color;
+  GtkWidget *line_color;
   GtkWidget *layout;
   GtkWidget *sort;
   /** The sliders of the Borders and Shadows popovers, in the order they were built. */
@@ -404,6 +407,11 @@ static gboolean _number_held(const dt_canvas_t *canvas, const int prop, float *h
       return TRUE;
     case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
       *held = canvas->shadow.offset_y;
+      return TRUE;
+    case DT_CANVAS_PROP_LINE_WIDTH:
+      // What the line is DRAWN with, never the raw field: a canvas that has never been told
+      // holds zero, and the slider would read nothing where the built-in line is on screen.
+      dt_canvas_object_effective_line(canvas, NULL, NULL, held);
       return TRUE;
     case DT_CANVAS_PROP_SHADOW_BLUR:
       *held = canvas->shadow.blur;
@@ -718,6 +726,11 @@ static void _refill(dt_lib_module_t *self)
 
   _rgba_to(toolbar->shadow_color, &canvas->shadow.color, TRUE);
   _rgba_to(toolbar->border_color, &canvas->border_color, TRUE);
+  /* What the line is DRAWN with, never the raw field: a canvas that has never been told holds
+   * zeros, and the well would show black-transparent where the built-in grey is on screen. */
+  dt_canvas_color_t effective_line;
+  dt_canvas_object_effective_line(canvas, NULL, &effective_line, NULL);
+  _rgba_to(toolbar->line_color, &effective_line, TRUE);
   // A slider already showing what the document holds is left strictly alone, and NOT merely
   // blocked. `dt_bauhaus_slider_set()` rewrites the display range around the value it is given, so
   // a slider showing a number past its soft end -- a 120 pt border, where a drag covers 50 -- would
@@ -1232,6 +1245,28 @@ static GtkWidget *_borders_popover(dt_lib_module_t *self)
 }
 
 /**
+ * The line every connector and every free line takes until it is given one of its own.
+ *
+ * The borders' popover with a line in it: the same `_prop_slider()` reading the same property
+ * table, so the toolbar's slider, a connector's own card and the document cannot spell one
+ * setting three ways.
+ */
+static GtkWidget *_lines_popover(dt_lib_module_t *self)
+{
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(4));
+  gtk_container_set_border_width(GTK_CONTAINER(box), DT_PIXEL_APPLY_DPI(10));
+  gtk_box_pack_start(GTK_BOX(box), _bold_label(_("Lines")), FALSE, FALSE, 0);
+  GtkWidget *first = _prop_slider(self, box, DT_CANVAS_PROP_LINE_WIDTH, _("Width"),
+                                  _("Default width of every connector and free line, in canvas units"));
+  toolbar->line_color = _color_button(_("Default line colour"),
+                                      _("Default colour of every connector and free line"), DT_CANVAS_COLOR_LINE,
+                                      TRUE, self);
+  _labelled_row(box, _("Colour"), toolbar->line_color);
+  return _popover_around(box, first);
+}
+
+/**
  * The texture popover: the four degrees of freedom every paper answers to. Contrast weighs
  * the body of the relief, detail its fine structure, scale sizes its features, grain the
  * dither that finishes it; 1 everywhere is the paper as designed.
@@ -1360,6 +1395,8 @@ void gui_init(dt_lib_module_t *self)
   // "Borders..." and "Shadows..." was a heading for a list of two that already read as one.
   _popover_button(box, _("Borders"), _("The uniform border of every frame without one of its own"), _borders_popover(self));
   _popover_button(box, _("Shadows"), _("The default shadow of every object without one of its own"), _shadow_popover(self));
+  _popover_button(box, _("Lines"), _("The line every connector and free line takes without one of its own"),
+                  _lines_popover(self));
   _separator(box);
 
   // No caption over these two, and no glyph either. The rule the groups above are built on is that
