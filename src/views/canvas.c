@@ -2330,6 +2330,16 @@ static void _paint_draw_marker(cairo_t *cr, const dt_canvas_view_t *view)
 }
 
 /** What the armed tool shows over the plane: a connector's anchors, a line's starting point. */
+/** The one connector the selection holds, or NULL: whose anchors are worth showing. */
+static const dt_canvas_object_t *_selected_connector(const dt_canvas_view_t *view)
+{
+  if(IS_NULL_PTR(view) || view->selection->len != 1) return NULL;
+  const uint32_t id = g_array_index(view->selection, uint32_t, 0);
+  const dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, id);
+  if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_CONNECTOR) return NULL;
+  return object;
+}
+
 static void _paint_tool_overlay(cairo_t *cr, const dt_canvas_view_t *view)
 {
   if(dt_canvas_tool_draws_shape(view->tool))
@@ -2359,7 +2369,25 @@ static void _paint_tool_overlay(cairo_t *cr, const dt_canvas_view_t *view)
     _paint_draw_marker(cr, view);
     return;
   }
-  if(view->tool != DT_CANVAS_TOOL_CONNECTOR) return;
+  /*
+   * The anchor dots also belong to a SELECTED connector, with no tool armed: choosing where a
+   * line meets a frame is a spatial act, and the card's two combos are the same choice made in
+   * words. Drawn for both frames it holds, so an end can be dragged onto one of them.
+   */
+  if(view->tool != DT_CANVAS_TOOL_CONNECTOR)
+  {
+    const dt_canvas_object_t *selected = _selected_connector(view);
+    if(IS_NULL_PTR(selected)) return;
+    cairo_save(cr);
+    const dt_canvas_object_t *held[2]
+        = { dt_canvas_find_object(view->canvas, selected->connector.from_id),
+            dt_canvas_find_object(view->canvas, selected->connector.to_id) };
+    const uint32_t chosen[2] = { selected->connector.from_anchor, selected->connector.to_anchor };
+    for(int end = 0; end < 2; end++)
+      if(!IS_NULL_PTR(held[end])) _paint_anchor_dots(cr, view, held[end], chosen[end]);
+    cairo_restore(cr);
+    return;
+  }
   cairo_save(cr);
   const dt_canvas_object_t *from = dt_canvas_find_object(view->canvas, view->connect_from);
   if(!IS_NULL_PTR(from))
@@ -5377,6 +5405,44 @@ static void _end_gesture(dt_view_t *self)
       if(inside && !_is_selected(view, object->id)) g_array_append_val(view->selection, object->id);
     }
   }
+  else if(view->drag == DT_CANVAS_DRAG_END_FROM || view->drag == DT_CANVAS_DRAG_END_TO)
+  {
+    /*
+     * An end dropped ON an anchor dot attaches there. Written through `dt_canvas_prop_write()`
+     * and never into the field: that is the one writer that knows an anchor belongs to an end
+     * holding a frame, so a raw write here could attach an end the card would then refuse to
+     * show. An end dropped anywhere else has already been moved by the motion handler.
+     */
+    dt_canvas_object_t *line = _single_selected(view);
+    uint32_t anchor_frame = 0;
+    uint32_t anchor = DT_CANVAS_ANCHOR_AUTO;
+    if(!IS_NULL_PTR(line) && line->kind == DT_CANVAS_OBJECT_CONNECTOR
+       && !(line->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)
+       && _anchor_at(view, view->pointer_x, view->pointer_y, &anchor_frame, &anchor) && anchor_frame != line->id)
+    {
+      const gboolean start = view->drag == DT_CANVAS_DRAG_END_FROM;
+      dt_canvas_t *before = _begin_edit(view);
+      if(start)
+        line->connector.from_id = anchor_frame;
+      else
+        line->connector.to_id = anchor_frame;
+      dt_canvas_prop_value_t value;
+      value.choice = (int)anchor;
+      dt_canvas_prop_write(view->canvas, line,
+                           start ? DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR : DT_CANVAS_PROP_CONNECTOR_TO_ANCHOR,
+                           &value);
+      dt_canvas_touch(view->canvas);
+      _record_undo(self, before);
+      view->drag_moved = FALSE;
+    }
+    view->anchor_hover_id = 0;
+    if(view->drag_moved)
+    {
+      dt_canvas_touch(view->canvas);
+      _record_undo(self, view->drag_snapshot);
+      view->drag_snapshot = NULL;
+    }
+  }
   dt_canvas_free(view->drag_snapshot);
   view->drag_snapshot = NULL;
   view->drag = DT_CANVAS_DRAG_NONE;
@@ -5943,10 +6009,19 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       dt_canvas_object_t *line = _single_selected(view);
       const gboolean start = view->drag == DT_CANVAS_DRAG_END_FROM;
       dt_canvas_route_t route;
-      if(!dt_canvas_connector_has_free_end(line) || (line->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)
-         || (start ? line->connector.from_id != 0 : line->connector.to_id != 0)
+      if(IS_NULL_PTR(line) || line->kind != DT_CANVAS_OBJECT_CONNECTOR
+         || (line->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)
          || !dt_canvas_connector_route(view->canvas, line, &route))
         break;
+      /* An ANCHORED end has no point of its own to move -- its frame puts it where it is -- so
+       * the drag only chooses where it will land, and the release re-attaches it. The dots to
+       * drop it on are lit by the motion handler further down. */
+      if(start ? line->connector.from_id != 0 : line->connector.to_id != 0)
+      {
+        view->drag_moved = TRUE;
+        _interaction_touch(self);
+        break;
+      }
       view->drag_moved = TRUE;
       _interaction_touch(self);
       double end_x = canvas_x;
@@ -6126,14 +6201,19 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
         view->hover = hover;
         dt_control_queue_redraw_center();
       }
-      if(view->tool == DT_CANVAS_TOOL_CONNECTOR)
+      /* The anchors light up while the connector tool is armed, and also while an END of a
+       * SELECTED connector is being dragged -- that is what makes re-attaching it a drag onto a
+       * dot rather than only a choice in the card. */
+      const gboolean dragging_an_end
+          = view->drag == DT_CANVAS_DRAG_END_FROM || view->drag == DT_CANVAS_DRAG_END_TO;
+      if(view->tool == DT_CANVAS_TOOL_CONNECTOR || dragging_an_end)
       {
         // The anchors of the frame under the pointer are shown; the one within reach lights up.
         uint32_t anchor_frame = 0;
         uint32_t anchor = DT_CANVAS_ANCHOR_AUTO;
         if(!_anchor_at(view, canvas_x, canvas_y, &anchor_frame, &anchor))
         {
-          anchor_frame = dt_canvas_object_is_frame(object) ? object->id : 0;
+          anchor_frame = !IS_NULL_PTR(object) && dt_canvas_object_is_frame(object) ? object->id : 0;
           anchor = DT_CANVAS_ANCHOR_AUTO;
         }
         view->anchor_hover_id = anchor_frame;

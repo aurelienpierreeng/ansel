@@ -461,21 +461,22 @@ static void _connector_sites(handles_list_t *list, const dt_canvas_t *canvas, co
   memset(&route, 0, sizeof(route));
   const uint32_t routed_sets = DT_CANVAS_HANDLES_ENDPOINTS | DT_CANVAS_HANDLES_TANGENTS | DT_CANVAS_HANDLES_CURVE;
   const gboolean routed = (what & routed_sets) && dt_canvas_connector_route(canvas, object, &route);
-  // A free end is the line's own to move, so it is a handle; an anchored end is where its frame
-  // puts it and follows the frame, so it has none -- which keeps every connector drawn between two
-  // frames offering exactly what it offered before free ends existed. A locked line keeps its ends
-  // where they are, as a locked frame keeps its corners.
+  /*
+   * BOTH ends are handles now. A free end is the line's own to move; an ANCHORED end is where
+   * its frame puts it, and dragging it is how the attachment point is chosen -- dropped on one
+   * of the frame's anchor dots it re-attaches there, and dropped anywhere else it stays where it
+   * was. The part (FROM or TO) already tells the two apart, so no new role is needed.
+   * A locked line keeps its ends where they are, as a locked frame keeps its corners.
+   */
   const gboolean ends_movable = (what & DT_CANVAS_HANDLES_ENDPOINTS) && routed
                                 && !(object->flags & DT_CANVAS_OBJECT_FLAG_LOCKED);
   if(ends_movable)
   {
-    const gboolean end_free[2] = { connector->from_id == 0, connector->to_id == 0 };
     const double end_x[2] = { route.from_x, route.to_x };
     const double end_y[2] = { route.from_y, route.to_y };
     const uint32_t end_part[2] = { DT_CANVAS_HANDLE_PART_FROM, DT_CANVAS_HANDLE_PART_TO };
     for(int end = 0; end < 2; end++)
     {
-      if(!end_free[end]) continue;
       // Along the canvas's own axes, as the waypoint is: a line has no turn of its own to follow.
       const size_t slot = list->count;
       _site_point(list, DT_CANVAS_HANDLE_ENDPOINT, DT_CANVAS_HANDLE_SQUARE, end_x[end], end_y[end], 0.0,

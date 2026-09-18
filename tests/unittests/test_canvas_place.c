@@ -853,7 +853,12 @@ static void _a_free_line_keeps_its_ends_and_the_arc_a_click_would_bend_clear(voi
   assert_false(_covered_by_class(shapes, DT_CANVAS_PLACE_PREDICTED, 440.0, 300.0 + 9.0));
   g_array_set_size(shapes, 0);
 
-  // The same line between two frames: its ends are theirs, and only the band is kept clear there.
+  /*
+   * The same line between two frames. Its ends are still handles -- an anchored end is dragged
+   * to choose WHERE on its frame the line attaches -- so they are still kept clear; what moves
+   * is where they stand, which is the frame's own anchor point. Here the left frame's east
+   * anchor is exactly where the free end was, so the same points are covered for a new reason.
+   */
   dt_canvas_object_t *left = dt_canvas_add_image(canvas, 0.0, 0.0, 1000, 1000);
   left->x = 150.0;
   left->y = 300.0;
@@ -869,13 +874,16 @@ static void _a_free_line_keeps_its_ends_and_the_arc_a_click_would_bend_clear(voi
   line->connector.to_id = right->id;
   line->connector.to_anchor = DT_CANVAS_ANCHOR_WEST;
   dt_canvas_place_object_shapes(shapes, &projection, canvas, line, FALSE);
+  dt_canvas_route_t anchored;
+  assert_true(dt_canvas_connector_route(canvas, line, &anchored));
+  const double held[4] = { anchored.from_x, anchored.from_y, anchored.to_x, anchored.to_y };
   for(int end = 0; end < 2; end++)
   {
     for(int corner = 0; corner < 4; corner++)
     {
-      const double x = ends[2 * end] + corners[2 * corner];
-      const double y = ends[2 * end + 1] + corners[2 * corner + 1];
-      assert_false(_covered_by_class(shapes, DT_CANVAS_PLACE_HARD, x, y));
+      const double x = held[2 * end] + corners[2 * corner];
+      const double y = held[2 * end + 1] + corners[2 * corner + 1];
+      assert_true(_covered_by_class(shapes, DT_CANVAS_PLACE_HARD, x, y));
     }
   }
   g_array_free(shapes, TRUE);

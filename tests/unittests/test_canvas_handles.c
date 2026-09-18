@@ -409,12 +409,15 @@ static void _every_site_catches_its_centre_and_lets_go_past_its_reach(void **sta
     {
       dt_canvas_handle_site_t *sites = NULL;
       const size_t count = _sites(scene.canvas, objects[object_idx], DT_CANVAS_HANDLES_ALL, &sites);
-      // A free end is a handle unless its line is locked; an anchored end never is, frames' included.
+      /* BOTH ends of a connector are handles unless its line is locked: a free end is the
+       * line's own to move, and an ANCHORED end is dragged to choose where on its frame the
+       * line attaches. A frame has none either way. */
       const dt_canvas_object_t *owner = objects[object_idx];
-      size_t free_ends = 0;
-      if(owner->kind == DT_CANVAS_OBJECT_CONNECTOR && !(owner->flags & DT_CANVAS_OBJECT_FLAG_LOCKED))
-        free_ends = (owner->connector.from_id == 0 ? 1u : 0u) + (owner->connector.to_id == 0 ? 1u : 0u);
-      assert_int_equal(_count_role(sites, count, DT_CANVAS_HANDLE_ENDPOINT), free_ends);
+      const size_t ends = owner->kind == DT_CANVAS_OBJECT_CONNECTOR
+                                  && !(owner->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)
+                              ? 2u
+                              : 0u;
+      assert_int_equal(_count_role(sites, count, DT_CANVAS_HANDLE_ENDPOINT), ends);
       for(size_t idx = 0; idx < count; idx++)
       {
         roles_seen[sites[idx].role]++;
@@ -611,10 +614,15 @@ static void _a_cubic_connector_offers_a_tangent_per_control_point(void **state)
   count = _sites(canvas, connector, DT_CANVAS_HANDLES_CONNECTOR, &sites);
   assert_true(dt_canvas_connector_route(canvas, connector, &route));
   assert_int_equal(route.segment_count, 2);
-  assert_int_equal(count, 9);
-  for(size_t idx = 0; idx < 8; idx++)
+  /* Both ends first, whatever holds them -- an anchored end is a handle too, dragged to choose
+   * where on its frame the line attaches -- then the four tangents with their tethers, then the
+   * waypoint. */
+  assert_int_equal(count, 11);
+  assert_int_equal(sites[0].role, DT_CANVAS_HANDLE_ENDPOINT);
+  assert_int_equal(sites[1].role, DT_CANVAS_HANDLE_ENDPOINT);
+  for(size_t idx = 2; idx < 10; idx++)
     assert_int_equal(sites[idx].role, idx % 2 == 0 ? DT_CANVAS_HANDLE_TANGENT : DT_CANVAS_HANDLE_TETHER);
-  assert_int_equal(sites[8].role, DT_CANVAS_HANDLE_VIA);
+  assert_int_equal(sites[10].role, DT_CANVAS_HANDLE_VIA);
   const double controls[8] = { route.control1_x, route.control1_y, route.control2_x, route.control2_y,
                                route.control3_x, route.control3_y, route.control4_x, route.control4_y };
   const uint32_t parts[4] = { DT_CANVAS_HANDLE_PART_FROM, DT_CANVAS_HANDLE_PART_VIA, DT_CANVAS_HANDLE_PART_VIA,
@@ -639,7 +647,7 @@ static void _a_cubic_connector_offers_a_tangent_per_control_point(void **state)
                                              controls[2 * idx + 1] + 9.5 / zoom, zoom));
     }
   }
-  const dt_canvas_handle_site_t *via = &sites[8];
+  const dt_canvas_handle_site_t *via = _nth_role(sites, count, DT_CANVAS_HANDLE_VIA, 0);
   assert_double_equal(via->x0, connector->connector.via_x, 1e-12);
   assert_double_equal(via->y0, connector->connector.via_y, 1e-12);
   for(int zoom_idx = 0; zoom_idx < 2; zoom_idx++)
@@ -670,7 +678,7 @@ static void _a_cubic_connector_offers_a_tangent_per_control_point(void **state)
  * connector offers one and a connector between two frames none -- and a locked line keeps both of
  * its ends, as a locked frame keeps its corners.
  */
-static void _a_line_offers_its_free_ends_and_nothing_at_an_anchored_one(void **state)
+static void _a_line_offers_both_its_ends_wherever_they_are_held(void **state)
 {
   (void)state;
   dt_canvas_t *canvas = dt_canvas_new();
@@ -720,27 +728,30 @@ static void _a_line_offers_its_free_ends_and_nothing_at_an_anchored_one(void **s
   assert_int_equal(dt_canvas_handle_sites(canvas, line, DT_CANVAS_HANDLES_ENDPOINTS, NULL, 0), 0);
   line->flags &= ~DT_CANVAS_OBJECT_FLAG_LOCKED;
 
-  // Its end anchored to a frame: the start alone, still where the line starts.
+  /*
+   * An ANCHORED end is a handle too, standing where its frame puts it: dragging it is how the
+   * attachment point is chosen, and dropping it on one of that frame's anchor dots re-attaches
+   * it there. So both ends are offered whatever holds them, and the part tells them apart.
+   */
   dt_canvas_object_t *frame = dt_canvas_add_image(canvas, 900.0, 400.0, 1000, 1000);
   line->connector.to_id = frame->id;
   line->connector.to_anchor = DT_CANVAS_ANCHOR_WEST;
+  assert_true(dt_canvas_connector_route(canvas, line, &route));
   count = _sites(canvas, line, DT_CANVAS_HANDLES_ENDPOINTS, &sites);
-  assert_int_equal(count, 1);
+  assert_int_equal(count, 2);
   assert_int_equal(sites[0].part, DT_CANVAS_HANDLE_PART_FROM);
   assert_true(sites[0].x0 == 100.0 && sites[0].y0 == 50.0);
-  dt_free(sites);
-  line->connector.from_id = frame->id;
-  line->connector.to_id = 0;
-  count = _sites(canvas, line, DT_CANVAS_HANDLES_ENDPOINTS, &sites);
-  assert_int_equal(count, 1);
-  assert_int_equal(sites[0].part, DT_CANVAS_HANDLE_PART_TO);
-  assert_int_equal(sites[0].index, 1);
-  assert_true(sites[0].x0 == 400.0 && sites[0].y0 == 250.0);
+  // The anchored one is where the ROUTE puts it, which is the frame's own anchor point.
+  assert_int_equal(sites[1].part, DT_CANVAS_HANDLE_PART_TO);
+  assert_true(sites[1].x0 == route.to_x && sites[1].y0 == route.to_y);
   dt_free(sites);
 
-  // Between two frames, no end of its own.
+  // Between two frames, both ends still, each at its own anchor point.
   dt_canvas_object_t *other = dt_canvas_add_image(canvas, -900.0, 400.0, 1000, 1000);
   dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, frame->id, other->id);
+  assert_int_equal(dt_canvas_handle_sites(canvas, connector, DT_CANVAS_HANDLES_ENDPOINTS, NULL, 0), 2);
+  // And a locked one offers none, whatever holds its ends.
+  connector->flags |= DT_CANVAS_OBJECT_FLAG_LOCKED;
   assert_int_equal(dt_canvas_handle_sites(canvas, connector, DT_CANVAS_HANDLES_ENDPOINTS, NULL, 0), 0);
   dt_canvas_free(canvas);
 }
@@ -1281,7 +1292,7 @@ int main(void)
     cmocka_unit_test(_the_knob_floats_a_screen_distance_above_a_turned_frame),
     cmocka_unit_test(_a_locked_frame_offers_no_frame_handles_but_keeps_its_cutout),
     cmocka_unit_test(_a_cubic_connector_offers_a_tangent_per_control_point),
-    cmocka_unit_test(_a_line_offers_its_free_ends_and_nothing_at_an_anchored_one),
+    cmocka_unit_test(_a_line_offers_both_its_ends_wherever_they_are_held),
     cmocka_unit_test(_a_polygon_offers_its_nodes_their_own_handles_and_its_edges),
     cmocka_unit_test(_a_square_polygon_hangs_a_node_handles_where_they_are_drawn),
     cmocka_unit_test(_the_cutout_handles_sit_where_the_shape_puts_them),

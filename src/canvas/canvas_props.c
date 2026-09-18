@@ -52,6 +52,17 @@ static const char *const _align_v_choices[] = { N_("Top"), N_("Middle"), N_("Bot
 static const char *const _align_v_icons[]
     = { "text_valign_top", "text_valign_middle", "text_valign_bottom", NULL };
 static const char *const _routing_choices[] = { N_("Straight"), N_("Square"), N_("Cubic spline"), NULL };
+/**
+ * Where on a frame a connector attaches, in `dt_canvas_anchor_t` order.
+ *
+ * A CHOICE and not ICONS: `PROPS_ICONS_MAX` is 8 and the builder truncates to it, so ten
+ * anchors would silently lose two. The static assert is what keeps this list and the enum from
+ * drifting apart when an anchor is appended.
+ */
+static const char *const _anchor_choices[]
+    = { N_("Automatic"), N_("Top"),   N_("Right"),      N_("Bottom"),     N_("Left"), N_("Top right"),
+        N_("Bottom right"), N_("Bottom left"), N_("Top left"), N_("Centre"), NULL };
+G_STATIC_ASSERT(G_N_ELEMENTS(_anchor_choices) == DT_CANVAS_ANCHOR_LAST + 1);
 static const char *const _routing_icons[] = { "route_straight", "route_square", "route_cubic", NULL };
 static const char *const _shape_choices[]
     = { N_("None"), N_("Circle"), N_("Ellipse"), N_("Polygon"), N_("Gradient"), NULL };
@@ -273,6 +284,22 @@ static const dt_canvas_prop_t _props[] = {
     .tooltip = N_("Swap the start and the end"), .kinds = KINDS_CONNECTOR, .section = DT_CANVAS_SECTION_ROUTE,
     .tier = DT_CANVAS_TIER_STRIP, .widget = DT_CANVAS_WIDGET_ACTION, .factor = 1.0, .neutral = NAN,
     .icons = _reverse_icons },
+  /* Only for an end that HOLDS a frame: a free end has no anchor, and which of the two applies
+   * is asked of the connector itself rather than of another row's value, since no row says
+   * whether an end is anchored. Not paired with each other for the same reason -- on a
+   * half-free connector only one of them is there. */
+  { .id = DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR, .key = "connector.from_anchor", .label = N_("Start"),
+    .tooltip = N_("Where on its frame the line starts. Automatic picks the side nearest the other end."),
+    .kinds = KINDS_CONNECTOR, .section = DT_CANVAS_SECTION_ROUTE, .tier = DT_CANVAS_TIER_ESSENTIAL,
+    .widget = DT_CANVAS_WIDGET_CHOICE, .max = (double)DT_CANVAS_ANCHOR_LAST - 1.0,
+    .soft_max = (double)DT_CANVAS_ANCHOR_LAST - 1.0, .step = 1.0, .factor = 1.0, .neutral = 0.0,
+    .choices = _anchor_choices },
+  { .id = DT_CANVAS_PROP_CONNECTOR_TO_ANCHOR, .key = "connector.to_anchor", .label = N_("End"),
+    .tooltip = N_("Where on its frame the line ends. Automatic picks the side nearest the other end."),
+    .kinds = KINDS_CONNECTOR, .section = DT_CANVAS_SECTION_ROUTE, .tier = DT_CANVAS_TIER_ESSENTIAL,
+    .widget = DT_CANVAS_WIDGET_CHOICE, .max = (double)DT_CANVAS_ANCHOR_LAST - 1.0,
+    .soft_max = (double)DT_CANVAS_ANCHOR_LAST - 1.0, .step = 1.0, .factor = 1.0, .neutral = 0.0,
+    .choices = _anchor_choices },
 
   /* --- shape ---------------------------------------------------------------------------- */
   { .id = DT_CANVAS_PROP_SHAPE_GEOMETRY, .key = "shape.geometry", .label = N_("Geometry"),
@@ -534,10 +561,29 @@ static gboolean _condition_holds(const dt_canvas_object_t *object, const dt_canv
   return (_value_bit(controller, &value) & allowed) != 0;
 }
 
+/** Which END of a connector a row is the anchor of: 0 its start, 1 its end, -1 neither. */
+static int _anchor_end(const dt_canvas_prop_id_t prop_id)
+{
+  if(prop_id == DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR) return 0;
+  if(prop_id == DT_CANVAS_PROP_CONNECTOR_TO_ANCHOR) return 1;
+  return -1;
+}
+
 gboolean dt_canvas_prop_applies(const dt_canvas_prop_t *prop, const dt_canvas_object_t *object)
 {
   if(IS_NULL_PTR(prop) || IS_NULL_PTR(object)) return FALSE;
   if(!dt_canvas_prop_for_kind(prop, object->kind)) return FALSE;
+  /*
+   * An anchor belongs to an end that HOLDS a frame; a free end has none. `visible_if` cannot
+   * say this -- it keys on another row's value, and no row reports whether an end is anchored --
+   * so it is asked of the connector, the way the text inset's four sides are.
+   */
+  const int end = _anchor_end(prop->id);
+  if(end >= 0)
+  {
+    const uint32_t held = end == 0 ? object->connector.from_id : object->connector.to_id;
+    if(held == 0) return FALSE;
+  }
   return _condition_holds(object, prop->visible_if, prop->visible_values);
 }
 
@@ -1375,6 +1421,12 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
     case DT_CANVAS_PROP_LINE_COLOR:
       dt_canvas_object_effective_line(canvas, object, &out->color, NULL);
       break;
+    case DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR:
+      out->choice = (int)object->connector.from_anchor;
+      break;
+    case DT_CANVAS_PROP_CONNECTOR_TO_ANCHOR:
+      out->choice = (int)object->connector.to_anchor;
+      break;
     case DT_CANVAS_PROP_LINE_DASHED:
       out->flag = (object->connector.style & DT_CANVAS_CONNECTOR_DASHED) != 0;
       break;
@@ -1762,6 +1814,20 @@ static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object
   if(prop->group == DT_CANVAS_GROUP_LINE) dt_canvas_group_set_own(canvas, object, DT_CANVAS_GROUP_LINE, TRUE);
   switch(prop->id)
   {
+    case DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR:
+    case DT_CANVAS_PROP_CONNECTOR_TO_ANCHOR:
+    {
+      /* CHANGED alone: an anchor moves where a line meets a frame and nothing else -- no text
+       * re-flows around it (the obstacle map counts frames only), and it is no part of a line's
+       * remembered style, since remembering one would send the next line to a frame it has
+       * never touched. */
+      const uint32_t anchor = (uint32_t)CLAMP(in->choice, 0, (int)DT_CANVAS_ANCHOR_LAST - 1);
+      if(prop->id == DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR)
+        object->connector.from_anchor = anchor;
+      else
+        object->connector.to_anchor = anchor;
+      return DT_CANVAS_EFFECT_CHANGED;
+    }
     case DT_CANVAS_PROP_CONNECTOR_ROUTING:
     {
       object->connector.routing = (uint32_t)CLAMP(in->choice, 0, 2);
@@ -1817,7 +1883,10 @@ static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object
       // same handle read the other way round is its negation.
       object->connector.via_tangent_x = -object->connector.via_tangent_x;
       object->connector.via_tangent_y = -object->connector.via_tangent_y;
-      return DT_CANVAS_EFFECT_CHANGED;
+      /* COUPLED because the two anchor rows have swapped values and would otherwise go on
+       * showing the ones from before; RESTRUCTURE because on a half-free connector reversing
+       * swaps WHICH of them applies at all. */
+      return DT_CANVAS_EFFECT_CHANGED | DT_CANVAS_EFFECT_COUPLED | DT_CANVAS_EFFECT_RESTRUCTURE;
     }
     case DT_CANVAS_PROP_LINE_WIDTH:
       object->connector.line_width = (float)_clamp_number(prop, in->number);

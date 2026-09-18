@@ -1997,14 +1997,34 @@ static void _a_section_is_there_when_one_of_its_rows_applies(void **state)
     else
       assert_int_equal(rows_uncut[1], rows_uncut[0]);
   }
-  // A line whose ends need no frame is a connector as far as the card is concerned: no connector row
-  // is gated on anything, so having free ends closes none of them. The day one is -- a route a free
-  // line cannot take -- this is the line that parts the two rules for the kind that already exists.
+  /*
+   * A line whose ends need no frame is a connector as far as the card is concerned, with ONE
+   * difference now: an anchor belongs to an end that holds a frame, so a free line has neither
+   * of the two anchor rows and an anchored connector has both. The sections are the same either
+   * way -- the route section has other rows in it -- and this is the case the comment here used
+   * to anticipate, now that it has arrived.
+   */
   dt_canvas_object_t *free_line
       = dt_canvas_add_line(fixture.canvas, 0.0, 1500.0, 300.0, 1500.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
   assert_non_null(free_line);
-  assert_int_equal(_sections_present(free_line), _sections_present(fixture.objects[4]));
-  assert_int_equal(_card_rows_applying(free_line), _card_rows_applying(fixture.objects[4]));
+  /* The ROUTE section is in the CARD for the first time: every other row it holds is on the
+   * strip, so it had nothing to show and was absent for every connector. It now holds the two
+   * anchors -- and so is absent for a free line, whose ends have none, and present for a
+   * connector that holds frames. A section with nothing to show is absent, never greyed out. */
+  assert_int_equal(_sections_present(free_line) | (1u << DT_CANVAS_SECTION_ROUTE),
+                   _sections_present(fixture.objects[4]));
+  assert_int_equal(_card_rows_applying(free_line) + 2, _card_rows_applying(fixture.objects[4]));
+  const dt_canvas_prop_t *table = dt_canvas_props(NULL);
+  const dt_canvas_prop_t *from_anchor = &table[DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR - 1];
+  const dt_canvas_prop_t *to_anchor = &table[DT_CANVAS_PROP_CONNECTOR_TO_ANCHOR - 1];
+  assert_false(dt_canvas_prop_applies(from_anchor, free_line));
+  assert_false(dt_canvas_prop_applies(to_anchor, free_line));
+  assert_true(dt_canvas_prop_applies(from_anchor, fixture.objects[4]));
+  assert_true(dt_canvas_prop_applies(to_anchor, fixture.objects[4]));
+  // And a HALF-free connector shows exactly the anchored end's row.
+  free_line->connector.from_id = fixture.objects[1]->id;
+  assert_true(dt_canvas_prop_applies(from_anchor, free_line));
+  assert_false(dt_canvas_prop_applies(to_anchor, free_line));
   _fixture_free(&fixture);
 }
 
