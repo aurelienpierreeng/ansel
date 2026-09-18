@@ -24,6 +24,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <fcntl.h>
 #include <cmocka.h>
 #include <glib/gstdio.h>
 
@@ -173,7 +174,7 @@ static dt_control_import_t _copy_import(GList *sources, const int elements, cons
   return data;
 }
 
-static void _test_public_siblings_keep_sequence_for_distinct_destinations(void **state)
+static void _test_public_siblings_keep_sequence_for_distinct_destinations(void **state G_GNUC_UNUSED)
 {
   char *root = g_dir_make_tmp("ansel-import-siblings-XXXXXX", NULL);
   char *source = g_build_filename(root, "source", NULL);
@@ -213,7 +214,7 @@ static void _test_public_siblings_keep_sequence_for_distinct_destinations(void *
   dt_free(root);
 }
 
-static void _test_public_sibling_collision_reexpands_once(void **state)
+static void _test_public_sibling_collision_reexpands_once(void **state G_GNUC_UNUSED)
 {
   char *root = g_dir_make_tmp("ansel-import-fallback-XXXXXX", NULL);
   char *source = g_build_filename(root, "source", NULL);
@@ -254,7 +255,7 @@ static void _test_public_sibling_collision_reexpands_once(void **state)
   dt_free(root);
 }
 
-static void _test_public_fixed_destination_follows_all_policies(void **state)
+static void _test_public_fixed_destination_follows_all_policies(void **state G_GNUC_UNUSED)
 {
   const dt_import_onconflict_t policies[] = { DT_IMPORT_ONCONFLICT_SKIP, DT_IMPORT_ONCONFLICT_OVERWRITE,
                                                DT_IMPORT_ONCONFLICT_UNIQUE };
@@ -303,7 +304,7 @@ static void _test_public_fixed_destination_follows_all_policies(void **state)
   }
 }
 
-static void _test_public_unrelated_collision_has_no_sibling_fallback(void **state)
+static void _test_public_unrelated_collision_has_no_sibling_fallback(void **state G_GNUC_UNUSED)
 {
   const dt_import_onconflict_t policies[] = { DT_IMPORT_ONCONFLICT_SKIP, DT_IMPORT_ONCONFLICT_OVERWRITE,
                                                DT_IMPORT_ONCONFLICT_UNIQUE };
@@ -353,7 +354,7 @@ static void _test_public_unrelated_collision_has_no_sibling_fallback(void **stat
   }
 }
 
-static void _test_public_failures_consume_sequences_and_complete_once(void **state)
+static void _test_public_failures_consume_sequences_and_complete_once(void **state G_GNUC_UNUSED)
 {
   char *root = g_dir_make_tmp("ansel-import-failures-XXXXXX", NULL);
   char *source = g_build_filename(root, "source", NULL);
@@ -396,7 +397,7 @@ static void _test_public_failures_consume_sequences_and_complete_once(void **sta
   dt_free(root);
 }
 
-static void _test_public_copy_failure_reservation_forces_sibling_fallback(void **state)
+static void _test_public_copy_failure_reservation_forces_sibling_fallback(void **state G_GNUC_UNUSED)
 {
   char *root = g_dir_make_tmp("ansel-import-copy-reservation-XXXXXX", NULL);
   char *source = g_build_filename(root, "source", NULL);
@@ -430,7 +431,7 @@ static void _test_public_copy_failure_reservation_forces_sibling_fallback(void *
   dt_free(root);
 }
 
-static void _test_public_database_failure_reservation_forces_sibling_fallback(void **state)
+static void _test_public_database_failure_reservation_forces_sibling_fallback(void **state G_GNUC_UNUSED)
 {
   char *root = g_dir_make_tmp("ansel-import-db-reservation-XXXXXX", NULL);
   char *source = g_build_filename(root, "source", NULL);
@@ -474,7 +475,7 @@ static void _test_public_database_failure_reservation_forces_sibling_fallback(vo
   dt_free(root);
 }
 
-static void _test_public_reserved_fallback_reaches_policy_without_third_expansion(void **state)
+static void _test_public_reserved_fallback_reaches_policy_without_third_expansion(void **state G_GNUC_UNUSED)
 {
   const dt_import_onconflict_t policies[] = { DT_IMPORT_ONCONFLICT_SKIP, DT_IMPORT_ONCONFLICT_OVERWRITE,
                                                DT_IMPORT_ONCONFLICT_UNIQUE };
@@ -567,7 +568,7 @@ static char *_prepare_test_datadir(const char *tmp_dir)
   return datadir;
 }
 
-static int _setup(void **state)
+static int _setup(void **state G_GNUC_UNUSED)
 {
   _rcfile = g_build_filename(g_get_tmp_dir(), "ansel-test-import-jobs.rc", NULL);
   g_remove(_rcfile);
@@ -576,7 +577,7 @@ static int _setup(void **state)
   return 0;
 }
 
-static int _teardown(void **state)
+static int _teardown(void **state G_GNUC_UNUSED)
 {
   dt_conf_cleanup(darktable.conf);
   free(darktable.conf);
@@ -587,7 +588,7 @@ static int _teardown(void **state)
   return 0;
 }
 
-static void _test_extension_contract(void **state)
+static void _test_extension_contract(void **state G_GNUC_UNUSED)
 {
   dt_variables_params_t *params = NULL;
   dt_variables_params_init(&params);
@@ -631,7 +632,7 @@ static void _test_extension_contract(void **state)
   dt_variables_params_destroy(params);
 }
 
-static void _test_extension_utility_rejections(void **state)
+static void _test_extension_utility_rejections(void **state G_GNUC_UNUSED)
 {
   assert_false(dt_has_same_path_basename("capture.raw", "other.jpg"));
   assert_false(dt_has_same_path_basename("/a.b/capture.raw", "/a/capture.jpg"));
@@ -644,11 +645,13 @@ static void _test_extension_utility_rejections(void **state)
   assert_null(dt_copy_filename_extension("capture.raw", "capture."));
 }
 
-static void _test_pattern_expansion_rejects_missing_patterns(void **state)
+static void _test_pattern_expansion_rejects_missing_patterns(void **state G_GNUC_UNUSED)
 {
   dt_control_import_t data = { 0 };
   dt_image_t image;
-  data.base_folder = "/tmp";
+  char *directory = g_dir_make_tmp("ansel-test-pattern-expansion-XXXXXX", NULL);
+  assert_non_null(directory);
+  data.base_folder = directory;
   data.datetime = g_date_time_new_now_local();
   dt_image_init(&image);
 
@@ -662,9 +665,11 @@ static void _test_pattern_expansion_rejects_missing_patterns(void **state)
   assert_null(data.target_dir);
 
   g_date_time_unref(data.datetime);
+  _remove_tree(directory);
+  dt_free(directory);
 }
 
-static void _test_image_import_extension_boundaries(void **state)
+static void _test_image_import_extension_boundaries(void **state G_GNUC_UNUSED)
 {
   char *directory = g_dir_make_tmp("ansel-test-image-import-XXXXXX", NULL);
   assert_non_null(directory);
@@ -697,137 +702,176 @@ static void _test_image_import_extension_boundaries(void **state)
   dt_free(directory);
 }
 
-static void _test_copy_creation_failure_reports_only_creation(void **state)
+typedef struct directory_failure_case_t
 {
+  const char *target_name;
+  const char *subfolder_pattern;
+  const char *expected_diagnostic;
+  const char *unexpected_diagnostic;
+  gboolean target_is_file;
+} directory_failure_case_t;
+
+static const directory_failure_case_t _directory_failure_cases[] = {
+  { "blocker", "missing", "Unable to create the target folder", "Not allowed to write", TRUE },
+  { "read-only", "read-only", "Not allowed to write", "Unable to create the target folder", FALSE },
+};
+
+static void _test_copy_directory_failure_reports_only_its_cause(void **state)
+{
+  const directory_failure_case_t *test_case = *state;
+  int directory_creation_result = -1;
+  int target_creation_result = -1;
+  int chmod_result = 0;
+  int mutex_result = -1;
+  int diagnostics_open_result = -1;
+  int stdout_dup_result = -1;
+  int stderr_dup_result = -1;
+  int stdout_redirect_result = -1;
+  int stderr_redirect_result = -1;
+  int import_result = -1;
+  int stdout_restore_result = 0;
+  int stderr_restore_result = 0;
+  int chmod_restore_result = 0;
+  gboolean writable_after_chmod = FALSE;
+  gboolean output_read = FALSE;
+  gboolean expected_diagnostic_found = FALSE;
+  gboolean unexpected_diagnostic_found = FALSE;
+  gboolean copy_diagnostic_found = FALSE;
+  gboolean image_path_is_empty = FALSE;
+  gboolean discarded_is_empty = FALSE;
+  gboolean creation_diagnostic_found = FALSE;
   char *directory = g_dir_make_tmp("ansel-test-import-copy-XXXXXX", NULL);
-  assert_non_null(directory);
-  char *blocker = g_build_filename(directory, "blocker", NULL);
-  assert_true(g_file_set_contents(blocker, "x", 1, NULL));
-
+  directory_creation_result = !IS_NULL_PTR(directory) ? 0 : -1;
+  char *target = NULL;
+  char *destination = NULL;
+  char *diagnostics = NULL;
+  char *output = NULL;
+  int diagnostic_fd = -1;
+  int stdout_fd = -1;
+  int stderr_fd = -1;
+  gboolean mutex_initialized = FALSE;
   dt_control_t control = { 0 };
-  darktable.control = &control;
-  dt_pthread_mutex_init(&control.log_mutex, NULL);
-
   dt_control_import_t data = { 0 };
-  data.base_folder = blocker;
-  data.target_subfolder_pattern = "missing";
-  data.target_file_pattern = "target.raw";
-  data.target_dir = g_build_filename(blocker, "missing", NULL);
-  data.datetime = g_date_time_new_now_local();
-  char *destination = g_build_filename(data.target_dir, "target.raw", NULL);
   GList *discarded = NULL;
   gchar image_path[DT_PATH_MAX] = { 0 };
-  char *diagnostics = NULL;
-  const int diagnostic_fd = g_file_open_tmp("ansel-test-import-jobs-XXXXXX", &diagnostics, NULL);
-  assert_true(diagnostic_fd >= 0);
-  fflush(stdout);
-  fflush(stderr);
-  const int stdout_fd = test_dup(fileno(stdout));
-  const int stderr_fd = test_dup(fileno(stderr));
-  assert_true(stdout_fd >= 0);
-  assert_true(stderr_fd >= 0);
-  assert_int_equal(test_dup2(diagnostic_fd, fileno(stdout)), fileno(stdout));
-  assert_int_equal(test_dup2(diagnostic_fd, fileno(stderr)), fileno(stderr));
-  test_close(diagnostic_fd);
 
-  assert_int_equal(_import_copy_file("source.raw", destination, &data, image_path, sizeof(image_path), &discarded), -1);
+  if(IS_NULL_PTR(directory)) goto cleanup;
 
-  fflush(stdout);
-  fflush(stderr);
-  assert_int_equal(test_dup2(stdout_fd, fileno(stdout)), fileno(stdout));
-  assert_int_equal(test_dup2(stderr_fd, fileno(stderr)), fileno(stderr));
-  test_close(stdout_fd);
-  test_close(stderr_fd);
-  gchar *output = NULL;
-  assert_true(g_file_get_contents(diagnostics, &output, NULL, NULL));
-  assert_int_equal(control.log_pos, 1);
-  assert_non_null(strstr(control.log_message[0], "Impossible to create directory"));
-  assert_non_null(strstr(output, "Unable to create the target folder"));
-  assert_null(strstr(output, "Not allowed to write"));
-  assert_null(strstr(output, "Unable to copy the file"));
-  assert_int_equal(image_path[0], '\0');
-  assert_null(discarded);
-
-  dt_free(output);
-  dt_free(destination);
-  g_remove(diagnostics);
-  dt_free(diagnostics);
-  dt_free(data.target_dir);
-  g_date_time_unref(data.datetime);
-  dt_pthread_mutex_destroy(&control.log_mutex);
-  darktable.control = NULL;
-  g_remove(blocker);
-  g_rmdir(directory);
-  dt_free(blocker);
-  dt_free(directory);
-}
-
-static void _test_copy_non_writable_directory_reports_only_writability(void **state)
-{
-  char *directory = g_dir_make_tmp("ansel-test-import-copy-XXXXXX", NULL);
-  assert_non_null(directory);
-  char *target_dir = g_build_filename(directory, "read-only", NULL);
-  assert_int_equal(g_mkdir(target_dir, 0700), 0);
-  assert_int_equal(g_chmod(target_dir, 0500), 0);
-  if(g_access(target_dir, W_OK | X_OK) == 0)
+  target = g_build_filename(directory, test_case->target_name, NULL);
+  if(test_case->target_is_file)
   {
-    assert_int_equal(g_chmod(target_dir, 0700), 0);
-    g_rmdir(target_dir);
-    g_rmdir(directory);
-    dt_free(target_dir);
-    dt_free(directory);
-    skip();
+    target_creation_result = g_file_set_contents(target, "x", 1, NULL) ? 0 : -1;
+    if(target_creation_result != 0) goto cleanup;
+  }
+  else
+  {
+    target_creation_result = g_mkdir(target, 0700);
+    if(target_creation_result != 0) goto cleanup;
+
+    chmod_result = g_chmod(target, 0500);
+    if(chmod_result != 0) goto cleanup;
+
+    writable_after_chmod = dt_util_test_writable_dir(target);
+    if(writable_after_chmod) goto cleanup;
   }
 
-  dt_control_import_t data = { 0 };
-  data.base_folder = directory;
-  data.target_subfolder_pattern = "read-only";
+  mutex_result = dt_pthread_mutex_init(&control.log_mutex, NULL);
+  if(mutex_result != 0) goto cleanup;
+  mutex_initialized = TRUE;
+  darktable.control = &control;
+  data.base_folder = test_case->target_is_file ? target : directory;
+  data.target_subfolder_pattern = g_strdup(test_case->subfolder_pattern);
   data.target_file_pattern = "target.raw";
-  data.target_dir = g_strdup(target_dir);
+  data.target_dir = test_case->target_is_file ? g_build_filename(target, "missing", NULL) : g_strdup(target);
   data.datetime = g_date_time_new_now_local();
-  char *destination = g_build_filename(target_dir, "target.raw", NULL);
-  GList *discarded = NULL;
-  gchar image_path[DT_PATH_MAX] = { 0 };
-  char *diagnostics = NULL;
-  const int diagnostic_fd = g_file_open_tmp("ansel-test-import-jobs-XXXXXX", &diagnostics, NULL);
-  assert_true(diagnostic_fd >= 0);
-  fflush(stdout);
-  fflush(stderr);
-  const int stdout_fd = test_dup(fileno(stdout));
-  const int stderr_fd = test_dup(fileno(stderr));
-  assert_true(stdout_fd >= 0);
-  assert_true(stderr_fd >= 0);
-  assert_int_equal(test_dup2(diagnostic_fd, fileno(stdout)), fileno(stdout));
-  assert_int_equal(test_dup2(diagnostic_fd, fileno(stderr)), fileno(stderr));
-  test_close(diagnostic_fd);
+  destination = g_build_filename(data.target_dir, "target.raw", NULL);
+  diagnostics = g_build_filename(directory, "diagnostics", NULL);
+  diagnostic_fd = g_open(diagnostics, O_CREAT | O_EXCL | O_RDWR, 0600);
+  diagnostics_open_result = diagnostic_fd >= 0 ? 0 : -1;
+  if(diagnostic_fd < 0) goto cleanup;
 
-  assert_int_equal(_import_copy_file("source.raw", destination, &data, image_path, sizeof(image_path), &discarded), -1);
+  stdout_fd = test_dup(fileno(stdout));
+  stdout_dup_result = stdout_fd >= 0 ? 0 : -1;
+  if(stdout_fd < 0) goto cleanup;
+
+  stderr_fd = test_dup(fileno(stderr));
+  stderr_dup_result = stderr_fd >= 0 ? 0 : -1;
+  if(stderr_fd < 0) goto cleanup;
 
   fflush(stdout);
   fflush(stderr);
-  assert_int_equal(test_dup2(stdout_fd, fileno(stdout)), fileno(stdout));
-  assert_int_equal(test_dup2(stderr_fd, fileno(stderr)), fileno(stderr));
-  test_close(stdout_fd);
-  test_close(stderr_fd);
-  gchar *output = NULL;
-  assert_true(g_file_get_contents(diagnostics, &output, NULL, NULL));
-  assert_non_null(strstr(output, "Not allowed to write"));
-  assert_null(strstr(output, "Unable to create the target folder"));
-  assert_null(strstr(output, "Unable to copy the file"));
-  assert_int_equal(image_path[0], '\0');
-  assert_null(discarded);
+  stdout_redirect_result = test_dup2(diagnostic_fd, fileno(stdout));
+  if(stdout_redirect_result != fileno(stdout)) goto cleanup;
 
+  stderr_redirect_result = test_dup2(diagnostic_fd, fileno(stderr));
+  if(stderr_redirect_result != fileno(stderr)) goto cleanup;
+
+  import_result = _import_copy_file("source.raw", destination, &data, image_path, sizeof(image_path), &discarded);
+
+cleanup:
+  fflush(stdout);
+  fflush(stderr);
+  if(stdout_fd >= 0) stdout_restore_result = test_dup2(stdout_fd, fileno(stdout));
+  if(stderr_fd >= 0) stderr_restore_result = test_dup2(stderr_fd, fileno(stderr));
+  if(stdout_fd >= 0) test_close(stdout_fd);
+  if(stderr_fd >= 0) test_close(stderr_fd);
+  if(diagnostic_fd >= 0) test_close(diagnostic_fd);
+
+  if(!IS_NULL_PTR(diagnostics)) output_read = g_file_get_contents(diagnostics, &output, NULL, NULL);
+  if(!IS_NULL_PTR(output))
+  {
+    expected_diagnostic_found = !IS_NULL_PTR(strstr(output, test_case->expected_diagnostic));
+    unexpected_diagnostic_found = !IS_NULL_PTR(strstr(output, test_case->unexpected_diagnostic));
+    copy_diagnostic_found = !IS_NULL_PTR(strstr(output, "Unable to copy the file"));
+  }
+  image_path_is_empty = image_path[0] == '\0';
+  discarded_is_empty = IS_NULL_PTR(discarded);
+  if(test_case->target_is_file && control.log_pos == 1)
+    creation_diagnostic_found = !IS_NULL_PTR(strstr(control.log_message[0], "Impossible to create directory"));
+
+  g_list_free_full(discarded, dt_free_gpointer);
   dt_free(output);
   dt_free(destination);
-  g_remove(diagnostics);
+  if(!IS_NULL_PTR(diagnostics)) g_remove(diagnostics);
   dt_free(diagnostics);
   dt_free(data.target_dir);
-  g_date_time_unref(data.datetime);
-  assert_int_equal(g_chmod(target_dir, 0700), 0);
-  g_rmdir(target_dir);
-  g_rmdir(directory);
-  dt_free(target_dir);
+  dt_free(data.target_subfolder_pattern);
+  if(!IS_NULL_PTR(data.datetime)) g_date_time_unref(data.datetime);
+  if(mutex_initialized) dt_pthread_mutex_destroy(&control.log_mutex);
+  darktable.control = NULL;
+  if(!test_case->target_is_file && target_creation_result == 0) chmod_restore_result = g_chmod(target, 0700);
+  if(!IS_NULL_PTR(target))
+  {
+    if(test_case->target_is_file)
+      g_remove(target);
+    else
+      g_rmdir(target);
+  }
+  if(!IS_NULL_PTR(directory)) g_rmdir(directory);
+  dt_free(target);
   dt_free(directory);
+  if(!test_case->target_is_file && writable_after_chmod) skip();
+  assert_int_equal(directory_creation_result, 0);
+  assert_int_equal(target_creation_result, 0);
+  assert_int_equal(chmod_result, 0);
+  assert_int_equal(mutex_result, 0);
+  assert_int_equal(diagnostics_open_result, 0);
+  assert_int_equal(stdout_dup_result, 0);
+  assert_int_equal(stderr_dup_result, 0);
+  assert_int_equal(stdout_redirect_result, fileno(stdout));
+  assert_int_equal(stderr_redirect_result, fileno(stderr));
+  assert_int_equal(import_result, -1);
+  assert_int_equal(stdout_restore_result, fileno(stdout));
+  assert_int_equal(stderr_restore_result, fileno(stderr));
+  assert_int_equal(chmod_restore_result, 0);
+  assert_true(output_read);
+  assert_true(expected_diagnostic_found);
+  assert_false(unexpected_diagnostic_found);
+  assert_false(copy_diagnostic_found);
+  assert_true(image_path_is_empty);
+  assert_true(discarded_is_empty);
+  if(test_case->target_is_file)
+    assert_true(creation_diagnostic_found);
 }
 
 int main(void)
@@ -837,8 +881,8 @@ int main(void)
     cmocka_unit_test(_test_extension_utility_rejections),
     cmocka_unit_test(_test_pattern_expansion_rejects_missing_patterns),
     cmocka_unit_test(_test_image_import_extension_boundaries),
-    cmocka_unit_test(_test_copy_creation_failure_reports_only_creation),
-    cmocka_unit_test(_test_copy_non_writable_directory_reports_only_writability),
+    cmocka_unit_test_prestate(_test_copy_directory_failure_reports_only_its_cause, (void *)&_directory_failure_cases[0]),
+    cmocka_unit_test_prestate(_test_copy_directory_failure_reports_only_its_cause, (void *)&_directory_failure_cases[1]),
   };
   const int unit_result = cmocka_run_group_tests(tests, _setup, _teardown);
   if(unit_result) return unit_result;
