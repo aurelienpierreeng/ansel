@@ -4063,3 +4063,59 @@ they are visible.
   polygon: on a canvas whose Corners had been raised, Shift+P drew a star with filleted points
   while the card's Geometry gave sharp ones, and the Corners row read "inherited" and said nothing
   about why.
+- **A property may be mirrored onto the strip as well as its section, and ONLY a colour may.** The
+  row declares `strip_kinds` (which kinds show it) and optionally `strip_if` (the row that must be
+  on). A mirror is two controls showing one property, so whichever the user holds, the other is
+  refilled underneath them -- and a colour is the one nature carrying no gesture state to lose,
+  where a slider mid-drag, a spin button with digits typed and not applied, and an open combo all
+  do. `_a_strip_mirror_is_a_colour_and_nothing_else` refuses anything else, refuses a row that is
+  itself `TIER_STRIP`, refuses a kind the property does not apply to, and refuses half of a
+  `pair_with` couple (paired rows share one widget, which cannot be in two places). The strip caps
+  at six rows and mirrors count against it. **A cap equal to the number in use is the next silent
+  defect**: `DT_CANVAS_TOOLBAR_NUMBERS` was exactly 5 with five sliders built, and `_prop_slider()`
+  would have refused a sixth with nothing said anywhere.
+- **Inheritance is FLAGLESS where a zero cannot be a real value.** A connector with
+  `line_width == 0` inherits the canvas's line -- there is no override bit -- exactly as an empty
+  `text.font` means the canvas's font. The whole-record zero rule governs reading it: all-zero
+  (width AND colour) is a file written before the fields existed, one zero is a zero. A width of 0
+  with a colour set is a genuine hairline, not an inheritance.
+- **A spin button's `input` handler must NEVER return `GTK_INPUT_ERROR`.** GTK answers it by
+  ZEROING the value: measured, a typo in a field holding 42 wrote 0 to the document. Return the
+  current value with TRUE instead and let the field snap back. For the same family of reason
+  `dt_length_field_set_unit()` must not call `gtk_spin_button_set_digits()`, which emits
+  `value-changed` -- choosing a unit became an undo step that wrote every field its handler read.
+  And length formatting is LOCALE-dependent on purpose (a French keyboard types a comma), so a
+  test builds its expectation with the same `printf` or pins `LC_NUMERIC`; `gtk_init()` sets the
+  locale, which is what broke four of them.
+- **The text wrap is `PANGO_WRAP_WORD`, never `WORD_CHAR`.** WORD_CHAR falls back to breaking
+  ANYWHERE once a word does not fit -- at places UAX #14 forbids included -- which is what split
+  words with no hyphen and stranded punctuation at the head of a line. Under WORD a long word
+  overflows instead, which is the accepted price. And the punctuation rule that goes with it is
+  narrower than it looks: **Pango's own UAX #14 already holds `;` `:` `!` `?` and the closing
+  guillemets** (classes IS, EX, CL), and what actually strands is the signs belonging to a NUMBER
+  -- per cent, degree, per mille are class PO and a break after the space before them is allowed
+  (measured at 24, 10 and 29 of 91 measures). One measure cannot tell the two groups apart.
+- **The flowing walk may refuse a stretch, and every refusal is made IN HOPE OF A WIDER ONE.** A
+  piece that does not fit, or that would be a lone one- or two-character scrap, is refused so the
+  walk tries the next stretch or the next line. A piece wider than the frame's own measure fits
+  nowhere, so refusing it DROPS it along with every word after it -- the walk consumes nothing and
+  asks the same question one line lower until the line cap. Measured: 4133 units where 66 were
+  owed, and 57188 once a skipped line cost a line of height rather than one unit. `_run_refused()`
+  returns FALSE outright once the run is the full measure.
+- **A text shadow needs TWO passes, because it is cast by the glyphs and lies UNDER them but OVER
+  the ground.** `dt_canvas_text_pass_t` splits the frame into GROUND and GLYPHS: paint the ground,
+  lay the shadow taken from a glyphs-only render over it, then paint the glyphs. Painted in one
+  pass the shadow is either invisible (under the ground) or drawn over the type.
+- **A shape's phase rotates the OUTLINE inside its frame, and rotation moves a bounding box's
+  CENTRE.** Fit, rotate, then fit again -- and recentre before scaling, or the shape walks out of
+  its box: measured, a triangle at -165 degrees reaching 141.9 in a 120-unit box. The phase write
+  must NOT go through `_shape_outline_effects()`, which refits the frame's height; it has its own
+  `_shape_turn_effects()`.
+- **An SVG sprite's internal ceiling is a cairo TRANSFORM, never truncated surface dimensions.**
+  Truncating the dimensions changes the aspect ratio, and rsvg's `xMidYMid meet` then letterboxes:
+  measured 15 px either side of a 25:1 drawing in a 25:1 box. Scale the context instead and render
+  into the ceiling. The two-pixel guard is the CALLER's padding around the box, not a repair; and
+  the sprite cache key must carry the sub-pixel PHASE as well as the size, or a pan hits a slot
+  keyed on nothing (measured 203 calls, 0 filled-slot hits). Slots are `CANVAS_SPRITE_SLOTS` (8)
+  for a drawing and 2 for a photograph -- `_sprite_slots()` -- because only the drawing is
+  re-rendered per phase.

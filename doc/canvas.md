@@ -1164,11 +1164,18 @@ out. One section is open at a time, and the one left open is remembered per
 kind (`plugins/canvas/props/section/<kind>`, stored by NAME, since the enum's order is the
 screen's and may change); the card itself is never remembered open, and an override section or
 the cutout never opens by itself. Measured offscreen at 96 dpi against the shipped theme, the strip
-is 35 px tall for every kind and 472 px wide for a text frame, 381 for a picture or a drawing, and
+is 35 px tall for every kind and 456 px wide for a text frame, 381 for a picture or a drawing, and
 340 for a map, a connector or a shape -- 340 being `PROPS_MIN_WIDTH_PIXELS`, the floor the width is
-held up to, which is why those three kinds report the same number rather than three close ones. The
-card is the strip's width, so the card button and the close button do not move when it opens,
-whichever side it grows on.
+held up to, which is why those three kinds report the same number rather than three close ones. A
+connector reports the same number anchored and free. The card is the strip's width, so the card
+button and the close button do not move when it opens, whichever side it grows on.
+
+**Those numbers are what the placement solver is given, so a stale one is worse than none**: it
+decides how much room a spot must have before the properties will go there, and a strip measured
+before a row was added or removed is a spot that turns out too small. Re-measure whenever a strip
+row changes -- the text frame's 456 was 472 until its type size stopped carrying a "pt" label of
+its own, the unit now living in the field -- and record the number here rather than leaving the
+solver to a guess.
 
 **Everything about a property is described once, in `canvas/canvas_props.c`**: its label, the
 kinds that have it, its section and tier, the control its nature gets, its range, what "left as
@@ -1185,6 +1192,30 @@ wherever it sits** -- a spin button for an exact number (a position, a size, a t
 bauhaus slider for a bounded perceptual one, a row of glyphs for a few choices -- so a property
 does not change shape between the strip and the card, or between two kinds. No slider sits on
 the strip: a bauhaus slider is a line and seven tenths tall, and every strip is one button tall.
+
+**A property may appear on the strip AND in its section, and only a colour may.** A row's tier
+says where it lives, and a tier is one place; the mirror is the exception, declared on the row
+itself as `strip_kinds` -- which kinds show it on their strip -- with an optional `strip_if`
+naming the row that has to be on for it to appear. A shape's outline and fill colours are there,
+and a connector's line colour, because reaching a colour is the whole of what those strips are
+for, while the row itself belongs in Stroke or Fill beside the width it goes with.
+
+**Only a colour, and that is a rule the table enforces rather than a habit.** A mirror is two
+controls showing one property, so whichever the user is holding, the other is being refilled
+underneath them -- and a colour is the one nature that holds no gesture state to lose: a well
+reports a colour and is done, where a slider being dragged, a spin button with digits typed and
+not yet applied, or a combo with its list open all carry something a refill would take away.
+`_a_strip_mirror_is_a_colour_and_nothing_else` holds it: every row with `strip_kinds` set must be
+a colour, must not itself be a strip row, must not name a kind the property does not apply to,
+and must not be half of a `pair_with` couple -- a paired row shares its partner's widget, and a
+shared widget cannot be in two places.
+
+The strip's own row count is capped at six, and a mirror counts against it -- it costs the same
+width as any other control -- so `_every_kind_reads_its_sections_in_screen_order` counts the
+mirrors alongside the `STRIP` rows. A cap that is exactly the number in use is the shape of the
+next silent defect: the toolbar's own `DT_CANVAS_TOOLBAR_NUMBERS` sat at precisely five while
+five sliders were built, and a sixth would have been refused by `_prop_slider()` and simply not
+appeared, with nothing said anywhere.
 
 **An override group reads what the object is DRAWN with.** Border, corners, shadow and font
 are the canvas's until the object takes its own. Editing one field while the object inherits
@@ -1633,6 +1664,26 @@ twelve points is twelve points on both, and converting a design from one to the 
 nothing by itself. `dt_canvas_paper_is_physical()` no longer says how a size reaches the plane,
 only how it is written down, so a panel can show one in points and the other in pixels.
 
+**A point is what the document stores; it is not what the user has to type.** Every length field
+in the atelier -- the properties' sizes and positions, the page margin, the bleed, the paddings --
+takes `210mm`, `8.5in`, `21,5 cm`, `12"`, `1080px` or a bare number, converts it to points and
+stores that. `src/common/length.{h,c}` is the whole of it: one table of units, GTK-free and
+conf-free, with `dt_length_parse()` and `dt_length_format()` either side of it, and
+`widgets/length_field.c` is the spin button that uses them. A pixel is the reference pixel again,
+so `1080px` is 810 points and nothing else in the file knows a second answer.
+
+Three rules the table and the field carry, each paid for once. The unit table is searched
+**longest spelling first**, or `8.5inch` matches `in` and leaves `ch` behind as a parse error the
+user cannot see the cause of. A field **remembers the unit it was last given**, per field, so a
+margin can be set in millimetres while the bleed beside it is set in points and neither reformats
+the other; the unit is a display property and never reaches the document. And a spin button's
+`input` handler **must never return `GTK_INPUT_ERROR`**: GTK answers that by zeroing the value, so
+a typo in a margin field silently wrote 0 rather than leaving 42 alone -- the handler returns the
+current value instead, and the field snaps back to what the document holds. For the same family of
+reason `dt_length_field_set_unit()` does not call `gtk_spin_button_set_digits()`, which emits
+`value-changed`: choosing a unit became an undo step that wrote every field the handler could
+read.
+
 **What a design does NOT do is resize itself to a new page.** Twelve points stays twelve
 points, which is what a point is for; making the layout fill a different page is a deliberate
 act and belongs in an explicit, undoable action rather than in a rule that fires behind the
@@ -1883,6 +1934,31 @@ button carries. Measured against the same toolbar built of words, it asks for 15
 one asked for 1747 -- 236 px and 13.5% narrower. **Fit stays a word**: the one picture the toolkit has for zooming is a
 magnifying glass, which says "zoom" over an action that means "fit", beside a "1:1" that is also
 a zoom.
+
+**A glyph draws in the unit square it is handed, and everything it draws must fit there.**
+`widgets/paint.c` gives each icon a context already scaled to a one-by-one box, and the same code
+answers at 16 px and at 32 px, at device scale 1 and 2. Two of these icons say what their button
+adds, and each had to solve that differently.
+
+A map frame's icon is the teardrop every map application draws, with the eye cut out
+**even-odd** rather than filled again in the ground's colour -- a second fill would be right on
+one theme and wrong on the other, and these buttons sit on both. Its tail is the pair of
+TANGENTS from the tip to the head, so the outline turns smoothly into the circle instead of
+meeting it at a corner. The map VIEW's own `..._map_pin()` is a different picture for a different
+job -- the callout tail under a thumbnail, correctly a triangle, since it points at a place
+already on screen -- and is untouched.
+
+A drawing has no picture of itself: it is whatever its author drew. So its icon sets the
+format's name, the three letters a file manager and a browser both put on it. **Text in a glyph
+is measured at size 1 and fitted to the box afterwards**, never set at a size chosen in advance,
+so the icon does not depend on which sans-serif the system resolves; and the measuring is done
+with **metrics hinting OFF**, because cairo quantises a hinted glyph's metrics to whole device
+pixels under the transform in force -- so the extents solved for would not be the metrics the
+glyphs are then hinted to under the fit computed from them. Measured, the same string came back
+2.250 wide in an 8 px box, 2.188 at 16, 2.150 at 20 and 2.208 at 24, against 2.169 unhinted: a
+different fit at every size, which cost 3.4% of the ink off the edge at 20 px and 10.7% at 8.
+The canvas's own text is laid out with metrics hinting off for exactly the same reason. The ink's
+own box is what gets centred, not the logical one, whose ascent no letter here reaches.
 
 **The tool toggles are a VIEW on the armed tool and keep no state.** `tool_toggles[]` is indexed
 by the tool each toggle arms, its action lives in the button's object data, the handler asks the
