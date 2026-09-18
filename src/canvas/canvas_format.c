@@ -221,6 +221,9 @@ static void _write_shape(GByteArray *out, const dt_canvas_shape_t *shape)
   _w_u32(out, shape->sides);
   _w_f32(out, shape->depth);
   _w_f32(out, shape->roundness);
+  // Taken out of the reserve, so the record is the same width it always was and a reader that
+  // predates the phase steps over it as reserve and sees the shape it used to see.
+  _w_f32(out, shape->phase);
   _w_bytes(out, shape->reserved, sizeof(shape->reserved));
 }
 
@@ -582,6 +585,8 @@ static void _read_shape(dt_canvas_cursor_t *cursor, dt_canvas_shape_t *shape)
   shape->sides = _r_u32(cursor);
   shape->depth = _r_f32(cursor);
   shape->roundness = _r_f32(cursor);
+  // A file written before the phase existed has zeros here, which is the shape as it was drawn.
+  shape->phase = _r_f32(cursor);
   _r_bytes(cursor, shape->reserved, sizeof(shape->reserved));
 }
 

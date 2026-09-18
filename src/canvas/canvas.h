@@ -116,7 +116,7 @@ typedef enum dt_canvas_text_flag_t
 #define DT_CANVAS_MAP_RESERVED 256
 #define DT_CANVAS_SVG_RESERVED 480 ///< 512 at format 1, minus the intrinsic size (8) and the load time (8)
 #define DT_CANVAS_CONNECTOR_RESERVED 24 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24), the free ends (48)
-#define DT_CANVAS_SHAPE_RESERVED 112 ///< 128 at birth, minus the geometry (4), the sides (4), the depth (4) and the roundness (4)
+#define DT_CANVAS_SHAPE_RESERVED 108 ///< 128 at birth, minus the geometry, sides, depth, roundness and phase (4 each)
 
 /** The colour space a stored JPEG is encoded in. A file from before the field says 0: sRGB. */
 typedef enum dt_canvas_colorspace_t
@@ -616,6 +616,13 @@ typedef struct dt_canvas_shape_t
   uint32_t sides;     ///< 3..12, kept for a rectangle too so a geometry switch has a value
   float depth;        ///< 0..DT_CANVAS_SHAPE_MAX_DEPTH: 0 is a convex polygon, above it a star
   float roundness;    ///< 0..1: 0 straight sides, 1 a circle
+  /**
+   * Radians the shape is turned by INSIDE its frame, which does not move.
+   *
+   * A file from before this reads 0, which is the shape as it was drawn. See `_polygon_outline()`
+   * for why the turn is applied after the fit and scaled back uniformly, and for what it costs.
+   */
+  float phase;
   uint8_t reserved[DT_CANVAS_SHAPE_RESERVED];
 } dt_canvas_shape_t;
 
@@ -637,6 +644,7 @@ typedef struct dt_canvas_shape_style_t
   uint32_t sides;                ///< what a polygon or a star would be born with
   float depth;
   float roundness;
+  float phase;                   ///< radians, turned inside its own frame
 } dt_canvas_shape_style_t;
 
 typedef struct dt_canvas_object_t

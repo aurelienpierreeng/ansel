@@ -25,6 +25,7 @@
 #include "canvas/canvas_render.h"
 #include "common/conf.h"
 #include "common/length.h"
+#include "math/polygon_envelope.h"
 #include "darktable.h"
 #include "system/macros.h"
 
@@ -336,6 +337,174 @@ static void _a_strip_mirror_is_a_colour_and_nothing_else(void **state)
      * builder; mirroring one would have to answer which half the strip shows. */
     assert_int_equal(prop->pair_with, DT_CANVAS_PROP_NONE);
   }
+}
+
+static void _a_shape_turns_inside_a_frame_that_does_not_move(void **state)
+{
+  (void)state;
+  /*
+   * The turn is applied to the FITTED points and the result scaled uniformly back inside the
+   * frame, which is what makes it a rotation rather than a shear: phased at the unit stage, a
+   * shape keeping its ratio would refit its own height and MOVE the container the user placed,
+   * and a free-ratio one would be stretched anisotropically after turning.
+   *
+   * So: the frame never moves, the outline never leaves it, every pairwise distance scales by
+   * ONE factor (rigidity), and at phase 0 nothing changes at all.
+   */
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  dt_canvas_prop_value_t value;
+
+  /*
+   * No fillet for the rigidity and identity checks: the corner arcs are computed on the FINAL
+   * points, which is what makes them turn with the shape, and their sample count is a function
+   * of the angle each corner turns through -- so a turned shape legitimately has a different
+   * number of points and its outline cannot be paired index by index. With the radius at
+   * nothing the outline IS the polygon's own vertices and the pairing means something. The
+   * filleted case is checked for containment below, which needs no pairing.
+   */
+  shape->flags |= DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE;
+  shape->corner_radius = 0.0f;
+
+  for(uint32_t sides = 3; sides <= 12; sides++)
+    for(int roundness_step = 0; roundness_step <= 2; roundness_step++)
+      for(int depth_step = 0; depth_step <= 1; depth_step++)
+      {
+        // A star IS a polygon whose notches have a depth: one geometry, two shapes.
+        shape->shape.geometry = DT_CANVAS_SHAPE_POLYGON;
+        shape->shape.sides = sides;
+        shape->shape.depth = depth_step > 0 ? DT_CANVAS_SHAPE_STAR_DEPTH : 0.0f;
+        shape->shape.roundness = 0.5f * (float)roundness_step;
+        shape->shape.phase = 0.0f;
+
+        const double frame_x = shape->x;
+        const double frame_y = shape->y;
+        const double frame_width = shape->width;
+        const double frame_height = shape->height;
+
+        double straight[2 * DT_POLYGON_OUTLINE_MAX_POINTS];
+        const size_t straight_count
+            = dt_canvas_shape_outline(fixture.canvas, shape, straight, DT_POLYGON_OUTLINE_MAX_POINTS);
+        assert_true(straight_count >= 3);
+
+        for(int turn = 0; turn <= 24; turn++)
+        {
+          value.number = 15.0 * turn - 180.0;
+          dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_PHASE, &value);
+          double turned[2 * DT_POLYGON_OUTLINE_MAX_POINTS];
+          const size_t count = dt_canvas_shape_outline(fixture.canvas, shape, turned, DT_POLYGON_OUTLINE_MAX_POINTS);
+          assert_int_equal(count, straight_count);
+
+          // The frame is exactly where it was: a turn is the shape's, never the container's.
+          assert_true(shape->x == frame_x && shape->y == frame_y);
+          assert_true(shape->width == frame_width && shape->height == frame_height);
+
+          /*
+           * The outline is still inside the box -- which the painter's clip and the silhouette's
+           * cap both take for granted -- and it still TOUCHES it on at least one axis, because
+           * a shape is fitted to its frame at every angle exactly as it is at none.
+           *
+           * The tolerance is a millionth of the frame because the PHASE IS A FLOAT: half a turn
+           * stored as one is a ten-millionth of a radian off pi, so a 200-unit shape's box is
+           * only known to about a fifty-thousandth of a unit -- measured, 9e-6 on a 120-unit
+           * box at half a turn. Far below the clip it is protecting, and far above the double
+           * rounding that a tighter figure would really be testing.
+           */
+          double widest = 0.0;
+          double tallest = 0.0;
+          for(size_t at = 0; at < count; at++)
+          {
+            widest = MAX(widest, fabs(turned[2 * at]));
+            tallest = MAX(tallest, fabs(turned[2 * at + 1]));
+          }
+          const double slack = 1e-6 * MAX(frame_width, frame_height);
+          if(widest > 0.5 * frame_width + slack || tallest > 0.5 * frame_height + slack)
+          {
+            print_error("%u sides, turn %.0f: the outline reaches %.6f x %.6f of a %.1f x %.1f box\n", sides,
+                        15.0 * turn - 180.0, 2.0 * widest, 2.0 * tallest, frame_width, frame_height);
+            fail();
+          }
+          if(widest < 0.5 * frame_width - slack && tallest < 0.5 * frame_height - slack)
+          {
+            print_error("%u sides, turn %.0f: the outline floats free at %.6f x %.6f in a %.1f x %.1f box\n",
+                        sides, 15.0 * turn - 180.0, 2.0 * widest, 2.0 * tallest, frame_width, frame_height);
+            fail();
+          }
+
+          /* RIGIDITY: a uniform scale of a rotated shape is similar to it, so every distance
+           * between two of its points is the same multiple of what it was. A shear would not
+           * keep one factor across all of them. */
+          double factor = -1.0;
+          const size_t across = MAX(count / 2, (size_t)1);
+          for(size_t a = 0; a + 1 < count; a++)
+          {
+            // Across the shape, never the next point along: on a triangle "three along" is the
+            // same point, and every pair measured nothing.
+            const size_t b = (a + across) % count;
+            const double was = hypot(straight[2 * a] - straight[2 * b], straight[2 * a + 1] - straight[2 * b + 1]);
+            const double is = hypot(turned[2 * a] - turned[2 * b], turned[2 * a + 1] - turned[2 * b + 1]);
+            if(was < 1e-6) continue;
+            const double ratio = is / was;
+            if(factor < 0.0) factor = ratio;
+            else if(fabs(ratio - factor) > 1e-6)
+            {
+              print_error("%u sides, turn %.0f: one distance scaled by %.6f and another by %.6f\n", sides,
+                          15.0 * turn - 180.0, factor, ratio);
+              fail();
+            }
+          }
+          /* The factor may be above 1 as well as below it: a shape whose turned box is
+           * NARROWER than the frame is fitted back out to it, the same way it was fitted at
+           * phase 0. What a turn may never do is change the shape, which is what the one
+           * common factor above says. */
+          if(factor <= 0.0)
+          {
+            print_error("%u sides, turn %.0f: no pair of %zu points was far enough apart to measure\n", sides,
+                        15.0 * turn - 180.0, count);
+            fail();
+          }
+        }
+
+        // Phase 0 is the shape as it was, to the bit.
+        value.number = 0.0;
+        dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_PHASE, &value);
+        double back[2 * DT_POLYGON_OUTLINE_MAX_POINTS];
+        const size_t back_count = dt_canvas_shape_outline(fixture.canvas, shape, back, DT_POLYGON_OUTLINE_MAX_POINTS);
+        assert_int_equal(back_count, straight_count);
+        assert_memory_equal(back, straight, straight_count * 2 * sizeof(double));
+      }
+
+
+  /*
+   * And with the corners filleted, where the point count moves with the turn: the one thing that
+   * must still hold is that nothing leaves the frame, because the painter clips to it and the
+   * silhouette caps at it.
+   */
+  shape->corner_radius = 12.0f;
+  shape->shape.roundness = 0.0f;
+  shape->shape.depth = 0.0f;
+  for(uint32_t sides = 3; sides <= 12; sides++)
+  {
+    shape->shape.sides = sides;
+    for(int turn = 0; turn <= 12; turn++)
+    {
+      value.number = 30.0 * turn - 180.0;
+      dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_PHASE, &value);
+      double turned[2 * DT_POLYGON_OUTLINE_MAX_POINTS];
+      const size_t count = dt_canvas_shape_outline(fixture.canvas, shape, turned, DT_POLYGON_OUTLINE_MAX_POINTS);
+      assert_true(count >= 3);
+      for(size_t at = 0; at < count; at++)
+        if(fabs(turned[2 * at]) > 0.5 * shape->width + 1e-6 || fabs(turned[2 * at + 1]) > 0.5 * shape->height + 1e-6)
+        {
+          print_error("filleted, %u sides, turn %.0f: a point at %.4f, %.4f left the box\n", sides,
+                      30.0 * turn - 180.0, turned[2 * at], turned[2 * at + 1]);
+          fail();
+        }
+    }
+  }
+
+  _fixture_free(&fixture);
 }
 
 static void _pairs_point_at_each_other(void **state)
@@ -2674,6 +2843,7 @@ int main(void)
     cmocka_unit_test(_a_numbers_soft_range_and_neutral_lie_inside_its_hard_range),
     cmocka_unit_test(_every_unit_in_the_table_is_a_length_or_is_named_here),
     cmocka_unit_test(_a_strip_mirror_is_a_colour_and_nothing_else),
+    cmocka_unit_test(_a_shape_turns_inside_a_frame_that_does_not_move),
     cmocka_unit_test(_pairs_point_at_each_other),
     cmocka_unit_test(_every_kind_reads_its_sections_in_screen_order),
     cmocka_unit_test(_groups_belong_to_their_sections),

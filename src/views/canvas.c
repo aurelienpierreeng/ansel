@@ -123,7 +123,7 @@ DT_MODULE(1)
 #define CANVAS_NEW_SHAPE_SHADOW_BLUR_KEY "plugins/canvas/new_shape/shadow_blur"
 #define CANVAS_NEW_SHAPE_SHADOW_COLOR_KEY "plugins/canvas/new_shape/shadow_color"
 /*
- * The sides, the notch depth and the roundness are remembered PER TOOL, where the fill, the border,
+ * The sides, the notch depth, the roundness and the turn are remembered PER TOOL, where the fill, the border,
  * the corners and the shadow above are remembered for every shape alike: a polygon with six straight
  * sides and a five-pointed star are two different things to reach for, and a user who has both in a
  * document wants each key to go on drawing what it drew last time. The star keeps its own depth; the
@@ -134,6 +134,8 @@ DT_MODULE(1)
 #define CANVAS_NEW_STAR_SIDES_KEY "plugins/canvas/new_shape/star_sides"
 #define CANVAS_NEW_STAR_DEPTH_KEY "plugins/canvas/new_shape/star_depth"
 #define CANVAS_NEW_STAR_ROUNDNESS_KEY "plugins/canvas/new_shape/star_roundness"
+#define CANVAS_NEW_POLYGON_PHASE_KEY "plugins/canvas/new_shape/polygon_phase"
+#define CANVAS_NEW_STAR_PHASE_KEY "plugins/canvas/new_shape/star_phase"
 
 /** The parts of the navigation flower, floating at the bottom right of the view. */
 typedef enum dt_canvas_flower_part_t
@@ -5007,6 +5009,7 @@ static dt_canvas_shape_style_t _shape_style_recalled(const dt_canvas_tool_t tool
     style.sides = (uint32_t)MAX(dt_conf_get_int(CANVAS_NEW_STAR_SIDES_KEY), 0);
     style.depth = dt_conf_get_float(CANVAS_NEW_STAR_DEPTH_KEY);
     style.roundness = dt_conf_get_float(CANVAS_NEW_STAR_ROUNDNESS_KEY);
+    style.phase = dt_conf_get_float(CANVAS_NEW_STAR_PHASE_KEY);
   }
   else
   {
@@ -5016,6 +5019,7 @@ static dt_canvas_shape_style_t _shape_style_recalled(const dt_canvas_tool_t tool
     style.sides = (uint32_t)MAX(dt_conf_get_int(CANVAS_NEW_POLYGON_SIDES_KEY), 0);
     style.depth = 0.0f;
     style.roundness = dt_conf_get_float(CANVAS_NEW_POLYGON_ROUNDNESS_KEY);
+    style.phase = dt_conf_get_float(CANVAS_NEW_POLYGON_PHASE_KEY);
   }
   if(dt_canvas_tool_draws_regular(tool) && !style.corner_override)
   {
@@ -5063,10 +5067,12 @@ static void _shape_style_remember(const dt_canvas_object_t *object)
     dt_conf_set_int(CANVAS_NEW_STAR_SIDES_KEY, (int)style.sides);
     dt_conf_set_float(CANVAS_NEW_STAR_DEPTH_KEY, style.depth);
     dt_conf_set_float(CANVAS_NEW_STAR_ROUNDNESS_KEY, style.roundness);
+    dt_conf_set_float(CANVAS_NEW_STAR_PHASE_KEY, style.phase);
     return;
   }
   dt_conf_set_int(CANVAS_NEW_POLYGON_SIDES_KEY, (int)style.sides);
   dt_conf_set_float(CANVAS_NEW_POLYGON_ROUNDNESS_KEY, style.roundness);
+  dt_conf_set_float(CANVAS_NEW_POLYGON_PHASE_KEY, style.phase);
 }
 
 /** The routing the armed tool draws with: the line tool a segment, the curve tool an arc. */

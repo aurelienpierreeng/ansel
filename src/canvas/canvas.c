@@ -928,6 +928,8 @@ void dt_canvas_connector_translate(dt_canvas_object_t *object, const double dx, 
  */
 #define CANVAS_SHAPE_BORDER_MAX 500.0f
 #define CANVAS_SHAPE_CORNER_MAX 5000.0f
+// One revolution either way: past that a turn is the same turn under a different number.
+#define CANVAS_SHAPE_PHASE_MAX 6.2831853071795864769f
 #define CANVAS_SHAPE_SHADOW_MAX 500.0f
 
 dt_canvas_shape_style_t dt_canvas_shape_style_default(void)
@@ -948,6 +950,7 @@ dt_canvas_shape_style_t dt_canvas_shape_style_default(void)
   // star TOOL's to ask for, so that a polygon born from this style is the polygon it was asked for.
   style.depth = 0.0f;
   style.roundness = 0.0f;
+  style.phase = 0.0f;
   return style;
 }
 
@@ -966,6 +969,7 @@ gboolean dt_canvas_shape_style_get(const dt_canvas_object_t *object, dt_canvas_s
   style->sides = object->shape.sides;
   style->depth = object->shape.depth;
   style->roundness = object->shape.roundness;
+  style->phase = object->shape.phase;
   return TRUE;
 }
 
@@ -1017,6 +1021,8 @@ gboolean dt_canvas_shape_style_sanitize(dt_canvas_shape_style_t *style)
   }
   style->depth = _sound_length(style->depth, 0.0f, DT_CANVAS_SHAPE_MAX_DEPTH, &sound);
   style->roundness = _sound_length(style->roundness, 0.0f, 1.0f, &sound);
+  // A turn goes either way and round: held to one revolution, and a number nobody can read is none.
+  style->phase = _sound_length(style->phase, -CANVAS_SHAPE_PHASE_MAX, CANVAS_SHAPE_PHASE_MAX, &sound);
   // A switch compared against TRUE elsewhere must hold TRUE itself, not merely something that is not 0.
   const gboolean border_override = style->border_override != FALSE;
   const gboolean corner_override = style->corner_override != FALSE;
@@ -1062,6 +1068,7 @@ dt_canvas_object_t *dt_canvas_add_shape(dt_canvas_t *canvas, const dt_canvas_sha
   object->shape.sides = applied.sides;
   object->shape.depth = applied.depth;
   object->shape.roundness = applied.roundness;
+  object->shape.phase = applied.phase;
   // A shape IS its fill and its border: both come from the style, and each override flag says
   // whether the canvas's own value still applies -- which is what makes a shape drawn with no
   // border of its own follow a canvas whose border is changed afterwards.
@@ -1300,6 +1307,60 @@ static size_t _polygon_outline(const dt_canvas_t *canvas, const dt_canvas_object
   {
     fitted[2 * idx] = (unit[2 * idx] - 0.5 * (box_left + box_right)) * scale_x;
     fitted[2 * idx + 1] = (unit[2 * idx + 1] - 0.5 * (box_top + box_bottom)) * scale_y;
+  }
+
+  /*
+   * THE PHASE TURNS THE SHAPE INSIDE ITS FRAME, and the frame does not move.
+   *
+   * It is applied to the FITTED points -- after the stretch onto the frame, before the fillet --
+   * and the turned shape is then scaled UNIFORMLY back inside the frame. That order is what
+   * makes it a turn: phased at the unit stage instead, a shape that keeps its ratio would refit
+   * its own height and move the container the user placed, and a free-ratio one would be
+   * stretched anisotropically AFTER turning, which is a shear and not a rotation.
+   *
+   * At phase 0 the scale is exactly 1 and every point is bit-identical to what it was. The
+   * price of a rigid turn inside a fixed container is that the shape breathes as it goes round
+   * -- a square in a square is 1/sqrt(2) across at 45 degrees and back to 1 at 90 -- which is
+   * what a rigid turn inside a fixed container IS. The outline still never leaves the frame's
+   * box, so the painter's clip and the silhouette's cap hold unchanged.
+   */
+  const double phase = (double)object->shape.phase;
+  if(phase != 0.0)
+  {
+    const double turn = cos(phase);
+    const double lift = sin(phase);
+    double turned_left = 0.0;
+    double turned_right = 0.0;
+    double turned_top = 0.0;
+    double turned_bottom = 0.0;
+    for(int idx = 0; idx < unit_points; idx++)
+    {
+      const double x = fitted[2 * idx];
+      const double y = fitted[2 * idx + 1];
+      fitted[2 * idx] = x * turn - y * lift;
+      fitted[2 * idx + 1] = x * lift + y * turn;
+    }
+    dt_polygon_points_box(fitted, unit_points, &turned_left, &turned_right, &turned_top, &turned_bottom);
+    const double turned_width = turned_right - turned_left;
+    const double turned_height = turned_bottom - turned_top;
+    /*
+     * RECENTRED before it is scaled. A rotation about the centre keeps the centroid but NOT the
+     * bounding box's centre, so a shape that is not symmetric about the origin comes out of the
+     * turn sitting off to one side of its own box -- and scaling that by the box's SIZE alone
+     * leaves the far edge outside the frame however small the factor is. Measured on a triangle
+     * turned 15 degrees short of half a turn: 141.9 units of outline in a 120-unit box. The fit
+     * at phase 0 centres the box on the origin, so doing it again at every phase is the same
+     * rule applied, not a new one.
+     */
+    const double turned_centre_x = 0.5 * (turned_left + turned_right);
+    const double turned_centre_y = 0.5 * (turned_top + turned_bottom);
+    const double back = MIN(turned_width > 0.0 ? object->width / turned_width : 1.0,
+                            turned_height > 0.0 ? object->height / turned_height : 1.0);
+    for(int idx = 0; idx < unit_points; idx++)
+    {
+      fitted[2 * idx] = (fitted[2 * idx] - turned_centre_x) * back;
+      fitted[2 * idx + 1] = (fitted[2 * idx + 1] - turned_centre_y) * back;
+    }
   }
 
   const double radius = fmax(dt_canvas_object_effective_corner_radius(canvas, object), 0.0);

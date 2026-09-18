@@ -305,6 +305,13 @@ static const dt_canvas_prop_t _props[] = {
     .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_TUNE, .min = 0.0, .max = 100.0,
     .soft_min = 0.0, .soft_max = 100.0, .step = 1.0, .factor = 0.01, .neutral = 0.0, .digits = 0,
     .visible_if = DT_CANVAS_PROP_SHAPE_GEOMETRY, .visible_values = GEOMETRIES_WITH_SIDES },
+  { .id = DT_CANVAS_PROP_SHAPE_PHASE, .key = "shape.phase", .label = N_("Turn"),
+    .tooltip = N_("Turn the shape inside its frame. The frame does not move and is not turned: the shape "
+                  "is scaled to keep inside it, so it breathes a little as it goes round."),
+    .unit = N_("\xc2\xb0"), .kinds = KINDS_SHAPE, .section = DT_CANVAS_SECTION_SHAPE,
+    .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_MEASURE, .min = -360.0, .max = 360.0,
+    .soft_min = -180.0, .soft_max = 180.0, .step = 1.0, .factor = G_PI / 180.0, .neutral = 0.0, .digits = 1,
+    .visible_if = DT_CANVAS_PROP_SHAPE_GEOMETRY, .visible_values = GEOMETRIES_WITH_SIDES },
 
   /* --- arrange -------------------------------------------------------------------------- */
   { .id = DT_CANVAS_PROP_X, .key = "arrange.x", .label = N_("X"),
@@ -1279,6 +1286,9 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
     case DT_CANVAS_PROP_SHAPE_ROUNDNESS:
       out->number = (double)object->shape.roundness / prop->factor;
       break;
+    case DT_CANVAS_PROP_SHAPE_PHASE:
+      out->number = (double)object->shape.phase / prop->factor;
+      break;
     case DT_CANVAS_PROP_X:
       out->number = object->x;
       break;
@@ -1665,6 +1675,7 @@ static gboolean _shape_style_row(const dt_canvas_prop_id_t prop_id)
     case DT_CANVAS_PROP_SHAPE_SIDES:
     case DT_CANVAS_PROP_SHAPE_DEPTH:
     case DT_CANVAS_PROP_SHAPE_ROUNDNESS:
+    case DT_CANVAS_PROP_SHAPE_PHASE:
     case DT_CANVAS_PROP_SHAPE_FILLED:
     case DT_CANVAS_PROP_BACKGROUND:
     case DT_CANVAS_PROP_BORDER_WIDTH:
@@ -1783,6 +1794,20 @@ static uint32_t _shape_outline_effects(dt_canvas_object_t *object)
 }
 
 /**
+ * A turn changes the outline and NOT the shape's proportions, so it must not refit the frame.
+ *
+ * The sides, the notch depth and the roundness all change what proportions the unit shape has,
+ * and the frame follows them. A phase does not: `dt_canvas_shape_unit_aspect()` never sees it,
+ * and the turn is applied after the fit and scaled back inside the frame the user placed. Sent
+ * through `_shape_outline_effects()` it would refit the height anyway -- measured, a 200 x 120
+ * box snapping to the aspect the sides imply the moment the shape was turned by a degree.
+ */
+static uint32_t _shape_turn_effects(void)
+{
+  return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_COUPLED;
+}
+
+/**
  * Turn a shape into a polygon, or into a star, which is a polygon whose notches have a depth.
  *
  * Three things go with the geometry itself. The cutout goes, because a polygon is not cut and a
@@ -1835,6 +1860,9 @@ static uint32_t _write_shape(dt_canvas_t *canvas, dt_canvas_object_t *object, co
     case DT_CANVAS_PROP_SHAPE_ROUNDNESS:
       object->shape.roundness = (float)CLAMP(_clamp_number(prop, in->number) * prop->factor, 0.0, 1.0);
       return _shape_outline_effects(object);
+    case DT_CANVAS_PROP_SHAPE_PHASE:
+      object->shape.phase = (float)(_clamp_number(prop, in->number) * prop->factor);
+      return _shape_turn_effects();
     case DT_CANVAS_PROP_SHAPE_FILLED:
     {
       if(in->flag)

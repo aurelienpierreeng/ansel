@@ -3269,6 +3269,12 @@
     <shortdescription>how round the sides of the next polygon drawn in the canvas atelier are; 0 is straight</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/canvas/new_shape/polygon_phase</name>
+    <type min="-6.2832" max="6.2832">float</type>
+    <default>0</default>
+    <shortdescription>radians the next polygon drawn in the canvas atelier is turned inside its own frame</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/canvas/new_shape/star_sides</name>
     <type min="3" max="12">int</type>
     <default>5</default>
@@ -3285,6 +3291,12 @@
     <type min="0.0" max="1.0">float</type>
     <default>0</default>
     <shortdescription>how round the sides of the next star drawn in the canvas atelier are; 0 is straight</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/canvas/new_shape/star_phase</name>
+    <type min="-6.2832" max="6.2832">float</type>
+    <default>0</default>
+    <shortdescription>radians the next star drawn in the canvas atelier is turned inside its own frame</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/canvas/color_history</name>
