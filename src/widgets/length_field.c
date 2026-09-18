@@ -175,7 +175,15 @@ void dt_length_field_set_unit(GtkWidget *widget, const char *unit)
   if(wanted == NULL || wanted == field->unit) return;
   field->unit = wanted;
   if(field->unit_key != NULL) dt_widget_store_string(field->unit_key, field->unit);
-  gtk_spin_button_set_digits(GTK_SPIN_BUTTON(widget), _shown_digits(field));
+  /*
+   * NOT gtk_spin_button_set_digits() here, though the figures shown do change with the unit:
+   * MEASURED, it emits `value-changed` whenever the count differs, with the value untouched.
+   * A control's `value-changed` is an EDIT to whatever it is wired to -- and the guides' margin
+   * and bleed share one setter that sends BOTH spins -- so choosing centimetres would write the
+   * document, take an undo step and recomposite the page for a change of words. `_render()`
+   * takes the figures from `_shown_digits()` itself, so the display is right either way, and
+   * what set_digits buys is GTK's own agreement about text this field replaces anyway.
+   */
   // The length has not moved, only the words for it.
   _render(GTK_SPIN_BUTTON(widget), field);
 }

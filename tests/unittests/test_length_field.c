@@ -242,6 +242,54 @@ static void _setting_the_unit_moves_the_words_and_not_the_length(void **state)
   gtk_widget_destroy(window);
 }
 
+static int _sends = 0;
+
+static void _count_send(GtkWidget *widget, gpointer data)
+{
+  (void)widget;
+  (void)data;
+  _sends++;
+}
+
+static void _changing_the_unit_is_not_an_edit(void **state)
+{
+  (void)state;
+  /*
+   * A control's `value-changed` is an EDIT to whatever it is wired to, and the guides' margin
+   * and bleed share ONE setter that sends both spins -- so a unit chosen for the look of it
+   * must not reach the document. gtk_spin_button_set_digits() emits `value-changed` when the
+   * count changes, with the value untouched (measured), which is why this field does not call
+   * it after construction.
+   */
+  GtkWidget *window = NULL;
+  GtkWidget *field = _field(&window, NULL, "pt", 0);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(field), 56.692913385826778);
+  _pump();
+  g_signal_connect(field, "value-changed", G_CALLBACK(_count_send), NULL);
+  _sends = 0;
+
+  // Points to centimetres is nought figures to two, which is the case that emitted.
+  dt_length_field_set_unit(field, "cm");
+  _pump();
+  if(_sends != 0) print_error("choosing centimetres reported %d edit(s)\n", _sends);
+  assert_int_equal(_sends, 0);
+  _assert_shows(field, 2, 2.0, "cm");
+  _assert_close(_value(field), 56.692913385826778, 0.0, "the length after the unit changed");
+
+  // And back the other way, two figures to none.
+  dt_length_field_set_unit(field, "pt");
+  _pump();
+  assert_int_equal(_sends, 0);
+
+  // A unit TYPED in with a new length is an edit, and reports exactly one.
+  _type(field, "1in");
+  _pump();
+  assert_int_equal(_sends, 1);
+  _assert_close(_value(field), 72.0, 1e-9, "1in");
+  assert_string_equal(dt_length_field_get_unit(field), "in");
+  gtk_widget_destroy(window);
+}
+
 static void _a_field_comes_back_in_the_unit_it_was_left_in(void **state)
 {
   (void)state;
@@ -296,6 +344,7 @@ int main(int argc, char **argv)
     cmocka_unit_test(_nonsense_leaves_the_length_alone),
     cmocka_unit_test(_a_field_shows_enough_figures_for_its_unit_and_its_caller),
     cmocka_unit_test(_setting_the_unit_moves_the_words_and_not_the_length),
+    cmocka_unit_test(_changing_the_unit_is_not_an_edit),
     cmocka_unit_test(_a_field_comes_back_in_the_unit_it_was_left_in),
     cmocka_unit_test(_the_unit_lives_in_the_text_and_never_in_the_number),
   };

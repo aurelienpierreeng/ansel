@@ -55,6 +55,7 @@
 #include "widgets/bauhaus.h"          // the popover sliders
 #include "widgets/button.h"           // dtgtk_button_new
 #include "widgets/chooser_button.h"
+#include "widgets/length_field.h"    // the guides are set in a unit, not in bare numbers
 #include "widgets/paint.h"            // the glyphs the icon groups show
 #include "widgets/togglebutton.h"     // dtgtk_togglebutton_new
 #include "widgets/widget_settings.h"
@@ -1088,8 +1089,8 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   _section_label(grid, 0, _("Grid"));
   toolbar->grid_show = _guide_check(self, grid, 1, 0, _("Show"), DT_CANVAS_GRID_VISIBLE);
   toolbar->grid_snap = _guide_check(self, grid, 1, 1, _("Snap"), DT_CANVAS_GRID_SNAP);
-  toolbar->grid_size = gtk_spin_button_new_with_range(5.0, 1000.0, 5.0);
-  gtk_widget_set_tooltip_text(toolbar->grid_size, _("Grid spacing, in canvas units"));
+  toolbar->grid_size = dt_length_field_new("canvas/guides/unit/grid_size", "pt", 0, 5.0, 1000.0, 5.0);
+  gtk_widget_set_tooltip_text(toolbar->grid_size, _("Grid spacing. Type a unit -- mm, cm, in -- and it is kept."));
   _connect_refilled(self, toolbar->grid_size, "value-changed", G_CALLBACK(_grid_size_changed));
   _labelled(grid, 1, 2, _("Size"), toolbar->grid_size);
   toolbar->grid_color = _color_button(_("Grid colour"), _("Colour of the grid dots"),
@@ -1140,7 +1141,7 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->spread_rows, _("Pages down one sheet. 0 tiles the plane uniformly."));
   _connect_refilled(self, toolbar->spread_rows, "value-changed", G_CALLBACK(_spread_changed));
   _labelled(grid, 6, 1, _("Down"), toolbar->spread_rows);
-  toolbar->bind_gutter = gtk_spin_button_new_with_range(0.0, 2000.0, 1.0);
+  toolbar->bind_gutter = dt_length_field_new("canvas/guides/unit/bind_gutter", "pt", 0, 0.0, 2000.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->bind_gutter,
                               _("The binding's own allowance, kept clear inside a page AT A FOLD only -- what a "
                                 "perfect binding swallows out of the middle of a picture crossing it. It is added "
@@ -1151,10 +1152,10 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   _section_label(grid, 7, _("Page margins"));
   toolbar->margin_show = _guide_check(self, grid, 8, 0, _("Show"), DT_CANVAS_MARGIN_VISIBLE);
   toolbar->margin_snap = _guide_check(self, grid, 8, 1, _("Snap"), DT_CANVAS_SNAP_MARGIN);
-  toolbar->margin_size = gtk_spin_button_new_with_range(0.0, 2000.0, 1.0);
+  toolbar->margin_size = dt_length_field_new("canvas/guides/unit/margin_size", "pt", 0, 0.0, 2000.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->margin_size,
-                              _("Kept clear inside every page edge, in canvas units. A guide and a snapping rule only: "
-                                "nothing is moved and the page is unchanged."));
+                              _("Kept clear inside every page edge. A guide and a snapping rule only: nothing is moved and "
+                                "the page is unchanged. Type a unit -- mm, cm, in -- and it is kept."));
   _connect_refilled(self, toolbar->margin_size, "value-changed", G_CALLBACK(_page_guides_changed));
   _labelled(grid, 8, 2, _("Size"), toolbar->margin_size);
   toolbar->margin_color = _color_button(_("Margin colour"), _("Colour of the margin lines"),
@@ -1164,7 +1165,7 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   _section_label(grid, 9, _("Bleed"));
   toolbar->bleed_show = _guide_check(self, grid, 10, 0, _("Show"), DT_CANVAS_BLEED_VISIBLE);
   toolbar->bleed_snap = _guide_check(self, grid, 10, 1, _("Snap"), DT_CANVAS_SNAP_BLEED);
-  toolbar->bleed_size = gtk_spin_button_new_with_range(0.0, 2000.0, 1.0);
+  toolbar->bleed_size = dt_length_field_new("canvas/guides/unit/bleed_size", "pt", 0, 0.0, 2000.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->bleed_size,
                               _("How far past every page edge the sheet keeps going, in canvas units. A frame a page break "
                                 "cuts in two carries on into the bleed on both sheets, which is what a binding folds around "
@@ -1180,9 +1181,10 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(toolbar->padding_show,
                               _("Draw each frame's clear margin around it. Two frames snapped side by side meet on one shared line, two paddings apart."));
   toolbar->padding_snap = _guide_check(self, grid, 12, 1, _("Snap"), DT_CANVAS_SNAP_PADDING);
-  toolbar->padding_size = gtk_spin_button_new_with_range(0.0, 500.0, 1.0);
+  toolbar->padding_size = dt_length_field_new("canvas/guides/unit/padding_size", "pt", 0, 0.0, 500.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->padding_size,
-                              _("The clear margin every frame keeps around itself, in canvas units. Side by side, two frames are two of these apart."));
+                              _("The clear margin every frame keeps around itself. Side by side, two frames are two of these "
+                                "apart. Type a unit -- mm, cm, in -- and it is kept."));
   _connect_refilled(self, toolbar->padding_size, "value-changed", G_CALLBACK(_padding_changed));
   _labelled(grid, 12, 2, _("Size"), toolbar->padding_size);
   toolbar->padding_color = _color_button(_("Padding colour"), _("Colour of the padding frames"),
