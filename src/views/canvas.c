@@ -2155,6 +2155,40 @@ static gboolean _anchor_at(const dt_canvas_view_t *view, const double x, const d
 }
 
 /**
+ * The frame under the point and the node of it nearest the point, whatever the distance.
+ *
+ * `_anchor_at()` answers only within `CANVAS_ANCHOR_REACH_PIXELS`, which is right for the
+ * connector tool -- a click off a node starts nothing -- and wrong for a DROP: an end dragged onto
+ * another object and let go a dozen pixels off its nearest dot did nothing at all, silently, which
+ * reads exactly like a gesture that is not implemented. Dropping ON an object is the ask; the
+ * nearest of its nine nodes is what it means.
+ */
+static gboolean _anchor_dropped_on(const dt_canvas_view_t *view, const double x, const double y,
+                                   uint32_t *frame_id, uint32_t *anchor)
+{
+  if(_anchor_at(view, x, y, frame_id, anchor)) return TRUE;
+  const dt_canvas_object_t *frame
+      = dt_canvas_pick(view->canvas, x, y, DT_CANVAS_PICK_TOLERANCE_PIXELS / view->zoom);
+  if(IS_NULL_PTR(frame) || !dt_canvas_object_is_frame(frame) || (frame->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN))
+    return FALSE;
+  double best = INFINITY;
+  for(int candidate = 0; candidate < CANVAS_FRAME_ANCHORS; candidate++)
+  {
+    double anchor_x = 0.0;
+    double anchor_y = 0.0;
+    dt_canvas_object_anchor_handle(view->canvas, frame, _frame_anchors[candidate], &anchor_x, &anchor_y);
+    const double distance = hypot(anchor_x - x, anchor_y - y);
+    if(distance < best)
+    {
+      best = distance;
+      *frame_id = frame->id;
+      *anchor = _frame_anchors[candidate];
+    }
+  }
+  return best < INFINITY;
+}
+
+/**
  * Where a press would start the next line, while a line tool is armed and nothing is being dragged: the
  * pointer, taken to the grid when snapping is on. TRUE when the marker moved, appeared or went, so the
  * caller repaints only then.
@@ -5474,7 +5508,7 @@ static void _end_gesture(dt_view_t *self)
      */
     if(view->drag_moved && !IS_NULL_PTR(line) && line->kind == DT_CANVAS_OBJECT_CONNECTOR
        && !(line->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)
-       && _anchor_at(view, view->pointer_x, view->pointer_y, &anchor_frame, &anchor))
+       && _anchor_dropped_on(view, view->pointer_x, view->pointer_y, &anchor_frame, &anchor))
     {
       /*
        * Never onto the frame the OTHER end holds: both ends on one frame is a connector of no
@@ -5497,6 +5531,10 @@ static void _end_gesture(dt_view_t *self)
         attached = TRUE;
       }
     }
+    dt_print(DT_DEBUG_INPUT,
+             "[canvas] end drop at %.1f, %.1f: moved=%d line=%u was_free=%d -> frame=%u anchor=%u attached=%d\n",
+             view->pointer_x, view->pointer_y, view->drag_moved ? 1 : 0, IS_NULL_PTR(line) ? 0 : line->id,
+             was_free ? 1 : 0, anchor_frame, anchor, attached ? 1 : 0);
     view->anchor_hover_id = 0;
     view->anchor_hover = DT_CANVAS_ANCHOR_AUTO;
     /*
@@ -5644,6 +5682,8 @@ static gboolean _press_handles(dt_view_t *self, const double canvas_x, const dou
   const dt_canvas_drag_t end_drag = _endpoint_handle_at(view, canvas_x, canvas_y, &end_owner);
   if(end_drag != DT_CANVAS_DRAG_NONE)
   {
+    dt_print(DT_DEBUG_INPUT, "[canvas] end drag armed on connector %u (%s)\n", end_owner->id,
+             end_drag == DT_CANVAS_DRAG_END_FROM ? "start" : "end");
     _select_only(view, end_owner->id);
     _gesture_snapshot(view);
     view->drag = end_drag;
@@ -5780,6 +5820,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
         const dt_canvas_drag_t end_drag = _endpoint_handle_at(view, canvas_x, canvas_y, &end_owner);
         if(end_drag != DT_CANVAS_DRAG_NONE)
         {
+          dt_print(DT_DEBUG_INPUT, "[canvas] end drag armed on connector %u (%s), connector tool armed\n",
+                   end_owner->id, end_drag == DT_CANVAS_DRAG_END_FROM ? "start" : "end");
           _select_only(view, end_owner->id);
           _gesture_snapshot(view);
           view->drag = end_drag;
@@ -5898,7 +5940,12 @@ static void _queue_cursor_for(dt_view_t *self, const double screen_x, const doub
   }
   else if(view->tool == DT_CANVAS_TOOL_CONNECTOR)
   {
-    cursor = view->anchor_hover != DT_CANVAS_ANCHOR_AUTO ? GDK_CROSSHAIR : GDK_LEFT_PTR;
+    // A selected connector's own ends answer a press even here, so the cursor has to say so, or
+    // the one gesture that is available over them looks like the tool's own crosshair.
+    if(view->connect_from == 0 && _endpoint_handle_at(view, x, y, &(dt_canvas_object_t *){ NULL }) != DT_CANVAS_DRAG_NONE)
+      cursor = GDK_FLEUR;
+    else
+      cursor = view->anchor_hover != DT_CANVAS_ANCHOR_AUTO ? GDK_CROSSHAIR : GDK_LEFT_PTR;
   }
   else if(_mask_handle_at(view, _single_selected(view), x, y, &(int){ -1 }) != DT_CANVAS_DRAG_NONE)
   {
