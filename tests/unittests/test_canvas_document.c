@@ -1660,30 +1660,95 @@ static void _bounds_hold_a_free_line_and_its_arrowhead(void **state)
  * corners, and the centre. They are the frame's own points, so they turn with it.
  */
 /**
- * The page list is ordered for reading and stored by code, so a size appended to the enum --
- * A0 and A1 were -- shows where it belongs without moving any saved document's page.
+ * The page list is ordered for reading and stored by code, and the two now agree: the enum was
+ * renumbered once, deliberately, while the format was R&D and local, and is append-only again.
  */
+static void _a_custom_page_is_the_canvass_own_size(void **state)
+{
+  (void)state;
+  /*
+   * The one size the table cannot hold, because it is the document's. `dt_canvas_paper_points()`
+   * must REFUSE it -- it has no canvas and would otherwise hand back a 0 x 0 page -- and
+   * `dt_canvas_paper_dimensions()`, which does have one, answers it.
+   */
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->paper_size = DT_CANVAS_PAPER_CUSTOM;
+  double width = 0.0;
+  double height = 0.0;
+
+  // Never sized, it is no page at all -- which every consumer already handles, so there is
+  // nothing to migrate: zeros in an old file read exactly this way.
+  assert_false(dt_canvas_paper_custom(canvas, &width, &height));
+  assert_false(dt_canvas_paper_dimensions(canvas, &width, &height));
+
+  dt_canvas_paper_custom_set(canvas, 210.0 * 72.0 / 25.4, 297.0 * 72.0 / 25.4);
+  assert_true(dt_canvas_paper_custom(canvas, &width, &height));
+  assert_true(dt_canvas_paper_dimensions(canvas, &width, &height));
+  assert_float_equal(width, 595.28, 0.05);
+  assert_float_equal(height, 841.89, 0.05);
+  // It turns with the orientation exactly as a named size does.
+  canvas->paper_landscape = TRUE;
+  assert_true(dt_canvas_paper_dimensions(canvas, &width, &height));
+  assert_float_equal(width, 841.89, 0.05);
+  assert_float_equal(height, 595.28, 0.05);
+
+  // A size that is not a number is none of it, which reads back as a page never given.
+  dt_canvas_paper_custom_set(canvas, NAN, 500.0);
+  assert_false(dt_canvas_paper_custom(canvas, &width, &height));
+
+  // And it survives the file.
+  dt_canvas_paper_custom_set(canvas, 333.0, 444.0);
+  canvas->paper_landscape = FALSE;
+  gchar *path = g_build_filename(g_get_tmp_dir(), "canvas-custom-page.anselcanvas", NULL);
+  GError *error = NULL;
+  assert_true(dt_canvas_save(canvas, path, &error));
+  dt_canvas_t *back = dt_canvas_load(path, &error);
+  assert_non_null(back);
+  assert_int_equal(back->paper_size, DT_CANVAS_PAPER_CUSTOM);
+  assert_true(dt_canvas_paper_custom(back, &width, &height));
+  assert_float_equal(width, 333.0, 0.01);
+  assert_float_equal(height, 444.0, 0.01);
+  dt_canvas_free(back);
+  g_unlink(path);
+  g_free(path);
+  dt_canvas_free(canvas);
+}
+
 static void _the_page_list_reads_in_order_and_stores_by_code(void **state)
 {
   (void)state;
-  // The list starts at "None" and then runs down the ISO A series from the largest.
+  // None, then the one size the canvas carries itself, then down the ISO A series.
   assert_int_equal(dt_canvas_paper_code(0), DT_CANVAS_PAPER_NONE);
-  assert_int_equal(dt_canvas_paper_code(1), DT_CANVAS_PAPER_A0);
-  assert_int_equal(dt_canvas_paper_code(2), DT_CANVAS_PAPER_A1);
-  assert_int_equal(dt_canvas_paper_code(3), DT_CANVAS_PAPER_A2);
-  assert_int_equal(dt_canvas_paper_code(7), DT_CANVAS_PAPER_A6);
-  assert_string_equal(dt_canvas_paper_name(1), "A0");
-  // Every code the list offers comes back to the row it was shown on, and every one of them
-  // is a size -- a stored value with no size behind it would silently become no pages at all.
+  assert_int_equal(dt_canvas_paper_code(1), DT_CANVAS_PAPER_CUSTOM);
+  assert_int_equal(dt_canvas_paper_code(2), DT_CANVAS_PAPER_A0);
+  assert_int_equal(dt_canvas_paper_code(3), DT_CANVAS_PAPER_A1);
+  assert_int_equal(dt_canvas_paper_code(8), DT_CANVAS_PAPER_A6);
+  assert_string_equal(dt_canvas_paper_name(2), "A0");
+  // The stored code IS the position now, which is what the renumbering bought.
+  for(int position = 0; position < dt_canvas_paper_count(); position++)
+    assert_int_equal((int)dt_canvas_paper_code(position), position);
+  /* Every code the list offers comes back to the row it was shown on, and every one of them is
+   * a size -- except CUSTOM, whose size is the canvas's and which `dt_canvas_paper_points()`
+   * must REFUSE, or a custom page would silently be 0 x 0. */
   for(int position = 1; position < dt_canvas_paper_count(); position++)
   {
     const uint32_t code = dt_canvas_paper_code(position);
     assert_int_equal(dt_canvas_paper_position(code), position);
     double width = 0.0;
     double height = 0.0;
+    if(code == DT_CANVAS_PAPER_CUSTOM)
+    {
+      assert_false(dt_canvas_paper_points(code, &width, &height));
+      continue;
+    }
     assert_true(dt_canvas_paper_points(code, &width, &height));
     assert_true(width > 0.0 && height > 0.0);
   }
+  // And a size this build has never heard of is no page, never the last row of the table.
+  assert_true(dt_canvas_paper_known(DT_CANVAS_PAPER_A4));
+  assert_true(dt_canvas_paper_known(DT_CANVAS_PAPER_CUSTOM));
+  assert_false(dt_canvas_paper_known(DT_CANVAS_PAPER_LAST));
+  assert_false(dt_canvas_paper_known(9999u));
   // A0 is 841 by 1189 mm, which is what a print shop will ask for.
   double width = 0.0;
   double height = 0.0;
@@ -3114,6 +3179,7 @@ int main(void)
     cmocka_unit_test(_a_dragged_line_end_snaps_to_the_grid_or_holds_its_angle),
     cmocka_unit_test(_bounds_hold_a_free_line_and_its_arrowhead),
     cmocka_unit_test(_the_page_list_reads_in_order_and_stores_by_code),
+    cmocka_unit_test(_a_custom_page_is_the_canvass_own_size),
     cmocka_unit_test(_a_page_carries_a_margin_inside_it_and_a_bleed_outside),
     cmocka_unit_test(_a_frame_offers_its_corners_and_its_centre_as_anchors),
     cmocka_unit_test(_a_waypoint_bends_every_routing_through_it),

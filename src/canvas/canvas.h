@@ -79,7 +79,7 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 836 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12), the line (20)
+#define DT_CANVAS_HEADER_RESERVED 828 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12), the line (20), the custom page (8)
 #define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
 #define DT_CANVAS_TEXT_RESERVED 144 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags, the standoff and the two paragraph settings
@@ -711,29 +711,37 @@ typedef enum dt_canvas_background_t
  * size is its size in points and a screen size is its size in pixels at 72 dpi -- export such
  * a page at 72 dpi and it comes out at exactly the pixel size it is named for.
  *
- * The stored value is this index: NEW SIZES ARE APPENDED, never inserted, or every saved
- * document changes page size. `dt_canvas_paper_name()` and `dt_canvas_paper_points()` are the
- * one table behind it, and the GUI reads its list from there.
+ * The stored value is this index. It was RENUMBERED ONCE, deliberately, while the format was
+ * still R&D and every document holding one was local: the codes had been appended as sizes were
+ * thought of, so A0 and A1 sat past the social formats and the stored order said nothing. From
+ * here it is APPEND-ONLY again -- insert a size and every saved document changes page.
+ *
+ * Nothing may read a range of these: which sizes are ISO, which are physical and which name is
+ * translated are all COLUMNS of the one table behind `dt_canvas_paper_name()` and
+ * `dt_canvas_paper_points()`, so a row answers for itself and a later reorder cannot make a
+ * numeric test quietly wrong. `dt_canvas_paper_known()` is what a stored or configured number
+ * is held to.
  */
 typedef enum dt_canvas_paper_t
 {
   DT_CANVAS_PAPER_NONE = 0,
-  DT_CANVAS_PAPER_A2 = 1,
-  DT_CANVAS_PAPER_A3 = 2,
-  DT_CANVAS_PAPER_A4 = 3,
-  DT_CANVAS_PAPER_A5 = 4,
-  DT_CANVAS_PAPER_A6 = 5,
-  DT_CANVAS_PAPER_LETTER = 6,             ///< US Letter, 8.5 x 11 in
-  DT_CANVAS_PAPER_INSTAGRAM_SQUARE = 7,   ///< 1080 x 1080 px
-  DT_CANVAS_PAPER_INSTAGRAM_PORTRAIT = 8, ///< 1080 x 1350 px
-  DT_CANVAS_PAPER_STORY = 9,              ///< reels and stories, 1080 x 1920 px
-  DT_CANVAS_PAPER_FACEBOOK_POST = 10,     ///< 1200 x 630 px
-  DT_CANVAS_PAPER_FACEBOOK_COVER = 11,    ///< 851 x 315 px
-  DT_CANVAS_PAPER_YOUTUBE_THUMBNAIL = 12, ///< 1280 x 720 px
-  DT_CANVAS_PAPER_YOUTUBE_BANNER = 13,    ///< channel art, 2560 x 1440 px
-  DT_CANVAS_PAPER_A1 = 14,
-  DT_CANVAS_PAPER_A0 = 15,
-  DT_CANVAS_PAPER_LAST = 16,
+  DT_CANVAS_PAPER_CUSTOM = 1,             ///< the size in `custom_paper_width`/`_height`, in points
+  DT_CANVAS_PAPER_A0 = 2,
+  DT_CANVAS_PAPER_A1 = 3,
+  DT_CANVAS_PAPER_A2 = 4,
+  DT_CANVAS_PAPER_A3 = 5,
+  DT_CANVAS_PAPER_A4 = 6,
+  DT_CANVAS_PAPER_A5 = 7,
+  DT_CANVAS_PAPER_A6 = 8,
+  DT_CANVAS_PAPER_LETTER = 9,              ///< US Letter, 8.5 x 11 in
+  DT_CANVAS_PAPER_INSTAGRAM_SQUARE = 10,   ///< 1080 x 1080 px
+  DT_CANVAS_PAPER_INSTAGRAM_PORTRAIT = 11, ///< 1080 x 1350 px
+  DT_CANVAS_PAPER_STORY = 12,              ///< reels and stories, 1080 x 1920 px
+  DT_CANVAS_PAPER_FACEBOOK_POST = 13,      ///< 1200 x 630 px
+  DT_CANVAS_PAPER_FACEBOOK_COVER = 14,     ///< 851 x 315 px
+  DT_CANVAS_PAPER_YOUTUBE_THUMBNAIL = 15,  ///< 1280 x 720 px
+  DT_CANVAS_PAPER_YOUTUBE_BANNER = 16,     ///< channel art, 2560 x 1440 px
+  DT_CANVAS_PAPER_LAST = 17,
 } dt_canvas_paper_t;
 
 typedef struct dt_canvas_t
@@ -795,6 +803,10 @@ typedef struct dt_canvas_t
    */
   dt_canvas_color_t line_color;
   float line_width;
+  /** The page a CUSTOM size is, in points. Zeros are a size nobody has given, which every
+   * consumer already reads as no page at all. */
+  float custom_paper_width;
+  float custom_paper_height;
   float corner_radius;              ///< default rounded corners of the frames, canvas units; 0 is square
   float page_margin;                ///< kept clear inside every page edge, canvas units
   dt_canvas_color_t margin_color;   ///< the margin lines
@@ -1436,6 +1448,27 @@ gboolean dt_canvas_paper_points(uint32_t paper, double *width, double *height);
  * reaches the plane, which is points either way.
  */
 gboolean dt_canvas_paper_is_physical(uint32_t paper);
+
+/**
+ * @brief Is this a page size this build knows?
+ *
+ * What a number read from a document or a configuration is held to. The enum was renumbered
+ * once and is append-only from here, so a file written by a later build can name a size this
+ * one has never heard of -- and the two CLAMPs that used to be the only guard would have turned
+ * it into whatever sits at the end of the table instead of into no page at all.
+ */
+gboolean dt_canvas_paper_known(uint32_t paper);
+
+/**
+ * @brief The size a CUSTOM page is, in points, or FALSE when it has never been given one.
+ *
+ * Zeros are what a page nobody has sized reads as, and every consumer already treats a page of
+ * no size as no page -- which is the safe reading and needs no migration.
+ */
+gboolean dt_canvas_paper_custom(const dt_canvas_t *canvas, double *width, double *height);
+
+/** @brief Set the size a CUSTOM page is, in points, each held to what a page may be. */
+void dt_canvas_paper_custom_set(dt_canvas_t *canvas, double width, double height);
 
 /**
  * @brief A text frame's four effective inner margins, top, right, bottom, left, in canvas

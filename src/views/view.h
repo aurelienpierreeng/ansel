@@ -286,6 +286,8 @@ typedef struct dt_view_manager_t
       void (*set_spread)(struct dt_view_t *view, int cols, int rows, float bind_gutter);
       /** The page's inner margin and the sheet's bleed outside it, in canvas units; < 0 leaves one alone. */
       void (*set_page_guides)(struct dt_view_t *view, float margin, float bleed);
+      /** The size a CUSTOM page is, in points; each side held to what a page may be. */
+      void (*set_custom_paper)(struct dt_view_t *view, float width, float height);
       /**
        * A colour the toolbar's colour window edits: `target` is a dt_canvas_color_target_t and `phase`
        * a dt_canvas_edit_phase_t. LIVE shows each change, COMMIT sets the colour kept through the

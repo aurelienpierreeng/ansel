@@ -546,7 +546,14 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   canvas->background_style = (uint32_t)CLAMP(dt_conf_get_int("canvas/background_style"), 0, DT_CANVAS_BACKGROUND_LAST - 1);
   const char *grid_color = dt_conf_get_string_const("canvas/grid_color");
   dt_canvas_color_parse(grid_color, &canvas->grid_color);
-  canvas->paper_size = (uint32_t)CLAMP(dt_conf_get_int("canvas/paper_size"), 0, DT_CANVAS_PAPER_LAST - 1);
+  /* Held to what this build KNOWS, never clamped into the table: a configuration written by a
+   * later build naming a size this one has not got would otherwise become whatever sits at the
+   * end, rather than no page at all. */
+  const int configured_paper = dt_conf_get_int("canvas/paper_size");
+  canvas->paper_size = dt_canvas_paper_known((uint32_t)configured_paper) ? (uint32_t)configured_paper
+                                                                        : DT_CANVAS_PAPER_NONE;
+  dt_canvas_paper_custom_set(canvas, dt_conf_get_float("canvas/custom_paper_width"),
+                             dt_conf_get_float("canvas/custom_paper_height"));
   canvas->page_margin = (float)fmax(dt_conf_get_float("canvas/page_margin"), 0.0);
   canvas->page_bleed = (float)fmax(dt_conf_get_float("canvas/page_bleed"), 0.0);
   dt_canvas_color_parse(dt_conf_get_string_const("canvas/guide_margin_color"), &canvas->margin_color);
@@ -6578,7 +6585,7 @@ static void _proxy_set_paper(dt_view_t *self, int paper, int landscape)
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
   if(paper >= 0)
   {
-    view->canvas->paper_size = (uint32_t)CLAMP(paper, 0, DT_CANVAS_PAPER_LAST - 1);
+    view->canvas->paper_size = dt_canvas_paper_known((uint32_t)paper) ? (uint32_t)paper : DT_CANVAS_PAPER_NONE;
     dt_conf_set_int("canvas/paper_size", (int)view->canvas->paper_size);
   }
   if(landscape >= 0)
@@ -6605,6 +6612,29 @@ static void _proxy_set_page_guides(dt_view_t *self, float margin, float bleed)
     dt_conf_set_float("canvas/page_bleed", bleed);
   }
   dt_canvas_touch(view->canvas);
+  dt_control_queue_redraw_center();
+}
+
+/**
+ * The size a CUSTOM page is. A page size is the document's, so it takes an undo step and tells
+ * whoever else shows it -- the page under every frame moves when it changes.
+ */
+static void _proxy_set_custom_paper(dt_view_t *self, const float width, const float height)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  double held_width = 0.0;
+  double held_height = 0.0;
+  dt_canvas_paper_custom(view->canvas, &held_width, &held_height);
+  if((double)width == held_width && (double)height == held_height) return;
+  _props_commit_pending(self);
+  dt_canvas_t *before = _begin_edit(view);
+  dt_canvas_paper_custom_set(view->canvas, width, height);
+  dt_conf_set_float("canvas/custom_paper_width", view->canvas->custom_paper_width);
+  dt_conf_set_float("canvas/custom_paper_height", view->canvas->custom_paper_height);
+  dt_canvas_touch(view->canvas);
+  _record_undo(self, before);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
   dt_control_queue_redraw_center();
 }
 
@@ -7198,6 +7228,7 @@ void init(dt_view_t *self)
   manager->proxy.canvas.set_resolution = _proxy_set_resolution;
   manager->proxy.canvas.set_spread = _proxy_set_spread;
   manager->proxy.canvas.set_page_guides = _proxy_set_page_guides;
+  manager->proxy.canvas.set_custom_paper = _proxy_set_custom_paper;
   manager->proxy.canvas.edit_color = _proxy_edit_color;
   manager->proxy.canvas.edit_number = _proxy_edit_number;
 }

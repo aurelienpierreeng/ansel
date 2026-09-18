@@ -80,6 +80,9 @@ typedef struct dt_lib_canvas_toolbar_handler_t
  * that silently does not appear. */
 #define DT_CANVAS_TOOLBAR_NUMBERS 6
 
+/** The biggest a custom page may be, in points: ten metres, past any press and any screen. */
+#define CANVAS_TOOLBAR_CUSTOM_PAPER_MAX 28346.0
+
 /** How long a gesture nothing holds -- a wheel step, an arrow key, the fine-tune popup -- waits
  * for the next step before it counts as over. */
 #define DT_CANVAS_TOOLBAR_DEBOUNCE_MS 400
@@ -144,6 +147,8 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *background_style;
   GtkWidget *border_color;
   GtkWidget *line_color;
+  GtkWidget *custom_width;
+  GtkWidget *custom_height;
   GtkWidget *layout;
   GtkWidget *sort;
   /** The sliders of the Borders and Shadows popovers, in the order they were built. */
@@ -705,6 +710,17 @@ static void _refill(dt_lib_module_t *self)
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->spread_rows), canvas->spread_rows);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->bind_gutter), canvas->bind_gutter);
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_size), dt_canvas_paper_position(canvas->paper_size));
+  /* The Custom page's own two sides, shown from what the DOCUMENT holds and never from the
+   * combo's handler: the toolbar owns no state, so which rows exist is derived here or it is
+   * state by another name. */
+  const gboolean custom = canvas->paper_size == DT_CANVAS_PAPER_CUSTOM;
+  gtk_widget_set_visible(toolbar->custom_width, custom);
+  gtk_widget_set_visible(toolbar->custom_height, custom);
+  double custom_width = 0.0;
+  double custom_height = 0.0;
+  dt_canvas_paper_custom(canvas, &custom_width, &custom_height);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->custom_width), custom_width);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->custom_height), custom_height);
   gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->page_orientation), canvas->paper_landscape ? 1 : 0);
   _rgba_to(toolbar->page_color, &canvas->page_color, TRUE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toolbar->padding_snap), (flags & DT_CANVAS_SNAP_PADDING) != 0);
@@ -984,6 +1000,23 @@ static GtkWidget *_prop_slider(dt_lib_module_t *self, GtkWidget *box, const dt_c
   return _popover_slider(self, box, slider, label, tooltip, G_CALLBACK(_number_changed), number);
 }
 
+/**
+ * Both sides of a Custom page at once, the way the margin and the bleed share one setter: each
+ * is read from its own field, so neither can send the other's stale value.
+ */
+static void _custom_paper_changed(GtkWidget *widget, gpointer user_data)
+{
+  (void)widget;
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_canvas_toolbar_t *toolbar = (dt_lib_canvas_toolbar_t *)self->data;
+  dt_view_t *view = NULL;
+  if(!_live(&view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_custom_paper)) return;
+  dt_view_manager_get_global()->proxy.canvas.set_custom_paper(
+      view, (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->custom_width)),
+      (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->custom_height)));
+}
+
 /** A guides checkbox bound to one flag bit. */
 static GtkWidget *_guide_check(dt_lib_module_t *self, GtkWidget *grid, const int row, const int col,
                                const char *label, const int flag)
@@ -1142,68 +1175,84 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->page_orientation), _("Landscape"));
   _connect_refilled(self, toolbar->page_orientation, "changed", G_CALLBACK(_page_changed));
   _labelled(grid, 4, 2, _("Orientation"), toolbar->page_orientation);
+  /*
+   * The one page size the canvas carries itself. Shown by `_refill()` alone, from what the
+   * DOCUMENT holds -- the toolbar owns no state, so the combo's own handler never decides this.
+   */
+  toolbar->custom_width = dt_length_field_new("canvas/guides/unit/custom_paper", "mm", 0, 0.0,
+                                              CANVAS_TOOLBAR_CUSTOM_PAPER_MAX, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->custom_width, _("How wide a Custom page is. Type a unit -- mm, cm, in."));
+  _connect_refilled(self, toolbar->custom_width, "value-changed", G_CALLBACK(_custom_paper_changed));
+  _labelled(grid, 5, 2, _("Custom W"), toolbar->custom_width);
+  toolbar->custom_height = dt_length_field_new("canvas/guides/unit/custom_paper", "mm", 0, 0.0,
+                                               CANVAS_TOOLBAR_CUSTOM_PAPER_MAX, 1.0);
+  gtk_widget_set_tooltip_text(toolbar->custom_height, _("How tall a Custom page is. Type a unit -- mm, cm, in."));
+  _connect_refilled(self, toolbar->custom_height, "value-changed", G_CALLBACK(_custom_paper_changed));
+  _labelled(grid, 5, 3, _("H"), toolbar->custom_height);
+  gtk_widget_set_no_show_all(toolbar->custom_width, TRUE);
+  gtk_widget_set_no_show_all(toolbar->custom_height, TRUE);
 
-  _section_label(grid, 5, _("Spread"));
+  _section_label(grid, 6, _("Spread"));
   toolbar->spread_cols = gtk_spin_button_new_with_range(0.0, 64.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->spread_cols,
                               _("Pages across one sheet. A book is 2, a poster taped together as many as it takes. "
                                 "0 tiles the plane uniformly, with no fold anywhere."));
   _connect_refilled(self, toolbar->spread_cols, "value-changed", G_CALLBACK(_spread_changed));
-  _labelled(grid, 6, 0, _("Across"), toolbar->spread_cols);
+  _labelled(grid, 7, 0, _("Across"), toolbar->spread_cols);
   toolbar->spread_rows = gtk_spin_button_new_with_range(0.0, 64.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->spread_rows, _("Pages down one sheet. 0 tiles the plane uniformly."));
   _connect_refilled(self, toolbar->spread_rows, "value-changed", G_CALLBACK(_spread_changed));
-  _labelled(grid, 6, 1, _("Down"), toolbar->spread_rows);
+  _labelled(grid, 7, 1, _("Down"), toolbar->spread_rows);
   toolbar->bind_gutter = dt_length_field_new("canvas/guides/unit/bind_gutter", "pt", 0, 0.0, 2000.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->bind_gutter,
                               _("The binding's own allowance, kept clear inside a page AT A FOLD only -- what a "
                                 "perfect binding swallows out of the middle of a picture crossing it. It is added "
                                 "to the page margin on those sides, and to no others."));
   _connect_refilled(self, toolbar->bind_gutter, "value-changed", G_CALLBACK(_spread_changed));
-  _labelled(grid, 6, 2, _("Bind gutter"), toolbar->bind_gutter);
+  _labelled(grid, 7, 2, _("Bind gutter"), toolbar->bind_gutter);
 
-  _section_label(grid, 7, _("Page margins"));
-  toolbar->margin_show = _guide_check(self, grid, 8, 0, _("Show"), DT_CANVAS_MARGIN_VISIBLE);
-  toolbar->margin_snap = _guide_check(self, grid, 8, 1, _("Snap"), DT_CANVAS_SNAP_MARGIN);
+  _section_label(grid, 8, _("Page margins"));
+  toolbar->margin_show = _guide_check(self, grid, 9, 0, _("Show"), DT_CANVAS_MARGIN_VISIBLE);
+  toolbar->margin_snap = _guide_check(self, grid, 9, 1, _("Snap"), DT_CANVAS_SNAP_MARGIN);
   toolbar->margin_size = dt_length_field_new("canvas/guides/unit/margin_size", "pt", 0, 0.0, 2000.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->margin_size,
                               _("Kept clear inside every page edge. A guide and a snapping rule only: nothing is moved and "
                                 "the page is unchanged. Type a unit -- mm, cm, in -- and it is kept."));
   _connect_refilled(self, toolbar->margin_size, "value-changed", G_CALLBACK(_page_guides_changed));
-  _labelled(grid, 8, 2, _("Size"), toolbar->margin_size);
+  _labelled(grid, 9, 2, _("Size"), toolbar->margin_size);
   toolbar->margin_color = _color_button(_("Margin colour"), _("Colour of the margin lines"),
                                         DT_CANVAS_COLOR_MARGIN, TRUE, self);
-  _labelled(grid, 8, 3, _("Colour"), toolbar->margin_color);
+  _labelled(grid, 9, 3, _("Colour"), toolbar->margin_color);
 
-  _section_label(grid, 9, _("Bleed"));
-  toolbar->bleed_show = _guide_check(self, grid, 10, 0, _("Show"), DT_CANVAS_BLEED_VISIBLE);
-  toolbar->bleed_snap = _guide_check(self, grid, 10, 1, _("Snap"), DT_CANVAS_SNAP_BLEED);
+  _section_label(grid, 10, _("Bleed"));
+  toolbar->bleed_show = _guide_check(self, grid, 11, 0, _("Show"), DT_CANVAS_BLEED_VISIBLE);
+  toolbar->bleed_snap = _guide_check(self, grid, 11, 1, _("Snap"), DT_CANVAS_SNAP_BLEED);
   toolbar->bleed_size = dt_length_field_new("canvas/guides/unit/bleed_size", "pt", 0, 0.0, 2000.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->bleed_size,
                               _("How far past every page edge the sheet keeps going, in canvas units. A frame a page break "
                                 "cuts in two carries on into the bleed on both sheets, which is what a binding folds around "
                                 "and a trim cuts into. The export writes it."));
   _connect_refilled(self, toolbar->bleed_size, "value-changed", G_CALLBACK(_page_guides_changed));
-  _labelled(grid, 10, 2, _("Size"), toolbar->bleed_size);
+  _labelled(grid, 11, 2, _("Size"), toolbar->bleed_size);
   toolbar->bleed_color = _color_button(_("Bleed colour"), _("Colour of the bleed lines"),
                                        DT_CANVAS_COLOR_BLEED, TRUE, self);
-  _labelled(grid, 10, 3, _("Colour"), toolbar->bleed_color);
+  _labelled(grid, 11, 3, _("Colour"), toolbar->bleed_color);
 
-  _section_label(grid, 11, _("Paddings"));
-  toolbar->padding_show = _guide_check(self, grid, 12, 0, _("Show"), DT_CANVAS_PADDING_VISIBLE);
+  _section_label(grid, 12, _("Paddings"));
+  toolbar->padding_show = _guide_check(self, grid, 13, 0, _("Show"), DT_CANVAS_PADDING_VISIBLE);
   gtk_widget_set_tooltip_text(toolbar->padding_show,
                               _("Draw each frame's clear margin around it. Two frames snapped side by side meet on one shared line, two paddings apart."));
-  toolbar->padding_snap = _guide_check(self, grid, 12, 1, _("Snap"), DT_CANVAS_SNAP_PADDING);
+  toolbar->padding_snap = _guide_check(self, grid, 13, 1, _("Snap"), DT_CANVAS_SNAP_PADDING);
   toolbar->padding_size = dt_length_field_new("canvas/guides/unit/padding_size", "pt", 0, 0.0, 500.0, 1.0);
   gtk_widget_set_tooltip_text(toolbar->padding_size,
                               _("The clear margin every frame keeps around itself. Side by side, two frames are two of these "
                                 "apart. Type a unit -- mm, cm, in -- and it is kept."));
   _connect_refilled(self, toolbar->padding_size, "value-changed", G_CALLBACK(_padding_changed));
-  _labelled(grid, 12, 2, _("Size"), toolbar->padding_size);
+  _labelled(grid, 13, 2, _("Size"), toolbar->padding_size);
   toolbar->padding_color = _color_button(_("Padding colour"), _("Colour of the padding frames"),
                                          DT_CANVAS_COLOR_PADDING, TRUE, self);
-  _labelled(grid, 12, 3, _("Colour"), toolbar->padding_color);
-  toolbar->size_snap = _guide_check(self, grid, 13, 0, _("Snap sizes to neighbours"), DT_CANVAS_SNAP_SIZE);
+  _labelled(grid, 13, 3, _("Colour"), toolbar->padding_color);
+  toolbar->size_snap = _guide_check(self, grid, 14, 0, _("Snap sizes to neighbours"), DT_CANVAS_SNAP_SIZE);
   gtk_widget_set_hexpand(toolbar->size_snap, TRUE);
 
   return _popover_around(grid, toolbar->grid_show);

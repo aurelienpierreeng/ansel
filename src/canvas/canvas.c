@@ -41,6 +41,8 @@
  * from before the field reads as 72 and keeps the geometry it was laid out with.
  */
 #define CANVAS_DEFAULT_RESOLUTION 300.0f
+/** The biggest a custom page may be, in points: ten metres, past any press and any screen. */
+#define CANVAS_CUSTOM_PAPER_MAX 28346.0
 #define CANVAS_DEFAULT_LONG_EDGE 2048
 #define CANVAS_DEFAULT_JPEG_QUALITY 92
 #define CANVAS_DEFAULT_FONT "Sans 12"
@@ -3314,23 +3316,32 @@ static const struct
   double width;
   double height;
   gboolean physical; ///< the size is in points and scales with the resolution; else it is pixels
+  /**
+   * The name goes through the catalogue. FALSE for the A series, which is the same word in every
+   * language -- a COLUMN rather than a numeric test on the code, so a row answers for itself and
+   * the renumbering of the enum could not make the question quietly wrong.
+   */
+  gboolean translated;
 } _paper_sizes[] = {
-  { DT_CANVAS_PAPER_NONE, N_("None"), 0.0, 0.0, FALSE },
-  { DT_CANVAS_PAPER_A0, "A0", 2384.0, 3370.0, TRUE },
-  { DT_CANVAS_PAPER_A1, "A1", 1684.0, 2384.0, TRUE },
-  { DT_CANVAS_PAPER_A2, "A2", 1191.0, 1684.0, TRUE },
-  { DT_CANVAS_PAPER_A3, "A3", 842.0, 1191.0, TRUE },
-  { DT_CANVAS_PAPER_A4, "A4", 595.0, 842.0, TRUE },
-  { DT_CANVAS_PAPER_A5, "A5", 420.0, 595.0, TRUE },
-  { DT_CANVAS_PAPER_A6, "A6", 298.0, 420.0, TRUE },
-  { DT_CANVAS_PAPER_LETTER, N_("US Letter"), 612.0, 792.0, TRUE },
-  { DT_CANVAS_PAPER_INSTAGRAM_SQUARE, N_("Instagram square"), 1080.0, 1080.0, FALSE },
-  { DT_CANVAS_PAPER_INSTAGRAM_PORTRAIT, N_("Instagram portrait"), 1080.0, 1350.0, FALSE },
-  { DT_CANVAS_PAPER_STORY, N_("Story, reel, Short"), 1080.0, 1920.0, FALSE },
-  { DT_CANVAS_PAPER_FACEBOOK_POST, N_("Facebook post"), 1200.0, 630.0, FALSE },
-  { DT_CANVAS_PAPER_FACEBOOK_COVER, N_("Facebook cover"), 851.0, 315.0, FALSE },
-  { DT_CANVAS_PAPER_YOUTUBE_THUMBNAIL, N_("YouTube thumbnail"), 1280.0, 720.0, FALSE },
-  { DT_CANVAS_PAPER_YOUTUBE_BANNER, N_("YouTube banner"), 2560.0, 1440.0, FALSE },
+  { DT_CANVAS_PAPER_NONE, N_("None"), 0.0, 0.0, FALSE, TRUE },
+  // No size of its own: the canvas carries it. dt_canvas_paper_points() refuses this code and
+  // dt_canvas_paper_dimensions(), which has the canvas, answers it.
+  { DT_CANVAS_PAPER_CUSTOM, N_("Custom size"), 0.0, 0.0, TRUE, TRUE },
+  { DT_CANVAS_PAPER_A0, "A0", 2384.0, 3370.0, TRUE, FALSE },
+  { DT_CANVAS_PAPER_A1, "A1", 1684.0, 2384.0, TRUE, FALSE },
+  { DT_CANVAS_PAPER_A2, "A2", 1191.0, 1684.0, TRUE, FALSE },
+  { DT_CANVAS_PAPER_A3, "A3", 842.0, 1191.0, TRUE, FALSE },
+  { DT_CANVAS_PAPER_A4, "A4", 595.0, 842.0, TRUE, FALSE },
+  { DT_CANVAS_PAPER_A5, "A5", 420.0, 595.0, TRUE, FALSE },
+  { DT_CANVAS_PAPER_A6, "A6", 298.0, 420.0, TRUE, FALSE },
+  { DT_CANVAS_PAPER_LETTER, N_("US Letter"), 612.0, 792.0, TRUE, TRUE },
+  { DT_CANVAS_PAPER_INSTAGRAM_SQUARE, N_("Instagram square"), 1080.0, 1080.0, FALSE, TRUE },
+  { DT_CANVAS_PAPER_INSTAGRAM_PORTRAIT, N_("Instagram portrait"), 1080.0, 1350.0, FALSE, TRUE },
+  { DT_CANVAS_PAPER_STORY, N_("Story, reel, Short"), 1080.0, 1920.0, FALSE, TRUE },
+  { DT_CANVAS_PAPER_FACEBOOK_POST, N_("Facebook post"), 1200.0, 630.0, FALSE, TRUE },
+  { DT_CANVAS_PAPER_FACEBOOK_COVER, N_("Facebook cover"), 851.0, 315.0, FALSE, TRUE },
+  { DT_CANVAS_PAPER_YOUTUBE_THUMBNAIL, N_("YouTube thumbnail"), 1280.0, 720.0, FALSE, TRUE },
+  { DT_CANVAS_PAPER_YOUTUBE_BANNER, N_("YouTube banner"), 2560.0, 1440.0, FALSE, TRUE },
 };
 
 gboolean dt_canvas_paper_is_physical(const uint32_t paper)
@@ -3518,11 +3529,9 @@ int dt_canvas_paper_count(void)
 const char *dt_canvas_paper_name(const int position)
 {
   if(position < 0 || position >= dt_canvas_paper_count()) return NULL;
-  // A0 through A6 are the same word in every language and are not in the catalogue.
-  const uint32_t code = _paper_sizes[position].code;
-  const gboolean iso = code == DT_CANVAS_PAPER_A0 || code == DT_CANVAS_PAPER_A1
-                       || (code >= DT_CANVAS_PAPER_A2 && code <= DT_CANVAS_PAPER_A6);
-  return iso ? _paper_sizes[position].name : _(_paper_sizes[position].name);
+  // The row says whether its name is in the catalogue: A0 through A6 are the same word in every
+  // language. Asked of the ROW and never of the code's value, which a reorder would break.
+  return _paper_sizes[position].translated ? _(_paper_sizes[position].name) : _paper_sizes[position].name;
 }
 
 uint32_t dt_canvas_paper_code(const int position)
@@ -3538,9 +3547,36 @@ int dt_canvas_paper_position(const uint32_t paper)
   return 0;
 }
 
+gboolean dt_canvas_paper_known(const uint32_t paper)
+{
+  for(int position = 0; position < dt_canvas_paper_count(); position++)
+    if(_paper_sizes[position].code == paper) return TRUE;
+  return FALSE;
+}
+
+gboolean dt_canvas_paper_custom(const dt_canvas_t *canvas, double *width, double *height)
+{
+  if(IS_NULL_PTR(canvas)) return FALSE;
+  if(!(canvas->custom_paper_width > 0.0f) || !(canvas->custom_paper_height > 0.0f)) return FALSE;
+  if(!IS_NULL_PTR(width)) *width = (double)canvas->custom_paper_width;
+  if(!IS_NULL_PTR(height)) *height = (double)canvas->custom_paper_height;
+  return TRUE;
+}
+
+void dt_canvas_paper_custom_set(dt_canvas_t *canvas, const double width, const double height)
+{
+  if(IS_NULL_PTR(canvas)) return;
+  // A page nobody can draw is no page: anything that is not a number is nothing, which reads
+  // back as a size never given.
+  canvas->custom_paper_width = isfinite(width) ? (float)CLAMP(width, 0.0, CANVAS_CUSTOM_PAPER_MAX) : 0.0f;
+  canvas->custom_paper_height = isfinite(height) ? (float)CLAMP(height, 0.0, CANVAS_CUSTOM_PAPER_MAX) : 0.0f;
+}
+
 gboolean dt_canvas_paper_points(const uint32_t paper, double *width, double *height)
 {
-  if(paper == DT_CANVAS_PAPER_NONE) return FALSE;
+  // Neither has a size of its own here: NONE has none at all, and a CUSTOM page's is the
+  // canvas's, which this does not have. dt_canvas_paper_dimensions() answers for that one.
+  if(paper == DT_CANVAS_PAPER_NONE || paper == DT_CANVAS_PAPER_CUSTOM) return FALSE;
   for(int position = 0; position < dt_canvas_paper_count(); position++)
   {
     if(_paper_sizes[position].code != paper) continue;
@@ -3567,7 +3603,12 @@ gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, do
   if(IS_NULL_PTR(canvas)) return FALSE;
   double portrait_width = 0.0;
   double portrait_height = 0.0;
-  if(!dt_canvas_paper_points(canvas->paper_size, &portrait_width, &portrait_height)) return FALSE;
+  if(canvas->paper_size == DT_CANVAS_PAPER_CUSTOM)
+  {
+    if(!dt_canvas_paper_custom(canvas, &portrait_width, &portrait_height)) return FALSE;
+  }
+  else if(!dt_canvas_paper_points(canvas->paper_size, &portrait_width, &portrait_height))
+    return FALSE;
   // A canvas unit IS a point, so a page is its own size and the export density does not enter
   // into it. Scaling the page by the density and leaving everything on it where it was is what
   // made raising the DPI shrink the whole layout against its own paper.
