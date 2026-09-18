@@ -5760,6 +5760,34 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     if(which != 1) return 1;
     if(view->tool == DT_CANVAS_TOOL_CONNECTOR)
     {
+      /*
+       * The connector just drawn is SELECTED and both its ends are marked, so a press on one of
+       * THEM is that connector's, not the start of another line. The tool stays armed for the next
+       * one, and without this the line just drawn could not be adjusted at all until the tool was
+       * put away -- every press went to `_connect_click()`, which found the anchor dot the end
+       * stands on and began a new connector from it, so the drag never started and nothing on
+       * screen answered. That is the state a user is in the moment they finish drawing, which is
+       * exactly when they look at what they drew.
+       *
+       * Only the ENDS answer, never the frame handles the other tools offer here: a press on a
+       * frame is how this tool is used. And a connector already half drawn -- a first frame
+       * clicked, its dot waiting -- always completes, since the pending click is the one the user
+       * is in the middle of.
+       */
+      if(view->connect_from == 0 && type == GDK_BUTTON_PRESS)
+      {
+        dt_canvas_object_t *end_owner = NULL;
+        const dt_canvas_drag_t end_drag = _endpoint_handle_at(view, canvas_x, canvas_y, &end_owner);
+        if(end_drag != DT_CANVAS_DRAG_NONE)
+        {
+          _select_only(view, end_owner->id);
+          _gesture_snapshot(view);
+          view->drag = end_drag;
+          _props_sync(self);
+          dt_control_change_cursor(GDK_FLEUR);
+          return 1;
+        }
+      }
       _connect_click(self, canvas_x, canvas_y);
       return 1;
     }
