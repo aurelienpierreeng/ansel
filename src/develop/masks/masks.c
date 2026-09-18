@@ -914,6 +914,11 @@ dt_masks_form_t *dt_masks_get_from_id(dt_develop_t *develop, int form_id)
   return result;
 }
 
+dt_masks_form_t *dt_masks_get_from_id_in_pipe(const dt_dev_pixelpipe_t *pipe, int form_id)
+{
+  return dt_masks_get_from_id_ext(pipe->forms, form_id);
+}
+
 dt_iop_module_t *dt_masks_get_mask_manager(dt_develop_t *develop)
 {
   for(GList *module_node = g_list_first(develop->iop); module_node; module_node = g_list_next(module_node))

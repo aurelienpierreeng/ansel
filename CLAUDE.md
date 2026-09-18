@@ -1970,23 +1970,36 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
 
-### retouch: the pixel-processing callback must resolve shapes through `pipe->forms`, not `self->dev->forms`
+### retouch: everything on the pipeline thread resolves shapes through `pipe->forms`, never `self->dev->forms`
 
-`rt_process_forms()`/`rt_process_forms_cl()` (`iop/retouch.c`) are the `dwt_decompose()`/
-`dwt_decompose_cl()` callbacks that actually apply each shape's clone/heal/blur/fill at every
-wavelet scale — they run on the pipeline/worker/CL thread, not the GUI thread. They resolve the
-module's mask group and each shape by id through `dt_masks_get_from_id_ext(pipe->forms, id)` —
-the refcounted, frozen snapshot `dt_dev_pixelpipe_process()` takes once per run (see "Forms are
-refcounted, not deep-copied" above) — never through `dt_masks_get_from_id(self->dev, id)`. The
-latter reads the live, GUI-owned `dev->forms` with no lock and no reference held, which is safe
-enough while `self->dev` is the long-lived darkroom `dev` continuously driven by the same GUI
-thread, but not for a `dev` that is created, populated, and torn down around one pipeline run —
-`imageio_core.c`'s export `dev` and `dev_snapshot.c`'s `frozen` both fit that shape. `commit_params()`
-and `rt_resynch_params()` already followed the `pipe->forms`-first pattern (falling back to a
-lock-guarded `self->dev->forms` only when `pipe->forms` is not yet populated); the two processing
-callbacks are the only per-pixel consumers and must use the same source. `rt_masks_form_is_in_roi()`,
-`rt_masks_get_delta_to_destination()`, `dt_masks_get_area()` and `dt_masks_get_mask()` all take an
-already-resolved `dt_masks_form_t*` and don't re-lookup by id, so they need no equivalent change.
+Two families of retouch code run on the pipeline/worker/CL thread, not the GUI thread: the
+`dwt_decompose()`/`dwt_decompose_cl()` callbacks `rt_process_forms()`/`rt_process_forms_cl()`, which
+apply each shape's clone/heal/blur/fill, and the ROI planning behind `modify_roi_in()`
+(`rt_compute_roi_in()`, `rt_extend_roi_in_for_clone()`, `rt_extend_roi_in_from_source_clones()`),
+which widens the input to cover every source area. Both resolve the module's mask group and each
+shape in `pipe->forms` — the refcounted, frozen snapshot of the run (see "Forms are refcounted, not
+deep-copied" above) — through `dt_masks_get_from_id_in_pipe()` (`develop/masks.h`), wrapped by
+`rt_pipe_group_members()` and `rt_pipe_member_form()`, and read the group id from
+`piece->blendop_data`, never from `self->blend_params`. The CPU and OpenCL callbacks share their whole per-shape preamble (lookup,
+scale and layer checks, mask, source offset) through `rt_prepare_shape()`, so the two paths cannot
+drift on which shapes they apply.
+
+`dt_masks_get_from_id(self->dev, id)` reads the live, GUI-owned `dev->forms` with no lock and no
+reference held, and that is unsafe even for the long-lived darkroom `dev`: while the user edits a
+shape, the GUI thread's copy-on-write replaces it in `dev->forms` and drops the old one, so a
+pipeline walking that shape's `points` reads freed memory. That is how the ROI planning crashed, in
+`g_list_length()` under `_polygon_get_area()`, while the GUI thread was committing the image's
+history. Export and snapshot devs (`imageio_core.c`, `dev_snapshot.c`'s `frozen`) are the other
+reason: they are built and torn down around a single run.
+
+The snapshot exists during ROI planning because the pipeline guarantees it there:
+`dt_dev_pixelpipe_process()` takes it BEFORE `dt_dev_pixelpipe_get_roi_in()`, so planning and
+processing see the same shapes, and `dt_dev_pixelpipe_get_roi_in()` itself takes a temporary one
+for the length of the walk when called with none (the darkroom's `_update_darkroom_roi` path in
+`develop.c` plans outside any run). `commit_params()` and `rt_resynch_params()` run on the GUI side
+and fall back to a lock-guarded `self->dev->forms` when `pipe->forms` is not populated.
+`rt_masks_form_is_in_roi()`, `rt_masks_get_delta_to_destination()`, `dt_masks_get_area()` and
+`dt_masks_get_mask()` take an already-resolved `dt_masks_form_t*` and do not look up by id.
 
 ### dev_snapshot.c: the `history_override` path must resync `frozen->forms` too, not just `frozen->history`
 

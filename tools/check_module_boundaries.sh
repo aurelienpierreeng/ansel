@@ -417,12 +417,17 @@ fi
 masks_include_baseline=18
 masks_gui_include_baseline=11
 # 75 -> 73 when the shape manager's "Add shape ..." menu took a shape's id and kind from
-# dt_masks_form_get_info() instead of reading them off the form.
-masks_member_baseline=73
+# dt_masks_form_get_info() instead of reading them off the form. 73 -> 68 when retouch's ROI
+# planning and its CPU/OpenCL shape loops read group members through rt_pipe_member_form() /
+# rt_prepare_shape().
+masks_member_baseline=68
 masks_write_baseline=16
 masks_alloc_baseline=1
-masks_forms_baseline=73
-masks_row_baseline=30
+# 73 -> 67 when the pipe's snapshot release went through dt_masks_forms_snapshot_release() and
+# retouch resolved every pipeline-side shape through dt_masks_get_from_id_in_pipe().
+masks_forms_baseline=67
+# 30 -> 27 for the same reason: retouch unpacks a membership row in one place instead of five.
+masks_row_baseline=27
 
 # Members no other struct in the tree uses. Keep it that way: adding an ambiguous name here
 # buys a bigger number and loses the gate.

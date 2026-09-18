@@ -597,11 +597,7 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   g_array_free(pipe->raster_mask_hashes, TRUE);
   pipe->raster_mask_hashes = NULL;
 
-  if(pipe->forms)
-  {
-    g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_form_unref);
-    pipe->forms = NULL;
-  }
+  dt_masks_forms_snapshot_release(&pipe->forms);
 }
 
 
@@ -1322,11 +1318,7 @@ void dt_dev_pixelpipe_disable_before(dt_dev_pixelpipe_t *pipe, const char *op)
       dt_opencl_release_device(pipe->devid);                                                                       \
       pipe->devid = -1;                                                                                           \
     }                                                                                                             \
-    if(pipe->forms)                                                                                               \
-    {                                                                                                             \
-      g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_form_unref);                                       \
-      pipe->forms = NULL;                                                                                         \
-    }                                                                                                             \
+    dt_masks_forms_snapshot_release(&pipe->forms);                                                                \
     dt_pthread_mutex_unlock(dt_pipeline_threadsafe_mutex());                                                      \
     return 1;                                                                                                     \
   }
@@ -1510,6 +1502,12 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
     pipe->dev->color_picker.piece_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   }
 
+  // get a snapshot of the mask list: shared by reference (dt_masks_cow_touch on the GUI side
+  // clones instead of mutating in place whenever refcount > 1, so this snapshot stays frozen
+  // even if dev->forms is edited mid-run), not deep-copied on every single pipeline recompute.
+  // Taken before ROI planning, so modify_roi_in() and process() see the same shapes.
+  pipe->forms = dt_masks_snapshot_current_forms(pipe->dev, FALSE);
+
   // Get the roi_out hash of all nodes.
   // Get the previous output size of the module, for cache invalidation.
   dt_dev_pixelpipe_get_roi_in(pipe, roi);
@@ -1617,16 +1615,12 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
       DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY, requested_hash,
                                     ready_node_key);
     }
+    dt_masks_forms_snapshot_release(&pipe->forms);
     return 0;
   }
 
   dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", 
            dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height);
-
-  // get a snapshot of the mask list: shared by reference (dt_masks_cow_touch on the GUI side
-  // clones instead of mutating in place whenever refcount > 1, so this snapshot stays frozen
-  // even if dev->forms is edited mid-run), not deep-copied on every single pipeline recompute.
-  pipe->forms = dt_masks_snapshot_current_forms(pipe->dev, FALSE);
 
   // go through the list of modules from the end:
   GList *pieces = g_list_last(pipe->nodes);
@@ -1777,11 +1771,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
   dt_pthread_mutex_unlock(dt_pipeline_threadsafe_mutex());
 
   // release resources:
-  if(pipe->forms)
-  {
-    g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_form_unref);
-    pipe->forms = NULL;
-  }
+  dt_masks_forms_snapshot_release(&pipe->forms);
   if(pipe->devid >= 0)
   {
     dt_opencl_release_device(pipe->devid);
