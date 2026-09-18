@@ -2965,7 +2965,7 @@ static void _brush_bounding_box(const float *const points, const float *const bo
  *
  * Used by both ROI and full-frame paths to size temporary buffers.
  */
-static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                      const dt_dev_pixelpipe_iop_t *const piece,
                      dt_masks_form_t *const mask_form, int *width, int *height, int *offset_x, int *offset_y,
                      int include_source)
@@ -3001,8 +3001,8 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   return 0;
 }
 
-static dt_masks_raster_result_t _brush_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                                  dt_dev_pixelpipe_iop_t *piece,
+static dt_masks_raster_result_t _brush_get_source_area(const dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
+                                  const dt_dev_pixelpipe_iop_t *piece,
                                   dt_masks_form_t *mask_form, int *width, int *height, int *offset_x, int *offset_y)
 {
   *width = 0;
@@ -3013,7 +3013,7 @@ static dt_masks_raster_result_t _brush_get_source_area(dt_iop_module_t *module, 
       _get_area(module, pipe, piece, mask_form, width, height, offset_x, offset_y, 1));
 }
 
-static dt_masks_raster_result_t _brush_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _brush_get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                            const dt_dev_pixelpipe_iop_t *const piece,
                            dt_masks_form_t *const mask_form, int *width, int *height, int *offset_x,
                            int *offset_y)
@@ -3062,7 +3062,7 @@ static void _brush_falloff(float *const restrict buffer, int segment_start[2], i
  *
  * The buffer is returned zero-initialized and filled only in the falloff region.
  */
-static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                            const dt_dev_pixelpipe_iop_t *const piece,
                            dt_masks_form_t *const mask_form,
                            float **buffer, int *width, int *height, int *offset_x, int *offset_y)
@@ -3250,7 +3250,7 @@ static inline void _brush_falloff_roi(float *buffer, const int *segment_start, c
  *
  * The buffer is assumed pre-zeroed. Points are scaled/shifted into ROI space before stamping.
  */
-static dt_masks_raster_result_t _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *const piece,
                                dt_masks_form_t *const mask_form, const dt_iop_roi_t *roi, float *buffer,
                                dt_iop_roi_t *touched)

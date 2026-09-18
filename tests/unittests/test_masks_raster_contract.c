@@ -172,37 +172,30 @@ static void _area_and_mask_always_write_their_out_parameters(void **state)
     /* Poisoned on purpose: these are the callers' uninitialised stack. iop/spots.c reads
      * width/height straight after the call and iop/retouch.c sizes an allocation from them,
      * so "reported not-OK" is not enough -- the values have to be defined too. */
-    int width = -12345;
-    int height = -12345;
-    int posx = -12345;
-    int posy = -12345;
+    const dt_masks_area_t poisoned = { .x = -12345, .y = -12345, .width = -12345, .height = -12345 };
+    dt_masks_area_t area = poisoned;
     float *buffer = (float *)(intptr_t)-1;
 
     if(_shapes[i].area_depends_on_geometry && !IS_NULL_PTR(form.functions->get_area))
     {
-      const dt_masks_raster_result_t area = dt_masks_get_area(NULL, NULL, NULL, &form, &width, &height,
-                                                              &posx, &posy);
-      assert_int_not_equal(area, DT_MASKS_RASTER_OK);
-      assert_int_equal(width, 0);
-      assert_int_equal(height, 0);
-      assert_int_equal(posx, 0);
-      assert_int_equal(posy, 0);
+      const dt_masks_raster_result_t result = dt_masks_get_area(NULL, NULL, NULL, &form, &area);
+      assert_int_not_equal(result, DT_MASKS_RASTER_OK);
+      assert_int_equal(area.width, 0);
+      assert_int_equal(area.height, 0);
+      assert_int_equal(area.x, 0);
+      assert_int_equal(area.y, 0);
     }
 
-    width = -12345;
-    height = -12345;
-    posx = -12345;
-    posy = -12345;
+    area = poisoned;
     if(!IS_NULL_PTR(form.functions->get_mask))
     {
-      const dt_masks_raster_result_t mask
-          = dt_masks_get_mask(NULL, NULL, NULL, &form, &buffer, &width, &height, &posx, &posy);
+      const dt_masks_raster_result_t mask = dt_masks_get_mask(NULL, NULL, NULL, &form, &buffer, &area);
       assert_int_not_equal(mask, DT_MASKS_RASTER_OK);
       assert_null(buffer);
-      assert_int_equal(width, 0);
-      assert_int_equal(height, 0);
-      assert_int_equal(posx, 0);
-      assert_int_equal(posy, 0);
+      assert_int_equal(area.width, 0);
+      assert_int_equal(area.height, 0);
+      assert_int_equal(area.x, 0);
+      assert_int_equal(area.y, 0);
     }
   }
 }
