@@ -1747,6 +1747,66 @@ static void _making_a_line_cubic_bends_it_into_an_arc(void **state)
  * since that state is modelled, loads verbatim and routes. Where a line GOES is nobody's default
  * either: only its style is remembered.
  */
+/**
+ * Dropping a connector's end on ANOTHER object's anchor node moves the attachment there.
+ *
+ * This is the release the view performs (`_end_gesture()`, DT_CANVAS_DRAG_END_FROM/_TO): it sets
+ * the end's id to whichever frame owns the dot under the pointer and then writes the anchor
+ * through `dt_canvas_prop_write()`. No committed test reaches a view plugin's handlers, so what is
+ * pinned here is the half that lives in this library -- that the pair of writes really moves the
+ * line onto the new object's chosen node, and that the ORDER the view relies on is load-bearing.
+ */
+static void _an_end_dropped_on_another_object_s_node_attaches_there(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *connector = fixture.objects[4];
+  const dt_canvas_object_t *was_holding = fixture.objects[1];
+  dt_canvas_object_t *newly_held = fixture.objects[3];
+  assert_int_equal(connector->connector.from_id, was_holding->id);
+
+  dt_canvas_route_t before;
+  assert_true(dt_canvas_connector_route(fixture.canvas, connector, &before));
+
+  /*
+   * THE ID FIRST, then the anchor: `dt_canvas_prop_applies()` asks the connector whether the end
+   * holds a frame, so an anchor written while the end is still free is refused. The view depends
+   * on that order, and a reader reversing the two would silently write nothing.
+   */
+  dt_canvas_object_t *free_end
+      = dt_canvas_add_line(fixture.canvas, 0.0, 1500.0, 200.0, 1500.0, DT_CANVAS_ROUTING_STRAIGHT, NULL);
+  assert_non_null(free_end);
+  assert_false(dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR), free_end));
+
+  // The release: the end now holds the drawing, at the node the pointer was over.
+  connector->connector.from_id = newly_held->id;
+  assert_true(dt_canvas_prop_applies(dt_canvas_prop_get(DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR), connector));
+  dt_canvas_prop_value_t wanted;
+  wanted.choice = (int)DT_CANVAS_ANCHOR_NORTH_WEST;
+  const uint32_t effects
+      = dt_canvas_prop_write(fixture.canvas, connector, DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR, &wanted);
+  assert_true(effects & DT_CANVAS_EFFECT_CHANGED);
+  assert_int_equal(connector->connector.from_anchor, DT_CANVAS_ANCHOR_NORTH_WEST);
+
+  // And the LINE moved: its start is on the new object's north-west node, to the unit.
+  double node_x = 0.0;
+  double node_y = 0.0;
+  dt_canvas_object_anchor_handle(fixture.canvas, newly_held, DT_CANVAS_ANCHOR_NORTH_WEST, &node_x, &node_y);
+  dt_canvas_route_t after;
+  assert_true(dt_canvas_connector_route(fixture.canvas, connector, &after));
+  if(fabs(after.from_x - node_x) > 0.5 || fabs(after.from_y - node_y) > 0.5)
+    print_error("the start went to %.2f, %.2f where the node is %.2f, %.2f\n", after.from_x, after.from_y, node_x,
+                node_y);
+  assert_true(fabs(after.from_x - node_x) < 0.5);
+  assert_true(fabs(after.from_y - node_y) < 0.5);
+  // It really moved, and the far end stayed where it was: only the dragged end was re-attached.
+  assert_true(hypot(after.from_x - before.from_x, after.from_y - before.from_y) > 1.0);
+  assert_true(hypot(after.to_x - before.to_x, after.to_y - before.to_y) < 0.5);
+
+  _fixture_free(&fixture);
+}
+
 static void _a_line_style_is_the_next_line_s_and_a_connector_s_is_not(void **state)
 {
   (void)state;
@@ -3025,6 +3085,7 @@ int main(void)
     cmocka_unit_test(_giving_the_font_back_refits_the_frame),
     cmocka_unit_test(_a_size_on_an_inheriting_font_writes_the_family_out),
     cmocka_unit_test(_making_a_line_cubic_bends_it_into_an_arc),
+    cmocka_unit_test(_an_end_dropped_on_another_object_s_node_attaches_there),
     cmocka_unit_test(_a_line_style_is_the_next_line_s_and_a_connector_s_is_not),
     cmocka_unit_test(_arrowheads_and_backgrounds_land_where_they_belong),
     cmocka_unit_test(_reversing_a_connector_walks_the_same_curve_backwards),
