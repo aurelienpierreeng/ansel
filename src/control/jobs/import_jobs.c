@@ -540,6 +540,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
   int index = 0;
   int xmps = 0; // number of xmps imported in db.
   int32_t imgid = UNKNOWN_IMAGE;
+  int32_t last_imgid = UNKNOWN_IMAGE;
   gint64 last_collection_refresh = 0;
 
   // What this import may do to the view the user is in, decided once from what the import IS. An
@@ -564,6 +565,8 @@ static int32_t _control_import_job_run(dt_job_t *job)
 
     if(imgid > UNKNOWN_IMAGE)
     {
+      last_imgid = imgid;
+
       // On the first image, try to switch the current filmroll to the imported image's folder.
       // dt_collection_load_filmroll() silently declines to do anything (no collection refresh)
       // when it cannot switch folders, e.g. the collect module is not on the "Folders" tab. In
@@ -604,7 +607,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
     // A requested single image opens in the darkroom, which is announcement enough -- only the
     // survey, which stays where it is, says anything.
     if(data->folder_survey) dt_control_log(_("Capture: imported 1 image."));
-    dt_collection_load_filmroll(dt_collection_get_global(), imgid, single_image_policy, TRUE);
+    dt_collection_load_filmroll(dt_collection_get_global(), last_imgid, single_image_policy, TRUE);
     return 0;
   }
 
