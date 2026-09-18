@@ -393,28 +393,6 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
   return TRUE;
 }
 
-static inline __attribute__((always_inline)) gboolean masks_form_is_in_roi(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
-                                     const dt_dev_pixelpipe_iop_t *piece,
-                                     dt_masks_form_t *form, const dt_iop_roi_t *roi_in,
-                                     const dt_iop_roi_t *roi_out)
-{
-  // we get the area for the form
-  int fl, ft, fw, fh;
-  dt_dev_pixelpipe_iop_t piece_copy = *piece;
-
-  if(dt_masks_get_area(self, (dt_dev_pixelpipe_t *)pipe, &piece_copy, form, &fw, &fh, &fl, &ft)
-     != DT_MASKS_RASTER_OK)
-    return FALSE;
-
-  // is the form outside of the roi?
-  fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
-  if(ft >= roi_out->y + roi_out->height || ft + fh <= roi_out->y || fl >= roi_out->x + roi_out->width
-     || fl + fw <= roi_out->x)
-    return FALSE;
-
-  return TRUE;
-}
-
 void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                     struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *roi_in)
@@ -427,7 +405,6 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
                    struct dt_dev_pixelpipe_iop_t *piece,
                    const dt_iop_roi_t *roi_out, dt_iop_roi_t *roi_in)
 {
-  dt_dev_pixelpipe_t *const processing_pipe = (dt_dev_pixelpipe_t *)pipe;
   *roi_in = *roi_out;
 
   int roir = roi_in->width + roi_in->x;
@@ -446,32 +423,20 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-      // we get the spot
+      // we get the spot, and skip it when it is outside the roi
       dt_masks_form_t *form = dt_masks_get_from_id_in_pipe(pipe, grpt->formid);
-      if(!IS_NULL_PTR(form))
-      {
-        // if the form is outside the roi, we just skip it
-        if(!masks_form_is_in_roi(self, processing_pipe, piece, form, roi_in, roi_out))
-        {
-          continue;
-        }
+      if(IS_NULL_PTR(form) || !dt_masks_form_is_in_roi(self, pipe, piece, form, roi_in, roi_out)) continue;
 
-        // we get the area for the source
-        int fl, ft, fw, fh;
+      // we get the area for the source
+      dt_masks_area_t area;
+      if(dt_masks_get_source_area(self, pipe, piece, form, &area) != DT_MASKS_RASTER_OK) continue;
+      dt_masks_area_scale(&area, roi_in->scale);
 
-        if(dt_masks_get_source_area(self, processing_pipe, piece, form, &fw, &fh, &fl, &ft)
-           != DT_MASKS_RASTER_OK)
-        {
-          continue;
-        }
-        fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
-
-        // we enlarge the roi if needed
-        roiy = fminf(ft, roiy);
-        roix = fminf(fl, roix);
-        roir = fmaxf(fl + fw, roir);
-        roib = fmaxf(ft + fh, roib);
-      }
+      // we enlarge the roi if needed
+      roiy = fminf(area.y, roiy);
+      roix = fminf(area.x, roix);
+      roir = fmaxf(area.x + area.width, roir);
+      roib = fmaxf(area.y + area.height, roib);
     }
   }
 
@@ -542,6 +507,167 @@ static inline __attribute__((always_inline)) int masks_get_delta(dt_iop_module_t
 }
 
 __DT_CLONE_TARGETS__
+// The buffers a spot is cloned between.
+typedef struct _spots_buffers_t
+{
+  const float *in;
+  float *out;
+  const dt_iop_roi_t *roi_in;
+  const dt_iop_roi_t *roi_out;
+  int ch;
+} _spots_buffers_t;
+
+// Clone a circle spot with the historical smoothstep falloff (clone_algo 1). Returns non-zero on
+// allocation failure.
+// Blend the disc of radius `rad` centred on (posx + rad, posy + rad) with the same disc shifted
+// by (-dx, -dy), weighted by the separable falloff `filter`. Pixels outside either ROI are left
+// alone.
+static void _spots_blend_disc(const _spots_buffers_t *buffers, const float *const filter, const int rad,
+                              const int posx, const int posy, const int dx, const int dy)
+{
+  const float *in = buffers->in;
+  float *out = buffers->out;
+  const dt_iop_roi_t *const roi_in = buffers->roi_in;
+  const dt_iop_roi_t *const roi_out = buffers->roi_out;
+  const int ch = buffers->ch;
+  const int fw = 2 * rad;
+  const int fh = 2 * rad;
+
+  for(int yy = posy; yy < posy + fh; yy++)
+  {
+    // we test if we are inside roi_out
+    if(yy < roi_out->y || yy >= roi_out->y + roi_out->height) continue;
+    // we test if the source point is inside roi_in
+    if(yy - dy < roi_in->y || yy - dy >= roi_in->y + roi_in->height) continue;
+    for(int xx = posx; xx < posx + fw; xx++)
+    {
+      // we test if we are inside roi_out
+      if(xx < roi_out->x || xx >= roi_out->x + roi_out->width) continue;
+      // we test if the source point is inside roi_in
+      if(xx - dx < roi_in->x || xx - dx >= roi_in->x + roi_in->width) continue;
+
+      const float f = filter[xx - posx + 1] * filter[yy - posy + 1];
+      for(int c = 0; c < ch; c++)
+        out[ch * ((size_t)roi_out->width * (yy - roi_out->y) + xx - roi_out->x) + c]
+            = out[ch * ((size_t)roi_out->width * (yy - roi_out->y) + xx - roi_out->x) + c] * (1.0f - f)
+              + in[ch * ((size_t)roi_in->width * (yy - dy - roi_in->y) + xx - dx - roi_in->x) + c] * f;
+    }
+  }
+}
+
+static int _spots_clone_circle(const struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                               const dt_masks_form_t *form, const _spots_buffers_t *buffers)
+{
+  const dt_iop_roi_t *const roi_in = buffers->roi_in;
+
+  dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)form->points->data;
+
+  dt_boundingbox_t points;
+  masks_point_denormalize(pipe, roi_in, circle->center, 1, points);
+  masks_point_denormalize(pipe, roi_in, form->source, 1, points + 2);
+
+  if(!dt_dev_distort_transform_plus(pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 2))
+  {
+    return 0;
+  }
+
+  // convert from world space:
+  float radius10[2] = { circle->radius, circle->radius };
+  float radf[2];
+  masks_point_denormalize(pipe, roi_in, radius10, 1, radf);
+
+  const int rad = MIN(radf[0], radf[1]);
+  const int posx = points[0] - rad;
+  const int posy = points[1] - rad;
+  const int posx_source = points[2] - rad;
+  const int posy_source = points[3] - rad;
+  const int dx = posx - posx_source;
+  const int dy = posy - posy_source;
+
+  float *filter = malloc(sizeof(float) * (2 * rad + 1));
+  if(IS_NULL_PTR(filter)) return 1;
+
+  if(rad > 0)
+  {
+    for(int k = -rad; k <= rad; k++)
+    {
+      const float kk = 1.0f - fabsf(k / (float)rad);
+      filter[rad + k] = kk * kk * (3.0f - 2.0f * kk);
+    }
+  }
+  else
+  {
+    filter[0] = 1.0f;
+  }
+
+  _spots_blend_disc(buffers, filter, rad, posx, posy, dx, dy);
+
+  dt_free(filter);
+  return 0;
+}
+
+// Clone any spot through its rasterised mask. Returns non-zero when the mask cannot be built.
+static int _spots_clone_mask(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                             const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form, const float opacity,
+                             const _spots_buffers_t *buffers)
+{
+  const float *in = buffers->in;
+  float *out = buffers->out;
+  const dt_iop_roi_t *const roi_in = buffers->roi_in;
+  const dt_iop_roi_t *const roi_out = buffers->roi_out;
+  const int ch = buffers->ch;
+
+  // we get the mask
+  float *mask = NULL;
+  dt_masks_area_t area;
+  /* Only a real failure aborts the module. A shape with nothing to draw (EMPTY) falls
+   * through to the zero-size check below and is skipped like any other empty shape --
+   * aborting here would silently drop every REMAINING shape in the group. The out
+   * parameters are guaranteed written on every outcome, so that check is safe to reach. */
+  if(dt_masks_get_mask(self, pipe, piece, form, &mask, &area) == DT_MASKS_RASTER_ERROR) return 1;
+
+  // now we search the delta with the source; nothing to clone without one
+  int dx = 0;
+  int dy = 0;
+  if(area.width < 1 || area.height < 1 || !masks_get_delta(self, pipe, roi_in, form, &dx, &dy)
+     || (dx == 0 && dy == 0))
+  {
+    dt_pixelpipe_cache_free_align(mask);
+    return 0;
+  }
+
+  const int fts = area.y * roi_in->scale;
+  const int fhs = area.height * roi_in->scale;
+  const int fls = area.x * roi_in->scale;
+  const int fws = area.width * roi_in->scale;
+
+  // now we do the pixel clone
+  for(int yy = fts + 1; yy < fts + fhs - 1; yy++)
+  {
+    // we test if we are inside roi_out
+    if(yy < roi_out->y || yy >= roi_out->y + roi_out->height) continue;
+    // we test if the source point is inside roi_in
+    if(yy - dy < roi_in->y || yy - dy >= roi_in->y + roi_in->height) continue;
+    for(int xx = fls + 1; xx < fls + fws - 1; xx++)
+    {
+      // we test if we are inside roi_out
+      if(xx < roi_out->x || xx >= roi_out->x + roi_out->width) continue;
+      // we test if the source point is inside roi_in
+      if(xx - dx < roi_in->x || xx - dx >= roi_in->x + roi_in->width) continue;
+
+      const float f = mask[((int)((yy - fts) / roi_in->scale)) * area.width
+                          + (int)((xx - fls) / roi_in->scale)] * opacity;
+
+      for(int c = 0; c < ch; c++)
+        out[ch * ((size_t)roi_out->width * (yy - roi_out->y) + xx - roi_out->x) + c]
+            = out[ch * ((size_t)roi_out->width * (yy - roi_out->y) + xx - roi_out->x) + c] * (1.0f - f)
+              + in[ch * ((size_t)roi_in->width * (yy - dy - roi_in->y) + xx - dx - roi_in->x) + c] * f;
+    }
+  }
+  dt_pixelpipe_cache_free_align(mask);
+  return 0;
+}
+
 static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                     const float *const in,
                     float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out, const int ch)
@@ -560,6 +686,8 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
     memcpy(outb, inb, sizeof(float) * roi_out->width * ch);
   }
 
+  const _spots_buffers_t buffers = { .in = in, .out = out, .roi_in = roi_in, .roi_out = roi_out, .ch = ch };
+
   // iterate through all forms
   const dt_masks_form_t *grp = dt_masks_get_from_id_in_pipe(pipe, bp->mask_id);
   int pos = 0;
@@ -576,139 +704,15 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
       }
 
       // if the form is outside the roi, we just skip it
-      if(!masks_form_is_in_roi(self, pipe, piece, form, roi_in, roi_out))
+      if(!dt_masks_form_is_in_roi(self, pipe, piece, form, roi_in, roi_out))
       {
         continue;
       }
 
-      if(d->clone_algo[pos] == 1 && (form->type & DT_MASKS_CIRCLE))
-      {
-        dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)form->points->data;
-
-        dt_boundingbox_t points;
-        masks_point_denormalize(pipe, roi_in, circle->center, 1, points);
-        masks_point_denormalize(pipe, roi_in, form->source, 1, points + 2);
-
-        if(!dt_dev_distort_transform_plus(pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 2))
-        {
-          continue;
-        }
-
-        // convert from world space:
-        float radius10[2] = { circle->radius, circle->radius };
-        float radf[2];
-        masks_point_denormalize(pipe, roi_in, radius10, 1, radf);
-
-        const int rad = MIN(radf[0], radf[1]);
-        const int posx = points[0] - rad;
-        const int posy = points[1] - rad;
-        const int posx_source = points[2] - rad;
-        const int posy_source = points[3] - rad;
-        const int dx = posx - posx_source;
-        const int dy = posy - posy_source;
-        const int fw = 2 * rad, fh = 2 * rad;
-
-        float *filter = malloc(sizeof(float) * (2 * rad + 1));
-        if(IS_NULL_PTR(filter)) return 1;
-
-        if(rad > 0)
-        {
-          for(int k = -rad; k <= rad; k++)
-          {
-            const float kk = 1.0f - fabsf(k / (float)rad);
-            filter[rad + k] = kk * kk * (3.0f - 2.0f * kk);
-          }
-        }
-        else
-        {
-          filter[0] = 1.0f;
-        }
-
-        for(int yy = posy; yy < posy + fh; yy++)
-        {
-          // we test if we are inside roi_out
-          if(yy < roi_out->y || yy >= roi_out->y + roi_out->height) continue;
-          // we test if the source point is inside roi_in
-          if(yy - dy < roi_in->y || yy - dy >= roi_in->y + roi_in->height) continue;
-          for(int xx = posx; xx < posx + fw; xx++)
-          {
-            // we test if we are inside roi_out
-            if(xx < roi_out->x || xx >= roi_out->x + roi_out->width) continue;
-            // we test if the source point is inside roi_in
-            if(xx - dx < roi_in->x || xx - dx >= roi_in->x + roi_in->width) continue;
-
-            const float f = filter[xx - posx + 1] * filter[yy - posy + 1];
-            for(int c = 0; c < ch; c++)
-              out[ch * ((size_t)roi_out->width * (yy - roi_out->y) + xx - roi_out->x) + c]
-                  = out[ch * ((size_t)roi_out->width * (yy - roi_out->y) + xx - roi_out->x) + c] * (1.0f - f)
-                    + in[ch * ((size_t)roi_in->width * (yy - posy + posy_source - roi_in->y) + xx - posx
-                              + posx_source - roi_in->x) + c] * f;
-          }
-        }
-
-        dt_free(filter);
-      }
-      else
-      {
-        // we get the mask
-        float *mask = NULL;
-        int posx, posy, width, height;
-        /* Only a real failure aborts the module. A shape with nothing to draw (EMPTY) falls
-         * through to the zero-size check below and is skipped like any other empty shape --
-         * aborting here would silently drop every REMAINING shape in the group. The out
-         * parameters are guaranteed written on every outcome, so that check is safe to reach. */
-        if(dt_masks_get_mask(self, (dt_dev_pixelpipe_t *)pipe, piece, form, &mask, &width, &height, &posx,
-                             &posy)
-           == DT_MASKS_RASTER_ERROR)
-        {
-          return 1;
-        }
-        if(width < 1 || height < 1)
-        {
-          dt_pixelpipe_cache_free_align(mask);
-          continue;
-        }
-        const int fts = posy * roi_in->scale;
-        const int fhs = height * roi_in->scale;
-        const int fls = posx * roi_in->scale;
-        const int fws = width * roi_in->scale;
-        int dx = 0, dy = 0;
-
-        // now we search the delta with the source
-        if(!masks_get_delta(self, pipe, roi_in, form, &dx, &dy))
-        {
-          dt_pixelpipe_cache_free_align(mask);
-          continue;
-        }
-
-        if(dx != 0 || dy != 0)
-        {
-          // now we do the pixel clone
-          for(int yy = fts + 1; yy < fts + fhs - 1; yy++)
-          {
-            // we test if we are inside roi_out
-            if(yy < roi_out->y || yy >= roi_out->y + roi_out->height) continue;
-            // we test if the source point is inside roi_in
-            if(yy - dy < roi_in->y || yy - dy >= roi_in->y + roi_in->height) continue;
-            for(int xx = fls + 1; xx < fls + fws - 1; xx++)
-            {
-              // we test if we are inside roi_out
-              if(xx < roi_out->x || xx >= roi_out->x + roi_out->width) continue;
-              // we test if the source point is inside roi_in
-              if(xx - dx < roi_in->x || xx - dx >= roi_in->x + roi_in->width) continue;
-
-              const float f = mask[((int)((yy - fts) / roi_in->scale)) * width
-                                  + (int)((xx - fls) / roi_in->scale)] * grpt->opacity;
-
-              for(int c = 0; c < ch; c++)
-                out[ch * ((size_t)roi_out->width * (yy - roi_out->y) + xx - roi_out->x) + c]
-                    = out[ch * ((size_t)roi_out->width * (yy - roi_out->y) + xx - roi_out->x) + c] * (1.0f - f)
-                      + in[ch * ((size_t)roi_in->width * (yy - dy - roi_in->y) + xx - dx - roi_in->x) + c] * f;
-            }
-          }
-        }
-        dt_pixelpipe_cache_free_align(mask);
-      }
+      const int err = (d->clone_algo[pos] == 1 && (form->type & DT_MASKS_CIRCLE))
+                          ? _spots_clone_circle(self, pipe, form, &buffers)
+                          : _spots_clone_mask(self, pipe, piece, form, grpt->opacity, &buffers);
+      if(err) return err;
     }
   }
   return 0;

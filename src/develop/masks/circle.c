@@ -658,8 +658,8 @@ static dt_masks_raster_result_t _circle_get_points_border(dt_develop_t *dev, str
   }
 }
 
-static dt_masks_raster_result_t _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                                   dt_dev_pixelpipe_iop_t *piece,
+static dt_masks_raster_result_t _circle_get_source_area(const dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
+                                   const dt_dev_pixelpipe_iop_t *piece,
                                    dt_masks_form_t *form, int *width, int *height, int *posx, int *posy)
 {
   /* Every early exit below must leave the out-parameters defined: callers read them
@@ -695,7 +695,7 @@ static dt_masks_raster_result_t _circle_get_source_area(dt_iop_module_t *module,
   return DT_MASKS_RASTER_OK;
 }
 
-static dt_masks_raster_result_t _circle_get_area(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _circle_get_area(const dt_iop_module_t *const restrict module, const dt_dev_pixelpipe_t *pipe,
                             const dt_dev_pixelpipe_iop_t *const restrict piece,
                             dt_masks_form_t *const restrict form,
                             int *width, int *height, int *posx, int *posy)
@@ -730,7 +730,7 @@ static dt_masks_raster_result_t _circle_get_area(const dt_iop_module_t *const re
   return DT_MASKS_RASTER_OK;
 }
 
-static dt_masks_raster_result_t _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _circle_get_mask(const dt_iop_module_t *const restrict module, const dt_dev_pixelpipe_t *pipe,
                             const dt_dev_pixelpipe_iop_t *const restrict piece,
                             dt_masks_form_t *const restrict form,
                             float **buffer, int *width, int *height, int *posx, int *posy)
@@ -834,7 +834,7 @@ static dt_masks_raster_result_t _circle_get_mask(const dt_iop_module_t *const re
 }
 
 
-static dt_masks_raster_result_t _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _circle_get_mask_roi(const dt_iop_module_t *const restrict module, const dt_dev_pixelpipe_t *pipe,
                                 const dt_dev_pixelpipe_iop_t *const restrict piece,
                                 dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
                                 float *const restrict buffer, dt_iop_roi_t *touched)

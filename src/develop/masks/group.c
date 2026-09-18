@@ -247,7 +247,7 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   return 0;
 }
 
-static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                            const dt_dev_pixelpipe_iop_t *const piece,
                            dt_masks_form_t *const form,
                            float **buffer, int *width, int *height, int *posx, int *posy)
@@ -294,9 +294,9 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
     dt_masks_form_t *sel = dt_masks_get_from_id(module->dev, fpt->formid);
     if(sel)
     {
-      const dt_masks_raster_result_t child
-          = dt_masks_get_mask(module, pipe, piece, sel, &bufs[nb_ok], &w[nb_ok], &h[nb_ok],
-                              &px[nb_ok], &py[nb_ok]);
+      dt_masks_area_t area;
+      const dt_masks_raster_result_t child = dt_masks_get_mask(module, pipe, piece, sel, &bufs[nb_ok], &area);
+      w[nb_ok] = area.width, h[nb_ok] = area.height, px[nb_ok] = area.x, py[nb_ok] = area.y;
       if(child == DT_MASKS_RASTER_ERROR)
       {
         err = DT_MASKS_RASTER_ERROR;
@@ -690,7 +690,7 @@ static uint64_t _group_prefix_hash(const dt_masks_form_t *const form, GList *mas
   return hash ? hash : 1;
 }
 
-static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const restrict module, const dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *const restrict piece,
                                dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
                                float *const restrict buffer, dt_iop_roi_t *touched)
@@ -935,7 +935,7 @@ static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const
   return err;
 }
 
-dt_masks_raster_result_t dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_group_render_roi(dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
                                                    const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
                                                    const dt_iop_roi_t *roi, float *buffer)
 {

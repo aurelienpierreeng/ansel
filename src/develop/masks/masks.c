@@ -342,7 +342,7 @@ void dt_masks_points_bounding_box(const float *const points, const int num_point
   *height = (ymax - ymin);
 }
 
-float *dt_masks_sample_grid_backtransform(struct dt_dev_pixelpipe_t *pipe, const double iop_order,
+float *dt_masks_sample_grid_backtransform(const struct dt_dev_pixelpipe_t *pipe, const double iop_order,
                                           const dt_masks_sample_grid_t *const grid,
                                           const char *const shape, const char *const form_name)
 {
@@ -447,37 +447,53 @@ void dt_masks_sample_grid_interpolate(const float *const points, const dt_masks_
   if(endy) *endy = ey;
 }
 
-dt_masks_raster_result_t dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                      dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
-                      int *area_width, int *area_height, int *area_pos_x, int *area_pos_y)
+void dt_masks_area_scale(dt_masks_area_t *area, const double scale)
 {
-  *area_width = 0;
-  *area_height = 0;
-  *area_pos_x = 0;
-  *area_pos_y = 0;
+  area->width *= scale;
+  area->height *= scale;
+  area->x *= scale;
+  area->y *= scale;
+}
+
+gboolean dt_masks_area_intersects(const dt_masks_area_t *area, const dt_iop_roi_t *roi)
+{
+  return !(area->y >= roi->y + roi->height || area->y + area->height <= roi->y
+           || area->x >= roi->x + roi->width || area->x + area->width <= roi->x);
+}
+
+dt_masks_raster_result_t dt_masks_get_area(const dt_iop_module_t *iop_module, const dt_dev_pixelpipe_t *pipe,
+                                           const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
+                                           dt_masks_area_t *area)
+{
+  *area = (dt_masks_area_t){ 0 };
   if(mask_form->functions && mask_form->functions->get_area)
-    return mask_form->functions->get_area(module, pipe, piece, mask_form, area_width, area_height,
-                                          area_pos_x, area_pos_y);
+    return mask_form->functions->get_area(iop_module, pipe, piece, mask_form, &area->width, &area->height,
+                                          &area->x, &area->y);
   return DT_MASKS_RASTER_ERROR;
 }
 
-dt_masks_raster_result_t dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                             dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
-                             int *area_width, int *area_height,
-                             int *area_pos_x, int *area_pos_y)
+gboolean dt_masks_form_is_in_roi(const dt_iop_module_t *iop_module, const dt_dev_pixelpipe_t *pipe,
+                                 const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+                                 const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out)
 {
-  *area_width = 0;
-  *area_height = 0;
-  *area_pos_x = 0;
-  *area_pos_y = 0;
+  dt_masks_area_t area;
+  if(dt_masks_get_area(iop_module, pipe, piece, form, &area) != DT_MASKS_RASTER_OK) return FALSE;
+
+  dt_masks_area_scale(&area, roi_in->scale);
+  return dt_masks_area_intersects(&area, roi_out);
+}
+
+dt_masks_raster_result_t dt_masks_get_source_area(const dt_iop_module_t *iop_module,
+                                                  const dt_dev_pixelpipe_t *pipe,
+                                                  const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
+                                                  dt_masks_area_t *area)
+{
+  *area = (dt_masks_area_t){ 0 };
 
   // must be a clone form
-  if(mask_form->type & DT_MASKS_CLONE)
-  {
-    if(mask_form->functions && mask_form->functions->get_source_area)
-      return mask_form->functions->get_source_area(module, pipe, piece, mask_form, area_width, area_height,
-                                                   area_pos_x, area_pos_y);
-  }
+  if((mask_form->type & DT_MASKS_CLONE) && mask_form->functions && mask_form->functions->get_source_area)
+    return mask_form->functions->get_source_area(iop_module, pipe, piece, mask_form, &area->width,
+                                                 &area->height, &area->x, &area->y);
 
   /* A form that is not a clone has no source area. That is an absence, not a failure. */
   return DT_MASKS_RASTER_EMPTY;
@@ -1628,23 +1644,21 @@ void dt_masks_cleanup_unused(dt_develop_t *develop)
 /* The two rasterisation dispatchers. They were inline in masks.h, which forced the
  * per-shape function table to be public; a per-buffer call is not a per-pixel cost,
  * so the inline bought nothing and the table is private now. */
-dt_masks_raster_result_t dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                       const dt_dev_pixelpipe_iop_t *const piece,
                       dt_masks_form_t *const form,
-                      float **buffer, int *width, int *height, int *posx, int *posy)
+                      float **buffer, dt_masks_area_t *area)
 {
   *buffer = NULL;
-  *width = 0;
-  *height = 0;
-  *posx = 0;
-  *posy = 0;
+  *area = (dt_masks_area_t){ 0 };
   /* A shape type with no rasteriser is a programming error, not an empty shape. */
   return (form->functions && form->functions->get_mask)
-    ? form->functions->get_mask(module, pipe, piece, form, buffer, width, height, posx, posy)
+    ? form->functions->get_mask(module, pipe, piece, form, buffer, &area->width, &area->height, &area->x,
+                                &area->y)
     : DT_MASKS_RASTER_ERROR;
 }
 
-dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                                                const dt_dev_pixelpipe_iop_t *const piece,
                                                dt_masks_form_t *const form, const dt_iop_roi_t *roi,
                                                float *buffer, dt_iop_roi_t *touched)
