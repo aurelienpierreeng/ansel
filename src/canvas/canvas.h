@@ -1,0 +1,1061 @@
+/*
+    This file is part of Ansel,
+    Copyright (C) 2026 Aurélien PIERRE.
+
+    Ansel is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Ansel is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#ifndef DT_CANVAS_CANVAS_H
+#define DT_CANVAS_CANVAS_H
+
+/**
+ * @file canvas.h
+ * @brief The Canvas document: an infinite plane of image frames, text frames and connectors.
+ *
+ * @details A canvas is what the Canvas atelier edits and what a `.anselcanvas` file holds:
+ * a ZIP archive (see canvas_zip.h) carrying one binary index, one sRGB JPEG per image
+ * frame and one Markdown file per text frame. It is self-contained on purpose. Opening it
+ * needs neither the library database nor the original raws, so a canvas travels to
+ * people who have neither; and every image frame records enough about its source (library
+ * id, version, folder and file name, history hash, EXIF) that the same library can find the
+ * original again and refresh the render when the development has moved on.
+ *
+ * Nothing about a canvas is written to the library database.
+ *
+ * Every record that reaches the disk carries `reserved` bytes. They are written as zeros,
+ * read back verbatim and kept in memory, so a later version can claim them for a new field
+ * without bumping the format or migrating anything; and each record is prefixed with its
+ * own size, so a reader skips fields it does not know. See canvas_format.c for the layout.
+ *
+ * Coordinates are "canvas units": one unit is one screen pixel at zoom 1, the origin is
+ * the centre of the plane, y grows downwards, and an object's `x`/`y` is the centre of its
+ * frame. Rotation is in radians, clockwise on screen.
+ *
+ * Threading: a `dt_canvas_t` belongs to the GUI thread. Background renders never touch it;
+ * they hand their JPEG back through a GUI-thread callback that checks the canvas is still
+ * the one the render was started for (see canvas_render.h).
+ */
+
+#include "common/paths.h"
+
+#include <glib.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** File extension of a saved canvas, dot included. */
+#define DT_CANVAS_FILE_EXTENSION ".anselcanvas"
+
+/** Current index format. Bumped only when a record's existing fields change meaning. */
+#define DT_CANVAS_FORMAT_VERSION 1u
+
+/** Length of the fixed text fields. */
+#define DT_CANVAS_TITLE_LEN 256
+#define DT_CANVAS_FONT_LEN 256
+#define DT_CANVAS_EXIF_MAKER_LEN 64
+#define DT_CANVAS_EXIF_MODEL_LEN 64
+#define DT_CANVAS_EXIF_LENS_LEN 128
+
+/** Reserved bytes per record, see the file comment. */
+#define DT_CANVAS_HEADER_RESERVED 856 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12)
+#define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
+#define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
+#define DT_CANVAS_TEXT_RESERVED 152 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags and the standoff
+#define DT_CANVAS_TEXT_FEATURES_LEN 64 ///< an OpenType feature string, as Pango spells it: "liga 1, onum 1"
+
+/** Which side of a text frame's inner margins an index names. */
+enum
+{
+  DT_CANVAS_TEXT_MARGIN_TOP = 0,
+  DT_CANVAS_TEXT_MARGIN_RIGHT = 1,
+  DT_CANVAS_TEXT_MARGIN_BOTTOM = 2,
+  DT_CANVAS_TEXT_MARGIN_LEFT = 3,
+};
+
+typedef enum dt_canvas_text_flag_t
+{
+  DT_CANVAS_TEXT_AUTO_HEIGHT = 1 << 0,     ///< the frame's height follows its content
+  DT_CANVAS_TEXT_OPTICAL_MARGINS = 1 << 1, ///< punctuation hangs into the margin so the edge reads straight
+  DT_CANVAS_TEXT_WRAP_AROUND = 1 << 2,     ///< the text flows around the frames laid over it
+} dt_canvas_text_flag_t;
+#define DT_CANVAS_MAP_RESERVED 256
+#define DT_CANVAS_CONNECTOR_RESERVED 72 ///< 128 at format 1, minus the anchors and routing (12), the waypoint (20), the handles (24)
+
+/** The colour space a stored JPEG is encoded in. A file from before the field says 0: sRGB. */
+typedef enum dt_canvas_colorspace_t
+{
+  DT_CANVAS_COLORSPACE_SRGB = 0,
+  DT_CANVAS_COLORSPACE_ADOBERGB = 1, ///< what the renders leave the pipeline in
+} dt_canvas_colorspace_t;
+
+/** An sRGB colour with straight alpha, each channel in [0, 1]. */
+typedef struct dt_canvas_color_t
+{
+  float red;
+  float green;
+  float blue;
+  float alpha;
+} dt_canvas_color_t;
+
+typedef enum dt_canvas_object_kind_t
+{
+  DT_CANVAS_OBJECT_NONE = 0,
+  DT_CANVAS_OBJECT_IMAGE = 1,
+  DT_CANVAS_OBJECT_TEXT = 2,
+  DT_CANVAS_OBJECT_CONNECTOR = 3,
+  DT_CANVAS_OBJECT_MAP = 4,
+} dt_canvas_object_kind_t;
+
+typedef enum dt_canvas_object_flags_t
+{
+  DT_CANVAS_OBJECT_FLAG_NONE = 0,
+  /** The object's own `border_color`/`border_width` apply instead of the canvas defaults. */
+  DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE = 1 << 0,
+  /** The object cannot be moved, scaled or rotated from the canvas. */
+  DT_CANVAS_OBJECT_FLAG_LOCKED = 1 << 1,
+  /** The object is kept but not drawn. */
+  DT_CANVAS_OBJECT_FLAG_HIDDEN = 1 << 2,
+  /** The object's own `shadow` applies instead of the canvas default. */
+  DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE = 1 << 3,
+  /** The object's own `corner_radius` applies instead of the canvas default. */
+  DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE = 1 << 4,
+} dt_canvas_object_flags_t;
+
+typedef enum dt_canvas_grid_flags_t
+{
+  DT_CANVAS_GRID_NONE = 0,
+  DT_CANVAS_GRID_VISIBLE = 1 << 0,
+  DT_CANVAS_GRID_SNAP = 1 << 1,     ///< positions and sizes round to the grid
+  DT_CANVAS_SNAP_PADDING = 1 << 2,   ///< edges land one padding from a neighbour, or in line with it
+  DT_CANVAS_SNAP_SIZE = 1 << 3,     ///< a resized frame takes a neighbour's width or height
+  DT_CANVAS_PAGE_VISIBLE = 1 << 4,  ///< the page borders are drawn
+  DT_CANVAS_SNAP_PAGE = 1 << 5,     ///< edges land on a page border
+  DT_CANVAS_PADDING_VISIBLE = 1 << 6, ///< a frame one padding out is drawn around every frame
+  DT_CANVAS_MARGIN_VISIBLE = 1 << 7, ///< the page's inner margin is drawn
+  DT_CANVAS_SNAP_MARGIN = 1 << 8,    ///< edges land on it
+  DT_CANVAS_BLEED_VISIBLE = 1 << 9,  ///< the sheet's bleed, outside the page, is drawn
+  DT_CANVAS_SNAP_BLEED = 1 << 10,    ///< edges land on it
+  DT_CANVAS_GUIDES_OVER = 1 << 11,   ///< the page guides are drawn over the content, not under it
+  DT_CANVAS_SNAP_ALL = DT_CANVAS_GRID_SNAP | DT_CANVAS_SNAP_PADDING | DT_CANVAS_SNAP_SIZE | DT_CANVAS_SNAP_PAGE
+                       | DT_CANVAS_SNAP_MARGIN | DT_CANVAS_SNAP_BLEED,
+} dt_canvas_grid_flags_t;
+
+/** Which edges of a moving box may snap: all four for a move, the dragged ones for a resize. */
+typedef enum dt_canvas_edges_t
+{
+  DT_CANVAS_EDGE_LEFT = 1 << 0,
+  DT_CANVAS_EDGE_RIGHT = 1 << 1,
+  DT_CANVAS_EDGE_TOP = 1 << 2,
+  DT_CANVAS_EDGE_BOTTOM = 1 << 3,
+  DT_CANVAS_EDGE_ALL = 0xF,
+} dt_canvas_edges_t;
+
+/** How an image frame's render relates to the library. Runtime only, never saved. */
+typedef enum dt_canvas_sync_status_t
+{
+  DT_CANVAS_SYNC_UNKNOWN = 0,   ///< not checked yet
+  DT_CANVAS_SYNC_CURRENT = 1,   ///< the library holds the image with the same history hash
+  DT_CANVAS_SYNC_STALE = 2,     ///< the library holds the image with a different history hash
+  DT_CANVAS_SYNC_MISSING = 3,   ///< no library image matches
+  DT_CANVAS_SYNC_RENDERING = 4, ///< a render job is running for this frame
+} dt_canvas_sync_status_t;
+
+typedef struct dt_canvas_image_t
+{
+  int32_t imgid;           ///< library id of the source at render time
+  int32_t version;         ///< duplicate version of the source
+  int32_t film_id;         ///< film roll id of the source at render time
+  uint64_t history_hash;   ///< the source's history hash at render time
+  int64_t rendered_at;     ///< unix time of the render, 0 when never rendered
+  int32_t pixel_width;     ///< the JPEG's dimensions, 0 when there is no JPEG yet
+  int32_t pixel_height;
+  int32_t source_width;    ///< the source's own dimensions, as the library reports them
+  int32_t source_height;
+  int32_t orientation;     ///< the source's dt_image_orientation_t
+  char folder[DT_PATH_MAX];               ///< the film roll folder
+  char filename[DT_MAX_FILENAME_LEN];     ///< the file name inside it
+  char exif_maker[DT_CANVAS_EXIF_MAKER_LEN];
+  char exif_model[DT_CANVAS_EXIF_MODEL_LEN];
+  char exif_lens[DT_CANVAS_EXIF_LENS_LEN];
+  float exif_exposure;
+  float exif_aperture;
+  float exif_iso;
+  float exif_focal_length;
+  float exif_exposure_bias;
+  int64_t exif_datetime_taken; ///< GTimeSpan, microseconds since the epoch
+  uint32_t colorspace;     ///< dt_canvas_colorspace_t of the JPEG
+  uint8_t reserved[DT_CANVAS_IMAGE_RESERVED];
+
+  /* runtime, not serialised as fields: the JPEG travels as its own archive entry */
+  GBytes *jpeg;                        ///< the sRGB JPEG, NULL until rendered
+  dt_canvas_sync_status_t sync_status;
+} dt_canvas_image_t;
+
+typedef enum dt_canvas_text_source_t
+{
+  DT_CANVAS_TEXT_SOURCE_MARKDOWN = 0, ///< the frame's own Markdown, edited in place
+  DT_CANVAS_TEXT_SOURCE_SIDECAR = 1,  ///< the `.txt` sidecar of `linked_object`'s source image
+} dt_canvas_text_source_t;
+
+typedef enum dt_canvas_text_align_t
+{
+  DT_CANVAS_ALIGN_START = 0,   ///< left, or top
+  DT_CANVAS_ALIGN_CENTER = 1,
+  DT_CANVAS_ALIGN_END = 2,     ///< right, or bottom
+  DT_CANVAS_ALIGN_JUSTIFY = 3, ///< horizontal only
+} dt_canvas_text_align_t;
+
+typedef struct dt_canvas_text_t
+{
+  char font[DT_CANVAS_FONT_LEN];  ///< a Pango font description, empty for the canvas default
+  dt_canvas_color_t text_color;
+  dt_canvas_color_t background;   ///< alpha 0 is a transparent frame
+  uint32_t source;                ///< dt_canvas_text_source_t
+  uint32_t linked_object;         ///< image object id for a sidecar frame, 0 otherwise
+  float padding;                  ///< inner margin in canvas units
+  uint32_t align_h;               ///< dt_canvas_text_align_t
+  uint32_t align_v;               ///< dt_canvas_text_align_t, never JUSTIFY
+  /**
+   * The leading, as a multiple of what the font asks for: 1 is the font's own, 1.5 is one and
+   * a half. 0 means unset and reads as 1, which is what a document from before the field
+   * holds and what keeps it looking as it did.
+   */
+  float line_height;
+  /**
+   * The tracking, in THOUSANDTHS OF AN EM, so it follows the type size rather than the plane:
+   * -50 tightens a line, +100 opens it out. 0 is the font's own spacing. A true condensed cut
+   * is a different thing and is chosen in the font name, since Pango can only reach one that
+   * the family actually ships.
+   */
+  float letter_spacing;
+  /**
+   * The inner margins, top, right, bottom, left. ALL FOUR zero takes the uniform `padding` on
+   * every side, which is what a document from before them holds; any one of them set makes
+   * all four literal, so a side really can be zero. Same rule, same reason, as the canvas's
+   * texture weights.
+   */
+  float margins[4];
+  /** OpenType features as Pango spells them, "liga 1, onum 1, smcp 1"; empty is the font's own. */
+  char features[DT_CANVAS_TEXT_FEATURES_LEN];
+  uint32_t text_flags;  ///< dt_canvas_text_flag_t
+  float wrap_standoff;  ///< how far the text keeps off a frame laid over it, in canvas units
+  uint8_t reserved[DT_CANVAS_TEXT_RESERVED];
+
+  /* runtime: the Markdown travels as its own archive entry */
+  char *markdown;
+} dt_canvas_text_t;
+
+typedef enum dt_canvas_connector_style_t
+{
+  DT_CANVAS_CONNECTOR_PLAIN = 0,
+  DT_CANVAS_CONNECTOR_ARROW_END = 1 << 0,
+  DT_CANVAS_CONNECTOR_ARROW_START = 1 << 1,
+  DT_CANVAS_CONNECTOR_DASHED = 1 << 2,
+} dt_canvas_connector_style_t;
+
+/**
+ * Where on a frame a connector attaches: the four edge midpoints, the four corners, or the
+ * centre. They are the frame's own points, so they rotate with it. AUTO picks, of the four
+ * cardinals, the one nearest the other end's frame -- the corners and the centre are not
+ * among its candidates, so a document laid out before they existed keeps the routes it had.
+ *
+ * The values are stored in the document: NEW ANCHORS ARE APPENDED, never inserted.
+ */
+typedef enum dt_canvas_anchor_t
+{
+  DT_CANVAS_ANCHOR_AUTO = 0,
+  DT_CANVAS_ANCHOR_NORTH = 1,
+  DT_CANVAS_ANCHOR_EAST = 2,
+  DT_CANVAS_ANCHOR_SOUTH = 3,
+  DT_CANVAS_ANCHOR_WEST = 4,
+  DT_CANVAS_ANCHOR_NORTH_EAST = 5,
+  DT_CANVAS_ANCHOR_SOUTH_EAST = 6,
+  DT_CANVAS_ANCHOR_SOUTH_WEST = 7,
+  DT_CANVAS_ANCHOR_NORTH_WEST = 8,
+  DT_CANVAS_ANCHOR_CENTRE = 9, ///< aims at the centre and touches the edge, wherever the other end is
+  DT_CANVAS_ANCHOR_LAST = 10,
+} dt_canvas_anchor_t;
+
+/** How a connector travels between its anchors. */
+typedef enum dt_canvas_routing_t
+{
+  DT_CANVAS_ROUTING_STRAIGHT = 0, ///< one segment
+  DT_CANVAS_ROUTING_SQUARE = 1,   ///< leaves each anchor along its normal, then horizontal and vertical legs
+  DT_CANVAS_ROUTING_CUBIC = 2,    ///< a cubic Bezier tangent to each anchor's normal
+} dt_canvas_routing_t;
+
+typedef struct dt_canvas_connector_t
+{
+  uint32_t from_id;     ///< object id the line starts at
+  uint32_t to_id;       ///< object id the line ends at
+  uint32_t style;       ///< dt_canvas_connector_style_t bits
+  dt_canvas_color_t color;
+  float line_width;
+  uint32_t from_anchor; ///< dt_canvas_anchor_t
+  uint32_t to_anchor;   ///< dt_canvas_anchor_t
+  uint32_t routing;     ///< dt_canvas_routing_t
+  uint32_t via_count;   ///< 0, or 1 when the route passes by (via_x, via_y)
+  double via_x;         ///< the waypoint, canvas units
+  double via_y;
+  float from_reach;     ///< length of the start's tangent handle, along the anchor's normal; 0 is automatic
+  float to_reach;       ///< the same at the end
+  double via_tangent_x; ///< the waypoint's tangent handle, direction and length; (0, 0) is automatic
+  double via_tangent_y;
+  uint8_t reserved[DT_CANVAS_CONNECTOR_RESERVED];
+} dt_canvas_connector_t;
+
+/** The most points a routed connector is flattened to, cubic included. */
+#define DT_CANVAS_ROUTE_MAX_POINTS 40
+
+/** A connector resolved to geometry: its ends, the normals it leaves them along, the
+ * cubic's control points, and the polyline every routing is flattened to for hit tests. */
+typedef struct dt_canvas_route_t
+{
+  uint32_t routing;
+  double from_x;
+  double from_y;
+  double to_x;
+  double to_y;
+  double from_normal_x; ///< unit vector leaving the start frame
+  double from_normal_y;
+  double to_normal_x;   ///< unit vector leaving the end frame
+  double to_normal_y;
+  int segment_count;    ///< 1, or 2 when the route passes by a waypoint
+  double via_x;         ///< the waypoint, when segment_count is 2
+  double via_y;
+  double control1_x;    ///< cubic control points of the first segment; unused by the other routings
+  double control1_y;
+  double control2_x;
+  double control2_y;
+  double control3_x;    ///< cubic control points of the second segment
+  double control3_y;
+  double control4_x;
+  double control4_y;
+  int point_count;
+  double points[2 * DT_CANVAS_ROUTE_MAX_POINTS]; ///< x0,y0,x1,y1..., start to end
+} dt_canvas_route_t;
+
+/** A map frame: a rendered slippy map around a point, kept as a JPEG like an image frame. */
+typedef struct dt_canvas_map_t
+{
+  double latitude;         ///< degrees
+  double longitude;        ///< degrees
+  int32_t zoom;            ///< slippy zoom level, 1..19
+  uint32_t source;         ///< the tile provider: an OsmGpsMapSource_t value, 0 for the default
+  int32_t pixel_width;     ///< the render's dimensions, 0 when there is none yet
+  int32_t pixel_height;
+  int64_t rendered_at;     ///< unix time of the render, 0 when never rendered
+  uint8_t reserved[DT_CANVAS_MAP_RESERVED];
+
+  /* runtime: the JPEG travels as its own archive entry */
+  GBytes *jpeg;
+  dt_canvas_sync_status_t sync_status; ///< RENDERING while the tiles are fetched, MISSING when they could not be
+} dt_canvas_map_t;
+
+/**
+ * A shadow: the object's silhouette, blurred, offset and tinted. The radius is the blur's
+ * standard deviation and its sign says where the shadow falls: positive drops it outside the
+ * object, negative casts it inside along the object's edges, and zero is no shadow at all.
+ * The colour's alpha is the strength. Offsets and radius are canvas units.
+ */
+typedef struct dt_canvas_shadow_t
+{
+  dt_canvas_color_t color;
+  float offset_x;
+  float offset_y;
+  float blur;   ///< the signed radius; see above
+} dt_canvas_shadow_t;
+
+/** The drawn-mask shape that cuts an object out of its rectangle. */
+typedef enum dt_canvas_mask_shape_t
+{
+  DT_CANVAS_MASK_NONE = 0,
+  DT_CANVAS_MASK_CIRCLE = 1,
+  DT_CANVAS_MASK_ELLIPSE = 2,
+  DT_CANVAS_MASK_POLYGON = 3,
+  DT_CANVAS_MASK_GRADIENT = 4,
+} dt_canvas_mask_shape_t;
+
+typedef enum dt_canvas_mask_flags_t
+{
+  DT_CANVAS_MASK_INVERT = 1 << 0, ///< keep what is outside the shape
+} dt_canvas_mask_flags_t;
+
+/**
+ * Floats per polygon node: x, y, the incoming control point x, y, the outgoing one x, y, the
+ * smooth flag, the fall-off's own radius either side of the node (0 takes the shape's), and
+ * one spare. The stride is written into the file's node chunk and read back from its size, so
+ * it may grow again without a format bump and without losing a node of an older document.
+ */
+#define DT_CANVAS_MASK_NODE_FLOATS 10
+
+/** Indices into a node record. */
+enum
+{
+  DT_CANVAS_MASK_NODE_X = 0,
+  DT_CANVAS_MASK_NODE_Y = 1,
+  DT_CANVAS_MASK_NODE_CTRL1_X = 2, ///< the control point on the previous node's side
+  DT_CANVAS_MASK_NODE_CTRL1_Y = 3,
+  DT_CANVAS_MASK_NODE_CTRL2_X = 4, ///< the one on the next node's side
+  DT_CANVAS_MASK_NODE_CTRL2_Y = 5,
+  DT_CANVAS_MASK_NODE_SMOOTH = 6, ///< a dt_canvas_mask_node_kind_t
+  DT_CANVAS_MASK_NODE_BORDER1 = 7,
+  DT_CANVAS_MASK_NODE_BORDER2 = 8,
+};
+
+/**
+ * What `DT_CANVAS_MASK_NODE_SMOOTH` holds. A cusp is zero, which is what a node is born as
+ * and what every document written before the smooth ones carries, so an older file reads
+ * exactly as it did. A reader that knows only "zero or not" treats a steered node as an
+ * automatic one: it loses the tangent the user gave it and keeps the shape smooth there,
+ * which is the graceful half of the two.
+ */
+typedef enum dt_canvas_mask_node_kind_t
+{
+  DT_CANVAS_MASK_NODE_CUSP = 0,    ///< the two stored control points are independent
+  DT_CANVAS_MASK_NODE_AUTO = 1,    ///< smooth, its tangent computed from its neighbours
+  DT_CANVAS_MASK_NODE_STEERED = 2, ///< smooth, its tangent the one the user dragged
+} dt_canvas_mask_node_kind_t;
+
+/**
+ * A cutout, in the object's own unit square: (0, 0) is the top-left corner of the unrotated
+ * frame and (1, 1) its bottom-right, whatever its size. Radii and the feather are fractions
+ * of the frame's shorter side, the way the darkroom's drawn masks measure theirs. The
+ * polygon's nodes live in `nodes`, saved after the object's record.
+ */
+typedef struct dt_canvas_mask_t
+{
+  uint32_t shape;     ///< dt_canvas_mask_shape_t
+  uint32_t flags;     ///< dt_canvas_mask_flags_t bits
+  float feather;      ///< the fall-off's extent
+  float center_x;     ///< circle, ellipse: the centre; gradient: the anchor
+  float center_y;
+  float radius_x;     ///< circle: the radius; ellipse: the horizontal radius; gradient: the extent
+  float radius_y;     ///< ellipse: the vertical radius; gradient: the curvature
+  float rotation;     ///< ellipse, gradient: degrees
+  float spare;
+  /* runtime */
+  uint32_t node_count;
+  float *nodes;       ///< node_count * DT_CANVAS_MASK_NODE_FLOATS
+} dt_canvas_mask_t;
+
+typedef struct dt_canvas_object_t
+{
+  uint32_t id;        ///< unique within the canvas, never reused
+  uint32_t kind;      ///< dt_canvas_object_kind_t
+  double x;           ///< centre, canvas units
+  double y;
+  double width;       ///< unrotated frame size, canvas units
+  double height;
+  double rotation;    ///< radians, clockwise on screen
+  int32_t z;          ///< draw order, lower is further back
+  uint32_t flags;     ///< dt_canvas_object_flags_t bits
+  dt_canvas_color_t border_color;
+  float border_width; ///< canvas units
+  dt_canvas_shadow_t shadow;  ///< applies with DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE
+  float transparency; ///< 0 opaque, 1 invisible; stored this way so an older file's zeros mean opaque
+  dt_canvas_mask_t mask;
+  dt_canvas_color_t background; ///< under the content, filling the frame or the cutout's whole shape; alpha 0 is none. A text frame keeps its own.
+  float corner_radius; ///< the frame's rounded corners, canvas units; applies with DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE
+  uint8_t reserved[DT_CANVAS_OBJECT_RESERVED];
+  union
+  {
+    dt_canvas_image_t image;
+    dt_canvas_text_t text;
+    dt_canvas_connector_t connector;
+    dt_canvas_map_t map;
+  };
+} dt_canvas_object_t;
+
+/**
+ * What the plane is painted with. Stored by value, so a background is APPENDED and never
+ * inserted; where it is offered in the list is `dt_canvas_background_position()`'s business,
+ * the same way the page sizes work.
+ */
+typedef enum dt_canvas_background_t
+{
+  DT_CANVAS_BACKGROUND_PLAIN = 0,       ///< the background colour
+  DT_CANVAS_BACKGROUND_MOLESKINE = 1,   ///< ivory notebook paper, soft texture
+  DT_CANVAS_BACKGROUND_WATERCOLOUR = 2, ///< white watercolour paper, thick texture
+  DT_CANVAS_BACKGROUND_EMBOSSED = 3,    ///< paper dried on a metallic mesh, its imprint in the fibres
+  DT_CANVAS_BACKGROUND_JAPANESE = 4,    ///< washi: large soft clouds and long wrinkles
+  DT_CANVAS_BACKGROUND_TRANSPARENT = 5, ///< nothing at all: the plane is a hole the export carries
+  DT_CANVAS_BACKGROUND_PSYCHEDELIC = 6, ///< washi whose wrinkles carry a colour instead of a brightness
+  DT_CANVAS_BACKGROUND_LAID = 7,        ///< verge: the mould's laid and chain wires left in a cloudy sheet
+  DT_CANVAS_BACKGROUND_KRAFT = 8,       ///< unbleached wrapping paper: brown, long fibres, dark shives
+  DT_CANVAS_BACKGROUND_CHARCOAL = 9,    ///< a near-black card whose tooth catches light instead of casting shade
+  DT_CANVAS_BACKGROUND_LAST = 10,
+} dt_canvas_background_t;
+
+/**
+ * The page the canvas is divided into. One canvas unit is one point (1/72 inch), so a print
+ * size is its size in points and a screen size is its size in pixels at 72 dpi -- export such
+ * a page at 72 dpi and it comes out at exactly the pixel size it is named for.
+ *
+ * The stored value is this index: NEW SIZES ARE APPENDED, never inserted, or every saved
+ * document changes page size. `dt_canvas_paper_name()` and `dt_canvas_paper_points()` are the
+ * one table behind it, and the GUI reads its list from there.
+ */
+typedef enum dt_canvas_paper_t
+{
+  DT_CANVAS_PAPER_NONE = 0,
+  DT_CANVAS_PAPER_A2 = 1,
+  DT_CANVAS_PAPER_A3 = 2,
+  DT_CANVAS_PAPER_A4 = 3,
+  DT_CANVAS_PAPER_A5 = 4,
+  DT_CANVAS_PAPER_A6 = 5,
+  DT_CANVAS_PAPER_LETTER = 6,             ///< US Letter, 8.5 x 11 in
+  DT_CANVAS_PAPER_INSTAGRAM_SQUARE = 7,   ///< 1080 x 1080 px
+  DT_CANVAS_PAPER_INSTAGRAM_PORTRAIT = 8, ///< 1080 x 1350 px
+  DT_CANVAS_PAPER_STORY = 9,              ///< reels and stories, 1080 x 1920 px
+  DT_CANVAS_PAPER_FACEBOOK_POST = 10,     ///< 1200 x 630 px
+  DT_CANVAS_PAPER_FACEBOOK_COVER = 11,    ///< 851 x 315 px
+  DT_CANVAS_PAPER_YOUTUBE_THUMBNAIL = 12, ///< 1280 x 720 px
+  DT_CANVAS_PAPER_YOUTUBE_BANNER = 13,    ///< channel art, 2560 x 1440 px
+  DT_CANVAS_PAPER_A1 = 14,
+  DT_CANVAS_PAPER_A0 = 15,
+  DT_CANVAS_PAPER_LAST = 16,
+} dt_canvas_paper_t;
+
+typedef struct dt_canvas_t
+{
+  uint32_t format_version;
+  char title[DT_CANVAS_TITLE_LEN];
+  dt_canvas_color_t background;
+  dt_canvas_color_t border_color;   ///< default border for frames without an override
+  float border_width;
+  float grid_size;                  ///< canvas units between grid lines
+  uint32_t grid_flags;              ///< dt_canvas_grid_flags_t bits
+  /**
+   * The clear margin EVERY frame keeps around itself, so two of them side by side are two of
+   * these apart and their margin boxes meet on one line. It used to be called the gutter,
+   * which in print is the fold's own allowance and is now `bind_gutter` below.
+   */
+  float padding;
+  uint32_t background_style;        ///< dt_canvas_background_t
+  dt_canvas_color_t grid_color;     ///< the grid dots
+  uint32_t paper_size;              ///< dt_canvas_paper_t
+  uint32_t paper_landscape;         ///< 0 portrait, 1 landscape
+  dt_canvas_color_t page_color;     ///< the page borders
+  dt_canvas_shadow_t shadow;        ///< default shadow for objects without an override
+  dt_canvas_color_t padding_color;   ///< the padding frames, when DT_CANVAS_PADDING_VISIBLE
+  float texture_contrast;           ///< the paper's relief: multipliers, 1 is the paper as designed; 0 reads as 1
+  float texture_detail;             ///< its fine structure: fibres, pores, wrinkles, the mesh
+  float texture_scale;              ///< the size of its features
+  float texture_grain;              ///< the dither that finishes it
+  float resolution;                 ///< canvas units per inch; 0 reads as 72, which is what a file from before held
+  /**
+   * A SPREAD is the block of pages that stays on one sheet: `spread_cols` across by
+   * `spread_rows` down. A book is 2 by 1, a zine folded both ways 2 by 2, a poster printed at
+   * home and taped together as many as it takes. Pages inside a spread are contiguous and the
+   * borders between them are FOLDS; between two spreads the plane opens by twice the bleed, so
+   * each sheet carries its own all round and no two bleeds overlap.
+   *
+   * ZERO is a plane tiled uniformly, which is what every document written before these fields
+   * holds and exactly the geometry it was laid out with. One is every page on its own sheet,
+   * two bleeds apart.
+   */
+  uint32_t spread_cols;
+  uint32_t spread_rows;
+  /**
+   * The binding's own allowance, added inside a page AT A FOLD only -- what a perfect binding
+   * swallows out of the middle of a picture that crosses it. It is not the page margin, which
+   * is uniform all round; it is the extra the fold side needs on top of it.
+   */
+  float bind_gutter;
+  float corner_radius;              ///< default rounded corners of the frames, canvas units; 0 is square
+  float page_margin;                ///< kept clear inside every page edge, canvas units
+  dt_canvas_color_t margin_color;   ///< the margin lines
+  float page_bleed;                 ///< how far past every page edge the sheet keeps going, canvas units
+  dt_canvas_color_t bleed_color;    ///< the bleed lines
+  double view_zoom;                 ///< the viewport the canvas was saved with
+  double view_x;                    ///< canvas point shown at the centre of the view
+  double view_y;
+  char default_font[DT_CANVAS_FONT_LEN];
+  int32_t image_long_edge;          ///< pixels on the long edge of a render
+  int32_t jpeg_quality;
+  uint8_t reserved[DT_CANVAS_HEADER_RESERVED];
+
+  /* runtime */
+  uint32_t next_id;
+  GPtrArray *objects;   ///< dt_canvas_object_t *, kept sorted by z then id
+  char *path;           ///< where it was loaded from or last saved, NULL for a new canvas
+  gboolean dirty;       ///< unsaved changes
+  uint64_t generation;  ///< bumps on every mutation
+  uint64_t serial;      ///< names this document for the life of the process: a freed document's address is reused, its serial never is
+} dt_canvas_t;
+
+/** An axis-aligned rectangle in canvas units. */
+typedef struct dt_canvas_rect_t
+{
+  double x;
+  double y;
+  double width;
+  double height;
+} dt_canvas_rect_t;
+
+/* --- lifecycle -------------------------------------------------------------- */
+
+/** @brief A new, empty canvas with defaults taken from conf. */
+dt_canvas_t *dt_canvas_new(void);
+
+/** @brief Free the canvas and every object. NULL-safe. */
+dt_canvas_t *dt_canvas_free(dt_canvas_t *canvas);
+
+/**
+ * @brief Deep copy: every object, the JPEG references and the Markdown strings.
+ * @details Undo snapshots are made of these. JPEG bytes are shared by reference, so the
+ * copy costs the records, not the pixels.
+ */
+dt_canvas_t *dt_canvas_copy(const dt_canvas_t *canvas);
+
+/**
+ * @brief Replace `canvas`'s content by `snapshot`'s, keeping `canvas`'s path.
+ * @details The undo restore. Both are left valid; `snapshot` is not consumed.
+ */
+void dt_canvas_restore(dt_canvas_t *canvas, const dt_canvas_t *snapshot);
+
+/* --- persistence ----------------------------------------------------------- */
+
+/**
+ * @brief Read a canvas file.
+ * @param path a `.anselcanvas` archive.
+ * @param error receives what went wrong, may be NULL.
+ * @return the canvas, or NULL with `error` set. `canvas->path` is set to `path`.
+ */
+dt_canvas_t *dt_canvas_load(const char *path, GError **error);
+
+/**
+ * @brief Write the canvas to `path`, atomically.
+ * @details On success `canvas->path` is updated and `dirty` is cleared.
+ */
+gboolean dt_canvas_save(dt_canvas_t *canvas, const char *path, GError **error);
+
+/* --- objects ---------------------------------------------------------------- */
+
+/**
+ * @brief Add an image frame for a library image whose render has not happened yet.
+ * @param source_width the source's own dimensions, so the frame gets its aspect ratio at once.
+ * @return the object, owned by the canvas.
+ */
+dt_canvas_object_t *dt_canvas_add_image(dt_canvas_t *canvas, double x, double y, int32_t source_width,
+                                        int32_t source_height);
+
+/** @brief Add a text frame. `markdown` is copied; NULL means empty. */
+dt_canvas_object_t *dt_canvas_add_text(dt_canvas_t *canvas, double x, double y, double width, double height,
+                                       const char *markdown);
+
+/** @brief Add a map frame around a point, not rendered yet. */
+dt_canvas_object_t *dt_canvas_add_map(dt_canvas_t *canvas, double x, double y, double latitude, double longitude,
+                                      int32_t zoom, uint32_t source);
+
+/** @brief Give the map frame its render. Takes a reference on `jpeg`. */
+void dt_canvas_map_set_render(dt_canvas_t *canvas, dt_canvas_object_t *object, GBytes *jpeg, int32_t pixel_width,
+                              int32_t pixel_height, int64_t rendered_at);
+
+/** @brief The raster a frame shows: an image frame's or a map frame's JPEG, NULL for the others or when unrendered. */
+GBytes *dt_canvas_object_raster(const dt_canvas_object_t *object);
+
+/** @brief Add a connector between two objects. Refuses self-links and unknown ids. */
+dt_canvas_object_t *dt_canvas_add_connector(dt_canvas_t *canvas, uint32_t from_id, uint32_t to_id);
+
+/**
+ * @brief Remove an object.
+ * @details Removing a frame also removes every connector attached to it, and unlinks any
+ * sidecar text frame that showed its note (the text stays, with the last content it had).
+ */
+gboolean dt_canvas_remove_object(dt_canvas_t *canvas, uint32_t id);
+
+/** @brief Duplicate a frame, offset by a little so the copy is visible. Connectors are not duplicated. */
+dt_canvas_object_t *dt_canvas_duplicate_object(dt_canvas_t *canvas, uint32_t id);
+
+dt_canvas_object_t *dt_canvas_find_object(const dt_canvas_t *canvas, uint32_t id);
+guint dt_canvas_object_count(const dt_canvas_t *canvas);
+/** @brief The object at `index` in draw order (back to front). NULL past the end. */
+dt_canvas_object_t *dt_canvas_object_at(const dt_canvas_t *canvas, guint index);
+
+/** @brief Mark the canvas changed: bump the generation and set dirty. Call after any in-place edit. */
+void dt_canvas_touch(dt_canvas_t *canvas);
+
+/** @brief Draw-order edits. Each re-sorts the object list. */
+void dt_canvas_object_to_front(dt_canvas_t *canvas, uint32_t id);
+void dt_canvas_object_to_back(dt_canvas_t *canvas, uint32_t id);
+void dt_canvas_object_raise(dt_canvas_t *canvas, uint32_t id);
+void dt_canvas_object_lower(dt_canvas_t *canvas, uint32_t id);
+
+/** @brief Give the image frame its render. Takes a reference on `jpeg`. */
+void dt_canvas_image_set_render(dt_canvas_t *canvas, dt_canvas_object_t *object, GBytes *jpeg, int32_t pixel_width,
+                                int32_t pixel_height, uint64_t history_hash, int64_t rendered_at, uint32_t colorspace);
+
+/** @brief Replace a text frame's Markdown. Copied; NULL means empty. */
+void dt_canvas_text_set_markdown(dt_canvas_t *canvas, dt_canvas_object_t *object, const char *markdown);
+
+/** @brief The Markdown of a text frame, never NULL for a text object. */
+const char *dt_canvas_text_get_markdown(const dt_canvas_object_t *object);
+
+/** @brief The font of a text frame: its own, or the canvas default when it has none. */
+const char *dt_canvas_text_effective_font(const dt_canvas_t *canvas, const dt_canvas_object_t *object);
+
+/** @brief The border a frame is drawn with: its own when overridden, the canvas default otherwise. */
+void dt_canvas_object_effective_border(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                       dt_canvas_color_t *color, float *width);
+
+/** @brief The shadow an object is drawn with: its own with the override flag, else the canvas default. */
+void dt_canvas_object_effective_shadow(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                       dt_canvas_shadow_t *shadow);
+
+/** @brief The paper texture's four multipliers, an unset (zero) one read as 1. */
+void dt_canvas_texture_get(const dt_canvas_t *canvas, float *contrast, float *detail, float *scale, float *grain);
+
+/** @brief The colour a paper is traditionally sold in: what the background takes when a paper is chosen. */
+dt_canvas_color_t dt_canvas_background_tint(uint32_t style);
+
+/** @brief How many backgrounds there are to offer. */
+int dt_canvas_background_count(void);
+
+/** @brief The background shown at `position`, translated. */
+const char *dt_canvas_background_name(int position);
+
+/** @brief The dt_canvas_background_t to store for the background shown at `position`. */
+uint32_t dt_canvas_background_code(int position);
+
+/** @brief Where a stored dt_canvas_background_t sits in the list. */
+int dt_canvas_background_position(uint32_t style);
+
+/**
+ * @brief Whether the plane is a hole rather than a colour.
+ * @details Such a canvas composites to real transparency, which a format without an alpha
+ * channel cannot carry: `dt_canvas_export_format_carries_alpha()` is the other half.
+ */
+gboolean dt_canvas_background_is_transparent(uint32_t style);
+
+/** @brief Whether a shadow draws anything at all: a radius other than zero and some strength. */
+gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow);
+
+/** @brief The corner radius a frame is drawn with, in canvas units, never past half its shorter side. */
+double dt_canvas_object_effective_corner_radius(const dt_canvas_t *canvas, const dt_canvas_object_t *object);
+
+/** @brief The colour under an object's content: a text frame's own, else the object's. */
+dt_canvas_color_t dt_canvas_object_background(const dt_canvas_object_t *object);
+
+/**
+ * @brief Give an object a cutout of a shape, at a sensible default geometry; NONE removes it.
+ * A shape already of that kind is kept as it is.
+ */
+void dt_canvas_mask_set_shape(dt_canvas_t *canvas, dt_canvas_object_t *object, uint32_t shape);
+
+/** @brief Replace the polygon's nodes; `nodes` holds count * DT_CANVAS_MASK_NODE_FLOATS floats. */
+void dt_canvas_mask_set_nodes(dt_canvas_t *canvas, dt_canvas_object_t *object, const float *nodes, uint32_t count);
+
+/** @brief Insert a corner node at `index` (0..count), at the unit-square point. */
+gboolean dt_canvas_mask_insert_node(dt_canvas_t *canvas, dt_canvas_object_t *object, uint32_t index, float x, float y);
+
+/** @brief Remove a node; refused when three would not remain. */
+gboolean dt_canvas_mask_remove_node(dt_canvas_t *canvas, dt_canvas_object_t *object, uint32_t index);
+
+/** @brief Drop the nodes; called by the object's owner before freeing it. */
+void dt_canvas_mask_clear(dt_canvas_object_t *object);
+
+/** @brief A hash of everything that changes the mask's raster: the key of a cached raster. */
+uint64_t dt_canvas_mask_hash(const dt_canvas_mask_t *mask);
+
+/* --- geometry --------------------------------------------------------------- */
+
+/** @brief Is this object a frame (image, text or map) rather than a connector? */
+gboolean dt_canvas_object_is_frame(const dt_canvas_object_t *object);
+
+/**
+ * @brief The four corners of a frame after rotation, in canvas units.
+ * @param corners receives x0,y0 ... x3,y3, top-left first, clockwise on screen.
+ */
+void dt_canvas_object_corners(const dt_canvas_object_t *object, double corners[8]);
+
+/** @brief The axis-aligned box around the rotated frame. */
+dt_canvas_rect_t dt_canvas_object_bounds(const dt_canvas_object_t *object);
+
+/** @brief Is the canvas point inside the rotated frame? Connectors answer by distance to their line. */
+gboolean dt_canvas_object_contains(const dt_canvas_t *canvas, const dt_canvas_object_t *object, double x, double y,
+                                   double tolerance);
+
+/** @brief Transform a canvas point into the frame's own unrotated space, centred on the frame. */
+void dt_canvas_object_to_local(const dt_canvas_object_t *object, double x, double y, double *local_x,
+                               double *local_y);
+
+/**
+ * @brief A frame's cardinal point and the outward normal there.
+ * @param anchor which point; AUTO picks the one nearest (target_x, target_y).
+ */
+void dt_canvas_object_anchor_point(const dt_canvas_t *canvas, const dt_canvas_object_t *frame,
+                                   dt_canvas_anchor_t anchor, double target_x, double target_y, double *x, double *y,
+                                   double *normal_x, double *normal_y);
+
+/**
+ * @brief Where the anchor's handle sits, which is where it is drawn and clicked.
+ * @details Every anchor's handle is its attachment point, except the centre's: that one is at
+ * the frame's centre, while what it attaches is out on the edge facing the other end.
+ */
+void dt_canvas_object_anchor_handle(const dt_canvas_t *canvas, const dt_canvas_object_t *frame,
+                                    dt_canvas_anchor_t anchor, double *x, double *y);
+
+/**
+ * @brief How far from the frame's centre the object still draws something, along `dir` in the
+ * frame's own axes.
+ * @details What the object draws is its rounded rectangle, or -- where a cutout replaces it --
+ * the cut shape grown by its fall-off and by the border band dilated from it, never past the
+ * frame. It is what the centre anchor leaves by, so a connector meets the picture rather than
+ * an empty corner of its bounding box. `dir` need not be normalised; the result is in canvas
+ * units along it.
+ */
+double dt_canvas_object_silhouette_reach(const dt_canvas_t *canvas, const dt_canvas_object_t *frame, double dir_x,
+                                         double dir_y);
+
+/**
+ * @brief Whether a canvas point falls on what a frame actually DRAWS, grown by `standoff`.
+ * @details The silhouette, not the bounding box: a cut frame covers its cut shape and the
+ * empty corner beside it covers nothing. Exact for a shape every ray from the centre leaves
+ * once -- a circle, an ellipse, a rounded rectangle, a convex polygon -- and an approximation
+ * for one that does not, which is the same bargain `dt_canvas_object_silhouette_reach()`
+ * already makes for the connectors.
+ */
+gboolean dt_canvas_object_covers(const dt_canvas_t *canvas, const dt_canvas_object_t *frame, double x, double y,
+                                 double standoff);
+
+/**
+ * @brief Resolve a connector to its geometry.
+ * @return FALSE when either end is missing.
+ */
+gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
+                                   dt_canvas_route_t *route);
+
+/**
+ * @brief The two ends of a connector: its anchor points.
+ * @return FALSE when either end is missing.
+ */
+gboolean dt_canvas_connector_endpoints(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
+                                       double *from_x, double *from_y, double *to_x, double *to_y);
+
+/** @brief The box around every visible frame. Empty (width 0) for an empty canvas. */
+dt_canvas_rect_t dt_canvas_bounds(const dt_canvas_t *canvas);
+
+/** @brief Round `value` to the grid when snapping is on, else return it unchanged. */
+double dt_canvas_snap(const dt_canvas_t *canvas, double value);
+
+/** @brief The object whose frame is under the point, frontmost first. NULL when none. */
+dt_canvas_object_t *dt_canvas_pick(const dt_canvas_t *canvas, double x, double y, double tolerance);
+
+/**
+ * @brief Snap a moving box next to, or in line with, the other frames.
+ * @details Candidates are the other frames' edges plus or minus the padding (side by side with
+ * the canvas margin) and their edges themselves (aligned). The nearest candidate within
+ * `threshold` wins per axis. This is the padding rule; it ignores the canvas's snap flags,
+ * the caller consults them.
+ * @param moving the box being moved, canvas units.
+ * @param exclude object ids not to snap against (the selection itself); may be NULL.
+ * @param edges which of the box's edges are moving and may snap (dt_canvas_edges_t bits).
+ * @param delta_x receives the shift to apply on x, 0 when nothing is within reach.
+ * @return TRUE when at least one axis snapped.
+ */
+gboolean dt_canvas_snap_to_neighbours(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving,
+                                      const GArray *exclude, double threshold, uint32_t edges, double *delta_x,
+                                      double *delta_y);
+
+/**
+ * @brief Snap a size to another frame's width or height, or to a run of frames.
+ * @details The same-size rule: the nearest candidate within `threshold` replaces `*width`, and
+ * likewise for `*height`, each axis on its own. Candidates are every other frame's box and
+ * every run of frames stacked one padding apart (masonry style), so a frame beside two stacked
+ * ones can take their combined height.
+ * @param width_reference receives the box the width was taken from, for a guide; may be NULL.
+ * @return TRUE when at least one dimension snapped.
+ */
+gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, double threshold, double *width,
+                             double *height, dt_canvas_rect_t *width_reference, dt_canvas_rect_t *height_reference);
+
+/**
+ * @brief The paper's size in canvas units (points), as oriented.
+ * @return FALSE when the canvas has no paper.
+ */
+gboolean dt_canvas_paper_dimensions(const dt_canvas_t *canvas, double *width, double *height);
+
+/**
+ * @brief How many page sizes there are to offer, DT_CANVAS_PAPER_NONE included.
+ * @details `position` runs 0..count-1 in the order a list should show them, which is NOT the
+ * stored value: sizes are appended to `dt_canvas_paper_t` so old documents keep their page,
+ * and appear in the list wherever they belong. `dt_canvas_paper_code()` turns a position into
+ * the value to store, `dt_canvas_paper_position()` turns it back.
+ */
+int dt_canvas_paper_count(void);
+
+/** @brief The page size shown at `position`, translated, or NULL past the end. */
+const char *dt_canvas_paper_name(int position);
+
+/** @brief The dt_canvas_paper_t to store for the size shown at `position`. */
+uint32_t dt_canvas_paper_code(int position);
+
+/** @brief Where a stored dt_canvas_paper_t sits in the list, or 0 when it is not one. */
+int dt_canvas_paper_position(uint32_t paper);
+
+/**
+ * @brief The page size in points, portrait. FALSE for DT_CANVAS_PAPER_NONE and past the end.
+ * @note A pixel-defined size (a story, a banner) is that many points, which is that many
+ * pixels at 72 dpi.
+ */
+gboolean dt_canvas_paper_points(uint32_t paper, double *width, double *height);
+
+/**
+ * @brief Whether a page size is a PHYSICAL one, measured in points, or a screen one measured
+ * in pixels.
+ *
+ * A canvas unit is a display pixel and the canvas carries how many of them go to the inch
+ * (`dt_canvas_resolution()`), so the two kinds of page size reach the plane differently: a
+ * screen format is its pixel size outright, and a sheet of paper is its size in points scaled
+ * by the resolution. Without that, both were read as points and an Instagram reel came out
+ * nearly twice the size of an A4 on the same plane, which is not a thing.
+ */
+gboolean dt_canvas_paper_is_physical(uint32_t paper);
+
+/**
+ * @brief A text frame's four effective inner margins, top, right, bottom, left, in canvas
+ * units -- the border's own inset NOT included.
+ */
+void dt_canvas_text_margins(const dt_canvas_object_t *object, double margins[4]);
+
+#define DT_CANVAS_TEXT_FEATURE_MAX 16 ///< room for the table below to grow without moving anything
+
+/**
+ * @brief How many OpenType features are offered by name, and what each is called.
+ *
+ * The stored form stays the string Pango reads -- that is what the renderer wants and what a
+ * file can carry without a table of its own -- and these turn it into something a person can
+ * tick. A feature a font does not ship is silently nothing, which is a property of fonts and
+ * not of this list.
+ */
+int dt_canvas_text_feature_count(void);
+const char *dt_canvas_text_feature_name(int feature);
+const char *dt_canvas_text_feature_tooltip(int feature);
+
+/** @brief Which of the named features a stored Pango feature string asks for. */
+void dt_canvas_text_features_parse(const char *features, gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX]);
+
+/** @brief The Pango feature string for a set of named features; empty when none is asked for. */
+void dt_canvas_text_features_compose(const gboolean wanted[DT_CANVAS_TEXT_FEATURE_MAX], char *features,
+                                     size_t length);
+
+/** @brief Canvas units per inch: what the canvas holds, or 72 for a document from before the field. */
+double dt_canvas_resolution(const dt_canvas_t *canvas);
+
+/**
+ * @brief The sheet a page belongs to: the block of pages that stays contiguous, and how many
+ * pages it holds.
+ *
+ * With no spread the sheet IS the page, which is the uniform tiling every document had before
+ * spreads existed. `cols`/`rows` may be NULL.
+ */
+gboolean dt_canvas_spread_rect(const dt_canvas_t *canvas, int col, int row, dt_canvas_rect_t *rect, int *cols,
+                               int *rows);
+
+/** @brief Where a page sits inside its own spread, so a caller can tell a fold from a trim. */
+void dt_canvas_page_in_spread(const dt_canvas_t *canvas, int col, int row, int *across, int *down, int *cols,
+                              int *rows);
+
+/**
+ * @brief The page rectangle inset by the margin, and by the bind gutter on whichever sides are
+ * a fold.
+ */
+gboolean dt_canvas_page_margin_rect(const dt_canvas_t *canvas, int col, int row, dt_canvas_rect_t *rect);
+
+/** @brief The page column and row whose rectangle covers a point, clamped into the nearest page. */
+void dt_canvas_page_at(const dt_canvas_t *canvas, double x, double y, int *col, int *row);
+
+/**
+ * @brief The rectangle of one page, grown by `outset` on every side.
+ * @details A negative outset is the page's inner margin, a positive one its bleed. FALSE when
+ * the canvas is not divided into pages.
+ */
+gboolean dt_canvas_page_guide_rect(const dt_canvas_t *canvas, int col, int row, double outset,
+                                   dt_canvas_rect_t *rect);
+
+/** @brief The page rectangle at column `col`, row `row` of the paper tiling, from the origin. */
+dt_canvas_rect_t dt_canvas_page_rect(const dt_canvas_t *canvas, int col, int row);
+
+/**
+ * @brief Snap a moving box's edges onto the page borders.
+ * @details The page rule; ignores the canvas's snap flags, the caller consults them.
+ * @return TRUE when at least one axis snapped.
+ */
+gboolean dt_canvas_snap_to_pages(const dt_canvas_t *canvas, const dt_canvas_rect_t *moving, double threshold,
+                                 uint32_t edges, double *delta_x, double *delta_y);
+
+/** @brief Put a waypoint on a connector, at the middle of its current route. */
+void dt_canvas_connector_add_via(dt_canvas_t *canvas, dt_canvas_object_t *connector);
+/** @brief Remove a connector's waypoint. */
+void dt_canvas_connector_remove_via(dt_canvas_t *canvas, dt_canvas_object_t *connector);
+
+/* --- layout ----------------------------------------------------------------- */
+
+typedef enum dt_canvas_layout_t
+{
+  DT_CANVAS_LAYOUT_GRID = 0,     ///< rows of equal cells, as many columns as fit a square
+  DT_CANVAS_LAYOUT_MASONRY = 1,  ///< fixed columns of equal width, each frame under the shortest column
+  DT_CANVAS_LAYOUT_ROW = 2,      ///< one row, frames scaled to the same height
+  DT_CANVAS_LAYOUT_COLUMN = 3,   ///< one column, frames scaled to the same width
+} dt_canvas_layout_t;
+
+/**
+ * @brief Arrange frames.
+ * @param ids the object ids to arrange, in the order they should flow; NULL arranges every frame.
+ * @param columns column count for masonry; ignored by the other layouts.
+ * @details Rotations are reset. The gap between frames is the canvas padding. The arrangement is
+ * anchored at the top-left of the box the frames currently occupy, so applying a layout does
+ * not move the group elsewhere; with snapping on, that anchor and every cell land on the grid.
+ */
+/** The order frames are laid out in: the canvas's own draw order, or a key of the images, the lighttable's way. */
+typedef enum dt_canvas_sort_t
+{
+  DT_CANVAS_SORT_CANVAS = 0,   ///< draw order, back to front
+  DT_CANVAS_SORT_FILENAME = 1,
+  DT_CANVAS_SORT_DATETIME = 2, ///< capture time
+  DT_CANVAS_SORT_ID = 3,       ///< library id: import order
+  DT_CANVAS_SORT_PATH = 4,     ///< folder then file name
+  DT_CANVAS_SORT_LAST = 5,
+} dt_canvas_sort_t;
+
+/**
+ * @brief Arrange frames -- `ids`, or every frame when NULL -- in a layout, in the order `sort`
+ * gives; frames that are not images keep their draw order after the images.
+ */
+void dt_canvas_layout_apply(dt_canvas_t *canvas, const GArray *ids, dt_canvas_layout_t layout, int columns,
+                            dt_canvas_sort_t sort);
+
+/* --- colours ---------------------------------------------------------------- */
+
+dt_canvas_color_t dt_canvas_color(float red, float green, float blue, float alpha);
+/** @brief Parse `#rrggbb` or `#rrggbbaa`. FALSE leaves `color` untouched. */
+gboolean dt_canvas_color_parse(const char *text, dt_canvas_color_t *color);
+/** @brief Format as `#rrggbbaa` into `out`, which holds at least 10 bytes. */
+void dt_canvas_color_format(const dt_canvas_color_t *color, char *out, size_t out_len);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // DT_CANVAS_CANVAS_H
+
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+// vim: shiftwidth=2 expandtab tabstop=2 cindent
+// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on
