@@ -142,10 +142,38 @@ RsvgDimensionData dt_get_svg_dimension(RsvgHandle *svg);
 // renders svg data
 void dt_render_svg(RsvgHandle *svg, cairo_t *cr, double width, double height, double offset_x, double offset_y);
 
-// check if the path + basenames are the same (<=> only differ by the extension)
+/**
+ * @brief Locate a normal filename extension in a path basename.
+ *
+ * Both '/' and '\\' delimit the basename on every platform. The final '.' qualifies
+ * only when it is not the basename's first byte and at least one byte follows it.
+ * Thus extensionless names, single-component dotfiles, empty basenames, and trailing
+ * dots have no extension; `.profile.jpg` has extension `jpg`.
+ *
+ * @param path Caller-owned, NUL-terminated path. The public caller contract requires
+ *             a non-NULL pointer.
+ * @return A borrowed pointer to the first byte after the qualifying '.', or NULL when
+ *         no extension exists. The pointer remains valid only while @p path is valid
+ *         and must never be freed or modified through this return value.
+ */
+const char *dt_util_path_get_extension(const char *path);
+
+/**
+ * @brief Test whether two paths are byte-identical before their normal extensions.
+ *
+ * @return TRUE only when both paths have extensions under dt_util_path_get_extension()
+ *         and their complete prefixes through the dot position are identical; FALSE
+ *         for a NULL input, a missing extension, or a different prefix.
+ */
 gboolean dt_has_same_path_basename(const char *filename1, const char *filename2);
 
-// set the filename2 extension to filename1 - return NULL if fails - result should be freed
+/**
+ * @brief Replace filename1's normal extension with filename2's normal extension.
+ *
+ * @return A newly allocated string owned by the caller and released with dt_free(), or
+ *         NULL when either input is NULL, either input has no normal extension, or
+ *         allocation fails.
+ */
 char *dt_copy_filename_extension(const char *filename1, const char *filename2);
 
 // replaces all occurences of a substring in a string
