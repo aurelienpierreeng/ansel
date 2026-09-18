@@ -172,6 +172,7 @@ static void _write_text(GByteArray *out, const dt_canvas_text_t *text)
   _w_f32(out, text->wrap_standoff);
   _w_f32(out, text->first_line_indent);
   _w_f32(out, text->paragraph_spacing);
+  _w_shadow(out, &text->shadow);
   _w_bytes(out, text->reserved, sizeof(text->reserved));
 }
 
@@ -538,6 +539,9 @@ static void _read_text(dt_canvas_cursor_t *cursor, dt_canvas_text_t *text)
   // paragraphs, which is what such a document was laid out with.
   text->first_line_indent = _r_f32(cursor);
   text->paragraph_spacing = _r_f32(cursor);
+  // Zeros from a document written before the glyphs had a shadow: no shadow, which is what an
+  // alpha of nothing means.
+  text->shadow = _r_shadow(cursor);
   _r_bytes(cursor, text->reserved, sizeof(text->reserved));
   text->markdown = NULL;
 }

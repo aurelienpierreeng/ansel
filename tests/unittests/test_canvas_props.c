@@ -2048,7 +2048,8 @@ static void _section_names_are_pinned_to_the_enum(void **state)
     { DT_CANVAS_SECTION_ROUTE, "route" },         { DT_CANVAS_SECTION_SHAPE, "shape" },
     { DT_CANVAS_SECTION_ARRANGE, "arrange" },     { DT_CANVAS_SECTION_FILL, "fill" },
     { DT_CANVAS_SECTION_STROKE, "stroke" },       { DT_CANVAS_SECTION_CORNERS, "corners" },
-    { DT_CANVAS_SECTION_SHADOW, "shadow" },       { DT_CANVAS_SECTION_CUTOUT, "cutout" },
+    { DT_CANVAS_SECTION_SHADOW, "shadow" },       { DT_CANVAS_SECTION_TEXT_SHADOW, "text_shadow" },
+    { DT_CANVAS_SECTION_CUTOUT, "cutout" },
   };
   assert_int_equal(G_N_ELEMENTS(pinned), DT_CANVAS_SECTION_COUNT);
   GHashTable *seen = g_hash_table_new(g_str_hash, g_str_equal);

@@ -142,6 +142,11 @@ typedef enum dt_canvas_prop_id_t
   DT_CANVAS_PROP_SHADOW_OFFSET_Y,
   DT_CANVAS_PROP_SHADOW_BLUR,
   DT_CANVAS_PROP_SHADOW_COLOR,
+  /* the text's own shadow, cast by its glyphs */
+  DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_X,
+  DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_Y,
+  DT_CANVAS_PROP_TEXT_SHADOW_BLUR,
+  DT_CANVAS_PROP_TEXT_SHADOW_COLOR,
   /* cutout */
   DT_CANVAS_PROP_CUTOUT_SHAPE,
   DT_CANVAS_PROP_CUTOUT_FEATHER,
@@ -173,6 +178,15 @@ typedef enum dt_canvas_prop_section_t
   DT_CANVAS_SECTION_STROKE,
   DT_CANVAS_SECTION_CORNERS,
   DT_CANVAS_SECTION_SHADOW,
+  /**
+   * The shadow a TEXT's glyphs cast, which is not the frame's.
+   *
+   * Its own section and not four rows inside SHADOW: that section carries the SHADOW override
+   * group's own switch, and `dt_canvas_group_set_own()` knows nothing about these rows -- so
+   * handing the section back would reset the frame's shadow, leave the glyphs' alone, and the
+   * heading would say neither.
+   */
+  DT_CANVAS_SECTION_TEXT_SHADOW,
   DT_CANVAS_SECTION_CUTOUT,
   DT_CANVAS_SECTION_COUNT,
 } dt_canvas_prop_section_t;

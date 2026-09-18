@@ -2608,6 +2608,62 @@ static void _a_picture_keeps_fewer_sprites_than_a_drawing(void **state)
   g_free(path);
 }
 
+/**
+ * A text casts a shadow from its GLYPHS, and it is a new thing only for a frame with a ground.
+ *
+ * A shadow's silhouette is the layer's alpha, so a text frame with no background and no border
+ * already shadowed its letters through the frame's own shadow. What this adds is the same for a
+ * frame that HAS a ground, where the frame's shadow is cast by the ground and the letters
+ * cast nothing -- and a shadow with an offset and NO blur, which the frame's own predicate
+ * refuses because an unblurred rectangle behind a rectangle is a rectangle.
+ */
+static void _a_text_casts_a_shadow_from_its_glyphs(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  canvas->background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 0.0, 0.0, 300.0, 120.0, "Hg");
+  assert_non_null(text);
+  g_strlcpy(text->text.font, "DejaVu Serif 64", DT_CANVAS_FONT_LEN);
+  text->text.text_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  // A ground under the letters, so the frame's own shadow could only ever be the ground's.
+  text->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  text->border_width = 0.0f;
+  text->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE;
+  memset(&text->shadow, 0, sizeof(text->shadow));
+  text->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+
+  // White letters on a white ground: nothing to see at all.
+  const uint32_t plain = _painted_pixel(canvas, 400, 200, 200);
+
+  /* A hard drop shadow: an offset and no blur, which is what a typesetter draws and what the
+   * frame's own shadow predicate refuses. Something dark must now appear inside the frame. */
+  text->text.shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  text->text.shadow.offset_x = 3.0f;
+  text->text.shadow.offset_y = 3.0f;
+  text->text.shadow.blur = 0.0f;
+  assert_true(dt_canvas_text_shadow_visible(&text->text.shadow));
+  assert_false(dt_canvas_shadow_visible(&text->text.shadow));
+
+  int dark = 0;
+  for(int at = 0; at < 300; at++)
+  {
+    const uint32_t pixel = _painted_pixel(canvas, 400, 150 + at % 120, 140 + at / 3);
+    if((int)(((pixel >> 16) & 0xFF) + ((pixel >> 8) & 0xFF) + (pixel & 0xFF)) / 3 < 128) dark++;
+  }
+  if(dark == 0) print_error("a hard drop shadow painted nothing inside the frame\n");
+  assert_true(dark > 0);
+  assert_int_equal(plain, 0xFFFFFFu);
+
+  // And with no opacity there is no shadow, whatever the offsets say.
+  text->text.shadow.color.alpha = 0.0f;
+  assert_false(dt_canvas_text_shadow_visible(&text->text.shadow));
+
+  dt_canvas_free(canvas);
+}
+
 static void _a_drawing_slides_with_the_page_instead_of_crabbing_against_it(void **state)
 {
   (void)state;
@@ -3412,6 +3468,7 @@ int main(void)
     cmocka_unit_test(_a_gesture_costs_the_page_nothing_but_its_pictures),
     cmocka_unit_test(_a_drawing_fills_its_frame_at_every_zoom),
     cmocka_unit_test(_a_drawing_slides_with_the_page_instead_of_crabbing_against_it),
+    cmocka_unit_test(_a_text_casts_a_shadow_from_its_glyphs),
     cmocka_unit_test(_a_picture_keeps_fewer_sprites_than_a_drawing),
     cmocka_unit_test(_a_text_frame_paints_the_same_lines_at_every_zoom),
     cmocka_unit_test(_a_text_frame_short_of_its_text_is_brought_up_to_it),

@@ -454,6 +454,36 @@ static const dt_canvas_prop_t _props[] = {
     .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_COLOR, .group = DT_CANVAS_GROUP_SHADOW,
     .factor = 1.0, .neutral = NAN },
 
+  /* --- the text's own shadow ------------------------------------------------------------- */
+  /* No group: the glyphs' shadow is the frame's own and is inherited from nothing, so this
+   * section carries no switch. The three numbers are neutral at nothing, so a folded section
+   * says so when one of them is not. */
+  { .id = DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_X, .key = "text_shadow.offset_x", .label = N_("Right"),
+    .tooltip = N_("How far right the glyphs' own shadow falls, in canvas units"), .unit = N_("pt"),
+    .kinds = KINDS_TEXT, .section = DT_CANVAS_SECTION_TEXT_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL,
+    .widget = DT_CANVAS_WIDGET_TUNE, .min = -500.0, .max = 500.0, .soft_min = -20.0, .soft_max = 20.0,
+    .step = 0.5, .factor = 1.0, .neutral = 0.0, .digits = 1,
+    .pair_with = DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_Y },
+  { .id = DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_Y, .key = "text_shadow.offset_y", .label = N_("Down"),
+    .tooltip = N_("How far down the glyphs' own shadow falls, in canvas units"), .unit = N_("pt"),
+    .kinds = KINDS_TEXT, .section = DT_CANVAS_SECTION_TEXT_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL,
+    .widget = DT_CANVAS_WIDGET_TUNE, .min = -500.0, .max = 500.0, .soft_min = -20.0, .soft_max = 20.0,
+    .step = 0.5, .factor = 1.0, .neutral = 0.0, .digits = 1,
+    .pair_with = DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_X },
+  /* Never negative: an inset shadow is cast by a frame onto itself, and glyphs have no inside
+   * to cast one into. Offset with NO blur is the commonest drop shadow in title work and is
+   * what a radius of nothing gives here -- a hard-edged copy of the letters. */
+  { .id = DT_CANVAS_PROP_TEXT_SHADOW_BLUR, .key = "text_shadow.blur", .label = N_("Blur"),
+    .tooltip = N_("How soft the glyphs' own shadow is, in canvas units. At 0 it is a hard-edged copy of the "
+                  "letters, which is a drop shadow as a typesetter draws one."),
+    .unit = N_("pt"), .kinds = KINDS_TEXT, .section = DT_CANVAS_SECTION_TEXT_SHADOW,
+    .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_TUNE, .min = 0.0, .max = 500.0, .soft_min = 0.0,
+    .soft_max = 50.0, .step = 0.5, .factor = 1.0, .neutral = 0.0, .digits = 1 },
+  { .id = DT_CANVAS_PROP_TEXT_SHADOW_COLOR, .key = "text_shadow.color", .label = N_("Colour"),
+    .tooltip = N_("Colour and strength of the shadow the glyphs cast. At no opacity there is no shadow."),
+    .kinds = KINDS_TEXT, .section = DT_CANVAS_SECTION_TEXT_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL,
+    .widget = DT_CANVAS_WIDGET_COLOR, .factor = 1.0, .neutral = NAN },
+
   /* --- cutout --------------------------------------------------------------------------- */
   { .id = DT_CANVAS_PROP_CUTOUT_SHAPE, .key = "cutout.shape", .label = N_("Shape"),
     .tooltip = N_("A drawn shape that cuts the frame out of its rectangle, with a fall-off past its edge"),
@@ -665,8 +695,9 @@ const char *dt_canvas_prop_section_label(const dt_canvas_prop_section_t section,
  * than take its neighbour's.
  */
 static const char *const _section_names[] = {
-  "character", "paragraph", "text_box", "picture", "drawing", "map",    "route",
-  "shape",     "arrange",   "fill",     "stroke",  "corners", "shadow", "cutout",
+  "character", "paragraph", "text_box", "picture", "drawing",     "map",    "route",
+  "shape",     "arrange",   "fill",     "stroke",  "corners",     "shadow", "text_shadow",
+  "cutout",
 };
 
 G_STATIC_ASSERT(G_N_ELEMENTS(_section_names) == DT_CANVAS_SECTION_COUNT);
@@ -1437,6 +1468,18 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
                         ? object->corner_radius
                         : (IS_NULL_PTR(canvas) ? 0.0f : canvas->corner_radius);
       break;
+    case DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_X:
+      out->number = object->text.shadow.offset_x;
+      break;
+    case DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_Y:
+      out->number = object->text.shadow.offset_y;
+      break;
+    case DT_CANVAS_PROP_TEXT_SHADOW_BLUR:
+      out->number = object->text.shadow.blur;
+      break;
+    case DT_CANVAS_PROP_TEXT_SHADOW_COLOR:
+      out->color = object->text.shadow.color;
+      break;
     case DT_CANVAS_PROP_SHADOW_OFFSET_X:
     case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
     case DT_CANVAS_PROP_SHADOW_BLUR:
@@ -1625,6 +1668,20 @@ static uint32_t _write_text(const dt_canvas_t *canvas, dt_canvas_object_t *objec
 {
   switch(prop->id)
   {
+    /* The glyphs' own shadow. CHANGED alone plus the obstacle effects: what a text casts
+     * reaches past its frame, so a column flowing round it clears the shadow as well. */
+    case DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_X:
+      object->text.shadow.offset_x = (float)_clamp_number(prop, in->number);
+      return OBSTACLE_EFFECTS;
+    case DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_Y:
+      object->text.shadow.offset_y = (float)_clamp_number(prop, in->number);
+      return OBSTACLE_EFFECTS;
+    case DT_CANVAS_PROP_TEXT_SHADOW_BLUR:
+      object->text.shadow.blur = (float)_clamp_number(prop, in->number);
+      return OBSTACLE_EFFECTS;
+    case DT_CANVAS_PROP_TEXT_SHADOW_COLOR:
+      object->text.shadow.color = in->color;
+      return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_TEXT_FONT:
     {
       // An empty description is the canvas's font.
@@ -2191,6 +2248,7 @@ uint32_t dt_canvas_prop_write(dt_canvas_t *canvas, dt_canvas_object_t *object, c
     case DT_CANVAS_SECTION_CHARACTER:
     case DT_CANVAS_SECTION_PARAGRAPH:
     case DT_CANVAS_SECTION_TEXT_BOX:
+    case DT_CANVAS_SECTION_TEXT_SHADOW:
       effects = _write_text(canvas, object, prop, in);
       break;
     case DT_CANVAS_SECTION_PICTURE:

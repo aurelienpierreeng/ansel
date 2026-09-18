@@ -82,7 +82,7 @@ extern "C" {
 #define DT_CANVAS_HEADER_RESERVED 828 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12), the line (20), the custom page (8)
 #define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
-#define DT_CANVAS_TEXT_RESERVED 144 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags, the standoff and the two paragraph settings
+#define DT_CANVAS_TEXT_RESERVED 116 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags, the standoff, the two paragraph settings and the glyphs' own shadow (28)
 /**
  * An OpenType feature string, as Pango spells it: "liga 1, onum 1".
  *
@@ -206,6 +206,20 @@ typedef enum dt_canvas_edges_t
   DT_CANVAS_EDGE_ALL = 0xF,
 } dt_canvas_edges_t;
 
+/**
+ * A shadow: the object's silhouette, blurred, offset and tinted. The radius is the blur's
+ * standard deviation and its sign says where the shadow falls: positive drops it outside the
+ * object, negative casts it inside along the object's edges, and zero is no shadow at all.
+ * The colour's alpha is the strength. Offsets and radius are canvas units.
+ */
+typedef struct dt_canvas_shadow_t
+{
+  dt_canvas_color_t color;
+  float offset_x;
+  float offset_y;
+  float blur;   ///< the signed radius; see above
+} dt_canvas_shadow_t;
+
 /** How an image frame's render relates to the library. Runtime only, never saved. */
 typedef enum dt_canvas_sync_status_t
 {
@@ -307,6 +321,17 @@ typedef struct dt_canvas_text_t
    * which one a text wants is the designer's call.
    */
   float paragraph_spacing;
+  /**
+   * A shadow cast by the GLYPHS, not by the frame.
+   *
+   * The frame's own shadow is `dt_canvas_object_t.shadow` and is cast from its edge; this one
+   * is cast from the letters, so a title over a picture can stand off it without the frame
+   * being drawn at all. A text frame with no ground already shadowed its glyphs -- a shadow's
+   * silhouette is the layer's alpha -- so what this adds is the same for a frame that HAS one.
+   *
+   * Its visibility is NOT `dt_canvas_shadow_visible()`: see `dt_canvas_text_shadow_visible()`.
+   */
+  dt_canvas_shadow_t shadow;
   uint8_t reserved[DT_CANVAS_TEXT_RESERVED];
 
   /* runtime: the Markdown travels as its own archive entry */
@@ -466,20 +491,6 @@ typedef struct dt_canvas_map_t
   GBytes *jpeg;
   dt_canvas_sync_status_t sync_status; ///< RENDERING while the tiles are fetched, MISSING when they could not be
 } dt_canvas_map_t;
-
-/**
- * A shadow: the object's silhouette, blurred, offset and tinted. The radius is the blur's
- * standard deviation and its sign says where the shadow falls: positive drops it outside the
- * object, negative casts it inside along the object's edges, and zero is no shadow at all.
- * The colour's alpha is the strength. Offsets and radius are canvas units.
- */
-typedef struct dt_canvas_shadow_t
-{
-  dt_canvas_color_t color;
-  float offset_x;
-  float offset_y;
-  float blur;   ///< the signed radius; see above
-} dt_canvas_shadow_t;
 
 /** The drawn-mask shape that cuts an object out of its rectangle. */
 typedef enum dt_canvas_mask_shape_t
@@ -1175,6 +1186,17 @@ gboolean dt_canvas_background_is_transparent(uint32_t style);
 
 /** @brief Whether a shadow draws anything at all: a radius other than zero and some strength. */
 gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow);
+
+/**
+ * @brief Is a TEXT's own shadow drawn?
+ *
+ * Not the same question as a frame's. A frame's shadow needs a blur to be anything -- an
+ * unblurred copy of a rectangle offset behind a rectangle is a rectangle -- so
+ * `dt_canvas_shadow_visible()` requires one. Offset with NO blur is the commonest drop shadow
+ * in title work, and a hard-edged copy of the glyphs is exactly what it is, so a text's shadow
+ * is drawn whenever it is coloured and displaced or blurred at all.
+ */
+gboolean dt_canvas_text_shadow_visible(const dt_canvas_shadow_t *shadow);
 
 /** @brief The corner radius a frame is drawn with, in canvas units, never past half its shorter side. */
 double dt_canvas_object_effective_corner_radius(const dt_canvas_t *canvas, const dt_canvas_object_t *object);

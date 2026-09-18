@@ -1793,6 +1793,14 @@ gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow)
   return !IS_NULL_PTR(shadow) && shadow->color.alpha > 0.0f && shadow->blur != 0.0f;
 }
 
+gboolean dt_canvas_text_shadow_visible(const dt_canvas_shadow_t *shadow)
+{
+  if(IS_NULL_PTR(shadow) || !(shadow->color.alpha > 0.0f)) return FALSE;
+  // A blur OR a displacement: an offset copy of the glyphs with a hard edge is a drop shadow,
+  // where an offset copy of a rectangle behind a rectangle is nothing at all.
+  return shadow->blur != 0.0f || shadow->offset_x != 0.0f || shadow->offset_y != 0.0f;
+}
+
 double dt_canvas_object_effective_corner_radius(const dt_canvas_t *canvas, const dt_canvas_object_t *object)
 {
   if(IS_NULL_PTR(object)) return 0.0;
