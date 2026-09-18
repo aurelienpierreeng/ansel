@@ -2957,6 +2957,66 @@ static void _the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map(v
   assert_float_equal(flush, lowered, 0.01);
 }
 
+static void _a_word_too_long_for_every_stretch_is_still_set(void **state)
+{
+  (void)state;
+  /*
+   * The flowing walk may REFUSE a stretch a piece does not fit -- that is what stops a word from
+   * being drawn across the picture beside it. A word wider than the widest stretch there is has
+   * nowhere better to go, so refusing it everywhere would drop it, and with it every word after
+   * it: the walk consumes nothing and the frame comes out empty. It must be set instead, and
+   * overflow, which is what PANGO_WRAP_WORD means.
+   */
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 200.0, 150.0, 360.0, 260.0,
+                                                "Court mot. "
+                                                "Anticonstitutionnellementgrandissimeissimementissimearchisuperlongissimement "
+                                                "et voici la suite du paragraphe qui doit rester.");
+  assert_non_null(text);
+  dt_canvas_object_t *over = dt_canvas_add_text(canvas, 300.0, 150.0, 140.0, 120.0, "");
+  assert_non_null(over);
+  text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND;
+  text->text.wrap_standoff = 8.0f;
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cairo_t *cr = cairo_create(surface);
+  const double height = dt_canvas_paint_text_natural_height(cr, canvas, text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+  const double line = 12.0 * 1.1667;
+
+  /*
+   * Judged against the SAME paragraph with the long word taken out: the word is one line, so a
+   * frame that set it owes about one line more. A frame that dropped it instead consumes
+   * nothing, asks the same question one line lower and burns the 4096-line cap -- measured at
+   * 4133 units against the 66 owed, which is what the upper bound catches.
+   */
+  dt_canvas_t *control = dt_canvas_new();
+  assert_non_null(control);
+  dt_canvas_object_t *short_text
+      = dt_canvas_add_text(control, 200.0, 150.0, 360.0, 260.0,
+                           "Court mot. et voici la suite du paragraphe qui doit rester.");
+  assert_non_null(short_text);
+  dt_canvas_object_t *control_over = dt_canvas_add_text(control, 300.0, 150.0, 140.0, 120.0, "");
+  assert_non_null(control_over);
+  short_text->text.text_flags |= DT_CANVAS_TEXT_WRAP_AROUND;
+  short_text->text.wrap_standoff = 8.0f;
+  surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 8, 8);
+  cr = cairo_create(surface);
+  const double without = dt_canvas_paint_text_natural_height(cr, control, short_text);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+  dt_canvas_free(control);
+
+  if(height > without + 4.0 * line)
+    print_error("the long word cost %.1f units over the %.1f the rest of the paragraph owes\n", height - without,
+                without);
+  assert_true(height > without);
+  assert_true(height <= without + 4.0 * line);
+  dt_canvas_free(canvas);
+}
+
 static void _text_flows_around_what_is_laid_over_it(void **state)
 {
   (void)state;
@@ -3460,6 +3520,7 @@ int main(void)
     cmocka_unit_test(_a_polygon_node_carries_its_own_fall_off),
     cmocka_unit_test(_a_polygon_node_steers_its_own_curve),
     cmocka_unit_test(_text_flows_around_what_is_laid_over_it),
+    cmocka_unit_test(_a_word_too_long_for_every_stretch_is_still_set),
     cmocka_unit_test(_the_first_line_is_placed_against_a_whole_line_of_the_obstacle_map),
     cmocka_unit_test(_an_auto_height_frame_grows_downward_and_settles),
     cmocka_unit_test(_a_text_frames_natural_height_is_the_same_at_every_zoom),

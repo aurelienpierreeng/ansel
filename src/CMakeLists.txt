@@ -77,6 +77,7 @@ FILE(GLOB SOURCE_FILES
   "canvas/canvas_place.c"
   "canvas/canvas_place_shapes.c"
   "canvas/canvas_props.c"
+  "canvas/canvas_text_breaks.c"
   "canvas/canvas_export.c"
   "canvas/canvas_render.c"
   "canvas/canvas_zip.c"

@@ -19,6 +19,7 @@
 #include "canvas/canvas_paint.h"
 
 #include "canvas/canvas_markdown.h"
+#include "canvas/canvas_text_breaks.h"
 #include "colorprofiles/colorspaces.h"
 #include "common/logging.h"
 #include "common/times.h"
@@ -1564,7 +1565,12 @@ static PangoLayout *_text_layout_styled(cairo_t *cr, const dt_canvas_t *canvas, 
   PangoFontDescription *font = pango_font_description_from_string(dt_canvas_text_effective_font(canvas, object));
   pango_layout_set_font_description(layout, font);
   pango_font_description_free(font);
-  pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+  /*
+   * WORD and not WORD_CHAR: the latter splits a long word mid-word with no hyphen, which is
+   * what stranded the fragments this rule exists to stop. A word wider than its measure now
+   * overflows, and a ragged edge is the accepted price of never breaking a word.
+   */
+  pango_layout_set_wrap(layout, PANGO_WRAP_WORD);
   switch(object->text.align_h)
   {
     case DT_CANVAS_ALIGN_CENTER:
@@ -1660,6 +1666,17 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
   gchar *markup = dt_canvas_markdown_to_pango(dt_canvas_text_get_markdown(object));
   pango_layout_set_markup(layout, markup, -1);
   dt_free(markup);
+  /*
+   * Punctuation that must stay with its word. Added BEFORE `_text_layout_finish()`, which
+   * copies the list and sets it again for the OpenType features and so carries these along --
+   * and in the flowing path too, so the screen and the export cannot break differently.
+   */
+  {
+    PangoAttrList *guards = pango_layout_get_attributes(layout);
+    const char *plain = pango_layout_get_text(layout);
+    if(!IS_NULL_PTR(guards) && !IS_NULL_PTR(plain))
+      dt_canvas_text_guard_breaks(guards, plain, strlen(plain));
+  }
   // Pango indents the first line of every paragraph in the layout, which is exactly the rule;
   // the flowing engine cannot use it, since every line there is the first of its own layout.
   pango_layout_set_indent(layout, (int)lround((double)object->text.first_line_indent * PANGO_SCALE));
@@ -2212,6 +2229,59 @@ typedef struct dt_text_piece_t
  * layout describing text that has already been set. Width alone was enough while a line was
  * one stretch and is not any more.
  */
+/**
+ * Is this stretch of the band no place to set this piece?
+ *
+ * The runs a band is cut into are at least one em wide, so a narrow gap beside a picture is
+ * exactly where the two failures the punctuation rule is about show up. A refused run consumes
+ * nothing and the walk moves on to the next stretch, or to the next line.
+ *
+ * 1. IT DID NOT FIT. With the wrap at WORD a word wider than the stretch overflows rather than
+ *    being cut in half, and so does a guarded "mot ;" -- setting either in a gap it is wider
+ *    than is how a word ends up lying across the picture beside it.
+ * 2. IT IS A LONE FRAGMENT. One or two characters alone in a gap is the stranded scrap the
+ *    whole rule exists to stop -- unless it really is all that is left, or all that is left of
+ *    its paragraph, where it is the last line and belongs there.
+ *
+ * BOTH ARE REFUSALS IN HOPE OF A WIDER STRETCH, so neither may fire where none can exist.
+ * `full_width` is the widest a run of this frame ever gets -- the measure with nothing in the
+ * way -- and a piece that does not fit THAT fits nowhere: refusing it drops it, and with it
+ * every word after it, since the walk consumes nothing and asks the same question one line
+ * lower. Measured, a word wider than its column in a frame with an obstacle: the paragraph
+ * came to 4133 units, which is the 4096-line cap burned one unit at a time with the text
+ * unset, where the same frame owes 105. Such a piece is set, and overflows, which is exactly
+ * what PANGO_WRAP_WORD means.
+ */
+static gboolean _run_refused(const dt_text_piece_t *piece, const double run_width, const double full_width,
+                             const char *plain, const gsize length, const gsize consumed)
+{
+  // No wider stretch will ever come: whatever this piece is, this is where it goes.
+  if(run_width >= full_width - 0.01) return FALSE;
+  // What the line actually came to, in units: its ink's own advance.
+  PangoRectangle ink;
+  PangoRectangle logical;
+  pango_layout_line_get_extents(piece->line, &ink, &logical);
+  const double set_width = (double)logical.width / PANGO_SCALE;
+  // It did not fit here; refuse it only if the frame's own measure would hold it.
+  if(set_width > run_width + 0.01) return set_width <= full_width + 0.01;
+  if(piece->consumed <= consumed) return FALSE;
+  const char *from = plain + consumed;
+  gsize span = piece->consumed - consumed;
+  // Trailing whitespace is the break itself, not something that was set.
+  while(span > 0 && g_ascii_isspace(from[span - 1])) span--;
+  if(span == 0) return FALSE;
+  const glong characters = g_utf8_strlen(from, (gssize)span);
+  if(characters > 2) return FALSE;
+  // All that is left, or all that is left of this paragraph: a short last line is a last line.
+  if(piece->consumed >= length) return FALSE;
+  for(gsize at = piece->consumed; at < length; at++)
+  {
+    if(plain[at] == '\n') return FALSE;
+    if(!g_ascii_isspace(plain[at])) break;
+  }
+  return TRUE;
+}
+
 static gboolean _flow_piece(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                             const char *plain, const gsize length, PangoAttrList *attributes,
                             const gsize consumed, const double run_width, const gboolean optical,
@@ -2349,6 +2419,10 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     return 0.0;
   }
   const gsize length = strlen(plain);
+  // The same guards the plain path gets. A markup with no attributes of its own still needs a
+  // list to hang them on.
+  if(IS_NULL_PTR(attributes)) attributes = pango_attr_list_new();
+  dt_canvas_text_guard_breaks(attributes, plain, length);
   const gboolean optical = (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS) != 0;
   double insets[4];
   _text_insets(canvas, object, insets);
@@ -2482,6 +2556,7 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
      * other side of an overlaid picture empty.
      */
     double line_height = 0.0;
+    double skipped_height = 0.0;
     double leading_gap = 0.0;
     for(int run = 0; run < run_count; run++)
     {
@@ -2491,6 +2566,16 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
         if(!_flow_piece(cr, canvas, object, plain, length, attributes, consumed, runs[run].width, optical,
                         &layout, &layout_width, &layout_offset, &layout_line, &piece))
           break;
+      }
+      // A stretch this piece has no business in: nothing is set and nothing is consumed, and
+      // the walk tries the next one. Every stretch refused is a line skipped, which the line
+      // cap bounds.
+      if(_run_refused(&piece, runs[run].width, inner_width, plain, length, consumed))
+      {
+        // The walk moves down a line, so it must move down by a LINE: left at one unit, a
+        // stretch refused all the way down an obstacle costs a thousand iterations of nothing.
+        skipped_height = fmax(skipped_height, piece.height);
+        continue;
       }
       if(draw)
       {
@@ -2513,7 +2598,7 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
       if(!advanced || piece.line->length == 0) break;
     }
     if(paragraph_start) before_first_paragraph = FALSE;
-    y += fmax(line_height, 1.0);
+    y += fmax(fmax(line_height, skipped_height), 1.0);
     /*
      * The leading, by hand, and only where a line follows. Pango's spacing is the space
      * BETWEEN two lines of one layout, and every line here is line zero of a layout of its
