@@ -2385,6 +2385,19 @@ static void _paint_tool_overlay(cairo_t *cr, const dt_canvas_view_t *view)
     const uint32_t chosen[2] = { selected->connector.from_anchor, selected->connector.to_anchor };
     for(int end = 0; end < 2; end++)
       if(!IS_NULL_PTR(held[end])) _paint_anchor_dots(cr, view, held[end], chosen[end]);
+    /*
+     * And, while an end is being dragged, the frame UNDER THE POINTER -- which is how an end is
+     * moved to a DIFFERENT object rather than to another dot of the one it already holds. The
+     * release accepts any frame, so without this the target existed and nothing drew it: the
+     * connector tool's own branch below has always shown the hovered frame's dots for exactly
+     * this reason, and the two gestures ask the same question.
+     */
+    if(view->drag == DT_CANVAS_DRAG_END_FROM || view->drag == DT_CANVAS_DRAG_END_TO)
+    {
+      const dt_canvas_object_t *hovered = dt_canvas_find_object(view->canvas, view->anchor_hover_id);
+      if(!IS_NULL_PTR(hovered) && hovered != held[0] && hovered != held[1])
+        _paint_anchor_dots(cr, view, hovered, DT_CANVAS_ANCHOR_AUTO);
+    }
     cairo_restore(cr);
     return;
   }
@@ -3901,13 +3914,22 @@ static void _paint_handles(cairo_t *cr, const dt_canvas_view_t *view, const dt_c
 }
 
 /**
- * A line's free ends as filled squares along the canvas's axes, where its handle sites are and at
- * the size their catch is drawn from. A locked line offers no ends to take and shows none, as a
- * locked frame shows no corners; an anchored end is its frame's and is not marked.
+ * BOTH of a line's ends, at their handle sites and at the size their catch is drawn from, and the
+ * two say what each of them does. A FREE end is the line's own point and is a FILLED square: drag
+ * it and it goes where it is put. An ANCHORED end stands where its frame puts it and cannot be
+ * moved -- what dragging it chooses is the attachment -- so it is a HOLLOW square around the dot
+ * the frame already shows for it, which reads as a grip on that dot rather than a point of its own.
+ *
+ * Both ends have been handle sites since anchored ends became draggable; this painter was left
+ * behind, so a connector drawn between two frames -- the ordinary case -- showed NO end marks at
+ * all. The cursor still turned over them and a press still took them, which is precisely how the
+ * whole feature came to read as missing: nothing on screen said there was anything to take.
+ *
+ * A locked line offers no ends and shows none, as a locked frame shows no corners.
  */
 static void _paint_line_ends(cairo_t *cr, const dt_canvas_view_t *view, const dt_canvas_object_t *object)
 {
-  if(!dt_canvas_connector_has_free_end(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)) return;
+  if(object->flags & DT_CANVAS_OBJECT_FLAG_LOCKED) return;
   dt_canvas_route_t route;
   if(!dt_canvas_connector_route(view->canvas, object, &route)) return;
   const double half = (DT_CANVAS_VIA_HANDLE_PIXELS - 2.0) / view->zoom;
@@ -3915,16 +3937,39 @@ static void _paint_line_ends(cairo_t *cr, const dt_canvas_view_t *view, const dt
   const double end_x[2] = { route.from_x, route.to_x };
   const double end_y[2] = { route.from_y, route.to_y };
   cairo_save(cr);
-  for(int end = 0; end < 2; end++)
+  // The free ends first, filled, in one pass; then the anchored ones, hollow, in another.
+  for(int pass = 0; pass < 2; pass++)
   {
-    if(!end_free[end]) continue;
-    cairo_rectangle(cr, end_x[end] - half, end_y[end] - half, 2.0 * half, 2.0 * half);
+    const gboolean want_free = pass == 0;
+    gboolean any = FALSE;
+    for(int end = 0; end < 2; end++)
+    {
+      if(end_free[end] != want_free) continue;
+      // A hollow mark is drawn a little wider, so it rings the anchor dot instead of hiding it.
+      const double reach = want_free ? half : half * 1.35;
+      cairo_rectangle(cr, end_x[end] - reach, end_y[end] - reach, 2.0 * reach, 2.0 * reach);
+      any = TRUE;
+    }
+    if(!any) continue;
+    if(want_free)
+    {
+      // Filled white with one dark edge, exactly as a free end has always been drawn.
+      cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
+      cairo_fill_preserve(cr);
+      cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.9);
+      cairo_set_line_width(cr, 1.5 / view->zoom);
+      cairo_stroke(cr);
+      continue;
+    }
+    // Hollow: a dark halo under a light edge, so the ring reads on a bright page and on a
+    // picture alike, and the anchor dot it surrounds stays visible through it.
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.9);
+    cairo_set_line_width(cr, 3.0 / view->zoom);
+    cairo_stroke_preserve(cr);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
+    cairo_set_line_width(cr, 1.5 / view->zoom);
+    cairo_stroke(cr);
   }
-  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
-  cairo_fill_preserve(cr);
-  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.9);
-  cairo_set_line_width(cr, 1.5 / view->zoom);
-  cairo_stroke(cr);
   cairo_restore(cr);
 }
 
@@ -5408,35 +5453,64 @@ static void _end_gesture(dt_view_t *self)
   else if(view->drag == DT_CANVAS_DRAG_END_FROM || view->drag == DT_CANVAS_DRAG_END_TO)
   {
     /*
-     * An end dropped ON an anchor dot attaches there. Written through `dt_canvas_prop_write()`
-     * and never into the field: that is the one writer that knows an anchor belongs to an end
-     * holding a frame, so a raw write here could attach an end the card would then refuse to
-     * show. An end dropped anywhere else has already been moved by the motion handler.
+     * An end dropped ON an anchor dot attaches there, to WHATEVER frame owns that dot -- which is
+     * how an end is moved to a different object. Written through `dt_canvas_prop_write()` and
+     * never into the field: that is the one writer that knows an anchor belongs to an end holding
+     * a frame, so a raw write here could attach an end the card would then refuse to show. The id
+     * has to be set first, since that writer asks the connector whether the end holds a frame.
      */
     dt_canvas_object_t *line = _single_selected(view);
+    const gboolean start = view->drag == DT_CANVAS_DRAG_END_FROM;
+    const gboolean was_free = !IS_NULL_PTR(line) && line->kind == DT_CANVAS_OBJECT_CONNECTOR
+                              && (start ? line->connector.from_id == 0 : line->connector.to_id == 0);
     uint32_t anchor_frame = 0;
     uint32_t anchor = DT_CANVAS_ANCHOR_AUTO;
-    if(!IS_NULL_PTR(line) && line->kind == DT_CANVAS_OBJECT_CONNECTOR
+    gboolean attached = FALSE;
+    /*
+     * A press that never MOVED chooses nothing. An anchored end sits on one of the dots itself,
+     * so without this a bare click on it -- the click that merely selects the line -- found the
+     * dot under the pointer, froze an Automatic anchor to whichever edge it happened to be
+     * leaving by, and recorded a whole undo step for a change the user never asked for.
+     */
+    if(view->drag_moved && !IS_NULL_PTR(line) && line->kind == DT_CANVAS_OBJECT_CONNECTOR
        && !(line->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)
-       && _anchor_at(view, view->pointer_x, view->pointer_y, &anchor_frame, &anchor) && anchor_frame != line->id)
+       && _anchor_at(view, view->pointer_x, view->pointer_y, &anchor_frame, &anchor))
     {
-      const gboolean start = view->drag == DT_CANVAS_DRAG_END_FROM;
-      dt_canvas_t *before = _begin_edit(view);
-      if(start)
-        line->connector.from_id = anchor_frame;
-      else
-        line->connector.to_id = anchor_frame;
-      dt_canvas_prop_value_t value;
-      value.choice = (int)anchor;
-      dt_canvas_prop_write(view->canvas, line,
-                           start ? DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR : DT_CANVAS_PROP_CONNECTOR_TO_ANCHOR,
-                           &value);
-      dt_canvas_touch(view->canvas);
-      _record_undo(self, before);
-      view->drag_moved = FALSE;
+      /*
+       * Never onto the frame the OTHER end holds: both ends on one frame is a connector of no
+       * length, which `dt_canvas_add_connector()` refuses outright and which this path must not
+       * be able to build behind its back. The guard that stood here compared the frame against
+       * the CONNECTOR's own id, which no frame can ever equal, so it refused nothing at all.
+       */
+      const uint32_t other_end = start ? line->connector.to_id : line->connector.from_id;
+      if(anchor_frame != other_end)
+      {
+        if(start)
+          line->connector.from_id = anchor_frame;
+        else
+          line->connector.to_id = anchor_frame;
+        dt_canvas_prop_value_t value;
+        value.choice = (int)anchor;
+        dt_canvas_prop_write(view->canvas, line,
+                             start ? DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR : DT_CANVAS_PROP_CONNECTOR_TO_ANCHOR,
+                             &value);
+        attached = TRUE;
+      }
     }
     view->anchor_hover_id = 0;
-    if(view->drag_moved)
+    view->anchor_hover = DT_CANVAS_ANCHOR_AUTO;
+    /*
+     * ONE undo step for the whole gesture, from the snapshot the PRESS took. A fresh snapshot
+     * taken here recorded the attachment ALONE: a free end dragged across the page and dropped on
+     * a dot gave back, on Ctrl+Z, a detached end at wherever the drag had left it, and the place
+     * it started from was in no record at all.
+     *
+     * And an ANCHORED end that attached nothing owes no step: its frame puts it where it is, so
+     * the drag moved nothing in the document however far the pointer went, and recording one
+     * marked the file unsaved for a gesture that changed not a byte. A FREE end really does move
+     * with the pointer, so its drag is a change whether or not it ended on a dot.
+     */
+    if(attached || (was_free && view->drag_moved))
     {
       dt_canvas_touch(view->canvas);
       _record_undo(self, view->drag_snapshot);
@@ -6013,9 +6087,30 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
          || (line->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)
          || !dt_canvas_connector_route(view->canvas, line, &route))
         break;
+      /*
+       * WHICHEVER end is being dragged, the anchor under the pointer lights up: that is the drop
+       * target the release will read, and the only thing telling the user this gesture chooses an
+       * attachment. It must be done HERE, in the drag's own case: the hover branch further down
+       * that once tried to do it sits in the switch's no-drag case and returns, so it is never
+       * reached while a button is held -- the dots stayed dead for the whole gesture and the
+       * feature read as doing nothing.
+       */
+      uint32_t hover_frame = 0;
+      uint32_t hover_anchor = DT_CANVAS_ANCHOR_AUTO;
+      if(!_anchor_at(view, canvas_x, canvas_y, &hover_frame, &hover_anchor))
+      {
+        const dt_canvas_object_t *under
+            = dt_canvas_pick(view->canvas, canvas_x, canvas_y, DT_CANVAS_PICK_TOLERANCE_PIXELS / view->zoom);
+        hover_frame = !IS_NULL_PTR(under) && dt_canvas_object_is_frame(under) ? under->id : 0;
+        hover_anchor = DT_CANVAS_ANCHOR_AUTO;
+      }
+      // Never the line's own id: a connector cannot be attached to itself, and the release refuses it.
+      if(hover_frame == line->id) hover_frame = 0;
+      view->anchor_hover_id = hover_frame;
+      view->anchor_hover = hover_anchor;
+
       /* An ANCHORED end has no point of its own to move -- its frame puts it where it is -- so
-       * the drag only chooses where it will land, and the release re-attaches it. The dots to
-       * drop it on are lit by the motion handler further down. */
+       * the drag only chooses where it will land, and the release re-attaches it. */
       if(start ? line->connector.from_id != 0 : line->connector.to_id != 0)
       {
         view->drag_moved = TRUE;
@@ -6201,12 +6296,10 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
         view->hover = hover;
         dt_control_queue_redraw_center();
       }
-      /* The anchors light up while the connector tool is armed, and also while an END of a
-       * SELECTED connector is being dragged -- that is what makes re-attaching it a drag onto a
-       * dot rather than only a choice in the card. */
-      const gboolean dragging_an_end
-          = view->drag == DT_CANVAS_DRAG_END_FROM || view->drag == DT_CANVAS_DRAG_END_TO;
-      if(view->tool == DT_CANVAS_TOOL_CONNECTOR || dragging_an_end)
+      /* Only the connector TOOL lights anchors from here: this whole branch is the switch's
+       * no-drag case and returns, so a gesture in flight never reaches it. An end being dragged
+       * lights its own target in the drag's case above. */
+      if(view->tool == DT_CANVAS_TOOL_CONNECTOR)
       {
         // The anchors of the frame under the pointer are shown; the one within reach lights up.
         uint32_t anchor_frame = 0;
