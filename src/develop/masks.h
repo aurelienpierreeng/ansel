@@ -430,6 +430,10 @@ dt_masks_form_t *dt_masks_create_ext(dt_develop_t *dev, dt_masks_type_t type);
 dt_masks_form_t *dt_masks_get_from_id_ext(GList *forms, int id);
 /** returns a form with formid == id from dev->forms */
 dt_masks_form_t *dt_masks_get_from_id(dt_develop_t *dev, int id);
+/** returns a form with formid == id from pipe->forms, the refcounted snapshot the pipe renders from.
+ *  This is the resolver of the pipeline thread (modify_roi_in(), process()): dt_masks_get_from_id()
+ *  reads the GUI-owned dev->forms, which the GUI thread replaces and frees mid-edit. */
+dt_masks_form_t *dt_masks_get_from_id_in_pipe(const dt_dev_pixelpipe_t *pipe, int id);
 /** copy forms used by a module from dev_src to dev_dest */
 int dt_masks_copy_used_forms_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_src,
                                         const struct dt_iop_module_t *mod_src);

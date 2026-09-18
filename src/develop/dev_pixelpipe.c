@@ -32,6 +32,7 @@
 #include "develop/dev_history.h"
 #include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
+#include "develop/masks/masks_history.h"
 #include "develop/pixelpipe.h"
 #include "caches/pixelpipe_cache.h"
 #include "develop/supervisor.h"
@@ -587,6 +588,14 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
 
   // This function does not support NULL pipes or ad-hoc temp nodes.
 
+  // A modify_roi_in() that reads drawn shapes (retouch's source areas) resolves them in
+  // pipe->forms, the refcounted snapshot the run renders from, never in the GUI-owned dev->forms,
+  // which the GUI thread replaces and frees mid-edit. dt_dev_pixelpipe_process() takes its snapshot
+  // before planning, so both see the same shapes; any other caller plans against a snapshot held
+  // for the length of the walk, which it then owns and releases.
+  const gboolean owns_forms = IS_NULL_PTR(pipe->forms);
+  if(owns_forms) pipe->forms = dt_masks_snapshot_current_forms(pipe->dev, FALSE);
+
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
   gchar *pipe_name = NULL;
@@ -627,6 +636,8 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
   }
 
   if(pipe_name) dt_free(pipe_name);
+
+  if(owns_forms) dt_masks_forms_snapshot_release(&pipe->forms);
 
   /* ROI planning runs backwards, but rawprepare seals the effective Bayer/X-Trans phase only once
    * the real input crop is known. Forward that authored RAW descriptor now so the downstream RAW

@@ -114,6 +114,13 @@ GList *dt_masks_snapshot_current_forms(dt_develop_t *dev, gboolean reset_changed
   return forms_snapshot;
 }
 
+void dt_masks_forms_snapshot_release(GList **snapshot)
+{
+  if(IS_NULL_PTR(*snapshot)) return;
+  g_list_free_full(*snapshot, (void (*)(void *))dt_masks_form_unref);
+  *snapshot = NULL;
+}
+
 void dt_masks_release_all_forms(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return;
