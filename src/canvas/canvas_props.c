@@ -387,7 +387,11 @@ static const dt_canvas_prop_t _props[] = {
   { .id = DT_CANVAS_PROP_LINE_COLOR, .key = "stroke.line_color", .label = N_("Colour"),
     .tooltip = N_("Line colour and opacity"), .kinds = KINDS_CONNECTOR, .section = DT_CANVAS_SECTION_STROKE,
     .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_COLOR, .factor = 1.0, .neutral = NAN,
-    .group = DT_CANVAS_GROUP_LINE },
+    .group = DT_CANVAS_GROUP_LINE,
+    /* A line's colour is the one thing a line is, so it goes on the strip. It keeps its LINE
+     * group, so the well shows the canvas's line while the connector inherits it and editing it
+     * gives the connector one of its own -- no further work than naming the kind. */
+    .strip_kinds = KINDS_CONNECTOR },
   { .id = DT_CANVAS_PROP_LINE_DASHED, .key = "stroke.line_dashed", .label = N_("Dashed"),
     .tooltip = N_("Draw the line in dashes"), .kinds = KINDS_CONNECTOR, .section = DT_CANVAS_SECTION_STROKE,
     .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_FLAG, .max = 1.0, .factor = 1.0, .neutral = NAN },

@@ -541,6 +541,12 @@ static void _a_shape_shows_its_background_only_while_it_is_filled(void **state)
   // And the frontend is told the strip's own shape changed, not merely a value.
   assert_true((effects & DT_CANVAS_EFFECT_RESTRUCTURE) != 0);
 
+  // A connector's line colour is on its strip too, always -- there is no fill to switch it off.
+  const dt_canvas_prop_t *line = &table[DT_CANVAS_PROP_LINE_COLOR - 1];
+  assert_int_equal(line->id, DT_CANVAS_PROP_LINE_COLOR);
+  assert_true(dt_canvas_prop_mirrors_on_strip(line, fixture.objects[4]));
+  assert_false(dt_canvas_prop_mirrors_on_strip(line, shape));
+
   // No other kind mirrors either of them: a picture's background belongs in its section.
   assert_false(dt_canvas_prop_mirrors_on_strip(background, fixture.objects[1]));
   assert_false(dt_canvas_prop_mirrors_on_strip(border, fixture.objects[1]));
