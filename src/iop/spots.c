@@ -393,28 +393,6 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
   return TRUE;
 }
 
-static inline __attribute__((always_inline)) gboolean masks_form_is_in_roi(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
-                                     const dt_dev_pixelpipe_iop_t *piece,
-                                     dt_masks_form_t *form, const dt_iop_roi_t *roi_in,
-                                     const dt_iop_roi_t *roi_out)
-{
-  // we get the area for the form
-  int fl, ft, fw, fh;
-  dt_dev_pixelpipe_iop_t piece_copy = *piece;
-
-  if(dt_masks_get_area(self, (dt_dev_pixelpipe_t *)pipe, &piece_copy, form, &fw, &fh, &fl, &ft)
-     != DT_MASKS_RASTER_OK)
-    return FALSE;
-
-  // is the form outside of the roi?
-  fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
-  if(ft >= roi_out->y + roi_out->height || ft + fh <= roi_out->y || fl >= roi_out->x + roi_out->width
-     || fl + fw <= roi_out->x)
-    return FALSE;
-
-  return TRUE;
-}
-
 void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                     struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *roi_in)
@@ -427,7 +405,6 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
                    struct dt_dev_pixelpipe_iop_t *piece,
                    const dt_iop_roi_t *roi_out, dt_iop_roi_t *roi_in)
 {
-  dt_dev_pixelpipe_t *const processing_pipe = (dt_dev_pixelpipe_t *)pipe;
   *roi_in = *roi_out;
 
   int roir = roi_in->width + roi_in->x;
@@ -449,7 +426,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
       if(!IS_NULL_PTR(form))
       {
         // if the form is outside the roi, we just skip it
-        if(!masks_form_is_in_roi(self, processing_pipe, piece, form, roi_in, roi_out))
+        if(!dt_masks_form_is_in_roi(self, pipe, piece, form, roi_in, roi_out))
         {
           continue;
         }
@@ -457,7 +434,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
         // we get the area for the source
         int fl, ft, fw, fh;
 
-        if(dt_masks_get_source_area(self, processing_pipe, piece, form, &fw, &fh, &fl, &ft)
+        if(dt_masks_get_source_area(self, pipe, piece, form, &fw, &fh, &fl, &ft)
            != DT_MASKS_RASTER_OK)
         {
           continue;
@@ -573,7 +550,7 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
       }
 
       // if the form is outside the roi, we just skip it
-      if(!masks_form_is_in_roi(self, pipe, piece, form, roi_in, roi_out))
+      if(!dt_masks_form_is_in_roi(self, pipe, piece, form, roi_in, roi_out))
       {
         continue;
       }
@@ -654,7 +631,7 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
          * through to the zero-size check below and is skipped like any other empty shape --
          * aborting here would silently drop every REMAINING shape in the group. The out
          * parameters are guaranteed written on every outcome, so that check is safe to reach. */
-        if(dt_masks_get_mask(self, (dt_dev_pixelpipe_t *)pipe, piece, form, &mask, &width, &height, &posx,
+        if(dt_masks_get_mask(self, pipe, piece, form, &mask, &width, &height, &posx,
                              &posy)
            == DT_MASKS_RASTER_ERROR)
         {

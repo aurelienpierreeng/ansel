@@ -828,27 +828,6 @@ static dt_masks_form_t *rt_pipe_get_form(const dt_dev_pixelpipe_t *pipe, const i
   return dt_masks_get_from_id_ext(pipe->forms, formid);
 }
 
-static gboolean rt_masks_form_is_in_roi(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                                        const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form, const dt_iop_roi_t *roi_in,
-                                        const dt_iop_roi_t *roi_out)
-{
-  // we get the area for the form
-  int fl, ft, fw, fh;
-  dt_dev_pixelpipe_iop_t piece_copy = *piece;
-
-  if(dt_masks_get_area(self, (dt_dev_pixelpipe_t *)pipe, &piece_copy, form, &fw, &fh, &fl, &ft)
-     != DT_MASKS_RASTER_OK)
-    return FALSE;
-
-  // is the form outside of the roi?
-  fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
-  if(ft >= roi_out->y + roi_out->height || ft + fh <= roi_out->y || fl >= roi_out->x + roi_out->width
-     || fl + fw <= roi_out->x)
-    return FALSE;
-
-  return TRUE;
-}
-
 static void rt_masks_point_denormalize(const dt_dev_pixelpipe_t *pipe, const dt_iop_roi_t *roi,
                                        const float *points,
                                        size_t points_count, float *new)
@@ -2616,7 +2595,7 @@ static gboolean rt_algo_needs_source(const dt_iop_retouch_algo_type_t algo)
   return algo == DT_IOP_RETOUCH_HEAL || algo == DT_IOP_RETOUCH_CLONE;
 }
 
-static void rt_compute_roi_in(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *const pipe,
+static void rt_compute_roi_in(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                               struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
                               rt_roi_bounds_t *const bounds)
 {
@@ -2663,7 +2642,7 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *
 
 // for a given form, if a previous clone/heal destination intersects the source area,
 // include that area in roi_in too
-static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *const pipe,
+static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                                 struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
                                                 const int formid_src, const int fl_src, const int ft_src,
                                                 const int fw_src, const int fh_src,
@@ -2709,7 +2688,7 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, dt
 
 // for clone and heal, if the source area is the destination from another clone/heal,
 // we also need the area from that previous clone/heal
-static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *const pipe,
+static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                        struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
                                        rt_roi_bounds_t *const bounds)
 {
@@ -2744,19 +2723,18 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
                    struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_out,
                    dt_iop_roi_t *roi_in)
 {
-  dt_dev_pixelpipe_t *const processing_pipe = (dt_dev_pixelpipe_t *)pipe;
   *roi_in = *roi_out;
 
   rt_roi_bounds_t bounds = { .x = roi_in->x, .y = roi_in->y,
                              .r = roi_in->width + roi_in->x, .b = roi_in->height + roi_in->y };
 
-  rt_compute_roi_in(self, processing_pipe, piece, roi_in, &bounds);
+  rt_compute_roi_in(self, pipe, piece, roi_in, &bounds);
 
   rt_roi_bounds_t previous = { -1, -1, -1, -1 };
   while(memcmp(&bounds, &previous, sizeof(bounds)))
   {
     previous = bounds;
-    rt_extend_roi_in_for_clone(self, processing_pipe, piece, roi_in, &bounds);
+    rt_extend_roi_in_for_clone(self, pipe, piece, roi_in, &bounds);
   }
 
   // now we set the values
@@ -3257,12 +3235,12 @@ static gboolean rt_prepare_shape(dt_iop_module_t *self, const dt_dev_pixelpipe_t
   }
 
   // if the form is outside the layer, we just skip it
-  if(!rt_masks_form_is_in_roi(self, pipe, piece, form, roi_layer, roi_layer)) return FALSE;
+  if(!dt_masks_form_is_in_roi(self, pipe, piece, form, roi_layer, roi_layer)) return FALSE;
 
   const dt_masks_form_group_t *grpt = (const dt_masks_form_group_t *)member->data;
   *shape = (rt_prepared_shape_t){ .index = index, .opacity = grpt->opacity, .algo = p->rt_forms[index].algorithm };
 
-  dt_masks_get_mask(self, (dt_dev_pixelpipe_t *)pipe, piece, form, &shape->mask, &shape->roi_mask.width,
+  dt_masks_get_mask(self, pipe, piece, form, &shape->mask, &shape->roi_mask.width,
                     &shape->roi_mask.height, &shape->roi_mask.x, &shape->roi_mask.y);
   if(IS_NULL_PTR(shape->mask))
   {

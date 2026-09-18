@@ -88,7 +88,7 @@ typedef struct dt_masks_functions_t
   /** Rasterise into a freshly allocated buffer covering the shape's own bounding box.
    * Same three outcomes as get_mask_roi. On anything but OK the out-parameters are still
    * written (NULL buffer, zero geometry): callers read them unconditionally. */
-  dt_masks_raster_result_t (*get_mask)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
+  dt_masks_raster_result_t (*get_mask)(const dt_iop_module_t *const module, const struct dt_dev_pixelpipe_t *pipe,
                   const dt_dev_pixelpipe_iop_t *const piece,
                   struct dt_masks_form_t *const form,
                   float **buffer, int *width, int *height, int *posx, int *posy);
@@ -103,18 +103,18 @@ typedef struct dt_masks_functions_t
    * NOT a failure: the group fold skips such a shape and keeps folding. Every implementation
    * must agree on which is which -- see dt_masks_raster_result_t.
    */
-  dt_masks_raster_result_t (*get_mask_roi)(const dt_iop_module_t *const fmodule, struct dt_dev_pixelpipe_t *pipe,
+  dt_masks_raster_result_t (*get_mask_roi)(const dt_iop_module_t *const fmodule, const struct dt_dev_pixelpipe_t *pipe,
                       const dt_dev_pixelpipe_iop_t *const piece,
                       struct dt_masks_form_t *const form,
                       const dt_iop_roi_t *roi, float *buffer, dt_iop_roi_t *touched);
   /** The shape's bounding box. Same three outcomes; the out-parameters are always written. */
-  dt_masks_raster_result_t (*get_area)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
+  dt_masks_raster_result_t (*get_area)(const dt_iop_module_t *const module, const struct dt_dev_pixelpipe_t *pipe,
                   const dt_dev_pixelpipe_iop_t *const piece,
                   struct dt_masks_form_t *const form,
                   int *width, int *height, int *posx, int *posy);
   /** The clone source's bounding box. Same three outcomes; out-parameters always written. */
-  dt_masks_raster_result_t (*get_source_area)(dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
-                         dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
+  dt_masks_raster_result_t (*get_source_area)(dt_iop_module_t *module, const struct dt_dev_pixelpipe_t *pipe,
+                         const dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
                          int *width, int *height, int *posx, int *posy);
   gboolean (*get_gravity_center)(struct dt_develop_t *dev, const struct dt_masks_form_t *form, float center[2], float *area);
   float (*get_interaction_value)(const struct dt_masks_form_t *form, dt_masks_interaction_t interaction);
@@ -150,7 +150,7 @@ typedef struct dt_masks_functions_t
 /* Rasterisation entry points, dispatched only from inside the masks module: the group fold
  * calls get_mask_roi on its children, and the GUI outline builder calls get_points_border.
  * They were declared in the public header with no caller outside this directory. */
-dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                                                const dt_dev_pixelpipe_iop_t *const piece,
                                                dt_masks_form_t *const form, const dt_iop_roi_t *roi,
                                                float *buffer, dt_iop_roi_t *touched);
@@ -237,7 +237,7 @@ typedef struct dt_masks_sample_grid_t
 void dt_masks_points_bounding_box(const float *const points, const int num_points,
                                   int *width, int *height, int *posx, int *posy);
 
-float *dt_masks_sample_grid_backtransform(struct dt_dev_pixelpipe_t *pipe, const double iop_order,
+float *dt_masks_sample_grid_backtransform(const struct dt_dev_pixelpipe_t *pipe, const double iop_order,
                                           const dt_masks_sample_grid_t *const grid,
                                           const char *const shape, const char *const form_name);
 

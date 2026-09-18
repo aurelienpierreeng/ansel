@@ -1188,8 +1188,8 @@ static float *const _ellipse_points_to_transform(dt_develop_t *dev, const float 
   return points;
 }
 
-static dt_masks_raster_result_t _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                                    dt_dev_pixelpipe_iop_t *piece,
+static dt_masks_raster_result_t _ellipse_get_source_area(dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
+                                    const dt_dev_pixelpipe_iop_t *piece,
                                     dt_masks_form_t *form, int *width, int *height, int *posx, int *posy)
 {
   /* Every early exit below must leave the out-parameters defined: callers read them
@@ -1228,7 +1228,7 @@ static dt_masks_raster_result_t _ellipse_get_source_area(dt_iop_module_t *module
   return DT_MASKS_RASTER_OK;
 }
 
-static dt_masks_raster_result_t _ellipse_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _ellipse_get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                              const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const form,
                              int *width, int *height, int *posx, int *posy)
@@ -1266,7 +1266,7 @@ static dt_masks_raster_result_t _ellipse_get_area(const dt_iop_module_t *const m
   return DT_MASKS_RASTER_OK;
 }
 
-static dt_masks_raster_result_t _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                              const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const form,
                              float **buffer, int *width, int *height, int *posx, int *posy)
@@ -1374,7 +1374,7 @@ static dt_masks_raster_result_t _ellipse_get_mask(const dt_iop_module_t *const m
   return DT_MASKS_RASTER_OK;
 }
 
-static dt_masks_raster_result_t _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                                  const dt_dev_pixelpipe_iop_t *const piece,
                                  dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer,
                                dt_iop_roi_t *touched)

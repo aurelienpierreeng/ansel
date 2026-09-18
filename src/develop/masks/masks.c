@@ -342,7 +342,7 @@ void dt_masks_points_bounding_box(const float *const points, const int num_point
   *height = (ymax - ymin);
 }
 
-float *dt_masks_sample_grid_backtransform(struct dt_dev_pixelpipe_t *pipe, const double iop_order,
+float *dt_masks_sample_grid_backtransform(const struct dt_dev_pixelpipe_t *pipe, const double iop_order,
                                           const dt_masks_sample_grid_t *const grid,
                                           const char *const shape, const char *const form_name)
 {
@@ -447,8 +447,8 @@ void dt_masks_sample_grid_interpolate(const float *const points, const dt_masks_
   if(endy) *endy = ey;
 }
 
-dt_masks_raster_result_t dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                      dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
+dt_masks_raster_result_t dt_masks_get_area(dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
+                      const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
                       int *area_width, int *area_height, int *area_pos_x, int *area_pos_y)
 {
   *area_width = 0;
@@ -461,8 +461,21 @@ dt_masks_raster_result_t dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixel
   return DT_MASKS_RASTER_ERROR;
 }
 
-dt_masks_raster_result_t dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                             dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
+gboolean dt_masks_form_is_in_roi(dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
+                                 const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+                                 const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out)
+{
+  int fl, ft, fw, fh;
+  if(dt_masks_get_area(module, pipe, piece, form, &fw, &fh, &fl, &ft) != DT_MASKS_RASTER_OK) return FALSE;
+
+  // is the form outside of the roi?
+  fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
+  return !(ft >= roi_out->y + roi_out->height || ft + fh <= roi_out->y || fl >= roi_out->x + roi_out->width
+           || fl + fw <= roi_out->x);
+}
+
+dt_masks_raster_result_t dt_masks_get_source_area(dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
+                             const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
                              int *area_width, int *area_height,
                              int *area_pos_x, int *area_pos_y)
 {
@@ -1623,7 +1636,7 @@ void dt_masks_cleanup_unused(dt_develop_t *develop)
 /* The two rasterisation dispatchers. They were inline in masks.h, which forced the
  * per-shape function table to be public; a per-buffer call is not a per-pixel cost,
  * so the inline bought nothing and the table is private now. */
-dt_masks_raster_result_t dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                       const dt_dev_pixelpipe_iop_t *const piece,
                       dt_masks_form_t *const form,
                       float **buffer, int *width, int *height, int *posx, int *posy)
@@ -1639,7 +1652,7 @@ dt_masks_raster_result_t dt_masks_get_mask(const dt_iop_module_t *const module, 
     : DT_MASKS_RASTER_ERROR;
 }
 
-dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                                                const dt_dev_pixelpipe_iop_t *const piece,
                                                dt_masks_form_t *const form, const dt_iop_roi_t *roi,
                                                float *buffer, dt_iop_roi_t *touched)
