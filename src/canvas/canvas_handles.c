@@ -513,6 +513,10 @@ static void _connector_sites(handles_list_t *list, const dt_canvas_t *canvas, co
   }
   if((what & DT_CANVAS_HANDLES_CURVE) && routed)
   {
+    // Its own line, or the canvas's when it carries none: what the pick measures against has to
+    // be the line that is actually drawn, or a connector inheriting a thick one is hard to hit.
+    float effective_line = 0.0f;
+    dt_canvas_object_effective_line(canvas, object, NULL, &effective_line);
     // The pick's band exactly: the tolerance on screen plus the line's whole width in units,
     // as dt_canvas_object_contains() measures it, leg by leg of the flattened route.
     for(int idx = 0; idx + 1 < route.point_count; idx++)
@@ -520,9 +524,9 @@ static void _connector_sites(handles_list_t *list, const dt_canvas_t *canvas, co
       const size_t slot = list->count;
       _site_segment(list, DT_CANVAS_HANDLE_CURVE, route.points[2 * idx], route.points[2 * idx + 1],
                     route.points[2 * idx + 2], route.points[2 * idx + 3], DT_CANVAS_PICK_TOLERANCE_PIXELS, idx);
-      if(!IS_NULL_PTR(list->out) && slot < list->max) list->out[slot].reach_units = connector->line_width;
+      if(!IS_NULL_PTR(list->out) && slot < list->max) list->out[slot].reach_units = effective_line;
     }
-    const double arrow_reach = dt_canvas_paint_arrow_reach(connector->line_width);
+    const double arrow_reach = dt_canvas_paint_arrow_reach(effective_line);
     const uint32_t ends[2] = { DT_CANVAS_CONNECTOR_ARROW_START, DT_CANVAS_CONNECTOR_ARROW_END };
     for(int end = 0; end < 2; end++)
     {

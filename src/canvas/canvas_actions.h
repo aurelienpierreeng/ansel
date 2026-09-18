@@ -155,6 +155,7 @@ typedef enum dt_canvas_color_target_t
   DT_CANVAS_COLOR_BACKGROUND,
   DT_CANVAS_COLOR_BORDER,
   DT_CANVAS_COLOR_SHADOW,
+  DT_CANVAS_COLOR_LINE,   ///< the line every connector takes until it is given one of its own
   DT_CANVAS_COLOR_LAST
 } dt_canvas_color_target_t;
 

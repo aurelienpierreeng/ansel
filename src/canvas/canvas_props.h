@@ -210,6 +210,7 @@ typedef enum dt_canvas_prop_group_t
   DT_CANVAS_GROUP_CORNER, ///< DT_CANVAS_OBJECT_FLAG_CORNER_OVERRIDE: the radius
   DT_CANVAS_GROUP_SHADOW, ///< DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE: the whole shadow
   DT_CANVAS_GROUP_FONT,   ///< no flag: an empty `text.font` is the canvas's font
+  DT_CANVAS_GROUP_LINE,   ///< no flag either: a `connector.line_width` of 0 is the canvas's line
   DT_CANVAS_GROUP_COUNT,
 } dt_canvas_prop_group_t;
 

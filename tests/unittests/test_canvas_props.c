@@ -549,6 +549,85 @@ static void _a_shape_shows_its_background_only_while_it_is_filled(void **state)
   _fixture_free(&fixture);
 }
 
+static void _a_connector_takes_the_canvass_line_until_it_is_given_one(void **state)
+{
+  (void)state;
+  /*
+   * The border's bargain, applied to lines -- and with NO FLAG: a width of zero was already the
+   * "draw it two units wide" sentinel, and that is exactly what taking the canvas's line means.
+   * The consequence worth pinning is that every connector in every document written before this
+   * carries a width of its own, so they all read as owning their line and nothing moves.
+   */
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *connector = fixture.objects[4];
+  fixture.canvas->line_width = 7.0f;
+  fixture.canvas->line_color = dt_canvas_color(0.25f, 0.5f, 0.75f, 1.0f);
+
+  /* A connector added now is born INHERITING: the drawing tool's memory and the style default
+   * both hold nothing, which is what taking the canvas's line looks like. */
+  assert_true(connector->connector.line_width == 0.0f);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, connector, DT_CANVAS_GROUP_LINE), DT_CANVAS_OWN_INHERIT);
+
+  /* A connector read from a document written BEFORE any of this carries a width of its own --
+   * every one of them does -- so it reads as owning its line and nothing about it moves. That is
+   * the whole reason the inheritance is flagless rather than a new flag, which would have read
+   * every one of those connectors as inheriting and changed every old document on sight. */
+  connector->connector.line_width = 3.0f;
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, connector, DT_CANVAS_GROUP_LINE), DT_CANVAS_OWN_CUSTOM);
+  float width = 0.0f;
+  dt_canvas_object_effective_line(fixture.canvas, connector, NULL, &width);
+  assert_true(width == 3.0f);
+
+  // Handed back, it takes the canvas's -- both the width and the colour.
+  dt_canvas_group_set_own(fixture.canvas, connector, DT_CANVAS_GROUP_LINE, FALSE);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, connector, DT_CANVAS_GROUP_LINE), DT_CANVAS_OWN_INHERIT);
+  dt_canvas_color_t color;
+  dt_canvas_object_effective_line(fixture.canvas, connector, &color, &width);
+  assert_true(width == 7.0f);
+  assert_true(color.red == 0.25f && color.green == 0.5f && color.blue == 0.75f);
+  // And the rows show what is DRAWN, not the zero it is carrying.
+  dt_canvas_prop_value_t shown;
+  dt_canvas_prop_read(fixture.canvas, connector, DT_CANVAS_PROP_LINE_WIDTH, &shown);
+  assert_true(shown.number == 7.0);
+  dt_canvas_prop_read(fixture.canvas, connector, DT_CANVAS_PROP_LINE_COLOR, &shown);
+  assert_true(shown.color.red == 0.25f);
+
+  /* Editing a row while inheriting GIVES the connector a line, seeded from what is drawn -- so
+   * the edit reaches the screen instead of being stored in a field nothing reads. */
+  const dt_canvas_prop_value_t thicker = _number(11.0);
+  dt_canvas_prop_write(fixture.canvas, connector, DT_CANVAS_PROP_LINE_WIDTH, &thicker);
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, connector, DT_CANVAS_GROUP_LINE), DT_CANVAS_OWN_CUSTOM);
+  dt_canvas_object_effective_line(fixture.canvas, connector, &color, &width);
+  assert_true(width == 11.0f);
+  // The colour came with the seed, so it is the canvas's and not whatever was left in the field.
+  assert_true(color.red == 0.25f && color.green == 0.5f && color.blue == 0.75f);
+
+  /* A canvas that has never been told holds zeros in BOTH fields, which is the built-in line --
+   * the whole-record rule. One zero is a zero. */
+  dt_canvas_group_set_own(fixture.canvas, connector, DT_CANVAS_GROUP_LINE, FALSE);
+  fixture.canvas->line_width = 0.0f;
+  fixture.canvas->line_color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.0f);
+  dt_canvas_object_effective_line(fixture.canvas, connector, &color, &width);
+  assert_true(width == DT_CANVAS_CONNECTOR_LINE_WIDTH);
+  assert_true(color.alpha > 0.0f);
+  // A colour deliberately made transparent, with a width, is obeyed rather than read as unset.
+  fixture.canvas->line_width = 5.0f;
+  dt_canvas_object_effective_line(fixture.canvas, connector, &color, &width);
+  assert_true(width == 5.0f);
+  assert_true(color.alpha == 0.0f);
+
+  // The group is a connector's alone: no frame has one.
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, fixture.objects[1], DT_CANVAS_GROUP_LINE),
+                   DT_CANVAS_OWN_INHERIT);
+  assert_int_equal(dt_canvas_prop_section_group(DT_CANVAS_SECTION_STROKE, DT_CANVAS_OBJECT_CONNECTOR),
+                   DT_CANVAS_GROUP_LINE);
+  assert_int_equal(dt_canvas_prop_section_group(DT_CANVAS_SECTION_STROKE, DT_CANVAS_OBJECT_IMAGE),
+                   DT_CANVAS_GROUP_BORDER);
+
+  _fixture_free(&fixture);
+}
+
 static void _pairs_point_at_each_other(void **state)
 {
   (void)state;
@@ -629,6 +708,12 @@ static void _groups_belong_to_their_sections(void **state)
       case DT_CANVAS_GROUP_FONT:
         assert_int_equal(prop->section, DT_CANVAS_SECTION_CHARACTER);
         assert_int_equal(prop->kinds, 1u << DT_CANVAS_OBJECT_TEXT);
+        break;
+      case DT_CANVAS_GROUP_LINE:
+        // A connector's line is inherited from the canvas the way a frame's border is, and the
+        // group has no flag: the width of nothing IS the inheritance.
+        assert_int_equal(prop->section, DT_CANVAS_SECTION_STROKE);
+        assert_int_equal(prop->kinds, 1u << DT_CANVAS_OBJECT_CONNECTOR);
         break;
       default:
         fail();
@@ -2311,8 +2396,10 @@ static void _override_sections_open_only_when_asked(void **state)
   assert_false(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_STROKE, DT_CANVAS_OBJECT_IMAGE));
   assert_false(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_SHADOW, DT_CANVAS_OBJECT_CONNECTOR));
   assert_false(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_CUTOUT, DT_CANVAS_OBJECT_IMAGE));
-  // A connector's line is no override group: it is its own.
-  assert_true(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_STROKE, DT_CANVAS_OBJECT_CONNECTOR));
+  /* A connector's line IS an override group now: it is the canvas's until the connector is given
+   * one, so its section is folded like the border's and the shadow's rather than opening by
+   * itself. */
+  assert_false(dt_canvas_prop_section_opens_by_itself(DT_CANVAS_SECTION_STROKE, DT_CANVAS_OBJECT_CONNECTOR));
 
   dt_canvas_object_t *image = fixture.objects[1];
   assert_true(dt_canvas_prop_section_stays_open(fixture.canvas, image, DT_CANVAS_SECTION_ARRANGE));
@@ -2887,6 +2974,7 @@ int main(void)
     cmocka_unit_test(_a_strip_mirror_is_a_colour_and_nothing_else),
     cmocka_unit_test(_a_shape_turns_inside_a_frame_that_does_not_move),
     cmocka_unit_test(_a_shape_shows_its_background_only_while_it_is_filled),
+    cmocka_unit_test(_a_connector_takes_the_canvass_line_until_it_is_given_one),
     cmocka_unit_test(_pairs_point_at_each_other),
     cmocka_unit_test(_every_kind_reads_its_sections_in_screen_order),
     cmocka_unit_test(_groups_belong_to_their_sections),

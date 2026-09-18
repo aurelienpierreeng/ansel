@@ -4943,6 +4943,8 @@ static void _scale_object(dt_canvas_view_t *view, dt_canvas_object_t *object, co
 static dt_canvas_line_style_t _line_style_recalled(void)
 {
   dt_canvas_line_style_t style = dt_canvas_line_style_default();
+  // A zero here is the canvas's line, the same way the colour's empty string is: it is not
+  // overwriting the default with a number, it is reading which of the two the last line chose.
   style.line_width = dt_conf_get_float(CANVAS_NEW_LINE_WIDTH_KEY);
   dt_canvas_color_parse(dt_conf_get_string_const(CANVAS_NEW_LINE_COLOR_KEY), &style.color);
   style.dashed = dt_conf_get_bool(CANVAS_NEW_LINE_DASHED_KEY);
@@ -6790,6 +6792,36 @@ static void _proxy_set_border(dt_view_t *self, const float *rgba, float width)
   dt_control_queue_redraw_center();
 }
 
+/**
+ * The line every connector takes until it is given one of its own -- the border's bargain,
+ * applied to lines. Static like the border's: the only way in is `edit_number()`, so a dragged
+ * control cannot be wired to record an undo step per motion event.
+ */
+static void _proxy_set_line(dt_view_t *self, const float *rgba, float width)
+{
+  dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas)) return;
+  const dt_canvas_color_t color
+      = IS_NULL_PTR(rgba) ? view->canvas->line_color : dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+  const float wanted = width >= 0.0f ? width : view->canvas->line_width;
+  const gboolean same_color = memcmp(&color, &view->canvas->line_color, sizeof(color)) == 0;
+  if(same_color && wanted == view->canvas->line_width) return;
+  _props_commit_pending(self);
+  dt_canvas_t *before = _begin_edit(view);
+  view->canvas->line_color = color;
+  char text[16];
+  dt_canvas_color_format(&view->canvas->line_color, text, sizeof(text));
+  dt_conf_set_string("canvas/line_color", text);
+  view->canvas->line_width = wanted;
+  dt_conf_set_float("canvas/line_width", wanted);
+  dt_canvas_touch(view->canvas);
+  _record_undo(self, before);
+  // Every connector that has not been given a line of its own is drawn with this one, and its
+  // card shows it: tell them, exactly as the border does.
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CANVAS_CHANGED);
+  dt_control_queue_redraw_center();
+}
+
 /** Where the document keeps a colour the toolbar edits. */
 static dt_canvas_color_t *_toolbar_color_field(dt_canvas_t *canvas, const int target)
 {
@@ -6811,6 +6843,8 @@ static dt_canvas_color_t *_toolbar_color_field(dt_canvas_t *canvas, const int ta
       return &canvas->border_color;
     case DT_CANVAS_COLOR_SHADOW:
       return &canvas->shadow.color;
+    case DT_CANVAS_COLOR_LINE:
+      return &canvas->line_color;
     default:
       return NULL;
   }
@@ -6822,7 +6856,8 @@ static dt_canvas_color_t *_toolbar_color_field(dt_canvas_t *canvas, const int ta
  */
 static gboolean _toolbar_color_inherited(const int target)
 {
-  return target == DT_CANVAS_COLOR_BORDER || target == DT_CANVAS_COLOR_SHADOW;
+  return target == DT_CANVAS_COLOR_BORDER || target == DT_CANVAS_COLOR_SHADOW
+         || target == DT_CANVAS_COLOR_LINE;
 }
 
 /**
@@ -6908,6 +6943,9 @@ static void _proxy_edit_color(dt_view_t *self, const int target, const float *rg
       _proxy_set_shadow(self, rgba, view->canvas->shadow.offset_x, view->canvas->shadow.offset_y,
                         view->canvas->shadow.blur);
       break;
+    case DT_CANVAS_COLOR_LINE:
+      _proxy_set_line(self, rgba, -1.0f);
+      break;
     default:
       break;
   }
@@ -6932,6 +6970,8 @@ static float *_toolbar_number_field(dt_canvas_t *canvas, const int prop)
       return &canvas->shadow.offset_y;
     case DT_CANVAS_PROP_SHADOW_BLUR:
       return &canvas->shadow.blur;
+    case DT_CANVAS_PROP_LINE_WIDTH:
+      return &canvas->line_width;
     default:
       return NULL;
   }
@@ -6971,6 +7011,10 @@ static void _toolbar_number_apply(dt_view_t *self, const int prop, const float v
       break;
     case DT_CANVAS_PROP_SHADOW_BLUR:
       _proxy_set_shadow(self, rgba, shadow.offset_x, shadow.offset_y, value);
+      break;
+    case DT_CANVAS_PROP_LINE_WIDTH:
+      // No colour: this gesture moved a width, and the line keeps the colour it has.
+      _proxy_set_line(self, NULL, value);
       break;
     default:
       break;

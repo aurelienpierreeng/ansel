@@ -761,7 +761,10 @@ dt_canvas_line_style_t dt_canvas_line_style_default(void)
 {
   dt_canvas_line_style_t style;
   memset(&style, 0, sizeof(style));
-  style.line_width = DT_CANVAS_CONNECTOR_LINE_WIDTH;
+  // NOTHING of its own: a line drawn with the tool takes the canvas's until it is told otherwise,
+  // the same way a frame takes the canvas's border. Written as a width here would put every line
+  // the tool draws in the owning state and make the canvas's line unreachable from the drawing path.
+  style.line_width = 0.0f;
   style.color = dt_canvas_color(0.85f, 0.85f, 0.85f, 1.0f);
   style.dashed = FALSE;
   style.arrow_start = FALSE;
@@ -799,7 +802,8 @@ gboolean dt_canvas_line_style_sanitize(dt_canvas_line_style_t *style)
   gboolean sound = TRUE;
   if(!isfinite(style->line_width))
   {
-    style->line_width = DT_CANVAS_CONNECTOR_LINE_WIDTH;
+    // Not a number is none of it, which here means the canvas's line: the careful answer.
+    style->line_width = 0.0f;
     sound = FALSE;
   }
   else if(style->line_width < 0.0f || style->line_width > DT_CANVAS_LINE_WIDTH_MAX)
@@ -1631,6 +1635,40 @@ void dt_canvas_object_effective_border(const dt_canvas_t *canvas, const dt_canva
   if(!IS_NULL_PTR(width)) *width = effective_width;
 }
 
+void dt_canvas_object_effective_line(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                     dt_canvas_color_t *color, float *width)
+{
+  /* The built-in line, which is what a canvas that has never been told otherwise draws with. */
+  dt_canvas_color_t effective_color = dt_canvas_color(0.6f, 0.6f, 0.6f, 1.0f);
+  float effective_width = DT_CANVAS_CONNECTOR_LINE_WIDTH;
+  if(!IS_NULL_PTR(canvas))
+  {
+    /*
+     * The canvas's own, read as a WHOLE RECORD. A document written before the canvas had a line
+     * holds zeros in both, and that is what "never set" looks like; ONE zero is a zero -- a
+     * line the user made fully transparent, or a width they turned down to nothing -- and is
+     * obeyed. The same rule the four texture weights already answer to.
+     */
+    const gboolean canvas_never_set
+        = canvas->line_width == 0.0f && canvas->line_color.red == 0.0f && canvas->line_color.green == 0.0f
+          && canvas->line_color.blue == 0.0f && canvas->line_color.alpha == 0.0f;
+    if(!canvas_never_set)
+    {
+      effective_color = canvas->line_color;
+      if(canvas->line_width > 0.0f) effective_width = canvas->line_width;
+    }
+  }
+  // A connector owns its line exactly when it has a width of its own: no flag, because a width
+  // of zero was already the "use the default" sentinel and simply became this.
+  if(!IS_NULL_PTR(object) && object->kind == DT_CANVAS_OBJECT_CONNECTOR && object->connector.line_width > 0.0f)
+  {
+    effective_color = object->connector.color;
+    effective_width = object->connector.line_width;
+  }
+  if(!IS_NULL_PTR(color)) *color = effective_color;
+  if(!IS_NULL_PTR(width)) *width = effective_width;
+}
+
 /* --- geometry --------------------------------------------------------------- */
 
 void dt_canvas_object_effective_shadow(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
@@ -2044,7 +2082,9 @@ gboolean dt_canvas_object_contains(const dt_canvas_t *canvas, const dt_canvas_ob
   {
     dt_canvas_route_t route;
     if(!dt_canvas_connector_route(canvas, object, &route)) return FALSE;
-    const double reach = tolerance + object->connector.line_width;
+    float effective_line = 0.0f;
+    dt_canvas_object_effective_line(canvas, object, NULL, &effective_line);
+    const double reach = tolerance + effective_line;
     for(int idx = 0; idx + 1 < route.point_count; idx++)
     {
       if(dt_canvas_segment_distance(x, y, route.points[2 * idx], route.points[2 * idx + 1], route.points[2 * idx + 2],
@@ -2941,7 +2981,9 @@ gboolean dt_canvas_object_extent(const dt_canvas_t *canvas, const dt_canvas_obje
     }
   }
   // Round caps and joins keep the stroke within half its width of the path it follows.
-  const double half_width = dt_canvas_stroke_reach(object->connector.line_width, DT_CANVAS_CONNECTOR_PLAIN);
+  float effective_line = 0.0f;
+  dt_canvas_object_effective_line(canvas, object, NULL, &effective_line);
+  const double half_width = dt_canvas_stroke_reach(effective_line, DT_CANVAS_CONNECTOR_PLAIN);
   min_x -= half_width;
   min_y -= half_width;
   max_x += half_width;
@@ -2952,7 +2994,7 @@ gboolean dt_canvas_object_extent(const dt_canvas_t *canvas, const dt_canvas_obje
   {
     if(!(object->connector.style & heads[end])) continue;
     double triangle[6];
-    dt_canvas_route_arrow_head(&route, end == 1, object->connector.line_width, triangle);
+    dt_canvas_route_arrow_head(&route, end == 1, effective_line, triangle);
     for(int corner = 0; corner < 3; corner++)
     {
       min_x = fmin(min_x, triangle[2 * corner]);

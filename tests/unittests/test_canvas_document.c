@@ -934,10 +934,12 @@ static void _a_line_style_from_outside_is_made_sound(void **state)
   assert_true(dt_canvas_line_style_sanitize(&style));
   assert_true(memcmp(&style, &untouched, sizeof(style)) == 0);
 
-  // A width that is not a number is no width: the default stands. Out of range, it is held to it.
+  /* A width that is not a number is NONE of it, which for a line means the canvas's -- the
+   * careful answer, and the same one an empty remembered colour gives. Held to the range
+   * otherwise. */
   style.line_width = NAN;
   assert_false(dt_canvas_line_style_sanitize(&style));
-  assert_true(style.line_width == DT_CANVAS_CONNECTOR_LINE_WIDTH);
+  assert_true(style.line_width == 0.0f);
   style.line_width = -3.0f;
   assert_false(dt_canvas_line_style_sanitize(&style));
   assert_true(style.line_width == 0.0f);

@@ -2769,13 +2769,16 @@ static void _paint_connector(cairo_t *cr, const dt_canvas_t *canvas, const dt_ca
 {
   dt_canvas_route_t route;
   if(!dt_canvas_connector_route(canvas, object, &route)) return;
-  const double line_width
-      = object->connector.line_width > 0.0f ? object->connector.line_width : DT_CANVAS_CONNECTOR_LINE_WIDTH;
+  // Its own line, or the canvas's when it carries none.
+  dt_canvas_color_t line_color;
+  float effective_line = 0.0f;
+  dt_canvas_object_effective_line(canvas, object, &line_color, &effective_line);
+  const double line_width = effective_line;
   // Arrow heads are sized to the line, so a thick connector gets a proportionate head.
   const double head_scale = fmax(line_width / 2.0, 1.0);
 
   cairo_save(cr);
-  _set_color(cr, &object->connector.color, options->for_display);
+  _set_color(cr, &line_color, options->for_display);
   cairo_set_line_width(cr, line_width);
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
   cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
@@ -3848,7 +3851,9 @@ static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas
   {
     dt_canvas_route_t route;
     if(!dt_canvas_connector_route(canvas, object, &route) || route.point_count <= 0) return box;
-    const double reach = dt_canvas_paint_arrow_reach(object->connector.line_width) * pixels_per_unit;
+    float effective_line = 0.0f;
+    dt_canvas_object_effective_line(canvas, object, NULL, &effective_line);
+    const double reach = dt_canvas_paint_arrow_reach(effective_line) * pixels_per_unit;
     box = _box_of_points(matrix, route.points, route.point_count, reach);
   }
   if(dt_canvas_shadow_visible(shadow) && shadow->blur > 0.0f)

@@ -79,7 +79,7 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 856 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12)
+#define DT_CANVAS_HEADER_RESERVED 836 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12), the line (20)
 #define DT_CANVAS_OBJECT_RESERVED 168 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
 #define DT_CANVAS_TEXT_RESERVED 144 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags, the standoff and the two paragraph settings
@@ -321,7 +321,15 @@ typedef enum dt_canvas_connector_style_t
   DT_CANVAS_CONNECTOR_DASHED = 1 << 2,
 } dt_canvas_connector_style_t;
 
-/** The width a connector is born with, and the width a stored zero is painted at, in canvas units. */
+/**
+ * The line a canvas that has never been told otherwise is drawn with, in canvas units.
+ *
+ * A connector's OWN zero is not this: it means the connector carries no line of its own and
+ * takes the canvas's -- which is this only while the canvas carries none either. Everything
+ * that draws or measures a line asks `dt_canvas_object_effective_line()`; the one place a raw
+ * zero is still a zero is `dt_canvas_line_style_get()`, where it is the memory "the last line
+ * drawn inherited".
+ */
 #define DT_CANVAS_CONNECTOR_LINE_WIDTH 2.0f
 /** The widest line the properties offer, and so the widest a line is ever born with. */
 #define DT_CANVAS_LINE_WIDTH_MAX 100.0f
@@ -403,7 +411,8 @@ typedef struct dt_canvas_connector_t
  */
 typedef struct dt_canvas_line_style_t
 {
-  float line_width;        ///< canvas units; 0 is painted two units wide, as a connector's is
+  float line_width;        ///< canvas units; 0 means the line the canvas sets, which is what a
+                           ///< connector's own zero means too
   dt_canvas_color_t color;
   gboolean dashed;
   gboolean arrow_start;    ///< a head at the line's first point
@@ -773,6 +782,19 @@ typedef struct dt_canvas_t
    * is uniform all round; it is the extra the fold side needs on top of it.
    */
   float bind_gutter;
+  /**
+   * The line every connector and every free line is drawn with unless it carries its own.
+   *
+   * The same bargain as the border, the corners and the shadow: set once for the canvas, taken
+   * by everything that has not been told otherwise. A connector owns its line exactly when its
+   * own `line_width` is above zero -- there is no flag, because a width of zero was already the
+   * "use the default" sentinel and simply became this. See `dt_canvas_object_effective_line()`.
+   *
+   * A document written before these existed holds zeros in BOTH, which is read as the built-in
+   * line: the whole-record rule, never one field at a time.
+   */
+  dt_canvas_color_t line_color;
+  float line_width;
   float corner_radius;              ///< default rounded corners of the frames, canvas units; 0 is square
   float page_margin;                ///< kept clear inside every page edge, canvas units
   dt_canvas_color_t margin_color;   ///< the margin lines
@@ -1265,6 +1287,19 @@ gboolean dt_canvas_connector_route(const dt_canvas_t *canvas, const dt_canvas_ob
  */
 gboolean dt_canvas_connector_endpoints(const dt_canvas_t *canvas, const dt_canvas_object_t *connector,
                                        double *from_x, double *from_y, double *to_x, double *to_y);
+
+/**
+ * @brief The line a connector is actually drawn with: its own, or the canvas's when it has none.
+ *
+ * A connector owns its line exactly when `connector.line_width > 0`. The canvas's own pair is
+ * read as a WHOLE record: both zero is a document written before the canvas had a line of its
+ * own and answers with the built-in one, where one zero is a zero.
+ *
+ * @param color where the colour goes, or NULL.
+ * @param width where the width goes, or NULL. Never zero.
+ */
+void dt_canvas_object_effective_line(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                     dt_canvas_color_t *color, float *width);
 
 /**
  * @brief How far a connector's ink can reach past its route in any direction, in canvas units.

@@ -361,6 +361,8 @@ GBytes *dt_canvas_format_write_index(const dt_canvas_t *canvas)
   _w_u32(out, canvas->spread_cols);
   _w_u32(out, canvas->spread_rows);
   _w_f32(out, canvas->bind_gutter);
+  _w_color(out, &canvas->line_color);
+  _w_f32(out, canvas->line_width);
   _w_bytes(out, canvas->reserved, sizeof(canvas->reserved));
   const uint32_t header_size = out->len;
   uint8_t *size_field = out->data + CANVAS_MAGIC_LEN + 4;
@@ -784,6 +786,11 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
   canvas->spread_cols = _r_u32(&cursor);
   canvas->spread_rows = _r_u32(&cursor);
   canvas->bind_gutter = _r_f32(&cursor);
+  /* Zeros from a document written before the canvas had a line of its own, which
+   * dt_canvas_object_effective_line() reads as the built-in one -- both fields together, never
+   * one at a time. */
+  canvas->line_color = _r_color(&cursor);
+  canvas->line_width = _r_f32(&cursor);
   _r_bytes(&cursor, canvas->reserved, sizeof(canvas->reserved));
   cursor.pos = header_size;
   cursor.limit = cursor.size;

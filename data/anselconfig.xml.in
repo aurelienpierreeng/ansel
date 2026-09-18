@@ -3157,11 +3157,23 @@
     <longdescription>The section of the canvas properties last left open on this kind of object, restored the next time its properties are shown. none - every section folded.</longdescription>
   </dtconfig>
   <dtconfig>
+    <name>canvas/line_width</name>
+    <type min="0" max="100">float</type>
+    <default>0</default>
+    <shortdescription>width every connector in a new canvas is drawn with, in canvas units; 0 is the built-in line</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/line_color</name>
+    <type>string</type>
+    <default></default>
+    <shortdescription>colour every connector in a new canvas is drawn with; empty is the built-in line</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/canvas/new_line/width</name>
     <type min="0" max="100">float</type>
-    <default>2</default>
+    <default>0</default>
     <shortdescription>width the next line drawn in the canvas atelier is given, in canvas units</shortdescription>
-    <longdescription>The style of the last free line drawn or edited, which the next one is drawn with. 0 is painted two units wide.</longdescription>
+    <longdescription>The style of the last free line drawn or edited, which the next one is drawn with. 0 means the line set for the canvas, the same way an empty colour means the canvas's.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/canvas/new_line/color</name>

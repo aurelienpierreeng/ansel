@@ -383,10 +383,11 @@ static const dt_canvas_prop_t _props[] = {
     .tooltip = N_("Line width, in canvas units"), .unit = N_("pt"), .kinds = KINDS_CONNECTOR,
     .section = DT_CANVAS_SECTION_STROKE, .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_TUNE,
     .min = 1.0, .max = DT_CANVAS_LINE_WIDTH_MAX, .soft_min = 1.0, .soft_max = 20.0, .step = 1.0, .factor = 1.0,
-    .neutral = NAN, .digits = 1 },
+    .neutral = NAN, .digits = 1, .group = DT_CANVAS_GROUP_LINE },
   { .id = DT_CANVAS_PROP_LINE_COLOR, .key = "stroke.line_color", .label = N_("Colour"),
     .tooltip = N_("Line colour and opacity"), .kinds = KINDS_CONNECTOR, .section = DT_CANVAS_SECTION_STROKE,
-    .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_COLOR, .factor = 1.0, .neutral = NAN },
+    .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_COLOR, .factor = 1.0, .neutral = NAN,
+    .group = DT_CANVAS_GROUP_LINE },
   { .id = DT_CANVAS_PROP_LINE_DASHED, .key = "stroke.line_dashed", .label = N_("Dashed"),
     .tooltip = N_("Draw the line in dashes"), .kinds = KINDS_CONNECTOR, .section = DT_CANVAS_SECTION_STROKE,
     .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_FLAG, .max = 1.0, .factor = 1.0, .neutral = NAN },
@@ -633,8 +634,9 @@ dt_canvas_prop_group_t dt_canvas_prop_section_group(const dt_canvas_prop_section
     case DT_CANVAS_SECTION_CHARACTER:
       return kind == DT_CANVAS_OBJECT_TEXT ? DT_CANVAS_GROUP_FONT : DT_CANVAS_GROUP_NONE;
     case DT_CANVAS_SECTION_STROKE:
-      // A connector's line has no canvas default to inherit: it is always its own.
-      return kind == DT_CANVAS_OBJECT_CONNECTOR ? DT_CANVAS_GROUP_NONE : DT_CANVAS_GROUP_BORDER;
+      // A connector's line is inherited from the canvas the same way a frame's border is, and
+      // this is the one line that used to say otherwise.
+      return kind == DT_CANVAS_OBJECT_CONNECTOR ? DT_CANVAS_GROUP_LINE : DT_CANVAS_GROUP_BORDER;
     case DT_CANVAS_SECTION_CORNERS:
       return DT_CANVAS_GROUP_CORNER;
     case DT_CANVAS_SECTION_SHADOW:
@@ -773,6 +775,8 @@ static gboolean _group_for_object(const dt_canvas_object_t *object, const dt_can
       return TRUE;
     case DT_CANVAS_GROUP_FONT:
       return object->kind == DT_CANVAS_OBJECT_TEXT;
+    case DT_CANVAS_GROUP_LINE:
+      return object->kind == DT_CANVAS_OBJECT_CONNECTOR;
     default:
       return FALSE;
   }
@@ -796,6 +800,10 @@ static uint32_t _group_flag(const dt_canvas_prop_group_t group)
 static gboolean _group_owned(const dt_canvas_object_t *object, const dt_canvas_prop_group_t group)
 {
   if(group == DT_CANVAS_GROUP_FONT) return object->text.font[0] != '\0';
+  // Flagless too: a width of zero was already the "draw it two units wide" sentinel, and that is
+  // exactly what taking the canvas's line means. Every connector in every document written before
+  // this holds a width of its own, so they all read as owning it and nothing on screen moves.
+  if(group == DT_CANVAS_GROUP_LINE) return object->connector.line_width > 0.0f;
   return (object->flags & _group_flag(group)) != 0;
 }
 
@@ -836,7 +844,9 @@ uint32_t dt_canvas_group_set_own(dt_canvas_t *canvas, dt_canvas_object_t *object
   // back is a choice the same way taking it is. Taking it is always followed by a value write that
   // asks to be remembered; handing it back stands alone, and without this the next shape is born
   // with the override the user has just removed. A font is a text frame's alone and never gets here.
-  const uint32_t remembered = object->kind == DT_CANVAS_OBJECT_SHAPE ? DT_CANVAS_EFFECT_COMMIT_CONF : 0u;
+  const uint32_t remembered
+      = (object->kind == DT_CANVAS_OBJECT_SHAPE || dt_canvas_connector_is_line(object)) ? DT_CANVAS_EFFECT_COMMIT_CONF
+                                                                                        : 0u;
   if(!take_ownership)
   {
     uint32_t effects = DT_CANVAS_EFFECT_CHANGED | DT_CANVAS_EFFECT_SETTLE_ALL | remembered;
@@ -847,6 +857,12 @@ uint32_t dt_canvas_group_set_own(dt_canvas_t *canvas, dt_canvas_object_t *object
     {
       object->text.font[0] = '\0';
       effects = DT_CANVAS_EFFECT_CHANGED | DT_CANVAS_EFFECT_RESTRUCTURE;
+    }
+    else if(group == DT_CANVAS_GROUP_LINE)
+    {
+      // The width IS the flag. The colour is left where it is: it is unread while the line is
+      // inherited, and it is what the connector gets back if the line is taken again.
+      object->connector.line_width = 0.0f;
     }
     else
     {
@@ -865,6 +881,12 @@ uint32_t dt_canvas_group_set_own(dt_canvas_t *canvas, dt_canvas_object_t *object
     // The face is the one already drawn, so nothing is refitted.
     g_strlcpy(object->text.font, dt_canvas_text_effective_font(canvas, object), sizeof(object->text.font));
     return DT_CANVAS_EFFECT_CHANGED;
+  }
+  if(group == DT_CANVAS_GROUP_LINE)
+  {
+    // Seeded from what is DRAWN, both fields, and the width is what makes it owned.
+    dt_canvas_object_effective_line(canvas, object, &object->connector.color, &object->connector.line_width);
+    return DT_CANVAS_EFFECT_CHANGED | DT_CANVAS_EFFECT_SETTLE_ALL | remembered;
   }
   // Seeded from what is DRAWN, so taking ownership changes nothing on screen. The corner radius
   // is the canvas's own number, not the one the frame's size limits it to: a frame that later
@@ -930,6 +952,14 @@ void dt_canvas_group_summary(const dt_canvas_t *canvas, const dt_canvas_object_t
         value = g_strdup_printf(_("blur %.1f pt"), shadow.blur);
       else
         value = g_strdup_printf(_("inset %.1f pt"), -shadow.blur);
+      break;
+    }
+    case DT_CANVAS_GROUP_LINE:
+    {
+      dt_canvas_color_t color;
+      float width = 0.0f;
+      dt_canvas_object_effective_line(canvas, object, &color, &width);
+      value = g_strdup_printf(_("%.1f pt"), width);
       break;
     }
     case DT_CANVAS_GROUP_FONT:
@@ -1329,11 +1359,17 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
       if(prop_id == DT_CANVAS_PROP_BORDER_WIDTH) memset(&out->color, 0, sizeof(out->color));
       break;
     }
+    /* What is DRAWN, so an inheriting connector's rows show the canvas's line rather than the
+     * zero and the stale colour it is carrying -- the same thing a frame's border rows show. */
     case DT_CANVAS_PROP_LINE_WIDTH:
-      out->number = object->connector.line_width;
+    {
+      float width = 0.0f;
+      dt_canvas_object_effective_line(canvas, object, NULL, &width);
+      out->number = width;
       break;
+    }
     case DT_CANVAS_PROP_LINE_COLOR:
-      out->color = object->connector.color;
+      dt_canvas_object_effective_line(canvas, object, &out->color, NULL);
       break;
     case DT_CANVAS_PROP_LINE_DASHED:
       out->flag = (object->connector.style & DT_CANVAS_CONNECTOR_DASHED) != 0;
@@ -1713,6 +1749,13 @@ static uint32_t _line_style_effects(const dt_canvas_object_t *object)
 static uint32_t _write_connector(dt_canvas_t *canvas, dt_canvas_object_t *object, const dt_canvas_prop_t *prop,
                                  const dt_canvas_prop_value_t *in)
 {
+  /*
+   * Editing the line of a connector that has none gives it one, seeded from what is drawn --
+   * the same rule `_write_shared()` applies to a frame's border, which this writer does not go
+   * through. Without it, a colour picked on an inheriting connector would be stored in a field
+   * nothing reads and the line on screen would not move.
+   */
+  if(prop->group == DT_CANVAS_GROUP_LINE) dt_canvas_group_set_own(canvas, object, DT_CANVAS_GROUP_LINE, TRUE);
   switch(prop->id)
   {
     case DT_CANVAS_PROP_CONNECTOR_ROUTING:
