@@ -359,7 +359,11 @@ static const dt_canvas_prop_t _props[] = {
     .tooltip = N_("Colour under the content, filling the frame or the whole cutout: what a feather dissolves "
                   "into. Its own opacity, at zero, lets the canvas show through."),
     .kinds = KINDS_FRAMES, .section = DT_CANVAS_SECTION_FILL, .tier = DT_CANVAS_TIER_ESSENTIAL,
-    .widget = DT_CANVAS_WIDGET_COLOR, .factor = 1.0, .neutral = NAN },
+    .widget = DT_CANVAS_WIDGET_COLOR, .factor = 1.0, .neutral = NAN,
+    /* A drawn shape's fill IS the shape, so it belongs within reach rather than two folds away.
+     * Only while the shape is filled: an unfilled one has no fill to show. The row in FILL is
+     * NOT conditional -- an unfilled shape must still let a colour be chosen for when it is. */
+    .strip_kinds = KINDS_SHAPE, .strip_if = DT_CANVAS_PROP_SHAPE_FILLED, .strip_values = PROP_WHEN_ON },
 
   /* --- stroke --------------------------------------------------------------------------- */
   { .id = DT_CANVAS_PROP_BORDER_WIDTH, .key = "stroke.border_width", .label = N_("Width"),
@@ -371,7 +375,10 @@ static const dt_canvas_prop_t _props[] = {
   { .id = DT_CANVAS_PROP_BORDER_COLOR, .key = "stroke.border_color", .label = N_("Colour"),
     .tooltip = N_("Border colour and opacity"), .kinds = KINDS_FRAMES, .section = DT_CANVAS_SECTION_STROKE,
     .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_COLOR, .group = DT_CANVAS_GROUP_BORDER,
-    .factor = 1.0, .neutral = NAN },
+    .factor = 1.0, .neutral = NAN,
+    /* The outline's colour, on the shape's own strip. It keeps its BORDER group, so the strip's
+     * well inherits the canvas's border and the seed-on-first-edit rule with no work of its own. */
+    .strip_kinds = KINDS_SHAPE },
   { .id = DT_CANVAS_PROP_LINE_WIDTH, .key = "stroke.line_width", .label = N_("Width"),
     .tooltip = N_("Line width, in canvas units"), .unit = N_("pt"), .kinds = KINDS_CONNECTOR,
     .section = DT_CANVAS_SECTION_STROKE, .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_TUNE,
@@ -1868,7 +1875,8 @@ static uint32_t _write_shape(dt_canvas_t *canvas, dt_canvas_object_t *object, co
       if(in->flag)
       {
         object->background.alpha = 1.0f;
-        return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_COUPLED;
+        // RESTRUCTURE: the fill's own colour well appears on the strip with it, and goes again.
+        return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_COUPLED | DT_CANVAS_EFFECT_RESTRUCTURE;
       }
       // The colour is KEPT and only its opacity goes, so switching the fill back on brings the
       // colour the user chose rather than a grey they never asked for.
@@ -1886,7 +1894,7 @@ static uint32_t _write_shape(dt_canvas_t *canvas, dt_canvas_object_t *object, co
         object->border_color = object->background;
         object->border_color.alpha = 1.0f;
       }
-      return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_COUPLED;
+      return OBSTACLE_EFFECTS | DT_CANVAS_EFFECT_COUPLED | DT_CANVAS_EFFECT_RESTRUCTURE;
     }
     default:
       return 0u;

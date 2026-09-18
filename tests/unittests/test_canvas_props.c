@@ -507,6 +507,48 @@ static void _a_shape_turns_inside_a_frame_that_does_not_move(void **state)
   _fixture_free(&fixture);
 }
 
+static void _a_shape_shows_its_background_only_while_it_is_filled(void **state)
+{
+  (void)state;
+  /*
+   * A shape's two colours are the ones it is made of, so both are on its strip. The outline's is
+   * always there; the fill's comes and goes with the fill, because an unfilled shape has no fill
+   * to show. The CARD's Background row is not conditional either way -- an unfilled shape must
+   * still let a colour be chosen for when it is filled again.
+   */
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  dt_canvas_object_t *shape = fixture.objects[5];
+  const dt_canvas_prop_t *table = dt_canvas_props(NULL);
+  const dt_canvas_prop_t *background = &table[DT_CANVAS_PROP_BACKGROUND - 1];
+  const dt_canvas_prop_t *border = &table[DT_CANVAS_PROP_BORDER_COLOR - 1];
+  assert_int_equal(background->id, DT_CANVAS_PROP_BACKGROUND);
+  assert_int_equal(border->id, DT_CANVAS_PROP_BORDER_COLOR);
+
+  dt_canvas_prop_value_t value;
+  value.flag = TRUE;
+  dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_FILLED, &value);
+  assert_true(dt_canvas_prop_mirrors_on_strip(background, shape));
+  assert_true(dt_canvas_prop_mirrors_on_strip(border, shape));
+  assert_true(dt_canvas_prop_applies(background, shape));
+
+  value.flag = FALSE;
+  const uint32_t effects = dt_canvas_prop_write(fixture.canvas, shape, DT_CANVAS_PROP_SHAPE_FILLED, &value);
+  assert_false(dt_canvas_prop_mirrors_on_strip(background, shape));
+  assert_true(dt_canvas_prop_mirrors_on_strip(border, shape));
+  // The card keeps it: the colour is still there to be chosen, only the shape is not wearing it.
+  assert_true(dt_canvas_prop_applies(background, shape));
+  // And the frontend is told the strip's own shape changed, not merely a value.
+  assert_true((effects & DT_CANVAS_EFFECT_RESTRUCTURE) != 0);
+
+  // No other kind mirrors either of them: a picture's background belongs in its section.
+  assert_false(dt_canvas_prop_mirrors_on_strip(background, fixture.objects[1]));
+  assert_false(dt_canvas_prop_mirrors_on_strip(border, fixture.objects[1]));
+  assert_false(dt_canvas_prop_mirrors_on_strip(background, fixture.objects[0]));
+
+  _fixture_free(&fixture);
+}
+
 static void _pairs_point_at_each_other(void **state)
 {
   (void)state;
@@ -2844,6 +2886,7 @@ int main(void)
     cmocka_unit_test(_every_unit_in_the_table_is_a_length_or_is_named_here),
     cmocka_unit_test(_a_strip_mirror_is_a_colour_and_nothing_else),
     cmocka_unit_test(_a_shape_turns_inside_a_frame_that_does_not_move),
+    cmocka_unit_test(_a_shape_shows_its_background_only_while_it_is_filled),
     cmocka_unit_test(_pairs_point_at_each_other),
     cmocka_unit_test(_every_kind_reads_its_sections_in_screen_order),
     cmocka_unit_test(_groups_belong_to_their_sections),
