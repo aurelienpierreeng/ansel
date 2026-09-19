@@ -115,7 +115,6 @@ typedef struct drawlayer_paint_backend_ctx_t
 
 static gboolean _paint_build_dab_cb(void *user_data, dt_drawlayer_paint_stroke_t *state,
                                     const dt_drawlayer_paint_raw_input_t *input, dt_drawlayer_brush_dab_t *out_dab);
-static gboolean _paint_layer_to_widget_cb(void *user_data, float lx, float ly, float *wx, float *wy);
 static void _paint_stroke_seed_cb(void *user_data, uint64_t stroke_seed);
 static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboolean flush_pending);
 static gboolean _commit_dabs_on_gui_thread(gpointer user_data);
@@ -244,8 +243,6 @@ gboolean dt_drawlayer_build_worker_input_dab(dt_iop_module_t *self, dt_drawlayer
   *dab = (dt_drawlayer_brush_dab_t){
     .x = lx,
     .y = ly,
-    .wx = input->wx,
-    .wy = input->wy,
     .radius = radius,
     .dir_x = dir_x,
     .dir_y = dir_y,
@@ -294,11 +291,6 @@ static gboolean _paint_build_dab_cb(void *user_data, dt_drawlayer_paint_stroke_t
              : FALSE;
 }
 
-static gboolean _paint_layer_to_widget_cb(void *user_data, float lx, float ly, float *wx, float *wy)
-{
-  drawlayer_paint_backend_ctx_t *ctx = (drawlayer_paint_backend_ctx_t *)user_data;
-  return (ctx && ctx->self) ? dt_drawlayer_layer_to_widget_coords(ctx->self, lx, ly, wx, wy) : FALSE;
-}
 
 static void _paint_stroke_seed_cb(void *user_data, uint64_t stroke_seed)
 {
@@ -353,7 +345,6 @@ static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_pai
   drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, g->stroke.worker, stroke);
   const dt_drawlayer_paint_callbacks_t callbacks = {
     .build_dab = _paint_build_dab_cb,
-    .layer_to_widget = _paint_layer_to_widget_cb,
     .on_stroke_seed = _paint_stroke_seed_cb,
   };
   if(!dt_drawlayer_paint_queue_raw_input(stroke, input)) return;
@@ -1247,10 +1238,24 @@ static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t
       dt_pthread_mutex_unlock(&rt->worker_mutex);
       if(should_stop) break;
 
-      processed_dabs = _rasterize_pending_dab_batch(&ctx, _live_publish_interval_us());
+      const gint64 interval_us = _live_publish_interval_us();
+      processed_dabs = _rasterize_pending_dab_batch(&ctx, interval_us);
       if(processed_dabs == 0) break;
-      _publish_backend_progress(&ctx, TRUE);
+
+      /* Honour the same deadline the input path honours. This loop is where most dabs of a
+       * fast drag are processed, and it used to publish after EVERY batch: a transient-params
+       * write, a TOP_CHANGED flag and a `dt_control_queue_redraw_center()` -- the last an
+       * asynchronous signal raise, so a malloc, a calloc and a GLib idle source each time --
+       * at up to one per 2 x nthreads dabs. The darkroom loop was dropping the surplus anyway,
+       * so the frames the user sees are unchanged; what goes away is the flooding.
+       * `live_publish_damage` is unioned across batches (see `_rasterize_pending_dab_batch`),
+       * so a skipped publish loses no coverage -- the next one carries it. */
+      if(_live_publish_deadline_reached(rt, g_get_monotonic_time(), interval_us))
+        _publish_backend_progress(&ctx, TRUE);
     }
+
+    /* Whatever the deadline said, the last batch of the drain must reach the screen. */
+    _publish_backend_progress(&ctx, TRUE);
   }
 
   if(IS_NULL_PTR(rt)) return;

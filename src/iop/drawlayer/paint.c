@@ -118,8 +118,6 @@ static dt_drawlayer_brush_dab_t _paint_build_segment_window_sample(const dt_draw
   dt_drawlayer_brush_dab_t dab = {
     .x = _paint_cubic_hermitef(p_start->x, p_end->x, m1x, m2x, t),
     .y = _paint_cubic_hermitef(p_start->y, p_end->y, m1y, m2y, t),
-    .wx = _lerpf(p_start->wx, p_end->wx, t),
-    .wy = _lerpf(p_start->wy, p_end->wy, t),
     .radius = fmaxf(0.5f, _lerpf(p_start->radius, p_end->radius, t)),
     .dir_x = dir_x,
     .dir_y = dir_y,
@@ -290,9 +288,7 @@ static dt_drawlayer_brush_dab_t _sample_raw_segment_cubic_arclen(const dt_drawla
 static void _apply_quadratic_dab_smoothing(dt_drawlayer_paint_stroke_t *state,
                                            dt_drawlayer_brush_dab_t *dab,
                                            const float sample_spacing,
-                                           const float smoothing_percent,
-                                           const dt_drawlayer_paint_layer_to_widget_cb layer_to_widget,
-                                           void *user_data)
+                                           const float smoothing_percent)
 {
   if(IS_NULL_PTR(state) || IS_NULL_PTR(dab) || smoothing_percent <= 0.0f) return;
   if(!state->history || state->history->len < 3) return;
@@ -373,8 +369,6 @@ static void _apply_quadratic_dab_smoothing(dt_drawlayer_paint_stroke_t *state,
     dab->x = real_x;
     dab->y = real_y;
   }
-
-  if(layer_to_widget) layer_to_widget(user_data, dab->x, dab->y, &dab->wx, &dab->wy);
 }
 
 /** @brief Emit one dab and append it to emitted-history tracking. */
@@ -400,19 +394,43 @@ static void _emit_dab(dt_drawlayer_paint_stroke_t *state, dt_drawlayer_brush_dab
 }
 
 /** @brief Freeze raster-time normalization into one emitted dab record. */
-static inline void _freeze_emitted_dab_raster_state(dt_drawlayer_brush_dab_t *dab, const float sample_spacing)
+static inline void _freeze_emitted_dab_raster_state(dt_drawlayer_paint_stroke_t *state,
+                                                    dt_drawlayer_brush_dab_t *dab,
+                                                    const float sample_spacing)
 {
   if(IS_NULL_PTR(dab)) return;
   dab->sample_spacing = fmaxf(sample_spacing, 1e-6f);
+
+  /* Four floats decide the quadrature's answer. Compare them rather than integrate again:
+   * with no tablet map on size or softness -- the shipped default -- every dab of a stroke
+   * hits this, turning 32 asinf + 32 sqrtf + ~96 divisions per dab into four comparisons. */
+  if(!IS_NULL_PTR(state) && state->opacity_scale_valid
+     && state->opacity_scale_radius == dab->radius
+     && state->opacity_scale_hardness == dab->hardness
+     && state->opacity_scale_step == dab->sample_spacing
+     && state->opacity_scale_shape == dab->shape)
+  {
+    dab->sample_opacity_scale = state->opacity_scale_value;
+    return;
+  }
+
   dab->sample_opacity_scale = _paint_stroke_sample_opacity_scale(dab, dab->sample_spacing);
+
+  if(!IS_NULL_PTR(state))
+  {
+    state->opacity_scale_radius = dab->radius;
+    state->opacity_scale_hardness = dab->hardness;
+    state->opacity_scale_step = dab->sample_spacing;
+    state->opacity_scale_shape = dab->shape;
+    state->opacity_scale_value = dab->sample_opacity_scale;
+    state->opacity_scale_valid = TRUE;
+  }
 }
 
 /** @brief Re-project current dab center to exact target spacing from previous dab. */
 static void _enforce_dab_center_spacing(dt_drawlayer_paint_stroke_t *state,
                                         dt_drawlayer_brush_dab_t *dab,
-                                        const float sample_spacing,
-                                        const dt_drawlayer_paint_layer_to_widget_cb layer_to_widget,
-                                        void *user_data)
+                                        const float sample_spacing)
 {
   if(IS_NULL_PTR(state) || IS_NULL_PTR(dab) || !state->history || state->history->len == 0) return;
   const dt_drawlayer_brush_dab_t *prev
@@ -452,7 +470,6 @@ static void _enforce_dab_center_spacing(dt_drawlayer_paint_stroke_t *state,
   dab->y = prev->y + dy * target;
   dab->dir_x = dx;
   dab->dir_y = dy;
-  if(layer_to_widget) layer_to_widget(user_data, dab->x, dab->y, &dab->wx, &dab->wy);
 }
 
 /** @brief Reset only path-generation state while keeping reusable allocations. */
@@ -517,7 +534,7 @@ static void _emit_first_sample_if_needed(dt_drawlayer_paint_stroke_t *state,
 
   dt_drawlayer_brush_dab_t first = *dab;
   first.stroke_pos = DT_DRAWLAYER_PAINT_STROKE_FIRST;
-  _freeze_emitted_dab_raster_state(&first, _paint_dab_sample_spacing(&first, _clamp01(state->distance_percent)));
+  _freeze_emitted_dab_raster_state(state, &first, _paint_dab_sample_spacing(&first, _clamp01(state->distance_percent)));
   _emit_dab(state, &first);
   state->sampled_arc_length = 0.0f;
 }
@@ -533,7 +550,7 @@ void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state)
 
   dt_drawlayer_brush_dab_t dab = state->last_input_dab;
   dab.stroke_pos = DT_DRAWLAYER_PAINT_STROKE_FIRST;
-  _freeze_emitted_dab_raster_state(&dab, _paint_dab_sample_spacing(&dab, _clamp01(state->distance_percent)));
+  _freeze_emitted_dab_raster_state(state, &dab, _paint_dab_sample_spacing(&dab, _clamp01(state->distance_percent)));
   _emit_dab(state, &dab);
   state->sampled_arc_length = 0.0f;
 }
@@ -626,11 +643,9 @@ static void _paint_process_one_raw_input(dt_drawlayer_paint_stroke_t *state,
                                              arc_lut, arc_lut_segments, arc_total);
       sample.stroke_batch = input->stroke_batch;
       sample.stroke_pos = DT_DRAWLAYER_PAINT_STROKE_MIDDLE;
-      _apply_quadratic_dab_smoothing(state, &sample, sample_spacing, smoothing_percent,
-                                     callbacks->layer_to_widget, user_data);
-      _enforce_dab_center_spacing(state, &sample, sample_spacing,
-                                  callbacks->layer_to_widget, user_data);
-      _freeze_emitted_dab_raster_state(&sample, sample_spacing);
+      _apply_quadratic_dab_smoothing(state, &sample, sample_spacing, smoothing_percent);
+      _enforce_dab_center_spacing(state, &sample, sample_spacing);
+      _freeze_emitted_dab_raster_state(state, &sample, sample_spacing);
       _emit_dab(state, &sample);
       state->sampled_arc_length = target_arc;
     }

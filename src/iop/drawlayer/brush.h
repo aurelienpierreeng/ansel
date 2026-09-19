@@ -66,8 +66,6 @@ typedef struct dt_drawlayer_brush_dab_t
 {
   float x;                /**< Dab center X in layer/buffer-space pixels. */
   float y;                /**< Dab center Y in layer/buffer-space pixels. */
-  float wx;               /**< Dab center X in widget-space coordinates (for GUI overlays). */
-  float wy;               /**< Dab center Y in widget-space coordinates (for GUI overlays). */
   float radius;           /**< Dab radius in layer-space pixels (>0.0f expected). */
   float dir_x;            /**< Unit direction X along local stroke tangent (or 0 when unknown). */
   float dir_y;            /**< Unit direction Y along local stroke tangent (or 1 when unknown). */

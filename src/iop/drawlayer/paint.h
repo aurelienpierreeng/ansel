@@ -110,6 +110,16 @@ typedef struct dt_drawlayer_paint_stroke_t
   gboolean have_prev_raw_dab;              /**< TRUE when `prev_raw_dab` is initialized. */
   float stroke_arc_length;   /**< Cumulative raw-path arc length in layer coordinates. */
   float sampled_arc_length;  /**< Cumulative arc position of last emitted sample. */
+  /* Memo for `_paint_stroke_sample_opacity_scale`, a 32-point radial quadrature that is a pure
+   * function of these four and was re-run for every emitted dab -- i.e. once per pixel of
+   * travel at the default spacing, for a value that is constant over a whole stroke unless
+   * the tablet maps size or softness. */
+  float opacity_scale_radius;
+  float opacity_scale_hardness;
+  float opacity_scale_step;
+  int opacity_scale_shape;
+  float opacity_scale_value;
+  gboolean opacity_scale_valid;
   float distance_percent;    /**< Last applied distance control in [0,1]. */
   uint64_t stroke_seed;      /**< Deterministic per-stroke seed (noise/sprinkles). */
   dt_drawlayer_damaged_rect_t bounds; /**< Last dab footprint bounds in target buffer coordinates. */
@@ -136,8 +146,6 @@ typedef gboolean (*dt_drawlayer_paint_build_dab_cb)(void *user_data,
                                                      const dt_drawlayer_paint_raw_input_t *input,
                                                      dt_drawlayer_brush_dab_t *out_dab);
 /** @brief Convert layer-space coordinates back to widget-space (for HUD/preview alignment). */
-typedef gboolean (*dt_drawlayer_paint_layer_to_widget_cb)(void *user_data, float lx, float ly,
-                                                           float *wx, float *wy);
 /** @brief Notify caller when a new stroke seed is started. */
 typedef void (*dt_drawlayer_paint_stroke_seed_cb)(void *user_data, uint64_t stroke_seed);
 
@@ -145,7 +153,6 @@ typedef void (*dt_drawlayer_paint_stroke_seed_cb)(void *user_data, uint64_t stro
 typedef struct dt_drawlayer_paint_callbacks_t
 {
   dt_drawlayer_paint_build_dab_cb build_dab; /**< Mandatory: raw event -> resolved dab conversion. */
-  dt_drawlayer_paint_layer_to_widget_cb layer_to_widget; /**< Optional: layer->widget transform callback. */
   dt_drawlayer_paint_stroke_seed_cb on_stroke_seed; /**< Optional: stroke-seed notification hook. */
 } dt_drawlayer_paint_callbacks_t;
 
