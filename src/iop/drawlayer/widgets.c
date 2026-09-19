@@ -272,8 +272,6 @@ static void _render_brush_profile_cell(unsigned char *dst, const int stride, con
   dt_drawlayer_brush_dab_t dab = {
     .x = 0.0f,
     .y = 0.0f,
-    .wx = 0.0f,
-    .wy = 0.0f,
     .radius = fmaxf(radius, 1.0f),
     .dir_x = 0.0f,
     .dir_y = 1.0f,
