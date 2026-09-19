@@ -5444,6 +5444,17 @@ static void _draw_finish(dt_view_t *self, const gboolean place)
   dt_control_queue_redraw_center();
 }
 
+/**
+ * Do these two connectors hold their ends differently? Both WHERE each end is attached and, for a
+ * free end, the point it sits at -- the whole of what an end drag can change.
+ */
+static gboolean _connector_ends_differ(const dt_canvas_connector_t *a, const dt_canvas_connector_t *b)
+{
+  return a->from_id != b->from_id || a->to_id != b->to_id || a->from_anchor != b->from_anchor
+         || a->to_anchor != b->to_anchor || a->from_x != b->from_x || a->from_y != b->from_y
+         || a->to_x != b->to_x || a->to_y != b->to_y;
+}
+
 static void _end_gesture(dt_view_t *self)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -5505,68 +5516,27 @@ static void _end_gesture(dt_view_t *self)
   else if(view->drag == DT_CANVAS_DRAG_END_FROM || view->drag == DT_CANVAS_DRAG_END_TO)
   {
     /*
-     * An end dropped ON an anchor dot attaches there, to WHATEVER frame owns that dot -- which is
-     * how an end is moved to a different object. Written through `dt_canvas_prop_write()` and
-     * never into the field: that is the one writer that knows an anchor belongs to an end holding
-     * a frame, so a raw write here could attach an end the card would then refuse to show. The id
-     * has to be set first, since that writer asks the connector whether the end holds a frame.
+     * The motion has ALREADY made the attachment the pointer chose -- it is previewed live, so the
+     * line is drawn where it will land rather than jumping there now -- and a pointer over nothing
+     * has already put the end back where the drag found it. Nothing is decided here. What is left
+     * is whether the gesture changed anything at all, and one undo step if it did.
      */
     dt_canvas_object_t *line = _single_selected(view);
-    const gboolean start = view->drag == DT_CANVAS_DRAG_END_FROM;
-    const gboolean was_free = !IS_NULL_PTR(line) && line->kind == DT_CANVAS_OBJECT_CONNECTOR
-                              && (start ? line->connector.from_id == 0 : line->connector.to_id == 0);
-    uint32_t anchor_frame = 0;
-    uint32_t anchor = DT_CANVAS_ANCHOR_AUTO;
-    gboolean attached = FALSE;
-    /*
-     * A press that never MOVED chooses nothing. An anchored end sits on one of the dots itself,
-     * so without this a bare click on it -- the click that merely selects the line -- found the
-     * dot under the pointer, froze an Automatic anchor to whichever edge it happened to be
-     * leaving by, and recorded a whole undo step for a change the user never asked for.
-     */
-    if(view->drag_moved && !IS_NULL_PTR(line) && line->kind == DT_CANVAS_OBJECT_CONNECTOR
-       && !(line->flags & DT_CANVAS_OBJECT_FLAG_LOCKED)
-       && _anchor_dropped_on(view, view->pointer_x, view->pointer_y, &anchor_frame, &anchor))
-    {
-      /*
-       * Never onto the frame the OTHER end holds: both ends on one frame is a connector of no
-       * length, which `dt_canvas_add_connector()` refuses outright and which this path must not
-       * be able to build behind its back. The guard that stood here compared the frame against
-       * the CONNECTOR's own id, which no frame can ever equal, so it refused nothing at all.
-       */
-      const uint32_t other_end = start ? line->connector.to_id : line->connector.from_id;
-      if(anchor_frame != other_end)
-      {
-        if(start)
-          line->connector.from_id = anchor_frame;
-        else
-          line->connector.to_id = anchor_frame;
-        dt_canvas_prop_value_t value;
-        value.choice = (int)anchor;
-        dt_canvas_prop_write(view->canvas, line,
-                             start ? DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR : DT_CANVAS_PROP_CONNECTOR_TO_ANCHOR,
-                             &value);
-        attached = TRUE;
-      }
-    }
-    dt_print(DT_DEBUG_INPUT,
-             "[canvas] end drop at %.1f, %.1f: moved=%d line=%u was_free=%d -> frame=%u anchor=%u attached=%d\n",
+    const dt_canvas_object_t *origin
+        = IS_NULL_PTR(line) || IS_NULL_PTR(view->drag_snapshot)
+              ? NULL
+              : dt_canvas_find_object(view->drag_snapshot, line->id);
+    const gboolean changed = !IS_NULL_PTR(line) && line->kind == DT_CANVAS_OBJECT_CONNECTOR
+                             && (IS_NULL_PTR(origin) ? view->drag_moved
+                                                     : _connector_ends_differ(&origin->connector, &line->connector));
+    dt_print(DT_DEBUG_INPUT, "[canvas] end drop at %.1f, %.1f: moved=%d line=%u -> from=%u/%u to=%u/%u changed=%d\n",
              view->pointer_x, view->pointer_y, view->drag_moved ? 1 : 0, IS_NULL_PTR(line) ? 0 : line->id,
-             was_free ? 1 : 0, anchor_frame, anchor, attached ? 1 : 0);
+             IS_NULL_PTR(line) ? 0 : line->connector.from_id, IS_NULL_PTR(line) ? 0 : line->connector.from_anchor,
+             IS_NULL_PTR(line) ? 0 : line->connector.to_id, IS_NULL_PTR(line) ? 0 : line->connector.to_anchor,
+             changed ? 1 : 0);
     view->anchor_hover_id = 0;
     view->anchor_hover = DT_CANVAS_ANCHOR_AUTO;
-    /*
-     * ONE undo step for the whole gesture, from the snapshot the PRESS took. A fresh snapshot
-     * taken here recorded the attachment ALONE: a free end dragged across the page and dropped on
-     * a dot gave back, on Ctrl+Z, a detached end at wherever the drag had left it, and the place
-     * it started from was in no record at all.
-     *
-     * And an ANCHORED end that attached nothing owes no step: its frame puts it where it is, so
-     * the drag moved nothing in the document however far the pointer went, and recording one
-     * marked the file unsaved for a gesture that changed not a byte. A FREE end really does move
-     * with the pointer, so its drag is a change whether or not it ended on a dot.
-     */
-    if(attached || (was_free && view->drag_moved))
+    if(changed)
     {
       // The gesture is over and the geometry final, so every auto-height frame is fitted once,
       // exactly as a move or a resize does it.
@@ -6184,37 +6154,59 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
          || !dt_canvas_connector_route(view->canvas, line, &route))
         break;
       /*
-       * WHICHEVER end is being dragged, the anchor under the pointer lights up: that is the drop
-       * target the release will read, and the only thing telling the user this gesture chooses an
-       * attachment. It must be done HERE, in the drag's own case: the hover branch further down
-       * that once tried to do it sits in the switch's no-drag case and returns, so it is never
-       * reached while a button is held -- the dots stayed dead for the whole gesture and the
-       * feature read as doing nothing.
+       * THE ATTACHMENT THE RELEASE WOULD MAKE IS MADE NOW, once per motion, so the line is drawn
+       * where it is going to land instead of standing still and jumping there when the button
+       * comes up. An anchored end has no point of its own to move -- its frame puts it where it
+       * is -- so previewing the ATTACHMENT is the only feedback such a drag can give, and without
+       * it the whole gesture looked inert until it was over.
+       *
+       * Asked with `_anchor_dropped_on()`, the same question the release asks, so the dot that
+       * lights and the line that moves are what letting go will keep. The pointer over nothing
+       * puts the end back where the drag found it, which is also what the release does.
        */
+      const uint32_t other_end = start ? line->connector.to_id : line->connector.from_id;
+      const dt_canvas_object_t *origin
+          = IS_NULL_PTR(view->drag_snapshot) ? NULL : dt_canvas_find_object(view->drag_snapshot, line->id);
+      uint32_t want_id = IS_NULL_PTR(origin) ? 0 : (start ? origin->connector.from_id : origin->connector.to_id);
+      uint32_t want_anchor
+          = IS_NULL_PTR(origin) ? DT_CANVAS_ANCHOR_AUTO
+                                : (start ? origin->connector.from_anchor : origin->connector.to_anchor);
       uint32_t hover_frame = 0;
       uint32_t hover_anchor = DT_CANVAS_ANCHOR_AUTO;
-      if(!_anchor_at(view, canvas_x, canvas_y, &hover_frame, &hover_anchor))
+      // Never the line's own id, and never the frame the OTHER end holds: a connector of no length.
+      if(_anchor_dropped_on(view, canvas_x, canvas_y, &hover_frame, &hover_anchor) && hover_frame != line->id
+         && hover_frame != other_end)
       {
-        const dt_canvas_object_t *under
-            = dt_canvas_pick(view->canvas, canvas_x, canvas_y, DT_CANVAS_PICK_TOLERANCE_PIXELS / view->zoom);
-        hover_frame = !IS_NULL_PTR(under) && dt_canvas_object_is_frame(under) ? under->id : 0;
+        want_id = hover_frame;
+        want_anchor = hover_anchor;
+      }
+      else
+      {
+        hover_frame = 0;
         hover_anchor = DT_CANVAS_ANCHOR_AUTO;
       }
-      // Never the line's own id: a connector cannot be attached to itself, and the release refuses it.
-      if(hover_frame == line->id) hover_frame = 0;
       view->anchor_hover_id = hover_frame;
       view->anchor_hover = hover_anchor;
 
-      /* An ANCHORED end has no point of its own to move -- its frame puts it where it is -- so
-       * the drag only chooses where it will land, and the release re-attaches it. */
-      if(start ? line->connector.from_id != 0 : line->connector.to_id != 0)
-      {
-        view->drag_moved = TRUE;
-        _interaction_touch(self);
-        break;
-      }
       view->drag_moved = TRUE;
       _interaction_touch(self);
+
+      if(start)
+        line->connector.from_id = want_id;
+      else
+        line->connector.to_id = want_id;
+      if(want_id != 0)
+      {
+        // Anchored: written through the property writer, which is the one that knows an anchor
+        // belongs to an end holding a frame -- and it needs the id above set first.
+        dt_canvas_prop_value_t preview;
+        preview.choice = (int)want_anchor;
+        dt_canvas_prop_write(view->canvas, line,
+                             start ? DT_CANVAS_PROP_CONNECTOR_FROM_ANCHOR : DT_CANVAS_PROP_CONNECTOR_TO_ANCHOR,
+                             &preview);
+        break;
+      }
+      // Free again, or free all along: the point follows the pointer.
       double end_x = canvas_x;
       double end_y = canvas_y;
       const double other_x = start ? route.to_x : route.from_x;
