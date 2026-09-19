@@ -318,6 +318,86 @@ static void _a_field_comes_back_in_the_unit_it_was_left_in(void **state)
   gtk_widget_destroy(window);
 }
 
+static void _the_chooser_and_the_field_follow_each_other(void **state)
+{
+  (void)state;
+  GtkWidget *window = NULL;
+  GtkWidget *field = _field(&window, NULL, "mm", 0);
+  GtkWidget *chooser = dt_length_field_unit_chooser(field);
+  assert_non_null(chooser);
+  // Owned here rather than packed: the field's window holds the field alone, and what is under
+  // test is the pair's behaviour, not where they sit.
+  g_object_ref_sink(chooser);
+  _pump();
+
+  // It opens on the unit the field is already in, not on the first row of the list.
+  assert_string_equal(gtk_combo_box_get_active_id(GTK_COMBO_BOX(chooser)), "mm");
+
+  /*
+   * It lists the units the PARSER knows, smallest first, and no alias: "inch" and the double
+   * prime are both spelled "in", and offering three rows that mean one unit is three ways to
+   * pick the same thing.
+   */
+  GtkTreeModel *model = gtk_combo_box_get_model(GTK_COMBO_BOX(chooser));
+  const int rows = gtk_tree_model_iter_n_children(model, NULL);
+  assert_int_equal(rows, 5);
+  static const char *const expected[5] = { "px", "pt", "mm", "cm", "in" };
+  for(int row = 0; row < rows; row++)
+  {
+    gtk_combo_box_set_active(GTK_COMBO_BOX(chooser), row);
+    const char *id = gtk_combo_box_get_active_id(GTK_COMBO_BOX(chooser));
+    if(g_strcmp0(id, expected[row]) != 0) print_error("row %d is %s, expected %s\n", row, id, expected[row]);
+    assert_string_equal(id, expected[row]);
+  }
+
+  // PICKING a unit shows the length in it and does not move the length.
+  _type(field, "210mm");
+  const double points = _value(field);
+  _assert_close(points, 595.2756, 1e-3, "210 mm");
+  gtk_combo_box_set_active_id(GTK_COMBO_BOX(chooser), "cm");
+  _pump();
+  assert_string_equal(dt_length_field_get_unit(field), "cm");
+  _assert_close(_value(field), points, 1e-9, "the length after picking centimetres");
+  _assert_shows(field, 2, 21.0, "cm");
+
+  // And TYPING a unit moves the chooser: one writer, so the two cannot disagree.
+  _type(field, "8.5in");
+  _pump();
+  assert_string_equal(dt_length_field_get_unit(field), "in");
+  assert_string_equal(gtk_combo_box_get_active_id(GTK_COMBO_BOX(chooser)), "in");
+  _assert_close(_value(field), 612.0, 1e-6, "8.5 in");
+
+  // An alias typed in moves it to the spelling the list offers, since that is the row there is.
+  _type(field, "3\"");
+  _pump();
+  assert_string_equal(gtk_combo_box_get_active_id(GTK_COMBO_BOX(chooser)), "in");
+  g_object_unref(chooser);
+  gtk_widget_destroy(window);
+}
+
+/** A chooser is never an edit, exactly as `dt_length_field_set_unit()` is never one. */
+static void _picking_a_unit_sends_nothing(void **state)
+{
+  (void)state;
+  GtkWidget *window = NULL;
+  GtkWidget *field = _field(&window, NULL, "mm", 0);
+  GtkWidget *chooser = dt_length_field_unit_chooser(field);
+  g_object_ref_sink(chooser);
+  _type(field, "210mm");
+  _pump();
+  int sends = 0;
+  g_signal_connect(field, "value-changed", G_CALLBACK(_count_send), &sends);
+  gtk_combo_box_set_active_id(GTK_COMBO_BOX(chooser), "in");
+  _pump();
+  gtk_combo_box_set_active_id(GTK_COMBO_BOX(chooser), "pt");
+  _pump();
+  if(sends != 0) print_error("picking a unit sent %d edit(s)\n", sends);
+  assert_int_equal(sends, 0);
+  assert_string_equal(dt_length_field_get_unit(field), "pt");
+  g_object_unref(chooser);
+  gtk_widget_destroy(window);
+}
+
 static void _the_unit_lives_in_the_text_and_never_in_the_number(void **state)
 {
   (void)state;
@@ -345,6 +425,8 @@ int main(int argc, char **argv)
     cmocka_unit_test(_a_field_shows_enough_figures_for_its_unit_and_its_caller),
     cmocka_unit_test(_setting_the_unit_moves_the_words_and_not_the_length),
     cmocka_unit_test(_changing_the_unit_is_not_an_edit),
+    cmocka_unit_test(_the_chooser_and_the_field_follow_each_other),
+    cmocka_unit_test(_picking_a_unit_sends_nothing),
     cmocka_unit_test(_a_field_comes_back_in_the_unit_it_was_left_in),
     cmocka_unit_test(_the_unit_lives_in_the_text_and_never_in_the_number),
   };

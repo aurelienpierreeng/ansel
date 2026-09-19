@@ -149,6 +149,8 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *line_color;
   GtkWidget *custom_width;
   GtkWidget *custom_height;
+  GtkWidget *custom_width_row;  ///< the label, the field and its unit: shown only for a Custom page
+  GtkWidget *custom_height_row;
   GtkWidget *layout;
   GtkWidget *sort;
   /** The sliders of the Borders and Shadows popovers, in the order they were built. */
@@ -714,8 +716,10 @@ static void _refill(dt_lib_module_t *self)
    * combo's handler: the toolbar owns no state, so which rows exist is derived here or it is
    * state by another name. */
   const gboolean custom = canvas->paper_size == DT_CANVAS_PAPER_CUSTOM;
-  gtk_widget_set_visible(toolbar->custom_width, custom);
-  gtk_widget_set_visible(toolbar->custom_height, custom);
+  /* The whole cell, label and unit included: hiding the field alone left "Custom W" and "H"
+   * standing over nothing on every standard page, announcing two controls that were not there. */
+  gtk_widget_set_visible(toolbar->custom_width_row, custom);
+  gtk_widget_set_visible(toolbar->custom_height_row, custom);
   double custom_width = 0.0;
   double custom_height = 0.0;
   dt_canvas_paper_custom(canvas, &custom_width, &custom_height);
@@ -1114,6 +1118,27 @@ static GtkWidget *_labelled_row(GtkWidget *box, const char *label, GtkWidget *wi
   return widget;
 }
 
+/**
+ * A length, its name and the combo naming its UNIT, as one cell.
+ *
+ * Every length here is stored in points and shown in whatever unit its reader thinks in, so each
+ * one carries its own chooser: typing "210mm" has always worked, and nothing on screen said so.
+ *
+ * @return the whole cell, so a row that does not apply can be hidden with its LABEL -- hiding the
+ *         field alone leaves its name behind announcing a control that is not there.
+ */
+static GtkWidget *_labelled_length(GtkWidget *grid, const int row, const int col, const char *label,
+                                   GtkWidget *field)
+{
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
+  gtk_box_pack_start(GTK_BOX(box), gtk_label_new(label), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(box), field, FALSE, FALSE, 0);
+  GtkWidget *chooser = dt_length_field_unit_chooser(field);
+  if(chooser != NULL) gtk_box_pack_start(GTK_BOX(box), chooser, FALSE, FALSE, 0);
+  gtk_grid_attach(GTK_GRID(grid), box, col, row, 1, 1);
+  return box;
+}
+
 static GtkWidget *_labelled(GtkWidget *grid, const int row, const int col, const char *label, GtkWidget *widget)
 {
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
@@ -1138,7 +1163,7 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
   toolbar->grid_size = dt_length_field_new("canvas/guides/unit/grid_size", "pt", 0, 5.0, 1000.0, 5.0);
   gtk_widget_set_tooltip_text(toolbar->grid_size, _("Grid spacing. Type a unit -- mm, cm, in -- and it is kept."));
   _connect_refilled(self, toolbar->grid_size, "value-changed", G_CALLBACK(_grid_size_changed));
-  _labelled(grid, 1, 2, _("Size"), toolbar->grid_size);
+  _labelled_length(grid, 1, 2, _("Size"), toolbar->grid_size);
   toolbar->grid_color = _color_button(_("Grid colour"), _("Colour of the grid dots"),
                                       DT_CANVAS_COLOR_GRID, TRUE, self);
   _labelled(grid, 1, 3, _("Colour"), toolbar->grid_color);
@@ -1179,18 +1204,22 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
    * The one page size the canvas carries itself. Shown by `_refill()` alone, from what the
    * DOCUMENT holds -- the toolbar owns no state, so the combo's own handler never decides this.
    */
-  toolbar->custom_width = dt_length_field_new("canvas/guides/unit/custom_paper", "mm", 0, 0.0,
+  /* A key EACH, as every other length here has: one key shared between two fields meant the two
+   * choosers could not agree -- picking centimetres on the width left the height in millimetres,
+   * and whichever was touched last decided what both read after a restart. */
+  toolbar->custom_width = dt_length_field_new("canvas/guides/unit/custom_width", "mm", 0, 0.0,
                                               CANVAS_TOOLBAR_CUSTOM_PAPER_MAX, 1.0);
   gtk_widget_set_tooltip_text(toolbar->custom_width, _("How wide a Custom page is. Type a unit -- mm, cm, in."));
   _connect_refilled(self, toolbar->custom_width, "value-changed", G_CALLBACK(_custom_paper_changed));
-  _labelled(grid, 5, 2, _("Custom W"), toolbar->custom_width);
-  toolbar->custom_height = dt_length_field_new("canvas/guides/unit/custom_paper", "mm", 0, 0.0,
+  toolbar->custom_width_row = _labelled_length(grid, 5, 2, _("Custom W"), toolbar->custom_width);
+  toolbar->custom_height = dt_length_field_new("canvas/guides/unit/custom_height", "mm", 0, 0.0,
                                                CANVAS_TOOLBAR_CUSTOM_PAPER_MAX, 1.0);
   gtk_widget_set_tooltip_text(toolbar->custom_height, _("How tall a Custom page is. Type a unit -- mm, cm, in."));
   _connect_refilled(self, toolbar->custom_height, "value-changed", G_CALLBACK(_custom_paper_changed));
-  _labelled(grid, 5, 3, _("H"), toolbar->custom_height);
-  gtk_widget_set_no_show_all(toolbar->custom_width, TRUE);
-  gtk_widget_set_no_show_all(toolbar->custom_height, TRUE);
+  toolbar->custom_height_row = _labelled_length(grid, 5, 3, _("H"), toolbar->custom_height);
+  // The ROW carries the label and the chooser as well, so all three appear and vanish together.
+  gtk_widget_set_no_show_all(toolbar->custom_width_row, TRUE);
+  gtk_widget_set_no_show_all(toolbar->custom_height_row, TRUE);
 
   _section_label(grid, 6, _("Spread"));
   toolbar->spread_cols = gtk_spin_button_new_with_range(0.0, 64.0, 1.0);
@@ -1209,7 +1238,7 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
                                 "perfect binding swallows out of the middle of a picture crossing it. It is added "
                                 "to the page margin on those sides, and to no others."));
   _connect_refilled(self, toolbar->bind_gutter, "value-changed", G_CALLBACK(_spread_changed));
-  _labelled(grid, 7, 2, _("Bind gutter"), toolbar->bind_gutter);
+  _labelled_length(grid, 7, 2, _("Bind gutter"), toolbar->bind_gutter);
 
   _section_label(grid, 8, _("Page margins"));
   toolbar->margin_show = _guide_check(self, grid, 9, 0, _("Show"), DT_CANVAS_MARGIN_VISIBLE);
@@ -1219,7 +1248,7 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
                               _("Kept clear inside every page edge. A guide and a snapping rule only: nothing is moved and "
                                 "the page is unchanged. Type a unit -- mm, cm, in -- and it is kept."));
   _connect_refilled(self, toolbar->margin_size, "value-changed", G_CALLBACK(_page_guides_changed));
-  _labelled(grid, 9, 2, _("Size"), toolbar->margin_size);
+  _labelled_length(grid, 9, 2, _("Size"), toolbar->margin_size);
   toolbar->margin_color = _color_button(_("Margin colour"), _("Colour of the margin lines"),
                                         DT_CANVAS_COLOR_MARGIN, TRUE, self);
   _labelled(grid, 9, 3, _("Colour"), toolbar->margin_color);
@@ -1233,7 +1262,7 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
                                 "cuts in two carries on into the bleed on both sheets, which is what a binding folds around "
                                 "and a trim cuts into. The export writes it."));
   _connect_refilled(self, toolbar->bleed_size, "value-changed", G_CALLBACK(_page_guides_changed));
-  _labelled(grid, 11, 2, _("Size"), toolbar->bleed_size);
+  _labelled_length(grid, 11, 2, _("Size"), toolbar->bleed_size);
   toolbar->bleed_color = _color_button(_("Bleed colour"), _("Colour of the bleed lines"),
                                        DT_CANVAS_COLOR_BLEED, TRUE, self);
   _labelled(grid, 11, 3, _("Colour"), toolbar->bleed_color);
@@ -1248,14 +1277,23 @@ static GtkWidget *_guides_popover(dt_lib_module_t *self)
                               _("The clear margin every frame keeps around itself. Side by side, two frames are two of these "
                                 "apart. Type a unit -- mm, cm, in -- and it is kept."));
   _connect_refilled(self, toolbar->padding_size, "value-changed", G_CALLBACK(_padding_changed));
-  _labelled(grid, 13, 2, _("Size"), toolbar->padding_size);
+  _labelled_length(grid, 13, 2, _("Size"), toolbar->padding_size);
   toolbar->padding_color = _color_button(_("Padding colour"), _("Colour of the padding frames"),
                                          DT_CANVAS_COLOR_PADDING, TRUE, self);
   _labelled(grid, 13, 3, _("Colour"), toolbar->padding_color);
   toolbar->size_snap = _guide_check(self, grid, 14, 0, _("Snap sizes to neighbours"), DT_CANVAS_SNAP_SIZE);
   gtk_widget_set_hexpand(toolbar->size_snap, TRUE);
 
-  return _popover_around(grid, toolbar->grid_show);
+  GtkWidget *popover = _popover_around(grid, toolbar->grid_show);
+  /*
+   * Refilled on the way OPEN, not only when the document announces a change. Which rows exist is
+   * derived from the document -- the Custom page's two sides are shown for a Custom page and
+   * hidden for every other -- and `gtk_widget_show_all()` runs once, at construction, where it
+   * cannot know. A popover opened on a document that was ALREADY Custom therefore showed neither
+   * field, and no signal was coming to correct it.
+   */
+  g_signal_connect_swapped(popover, "show", G_CALLBACK(_refill), self);
+  return popover;
 }
 
 /** The shadow popover: the default drop shadow of every object that has no shadow of its own. */

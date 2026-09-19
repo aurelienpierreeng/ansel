@@ -22,20 +22,30 @@
 #include "widgets/widget_settings.h"
 
 #include <glib.h>
+#include <glib/gi18n.h>
 
 #define DT_LENGTH_FIELD_DATA "dt-length-field"
 
 typedef struct dt_length_field_t
 {
-  const char *unit;  ///< into the static table in common/length.c, so never owned
-  gchar *unit_key;   ///< where it is remembered, or NULL
-  int digits;        ///< what the caller asked to see, whatever the unit needs on top
+  const char *unit;      ///< into the static table in common/length.c, so never owned
+  gchar *unit_key;       ///< where it is remembered, or NULL
+  int digits;            ///< what the caller asked to see, whatever the unit needs on top
+  GtkWidget *chooser;    ///< the combo naming the unit, or NULL; weak, it is the field's sibling
+  gulong chooser_handler; ///< blocked while the field writes into it, so it never answers back
 } dt_length_field_t;
 
 static void _field_free(gpointer data)
 {
   dt_length_field_t *field = (dt_length_field_t *)data;
   if(field == NULL) return;
+  /*
+   * The weak pointer is a live write permission GObject holds on these bytes, and it must be
+   * withdrawn BEFORE they go back to the allocator -- a combo destroyed after this struct would
+   * otherwise have GLib write NULL into freed memory, which lands on the allocator's own
+   * bookkeeping and kills the process in an innocent caller much later.
+   */
+  if(field->chooser != NULL) g_object_remove_weak_pointer(G_OBJECT(field->chooser), (gpointer *)&field->chooser);
   g_free(field->unit_key);
   g_free(field);
 }
@@ -44,6 +54,24 @@ static dt_length_field_t *_field_of(GtkWidget *widget)
 {
   if(!GTK_IS_SPIN_BUTTON(widget)) return NULL;
   return (dt_length_field_t *)g_object_get_data(G_OBJECT(widget), DT_LENGTH_FIELD_DATA);
+}
+
+/**
+ * Adopt a unit: remember it, and tell the combo if there is one.
+ *
+ * The one place `field->unit` is written, so a unit TYPED into the field and a unit PICKED from
+ * the combo cannot disagree. The combo's own handler is blocked while it is written to, the way
+ * every refill in this tree blocks by stored id rather than by a flag the handler reads.
+ */
+static void _adopt_unit(dt_length_field_t *field, const char *unit)
+{
+  if(field == NULL || unit == NULL || unit == field->unit) return;
+  field->unit = unit;
+  if(field->unit_key != NULL) dt_widget_store_string(field->unit_key, field->unit);
+  if(field->chooser == NULL) return;
+  g_signal_handler_block(field->chooser, field->chooser_handler);
+  gtk_combo_box_set_active_id(GTK_COMBO_BOX(field->chooser), field->unit);
+  g_signal_handler_unblock(field->chooser, field->chooser_handler);
 }
 
 /** As many figures as the caller asked for, or as many as the unit needs to reach a point. */
@@ -86,12 +114,8 @@ static gint _on_input(GtkSpinButton *spin, gdouble *value, gpointer data)
     *value = gtk_spin_button_get_value(spin);
     return TRUE;
   }
-  // A unit typed in is the unit this field speaks from now on.
-  if(used != NULL && used != field->unit)
-  {
-    field->unit = used;
-    if(field->unit_key != NULL) dt_widget_store_string(field->unit_key, field->unit);
-  }
+  // A unit typed in is the unit this field speaks from now on, combo and all.
+  if(used != NULL) _adopt_unit(field, used);
   *value = points;
   return TRUE;
 }
@@ -161,6 +185,51 @@ GtkWidget *dt_length_field_new(const char *unit_key, const char *unit, const int
   return spin;
 }
 
+/** The combo answered: this field speaks that unit from now on. */
+static void _chooser_changed(GtkComboBox *combo, gpointer data)
+{
+  GtkWidget *widget = GTK_WIDGET(data);
+  const char *chosen = gtk_combo_box_get_active_id(combo);
+  if(chosen != NULL) dt_length_field_set_unit(widget, chosen);
+}
+
+GtkWidget *dt_length_field_unit_chooser(GtkWidget *widget)
+{
+  dt_length_field_t *field = _field_of(widget);
+  if(field == NULL) return NULL;
+  GtkWidget *combo = gtk_combo_box_text_new();
+  /*
+   * The units the PARSER knows, so a name that can be typed can also be picked and the two
+   * cannot drift apart. The aliases are skipped -- "inch" and the double prime are both spelled
+   * "in" -- and the order is by SIZE, smallest first, which is a fact of the table rather than a
+   * second list to keep in step with it.
+   */
+  size_t count = 0;
+  const dt_length_unit_t *units = dt_length_units(&count);
+  const dt_length_unit_t *order[16];
+  size_t listed = 0;
+  for(size_t at = 0; at < count && listed < G_N_ELEMENTS(order); at++)
+    if(units[at].canonical == NULL) order[listed++] = &units[at];
+  for(size_t a = 0; a + 1 < listed; a++)
+    for(size_t b = a + 1; b < listed; b++)
+      if(order[b]->points < order[a]->points)
+      {
+        const dt_length_unit_t *swap = order[a];
+        order[a] = order[b];
+        order[b] = swap;
+      }
+  for(size_t at = 0; at < listed; at++)
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo), order[at]->name, order[at]->name);
+  gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo), field->unit);
+  gtk_widget_set_tooltip_text(combo, _("The unit this length is shown in. The value does not change."));
+  // The field keeps no reference: the two are built together and packed side by side, and the
+  // combo outliving the field it writes to is the one arrangement this must not be used in.
+  field->chooser = combo;
+  field->chooser_handler = g_signal_connect(combo, "changed", G_CALLBACK(_chooser_changed), widget);
+  g_object_add_weak_pointer(G_OBJECT(combo), (gpointer *)&field->chooser);
+  return combo;
+}
+
 const char *dt_length_field_get_unit(GtkWidget *widget)
 {
   const dt_length_field_t *field = _field_of(widget);
@@ -173,8 +242,7 @@ void dt_length_field_set_unit(GtkWidget *widget, const char *unit)
   if(field == NULL) return;
   const char *wanted = dt_length_unit_canonical(unit);
   if(wanted == NULL || wanted == field->unit) return;
-  field->unit = wanted;
-  if(field->unit_key != NULL) dt_widget_store_string(field->unit_key, field->unit);
+  _adopt_unit(field, wanted);
   /*
    * NOT gtk_spin_button_set_digits() here, though the figures shown do change with the unit:
    * MEASURED, it emits `value-changed` whenever the count differs, with the value untouched.

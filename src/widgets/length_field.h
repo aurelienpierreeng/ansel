@@ -64,4 +64,21 @@ const char *dt_length_field_get_unit(GtkWidget *field);
  */
 void dt_length_field_set_unit(GtkWidget *field, const char *unit);
 
+/**
+ * @brief A combo naming this field's unit, to pack beside it.
+ *
+ * Lists the units the PARSER knows, so anything that can be typed into the field can be picked
+ * here too, smallest first; the aliases are left out, "inch" and the double prime both being
+ * spelled "in". The two follow each other: picking a unit shows the length in it, and TYPING one
+ * into the field moves the combo, since both go through the field's own one writer.
+ *
+ * Picking a unit changes no length -- only the words for it -- so it is not an edit and nothing
+ * downstream hears of it.
+ *
+ * @param field a field from dt_length_field_new(). One chooser per field.
+ * @return the combo, floating like any GTK widget, or NULL if that is not a length field. It must
+ *         not outlive the field it names.
+ */
+GtkWidget *dt_length_field_unit_chooser(GtkWidget *field);
+
 #endif // DT_WIDGETS_LENGTH_FIELD_H
