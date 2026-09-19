@@ -123,6 +123,7 @@ typedef struct dt_drawlayer_brush_batch_t
   int mode;                             /**< Shared mode: PAINT or ERASE. */
   float cap;                            /**< Shared `clamp01(opacity)`, the stroke-alpha ceiling. */
   float color[4];                       /**< Shared premultiplied source colour. */
+  gboolean sprinkles;                   /**< Any dab carries texture, so the shared field is worth precomputing. */
 } dt_drawlayer_brush_batch_t;
 
 /**
@@ -149,6 +150,10 @@ gboolean dt_drawlayer_brush_batch_is_uniform(const dt_drawlayer_brush_dab_t *dab
  *                    starting alpha and overwritten with the batch's result.
  * @param transmittance Caller-owned scratch plane of at least `patch->width * patch->height`
  *                      floats. Contents on entry are irrelevant; the batch box is initialised.
+ * @param noise_scratch Optional second plane of the same size. When the batch carries texture,
+ *                      the sprinkle field -- a function of LAYER position alone, hence identical
+ *                      for every overlapping dab -- is evaluated into it once instead of once
+ *                      per dab per pixel. NULL falls back to evaluating it per dab.
  * @param batch_damage Optional; the batch's footprint is unioned into it.
  * @return TRUE when at least one dab contributed.
  *
@@ -159,6 +164,7 @@ gboolean dt_drawlayer_brush_rasterize_batch(const dt_drawlayer_brush_batch_t *ba
                                             dt_drawlayer_cache_patch_t *patch, float scale,
                                             dt_drawlayer_cache_patch_t *stroke_mask,
                                             float *transmittance,
+                                            float *noise_scratch,
                                             dt_drawlayer_damaged_rect_t *batch_damage);
 
 /**

@@ -90,6 +90,7 @@ struct dt_drawlayer_worker_t
   dt_drawlayer_cache_patch_t heartbeat_patch;   /**< Worker-private scratch patch for one heartbeat batch. */
   dt_drawlayer_cache_patch_t heartbeat_stroke_mask; /**< Worker-private stroke mask for one heartbeat batch. */
   float *heartbeat_transmittance;               /**< Worker-private coverage plane for the batch path, one float per patch pixel. */
+  float *heartbeat_noise;                       /**< Worker-private sprinkle field for the batch path, shared by every dab of a batch. */
   size_t heartbeat_transmittance_capacity;      /**< Allocated floats. Grow-only: the batch box changes by a pixel or two per frame
                                                  *   as the pointer moves, and reallocating on any DIFFERENCE rather than on a
                                                  *   shortfall would hit the allocator ~50 times a second during a drag. */
@@ -610,6 +611,11 @@ static gboolean _ensure_heartbeat_batch_buffers(dt_drawlayer_worker_t *rt,
     float *const grown = g_realloc_n(rt->heartbeat_transmittance, needed, sizeof(*grown));
     if(IS_NULL_PTR(grown)) return FALSE;
     rt->heartbeat_transmittance = grown;
+
+    float *const grown_noise = g_realloc_n(rt->heartbeat_noise, needed, sizeof(*grown_noise));
+    if(IS_NULL_PTR(grown_noise)) return FALSE;
+    rt->heartbeat_noise = grown_noise;
+
     rt->heartbeat_transmittance_capacity = needed;
   }
 
@@ -953,7 +959,8 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
      && !IS_NULL_PTR(worker->heartbeat_transmittance))
   {
     if(dt_drawlayer_brush_rasterize_batch(&uniform_batch, heartbeat_patch, 1.0f, heartbeat_mask,
-                                          worker->heartbeat_transmittance, &batch_damage))
+                                          worker->heartbeat_transmittance, worker->heartbeat_noise,
+                                          &batch_damage))
     {
       used_outer_loop = TRUE;
       processed_dabs = batch_dabs;
@@ -1326,6 +1333,8 @@ static void _rt_destroy_state(dt_iop_module_t *self, dt_drawlayer_worker_t **rt_
   dt_drawlayer_cache_patch_clear(&rt->heartbeat_stroke_mask, DRAWLAYER_HEARTBEAT_MASK_NAME);
   g_free(rt->heartbeat_transmittance);
   rt->heartbeat_transmittance = NULL;
+  g_free(rt->heartbeat_noise);
+  rt->heartbeat_noise = NULL;
   rt->heartbeat_transmittance_capacity = 0;
   dt_free(worker->ring);
   pthread_cond_destroy(&rt->worker_cond);
