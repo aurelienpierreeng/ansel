@@ -599,7 +599,8 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
     }
 
     gboolean warm_loaded = FALSE;
-    if(have_sidecar && info.found)
+    const gboolean load_attempted = have_sidecar && info.found;
+    if(load_attempted)
     {
       dt_drawlayer_io_patch_t warm_patch = { 0 };
       dt_drawlayer_cache_patch_wrlock(&data->process.base_patch);
@@ -621,6 +622,23 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
       data->process.cache_layer_order = info.found ? info.index : params->layer_order;
       dt_drawlayer_paint_runtime_state_reset(&data->process.cache_dirty_rect);
       return TRUE;
+    }
+
+    /* A fresh arena page is NOT zeroed -- `dt_drawlayer_cache_patch_alloc_shared` allocates,
+     * it does not clear -- and below we are about to publish it as a valid canvas. When the
+     * load ran it already memset its destination before touching the file, so the only
+     * uncleared case is the one where it never ran. Clear exactly that one: the GUI-side twin
+     * (`dt_drawlayer_ensure_layer_cache`) has always cleared here, and the two loaders had
+     * diverged. Both key the same cache entry, so an uncleared page created by the pipeline is
+     * adopted by the GUI as the layer's content and a later sidecar write makes it permanent.
+     * Do NOT move this into the allocator: the rekey-conflict caller memcpys the whole buffer
+     * on its next statement and would pay a dead full-canvas memset. */
+    if(!load_attempted)
+    {
+      dt_drawlayer_cache_patch_wrlock(&data->process.base_patch);
+      dt_drawlayer_cache_clear_transparent_float(data->process.base_patch.pixels,
+                                                 (size_t)layer_width * layer_height);
+      dt_drawlayer_cache_patch_wrunlock(&data->process.base_patch);
     }
 
     data->process.cache_valid = TRUE;
@@ -2656,6 +2674,11 @@ void dt_drawlayer_begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawl
   g->stroke.stroke_event_index = event_index;
   g->stroke.last_dab_valid = FALSE;
   dt_drawlayer_worker_reset_live_publish(g->stroke.worker);
+  /* Hand the worker its own params blob for this stroke's heartbeats. Nothing may change
+   * `self->params` while a stroke is live -- every GUI writer of it runs `_commit_dabs(self,
+   * FALSE)` first, which waits for the worker -- so one snapshot here is valid for the whole
+   * stroke, and the worker never has to read a blob the GUI thread owns. */
+  dt_drawlayer_worker_snapshot_params(g->stroke.worker, (const dt_iop_drawlayer_params_t *)self->params);
   dt_iop_gui_leave_critical_section(self);
 }
 

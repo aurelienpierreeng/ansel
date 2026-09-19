@@ -461,7 +461,7 @@ void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, const gboole
     dt_dev_pixelpipe_resync_history_main(self->dev);
   if(IS_NULL_PTR(self->dev->preview_pipe)) return;
 
-  self->dev->preview_pipe->pause = state;
+  dt_atomic_set_int(&self->dev->preview_pipe->pause, state ? 1 : 0);
   if(state)
     dt_atomic_set_int(&self->dev->preview_pipe->shutdown, TRUE);
 }
