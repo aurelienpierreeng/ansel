@@ -758,15 +758,18 @@ gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush
       dt_drawlayer_paint_runtime_set_smudge_pickup(runtime_private, 0.0f, 0.0f, FALSE);
   }
 
-  const double t0 = dt_get_wtime();
+  /* The clock is read only when the trace that consumes it is on. Two `dt_get_wtime()` per dab
+   * is two vDSO calls on the hot path at 3000 dabs/s, paid for a string nobody asked for. */
+  const gboolean trace_timing = (dt_get_debug_flags() & DT_DEBUG_VERBOSE) != 0;
+  const double t0 = trace_timing ? dt_get_wtime() : 0.0;
   const gboolean rasterized
       = dt_drawlayer_brush_rasterize(sample_patch, patch, scale, sample, sample_opacity_scale, stroke_mask,
                                      runtime_private);
-  const double t1 = dt_get_wtime();
+  const double t1 = trace_timing ? dt_get_wtime() : 0.0;
   if(rasterized && !IS_NULL_PTR(runtime_state) && !IS_NULL_PTR(runtime_private) && runtime_private->bounds.valid)
     dt_drawlayer_paint_runtime_note_dab_damage(runtime_state, &runtime_private->bounds);
 
-  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
+  if(trace_timing)
   {
     if(!IS_NULL_PTR(runtime_private) && runtime_private->bounds.valid)
     {

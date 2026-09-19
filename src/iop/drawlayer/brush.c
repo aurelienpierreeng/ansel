@@ -380,6 +380,15 @@ static inline float _stroke_flow_alpha(const dt_drawlayer_brush_dab_t *dab, cons
   const float remaining_to_cap = fmaxf(stroke_cap - flow_ref_alpha, 0.0f);
   const float capped_alpha = fminf(_clamp01(brush_alpha),
                                    remaining_to_cap / fmaxf(1.0f - flow_ref_alpha, 1e-6f));
+
+  /* `flow` is a per-dab constant and is exactly 0 at the shipped default (UI Flow 100%,
+   * inverted at the top of dt_drawlayer_brush_rasterize). `_lerpf(a, b, 0)` is `a + (b-a)*0`,
+   * which is `a` exactly for any finite b -- so at the default this `powf` was evaluated once
+   * per inside-disc pixel of every dab and then multiplied away. That is ~412k discarded libm
+   * calls per heartbeat batch at r=64 with a 16-thread batch, and a call boundary the enclosing
+   * loop cannot vectorize across. Returning here is bit-identical, not an approximation. */
+  if(flow <= 0.0f) return _clamp01(capped_alpha);
+
   const float accum_alpha = 1.0f - powf(fmaxf(1.0f - brush_alpha, 0.0f), opacity_scale);
   /* Internal flow convention is inverse of UI flow:
    * - internal flow=0 (UI 100%) -> union/capped watercolor behavior,
