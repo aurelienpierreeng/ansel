@@ -159,23 +159,31 @@ refusals and the thread-count independence.
 
 | | per-dab | batch |
 |---|---|---|
-| wall clock | 25.3 – 27.0 ms | 2.6 – 4.7 ms |
+| plain | 21.0 ms | 1.6 ms |
+| sprinkles 0.6 | 131.9 ms | 3.3 ms |
 
-The old figure is the interesting one: it was *above* the 20 ms heartbeat budget, so the
-rasterizer alone could not keep up with its own publish rate.
+The old figures are the interesting ones. A plain stroke was *above* the 20 ms heartbeat
+budget, so the rasterizer alone could not keep up with its own publish rate; a textured one
+was **6.6× over it**, which is what "the brush lags" means in practice.
 
-### What is left in the per-pixel loop
+### What the per-pixel loop no longer does
 
-Per inside-disc pixel (`_brush_alpha_at`, `brush.c`): a `sqrtf` and a `switch` on shape in
-`dt_drawlayer_brush_profile_eval`, which still recomputes `hardness`/`min_inner`/`inner` per
-pixel although they are per-dab constants; and, with sprinkles on, `_cellular_grain_2d` — 9
-cells × 4 `splitmix32` per octave, up to 3 octaves, **up to 108 hashes per pixel**. The
-`powf` that used to sit here is gone: it fed `accum_alpha`, which `_lerpf(·, ·, 0)` discarded
-at the default Flow.
+Three things used to sit in it and no longer do.
 
-Two wins remain and are not taken: hoisting the per-dab constants out of the profile
-evaluation, and caching the sprinkle field — it is a function of *layer* coordinates only, so
-it is identical for every overlapping dab and is currently recomputed per dab per pixel.
+- **A `powf`**, feeding `accum_alpha`, which `_lerpf(·, ·, 0)` discarded at the default Flow.
+- **Four per-dab constants recomputed per pixel** — `hardness`, `min_inner`, `inner` and the
+  transition width — inside `dt_drawlayer_brush_profile_eval`.
+  `dt_drawlayer_brush_profile_prepare` resolves them once per dab onto the runtime view and
+  `..._eval_fast` performs the identical arithmetic on the identical operands, so the floats
+  are unchanged. Worth ~20% of the per-dab path and ~2× of the batch path.
+- **The sprinkle field, evaluated per dab per pixel.** `_cellular_grain_2d` is 9 cells × 4
+  `splitmix32` per octave, up to three octaves — **up to 108 hashes per pixel** — and it is a
+  function of *layer* position and the stroke seed alone, so every overlapping dab sampled the
+  same value. The batch now evaluates it once over the batch box, which divides it by the
+  overdraw factor; the per-dab `alpha_noise_gain` stays per dab. That is what the uniformity
+  gate's sprinkle-parameter checks are for.
+
+What remains per pixel is a `sqrtf`, a shape `switch`, and the transmittance multiply.
 
 ## 5. Where else the time goes
 

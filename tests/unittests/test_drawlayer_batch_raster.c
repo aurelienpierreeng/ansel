@@ -76,8 +76,9 @@ static void _plane_free(plane_t *p)
 }
 
 /** @brief A short stroke of overlapping dabs, uniform in everything the gate tests. */
-static void _build_dabs(dt_drawlayer_brush_dab_t *dabs, const int count, const int mode,
-                        const float opacity, const float radius, const float step)
+static void _build_dabs_tex(dt_drawlayer_brush_dab_t *dabs, const int count, const int mode,
+                            const float opacity, const float radius, const float step,
+                            const float sprinkles)
 {
   for(int i = 0; i < count; i++)
   {
@@ -91,7 +92,7 @@ static void _build_dabs(dt_drawlayer_brush_dab_t *dabs, const int count, const i
       .sample_opacity_scale = 1.0f,
       .opacity = opacity,
       .flow = 1.0f, /* UI 100% -> internal 0, the regime the closed form covers */
-      .sprinkles = 0.0f,
+      .sprinkles = sprinkles,
       .sprinkle_size = 3.0f,
       .sprinkle_coarseness = 0.5f,
       .hardness = 0.5f,
@@ -103,6 +104,12 @@ static void _build_dabs(dt_drawlayer_brush_dab_t *dabs, const int count, const i
                                      : DT_DRAWLAYER_PAINT_STROKE_MIDDLE),
     };
   }
+}
+
+static void _build_dabs(dt_drawlayer_brush_dab_t *dabs, const int count, const int mode,
+                        const float opacity, const float radius, const float step)
+{
+  _build_dabs_tex(dabs, count, mode, opacity, radius, step, 0.0f);
 }
 
 /** @brief Run the reference path: one `dt_drawlayer_brush_rasterize` per dab, in order. */
@@ -121,9 +128,12 @@ static void _run_batch(plane_t *p, const dt_drawlayer_brush_dab_t *dabs, const i
   assert_true(dt_drawlayer_brush_batch_is_uniform(dabs, (guint)count, &batch));
 
   float *transmittance = calloc((size_t)W * H, sizeof(float));
+  float *noise = calloc((size_t)W * H, sizeof(float));
   assert_non_null(transmittance);
-  assert_true(dt_drawlayer_brush_rasterize_batch(&batch, &p->patch, 1.0f, &p->mask, transmittance, NULL));
+  assert_non_null(noise);
+  assert_true(dt_drawlayer_brush_rasterize_batch(&batch, &p->patch, 1.0f, &p->mask, transmittance, noise, NULL));
   free(transmittance);
+  free(noise);
 }
 
 static double _max_abs_diff(const float *a, const float *b, const size_t n)
@@ -137,12 +147,12 @@ static double _max_abs_diff(const float *a, const float *b, const size_t n)
   return worst;
 }
 
-static void _compare(const int mode, const float opacity, const float radius, const float step,
-                     const int count)
+static void _compare_tex(const int mode, const float opacity, const float radius, const float step,
+                         const int count, const float sprinkles)
 {
   dt_drawlayer_brush_dab_t *dabs = calloc((size_t)count, sizeof(*dabs));
   assert_non_null(dabs);
-  _build_dabs(dabs, count, mode, opacity, radius, step);
+  _build_dabs_tex(dabs, count, mode, opacity, radius, step, sprinkles);
 
   plane_t serial, batch;
   _plane_init(&serial);
@@ -166,8 +176,9 @@ static void _compare(const int mode, const float opacity, const float radius, co
   for(size_t i = 0; i < (size_t)W * H; i++) painted += batch.mask.pixels[i];
   assert_true(painted > 1.0);
 
-  print_message("mode=%d opacity=%.2f r=%.1f step=%.2f n=%d -> max |dpixel|=%.3e max |dmask|=%.3e\n",
-                mode, opacity, radius, step, count, pixel_diff, mask_diff);
+  print_message("mode=%d opacity=%.2f r=%.1f step=%.2f n=%d sprinkles=%.2f -> "
+                "max |dpixel|=%.3e max |dmask|=%.3e\n",
+                mode, opacity, radius, step, count, sprinkles, pixel_diff, mask_diff);
 
   /* Measured on x86-64 GCC with -ffast-math: 1.192e-07, i.e. ONE ulp at 1.0 in float32.
    * The bound is two orders of magnitude looser to absorb platform variation, and still
@@ -179,6 +190,26 @@ static void _compare(const int mode, const float opacity, const float radius, co
   _plane_free(&serial);
   _plane_free(&batch);
   free(dabs);
+}
+
+static void _compare(const int mode, const float opacity, const float radius, const float step,
+                     const int count)
+{
+  _compare_tex(mode, opacity, radius, step, count, 0.0f);
+}
+
+/**
+ * @brief Texture on: the batch shares ONE sprinkle field across every dab.
+ *
+ * The field is a function of layer position and the stroke seed alone, so every overlapping
+ * dab samples the same value -- which is why the gate also requires the sprinkle parameters
+ * to match. `_cellular_grain_2d` costs 9 cells x 4 splitmix32 per octave, up to three
+ * octaves, so sharing it divides the dominant per-pixel cost by the overdraw factor.
+ */
+static void test_batch_matches_serial_sprinkles(void **state)
+{
+  (void)state;
+  _compare_tex(DT_DRAWLAYER_BRUSH_MODE_PAINT, 0.9f, 12.0f, 1.0f, 24, 0.6f);
 }
 
 /** @brief Heavy overlap, the shipped regime: spacing far below the diameter. */
@@ -238,6 +269,15 @@ static void test_gate_refuses_non_uniform(void **state)
   dabs[0].mode = DT_DRAWLAYER_BRUSH_MODE_ERASE;
   assert_false(dt_drawlayer_brush_batch_is_uniform(dabs, 4, &batch));
 
+  /* The sprinkle field is shared, so its parameters are part of the contract. */
+  _build_dabs(dabs, 4, DT_DRAWLAYER_BRUSH_MODE_PAINT, 0.8f, 10.0f, 2.0f);
+  dabs[2].sprinkles = 0.5f;
+  assert_false(dt_drawlayer_brush_batch_is_uniform(dabs, 4, &batch));
+
+  _build_dabs_tex(dabs, 4, DT_DRAWLAYER_BRUSH_MODE_PAINT, 0.8f, 10.0f, 2.0f, 0.5f);
+  dabs[1].sprinkle_size = 9.0f;
+  assert_false(dt_drawlayer_brush_batch_is_uniform(dabs, 4, &batch));
+
   /* SMUDGE and BLUR read the destination per dab and never qualify. */
   _build_dabs(dabs, 4, DT_DRAWLAYER_BRUSH_MODE_SMUDGE, 0.8f, 10.0f, 2.0f);
   assert_false(dt_drawlayer_brush_batch_is_uniform(dabs, 4, &batch));
@@ -295,9 +335,8 @@ static void test_batch_is_thread_count_independent(void **state)
  * assertion on a shared runner is a flaky test, and the equality tests above are what
  * actually protect the behaviour.
  */
-static void test_report_batch_speedup(void **state)
+static void _report_speedup(const float sprinkles)
 {
-  (void)state;
   const int count = 32;
   const float radius = 64.0f;
   const int plane = 512;
@@ -309,7 +348,7 @@ static void test_report_batch_speedup(void **state)
     dabs[i] = (dt_drawlayer_brush_dab_t){
       .x = 160.0f + (float)i, .y = 256.0f, .radius = radius, .dir_x = 1.0f, .dir_y = 0.0f,
       .sample_spacing = 1.0f, .sample_opacity_scale = 1.0f, .opacity = 1.0f, .flow = 1.0f,
-      .sprinkle_size = 3.0f, .sprinkle_coarseness = 0.5f, .hardness = 0.5f,
+      .sprinkles = sprinkles, .sprinkle_size = 3.0f, .sprinkle_coarseness = 0.5f, .hardness = 0.5f,
       .color = { 0.8f, 0.4f, 0.2f, 1.0f }, .shape = DT_DRAWLAYER_BRUSH_SHAPE_LINEAR,
       .mode = DT_DRAWLAYER_BRUSH_MODE_PAINT, .stroke_batch = 3u,
       .stroke_pos = (uint8_t)(i == 0 ? DT_DRAWLAYER_PAINT_STROKE_FIRST
@@ -321,9 +360,11 @@ static void test_report_batch_speedup(void **state)
   float *rgba = calloc(px * 4, sizeof(float));
   float *mask = calloc(px, sizeof(float));
   float *transmittance = calloc(px, sizeof(float));
+  float *noise = calloc(px, sizeof(float));
   assert_non_null(rgba);
   assert_non_null(mask);
   assert_non_null(transmittance);
+  assert_non_null(noise);
 
   dt_drawlayer_cache_patch_t patch = { .width = plane, .height = plane, .pixels = rgba,
                                        .external_alloc = TRUE };
@@ -353,19 +394,28 @@ static void test_report_batch_speedup(void **state)
   for(int r = 0; r < rounds; r++)
   {
     memset(mask, 0, px * sizeof(float));
-    dt_drawlayer_brush_rasterize_batch(&batch, &patch, 1.0f, &mpatch, transmittance, NULL);
+    dt_drawlayer_brush_rasterize_batch(&batch, &patch, 1.0f, &mpatch, transmittance, noise, NULL);
   }
   clock_gettime(CLOCK_MONOTONIC, &t1);
   const double batch_ms = ((double)(t1.tv_sec - t0.tv_sec) * 1e3
                            + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6) / (double)rounds;
 
-  print_message("one heartbeat batch, r=%.0f spacing=1 dabs=%d: per-dab %.3f ms, batch %.3f ms (%.1fx)\n",
-                radius, count, serial_ms, batch_ms, serial_ms / fmax(batch_ms, 1e-9));
+  print_message("one heartbeat batch, r=%.0f spacing=1 dabs=%d sprinkles=%.2f: "
+                "per-dab %.3f ms, batch %.3f ms (%.1fx)\n",
+                radius, count, sprinkles, serial_ms, batch_ms, serial_ms / fmax(batch_ms, 1e-9));
 
   free(rgba);
   free(mask);
   free(transmittance);
+  free(noise);
   free(dabs);
+}
+
+static void test_report_batch_speedup(void **state)
+{
+  (void)state;
+  _report_speedup(0.0f);
+  _report_speedup(0.6f);
 }
 
 int main(void)
@@ -377,6 +427,7 @@ int main(void)
     cmocka_unit_test(test_batch_matches_serial_paint_capped),
     cmocka_unit_test(test_batch_matches_serial_paint_sparse),
     cmocka_unit_test(test_batch_matches_serial_erase),
+    cmocka_unit_test(test_batch_matches_serial_sprinkles),
     cmocka_unit_test(test_gate_refuses_non_uniform),
   };
   return cmocka_run_group_tests(tests, NULL, NULL);

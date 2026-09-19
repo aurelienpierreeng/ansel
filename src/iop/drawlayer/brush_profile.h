@@ -87,6 +87,71 @@ static inline float dt_drawlayer_brush_transition_mass_primitive_eval(const int 
 }
 
 /**
+ * @brief The part of the profile that depends on the dab and not on the pixel.
+ *
+ * `dt_drawlayer_brush_profile_eval` recomputed `hardness`, `min_inner`, `inner` and the
+ * transition width for EVERY pixel of every dab, although all four are properties of the
+ * dab. Resolve them once with `dt_drawlayer_brush_profile_prepare` and evaluate with
+ * `dt_drawlayer_brush_profile_eval_fast`, which performs the identical arithmetic on the
+ * identical operands and therefore returns identical floats.
+ */
+typedef struct dt_drawlayer_brush_profile_const_t
+{
+  int shape;         /**< Copy of the dab's shape. */
+  gboolean gaussian; /**< Shape is GAUSSIAN: the analytic branch, no inner/width. */
+  gboolean flat;     /**< Hardness saturates: the profile is 1 everywhere inside the disc. */
+  float inner;       /**< Normalized radius at which the fall-off starts. */
+  float width;       /**< `max(1 - inner, 1e-6)`, the transition width, kept as a DIVISOR so
+                      *   the division matches the original bit for bit. */
+} dt_drawlayer_brush_profile_const_t;
+
+/** @brief Resolve the per-dab half of the profile once. */
+static inline void dt_drawlayer_brush_profile_prepare(const dt_drawlayer_brush_dab_t *dab,
+                                                      dt_drawlayer_brush_profile_const_t *out)
+{
+  if(IS_NULL_PTR(dab) || IS_NULL_PTR(out)) return;
+  out->shape = dab->shape;
+  out->gaussian = (dab->shape == DT_DRAWLAYER_BRUSH_SHAPE_GAUSSIAN);
+  out->flat = FALSE;
+  out->inner = 0.0f;
+  out->width = 1.0f;
+  if(out->gaussian) return;
+
+  const float hardness = dt_drawlayer_brush_profile_clamp01(dab->hardness);
+  if(hardness >= 1.0f - 1e-6f)
+  {
+    out->flat = TRUE;
+    return;
+  }
+  const float min_inner = 0.5f / fmaxf(dab->radius, 0.5f);
+  out->inner = fmaxf(hardness, dt_drawlayer_brush_profile_clamp01(min_inner));
+  out->width = fmaxf(1.0f - out->inner, 1e-6f);
+}
+
+/** @brief Evaluate the profile against pre-resolved dab constants. */
+static inline float dt_drawlayer_brush_profile_eval_fast(const dt_drawlayer_brush_profile_const_t *pc,
+                                                         const float norm2)
+{
+  if(norm2 >= 1.0f) return 0.0f;
+
+  if(pc->gaussian)
+  {
+    const float radius = sqrtf(norm2);
+    if(radius < 0.5f) return 1.0f - 6.0f * norm2 + 6.0f * norm2 * radius;
+    const float inv_r = 1.0f - radius;
+    return 2.0f * inv_r * inv_r * inv_r;
+  }
+
+  if(pc->flat) return 1.0f;
+
+  const float radius = sqrtf(norm2);
+  if(radius <= pc->inner) return 1.0f;
+
+  const float t = dt_drawlayer_brush_profile_clamp01((radius - pc->inner) / pc->width);
+  return dt_drawlayer_brush_transition_profile_eval(pc->shape, t, 1.0f - t);
+}
+
+/**
  * @brief Evaluate normalized brush profile at squared normalized radius.
  * @param dab Current dab parameters.
  * @param norm2 Squared normalized radius (`r^2` in [0, inf)).

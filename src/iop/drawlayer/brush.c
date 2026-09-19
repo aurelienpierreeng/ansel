@@ -208,6 +208,7 @@ static inline float _sample_sprinkle_preview(const dt_drawlayer_sprinkle_preview
 
 typedef struct dt_drawlayer_brush_runtime_view_t
 {
+  dt_drawlayer_brush_profile_const_t profile; /**< Per-dab half of the fall-off, resolved once. */
   /* Read-only dab + precomputed geometry for one rasterization call. */
   const dt_drawlayer_brush_dab_t *dab;
   dt_drawlayer_damaged_rect_t bounds;
@@ -286,6 +287,7 @@ static gboolean _brush_runtime_view_from_bounds(const dt_drawlayer_damaged_rect_
     .have_sprinkles = (dab->sprinkles > 1e-6f),
   };
   view->inv_radius = 1.0f / view->scaled_radius;
+  dt_drawlayer_brush_profile_prepare(dab, &view->profile);
   return TRUE;
 }
 
@@ -421,7 +423,7 @@ static gboolean _prepare_analytic_pixel_context(const dt_drawlayer_brush_runtime
   const float dy = ((float)y + 0.5f - view->center_y) * view->inv_radius;
   const float dx = ((float)x + 0.5f - view->center_x) * view->inv_radius;
   const float norm2 = dx * dx + dy * dy;
-  pixel_eval->profile = dt_drawlayer_brush_profile_eval(dab, norm2);
+  pixel_eval->profile = dt_drawlayer_brush_profile_eval_fast(&view->profile, norm2);
   if(pixel_eval->profile <= 0.0f) return FALSE;
 
   const float alpha_noise = fmaxf(0.0f, _sample_alpha_noise_raw(dab, view,
@@ -460,7 +462,6 @@ static gboolean _prepare_blur_context(dt_aligned_pixel_simd_t *blur_px, const fl
   if(IS_NULL_PTR(blur_px)) return FALSE;
   float blur_weight_sum = 0.0f;
   dt_aligned_pixel_simd_t blur_sum = dt_simd_set1(0.0f);
-  const dt_drawlayer_brush_dab_t *dab = view->dab;
 
   for(int y = view->bounds.nw[1]; y < view->bounds.se[1]; y++)
   {
@@ -469,7 +470,7 @@ static gboolean _prepare_blur_context(dt_aligned_pixel_simd_t *blur_px, const fl
     for(int x = view->bounds.nw[0]; x < view->bounds.se[0]; x++)
     {
       const float dx = ((float)x + 0.5f - view->center_x) * view->inv_radius;
-      const float blur_weight = dt_drawlayer_brush_profile_eval(dab, dx * dx + dy2);
+      const float blur_weight = dt_drawlayer_brush_profile_eval_fast(&view->profile, dx * dx + dy2);
       if(blur_weight <= 0.0f) continue;
 
       const int source_x = x + patch_origin_x - source_origin_x;
@@ -852,13 +853,26 @@ static inline float _brush_alpha_at(const dt_drawlayer_brush_runtime_view_t *con
 {
   const float dy = ((float)y + 0.5f - view->center_y) * view->inv_radius;
   const float dx = ((float)x + 0.5f - view->center_x) * view->inv_radius;
-  const float profile = dt_drawlayer_brush_profile_eval(view->dab, dx * dx + dy * dy);
+  const float profile = dt_drawlayer_brush_profile_eval_fast(&view->profile, dx * dx + dy * dy);
   if(profile <= 0.0f) return 0.0f;
 
   const float alpha_noise = fmaxf(0.0f, _sample_alpha_noise_raw(view->dab, view,
                                                                 view->sample_origin_x + x,
                                                                 view->sample_origin_y + y)
                                            * view->alpha_noise_gain);
+  return _clamp01(view->dab->opacity * profile * alpha_noise);
+}
+
+/** @brief As `_brush_alpha_at`, with the shared sprinkle field already sampled. */
+static inline float _brush_alpha_at_noise(const dt_drawlayer_brush_runtime_view_t *const view,
+                                          const int x, const int y, const float raw_noise)
+{
+  const float dy = ((float)y + 0.5f - view->center_y) * view->inv_radius;
+  const float dx = ((float)x + 0.5f - view->center_x) * view->inv_radius;
+  const float profile = dt_drawlayer_brush_profile_eval_fast(&view->profile, dx * dx + dy * dy);
+  if(profile <= 0.0f) return 0.0f;
+
+  const float alpha_noise = fmaxf(0.0f, raw_noise * view->alpha_noise_gain);
   return _clamp01(view->dab->opacity * profile * alpha_noise);
 }
 
@@ -884,6 +898,11 @@ gboolean dt_drawlayer_brush_batch_is_uniform(const dt_drawlayer_brush_dab_t *dab
     if(d->color[0] != first->color[0] || d->color[1] != first->color[1]
        || d->color[2] != first->color[2] || d->color[3] != first->color[3])
       return FALSE;
+    /* The sprinkle field is shared across the batch, so its parameters must be too. */
+    if(d->sprinkles != first->sprinkles || d->sprinkle_size != first->sprinkle_size
+       || d->sprinkle_coarseness != first->sprinkle_coarseness
+       || d->stroke_batch != first->stroke_batch)
+      return FALSE;
   }
 
   out->dabs = dabs;
@@ -891,6 +910,7 @@ gboolean dt_drawlayer_brush_batch_is_uniform(const dt_drawlayer_brush_dab_t *dab
   out->mode = first->mode;
   out->cap = _clamp01(first->opacity);
   for(int c = 0; c < 4; c++) out->color[c] = first->color[c];
+  out->sprinkles = (first->sprinkles > 1e-6f);
   return TRUE;
 }
 
@@ -898,6 +918,7 @@ gboolean dt_drawlayer_brush_rasterize_batch(const dt_drawlayer_brush_batch_t *ba
                                             dt_drawlayer_cache_patch_t *patch, const float scale,
                                             dt_drawlayer_cache_patch_t *stroke_mask,
                                             float *const transmittance,
+                                            float *const noise_scratch,
                                             dt_drawlayer_damaged_rect_t *batch_damage)
 {
   if(IS_NULL_PTR(batch) || IS_NULL_PTR(patch) || IS_NULL_PTR(patch->pixels) || IS_NULL_PTR(stroke_mask)
@@ -957,6 +978,27 @@ gboolean dt_drawlayer_brush_rasterize_batch(const dt_drawlayer_brush_batch_t *ba
   const int x0 = bbox.nw[0];
   const int x1 = bbox.se[0];
 
+  /* The sprinkle field is a function of LAYER position and the stroke's seed, so every dab of
+   * the batch samples the same value at the same pixel -- and `_cellular_grain_2d` costs 9
+   * cells x 4 splitmix32 per octave, up to 108 hashes. Evaluating it once over the batch box
+   * instead of once per dab per pixel divides that by the overdraw factor, which at the
+   * default spacing is the whole point. The per-dab `alpha_noise_gain` stays per dab; only
+   * the raw field is shared. */
+  const gboolean shared_noise = batch->sprinkles && !IS_NULL_PTR(noise_scratch) && views[0].have_sprinkles;
+  if(shared_noise)
+  {
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+    for(int y = y0; y < y1; y++)
+    {
+      float *const nrow = noise_scratch + (size_t)y * width;
+      for(int x = x0; x < x1; x++)
+        nrow[x] = _sample_alpha_noise_raw(views[0].dab, &views[0], views[0].sample_origin_x + x,
+                                          views[0].sample_origin_y + y);
+    }
+  }
+
   /* Pass 1 -- transmittance. A row is owned by exactly one thread, so the writes are
    * disjoint and no lock is needed; dabs are still applied in index order within a row,
    * so the result does not depend on the schedule. */
@@ -966,6 +1008,7 @@ gboolean dt_drawlayer_brush_rasterize_batch(const dt_drawlayer_brush_batch_t *ba
   for(int y = y0; y < y1; y++)
   {
     float *const row = transmittance + (size_t)y * width;
+    const float *const nrow = shared_noise ? (noise_scratch + (size_t)y * width) : NULL;
     for(int x = x0; x < x1; x++) row[x] = 1.0f;
 
     for(guint i = 0; i < live; i++)
@@ -975,7 +1018,8 @@ gboolean dt_drawlayer_brush_rasterize_batch(const dt_drawlayer_brush_batch_t *ba
 
       for(int x = view->bounds.nw[0]; x < view->bounds.se[0]; x++)
       {
-        const float brush_alpha = _brush_alpha_at(view, x, y);
+        const float brush_alpha
+            = nrow ? _brush_alpha_at_noise(view, x, y, nrow[x]) : _brush_alpha_at(view, x, y);
         if(brush_alpha <= 0.0f) continue;
         row[x] *= (1.0f - brush_alpha);
       }
