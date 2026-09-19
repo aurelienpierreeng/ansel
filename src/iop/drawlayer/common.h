@@ -32,6 +32,7 @@ typedef enum dt_drawlayer_runtime_feedback_t
 gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, gboolean record_history);
 gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self);
 gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self);
+void dt_drawlayer_invalidate_brush_settings_cache(dt_iop_drawlayer_gui_data_t *g);
 void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, gboolean state);
 gboolean dt_drawlayer_build_worker_input_dab(dt_iop_module_t *self, dt_drawlayer_paint_stroke_t *state,
                                              const dt_drawlayer_paint_raw_input_t *input,

@@ -298,6 +298,7 @@ static void _apply_display_brush_color(dt_iop_module_t *self, const float displa
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || !g->ui.widgets || !display_rgb) return;
 
+  dt_drawlayer_invalidate_brush_settings_cache(g);
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_R, _clamp01(display_rgb[0]));
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_G, _clamp01(display_rgb[1]));
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_B, _clamp01(display_rgb[2]));
@@ -334,6 +335,8 @@ static void _sync_params_from_gui(dt_iop_module_t *self, const gboolean record_h
   (void)record_history;
   if(IS_NULL_PTR(g) || (dt_gui_get_global() && dt_gui_widgets_suppressed())) return;
 
+  /* Every widget edit lands here, so this is where the resolved-brush cache goes stale. */
+  dt_drawlayer_invalidate_brush_settings_cache(g);
   dt_conf_set_int(DRAWLAYER_CONF_BRUSH_SHAPE, dt_drawlayer_widgets_get_brush_profile_selection(g->ui.widgets));
   dt_conf_set_int(DRAWLAYER_CONF_BRUSH_MODE, dt_bauhaus_combobox_get(g->controls.brush_mode));
   dt_conf_set_float(DRAWLAYER_CONF_SIZE, dt_bauhaus_slider_get(g->controls.size));
