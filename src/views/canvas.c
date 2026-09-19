@@ -177,6 +177,16 @@ typedef enum dt_canvas_drag_t
   DT_CANVAS_DRAG_DRAW_SHAPE,         ///< a shape's box being dragged from the press, `draw_id` once it exists
 } dt_canvas_drag_t;
 
+/*
+ * `_end_gesture()` ends the mask drags as a RANGE, so everything declared between MASK_CENTER and
+ * MASK_NODE_CTRL_OUT is one case and everything after it is its own. These two were inside an
+ * OPEN-ENDED `>=` once, which made the branch that re-attaches a connector's end unreachable from
+ * the day it was written -- the drag armed and the drop did nothing, with no error anywhere.
+ * Moving either of them back into that range would do it again, silently, so it does not compile.
+ */
+G_STATIC_ASSERT(DT_CANVAS_DRAG_END_FROM > DT_CANVAS_DRAG_MASK_NODE_CTRL_OUT);
+G_STATIC_ASSERT(DT_CANVAS_DRAG_END_TO > DT_CANVAS_DRAG_MASK_NODE_CTRL_OUT);
+
 typedef struct dt_canvas_view_t
 {
   dt_canvas_t *canvas;
@@ -5443,10 +5453,18 @@ static void _end_gesture(dt_view_t *self)
     _draw_finish(self, TRUE);
     return;
   }
+  /*
+   * The mask drags are named as a RANGE with BOTH ends, never as "at or after the first of them".
+   * Open-ended, this test swallowed every value declared after `MASK_CENTER` -- and the two END
+   * drags are declared after it, so the branch below that re-attaches a connector's end was
+   * unreachable from the day it was written. The gesture armed, the drag ran, the drop resolved
+   * nothing and no anchor was ever written: the whole feature was dead code behind a `>=`.
+   * Anything added to the enum after this range is now its own case, as it should be.
+   */
   if(view->drag == DT_CANVAS_DRAG_MOVE || view->drag == DT_CANVAS_DRAG_SCALE || view->drag == DT_CANVAS_DRAG_ROTATE
      || view->drag == DT_CANVAS_DRAG_VIA || view->drag == DT_CANVAS_DRAG_HANDLE_FROM
      || view->drag == DT_CANVAS_DRAG_HANDLE_TO || view->drag == DT_CANVAS_DRAG_HANDLE_VIA
-     || view->drag >= DT_CANVAS_DRAG_MASK_CENTER)
+     || (view->drag >= DT_CANVAS_DRAG_MASK_CENTER && view->drag <= DT_CANVAS_DRAG_MASK_NODE_CTRL_OUT))
   {
     if(view->drag_moved)
     {
@@ -5550,6 +5568,9 @@ static void _end_gesture(dt_view_t *self)
      */
     if(attached || (was_free && view->drag_moved))
     {
+      // The gesture is over and the geometry final, so every auto-height frame is fitted once,
+      // exactly as a move or a resize does it.
+      dt_canvas_props_settle_all(view->canvas);
       dt_canvas_touch(view->canvas);
       _record_undo(self, view->drag_snapshot);
       view->drag_snapshot = NULL;
