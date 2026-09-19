@@ -44,6 +44,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_history_snapshot
   test_masks_raster_contract
   test_stroke_raster
+  test_drawlayer_batch_raster
 )
 
 foreach(test ${LIB_ANSEL_UNIT_TESTS})
@@ -70,6 +71,13 @@ foreach(test ${LIB_ANSEL_UNIT_TESTS})
     _copy_required_library(${test} lib_ansel)
   endif()
 endforeach()
+
+# brush.c and paint.c live in the drawlayer IOP plugin, not in lib_ansel. Both are written to
+# be independent of the module internals, so the test compiles them directly rather than
+# reaching into the plugin.
+target_sources(test_drawlayer_batch_raster PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/iop/drawlayer/brush.c
+  ${CMAKE_SOURCE_DIR}/src/iop/drawlayer/paint.c)
 
 target_sources(test_tagging_completion PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)

@@ -89,6 +89,10 @@ struct dt_drawlayer_worker_t
   dt_drawlayer_damaged_rect_t *backend_path;    /**< Worker-owned backend damage accumulator. */
   dt_drawlayer_cache_patch_t heartbeat_patch;   /**< Worker-private scratch patch for one heartbeat batch. */
   dt_drawlayer_cache_patch_t heartbeat_stroke_mask; /**< Worker-private stroke mask for one heartbeat batch. */
+  float *heartbeat_transmittance;               /**< Worker-private coverage plane for the batch path, one float per patch pixel. */
+  size_t heartbeat_transmittance_capacity;      /**< Allocated floats. Grow-only: the batch box changes by a pixel or two per frame
+                                                 *   as the pointer moves, and reallocating on any DIFFERENCE rather than on a
+                                                 *   shortfall would hit the allocator ~50 times a second during a drag. */
   gint64 live_publish_ts;                       /**< Realtime publish pacing timestamp. */
   uint32_t live_publish_serial;                 /**< Monotonic live publish serial committed by heartbeat flushes. */
   dt_drawlayer_damaged_rect_t live_publish_damage; /**< Worker-owned accumulated publish damage. */
@@ -609,6 +613,15 @@ static gboolean _ensure_heartbeat_batch_buffers(dt_drawlayer_worker_t *rt,
                                                      DRAWLAYER_HEARTBEAT_MASK_NAME))
     return FALSE;
 
+  const size_t needed = (size_t)width * height;
+  if(rt->heartbeat_transmittance_capacity < needed)
+  {
+    float *const grown = g_realloc_n(rt->heartbeat_transmittance, needed, sizeof(*grown));
+    if(IS_NULL_PTR(grown)) return FALSE;
+    rt->heartbeat_transmittance = grown;
+    rt->heartbeat_transmittance_capacity = needed;
+  }
+
   rt->heartbeat_patch.x = batch_bounds->nw[0];
   rt->heartbeat_patch.y = batch_bounds->nw[1];
   rt->heartbeat_stroke_mask.x = batch_bounds->nw[0];
@@ -939,8 +952,31 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
   dt_drawlayer_cache_patch_rdlock(&g->process.stroke_mask);
   _copy_rgba_batch_from_locked_patch(&g->process.base_patch, heartbeat_patch);
   _copy_mask_batch_from_locked_patch(&g->process.stroke_mask, heartbeat_mask);
+  /* Preferred path: one coverage accumulation, one composite. It is the whole batch or
+   * nothing -- `dt_drawlayer_brush_batch_is_uniform` refuses a run whose dabs do not share
+   * the mode, opacity, colour and flow the closed form is derived for, and the serial loop
+   * below then handles every dab as before. */
+  dt_drawlayer_brush_batch_t uniform_batch = { 0 };
+  if(dt_drawlayer_brush_batch_is_uniform(&g_array_index(stroke->pending_dabs, dt_drawlayer_brush_dab_t, 0),
+                                         batch_dabs, &uniform_batch)
+     && !IS_NULL_PTR(worker->heartbeat_transmittance))
+  {
+    if(dt_drawlayer_brush_rasterize_batch(&uniform_batch, heartbeat_patch, 1.0f, heartbeat_mask,
+                                          worker->heartbeat_transmittance, &batch_damage))
+    {
+      used_outer_loop = TRUE;
+      processed_dabs = batch_dabs;
+      /* The batch path does not feed the 3-dab window, which exists solely so a SMUDGE dab can
+       * see its predecessor. Clear it rather than leave a window with a hole in it: a following
+       * SMUDGE dab then reads as the start of a run, which is the defined conservative state
+       * (`previous_sample` NULL, pickup cleared). The tile-lock path had the same hole and left
+       * it stale. */
+      if(stroke->dab_window) g_array_set_size(stroke->dab_window, 0);
+    }
+  }
 #if defined(_OPENMP) && OUTER_LOOP
-  if(batch_dabs >= min_batch && _dab_batch_supports_outer_loop(stroke->pending_dabs, batch_dabs))
+  if(processed_dabs == 0 && batch_dabs >= min_batch
+     && _dab_batch_supports_outer_loop(stroke->pending_dabs, batch_dabs))
   {
     used_outer_loop = TRUE;
     processed_dabs = _rasterize_dab_batch_outer_loop(stroke->pending_dabs, batch_dabs,
@@ -1283,6 +1319,9 @@ static void _rt_destroy_state(dt_iop_module_t *self, dt_drawlayer_worker_t **rt_
   dt_drawlayer_paint_runtime_state_destroy(&rt->backend_path);
   dt_drawlayer_cache_patch_clear(&rt->heartbeat_patch, DRAWLAYER_HEARTBEAT_PATCH_NAME);
   dt_drawlayer_cache_patch_clear(&rt->heartbeat_stroke_mask, DRAWLAYER_HEARTBEAT_MASK_NAME);
+  g_free(rt->heartbeat_transmittance);
+  rt->heartbeat_transmittance = NULL;
+  rt->heartbeat_transmittance_capacity = 0;
   dt_free(worker->ring);
   pthread_cond_destroy(&rt->worker_cond);
   dt_pthread_mutex_destroy(&rt->worker_mutex);

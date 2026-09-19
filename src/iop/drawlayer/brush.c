@@ -247,16 +247,14 @@ typedef struct dt_drawlayer_brush_pixel_eval_t
  * @brief Build immutable per-dab raster view from stroke runtime state.
  * @return TRUE when dab bounds are valid and non-empty.
  */
-static gboolean _brush_runtime_view_from_state(const dt_drawlayer_paint_stroke_t *stroke,
-                                               const dt_drawlayer_brush_dab_t *dab,
-                                               const int origin_x, const int origin_y,
-                                               const float scale,
-                                               dt_drawlayer_brush_runtime_view_t *view)
+static gboolean _brush_runtime_view_from_bounds(const dt_drawlayer_damaged_rect_t *bounds,
+                                                const dt_drawlayer_brush_dab_t *dab,
+                                                const int origin_x, const int origin_y,
+                                                const float scale,
+                                                dt_drawlayer_brush_runtime_view_t *view)
 {
-  if(!stroke || IS_NULL_PTR(dab) || IS_NULL_PTR(view) || !stroke->bounds.valid) return FALSE;
-  if(stroke->bounds.se[0] <= stroke->bounds.nw[0]
-     || stroke->bounds.se[1] <= stroke->bounds.nw[1])
-    return FALSE;
+  if(IS_NULL_PTR(bounds) || IS_NULL_PTR(dab) || IS_NULL_PTR(view) || !bounds->valid) return FALSE;
+  if(bounds->se[0] <= bounds->nw[0] || bounds->se[1] <= bounds->nw[1]) return FALSE;
 
   const float dir_len = hypotf(dab->dir_x, dab->dir_y);
   float sprinkle_w0 = 0.0f, sprinkle_w1 = 0.0f, sprinkle_w2 = 0.0f;
@@ -265,7 +263,7 @@ static gboolean _brush_runtime_view_from_state(const dt_drawlayer_paint_stroke_t
 
   *view = (dt_drawlayer_brush_runtime_view_t){
     .dab = dab,
-    .bounds = stroke->bounds,
+    .bounds = *bounds,
     .sample_origin_x = origin_x,
     .sample_origin_y = origin_y,
     .scaled_radius = fmaxf(dab->radius * scale, 0.5f),
@@ -289,6 +287,16 @@ static gboolean _brush_runtime_view_from_state(const dt_drawlayer_paint_stroke_t
   };
   view->inv_radius = 1.0f / view->scaled_radius;
   return TRUE;
+}
+
+static gboolean _brush_runtime_view_from_state(const dt_drawlayer_paint_stroke_t *stroke,
+                                               const dt_drawlayer_brush_dab_t *dab,
+                                               const int origin_x, const int origin_y,
+                                               const float scale,
+                                               dt_drawlayer_brush_runtime_view_t *view)
+{
+  if(!stroke) return FALSE;
+  return _brush_runtime_view_from_bounds(&stroke->bounds, dab, origin_x, origin_y, scale, view);
 }
 
 /**
@@ -797,6 +805,228 @@ gboolean dt_drawlayer_brush_rasterize(const dt_drawlayer_cache_patch_t *sample_p
     }
   }
 
+  return TRUE;
+}
+
+/* ---------------------------------------------------------------------------
+ * Batch path: accumulate coverage once, composite once.
+ *
+ * At the shipped defaults the spacing is 1 layer px against a 128 px diameter, so every
+ * stroke pixel is composited ~128 times, each time a full RGBA read-modify-write. It does
+ * not have to be. With the stroke mask present and the internal flow at 0, the per-pixel
+ * alpha reduces to
+ *
+ *     capped = min(ba, (cap - s) / (1 - s))     and     s' = 1 - (1 - capped)(1 - s)
+ *
+ * and the two cases of that min collapse to the single closed form
+ *
+ *     s' = min( 1 - (1 - ba)(1 - s),  cap )
+ *
+ * -- the cap is ABSORBING: once it binds, every later dab leaves s at cap. So over a batch
+ *
+ *     s_final = min( 1 - PROD_i (1 - ba_i) * (1 - s_0),  cap )
+ *
+ * a product of per-dab transmittance factors, clamped once at the end. Two consequences:
+ *
+ *   1) The product is commutative and associative, so pass 1 is ORDER-INDEPENDENT. That is
+ *      what lets it run lock-free over disjoint rows and be deterministic -- the tile-lock
+ *      grid it replaces gave mutual exclusion but never ordering, so the old parallel path
+ *      produced a different picture run to run.
+ *   2) Only the product is needed per pixel, not the colour. Pass 1 touches 4 bytes and
+ *      never loads the destination; pass 2 does one float4 composite over the batch bbox.
+ *
+ * TRANSMITTANCE, not coverage, is what is accumulated: `T *= (1 - ba)` reproduces the
+ * existing sequence of operations exactly, whereas the algebraically equal
+ * `A = 1 - (1 - A)(1 - ba)` would drift by an ulp per dab because `1 - (1 - x)` is not
+ * exact in binary floating point. It is also one multiply instead of three operations.
+ *
+ * The derivation assumes a SHARED cap, colour and mode across the batch, and an internal
+ * flow of 0. `dt_drawlayer_brush_batch_is_uniform` is that gate; anything else -- a
+ * pressure-to-opacity map, a mid-batch mode change, SMUDGE or BLUR (which genuinely read
+ * the destination per dab) -- falls back to the serial per-dab path.
+ */
+
+/** @brief Per-pixel brush alpha, the part of the pixel context that owes nothing to the destination. */
+static inline float _brush_alpha_at(const dt_drawlayer_brush_runtime_view_t *const view,
+                                    const int x, const int y)
+{
+  const float dy = ((float)y + 0.5f - view->center_y) * view->inv_radius;
+  const float dx = ((float)x + 0.5f - view->center_x) * view->inv_radius;
+  const float profile = dt_drawlayer_brush_profile_eval(view->dab, dx * dx + dy * dy);
+  if(profile <= 0.0f) return 0.0f;
+
+  const float alpha_noise = fmaxf(0.0f, _sample_alpha_noise_raw(view->dab, view,
+                                                                view->sample_origin_x + x,
+                                                                view->sample_origin_y + y)
+                                           * view->alpha_noise_gain);
+  return _clamp01(view->dab->opacity * profile * alpha_noise);
+}
+
+gboolean dt_drawlayer_brush_batch_is_uniform(const dt_drawlayer_brush_dab_t *dabs, const guint count,
+                                             dt_drawlayer_brush_batch_t *out)
+{
+  if(IS_NULL_PTR(dabs) || count == 0 || IS_NULL_PTR(out)) return FALSE;
+
+  const dt_drawlayer_brush_dab_t *const first = &dabs[0];
+  if(first->mode != DT_DRAWLAYER_BRUSH_MODE_PAINT && first->mode != DT_DRAWLAYER_BRUSH_MODE_ERASE)
+    return FALSE;
+  /* The rasterizer inverts flow: UI 100% -> internal 0, which is the regime the closed form
+   * above is derived for. Anything else keeps `accum_alpha`, whose dependence on the running
+   * destination alpha does not collapse into a product. */
+  if(_clamp01(first->flow) < 1.0f) return FALSE;
+
+  for(guint i = 1; i < count; i++)
+  {
+    const dt_drawlayer_brush_dab_t *const d = &dabs[i];
+    if(d->mode != first->mode) return FALSE;
+    if(d->opacity != first->opacity) return FALSE;
+    if(_clamp01(d->flow) < 1.0f) return FALSE;
+    if(d->color[0] != first->color[0] || d->color[1] != first->color[1]
+       || d->color[2] != first->color[2] || d->color[3] != first->color[3])
+      return FALSE;
+  }
+
+  out->dabs = dabs;
+  out->count = count;
+  out->mode = first->mode;
+  out->cap = _clamp01(first->opacity);
+  for(int c = 0; c < 4; c++) out->color[c] = first->color[c];
+  return TRUE;
+}
+
+gboolean dt_drawlayer_brush_rasterize_batch(const dt_drawlayer_brush_batch_t *batch,
+                                            dt_drawlayer_cache_patch_t *patch, const float scale,
+                                            dt_drawlayer_cache_patch_t *stroke_mask,
+                                            float *const transmittance,
+                                            dt_drawlayer_damaged_rect_t *batch_damage)
+{
+  if(IS_NULL_PTR(batch) || IS_NULL_PTR(patch) || IS_NULL_PTR(patch->pixels) || IS_NULL_PTR(stroke_mask)
+     || IS_NULL_PTR(stroke_mask->pixels) || IS_NULL_PTR(transmittance) || batch->count == 0 || scale <= 0.0f)
+    return FALSE;
+
+  const int width = patch->width;
+  const int height = patch->height;
+  if(width <= 0 || height <= 0) return FALSE;
+  if(stroke_mask->width != width || stroke_mask->height != height) return FALSE;
+
+  /* Per-dab setup is serial and cheap -- one view per dab, no per-thread runtime objects, no
+   * locks, and the batch bounding box falls out of the same walk that builds them (the old
+   * path computed it twice, in two different coordinate frames). */
+  dt_drawlayer_brush_dab_t *const prepared = g_malloc_n(batch->count, sizeof(*prepared));
+  dt_drawlayer_brush_runtime_view_t *const views = g_malloc_n(batch->count, sizeof(*views));
+  if(IS_NULL_PTR(prepared) || IS_NULL_PTR(views))
+  {
+    g_free(prepared);
+    g_free(views);
+    return FALSE;
+  }
+
+  guint live = 0;
+  dt_drawlayer_damaged_rect_t bbox = { 0 };
+  for(guint i = 0; i < batch->count; i++)
+  {
+    dt_drawlayer_brush_dab_t dab = batch->dabs[i];
+    dab.opacity = _clamp01(dab.opacity);
+    dab.flow = 1.0f - _clamp01(dab.flow);
+    if(dab.radius <= 0.0f || dab.opacity <= 0.0f) continue;
+
+    dt_drawlayer_damaged_rect_t bounds = { .valid = TRUE };
+    bounds.nw[0] = MAX(0, (int)floorf((dab.x - dab.radius) * scale) - patch->x);
+    bounds.nw[1] = MAX(0, (int)floorf((dab.y - dab.radius) * scale) - patch->y);
+    bounds.se[0] = MIN(width, (int)ceilf((dab.x + dab.radius) * scale) - patch->x + 1);
+    bounds.se[1] = MIN(height, (int)ceilf((dab.y + dab.radius) * scale) - patch->y + 1);
+    if(bounds.se[0] <= bounds.nw[0] || bounds.se[1] <= bounds.nw[1]) continue;
+
+    prepared[live] = dab;
+    if(!_brush_runtime_view_from_bounds(&bounds, &prepared[live], patch->x, patch->y, scale, &views[live]))
+      continue;
+    views[live].alpha_noise_gain = _estimate_alpha_noise_gain(&prepared[live], &views[live]);
+    dt_drawlayer_paint_runtime_note_dab_damage(&bbox, &bounds);
+    live++;
+  }
+
+  if(live == 0 || !bbox.valid)
+  {
+    g_free(prepared);
+    g_free(views);
+    return FALSE;
+  }
+
+  const int y0 = bbox.nw[1];
+  const int y1 = bbox.se[1];
+  const int x0 = bbox.nw[0];
+  const int x1 = bbox.se[0];
+
+  /* Pass 1 -- transmittance. A row is owned by exactly one thread, so the writes are
+   * disjoint and no lock is needed; dabs are still applied in index order within a row,
+   * so the result does not depend on the schedule. */
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int y = y0; y < y1; y++)
+  {
+    float *const row = transmittance + (size_t)y * width;
+    for(int x = x0; x < x1; x++) row[x] = 1.0f;
+
+    for(guint i = 0; i < live; i++)
+    {
+      const dt_drawlayer_brush_runtime_view_t *const view = &views[i];
+      if(y < view->bounds.nw[1] || y >= view->bounds.se[1]) continue;
+
+      for(int x = view->bounds.nw[0]; x < view->bounds.se[0]; x++)
+      {
+        const float brush_alpha = _brush_alpha_at(view, x, y);
+        if(brush_alpha <= 0.0f) continue;
+        row[x] *= (1.0f - brush_alpha);
+      }
+    }
+  }
+
+  /* Pass 2 -- one composite over the batch box. */
+  const gboolean erase = (batch->mode == DT_DRAWLAYER_BRUSH_MODE_ERASE);
+  const float cap = batch->cap;
+
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int y = y0; y < y1; y++)
+  {
+    const float *const trow = transmittance + (size_t)y * width;
+    float *const mrow = stroke_mask->pixels + (size_t)y * width;
+    float *const prow = patch->pixels + 4 * ((size_t)y * width);
+
+    for(int x = x0; x < x1; x++)
+    {
+      const float t = trow[x];
+      if(t >= 1.0f) continue; /* no dab of this batch reached the pixel */
+
+      const float stroke_old_alpha = _clamp01(mrow[x]);
+      float stroke_alpha = 1.0f - t * (1.0f - stroke_old_alpha);
+      if(stroke_alpha > cap) stroke_alpha = cap;
+
+      /* The increment that, composited over what the stroke already laid down, lands on
+       * `stroke_alpha`. Negative when the cap was already exceeded -- clamped to nothing,
+       * exactly as the per-dab `remaining_to_cap` was. */
+      const float src_alpha
+          = _clamp01((stroke_alpha - stroke_old_alpha) / fmaxf(1.0f - stroke_old_alpha, 1e-6f));
+      if(src_alpha <= 0.0f) continue;
+
+      float *const pixel = prow + 4 * x;
+      const float old_alpha = _clamp01(pixel[3]);
+      const dt_aligned_pixel_simd_t old_px = (old_alpha > 1e-8f) ? dt_load_simd(pixel) : dt_simd_set1(0.0f);
+      const dt_aligned_pixel_simd_t inv_alpha = dt_simd_set1(1.0f - src_alpha);
+      const dt_aligned_pixel_simd_t out_px
+          = erase ? (old_px * inv_alpha)
+                  : (dt_load_simd(batch->color) * dt_simd_set1(src_alpha) + old_px * inv_alpha);
+      dt_store_simd(pixel, out_px);
+      mrow[x] = stroke_alpha;
+    }
+  }
+
+  if(!IS_NULL_PTR(batch_damage)) dt_drawlayer_paint_runtime_note_dab_damage(batch_damage, &bbox);
+
+  g_free(prepared);
+  g_free(views);
   return TRUE;
 }
 
