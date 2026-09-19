@@ -62,7 +62,7 @@
 typedef struct dt_masks_distort_t
 {
   /** The pipe to compose, or NULL to compose through the geometry service. */
-  dt_dev_pixelpipe_t *pipe;
+  const dt_dev_pixelpipe_t *pipe;
   /** Needed by the GUI supplier, and harmless for the other. */
   dt_develop_t *dev;
 
@@ -78,7 +78,7 @@ typedef struct dt_masks_distort_t
 } dt_masks_distort_t;
 
 /** @brief The rendering supplier: compose this pipe, sample as this pipe was told to. */
-static inline dt_masks_distort_t dt_masks_distort_for_pipe(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+static inline dt_masks_distort_t dt_masks_distort_for_pipe(const dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   dt_masks_distort_t d = { pipe, dev, 0, 0, 1 };
   if(!IS_NULL_PTR(pipe))
