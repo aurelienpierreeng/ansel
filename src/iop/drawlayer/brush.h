@@ -25,6 +25,7 @@
 #define OUTER_LOOP 1
 
 typedef struct dt_drawlayer_cache_patch_t dt_drawlayer_cache_patch_t;
+typedef struct dt_drawlayer_damaged_rect_t dt_drawlayer_damaged_rect_t;
 
 /**
  * @file brush.h
@@ -110,6 +111,57 @@ gboolean dt_drawlayer_brush_rasterize(const dt_drawlayer_cache_patch_t *sample_p
                                       float sample_opacity_scale,
                                       dt_drawlayer_cache_patch_t *stroke_mask,
                                       struct dt_drawlayer_paint_stroke_t *stroke);
+
+/**
+ * @brief A run of dabs that share everything the batch composite needs to be a single step.
+ *
+ * Produced by `dt_drawlayer_brush_batch_is_uniform`. `dabs` is borrowed from the caller's
+ * array and must outlive the rasterization.
+ */
+typedef struct dt_drawlayer_brush_batch_t
+{
+  const dt_drawlayer_brush_dab_t *dabs; /**< Borrowed, contiguous, `count` entries. */
+  guint count;                          /**< Number of dabs. */
+  int mode;                             /**< Shared mode: PAINT or ERASE. */
+  float cap;                            /**< Shared `clamp01(opacity)`, the stroke-alpha ceiling. */
+  float color[4];                       /**< Shared premultiplied source colour. */
+} dt_drawlayer_brush_batch_t;
+
+/**
+ * @brief Decide whether a run of dabs can take the batch path, and describe it if so.
+ *
+ * Requires one mode across the run (PAINT or ERASE), one opacity, one colour, and UI Flow
+ * at 100% (internal flow 0). Those are the conditions under which the per-pixel stroke
+ * alpha collapses to a product of per-dab transmittance factors clamped once -- see the
+ * derivation above `dt_drawlayer_brush_rasterize_batch` in brush.c. SMUDGE and BLUR never
+ * qualify: they read the destination per dab.
+ *
+ * @return TRUE and fills `out` when the run qualifies, FALSE otherwise.
+ */
+gboolean dt_drawlayer_brush_batch_is_uniform(const dt_drawlayer_brush_dab_t *dabs, guint count,
+                                             dt_drawlayer_brush_batch_t *out);
+
+/**
+ * @brief Rasterize a whole batch in two passes: accumulate transmittance, then composite once.
+ *
+ * @param batch Uniform run from `dt_drawlayer_brush_batch_is_uniform`.
+ * @param patch Destination premultiplied RGBA float patch (the heartbeat scratch).
+ * @param scale Layer-to-buffer scale factor, must be >0.
+ * @param stroke_mask Stroke-local alpha, same dimensions as `patch`. Read as the batch's
+ *                    starting alpha and overwritten with the batch's result.
+ * @param transmittance Caller-owned scratch plane of at least `patch->width * patch->height`
+ *                      floats. Contents on entry are irrelevant; the batch box is initialised.
+ * @param batch_damage Optional; the batch's footprint is unioned into it.
+ * @return TRUE when at least one dab contributed.
+ *
+ * Both passes are parallel over disjoint rows, so the result does not depend on the thread
+ * schedule -- unlike the per-dab loop it replaces, whose tile locks excluded but did not order.
+ */
+gboolean dt_drawlayer_brush_rasterize_batch(const dt_drawlayer_brush_batch_t *batch,
+                                            dt_drawlayer_cache_patch_t *patch, float scale,
+                                            dt_drawlayer_cache_patch_t *stroke_mask,
+                                            float *transmittance,
+                                            dt_drawlayer_damaged_rect_t *batch_damage);
 
 /**
  * @brief Rasterize a single dab preview into ARGB8 for GUI overlays.
