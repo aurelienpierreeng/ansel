@@ -207,10 +207,19 @@ static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display
   g->ui.brush_color_valid = TRUE;
 }
 
-static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint_raw_input_t *input)
+/**
+ * @brief Re-resolve the brush from conf into the GUI-side cache.
+ *
+ * Every read here parses a string (`dt_conf_get_float` -> `dt_calculator_solve`), so this
+ * runs when something CHANGES the brush, not when the pointer moves. Its three runtime
+ * writers are `_sync_params_from_gui` (every widget), the colour setter, and `scrolled()`;
+ * `gui_update`, `change_image` and `gui_focus` invalidate as well, so a path nobody
+ * enumerated still refills on the next non-motion event.
+ */
+static void _refresh_brush_settings_cache(dt_iop_drawlayer_gui_data_t *g)
 {
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(input)) return;
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
+  if(IS_NULL_PTR(g)) return;
+  dt_drawlayer_brush_settings_t *const c = &g->ui.brush_settings;
 
   uint32_t map_flags = 0u;
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_SIZE;
@@ -225,6 +234,53 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_OPACITY)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_OPACITY;
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_FLOW)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_FLOW;
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_SOFTNESS;
+
+  c->map_flags = map_flags;
+  c->pressure_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
+  c->tilt_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
+  c->accel_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
+  c->distance_percent = _conf_distance() / 100.0f;
+  c->smoothing_percent = _conf_smoothing() / 100.0f;
+  c->brush_radius = _conf_size();
+  c->brush_opacity = _conf_opacity() / 100.0f;
+  c->brush_flow = _conf_flow() / 100.0f;
+  c->brush_hardness = _conf_hardness();
+  c->brush_sprinkles = _conf_sprinkles() / 100.0f;
+  c->brush_sprinkle_size = _conf_sprinkle_size();
+  c->brush_sprinkle_coarseness = _conf_sprinkle_coarseness() / 100.0f;
+  c->brush_shape = _conf_brush_shape();
+  c->brush_mode = _conf_brush_mode();
+  g->ui.brush_settings_valid = TRUE;
+}
+
+void dt_drawlayer_invalidate_brush_settings_cache(dt_iop_drawlayer_gui_data_t *g)
+{
+  if(!IS_NULL_PTR(g)) g->ui.brush_settings_valid = FALSE;
+}
+
+static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint_raw_input_t *input)
+{
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(input)) return;
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
+  if(!IS_NULL_PTR(g) && !g->ui.brush_settings_valid) _refresh_brush_settings_cache(g);
+
+  /* Only reachable without GUI data, where there is nowhere to cache. */
+  uint32_t map_flags = 0u;
+  if(IS_NULL_PTR(g))
+  {
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_SIZE;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_OPACITY)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_OPACITY;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_FLOW)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_FLOW;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SOFTNESS)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_SOFTNESS;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_SIZE)) map_flags |= DRAWLAYER_INPUT_MAP_TILT_SIZE;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_OPACITY)) map_flags |= DRAWLAYER_INPUT_MAP_TILT_OPACITY;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_FLOW)) map_flags |= DRAWLAYER_INPUT_MAP_TILT_FLOW;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_SOFTNESS)) map_flags |= DRAWLAYER_INPUT_MAP_TILT_SOFTNESS;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SIZE)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_SIZE;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_OPACITY)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_OPACITY;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_FLOW)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_FLOW;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_SOFTNESS;
+  }
 
   float display_rgb[3] = { 0.0f };
   float pipeline_rgb[3] = { 0.0f };
@@ -251,21 +307,22 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
     }
   }
 
-  input->map_flags = map_flags;
-  input->pressure_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
-  input->tilt_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
-  input->accel_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
-  input->distance_percent = _conf_distance() / 100.0f;
-  input->smoothing_percent = _conf_smoothing() / 100.0f;
-  input->brush_radius = _conf_size();
-  input->brush_opacity = _conf_opacity() / 100.0f;
-  input->brush_flow = _conf_flow() / 100.0f;
-  input->brush_hardness = _conf_hardness();
-  input->brush_sprinkles = _conf_sprinkles() / 100.0f;
-  input->brush_sprinkle_size = _conf_sprinkle_size();
-  input->brush_sprinkle_coarseness = _conf_sprinkle_coarseness() / 100.0f;
-  input->brush_shape = _conf_brush_shape();
-  input->brush_mode = _conf_brush_mode();
+  const dt_drawlayer_brush_settings_t *const c = IS_NULL_PTR(g) ? NULL : &g->ui.brush_settings;
+  input->map_flags = c ? c->map_flags : map_flags;
+  input->pressure_profile = c ? c->pressure_profile : (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
+  input->tilt_profile = c ? c->tilt_profile : (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
+  input->accel_profile = c ? c->accel_profile : (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
+  input->distance_percent = c ? c->distance_percent : _conf_distance() / 100.0f;
+  input->smoothing_percent = c ? c->smoothing_percent : _conf_smoothing() / 100.0f;
+  input->brush_radius = c ? c->brush_radius : _conf_size();
+  input->brush_opacity = c ? c->brush_opacity : _conf_opacity() / 100.0f;
+  input->brush_flow = c ? c->brush_flow : _conf_flow() / 100.0f;
+  input->brush_hardness = c ? c->brush_hardness : _conf_hardness();
+  input->brush_sprinkles = c ? c->brush_sprinkles : _conf_sprinkles() / 100.0f;
+  input->brush_sprinkle_size = c ? c->brush_sprinkle_size : _conf_sprinkle_size();
+  input->brush_sprinkle_coarseness = c ? c->brush_sprinkle_coarseness : _conf_sprinkle_coarseness() / 100.0f;
+  input->brush_shape = c ? c->brush_shape : _conf_brush_shape();
+  input->brush_mode = c ? c->brush_mode : _conf_brush_mode();
   input->color[0] = pipeline_rgb[0];
   input->color[1] = pipeline_rgb[1];
   input->color[2] = pipeline_rgb[2];
@@ -3265,6 +3322,11 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g)) return;
 
+  /* Belt and braces beside the three enumerated writers: any refresh of the panel refills
+   * the resolved brush on the next pointer event, so a conf path nobody found cannot leave
+   * the cache stale for longer than one non-motion event. */
+  dt_drawlayer_invalidate_brush_settings_cache(g);
+
   _sanitize_params(self, params);
 
   dt_bauhaus_combobox_set(g->controls.brush_mode, _conf_brush_mode());
@@ -3972,6 +4034,9 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
   const gboolean increase = dt_mask_scroll_increases(up);
   const float factor = increase ? 1.1f : 0.9f;
   const float new_size = CLAMP(_conf_size() * factor, 1.0f, 2048.0f);
+  /* The wheel changes the brush mid-stroke, which is exactly the case a per-event cache
+   * must not miss. */
+  dt_drawlayer_invalidate_brush_settings_cache((dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self));
   dt_conf_set_float(DRAWLAYER_CONF_SIZE, new_size);
 
   if(dt_iop_gui_data(self))

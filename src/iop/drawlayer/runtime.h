@@ -80,6 +80,33 @@ typedef struct dt_drawlayer_stroke_state_t
   uint32_t current_stroke_batch;
 } dt_drawlayer_stroke_state_t;
 
+/**
+ * @brief The brush as the input path needs it, resolved from conf once per change.
+ *
+ * `dt_conf_get_float` runs `dt_calculator_solve` -- an expression parser -- on the stored
+ * string at EVERY call, and the motion handler read eleven floats, twelve bools and three
+ * ints per pointer event. None of it depends on where the pointer is. Cached here beside
+ * the brush colour, which already worked this way.
+ */
+typedef struct dt_drawlayer_brush_settings_t
+{
+  uint32_t map_flags;
+  uint8_t pressure_profile;
+  uint8_t tilt_profile;
+  uint8_t accel_profile;
+  float distance_percent;
+  float smoothing_percent;
+  float brush_radius;
+  float brush_opacity;
+  float brush_flow;
+  float brush_hardness;
+  float brush_sprinkles;
+  float brush_sprinkle_size;
+  float brush_sprinkle_coarseness;
+  int brush_shape;
+  int brush_mode;
+} dt_drawlayer_brush_settings_t;
+
 typedef struct dt_drawlayer_ui_state_t
 {
   dt_drawlayer_widgets_t *widgets;
@@ -94,6 +121,8 @@ typedef struct dt_drawlayer_ui_state_t
   float brush_display_color[3];
   float brush_pipeline_color[3];
   gboolean brush_color_valid;
+  dt_drawlayer_brush_settings_t brush_settings;
+  gboolean brush_settings_valid;
 } dt_drawlayer_ui_state_t;
 
 typedef struct dt_drawlayer_controls_t

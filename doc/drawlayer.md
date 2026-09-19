@@ -115,85 +115,101 @@ With `r` = brush radius (conf default **64**, `conf.c:78`), `s` = spacing
 
 ---
 
-## 4. Why the rasterizer is slow
+## 4. How the rasterizer works, and what it used to cost
 
-Three independent reasons, all measurable from the source alone.
+A stroke pixel used to be composited about 128 times. It is now composited **once per
+batch**, and the reason is algebra rather than tuning.
 
-**(a) It is serial.** Intra-dab parallelism is compiled out — `OUTER_LOOP` is `1`
-(`brush.h:25`), so `#pragma omp parallel for collapse(2)` at `brush.c:747` never compiles in.
-The replacement, a `parallel for` over dabs guarded by 128 px tile locks
-(`worker.c:790-883`), has **parallelism exactly 1 at the defaults**: the batch bbox is
-~162×130 px so the tile grid is 2×2, and every dab's 130×130 footprint spans all four tiles.
-Every dab locks every tile. The OpenMP team is pure overhead, and more threads make it worse
-(a larger `B` ⇒ a larger bbox ⇒ the same contention over more dabs).
+With the stroke mask present and the internal flow at 0 (UI Flow 100%, the default), the
+per-pixel alpha is `capped = min(ba, (cap − s)/(1 − s))` with the mask update
+`s' = 1 − (1 − capped)(1 − s)`. Both branches of that min collapse into one closed form —
 
-The locks are acquired in ascending index order (`worker.c:900-907`), so there is no deadlock —
-but they give mutual exclusion, not *ordering*, and the result is order-dependent through
-`_stroke_flow_alpha`'s `remaining_to_cap` (`brush.c:380`), which reads `stroke_old_alpha`. The
-live preview is therefore nondeterministic.
+> **s' = min( 1 − (1 − ba)(1 − s),  cap )**
 
-**(b) Every pixel runs transcendentals that are constant, cancelled, or avoidable.**
-Per inside-disc pixel (`brush.c:394-431`):
+because the cap is *absorbing*: once it binds, every later dab leaves `s` at `cap`. Over a
+batch that composes to
 
-| cost | site | note |
+> **s_final = min( 1 − Πᵢ (1 − baᵢ) · (1 − s₀),  cap )**
+
+a product of per-dab transmittance factors, clamped once. So `dt_drawlayer_brush_rasterize_batch`
+(`brush.c`) runs two passes: pass 1 accumulates `T ·= (1 − ba)` into a scalar plane — four
+bytes per pixel, no destination load, no `powf` — and pass 2 walks the batch box once and
+does a single float4 composite.
+
+Three properties of that, in order of how easy they are to lose:
+
+- **Transmittance, not coverage.** `T ·= (1 − ba)` reproduces the existing sequence of
+  operations. The algebraically identical `A = 1 − (1 − A)(1 − ba)` would drift, because
+  `1 − (1 − x)` is not exact in binary floating point. Measured against the per-dab path
+  across dense, cap-binding, sparse and ERASE cases: **1.192e-07**, one ULP at 1.0 in float32.
+- **The product is commutative, so order stops mattering** — which is what lets both passes
+  run over disjoint rows with no locks at all, and makes the result bit-identical between one
+  thread and many. The scheme it replaced used an `omp_lock_t` per 128 px tile, which gave
+  mutual exclusion but never *ordering*; since the per-pixel alpha depends on the running
+  stroke alpha, that path produced a different picture run to run.
+- **The derivation is gated, because it is conditional.** `dt_drawlayer_brush_batch_is_uniform`
+  requires one mode (PAINT or ERASE), one opacity, one colour and Flow at 100%. SMUDGE and
+  BLUR never qualify — they read the destination per dab. Everything refused falls through to
+  the per-dab loop unchanged.
+
+`tests/unittests/test_drawlayer_batch_raster.c` pins all of this, including the gate's
+refusals and the thread-count independence.
+
+**Measured, one heartbeat batch at the defaults** (r=64, spacing 1, 32 dabs, 8 cores):
+
+| | per-dab | batch |
 |---|---|---|
-| `sqrtf` | `brush_profile.h:107` | recovers `r` from `r²` the caller just squared |
-| `switch` on shape | `brush_profile.h:38` | per-dab constant |
-| `hardness`, `min_inner`, `inner` | `brush_profile.h:110-113` | **per-dab constants, recomputed per pixel** |
-| `powf` | `brush.c:383` | **multiplied by zero at the default Flow** (`flow = 1-1 = 0`, `brush.c:682`) |
-| up to 108 `splitmix32` | `brush.c:57-88` | sprinkles only; 9 cells × 4 hashes × 3 octaves |
+| wall clock | 25.3 – 27.0 ms | 2.6 – 4.7 ms |
 
-The `powf` alone is ~412 000 discarded calls per batch ≈ 5.5 ms at 40 cy/call and 3 GHz —
-more than the rest of the 20 ms budget spends on anything else. With sprinkles off, the whole
-`norm2 → src_alpha` map is a **1-D function of one scalar with per-dab-constant parameters**:
-one per-dab LUT removes every transcendental in the loop.
+The old figure is the interesting one: it was *above* the 20 ms heartbeat budget, so the
+rasterizer alone could not keep up with its own publish rate.
 
-**(c) It composites 128× what it needs to.** This is the theoretical result, and it is
-checked algebra rather than intuition. At the default Flow, with the stroke mask present,
-`_stroke_flow_alpha` returns `capped_alpha = min(brush_alpha, (cap − s)/(1 − s))` and the mask
-update is `1 − s' = (1 − src)(1 − s)`. Substituting:
+### What is left in the per-pixel loop
 
-> **s' = min( 1 − (1 − brush_alpha)·(1 − s),  cap )**
+Per inside-disc pixel (`_brush_alpha_at`, `brush.c`): a `sqrtf` and a `switch` on shape in
+`dt_drawlayer_brush_profile_eval`, which still recomputes `hardness`/`min_inner`/`inner` per
+pixel although they are per-dab constants; and, with sprinkles on, `_cellular_grain_2d` — 9
+cells × 4 `splitmix32` per octave, up to 3 octaves, **up to 108 hashes per pixel**. The
+`powf` that used to sit here is gone: it fed `accum_alpha`, which `_lerpf(·, ·, 0)` discarded
+at the default Flow.
 
-A **product of per-dab transmittance factors, then a min with a constant**. Products are
-commutative and associative, so for PAINT and ERASE the batch can:
-
-1. accumulate scalar coverage per dab — `A[p] = 1 − (1−A[p])·(1−brush_alpha)` — touching 4
-   bytes per pixel, never loading the RGBA destination, never calling `powf`;
-2. composite **once** over the batch bbox.
-
-That is `540 800` float4 read-modify-writes replaced by `540 800` scalar accumulates plus
-`21 060` float4 composites — **~26× fewer 16-byte writes**, with bit-identical output. And
-because the accumulation is commutative, **dab order stops mattering**: the tile locks, the
-per-thread runtimes and the nondeterminism all go away together, and the parallel loop becomes
-correct by construction.
-
----
+Two wins remain and are not taken: hoisting the per-dab constants out of the profile
+evaluation, and caching the sprinkle field — it is a function of *layer* coordinates only, so
+it is identical for every overlapping dab and is currently recomputed per dab per pixel.
 
 ## 5. Where else the time goes
 
-- **Per pointer event:** 26 `dt_conf_get_*` calls (`drawlayer.c:210-275`), a 25-sample
-  arc-length LUT that builds 25 complete 104-byte dab structs to read two floats from each
-  (`paint.c:239`).
-- **Per emitted dab:** a 32-point radial quadrature with 32 `asinf` + 32 `sqrtf` for a value
-  that is constant over the whole stroke (`paint.c:149-191`); a full `dev->geometry_chain`
-  walk, *from the worker thread*, to fill `dab->wx`/`wy` which **nothing reads**
-  (`paint.c:455`); two unconditional `dt_get_wtime()` calls before the debug-flag test
-  (`paint.c:763`).
-- **Per batch:** the bounding box is computed twice over the same dabs (`worker.c:797` then
-  `:801`); 3 `g_malloc0` + one runtime object per thread + `omp_init_lock` per tile; the
-  scratch buffers are reallocated whenever either dimension *differs* rather than when too
-  small (`cache.c:211`), which on a moving stroke is nearly every frame — ~200 arena
-  operations per second on the lock every pipeline thread contends for.
-- **Per batch, publishes:** the input path is deadline-gated at 20 ms; the drain loop
-  (`worker.c:1138`) publishes after **every** batch with no gate, flooding the GUI main loop
-  with transient-params writes, `TOP_CHANGED` flags and idle sources.
-- **Per layer create:** **two complete sidecar rewrites** (`drawlayer.c:2095`, `:2119`) — on a
-  6000×4000 canvas with 3 layers, ~1.15 GB of half-float traffic through zlib, twice, on the
-  GUI thread. `io.c` takes no lock anywhere and uses a fixed `<path>.tmp` name (`io.c:555`)
-  while being reachable from three threads.
+Fixed:
 
----
+- The 26 `dt_conf_get_*` per pointer motion are now one resolve per *change*
+  (`_refresh_brush_settings_cache`). `dt_conf_get_float` runs `dt_calculator_solve` — an
+  expression parser — on the stored string at every call.
+- The 32-point radial quadrature (32 `asinf`, 32 `sqrtf`, ~96 divisions) is memoised on
+  (radius, hardness, shape, spacing); with no tablet map on size or softness it is computed
+  once per stroke.
+- `dab->wx`/`wy` and the `dev->geometry_chain` walk that filled them from the worker thread
+  are deleted — four writers, no readers.
+- The drain loop honours the same 20 ms publish deadline as the input path. It used to
+  publish after every batch: a transient-params write, a `TOP_CHANGED` flag and an
+  asynchronous signal raise apiece.
+- Two unconditional `dt_get_wtime()` per dab now happen only when the trace is on.
+
+Not fixed:
+
+- **The batch bounding box is still computed twice**, in two different coordinate frames:
+  `_collect_batch_bounds` works against the full canvas, the inner pass against the
+  heartbeat patch. Deduplicating means translating between them.
+- **`process()` composites the whole `roi_out` every frame** and never consults
+  `cache_dirty_rect`, while `process_cl()` does. The win is smaller than it looks:
+  `dt_interpolation_resample` takes a 1:1 fast path (`interpolation.c:920-937`, reached
+  because `source_roi.scale` is hardcoded to 1.0f) at the zoom levels people paint at, so
+  only the alpha-over blend is full-frame there. It is worth most when zoomed *out*. A
+  damage-limited CPU composite also cannot copy the GPU gate: that one depends on the output
+  cacheline being rekeyed in place, which `cache_output_on_ram` prevents on the CPU path.
+- **Per layer create: two complete sidecar rewrites** (`drawlayer.c`) — on a 6000×4000 canvas
+  with 3 layers, ~1.15 GB of half-float traffic through zlib, twice, on the GUI thread.
+  `io.c` takes no lock anywhere and uses a fixed `<path>.tmp` name while being reachable from
+  three threads.
 
 ## 6. State is ten booleans, not a state machine
 
@@ -228,24 +244,41 @@ Confirmed by whole-tree grep, not by inspection:
 
 ---
 
-## 8. Two hazards that are not performance
+## 8. Two hazards that were not performance
 
-**The worker can deadlock itself and take the GUI down with it.**
-`_backend_worker_on_idle` calls `_commit_dabs` (`worker.c:1157`) → `_wait_worker_idle`
-(`drawlayer.c:1786`), which blocks while `ring_count > 0` (`worker.c:1267`). The ring's only
-consumer is `_rt_queue_pop_locked`, called only from `_drawlayer_worker_main` — the thread now
-parked in `dt_pthread_cond_wait`. The lock is dropped at `:1156` and retaken at `:1266`, so a
-GUI push in that window sets `ring_count = 1`. The only escape is `worker->stop`, whose sole
-writer is `_stop_worker` — which calls `_wait_worker_idle` *first* (`:1411`) and sets `stop`
-after (`:1414`). **Both threads hang**, with no error and no stack anywhere else.
+Both fixed; recorded because the shapes recur.
 
-**A new canvas can be published uncleared.** When `_refresh_piece_base_cache` creates a cache
-entry and loads no sidecar page into it, it sets `cache_valid = TRUE` on a buffer
-`dt_drawlayer_cache_patch_alloc_shared` never zeroed (`drawlayer.c:583-632` vs `cache.c:89-121`).
-The GUI twin clears explicitly on the same condition (`layers.c:225-230`) — the two loaders
-have diverged.
+**The worker could deadlock itself and take the GUI down with it.**
+`_backend_worker_on_idle` called `_commit_dabs` → `_wait_worker_idle`, which blocks while
+`ring_count > 0` — and the ring's only consumer is the worker's own loop. It read the
+"ready" predicate under the mutex, dropped it, then committed, so a GUI push in that window
+made the wait real. The only escape, `worker->stop`, is written by `_stop_worker` *after* it
+calls `_wait_worker_idle` too, so the next GUI-side commit hung the GUI thread on the same
+predicate. The worker now posts the commit to the GUI thread and decides-and-posts under one
+lock acquisition; `_wait_worker_idle` carries a tripwire. Note the cheap fix — making the
+wait a no-op on the worker thread — is *wrong*: at that point the ring may hold a new
+stroke's events, and the commit would wipe that stroke's session state.
 
----
+**A never-cleared arena page was published as a valid canvas.**
+`dt_drawlayer_cache_patch_alloc_shared` allocates but does not clear, and
+`_refresh_piece_base_cache` set `cache_valid = TRUE` without clearing when it never attempted
+a load. The GUI-side twin had always cleared; the two loaders had diverged. Both key the same
+cache entry, so an uncleared page created by the pipeline is adopted by the GUI as the
+layer's content and a later sidecar write makes it permanent. The clear stays at the call
+site: moving it into the allocator would add a dead full-canvas memset on the rekey-conflict
+path, which memcpys the whole buffer on its next statement.
+
+Three more of the same family, also fixed: the worker wrote `self->params` (it now carries
+its own blob, *seeded* from the GUI thread, because the hash is an accumulator); the damage
+rectangle was published after releasing the write lock that wrote the pixels it describes;
+and `dt_dev_pixelpipe_t.pause` was a plain `gboolean` written cross-thread beside three
+fields that are atomics for exactly that reason.
+
+Still open: the **pipeline thread writes `self->params` and opens the sidecar** —
+`PROCESS_*_BEFORE` schedules `ensure_layer_cache`, whose first act is `_sanitize_params` on
+`self->params`. Removing it is not a deletion: `g->process.cache_valid = TRUE` happens in
+exactly one place, inside that function, so a display pipe would never composite the layer
+again without a GUI-thread request path to replace it.
 
 ## 9. "Move the rasterizer to the GPU" — the verdict
 
