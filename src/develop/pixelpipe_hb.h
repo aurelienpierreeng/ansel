@@ -525,8 +525,12 @@ typedef struct dt_dev_pixelpipe_t
   // and can lead to memory pressure (RAM buffers + OpenCL pinned/device buffers).
   gboolean no_cache;
 
-  // Temporarily pause the infinite loop of pipeline
-  gboolean pause;
+  // Temporarily pause the infinite loop of pipeline.
+  // Written by drawlayer from BOTH the GUI thread and its paint worker, polled by the
+  // darkroom loop -- so it is atomic, like `running`, `shutdown` and `realtime` beside it.
+  // The pause path happened to be fenced by the `shutdown` store that followed it; the
+  // RESUME path had no atomic after it at all.
+  dt_atomic_int pause;
 
   // Run a self-setting pipeline that will update history for each module
   // depending on its input if it implements the autoset() method

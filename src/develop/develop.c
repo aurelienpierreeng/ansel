@@ -554,7 +554,7 @@ gboolean _resync_pipe_with_history(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
 {
   // When in realtime mode, preview pipe gets paused at the benefit of main pipeline.
   // This is a transient state.
-  if(pipe->pause) return FALSE;
+  if(dt_atomic_get_int(&pipe->pause)) return FALSE;
 
   // We recompute if history hash changed or ROI has changed.
   // If we know history changed, ensure at least the last step is resynced.

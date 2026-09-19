@@ -92,6 +92,14 @@ struct dt_drawlayer_worker_t
   gint64 live_publish_ts;                       /**< Realtime publish pacing timestamp. */
   uint32_t live_publish_serial;                 /**< Monotonic live publish serial committed by heartbeat flushes. */
   dt_drawlayer_damaged_rect_t live_publish_damage; /**< Worker-owned accumulated publish damage. */
+  guint commit_idle_id;                         /**< GUI-thread commit request in flight, 0 when none. Guarded by `worker_mutex`. */
+  dt_iop_drawlayer_params_t publish_params;     /**< Worker-private params blob used by the realtime heartbeat.
+                                                 *   Seeded from `self->params` by the GUI thread at stroke begin
+                                                 *   (`dt_drawlayer_worker_snapshot_params`), then owned by the
+                                                 *   worker. The heartbeat must never touch `self->params`: that
+                                                 *   blob belongs to the GUI thread, and bumping its hash in place
+                                                 *   was an unsynchronised read-modify-write of 344 bytes that
+                                                 *   includes two strings. */
 };
 
 typedef struct drawlayer_paint_backend_ctx_t
@@ -106,6 +114,8 @@ static gboolean _paint_build_dab_cb(void *user_data, dt_drawlayer_paint_stroke_t
 static gboolean _paint_layer_to_widget_cb(void *user_data, float lx, float ly, float *wx, float *wy);
 static void _paint_stroke_seed_cb(void *user_data, uint64_t stroke_seed);
 static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboolean flush_pending);
+static gboolean _commit_dabs_on_gui_thread(gpointer user_data);
+static void _cancel_pending_gui_commit(dt_drawlayer_worker_t *rt);
 static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_paint_raw_input_t *input,
                                    dt_drawlayer_paint_stroke_t *stroke);
 static gboolean _process_backend_dab(const dt_drawlayer_brush_dab_t *dab, drawlayer_paint_backend_ctx_t *ctx,
@@ -299,7 +309,7 @@ static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboole
 
   dt_iop_module_t *self = ctx->self;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(ctx->self);
-  dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
+  dt_iop_drawlayer_params_t *params = IS_NULL_PTR(ctx->worker) ? NULL : &ctx->worker->publish_params;
   dt_develop_t *dev = self->dev;
   if(IS_NULL_PTR(ctx->worker) || IS_NULL_PTR(g) || IS_NULL_PTR(params) || IS_NULL_PTR(dev) || !ctx->worker->live_publish_damage.valid) return;
 
@@ -316,7 +326,15 @@ static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboole
    * re-keys the drawlayer piece's global_hash) without churning the undo stack or the database. The
    * permanent history is written once, at the real commit (`dt_drawlayer_commit_dabs`), which also
    * clears the transient slot. drawlayer does not change geometry, so a fast main-pipe top-only resync
-   * (`_sync_focused_in_place`) is enough — flag it explicitly since _set no longer auto-triggers. */
+   * (`_sync_focused_in_place`) is enough — flag it explicitly since _set no longer auto-triggers.
+   *
+   * `params` is the WORKER'S OWN blob, seeded from `self->params` on the GUI thread at stroke
+   * begin. It is not `self->params`: that one belongs to the GUI thread, and bumping its hash
+   * here was an unsynchronised read-modify-write of a struct carrying two strings. The transient
+   * channel deep-copies what it is given, so a private blob is all it needs. Consequence worth
+   * knowing: the hash the COMMIT chains from is now the previous commit's rather than the last
+   * heartbeat's, which makes the committed value deterministic instead of a function of how many
+   * heartbeats happened to fire. */
   dt_dev_transient_params_set(self, params, self->params_size, NULL, 0);
   dt_dev_pixelpipe_or_changed(dev->pipe, DT_DEV_PIPE_TOP_CHANGED);
   dt_control_queue_redraw_center();
@@ -966,11 +984,20 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
       _clear_mask_damage_in_patch(heartbeat_mask, &batch_damage);
       dt_dev_pixelpipe_cache_flush_host_pinned_image(g->process.base_patch.pixels,
                                                      g->process.base_patch.cache_entry, -1);
+
+      /* Publish the damage INSIDE the write-lock span that wrote the pixels it describes.
+       * The pipeline reads and resets this rect under the base-patch READ lock (taken in
+       * `_update_runtime_state`, released in `_release_runtime_source`), which is mutually
+       * exclusive with this write lock -- so this was the one access of the three that sat
+       * outside a lock. Published after the unlock, a pipeline read landing in the gap saw
+       * pixels without the damage naming them, then cleared the rect: the window was
+       * uploaded but composited against the wrong rectangle. */
+      g->process.cache_dirty = TRUE;
+      dt_drawlayer_paint_runtime_note_dab_damage(&g->process.cache_dirty_rect, &absolute_damage);
+
       dt_drawlayer_cache_patch_wrunlock(&g->process.stroke_mask);
       dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);
 
-      g->process.cache_dirty = TRUE;
-      dt_drawlayer_paint_runtime_note_dab_damage(&g->process.cache_dirty_rect, &absolute_damage);
       dt_drawlayer_paint_runtime_note_dab_damage(worker->backend_path, &absolute_damage);
       dt_drawlayer_paint_runtime_note_dab_damage(&worker->live_publish_damage, &absolute_damage);
       g->stroke.last_dab_valid = TRUE;
@@ -1122,6 +1149,47 @@ static gboolean _rt_workers_any_active(dt_drawlayer_worker_t *rt)
   return active;
 }
 
+/**
+ * @brief Run the stroke-end commit on the GUI thread.
+ *
+ * The commit must not run on the worker thread. `dt_drawlayer_commit_dabs` calls
+ * `_wait_worker_idle`, which blocks while `ring_count > 0`, and the ring's only consumer is
+ * the worker itself — so a worker-side commit that raced a GUI push parked the worker forever
+ * in `dt_pthread_cond_wait`. The only escape, `worker->stop`, is set by `_stop_worker` *after*
+ * it calls `_wait_worker_idle` too, so the next GUI-side commit (a layer operation, focus
+ * loss, image change, module removal, quit) hung the GUI thread on the same predicate.
+ * The commit also writes `self->params` and the history stack, both of which belong to the
+ * GUI thread.
+ */
+static gboolean _commit_dabs_on_gui_thread(gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_drawlayer_gui_data_t *g = IS_NULL_PTR(self) ? NULL : (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
+  dt_drawlayer_worker_t *rt = IS_NULL_PTR(g) ? NULL : g->stroke.worker;
+  if(IS_NULL_PTR(rt)) return G_SOURCE_REMOVE;
+
+  /* Clear the in-flight marker before committing, so a commit that re-arms the request
+   * can post a fresh one. Both this callback and `_cancel_pending_gui_commit` run on the
+   * GUI thread, so the source can never be removed while it is dispatching. */
+  dt_pthread_mutex_lock(&rt->worker_mutex);
+  rt->commit_idle_id = 0;
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
+
+  _commit_dabs(self, TRUE);
+  return G_SOURCE_REMOVE;
+}
+
+/** @brief Drop a queued GUI-thread commit request. GUI thread only. */
+static void _cancel_pending_gui_commit(dt_drawlayer_worker_t *rt)
+{
+  if(IS_NULL_PTR(rt)) return;
+  dt_pthread_mutex_lock(&rt->worker_mutex);
+  const guint source_id = rt->commit_idle_id;
+  rt->commit_idle_id = 0;
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
+  if(source_id) g_source_remove(source_id);
+}
+
 /** @brief Backend-worker idle hook. */
 static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
@@ -1150,11 +1218,13 @@ static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t
   }
 
   if(IS_NULL_PTR(rt)) return;
-  gboolean should_commit = FALSE;
+  /* Decide and post under the SAME lock acquisition. The old code read the predicate, dropped
+   * the lock, then committed — and a GUI push landing in that window made the commit's
+   * `_wait_worker_idle` wait on a ring only this thread drains. */
   dt_pthread_mutex_lock(&rt->worker_mutex);
-  should_commit = _workers_ready_for_commit_locked(rt);
+  if(_workers_ready_for_commit_locked(rt) && rt->commit_idle_id == 0)
+    rt->commit_idle_id = g_idle_add_full(G_PRIORITY_HIGH_IDLE, _commit_dabs_on_gui_thread, self, NULL);
   dt_pthread_mutex_unlock(&rt->worker_mutex);
-  if(should_commit) _commit_dabs(self, TRUE);
 }
 
 /** @brief Process one backend raw input event. */
@@ -1262,6 +1332,18 @@ static gboolean _wait_worker_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *
   (void)self;
   const drawlayer_rt_worker_t *worker = _backend_worker_const(rt);
   if(IS_NULL_PTR(rt) || IS_NULL_PTR(worker) || !_worker_is_started(worker)) return TRUE;
+
+  /* TRIPWIRE. This must only ever be called from the GUI thread. The ring's only consumer is
+   * the worker itself, so waiting here from the worker parks it forever, and `_stop_worker` —
+   * whose `stop` flag is the sole escape — calls this first, so the GUI thread then hangs on
+   * the same predicate. Do NOT "fix" a hit by returning early: at that point the ring may hold
+   * a new stroke's events, and committing would wipe that stroke's session state instead.
+   * Post the commit to the GUI thread (`_commit_dabs_on_gui_thread`) as `_backend_worker_on_idle`
+   * does. */
+  if(worker->thread_started && pthread_equal(pthread_self(), worker->thread))
+    dt_print(DT_DEBUG_ALWAYS,
+             "[drawlayer] BUG: _wait_worker_idle called on the worker thread — it consumes the "
+             "ring it is about to wait on, and will deadlock with the GUI thread.\n");
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
   while(_worker_is_busy(worker) || worker->ring_count > 0)
@@ -1405,6 +1487,10 @@ static void _stop_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
   if(IS_NULL_PTR(rt)) return;
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
   _cancel_async_commit(rt);
+  /* Before joining: a commit the worker posted must not fire against a torn-down module.
+   * This runs on the GUI thread, as does the callback, so once the source is removed here
+   * no commit can be in flight. */
+  _cancel_pending_gui_commit(rt);
 
   if(worker && _worker_is_started(worker))
   {
@@ -1585,6 +1671,23 @@ void dt_drawlayer_worker_request_commit(dt_drawlayer_worker_t *worker)
   dt_pthread_mutex_lock(&worker->worker_mutex);
   if(worker->finish_commit_pending) *worker->finish_commit_pending = TRUE;
   pthread_cond_broadcast(&worker->worker_cond);
+  dt_pthread_mutex_unlock(&worker->worker_mutex);
+}
+
+/**
+ * @brief Seed the worker's private params blob for the stroke about to start. GUI thread only.
+ *
+ * `dt_drawlayer_touch_stroke_commit_hash` is an ACCUMULATOR — it chains from whatever the blob
+ * already holds and keeps the field non-zero so "never updated" stays distinguishable. So the
+ * private copy is seeded, never zeroed, or the heartbeat would restart the chain from the 5381
+ * seed and the commit would observe a different invariant than the one drawlayer.c documents.
+ */
+void dt_drawlayer_worker_snapshot_params(dt_drawlayer_worker_t *worker,
+                                         const dt_iop_drawlayer_params_t *params)
+{
+  if(IS_NULL_PTR(worker) || IS_NULL_PTR(params)) return;
+  dt_pthread_mutex_lock(&worker->worker_mutex);
+  worker->publish_params = *params;
   dt_pthread_mutex_unlock(&worker->worker_mutex);
 }
 

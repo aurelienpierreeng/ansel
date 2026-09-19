@@ -62,6 +62,8 @@ void dt_drawlayer_worker_get_snapshot(const dt_drawlayer_worker_t *worker,
 /** @brief Request asynchronous commit once queues become idle. */
 void dt_drawlayer_worker_request_commit(dt_drawlayer_worker_t *worker);
 /** @brief Flush pending events and force commit transition. */
+void dt_drawlayer_worker_snapshot_params(dt_drawlayer_worker_t *worker,
+                                         const dt_iop_drawlayer_params_t *params);
 void dt_drawlayer_worker_flush_pending(dt_drawlayer_worker_t *worker);
 /** @brief Ensure realtime/backend worker threads are started. */
 gboolean dt_drawlayer_worker_ensure_running(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
