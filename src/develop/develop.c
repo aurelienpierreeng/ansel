@@ -876,14 +876,23 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
           dt_dev_resync_mipmap_cache(dev, pipe, roi);
       }
 
-      // Allow some breathing room to the OS and GPU
-      dt_iop_nap(10000); // 10 ms
+      /* Breathing room for the OS and the GPU, sized against the work just done rather than
+       * fixed. A realtime stroke paces itself upstream -- the publisher only republishes once
+       * per measured pipe runtime -- so a constant here is not what stops this loop spinning;
+       * it is pure latency added to every frame. Two 10 ms naps were ~15% of a 130 ms frame
+       * when this was written and are 41% of a 29 ms one, which is how a constant ages when
+       * the thing it sits beside gets three times faster. */
+      if(!dt_dev_pixelpipe_get_realtime(pipe)) dt_iop_nap(10000);
     }
 
+    /* Nap only when this turn found nothing to do. Having serviced a pipe, go straight back and
+     * look again: the publish throttle decides how often there is new work, and sleeping past
+     * its next publish just moves the stroke further behind the pointer. */
+    const gboolean serviced = pipe_needs_update[0] || pipe_needs_update[1];
     if(dt_dev_pixelpipe_get_realtime(pipes[0]) || dt_dev_pixelpipe_get_realtime(pipes[1]))
-      dt_iop_nap(10000);
+      dt_iop_nap(serviced ? 500 : 10000);
     else
-      dt_iop_nap(50000);
+      dt_iop_nap(serviced ? 1000 : 50000);
   }
 
   for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
