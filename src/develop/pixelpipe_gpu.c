@@ -222,6 +222,10 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   dt_pixel_cache_entry_t *cpu_input_entry = input_entry;
   dt_pixel_cache_entry_t *locked_input_entry = NULL;
   gboolean borrowed_cl_mem_input = FALSE;
+  /* Whether this module's OUTPUT device buffer was created against the host cacheline
+   * (CL_MEM_USE_HOST_PTR). Decided at the acquisition below and read again at the release, so
+   * the two always agree about what kind of buffer this is. */
+  gboolean pinned_output = FALSE;
   const dt_iop_buffer_dsc_t actual_input_dsc = previous_piece ? previous_piece->dsc_out : pipe->dev->image_storage.dsc;
   dt_iop_buffer_dsc_t process_input_dsc = actual_input_dsc;
   dt_iop_buffer_dsc_t blend_input_dsc = actual_input_dsc;
@@ -343,14 +347,34 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
     cl_mem_process_input = cl_mem_input;
 
-    /* The output DEVICE buffer. Suspected of being where display encoding's prologue goes:
-     * its output is 4 bpp, the only such size in a 16 bpp pipe, so it can never be served by
-     * a device buffer another module just released -- unlike colorout, whose prologue is a
-     * twentieth of it. Measured rather than assumed, because the two obvious candidates
-     * before it (the input borrow, the host output allocation) both came back at 0.00. */
+    /* PIN THE OUTPUT ONLY WHERE THE REGISTRATION CAN BE AMORTISED.
+     *
+     * Creating a buffer CL_MEM_USE_HOST_PTR makes the driver register the host pages, which is
+     * only a saving if that registration is reused on later frames. It is reused only if the
+     * cl_mem is found again in the cache entry's payload list, which needs the host pointer to
+     * be the same, which needs the entry to be REKEYED in place rather than replaced.
+     *
+     * `cache_output' is exactly what forbids that rekey: pixelpipe_hb.c computes
+     * `allow_rekey_reuse = ... && !cache_ram_output', deliberately, so the GUI can keep reading
+     * the frame it published while the pipe writes the next one. A fresh slot per frame IS that
+     * double-buffering. The consequence nobody had priced is that such an output can never
+     * reuse a pinned buffer -- measured on display encoding, the one module in this state per
+     * frame: 65 frames, 65 distinct host pointers, 0% reuse against 94-97% for every module
+     * that does rekey, and 7.4 ms a frame re-registering 12.2 MB for nothing. An explicit
+     * device->host read of the same buffer measures ~2 ms.
+     *
+     * So such an output takes a plain device buffer and an explicit copy.
+     * dt_dev_pixelpipe_cache_sync_cl_buffer() already chooses between map/unmap and a read by
+     * asking dt_opencl_is_pinned_memory(), so the readback needs no change.
+     *
+     * This is NOT a retreat from pinned memory being the default: it is the condition under
+     * which pinning is a saving at all. Everything that rekeys still pins and still reuses. */
+    pinned_output = !*cache_output;
+
     const gint64 outcl_t0 = (dt_get_debug_flags() & DT_DEBUG_PERF) ? g_get_monotonic_time() : 0;
     // Alloc output GPU buffer - non-optional
-    cl_mem_output = dt_dev_pixelpipe_cache_get_cl_buffer(pipe->devid, output, &piece->roi_out, piece->dsc_out.bpp, module,
+    cl_mem_output = dt_dev_pixelpipe_cache_get_cl_buffer(pipe->devid, pinned_output ? output : NULL,
+                                                         &piece->roi_out, piece->dsc_out.bpp, module,
                                                          "output", output_entry,
                                                          &gpu_out_cl_reused, cl_mem_input);
     if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -395,12 +419,12 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       dt_print(DT_DEBUG_PERF,
                "[dev_pixelpipe] %s gpu prologue=%.2f ms"
                " (inbuf=%.2f outalloc=%.2f inprep=%.2f outcl=%.2f cst=%.2f) process_cl=%.2f ms"
-               " (in %dx%d bpp=%zu -> out bpp=%zu cache_out=%d outcl_reused=%d host=%p)\n",
+               " (in %dx%d bpp=%zu -> out bpp=%zu cache_out=%d outcl_reused=%d pinned=%d host=%p)\n",
                module->op, (gpu_prologue_end - gpu_stage_t0) / 1000.0,
                gpu_in_borrow_ms, gpu_out_alloc_ms, gpu_in_prepare_ms, gpu_out_cl_ms, gpu_cst_ms,
                (g_get_monotonic_time() - gpu_prologue_end) / 1000.0,
                piece->roi_in.width, piece->roi_in.height, process_input_dsc.bpp, piece->dsc_out.bpp,
-               *cache_output ? 1 : 0, gpu_out_cl_reused ? 1 : 0, output);
+               *cache_output ? 1 : 0, gpu_out_cl_reused ? 1 : 0, pinned_output ? 1 : 0, output);
 
     *pixelpipe_flow |= PIXELPIPE_FLOW_PROCESSED_ON_GPU;
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
@@ -691,7 +715,13 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
    * When the output stayed GPU-only, the recursion no longer carries `cl_mem_output`
    * back explicitly, so we must cache it here before returning. Otherwise
    * the caller publishes a cacheline with metadata only and no recoverable payload. */
-  dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry, output, TRUE);
+  /* Hand back the same KIND of buffer that was taken. The cache tells a host-backed payload
+   * from a device-only one by this pointer (NULL means device-only), and that classification
+   * decides two later things: which source the materialize path prefers, and whether teardown
+   * must wait on the device before recycling the arena slot -- a wait a device-only buffer
+   * does not owe, since it never dereferences that slot. */
+  dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry,
+                                           pinned_output ? output : NULL, TRUE);
 
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_blend_output_temp, NULL, NULL, FALSE);
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_blend_input_temp, NULL, NULL, FALSE);
