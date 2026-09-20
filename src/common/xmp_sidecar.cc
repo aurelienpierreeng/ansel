@@ -1159,17 +1159,21 @@ GHashTable *read_masks(Exiv2::XmpData &xmpData, const char *filename, const int 
   return mask_entries;
 }
 
-/** Decode current mask fields while retaining presence validation. */
+/** Decode current mask fields while retaining presence and range validation. */
 int mask_entry_t::read_property(const char *property, const Exiv2::Xmpdatum &value)
 {
   if(g_str_has_prefix(property, "darktable:mask_num"))
   {
-    mask_num = value.toLong();
+    const long parsed_num = value.toLong();
+    if(parsed_num < 0 || parsed_num > G_MAXINT) return 1;
+    mask_num = parsed_num;
     have_num = TRUE;
   }
   else if(g_str_has_prefix(property, "darktable:mask_id"))
   {
-    mask_id = value.toLong();
+    const long parsed_id = value.toLong();
+    if(parsed_id <= 0 || parsed_id > G_MAXINT) return 1;
+    mask_id = parsed_id;
     have_id = TRUE;
   }
   else if(g_str_has_prefix(property, "darktable:mask_type"))
@@ -1520,29 +1524,37 @@ GList *xmp_development_t::read_order(Exiv2::XmpData &xmpData)
   return order;
 }
 
-/** Validate group references and reject duplicate mask IDs. */
+/** Resolve mask groups within each history step, never across snapshots. */
 int xmp_development_t::validate_mask_history()
 {
   gboolean masks_valid = TRUE;
-  GHashTable *entries = g_hash_table_new(g_int_hash, g_int_equal);
-  if(IS_NULL_PTR(entries)) return 1;
+  GHashTable *entries_by_num = g_hash_table_new(g_direct_hash, g_direct_equal);
+  if(IS_NULL_PTR(entries_by_num)) return 1;
   for(GList *iter = mask_entries_v3; !IS_NULL_PTR(iter); iter = g_list_next(iter))
   {
     auto *entry = (mask_entry_t *)iter->data;
-    if(g_hash_table_contains(entries, &entry->mask_id))
+    auto *entries = (GHashTable *)g_hash_table_lookup(entries_by_num, GINT_TO_POINTER(entry->mask_num));
+    if(IS_NULL_PTR(entries)) entries = g_hash_table_new(g_int_hash, g_int_equal);
+    if(IS_NULL_PTR(entries) || g_hash_table_contains(entries, &entry->mask_id))
     {
       masks_valid = FALSE;
       break;
     }
+    g_hash_table_insert(entries_by_num, GINT_TO_POINTER(entry->mask_num), entries);
     g_hash_table_insert(entries, &entry->mask_id, entry);
   }
-  if(masks_valid)
+  GHashTableIter iter;
+  gpointer entries;
+  g_hash_table_iter_init(&iter, entries_by_num);
+  while(masks_valid && g_hash_table_iter_next(&iter, nullptr, &entries))
   {
-    mask_validation_context_t context = { .entries = entries, .valid = TRUE };
+    mask_validation_context_t context = { .entries = (GHashTable *)entries, .valid = TRUE };
     g_hash_table_foreach(context.entries, validate_mask_entries, &context);
     masks_valid = context.valid;
   }
-  g_hash_table_destroy(entries);
+  g_hash_table_iter_init(&iter, entries_by_num);
+  while(g_hash_table_iter_next(&iter, nullptr, &entries)) g_hash_table_destroy((GHashTable *)entries);
+  g_hash_table_destroy(entries_by_num);
   return masks_valid ? 0 : 1;
 }
 
@@ -1834,33 +1846,30 @@ typedef struct _xmp_mask_ctx_t
   int num;
 } _xmp_mask_ctx_t;
 
-static void _xmp_append_mask(void *user_data, const int mask_num, const int mask_id,
-                             const int mask_type, const char *mask_name, const int mask_version,
-                             const void *points, const int points_len, const int mask_nb,
-                             const void *source, const int source_len)
+static void _xmp_append_mask(void *user_data, const dt_history_repository_mask_row_t *row)
 {
   _xmp_mask_ctx_t *ctx = (_xmp_mask_ctx_t *)user_data;
   Exiv2::XmpData &xmpData = *ctx->xmpData;
   char key[1024];
   const int num = ctx->num;
 
-  char *mask_d = dt_exif_xmp_encode((const unsigned char *)points, points_len, NULL);
-  char *mask_src = dt_exif_xmp_encode((const unsigned char *)source, source_len, NULL);
+  char *mask_d = dt_exif_xmp_encode((const unsigned char *)row->points, row->points_len, nullptr);
+  char *mask_src = dt_exif_xmp_encode((const unsigned char *)row->source, row->source_len, nullptr);
 
   snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_num", num);
-  xmpData[key] = mask_num;
+  xmpData[key] = row->num;
   snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_id", num);
-  xmpData[key] = mask_id;
+  xmpData[key] = row->mask_id;
   snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_type", num);
-  xmpData[key] = mask_type;
+  xmpData[key] = row->form;
   snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_name", num);
-  xmpData[key] = mask_name;
+  xmpData[key] = row->name;
   snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_version", num);
-  xmpData[key] = mask_version;
+  xmpData[key] = row->version;
   snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_points", num);
   xmpData[key] = mask_d;
   snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_nb", num);
-  xmpData[key] = mask_nb;
+  xmpData[key] = row->points_count;
   snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_src", num);
   xmpData[key] = mask_src;
 

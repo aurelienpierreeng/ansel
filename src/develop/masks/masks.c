@@ -1026,28 +1026,25 @@ typedef struct _masks_read_ctx_t
   int previous_num;
 } _masks_read_ctx_t;
 
-static void _read_mask_row(void *user_data, const int history_num, const int form_id,
-                           const int form, const char *name, const int version,
-                           const void *points, const int points_len, const int point_count,
-                           const void *source, const int source_len)
+static void _read_mask_row(void *user_data, const dt_history_repository_mask_row_t *row)
 {
   _masks_read_ctx_t *ctx = (_masks_read_ctx_t *)user_data;
   dt_develop_t *develop = ctx->develop;
 
-  const dt_masks_type_t mask_type = form;
+  const dt_masks_type_t mask_type = row->form;
   dt_masks_form_t *mask_form = dt_masks_create(mask_type);
-  mask_form->formid = form_id;
-  g_strlcpy(mask_form->name, name, sizeof(mask_form->name));
-  mask_form->version = version;
+  mask_form->formid = row->mask_id;
+  g_strlcpy(mask_form->name, row->name, sizeof(mask_form->name));
+  mask_form->version = row->version;
   mask_form->points = NULL;
-  memcpy(mask_form->source, source, sizeof(float) * 2);
+  memcpy(mask_form->source, row->source, sizeof(float) * 2);
 
   // and now we "read" the blob
   if(mask_form->functions)
   {
-    const char *const point_buffer = (const char *)points;
+    const char *const point_buffer = (const char *)row->points;
     const size_t point_struct_size = mask_form->functions->point_struct_size;
-    for(int point_index = 0; point_index < point_count; point_index++)
+    for(int point_index = 0; point_index < row->points_count; point_index++)
     {
       char *point_data = (char *)malloc(point_struct_size);
       memcpy(point_data, point_buffer + point_index * point_struct_size, point_struct_size);
@@ -1083,19 +1080,19 @@ static void _read_mask_row(void *user_data, const int history_num, const int for
     // superseded (never read again) or about to be recomputed anyway.
 
     // if this is a new history entry let's find it
-  if(ctx->previous_num != history_num)
+  if(ctx->previous_num != row->num)
   {
     ctx->history_item = NULL;
     for(GList *history_node = g_list_first(develop->history); history_node; history_node = g_list_next(history_node))
     {
       dt_dev_history_item_t *history_entry = (dt_dev_history_item_t *)(history_node->data);
-      if(history_entry->num == history_num)
+      if(history_entry->num == row->num)
       {
         ctx->history_item = history_entry;
         break;
       }
     }
-    ctx->previous_num = history_num;
+    ctx->previous_num = row->num;
   }
   // add the form to the history entry
     // FIXME: there is no reason to hack history_item to add a forms snapshot that doesn't
@@ -1110,9 +1107,9 @@ static void _read_mask_row(void *user_data, const int history_num, const int for
   else
     fprintf(stderr,
             "[_dev_read_masks_history] can't find history entry %i while adding mask %s(%i)\n",
-            history_num, mask_form->name, form_id);
+            row->num, mask_form->name, row->mask_id);
 
-  if(history_num < dt_dev_get_history_end_ext(develop)) ctx->last_history_item = ctx->history_item;
+  if(row->num < dt_dev_get_history_end_ext(develop)) ctx->last_history_item = ctx->history_item;
 }
 
 void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)

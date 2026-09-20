@@ -20,6 +20,7 @@
 #include "database/database.h"
 #include "database/image_repository.h"
 #include "darktable.h"
+#include "develop/masks.h"
 #include "metadata/exif.h"
 #include "metadata/metadata.h"
 
@@ -140,6 +141,65 @@ static void assert_development_preserved(const int32_t imgid)
 {
   assert_int_equal(dt_history_repository_count_items(imgid), 1);
   assert_int_equal(dt_history_repository_count_mask_items(imgid), 1);
+}
+
+typedef struct mask_history_rows_t
+{
+  int count;
+  int nums[2];
+  int formids[2];
+  int types[2];
+  int versions[2];
+  int point_counts[2];
+  char names[2][8];
+  dt_masks_node_circle_t points[2];
+  float sources[2][2];
+} mask_history_rows_t;
+
+static void collect_mask_history_rows(void *user_data, const dt_history_repository_mask_row_t *row)
+{
+  mask_history_rows_t *rows = (mask_history_rows_t *)user_data;
+  if(rows->count >= (int)G_N_ELEMENTS(rows->nums))
+  {
+    assert_true(FALSE);
+    return;
+  }
+  rows->nums[rows->count] = row->num;
+  rows->formids[rows->count] = row->mask_id;
+  rows->types[rows->count] = row->form;
+  rows->versions[rows->count] = row->version;
+  rows->point_counts[rows->count] = row->points_count;
+  g_strlcpy(rows->names[rows->count], row->name, sizeof(rows->names[rows->count]));
+  assert_int_equal(row->points_len, (int)sizeof(rows->points[rows->count]));
+  memcpy(&rows->points[rows->count], row->points, sizeof(rows->points[rows->count]));
+  assert_int_equal(row->source_len, (int)sizeof(rows->sources[rows->count]));
+  memcpy(rows->sources[rows->count], row->source, sizeof(rows->sources[rows->count]));
+  rows->count++;
+}
+
+static char *make_v3_circle_mask(const char *attributes, const char *name,
+                                 const dt_masks_node_circle_t *point, const float source[2])
+{
+  char *points = dt_exif_xmp_encode((const unsigned char *)point, sizeof(*point), NULL);
+  char *source_position = dt_exif_xmp_encode((const unsigned char *)source, 2 * sizeof(float), NULL);
+  char *mask = g_strdup_printf("<rdf:li %s darktable:mask_type=\"%d\" darktable:mask_name=\"%s\" "
+                               "darktable:mask_version=\"%d\" darktable:mask_points=\"%s\" darktable:mask_nb=\"1\" "
+                               "darktable:mask_src=\"%s\"/>",
+                               attributes, DT_MASKS_CIRCLE, name, DEVELOP_MASKS_VERSION, points, source_position);
+  dt_free(source_position);
+  dt_free(points);
+  return mask;
+}
+
+static char *make_v3_history_step(const int num)
+{
+  static const unsigned char params[] = { 0, 0 };
+  char *encoded_params = dt_exif_xmp_encode(params, sizeof(params), NULL);
+  char *history = g_strdup_printf("<rdf:li darktable:num=\"%d\" darktable:operation=\"exposure\" "
+                                  "darktable:enabled=\"1\" darktable:modversion=\"1\" darktable:params=\"%s\"/>",
+                                  num, encoded_params);
+  dt_free(encoded_params);
+  return history;
 }
 
 static void test_excluded_descriptive_metadata_survives_full_xmp_read(void **state)
@@ -281,6 +341,124 @@ static void test_duplicate_legacy_mask_ids_preserve_development(void **state)
 
   assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
   assert_development_preserved(image.id);
+}
+
+static void test_v3_masks_reuse_formid_across_history_steps(void **state)
+{
+  (void)state;
+  dt_image_t image = make_image("v3-mask-formid-per-step.raw");
+  const dt_masks_node_circle_t first_point = { .center = { 0.25f, 0.50f }, .radius = 0.10f, .border = 0.20f };
+  const dt_masks_node_circle_t second_point = { .center = { 0.75f, 0.50f }, .radius = 0.15f, .border = 0.30f };
+  const float first_source[] = { 0.10f, 0.20f };
+  const float second_source[] = { 0.80f, 0.90f };
+  char *first_history = make_v3_history_step(0);
+  char *second_history = make_v3_history_step(1);
+  char *first_mask = make_v3_circle_mask("darktable:mask_num=\"0\" darktable:mask_id=\"1\"", "first",
+                                          &first_point, first_source);
+  char *second_mask = make_v3_circle_mask("darktable:mask_num=\"1\" darktable:mask_id=\"1\"", "second",
+                                           &second_point, second_source);
+  char *properties = g_strdup_printf("<darktable:history><rdf:Seq>%s%s</rdf:Seq></darktable:history>"
+                                     "<darktable:masks_history><rdf:Seq>%s%s</rdf:Seq></darktable:masks_history>",
+                                     first_history, second_history, first_mask, second_mask);
+  write_xmp(3, properties);
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_int_equal(dt_history_repository_count_items(image.id), 2);
+  assert_int_equal(dt_history_repository_count_mask_items(image.id), 2);
+  char *packet = dt_exif_xmp_read_string(image.id);
+  assert_non_null(packet);
+  assert_true(g_file_set_contents(xmp_path, packet, -1, NULL));
+  dt_free(packet);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_int_equal(dt_history_repository_count_items(image.id), 2);
+  mask_history_rows_t rows = { 0 };
+  dt_history_repository_foreach_mask_item(image.id, collect_mask_history_rows, &rows);
+  assert_int_equal(rows.count, 2);
+  assert_int_equal(rows.nums[0], 0);
+  assert_int_equal(rows.formids[0], 1);
+  assert_int_equal(rows.types[0], DT_MASKS_CIRCLE);
+  assert_int_equal(rows.versions[0], DEVELOP_MASKS_VERSION);
+  assert_int_equal(rows.point_counts[0], 1);
+  assert_int_equal(rows.nums[1], 1);
+  assert_int_equal(rows.formids[1], 1);
+  assert_int_equal(rows.types[1], DT_MASKS_CIRCLE);
+  assert_int_equal(rows.versions[1], DEVELOP_MASKS_VERSION);
+  assert_int_equal(rows.point_counts[1], 1);
+  assert_string_equal(rows.names[0], "first");
+  assert_memory_equal(&rows.points[0], &first_point, sizeof(first_point));
+  assert_memory_equal(rows.sources[0], first_source, sizeof(first_source));
+  assert_string_equal(rows.names[1], "second");
+  assert_memory_equal(&rows.points[1], &second_point, sizeof(second_point));
+  assert_memory_equal(rows.sources[1], second_source, sizeof(second_source));
+
+  dt_free(properties);
+  dt_free(second_mask);
+  dt_free(first_mask);
+  dt_free(second_history);
+  dt_free(first_history);
+}
+
+static void test_invalid_v3_mask_properties_preserve_development(void **state)
+{
+  (void)state;
+  const struct
+  {
+    const char *attributes;
+  } cases[] = { { "darktable:mask_num=\"-1\" darktable:mask_id=\"1\"" },
+                { "darktable:mask_num=\"2147483648\" darktable:mask_id=\"1\"" },
+                { "darktable:mask_num=\"3\" darktable:mask_id=\"-1\"" },
+                { "darktable:mask_num=\"3\" darktable:mask_id=\"0\"" },
+                { "darktable:mask_num=\"3\" darktable:mask_id=\"2147483648\"" } };
+  const dt_masks_node_circle_t point = { .center = { 0.25f, 0.50f }, .radius = 0.10f, .border = 0.20f };
+  const float source[] = { 0.10f, 0.20f };
+
+  for(size_t i = 0; i < G_N_ELEMENTS(cases); i++)
+  {
+    char *filename = g_strdup_printf("out-of-range-v3-mask-%" G_GSIZE_FORMAT ".raw", i);
+    dt_image_t image = make_image(filename);
+    seed_development(image.id);
+    char *history = make_v3_history_step(0);
+    char *mask = make_v3_circle_mask(cases[i].attributes, "mask", &point, source);
+    char *properties = g_strdup_printf("<darktable:history><rdf:Seq>%s</rdf:Seq></darktable:history>"
+                                       "<darktable:masks_history><rdf:Seq>%s</rdf:Seq></darktable:masks_history>",
+                                       history, mask);
+    write_xmp(3, properties);
+
+    assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
+    assert_development_preserved(image.id);
+    dt_free(properties);
+    dt_free(mask);
+    dt_free(history);
+    dt_free(filename);
+  }
+}
+
+static void test_duplicate_v3_mask_ids_in_one_history_step_preserve_development(void **state)
+{
+  (void)state;
+  dt_image_t image = make_image("duplicate-v3-mask-id.raw");
+  seed_development(image.id);
+  const dt_masks_node_circle_t first_point = { .center = { 0.25f, 0.50f }, .radius = 0.10f, .border = 0.20f };
+  const dt_masks_node_circle_t second_point = { .center = { 0.75f, 0.50f }, .radius = 0.15f, .border = 0.30f };
+  const float first_source[] = { 0.10f, 0.20f };
+  const float second_source[] = { 0.80f, 0.90f };
+  char *history = make_v3_history_step(0);
+  char *first_mask = make_v3_circle_mask("darktable:mask_num=\"0\" darktable:mask_id=\"1\"", "first",
+                                          &first_point, first_source);
+  char *second_mask = make_v3_circle_mask("darktable:mask_num=\"0\" darktable:mask_id=\"1\"", "second",
+                                           &second_point, second_source);
+  char *properties = g_strdup_printf("<darktable:history><rdf:Seq>%s</rdf:Seq></darktable:history>"
+                                     "<darktable:masks_history><rdf:Seq>%s%s</rdf:Seq></darktable:masks_history>",
+                                     history, first_mask, second_mask);
+  write_xmp(3, properties);
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
+  assert_development_preserved(image.id);
+
+  dt_free(properties);
+  dt_free(second_mask);
+  dt_free(first_mask);
+  dt_free(history);
 }
 
 static void test_malformed_history_restores_cached_raw_parameters_and_flags(void **state)
@@ -716,6 +894,9 @@ int main(void)
     cmocka_unit_test(test_partial_v1_legacy_mask_properties_preserve_development),
     cmocka_unit_test(test_partial_v2_legacy_mask_properties_preserve_development),
     cmocka_unit_test(test_duplicate_legacy_mask_ids_preserve_development),
+    cmocka_unit_test(test_v3_masks_reuse_formid_across_history_steps),
+    cmocka_unit_test(test_invalid_v3_mask_properties_preserve_development),
+    cmocka_unit_test(test_duplicate_v3_mask_ids_in_one_history_step_preserve_development),
     cmocka_unit_test(test_malformed_history_restores_cached_raw_parameters_and_flags),
     cmocka_unit_test(test_legacy_raw_parameters_decode_flip_byte),
     cmocka_unit_test(test_empty_valid_history_is_accepted),
