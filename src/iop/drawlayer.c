@@ -1027,6 +1027,15 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
                            && _drawlayer_map_source_damage_to_target(&process->cache_dirty_rect, target_roi,
                                                                      source_roi, &target_damage);
 
+  /* Localise the composite's cost. Measured on a 10.4 s stroke, `Drawing' cost 37.5 ms a frame
+   * with a 23 ms FLOOR -- something runs unconditionally -- against a total frame of 109.5 ms.
+   * A per-module total cannot say whether that is the source upload, the resample or the
+   * kernel, and the three have very different fixes. */
+  const gboolean trace_stages = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
+  const gint64 stage_t0 = trace_stages ? g_get_monotonic_time() : 0;
+  gint64 stage_source = stage_t0;
+  gint64 stage_layer = stage_t0;
+
   drawlayer_cl_image_handle_t source = { 0 };
   drawlayer_cl_image_handle_t layer = { 0 };
   cl_mem dev_layer_partial = NULL;
@@ -1040,6 +1049,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   else if(!_drawlayer_acquire_source_image(devid, layer_pixels, resolved_entry, force_device_copy, realtime_reuse,
                                            source_w, source_h, process, &source))
     goto cleanup;
+  if(trace_stages) stage_source = g_get_monotonic_time();
 
   if(partial)
   {
@@ -1102,12 +1112,19 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
       }
     }
     result = TRUE;
+    if(trace_stages)
+      dt_print(DT_DEBUG_PERF,
+               "[drawlayer] composite partial win=%dx%d src=%.2f ms kernel=%.2f ms total=%.2f ms\n",
+               dw, dh, (stage_source - stage_t0) / 1000.0,
+               (g_get_monotonic_time() - stage_source) / 1000.0,
+               (g_get_monotonic_time() - stage_t0) / 1000.0);
     goto cleanup;
   }
 
   if(!_drawlayer_acquire_layer_image(devid, resolved_entry, realtime_reuse, direct_copy, source.mem, source_w,
                                      source_h, target_roi, source_roi, &layer, &err))
     goto cleanup;
+  if(trace_stages) stage_layer = g_get_monotonic_time();
 
   if(use_preview_bg)
   {
@@ -1136,6 +1153,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   err = _drawlayer_run_premult_over_kernel(devid, kernel_premult_over, dev_background, layer.mem, dev_out,
                                            target_roi->width, target_roi->height, 0, 0);
   if(err != CL_SUCCESS) goto cleanup;
+  const gint64 stage_kernel = trace_stages ? g_get_monotonic_time() : 0;
 
   /* The realtime display source is the host-backed full-resolution cache.
    * When imported as CL_MEM_USE_HOST_PTR, queued GPU reads may still touch that
@@ -1151,6 +1169,15 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   }
 
   result = TRUE;
+  if(trace_stages)
+    dt_print(DT_DEBUG_PERF,
+             "[drawlayer] composite FULL out=%dx%d src=%dx%d src_up=%.2f ms resample=%.2f ms "
+             "kernel=%.2f ms finish=%.2f ms total=%.2f ms pinned=%d\n",
+             target_roi->width, target_roi->height, source_w, source_h,
+             (stage_source - stage_t0) / 1000.0, (stage_layer - stage_source) / 1000.0,
+             (stage_kernel - stage_layer) / 1000.0,
+             (g_get_monotonic_time() - stage_kernel) / 1000.0,
+             (g_get_monotonic_time() - stage_t0) / 1000.0, source.is_pinned ? 1 : 0);
 
 cleanup:
   if(dev_layer_partial) dt_opencl_release_mem_object(dev_layer_partial);
@@ -4166,10 +4193,17 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     const gboolean g_hash = pstate && layer_hash != 0 && pstate->last_composite_layer_hash == layer_hash;
     const gboolean g_roi = pstate && !memcmp(&pstate->last_composite_target_roi, &target_roi, sizeof(dt_iop_roi_t));
     const gboolean allow_partial = realtime && g_valid && g_devout && g_hash && g_roi;
-    if(realtime && pstate && !allow_partial && (dt_get_debug_flags() & DT_DEBUG_VERBOSE))
+    /* Once per composite, not per dab, so it belongs under -d perf rather than -d verbose:
+     * asking for verbose to find out why a frame was slow also turns on a per-dab print, and
+     * at the default 1 px spacing that is thousands of lines a second drowning the answer.
+     * Which of the four conditions declined is the whole diagnosis when the full path runs
+     * every frame. */
+    if(realtime && pstate && !allow_partial)
       dt_print(DT_DEBUG_PERF,
-               "[drawlayer] partial gate declined: valid=%d devout=%d hash=%d roi=%d\n",
-               g_valid, g_devout, g_hash, g_roi);
+               "[drawlayer] partial gate declined: valid=%d devout=%d hash=%d roi=%d "
+               "(cache_on_ram=%d bypass=%d)\n",
+               g_valid, g_devout, g_hash, g_roi, piece->cache_output_on_ram ? 1 : 0,
+               piece->bypass_cache ? 1 : 0);
 
     gboolean ok = _blend_layer_over_input_cl(
         pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry, NULL,

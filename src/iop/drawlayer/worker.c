@@ -1266,8 +1266,18 @@ static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t
         _publish_backend_progress(&ctx, TRUE);
     }
 
-    /* Whatever the deadline said, the last batch of the drain must reach the screen. */
-    _publish_backend_progress(&ctx, TRUE);
+    /* The last batch of a drain must reach the screen -- but ONLY once the stroke is over.
+     * This hook runs on every idle transition, which during a live stroke is once per input
+     * batch, so publishing here unconditionally defeated the deadline above entirely: measured
+     * on a 10.4 s stroke, 434 publishes at a 19 ms median gap against a main pipe that needed
+     * 109 ms a frame and delivered 75. The surplus is not free -- each publish raises a centre
+     * redraw, and the GUI thread was compositing the window 48 times a second to show 9 new
+     * frames, on the same thread that has to service the pointer.
+     * Mid-stroke, skipping loses nothing: `live_publish_damage` accumulates and the next
+     * publish carries it. After the stroke, this is the path that shows the final dabs before
+     * the commit lands. */
+    if(rt->painting && !*rt->painting)
+      _publish_backend_progress(&ctx, TRUE);
   }
 
   if(IS_NULL_PTR(rt)) return;
