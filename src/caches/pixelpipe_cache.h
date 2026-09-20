@@ -271,6 +271,7 @@ dt_dev_pixelpipe_cache_get_writable(const uint64_t hash,
                                     const size_t size, const char *name, const int id,
                                     const gboolean alloc, const gboolean allow_rekey_reuse,
                                     const struct dt_pixel_cache_entry_t *reuse_hint,
+                                    const struct dt_pixel_cache_entry_t *reuse_hint_prev,
                                     void **data,
                                     struct dt_pixel_cache_entry_t **entry);
 

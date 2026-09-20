@@ -2549,6 +2549,7 @@ dt_dev_pixelpipe_cache_get_writable(const uint64_t hash,
                                     const size_t size, const char *name, const int id,
                                     const gboolean alloc, const gboolean allow_rekey_reuse,
                                     const dt_pixel_cache_entry_t *reuse_hint,
+                                    const dt_pixel_cache_entry_t *reuse_hint_prev,
                                     void **data,
                                     dt_pixel_cache_entry_t **entry)
 {
@@ -2588,7 +2589,13 @@ dt_dev_pixelpipe_cache_get_writable(const uint64_t hash,
 
   if(allow_rekey_reuse)
   {
+    /* Two candidates, most recent first. The second only ever answers for an output a consumer
+     * holds across frames -- the backbuffer -- where the first is refused by the guard inside
+     * because it is the cacheline currently on screen. Anything nobody holds is served by the
+     * first and never reaches the second, so no module keeps a cacheline alive on its account. */
     cache_entry = _cache_try_rekey_reuse_locked(cache, hash, size, reuse_hint);
+    if(IS_NULL_PTR(cache_entry))
+      cache_entry = _cache_try_rekey_reuse_locked(cache, hash, size, reuse_hint_prev);
     if(!IS_NULL_PTR(cache_entry))
     {
       dt_pthread_mutex_unlock(&cache->lock);
