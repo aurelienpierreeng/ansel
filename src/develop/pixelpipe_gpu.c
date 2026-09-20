@@ -200,6 +200,11 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
    * own process_cl() is spending the difference in here -- input colourspace transform, buffer
    * acquisition, blend, readback. Split the prologue from the kernel so the log says which. */
   const gint64 gpu_stage_t0 = (dt_get_debug_flags() & DT_DEBUG_PERF) ? g_get_monotonic_time() : 0;
+  /* The prologue's two candidate costs, split out because guessing between them has already
+   * been wrong once: borrowing the upstream vRAM payload, and allocating this node's own host
+   * output -- the latter going through the cache allocator, which evicts to make room. */
+  double gpu_in_borrow_ms = 0.0;
+  double gpu_out_alloc_ms = 0.0;
   float *input = input_entry ? dt_pixel_cache_entry_get_data(input_entry) : NULL;
   void *output = dt_pixel_cache_entry_get_data(output_entry);
   void *cl_mem_input = NULL;
@@ -222,9 +227,12 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   // except for basebuffer module which takes no input
   if(!(piece->module->flags() & IOP_FLAGS_TAKE_NO_INPUT))
   {
+    const gint64 borrow_t0 = (dt_get_debug_flags() & DT_DEBUG_PERF) ? g_get_monotonic_time() : 0;
     cl_mem_input = dt_dev_pixelpipe_cache_borrow_cl_payload(input_entry, pipe->devid,
                                             piece->roi_in.width, piece->roi_in.height,
                                             actual_input_dsc.bpp);
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+      gpu_in_borrow_ms = (g_get_monotonic_time() - borrow_t0) / 1000.0;
     borrowed_cl_mem_input = (!IS_NULL_PTR(cl_mem_input));
     if(IS_NULL_PTR(cl_mem_input))
       dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s could not get a cached vRAM input buffer.\n", module->name());
@@ -283,7 +291,10 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   if(!possible_cl || !fits_on_device) *cache_output = TRUE;
   if(*cache_output && IS_NULL_PTR(output))
   {
+    const gint64 alloc_t0 = (dt_get_debug_flags() & DT_DEBUG_PERF) ? g_get_monotonic_time() : 0;
     output = dt_pixel_cache_alloc(output_entry);
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+      gpu_out_alloc_ms = (g_get_monotonic_time() - alloc_t0) / 1000.0;
     if(IS_NULL_PTR(output)) goto error;
   }
 
@@ -364,10 +375,13 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       goto error;
     if(dt_get_debug_flags() & DT_DEBUG_PERF)
       dt_print(DT_DEBUG_PERF,
-               "[dev_pixelpipe] %s gpu prologue=%.2f ms process_cl=%.2f ms (in %dx%d bpp=%zu -> out bpp=%zu)\n",
+               "[dev_pixelpipe] %s gpu prologue=%.2f ms (inbuf=%.2f outalloc=%.2f) process_cl=%.2f ms"
+               " (in %dx%d bpp=%zu -> out bpp=%zu cache_out=%d)\n",
                module->op, (gpu_prologue_end - gpu_stage_t0) / 1000.0,
+               gpu_in_borrow_ms, gpu_out_alloc_ms,
                (g_get_monotonic_time() - gpu_prologue_end) / 1000.0,
-               piece->roi_in.width, piece->roi_in.height, process_input_dsc.bpp, piece->dsc_out.bpp);
+               piece->roi_in.width, piece->roi_in.height, process_input_dsc.bpp, piece->dsc_out.bpp,
+               *cache_output ? 1 : 0);
 
     *pixelpipe_flow |= PIXELPIPE_FLOW_PROCESSED_ON_GPU;
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
