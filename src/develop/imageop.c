@@ -1462,7 +1462,17 @@ void dt_iop_compute_module_hash(dt_iop_module_t *module, GList *masks)
 {
   // Uniform way of getting the full state hash of user-defined parameters,
   // including masks and blending.
-  // WARNING: doesn't take into account parameters dynamically set at runtime.
+  //
+  // WARNING: doesn't take into account parameters dynamically set at runtime. It hashes
+  // `module->params`, NOT whatever params `dt_iop_commit_params()` was handed -- so a caller
+  // committing a transient blob gets a piece that PROCESSES the new params while keeping the
+  // identity of the old ones, and `dt_dev_pixelpipe_process()` then exact-hits the cache and
+  // republishes the previous frame. A realtime stroke rendered only after the brush was
+  // lifted, and nothing logged a thing: 122 heartbeats, 122 resyncs, 122 instant returns.
+  // Callers that commit params other than `module->params` must advance the piece identity
+  // themselves -- see `_sync_focused_in_place()` (develop/dev_pixelpipe.c), which folds the
+  // transient serial into `piece->hash`. Do not "fix" this by writing `module->params` from a
+  // worker thread: that blob belongs to the GUI thread.
 
   /* NOT module->instance. That is a runtime identity -- the family id dt_dev_module_duplicate()
    * matches on -- handed out by a counter on the dev that is never reset, so every darkroom
