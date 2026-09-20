@@ -395,12 +395,12 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       dt_print(DT_DEBUG_PERF,
                "[dev_pixelpipe] %s gpu prologue=%.2f ms"
                " (inbuf=%.2f outalloc=%.2f inprep=%.2f outcl=%.2f cst=%.2f) process_cl=%.2f ms"
-               " (in %dx%d bpp=%zu -> out bpp=%zu cache_out=%d outcl_reused=%d)\n",
+               " (in %dx%d bpp=%zu -> out bpp=%zu cache_out=%d outcl_reused=%d host=%p)\n",
                module->op, (gpu_prologue_end - gpu_stage_t0) / 1000.0,
                gpu_in_borrow_ms, gpu_out_alloc_ms, gpu_in_prepare_ms, gpu_out_cl_ms, gpu_cst_ms,
                (g_get_monotonic_time() - gpu_prologue_end) / 1000.0,
                piece->roi_in.width, piece->roi_in.height, process_input_dsc.bpp, piece->dsc_out.bpp,
-               *cache_output ? 1 : 0, gpu_out_cl_reused ? 1 : 0);
+               *cache_output ? 1 : 0, gpu_out_cl_reused ? 1 : 0, output);
 
     *pixelpipe_flow |= PIXELPIPE_FLOW_PROCESSED_ON_GPU;
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
