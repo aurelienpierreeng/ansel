@@ -96,6 +96,33 @@ void dt_dev_draw_profile_mode_label(cairo_t *cri, int height)
   g_object_unref(layout);
 }
 
+/**
+ * @brief Point this surface at a cacheline, holding the GUI's own claim on it.
+ *
+ * A pixelpipe cache entry with refcount > 0 is never evicted, never has its vRAM flushed and
+ * never removed -- that one predicate is what the LRU, `dt_dev_pixelpipe_cache_flush_clmem()'
+ * and the removal path all share. A locked surface keeps a RAW POINTER into the entry's pixels
+ * for as long as it exists, which is exactly the thing that claim exists to protect, so the GUI
+ * takes it rather than borrowing the pipeline's.
+ *
+ * That is the difference from how this used to work. The surface relied on the single keepalive
+ * ref `pixelpipe_hb.c' swaps when it publishes a new backbuffer, so the cacheline under the
+ * displayed frame was protected only while the pipeline still called it the backbuffer -- the
+ * moment it published the next one, what the screen was showing belonged to nobody. Holding the
+ * claim here means the frame on screen survives the pipeline moving on, which is what lets that
+ * pipeline stop allocating a fresh buffer for every frame just to keep out of the GUI's way.
+ *
+ * Every bind goes through here, including the release (@p entry NULL), so the take and the drop
+ * cannot drift apart -- the shape of bug this file would otherwise grow one assignment at a time.
+ */
+static void _locked_bind_entry(dt_dev_locked_surface_t *locked, struct dt_pixel_cache_entry_t *entry)
+{
+  if(locked->entry == entry) return;
+  if(!IS_NULL_PTR(locked->entry)) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, locked->entry);
+  locked->entry = entry;
+  if(!IS_NULL_PTR(entry)) dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
+}
+
 void dt_dev_release_locked_surface(dt_dev_locked_surface_t *locked)
 {
   if(IS_NULL_PTR(locked)) return;
@@ -106,10 +133,7 @@ void dt_dev_release_locked_surface(dt_dev_locked_surface_t *locked)
     locked->surface = NULL;
   }
 
-  /* These cairo views only mirror whatever cacheline the pipeline currently exposes as backbuffer.
-   * They never own the backbuffer keepalive ref themselves: `pixelpipe_hb.c` swaps that ownership
-   * when publishing a new backbuffer. Releasing the surface must therefore only drop the GUI view. */
-  locked->entry = NULL;
+  _locked_bind_entry(locked, NULL);
   locked->data = NULL;
   locked->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   locked->width = 0;
@@ -161,8 +185,8 @@ gboolean dt_dev_lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, d
    * to the slow path does. */
 
   struct dt_pixel_cache_entry_t *entry = NULL;
-  /* GUI surfaces only borrow the currently published backbuffer. They rely on the backbuffer keepalive ref
-   * owned by `pixelpipe_hb.c`, so they must not take or drop their own cache refs here. */
+  /* The claim on whatever this resolves to is taken by _locked_bind_entry() below, once the
+   * entry is known to be usable -- never here, where the lookup may still be refused. */
   void *data = NULL;
   if(!dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &data, &entry, wait, _dev_backbuf_restart_cache_wait, dev))
     data = NULL;
@@ -197,8 +221,11 @@ gboolean dt_dev_lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, d
 
   if(!IS_NULL_PTR(locked->surface) && locked->data == data && locked->width == width && locked->height == height)
   {
+    /* Same pixels, so the cairo surface stands -- but the ENTRY behind them may be a different
+     * one (this path compares the data pointer, the fast path above compares both), and the
+     * claim belongs to whichever entry actually owns the memory now. */
     locked->hash = hash;
-    locked->entry = entry;
+    _locked_bind_entry(locked, entry);
     locked->data = data;
     return TRUE;
   }
@@ -217,7 +244,7 @@ gboolean dt_dev_lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, d
   locked->width = width;
   locked->height = height;
   locked->data = data;
-  locked->entry = entry;
+  _locked_bind_entry(locked, entry);
   locked->surface = surface;
   return TRUE;
 }
