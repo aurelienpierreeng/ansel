@@ -395,7 +395,8 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       dt_print(DT_DEBUG_PERF,
                "[dev_pixelpipe] %s gpu prologue=%.2f ms"
                " (inbuf=%.2f outalloc=%.2f inprep=%.2f outcl=%.2f cst=%.2f) process_cl=%.2f ms"
-               " (in %dx%d bpp=%zu -> out bpp=%zu cache_out=%d outcl_reused=%d host=%p)\n",
+               " (in %dx%d bpp=%" G_GSIZE_FORMAT " -> out bpp=%" G_GSIZE_FORMAT
+               " cache_out=%d outcl_reused=%d host=%p)\n",
                module->op, (gpu_prologue_end - gpu_stage_t0) / 1000.0,
                gpu_in_borrow_ms, gpu_out_alloc_ms, gpu_in_prepare_ms, gpu_out_cl_ms, gpu_cst_ms,
                (g_get_monotonic_time() - gpu_prologue_end) / 1000.0,
@@ -519,7 +520,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
        * composite gate report devout=0 and fall back to a full resample every frame. One flag,
        * both costs, and neither visible without asking. */
       if(dt_get_debug_flags() & DT_DEBUG_PERF)
-        dt_print(DT_DEBUG_PERF, "[dev_pixelpipe] %s output readback %dx%d bpp=%zu took %.2f ms\n",
+        dt_print(DT_DEBUG_PERF, "[dev_pixelpipe] %s output readback %dx%d bpp=%" G_GSIZE_FORMAT " took %.2f ms\n",
                  module->op, piece->roi_out.width, piece->roi_out.height, piece->dsc_out.bpp,
                  (g_get_monotonic_time() - readback_t0) / 1000.0);
       dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] output memory was copied to cache for %s\n", module->name());
