@@ -4164,6 +4164,12 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   dt_drawlayer_runtime_source_t source = { 0 };
   if(!fallback) fallback = !_update_runtime_state(&runtime_request, &source);
+  /* Everything above -- bind_piece, _refresh_piece_base_cache, the runtime state machine and
+   * _update_runtime_state's source resolution -- is prologue. The pipeline reports `Drawing'
+   * at 53 ms a frame while the composite inside it measures 15, so ~38 ms is somewhere else:
+   * either here, or in the blend op the pipe runs AFTER process_cl returns. Splitting the two
+   * is the difference between optimising drawlayer and optimising blend.c. */
+  const gint64 prologue_end = g_get_monotonic_time();
   if(!fallback)
   {
     const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
@@ -4233,8 +4239,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       .process = runtime_request.process_state,
       .source = &source,
     };
-    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-      dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=blend-base total=%.3f ok=%d\n",
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+      dt_print(DT_DEBUG_PERF,
+               "[drawlayer] process_cl prologue=%.2f ms composite+epilogue=%.2f ms total=%.2f ms ok=%d\n",
+               (prologue_end - process_t0) / 1000.0,
+               (g_get_monotonic_time() - prologue_end) / 1000.0,
                (g_get_monotonic_time() - process_t0) / 1000.0, ok ? 1 : 0);
     dt_drawlayer_runtime_manager_update(manager, &process_post, &runtime_manager);
     return ok;
