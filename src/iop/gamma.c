@@ -502,8 +502,19 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   int mode = DT_IOP_GAMMA_KERNEL_COPY;
   int channel = DT_IOP_GAMMA_FALSE_COLOR_MONO;
   float alpha = (mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) ? 1.0f : 0.0f;
-  const float *const checker_color_1 = d->preview.checker_color_1;
-  const float *const checker_color_2 = d->preview.checker_color_2;
+  /* These two MUST stay arrays, not pointers to d->preview's. The kernel argument below is
+   * sized with sizeof(), so a pointer passes 8 bytes of host address where the kernel wants a
+   * 16-byte float4 -- CL_INVALID_KERNEL_ARGS (-52) on every frame, the GPU path failing over
+   * to a CPU fallback that reads host input the RAM-caching policy never populated, i.e. the
+   * previous life of a rekeyed cacheline: an older frame, drawn silently. Nothing warns,
+   * because sizeof() on a pointer is perfectly legal. */
+  dt_aligned_pixel_t checker_color_1;
+  dt_aligned_pixel_t checker_color_2;
+  for(int c = 0; c < 4; c++)
+  {
+    checker_color_1[c] = d->preview.checker_color_1[c];
+    checker_color_2[c] = d->preview.checker_color_2[c];
+  }
   const int checker_1 = (int)d->preview.checker_1;
   const int checker_2 = (int)d->preview.checker_2;
   const int black_and_white = d->preview.black_and_white ? 1 : 0;
@@ -533,6 +544,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 4, sizeof(int), (void *)&mode);
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 5, sizeof(int), (void *)&channel);
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 6, sizeof(float), (void *)&alpha);
+  /* The kernel wants a float4 for each; sizeof() on a decayed pointer would quietly pass 8
+   * bytes of host address instead, which the compiler cannot warn about. Checked here rather
+   * than trusted, because the runtime symptom is an older frame drawn silently. */
+  _Static_assert(sizeof(checker_color_1) == 4 * sizeof(float), "checker colour 1 must be a float4, not a pointer");
+  _Static_assert(sizeof(checker_color_2) == 4 * sizeof(float), "checker colour 2 must be a float4, not a pointer");
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 7, sizeof(checker_color_1), (void *)&checker_color_1);
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 8, sizeof(checker_color_2), (void *)&checker_color_2);
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 9, sizeof(int), (void *)&checker_1);
