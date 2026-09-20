@@ -205,6 +205,9 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
    * output -- the latter going through the cache allocator, which evicts to make room. */
   double gpu_in_borrow_ms = 0.0;
   double gpu_out_alloc_ms = 0.0;
+  double gpu_in_prepare_ms = 0.0;
+  double gpu_out_cl_ms = 0.0;
+  double gpu_cst_ms = 0.0;
   float *input = input_entry ? dt_pixel_cache_entry_get_data(input_entry) : NULL;
   void *output = dt_pixel_cache_entry_get_data(output_entry);
   void *cl_mem_input = NULL;
@@ -328,21 +331,33 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   if(fits_on_device)
   {
     // Alloc input GPU buffer if we didn't already borrow it
+    const gint64 inprep_t0 = (dt_get_debug_flags() & DT_DEBUG_PERF) ? g_get_monotonic_time() : 0;
     if(!(piece->module->flags() & IOP_FLAGS_TAKE_NO_INPUT))
       if(dt_dev_pixelpipe_cache_prepare_cl_input(pipe, module, input, &cl_mem_input,
                               &piece->roi_in, piece->dsc_in.bpp, input_entry,
                               &locked_input_entry, NULL))
         goto error;
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+      gpu_in_prepare_ms = (g_get_monotonic_time() - inprep_t0) / 1000.0;
 
     cl_mem_process_input = cl_mem_input;
 
+    /* The output DEVICE buffer. Suspected of being where display encoding's prologue goes:
+     * its output is 4 bpp, the only such size in a 16 bpp pipe, so it can never be served by
+     * a device buffer another module just released -- unlike colorout, whose prologue is a
+     * twentieth of it. Measured rather than assumed, because the two obvious candidates
+     * before it (the input borrow, the host output allocation) both came back at 0.00. */
+    const gint64 outcl_t0 = (dt_get_debug_flags() & DT_DEBUG_PERF) ? g_get_monotonic_time() : 0;
     // Alloc output GPU buffer - non-optional
     cl_mem_output = dt_dev_pixelpipe_cache_get_cl_buffer(pipe->devid, output, &piece->roi_out, piece->dsc_out.bpp, module,
                                                          "output", output_entry,
                                                          NULL, cl_mem_input);
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+      gpu_out_cl_ms = (g_get_monotonic_time() - outcl_t0) / 1000.0;
     if(IS_NULL_PTR(cl_mem_output)) goto error;
     
     const int cst_before_cl = process_input_dsc.cst;
+    const gint64 cst_t0 = (dt_get_debug_flags() & DT_DEBUG_PERF) ? g_get_monotonic_time() : 0;
     if(process_input_dsc.cst != piece->dsc_in.cst
        && !(dt_iop_colorspace_is_rgb(process_input_dsc.cst) && dt_iop_colorspace_is_rgb(piece->dsc_in.cst)))
     {
@@ -363,6 +378,8 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     {
       process_input_dsc.cst = piece->dsc_in.cst;
     }
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+      gpu_cst_ms = (g_get_monotonic_time() - cst_t0) / 1000.0;
     const int cst_after_cl = process_input_dsc.cst;
 
     dt_dev_pixelpipe_debug_dump_module_io(pipe, module, "pre", TRUE, &piece->dsc_in, &piece->dsc_out,
@@ -375,10 +392,11 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       goto error;
     if(dt_get_debug_flags() & DT_DEBUG_PERF)
       dt_print(DT_DEBUG_PERF,
-               "[dev_pixelpipe] %s gpu prologue=%.2f ms (inbuf=%.2f outalloc=%.2f) process_cl=%.2f ms"
+               "[dev_pixelpipe] %s gpu prologue=%.2f ms"
+               " (inbuf=%.2f outalloc=%.2f inprep=%.2f outcl=%.2f cst=%.2f) process_cl=%.2f ms"
                " (in %dx%d bpp=%zu -> out bpp=%zu cache_out=%d)\n",
                module->op, (gpu_prologue_end - gpu_stage_t0) / 1000.0,
-               gpu_in_borrow_ms, gpu_out_alloc_ms,
+               gpu_in_borrow_ms, gpu_out_alloc_ms, gpu_in_prepare_ms, gpu_out_cl_ms, gpu_cst_ms,
                (g_get_monotonic_time() - gpu_prologue_end) / 1000.0,
                piece->roi_in.width, piece->roi_in.height, process_input_dsc.bpp, piece->dsc_out.bpp,
                *cache_output ? 1 : 0);
