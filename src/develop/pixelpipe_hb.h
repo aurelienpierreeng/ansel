@@ -225,7 +225,25 @@ typedef struct dt_backbuf_t
 
   /** Odd while a publication is in flight, even once it has settled. See ::dt_dev_backbuf_snapshot. */
   dt_atomic_uint64 generation;
+
+  /** The ONE cache reference that keeps the published cacheline alive, held by pointer.
+   *
+   * Private to whoever publishes this backbuffer -- never read by a consumer, and deliberately
+   * NOT part of ::dt_backbuf_state_t, which is the coherent snapshot consumers take. It is a
+   * pointer rather than the hash it used to be released by, because rekey reuse moves a live
+   * entry to a new hash in place: released by the hash it was taken at, the reference would
+   * never be found again and never dropped. Managed only through
+   * ::dt_dev_backbuf_take_keepalive and ::dt_dev_backbuf_release_keepalive. */
+  struct dt_pixel_cache_entry_t *keepalive;
 } dt_backbuf_t;
+
+/** @brief Take the keepalive reference on @p entry, releasing whatever this backbuffer held.
+ *  Idempotent for the same entry, so a republication that resolves to the same cacheline does
+ *  not stack references. */
+void dt_dev_backbuf_take_keepalive(dt_backbuf_t *backbuf, struct dt_pixel_cache_entry_t *entry);
+
+/** @brief Release this backbuffer's keepalive reference, if it holds one. Safe to call twice. */
+void dt_dev_backbuf_release_keepalive(dt_backbuf_t *backbuf);
 
 /** @brief One coherent publication, by value. */
 typedef struct dt_backbuf_state_t

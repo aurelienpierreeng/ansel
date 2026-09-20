@@ -3088,6 +3088,14 @@ void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_pixel_cache_entry_t *cache_ent
   dt_pthread_mutex_unlock(&cache->lock);
 }
 
+void dt_dev_pixelpipe_cache_unref_entry(dt_pixel_cache_entry_t *entry)
+{
+  /* No cache lock and no lookup: the caller names the entry it referenced, and holding a
+   * reference is what guarantees that object is still there to be named. */
+  if(IS_NULL_PTR(entry)) return;
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+}
+
 void dt_dev_pixelpipe_cache_unref_hash(const uint64_t hash)
 {
   dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
