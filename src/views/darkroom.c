@@ -1568,6 +1568,31 @@ gboolean _switch_to_prev_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   return TRUE;
 }
 
+/**
+ * @brief Re-settle every node against the preferences that were just changed.
+ *
+ * A module settles its effective contract in commit_params(), and several read application
+ * preferences there rather than per frame -- iop/colorbalancergb.c and iop/gamma.c both do,
+ * for the same mask-preview appearance. Nothing carries those values in history, so only a
+ * resync re-reads them, and the four "Mask preview settings" writers below each trigger one
+ * themselves for exactly that reason.
+ *
+ * The Preferences dialog had no such path. A key reachable only from it -- `channel_display',
+ * which picks false colour against greyscale for the channel display -- would therefore keep
+ * whatever it held at the last resync: toggling the channel display raises TOP_CHANGED, which
+ * re-commits the focused node alone and never reaches iop/gamma.c, so the preference read as
+ * doing nothing until an unrelated edit happened to resync the pipe.
+ *
+ * One resync per dialog interaction, which is the same cost the render-size and mask
+ * rasterisation combos in this file already pay for a settings change.
+ */
+static void _preferences_changed(gpointer instance, gpointer user_data)
+{
+  dt_develop_t *dev = (dt_develop_t *)user_data;
+  if(IS_NULL_PTR(dev)) return;
+  dt_dev_pixelpipe_resync_history_all(dev);
+}
+
 static void _preview_pipe_finished(gpointer instance, gpointer user_data)
 {
   // Get the mip size that is at most as big as our pipeline backbuf
@@ -1687,6 +1712,10 @@ void gui_init(dt_view_t *self)
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_preview_pipe_finished), self);
+
+  // Both resync entry points early-out on !dev->gui_attached, so this is inert outside darkroom.
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE,
+                                  G_CALLBACK(_preferences_changed), dev);
 
   dt_accels_new_darkroom_action(_switch_to_next_picture, self, NULL, N_("Darkroom/Actions"),
                                 N_("Switch to the next picture"), GDK_KEY_Right, GDK_MOD1_MASK, _("Triggers the action"));
