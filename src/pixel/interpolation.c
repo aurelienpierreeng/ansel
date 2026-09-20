@@ -41,6 +41,7 @@
 #include "caches/pixelpipe_cache_alloc.h"
 #include "math/math.h"
 #include "common/conf.h"
+#include "system/atomic.h"  // the generation-keyed userpref cache below
 
 #include <assert.h>
 #include <glib.h>
@@ -597,27 +598,63 @@ void dt_interpolation_compute_pixel4c(const struct dt_interpolation *itor,
  * Interpolation factory
  * ------------------------------------------------------------------------*/
 
+/* The two preference-driven answers, cached against the conf generation.
+ *
+ * This resolves a preference to one of a handful of static kernels, and it used to do that
+ * by reading conf and strcmp-ing the name on EVERY call -- from ~30 call sites, several of
+ * them per tile, on pipeline threads. The arithmetic was never the problem: dt_conf_get_*
+ * takes the application-wide conf mutex, the one the GUI thread holds constantly, so this
+ * was pipeline threads contending with the GUI to re-derive a constant.
+ *
+ * Unlike a module, this is a library function with no commit_params() to settle it in, so
+ * the answer is cached here and re-derived when dt_conf_generation() moves.
+ *
+ * The race is benign by construction: two threads may both re-derive, and they resolve the
+ * same preference to the same static pointer. The pointer is published BEFORE the generation
+ * that vouches for it, so a reader that sees a current generation cannot see a stale pointer;
+ * both stores are sequentially consistent, which orders them.
+ *
+ * NOTE this does not make the interpolator part of any cache key. A module whose pixels
+ * depend on which kernel is chosen still owes that to its own hash -- changing the preference
+ * mid-session re-derives here but invalidates no pixel the pipe has already cached. That gap
+ * predates this cache and is not closed by it. */
+static dt_atomic_uint64 _userpref_generation = 0;
+static dt_atomic_ptr _userpref_itor = NULL;
+static dt_atomic_uint64 _userpref_warp_generation = 0;
+static dt_atomic_ptr _userpref_warp_itor = NULL;
+
+static const struct dt_interpolation *_resolve_by_name(const char *conf_key)
+{
+  const char *uipref = dt_conf_get_string_const(conf_key);
+  for(int i = DT_INTERPOLATION_FIRST; uipref && i < DT_INTERPOLATION_LAST; i++)
+  {
+    if(!strcmp(uipref, dt_interpolator[i].name)) return &dt_interpolator[i];
+  }
+  return NULL;
+}
+
+static const struct dt_interpolation *_userpref_cached(const char *conf_key,
+                                                       dt_atomic_uint64 *generation,
+                                                       dt_atomic_ptr *slot)
+{
+  const uint64_t now = dt_conf_generation();
+  if(dt_atomic_get_uint64(generation) == now)
+    return (const struct dt_interpolation *)dt_atomic_get_ptr(slot);
+
+  const struct dt_interpolation *itor = _resolve_by_name(conf_key);
+  dt_atomic_set_ptr(slot, (void *)itor);
+  dt_atomic_set_uint64(generation, now);
+  return itor;
+}
+
 const struct dt_interpolation *dt_interpolation_new(enum dt_interpolation_type type)
 {
   const struct dt_interpolation *itor = NULL;
 
   if(type == DT_INTERPOLATION_USERPREF)
   {
-    // Find user preferred interpolation method
-    const char *uipref =
-      dt_conf_get_string_const("plugins/lighttable/export/pixel_interpolator");
-
-    for(int i = DT_INTERPOLATION_FIRST;
-        uipref && i < DT_INTERPOLATION_LAST;
-        i++)
-    {
-      if(!strcmp(uipref, dt_interpolator[i].name))
-      {
-        // Found the one
-        itor = &dt_interpolator[i];
-        break;
-      }
-    }
+    itor = _userpref_cached("plugins/lighttable/export/pixel_interpolator",
+                            &_userpref_generation, &_userpref_itor);
 
     /* In the case the search failed (!uipref or name not found),
      * prepare later search pass with default fallback */
@@ -625,20 +662,8 @@ const struct dt_interpolation *dt_interpolation_new(enum dt_interpolation_type t
   }
   else if(type == DT_INTERPOLATION_USERPREF_WARP)
   {
-    // Find user preferred interpolation method
-    const char *uipref =
-      dt_conf_get_string_const("plugins/lighttable/export/pixel_interpolator_warp");
-    for(int i = DT_INTERPOLATION_FIRST;
-        uipref && i < DT_INTERPOLATION_LAST;
-        i++)
-    {
-      if(!strcmp(uipref, dt_interpolator[i].name))
-      {
-        // Found the one
-        itor = &dt_interpolator[i];
-        break;
-      }
-    }
+    itor = _userpref_cached("plugins/lighttable/export/pixel_interpolator_warp",
+                            &_userpref_warp_generation, &_userpref_warp_itor);
 
     /* In the case the search failed (!uipref or name not found),
      * prepare later search pass with default fallback */
