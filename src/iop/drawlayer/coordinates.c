@@ -291,14 +291,19 @@ float dt_drawlayer_widget_brush_radius(dt_iop_module_t *self, const dt_drawlayer
   return fmaxf(0.5f, isfinite(radius) ? radius : fallback);
 }
 
+/* Reached from process() through the runtime manager, and from every stroke motion --
+ * _fill_runtime_inputs() calls it once per update just to answer `padding_changed'.
+ *
+ * It used to build a whole dab to do that, reading the brush hardness and shape from conf
+ * alongside the size and then using NEITHER: the padding is a function of the radius only.
+ * Those two reads were not merely redundant arithmetic, they were two acquisitions of the
+ * application-wide conf mutex -- the one the GUI thread holds constantly -- on the realtime
+ * painting path, per motion event. Three acquisitions where one is owed.
+ *
+ * Keep it that way: this answers a question about the radius, so it reads the radius. */
 float dt_drawlayer_current_live_padding(dt_iop_module_t *self)
 {
-  dt_drawlayer_brush_dab_t dab = {
-    .radius = fmaxf(_conf_size(), 0.5f),
-    .hardness = _conf_hardness(),
-    .shape = _conf_brush_shape(),
-  };
-  return ceilf(dab.radius + 1.0f);
+  return ceilf(fmaxf(_conf_size(), 0.5f) + 1.0f);
 }
 
 gboolean dt_drawlayer_compute_view_patch(dt_iop_module_t *self, const float padding, drawlayer_view_patch_info_t *view)
