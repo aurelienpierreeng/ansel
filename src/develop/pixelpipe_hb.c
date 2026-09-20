@@ -1071,7 +1071,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   const dt_dev_pixelpipe_cache_writable_status_t acquire_status
       = dt_dev_pixelpipe_cache_get_writable(hash, bufsize, name, pipe->type,
                                             cache_ram_output, allow_rekey_reuse,
-                                            &piece->cache_entry,
+                                            &piece->cache_entry, &piece->cache_entry_prev,
                                             &output, &output_entry);
   dt_free(name);
   if(acquire_status == DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT)
@@ -1233,6 +1233,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
 
   if(!IS_NULL_PTR(output_entry))
   {
+    /* Shift, so the slot the next run falls back on is the cacheline from two runs ago -- by
+     * then released by whoever was displaying it, where the one just published is not. */
+    piece->cache_entry_prev = piece->cache_entry;
     piece->cache_entry = *output_entry;
   }
   else

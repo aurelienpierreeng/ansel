@@ -158,6 +158,20 @@ typedef struct dt_dev_pixelpipe_iop_t
   // fails before producing a valid output for the new hash.
   dt_pixel_cache_entry_t cache_entry;
 
+  /** The cacheline written the run BEFORE `cache_entry`, offered as a second reuse candidate.
+   *
+   * It exists for one case: an output a consumer holds across frames, i.e. the backbuffer. Such
+   * an entry is refused by the rekey guard while it is on screen, and with a single hint the
+   * producer then had nothing to fall back on and allocated a new cacheline every frame --
+   * measured, 122 distinct host buffers over 122 frames, each re-pinning 12.2 MB for OpenCL.
+   * Two slots let it alternate: the one from two runs ago has been released by then, so the
+   * frame being displayed is republished rather than overwritten and both keep their payload.
+   *
+   * It costs nothing for every other module. `cache_entry` is tried first and, with nothing
+   * holding it, succeeds -- so this slot is never consulted and no second cacheline is kept
+   * alive on its account. */
+  dt_pixel_cache_entry_t cache_entry_prev;
+
   // Set to TRUE for modules that should mandatorily cache their output to RAM
   // even when running on OpenCL. This is a processing-policy flag authored
   // during synchronization and then consumed by one recursion step; it does not
