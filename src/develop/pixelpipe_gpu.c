@@ -196,6 +196,10 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                              dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
 {
   dt_iop_module_t *module = piece->module;
+  /* The module's timed region is exactly this function, so a module that costs more than its
+   * own process_cl() is spending the difference in here -- input colourspace transform, buffer
+   * acquisition, blend, readback. Split the prologue from the kernel so the log says which. */
+  const gint64 gpu_stage_t0 = (dt_get_debug_flags() & DT_DEBUG_PERF) ? g_get_monotonic_time() : 0;
   float *input = input_entry ? dt_pixel_cache_entry_get_data(input_entry) : NULL;
   void *output = dt_pixel_cache_entry_get_data(output_entry);
   void *cl_mem_input = NULL;
@@ -355,8 +359,15 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                                           process_input_dsc.bpp, piece->dsc_out.bpp,
                                           cst_before_cl, cst_after_cl);
 
-      if(!module->process_cl(module, pipe, piece, cl_mem_process_input, cl_mem_output))
+    const gint64 gpu_prologue_end = (dt_get_debug_flags() & DT_DEBUG_PERF) ? g_get_monotonic_time() : 0;
+    if(!module->process_cl(module, pipe, piece, cl_mem_process_input, cl_mem_output))
       goto error;
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+      dt_print(DT_DEBUG_PERF,
+               "[dev_pixelpipe] %s gpu prologue=%.2f ms process_cl=%.2f ms (in %dx%d bpp=%zu -> out bpp=%zu)\n",
+               module->op, (gpu_prologue_end - gpu_stage_t0) / 1000.0,
+               (g_get_monotonic_time() - gpu_prologue_end) / 1000.0,
+               piece->roi_in.width, piece->roi_in.height, process_input_dsc.bpp, piece->dsc_out.bpp);
 
     *pixelpipe_flow |= PIXELPIPE_FLOW_PROCESSED_ON_GPU;
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
@@ -475,7 +486,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
        * composite gate report devout=0 and fall back to a full resample every frame. One flag,
        * both costs, and neither visible without asking. */
       if(dt_get_debug_flags() & DT_DEBUG_PERF)
-        dt_print(DT_DEBUG_PERF, "[dev_pixelpipe] %s output readback %dx%d bpp=%d took %.2f ms\n",
+        dt_print(DT_DEBUG_PERF, "[dev_pixelpipe] %s output readback %dx%d bpp=%zu took %.2f ms\n",
                  module->op, piece->roi_out.width, piece->roi_out.height, piece->dsc_out.bpp,
                  (g_get_monotonic_time() - readback_t0) / 1000.0);
       dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] output memory was copied to cache for %s\n", module->name());
