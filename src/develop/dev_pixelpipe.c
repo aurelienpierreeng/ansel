@@ -436,9 +436,34 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
                                                        .active_in_gui = active_in_gui,
                                                        .has_autoset = has_autoset };
 
+    const gboolean was_cached_on_ram = piece->cache_output_on_ram;
     piece->cache_output_on_ram
         = dt_dev_pipe_cache_policy_decide(&inputs, current_output_must_cache_host,
                                           &current_output_must_cache_host);
+
+    /* THE TRANSITION, and the reason the policy above can stay lean.
+     *
+     * A node that did NOT have to publish host data leaves its cacheline with whatever host
+     * bytes that line held in a previous life -- the buffers are reused in place by rekey. If
+     * its requirement then turns back on (a CPU-only consumer downstream re-enabled, a picker
+     * opened, the module gaining focus), the line is found by hash, looks valid, and hands
+     * out those stale bytes. That is the defect the old transitive OR was hiding by keeping
+     * every host copy fresh everywhere, forever -- at 152 MB a frame.
+     *
+     * Invalidate the line instead, exactly on the edge where it becomes readable from RAM.
+     * `piece->global_hash` still names the PREVIOUS resync's line here (the new hashes are
+     * computed after this seal), which is precisely the line that would be reused. Entries
+     * still referenced or locked are left alone by the cache, so this cannot pull a published
+     * backbuffer out from under another pipe. */
+    if(!was_cached_on_ram && piece->cache_output_on_ram
+       && piece->global_hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+    {
+      const uint64_t stale = piece->global_hash;
+      dt_dev_pixelpipe_cache_invalidate_hashes(&stale, 1);
+      dt_print(DT_DEBUG_PIPE,
+               "[pixelpipe] %s now needs its output in RAM: dropped its cacheline so the host "
+               "copy cannot be served stale\n", module->op);
+    }
   }
 }
 

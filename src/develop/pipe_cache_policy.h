@@ -84,14 +84,22 @@ static inline gboolean dt_dev_pipe_cache_policy_decide(const dt_dev_pipe_cache_p
       = !in->supports_opencl || in->active_in_gui || in->module_hist_on
         || in->global_hist_input_on || in->has_autoset;
 
-  // A GPU-capable node that needs no host input of its own must not ERASE a requirement
-  // inherited from further downstream -- a CPU-only module reached through it, or one that is
-  // disabled right now but was enabled a moment ago and left a stale host-less cacheline
-  // behind. This was an `=' once, and an intermediate GPU module silently reset the flag; the
-  // module before it then skipped a readback that a later, non-adjacent consumer needed, and
-  // read the previous life of a rekeyed cacheline. Only reproducible with OpenCL enabled.
+  // ONE HOP, not transitive. A node's output must reach host RAM when the node that CONSUMES
+  // it reads from RAM -- and that says nothing about the node before it, which publishes to a
+  // consumer of its own. Carrying the requirement further up (`own || inherited') made it
+  // monotone: the seal seeds the walk with TRUE for the displayed final output, so every
+  // enabled node in the pipe inherited it and copied its whole output device->host every
+  // frame. Measured on a painting stroke: 152 MB and 68 ms of a 113.8 ms frame, of which only
+  // gamma's 11.7 MB was ever read by anything on the host.
+  //
+  // That OR was itself a fix, for a GPU module toggled ON erasing a CPU-only module's
+  // requirement from further downstream. But the defect it fixed was never in the
+  // propagation: it was that the node's cacheline kept a STALE host copy when its
+  // host-requirement later turned back on, and got reused by hash. Keeping every host copy
+  // eternally fresh hid that. `_seal_opencl_cache_policy()' now invalidates a node's cacheline
+  // on the FALSE->TRUE transition instead, which is where the staleness actually lives.
   if(!IS_NULL_PTR(upstream_requirement))
-    *upstream_requirement = own_input_requirement || inherited_requirement;
+    *upstream_requirement = own_input_requirement;
 
   return in->authored_cache || in->user_requested_cache || in->color_picker_on
          || in->global_hist_output_on || inherited_requirement;
