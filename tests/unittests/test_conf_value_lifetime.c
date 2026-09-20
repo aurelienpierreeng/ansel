@@ -159,6 +159,43 @@ static void _typed_setters_retire_too(void **state)
   assert_int_equal(dt_conf_get_int_fast(TEST_KEY), 22);
 }
 
+/** The generation advances on a real change, and ONLY on a real change.
+ *
+ * This is the contract a hot-path cache keys on (pixel/interpolation.c's interpolator, and
+ * whatever follows it): re-derive when the number moves, otherwise trust what you kept. If it
+ * failed to advance on a real edit, such a cache would serve the previous preference for the
+ * rest of the session; if it advanced on an idle rewrite, every cache in the application would
+ * be thrown away by GUI state being written back with values that did not change, which
+ * _rewriting_the_same_value_retires_nothing above shows happens constantly. */
+static void _the_generation_advances_on_a_change_and_not_otherwise(void **state)
+{
+  (void)state;
+  dt_conf_set_string(TEST_KEY, "first");
+  const uint64_t after_first = dt_conf_generation();
+  assert_true(after_first > 0);   // starts at 1, so 0 is usable as "nothing cached yet"
+
+  dt_conf_set_string(TEST_KEY, "second");
+  const uint64_t after_second = dt_conf_generation();
+  assert_true(after_second > after_first);
+
+  // An idle rewrite of the identical value must NOT move it.
+  for(int i = 0; i < 16; i++) dt_conf_set_string(TEST_KEY, "second");
+  assert_int_equal(dt_conf_generation(), after_second);
+
+  // The typed setters go through the same writer, so they advance it too.
+  dt_conf_set_int(TEST_KEY, 7);
+  const uint64_t after_int = dt_conf_generation();
+  assert_true(after_int > after_second);
+
+  dt_conf_set_int(TEST_KEY, 7);
+  assert_int_equal(dt_conf_generation(), after_int);
+
+  // And a plain read never moves it -- a cache that re-derived per read would be no cache.
+  (void)dt_conf_get_int_fast(TEST_KEY);
+  (void)dt_conf_get_string_const(TEST_KEY);
+  assert_int_equal(dt_conf_generation(), after_int);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -166,6 +203,7 @@ int main(void)
     cmocka_unit_test(_every_displaced_value_stays_readable),
     cmocka_unit_test(_rewriting_the_same_value_retires_nothing),
     cmocka_unit_test(_typed_setters_retire_too),
+    cmocka_unit_test(_the_generation_advances_on_a_change_and_not_otherwise),
   };
 
   return cmocka_run_group_tests(tests, _setup, _teardown);

@@ -45,6 +45,7 @@
 #endif
 
 #include "math/calculator.h"
+#include "system/atomic.h"  // dt_atomic_uint64, for the generation counter
 #include "common/paths.h"   // DT_PATH_MAX
 #include "darktable.h"
 #include "common/file_location.h"
@@ -143,6 +144,24 @@ static inline char *dt_conf_get_var(const char *name)
  * @return non-zero when the value was not stored -- either the command line pinned this key,
  * or it already held exactly this value. **The caller still owns @p str and must free it.**
  */
+/* Advances on every write that actually CHANGES a value. It exists so a consumer on a hot
+ * path can cache what it derived from conf and re-derive only when this number moves: one
+ * atomic load replaces taking the mutex below, which the GUI thread holds constantly.
+ *
+ * It is deliberately one number for the whole table rather than one per key. A per-key
+ * version would need its own lookup -- i.e. the lock again -- to be read, which is the cost
+ * it was meant to avoid. The price is that any conf write invalidates every cache; conf is
+ * written by user action, so that is rare and the re-derivation is what the cache already
+ * did on every call.
+ *
+ * It starts at 1, so a consumer may use 0 as "never read" without a separate flag. */
+static dt_atomic_uint64 _conf_generation = 1;
+
+uint64_t dt_conf_generation(void)
+{
+  return dt_atomic_get_uint64(&_conf_generation);
+}
+
 static int dt_conf_set_if_not_overridden(const char *name, char *str)
 {
   dt_pthread_mutex_lock(&darktable.conf->mutex);
@@ -173,6 +192,11 @@ static int dt_conf_set_if_not_overridden(const char *name, char *str)
       }
 
       g_hash_table_insert(darktable.conf->table, g_strdup(name), str);
+
+      /* Bumped under the lock, and only where the value really moved -- the two `not_stored'
+       * branches above are a pinned override and a write of the identical string, neither of
+       * which any consumer needs to re-derive from. */
+      dt_atomic_set_uint64(&_conf_generation, dt_atomic_get_uint64(&_conf_generation) + 1);
     }
   }
 
