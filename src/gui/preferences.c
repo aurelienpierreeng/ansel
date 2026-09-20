@@ -721,6 +721,16 @@ void dt_gui_preferences_show()
         gtk_grid_attach(GTK_GRID(grid), pinned_memory_labdef, 1, line, 1, 1);
 
         GtkWidget *pinned_memory = gtk_check_button_new();
+        gtk_widget_set_tooltip_text(
+            pinned_memory,
+            _("Keep the host-side buffers this device transfers to and from in page-locked "
+              "memory.\n\n"
+              "Enabled, the driver can move them by direct memory access. Disabled, it must "
+              "copy them through a staging buffer of its own first, so every transfer is made "
+              "twice. On a discrete card this is several times slower, and it is paid on every "
+              "frame the darkroom displays.\n\n"
+              "Page-locked memory cannot be swapped out, so turn this off if the machine is "
+              "short of RAM."));
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(pinned_memory),
                                      dt_opencl_detected_device_pinned_memory(dev));
         gtk_widget_set_tooltip_text(pinned_memory, _("Use pinned host memory for OpenCL transfers on this GPU"));
