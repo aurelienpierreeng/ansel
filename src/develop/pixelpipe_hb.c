@@ -558,7 +558,7 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   {
     /* Backbuffer ownership belongs to the pipeline, not its GUI consumers. Once the pipe itself is
      * torn down, always release that keepalive ref and invalidate the published backbuffer metadata. */
-    dt_dev_pixelpipe_cache_unref_hash(old_backbuf_hash);
+    dt_dev_backbuf_release_keepalive(&pipe->backbuf);
 
     if(pipe->no_cache)
     {
@@ -1362,7 +1362,7 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
      || entry_hash == DT_PIXELPIPE_CACHE_HASH_INVALID
      || entry_hash != requested_hash)
   {
-    dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&pipe->backbuf));
+    dt_dev_backbuf_release_keepalive(&pipe->backbuf);
     dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                        dt_dev_pixelpipe_get_history_hash(pipe));
     return;
@@ -1371,12 +1371,11 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
   // Keep exactly one cache reference to the last valid output ("backbuf") for display.
   // This prevents the cache entry from being evicted while still in use by the GUI,
   // without leaking references on repeated cache hits.
-  const gboolean hash_changed = (dt_dev_backbuf_get_hash(&pipe->backbuf) != entry_hash);
-  if(hash_changed)
-  {
-    dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&pipe->backbuf));
-    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
-  }
+  /* Keyed on the ENTRY, not on the hash it currently answers to. A rekey-reused entry keeps
+   * its identity while its hash moves, so "same cacheline, new hash" must not re-take a
+   * reference -- and "new cacheline" must release the old one by pointer, since the hash it was
+   * taken at may no longer resolve to it. The helper is idempotent, so this is unconditional. */
+  dt_dev_backbuf_take_keepalive(&pipe->backbuf, entry);
 
   /* The backbuf advertises the ROI THIS RUN ASKED FOR, paired with whatever cacheline it
    * resolved. Those two are supposed to describe the same image, and every consumer trusts that

@@ -2140,6 +2140,31 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
            radius, clamped, zoom_level, dt_screen_ppd());
 }
 
+void dt_dev_backbuf_take_keepalive(dt_backbuf_t *backbuf, struct dt_pixel_cache_entry_t *entry)
+{
+  if(IS_NULL_PTR(backbuf)) return;
+  /* Idempotent: a republication resolving to the same cacheline must not stack references, and
+   * must not drop the one it holds either -- which an unconditional release-then-take would do
+   * for a moment, long enough for the LRU to take the entry the screen is showing. */
+  if(backbuf->keepalive == entry) return;
+
+  dt_dev_backbuf_release_keepalive(backbuf);
+  if(!IS_NULL_PTR(entry))
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
+    backbuf->keepalive = entry;
+  }
+}
+
+void dt_dev_backbuf_release_keepalive(dt_backbuf_t *backbuf)
+{
+  if(IS_NULL_PTR(backbuf) || IS_NULL_PTR(backbuf->keepalive)) return;
+  /* By POINTER. This reference was taken by pointer, and an entry's hash is not stable under
+   * rekey reuse -- see dt_dev_pixelpipe_cache_unref_entry() for what releasing by hash costs. */
+  dt_dev_pixelpipe_cache_unref_entry(backbuf->keepalive);
+  backbuf->keepalive = NULL;
+}
+
 void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 
                         const int64_t hash, const int64_t history_hash)
 {
