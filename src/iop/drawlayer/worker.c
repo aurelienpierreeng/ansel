@@ -335,6 +335,9 @@ static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboole
   dt_dev_transient_params_set(self, params, self->params_size, NULL, 0);
   dt_dev_pixelpipe_or_changed(dev->pipe, DT_DEV_PIPE_TOP_CHANGED);
   dt_control_queue_redraw_center();
+
+  dt_print(DT_DEBUG_PERF, "[drawlayer] publish serial=%u hash=%u dabs=%d\n",
+           ctx->worker->live_publish_serial, params->stroke_commit_hash, sample_count);
 }
 
 static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_paint_raw_input_t *input,
@@ -964,6 +967,8 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
     {
       used_outer_loop = TRUE;
       processed_dabs = batch_dabs;
+      _log_worker_batch_timing("batch", processed_dabs, _worker_batch_min_size(),
+                               1000.0 * (dt_get_wtime() - batch_t0), TRUE);
       /* The batch path does not feed the 3-dab window, which exists solely so a SMUDGE dab can
        * see its predecessor. Clear it rather than leave a window with a hole in it: a following
        * SMUDGE dab then reads as the start of a run, which is the defined conservative state

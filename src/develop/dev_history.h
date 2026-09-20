@@ -729,7 +729,8 @@ void dt_dev_transient_params_clear(struct dt_iop_module_t *module);
  */
 gboolean dt_dev_transient_params_get(struct dt_develop_t *dev, const struct dt_iop_module_t *module,
                                      void *out_params, size_t out_params_size,
-                                     void *out_blend, size_t out_blend_size, gboolean *out_has_blend);
+                                     void *out_blend, size_t out_blend_size, gboolean *out_has_blend,
+                                     uint64_t *out_serial);
 
 /** @brief Whether a transient slot is currently active for `module` (cheap, locked read). */
 gboolean dt_dev_transient_params_active(struct dt_develop_t *dev, const struct dt_iop_module_t *module);

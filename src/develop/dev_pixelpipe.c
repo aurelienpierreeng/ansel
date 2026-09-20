@@ -274,12 +274,18 @@ static gboolean _sync_focused_in_place(dt_dev_pixelpipe_t *pipe, const dt_dev_hi
   // taken so the slot lock is not held across commit_params(); never the live GUI module->params.
   dt_iop_params_t *params = hist->params;
   void *tbuf = NULL;
+  uint64_t transient_serial = 0;
+  gboolean used_transient = FALSE;
   if(transient && focus->params_size > 0)
   {
     tbuf = g_malloc0(focus->params_size);
     if(!IS_NULL_PTR(tbuf)
-       && dt_dev_transient_params_get(dev, focus, tbuf, (size_t)focus->params_size, NULL, 0, NULL))
+       && dt_dev_transient_params_get(dev, focus, tbuf, (size_t)focus->params_size, NULL, 0, NULL,
+                                      &transient_serial))
+    {
       params = (dt_iop_params_t *)tbuf;
+      used_transient = TRUE;
+    }
     else
       dt_free(tbuf);
   }
@@ -289,6 +295,26 @@ static gboolean _sync_focused_in_place(dt_dev_pixelpipe_t *pipe, const dt_dev_hi
   piece->detail_mask = !IS_NULL_PTR(hist->blend_params) && hist->blend_params->details != 0.0f;
   dt_iop_commit_params(focus, params, hist->blend_params, pipe, piece);
   dt_free(tbuf);
+
+  /* `dt_iop_commit_params()` hands the params we pass to `module->commit_params()`, so the piece
+   * PROCESSES the transient blob -- but it derives the piece's identity from
+   * `dt_iop_compute_module_hash()`, which hashes `module->params`. That function says so itself:
+   * "WARNING: doesn't take into account parameters dynamically set at runtime". So a transient
+   * edit changed the pixels a recompute would produce without changing the hash that decides
+   * whether to recompute at all, and `dt_dev_pixelpipe_process()` exact-hit the cache and
+   * republished the previous frame. Drawlayer used to hide this by bumping `module->params`
+   * from its paint worker -- which is the very cross-thread write on GUI-owned state that the
+   * transient channel exists to avoid.
+   *
+   * The transient serial advances once per publish and is fetched under the same lock as the
+   * blob, so folding it in makes the piece's identity describe exactly the params it committed.
+   * Do this BEFORE `dt_pixelpipe_get_global_hash()` below, which folds the piece hashes into the
+   * cumulative pipe hash the cache is probed with. */
+  if(used_transient)
+  {
+    piece->hash = dt_hash(piece->hash, (const char *)&transient_serial, sizeof(transient_serial));
+    piece->global_hash = piece->hash;
+  }
   _refresh_pipe_detail_mask_state(pipe);
   if(previous_want_detail_mask != (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE)) return FALSE;
 

@@ -3005,9 +3005,11 @@ void dt_dev_transient_params_clear(dt_iop_module_t *module)
 
 gboolean dt_dev_transient_params_get(dt_develop_t *dev, const dt_iop_module_t *module,
                                      void *out_params, const size_t out_params_size,
-                                     void *out_blend, const size_t out_blend_size, gboolean *out_has_blend)
+                                     void *out_blend, const size_t out_blend_size, gboolean *out_has_blend,
+                                     uint64_t *out_serial)
 {
   if(!IS_NULL_PTR(out_has_blend)) *out_has_blend = FALSE;
+  if(!IS_NULL_PTR(out_serial)) *out_serial = 0;
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || IS_NULL_PTR(out_params) || out_params_size == 0) return FALSE;
 
   gboolean ok = FALSE;
@@ -3016,6 +3018,10 @@ gboolean dt_dev_transient_params_get(dt_develop_t *dev, const dt_iop_module_t *m
      && dev->transient_params.params_size == (int32_t)out_params_size)
   {
     memcpy(out_params, dev->transient_params.params, out_params_size);
+    /* Fetched under the SAME lock as the blob it describes. Read separately, a publish landing
+     * in between would pair a serial with params it does not describe -- and since the serial is
+     * what advances the piece's cache identity, that pairing is a silently missed render. */
+    if(!IS_NULL_PTR(out_serial)) *out_serial = dev->transient_params.serial;
     ok = TRUE;
 
     if(!IS_NULL_PTR(out_blend) && out_blend_size > 0 && !IS_NULL_PTR(dev->transient_params.blend_params)
