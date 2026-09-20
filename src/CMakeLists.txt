@@ -613,15 +613,6 @@ endif()
 
 if(USE_OPENCL)
   add_definitions(-DHAVE_OPENCL=1)
-  # HAVE_OPENCL changes the LAYOUT of public structs -- it gates `process_cl` and its siblings
-  # in dt_iop_module_t -- so every consumer of these headers must see the same value as the
-  # library, or it reads the library's fields at its own offsets. add_definitions() is
-  # DIRECTORY-scoped, and the test tree is a sibling of src/, not a child: the tests were
-  # compiling a 1088-byte dt_iop_module_t against the library's 1104, so a `module->dev` the
-  # test had set read back as NULL inside lib_ansel. Nothing warned; the tests simply exercised
-  # a different struct. lib_ansel links ansel_deps PUBLIC, so putting it here reaches every
-  # consumer, in-tree or not.
-  target_compile_definitions(ansel_deps INTERFACE HAVE_OPENCL=1)
 endif(USE_OPENCL)
 
 if(WIN32)
