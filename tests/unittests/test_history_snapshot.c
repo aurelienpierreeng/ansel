@@ -57,6 +57,7 @@ static int _setup(void **state)
   _fixture_t *f = calloc(1, sizeof(_fixture_t));
   if(!f) return -1;
   dt_pthread_rwlock_init(&f->dev.history_mutex, NULL);
+  dt_pthread_mutex_init(&f->dev.transient_params_mutex, NULL);
   f->dev.pipe = &f->pipe;
   f->dev.preview_pipe = NULL;
   *state = f;
@@ -71,6 +72,9 @@ static int _teardown(void **state)
   dt_dev_free_history_item(dt_atomic_exch_ptr(&f->pipe.last_history_item, NULL));
   g_list_free_full(f->dev.history, dt_dev_free_history_item);
   f->dev.history = NULL;
+  dt_free(f->dev.transient_params.params);
+  dt_free(f->dev.transient_params.blend_params);
+  dt_pthread_mutex_destroy(&f->dev.transient_params_mutex);
   dt_pthread_rwlock_destroy(&f->dev.history_mutex);
   free(f);
   return 0;
@@ -253,6 +257,62 @@ static void _cow_touch_ignores_a_marker_naming_a_different_item(void **state)
   dt_dev_history_snapshot_release(&snap);
 }
 
+/**
+ * @brief A transient publication must be distinguishable from the one before it.
+ *
+ * This pins the invariant a realtime module's whole feedback loop rests on, and it is pinned
+ * here because nothing else can see it. `dt_iop_commit_params()` hands the params it is given
+ * to `module->commit_params()` but derives the piece's cache identity from
+ * `dt_iop_compute_module_hash()`, which hashes `module->params` instead -- so a transient edit
+ * changes the pixels a recompute would produce WITHOUT changing the hash that decides whether
+ * to recompute at all. `_sync_focused_in_place()` closes that by folding this serial into
+ * `piece->hash`, which only works if the serial actually advances per publication and arrives
+ * with the blob it describes.
+ *
+ * When this broke, a drawn stroke appeared only after the brush was lifted, every unit test
+ * passed, three build configurations were clean, and the log said nothing: the pipe reported
+ * success 122 times while exact-hitting the cache. The cost of not having this test was a
+ * user-visible regression that only a drawing session could catch.
+ */
+static void _transient_params_serial_advances_with_every_publication(void **state)
+{
+  _fixture_t *f = *state;
+  dt_iop_module_t module = { 0 };
+  module.dev = &f->dev;
+
+  uint32_t params = 0x1111u;
+  uint32_t out = 0u;
+  uint64_t first = 0u;
+  uint64_t second = 0u;
+  uint64_t repeat = 0u;
+
+  dt_dev_transient_params_set(&module, &params, sizeof(params), NULL, 0);
+  assert_true(dt_dev_transient_params_get(&f->dev, &module, &out, sizeof(out), NULL, 0, NULL, &first));
+  assert_int_equal(out, 0x1111u);
+  assert_true(first != 0u);
+
+  /* A second publication of DIFFERENT params must not collide with the first. */
+  params = 0x2222u;
+  dt_dev_transient_params_set(&module, &params, sizeof(params), NULL, 0);
+  assert_true(dt_dev_transient_params_get(&f->dev, &module, &out, sizeof(out), NULL, 0, NULL, &second));
+  assert_int_equal(out, 0x2222u);
+  assert_true(second != first);
+
+  /* And a publication of the SAME bytes must still advance it. A realtime stroke can repaint
+   * an identical blob -- what makes the frame new is the canvas the module reads, not the
+   * params -- so a serial that only moved on a byte change would drop those frames. */
+  dt_dev_transient_params_set(&module, &params, sizeof(params), NULL, 0);
+  assert_true(dt_dev_transient_params_get(&f->dev, &module, &out, sizeof(out), NULL, 0, NULL, &repeat));
+  assert_true(repeat != second);
+
+  /* A module that published nothing gets no serial and no params. */
+  dt_iop_module_t other = { 0 };
+  other.dev = &f->dev;
+  uint64_t none = 12345u;
+  assert_false(dt_dev_transient_params_get(&f->dev, &other, &out, sizeof(out), NULL, 0, NULL, &none));
+  assert_int_equal(none, 0u);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -262,6 +322,7 @@ int main(void)
     cmocka_unit_test_setup_teardown(_cow_touch_clones_an_item_a_snapshot_is_holding, _setup, _teardown),
     cmocka_unit_test_setup_teardown(_cow_touch_repoints_the_pipe_marker_and_balances_every_reference, _setup, _teardown),
     cmocka_unit_test_setup_teardown(_cow_touch_ignores_a_marker_naming_a_different_item, _setup, _teardown),
+    cmocka_unit_test_setup_teardown(_transient_params_serial_advances_with_every_publication, _setup, _teardown),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);
