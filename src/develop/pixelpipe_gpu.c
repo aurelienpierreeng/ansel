@@ -208,6 +208,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   double gpu_in_prepare_ms = 0.0;
   double gpu_out_cl_ms = 0.0;
   double gpu_cst_ms = 0.0;
+  gboolean gpu_out_cl_reused = FALSE;
   float *input = input_entry ? dt_pixel_cache_entry_get_data(input_entry) : NULL;
   void *output = dt_pixel_cache_entry_get_data(output_entry);
   void *cl_mem_input = NULL;
@@ -351,7 +352,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     // Alloc output GPU buffer - non-optional
     cl_mem_output = dt_dev_pixelpipe_cache_get_cl_buffer(pipe->devid, output, &piece->roi_out, piece->dsc_out.bpp, module,
                                                          "output", output_entry,
-                                                         NULL, cl_mem_input);
+                                                         &gpu_out_cl_reused, cl_mem_input);
     if(dt_get_debug_flags() & DT_DEBUG_PERF)
       gpu_out_cl_ms = (g_get_monotonic_time() - outcl_t0) / 1000.0;
     if(IS_NULL_PTR(cl_mem_output)) goto error;
@@ -394,12 +395,12 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       dt_print(DT_DEBUG_PERF,
                "[dev_pixelpipe] %s gpu prologue=%.2f ms"
                " (inbuf=%.2f outalloc=%.2f inprep=%.2f outcl=%.2f cst=%.2f) process_cl=%.2f ms"
-               " (in %dx%d bpp=%zu -> out bpp=%zu cache_out=%d)\n",
+               " (in %dx%d bpp=%zu -> out bpp=%zu cache_out=%d outcl_reused=%d)\n",
                module->op, (gpu_prologue_end - gpu_stage_t0) / 1000.0,
                gpu_in_borrow_ms, gpu_out_alloc_ms, gpu_in_prepare_ms, gpu_out_cl_ms, gpu_cst_ms,
                (g_get_monotonic_time() - gpu_prologue_end) / 1000.0,
                piece->roi_in.width, piece->roi_in.height, process_input_dsc.bpp, piece->dsc_out.bpp,
-               *cache_output ? 1 : 0);
+               *cache_output ? 1 : 0, gpu_out_cl_reused ? 1 : 0);
 
     *pixelpipe_flow |= PIXELPIPE_FLOW_PROCESSED_ON_GPU;
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
