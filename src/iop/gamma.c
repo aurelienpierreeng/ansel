@@ -624,6 +624,18 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   dt_iop_gamma_data_t *const d = (dt_iop_gamma_data_t *)piece->data;
   if(IS_NULL_PTR(d)) return;
 
+  /* commit_params() runs for EVERY node of EVERY pipe, disabled ones included -- thumbnails,
+   * exports, the navigation preview -- so anything read here is charged to all of them. This
+   * module is enabled in the two GUI pipes only (just above), and the settled values below
+   * describe a mask preview that cannot exist anywhere else.
+   *
+   * The cost is not the arithmetic: each dt_conf_get_* takes the application-wide
+   * darktable.conf->mutex, and dt_conf_get_float additionally runs dt_calculator_solve() over
+   * the stored string. Nine acquisitions of a lock the GUI thread holds constantly, per node
+   * resync, on every thumbnail worker at once, is contention charged to the whole application
+   * for a checkerboard no thumbnail can draw. */
+  if(!piece->enabled) return;
+
   /* Settle the mask-preview appearance here, once, rather than in the two process() paths --
    * see dt_iop_gamma_data_t. The keys keep Color Balance's historical namespace because
    * views/darkroom.c's "Mask preview settings" toolbox writes them under those names, and it
