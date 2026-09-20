@@ -192,6 +192,82 @@ static void _null_upstream_pointer_is_allowed(void **state)
   assert_true(dt_dev_pipe_cache_policy_decide(&in, FALSE, NULL));
 }
 
+/**
+ * @brief Walk a chain of nodes the way `_seal_opencl_cache_policy()` does, last to first.
+ *
+ * The policy is a per-node decision, but what it MEANS is a property of the chain: the seal
+ * threads one flag backwards through every enabled node. The per-node tests above cannot see
+ * that, and the defect they missed lived entirely in the composition -- a requirement that was
+ * correct for one node became, by being relayed, a requirement for every node before it. So
+ * these run the walk.
+ *
+ * `out[]` receives each node's cache_output_on_ram, indexed as `nodes[]` is.
+ */
+static void _walk(const dt_dev_pipe_cache_policy_inputs_t *nodes, gboolean *out, const int count,
+                  const gboolean display_reads_the_last_output)
+{
+  gboolean carried = display_reads_the_last_output;
+  for(int i = count - 1; i >= 0; i--)
+    out[i] = dt_dev_pipe_cache_policy_decide(&nodes[i], carried, &carried);
+}
+
+/**
+ * The darkroom case, and the one that was costing 152 MB a frame: every module on the GPU,
+ * the last one's output displayed from host memory by Cairo. Exactly one node may cache.
+ */
+static void _only_the_displayed_output_is_cached_in_a_gpu_chain(void **state)
+{
+  (void)state;
+  dt_dev_pipe_cache_policy_inputs_t nodes[4];
+  for(int i = 0; i < 4; i++) nodes[i] = _gpu_node_with_no_needs();
+
+  gboolean cached[4] = { FALSE };
+  _walk(nodes, cached, 4, TRUE);
+
+  assert_true(cached[3]);   // the displayed output
+  assert_false(cached[2]);  // ... and nothing else. Relayed, these were all TRUE.
+  assert_false(cached[1]);
+  assert_false(cached[0]);
+}
+
+/**
+ * A CPU-only node in the middle publishes its producer and NOTHING further. This is the shape
+ * the transitive version was written for (colorout -> rawoverexposed -> dither): the producer
+ * must publish, and the nodes before it must not have to.
+ */
+static void _a_cpu_node_publishes_its_producer_and_no_further(void **state)
+{
+  (void)state;
+  dt_dev_pipe_cache_policy_inputs_t nodes[4];
+  for(int i = 0; i < 4; i++) nodes[i] = _gpu_node_with_no_needs();
+  nodes[2].supports_opencl = FALSE;   // CPU-only: reads its input from RAM
+
+  gboolean cached[4] = { FALSE };
+  _walk(nodes, cached, 4, TRUE);
+
+  assert_true(cached[3]);   // displayed
+  /* The CPU node's OWN flag is FALSE, and that is correct rather than an oversight: the flag
+   * asks for a device->host COPY of a module's output, and a module that ran on the CPU has
+   * already written its output in host memory. There is nothing to copy. (Asserting TRUE here
+   * is what this test caught on its first run.) */
+  assert_false(cached[2]);
+  assert_true(cached[1]);   // its PRODUCER must publish -- this is the one that matters
+  assert_false(cached[0]);  // and the requirement stops there
+}
+
+/** With nothing displayed and nothing on the CPU, the chain caches nothing at all. */
+static void _a_pure_gpu_chain_nobody_reads_caches_nothing(void **state)
+{
+  (void)state;
+  dt_dev_pipe_cache_policy_inputs_t nodes[3];
+  for(int i = 0; i < 3; i++) nodes[i] = _gpu_node_with_no_needs();
+
+  gboolean cached[3] = { FALSE };
+  _walk(nodes, cached, 3, FALSE);
+
+  for(int i = 0; i < 3; i++) assert_false(cached[i]);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -203,6 +279,9 @@ int main(void)
     cmocka_unit_test(_each_own_input_reason_raises_upstream),
     cmocka_unit_test(_each_own_output_reason_raises_own),
     cmocka_unit_test(_null_upstream_pointer_is_allowed),
+    cmocka_unit_test(_only_the_displayed_output_is_cached_in_a_gpu_chain),
+    cmocka_unit_test(_a_cpu_node_publishes_its_producer_and_no_further),
+    cmocka_unit_test(_a_pure_gpu_chain_nobody_reads_caches_nothing),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);
