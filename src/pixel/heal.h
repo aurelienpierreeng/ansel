@@ -37,11 +37,17 @@ typedef enum dt_heal_domain_t
   DT_HEAL_DOMAIN_SQRT = 1
 } dt_heal_domain_t;
 
+/** How the fill is solved; both settings come from the calling module. */
+typedef struct dt_heal_solver_t
+{
+  int max_iter;            /**< cap on the relaxation iterations */
+  dt_heal_domain_t domain; /**< space the source-to-destination difference is interpolated in */
+} dt_heal_solver_t;
+
 /** Heal dest_buffer using src_buffer as a reference and mask_buffer to define the area to be healed.
- *  The 3 buffers must have the same size, but mask_buffer is 1 channel and is tested for != 0.f.
- *  domain selects the space the source-to-destination difference is interpolated in. */
+ *  The 3 buffers must have the same size, but mask_buffer is 1 channel and is tested for != 0.f. */
 void dt_heal(const float *const src_buffer, float *dest_buffer, const float *const mask_buffer, const int width,
-             const int height, const int ch, const int max_iter, const dt_heal_domain_t domain);
+             const int height, const int ch, const dt_heal_solver_t solver);
 
 #ifdef HAVE_OPENCL
 
@@ -63,7 +69,7 @@ heal_params_cl_t *dt_heal_init_cl(const int devid);
 void dt_heal_free_cl(heal_params_cl_t *p);
 
 cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const float *const mask_buffer,
-                  const int width, const int height, const int max_iter, const dt_heal_domain_t domain);
+                  const int width, const int height, const dt_heal_solver_t solver);
 
 #endif
 #endif
