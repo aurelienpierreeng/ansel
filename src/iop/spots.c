@@ -440,7 +440,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   const dt_develop_blend_params_t *bp = (const dt_develop_blend_params_t *)piece->blendop_data;
 
   // We iterate through all spots or polygons
-  dt_masks_form_t *grp = dt_masks_get_from_id_in_pipe(pipe, bp->mask_id);
+  const dt_masks_form_t *grp = dt_masks_get_from_id_in_pipe(pipe, bp->mask_id);
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
@@ -561,7 +561,7 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
   }
 
   // iterate through all forms
-  dt_masks_form_t *grp = dt_masks_get_from_id_in_pipe(pipe, bp->mask_id);
+  const dt_masks_form_t *grp = dt_masks_get_from_id_in_pipe(pipe, bp->mask_id);
   int pos = 0;
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
