@@ -83,7 +83,7 @@
 
 // this is the version of the modules parameters,
 // and includes version information about compile-time dt
-DT_MODULE_INTROSPECTION(3, dt_iop_retouch_params_t)
+DT_MODULE_INTROSPECTION(4, dt_iop_retouch_params_t)
 
 #define RETOUCH_NO_FORMS 300
 #define RETOUCH_MAX_SCALES 15
@@ -101,6 +101,13 @@ typedef enum dt_iop_retouch_fill_modes_t {
   DT_IOP_RETOUCH_FILL_ERASE = 0, // $DESCRIPTION: "erase"
   DT_IOP_RETOUCH_FILL_COLOR = 1  // $DESCRIPTION: "color"
 } dt_iop_retouch_fill_modes_t;
+
+// How the heal algorithm carries the source's texture over to the destination level,
+// see dt_heal_domain_t. Edits made before the square-root algorithm existed keep the linear one.
+typedef enum dt_iop_retouch_heal_algorithm_t {
+  DT_IOP_RETOUCH_HEAL_LINEAR = 0, // $DESCRIPTION: "linear"
+  DT_IOP_RETOUCH_HEAL_SQRT = 1    // $DESCRIPTION: "square root"
+} dt_iop_retouch_heal_algorithm_t;
 
 typedef enum dt_iop_retouch_blur_types_t {
   DT_IOP_RETOUCH_BLUR_GAUSSIAN = 0, // $DESCRIPTION: "gaussian"
@@ -160,6 +167,7 @@ typedef struct dt_iop_retouch_params_t
   float fill_color[3];   // $DEFAULT: 0.0 color for fill algorithm
   float fill_brightness; // $MIN: -1.0 $MAX: 1.0 $DESCRIPTION: "brightness" value to be added to the color
   int max_heal_iter;     // $DEFAULT: 2000 $DESCRIPTION: "max_iter" numbe of iteration for heal algorithm
+  dt_iop_retouch_heal_algorithm_t heal_algorithm; // $DEFAULT: DT_IOP_RETOUCH_HEAL_SQRT $DESCRIPTION: "heal algorithm"
 } dt_iop_retouch_params_t;
 
 typedef struct dt_iop_retouch_gui_data_t
@@ -212,6 +220,7 @@ typedef struct dt_iop_retouch_gui_data_t
   GtkWidget *colorpicker; // pick a color from the picture
 
   GtkWidget *cmb_fill_mode;
+  GtkWidget *cmb_heal_algorithm;
   GtkWidget *sl_fill_brightness;
 
   GtkWidget *sl_mask_opacity; // draw mask opacity
@@ -275,7 +284,7 @@ static int rt_shape_is_being_added(dt_iop_module_t *self, const int shape_type);
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version, void *new_params,
                   const int new_version)
 {
-  if(old_version == 1 && new_version == 3)
+  if(old_version == 1 && new_version == 4)
   {
     typedef struct dt_iop_retouch_form_data_v1_t
     {
@@ -349,10 +358,11 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     n->preview_levels[2] = o->preview_levels[2];
 
     n->max_heal_iter = 1000;
+    n->heal_algorithm = DT_IOP_RETOUCH_HEAL_LINEAR;
 
     return 0;
   }
-  if(old_version == 2 && new_version == 3)
+  if(old_version == 2 && new_version == 4)
   {
     typedef struct dt_iop_retouch_params_v2_t
     {
@@ -383,6 +393,20 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     memcpy(n, o, sizeof(dt_iop_retouch_params_v2_t));
 
     n->max_heal_iter = 1000;
+    n->heal_algorithm = DT_IOP_RETOUCH_HEAL_LINEAR;
+
+    return 0;
+  }
+  if(old_version == 3 && new_version == 4)
+  {
+    // v3 is v4 without the trailing heal_algorithm
+    const size_t v3_size = offsetof(dt_iop_retouch_params_t, heal_algorithm);
+    dt_iop_retouch_params_t *n = (dt_iop_retouch_params_t *)new_params;
+    const dt_iop_retouch_params_t *d = (dt_iop_retouch_params_t *)self->default_params;
+
+    *n = *d;
+    memcpy(n, old_params, v3_size);
+    n->heal_algorithm = DT_IOP_RETOUCH_HEAL_LINEAR;
 
     return 0;
   }
@@ -2166,6 +2190,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->sl_blur_radius, p->blur_radius);
   dt_bauhaus_slider_set(g->sl_fill_brightness, p->fill_brightness);
   dt_bauhaus_combobox_set(g->cmb_fill_mode, p->fill_mode);
+  dt_bauhaus_combobox_set(g->cmb_heal_algorithm, p->heal_algorithm);
 
   rt_display_selected_fill_color(g, p);
 
@@ -2481,6 +2506,12 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox_shapes, TRUE, TRUE, 0);
   // algorithms toolbar
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox_algo, TRUE, TRUE, 0);
+
+  g->cmb_heal_algorithm = dt_bauhaus_combobox_from_params(self, "heal_algorithm");
+  gtk_widget_set_tooltip_text(g->cmb_heal_algorithm,
+                              _("linear: the source keeps its own noise and texture amplitude,\n"
+                                "a source brighter than the target makes it noisier\n"
+                                "square root: the source noise is scaled to the brightness of the target"));
 
   // wavelet decompose
   GtkWidget *lbl_wd = dt_ui_section_label_new(_("wavelet decompose"));
@@ -3165,8 +3196,18 @@ static int _retouch_blur(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
   return 0;
 }
 
+// Only the image itself (scale 0) and the wavelet residual carry a light level. Detail scales are
+// signed, zero-mean differences, which the square-root domain cannot represent: they heal linearly
+// whatever the algorithm.
+static dt_heal_domain_t rt_heal_domain(const dt_iop_retouch_params_t *const p, const int scale, const int scales)
+{
+  const gboolean has_level = (scale == 0 || scale == scales + 1);
+  return (p->heal_algorithm == DT_IOP_RETOUCH_HEAL_SQRT && has_level) ? DT_HEAL_DOMAIN_SQRT : DT_HEAL_DOMAIN_LINEAR;
+}
+
 static int _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
-                         dt_iop_roi_t *const roi_mask_scaled, const int dx, const int dy, const float opacity, const int max_iter)
+                         dt_iop_roi_t *const roi_mask_scaled, const int dx, const int dy, const float opacity,
+                         const int max_iter, const dt_heal_domain_t domain)
 {
   float *img_src = NULL;
   float *img_dest = NULL;
@@ -3187,7 +3228,7 @@ static int _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *con
   rt_copy_in_to_out(in, roi_in, img_dest, roi_mask_scaled, 4, 0, 0);
 
   // heal it
-  dt_heal(img_src, img_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, 4, max_iter);
+  dt_heal(img_src, img_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, 4, max_iter, domain);
 
   // copy healed (temp) image to destination image
   rt_copy_image_masked(img_dest, in, roi_in, mask_scaled, roi_mask_scaled, opacity);
@@ -3345,7 +3386,8 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
       }
       else if(algo == DT_IOP_RETOUCH_HEAL)
       {
-        if(_retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, p->max_heal_iter) != 0)
+        if(_retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, p->max_heal_iter,
+                         rt_heal_domain(p, scale1, wt_p->scales)) != 0)
         {
           dt_pixelpipe_cache_free_align(mask_scaled);
           return 1;
@@ -3957,7 +3999,8 @@ cleanup:
 
 static cl_int _retouch_heal_cl(const int devid, cl_mem dev_layer, dt_iop_roi_t *const roi_layer, float *mask_scaled,
                                cl_mem dev_mask_scaled, dt_iop_roi_t *const roi_mask_scaled, const int dx,
-                               const int dy, const float opacity, dt_iop_retouch_global_data_t *gd, const int max_iter)
+                               const int dy, const float opacity, dt_iop_retouch_global_data_t *gd, const int max_iter,
+                               const dt_heal_domain_t domain)
 {
   cl_int err = CL_SUCCESS;
 
@@ -4002,7 +4045,8 @@ static cl_int _retouch_heal_cl(const int devid, cl_mem dev_layer, dt_iop_roi_t *
   heal_params_cl_t *hp = dt_heal_init_cl(devid);
   if(hp)
   {
-    err = dt_heal_cl(hp, dev_src, dev_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, max_iter);
+    err = dt_heal_cl(hp, dev_src, dev_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, max_iter,
+                     domain);
     dt_heal_free_cl(hp);
 
     dt_opencl_release_mem_object(dev_src);
@@ -4118,7 +4162,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
         else if(algo == DT_IOP_RETOUCH_HEAL)
         {
           err = _retouch_heal_cl(devid, dev_layer, roi_layer, mask_scaled, dev_mask_scaled, &roi_mask_scaled, dx,
-                                  dy, form_opacity, gd, p->max_heal_iter);
+                                  dy, form_opacity, gd, p->max_heal_iter, rt_heal_domain(p, scale1, wt_p->scales));
         }
         else if(algo == DT_IOP_RETOUCH_BLUR)
         {

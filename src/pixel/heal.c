@@ -58,11 +58,34 @@
  */
 
 
+/* Offset under the square root: it keeps the transform differentiable at zero and stands in for
+ * the noise floor, where shot noise stops dominating. Scene-linear, 1.0 being white. */
+#define DT_HEAL_SQRT_OFFSET 1e-3f
+
+static inline float _heal_encode(const float value, const size_t c, const dt_heal_domain_t domain)
+{
+  if(domain == DT_HEAL_DOMAIN_SQRT && c < 3) return sqrtf(fmaxf(value, 0.0f) + DT_HEAL_SQRT_OFFSET);
+  return value;
+}
+
+// Inverse of _heal_encode() applied to src + correction. A negative source value keeps its
+// negative part, which the square root cannot carry.
+static inline float _heal_decode(const float src, const float correction, const size_t c,
+                                 const dt_heal_domain_t domain)
+{
+  if(domain == DT_HEAL_DOMAIN_SQRT && c < 3)
+  {
+    const float root = fmaxf(_heal_encode(src, c, domain) + correction, 0.0f);
+    return root * root - DT_HEAL_SQRT_OFFSET + fminf(src, 0.0f);
+  }
+  return src + correction;
+}
+
 // Subtract bottom from top and store in result as a float; separate 'red' and 'black' pixels into
 // two contiguous regions
 static void _heal_sub(const float *const top_buffer, const float *const bottom_buffer,
                       float *const restrict red_buffer, float *const restrict black_buffer,
-                      const size_t width, const size_t height)
+                      const size_t width, const size_t height, const dt_heal_domain_t domain)
 {
   // how many red or black pixels per line?  For consistency, we need the larger of the two, so round up
   const size_t res_stride = 4 * ((width + 1) / 2);
@@ -79,8 +102,9 @@ static void _heal_sub(const float *const top_buffer, const float *const bottom_b
       const size_t idx = 4 * (row * width + 2*col);
       for_each_channel(c)
       {
-        buf1[4*col + c] = top_buffer[idx + c] - bottom_buffer[idx + c];
-        buf2[4*col + c] = top_buffer[idx+4 + c] - bottom_buffer[idx+4 + c];
+        buf1[4*col + c] = _heal_encode(top_buffer[idx + c], c, domain) - _heal_encode(bottom_buffer[idx + c], c, domain);
+        buf2[4*col + c] = _heal_encode(top_buffer[idx+4 + c], c, domain)
+                          - _heal_encode(bottom_buffer[idx+4 + c], c, domain);
       }
     }
     if(width & 1)
@@ -91,7 +115,7 @@ static void _heal_sub(const float *const top_buffer, const float *const bottom_b
       const size_t idx = 4 * (row * width + (width-1));
       for_each_channel(c)
       {
-        buf1[4*res_idx + c] = top_buffer[idx + c] - bottom_buffer[idx + c];
+        buf1[4*res_idx + c] = _heal_encode(top_buffer[idx + c], c, domain) - _heal_encode(bottom_buffer[idx + c], c, domain);
         buf2[4*res_idx + c] = 0.0f;
       }
     }
@@ -106,7 +130,7 @@ static void _heal_sub(const float *const top_buffer, const float *const bottom_b
 // Add first to second and store in result, re-interleaving the 'red' and 'black' pixels
 static void _heal_add(const float *const restrict red_buffer, const float *const black_buffer,
                       const float *const restrict second_buffer, float *const restrict result_buffer,
-                      const size_t width, const size_t height)
+                      const size_t width, const size_t height, const dt_heal_domain_t domain)
 {
   // how many red or black pixels per line?  For consistency, we need the larger of the two, so round up, then
   // add one to ensure a padding pixel on the right
@@ -124,8 +148,8 @@ static void _heal_add(const float *const restrict red_buffer, const float *const
       const size_t idx = 4 * (row * width + 2*col);
       for_each_channel(c)
       {
-        result_buffer[idx + c] = buf1[4*col + c] + second_buffer[idx + c];
-        result_buffer[idx + 4 + c] = buf2[4*col + c] + second_buffer[idx + 4 + c];
+        result_buffer[idx + c] = _heal_decode(second_buffer[idx + c], buf1[4*col + c], c, domain);
+        result_buffer[idx + 4 + c] = _heal_decode(second_buffer[idx + 4 + c], buf2[4*col + c], c, domain);
       }
     }
     if(width & 1)
@@ -134,7 +158,7 @@ static void _heal_add(const float *const restrict red_buffer, const float *const
       const size_t res_idx = (width-1)/2;
       const size_t idx = 4 * (row * width + (width-1));
       for_each_channel(c)
-        result_buffer[idx + c] = buf1[4*res_idx + c] + second_buffer[idx + c];
+        result_buffer[idx + c] = _heal_decode(second_buffer[idx + c], buf1[4*res_idx + c], c, domain);
     }
   }
 }
@@ -384,7 +408,7 @@ cleanup:
  * http://www.tgeorgiev.net/Photoshop_Healing.pdf
  */
 void dt_heal(const float *const src_buffer, float *dest_buffer, const float *const mask_buffer, const int width,
-             const int height, const int ch, const int max_iter)
+             const int height, const int ch, const int max_iter, const dt_heal_domain_t domain)
 {
   if(ch != 4)
   {
@@ -401,12 +425,12 @@ void dt_heal(const float *const src_buffer, float *dest_buffer, const float *con
   }
 
   /* subtract pattern from image and store the result split by 'red' and 'black' positions  */
-  _heal_sub(dest_buffer, src_buffer, red_buffer, black_buffer, width, height);
+  _heal_sub(dest_buffer, src_buffer, red_buffer, black_buffer, width, height, domain);
 
   _heal_laplace_loop(red_buffer, black_buffer, width, height, mask_buffer, max_iter);
 
   /* add solution to original image and store in dest */
-  _heal_add(red_buffer, black_buffer, src_buffer, dest_buffer, width, height);
+  _heal_add(red_buffer, black_buffer, src_buffer, dest_buffer, width, height, domain);
 
 cleanup:
   dt_pixelpipe_cache_free_align(red_buffer);
@@ -457,7 +481,7 @@ void dt_heal_free_cl(heal_params_cl_t *p)
 }
 
 cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const float *const mask_buffer,
-                  const int width, const int height, const int max_iter)
+                  const int width, const int height, const int max_iter, const dt_heal_domain_t domain)
 {
   cl_int err = CL_SUCCESS;
 
@@ -497,7 +521,7 @@ cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const fl
   }
 
   // I couldn't make it run fast on opencl (the reduction takes forever), so just call the cpu version
-  dt_heal(src_buffer, dest_buffer, mask_buffer, width, height, ch, max_iter);
+  dt_heal(src_buffer, dest_buffer, mask_buffer, width, height, ch, max_iter, domain);
 
   err = dt_opencl_write_buffer_to_device(p->devid, dest_buffer, dev_dest, 0, sizeof(float) * width * height * ch, CL_TRUE);
   if(err != CL_SUCCESS)

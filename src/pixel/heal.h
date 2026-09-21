@@ -22,11 +22,26 @@
 #ifndef DT_PIXEL_HEAL_H
 #define DT_PIXEL_HEAL_H
 
-/* heals dest_buffer using src_buffer as a reference and mask_buffer to define the area to be healed
- * the 3 buffers must have the same size, but mask_buffer is 1 channel and is tested for != 0.f
- */
+/** The domain the source-to-destination difference is interpolated in.
+ *
+ * LINEAR adds a harmonic correction to the source pixels as they are, so a source brighter than
+ * the destination keeps its absolute noise and texture amplitude on a darker base: once encoded
+ * for display, that noise is stronger than the destination's own.
+ *
+ * SQRT interpolates the difference of square roots, the variance-stabilising transform of shot
+ * noise, so the pasted noise takes the amplitude it would have had at the destination level. Only
+ * the three colour channels are transformed; the fourth stays linear. */
+typedef enum dt_heal_domain_t
+{
+  DT_HEAL_DOMAIN_LINEAR = 0,
+  DT_HEAL_DOMAIN_SQRT = 1
+} dt_heal_domain_t;
+
+/** Heal dest_buffer using src_buffer as a reference and mask_buffer to define the area to be healed.
+ *  The 3 buffers must have the same size, but mask_buffer is 1 channel and is tested for != 0.f.
+ *  domain selects the space the source-to-destination difference is interpolated in. */
 void dt_heal(const float *const src_buffer, float *dest_buffer, const float *const mask_buffer, const int width,
-             const int height, const int ch, const int max_iter);
+             const int height, const int ch, const int max_iter, const dt_heal_domain_t domain);
 
 #ifdef HAVE_OPENCL
 
@@ -48,7 +63,7 @@ heal_params_cl_t *dt_heal_init_cl(const int devid);
 void dt_heal_free_cl(heal_params_cl_t *p);
 
 cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const float *const mask_buffer,
-                  const int width, const int height, const int max_iter);
+                  const int width, const int height, const int max_iter, const dt_heal_domain_t domain);
 
 #endif
 #endif
