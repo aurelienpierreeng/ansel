@@ -2035,27 +2035,30 @@ deep-copied"), so this is a cheap re-point, not a copy. `duplicate.c`'s call sit
 enters this block — it already gets correct forms from `dt_dev_load_image()`'s normal DB read, since
 it is snapshotting an already-saved image, not a live in-progress edit.
 
-### retouch: the "square root" heal algorithm interpolates in the square-root domain, and only where there is a level
+### retouch: the "Square root" heal algorithm interpolates in the square-root domain, and only where there is a level
 
 `dt_heal()` (`pixel/heal.c`) solves Laplace on the destination − source difference and adds the
-harmonic correction back to the source. The "linear" algorithm (`DT_HEAL_DOMAIN_LINEAR`) does it on
+harmonic correction back to the source. The "Linear" algorithm (`DT_HEAL_DOMAIN_LINEAR`) does it on
 scene-linear values, so a source brighter than its target keeps its *absolute* noise on a darker
 base; the display encoding is steeper in the shadows, and the patch comes out visibly noisier than
 what surrounds it. Measured on a heal whose source was ~2× brighter in linear: high-pass noise ×1.49 /
 ×1.35 / ×1.34 (R/G/B) against the target, matching the predicted `(Ls/Lt)^(1 − 1/2.4)` exactly.
 
-The "square root" algorithm (`DT_HEAL_DOMAIN_SQRT`) does the same on `sqrt(max(x, 0) + 1e-3)`, the
+The "Square root" algorithm (`DT_HEAL_DOMAIN_SQRT`) does the same on `sqrt(max(x, 0) + 1e-3)`, the
 variance-stabilising transform of shot noise, which brought that patch's noise back to the target's
 own (0.0208 vs 0.0214). A log (multiplicative) domain was measured too and rejected: it scales noise by the level
 ratio rather than its square root and smooths the patch (0.016). The fourth channel stays linear,
 and a negative source value keeps its negative part.
 
-`heal_algorithm` is a module parameter (combobox "linear"/"square root", default square root);
-`legacy_params()` maps every older params version to linear, so an existing edit renders
-bit-identically. `rt_heal_domain()` applies the square root only to scale 0 and the wavelet
-residual: detail scales and merged layers are signed, zero-mean differences, and they heal linearly
-whatever the algorithm. The OpenCL path runs the same CPU `dt_heal()`, so it takes the domain as an
-argument rather than a kernel of its own.
+`heal_algorithm` is a module parameter (combobox "Linear"/"Square root", default Square root);
+`legacy_params()` maps every older params version to Linear, so an existing edit renders
+bit-identically. v4 has shipped in no round-numbered release, so it is still open (see the
+stored-format version rule under "Architectural rules"): a new param is appended to the end of v4,
+and every conversion in `legacy_params()` starts from the defaults, so it needs no change there.
+`rt_heal_domain()` applies the square root only to scale 0 and the wavelet residual: detail scales
+and merged layers are signed, zero-mean differences, and they heal linearly whatever the algorithm.
+The OpenCL path runs the same CPU `dt_heal()`, so it takes the domain as an argument rather than a
+kernel of its own.
 
 ### retouch: combining the mask/wavelet-scale/suppress preview toggles
 
