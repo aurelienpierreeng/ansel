@@ -28,8 +28,13 @@ the tree already distinguishes the cases positionally:
   locks and COW-touches internally; returns a value ⟹ it reads under the read lock.
 
 Only the *resolvers* come in pairs. That removes about six functions relative to the CRUD proposal,
-and it makes `iop/spots.c:441/561` — which resolves `self->dev->forms` from the pipeline thread, the
-retouch bug that never got migrated — visibly wrong at the call site.
+and it makes a pipeline-thread lookup in `self->dev->forms` — the bug retouch and spots both carried
+in `modify_roi_in()` and `process()` — visibly wrong at the call site.
+
+The first resolver of the snapshot side already exists and takes the pipe itself rather than its
+list: `dt_masks_get_from_id_in_pipe(const dt_dev_pixelpipe_t *pipe, int id)` (`develop/masks.h`),
+used by retouch and spots on the pipeline thread. The pipe still names the world first, and callers
+no longer touch `pipe->forms`, which is what the `->forms` ratchet counts.
 
 Handles are non-negotiable for reads. **Verified:** `dt_masks_get_visible_form()` can return a
 `formid == 0` transient display group that is in neither `dev->forms` nor `dev->allforms`
@@ -113,7 +118,7 @@ must be what everyone else consumes.
 
 ```c
 dt_masks_form_t *dt_masks_get_group_from_id   (struct dt_develop_t *dev, int group_id);
-dt_masks_form_t *dt_masks_get_group_from_id_in(GList *forms, int group_id);   /* pipe->forms */
+dt_masks_form_t *dt_masks_get_group_from_id_in_pipe(const dt_dev_pixelpipe_t *pipe, int group_id);
 ```
 
 NULL unless it resolves *and* is a group. Collapses ~30 sites that write `dt_masks_get_from_id(...)`

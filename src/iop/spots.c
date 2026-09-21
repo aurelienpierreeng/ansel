@@ -435,17 +435,19 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   int roix = roi_in->x;
   int roiy = roi_in->y;
 
-  dt_develop_blend_params_t *bp = self->blend_params;
+  // This runs on the pipeline thread: the group id comes from the piece and the shapes from the
+  // run's snapshot, never from self->blend_params and the GUI-owned dev->forms.
+  const dt_develop_blend_params_t *bp = (const dt_develop_blend_params_t *)piece->blendop_data;
 
   // We iterate through all spots or polygons
-  dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id_in_pipe(pipe, bp->mask_id);
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       // we get the spot
-      dt_masks_form_t *form = dt_masks_get_from_id(self->dev, grpt->formid);
+      dt_masks_form_t *form = dt_masks_get_from_id_in_pipe(pipe, grpt->formid);
       if(!IS_NULL_PTR(form))
       {
         // if the form is outside the roi, we just skip it
@@ -545,7 +547,8 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
                     float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out, const int ch)
 {
   dt_iop_spots_params_t *d = (dt_iop_spots_params_t *)piece->data;
-  dt_develop_blend_params_t *bp = self->blend_params;
+  // Pipeline thread: see modify_roi_in() for why the piece and the run's snapshot, not the module.
+  const dt_develop_blend_params_t *bp = (const dt_develop_blend_params_t *)piece->blendop_data;
 
 // we don't modify most of the image:
   __OMP_PARALLEL_FOR__()
@@ -558,7 +561,7 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
   }
 
   // iterate through all forms
-  dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id_in_pipe(pipe, bp->mask_id);
   int pos = 0;
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
@@ -566,7 +569,7 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
     {
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       // we get the spot
-      dt_masks_form_t *form = dt_masks_get_from_id(self->dev, grpt->formid);
+      dt_masks_form_t *form = dt_masks_get_from_id_in_pipe(pipe, grpt->formid);
       if(IS_NULL_PTR(form))
       {
         continue;
