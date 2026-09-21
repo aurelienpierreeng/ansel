@@ -3230,7 +3230,8 @@ static int _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *con
   rt_copy_in_to_out(in, roi_in, img_dest, roi_mask_scaled, 4, 0, 0);
 
   // heal it
-  dt_heal(img_src, img_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, 4, max_iter, domain);
+  dt_heal(img_src, img_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, 4,
+          (dt_heal_solver_t){ .max_iter = max_iter, .domain = domain });
 
   // copy healed (temp) image to destination image
   rt_copy_image_masked(img_dest, in, roi_in, mask_scaled, roi_mask_scaled, opacity);
@@ -3375,39 +3376,45 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
       continue;
     }
 
-    if((dx != 0 || dy != 0 || algo == DT_IOP_RETOUCH_BLUR || algo == DT_IOP_RETOUCH_FILL)
-        && ((roi_mask_scaled.width > 2) && (roi_mask_scaled.height > 2)))
+    // clone and heal need a source offset, and every algorithm needs a mask larger than 2x2
+    const gboolean has_effect = (dx != 0 || dy != 0 || algo == DT_IOP_RETOUCH_BLUR || algo == DT_IOP_RETOUCH_FILL)
+                                && roi_mask_scaled.width > 2 && roi_mask_scaled.height > 2;
+    if(!has_effect)
     {
-      if(algo == DT_IOP_RETOUCH_CLONE)
+      dt_pixelpipe_cache_free_align(mask_scaled);
+      continue;
+    }
+
+    if(algo == DT_IOP_RETOUCH_CLONE)
+    {
+      if(_retouch_clone(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity) != 0)
       {
-        if(_retouch_clone(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity) != 0)
-        {
-          dt_pixelpipe_cache_free_align(mask_scaled);
-          return 1;
-        }
+        dt_pixelpipe_cache_free_align(mask_scaled);
+        return 1;
       }
-      else if(algo == DT_IOP_RETOUCH_HEAL)
+    }
+    else if(algo == DT_IOP_RETOUCH_HEAL)
+    {
+      if(_retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, p->max_heal_iter,
+                       rt_heal_domain(p, scale1, wt_p->scales)) != 0)
       {
-        if(_retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, p->max_heal_iter,
-                         rt_heal_domain(p, scale1, wt_p->scales)) != 0)
-        {
-          dt_pixelpipe_cache_free_align(mask_scaled);
-          return 1;
-        }
+        dt_pixelpipe_cache_free_align(mask_scaled);
+        return 1;
       }
-      else if(algo == DT_IOP_RETOUCH_BLUR)
+    }
+    else if(algo == DT_IOP_RETOUCH_BLUR)
+    {
+      if(_retouch_blur(self, pipe, layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity,
+                       p->rt_forms[index].blur_type, p->rt_forms[index].blur_radius, wt_p->use_sse) != 0)
       {
-        if(_retouch_blur(self, pipe, layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity,
-                          p->rt_forms[index].blur_type, p->rt_forms[index].blur_radius, wt_p->use_sse) != 0)
-        {
-          dt_pixelpipe_cache_free_align(mask_scaled);
-          return 1;
-        }
+        dt_pixelpipe_cache_free_align(mask_scaled);
+        return 1;
       }
-      else if(algo == DT_IOP_RETOUCH_FILL)
-      {
-        // add a brightness to the color so it can be fine-adjusted by the user
-        dt_aligned_pixel_t fill_color;
+    }
+    else if(algo == DT_IOP_RETOUCH_FILL)
+    {
+      // add a brightness to the color so it can be fine-adjusted by the user
+      dt_aligned_pixel_t fill_color;
 
       if(p->rt_forms[index].fill_mode == DT_IOP_RETOUCH_FILL_ERASE)
       {
@@ -3428,11 +3435,11 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
 
     if(mask_display)
       rt_copy_mask_to_alpha(layer, roi_layer, wt_p->ch, mask_scaled, &roi_mask_scaled, form_opacity);
-  }
+
     dt_pixelpipe_cache_free_align(mask);
     dt_pixelpipe_cache_free_align(mask_scaled);
   }
-  
+
   return 0;
 }
 
@@ -4001,8 +4008,8 @@ cleanup:
 
 static cl_int _retouch_heal_cl(const int devid, cl_mem dev_layer, dt_iop_roi_t *const roi_layer, float *mask_scaled,
                                cl_mem dev_mask_scaled, dt_iop_roi_t *const roi_mask_scaled, const int dx,
-                               const int dy, const float opacity, dt_iop_retouch_global_data_t *gd, const int max_iter,
-                               const dt_heal_domain_t domain)
+                               const int dy, const float opacity, const dt_iop_retouch_global_data_t *const gd,
+                               const int max_iter, const dt_heal_domain_t domain)
 {
   cl_int err = CL_SUCCESS;
 
@@ -4047,8 +4054,8 @@ static cl_int _retouch_heal_cl(const int devid, cl_mem dev_layer, dt_iop_roi_t *
   heal_params_cl_t *hp = dt_heal_init_cl(devid);
   if(hp)
   {
-    err = dt_heal_cl(hp, dev_src, dev_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, max_iter,
-                     domain);
+    err = dt_heal_cl(hp, dev_src, dev_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height,
+                     (dt_heal_solver_t){ .max_iter = max_iter, .domain = domain });
     dt_heal_free_cl(hp);
 
     dt_opencl_release_mem_object(dev_src);

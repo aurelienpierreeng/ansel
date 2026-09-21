@@ -408,7 +408,7 @@ cleanup:
  * http://www.tgeorgiev.net/Photoshop_Healing.pdf
  */
 void dt_heal(const float *const src_buffer, float *dest_buffer, const float *const mask_buffer, const int width,
-             const int height, const int ch, const int max_iter, const dt_heal_domain_t domain)
+             const int height, const int ch, const dt_heal_solver_t solver)
 {
   if(ch != 4)
   {
@@ -425,12 +425,12 @@ void dt_heal(const float *const src_buffer, float *dest_buffer, const float *con
   }
 
   /* subtract pattern from image and store the result split by 'red' and 'black' positions  */
-  _heal_sub(dest_buffer, src_buffer, red_buffer, black_buffer, width, height, domain);
+  _heal_sub(dest_buffer, src_buffer, red_buffer, black_buffer, width, height, solver.domain);
 
-  _heal_laplace_loop(red_buffer, black_buffer, width, height, mask_buffer, max_iter);
+  _heal_laplace_loop(red_buffer, black_buffer, width, height, mask_buffer, solver.max_iter);
 
   /* add solution to original image and store in dest */
-  _heal_add(red_buffer, black_buffer, src_buffer, dest_buffer, width, height, domain);
+  _heal_add(red_buffer, black_buffer, src_buffer, dest_buffer, width, height, solver.domain);
 
 cleanup:
   dt_pixelpipe_cache_free_align(red_buffer);
@@ -481,7 +481,7 @@ void dt_heal_free_cl(heal_params_cl_t *p)
 }
 
 cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const float *const mask_buffer,
-                  const int width, const int height, const int max_iter, const dt_heal_domain_t domain)
+                  const int width, const int height, const dt_heal_solver_t solver)
 {
   cl_int err = CL_SUCCESS;
 
@@ -521,7 +521,7 @@ cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const fl
   }
 
   // I couldn't make it run fast on opencl (the reduction takes forever), so just call the cpu version
-  dt_heal(src_buffer, dest_buffer, mask_buffer, width, height, ch, max_iter, domain);
+  dt_heal(src_buffer, dest_buffer, mask_buffer, width, height, ch, solver);
 
   err = dt_opencl_write_buffer_to_device(p->devid, dest_buffer, dev_dest, 0, sizeof(float) * width * height * ch, CL_TRUE);
   if(err != CL_SUCCESS)
