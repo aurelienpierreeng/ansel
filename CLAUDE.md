@@ -119,6 +119,39 @@ interface `dt_dev_transient_params_{set,clear,get,active}` in `dev_history.{h,c}
 
 See `doc/reorganisation.md` for the threading model (GUI diamond nodes vs. pipeline round nodes).
 
+### A stored format's version is bumped only once it has shipped in a round-numbered release
+
+Three formats outlive the build that writes them: a module's params (`DT_MODULE_INTROSPECTION`), the
+database schema (`CURRENT_DATABASE_VERSION_LIBRARY` / `_DATA`, `database/database.c`) and the XMP
+sidecar (`DT_XMP_EXIF_VERSION`, `common/xmp_sidecar.cc`). Bump one only if its current version was
+distributed in a round-numbered release: Ansel 1.0, 2.0, … or, for a version inherited from
+darktable, a darktable release. A version that has not shipped in one is still open, and a change
+goes into it without a bump. For the database schema and the XMP, the bump itself is made as late
+as possible, just before Ansel's version number changes.
+
+A bump rejects nothing: the build that makes it converts every older version (`legacy_params()`,
+the schema migration steps, the readers of older XMP versions). What it adds is permanent, since
+each version keeps its conversion code for good, so versions follow round-numbered releases instead
+of piling up one per change in nightlies.
+
+Changing an open version in place has its own conditions, since nightlies have already written it:
+
+- **Module params**: append, never insert. The conversions from older versions commonly copy the
+  old layout as a prefix over the defaults, so existing members keep their offsets. A blob of the
+  same version but another size makes `_sync_params()` call `legacy_params(N, N)`, which is not
+  told the stored size and has no branch for it, so the step is dropped: an edit saved with the
+  shorter layout loses that module. `_sync_params()` does not fall back to copying the common
+  prefix.
+- **Database schema**: a library already at version N never re-runs the step that brought it there
+  (`_upgrade_library_schema_step()`), so what is added to N in place must also be applied,
+  idempotently, to a library already at N: `_sanitize_db()` runs at every open.
+- **XMP**: a new key is optional, its absence meaning the default, and an existing key keeps its
+  meaning: a sidecar written earlier under the same version still reads, and an older build
+  reading a newer one skips what it does not know.
+
+Schema 36, data 9 and XMP 5 come from darktable releases. The bumps planned for Ansel 1.0 (schema
+37, XMP 6) wait on the `masks-history-dedup` branch, see `doc/masks_history_dedup.md`.
+
 ---
 
 ## Preferences system
