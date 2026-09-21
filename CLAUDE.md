@@ -1970,7 +1970,7 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
 
-### retouch: everything on the pipeline thread resolves shapes through `pipe->forms`, never `self->dev->forms`
+### retouch and spots: everything on the pipeline thread resolves shapes through `pipe->forms`, never `self->dev->forms`
 
 Two families of retouch code run on the pipeline/worker/CL thread, not the GUI thread: the
 `dwt_decompose()`/`dwt_decompose_cl()` callbacks `rt_process_forms()`/`rt_process_forms_cl()`, which
@@ -1980,7 +1980,8 @@ which widens the input to cover every source area. Both resolve the module's mas
 shape in `pipe->forms` — the refcounted, frozen snapshot of the run (see "Forms are refcounted, not
 deep-copied" above) — through `dt_masks_get_from_id_in_pipe()` (`develop/masks.h`), wrapped by
 `rt_pipe_group_members()` and `rt_pipe_member_form()`, and read the group id from
-`piece->blendop_data`, never from `self->blend_params`. The CPU and OpenCL callbacks share their whole per-shape preamble (lookup,
+`piece->blendop_data`, never from `self->blend_params`. `iop/spots.c`'s `modify_roi_in()` and
+`_process()` (which `distort_mask()` reuses) follow the same rule with the same resolver. The CPU and OpenCL callbacks share their whole per-shape preamble (lookup,
 scale and layer checks, mask, source offset) through `rt_prepare_shape()`, so the two paths cannot
 drift on which shapes they apply.
 
