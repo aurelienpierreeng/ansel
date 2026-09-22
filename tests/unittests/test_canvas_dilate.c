@@ -49,29 +49,47 @@ static int _length_of(const dt_canvas_dilate_lengths_t lengths, const int step)
   return lengths.knight;
 }
 
-/* The reference: each segment's maximum taken sample by sample, 0 outside the plane. */
+/*
+ * The reference: the largest value within the segments' reach of every pixel, nothing outside the
+ * plane -- each segment's maximum taken sample by sample, on a copy padded with nothing as far as
+ * the segments reach. The padding is not a detail: a sum of segments reaches some of its points
+ * only through points outside the plane, and running the passes on the plane itself cut those
+ * paths and read short along the edges, which the tiles, whose buffers carry that room, did not.
+ */
 static void _brute_force(float *plane, const int width, const int height, const dt_canvas_dilate_lengths_t lengths)
 {
-  float *copy = g_new(float, (size_t)width * height);
+  const int margin = lengths.axis + 2 * lengths.diagonal + 6 * lengths.knight;
+  const int padded_width = width + 2 * margin;
+  const int padded_height = height + 2 * margin;
+  const size_t padded_count = (size_t)padded_width * padded_height;
+  float *padded = g_new0(float, padded_count);
+  float *copy = g_new(float, padded_count);
+  for(int row = 0; row < height; row++)
+    memcpy(padded + (size_t)(row + margin) * padded_width + margin, plane + (size_t)row * width,
+           sizeof(float) * width);
   for(int step = 0; step < 8; step++)
   {
     const int half = _length_of(lengths, step);
     if(half <= 0) continue;
-    memcpy(copy, plane, sizeof(float) * width * height);
-    for(int row = 0; row < height; row++)
-      for(int col = 0; col < width; col++)
+    memcpy(copy, padded, sizeof(float) * padded_count);
+    for(int row = 0; row < padded_height; row++)
+      for(int col = 0; col < padded_width; col++)
       {
         float best = 0.0f;
         for(int t = -half; t <= half; t++)
         {
           const int x = col + t * _steps[step][0];
           const int y = row + t * _steps[step][1];
-          if(x < 0 || x >= width || y < 0 || y >= height) continue;
-          best = fmaxf(best, copy[(size_t)y * width + x]);
+          if(x < 0 || x >= padded_width || y < 0 || y >= padded_height) continue;
+          best = fmaxf(best, copy[(size_t)y * padded_width + x]);
         }
-        plane[(size_t)row * width + col] = best;
+        padded[(size_t)row * padded_width + col] = best;
       }
   }
+  for(int row = 0; row < height; row++)
+    memcpy(plane + (size_t)row * width, padded + (size_t)(row + margin) * padded_width + margin,
+           sizeof(float) * width);
+  g_free(padded);
   g_free(copy);
 }
 
@@ -139,6 +157,65 @@ static void _the_running_maximum_is_the_segments_maximum(void **state)
       g_free(suffix);
     }
   g_rand_free(random);
+}
+
+/*
+ * A plane large enough to be grown in tiles, laid out the way a shadow's plane is -- a solid frame
+ * with a hole and a feathered edge, empty room around it, a faint line, stray dots and something
+ * touching the plane's own edge -- so the tiles left alone because their neighbourhood is uniform
+ * and the tiles grown in their own buffers are both held to the segments' maximum, to the bit.
+ */
+static void _a_plane_grown_in_tiles_is_grown_exactly(void **state)
+{
+  (void)state;
+  const int width = 420;
+  const int height = 380;
+  const size_t count = (size_t)width * height;
+  float *plane = g_new0(float, count);
+  float *source = g_new(float, count);
+  float *expected = g_new(float, count);
+  float *prefix = g_new(float, count);
+  float *suffix = g_new(float, count);
+  const float radii[] = { 6.0f, 20.0f, 40.0f };
+  GRand *random = g_rand_new_with_seed(99);
+  for(size_t r = 0; r < G_N_ELEMENTS(radii); r++)
+  {
+    memset(plane, 0, sizeof(float) * count);
+    for(int row = 50; row < 250; row++)
+      for(int col = 60; col < 330; col++)
+        plane[(size_t)row * width + col] = col < 300 ? 1.0f : (float)(330 - col) / 30.0f;
+    for(int row = 100; row < 140; row++)
+      for(int col = 150; col < 200; col++) plane[(size_t)row * width + col] = 0.0f;
+    for(int row = 20; row < 360; row++) plane[(size_t)row * width + 380] = 0.4f;
+    for(int row = 0; row < 10; row++)
+      for(int col = 0; col < 100; col++) plane[(size_t)row * width + col] = 0.7f;
+    for(int dot = 0; dot < 12; dot++)
+      plane[(size_t)g_rand_int_range(random, 270, height) * width + g_rand_int_range(random, 0, 360)]
+          = (float)g_rand_double_range(random, 0.3, 1.0);
+    memcpy(source, plane, sizeof(float) * count);
+    memcpy(expected, plane, sizeof(float) * count);
+    _brute_force(expected, width, height, dt_canvas_dilate_lengths(radii[r]));
+    assert_true(dt_canvas_dilate(plane, prefix, suffix, width, height, radii[r]));
+    const int margin = dt_canvas_dilate_margin(radii[r]);
+    for(int row = 0; row < height; row++)
+      for(int col = 0; col < width; col++)
+      {
+        const size_t idx = (size_t)row * width + col;
+        const gboolean inside = row >= margin && row < height - margin && col >= margin && col < width - margin;
+        if(inside && plane[idx] != expected[idx])
+          fail_msg("radius %.0f: (%d, %d) is %.6f, the segments give %.6f", radii[r], col, row, plane[idx],
+                   expected[idx]);
+        if(plane[idx] < source[idx] || plane[idx] > expected[idx])
+          fail_msg("radius %.0f: (%d, %d) is %.6f, outside [%.6f, %.6f]", radii[r], col, row, plane[idx], source[idx],
+                   expected[idx]);
+      }
+  }
+  g_rand_free(random);
+  g_free(plane);
+  g_free(source);
+  g_free(expected);
+  g_free(prefix);
+  g_free(suffix);
 }
 
 /* How far the sum reaches, in every direction, against the radius asked for. */
@@ -293,6 +370,7 @@ int main(void)
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_the_running_maximum_is_the_segments_maximum),
+    cmocka_unit_test(_a_plane_grown_in_tiles_is_grown_exactly),
     cmocka_unit_test(_the_segments_reach_as_far_as_a_disc_does),
     cmocka_unit_test(_a_lit_pixel_spreads_to_a_round_patch),
     cmocka_unit_test(_a_feather_moves_out_whole),

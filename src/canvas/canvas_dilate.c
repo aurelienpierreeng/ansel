@@ -18,11 +18,14 @@
 
 #include "canvas/canvas_dilate.h"
 
-#include "system/macros.h" // IS_NULL_PTR
+#include "system/macros.h"    // IS_NULL_PTR
+#include "system/mem_alloc.h" // dt_alloc_align_float
+#include "system/openmp.h"    // omp_get_max_threads(), dt_get_thread_num()
 
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* A lattice step: one sample of a line along it to the next. */
 typedef struct dt_canvas_dilate_step_t
@@ -42,6 +45,10 @@ static const dt_canvas_dilate_step_t _steps[8] = {
 #define DILATE_DIAGONAL_SHARE 0.300f    ///< the continuous optimum, per axis sample (see the header)
 #define DILATE_KNIGHT_SHARE 0.440f
 #define DILATE_RADIUS_MAX 1.0e6f        ///< keeps the lengths inside an int, far past any plane
+#define DILATE_TILE_MIN 64              ///< the smallest core of a tile grown on its own, in pixels
+#define DILATE_TILE_PER_MARGIN 4        ///< a tile's core is at least this many margins wide
+#define DILATE_TILE_MARGIN_MAX 48       ///< past it a tile's three buffers leave the cache: the plane is swept whole
+#define DILATE_CELL 16                  ///< the side of a cell of the map that finds the tiles to grow
 
 float dt_canvas_dilate_reach(const dt_canvas_dilate_lengths_t lengths, const float angle)
 {
@@ -162,12 +169,13 @@ static int _family_length(const dt_canvas_dilate_lengths_t *lengths, const int s
  * reads, whatever `half` is. A window that would leave the row is not computed: that pixel keeps
  * its own value, which is the margin's bargain.
  */
-static void _dilate_rows(float *plane, float *prefix, float *suffix, const int width, const int height, const int half)
+static void _dilate_rows(float *plane, float *prefix, float *suffix, const int width, const int height, const int half,
+                         const gboolean threaded)
 {
   const int span = 2 * half + 1;
   if(2 * half >= width) return;
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
+#pragma omp parallel for default(firstprivate) schedule(static) if(threaded)
 #endif
   for(int row = 0; row < height; row++)
   {
@@ -212,7 +220,7 @@ static inline void _run_row(float *target, const float *previous, const float *s
  * at a time and measured slower.
  */
 static void _dilate_lines(float *plane, float *prefix, float *suffix, const int width, const int height, const int vx,
-                          const int vy, const int half)
+                          const int vy, const int half, const gboolean threaded)
 {
   const int span = 2 * half + 1;
   const int margin_x = half * abs(vx);
@@ -221,7 +229,7 @@ static void _dilate_lines(float *plane, float *prefix, float *suffix, const int 
   const int block_rows = span * vy;
   const int blocks = (height + block_rows - 1) / block_rows;
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
+#pragma omp parallel for default(firstprivate) schedule(static) if(threaded)
 #endif
   for(int block = 0; block < blocks; block++)
   {
@@ -242,7 +250,7 @@ static void _dilate_lines(float *plane, float *prefix, float *suffix, const int 
   }
   // Both ends of each window, read from the two runs, wherever the window lies inside the plane.
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
+#pragma omp parallel for default(firstprivate) schedule(static) if(threaded)
 #endif
   for(int row = margin_y; row < height - margin_y; row++)
   {
@@ -254,19 +262,209 @@ static void _dilate_lines(float *plane, float *prefix, float *suffix, const int 
   }
 }
 
+/* The eight passes over one plane, in the order the steps are listed. */
+static void _dilate_plane(float *plane, float *prefix, float *suffix, const int width, const int height,
+                          const dt_canvas_dilate_lengths_t *lengths, const gboolean threaded)
+{
+  for(int step = 0; step < 8; step++)
+  {
+    const int half = _family_length(lengths, step);
+    if(half <= 0) continue;
+    if(_steps[step].vy == 0)
+      _dilate_rows(plane, prefix, suffix, width, height, half, threaded);
+    else
+      _dilate_lines(plane, prefix, suffix, width, height, _steps[step].vx, _steps[step].vy, half, threaded);
+  }
+}
+
+/*
+ * The same grow, a tile at a time, and only where it changes anything.
+ *
+ * The eight passes are bound by memory, and over a shadow's plane most of that memory is spent where
+ * the grow does nothing: a frame's inside is solid and stays solid, the room around it is empty and
+ * stays empty, and only a ring about the edges moves. A tile whose neighbourhood -- its core and the
+ * margin around it, inside the plane -- holds one value throughout grows into that same value, so it
+ * is left as it is. Every other tile is grown in a buffer of its own, small enough to stay in cache,
+ * that the margin around the core keeps exact; outside the plane the buffer holds nothing. The result
+ * is the exact grow everywhere, the band along the plane's edges included, which is more than the
+ * whole-plane sweep promises there.
+ *
+ * FALSE, with the plane untouched, when the buffers cannot be had or the tiles that move would cost
+ * more than the plane swept whole.
+ */
+static gboolean _dilate_tiled(float *plane, float *out, const int width, const int height,
+                              const dt_canvas_dilate_lengths_t *lengths, const int margin)
+{
+  const int tile = MAX(DILATE_TILE_MIN, DILATE_TILE_PER_MARGIN * margin);
+  const int tiles_x = (width + tile - 1) / tile;
+  const int tiles_y = (height + tile - 1) / tile;
+  const int cells_x = (width + DILATE_CELL - 1) / DILATE_CELL;
+  const int cells_y = (height + DILATE_CELL - 1) / DILATE_CELL;
+  const int side = tile + 2 * margin;
+  const size_t area = (size_t)side * side;
+  // The team a parallel loop below can have, whatever budget the application set itself: the
+  // buffers are indexed by the thread's number within that team.
+  const int threads = MAX(omp_get_max_threads(), 1);
+  float *low = dt_alloc_align_float((size_t)cells_x * cells_y);
+  float *high = dt_alloc_align_float((size_t)cells_x * cells_y);
+  int *active = g_try_new(int, (size_t)tiles_x * tiles_y);
+  // Three buffers a thread, taken together so a thread that could not have its own cannot leave its
+  // tiles ungrown.
+  float *buffers = dt_alloc_align_float(area * 3 * (size_t)threads);
+  if(IS_NULL_PTR(low) || IS_NULL_PTR(high) || IS_NULL_PTR(active) || IS_NULL_PTR(buffers))
+  {
+    dt_free_align(low);
+    dt_free_align(high);
+    g_free(active);
+    dt_free_align(buffers);
+    return FALSE;
+  }
+
+  // The smallest and the largest value of every cell.
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int cell_y = 0; cell_y < cells_y; cell_y++)
+  {
+    float *row_low = low + (size_t)cell_y * cells_x;
+    float *row_high = high + (size_t)cell_y * cells_x;
+    for(int cell_x = 0; cell_x < cells_x; cell_x++)
+    {
+      row_low[cell_x] = INFINITY;
+      row_high[cell_x] = -INFINITY;
+    }
+    const int y_end = MIN((cell_y + 1) * DILATE_CELL, height);
+    for(int y = cell_y * DILATE_CELL; y < y_end; y++)
+    {
+      const float *line = plane + (size_t)y * width;
+      for(int cell_x = 0; cell_x < cells_x; cell_x++)
+      {
+        const int x_end = MIN((cell_x + 1) * DILATE_CELL, width);
+        float smallest = row_low[cell_x];
+        float largest = row_high[cell_x];
+        for(int x = cell_x * DILATE_CELL; x < x_end; x++)
+        {
+          smallest = fminf(smallest, line[x]);
+          largest = fmaxf(largest, line[x]);
+        }
+        row_low[cell_x] = smallest;
+        row_high[cell_x] = largest;
+      }
+    }
+  }
+
+  // The tiles whose neighbourhood holds more than one value: the only ones the grow can change.
+  int count = 0;
+  size_t work = 0;
+  for(int tile_y = 0; tile_y < tiles_y; tile_y++)
+    for(int tile_x = 0; tile_x < tiles_x; tile_x++)
+    {
+      const int first_x = MAX(tile_x * tile - margin, 0) / DILATE_CELL;
+      const int last_x = (MIN((tile_x + 1) * tile + margin, width) - 1) / DILATE_CELL;
+      const int first_y = MAX(tile_y * tile - margin, 0) / DILATE_CELL;
+      const int last_y = (MIN((tile_y + 1) * tile + margin, height) - 1) / DILATE_CELL;
+      float smallest = INFINITY;
+      float largest = -INFINITY;
+      for(int cell_y = first_y; cell_y <= last_y; cell_y++)
+        for(int cell_x = first_x; cell_x <= last_x; cell_x++)
+        {
+          smallest = fminf(smallest, low[(size_t)cell_y * cells_x + cell_x]);
+          largest = fmaxf(largest, high[(size_t)cell_y * cells_x + cell_x]);
+        }
+      if(smallest != largest)
+      {
+        active[count++] = tile_y * tiles_x + tile_x;
+        work += (size_t)(MIN(tile, width - tile_x * tile) + 2 * margin) * (MIN(tile, height - tile_y * tile) + 2 * margin);
+      }
+    }
+  /* Every active tile is grown with its margin around it, so a plane where most tiles move -- a
+   * text's glyphs, a lattice of small frames -- costs more in tiles than swept whole. Swept whole
+   * then: MEASURED, the tiles won wherever the grow left most of the plane alone and lost by half
+   * where it did not. */
+  if(work >= (size_t)width * height)
+  {
+    dt_free_align(low);
+    dt_free_align(high);
+    g_free(active);
+    dt_free_align(buffers);
+    return FALSE;
+  }
+
+  // Each of them grown in its thread's buffers, the core written to `out` so no tile reads a
+  // neighbour another has already grown.
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static, 1)
+#endif
+  for(int index = 0; index < count; index++)
+  {
+    float *buffer = buffers + area * 3 * (size_t)dt_get_thread_num();
+    float *prefix = buffer + area;
+    float *suffix = prefix + area;
+    const int x0 = (active[index] % tiles_x) * tile;
+    const int y0 = (active[index] / tiles_x) * tile;
+    const int core_width = MIN(tile, width - x0);
+    const int core_height = MIN(tile, height - y0);
+    const int buffer_width = core_width + 2 * margin;
+    const int buffer_height = core_height + 2 * margin;
+    const int left = x0 - margin;
+    const int inside_first = MIN(MAX(-left, 0), buffer_width);
+    const int inside_last = MAX(MIN(buffer_width, width - left), inside_first);
+    for(int row = 0; row < buffer_height; row++)
+    {
+      float *target = buffer + (size_t)row * buffer_width;
+      const int y = y0 - margin + row;
+      if(y < 0 || y >= height)
+      {
+        memset(target, 0, sizeof(float) * buffer_width);
+        continue;
+      }
+      memset(target, 0, sizeof(float) * inside_first);
+      memcpy(target + inside_first, plane + (size_t)y * width + left + inside_first,
+             sizeof(float) * (inside_last - inside_first));
+      memset(target + inside_last, 0, sizeof(float) * (buffer_width - inside_last));
+    }
+    _dilate_plane(buffer, prefix, suffix, buffer_width, buffer_height, lengths, FALSE);
+    for(int row = 0; row < core_height; row++)
+      memcpy(out + (size_t)(y0 + row) * width + x0, buffer + (size_t)(margin + row) * buffer_width + margin,
+             sizeof(float) * core_width);
+  }
+
+  // Every grown core back into the plane; the tiles left alone already hold their answer.
+#ifdef _OPENMP
+#pragma omp parallel for default(firstprivate) schedule(static)
+#endif
+  for(int index = 0; index < count; index++)
+  {
+    const int x0 = (active[index] % tiles_x) * tile;
+    const int y0 = (active[index] / tiles_x) * tile;
+    const int core_width = MIN(tile, width - x0);
+    const int core_height = MIN(tile, height - y0);
+    for(int row = 0; row < core_height; row++)
+      memcpy(plane + (size_t)(y0 + row) * width + x0, out + (size_t)(y0 + row) * width + x0,
+             sizeof(float) * core_width);
+  }
+
+  dt_free_align(low);
+  dt_free_align(high);
+  g_free(active);
+  dt_free_align(buffers);
+  return TRUE;
+}
+
 gboolean dt_canvas_dilate(float *plane, float *prefix, float *suffix, const int width, const int height,
                           const float radius)
 {
   if(IS_NULL_PTR(plane) || IS_NULL_PTR(prefix) || IS_NULL_PTR(suffix) || width <= 0 || height <= 0) return FALSE;
   const dt_canvas_dilate_lengths_t lengths = dt_canvas_dilate_lengths(radius);
-  for(int step = 0; step < 8; step++)
-  {
-    const int half = _family_length(&lengths, step);
-    if(half <= 0) continue;
-    if(_steps[step].vy == 0)
-      _dilate_rows(plane, prefix, suffix, width, height, half);
-    else
-      _dilate_lines(plane, prefix, suffix, width, height, _steps[step].vx, _steps[step].vy, half);
-  }
+  const int margin = lengths.axis + 2 * lengths.diagonal + 6 * lengths.knight;
+  if(margin <= 0) return TRUE;
+  // In tiles when the margin leaves a tile most of its buffer, the buffers fit in the cache and the
+  // plane holds a few tiles; swept whole otherwise, when most tiles would move anyway, or when the
+  // tiles' buffers cannot be had.
+  const int tile = MAX(DILATE_TILE_MIN, DILATE_TILE_PER_MARGIN * margin);
+  if(margin <= DILATE_TILE_MARGIN_MAX && width >= 2 * tile && height >= 2 * tile
+     && _dilate_tiled(plane, prefix, width, height, &lengths, margin))
+    return TRUE;
+  _dilate_plane(plane, prefix, suffix, width, height, &lengths, TRUE);
   return TRUE;
 }

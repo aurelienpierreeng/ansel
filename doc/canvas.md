@@ -256,11 +256,23 @@ The grow is `canvas/canvas_dilate.c`, and three things about it were decided by 
   what it asks beyond the room the layer box already leaves past the grown silhouette -- three
   blurs and the offset -- where the right answer is nothing and so is the approximate one.
 
-Its cost is the part still open. Measured on five shadowed objects filling a 2560 x 1440 view,
-shadows cost 2.7 ms at half zoom, 11.6 at 1:1 and 36 at 2:1 with no extent, and 6.5, 38 and 120
-with an extent of 10 points: eight passes over planes the size of the objects, bound by memory.
-A shadow wide enough to need an extent is smooth at the scale of its blur, so the remedy is to
-compute it at a fraction of the resolution, not a cheaper grow.
+- **Tiles where the grow moves nothing.** The eight passes are bound by memory, and over a
+  shadow's plane most of that memory is spent where the grow changes nothing: a frame's inside
+  stays solid, the room around it stays empty. A plane whose margin is at most 48 px is cut into
+  tiles at least four margins wide; a tile whose neighbourhood holds one value is left alone and
+  every other is grown in buffers of its own that stay in the cache, exact everywhere, edges
+  included. When the tiles that move would cost more than the plane -- a text's glyphs, a lattice
+  of small frames -- it is swept whole. The first tiling, with tiles two margins wide and no cap,
+  lost wherever the margin was large: at an extent of 60 points it cost 345 ms where the sweep
+  cost 198. The brute force the test holds it to had to be padded too: a sum of segments reaches
+  some of its points only through points outside the plane, and the passes run on the plane
+  itself cut those paths, so the reference read short along the edges where the tiles were right.
+
+What it costs, measured on five shadowed objects filling a 2560 x 1440 view: shadows cost 2.8 ms
+at half zoom, 11 at 1:1 and 37 at 2:1 with no extent; 7, 27 and 81 with an extent of 10 points;
+13, 53 and 184 with 60. The last column is the one still open: a large extent's margin is too
+wide to tile. A shadow wide enough to want a large extent is smooth at the scale of its blur, so
+the remedy there is to compute it at a fraction of the resolution, not a cheaper grow.
 
 ### Cutouts
 

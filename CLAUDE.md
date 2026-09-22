@@ -3439,7 +3439,12 @@ they are visible.
   `dt_canvas_dilate_margin()` -- ones for an inset plane, and for an outset one only what the margin
   asks beyond the three blurs and the offset the layer box already leaves, where the right answer
   is nothing anyway. Every reach the painter grows by goes through `_shadow_reach()`, extent
-  included, so the layer box, the band, the damage and the plane cannot disagree.
+  included, so the layer box, the band, the damage and the plane cannot disagree. A plane whose
+  margin is small is grown in TILES, and a tile whose neighbourhood is uniform is skipped; the
+  tiles are exact everywhere, which is what caught the test's own reference out: **a brute force
+  run pass by pass on the unpadded plane is NOT the maximum over the segments' reach** -- a sum of
+  segments reaches some of its points only through points outside the plane, so the reference
+  must run on a copy padded by the margin, or it reads short along every edge.
 - **`schedule(dynamic)` in libansel needs a newer libomp than the Debug clang build's tests load.**
   clang emits `__kmpc_dispatch_deinit` for it, and `build-warnsweep`'s test binaries resolve
   `/usr/lib64/llvm18/lib/libomp.so`, which lacks it: every test dies at the first call with a
