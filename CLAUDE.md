@@ -2838,6 +2838,12 @@ Intel failure used to discard the arm64 DMG too, `upload_to_release` having `nee
 the whole matrix with no `if:`, which cost five good Apple Silicon packages in five nights. It
 publishes per architecture now, so the Intel measures decide whether an Intel DMG exists and no
 longer whether a macOS nightly exists at all.
+
+A scheduled nightly builds only what the release does not already hold for the head commit:
+each of `lin-`, `win-` and `mac-nightly.yml` starts with a `published` job asking
+`tools/nightly_published.sh` (on macOS per architecture, that job owning the matrix); a manual
+dispatch rebuilds. All three rename `~` to `.` before `tip`, or it cannot replace an existing asset.
+
 ### Only the macOS bundle is assembled by hand, and it may not name a binary
 
 Windows packages with CPack (`--target package`, the `DTApplication` component whole) and
