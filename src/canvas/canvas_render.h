@@ -226,6 +226,7 @@ typedef enum dt_canvas_scratch_slot_t
   DT_CANVAS_SCRATCH_SHADOW,     ///< a shadow's coverage plane
   DT_CANVAS_SCRATCH_BLUR,       ///< the blur's ping-pong
   DT_CANVAS_SCRATCH_GLYPHS,     ///< a text's glyph-only alpha, what its own shadow is cast from
+  DT_CANVAS_SCRATCH_GROW,       ///< the second run of a shadow's grow, beside the blur's ping-pong
   DT_CANVAS_SCRATCH_COUNT
 } dt_canvas_scratch_slot_t;
 

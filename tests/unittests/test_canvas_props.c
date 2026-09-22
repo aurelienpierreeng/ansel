@@ -1060,6 +1060,63 @@ static void _a_blur_of_minus_one_round_trips(void **state)
   _fixture_free(&fixture);
 }
 
+/*
+ * The extent is one more member of the shadow's group, like the three numbers beside it: edited
+ * while the object inherits, it takes the whole shadow the object was drawn with and changes only
+ * itself, and the canvas's own value written back while inheriting is no edit at all. The glyphs'
+ * extent belongs to no group and is neutral at nothing.
+ */
+static void _a_shadows_extent_is_one_more_member_of_its_group(void **state)
+{
+  (void)state;
+  props_fixture_t fixture;
+  _fixture_build(&fixture);
+  fixture.canvas->shadow.extent = 4.0f;
+  dt_canvas_object_t *image = fixture.objects[1];
+  assert_float_equal(_read_number(fixture.canvas, image, DT_CANVAS_PROP_SHADOW_EXTENT), 4.0, 1e-6);
+  const dt_canvas_prop_value_t same = _number(4.0);
+  assert_int_equal(dt_canvas_prop_write(fixture.canvas, image, DT_CANVAS_PROP_SHADOW_EXTENT, &same), 0);
+  assert_false(image->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE);
+  const dt_canvas_prop_value_t wider = _number(12.5);
+  assert_true(dt_canvas_prop_write(fixture.canvas, image, DT_CANVAS_PROP_SHADOW_EXTENT, &wider)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(image->flags & DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE);
+  assert_float_equal(image->shadow.extent, 12.5f, 1e-6);
+  // Seeded from what was drawn: the canvas's blur, which the edit did not touch.
+  assert_float_equal(image->shadow.blur, 10.0f, 1e-6);
+  assert_float_equal(fixture.canvas->shadow.extent, 4.0f, 1e-6);
+  // Held to its range: a grow is never negative.
+  const dt_canvas_prop_value_t negative = _number(-3.0);
+  dt_canvas_prop_write(fixture.canvas, image, DT_CANVAS_PROP_SHADOW_EXTENT, &negative);
+  assert_float_equal(image->shadow.extent, 0.0f, 1e-6);
+  // The folded section says what it is.
+  image->shadow.extent = 6.0f;
+  char summary[128];
+  dt_canvas_group_summary(fixture.canvas, image, DT_CANVAS_GROUP_SHADOW, summary, sizeof(summary));
+  assert_non_null(strstr(summary, "6.0"));
+  // A drawing holding nothing but an extent owns a shadow of its own, not its kind's nothing.
+  dt_canvas_object_t *drawing = fixture.objects[3];
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, drawing, DT_CANVAS_GROUP_SHADOW),
+                   DT_CANVAS_OWN_KIND_DEFAULT);
+  drawing->shadow.extent = 2.0f;
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, drawing, DT_CANVAS_GROUP_SHADOW), DT_CANVAS_OWN_CUSTOM);
+
+  dt_canvas_object_t *text = fixture.objects[0];
+  assert_true(dt_canvas_prop_is_neutral(fixture.canvas, text, DT_CANVAS_PROP_TEXT_SHADOW_EXTENT));
+  const dt_canvas_prop_value_t outline = _number(2.5);
+  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_TEXT_SHADOW_EXTENT, &outline)
+              & DT_CANVAS_EFFECT_SETTLE_ALL);
+  assert_float_equal(_read_number(fixture.canvas, text, DT_CANVAS_PROP_TEXT_SHADOW_EXTENT), 2.5, 1e-6);
+  assert_false(dt_canvas_prop_is_neutral(fixture.canvas, text, DT_CANVAS_PROP_TEXT_SHADOW_EXTENT));
+  // Grown alone, with no blur and no offset, the glyphs' shadow is an outline, and it is drawn.
+  text->text.shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  text->text.shadow.blur = 0.0f;
+  text->text.shadow.offset_x = 0.0f;
+  text->text.shadow.offset_y = 0.0f;
+  assert_true(dt_canvas_text_shadow_visible(&text->text.shadow));
+  _fixture_free(&fixture);
+}
+
 static void _a_fresh_drawing_owns_only_what_its_kind_is_born_with(void **state)
 {
   (void)state;
@@ -1450,6 +1507,7 @@ static void _the_inherited_value_is_what_giving_the_group_back_shows(void **stat
   fixture.canvas->shadow.offset_x = 3.0f;
   fixture.canvas->shadow.offset_y = -2.0f;
   fixture.canvas->shadow.color = dt_canvas_color(0.2f, 0.3f, 0.4f, 0.5f);
+  fixture.canvas->shadow.extent = 5.0f;
   g_strlcpy(fixture.canvas->default_font, "Serif Bold 17", sizeof(fixture.canvas->default_font));
   size_t count = 0;
   const dt_canvas_prop_t *table = dt_canvas_props(&count);
@@ -1469,6 +1527,7 @@ static void _the_inherited_value_is_what_giving_the_group_back_shows(void **stat
       object->shadow.offset_x = 11.0f;
       object->shadow.offset_y = 12.0f;
       object->shadow.blur = -13.0f;
+      object->shadow.extent = 14.0f;
       object->shadow.color = dt_canvas_color(0.7f, 0.7f, 0.1f, 0.9f);
       if(object->kind == DT_CANVAS_OBJECT_TEXT)
         g_strlcpy(object->text.font, "Monospace Italic 41", sizeof(object->text.font));
@@ -3101,6 +3160,7 @@ int main(void)
     cmocka_unit_test(_a_shadow_offset_edited_while_inheriting_is_kept_and_owned),
     cmocka_unit_test(_a_border_colour_keeps_the_effective_width),
     cmocka_unit_test(_a_blur_of_minus_one_round_trips),
+    cmocka_unit_test(_a_shadows_extent_is_one_more_member_of_its_group),
     cmocka_unit_test(_a_fresh_drawing_owns_only_what_its_kind_is_born_with),
     cmocka_unit_test(_an_all_zero_inset_stays_zero),
     cmocka_unit_test(_the_uniform_inset_writes_all_four_even_when_the_top_agrees),

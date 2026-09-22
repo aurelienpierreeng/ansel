@@ -18,6 +18,7 @@
 
 #include "canvas/canvas_paint.h"
 
+#include "canvas/canvas_dilate.h"
 #include "canvas/canvas_markdown.h"
 #include "canvas/canvas_text_breaks.h"
 #include "colorprofiles/colorspaces.h"
@@ -1826,9 +1827,9 @@ static double _obstacle_reach(const dt_canvas_t *canvas, const dt_canvas_object_
   dt_canvas_object_effective_shadow(canvas, other, &shadow);
   if(dt_canvas_shadow_visible(&shadow) && shadow.blur > 0.0)
   {
-    // An outset shadow is a blur about an offset copy, so it reaches the offset plus the blur.
-    // An inset one (a negative radius) paints inside the object and reaches nothing.
-    reach += (double)shadow.blur + hypot((double)shadow.offset_x, (double)shadow.offset_y);
+    // An outset shadow is a blur about a grown, offset copy, so it reaches the extent, the offset
+    // and the blur. An inset one (a negative radius) paints inside the object and reaches nothing.
+    reach += (double)shadow.extent + (double)shadow.blur + hypot((double)shadow.offset_x, (double)shadow.offset_y);
   }
   /*
    * A text's own shadow is cast from its GLYPHS, which are inside the frame, so it reaches at
@@ -1837,7 +1838,7 @@ static double _obstacle_reach(const dt_canvas_t *canvas, const dt_canvas_object_
    */
   if(other->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&other->text.shadow))
   {
-    const double glyph_reach = fmax((double)other->text.shadow.blur, 0.0)
+    const double glyph_reach = (double)other->text.shadow.extent + fmax((double)other->text.shadow.blur, 0.0)
                                + hypot((double)other->text.shadow.offset_x, (double)other->text.shadow.offset_y);
     reach = fmax(reach, glyph_reach);
   }
@@ -3002,6 +3003,18 @@ static float _eotf_lut[256];
 static uint8_t _oetf_lut[COMPOSE_OETF_STEPS + 1];
 static gsize _luts_ready = 0;
 
+/*
+ * How far a shadow reaches past what casts it, in canvas units: its offset, its extent and three
+ * of its blurs, inset or outset alike -- an inset shadow reaches as far INTO the object, which is
+ * what a band of it has to carry past its edge for the grow and the blur to be whole there. The
+ * one number every consumer grows by, so the layer box, the band, the damage and the plane agree.
+ */
+static double _shadow_reach(const dt_canvas_shadow_t *shadow)
+{
+  return fabs(shadow->offset_x) + fabs(shadow->offset_y) + fmax(shadow->extent, 0.0f)
+         + COMPOSE_SHADOW_SIGMAS * fabs(shadow->blur);
+}
+
 static float _working_eotf(const float value)
 {
   return powf(CLAMP(value, 0.0f, 1.0f), WORKING_GAMMA);
@@ -3522,11 +3535,29 @@ static float *_shadow_plane(const dt_canvas_paint_options_t *options, const dt_c
 {
   const gboolean inset = shadow->blur < 0.0f;
   const int radius = (int)lround(fabs(shadow->blur) * pixels_per_unit);
+  // The extent grows the silhouette before the blur, in the plane's own pixels -- the uncovered
+  // world into the object for an inset shadow, the object outward for an outset one.
+  const float extent = fmaxf(shadow->extent, 0.0f) * (float)pixels_per_unit;
+  const int grow_margin = extent >= 0.5f ? dt_canvas_dilate_margin(extent) : 0;
   // An inset plane is padded with ones: past the layer's box the world is uncovered, and the
   // blur's zero padding would read it as covered and thin the shadow wherever the shape comes
   // near its own box. Three passes of radius r reach 3r, so that much padding keeps the blur
   // honest all the way to the box's edge. An outset plane pads with zeros: nothing casts there.
-  *pad = inset ? 3 * radius : 0;
+  //
+  // The grow is exact only its margin away from the plane's edges, and nearer them it leaves each
+  // pixel somewhere between its own value and the right one. For an inset plane the padding covers
+  // that margin: ones stay ones under a maximum. An outset layer box already reaches past the
+  // silhouette by the extent, three blurs and the offset -- `_shadow_reach()` -- and the grown
+  // silhouette ends the margin past it (the segments' reach along an axis, which misses the extent
+  // by up to 2.4 % either way), so the layer box leaves `reach - margin` of nothing beyond it. Only
+  // what the margin asks for beyond that nothing is padded: over it, the right answer and the
+  // approximate one are both nothing. Padding the whole margin regardless grew every plane by twice
+  // the extent along each axis, most of it for nothing.
+  const int nothing = (int)floor((extent + (COMPOSE_SHADOW_SIGMAS * fabs(shadow->blur) + fabs(shadow->offset_x)
+                                            + fabs(shadow->offset_y))
+                                               * pixels_per_unit))
+                      - grow_margin;
+  *pad = inset ? MAX(3 * radius, grow_margin) : MAX(grow_margin - nothing, 0);
   const int width = layer_box->width + 2 * *pad;
   const int height = layer_box->height + 2 * *pad;
   const size_t count = (size_t)width * height;
@@ -3562,6 +3593,14 @@ static float *_shadow_plane(const dt_canvas_paint_options_t *options, const dt_c
       target[margin + col] = inset ? 1.0f - source[stride * col + stride - 1] : source[stride * col + stride - 1];
     for(int col = margin + layer_width; col < width; col++) target[col] = padding;
   }
+  if(grow_margin > 0)
+  {
+    gboolean grow_owned = FALSE;
+    float *grow = _scratch(options, DT_CANVAS_SCRATCH_GROW, count * sizeof(float), &grow_owned);
+    // Without the scratch the silhouette is blurred as it stands: a thinner shadow, not a missing one.
+    if(!IS_NULL_PTR(grow)) dt_canvas_dilate(alpha, scratch, grow, width, height, extent);
+    _scratch_release(grow, grow_owned);
+  }
   if(radius >= 1)
   {
     for(int pass = 0; pass < 3; pass++) _box_blur(alpha, scratch, width, height, radius);
@@ -3591,19 +3630,22 @@ static void _canvas_shadow(const dt_canvas_paint_options_t *options, float *canv
   const int offset_y = (int)lround(shadow->offset_y * pixels_per_unit);
   const int rows = area->height;
   const int cols = area->width;
+  // The plane is the layer's box grown by the padding the extent's grow asked for, if any.
+  const int plane_width = layer_box->width + 2 * pad;
+  const int plane_height = layer_box->height + 2 * pad;
 #ifdef _OPENMP
 #pragma omp parallel for default(firstprivate) schedule(static)
 #endif
   for(int row = 0; row < rows; row++)
   {
     const int y = area->y + row;
-    const int source_y = y - offset_y - layer_box->y;
+    const int source_y = y - offset_y - layer_box->y + pad;
     float *target = canvas_rgba + ((size_t)(y - canvas_box->y) * canvas_box->width + (area->x - canvas_box->x)) * 4;
     for(int col = 0; col < cols; col++)
     {
-      const int source_x = area->x + col - offset_x - layer_box->x;
-      if(source_y < 0 || source_y >= layer_box->height || source_x < 0 || source_x >= layer_box->width) continue;
-      const float coverage = alpha[(size_t)source_y * layer_box->width + source_x] * strength;
+      const int source_x = area->x + col - offset_x - layer_box->x + pad;
+      if(source_y < 0 || source_y >= plane_height || source_x < 0 || source_x >= plane_width) continue;
+      const float coverage = alpha[(size_t)source_y * plane_width + source_x] * strength;
       if(coverage <= 0.0f) continue;
       const float keep = 1.0f - coverage;
       target[4 * col + 0] = tint[0] * coverage + target[4 * col + 0] * keep;
@@ -4139,13 +4181,9 @@ gboolean dt_canvas_paint_object_extent(const dt_canvas_t *canvas, const dt_canva
   dt_canvas_object_effective_shadow(canvas, object, &shadow);
   double shadow_reach = 0.0;
   if(dt_canvas_shadow_visible(&shadow) && shadow.blur > 0.0f)
-    shadow_reach = fabs(shadow.offset_x) + fabs(shadow.offset_y) + COMPOSE_SHADOW_SIGMAS * shadow.blur;
+    shadow_reach = _shadow_reach(&shadow);
   if(object->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&object->text.shadow))
-  {
-    const dt_canvas_shadow_t *glyphs = &object->text.shadow;
-    shadow_reach = fmax(shadow_reach, fabs(glyphs->offset_x) + fabs(glyphs->offset_y)
-                                          + COMPOSE_SHADOW_SIGMAS * fmax(glyphs->blur, 0.0f));
-  }
+    shadow_reach = fmax(shadow_reach, _shadow_reach(&object->text.shadow));
   grow = fmax(grow, 0.0) + shadow_reach;
   out->x = min_x - grow;
   out->y = min_y - grow;
@@ -4239,17 +4277,9 @@ static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas
   // The LARGER of the two shadows an object can cast: its own, from the frame's edge, and a
   // text's, from its glyphs. Taken one at a time, the smaller would clip the larger at the box.
   double grown = 0.0;
-  if(dt_canvas_shadow_visible(shadow) && shadow->blur > 0.0f)
-    grown = (fabs(shadow->offset_x) + fabs(shadow->offset_y) + COMPOSE_SHADOW_SIGMAS * shadow->blur)
-            * pixels_per_unit;
+  if(dt_canvas_shadow_visible(shadow) && shadow->blur > 0.0f) grown = _shadow_reach(shadow) * pixels_per_unit;
   if(object->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&object->text.shadow))
-  {
-    const dt_canvas_shadow_t *glyphs = &object->text.shadow;
-    const double reach = (fabs(glyphs->offset_x) + fabs(glyphs->offset_y)
-                          + COMPOSE_SHADOW_SIGMAS * fmax(glyphs->blur, 0.0f))
-                         * pixels_per_unit;
-    grown = fmax(grown, reach);
-  }
+    grown = fmax(grown, _shadow_reach(&object->text.shadow) * pixels_per_unit);
   if(grown > 0.0) box = _box_grow(&box, (int)ceil(grown) + 1);
   return box;
 }
@@ -4340,12 +4370,9 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     dt_canvas_box_t object_box = _object_box(matrix, canvas, object, &shadow, pixels_per_unit);
     if(_box_empty(&object_box)) continue;
     // The layer keeps the shadow's reach beyond the band, so a blur at the band's edge is whole.
-    double reach_units = shadowed ? fabs(shadow.offset_x) + fabs(shadow.offset_y)
-                                        + COMPOSE_SHADOW_SIGMAS * fabs(shadow.blur)
-                                  : 0.0;
+    double reach_units = shadowed ? _shadow_reach(&shadow) : 0.0;
     if(object->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&object->text.shadow))
-      reach_units = fmax(reach_units, fabs(object->text.shadow.offset_x) + fabs(object->text.shadow.offset_y)
-                                          + COMPOSE_SHADOW_SIGMAS * fabs(object->text.shadow.blur));
+      reach_units = fmax(reach_units, _shadow_reach(&object->text.shadow));
     const int reach = reach_units > 0.0 ? (int)ceil(reach_units * pixels_per_unit) + 1 : 0;
     const dt_canvas_box_t band_reach = _box_grow(band, reach);
     const dt_canvas_box_t layer_box = _box_intersect(&object_box, &band_reach);

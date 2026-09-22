@@ -216,6 +216,52 @@ The shadow is derived from the object's alpha after its cutout, its border and i
 so it starts at the solid border, a feathered frame casts a feathered shadow and a translucent
 one a fainter one.
 
+**The extent grows the silhouette before the blur.** A blur spreads the ink it is given over a
+wider area and never adds any, so a thin silhouette under a wide blur has almost nothing left:
+measured beside a bar four units wide under a blur of twenty, ten units out, the shadow was code
+247 on white -- gone. `dt_canvas_shadow_t.extent` (canvas units, 0 to
+`DT_CANVAS_SHADOW_EXTENT_MAX`) grows the plane first -- the object outward for an outset shadow,
+the uncovered world inward for an inset one -- so the colour keeps its full strength that much
+further and the blur then fades a solid shadow: code 186 at the same spot with an extent of 15, 246
+to 194 thirty units inside a frame under an inset blur of twenty with an extent of 25
+(`test_canvas_cutout`). Like the radius's sign it switches nothing on by itself for a frame; a
+text's glyph shadow grown with no blur and no offset IS drawn, and is the outline that keeps a
+caption legible over a picture. The canvas's default carries one (the Shadow popover), an object's
+own shadow and a text's glyph shadow each carry theirs, and each record keeps it where its
+reserved bytes began, so a document from before reads 0 and is drawn as it was.
+
+The grow is `canvas/canvas_dilate.c`, and three things about it were decided by measurement:
+
+- **A maximum, not a threshold.** Every pixel takes the largest value within reach -- a
+  grayscale dilation -- rather than a distance transform of the silhouette cut at half coverage,
+  which is what the cutout's border band does and is right there, because that band is solid by
+  definition. A shadow's silhouette is not binary: a feather is a ramp, and a threshold hardens
+  it the moment the extent leaves zero, a jump from the slider's first step; a glyph's hairline
+  is a pixel of partial coverage, and a threshold drops it. The maximum moves every level out
+  together: a feather stays a feather, further out, and a faint stroke spreads at its own density.
+- **A sum of segments, not a disc.** A maximum over a true disc costs a read per ROW of the disc
+  per pixel, where the three box blurs after it cost nothing that grows with the radius. The grow
+  is a sum of segments along eight lattice directions -- the axes, the diagonals, the knight's
+  moves -- each a running maximum at a constant cost per pixel (van Herk / Gil-Werman), with the
+  lengths chosen per radius to match the disc's reach in every direction: within 0.76 px up to a
+  radius of 20 px, a pixel up to 40, 2.4 % at worst beyond and 1.4 % past 640 px. The axes and
+  diagonals alone make an octagon, 4 % off; the square a separable filter makes is 41 % off, the
+  error the occupancy grid's rule already forbids.
+- **A margin instead of edge logic.** A window is computed only where it lies inside the plane,
+  so the working loop is two reads and a maximum; nearer an edge than `dt_canvas_dilate_margin()`
+  a pixel ends somewhere between its own value and the right one. The first version handled the
+  edges exactly, per pixel, and cost two to five times the blur; the second measured about the
+  blur's own cost at a megapixel. The painter pays for the margin only where it must: an inset
+  plane is padded with ones by it (ones stay ones under a maximum), and an outset plane only by
+  what it asks beyond the room the layer box already leaves past the grown silhouette -- three
+  blurs and the offset -- where the right answer is nothing and so is the approximate one.
+
+Its cost is the part still open. Measured on five shadowed objects filling a 2560 x 1440 view,
+shadows cost 2.7 ms at half zoom, 11.6 at 1:1 and 36 at 2:1 with no extent, and 6.5, 38 and 120
+with an extent of 10 points: eight passes over planes the size of the objects, bound by memory.
+A shadow wide enough to need an extent is smooth at the scale of its blur, so the remedy is to
+compute it at a fraction of the resolution, not a cheaper grow.
+
 ### Cutouts
 
 A frame can be cut out of its rectangle by a drawn-mask shape: a circle, an ellipse, a
@@ -1995,8 +2041,9 @@ property table. The margin and bleed controls were never refilled at all until t
 the first edit of the bleed after a restart wrote the margin's GTK default of 0 over the document's.
 
 The Borders and Shadows popovers hold bauhaus sliders, and a dragged control asks for two things a
-spin button did not. What it SENDS is one value per motion event, so the five numbers they edit --
-the frames' default border width and corner radius, the default shadow's two offsets and its blur --
+spin button did not. What it SENDS is one value per motion event, so the six numbers they edit --
+the frames' default border width and corner radius, the default shadow's two offsets, its blur and
+its extent --
 have no plain setter in `proxy.canvas` at all: `set_border`, `set_shadow` and `set_corner_radius`
 were withdrawn from the proxy and are now static to the view, and the only way in is the
 phase-aware `proxy.canvas.edit_number()`, taking the `dt_canvas_prop_id_t` and a phase the way

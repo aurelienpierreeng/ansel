@@ -37,6 +37,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <cmocka.h>
@@ -2664,6 +2665,122 @@ static void _a_text_casts_a_shadow_from_its_glyphs(void **state)
   dt_canvas_free(canvas);
 }
 
+/*
+ * A shadow's extent grows the silhouette BEFORE the blur, so a wide blur fades a solid shadow
+ * rather than spreading the same thin ink ever thinner. Judged where it was reported: beside a
+ * thin bar under a wide blur, where the shadow had all but vanished, and inside a frame under a
+ * wide inset blur, where the same held for the uncovered world.
+ */
+static void _a_shadows_extent_carries_its_strength_past_a_wide_blur(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  canvas->background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  // A bar four units wide, white on white: only its shadow can show.
+  dt_canvas_object_t *bar = dt_canvas_add_text(canvas, 0.0, 0.0, 4.0, 120.0, "");
+  bar->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  bar->border_width = 0.0f;
+  bar->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  bar->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  bar->shadow.offset_x = 0.0f;
+  bar->shadow.offset_y = 0.0f;
+  bar->shadow.blur = 20.0f;
+  bar->shadow.extent = 0.0f;
+  // Ten units past the bar's edge, halfway down it.
+  const uint32_t washed = _painted_pixel(canvas, 200, 112, 100) & 0xFF;
+  dt_canvas_rect_t narrow;
+  assert_true(dt_canvas_paint_object_extent(canvas, bar, &narrow));
+  bar->shadow.extent = 15.0f;
+  const uint32_t carried = _painted_pixel(canvas, 200, 112, 100) & 0xFF;
+  printf("beside a 4-unit bar under a 20-unit blur: code %u, %u with an extent of 15\n", washed, carried);
+  // Four units of ink under a sigma of twenty leave about 7 % of the colour ten units out...
+  assert_true(washed >= 235);
+  // ...where thirty-four units of it leave about half.
+  assert_true(carried <= 205);
+  // What a move repaints reaches exactly as much further, on both sides.
+  dt_canvas_rect_t wide;
+  assert_true(dt_canvas_paint_object_extent(canvas, bar, &wide));
+  assert_float_equal(wide.width - narrow.width, 30.0, 1e-6);
+
+  // Inset: thirty units inside a frame's left edge, halfway down it.
+  dt_canvas_remove_object(canvas, bar->id);
+  dt_canvas_object_t *frame = dt_canvas_add_text(canvas, 0.0, 0.0, 120.0, 120.0, "");
+  frame->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  frame->border_width = 0.0f;
+  frame->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  frame->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  frame->shadow.offset_x = 0.0f;
+  frame->shadow.offset_y = 0.0f;
+  frame->shadow.blur = -20.0f;
+  frame->shadow.extent = 0.0f;
+  const uint32_t faint = _painted_pixel(canvas, 200, 70, 100) & 0xFF;
+  frame->shadow.extent = 25.0f;
+  const uint32_t deep = _painted_pixel(canvas, 200, 70, 100) & 0xFF;
+  printf("30 units inside a frame under a 20-unit inset blur: code %u, %u with an extent of 25\n", faint, deep);
+  assert_true(faint >= 235);
+  assert_true(deep <= 215);
+  // And the grow stays inside the frame: nothing lands on the canvas past its edge.
+  assert_int_equal(_painted_pixel(canvas, 200, 30, 100), 0xFFFFFFu);
+
+  /* With next to no blur the grown silhouette IS the shadow, so it must reach the whole extent past
+   * the frame at full strength, both ways. This is the case the plane's padding exists for: the
+   * layer leaves no room beyond the grown silhouette, and the band the grow cannot compute would
+   * otherwise cut the shadow short of its extent. The segments reach within a pixel of 40 here. */
+  dt_canvas_remove_object(canvas, frame->id);
+  dt_canvas_object_t *tile = dt_canvas_add_text(canvas, 0.0, 0.0, 40.0, 40.0, "");
+  tile->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  tile->border_width = 0.0f;
+  tile->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  tile->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  tile->shadow.offset_x = 0.0f;
+  tile->shadow.offset_y = 0.0f;
+  tile->shadow.blur = 0.1f;
+  tile->shadow.extent = 40.0f;
+  // The tile spans pixels 80 to 119; its shadow 40 either side of that.
+  assert_int_equal(_painted_pixel(canvas, 200, 120 + 38, 100), 0x000000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 79 - 38, 100), 0x000000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 120 + 38), 0x000000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 120 + 42, 100), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel(canvas, 200, 79 - 42, 100), 0xFFFFFFu);
+  dt_canvas_free(canvas);
+}
+
+/* Grown with no blur and no offset, the glyphs' own shadow is an outline round the letters. */
+static void _a_grown_glyph_shadow_outlines_the_letters(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  canvas->background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 0.0, 0.0, 300.0, 120.0, "Hg");
+  assert_non_null(text);
+  g_strlcpy(text->text.font, "DejaVu Serif 64", DT_CANVAS_FONT_LEN);
+  // White letters on nothing, over white: invisible until something is drawn round them.
+  text->text.text_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  text->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 0.0f);
+  text->border_width = 0.0f;
+  text->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  memset(&text->shadow, 0, sizeof(text->shadow));
+  text->text.shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  int dark[2] = { 0, 0 };
+  for(int pass = 0; pass < 2; pass++)
+  {
+    text->text.shadow.extent = pass == 0 ? 0.0f : 3.0f;
+    for(int at = 0; at < 600; at++)
+    {
+      const uint32_t pixel = _painted_pixel(canvas, 400, 60 + at % 280, 150 + at / 6);
+      if((int)(((pixel >> 16) & 0xFF) + ((pixel >> 8) & 0xFF) + (pixel & 0xFF)) / 3 < 128) dark[pass]++;
+    }
+  }
+  printf("dark pixels round the letters: %d with no extent, %d with an extent of 3\n", dark[0], dark[1]);
+  assert_int_equal(dark[0], 0);
+  assert_true(dark[1] > 0);
+  dt_canvas_free(canvas);
+}
+
 static void _a_drawing_slides_with_the_page_instead_of_crabbing_against_it(void **state)
 {
   (void)state;
@@ -3556,6 +3673,8 @@ int main(void)
     cmocka_unit_test(_a_gradient_fades_across_its_line),
     cmocka_unit_test(_the_object_mask_surface_matches_the_raster),
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),
+    cmocka_unit_test(_a_shadows_extent_carries_its_strength_past_a_wide_blur),
+    cmocka_unit_test(_a_grown_glyph_shadow_outlines_the_letters),
     cmocka_unit_test(_the_compositor_paints_the_surfaces_own_pixels_on_a_scaled_surface),
     cmocka_unit_test(_a_cut_frames_border_follows_the_cutout_outward),
     cmocka_unit_test(_an_edited_document_is_not_served_from_the_last_frame),

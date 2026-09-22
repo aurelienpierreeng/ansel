@@ -3240,7 +3240,7 @@ they are visible.
   drag into dozens, each holding two whole `dt_canvas_copy()` snapshots of the document plus a
   configuration write and a repaint. Measured on a 40-position drag, driving real button and motion
   events at a bauhaus slider: **39 undo steps, every one of them before the button came up**;
-  through the phase-aware path, **1, recorded only on the release**. So these five numbers have NO
+  through the phase-aware path, **1, recorded only on the release**. So these six numbers have NO
   plain setter in `proxy.canvas` at all -- `set_border`, `set_shadow` and `set_corner_radius` were
   withdrawn from it and are now static to `views/canvas.c` -- and the only way in is
   `proxy.canvas.edit_number()`, which takes the `dt_canvas_prop_id_t` and a `dt_canvas_edit_phase_t`
@@ -3423,7 +3423,28 @@ they are visible.
   surrounds it.
 - **A shadow's radius is signed and is its own switch**: positive outset, negative inset (the
   uncovered plane blurred and laid over the object within its coverage), zero none. Do not
-  reintroduce an enable flag; `dt_canvas_shadow_visible()` reads the radius.
+  reintroduce an enable flag; `dt_canvas_shadow_visible()` reads the radius. The EXTENT does not
+  switch a frame's shadow on either -- it grows whichever side the radius's sign names -- but it
+  does switch on a text's GLYPH shadow, where grown alone it is an outline.
+- **A shadow's extent is a grayscale MAXIMUM, never a threshold grown by a distance transform**
+  (`canvas/canvas_dilate.c`). The cutout's border band is a threshold, rightly, because a band is
+  solid by definition; a shadow's silhouette is not. A threshold hardens a feather the moment the
+  extent leaves zero -- a jump from the slider's first step -- and drops a glyph's hairline, which
+  is a pixel of partial coverage; the maximum moves every level out together. Two traps in its
+  implementation, both measured: **a maximum over a true disc costs a read per row of the disc per
+  pixel**, so the grow is a sum of segments along eight lattice directions at a constant cost,
+  within a pixel of the disc to 40 px and 2.4 % beyond (the octagon of the axes and diagonals alone
+  is 4 % off, the separable square 41 %); and **per-pixel edge handling made it two to five times
+  the blur**, so a window is computed only where it lies inside the plane and the caller pads by
+  `dt_canvas_dilate_margin()` -- ones for an inset plane, and for an outset one only what the margin
+  asks beyond the three blurs and the offset the layer box already leaves, where the right answer
+  is nothing anyway. Every reach the painter grows by goes through `_shadow_reach()`, extent
+  included, so the layer box, the band, the damage and the plane cannot disagree.
+- **`schedule(dynamic)` in libansel needs a newer libomp than the Debug clang build's tests load.**
+  clang emits `__kmpc_dispatch_deinit` for it, and `build-warnsweep`'s test binaries resolve
+  `/usr/lib64/llvm18/lib/libomp.so`, which lacks it: every test dies at the first call with a
+  symbol lookup error. Nothing else in the library used a dynamic schedule; the grow's blocks are
+  equal-sized, so `schedule(static)` costs nothing there.
 - **`far` and `near` are macros on Windows** (minwindef.h defines them empty), and the local
   MinGW syntax check skips `canvas_render.c` for its curl header, so a local of that name
   compiles everywhere but CI. Name it something else.

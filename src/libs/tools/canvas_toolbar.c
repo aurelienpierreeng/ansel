@@ -74,11 +74,12 @@ typedef struct dt_lib_canvas_toolbar_handler_t
   gulong handler_id;
 } dt_lib_canvas_toolbar_handler_t;
 
-/** How many sliders edit a canvas-wide number: the border's width and the corners' radius, the
- * shadow's two offsets and its blur, and the line's width. `_prop_slider()` builds NO slider
- * once this is full rather than overrun the array, so a row added without raising it is a row
- * that silently does not appear. */
-#define DT_CANVAS_TOOLBAR_NUMBERS 6
+/** How many sliders may edit a canvas-wide number: the border's width and the corners' radius, the
+ * shadow's two offsets, its blur and its extent, and the line's width -- seven -- and one spare.
+ * `_prop_slider()` builds NO slider once this is full rather than overrun the array, so a row added
+ * without raising it is a row that silently does not appear; the spare is what keeps the next row
+ * from being that row. */
+#define DT_CANVAS_TOOLBAR_NUMBERS 8
 
 /** The biggest a custom page may be, in points: ten metres, past any press and any screen. */
 #define CANVAS_TOOLBAR_CUSTOM_PAPER_MAX 28346.0
@@ -422,6 +423,9 @@ static gboolean _number_held(const dt_canvas_t *canvas, const int prop, float *h
       return TRUE;
     case DT_CANVAS_PROP_SHADOW_BLUR:
       *held = canvas->shadow.blur;
+      return TRUE;
+    case DT_CANVAS_PROP_SHADOW_EXTENT:
+      *held = canvas->shadow.extent;
       return TRUE;
     default:
       return FALSE;
@@ -1308,6 +1312,8 @@ static GtkWidget *_shadow_popover(dt_lib_module_t *self)
   _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_OFFSET_Y, _("Down"), _("Offset downwards, in canvas units"));
   _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_BLUR, _("Radius"),
                _("Radius, in canvas units: 0 is no shadow, positive drops it outside every object, negative casts it inside along their edges. An object's own properties can override it."));
+  _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_EXTENT, _("Extent"),
+               _("How far the shadow keeps its full strength before the radius softens it, in canvas units: outward for a shadow dropped outside, inward for one cast inside. With it, a wide radius fades the shadow instead of washing it out."));
   toolbar->shadow_color = _color_button(_("Default shadow colour"), _("Colour and strength of the shadow"),
                                         DT_CANVAS_COLOR_SHADOW, TRUE, self);
   _labelled_row(box, _("Colour"), toolbar->shadow_color);

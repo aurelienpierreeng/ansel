@@ -21,6 +21,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
+#include <math.h>
 #include <string.h>
 
 #define CANVAS_MAGIC "ANSELCNV"
@@ -173,6 +174,7 @@ static void _write_text(GByteArray *out, const dt_canvas_text_t *text)
   _w_f32(out, text->first_line_indent);
   _w_f32(out, text->paragraph_spacing);
   _w_shadow(out, &text->shadow);
+  _w_f32(out, text->shadow.extent);
   _w_bytes(out, text->reserved, sizeof(text->reserved));
 }
 
@@ -268,6 +270,7 @@ static void _write_object(GByteArray *out, const dt_canvas_object_t *object)
   _w_f32(out, object->mask.spare);
   _w_color(out, &object->background);
   _w_f32(out, object->corner_radius);
+  _w_f32(out, object->shadow.extent);
   _w_bytes(out, object->reserved, sizeof(object->reserved));
   switch(object->kind)
   {
@@ -366,6 +369,7 @@ GBytes *dt_canvas_format_write_index(const dt_canvas_t *canvas)
   _w_f32(out, canvas->line_width);
   _w_f32(out, canvas->custom_paper_width);
   _w_f32(out, canvas->custom_paper_height);
+  _w_f32(out, canvas->shadow.extent);
   _w_bytes(out, canvas->reserved, sizeof(canvas->reserved));
   const uint32_t header_size = out->len;
   uint8_t *size_field = out->data + CANVAS_MAGIC_LEN + 4;
@@ -481,7 +485,21 @@ static dt_canvas_shadow_t _r_shadow(dt_canvas_cursor_t *cursor)
   shadow.offset_x = _r_f32(cursor);
   shadow.offset_y = _r_f32(cursor);
   shadow.blur = _r_f32(cursor);
+  // Stored apart, at the end of whichever record holds the shadow: see `_r_extent()`.
+  shadow.extent = 0.0f;
   return shadow;
+}
+
+/*
+ * A shadow's extent, which every record keeps after the fields it had before, where its reserved
+ * bytes began. Zero from a document written before extents -- a silhouette blurred as it stands,
+ * which is how that document was drawn. Held to the range here, once, for every consumer: it sizes
+ * a raster, and a grow nobody can read is no grow at all rather than the largest one allowed.
+ */
+static float _r_extent(dt_canvas_cursor_t *cursor)
+{
+  const float extent = _r_f32(cursor);
+  return isfinite(extent) && extent > 0.0f ? fminf(extent, DT_CANVAS_SHADOW_EXTENT_MAX) : 0.0f;
 }
 
 static void _read_image(dt_canvas_cursor_t *cursor, dt_canvas_image_t *image)
@@ -542,6 +560,7 @@ static void _read_text(dt_canvas_cursor_t *cursor, dt_canvas_text_t *text)
   // Zeros from a document written before the glyphs had a shadow: no shadow, which is what an
   // alpha of nothing means.
   text->shadow = _r_shadow(cursor);
+  text->shadow.extent = _r_extent(cursor);
   _r_bytes(cursor, text->reserved, sizeof(text->reserved));
   text->markdown = NULL;
 }
@@ -647,6 +666,7 @@ static gboolean _read_object(dt_canvas_cursor_t *cursor, dt_canvas_object_t *obj
   object->mask.nodes = NULL;
   object->background = _r_color(cursor);
   object->corner_radius = _r_f32(cursor);
+  object->shadow.extent = _r_extent(cursor);
   _r_bytes(cursor, object->reserved, sizeof(object->reserved));
   switch(object->kind)
   {
@@ -800,6 +820,7 @@ gboolean dt_canvas_format_read_index(dt_canvas_t *canvas, GBytes *index, GError 
   // Zeros are a custom page nobody has sized, which every consumer already reads as no page.
   canvas->custom_paper_width = _r_f32(&cursor);
   canvas->custom_paper_height = _r_f32(&cursor);
+  canvas->shadow.extent = _r_extent(&cursor);
   _r_bytes(&cursor, canvas->reserved, sizeof(canvas->reserved));
   /*
    * The ONE place a stored page size is held to what this build knows, so that "a reader must

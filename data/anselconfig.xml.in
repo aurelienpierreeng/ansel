@@ -3275,6 +3275,12 @@
     <shortdescription>blur radius of the shadow the next shape drawn in the canvas atelier carries; negative casts it inside</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/canvas/new_shape/shadow_extent</name>
+    <type min="0" max="500">float</type>
+    <default>0</default>
+    <shortdescription>how far the shadow the next shape drawn in the canvas atelier carries is grown before its blur, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/canvas/new_shape/shadow_color</name>
     <type>string</type>
     <default></default>
@@ -3418,6 +3424,12 @@
     <type min="-500" max="500">float</type>
     <default>0</default>
     <shortdescription>default shadow radius of a new canvas, in canvas units: 0 none, positive outside the objects, negative inside</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_extent</name>
+    <type min="0" max="500">float</type>
+    <default>0</default>
+    <shortdescription>default shadow extent of a new canvas: how far the silhouette keeps its full strength before the blur, in canvas units</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/layout_sort</name>

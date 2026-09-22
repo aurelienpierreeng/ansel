@@ -449,6 +449,15 @@ static const dt_canvas_prop_t _props[] = {
     .unit = N_("pt"), .kinds = KINDS_ALL, .section = DT_CANVAS_SECTION_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL,
     .widget = DT_CANVAS_WIDGET_TUNE, .group = DT_CANVAS_GROUP_SHADOW, .min = -500.0, .max = 500.0,
     .soft_min = -50.0, .soft_max = 100.0, .step = 1.0, .factor = 1.0, .neutral = NAN, .digits = 1 },
+  /* Grows the silhouette BEFORE the blur, so the blur fades a solid shadow rather than spreading
+   * the same ink ever thinner: a thin stroke blurred wide has next to no density left at all. */
+  { .id = DT_CANVAS_PROP_SHADOW_EXTENT, .key = "shadow.extent", .label = N_("Extent"),
+    .tooltip = N_("How far the shadow keeps its full strength before the blur softens it, in canvas units: the "
+                  "silhouette grown outward for a shadow dropped outside the object, inward for one cast inside. "
+                  "With it, a wide blur fades the shadow instead of washing it out."),
+    .unit = N_("pt"), .kinds = KINDS_ALL, .section = DT_CANVAS_SECTION_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL,
+    .widget = DT_CANVAS_WIDGET_TUNE, .group = DT_CANVAS_GROUP_SHADOW, .min = 0.0, .max = DT_CANVAS_SHADOW_EXTENT_MAX,
+    .soft_min = 0.0, .soft_max = 50.0, .step = 0.5, .factor = 1.0, .neutral = NAN, .digits = 1 },
   { .id = DT_CANVAS_PROP_SHADOW_COLOR, .key = "shadow.color", .label = N_("Colour"),
     .tooltip = N_("Shadow colour and strength"), .kinds = KINDS_ALL, .section = DT_CANVAS_SECTION_SHADOW,
     .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_COLOR, .group = DT_CANVAS_GROUP_SHADOW,
@@ -479,6 +488,16 @@ static const dt_canvas_prop_t _props[] = {
     .unit = N_("pt"), .kinds = KINDS_TEXT, .section = DT_CANVAS_SECTION_TEXT_SHADOW,
     .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_TUNE, .min = 0.0, .max = 500.0, .soft_min = 0.0,
     .soft_max = 50.0, .step = 0.5, .factor = 1.0, .neutral = 0.0, .digits = 1 },
+  /* A glyph's stroke is a point or two wide, so a blur of any size leaves it almost nothing to
+   * cast: the extent is what lets a soft glow behind a caption stay a glow. On its own, with no
+   * blur and no offset, it is the outline that keeps a caption legible over a busy picture. */
+  { .id = DT_CANVAS_PROP_TEXT_SHADOW_EXTENT, .key = "text_shadow.extent", .label = N_("Extent"),
+    .tooltip = N_("How far the glyphs' own shadow keeps its full strength before the blur softens it, in canvas "
+                  "units. With no blur and no offset it draws an outline around the letters."),
+    .unit = N_("pt"), .kinds = KINDS_TEXT, .section = DT_CANVAS_SECTION_TEXT_SHADOW,
+    .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_TUNE, .min = 0.0,
+    .max = DT_CANVAS_SHADOW_EXTENT_MAX, .soft_min = 0.0, .soft_max = 20.0, .step = 0.5, .factor = 1.0,
+    .neutral = 0.0, .digits = 1 },
   { .id = DT_CANVAS_PROP_TEXT_SHADOW_COLOR, .key = "text_shadow.color", .label = N_("Colour"),
     .tooltip = N_("Colour and strength of the shadow the glyphs cast. At no opacity there is no shadow."),
     .kinds = KINDS_TEXT, .section = DT_CANVAS_SECTION_TEXT_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL,
@@ -906,8 +925,9 @@ dt_canvas_own_state_t dt_canvas_group_state(const dt_canvas_t *canvas, const dt_
   {
     if(group == DT_CANVAS_GROUP_BORDER && !(object->border_width > 0.0f)) return DT_CANVAS_OWN_KIND_DEFAULT;
     if(group == DT_CANVAS_GROUP_SHADOW && object->shadow.offset_x == 0.0f && object->shadow.offset_y == 0.0f
-       && object->shadow.blur == 0.0f && object->shadow.color.red == 0.0f && object->shadow.color.green == 0.0f
-       && object->shadow.color.blue == 0.0f && object->shadow.color.alpha == 0.0f)
+       && object->shadow.blur == 0.0f && object->shadow.extent == 0.0f && object->shadow.color.red == 0.0f
+       && object->shadow.color.green == 0.0f && object->shadow.color.blue == 0.0f
+       && object->shadow.color.alpha == 0.0f)
       return DT_CANVAS_OWN_KIND_DEFAULT;
     // A shape's corners are its own the moment its geometry has no corners to round; a drawing's
     // radius is never written for it, so this reads only for a shape.
@@ -1033,6 +1053,10 @@ void dt_canvas_group_summary(const dt_canvas_t *canvas, const dt_canvas_object_t
       dt_canvas_object_effective_shadow(canvas, object, &shadow);
       if(!dt_canvas_shadow_visible(&shadow))
         value = g_strdup(_("none"));
+      else if(shadow.extent > 0.0f && shadow.blur > 0.0f)
+        value = g_strdup_printf(_("blur %.1f pt, extent %.1f pt"), shadow.blur, shadow.extent);
+      else if(shadow.extent > 0.0f)
+        value = g_strdup_printf(_("inset %.1f pt, extent %.1f pt"), -shadow.blur, shadow.extent);
       else if(shadow.blur > 0.0f)
         value = g_strdup_printf(_("blur %.1f pt"), shadow.blur);
       else
@@ -1481,12 +1505,16 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
     case DT_CANVAS_PROP_TEXT_SHADOW_BLUR:
       out->number = object->text.shadow.blur;
       break;
+    case DT_CANVAS_PROP_TEXT_SHADOW_EXTENT:
+      out->number = object->text.shadow.extent;
+      break;
     case DT_CANVAS_PROP_TEXT_SHADOW_COLOR:
       out->color = object->text.shadow.color;
       break;
     case DT_CANVAS_PROP_SHADOW_OFFSET_X:
     case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
     case DT_CANVAS_PROP_SHADOW_BLUR:
+    case DT_CANVAS_PROP_SHADOW_EXTENT:
     case DT_CANVAS_PROP_SHADOW_COLOR:
     {
       dt_canvas_shadow_t shadow;
@@ -1494,6 +1522,7 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
       if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_X) out->number = shadow.offset_x;
       else if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_Y) out->number = shadow.offset_y;
       else if(prop_id == DT_CANVAS_PROP_SHADOW_BLUR) out->number = shadow.blur;
+      else if(prop_id == DT_CANVAS_PROP_SHADOW_EXTENT) out->number = shadow.extent;
       else out->color = shadow.color;
       break;
     }
@@ -1561,6 +1590,7 @@ void dt_canvas_prop_read_inherited(const dt_canvas_t *canvas, const dt_canvas_ob
     case DT_CANVAS_PROP_SHADOW_OFFSET_X:
     case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
     case DT_CANVAS_PROP_SHADOW_BLUR:
+    case DT_CANVAS_PROP_SHADOW_EXTENT:
     case DT_CANVAS_PROP_SHADOW_COLOR:
     {
       dt_canvas_shadow_t shadow;
@@ -1568,6 +1598,7 @@ void dt_canvas_prop_read_inherited(const dt_canvas_t *canvas, const dt_canvas_ob
       if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_X) out->number = shadow.offset_x;
       else if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_Y) out->number = shadow.offset_y;
       else if(prop_id == DT_CANVAS_PROP_SHADOW_BLUR) out->number = shadow.blur;
+      else if(prop_id == DT_CANVAS_PROP_SHADOW_EXTENT) out->number = shadow.extent;
       else out->color = shadow.color;
       return;
     }
@@ -1682,6 +1713,9 @@ static uint32_t _write_text(const dt_canvas_t *canvas, dt_canvas_object_t *objec
       return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_TEXT_SHADOW_BLUR:
       object->text.shadow.blur = (float)_clamp_number(prop, in->number);
+      return OBSTACLE_EFFECTS;
+    case DT_CANVAS_PROP_TEXT_SHADOW_EXTENT:
+      object->text.shadow.extent = (float)_clamp_number(prop, in->number);
       return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_TEXT_SHADOW_COLOR:
       object->text.shadow.color = in->color;
@@ -1844,6 +1878,7 @@ static gboolean _shape_style_row(const dt_canvas_prop_id_t prop_id)
     case DT_CANVAS_PROP_SHADOW_OFFSET_X:
     case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
     case DT_CANVAS_PROP_SHADOW_BLUR:
+    case DT_CANVAS_PROP_SHADOW_EXTENT:
     case DT_CANVAS_PROP_SHADOW_COLOR:
       return TRUE;
     default:
@@ -2178,6 +2213,9 @@ static uint32_t _write_shared(dt_canvas_t *canvas, dt_canvas_object_t *object, c
       return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_SHADOW_BLUR:
       object->shadow.blur = (float)_clamp_number(prop, in->number);
+      return OBSTACLE_EFFECTS;
+    case DT_CANVAS_PROP_SHADOW_EXTENT:
+      object->shadow.extent = (float)_clamp_number(prop, in->number);
       return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_SHADOW_COLOR:
       // Its strength decides whether it is there at all, and so whether text keeps off it.

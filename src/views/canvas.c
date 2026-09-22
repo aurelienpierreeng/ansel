@@ -121,6 +121,7 @@ DT_MODULE(1)
 #define CANVAS_NEW_SHAPE_SHADOW_OFFSET_X_KEY "plugins/canvas/new_shape/shadow_offset_x"
 #define CANVAS_NEW_SHAPE_SHADOW_OFFSET_Y_KEY "plugins/canvas/new_shape/shadow_offset_y"
 #define CANVAS_NEW_SHAPE_SHADOW_BLUR_KEY "plugins/canvas/new_shape/shadow_blur"
+#define CANVAS_NEW_SHAPE_SHADOW_EXTENT_KEY "plugins/canvas/new_shape/shadow_extent"
 #define CANVAS_NEW_SHAPE_SHADOW_COLOR_KEY "plugins/canvas/new_shape/shadow_color"
 /*
  * The sides, the notch depth, the roundness and the turn are remembered PER TOOL, where the fill, the border,
@@ -605,6 +606,7 @@ static void _canvas_apply_conf_defaults(dt_canvas_t *canvas)
   canvas->shadow.offset_x = dt_conf_get_float("canvas/shadow_offset_x");
   canvas->shadow.offset_y = dt_conf_get_float("canvas/shadow_offset_y");
   canvas->shadow.blur = dt_conf_get_float("canvas/shadow_radius");
+  canvas->shadow.extent = dt_conf_get_float("canvas/shadow_extent");
   const char *padding_color = dt_conf_get_string_const("canvas/guide_padding_color");
   dt_canvas_color_parse(padding_color, &canvas->padding_color);
   if(dt_conf_get_bool("canvas/padding_visible")) canvas->grid_flags |= DT_CANVAS_PADDING_VISIBLE;
@@ -5190,6 +5192,7 @@ static dt_canvas_shape_style_t _shape_style_recalled(const dt_canvas_tool_t tool
   style.shadow.offset_x = dt_conf_get_float(CANVAS_NEW_SHAPE_SHADOW_OFFSET_X_KEY);
   style.shadow.offset_y = dt_conf_get_float(CANVAS_NEW_SHAPE_SHADOW_OFFSET_Y_KEY);
   style.shadow.blur = dt_conf_get_float(CANVAS_NEW_SHAPE_SHADOW_BLUR_KEY);
+  style.shadow.extent = dt_conf_get_float(CANVAS_NEW_SHAPE_SHADOW_EXTENT_KEY);
   dt_canvas_color_parse(dt_conf_get_string_const(CANVAS_NEW_SHAPE_SHADOW_COLOR_KEY), &style.shadow.color);
   if(tool == DT_CANVAS_TOOL_STAR)
   {
@@ -5244,6 +5247,7 @@ static void _shape_style_remember(const dt_canvas_object_t *object)
   dt_conf_set_float(CANVAS_NEW_SHAPE_SHADOW_OFFSET_X_KEY, style.shadow.offset_x);
   dt_conf_set_float(CANVAS_NEW_SHAPE_SHADOW_OFFSET_Y_KEY, style.shadow.offset_y);
   dt_conf_set_float(CANVAS_NEW_SHAPE_SHADOW_BLUR_KEY, style.shadow.blur);
+  dt_conf_set_float(CANVAS_NEW_SHAPE_SHADOW_EXTENT_KEY, style.shadow.extent);
   dt_conf_set_string(CANVAS_NEW_SHAPE_SHADOW_COLOR_KEY, shadow);
   // Which set of the three the shape teaches is the shape it IS, read exactly as the card reads it:
   // a rectangle carries numbers it draws nothing with and teaches neither tool, and a star is a
@@ -7141,17 +7145,18 @@ static void _proxy_set_padding_color(dt_view_t *self, const float *rgba)
   dt_control_queue_redraw_center();
 }
 
-static void _proxy_set_shadow(dt_view_t *self, const float *rgba, float offset_x, float offset_y, float blur)
+static void _proxy_set_shadow(dt_view_t *self, const float *rgba, float offset_x, float offset_y, float blur,
+                              float extent)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
   if(IS_NULL_PTR(view) || IS_NULL_PTR(view->canvas) || IS_NULL_PTR(rgba)) return;
   // A shadow the canvas already carries is no edit, as the border's and the corners' setters have
   // always held: a gesture that ended where it started owes no undo step, and its caller must not
-  // have to know which of the four members it moved to say so.
+  // have to know which of the five members it moved to say so.
   const dt_canvas_color_t wanted = dt_canvas_color(rgba[0], rgba[1], rgba[2], rgba[3]);
   if(memcmp(&wanted, &view->canvas->shadow.color, sizeof(wanted)) == 0
      && offset_x == view->canvas->shadow.offset_x && offset_y == view->canvas->shadow.offset_y
-     && blur == view->canvas->shadow.blur)
+     && blur == view->canvas->shadow.blur && extent == view->canvas->shadow.extent)
     return;
   // An edit still open in the properties is its own undo step, and an earlier one.
   _props_commit_pending(self);
@@ -7160,12 +7165,14 @@ static void _proxy_set_shadow(dt_view_t *self, const float *rgba, float offset_x
   view->canvas->shadow.offset_x = offset_x;
   view->canvas->shadow.offset_y = offset_y;
   view->canvas->shadow.blur = blur;
+  view->canvas->shadow.extent = extent;
   char text[16];
   dt_canvas_color_format(&view->canvas->shadow.color, text, sizeof(text));
   dt_conf_set_string("canvas/shadow_color", text);
   dt_conf_set_float("canvas/shadow_offset_x", offset_x);
   dt_conf_set_float("canvas/shadow_offset_y", offset_y);
   dt_conf_set_float("canvas/shadow_radius", blur);
+  dt_conf_set_float("canvas/shadow_extent", extent);
   dt_canvas_touch(view->canvas);
   _record_undo(self, before);
   // Every object that inherits its shadow is drawn with the new one, and the properties show it.
@@ -7410,7 +7417,7 @@ static void _proxy_edit_color(dt_view_t *self, const int target, const float *rg
       break;
     case DT_CANVAS_COLOR_SHADOW:
       _proxy_set_shadow(self, rgba, view->canvas->shadow.offset_x, view->canvas->shadow.offset_y,
-                        view->canvas->shadow.blur);
+                        view->canvas->shadow.blur, view->canvas->shadow.extent);
       break;
     case DT_CANVAS_COLOR_LINE:
       _proxy_set_line(self, rgba, -1.0f);
@@ -7439,6 +7446,8 @@ static float *_toolbar_number_field(dt_canvas_t *canvas, const int prop)
       return &canvas->shadow.offset_y;
     case DT_CANVAS_PROP_SHADOW_BLUR:
       return &canvas->shadow.blur;
+    case DT_CANVAS_PROP_SHADOW_EXTENT:
+      return &canvas->shadow.extent;
     case DT_CANVAS_PROP_LINE_WIDTH:
       return &canvas->line_width;
     default:
@@ -7473,13 +7482,16 @@ static void _toolbar_number_apply(dt_view_t *self, const int prop, const float v
       _proxy_set_corner_radius(self, value);
       break;
     case DT_CANVAS_PROP_SHADOW_OFFSET_X:
-      _proxy_set_shadow(self, rgba, value, shadow.offset_y, shadow.blur);
+      _proxy_set_shadow(self, rgba, value, shadow.offset_y, shadow.blur, shadow.extent);
       break;
     case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
-      _proxy_set_shadow(self, rgba, shadow.offset_x, value, shadow.blur);
+      _proxy_set_shadow(self, rgba, shadow.offset_x, value, shadow.blur, shadow.extent);
       break;
     case DT_CANVAS_PROP_SHADOW_BLUR:
-      _proxy_set_shadow(self, rgba, shadow.offset_x, shadow.offset_y, value);
+      _proxy_set_shadow(self, rgba, shadow.offset_x, shadow.offset_y, value, shadow.extent);
+      break;
+    case DT_CANVAS_PROP_SHADOW_EXTENT:
+      _proxy_set_shadow(self, rgba, shadow.offset_x, shadow.offset_y, shadow.blur, value);
       break;
     case DT_CANVAS_PROP_LINE_WIDTH:
       // No colour: this gesture moved a width, and the line keeps the colour it has.

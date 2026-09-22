@@ -73,6 +73,9 @@ static dt_canvas_t *_populated_canvas(void)
   text->text.background.alpha = 0.0f;
   text->text.first_line_indent = -18.0f;  // a hanging indent, so the sign survives too
   text->text.paragraph_spacing = 24.0f;
+  text->text.shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.7f);
+  text->text.shadow.blur = 1.5f;
+  text->text.shadow.extent = 1.75f;
 
   dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, text->id, image->id);
   assert_non_null(connector);
@@ -90,6 +93,7 @@ static dt_canvas_t *_populated_canvas(void)
   canvas->shadow.offset_x = 11.0f;
   canvas->shadow.offset_y = -7.0f;
   canvas->shadow.blur = 5.5f;
+  canvas->shadow.extent = 6.5f;
   canvas->padding_color = dt_canvas_color(0.9f, 0.8f, 0.7f, 0.6f);
   canvas->texture_contrast = 1.5f;
   canvas->texture_detail = 0.5f;
@@ -105,6 +109,7 @@ static dt_canvas_t *_populated_canvas(void)
   image->shadow.offset_x = 3.0f;
   image->shadow.offset_y = 4.0f;
   image->shadow.blur = 2.0f;
+  image->shadow.extent = 3.25f;
   image->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
   image->transparency = 0.25f;
   image->background = dt_canvas_color(0.2f, 0.4f, 0.6f, 0.8f);
@@ -207,6 +212,7 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(image->shadow.offset_x, 3.0f, 1e-6);
   assert_float_equal(image->shadow.offset_y, 4.0f, 1e-6);
   assert_float_equal(image->shadow.blur, 2.0f, 1e-6);
+  assert_float_equal(image->shadow.extent, 3.25f, 1e-6);
   assert_float_equal(image->transparency, 0.25f, 1e-6);
   assert_float_equal(image->background.green, 0.4f, 1e-6);
   assert_float_equal(image->background.alpha, 0.8f, 1e-6);
@@ -226,6 +232,7 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(restored->shadow.offset_x, 11.0f, 1e-6);
   assert_float_equal(restored->shadow.offset_y, -7.0f, 1e-6);
   assert_float_equal(restored->shadow.blur, 5.5f, 1e-6);
+  assert_float_equal(restored->shadow.extent, 6.5f, 1e-6);
   assert_float_equal(restored->page_margin, 18.0f, 1e-6);
   assert_float_equal(restored->page_bleed, 9.0f, 1e-6);
   assert_float_equal(restored->margin_color.blue, 0.25f, 1e-6);
@@ -265,6 +272,8 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(text->text.background.alpha, 0.0f, 1e-6);
   assert_float_equal(text->text.first_line_indent, -18.0f, 1e-6);
   assert_float_equal(text->text.paragraph_spacing, 24.0f, 1e-6);
+  assert_float_equal(text->text.shadow.blur, 1.5f, 1e-6);
+  assert_float_equal(text->text.shadow.extent, 1.75f, 1e-6);
   assert_int_equal(text->mask.shape, DT_CANVAS_MASK_ELLIPSE);
   assert_float_equal(text->mask.center_x, 0.4f, 1e-6);
   assert_float_equal(text->mask.rotation, 30.0f, 1e-6);
@@ -285,6 +294,39 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(connector->connector.via_tangent_x, 40.0, 1e-9);
   assert_float_equal(restored->page_color.blue, 0.7f, 1e-6);
 
+  dt_canvas_free(restored);
+  dt_canvas_free(canvas);
+}
+
+/*
+ * A shadow's extent sizes a raster, so a stored one nobody can read is no grow at all rather than
+ * the largest the range allows, and none is ever negative -- held once, as the record is read, for
+ * the canvas's shadow, an object's and a text's glyphs' alike.
+ */
+static void _a_stored_extent_is_held_to_its_range(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  assert_non_null(canvas);
+  canvas->shadow.extent = NAN;
+  dt_canvas_object_t *image = dt_canvas_add_image(canvas, 0.0, 0.0, 600, 400);
+  assert_non_null(image);
+  image->shadow.extent = -4.0f;
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 400.0, 0.0, 200.0, 100.0, "Caption");
+  assert_non_null(text);
+  text->text.shadow.extent = 1.0e9f;
+  const uint32_t image_id = image->id;
+  const uint32_t text_id = text->id;
+  GBytes *index = dt_canvas_format_write_index(canvas);
+  assert_non_null(index);
+  dt_canvas_t *restored = dt_canvas_new();
+  GError *error = NULL;
+  assert_true(dt_canvas_format_read_index(restored, index, &error));
+  assert_null(error);
+  g_bytes_unref(index);
+  assert_float_equal(restored->shadow.extent, 0.0f, 1e-6);
+  assert_float_equal(dt_canvas_find_object(restored, image_id)->shadow.extent, 0.0f, 1e-6);
+  assert_float_equal(dt_canvas_find_object(restored, text_id)->text.shadow.extent, DT_CANVAS_SHADOW_EXTENT_MAX, 1e-6);
   dt_canvas_free(restored);
   dt_canvas_free(canvas);
 }
@@ -3156,6 +3198,7 @@ int main(void)
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_index_round_trip_keeps_every_field),
+    cmocka_unit_test(_a_stored_extent_is_held_to_its_range),
     cmocka_unit_test(_a_record_from_a_later_version_is_skipped_by_its_size),
     cmocka_unit_test(_a_newer_format_and_a_truncated_index_are_refused),
     cmocka_unit_test(_archive_round_trip_carries_jpegs_and_markdown),

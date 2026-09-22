@@ -60,6 +60,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_canvas_markdown
   test_canvas_text_breaks
   test_canvas_cutout
+  test_canvas_dilate
   test_canvas_export
   bench_canvas_paint
   bench_canvas_place

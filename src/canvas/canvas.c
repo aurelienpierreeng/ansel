@@ -217,6 +217,7 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->shadow.offset_x = CANVAS_DEFAULT_SHADOW_OFFSET;
   canvas->shadow.offset_y = CANVAS_DEFAULT_SHADOW_OFFSET;
   canvas->shadow.blur = 0.0f; // off until asked for
+  canvas->shadow.extent = 0.0f;
   // A padding is no prepress object at all -- it is a layout aid -- so it takes the one
   // family the convention leaves free here, the blue of the slug.
   canvas->padding_color = dt_canvas_color(0.235f, 0.471f, 0.784f, 1.0f);
@@ -1020,6 +1021,7 @@ gboolean dt_canvas_shape_style_sanitize(dt_canvas_shape_style_t *style)
   style->shadow.offset_y
       = _sound_length(style->shadow.offset_y, -CANVAS_SHAPE_SHADOW_MAX, CANVAS_SHAPE_SHADOW_MAX, &sound);
   style->shadow.blur = _sound_length(style->shadow.blur, -CANVAS_SHAPE_SHADOW_MAX, CANVAS_SHAPE_SHADOW_MAX, &sound);
+  style->shadow.extent = _sound_length(style->shadow.extent, 0.0f, DT_CANVAS_SHADOW_EXTENT_MAX, &sound);
   if(style->sides < DT_CANVAS_SHAPE_MIN_SIDES || style->sides > DT_CANVAS_SHAPE_MAX_SIDES)
   {
     style->sides = CLAMP(style->sides, DT_CANVAS_SHAPE_MIN_SIDES, DT_CANVAS_SHAPE_MAX_SIDES);
@@ -1796,9 +1798,10 @@ gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow)
 gboolean dt_canvas_text_shadow_visible(const dt_canvas_shadow_t *shadow)
 {
   if(IS_NULL_PTR(shadow) || !(shadow->color.alpha > 0.0f)) return FALSE;
-  // A blur OR a displacement: an offset copy of the glyphs with a hard edge is a drop shadow,
-  // where an offset copy of a rectangle behind a rectangle is nothing at all.
-  return shadow->blur != 0.0f || shadow->offset_x != 0.0f || shadow->offset_y != 0.0f;
+  // A blur, a displacement OR a grow: an offset copy of the glyphs with a hard edge is a drop
+  // shadow and a grown one is an outline, where an offset copy of a rectangle behind a rectangle
+  // is nothing at all.
+  return shadow->blur != 0.0f || shadow->offset_x != 0.0f || shadow->offset_y != 0.0f || shadow->extent > 0.0f;
 }
 
 double dt_canvas_object_effective_corner_radius(const dt_canvas_t *canvas, const dt_canvas_object_t *object)
