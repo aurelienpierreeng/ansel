@@ -76,6 +76,7 @@ static dt_canvas_t *_populated_canvas(void)
   text->text.shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.7f);
   text->text.shadow.blur = 1.5f;
   text->text.shadow.extent = 1.75f;
+  text->text.shadow.inset = TRUE;
 
   dt_canvas_object_t *connector = dt_canvas_add_connector(canvas, text->id, image->id);
   assert_non_null(connector);
@@ -94,6 +95,7 @@ static dt_canvas_t *_populated_canvas(void)
   canvas->shadow.offset_y = -7.0f;
   canvas->shadow.blur = 5.5f;
   canvas->shadow.extent = 6.5f;
+  canvas->shadow.inset = TRUE;
   canvas->padding_color = dt_canvas_color(0.9f, 0.8f, 0.7f, 0.6f);
   canvas->texture_contrast = 1.5f;
   canvas->texture_detail = 0.5f;
@@ -213,6 +215,7 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(image->shadow.offset_y, 4.0f, 1e-6);
   assert_float_equal(image->shadow.blur, 2.0f, 1e-6);
   assert_float_equal(image->shadow.extent, 3.25f, 1e-6);
+  assert_false(image->shadow.inset);
   assert_float_equal(image->transparency, 0.25f, 1e-6);
   assert_float_equal(image->background.green, 0.4f, 1e-6);
   assert_float_equal(image->background.alpha, 0.8f, 1e-6);
@@ -233,6 +236,7 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(restored->shadow.offset_y, -7.0f, 1e-6);
   assert_float_equal(restored->shadow.blur, 5.5f, 1e-6);
   assert_float_equal(restored->shadow.extent, 6.5f, 1e-6);
+  assert_true(restored->shadow.inset);
   assert_float_equal(restored->page_margin, 18.0f, 1e-6);
   assert_float_equal(restored->page_bleed, 9.0f, 1e-6);
   assert_float_equal(restored->margin_color.blue, 0.25f, 1e-6);
@@ -274,6 +278,7 @@ static void _index_round_trip_keeps_every_field(void **state)
   assert_float_equal(text->text.paragraph_spacing, 24.0f, 1e-6);
   assert_float_equal(text->text.shadow.blur, 1.5f, 1e-6);
   assert_float_equal(text->text.shadow.extent, 1.75f, 1e-6);
+  assert_true(text->text.shadow.inset);
   assert_int_equal(text->mask.shape, DT_CANVAS_MASK_ELLIPSE);
   assert_float_equal(text->mask.center_x, 0.4f, 1e-6);
   assert_float_equal(text->mask.rotation, 30.0f, 1e-6);
@@ -312,6 +317,7 @@ static void _a_stored_extent_is_held_to_its_range(void **state)
   dt_canvas_object_t *image = dt_canvas_add_image(canvas, 0.0, 0.0, 600, 400);
   assert_non_null(image);
   image->shadow.extent = -4.0f;
+  image->shadow.blur = -4.0f;
   dt_canvas_object_t *text = dt_canvas_add_text(canvas, 400.0, 0.0, 200.0, 100.0, "Caption");
   assert_non_null(text);
   text->text.shadow.extent = 1.0e9f;
@@ -326,6 +332,9 @@ static void _a_stored_extent_is_held_to_its_range(void **state)
   g_bytes_unref(index);
   assert_float_equal(restored->shadow.extent, 0.0f, 1e-6);
   assert_float_equal(dt_canvas_find_object(restored, image_id)->shadow.extent, 0.0f, 1e-6);
+  // The blur is a radius, held the same way: a negative one is none, and says nothing of the side.
+  assert_float_equal(dt_canvas_find_object(restored, image_id)->shadow.blur, 0.0f, 1e-6);
+  assert_false(dt_canvas_find_object(restored, image_id)->shadow.inset);
   assert_float_equal(dt_canvas_find_object(restored, text_id)->text.shadow.extent, DT_CANVAS_SHADOW_EXTENT_MAX, 1e-6);
   dt_canvas_free(restored);
   dt_canvas_free(canvas);

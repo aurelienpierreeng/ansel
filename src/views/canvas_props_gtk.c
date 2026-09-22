@@ -105,6 +105,8 @@ static const props_glyph_t _glyphs[] = {
   { "shape_polygon", dtgtk_cairo_paint_shape, CPF_SHAPE_POLYGON },
   { "shape_star", dtgtk_cairo_paint_shape, CPF_SHAPE_STAR },
   { "shape_filled", dtgtk_cairo_paint_shape, CPF_SHAPE_FILLED },
+  { "shadow_outset", dtgtk_cairo_paint_shadow, CPF_SHADOW_OUTSET },
+  { "shadow_inset", dtgtk_cairo_paint_shadow, CPF_SHADOW_INSET },
 };
 
 /** The glyph for an id; a text label for one this frontend does not know, so a new id shows as something. */

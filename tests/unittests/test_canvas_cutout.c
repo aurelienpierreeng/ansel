@@ -888,7 +888,7 @@ static void _the_compositor_blends_in_linear_light_and_round_trips_opaque_codes(
   frame->shadow.offset_y = 20.0f;
   frame->shadow.blur = 0.0f;
   frame->flags |= DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
-  // A radius of zero is no shadow at all.
+  // No blur and no extent is no shadow at all, whatever the offset says.
   assert_int_equal(_painted_pixel(canvas, 200, 160, 160), background);
   // Hardly blurred, the shadow is where the frame's silhouette lands, offset.
   frame->shadow.blur = 0.4f;
@@ -898,9 +898,9 @@ static void _the_compositor_blends_in_linear_light_and_round_trips_opaque_codes(
   frame->shadow.blur = 8.0f;
   const uint32_t soft = _painted_pixel(canvas, 200, 168, 168);
   assert_true((soft & 0xFF) > 0 && (soft & 0xFF) < (background & 0xFF));
-  // A negative radius casts the shadow inside the frame's own edges: the frame's corner
-  // opposite the offset darkens, its middle does not, and nothing lands outside.
-  frame->shadow.blur = -8.0f;
+  // Cast inside, the shadow falls along the frame's own edges: the frame's corner opposite the
+  // offset darkens, its middle does not, and nothing lands outside.
+  frame->shadow.inset = TRUE;
   assert_int_equal(_painted_pixel(canvas, 200, 168, 168), background);
   const uint32_t inner = _painted_pixel(canvas, 200, 54, 54);
   assert_true((inner & 0xFF) < 0xFF);
@@ -2713,7 +2713,8 @@ static void _a_shadows_extent_carries_its_strength_past_a_wide_blur(void **state
   frame->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
   frame->shadow.offset_x = 0.0f;
   frame->shadow.offset_y = 0.0f;
-  frame->shadow.blur = -20.0f;
+  frame->shadow.blur = 20.0f;
+  frame->shadow.inset = TRUE;
   frame->shadow.extent = 0.0f;
   const uint32_t faint = _painted_pixel(canvas, 200, 70, 100) & 0xFF;
   frame->shadow.extent = 25.0f;
@@ -2723,6 +2724,17 @@ static void _a_shadows_extent_carries_its_strength_past_a_wide_blur(void **state
   assert_true(deep <= 215);
   // And the grow stays inside the frame: nothing lands on the canvas past its edge.
   assert_int_equal(_painted_pixel(canvas, 200, 30, 100), 0xFFFFFFu);
+  /* An extent with NO blur, cast inside: a hard band along the frame's edges, the extent wide. A
+   * signed radius could not say this at all -- a radius of nothing was no shadow -- which is what
+   * the shadow's own switch is for. The frame's left edge is pixel 40; the segments reach within a
+   * pixel of 10 here. */
+  frame->shadow.blur = 0.0f;
+  frame->shadow.extent = 10.0f;
+  assert_true(dt_canvas_shadow_visible(&frame->shadow));
+  assert_int_equal(_painted_pixel(canvas, 200, 40 + 7, 100), 0x000000u);
+  assert_int_equal(_painted_pixel(canvas, 200, 40 + 13, 100), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel(canvas, 200, 100, 100), 0xFFFFFFu);
+  assert_int_equal(_painted_pixel(canvas, 200, 40 - 3, 100), 0xFFFFFFu);
 
   /* With next to no blur the grown silhouette IS the shadow, so it must reach the whole extent past
    * the frame at full strength, both ways. This is the case the plane's padding exists for: the
@@ -2778,6 +2790,70 @@ static void _a_grown_glyph_shadow_outlines_the_letters(void **state)
   printf("dark pixels round the letters: %d with no extent, %d with an extent of 3\n", dark[0], dark[1]);
   assert_int_equal(dark[0], 0);
   assert_true(dark[1] > 0);
+  dt_canvas_free(canvas);
+}
+
+/*
+ * Cast inside the letters, the glyphs' shadow falls ON them, within their own coverage, and never on
+ * the ground around them: dark letters out of white ones, and not a dark pixel anywhere the letters
+ * are not. Judged against the letters' own mask, taken from the same text set in black.
+ */
+static void _a_glyph_shadow_cast_inside_stays_on_the_letters(void **state)
+{
+  (void)state;
+  dt_canvas_t *canvas = dt_canvas_new();
+  canvas->grid_flags = 0;
+  canvas->paper_size = DT_CANVAS_PAPER_NONE;
+  canvas->background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  dt_canvas_object_t *text = dt_canvas_add_text(canvas, 0.0, 0.0, 300.0, 120.0, "Hg");
+  assert_non_null(text);
+  g_strlcpy(text->text.font, "DejaVu Sans Bold 72", DT_CANVAS_FONT_LEN);
+  text->text.background = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  text->border_width = 0.0f;
+  text->flags |= DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE | DT_CANVAS_OBJECT_FLAG_SHADOW_OVERRIDE;
+  memset(&text->shadow, 0, sizeof(text->shadow));
+
+  // The letters' mask: the same text in black, no shadow.
+  text->text.text_color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  memset(&text->text.shadow, 0, sizeof(text->text.shadow));
+  const int size = 400;
+  gboolean *letter = g_new0(gboolean, (size_t)size * size);
+  int letters = 0;
+  for(int at = 0; at < size * size; at += 7)
+  {
+    const uint32_t pixel = _painted_pixel(canvas, size, at % size, at / size);
+    letter[at] = (pixel & 0xFF) < 250;
+    if(letter[at]) letters++;
+  }
+  assert_true(letters > 0);
+
+  // White letters, their shadow cast inside them, down and right, hard.
+  text->text.text_color = dt_canvas_color(1.0f, 1.0f, 1.0f, 1.0f);
+  text->text.shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 1.0f);
+  text->text.shadow.offset_x = 3.0f;
+  text->text.shadow.offset_y = 3.0f;
+  text->text.shadow.inset = TRUE;
+  assert_true(dt_canvas_text_shadow_visible(&text->text.shadow));
+  int dark = 0;
+  int astray = 0;
+  for(int at = 0; at < size * size; at += 7)
+  {
+    const uint32_t pixel = _painted_pixel(canvas, size, at % size, at / size);
+    if((pixel & 0xFF) >= 128) continue;
+    dark++;
+    if(!letter[at]) astray++;
+  }
+  printf("inset glyph shadow: %d dark samples, %d of them off the letters\n", dark, astray);
+  assert_true(dark > 0);
+  assert_int_equal(astray, 0);
+  // It reaches nothing past the frame, so what a move repaints is the frame's alone.
+  dt_canvas_rect_t with_shadow;
+  assert_true(dt_canvas_paint_object_extent(canvas, text, &with_shadow));
+  text->text.shadow.color.alpha = 0.0f;
+  dt_canvas_rect_t without;
+  assert_true(dt_canvas_paint_object_extent(canvas, text, &without));
+  assert_float_equal(with_shadow.width, without.width, 1e-6);
+  g_free(letter);
   dt_canvas_free(canvas);
 }
 
@@ -3675,6 +3751,7 @@ int main(void)
     cmocka_unit_test(_the_compositor_blends_in_linear_light_and_round_trips_opaque_codes),
     cmocka_unit_test(_a_shadows_extent_carries_its_strength_past_a_wide_blur),
     cmocka_unit_test(_a_grown_glyph_shadow_outlines_the_letters),
+    cmocka_unit_test(_a_glyph_shadow_cast_inside_stays_on_the_letters),
     cmocka_unit_test(_the_compositor_paints_the_surfaces_own_pixels_on_a_scaled_surface),
     cmocka_unit_test(_a_cut_frames_border_follows_the_cutout_outward),
     cmocka_unit_test(_an_edited_document_is_not_served_from_the_last_frame),

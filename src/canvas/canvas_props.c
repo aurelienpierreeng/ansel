@@ -86,6 +86,9 @@ static const char *const _geometry_icons[] = { "shape_rectangle", "shape_polygon
 #define GEOMETRY_STAR GEOMETRY_BIT(2)
 #define GEOMETRIES_WITH_SIDES (GEOMETRY_POLYGON | GEOMETRY_STAR)
 
+/* Which way a shadow falls, in the order its choice is stored: 0 dropped outside, 1 cast inside. */
+static const char *const _shadow_side_choices[] = { N_("Outside"), N_("Inside"), NULL };
+static const char *const _shadow_side_icons[] = { "shadow_outset", "shadow_inset", NULL };
 static const char *const _filled_icons[] = { "shape_filled", NULL };
 static const char *const _refresh_icons[] = { "refresh", NULL };
 static const char *const _link_icons[] = { "link", NULL };
@@ -433,6 +436,15 @@ static const dt_canvas_prop_t _props[] = {
     .soft_max = 200.0, .step = 1.0, .factor = 1.0, .neutral = NAN, .digits = 1 },
 
   /* --- shadow --------------------------------------------------------------------------- */
+  /* Which way it falls is a choice of its own and the first thing the section says: it used to be
+   * the blur's sign, which made an inset shadow impossible without a blur -- and the extent, which
+   * needs none, is exactly what asks for one. */
+  { .id = DT_CANVAS_PROP_SHADOW_INSET, .key = "shadow.inset", .label = N_("Direction"),
+    .tooltip = N_("Where the shadow falls: dropped outside the object, behind it, or cast inside it along its "
+                  "own edges"),
+    .kinds = KINDS_ALL, .section = DT_CANVAS_SECTION_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL,
+    .widget = DT_CANVAS_WIDGET_ICONS, .group = DT_CANVAS_GROUP_SHADOW, .max = 1.0, .soft_max = 1.0, .step = 1.0,
+    .factor = 1.0, .neutral = NAN, .choices = _shadow_side_choices, .icons = _shadow_side_icons },
   { .id = DT_CANVAS_PROP_SHADOW_OFFSET_X, .key = "shadow.offset_x", .label = N_("Offset X"),
     .tooltip = N_("Shadow offset to the right, in canvas units"), .unit = N_("pt"), .kinds = KINDS_ALL,
     .section = DT_CANVAS_SECTION_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL, .widget = DT_CANVAS_WIDGET_TUNE,
@@ -444,11 +456,10 @@ static const dt_canvas_prop_t _props[] = {
     .group = DT_CANVAS_GROUP_SHADOW, .min = -500.0, .max = 500.0, .soft_min = -50.0, .soft_max = 50.0, .step = 1.0,
     .factor = 1.0, .neutral = NAN, .digits = 1, .pair_with = DT_CANVAS_PROP_SHADOW_OFFSET_X },
   { .id = DT_CANVAS_PROP_SHADOW_BLUR, .key = "shadow.blur", .label = N_("Blur"),
-    .tooltip = N_("Shadow radius, in canvas units: 0 is no shadow, positive drops it outside the object, negative "
-                  "casts it inside along the edges"),
+    .tooltip = N_("How soft the shadow is, in canvas units. With no blur and no extent there is no shadow."),
     .unit = N_("pt"), .kinds = KINDS_ALL, .section = DT_CANVAS_SECTION_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL,
-    .widget = DT_CANVAS_WIDGET_TUNE, .group = DT_CANVAS_GROUP_SHADOW, .min = -500.0, .max = 500.0,
-    .soft_min = -50.0, .soft_max = 100.0, .step = 1.0, .factor = 1.0, .neutral = NAN, .digits = 1 },
+    .widget = DT_CANVAS_WIDGET_TUNE, .group = DT_CANVAS_GROUP_SHADOW, .min = 0.0, .max = DT_CANVAS_SHADOW_BLUR_MAX,
+    .soft_min = 0.0, .soft_max = 100.0, .step = 1.0, .factor = 1.0, .neutral = NAN, .digits = 1 },
   /* Grows the silhouette BEFORE the blur, so the blur fades a solid shadow rather than spreading
    * the same ink ever thinner: a thin stroke blurred wide has next to no density left at all. */
   { .id = DT_CANVAS_PROP_SHADOW_EXTENT, .key = "shadow.extent", .label = N_("Extent"),
@@ -465,8 +476,14 @@ static const dt_canvas_prop_t _props[] = {
 
   /* --- the text's own shadow ------------------------------------------------------------- */
   /* No group: the glyphs' shadow is the frame's own and is inherited from nothing, so this
-   * section carries no switch. The three numbers are neutral at nothing, so a folded section
-   * says so when one of them is not. */
+   * section carries no switch. The numbers are neutral at nothing and the direction outside, so a
+   * folded section says so when one of them is not. */
+  { .id = DT_CANVAS_PROP_TEXT_SHADOW_INSET, .key = "text_shadow.inset", .label = N_("Direction"),
+    .tooltip = N_("Where the glyphs' own shadow falls: around the letters, or inside them along their own edges, "
+                  "like type pressed into the page"),
+    .kinds = KINDS_TEXT, .section = DT_CANVAS_SECTION_TEXT_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL,
+    .widget = DT_CANVAS_WIDGET_ICONS, .max = 1.0, .soft_max = 1.0, .step = 1.0, .factor = 1.0, .neutral = 0.0,
+    .choices = _shadow_side_choices, .icons = _shadow_side_icons },
   { .id = DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_X, .key = "text_shadow.offset_x", .label = N_("Right"),
     .tooltip = N_("How far right the glyphs' own shadow falls, in canvas units"), .unit = N_("pt"),
     .kinds = KINDS_TEXT, .section = DT_CANVAS_SECTION_TEXT_SHADOW, .tier = DT_CANVAS_TIER_ESSENTIAL,
@@ -479,9 +496,8 @@ static const dt_canvas_prop_t _props[] = {
     .widget = DT_CANVAS_WIDGET_TUNE, .min = -500.0, .max = 500.0, .soft_min = -20.0, .soft_max = 20.0,
     .step = 0.5, .factor = 1.0, .neutral = 0.0, .digits = 1,
     .pair_with = DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_X },
-  /* Never negative: an inset shadow is cast by a frame onto itself, and glyphs have no inside
-   * to cast one into. Offset with NO blur is the commonest drop shadow in title work and is
-   * what a radius of nothing gives here -- a hard-edged copy of the letters. */
+  /* Offset with NO blur is the commonest drop shadow in title work and is what a radius of nothing
+   * gives here -- a hard-edged copy of the letters. */
   { .id = DT_CANVAS_PROP_TEXT_SHADOW_BLUR, .key = "text_shadow.blur", .label = N_("Blur"),
     .tooltip = N_("How soft the glyphs' own shadow is, in canvas units. At 0 it is a hard-edged copy of the "
                   "letters, which is a drop shadow as a typesetter draws one."),
@@ -925,9 +941,9 @@ dt_canvas_own_state_t dt_canvas_group_state(const dt_canvas_t *canvas, const dt_
   {
     if(group == DT_CANVAS_GROUP_BORDER && !(object->border_width > 0.0f)) return DT_CANVAS_OWN_KIND_DEFAULT;
     if(group == DT_CANVAS_GROUP_SHADOW && object->shadow.offset_x == 0.0f && object->shadow.offset_y == 0.0f
-       && object->shadow.blur == 0.0f && object->shadow.extent == 0.0f && object->shadow.color.red == 0.0f
-       && object->shadow.color.green == 0.0f && object->shadow.color.blue == 0.0f
-       && object->shadow.color.alpha == 0.0f)
+       && object->shadow.blur == 0.0f && object->shadow.extent == 0.0f && !object->shadow.inset
+       && object->shadow.color.red == 0.0f && object->shadow.color.green == 0.0f
+       && object->shadow.color.blue == 0.0f && object->shadow.color.alpha == 0.0f)
       return DT_CANVAS_OWN_KIND_DEFAULT;
     // A shape's corners are its own the moment its geometry has no corners to round; a drawing's
     // radius is never written for it, so this reads only for a shape.
@@ -1053,14 +1069,16 @@ void dt_canvas_group_summary(const dt_canvas_t *canvas, const dt_canvas_object_t
       dt_canvas_object_effective_shadow(canvas, object, &shadow);
       if(!dt_canvas_shadow_visible(&shadow))
         value = g_strdup(_("none"));
-      else if(shadow.extent > 0.0f && shadow.blur > 0.0f)
-        value = g_strdup_printf(_("blur %.1f pt, extent %.1f pt"), shadow.blur, shadow.extent);
-      else if(shadow.extent > 0.0f)
-        value = g_strdup_printf(_("inset %.1f pt, extent %.1f pt"), -shadow.blur, shadow.extent);
-      else if(shadow.blur > 0.0f)
-        value = g_strdup_printf(_("blur %.1f pt"), shadow.blur);
       else
-        value = g_strdup_printf(_("inset %.1f pt"), -shadow.blur);
+      {
+        const char *side = shadow.inset ? _("inside") : _("outside");
+        if(shadow.blur > 0.0f && shadow.extent > 0.0f)
+          value = g_strdup_printf(_("%s, blur %.1f pt, extent %.1f pt"), side, shadow.blur, shadow.extent);
+        else if(shadow.extent > 0.0f)
+          value = g_strdup_printf(_("%s, extent %.1f pt"), side, shadow.extent);
+        else
+          value = g_strdup_printf(_("%s, blur %.1f pt"), side, shadow.blur);
+      }
       break;
     }
     case DT_CANVAS_GROUP_LINE:
@@ -1496,6 +1514,9 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
                         ? object->corner_radius
                         : (IS_NULL_PTR(canvas) ? 0.0f : canvas->corner_radius);
       break;
+    case DT_CANVAS_PROP_TEXT_SHADOW_INSET:
+      out->choice = object->text.shadow.inset ? 1 : 0;
+      break;
     case DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_X:
       out->number = object->text.shadow.offset_x;
       break;
@@ -1511,6 +1532,7 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
     case DT_CANVAS_PROP_TEXT_SHADOW_COLOR:
       out->color = object->text.shadow.color;
       break;
+    case DT_CANVAS_PROP_SHADOW_INSET:
     case DT_CANVAS_PROP_SHADOW_OFFSET_X:
     case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
     case DT_CANVAS_PROP_SHADOW_BLUR:
@@ -1519,7 +1541,8 @@ void dt_canvas_prop_read(const dt_canvas_t *canvas, const dt_canvas_object_t *ob
     {
       dt_canvas_shadow_t shadow;
       dt_canvas_object_effective_shadow(canvas, object, &shadow);
-      if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_X) out->number = shadow.offset_x;
+      if(prop_id == DT_CANVAS_PROP_SHADOW_INSET) out->choice = shadow.inset ? 1 : 0;
+      else if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_X) out->number = shadow.offset_x;
       else if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_Y) out->number = shadow.offset_y;
       else if(prop_id == DT_CANVAS_PROP_SHADOW_BLUR) out->number = shadow.blur;
       else if(prop_id == DT_CANVAS_PROP_SHADOW_EXTENT) out->number = shadow.extent;
@@ -1587,6 +1610,7 @@ void dt_canvas_prop_read_inherited(const dt_canvas_t *canvas, const dt_canvas_ob
     case DT_CANVAS_PROP_CORNER_RADIUS:
       out->number = IS_NULL_PTR(canvas) ? 0.0f : canvas->corner_radius;
       return;
+    case DT_CANVAS_PROP_SHADOW_INSET:
     case DT_CANVAS_PROP_SHADOW_OFFSET_X:
     case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
     case DT_CANVAS_PROP_SHADOW_BLUR:
@@ -1595,7 +1619,8 @@ void dt_canvas_prop_read_inherited(const dt_canvas_t *canvas, const dt_canvas_ob
     {
       dt_canvas_shadow_t shadow;
       dt_canvas_object_effective_shadow(canvas, NULL, &shadow);
-      if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_X) out->number = shadow.offset_x;
+      if(prop_id == DT_CANVAS_PROP_SHADOW_INSET) out->choice = shadow.inset ? 1 : 0;
+      else if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_X) out->number = shadow.offset_x;
       else if(prop_id == DT_CANVAS_PROP_SHADOW_OFFSET_Y) out->number = shadow.offset_y;
       else if(prop_id == DT_CANVAS_PROP_SHADOW_BLUR) out->number = shadow.blur;
       else if(prop_id == DT_CANVAS_PROP_SHADOW_EXTENT) out->number = shadow.extent;
@@ -1705,6 +1730,11 @@ static uint32_t _write_text(const dt_canvas_t *canvas, dt_canvas_object_t *objec
   {
     /* The glyphs' own shadow. CHANGED alone plus the obstacle effects: what a text casts
      * reaches past its frame, so a column flowing round it clears the shadow as well. */
+    case DT_CANVAS_PROP_TEXT_SHADOW_INSET:
+      // Only a shadow dropped outside the letters reaches past them, so the text flowing round the
+      // frame keeps clear of it or stops keeping clear.
+      object->text.shadow.inset = in->choice != 0;
+      return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_TEXT_SHADOW_OFFSET_X:
       object->text.shadow.offset_x = (float)_clamp_number(prop, in->number);
       return OBSTACLE_EFFECTS;
@@ -1875,6 +1905,7 @@ static gboolean _shape_style_row(const dt_canvas_prop_id_t prop_id)
     case DT_CANVAS_PROP_BORDER_WIDTH:
     case DT_CANVAS_PROP_BORDER_COLOR:
     case DT_CANVAS_PROP_CORNER_RADIUS:
+    case DT_CANVAS_PROP_SHADOW_INSET:
     case DT_CANVAS_PROP_SHADOW_OFFSET_X:
     case DT_CANVAS_PROP_SHADOW_OFFSET_Y:
     case DT_CANVAS_PROP_SHADOW_BLUR:
@@ -2204,6 +2235,10 @@ static uint32_t _write_shared(dt_canvas_t *canvas, dt_canvas_object_t *object, c
       return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_CORNER_RADIUS:
       object->corner_radius = (float)_clamp_number(prop, in->number);
+      return OBSTACLE_EFFECTS;
+    case DT_CANVAS_PROP_SHADOW_INSET:
+      // A shadow cast inside the object reaches nothing past it, so what flows round it changes.
+      object->shadow.inset = in->choice != 0;
       return OBSTACLE_EFFECTS;
     case DT_CANVAS_PROP_SHADOW_OFFSET_X:
       object->shadow.offset_x = (float)_clamp_number(prop, in->number);

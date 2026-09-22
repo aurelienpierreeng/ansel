@@ -216,8 +216,9 @@ dt_canvas_t *dt_canvas_new(void)
   canvas->shadow.color = dt_canvas_color(0.0f, 0.0f, 0.0f, 0.5f);
   canvas->shadow.offset_x = CANVAS_DEFAULT_SHADOW_OFFSET;
   canvas->shadow.offset_y = CANVAS_DEFAULT_SHADOW_OFFSET;
-  canvas->shadow.blur = 0.0f; // off until asked for
+  canvas->shadow.blur = 0.0f; // off until asked for: no blur and no extent
   canvas->shadow.extent = 0.0f;
+  canvas->shadow.inset = FALSE;
   // A padding is no prepress object at all -- it is a layout aid -- so it takes the one
   // family the convention leaves free here, the blue of the slug.
   canvas->padding_color = dt_canvas_color(0.235f, 0.471f, 0.784f, 1.0f);
@@ -1020,7 +1021,7 @@ gboolean dt_canvas_shape_style_sanitize(dt_canvas_shape_style_t *style)
       = _sound_length(style->shadow.offset_x, -CANVAS_SHAPE_SHADOW_MAX, CANVAS_SHAPE_SHADOW_MAX, &sound);
   style->shadow.offset_y
       = _sound_length(style->shadow.offset_y, -CANVAS_SHAPE_SHADOW_MAX, CANVAS_SHAPE_SHADOW_MAX, &sound);
-  style->shadow.blur = _sound_length(style->shadow.blur, -CANVAS_SHAPE_SHADOW_MAX, CANVAS_SHAPE_SHADOW_MAX, &sound);
+  style->shadow.blur = _sound_length(style->shadow.blur, 0.0f, DT_CANVAS_SHADOW_BLUR_MAX, &sound);
   style->shadow.extent = _sound_length(style->shadow.extent, 0.0f, DT_CANVAS_SHADOW_EXTENT_MAX, &sound);
   if(style->sides < DT_CANVAS_SHAPE_MIN_SIDES || style->sides > DT_CANVAS_SHAPE_MAX_SIDES)
   {
@@ -1035,12 +1036,14 @@ gboolean dt_canvas_shape_style_sanitize(dt_canvas_shape_style_t *style)
   const gboolean border_override = style->border_override != FALSE;
   const gboolean corner_override = style->corner_override != FALSE;
   const gboolean shadow_override = style->shadow_override != FALSE;
+  const gboolean shadow_inset = style->shadow.inset != FALSE;
   if(border_override != style->border_override || corner_override != style->corner_override
-     || shadow_override != style->shadow_override)
+     || shadow_override != style->shadow_override || shadow_inset != style->shadow.inset)
     sound = FALSE;
   style->border_override = border_override;
   style->corner_override = corner_override;
   style->shadow_override = shadow_override;
+  style->shadow.inset = shadow_inset;
   return sound;
 }
 
@@ -1792,16 +1795,16 @@ dt_canvas_color_t dt_canvas_background_tint(const uint32_t style)
 
 gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow)
 {
-  return !IS_NULL_PTR(shadow) && shadow->color.alpha > 0.0f && shadow->blur != 0.0f;
+  return !IS_NULL_PTR(shadow) && shadow->color.alpha > 0.0f && (shadow->blur > 0.0f || shadow->extent > 0.0f);
 }
 
 gboolean dt_canvas_text_shadow_visible(const dt_canvas_shadow_t *shadow)
 {
   if(IS_NULL_PTR(shadow) || !(shadow->color.alpha > 0.0f)) return FALSE;
   // A blur, a displacement OR a grow: an offset copy of the glyphs with a hard edge is a drop
-  // shadow and a grown one is an outline, where an offset copy of a rectangle behind a rectangle
-  // is nothing at all.
-  return shadow->blur != 0.0f || shadow->offset_x != 0.0f || shadow->offset_y != 0.0f || shadow->extent > 0.0f;
+  // shadow and a grown one is an outline. A frame's needs a blur or an extent, because the canvas's
+  // default keeps its offsets while it is off; a glyph shadow inherits from nothing.
+  return shadow->blur > 0.0f || shadow->offset_x != 0.0f || shadow->offset_y != 0.0f || shadow->extent > 0.0f;
 }
 
 double dt_canvas_object_effective_corner_radius(const dt_canvas_t *canvas, const dt_canvas_object_t *object)

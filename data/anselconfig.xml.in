@@ -3270,9 +3270,15 @@
   </dtconfig>
   <dtconfig>
     <name>plugins/canvas/new_shape/shadow_blur</name>
-    <type min="-500" max="500">float</type>
+    <type min="0" max="500">float</type>
     <default>0</default>
-    <shortdescription>blur radius of the shadow the next shape drawn in the canvas atelier carries; negative casts it inside</shortdescription>
+    <shortdescription>blur radius of the shadow the next shape drawn in the canvas atelier carries, in canvas units</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/canvas/new_shape/shadow_inset</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>whether the shadow the next shape drawn in the canvas atelier carries is cast inside it rather than dropped outside</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/canvas/new_shape/shadow_extent</name>
@@ -3421,9 +3427,15 @@
   </dtconfig>
   <dtconfig>
     <name>canvas/shadow_radius</name>
-    <type min="-500" max="500">float</type>
+    <type min="0" max="500">float</type>
     <default>0</default>
-    <shortdescription>default shadow radius of a new canvas, in canvas units: 0 none, positive outside the objects, negative inside</shortdescription>
+    <shortdescription>default shadow blur radius of a new canvas, in canvas units; with no extent either, no shadow</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>canvas/shadow_inset</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>whether a new canvas's default shadow is cast inside the objects rather than dropped outside them</shortdescription>
   </dtconfig>
   <dtconfig>
     <name>canvas/shadow_extent</name>

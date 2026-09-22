@@ -200,11 +200,19 @@ one space and not one per input.
 
 ### Shadows
 
-A `dt_canvas_shadow_t` is a colour whose alpha is the strength, an offset and a signed
-radius, in canvas units. The radius is the blur's sigma and its sign says where the shadow
-falls: positive drops it outside the object, negative casts it inside along the object's
-edges (what the object leaves uncovered, blurred and offset, laid over the object within its
-own coverage), and zero is no shadow at all -- there is no on/off toggle, the radius is it.
+A `dt_canvas_shadow_t` is a colour whose alpha is the strength, an offset, an extent, a blur
+radius -- all in canvas units -- and a direction, `inset`: dropped OUTSIDE the object, behind it,
+or cast INSIDE it along its own edges (what the object leaves uncovered, grown, blurred and
+offset, laid over the object within its own coverage). The direction used to be the radius's
+sign, positive outside and negative inside, with zero no shadow at all; that held only until the
+extent arrived, since an extent needs no blur and an inset shadow then needed one anyway. So the
+direction is its own switch and the blur a radius of 0 to `DT_CANVAS_SHADOW_BLUR_MAX` and nothing
+more, and a frame's shadow draws once it has some strength and a blur or an extent to spread
+(`dt_canvas_shadow_visible()`). An offset alone still does not switch a frame's shadow on: the
+canvas's default keeps its offsets while it is off, so every frame would wear one. A text's glyph
+shadow draws with an offset alone too (`dt_canvas_text_shadow_visible()`), and takes the same
+switch -- cast inside the letters, it falls ON them, within their own coverage, after they are
+painted, where a shadow dropped outside goes between the ground and them.
 The inset plane is padded with ones past the layer's box before it is blurred: the world
 outside the frame is uncovered, and a zero padding read it as covered and thinned the shadow
 wherever a cutout came near its own frame. An outset plane pads with zeros: nothing casts
@@ -224,11 +232,12 @@ measured beside a bar four units wide under a blur of twenty, ten units out, the
 the uncovered world inward for an inset one -- so the colour keeps its full strength that much
 further and the blur then fades a solid shadow: code 186 at the same spot with an extent of 15, 246
 to 194 thirty units inside a frame under an inset blur of twenty with an extent of 25
-(`test_canvas_cutout`). Like the radius's sign it switches nothing on by itself for a frame; a
-text's glyph shadow grown with no blur and no offset IS drawn, and is the outline that keeps a
-caption legible over a picture. The canvas's default carries one (the Shadow popover), an object's
-own shadow and a text's glyph shadow each carry theirs, and each record keeps it where its
-reserved bytes began, so a document from before reads 0 and is drawn as it was.
+(`test_canvas_cutout`). With no blur at all it is a hard edge, which an inset shadow could not have
+while the direction was the blur's sign -- a band the extent wide along a frame's inner edges -- and
+a text's glyph shadow grown with no blur and no offset is the outline that keeps a caption legible
+over a picture. The canvas's default carries one (the Shadow popover), an object's own shadow and a
+text's glyph shadow each carry theirs, and each record keeps it, then the shadow's flags word, where
+its reserved bytes began.
 
 The grow is `canvas/canvas_dilate.c`, and three things about it were decided by measurement:
 
@@ -2048,7 +2057,7 @@ could wake, by its stored id** (`_connect_refilled()` is the only way such a han
 connected), rather than raising a flag the handlers check: a handler that reads SEVERAL controls
 -- the margin with the bleed, the shadow's three sliders -- woken halfway through a refill sends the
 ones not refilled yet into the document. Measured offscreen with the blocking removed: 9 writes
-during one refill, one of them a shadow radius of -500, the hard minimum of that row in the
+during one refill, one of them a shadow radius of -500, then the hard minimum of that row in the
 property table. The margin and bleed controls were never refilled at all until this was checked, so
 the first edit of the bleed after a restart wrote the margin's GTK default of 0 over the document's.
 

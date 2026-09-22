@@ -3229,8 +3229,8 @@ they are visible.
   check** (`_connect_refilled()` in the toolbar is the only way such a handler is connected). A
   handler that reads several controls -- the margin with the bleed, the shadow's three sliders --
   woken halfway through a refill sends the ones not refilled yet: measured offscreen with the
-  blocking removed, 9 writes during one refill, one of them a shadow radius of -500, the hard
-  minimum of that row in the property table. And **a control that mirrors a document setting is
+  blocking removed, 9 writes during one refill, one of them a shadow radius of -500, then the
+  hard minimum of that row in the property table. And **a control that mirrors a document setting is
   refilled, or it is state**: the margin and bleed controls never were, so they showed 0 whatever
   the document held and the first edit of the bleed after a restart wrote the margin's 0 over the
   document's (measured against the previous toolbar: margin 36 in, 0 out).
@@ -3421,11 +3421,17 @@ they are visible.
   ones and the sampler offsets into it. The test compares two STRAIGHT edges (the frame's and a
   square cutout's); a curved edge legitimately reads deeper, since more uncovered world
   surrounds it.
-- **A shadow's radius is signed and is its own switch**: positive outset, negative inset (the
-  uncovered plane blurred and laid over the object within its coverage), zero none. Do not
-  reintroduce an enable flag; `dt_canvas_shadow_visible()` reads the radius. The EXTENT does not
-  switch a frame's shadow on either -- it grows whichever side the radius's sign names -- but it
-  does switch on a text's GLYPH shadow, where grown alone it is an outline.
+- **A shadow's direction is its own switch, `inset`, never the blur's sign.** The blur is a
+  radius, 0 and up. The sign used to say which way a shadow fell -- positive outset, negative inset
+  (the uncovered plane blurred and laid over the object within its coverage), zero none -- which
+  held until the extent arrived: an extent needs no blur, and an inset shadow then needed one
+  anyway. A frame's shadow draws with some strength and a BLUR OR AN EXTENT
+  (`dt_canvas_shadow_visible()`); an offset alone does not switch it on, because the canvas's
+  default keeps its offsets while it is off. There is still no enable flag: strength, blur and
+  extent at nothing are "off". A text's GLYPH shadow also draws with an offset alone, takes the same
+  switch, and cast inside falls ON the letters, bounded by the glyphs' own alpha and laid after them
+  -- bounded by the layer's instead, it lands on the frame's ground and not on one letter, which is
+  what `test_canvas_cutout` checks by measuring against the letters' own mask.
 - **A shadow's extent is a grayscale MAXIMUM, never a threshold grown by a distance transform**
   (`canvas/canvas_dilate.c`). The cutout's border band is a threshold, rightly, because a band is
   solid by definition; a shadow's silhouette is not. A threshold hardens a feather the moment the

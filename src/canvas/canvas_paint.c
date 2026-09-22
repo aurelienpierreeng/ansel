@@ -1824,10 +1824,10 @@ static double _obstacle_reach(const dt_canvas_t *canvas, const dt_canvas_object_
   double reach = fmax((double)border_width, 0.0);
   dt_canvas_shadow_t shadow;
   dt_canvas_object_effective_shadow(canvas, other, &shadow);
-  if(dt_canvas_shadow_visible(&shadow) && shadow.blur > 0.0)
+  if(dt_canvas_shadow_visible(&shadow) && !shadow.inset)
   {
     // An outset shadow is a blur about a grown, offset copy, so it reaches the extent, the offset
-    // and the blur. An inset one (a negative radius) paints inside the object and reaches nothing.
+    // and the blur. An inset one paints inside the object and reaches nothing.
     reach += (double)shadow.extent + (double)shadow.blur + hypot((double)shadow.offset_x, (double)shadow.offset_y);
   }
   /*
@@ -1835,7 +1835,8 @@ static double _obstacle_reach(const dt_canvas_t *canvas, const dt_canvas_object_
    * most its blur plus its offset past the frame's edge -- fmax and NOT +=, unlike the frame's
    * shadow, which is added to the border because it is cast from the edge the border sits on.
    */
-  if(other->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&other->text.shadow))
+  if(other->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&other->text.shadow)
+     && !other->text.shadow.inset)
   {
     const double glyph_reach = (double)other->text.shadow.extent + fmax((double)other->text.shadow.blur, 0.0)
                                + hypot((double)other->text.shadow.offset_x, (double)other->text.shadow.offset_y);
@@ -3011,7 +3012,7 @@ static gsize _luts_ready = 0;
 static double _shadow_reach(const dt_canvas_shadow_t *shadow)
 {
   return fabs(shadow->offset_x) + fabs(shadow->offset_y) + fmax(shadow->extent, 0.0f)
-         + COMPOSE_SHADOW_SIGMAS * fabs(shadow->blur);
+         + COMPOSE_SHADOW_SIGMAS * fmax(shadow->blur, 0.0f);
 }
 
 static float _working_eotf(const float value)
@@ -3520,8 +3521,8 @@ static float *_shadow_plane(const dt_canvas_paint_options_t *options, const dt_c
                             const dt_canvas_box_t *layer_box, const dt_canvas_shadow_t *shadow,
                             const double pixels_per_unit, int *pad, gboolean *owned)
 {
-  const gboolean inset = shadow->blur < 0.0f;
-  const int radius = (int)lround(fabs(shadow->blur) * pixels_per_unit);
+  const gboolean inset = shadow->inset;
+  const int radius = (int)lround(fmax(shadow->blur, 0.0f) * pixels_per_unit);
   // The extent grows the silhouette before the blur, in the plane's own pixels -- the uncovered
   // world into the object for an inset shadow, the object outward for an outset one.
   const float extent = fmaxf(shadow->extent, 0.0f) * (float)pixels_per_unit;
@@ -3540,7 +3541,7 @@ static float *_shadow_plane(const dt_canvas_paint_options_t *options, const dt_c
   // what the margin asks for beyond that nothing is padded: over it, the right answer and the
   // approximate one are both nothing. Padding the whole margin regardless grew every plane by twice
   // the extent along each axis, most of it for nothing.
-  const int nothing = (int)floor((extent + (COMPOSE_SHADOW_SIGMAS * fabs(shadow->blur) + fabs(shadow->offset_x)
+  const int nothing = (int)floor((extent + (COMPOSE_SHADOW_SIGMAS * fmax(shadow->blur, 0.0f) + fabs(shadow->offset_x)
                                             + fabs(shadow->offset_y))
                                                * pixels_per_unit))
                       - grow_margin;
@@ -3717,17 +3718,18 @@ static void _layer_over_surface(float *layer_rgba, const dt_canvas_box_t *layer_
 }
 
 /**
- * An inset shadow: what the layer leaves uncovered, blurred and offset, falls onto the layer
- * inside its own edges -- the shadow the object would cast on itself were it a hole. Laid
- * over the layer, within the layer's own coverage, before the layer goes over the canvas.
+ * An inset shadow: what the silhouette leaves uncovered, grown, blurred and offset, falls onto the
+ * layer inside the silhouette's own edges -- the shadow the object would cast on itself were it a
+ * hole. Laid over the layer, within the silhouette's coverage, before the layer goes over the
+ * canvas. The silhouette is the layer's own alpha for a frame, and the glyphs' alone for a text's
+ * glyph shadow, which then falls on the letters and not on the ground under them.
  */
 static void _layer_inset_shadow(const dt_canvas_paint_options_t *options, float *layer_rgba,
-                                const dt_canvas_box_t *layer_box, const dt_canvas_shadow_t *shadow,
-                                const double pixels_per_unit)
+                                const dt_canvas_box_t *layer_box, const dt_canvas_silhouette_t silhouette,
+                                const dt_canvas_shadow_t *shadow, const double pixels_per_unit)
 {
   int pad = 0;
   gboolean owned = FALSE;
-  const dt_canvas_silhouette_t silhouette = { layer_rgba, 4 };
   float *alpha = _shadow_plane(options, silhouette, layer_box, shadow, pixels_per_unit, &pad, &owned);
   if(IS_NULL_PTR(alpha)) return;
   float tint[3];
@@ -3743,10 +3745,11 @@ static void _layer_inset_shadow(const dt_canvas_paint_options_t *options, float 
   for(int row = 0; row < rows; row++)
   {
     float *target = layer_rgba + (size_t)row * cols * 4;
+    const float *bound = silhouette.values + (size_t)row * cols * silhouette.stride;
     const int source_y = row - offset_y;
     for(int col = 0; col < cols; col++)
     {
-      const float own = target[4 * col + 3];
+      const float own = bound[silhouette.stride * col + silhouette.stride - 1];
       if(own <= 0.0f) continue;
       const int source_x = col - offset_x;
       // Past the padded plane the uncovered world is whole: the shadow falls at full strength.
@@ -4155,9 +4158,9 @@ gboolean dt_canvas_paint_object_extent(const dt_canvas_t *canvas, const dt_canva
   dt_canvas_shadow_t shadow;
   dt_canvas_object_effective_shadow(canvas, object, &shadow);
   double shadow_reach = 0.0;
-  if(dt_canvas_shadow_visible(&shadow) && shadow.blur > 0.0f)
-    shadow_reach = _shadow_reach(&shadow);
-  if(object->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&object->text.shadow))
+  if(dt_canvas_shadow_visible(&shadow) && !shadow.inset) shadow_reach = _shadow_reach(&shadow);
+  if(object->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&object->text.shadow)
+     && !object->text.shadow.inset)
     shadow_reach = fmax(shadow_reach, _shadow_reach(&object->text.shadow));
   grow = fmax(grow, 0.0) + shadow_reach;
   out->x = min_x - grow;
@@ -4252,8 +4255,9 @@ static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas
   // The LARGER of the two shadows an object can cast: its own, from the frame's edge, and a
   // text's, from its glyphs. Taken one at a time, the smaller would clip the larger at the box.
   double grown = 0.0;
-  if(dt_canvas_shadow_visible(shadow) && shadow->blur > 0.0f) grown = _shadow_reach(shadow) * pixels_per_unit;
-  if(object->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&object->text.shadow))
+  if(dt_canvas_shadow_visible(shadow) && !shadow->inset) grown = _shadow_reach(shadow) * pixels_per_unit;
+  if(object->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&object->text.shadow)
+     && !object->text.shadow.inset)
     grown = fmax(grown, _shadow_reach(&object->text.shadow) * pixels_per_unit);
   if(grown > 0.0) box = _box_grow(&box, (int)ceil(grown) + 1);
   return box;
@@ -4435,24 +4439,24 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
     // the border band past the feather, in one pass in linear light.
     if(cut) _cut_compose(&local, layer_rgba, &layer_box, canvas, object, matrix, pixels_per_unit, opacity);
     const double shadow_clock = dt_get_wtime();
-    if(shadowed && shadow.blur < 0.0f) _layer_inset_shadow(&local, layer_rgba, &layer_box, &shadow, pixels_per_unit);
-    if(shadowed && shadow.blur > 0.0f)
-    {
-      const dt_canvas_silhouette_t from_layer = { layer_rgba, 4 };
+    const dt_canvas_silhouette_t from_layer = { layer_rgba, 4 };
+    if(shadowed && shadow.inset) _layer_inset_shadow(&local, layer_rgba, &layer_box, from_layer, &shadow, pixels_per_unit);
+    if(shadowed && !shadow.inset)
       _canvas_shadow(&local, canvas_rgba, band, from_layer, &layer_box, &area, &shadow, pixels_per_unit);
-    }
     /*
-     * And the glyphs' own, laid INTO the layer: over the ground the first pass painted, under
-     * the letters the second one is about to paint. Onto the canvas instead it would be hidden
-     * by any ground that is not transparent, which is the case this exists for.
+     * And the glyphs' own, laid INTO the layer. Dropped outside the letters it goes over the ground
+     * the first pass painted and under the letters the second one is about to paint -- onto the
+     * canvas instead it would be hidden by any ground that is not transparent, which is the case
+     * this exists for. Cast inside them it goes over the letters, within their own coverage, so it
+     * waits for them.
      */
     if(!IS_NULL_PTR(glyph_alpha))
     {
       const dt_canvas_silhouette_t from_glyphs = { glyph_alpha, 1 };
-      _layer_over_shadow(&local, layer_rgba, &layer_box, from_glyphs, &object->text.shadow, pixels_per_unit);
-      _scratch_release(glyph_alpha, glyph_owned);
-      glyph_alpha = NULL;
-      // Now the letters, over their own shadow.
+      const dt_canvas_shadow_t *glyph_shadow = &object->text.shadow;
+      if(!glyph_shadow->inset)
+        _layer_over_shadow(&local, layer_rgba, &layer_box, from_glyphs, glyph_shadow, pixels_per_unit);
+      // Now the letters, over their own shadow or under it.
       cairo_surface_t *glyphs = _scratch_surface(&local, layer_box.width, layer_box.height);
       if(!IS_NULL_PTR(glyphs))
       {
@@ -4462,6 +4466,10 @@ static void _paint_band(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
         _layer_over_surface(layer_rgba, &layer_box, glyphs, opacity);
         cairo_surface_destroy(glyphs);
       }
+      if(glyph_shadow->inset)
+        _layer_inset_shadow(&local, layer_rgba, &layer_box, from_glyphs, glyph_shadow, pixels_per_unit);
+      _scratch_release(glyph_alpha, glyph_owned);
+      glyph_alpha = NULL;
     }
     _stats.shadow_seconds += dt_get_wtime() - shadow_clock;
     _canvas_over(canvas_rgba, band, layer_rgba, &layer_box, &area);

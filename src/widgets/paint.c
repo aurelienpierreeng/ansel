@@ -3909,6 +3909,57 @@ void dtgtk_cairo_paint_shape(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
   FINISH
 }
 
+void dtgtk_cairo_paint_shadow(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  // The frame is the outline; its shadow is the icon's colour at half strength, as a filled shape's
+  // inside is, so the two read apart. Dropped, the shadow is the frame's copy moved down and right,
+  // seen past the frame's edges only; cast inside, it is the band that copy leaves along the frame's
+  // upper and left inner edges. Both are one outline, so neither is drawn twice where it overlaps.
+  const gboolean inset = (flags & CPF_SHADOW_INSET) != 0;
+  const double left = inset ? 0.15 : 0.10;
+  const double top = left;
+  const double side = inset ? 0.70 : 0.62;
+  const double offset = inset ? 0.16 : 0.18;
+  const double right = left + side;
+  const double bottom = top + side;
+
+  double red = 0.0;
+  double green = 0.0;
+  double blue = 0.0;
+  double alpha = 1.0;
+  cairo_save(cr);
+  if(cairo_pattern_get_rgba(cairo_get_source(cr), &red, &green, &blue, &alpha) == CAIRO_STATUS_SUCCESS)
+    cairo_set_source_rgba(cr, red, green, blue, alpha * 0.5);
+  if(inset)
+  {
+    cairo_move_to(cr, left, top);
+    cairo_line_to(cr, right, top);
+    cairo_line_to(cr, right, top + offset);
+    cairo_line_to(cr, left + offset, top + offset);
+    cairo_line_to(cr, left + offset, bottom);
+    cairo_line_to(cr, left, bottom);
+  }
+  else
+  {
+    cairo_move_to(cr, right, top + offset);
+    cairo_line_to(cr, right + offset, top + offset);
+    cairo_line_to(cr, right + offset, bottom + offset);
+    cairo_line_to(cr, left + offset, bottom + offset);
+    cairo_line_to(cr, left + offset, bottom);
+    cairo_line_to(cr, right, bottom);
+  }
+  cairo_close_path(cr);
+  cairo_fill(cr);
+  cairo_restore(cr);
+
+  cairo_rectangle(cr, left, top, side, side);
+  cairo_stroke(cr);
+
+  FINISH
+}
+
 void dtgtk_cairo_paint_note(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)

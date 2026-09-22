@@ -105,6 +105,8 @@ typedef enum dtgtk_cairo_paint_flags_t
 #define CPF_SHAPE_POLYGON CPF_SPECIAL_FLAG
 #define CPF_SHAPE_STAR (CPF_SPECIAL_FLAG << 1)
 #define CPF_SHAPE_FILLED (CPF_SPECIAL_FLAG << 2) ///< colour inside the outline, at half its strength
+#define CPF_SHADOW_OUTSET CPF_NONE
+#define CPF_SHADOW_INSET CPF_SPECIAL_FLAG ///< the shadow along the frame's inner edges, not behind it
 
 typedef void (*DTGTKCairoPaintIconFunc)(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint nothing */
@@ -410,6 +412,8 @@ void dtgtk_cairo_paint_waypoint(cairo_t *cr, gint x, gint y, gint w, gint h, gin
 void dtgtk_cairo_paint_reverse(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a drawn shape: a rectangle, or the polygon or star of its variant: CPF_SHAPE_* */
 void dtgtk_cairo_paint_shape(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a frame and its shadow, dropped behind it or cast inside it: CPF_SHADOW_* */
+void dtgtk_cairo_paint_shadow(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a sheet of notes: a folded corner over its ruled lines */
 void dtgtk_cairo_paint_note(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a pencil over a baseline: edit the text */

@@ -142,6 +142,7 @@ typedef struct dt_lib_canvas_toolbar_t
   GtkWidget *texture_scale;
   GtkWidget *texture_grain;
   // the shadow popover
+  GtkWidget *shadow_inset; ///< which way the canvas's shadow falls: outside the objects, or inside them
   GtkWidget *shadow_color;
   // the rest of the row
   GtkWidget *background_color;
@@ -314,6 +315,17 @@ static void _spread_changed(GtkSpinButton *spin, gpointer user_data)
       view, (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->spread_cols)),
       (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->spread_rows)),
       (float)gtk_spin_button_get_value(GTK_SPIN_BUTTON(toolbar->bind_gutter)));
+}
+
+/* One click, one undo step: the setter behind it compares with the document before it records. */
+static void _shadow_inset_changed(GtkComboBox *combo, gpointer user_data)
+{
+  dt_view_t *view = NULL;
+  if(!_live(&view)) return;
+  if(IS_NULL_PTR(dt_view_manager_get_global()->proxy.canvas.set_shadow_inset)) return;
+  const int active = gtk_combo_box_get_active(combo);
+  if(active < 0) return;
+  dt_view_manager_get_global()->proxy.canvas.set_shadow_inset(view, active == 1);
 }
 
 static void _resolution_changed(GtkSpinButton *spin, gpointer user_data)
@@ -748,6 +760,7 @@ static void _refill(dt_lib_module_t *self)
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(toolbar->bleed_size), canvas->page_bleed);
   _rgba_to(toolbar->bleed_color, &canvas->bleed_color, TRUE);
 
+  gtk_combo_box_set_active(GTK_COMBO_BOX(toolbar->shadow_inset), canvas->shadow.inset ? 1 : 0);
   _rgba_to(toolbar->shadow_color, &canvas->shadow.color, TRUE);
   _rgba_to(toolbar->border_color, &canvas->border_color, TRUE);
   /* What the line is DRAWN with, never the raw field: a canvas that has never been told holds
@@ -1307,17 +1320,25 @@ static GtkWidget *_shadow_popover(dt_lib_module_t *self)
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(4));
   gtk_container_set_border_width(GTK_CONTAINER(box), DT_PIXEL_APPLY_DPI(10));
   gtk_box_pack_start(GTK_BOX(box), _bold_label(_("Shadow")), FALSE, FALSE, 0);
-  GtkWidget *first = _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_OFFSET_X, _("Right"),
-                                  _("Offset to the right, in canvas units"));
+  // Which way it falls comes first and is a choice of its own: it used to be the radius's sign, and
+  // a shadow cast inside with no radius -- an extent alone -- could not be said at all.
+  toolbar->shadow_inset = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->shadow_inset), _("Outside the objects"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(toolbar->shadow_inset), _("Inside the objects"));
+  gtk_widget_set_tooltip_text(toolbar->shadow_inset,
+                              _("Where the default shadow falls: dropped outside every object, behind it, or cast inside it along its own edges. An object's own properties can override it."));
+  _connect_refilled(self, toolbar->shadow_inset, "changed", G_CALLBACK(_shadow_inset_changed));
+  _labelled_row(box, _("Direction"), toolbar->shadow_inset);
+  _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_OFFSET_X, _("Right"), _("Offset to the right, in canvas units"));
   _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_OFFSET_Y, _("Down"), _("Offset downwards, in canvas units"));
   _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_BLUR, _("Radius"),
-               _("Radius, in canvas units: 0 is no shadow, positive drops it outside every object, negative casts it inside along their edges. An object's own properties can override it."));
+               _("How soft the shadow is, in canvas units. With no radius and no extent there is no shadow. An object's own properties can override it."));
   _prop_slider(self, box, DT_CANVAS_PROP_SHADOW_EXTENT, _("Extent"),
-               _("How far the shadow keeps its full strength before the radius softens it, in canvas units: outward for a shadow dropped outside, inward for one cast inside. With it, a wide radius fades the shadow instead of washing it out."));
+               _("How far the shadow keeps its full strength before the radius softens it, in canvas units: outward for a shadow dropped outside, inward for one cast inside. With it, a wide radius fades the shadow instead of washing it out, and with no radius it is a hard edge."));
   toolbar->shadow_color = _color_button(_("Default shadow colour"), _("Colour and strength of the shadow"),
                                         DT_CANVAS_COLOR_SHADOW, TRUE, self);
   _labelled_row(box, _("Colour"), toolbar->shadow_color);
-  return _popover_around(box, first);
+  return _popover_around(box, toolbar->shadow_inset);
 }
 
 /** The borders popover: the uniform border of every frame that has none of its own. */

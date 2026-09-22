@@ -79,10 +79,10 @@ extern "C" {
 #define DT_CANVAS_EXIF_LENS_LEN 128
 
 /** Reserved bytes per record, see the file comment. */
-#define DT_CANVAS_HEADER_RESERVED 824 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12), the line (20), the custom page (8), the shadow's extent (4)
-#define DT_CANVAS_OBJECT_RESERVED 164 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4), the shadow's extent (4)
+#define DT_CANVAS_HEADER_RESERVED 820 ///< 1024 at format 1, minus the padding (4), background style (4), grid colour (16), paper (8), page colour (16), shadow (28), padding colour (16), texture (16), corners (4), page margin (20), page bleed (20), resolution (4), spread (12), the line (20), the custom page (8), the shadow's extent (4) and flags (4)
+#define DT_CANVAS_OBJECT_RESERVED 160 ///< 256 at format 1, minus the shadow (28), the transparency (4), the cutout mask (36), the background (16), the corners (4), the shadow's extent (4) and flags (4)
 #define DT_CANVAS_IMAGE_RESERVED 508 ///< 512 at format 1, minus the render's colour space (4)
-#define DT_CANVAS_TEXT_RESERVED 112 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags, the standoff, the two paragraph settings, the glyphs' own shadow (28) and its extent (4)
+#define DT_CANVAS_TEXT_RESERVED 108 ///< 256 at format 1, minus the two alignments, the line height and the tracking, the four margins, the features, the flags, the standoff, the two paragraph settings, the glyphs' own shadow (28), its extent (4) and its flags (4)
 /**
  * An OpenType feature string, as Pango spells it: "liga 1, onum 1".
  *
@@ -207,24 +207,26 @@ typedef enum dt_canvas_edges_t
 } dt_canvas_edges_t;
 
 /**
- * A shadow: the object's silhouette, grown, blurred, offset and tinted. The radius is the blur's
- * standard deviation and its sign says where the shadow falls: positive drops it outside the
- * object, negative casts it inside along the object's edges, and zero is no shadow at all.
- * The EXTENT grows the silhouette before the blur -- outward for a dropped shadow, inward for an
- * inset one -- so the colour keeps its full density that much further and a wide blur softens a
- * shadow instead of washing it away; on its own it switches nothing on (a text's glyph shadow
- * aside, see dt_canvas_text_shadow_visible()). The colour's alpha is the strength. Offsets, extent
- * and radius are canvas units.
+ * A shadow: the object's silhouette, grown, blurred, offset and tinted, and dropped OUTSIDE the
+ * object, behind it, or cast INSIDE it along its own edges -- which one is `inset` and nothing
+ * else. The EXTENT grows the silhouette before the blur, outward for a dropped shadow and inward
+ * for an inset one, so the colour keeps its full strength that much further; the BLUR is how soft
+ * it then is, the Gaussian's standard deviation. A frame's shadow draws once it has some strength
+ * and a blur or an extent to spread (dt_canvas_shadow_visible()); a text's glyph shadow also with
+ * an offset alone (dt_canvas_text_shadow_visible()). The colour's alpha is the strength. Offsets,
+ * extent and blur are canvas units.
  */
 typedef struct dt_canvas_shadow_t
 {
   dt_canvas_color_t color;
   float offset_x;
   float offset_y;
-  float blur;   ///< the signed radius; see above
-  float extent; ///< how far the silhouette is grown before the blur, 0 to DT_CANVAS_SHADOW_EXTENT_MAX
+  float blur;     ///< how soft the shadow is, 0 to DT_CANVAS_SHADOW_BLUR_MAX
+  float extent;   ///< how far the silhouette is grown before the blur, 0 to DT_CANVAS_SHADOW_EXTENT_MAX
+  gboolean inset; ///< cast inside the object along its own edges, rather than dropped outside it
 } dt_canvas_shadow_t;
 
+#define DT_CANVAS_SHADOW_BLUR_MAX 500.0f   ///< the most a shadow's blur is held to, in canvas units
 #define DT_CANVAS_SHADOW_EXTENT_MAX 500.0f ///< the most a shadow's extent is held to, in canvas units
 
 /** How an image frame's render relates to the library. Runtime only, never saved. */
@@ -1191,7 +1193,12 @@ int dt_canvas_background_position(uint32_t style);
  */
 gboolean dt_canvas_background_is_transparent(uint32_t style);
 
-/** @brief Whether a shadow draws anything at all: a radius other than zero and some strength. */
+/**
+ * @brief Whether a frame's shadow draws anything at all: some strength, and a blur or an extent to
+ * spread. Which way it falls is `inset`'s to say and is no part of the answer.
+ * @details An offset alone does not switch a frame's shadow on: the canvas's default keeps its
+ * offsets while it is off, so every frame would otherwise wear one.
+ */
 gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow);
 
 /**
@@ -1199,10 +1206,11 @@ gboolean dt_canvas_shadow_visible(const dt_canvas_shadow_t *shadow);
  *
  * Not the same question as a frame's. A frame's shadow needs a blur to be anything -- an
  * unblurred copy of a rectangle offset behind a rectangle is a rectangle -- so
- * `dt_canvas_shadow_visible()` requires one. Offset with NO blur is the commonest drop shadow
- * in title work, and a hard-edged copy of the glyphs is exactly what it is, so a text's shadow
- * is drawn whenever it is coloured and displaced, blurred or grown at all -- grown alone, it is
- * the outline that keeps a caption legible over a busy picture.
+ * `dt_canvas_shadow_visible()` requires a blur or an extent. Offset with NO blur is the commonest
+ * drop shadow in title work, and a hard-edged copy of the glyphs is exactly what it is, so a text's
+ * shadow is drawn whenever it is coloured and displaced, blurred or grown at all -- grown alone, it
+ * is the outline that keeps a caption legible over a busy picture, and cast inside the letters with
+ * an offset alone, it is type pressed into the page.
  */
 gboolean dt_canvas_text_shadow_visible(const dt_canvas_shadow_t *shadow);
 

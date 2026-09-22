@@ -296,7 +296,7 @@ typedef struct dt_view_manager_t
       void (*edit_color)(struct dt_view_t *view, int target, const float *rgba, int phase);
       /**
        * A number belonging to the whole canvas -- the frames' default border width and corner
-       * radius, the default shadow's two offsets and its blur: `prop` is the
+       * radius, the default shadow's two offsets, its blur and its extent: `prop` is the
        * dt_canvas_prop_id_t the property table describes it by and `phase` a dt_canvas_edit_phase_t.
        * LIVE writes it and shows it, costing no configuration write and no undo record; COMMIT puts
        * the number the gesture found back and hands the kept one to the setting's own setter, so a
@@ -305,6 +305,8 @@ typedef struct dt_view_manager_t
        * control cannot be wired to one and record a step per motion event.
        */
       void (*edit_number)(struct dt_view_t *view, int prop, float value, int phase);
+      /** Which way the canvas's shadow falls: dropped outside the objects (0) or cast inside them. */
+      void (*set_shadow_inset)(struct dt_view_t *view, int inset);
     } canvas;
   } proxy;
 

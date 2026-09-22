@@ -1045,18 +1045,58 @@ static void _a_border_colour_keeps_the_effective_width(void **state)
   _fixture_free(&fixture);
 }
 
-static void _a_blur_of_minus_one_round_trips(void **state)
+/*
+ * Which way a shadow falls is its own switch and never the blur's sign: an inside shadow with no
+ * blur at all -- an extent alone, a hard band along the edges -- is one a signed radius could not
+ * say. The blur is a radius and nothing else, held at nothing from below.
+ */
+static void _a_shadow_falls_inside_by_its_own_switch(void **state)
 {
   (void)state;
-  // It used to be the sentinel for "the canvas's shadow", so a small inner shadow could not be typed.
   props_fixture_t fixture;
   _fixture_build(&fixture);
   dt_canvas_object_t *text = fixture.objects[0];
-  const dt_canvas_prop_value_t blur = _number(-1.0);
-  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_SHADOW_BLUR, &blur)
+  const dt_canvas_prop_value_t inside = _choice(1);
+  const dt_canvas_prop_value_t outside = _choice(0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_SHADOW_INSET, &inside)
               & DT_CANVAS_EFFECT_CHANGED);
-  assert_float_equal(_read_number(fixture.canvas, text, DT_CANVAS_PROP_SHADOW_BLUR), -1.0, 1e-6);
+  assert_true(text->shadow.inset);
   assert_int_equal(dt_canvas_group_state(fixture.canvas, text, DT_CANVAS_GROUP_SHADOW), DT_CANVAS_OWN_CUSTOM);
+  // Seeded from what was drawn: the canvas's blur, which the switch did not touch.
+  assert_float_equal(text->shadow.blur, 10.0f, 1e-6);
+  // A blur written negative is held at nothing, and does not turn the shadow round.
+  const dt_canvas_prop_value_t negative = _number(-1.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_SHADOW_BLUR, &negative)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_float_equal(_read_number(fixture.canvas, text, DT_CANVAS_PROP_SHADOW_BLUR), 0.0, 1e-6);
+  assert_true(text->shadow.inset);
+  // With neither blur nor extent it draws nothing; an extent alone brings it back, still inside.
+  assert_false(dt_canvas_shadow_visible(&text->shadow));
+  const dt_canvas_prop_value_t grow = _number(6.0);
+  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_SHADOW_EXTENT, &grow)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(dt_canvas_shadow_visible(&text->shadow));
+  char summary[128];
+  dt_canvas_group_summary(fixture.canvas, text, DT_CANVAS_GROUP_SHADOW, summary, sizeof(summary));
+  assert_non_null(strstr(summary, "inside"));
+  // Back outside by the same switch, the numbers left as they were.
+  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_SHADOW_INSET, &outside)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_false(text->shadow.inset);
+  assert_float_equal(text->shadow.extent, 6.0f, 1e-6);
+  // A drawing holding nothing but the switch owns a shadow of its own, not its kind's nothing.
+  dt_canvas_object_t *drawing = fixture.objects[3];
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, drawing, DT_CANVAS_GROUP_SHADOW),
+                   DT_CANVAS_OWN_KIND_DEFAULT);
+  drawing->shadow.inset = TRUE;
+  assert_int_equal(dt_canvas_group_state(fixture.canvas, drawing, DT_CANVAS_GROUP_SHADOW), DT_CANVAS_OWN_CUSTOM);
+  // The glyphs' own shadow carries a switch of its own, neutral outside.
+  assert_true(dt_canvas_prop_is_neutral(fixture.canvas, text, DT_CANVAS_PROP_TEXT_SHADOW_INSET));
+  assert_true(dt_canvas_prop_write(fixture.canvas, text, DT_CANVAS_PROP_TEXT_SHADOW_INSET, &inside)
+              & DT_CANVAS_EFFECT_CHANGED);
+  assert_true(text->text.shadow.inset);
+  assert_false(text->shadow.inset);
+  assert_false(dt_canvas_prop_is_neutral(fixture.canvas, text, DT_CANVAS_PROP_TEXT_SHADOW_INSET));
   _fixture_free(&fixture);
 }
 
@@ -1526,8 +1566,9 @@ static void _the_inherited_value_is_what_giving_the_group_back_shows(void **stat
       object->corner_radius = 33.0f;
       object->shadow.offset_x = 11.0f;
       object->shadow.offset_y = 12.0f;
-      object->shadow.blur = -13.0f;
+      object->shadow.blur = 13.0f;
       object->shadow.extent = 14.0f;
+      object->shadow.inset = TRUE;
       object->shadow.color = dt_canvas_color(0.7f, 0.7f, 0.1f, 0.9f);
       if(object->kind == DT_CANVAS_OBJECT_TEXT)
         g_strlcpy(object->text.font, "Monospace Italic 41", sizeof(object->text.font));
@@ -3159,7 +3200,7 @@ int main(void)
     cmocka_unit_test(_every_property_round_trips_on_every_kind),
     cmocka_unit_test(_a_shadow_offset_edited_while_inheriting_is_kept_and_owned),
     cmocka_unit_test(_a_border_colour_keeps_the_effective_width),
-    cmocka_unit_test(_a_blur_of_minus_one_round_trips),
+    cmocka_unit_test(_a_shadow_falls_inside_by_its_own_switch),
     cmocka_unit_test(_a_shadows_extent_is_one_more_member_of_its_group),
     cmocka_unit_test(_a_fresh_drawing_owns_only_what_its_kind_is_born_with),
     cmocka_unit_test(_an_all_zero_inset_stays_zero),
