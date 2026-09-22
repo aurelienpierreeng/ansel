@@ -330,9 +330,14 @@ toolchain_bin_dir_for() {
   # unrelated /mingw64 vs. a standalone C:\msys64\ucrt64 build) -- guessing a
   # flavor dir name off the current shell's own PATH doesn't reliably land on the
   # right install, so read the compiler path CMake recorded for this exact build.
-  local bin="$1" d cache compiler compiler_dir
+  local bin="$1" d prev="" cache compiler compiler_dir
   d="$(dirname "$bin")"
-  while [ "$d" != "/" ] && [ -n "$d" ]; do
+  # Stop when dirname stops making progress, not only at "/". A path can be
+  # drive-rooted on Windows ("C:/msys64/..."), and dirname's fixed point there is
+  # "C:" -- never "/", never empty -- so a walk guarded on "/" alone spins
+  # forever, forking one dirname per turn. The pre-commit hook hands this script
+  # exactly such a path, since git rev-parse --show-toplevel answers in that form.
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "$prev" ]; do
     cache="$d/CMakeCache.txt"
     if [ -f "$cache" ]; then
       compiler="$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' "$cache")"
@@ -342,6 +347,7 @@ toolchain_bin_dir_for() {
       printf '%s\n' "$compiler_dir"
       return 0
     fi
+    prev="$d"
     d="$(dirname "$d")"
   done
   return 1
@@ -356,9 +362,10 @@ installed_cli_for() {
   # can't find its views/libs/imageio plugins. If this build was ever installed
   # (CMAKE_INSTALL_PREFIX recorded in its CMakeCache.txt has a populated bin/),
   # prefer that binary over the raw, not-installed one found by find_cli().
-  local bin="$1" d cache prefix prefix_dir candidate
+  local bin="$1" d prev="" cache prefix prefix_dir candidate
   d="$(dirname "$bin")"
-  while [ "$d" != "/" ] && [ -n "$d" ]; do
+  # Same termination rule as toolchain_bin_dir_for() above, for the same reason.
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "$prev" ]; do
     cache="$d/CMakeCache.txt"
     if [ -f "$cache" ]; then
       prefix="$(sed -n 's/^CMAKE_INSTALL_PREFIX:PATH=//p' "$cache")"
@@ -370,6 +377,7 @@ installed_cli_for() {
       done
       return 1
     fi
+    prev="$d"
     d="$(dirname "$d")"
   done
   return 1
