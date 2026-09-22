@@ -6184,9 +6184,20 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
                                 : (start ? origin->connector.from_anchor : origin->connector.to_anchor);
       uint32_t hover_frame = 0;
       uint32_t hover_anchor = DT_CANVAS_ANCHOR_AUTO;
+      /*
+       * How generous the drop is depends on what the end WAS. An end that held a frame must end the
+       * gesture holding one, so anywhere over a frame means that frame's nearest node. A FREE end is
+       * a point of its own, and the most common thing done with one is to put it ON a picture -- the
+       * tip of an arrow pointing at a detail -- so it attaches only when brought within reach of a
+       * dot, as the connector tool asks, and is left where it is put everywhere else. Forgiving for
+       * both, an arrow's tip could not be laid on a photograph at all: it jumped to the frame's
+       * nearest edge the moment it crossed one.
+       */
+      const gboolean origin_free = want_id == 0;
+      const gboolean found = origin_free ? _anchor_at(view, canvas_x, canvas_y, &hover_frame, &hover_anchor)
+                                         : _anchor_dropped_on(view, canvas_x, canvas_y, &hover_frame, &hover_anchor);
       // Never the line's own id, and never the frame the OTHER end holds: a connector of no length.
-      if(_anchor_dropped_on(view, canvas_x, canvas_y, &hover_frame, &hover_anchor) && hover_frame != line->id
-         && hover_frame != other_end)
+      if(found && hover_frame != line->id && hover_frame != other_end)
       {
         want_id = hover_frame;
         want_anchor = hover_anchor;
