@@ -45,6 +45,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_masks_raster_contract
   test_stroke_raster
   test_drawlayer_batch_raster
+  test_import_jobs
 )
 
 foreach(test ${LIB_ANSEL_UNIT_TESTS})
@@ -78,6 +79,9 @@ endforeach()
 target_sources(test_drawlayer_batch_raster PRIVATE
   ${CMAKE_SOURCE_DIR}/src/iop/drawlayer/brush.c
   ${CMAKE_SOURCE_DIR}/src/iop/drawlayer/paint.c)
+target_compile_definitions(test_import_jobs PRIVATE
+  ANSEL_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+  ANSEL_TEST_BINARY_DIR="${CMAKE_BINARY_DIR}")
 
 target_sources(test_tagging_completion PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
