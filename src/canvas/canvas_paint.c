@@ -1997,10 +1997,27 @@ static gboolean _obstacles_build(dt_text_obstacles_t *obstacles, const dt_canvas
   margin += standoff;
   const double mapped_width = inner_width + 2.0 * margin;
   const double mapped_height = inner_height + 2.0 * margin;
-  obstacles->columns = CLAMP((int)ceil(mapped_width / TEXT_FLOW_CELL), 1, TEXT_FLOW_MAX_CELLS);
-  obstacles->rows = CLAMP((int)ceil(mapped_height / TEXT_FLOW_CELL), 1, TEXT_FLOW_MAX_CELLS);
-  obstacles->cell_x = mapped_width / obstacles->columns;
-  obstacles->cell_y = mapped_height / obstacles->rows;
+  /*
+   * The CELL is the constant and the row count follows, never the other way round. Sized as
+   * `extent / rows` the pitch wobbles with the frame's own height -- over a hundred rows, by a
+   * fortieth of a unit -- which moves a cell boundary near the bottom of the map by a whole
+   * cell, and the frame's height is the one number the auto-height fit is solving for. So the
+   * measurement fed on its own answer: the natural height of one text beside one picture took
+   * two values three units of frame height apart, 365.94 and 382.23, NEITHER of them a fixed
+   * point, and the fit flipped between them for as long as anything asked -- the frame growing
+   * and shrinking by a line on every repaint, and `settle` reporting movement for ever. With a
+   * constant pitch the map is a function of where the obstacles stand and nothing else: both
+   * the origin and every band the flow asks about carry the same `-height / 2`, so it cancels.
+   * Past the cell ceiling the pitch is coarsened to a MULTIPLE of the cell, so what changes
+   * there is a step a stray unit of height cannot cross, not a slide.
+   */
+  const double extent = fmax(mapped_width, mapped_height);
+  const double coarsening = ceil(extent / (TEXT_FLOW_CELL * TEXT_FLOW_MAX_CELLS));
+  const double pitch = TEXT_FLOW_CELL * fmax(coarsening, 1.0);
+  obstacles->cell_x = pitch;
+  obstacles->cell_y = pitch;
+  obstacles->columns = CLAMP((int)ceil(mapped_width / pitch), 1, TEXT_FLOW_MAX_CELLS);
+  obstacles->rows = CLAMP((int)ceil(mapped_height / pitch), 1, TEXT_FLOW_MAX_CELLS);
   // The map spans the TEXT AREA, so its origin is that area's corner and not the frame's:
   // taken from the frame while the extent is the inner size, every obstacle sits one padding
   // to the left of where the lines think it is, and the last padding of the area has no map
@@ -2150,9 +2167,21 @@ static int _obstacles_runs(const dt_text_obstacles_t *obstacles, const double to
   runs[0].x = left;
   runs[0].width = right - left;
   if(IS_NULL_PTR(obstacles->covered)) return runs[0].width > 0.0 ? 1 : 0;
-  const int first_row = CLAMP((int)floor((top - obstacles->origin_y) / obstacles->cell_y), 0, obstacles->rows - 1);
-  const int last_row
-      = CLAMP((int)ceil((bottom - obstacles->origin_y) / obstacles->cell_y) - 1, 0, obstacles->rows - 1);
+  /*
+   * A band the map does not reach is CLEAR, and clamping it onto the nearest row is how the
+   * frame came to be bottomless. The map is built over the frame's current height while the
+   * measuring pass flows without a cut, so every line past that height fell outside it --
+   * clamped, each one was judged by the map's last row, and an obstacle overlapping the
+   * frame's bottom edge therefore blocked the whole page below it, not just the rows it
+   * covers. Nothing is known about what stands down there until the frame has grown far
+   * enough to map it, and the fit's next round is what learns it: growth stays monotone
+   * because every line already placed keeps the obstacles it was placed against.
+   */
+  const int row_above = (int)floor((top - obstacles->origin_y) / obstacles->cell_y);
+  const int row_below = (int)ceil((bottom - obstacles->origin_y) / obstacles->cell_y) - 1;
+  if(row_below < 0 || row_above > obstacles->rows - 1) return runs[0].width > 0.0 ? 1 : 0;
+  const int first_row = CLAMP(row_above, 0, obstacles->rows - 1);
+  const int last_row = CLAMP(row_below, 0, obstacles->rows - 1);
   const int first_column
       = CLAMP((int)floor((left - obstacles->origin_x) / obstacles->cell_x), 0, obstacles->columns - 1);
   const int last_column
@@ -2465,6 +2494,13 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
   // its own indent would indent every line, and it has no paragraph spacing at all.
   gboolean paragraph_start = TRUE;
   gboolean before_first_paragraph = TRUE;
+  // Where the space between paragraphs was last paid, since a line the obstacles refuse sets
+  // nothing and consumes nothing: the walk moves down and asks again at the SAME offset, which
+  // is a paragraph start again. Paid per attempt rather than per paragraph, a paragraph that
+  // waits for the foot of a picture is pushed one further gap down for every line it waited --
+  // the second paragraph following the picture down and opening a gap behind it that the third
+  // one does not have. `consumed` only ever grows, so it names the paragraph.
+  gsize paragraph_gap_paid = G_MAXSIZE;
   const double indent = (double)object->text.first_line_indent;
   const double paragraph_gap = fmax((double)object->text.paragraph_spacing, 0.0);
   // Before there is a line to measure, the whole logical box: a first line must not be placed
@@ -2487,7 +2523,11 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     paragraph_start = !blank_line && (consumed == 0 || (consumed > 0 && plain[consumed - 1] == '\n'));
     // The space between paragraphs goes in before the band is asked for, or the line would be
     // measured against the obstacles at the height it is NOT going to be set at.
-    if(paragraph_start && !before_first_paragraph) y += paragraph_gap;
+    if(paragraph_start && !before_first_paragraph && paragraph_gap_paid != consumed)
+    {
+      y += paragraph_gap;
+      paragraph_gap_paid = consumed;
+    }
 
     /*
      * The band is the line's INK, not its logical box. What must clear the picture is the
@@ -2501,18 +2541,32 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
     dt_text_run_t runs[TEXT_FLOW_MAX_RUNS];
     int run_count = _obstacles_runs(obstacles, top + y + band_top, top + y + band_top + band_height, text_left,
                                     text_right, nominal, runs);
-    if(run_count <= 0) break;
     /*
      * The first line of a paragraph is set on a shorter measure, from the side the reading
      * starts: the run's start moves in and its end stays, so the line comes out indented under
      * every alignment and justified text keeps its right edge. A negative indent hangs the
      * line out of the measure instead, which is what a bibliography or a dictionary wants.
      */
-    if(paragraph_start && fabs(indent) > 1e-4)
+    gboolean nothing_fits = run_count <= 0;
+    if(!nothing_fits && paragraph_start && fabs(indent) > 1e-4)
     {
       runs[0].x += indent;
       runs[0].width -= indent;
-      if(!(runs[0].width > 0.0)) break;
+      nothing_fits = !(runs[0].width > 0.0);
+    }
+    /*
+     * A band with no room in it is a line the walk steps OVER, never the end of the text. It
+     * used to end the walk, so a picture as wide as the column deleted every word below it --
+     * "the text disappears" -- and with it every line an indent wider than its own stretch
+     * would have taken. One line down is the same answer a single refused stretch already
+     * gets; what bounds the walk is the frame's own cut, and the line cap behind it.
+     */
+    if(nothing_fits)
+    {
+      const double step = fmax(fmax(band_height, nominal), 1.0);
+      if(y + step > inner_height && line_index > 0) break;
+      y += step;
+      continue;
     }
 
     dt_text_piece_t piece;
@@ -2598,7 +2652,12 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
       // cannot be waited on.
       if(!advanced || piece.line->length == 0) break;
     }
-    if(paragraph_start) before_first_paragraph = FALSE;
+    // A paragraph has been seen once one of its lines is SET, not once one is attempted: the
+    // opening line of the first paragraph, refused for want of room, otherwise left the walk
+    // believing a paragraph was behind it and charged the space between paragraphs above the
+    // very first one. Measured at the same obstacle as the gap above, it is the other half of
+    // the same three-gaps-for-two-breaks.
+    if(paragraph_start && line_height > 0.0) before_first_paragraph = FALSE;
     y += fmax(fmax(line_height, skipped_height), 1.0);
     /*
      * The leading, by hand, and only where a line follows. Pango's spacing is the space

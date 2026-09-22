@@ -409,6 +409,33 @@ stays where they put it; and it iterates to a fixed point rather than taking one
 paint, which downward growth makes monotone -- every existing line keeps the obstacles it had
 and the height only opens room below. The same run settles in two: 616 -> 1191 -> 1045.
 
+**The fixed point exists only because the measurement does not depend on the height it is
+solving for**, and one number quietly did. The occupancy map used to size its cells as
+`extent / rows`, the extent being the frame's own inner height, so the pitch wobbled with the
+height by about a fortieth of a unit -- which over a hundred rows moves a cell boundary near
+the bottom of the map by a whole cell, and a line beside a picture then fits or does not.
+Measured on one column beside one picture, the natural height took two values three units of
+frame height apart, 365.94 and 382.23, with NEITHER of them a fixed point: the fit flipped
+between them for as long as anything asked, the frame growing and shrinking by a line on every
+repaint, and `dt_canvas_props_settle_all()` reporting movement for ever. The cell is now a
+length in canvas units and the row count follows from it; past the cell ceiling the pitch is
+coarsened to a MULTIPLE of the cell, so what changes there is a step a stray unit of height
+cannot cross rather than a slide. Both the map's origin and every band the flow asks about
+carry the same `-height / 2`, so with a constant pitch it cancels and the map is a function of
+where the obstacles stand and of nothing else. That is the same two-cycle as the one above,
+found the same way and fixed at a different link in the same chain; a new quantity derived
+from the frame's height owes the same check.
+
+**A band the map does not reach is CLEAR, not a copy of the map's nearest row.** The map is
+built over the frame's current height while the measuring pass flows without a cut, so every
+line past that height falls outside it. Clamped onto the last row, a picture covering the map's
+bottom blocked the whole page below it: measured on a column under a picture it cannot clear,
+ONE measuring pass returned 66776 units where the text wants 270 -- the line cap, and the
+"infinitely high" frame as reported. Nothing is known about what stands below the map until the
+frame has grown far enough to map it, and the fit's next round is what learns it, which is the
+same monotone growth as before: measured on that case, 268 -> 382 -> 480 -> 578 -> 676 as the
+map widens, instead of the cap in a single pass.
+
 Every path that changes what the text or its box is owes that call: every edit in the properties
 (the property table's writer refits the frame it edits and reports `DT_CANVAS_EFFECT_SETTLE_ALL`
 when it moved what other frames flow around), the text editor -- whose "fit height" button was
@@ -771,6 +798,29 @@ real document with the indent and the space both at 50 units, not one of its twe
 lines got either. For the same reason `_flow_piece()` steps over ONE newline and no more --
 swallowing a run makes the blank line appear or vanish according to whether the layout happened
 to be reused, which with two stretches is almost never.
+
+**The space between paragraphs is charged once per PARAGRAPH, and a paragraph has been seen
+once one of its lines is SET.** Both halves are the same mistake, and both were paid for on the
+same picture. A line the obstacles refuse sets nothing and consumes nothing, so the walk moves
+down and asks again at the same offset -- which is a paragraph start again: charged per attempt,
+a paragraph waiting for the foot of a picture was pushed one further gap down for every line it
+waited, which is the second paragraph following the picture down and opening a gap behind it
+that the third one has not got. And the marker saying a paragraph is behind us was set per
+attempt too, so the FIRST paragraph, its opening line refused for want of room, was charged the
+space above the very first line of the frame. Measured over a 26 by 21 grid of picture
+positions with a 200-unit spacing and two breaks in the text: 600 units charged where 400 are
+owed, both halves being 200 each, against exactly 400 everywhere once the gap is keyed on the
+offset it was paid at and the marker on a line actually set.
+
+**A band with no room in it is a line the walk steps OVER, never the end of the text.** Ending
+the walk there deleted every word below a picture as wide as the column -- measured, 19 rows of
+type where 77 belong, and nothing at all below the picture, with the lines above it set
+correctly, which is what makes it read as a flow problem rather than a truncation. It is also
+what an indent wider than its own stretch used to do. One line down is the same answer a single
+refused stretch already gets, and what bounds the walk is the frame's own cut with the line cap
+behind it. This rule and the map's "outside is clear" above hold each other up: stepping down
+past a map whose last row is copied downward steps to the cap instead of stopping, so neither
+can be reverted alone.
 
 **The leading is space BETWEEN lines, so this engine advances it by hand.**
 `pango_layout_set_spacing()` puts it between the lines of one layout, and every line here is

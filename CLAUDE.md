@@ -3540,6 +3540,41 @@ they are visible.
   iterates to a fixed point, which downward growth makes monotone. Every path that changes
   what the text or its box is owes the call, the end of a gesture included: a frame dragged
   over a column changes that column's flow as surely as editing it does.
+- **That fixed point exists only while the measurement does not depend on the height it is
+  solving for, and the occupancy map's PITCH did.** Sized as `extent / rows` -- the extent being
+  the frame's own inner height -- the pitch wobbled with the height by a fortieth of a unit,
+  which over a hundred rows moves a cell boundary near the bottom of the map by a whole cell, so
+  a line beside a picture fits at one height and not at the next. Measured on one column beside
+  one picture, the natural height took two values three units of frame height apart, 365.94 and
+  382.23, NEITHER of them a fixed point: the frame grew and shrank by a line on every repaint
+  and `dt_canvas_props_settle_all()` reported movement for ever (40 settles, still moving). The
+  cell is now a length in canvas units and the row count follows; past the cell ceiling it is
+  coarsened to a MULTIPLE of the cell, a step a stray unit of height cannot cross. Both the
+  map's origin and every band the flow asks about carry the same `-height / 2`, so at a constant
+  pitch it cancels. **Any new quantity derived from the frame's height owes the same check** --
+  this is the second two-cycle in the same chain, the first being the centre-anchored growth
+  above.
+- **A band the map does not reach is CLEAR, and a band with no room in it is a line the walk
+  steps OVER.** The map is built over the frame's current height while the measuring pass flows
+  without a cut, so lines past that height fall outside it; clamped onto the map's last row, a
+  picture covering the map's bottom blocked the whole page below it -- ONE measuring pass
+  returned 66776 units where the text wants 270, which is the line cap and the "infinitely high"
+  frame as reported. And a fully blocked band used to END the walk, which deleted every word
+  below a picture as wide as the column: 19 rows of type where 77 belong, the lines above it set
+  correctly, reported as the text disappearing. The two hold each other up -- stepping down past
+  a map whose last row is copied downward steps to the cap instead of stopping -- so neither may
+  be reverted alone.
+- **The space between paragraphs is charged once per PARAGRAPH, and a paragraph has been seen
+  once one of its lines is SET.** A line the obstacles refuse sets nothing and consumes nothing,
+  so the walk moves down and asks again at the same offset, which is a paragraph start again:
+  charged per attempt, a paragraph waiting for the foot of a picture was pushed one further gap
+  down for every line it waited (the second paragraph following the picture down, with a gap
+  behind it the third one has not got), and the first paragraph, its opening line refused, was
+  charged a space above the very first line of the frame. Measured over a 26x21 grid of picture
+  positions, a 200-unit spacing and two breaks: 600 units charged where 400 are owed, 200 from
+  each half. **One picture position cannot see this** -- the picture has to refuse the line a
+  paragraph opens on, and the first geometry tried showed nothing at all.
+  `tests/unittests/test_canvas_text_flow.c` pins all four, each checked by putting its bug back.
 - **The band a line is offered to the map is its INK, never its logical box.** What has to
   clear a picture is the glyphs, and a logical box carries the font's full ascent above the
   tallest of them -- measured, 72.96 units of box around 59.65 of ink. On a slanted edge a band
