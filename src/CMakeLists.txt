@@ -193,6 +193,7 @@ FILE(GLOB SOURCE_FILES
   "control/jobs/film_jobs.c"
   "control/jobs/image_jobs.c"
   "control/jobs/import_jobs.c"
+  "control/jobs/import_sequence.c"
   "control/progress.c"
   "control/signal.c"
   "develop/develop.c"

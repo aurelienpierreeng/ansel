@@ -91,6 +91,29 @@
 #include <librsvg/rsvg-cairo.h>
 #endif
 
+int dt_util_streams_equal(FILE *first, FILE *second)
+{
+  const size_t chunk_size = 64 * 1024;
+  unsigned char *buffers = malloc(2 * chunk_size);
+  if(IS_NULL_PTR(buffers)) return -1;
+
+  int result = 1;
+  size_t first_read;
+  do
+  {
+    first_read = fread(buffers, 1, chunk_size, first);
+    const size_t second_read = fread(buffers + chunk_size, 1, chunk_size, second);
+    if(ferror(first) || ferror(second))
+    {
+      result = -1;
+      break;
+    }
+    result = first_read == second_read && memcmp(buffers, buffers + chunk_size, first_read) == 0;
+  } while(result == 1 && first_read == chunk_size);
+  dt_free(buffers);
+  return result;
+}
+
 size_t safe_strlen(const char *str)
 {
   return str ? strlen(str) : 0;
