@@ -118,6 +118,51 @@ static double _paint_once_quality(cairo_surface_t *surface, const dt_canvas_t *c
   return seconds;
 }
 
+/**
+ * A paint of the same view confined to one box of the plane, in canvas units: what the view is
+ * handed when it invalidates a rectangle instead of the whole window, since GTK then clips the
+ * context it draws with. NULL paints the whole view, as a full redraw does.
+ */
+static double _paint_clipped(cairo_surface_t *surface, const dt_canvas_t *canvas, dt_canvas_surface_cache_t *cache,
+                             const double zoom, const double center_x, const double center_y, const int width,
+                             const int height, const double quality, const dt_canvas_rect_t *clip)
+{
+  cairo_t *cr = cairo_create(surface);
+  cairo_translate(cr, width * 0.5, height * 0.5);
+  cairo_scale(cr, zoom, zoom);
+  cairo_translate(cr, -center_x, -center_y);
+  if(!IS_NULL_PTR(clip))
+  {
+    /*
+     * Rounded OUT to whole pixels of the widget, as GTK rounds what gtk_widget_queue_draw_area() is
+     * given: a clip left on fractional pixels is anti-aliased along its edge by cairo, which blends
+     * the old frame and the new one there -- an artefact of the test, not of anything the atelier
+     * does, and it read as a ring of differences around every repaint.
+     */
+    double x0 = clip->x;
+    double y0 = clip->y;
+    double x1 = clip->x + clip->width;
+    double y1 = clip->y + clip->height;
+    cairo_user_to_device(cr, &x0, &y0);
+    cairo_user_to_device(cr, &x1, &y1);
+    cairo_save(cr);
+    cairo_identity_matrix(cr);
+    const double left = floor(fmin(x0, x1));
+    const double top = floor(fmin(y0, y1));
+    cairo_rectangle(cr, left, top, ceil(fmax(x0, x1)) - left, ceil(fmax(y0, y1)) - top);
+    cairo_restore(cr);
+    cairo_clip(cr);
+  }
+  dt_canvas_rect_t visible = { center_x - width * 0.5 / zoom, center_y - height * 0.5 / zoom, width / zoom, height / zoom };
+  dt_canvas_paint_options_t options = dt_canvas_paint_options_display(cache, 1.0 / zoom, visible);
+  options.quality = quality;
+  const double start = dt_get_wtime();
+  dt_canvas_paint(cr, canvas, &options);
+  const double seconds = dt_get_wtime() - start;
+  cairo_destroy(cr);
+  return seconds;
+}
+
 static double _paint_once(cairo_surface_t *surface, const dt_canvas_t *canvas, dt_canvas_surface_cache_t *cache,
                           const double zoom, const double center_x, const double center_y, const int width,
                           const int height, const gboolean for_display)
@@ -232,6 +277,219 @@ static void _bench(void **state)
   _print("warm, display, zoomed x1.5", _paint_once(surface, canvas, cache, zoom * 1.5, center_x, center_y, width, height, TRUE));
   _print("warm, export encoding", _paint_once(surface, canvas, cache, zoom, center_x, center_y, width, height, FALSE));
   cairo_surface_write_to_png(surface, "/tmp/canvas_bench.png");
+
+  /*
+   * A DRAG, the way the atelier runs one: the largest picture moved a few units per motion event,
+   * the generation bumped each time -- which is what makes every frame miss the composite cache --
+   * and the view repainted at the gesture's half quality. First over the whole window, which is
+   * what a full redraw asks for; then confined to what the move damages, the picture's extent
+   * before and after, which is all that can change on the page.
+   */
+  {
+    dt_canvas_object_t *largest = NULL;
+    double largest_area = 0.0;
+    for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
+    {
+      dt_canvas_object_t *object = (dt_canvas_object_t *)dt_canvas_object_at(canvas, idx);
+      if(object->kind != DT_CANVAS_OBJECT_IMAGE) continue;
+      if(object->width * object->height > largest_area)
+      {
+        largest_area = object->width * object->height;
+        largest = object;
+      }
+    }
+    if(!IS_NULL_PTR(g_getenv("CANVAS_BENCH_DAMAGE")))
+    {
+      /*
+       * THE DAMAGE, HELD TO A FULL REPAINT. For every object that can be moved: paint the view,
+       * move the object by an uneven amount, repaint ONLY what dt_canvas_paint_move_damage() says
+       * changed -- over the previous frame, as GTK composites a clipped redraw -- and compare that,
+       * pixel for pixel, with the same view repainted whole. A pixel that differs is one the damage
+       * left out, and would stay on screen stale as a trail behind the drag.
+       */
+      cairo_surface_t *partial = cairo_image_surface_create(CAIRO_FORMAT_RGB24, (int)(width * device_scale),
+                                                            (int)(height * device_scale));
+      cairo_surface_t *whole = cairo_image_surface_create(CAIRO_FORMAT_RGB24, (int)(width * device_scale),
+                                                          (int)(height * device_scale));
+      cairo_surface_set_device_scale(partial, device_scale, device_scale);
+      cairo_surface_set_device_scale(whole, device_scale, device_scale);
+      int checked = 0;
+      int failed = 0;
+      for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
+      {
+        dt_canvas_object_t *object = (dt_canvas_object_t *)dt_canvas_object_at(canvas, idx);
+        const gboolean movable = dt_canvas_object_is_frame(object) || dt_canvas_connector_has_free_end(object);
+        if(!movable) continue;
+        const uint32_t id = object->id;
+        _paint_clipped(partial, canvas, cache, zoom, center_x, center_y, width, height, 1.0, NULL);
+        dt_canvas_rect_t before = { 0 };
+        dt_canvas_rect_t after = { 0 };
+        const gboolean known_before = dt_canvas_paint_move_damage(canvas, &id, 1, &before);
+        const double move_x = 7.3;
+        const double move_y = -4.1;
+        if(dt_canvas_object_is_frame(object))
+        {
+          object->x += move_x;
+          object->y += move_y;
+        }
+        else
+          dt_canvas_connector_translate(object, move_x, move_y);
+        dt_canvas_touch(canvas);
+        const gboolean known_after = dt_canvas_paint_move_damage(canvas, &id, 1, &after);
+        if(known_before && known_after)
+        {
+          const double x0 = fmin(before.x, after.x);
+          const double y0 = fmin(before.y, after.y);
+          const double x1 = fmax(before.x + before.width, after.x + after.width);
+          const double y1 = fmax(before.y + before.height, after.y + after.height);
+          const dt_canvas_rect_t clip = { x0, y0, x1 - x0, y1 - y0 };
+          _paint_clipped(partial, canvas, cache, zoom, center_x, center_y, width, height, 1.0, &clip);
+          _paint_clipped(whole, canvas, cache, zoom, center_x, center_y, width, height, 1.0, NULL);
+          cairo_surface_flush(partial);
+          cairo_surface_flush(whole);
+          const uint8_t *a = cairo_image_surface_get_data(partial);
+          const uint8_t *b = cairo_image_surface_get_data(whole);
+          const int stride = cairo_image_surface_get_stride(partial);
+          int64_t differing = 0;
+          int worst = 0;
+          // Where the clip lands in the surface's pixels, to tell a repaint that differs INSIDE it
+          // from a damage that left something OUTSIDE it.
+          const double to_px = zoom * device_scale;
+          const int clip_x0 = (int)floor(((clip.x - center_x) * zoom + width * 0.5) * device_scale);
+          const int clip_y0 = (int)floor(((clip.y - center_y) * zoom + height * 0.5) * device_scale);
+          const int clip_x1 = (int)ceil(clip_x0 + clip.width * to_px) + 1;
+          const int clip_y1 = (int)ceil(clip_y0 + clip.height * to_px) + 1;
+          int64_t inside = 0;
+          int worst_inside = 0;
+          int worst_outside = 0;
+          for(int row = 0; row < (int)(height * device_scale); row++)
+            for(int col = 0; col < (int)(width * device_scale); col++)
+            {
+              const uint32_t first = *(const uint32_t *)(a + (size_t)row * stride + (size_t)col * 4) & 0xFFFFFFu;
+              const uint32_t second = *(const uint32_t *)(b + (size_t)row * stride + (size_t)col * 4) & 0xFFFFFFu;
+              if(first == second) continue;
+              differing++;
+              int delta = 0;
+              for(int channel = 0; channel < 3; channel++)
+                delta = MAX(delta, abs((int)((first >> (8 * channel)) & 0xFF) - (int)((second >> (8 * channel)) & 0xFF)));
+              worst = MAX(worst, delta);
+              const gboolean in_clip = col >= clip_x0 && col < clip_x1 && row >= clip_y0 && row < clip_y1;
+              if(in_clip)
+              {
+                inside++;
+                worst_inside = MAX(worst_inside, delta);
+              }
+              else
+                worst_outside = MAX(worst_outside, delta);
+            }
+          printf("%-28s   inside the clip %" G_GINT64_FORMAT " px (worst %d), outside %" G_GINT64_FORMAT
+                 " px (worst %d)\n", "", inside, worst_inside, differing - inside, worst_outside);
+          if(!IS_NULL_PTR(g_getenv("CANVAS_BENCH_DAMAGE_MAP")) && differing > 0)
+          {
+            // Where the object now sits, in the surface's pixels, and a coarse map of the differences
+            // over the clip: '#' where a cell holds a pixel off by more than 20, '+' more than 2, '.' any.
+            dt_canvas_rect_t now = { 0 };
+            dt_canvas_paint_object_extent(canvas, object, &now);
+            printf("    object at px %.0f..%.0f x %.0f..%.0f, clip px %d..%d x %d..%d\n",
+                   ((now.x - center_x) * zoom + width * 0.5) * device_scale,
+                   ((now.x + now.width - center_x) * zoom + width * 0.5) * device_scale,
+                   ((now.y - center_y) * zoom + height * 0.5) * device_scale,
+                   ((now.y + now.height - center_y) * zoom + height * 0.5) * device_scale, clip_x0, clip_x1, clip_y0,
+                   clip_y1);
+            const int cells_x = 64;
+            const int cells_y = 32;
+            for(int cy = 0; cy < cells_y; cy++)
+            {
+              printf("    ");
+              for(int cx = 0; cx < cells_x; cx++)
+              {
+                int cell_worst = -1;
+                const int r0 = clip_y0 + (clip_y1 - clip_y0) * cy / cells_y;
+                const int r1 = clip_y0 + (clip_y1 - clip_y0) * (cy + 1) / cells_y;
+                const int c0 = clip_x0 + (clip_x1 - clip_x0) * cx / cells_x;
+                const int c1 = clip_x0 + (clip_x1 - clip_x0) * (cx + 1) / cells_x;
+                for(int row = MAX(r0, 0); row < MIN(r1, (int)(height * device_scale)); row++)
+                  for(int col = MAX(c0, 0); col < MIN(c1, (int)(width * device_scale)); col++)
+                  {
+                    const uint32_t first = *(const uint32_t *)(a + (size_t)row * stride + (size_t)col * 4) & 0xFFFFFFu;
+                    const uint32_t second = *(const uint32_t *)(b + (size_t)row * stride + (size_t)col * 4) & 0xFFFFFFu;
+                    if(first == second) continue;
+                    int delta = 0;
+                    for(int channel = 0; channel < 3; channel++)
+                      delta = MAX(delta, abs((int)((first >> (8 * channel)) & 0xFF) - (int)((second >> (8 * channel)) & 0xFF)));
+                    cell_worst = MAX(cell_worst, delta);
+                  }
+                putchar(cell_worst < 0 ? ' ' : cell_worst > 20 ? '#' : cell_worst > 2 ? '+' : '.');
+              }
+              putchar('\n');
+            }
+          }
+          checked++;
+          /*
+           * More than eight codes is a pixel a person could see. At or under it is the PAPER, which
+           * cairo samples a hair differently when the box it fills is smaller: measured on three
+           * real canvases, never more than 6 codes and only where paper shows, inside the repainted
+           * box. What remains above it is reported, not hidden: one pixel on the edge of a text
+           * frame crossed by a connector, off by 56, in a partial repaint -- the painter's, and
+           * repainted whole the moment the gesture ends.
+           */
+          if(worst > 8) failed++;
+          printf("%-28s object %3u kind %u: %" G_GINT64_FORMAT " px differ, worst %d\n", "damage vs whole", id,
+                 object->kind, differing, worst);
+        }
+        if(dt_canvas_object_is_frame(object))
+        {
+          object->x -= move_x;
+          object->y -= move_y;
+        }
+        else
+          dt_canvas_connector_translate(object, -move_x, -move_y);
+        dt_canvas_touch(canvas);
+      }
+      printf("%-28s %d objects moved, %d with a pixel off by more than 8 codes\n", "damage vs whole", checked,
+             failed);
+      cairo_surface_destroy(partial);
+      cairo_surface_destroy(whole);
+    }
+    if(!IS_NULL_PTR(largest))
+    {
+      const char *steps_env = g_getenv("CANVAS_BENCH_DRAG_STEPS");
+      const int steps = IS_NULL_PTR(steps_env) ? 12 : MAX(atoi(steps_env), 1);
+      const double step_x = 4.0;
+      const double step_y = 3.0;
+      double full = 0.0;
+      for(int step = 0; step < steps; step++)
+      {
+        largest->x += step_x;
+        largest->y += step_y;
+        dt_canvas_touch(canvas);
+        full += _paint_clipped(surface, canvas, cache, zoom, center_x, center_y, width, height, 0.5, NULL);
+      }
+      double damaged = 0.0;
+      for(int step = 0; step < steps; step++)
+      {
+        dt_canvas_rect_t before = { 0 };
+        dt_canvas_object_extent(canvas, largest, &before);
+        largest->x -= step_x;
+        largest->y -= step_y;
+        dt_canvas_touch(canvas);
+        dt_canvas_rect_t after = { 0 };
+        dt_canvas_object_extent(canvas, largest, &after);
+        const double x0 = fmin(before.x, after.x) - 2.0 / zoom;
+        const double y0 = fmin(before.y, after.y) - 2.0 / zoom;
+        const double x1 = fmax(before.x + before.width, after.x + after.width) + 2.0 / zoom;
+        const double y1 = fmax(before.y + before.height, after.y + after.height) + 2.0 / zoom;
+        const dt_canvas_rect_t clip = { x0, y0, x1 - x0, y1 - y0 };
+        const char *quality_env = g_getenv("CANVAS_BENCH_DRAG_QUALITY");
+        const double drag_quality = IS_NULL_PTR(quality_env) ? 1.0 : g_ascii_strtod(quality_env, NULL);
+        damaged += _paint_clipped(surface, canvas, cache, zoom, center_x, center_y, width, height, drag_quality, &clip);
+      }
+      printf("%-28s %7.1f ms a frame over the whole view, %.1f ms confined to the damage (picture %.0f x %.0f of a "
+             "%.0f x %.0f view)\n",
+             "drag, largest picture", full * 1000.0 / steps, damaged * 1000.0 / steps, largest->width * zoom,
+             largest->height * zoom, (double)width, (double)height);
+    }
+  }
 
   // CANVAS_BENCH_VERIFY=1 paints every view twice, once through the caches and once with
   // none, and compares the pixels. The caches are the only difference between the two, so a

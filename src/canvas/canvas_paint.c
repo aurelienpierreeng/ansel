@@ -4052,6 +4052,169 @@ static void _cut_compose(const dt_canvas_paint_options_t *options, float *layer_
 
 
 /** Source-over of one premultiplied float layer onto another of the same box. */
+/* --- what a move repaints ------------------------------------------------------ */
+
+/** Grow `into` to hold `box`; an empty `into` (width < 0) becomes `box`. */
+static void _rect_union(dt_canvas_rect_t *into, const dt_canvas_rect_t *box)
+{
+  if(into->width < 0.0)
+  {
+    *into = *box;
+    return;
+  }
+  const double x0 = fmin(into->x, box->x);
+  const double y0 = fmin(into->y, box->y);
+  const double x1 = fmax(into->x + into->width, box->x + box->width);
+  const double y1 = fmax(into->y + into->height, box->y + box->height);
+  into->x = x0;
+  into->y = y0;
+  into->width = x1 - x0;
+  into->height = y1 - y0;
+}
+
+static gboolean _rects_meet(const dt_canvas_rect_t *a, const dt_canvas_rect_t *b)
+{
+  return a->x < b->x + b->width && b->x < a->x + a->width && a->y < b->y + b->height && b->y < a->y + a->height;
+}
+
+gboolean dt_canvas_paint_object_extent(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                       dt_canvas_rect_t *out)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(object) || IS_NULL_PTR(out)) return FALSE;
+  double min_x = INFINITY;
+  double min_y = INFINITY;
+  double max_x = -INFINITY;
+  double max_y = -INFINITY;
+  double grow = 0.0;
+  if(dt_canvas_object_is_frame(object))
+  {
+    double corners[8];
+    dt_canvas_object_corners(object, corners);
+    for(int idx = 0; idx < 4; idx++)
+    {
+      min_x = fmin(min_x, corners[2 * idx]);
+      min_y = fmin(min_y, corners[2 * idx + 1]);
+      max_x = fmax(max_x, corners[2 * idx]);
+      max_y = fmax(max_y, corners[2 * idx + 1]);
+    }
+    // The padding frame drawn around it while the paddings are shown moves with it.
+    if((canvas->grid_flags & DT_CANVAS_PADDING_VISIBLE) && canvas->padding > 0.0f) grow = (double)canvas->padding;
+  }
+  else if(object->kind == DT_CANVAS_OBJECT_CONNECTOR)
+  {
+    dt_canvas_route_t route;
+    if(!dt_canvas_connector_route(canvas, object, &route) || route.point_count <= 0) return FALSE;
+    for(int idx = 0; idx < route.point_count; idx++)
+    {
+      min_x = fmin(min_x, route.points[2 * idx]);
+      min_y = fmin(min_y, route.points[2 * idx + 1]);
+      max_x = fmax(max_x, route.points[2 * idx]);
+      max_y = fmax(max_y, route.points[2 * idx + 1]);
+    }
+    // The control points and the waypoint are drawn as handles when the line is selected, and
+    // they need not lie on the curve: a steered tangent reaches well past it.
+    const double controls[10] = { route.control1_x, route.control1_y, route.control2_x, route.control2_y,
+                                  route.control3_x, route.control3_y, route.control4_x, route.control4_y,
+                                  route.via_x,      route.via_y };
+    const int control_count = route.segment_count == 2 ? 5 : 2;
+    for(int idx = 0; idx < control_count; idx++)
+    {
+      const double control_x = controls[2 * idx];
+      const double control_y = controls[2 * idx + 1];
+      if(!isfinite(control_x) || !isfinite(control_y)) continue;
+      min_x = fmin(min_x, control_x);
+      min_y = fmin(min_y, control_y);
+      max_x = fmax(max_x, control_x);
+      max_y = fmax(max_y, control_y);
+    }
+    float effective_line = 0.0f;
+    dt_canvas_object_effective_line(canvas, object, NULL, &effective_line);
+    grow = dt_canvas_paint_arrow_reach(effective_line);
+  }
+  else
+    return FALSE;
+  if(!isfinite(min_x) || !isfinite(max_x)) return FALSE;
+  // The larger of the two shadows it can cast, reached exactly as `_object_box()` reaches it.
+  dt_canvas_shadow_t shadow;
+  dt_canvas_object_effective_shadow(canvas, object, &shadow);
+  double shadow_reach = 0.0;
+  if(dt_canvas_shadow_visible(&shadow) && shadow.blur > 0.0f)
+    shadow_reach = fabs(shadow.offset_x) + fabs(shadow.offset_y) + COMPOSE_SHADOW_SIGMAS * shadow.blur;
+  if(object->kind == DT_CANVAS_OBJECT_TEXT && dt_canvas_text_shadow_visible(&object->text.shadow))
+  {
+    const dt_canvas_shadow_t *glyphs = &object->text.shadow;
+    shadow_reach = fmax(shadow_reach, fabs(glyphs->offset_x) + fabs(glyphs->offset_y)
+                                          + COMPOSE_SHADOW_SIGMAS * fmax(glyphs->blur, 0.0f));
+  }
+  grow = fmax(grow, 0.0) + shadow_reach;
+  out->x = min_x - grow;
+  out->y = min_y - grow;
+  out->width = (max_x - min_x) + 2.0 * grow;
+  out->height = (max_y - min_y) + 2.0 * grow;
+  return TRUE;
+}
+
+static gboolean _id_listed(const uint32_t *ids, const size_t count, const uint32_t id)
+{
+  if(id == 0) return FALSE;
+  for(size_t idx = 0; idx < count; idx++)
+    if(ids[idx] == id) return TRUE;
+  return FALSE;
+}
+
+gboolean dt_canvas_paint_move_damage(const dt_canvas_t *canvas, const uint32_t *ids, const size_t count,
+                                     dt_canvas_rect_t *out)
+{
+  if(IS_NULL_PTR(canvas) || IS_NULL_PTR(ids) || IS_NULL_PTR(out) || count == 0) return FALSE;
+  dt_canvas_rect_t damage = { 0.0, 0.0, -1.0, -1.0 };
+  // What the moved frames paint, kept apart: the text frames that flow around them are found by it.
+  dt_canvas_rect_t moved_frames = { 0.0, 0.0, -1.0, -1.0 };
+  for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
+  {
+    const dt_canvas_object_t *object = dt_canvas_object_at(canvas, idx);
+    if(IS_NULL_PTR(object) || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN)) continue;
+    const gboolean moved = _id_listed(ids, count, object->id);
+    // A connector goes wherever the frames it holds go, whether or not it was asked to move.
+    const gboolean follows = object->kind == DT_CANVAS_OBJECT_CONNECTOR
+                             && (_id_listed(ids, count, object->connector.from_id)
+                                 || _id_listed(ids, count, object->connector.to_id));
+    if(!moved && !follows) continue;
+    dt_canvas_rect_t extent;
+    if(!dt_canvas_paint_object_extent(canvas, object, &extent)) continue;
+    _rect_union(&damage, &extent);
+    if(moved && dt_canvas_object_is_frame(object)) _rect_union(&moved_frames, &extent);
+  }
+  if(damage.width < 0.0) return FALSE;
+  if(moved_frames.width >= 0.0)
+  {
+    /*
+     * A text frame that flows around the frames laid over it re-wraps when one of them moves, and
+     * a re-wrapped line can land anywhere in the frame -- so the WHOLE frame is damage, not the
+     * part the mover crosses. Asked before and after the move, so a frame the mover is leaving and
+     * one it is arriving at are both caught.
+     */
+    for(guint idx = 0; idx < dt_canvas_object_count(canvas); idx++)
+    {
+      const dt_canvas_object_t *object = dt_canvas_object_at(canvas, idx);
+      if(IS_NULL_PTR(object) || object->kind != DT_CANVAS_OBJECT_TEXT
+         || (object->flags & DT_CANVAS_OBJECT_FLAG_HIDDEN) || !(object->text.text_flags & DT_CANVAS_TEXT_WRAP_AROUND))
+        continue;
+      dt_canvas_rect_t extent;
+      if(!dt_canvas_paint_object_extent(canvas, object, &extent)) continue;
+      // Grown by the gap it keeps: a frame that clears the text's box by less than that still pushes it.
+      dt_canvas_rect_t reach = extent;
+      const double gap = fmax((double)object->text.wrap_standoff, 0.0);
+      reach.x -= gap;
+      reach.y -= gap;
+      reach.width += 2.0 * gap;
+      reach.height += 2.0 * gap;
+      if(_rects_meet(&reach, &moved_frames)) _rect_union(&damage, &extent);
+    }
+  }
+  *out = damage;
+  return TRUE;
+}
+
 /** The device box an object touches, its shadow included. */
 static dt_canvas_box_t _object_box(const cairo_matrix_t *matrix, const dt_canvas_t *canvas,
                                    const dt_canvas_object_t *object, const dt_canvas_shadow_t *shadow,

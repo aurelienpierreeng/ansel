@@ -97,6 +97,34 @@ dt_canvas_paint_stats_t dt_canvas_paint_last_stats(void);
  */
 double dt_canvas_paint_arrow_reach(double line_width);
 
+/**
+ * @brief Everything this object paints, in canvas units.
+ *
+ * Its frame, turned, or its route with the arrowheads and every control point; grown by the reach
+ * of its shadow and, for a text, of its letters' own shadow; and by the padding drawn around a
+ * frame while the paddings are shown. The canvas-unit twin of the box the painter sizes each
+ * object's layer to, so what it answers is what a repaint of that object can touch.
+ *
+ * @return FALSE when the object paints nothing that can be measured -- an unrouted connector.
+ */
+gboolean dt_canvas_paint_object_extent(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                                       dt_canvas_rect_t *out);
+
+/**
+ * @brief The part of the plane that can change when these objects move, in canvas units.
+ *
+ * What they paint, what every connector attached to one of them paints -- it follows its frame --
+ * and the whole of every text frame flowing around frames whose own paint meets a moved one's,
+ * since its lines can re-wrap anywhere inside it. Asked once before a move and once after, the
+ * union of the two is all a repaint has to cover: everything outside it is pixel for pixel what it
+ * was. `test` in `bench_canvas_paint` holds that against a full repaint on real canvases.
+ *
+ * @param ids the objects being moved; objects not in the canvas are skipped.
+ * @return FALSE when nothing measurable moves, in which case nothing need be repainted either.
+ */
+gboolean dt_canvas_paint_move_damage(const dt_canvas_t *canvas, const uint32_t *ids, size_t count,
+                                     dt_canvas_rect_t *out);
+
 /** @brief Paint one object. */
 void dt_canvas_paint_object(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
                             const dt_canvas_paint_options_t *options);
