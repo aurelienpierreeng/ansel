@@ -277,99 +277,170 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
-static int get_grab(dt_iop_module_t *self, float pointerx, float pointery, float startx, float starty, float endx, float endy,
-                    float zoom_scale)
+/* The vignette is computed on the module's own input frame (piece->buf_in, see process()),
+ * which sits upstream of lens, crop, flip, ashift... Its geometry is therefore stated in that
+ * frame, at full resolution, and only projected through the downstream distortions to be
+ * drawn or hit-tested. */
+typedef struct dt_iop_vignette_geometry_t
 {
-  // trick to convert the radius from image norm to preview abs
-  float radius[2] = { DT_GUI_MOUSE_EFFECT_RADIUS, 0 };
-  dt_dev_coordinates_image_abs_to_image_norm(self->dev, radius, 1);
-  dt_dev_coordinates_image_norm_to_preview_abs(self->dev, radius, 1); 
-  const float radius_sq = radius[0] * radius[0];
- 
-  if((pointerx - startx) * (pointerx - startx) + pointery * pointery <= radius_sq) return 2;  // x size
-  if(pointerx * pointerx + (pointery - starty) * (pointery - starty) <= radius_sq) return 4;  // y size
-  if(pointerx * pointerx + pointery * pointery <= radius_sq)                       return 1;  // center
-  if((pointerx - endx) * (pointerx - endx) + pointery * pointery <= radius_sq)     return 8;  // x falloff
-  if(pointerx * pointerx + (pointery - endy) * (pointery - endy) <= radius_sq)     return 16; // y falloff
+  float width;           // module input frame, full resolution
+  float height;
+  float longest;         // MAX(width, height), the basis of a fixed w/h ratio
+  float cx;              // vignette center
+  float cy;
+  float rx;              // inner radii: start of the falloff
+  float ry;
+  float frx;             // outer radii: end of the falloff
+  float fry;
+  float shape;
+} dt_iop_vignette_geometry_t;
 
+#define VIGNETTE_OUTLINE_SAMPLES 128
+
+static gboolean _vignette_geometry(dt_iop_module_t *self, const dt_iop_vignette_params_t *p,
+                                   dt_iop_vignette_geometry_t *geo)
+{
+  dt_iop_roi_t in;
+  if(!dt_dev_module_geometry_gui(self->dev, self, &in, NULL)) return FALSE;
+  if(in.width <= 0 || in.height <= 0) return FALSE;
+
+  geo->width = in.width;
+  geo->height = in.height;
+  geo->longest = MAX(geo->width, geo->height);
+  geo->cx = (p->center.x + 1.0f) * 0.5f * geo->width;
+  geo->cy = (p->center.y + 1.0f) * 0.5f * geo->height;
+
+  // Half-axes of the unit ellipse, mirroring xscale/yscale in process()
+  float half_x;
+  float half_y;
+  if(p->autoratio)
+  {
+    half_x = 0.5f * geo->width;
+    half_y = 0.5f * geo->height;
+  }
+  else if(p->whratio <= 1.0f)
+  {
+    half_x = 0.5f * geo->longest * p->whratio;
+    half_y = 0.5f * geo->longest;
+  }
+  else
+  {
+    half_x = 0.5f * geo->longest;
+    half_y = 0.5f * geo->longest * (2.0f - p->whratio);
+  }
+
+  const float dscale = p->scale / 100.0f;
+  const float min_falloff = 100.0f / MIN(geo->width, geo->height);
+  const float fscale = MAX(p->falloff_scale, min_falloff) / 100.0f;
+  geo->rx = dscale * half_x;
+  geo->ry = dscale * half_y;
+  geo->frx = (dscale + fscale) * half_x;
+  geo->fry = (dscale + fscale) * half_y;
+  geo->shape = MAX(p->shape, 0.001f);
+  return TRUE;
+}
+
+/* Module frame (full resolution) -> developed image, absolute pixels. */
+static gboolean _module_to_image_abs(dt_iop_module_t *self, float *pts, const size_t count)
+{
+  return dt_dev_distort_transform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, count) != 0;
+}
+
+/* Widget pointer -> module frame (full resolution). */
+static gboolean _widget_to_module(dt_iop_module_t *self, const double x, const double y, float pt[2])
+{
+  pt[0] = (float)x;
+  pt[1] = (float)y;
+  dt_dev_coordinates_widget_to_image_norm(self->dev, pt, 1);
+  dt_dev_coordinates_image_norm_to_image_abs(self->dev, pt, 1);
+  return dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pt, 1) != 0;
+}
+
+/* The five handles in module frame: center, inner x, inner y, outer x, outer y.
+ * Their order is the grab identifiers' bit order below. */
+static void _vignette_handles(const dt_iop_vignette_geometry_t *geo, float pts[10])
+{
+  pts[0] = geo->cx;            pts[1] = geo->cy;
+  pts[2] = geo->cx + geo->rx;  pts[3] = geo->cy;
+  pts[4] = geo->cx;            pts[5] = geo->cy - geo->ry;
+  pts[6] = geo->cx + geo->frx; pts[7] = geo->cy;
+  pts[8] = geo->cx;            pts[9] = geo->cy - geo->fry;
+}
+
+/* Hit test in developed-image pixels, where DT_GUI_MOUSE_EFFECT_RADIUS is expressed.
+ * Returns 1 center, 2 x size, 4 y size, 8 x falloff, 16 y falloff, 0 nothing. */
+static int _get_grab(dt_iop_module_t *self, const dt_iop_vignette_geometry_t *geo, const double x,
+                     const double y)
+{
+  float handles[10];
+  _vignette_handles(geo, handles);
+  if(!_module_to_image_abs(self, handles, 5)) return 0;
+
+  float pointer[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(self->dev, pointer, 1);
+  dt_dev_coordinates_image_norm_to_image_abs(self->dev, pointer, 1);
+
+  const float radius = DT_GUI_MOUSE_EFFECT_RADIUS;
+  const float radius_sq = radius * radius;
+  // Size handles first, so they stay reachable on a vignette shrunk onto its center
+  static const int order[5] = { 1, 2, 0, 3, 4 };
+  for(int k = 0; k < 5; k++)
+  {
+    const int i = order[k];
+    const float dx = pointer[0] - handles[2 * i];
+    const float dy = pointer[1] - handles[2 * i + 1];
+    if(dx * dx + dy * dy <= radius_sq) return 1 << i;
+  }
   return 0;
 }
 
-static void draw_overlay(cairo_t *cr, float x, float y, float fx, float fy, int grab, float zoom_scale)
+/* Superellipse |x/rx|^(2/shape) + |y/ry|^(2/shape) = 1, the iso-line process() thresholds on. */
+static void _outline_sample(const dt_iop_vignette_geometry_t *geo, const float rx, const float ry,
+                            float *pts)
 {
-  // half width/height of the crosshair
-  const float crosshair_w = DT_PIXEL_APPLY_DPI(10.0) / zoom_scale;
-  const float crosshair_h = DT_PIXEL_APPLY_DPI(10.0) / zoom_scale;
-
-  // center crosshair
-  cairo_move_to(cr, -crosshair_w, 0.0);
-  cairo_line_to(cr, crosshair_w, 0.0);
-  cairo_move_to(cr, 0.0, -crosshair_h);
-  cairo_line_to(cr, 0.0, crosshair_h);
-  cairo_stroke(cr);
-
-  // inner border of the vignette
-  cairo_save(cr);
-  if(x <= y)
+  for(int i = 0; i < VIGNETTE_OUTLINE_SAMPLES; i++)
   {
-    cairo_scale(cr, x / y, 1.0);
-    cairo_arc(cr, 0.0, 0.0, y, 0.0, M_PI * 2.0);
+    const float t = 2.0f * M_PI * i / VIGNETTE_OUTLINE_SAMPLES;
+    const float c = cosf(t);
+    const float s = sinf(t);
+    pts[2 * i] = geo->cx + rx * copysignf(powf(fabsf(c), geo->shape), c);
+    pts[2 * i + 1] = geo->cy + ry * copysignf(powf(fabsf(s), geo->shape), s);
   }
-  else
-  {
-    cairo_scale(cr, 1.0, y / x);
-    cairo_arc(cr, 0.0, 0.0, x, 0.0, M_PI * 2.0);
-  }
-  cairo_restore(cr);
-  cairo_stroke(cr);
+}
 
-  // outer border of the vignette
-  cairo_save(cr);
-  if(fx <= fy)
-  {
-    cairo_scale(cr, fx / fy, 1.0);
-    cairo_arc(cr, 0.0, 0.0, fy, 0.0, M_PI * 2.0);
-  }
-  else
-  {
-    cairo_scale(cr, 1.0, fy / fx);
-    cairo_arc(cr, 0.0, 0.0, fx, 0.0, M_PI * 2.0);
-  }
-  cairo_restore(cr);
-  cairo_stroke(cr);
-
-  // the handles
-  const float radius_sel = DT_PIXEL_APPLY_DPI(6.0) / zoom_scale;
-  const float radius_reg = DT_PIXEL_APPLY_DPI(4.0) / zoom_scale;
-  if(grab == 1)
-    cairo_arc(cr, 0.0, 0.0, radius_sel, 0.0, M_PI * 2.0);
-  else
-    cairo_arc(cr, 0.0, 0.0, radius_reg, 0.0, M_PI * 2.0);
-  cairo_stroke(cr);
-  if(grab == 2)
-    cairo_arc(cr, x, 0.0, radius_sel, 0.0, M_PI * 2.0);
-  else
-    cairo_arc(cr, x, 0.0, radius_reg, 0.0, M_PI * 2.0);
-  cairo_stroke(cr);
-  if(grab == 4)
-    cairo_arc(cr, 0.0, -y, radius_sel, 0.0, M_PI * 2.0);
-  else
-    cairo_arc(cr, 0.0, -y, radius_reg, 0.0, M_PI * 2.0);
-  cairo_stroke(cr);
-  if(grab == 8)
-    cairo_arc(cr, fx, 0.0, radius_sel, 0.0, M_PI * 2.0);
-  else
-    cairo_arc(cr, fx, 0.0, radius_reg, 0.0, M_PI * 2.0);
-  cairo_stroke(cr);
-  if(grab == 16)
-    cairo_arc(cr, 0.0, -fy, radius_sel, 0.0, M_PI * 2.0);
-  else
-    cairo_arc(cr, 0.0, -fy, radius_reg, 0.0, M_PI * 2.0);
+static void _draw_closed_path(cairo_t *cr, const float *pts, const int count)
+{
+  cairo_move_to(cr, pts[0], pts[1]);
+  for(int i = 1; i < count; i++) cairo_line_to(cr, pts[2 * i], pts[2 * i + 1]);
+  cairo_close_path(cr);
   cairo_stroke(cr);
 }
 
-// FIXME: For portrait images the overlay is a bit off. The coordinates in mouse_moved seem to be ok though.
-// WTF?
+static void _draw_overlay(cairo_t *cr, const float *inner, const float *outer, const float *handles,
+                          const int grab, const float zoom_scale)
+{
+  // half width/height of the crosshair
+  const float crosshair = DT_PIXEL_APPLY_DPI(10.0) / zoom_scale;
+  cairo_move_to(cr, handles[0] - crosshair, handles[1]);
+  cairo_line_to(cr, handles[0] + crosshair, handles[1]);
+  cairo_move_to(cr, handles[0], handles[1] - crosshair);
+  cairo_line_to(cr, handles[0], handles[1] + crosshair);
+  cairo_stroke(cr);
+
+  _draw_closed_path(cr, inner, VIGNETTE_OUTLINE_SAMPLES);
+  _draw_closed_path(cr, outer, VIGNETTE_OUTLINE_SAMPLES);
+
+  const float radius_sel = DT_PIXEL_APPLY_DPI(6.0) / zoom_scale;
+  const float radius_reg = DT_PIXEL_APPLY_DPI(4.0) / zoom_scale;
+  for(int i = 0; i < 5; i++)
+  {
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, handles[2 * i], handles[2 * i + 1], (grab == (1 << i)) ? radius_sel : radius_reg, 0.0,
+              M_PI * 2.0);
+    cairo_stroke(cr);
+  }
+}
+
 void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t height,
                      int32_t pointerx, int32_t pointery)
 {
@@ -378,167 +449,53 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
-  const float wd = dt_dev_roi_request_preview_width(dev);
-  const float ht = dt_dev_roi_request_preview_height(dev);
-  float bigger_side, smaller_side;
-  if(wd >= ht)
-  {
-    bigger_side = wd;
-    smaller_side = ht;
-  }
-  else
-  {
-    bigger_side = ht;
-    smaller_side = wd;
-  }
+  dt_iop_vignette_geometry_t geo;
+  if(!_vignette_geometry(self, p, &geo)) return;
+
+  // Everything is sampled in the module frame and carried to the preview through the
+  // downstream distortions in one batch: inner outline, outer outline, handles.
+  const size_t count = 2 * VIGNETTE_OUTLINE_SAMPLES + 5;
+  float pts[2 * (2 * VIGNETTE_OUTLINE_SAMPLES + 5)];
+  float *inner = pts;
+  float *outer = pts + 2 * VIGNETTE_OUTLINE_SAMPLES;
+  float *handles = pts + 4 * VIGNETTE_OUTLINE_SAMPLES;
+  _outline_sample(&geo, geo.rx, geo.ry, inner);
+  _outline_sample(&geo, geo.frx, geo.fry, outer);
+  _vignette_handles(&geo, handles);
+  if(!_module_to_image_abs(self, pts, count)) return;
+  dt_dev_coordinates_image_abs_to_image_norm(dev, pts, count);
+  dt_dev_coordinates_image_norm_to_preview_abs(dev, pts, count);
+
+  const int grab = _get_grab(self, &geo, pointerx, pointery);
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
-  float pzxpy[2] = { (float)pointerx, (float)pointery };
-  dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
-  const float pzx = pzxpy[0];
-  const float pzy = pzxpy[1];
   dt_dev_rescale_roi(dev, cr, width, height);
 
-  float vignette_x = (p->center.x + 1.0) * 0.5 * wd;
-  float vignette_y = (p->center.y + 1.0) * 0.5 * ht;
-
-  cairo_translate(cr, vignette_x, vignette_y);
-
-  float vignette_w = p->scale * 0.01 * 0.5 * wd; // start of falloff
-  float vignette_h = p->scale * 0.01 * 0.5 * ht;
-  float vignette_fx = vignette_w + p->falloff_scale * 0.01 * 0.5 * wd; // end of falloff
-  float vignette_fy = vignette_h + p->falloff_scale * 0.01 * 0.5 * ht;
-
-  if(p->autoratio == FALSE)
-  {
-    float factor1 = bigger_side / smaller_side;
-    if(wd >= ht)
-    {
-      float factor2 = (2.0 - p->whratio) * factor1;
-
-      if(p->whratio <= 1)
-      {
-        vignette_h *= factor1;
-        vignette_w *= p->whratio;
-        vignette_fx *= p->whratio;
-        vignette_fy *= factor1;
-      }
-      else
-      {
-        vignette_h *= factor2;
-        vignette_fy *= factor2;
-      }
-    }
-    else
-    {
-      float factor2 = (p->whratio) * factor1;
-
-      if(p->whratio <= 1)
-      {
-        vignette_w *= factor2;
-        vignette_fx *= factor2;
-      }
-      else
-      {
-        vignette_w *= factor1;
-        vignette_h *= (2.0 - p->whratio);
-        vignette_fx *= factor1;
-        vignette_fy *= (2.0 - p->whratio);
-      }
-    }
-  }
-
-  int grab = get_grab(self, pzx * wd - vignette_x, pzy * ht - vignette_y, vignette_w, -vignette_h, vignette_fx,
-                      -vignette_fy, zoom_scale);
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.0) / zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
-  draw_overlay(cr, vignette_w, vignette_h, vignette_fx, vignette_fy, grab, zoom_scale);
+  _draw_overlay(cr, inner, outer, handles, grab, zoom_scale);
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.0) / zoom_scale);
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  draw_overlay(cr, vignette_w, vignette_h, vignette_fx, vignette_fy, grab, zoom_scale);
+  _draw_overlay(cr, inner, outer, handles, grab, zoom_scale);
 }
 
 // FIXME: Pumping of the opposite direction when changing width/height. See two FIXMEs further down.
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
-  const dt_develop_t *dev = (const dt_develop_t *)self->dev;
   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return 0;
-  const float wd = dt_dev_roi_request_preview_width(dev);
-  const float ht = dt_dev_roi_request_preview_height(dev);
-  float bigger_side, smaller_side;
-  if(wd >= ht)
-  {
-    bigger_side = wd;
-    smaller_side = ht;
-  }
-  else
-  {
-    bigger_side = ht;
-    smaller_side = wd;
-  }
 
-  const float zoom_scale = dt_dev_viewport_scaling(dev);
-  float pzxpy[2] = { (float)x, (float)y };
-  dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
-  const float pzx = pzxpy[0];
-  const float pzy = pzxpy[1];
+  dt_iop_vignette_geometry_t geo;
+  if(!_vignette_geometry(self, p, &geo)) return 0;
+  const float longest = geo.longest;
+
   static int old_grab = -1;
   int grab = old_grab;
 
-  float vignette_x = (p->center.x + 1.0) * 0.5 * wd;
-  float vignette_y = (p->center.y + 1.0) * 0.5 * ht;
-
-  float vignette_w = p->scale * 0.01 * 0.5 * wd; // start of falloff
-  float vignette_h = p->scale * 0.01 * 0.5 * ht;
-  float vignette_fx = vignette_w + p->falloff_scale * 0.01 * 0.5 * wd; // end of falloff
-  float vignette_fy = vignette_h + p->falloff_scale * 0.01 * 0.5 * ht;
-
-  if(p->autoratio == FALSE)
-  {
-    float factor1 = bigger_side / smaller_side;
-    if(wd >= ht)
-    {
-      float factor2 = (2.0 - p->whratio) * factor1;
-
-      if(p->whratio <= 1)
-      {
-        vignette_h *= factor1;
-        vignette_w *= p->whratio;
-        vignette_fx *= p->whratio;
-        vignette_fy *= factor1;
-      }
-      else
-      {
-        vignette_h *= factor2;
-        vignette_fy *= factor2;
-      }
-    }
-    else
-    {
-      float factor2 = (p->whratio) * factor1;
-
-      if(p->whratio <= 1)
-      {
-        vignette_w *= factor2;
-        vignette_fx *= factor2;
-      }
-      else
-      {
-        vignette_w *= factor1;
-        vignette_h *= (2.0 - p->whratio);
-        vignette_fx *= factor1;
-        vignette_fy *= (2.0 - p->whratio);
-      }
-    }
-  }
-
   if(grab == 0 || !(dt_control_button_down(1)))
-  {
-    grab = get_grab(self, pzx * wd - vignette_x, pzy * ht - vignette_y, vignette_w, -vignette_h, vignette_fx,
-                    -vignette_fy, zoom_scale);
-  }
+    grab = _get_grab(self, &geo, x, y);
 
   if(dt_control_button_down(1))
   {
@@ -547,89 +504,73 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       dt_control_queue_cursor(GDK_HAND1);
       return 0;
     }
-    else if(grab == 1) // move the center
+
+    float pointer[2];
+    if(!_widget_to_module(self, x, y, pointer)) return 1;
+    const float mx = pointer[0];
+    const float my = pointer[1];
+
+    if(grab == 1) // move the center
     {
-      dt_bauhaus_slider_set(g->center_x, pzx * 2.0 - 1.0);
-      dt_bauhaus_slider_set(g->center_y, pzy * 2.0 - 1.0);
+      dt_bauhaus_slider_set(g->center_x, mx / geo.width * 2.0f - 1.0f);
+      dt_bauhaus_slider_set(g->center_y, my / geo.height * 2.0f - 1.0f);
     }
     else if(grab == 2) // change the width
     {
-      const float max = 0.5 * ((p->whratio <= 1.0) ? bigger_side * p->whratio : bigger_side);
-      const float new_vignette_w = MIN(bigger_side, MAX(0.1, pzx * wd - vignette_x));
-      const float ratio = new_vignette_w / vignette_h;
-      const float new_scale = 100.0 * new_vignette_w / max;
+      const float max = 0.5f * ((p->whratio <= 1.0f) ? longest * p->whratio : longest);
+      const float new_vignette_w = MIN(longest, MAX(0.1f, mx - geo.cx));
+      const float ratio = new_vignette_w / geo.ry;
+      const float new_scale = 100.0f * new_vignette_w / max;
       // FIXME: When going over the 1.0 boundary from wide to narrow (>1.0 -> <=1.0) the height slightly
       // changes, depending on speed.
       //        I guess we have to split the computation.
-      if(ratio <= 1.0)
+      if(ratio <= 1.0f)
       {
         if(dt_modifier_is(which, DT_PRIMARY_MASK))
-        {
           dt_bauhaus_slider_set(g->scale, new_scale);
-        }
         else
-        {
           dt_bauhaus_slider_set(g->whratio, ratio);
-        }
       }
       else
       {
         dt_bauhaus_slider_set(g->scale, new_scale);
-
         if(!dt_modifier_is(which, DT_PRIMARY_MASK))
-        {
-          float new_whratio = 2.0 - 1.0 / ratio;
-          dt_bauhaus_slider_set(g->whratio, new_whratio);
-        }
+          dt_bauhaus_slider_set(g->whratio, 2.0f - 1.0f / ratio);
       }
     }
     else if(grab == 4) // change the height
     {
-      const float new_vignette_h = MIN(bigger_side, MAX(0.1, vignette_y - pzy * ht));
-      const float ratio = new_vignette_h / vignette_w;
-      const float max = 0.5 * ((ratio <= 1.0) ? bigger_side * (2.0 - p->whratio) : bigger_side);
+      const float new_vignette_h = MIN(longest, MAX(0.1f, geo.cy - my));
+      const float ratio = new_vignette_h / geo.rx;
+      const float max = 0.5f * ((ratio <= 1.0f) ? longest * (2.0f - p->whratio) : longest);
       // FIXME: When going over the 1.0 boundary from narrow to wide (>1.0 -> <=1.0) the width slightly
       // changes, depending on speed.
       //        I guess we have to split the computation.
-      if(ratio <= 1.0)
+      if(ratio <= 1.0f)
       {
         if(dt_modifier_is(which, DT_PRIMARY_MASK))
-        {
-          const float new_scale = 100.0 * new_vignette_h / max;
-          dt_bauhaus_slider_set(g->scale, new_scale);
-        }
+          dt_bauhaus_slider_set(g->scale, 100.0f * new_vignette_h / max);
         else
-        {
-          dt_bauhaus_slider_set(g->whratio, 2.0 - ratio);
-        }
+          dt_bauhaus_slider_set(g->whratio, 2.0f - ratio);
       }
       else
       {
-        const float new_scale = 100.0 * new_vignette_h / max;
-        dt_bauhaus_slider_set(g->scale, new_scale);
-
+        dt_bauhaus_slider_set(g->scale, 100.0f * new_vignette_h / max);
         if(!dt_modifier_is(which, DT_PRIMARY_MASK))
-        {
-          const float new_whratio = 1.0 / ratio;
-          dt_bauhaus_slider_set(g->whratio, new_whratio);
-        }
+          dt_bauhaus_slider_set(g->whratio, 1.0f / ratio);
       }
     }
     else if(grab == 8) // change the falloff on the right
     {
-      const float new_vignette_fx = pzx * wd - vignette_x;
-      const float max = 0.5 * ((p->whratio <= 1.0) ? bigger_side * p->whratio : bigger_side);
-      const float delta_x = MIN(2.0f * max, MAX(0.0, new_vignette_fx - vignette_w));
-      const float new_falloff = 100.0 * delta_x / max;
-      dt_bauhaus_slider_set(g->falloff_scale, new_falloff);
+      const float max = 0.5f * ((p->whratio <= 1.0f) ? longest * p->whratio : longest);
+      const float delta_x = MIN(2.0f * max, MAX(0.0f, mx - geo.cx - geo.rx));
+      dt_bauhaus_slider_set(g->falloff_scale, 100.0f * delta_x / max);
     }
     else if(grab == 16) // change the falloff on the top
     {
-      const float new_vignette_fy = vignette_y - pzy * ht;
-      const float max = 0.5 * ((p->whratio > 1.0) ? bigger_side * (2.0 - p->whratio) : bigger_side);
-      const float delta_y = MIN(2.0f * max, MAX(0.0, new_vignette_fy - vignette_h));
-      const float new_falloff = 100.0 * delta_y / max;
-      dt_bauhaus_slider_set(g->falloff_scale, new_falloff);
+      const float max = 0.5f * ((p->whratio > 1.0f) ? longest * (2.0f - p->whratio) : longest);
+      const float delta_y = MIN(2.0f * max, MAX(0.0f, geo.cy - my - geo.ry));
+      dt_bauhaus_slider_set(g->falloff_scale, 100.0f * delta_y / max);
     }
     dt_control_queue_redraw_center();
     return 1;
@@ -638,13 +579,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   {
     if(grab == 1)
       dt_control_queue_cursor(GDK_FLEUR);
-    else if(grab == 2)
+    else if(grab == 2 || grab == 8)
       dt_control_queue_cursor(GDK_SB_H_DOUBLE_ARROW);
-    else if(grab == 4)
-      dt_control_queue_cursor(GDK_SB_V_DOUBLE_ARROW);
-    else if(grab == 8)
-      dt_control_queue_cursor(GDK_SB_H_DOUBLE_ARROW);
-    else if(grab == 16)
+    else if(grab == 4 || grab == 16)
       dt_control_queue_cursor(GDK_SB_V_DOUBLE_ARROW);
   }
   else
