@@ -31,6 +31,7 @@
 #include "system/atomic.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
+#include "system/openmp.h"
 
 #include <curl/curl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -1417,9 +1418,7 @@ static void _mask_clip_rounded(float *fine, const int fine_width, const int fine
   const double right = fine_width - inset;
   const double bottom = fine_height - inset;
   const double corner = CLAMP(radius, 0.0, 0.5 * fmin(right - left, bottom - top));
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < fine_height; row++)
   {
     float *line = fine + (size_t)row * fine_width;
@@ -1502,9 +1501,7 @@ static float *_mask_downsample(const float *fine, const int fine_width, const in
   float *coarse = dt_alloc_align_float((size_t)width * height);
   if(IS_NULL_PTR(coarse)) return NULL;
   const float norm = 1.0f / (float)(factor * factor);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < height; row++)
   {
     for(int col = 0; col < width; col++)
@@ -1533,9 +1530,7 @@ static cairo_surface_t *_alpha_surface(const float *raster, const int width, con
   cairo_surface_flush(surface);
   uint8_t *pixels = cairo_image_surface_get_data(surface);
   const int stride = cairo_image_surface_get_stride(surface);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < height; row++)
   {
     const float *source = raster + (size_t)row * width;
@@ -1552,9 +1547,7 @@ static cairo_surface_t *_alpha_surface(const float *raster, const int width, con
 /** A fine raster, thresholded in place to the shape's support. */
 static void _mask_threshold(float *fine, const size_t count)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(size_t idx = 0; idx < count; idx++) fine[idx] = fine[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 1.0f : 0.0f;
 }
 
@@ -1626,35 +1619,30 @@ static void _distance_1d(const float *f, float *out, int *vertices, float *bound
   }
 }
 
-/* The rows of the distance transform, each thread with its own scratch. FALSE when one could not get it. */
+/*
+ * The rows of the distance transform, each thread with its own scratch. FALSE when one could not
+ * get it: the rows that thread was dealt are then left as they were, and the caller throws the
+ * result away. Every thread still meets the loop, because OpenMP asks a worksharing loop to be met
+ * by the whole team or by none of it -- a thread without its scratch used to step round it -- and
+ * the reduction is what tells the caller, with no atomic write.
+ */
 static gboolean _distance_rows(float *distance, const int width, const int height)
 {
   gboolean ok = TRUE;
-#ifdef _OPENMP
-#pragma omp parallel default(firstprivate) shared(ok, distance)
-#endif
+  __OMP_PARALLEL__(shared(distance) reduction(&& : ok))
   {
     float *line_out = dt_alloc_align_float((size_t)width);
     int *vertices = g_new(int, width);
     float *boundaries = g_new(float, width + 1);
-    if(IS_NULL_PTR(line_out) || IS_NULL_PTR(vertices) || IS_NULL_PTR(boundaries))
+    const gboolean ready = !IS_NULL_PTR(line_out) && !IS_NULL_PTR(vertices) && !IS_NULL_PTR(boundaries);
+    ok = ok && ready;
+    __OMP_FOR__()
+    for(int row = 0; row < height; row++)
     {
-#ifdef _OPENMP
-#pragma omp atomic write
-#endif
-      ok = FALSE;
-    }
-    else
-    {
-#ifdef _OPENMP
-#pragma omp for schedule(static)
-#endif
-      for(int row = 0; row < height; row++)
-      {
-        float *line = distance + (size_t)row * width;
-        _distance_1d(line, line_out, vertices, boundaries, width);
-        memcpy(line, line_out, (size_t)width * sizeof(float));
-      }
+      if(!ready) continue;
+      float *line = distance + (size_t)row * width;
+      _distance_1d(line, line_out, vertices, boundaries, width);
+      memcpy(line, line_out, (size_t)width * sizeof(float));
     }
     dt_free(vertices);
     dt_free(boundaries);
@@ -1663,36 +1651,26 @@ static gboolean _distance_rows(float *distance, const int width, const int heigh
   return ok;
 }
 
-/* The columns, gathered and scattered through a per-thread line. */
+/* The columns, gathered and scattered through a per-thread line; the same bargain as the rows. */
 static gboolean _distance_columns(float *distance, const int width, const int height)
 {
   gboolean ok = TRUE;
-#ifdef _OPENMP
-#pragma omp parallel default(firstprivate) shared(ok, distance)
-#endif
+  __OMP_PARALLEL__(shared(distance) reduction(&& : ok))
   {
     float *line = dt_alloc_align_float((size_t)height);
     float *line_out = dt_alloc_align_float((size_t)height);
     int *vertices = g_new(int, height);
     float *boundaries = g_new(float, height + 1);
-    if(IS_NULL_PTR(line) || IS_NULL_PTR(line_out) || IS_NULL_PTR(vertices) || IS_NULL_PTR(boundaries))
+    const gboolean ready = !IS_NULL_PTR(line) && !IS_NULL_PTR(line_out) && !IS_NULL_PTR(vertices)
+                           && !IS_NULL_PTR(boundaries);
+    ok = ok && ready;
+    __OMP_FOR__()
+    for(int col = 0; col < width; col++)
     {
-#ifdef _OPENMP
-#pragma omp atomic write
-#endif
-      ok = FALSE;
-    }
-    else
-    {
-#ifdef _OPENMP
-#pragma omp for schedule(static)
-#endif
-      for(int col = 0; col < width; col++)
-      {
-        for(int row = 0; row < height; row++) line[row] = distance[(size_t)row * width + col];
-        _distance_1d(line, line_out, vertices, boundaries, height);
-        for(int row = 0; row < height; row++) distance[(size_t)row * width + col] = line_out[row];
-      }
+      if(!ready) continue;
+      for(int row = 0; row < height; row++) line[row] = distance[(size_t)row * width + col];
+      _distance_1d(line, line_out, vertices, boundaries, height);
+      for(int row = 0; row < height; row++) distance[(size_t)row * width + col] = line_out[row];
     }
     dt_free(vertices);
     dt_free(boundaries);
@@ -1735,9 +1713,7 @@ cairo_surface_t *dt_canvas_render_mask_band(const dt_canvas_object_t *object, co
     // Squared distance to the nearest pixel of the support: 0 inside, "infinite" outside, then the two passes.
     const int longest = MAX(fine_width, fine_height);
     const float unreached = (float)longest * longest * 4.0f; // not `far`: a Windows macro
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+    __OMP_PARALLEL_FOR__()
     for(size_t idx = 0; idx < count; idx++)
       distance[idx] = fine[idx] > CANVAS_MASK_SUPPORT_THRESHOLD ? 0.0f : unreached;
     const gboolean transformed = _distance_rows(distance, fine_width, fine_height)
@@ -1745,9 +1721,7 @@ cairo_surface_t *dt_canvas_render_mask_band(const dt_canvas_object_t *object, co
     if(transformed)
     {
       const float fine_radius = (float)radius * factor;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+      __OMP_PARALLEL_FOR__()
       for(size_t idx = 0; idx < count; idx++)
       {
         const float reach = CLAMP(fine_radius + 0.5f - sqrtf(distance[idx]), 0.0f, 1.0f);
@@ -1954,9 +1928,7 @@ cairo_surface_t *dt_canvas_render_rescale(cairo_surface_t *source, const int wid
   }
   const gboolean shrink_x = width < source_width;
   const gboolean shrink_y = height < source_height;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < source_height; row++)
   {
     const uint32_t *line = (const uint32_t *)(pixels + (size_t)row * source_stride);
@@ -1996,9 +1968,7 @@ cairo_surface_t *dt_canvas_render_rescale(cairo_surface_t *source, const int wid
   cairo_surface_flush(target);
   uint8_t *target_pixels = cairo_image_surface_get_data(target);
   const int target_stride = cairo_image_surface_get_stride(target);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < height; row++)
   {
     uint32_t *line = (uint32_t *)(target_pixels + (size_t)row * target_stride);

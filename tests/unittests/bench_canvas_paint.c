@@ -40,6 +40,7 @@
 #include "common/conf.h"
 #include "common/times.h"
 #include "darktable.h"
+#include "system/openmp.h"
 
 #include <cairo.h>
 #include <glib.h>
@@ -53,9 +54,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <cmocka.h>
-#ifdef _OPENMP
-#include <omp.h>
-#endif
 
 static char *_rcfile = NULL;
 
@@ -67,11 +65,7 @@ static int _group_setup(void **state)
   darktable.conf = (dt_conf_t *)calloc(1, sizeof(dt_conf_t));
   dt_conf_init(darktable.conf, _rcfile, NULL);
   // The parallel loops size their scratch from this, as dt_init() sets it.
-#ifdef _OPENMP
   darktable.num_openmp_threads = omp_get_max_threads();
-#else
-  darktable.num_openmp_threads = 1;
-#endif
   dt_colorprofiles_init();
   return dt_dev_pixelpipe_cache_init(512u * 1024u * 1024u, FALSE, FALSE) ? 0 : 1;
 }

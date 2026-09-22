@@ -174,9 +174,7 @@ static void _dilate_rows(float *plane, float *prefix, float *suffix, const int w
 {
   const int span = 2 * half + 1;
   if(2 * half >= width) return;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static) if(threaded)
-#endif
+  __OMP_PARALLEL_FOR__(if(threaded))
   for(int row = 0; row < height; row++)
   {
     float *line = plane + (size_t)row * width;
@@ -228,9 +226,7 @@ static void _dilate_lines(float *plane, float *prefix, float *suffix, const int 
   if(2 * margin_x >= width || 2 * margin_y >= height) return;
   const int block_rows = span * vy;
   const int blocks = (height + block_rows - 1) / block_rows;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static) if(threaded)
-#endif
+  __OMP_PARALLEL_FOR__(if(threaded))
   for(int block = 0; block < blocks; block++)
   {
     const int top = block * block_rows;
@@ -249,9 +245,7 @@ static void _dilate_lines(float *plane, float *prefix, float *suffix, const int 
     }
   }
   // Both ends of each window, read from the two runs, wherever the window lies inside the plane.
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static) if(threaded)
-#endif
+  __OMP_PARALLEL_FOR__(if(threaded))
   for(int row = margin_y; row < height - margin_y; row++)
   {
     float *target = plane + (size_t)row * width;
@@ -321,9 +315,7 @@ static gboolean _dilate_tiled(float *plane, float *out, const int width, const i
   }
 
   // The smallest and the largest value of every cell.
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int cell_y = 0; cell_y < cells_y; cell_y++)
   {
     float *row_low = low + (size_t)cell_y * cells_x;
@@ -392,9 +384,7 @@ static gboolean _dilate_tiled(float *plane, float *out, const int width, const i
 
   // Each of them grown in its thread's buffers, the core written to `out` so no tile reads a
   // neighbour another has already grown.
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static, 1)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int index = 0; index < count; index++)
   {
     float *buffer = buffers + area * 3 * (size_t)dt_get_thread_num();
@@ -430,9 +420,7 @@ static gboolean _dilate_tiled(float *plane, float *out, const int width, const i
   }
 
   // Every grown core back into the plane; the tiles left alone already hold their answer.
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int index = 0; index < count; index++)
   {
     const int x0 = (active[index] % tiles_x) * tile;

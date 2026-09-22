@@ -26,6 +26,7 @@
 #include "common/times.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
+#include "system/openmp.h"
 
 #include <math.h>
 #include <pango/pangocairo.h>
@@ -1085,9 +1086,7 @@ static void _dither_canvas(float *canvas_rgba, const dt_canvas_box_t *box, const
   const float sigma = (float)(PAPER_DITHER_SIGMA * strength * CLAMP(sqrt(zoom), 0.5, 2.0));
   if(sigma <= 0.0f) return;
   const float *noise = _dither_noise();
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < box->height; row++)
   {
     float *pixel = canvas_rgba + (size_t)row * box->width * 4;
@@ -3321,9 +3320,7 @@ static void _layer_linearise(cairo_surface_t *surface, const float opacity, floa
   const int stride = cairo_image_surface_get_stride(surface);
   const int width = cairo_image_surface_get_width(surface);
   const int height = cairo_image_surface_get_height(surface);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) shared(_eotf_lut) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__(shared(_eotf_lut))
   for(int row = 0; row < height; row++)
   {
     const uint32_t *source = (const uint32_t *)(pixels + (size_t)row * stride);
@@ -3345,9 +3342,7 @@ static void _canvas_over_surface(float *canvas_rgba, const dt_canvas_box_t *canv
   cairo_surface_flush(surface);
   const uint8_t *pixels = cairo_image_surface_get_data(surface);
   const int stride = cairo_image_surface_get_stride(surface);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) shared(_eotf_lut) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__(shared(_eotf_lut))
   for(int row = 0; row < rows; row++)
   {
     const int y = area->y + row;
@@ -3386,9 +3381,7 @@ static void _canvas_encode(const float *rgba, cairo_surface_t *surface, const gb
   // out with the colour and nothing has to be divided back.
   if(cairo_image_surface_get_format(surface) == CAIRO_FORMAT_ARGB32)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) shared(_oetf_lut) schedule(static)
-#endif
+    __OMP_PARALLEL_FOR__(shared(_oetf_lut))
     for(int row = 0; row < height; row++)
     {
       const float *source = rgba + (size_t)row * width * 4;
@@ -3415,9 +3408,7 @@ static void _canvas_encode(const float *rgba, cairo_surface_t *surface, const gb
     cairo_surface_mark_dirty(surface);
     return;
   }
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) shared(_oetf_lut) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__(shared(_oetf_lut))
   for(int row = 0; row < height; row++)
   {
     const float *source = rgba + (size_t)row * width * 4;
@@ -3442,9 +3433,7 @@ static void _canvas_over(float *canvas_rgba, const dt_canvas_box_t *canvas_box, 
   const int rows = area->height;
   const int cols = area->width;
   if(rows <= 0 || cols <= 0) return;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < rows; row++)
   {
     const int y = area->y + row;
@@ -3465,9 +3454,7 @@ static void _canvas_over(float *canvas_rgba, const dt_canvas_box_t *canvas_box, 
 static void _box_blur(float *plane, float *scratch, const int width, const int height, const int radius)
 {
   const float norm = 1.0f / (float)(2 * radius + 1);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < height; row++)
   {
     const float *source = plane + (size_t)row * width;
@@ -3574,9 +3561,7 @@ static float *_shadow_plane(const dt_canvas_paint_options_t *options, const dt_c
   const int layer_height = layer_box->height;
   const int layer_width = layer_box->width;
   const int margin = *pad;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < height; row++)
   {
     float *target = alpha + (size_t)row * width;
@@ -3633,9 +3618,7 @@ static void _canvas_shadow(const dt_canvas_paint_options_t *options, float *canv
   // The plane is the layer's box grown by the padding the extent's grow asked for, if any.
   const int plane_width = layer_box->width + 2 * pad;
   const int plane_height = layer_box->height + 2 * pad;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < rows; row++)
   {
     const int y = area->y + row;
@@ -3682,9 +3665,7 @@ static void _layer_over_shadow(const dt_canvas_paint_options_t *options, float *
   const int cols = layer_box->width;
   const int plane_width = cols + 2 * pad;
   const int plane_height = rows + 2 * pad;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < rows; row++)
   {
     float *target = layer_rgba + (size_t)row * cols * 4;
@@ -3716,9 +3697,7 @@ static void _layer_over_surface(float *layer_rgba, const dt_canvas_box_t *layer_
   cairo_surface_flush(surface);
   const uint8_t *pixels = cairo_image_surface_get_data(surface);
   const int stride = cairo_image_surface_get_stride(surface);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < rows; row++)
   {
     const uint32_t *line = (const uint32_t *)(pixels + (size_t)row * stride);
@@ -3760,9 +3739,7 @@ static void _layer_inset_shadow(const dt_canvas_paint_options_t *options, float 
   const int cols = layer_box->width;
   const int plane_width = cols + 2 * pad;
   const int plane_height = rows + 2 * pad;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < rows; row++)
   {
     float *target = layer_rgba + (size_t)row * cols * 4;
@@ -4047,9 +4024,7 @@ static void _cut_compose(const dt_canvas_paint_options_t *options, float *layer_
       }
       const int rows = layer_box->height;
       const int cols = layer_box->width;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
-#endif
+      __OMP_PARALLEL_FOR__()
       for(int row = 0; row < rows; row++)
       {
         float *target = layer_rgba + (size_t)row * cols * 4;
