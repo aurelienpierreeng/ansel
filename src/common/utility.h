@@ -44,6 +44,7 @@
 
 #include <gtk/gtk.h>
 #include <string.h>
+#include <stdio.h>
 #include <librsvg/rsvg.h>
 
 #ifdef __cplusplus
@@ -57,6 +58,15 @@ extern "C" {
  * @return size_t length of the string
  */
 size_t safe_strlen(const char *str);
+
+/**
+ * @brief Compare the remaining bytes of two borrowed binary streams.
+ *
+ * Reads bounded chunks until a mismatch or EOF, without closing either stream.
+ * The caller retains ownership and decides whether equality permits deletion.
+ * @return 1 for identical streams, 0 for different content, -1 on allocation or read failure.
+ */
+int dt_util_streams_equal(FILE *first, FILE *second);
 
 /** dynamically allocate and concatenate string */
 gchar *dt_util_dstrcat(gchar *str, const gchar *format, ...) __attribute__((format(printf, 2, 3)));
