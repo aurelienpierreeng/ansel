@@ -88,7 +88,7 @@ static dt_imageio_retval_t dt_imageio_open_rawspeed_sraw (dt_image_t *img,
                                                           const RawImage r,
                                                           dt_mipmap_buffer_t *buf);
 static CameraMetaData *meta = NULL;
-static std::once_flag meta_once;
+static std::mutex meta_mutex;
 
 /** Load rawspeed's cameras.xml exactly once, whichever thread gets here first.
  *
@@ -98,19 +98,30 @@ static std::once_flag meta_once;
  * of the object. It also meant a one-time initialisation shared a lock with the watermark
  * renderer and the export filename allocator, which have nothing to do with it.
  *
- * std::call_once is the mechanism this always wanted: no lock of our own, correct
- * publication, and -- unlike pthread_once -- a throwing initialiser leaves the flag unset
- * and propagates, so a corrupt cameras.xml is retried rather than latched as "done". The
- * object is intentionally never freed; it lives until the process exits.
+ * The test and the store now happen under a lock this initialisation owns alone, so the
+ * pointer is published in order and nothing else contends for it. A throwing initialiser
+ * leaves `meta` NULL and propagates through the guard's destructor, so a corrupt
+ * cameras.xml is retried rather than latched as "done". The object is intentionally never
+ * freed; it lives until the process exits.
+ *
+ * std::call_once, which says all of that in one line, is NOT usable here: mingw-w64's
+ * libstdc++ is built with emulated TLS and therefore defines the two thread-locals that
+ * back it as `__emutls_v._ZSt11__once_call` / `__emutls_v._ZSt15__once_callable`, while
+ * clang emits native TLS references to the bare symbols -- so the Windows build fails to
+ * link with `undefined symbol: std::__once_call`. The lock costs one uncontended
+ * acquisition per file opened, against reading a raw off the disk.
  */
 static void dt_rawspeed_load_meta()
 {
-  std::call_once(meta_once, [] {
+  std::lock_guard<std::mutex> lock(meta_mutex);
+
+  if(IS_NULL_PTR(meta))
+  {
     char datadir[DT_PATH_MAX] = { 0 }, camfile[DT_PATH_MAX] = { 0 };
     dt_loc_get_datadir(datadir, sizeof(datadir));
     dt_concat_path_file(camfile, datadir, "rawspeed/cameras.xml");
     meta = new CameraMetaData(camfile);
-  });
+  }
 }
 
 gboolean dt_rawspeed_lookup_makermodel(const char *maker,
