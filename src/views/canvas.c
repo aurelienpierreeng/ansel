@@ -364,6 +364,15 @@ static gboolean _interaction_settled(gpointer data)
 {
   dt_view_t *self = (dt_view_t *)data;
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
+  /*
+   * A button still held is a gesture still going, however long since the last event. The pause
+   * this timer waits for is the one a wheel or the arrow keys leave, which have no release to end
+   * on; a drag has one. Measured, one frame of a drag costs 170 to 400 ms on real canvases, longer
+   * than this timer's 180, and the main loop is blocked for the whole of it -- so by the time the
+   * next motion arrived the timer had fired, mid-drag: quality back to full, the properties synced,
+   * and a whole extra full-quality repaint queued between two motion events.
+   */
+  if(view->drag != DT_CANVAS_DRAG_NONE) return G_SOURCE_CONTINUE;
   view->interaction_timeout = 0;
   view->interacting = FALSE;
   // The gesture has paused: properties it hid come back where the objects now are.
@@ -4526,7 +4535,17 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   cairo_scale(cr, view->zoom, view->zoom);
   cairo_translate(cr, -view->center_x, -view->center_y);
   dt_canvas_paint_options_t options = dt_canvas_paint_options_display(view->cache, 1.0 / view->zoom, _visible_rect(view));
-  options.quality = view->interacting ? 0.5 : 1.0;
+  /*
+   * The gesture's reduced quality is for gestures that repaint the WHOLE view and change the size
+   * of what is on it -- a zoom, a pan -- where it keeps a drawing's re-render affordable. Moving,
+   * resizing or turning objects repaints only what they touch, and at half quality every picture
+   * inside that box would be drawn softer than the same picture outside it: a rectangle of blur
+   * travelling with the drag. Nor does a move save anything by it: nothing changes size, so every
+   * full-size sprite is already made, and the half-size ones would have to be.
+   */
+  const gboolean repaints_part
+      = view->drag == DT_CANVAS_DRAG_MOVE || view->drag == DT_CANVAS_DRAG_SCALE || view->drag == DT_CANVAS_DRAG_ROTATE;
+  options.quality = view->interacting && !repaints_part ? 0.5 : 1.0;
   dt_canvas_paint(cr, view->canvas, &options);
 
   for(guint idx = 0; idx < dt_canvas_object_count(view->canvas); idx++)
@@ -4848,6 +4867,37 @@ static dt_canvas_object_t *_via_handle_at(const dt_canvas_view_t *view, const do
     if(hit) return object;
   }
   return NULL;
+}
+
+/**
+ * Put every selected object back where the press found it, from the gesture's snapshot: the
+ * position fields only, which is all a move changes -- a frame's centre, a line's free points and
+ * its waypoint.
+ */
+static void _selection_restore_positions(dt_canvas_view_t *view)
+{
+  if(IS_NULL_PTR(view->drag_snapshot)) return;
+  for(guint idx = 0; idx < view->selection->len; idx++)
+  {
+    const uint32_t id = g_array_index(view->selection, uint32_t, idx);
+    dt_canvas_object_t *object = dt_canvas_find_object(view->canvas, id);
+    const dt_canvas_object_t *origin = dt_canvas_find_object(view->drag_snapshot, id);
+    if(IS_NULL_PTR(object) || IS_NULL_PTR(origin)) continue;
+    if(dt_canvas_object_is_frame(object))
+    {
+      object->x = origin->x;
+      object->y = origin->y;
+    }
+    else if(object->kind == DT_CANVAS_OBJECT_CONNECTOR)
+    {
+      object->connector.from_x = origin->connector.from_x;
+      object->connector.from_y = origin->connector.from_y;
+      object->connector.to_x = origin->connector.to_x;
+      object->connector.to_y = origin->connector.to_y;
+      object->connector.via_x = origin->connector.via_x;
+      object->connector.via_y = origin->connector.via_y;
+    }
+  }
 }
 
 static void _move_selection(dt_canvas_view_t *view, const double delta_x, const double delta_y)
@@ -5564,6 +5614,18 @@ static void _end_gesture(dt_view_t *self)
   view->guide_width_valid = FALSE;
   view->guide_height_valid = FALSE;
   _cursor_for_armed_tool(view);
+  /*
+   * A gesture that ends on a release HAS settled: nothing is in motion any more. Left to the idle
+   * timer, which exists for the wheel and its lack of a release, the view repainted twice after
+   * every drag -- once at the gesture's half quality straight away, and again at full quality a
+   * moment later -- a flash of softness on every release.
+   */
+  if(view->interaction_timeout != 0)
+  {
+    g_source_remove(view->interaction_timeout);
+    view->interaction_timeout = 0;
+  }
+  view->interacting = FALSE;
   // Properties the gesture hid come back; a rubber band that changed the selection closes them.
   _props_sync(self);
   dt_control_queue_redraw_center();
@@ -6020,6 +6082,42 @@ static gboolean _drag_changes_the_document(const dt_canvas_drag_t drag)
   }
 }
 
+/**
+ * What changing the selection's geometry repaints, in canvas units: the painter's own answer for
+ * the selected objects, the connectors that follow them and the text that flows around them.
+ */
+static gboolean _selection_damage(const dt_canvas_view_t *view, dt_canvas_rect_t *out)
+{
+  if(view->selection->len == 0) return FALSE;
+  return dt_canvas_paint_move_damage(view->canvas, (const uint32_t *)view->selection->data, view->selection->len, out);
+}
+
+/**
+ * Repaint only this part of the plane, grown by what the handles draw around a frame -- the rotate
+ * knob stands its offset above the edge and every handle has a size of its own. A rectangle that
+ * would cover most of the view is not worth the bookkeeping, and asks for the whole view instead.
+ */
+static void _queue_redraw_canvas_rect(const dt_canvas_view_t *view, const dt_canvas_rect_t *damage)
+{
+  const double margin = DT_CANVAS_ROTATE_HANDLE_OFFSET_PIXELS + 2.0 * DT_CANVAS_HANDLE_PIXELS;
+  const double left = (damage->x - view->center_x) * view->zoom + view->width * 0.5 - margin;
+  const double top = (damage->y - view->center_y) * view->zoom + view->height * 0.5 - margin;
+  const double right = left + damage->width * view->zoom + 2.0 * margin;
+  const double bottom = top + damage->height * view->zoom + 2.0 * margin;
+  const int x0 = (int)floor(fmax(left, 0.0));
+  const int y0 = (int)floor(fmax(top, 0.0));
+  const int x1 = (int)ceil(fmin(right, (double)view->width));
+  const int y1 = (int)ceil(fmin(bottom, (double)view->height));
+  if(x1 <= x0 || y1 <= y0) return;
+  const double covered = (double)(x1 - x0) * (double)(y1 - y0);
+  if(covered > 0.7 * (double)view->width * (double)view->height)
+  {
+    dt_control_queue_redraw_center();
+    return;
+  }
+  gtk_widget_queue_draw_area(dt_gui_center_widget(), x0, y0, x1 - x0, y1 - y0);
+}
+
 void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which)
 {
   dt_canvas_view_t *view = (dt_canvas_view_t *)self->data;
@@ -6037,6 +6135,25 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   }
   const double delta_x = canvas_x - view->last_x;
   const double delta_y = canvas_y - view->last_y;
+  /*
+   * What this event repaints, when it can be bounded. A drag used to repaint the WHOLE view on
+   * every motion event, and the composite cache cannot help a document that changes each time:
+   * measured on real canvases at 2560 x 1440 and a device scale of 2, 176 to 395 ms a frame --
+   * two to six frames a second, and the events that queued up behind each frame arriving as one
+   * jump. Only what the moved objects paint, before and after, can change; confined to that the
+   * same frames cost 32 to 129 ms, and the painter is held to a full repaint pixel for pixel over
+   * every object of those canvases by `bench_canvas_paint` (CANVAS_BENCH_DAMAGE).
+   */
+  gboolean damage_known = FALSE;
+  dt_canvas_rect_t damage = { 0.0, 0.0, 0.0, 0.0 };
+  const gboolean geometry_drag = view->drag == DT_CANVAS_DRAG_MOVE || view->drag == DT_CANVAS_DRAG_SCALE
+                                 || view->drag == DT_CANVAS_DRAG_ROTATE;
+  // The cutout editor draws handles that need not lie inside the frame: those repaint everything.
+  const gboolean damage_bounded = geometry_drag && !view->mask_editing && _selection_damage(view, &damage);
+  // A resize matched to a neighbour draws guide lines across the view, outside every object; the
+  // frame that drew them last must be able to erase them, so this is read before the motion too.
+  const gboolean guides_before
+      = view->drag == DT_CANVAS_DRAG_SCALE && (view->guide_width_valid || view->guide_height_valid);
 
   switch(view->drag)
   {
@@ -6053,7 +6170,25 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
         break;
       view->drag_moved = TRUE;
       _interaction_touch(self);
-      _move_selection(view, delta_x, delta_y);
+      /*
+       * FROM THE PRESS, never from the last event. The selection is put back where the press found
+       * it and moved by the whole displacement since, and only then snapped -- so where it lands is
+       * a function of where the pointer is and nothing else.
+       *
+       * Moved by each event's own delta instead, two things went wrong. The snap was applied to a
+       * position the PREVIOUS snap had already pulled onto a line, so every event smaller than the
+       * snap distance was pulled straight back and the frame stuck to a guide until one event alone
+       * carried it clear: a drag that felt held back by a threshold and dropped frames in steps.
+       * And the ground covered inside the start threshold was thrown away, so the frame lagged the
+       * point it was grabbed by for the whole gesture.
+       */
+      if(!IS_NULL_PTR(view->drag_snapshot))
+      {
+        _selection_restore_positions(view);
+        _move_selection(view, canvas_x - view->press_x, canvas_y - view->press_y);
+      }
+      else
+        _move_selection(view, delta_x, delta_y);
       if(view->selection->len > 0) _snap_selection(view, _snap_leader(view));
       break;
     case DT_CANVAS_DRAG_SCALE:
@@ -6434,6 +6569,24 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       return;
     }
   }
+  if(damage_bounded && view->drag_moved)
+  {
+    dt_canvas_rect_t after = { 0.0, 0.0, 0.0, 0.0 };
+    const gboolean guides_after
+        = view->drag == DT_CANVAS_DRAG_SCALE && (view->guide_width_valid || view->guide_height_valid);
+    if(!guides_before && !guides_after && _selection_damage(view, &after))
+    {
+      const double x0 = fmin(damage.x, after.x);
+      const double y0 = fmin(damage.y, after.y);
+      const double x1 = fmax(damage.x + damage.width, after.x + after.width);
+      const double y1 = fmax(damage.y + damage.height, after.y + after.height);
+      damage.x = x0;
+      damage.y = y0;
+      damage.width = x1 - x0;
+      damage.height = y1 - y0;
+      damage_known = TRUE;
+    }
+  }
   if(_drag_changes_the_document(view->drag)) dt_canvas_touch(view->canvas);
   // A gesture that has really moved something hides the properties until it settles. A rubber
   // band moves nothing, so the same threshold as a move decides when it has started.
@@ -6445,7 +6598,10 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   view->pointer_y = canvas_y;
   view->last_x = canvas_x;
   view->last_y = canvas_y;
-  dt_control_queue_redraw_center();
+  if(damage_known)
+    _queue_redraw_canvas_rect(view, &damage);
+  else
+    dt_control_queue_redraw_center();
 }
 
 int button_released(dt_view_t *self, double x, double y, int which, uint32_t state)
