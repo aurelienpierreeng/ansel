@@ -1696,15 +1696,18 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     dt_free(normalized_filename);
     return 0;
   }
-  const char *cc = normalized_filename + strlen(normalized_filename);
-  for(; *cc != '.' && cc > normalized_filename; cc--)
-    ;
-  if(!strcasecmp(cc, ".dt") || !strcasecmp(cc, ".dttags") || !strcasecmp(cc, ".xmp"))
+  const char *extension = dt_util_path_get_extension(normalized_filename);
+  if(IS_NULL_PTR(extension))
   {
     dt_free(normalized_filename);
     return 0;
   }
-  char *ext = g_ascii_strdown(cc + 1, -1);
+  if(!strcasecmp(extension, "dt") || !strcasecmp(extension, "dttags") || !strcasecmp(extension, "xmp"))
+  {
+    dt_free(normalized_filename);
+    return 0;
+  }
+  char *ext = g_ascii_strdown(extension, -1);
   if(!dt_image_ext_is_supported(ext))
   {
     dt_free(normalized_filename);
@@ -1727,8 +1730,8 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   uint32_t flags = 0;
   flags |= DT_IMAGE_NO_LEGACY_PRESETS;
   // and we set the type of image flag (from extension for now)
-  gchar *extension = g_strrstr(imgfname, ".");
-  flags |= dt_image_flags_from_extension(extension);
+  const char *image_extension = dt_util_path_get_extension(imgfname);
+  flags |= dt_image_flags_from_extension(image_extension - 1);
   // set the bits in flags that indicate if any of the extra files (.txt, .wav) are present
   char *extra_file = dt_image_get_audio_path_from_path(normalized_filename);
   if(extra_file)
@@ -1749,11 +1752,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   id = dt_image_get_id(film_id, imgfname);
 
   // Try to find out if this should be grouped already.
-  gchar *basename = g_strdup(imgfname);
-  gchar *cc2 = basename + strlen(basename);
-  for(; *cc2 != '.' && cc2 > basename; cc2--)
-    ;
-  *cc2 = '\0';
+  gchar *basename = g_strndup(imgfname, image_extension - imgfname - 1);
   gchar *sql_pattern = g_strconcat(basename, ".%", NULL);
   int group_id;
   // in case we are not a jpg check if we need to change group representative
@@ -1765,12 +1764,8 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     {
       int other_id = other_group;
       dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
-      gchar *other_basename = g_strdup(other_img->filename);
-      gchar *cc3 = other_basename + strlen(other_img->filename);
-      for(; *cc3 != '.' && cc3 > other_basename; cc3--)
-        ;
-      ++cc3;
-      gchar *ext_lowercase = g_ascii_strdown(cc3, -1);
+      const char *other_extension = dt_util_path_get_extension(other_img->filename);
+      gchar *ext_lowercase = g_ascii_strdown(other_extension, -1);
       // if the group representative is a jpg, change group representative to this new imported image
       if(!strcmp(ext_lowercase, "jpg") || !strcmp(ext_lowercase, "jpeg"))
       {
@@ -1793,7 +1788,6 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
         group_id = other_id;
       }
       dt_free(ext_lowercase);
-      dt_free(other_basename);
     }
     else
     {

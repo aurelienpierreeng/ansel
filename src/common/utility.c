@@ -1007,42 +1007,51 @@ void dt_render_svg(RsvgHandle *svg, cairo_t *cr, double width, double height, do
   #endif
 }
 
-// check if the path + basenames are the same (<=> only differ by the extension)
-gboolean dt_has_same_path_basename(const char *filename1, const char *filename2)
+const char *dt_util_path_get_extension(const char *path)
 {
-  // assume both filenames have an extension
-  if(!filename1 || !filename2) return FALSE;
-  const char *dot1 = strrchr(filename1, '.');
-  if(IS_NULL_PTR(dot1)) return FALSE;
-  const char *dot2 = strrchr(filename2, '.');
-  if(IS_NULL_PTR(dot2)) return FALSE;
-  const int length1 = dot1 - filename1;
-  const int length2 = dot2 - filename2;
-  if(length1 != length2)
-    return FALSE;
-  for(int i = length1 - 1; i > 0; i--)
-    if(filename1[i] != filename2[i])
-      return FALSE;
-  return TRUE;
+  if(IS_NULL_PTR(path)) return NULL;
+
+  const char *basename = strrchr(path, '/');
+  const char *windows_basename = strrchr(path, '\\');
+  if(IS_NULL_PTR(basename) || (!IS_NULL_PTR(windows_basename) && windows_basename > basename))
+    basename = windows_basename;
+  if(!IS_NULL_PTR(basename)) basename++;
+
+  const char *dot = strrchr(basename ? basename : path, '.');
+  if(IS_NULL_PTR(dot) || dot == (basename ? basename : path) || dot[1] == '\0') return NULL;
+
+  return dot + 1;
 }
 
-// set the filename2 extension to filename1 - return NULL if fails - result should be freed
+gboolean dt_has_same_path_basename(const char *filename1, const char *filename2)
+{
+  if(IS_NULL_PTR(filename1) || IS_NULL_PTR(filename2)) return FALSE;
+
+  const char *extension1 = dt_util_path_get_extension(filename1);
+  const char *extension2 = dt_util_path_get_extension(filename2);
+  if(IS_NULL_PTR(extension1) || IS_NULL_PTR(extension2)) return FALSE;
+
+  const size_t prefix1_length = extension1 - filename1;
+  const size_t prefix2_length = extension2 - filename2;
+  return prefix1_length == prefix2_length && !strncmp(filename1, filename2, prefix1_length);
+}
+
 char *dt_copy_filename_extension(const char *filename1, const char *filename2)
 {
-  // assume both filenames have an extension
-  if(!filename1 || !filename2) return NULL;
-  const char *dot1 = strrchr(filename1, '.');
-  if(IS_NULL_PTR(dot1)) return NULL;
-  const char *dot2 = strrchr(filename2, '.');
-  if(IS_NULL_PTR(dot2)) return NULL;
-  const int name_lgth = dot1 - filename1;
-  const int ext_lgth = strlen(dot2);
-  char *output = g_malloc(name_lgth + ext_lgth + 1);
-  if(output)
-  {
-    memcpy(output, filename1, name_lgth);
-    memcpy(&output[name_lgth], &filename2[strlen(filename2) - ext_lgth], ext_lgth + 1);
-  }
+  if(IS_NULL_PTR(filename1) || IS_NULL_PTR(filename2)) return NULL;
+
+  const char *extension1 = dt_util_path_get_extension(filename1);
+  const char *extension2 = dt_util_path_get_extension(filename2);
+  if(IS_NULL_PTR(extension1) || IS_NULL_PTR(extension2)) return NULL;
+
+  const size_t basename_length = extension1 - filename1 - 1;
+  const size_t extension_length = strlen(extension2);
+  char *output = g_try_malloc(basename_length + extension_length + 2);
+  if(IS_NULL_PTR(output)) return NULL;
+
+  memcpy(output, filename1, basename_length);
+  output[basename_length] = '.';
+  memcpy(output + basename_length + 1, extension2, extension_length + 1);
   return output;
 }
 
