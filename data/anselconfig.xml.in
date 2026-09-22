@@ -3330,12 +3330,6 @@
     <longdescription>Most recent first, as #RRGGBBAA separated by commas, shared by every colour window of the canvas atelier.</longdescription>
   </dtconfig>
   <dtconfig>
-    <name>canvas/pdf/dpi</name>
-    <type min="72" max="1200">int</type>
-    <default>300</default>
-    <shortdescription>resolution of the canvas export</shortdescription>
-  </dtconfig>
-  <dtconfig>
     <name>canvas/export/format</name>
     <type min="0" max="3">int</type>
     <default>0</default>

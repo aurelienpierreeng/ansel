@@ -993,10 +993,22 @@ static void _export_canvas(dt_view_t *self)
   g_signal_connect(widgets.format, "changed", G_CALLBACK(_export_format_changed), &widgets);
   _labelled_row(grid, 0, _("Format"), widgets.format);
 
-  widgets.dpi = gtk_spin_button_new_with_range(72.0, 1200.0, 1.0);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets.dpi), dt_conf_get_int("canvas/pdf/dpi"));
+  /*
+   * The CANVAS's resolution, the one set as Export DPI under Guides and saved with the document: a
+   * print piece is laid out for 300 dpi and a story for 96, and that is a property of the design,
+   * not of whoever last used this dialog. It used to start from a number of its own, remembered
+   * across every canvas, while the document's value -- saved, shown, and promised by its tooltip to
+   * decide the export -- was read by nothing at all. Changing it here exports at that for this
+   * once and leaves the document as it is: an export writes files, not the canvas.
+   *
+   * And the document's own range, 18 to 2400: a narrower one here clamped a 2400 dpi canvas to 1200
+   * without a word, and it came out at half the pixels it was laid out for.
+   */
+  widgets.dpi = gtk_spin_button_new_with_range(18.0, 2400.0, 1.0);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets.dpi), dt_canvas_resolution(view->canvas));
   gtk_widget_set_tooltip_text(widgets.dpi,
-                              _("A page is rasterised at exactly this many pixels per inch of its own size, and no more"));
+                              _("A page is rasterised at exactly this many pixels per inch of its own size, and no more. "
+                                "It starts from the canvas's Export DPI, set under Guides."));
   _labelled_row(grid, 1, _("Resolution (dpi)"), widgets.dpi);
 
   widgets.quality = gtk_spin_button_new_with_range(50.0, 100.0, 1.0);
@@ -1077,7 +1089,6 @@ static void _export_canvas(dt_view_t *self)
       g_strlcpy(options.icc_filename, widgets.profiles[profile].filename, sizeof(options.icc_filename));
     }
     dt_conf_set_int("canvas/export/format", (int)options.format);
-    dt_conf_set_int("canvas/pdf/dpi", (int)options.dpi);
     dt_conf_set_int("canvas/export/quality", options.quality);
     dt_conf_set_int("canvas/pdf/icc_type", options.icc_type);
     dt_conf_set_string("canvas/pdf/icc_filename", options.icc_filename);
