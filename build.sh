@@ -584,15 +584,35 @@ eval "$cmd_install"
 
 # install the desktop launcher and system-wide command
 if [ $DO_INSTALL ] ; then
-	if [ -f "$INSTALL_PREFIX/bin/ansel" ]; then
+	# Put the freshly installed binaries on PATH under their plain names. A symlink
+	# is the intent, and is what happens everywhere it can: the link keeps pointing
+	# at whatever the prefix now holds, and the binary still runs from its install
+	# directory, next to its own libraries.
+	#
+	# Creating one on Windows/NTFS without elevated privileges (or MSYS2's
+	# winsymlinks:nativestrict) silently degrades to a plain COPY instead, and a
+	# copy is not an equivalent here: Windows resolves libansel.dll relative to the
+	# EXECUTABLE'S OWN directory, so a lone ansel-cli.exe sitting in /usr/local/bin
+	# either refuses to start -- "can't init develop system" -- or, worse, binds to
+	# an unrelated older libansel.dll that happens to be on PATH and reports that
+	# build's version. Measured: tests/image_test.sh, which resolves the CLI through
+	# `command -v ansel-cli`, spent an evening testing a four-month-old build and
+	# reporting every raw as a crash.
+	#
+	# So check what `ln` actually produced, and where it gave a copy, leave a small
+	# exec wrapper instead: it reaches the real binary in its own directory, which is
+	# the one property the copy loses.
+	for target_bin in ansel ansel-cli; do
+		[ -f "$INSTALL_PREFIX/bin/$target_bin" ] || continue
 		[ ! -d "/usr/local/bin/" ] && $SUDO mkdir -p /usr/local/bin/
-		$SUDO ln -sfn "$INSTALL_PREFIX"/bin/ansel /usr/local/bin/ansel
-	fi
-
-	if [ -f "$INSTALL_PREFIX/bin/ansel-cli" ]; then
-		[ ! -d "/usr/local/bin/" ] && $SUDO mkdir -p /usr/local/bin/
-		$SUDO ln -sfn "$INSTALL_PREFIX"/bin/ansel-cli /usr/local/bin/ansel-cli
-	fi
+		$SUDO ln -sfn "$INSTALL_PREFIX/bin/$target_bin" "/usr/local/bin/$target_bin"
+		if [ ! -L "/usr/local/bin/$target_bin" ]; then
+			$SUDO rm -f "/usr/local/bin/$target_bin"
+			printf '#!/bin/sh\nexec "%s/bin/%s" "$@"\n' "$INSTALL_PREFIX" "$target_bin" \
+				| $SUDO tee "/usr/local/bin/$target_bin" > /dev/null
+			$SUDO chmod +x "/usr/local/bin/$target_bin"
+		fi
+	done
 
 	if [ -f "$INSTALL_PREFIX/share/applications/photos.ansel.Ansel.desktop" ]; then
 		[ ! -d "/usr/share/applications/" ] && $SUDO mkdir -p /usr/share/applications/
