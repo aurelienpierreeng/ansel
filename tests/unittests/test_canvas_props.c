@@ -689,6 +689,36 @@ static void _every_kind_reads_its_sections_in_screen_order(void **state)
   }
 }
 
+/**
+ * Every section a row lives in has a heading. The binder titles each collapsible section with
+ * `dt_canvas_prop_section_label()` and hands the answer straight to gettext and GTK, both of which
+ * take a NULL quietly -- so a section added without a label is not a crash, it is a heading with
+ * no words over its rows. The text shadow's section shipped that way, and read as four unexplained
+ * controls under a blank bar in every text frame's card.
+ */
+static void _every_section_holding_a_row_has_a_heading(void **state)
+{
+  (void)state;
+  size_t count = 0;
+  const dt_canvas_prop_t *table = dt_canvas_props(&count);
+  static const uint32_t kinds[] = { DT_CANVAS_OBJECT_TEXT, DT_CANVAS_OBJECT_IMAGE, DT_CANVAS_OBJECT_SVG,
+                                    DT_CANVAS_OBJECT_MAP, DT_CANVAS_OBJECT_CONNECTOR, DT_CANVAS_OBJECT_SHAPE };
+  for(size_t at = 0; at < count; at++)
+  {
+    const dt_canvas_prop_t *prop = &table[at];
+    for(size_t k = 0; k < G_N_ELEMENTS(kinds); k++)
+    {
+      if(!(prop->kinds & (1u << kinds[k]))) continue;
+      const char *heading = dt_canvas_prop_section_label(prop->section, kinds[k]);
+      if(heading == NULL || heading[0] == '\0')
+        print_error("row \"%s\" sits in section %d, which has no heading for kind %u\n", prop->key,
+                    (int)prop->section, kinds[k]);
+      assert_non_null(heading);
+      assert_true(heading[0] != '\0');
+    }
+  }
+}
+
 static void _groups_belong_to_their_sections(void **state)
 {
   (void)state;
@@ -3064,6 +3094,7 @@ int main(void)
     cmocka_unit_test(_a_connector_takes_the_canvass_line_until_it_is_given_one),
     cmocka_unit_test(_pairs_point_at_each_other),
     cmocka_unit_test(_every_kind_reads_its_sections_in_screen_order),
+    cmocka_unit_test(_every_section_holding_a_row_has_a_heading),
     cmocka_unit_test(_groups_belong_to_their_sections),
     cmocka_unit_test(_conditions_depend_on_the_objects_own_switches),
     cmocka_unit_test(_every_property_round_trips_on_every_kind),

@@ -680,6 +680,10 @@ const char *dt_canvas_prop_section_label(const dt_canvas_prop_section_t section,
       return N_("Corners");
     case DT_CANVAS_SECTION_SHADOW:
       return N_("Shadow");
+    case DT_CANVAS_SECTION_TEXT_SHADOW:
+      // Named for what casts it: the frame's own Shadow sits in the same card, and the two are
+      // different shadows with different switches.
+      return N_("Text shadow");
     case DT_CANVAS_SECTION_CUTOUT:
       return N_("Cutout");
     default:
