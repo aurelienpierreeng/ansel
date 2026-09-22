@@ -3311,11 +3311,11 @@ gboolean dt_canvas_snap_size(const dt_canvas_t *canvas, const GArray *exclude, d
 /**
  * Every page size, portrait. The order IS the stored value, so entries are only ever appended.
  *
- * A sheet of paper is given in POINTS and a screen format in PIXELS, and the two reach the
- * plane differently: a canvas unit is a display pixel, so a screen format is its pixel size
- * outright while a sheet is its size in points scaled by the canvas's resolution. Read both
- * as points, as they were, and an Instagram reel comes out 1080 units against an A4's 595 --
- * nearly twice the sheet, for something that fits in a hand.
+ * A sheet of paper is given in POINTS and a screen format in PIXELS, as each is named, and both
+ * reach the plane in points: a canvas unit IS a point, and a pixel becomes one at the W3C's
+ * reference density, 96 to the inch, in dt_canvas_paper_points(). Read the pixel sizes as points
+ * outright instead and an Instagram reel comes out 1080 units against an A4's 595 -- nearly twice
+ * the sheet, for something that fits in a hand. `physical` says only which way a row is written.
  */
 static const struct
 {
@@ -3323,7 +3323,7 @@ static const struct
   const char *name;
   double width;
   double height;
-  gboolean physical; ///< the size is in points and scales with the resolution; else it is pixels
+  gboolean physical; ///< the size is written in points; else in pixels, converted at 96 to the inch
   /**
    * The name goes through the catalogue. FALSE for the A series, which is the same word in every
    * language -- a COLUMN rather than a numeric test on the code, so a row answers for itself and
