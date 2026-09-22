@@ -277,6 +277,8 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
 
   int process = TRUE;
   int copied = 0;
+  gboolean creation_failed = FALSE;
+  gboolean writability_failed = FALSE;
 
   gboolean exists = _file_exist(dest_file_path);
 
@@ -310,12 +312,18 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
   if(!exists)
   {
     if(!dt_util_dir_exist(data->target_dir))
-      process = !_create_dir(data->target_dir);
+    {
+      creation_failed = _create_dir(data->target_dir);
+      process = !creation_failed;
+    }
     else
       dt_print(DT_DEBUG_PRINT, "[Import] target folder %s already exists. Nothing to do.\n", data->target_dir);
 
     if(process)
-      process = dt_util_test_writable_dir(data->target_dir);
+    {
+      writability_failed = !dt_util_test_writable_dir(data->target_dir);
+      process = !writability_failed;
+    }
     else
       fprintf(stdout, "[Import] Unable to create the target folder %s.\n", data->target_dir);
 
@@ -324,7 +332,7 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
       process = _copy_file(filename, dest_file_path);
       copied = process;
     }
-    else
+    else if(!creation_failed)
       fprintf(stdout, "[Import] Not allowed to write in the %s folder.\n", data->target_dir);
 
     if(process)
@@ -335,7 +343,7 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
 
     if(process)
       g_strlcpy(img_path_to_db, dest_file_path, pathname_len);
-    else
+    else if(!creation_failed && !writability_failed)
       fprintf(stderr, "[Import] Unable to copy the file %s to %s.\n", img_path_to_db, dest_file_path);
   }
   else
