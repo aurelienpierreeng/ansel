@@ -822,6 +822,25 @@ behind it. This rule and the map's "outside is clear" above hold each other up: 
 past a map whose last row is copied downward steps to the cap instead of stopping, so neither
 can be reverted alone.
 
+**A refusal asks whether a wider stretch will ever come, and for a paragraph's first line the
+widest that will ever come is the frame's measure LESS ITS INDENT.** The indent is taken off the
+first stretch before the piece is set, and `_run_refused()` was then handed that narrowed run to
+weigh against the frame's whole measure -- so a first line whose set width landed between the two
+was refused for being one indent too wide. Two ordinary settings put a set width there: an optical
+margin hangs the line's final comma past the measure, and a justified line is stretched to it. A
+refused line consumes nothing, so the next attempt is the same first line, indented again, refused
+again, one line lower each time, and a first line therefore fell until something narrowed the run
+enough for a short piece to fit.
+
+Measured with nothing laid over the column at all, justified with a 48-unit indent: the frame came
+to 66776 units -- the line cap -- with no ink anywhere, the text gone and the frame bottomless.
+With a picture in the column the cascade stops against it, so the paragraph's opening line lands on
+the picture and moves down with it whenever it is dragged; that is how it was reported, and the
+document it was found on is justified, hangs its punctuation and indents by 48. A line ending on a
+letter hangs nothing, which is why the first synthetic text written for this reproduced not one
+unit of it: the case needs prose that ends its lines on commas. Only the indented stretch is
+bounded this way -- the rest of the line is not indented and keeps the frame's own measure.
+
 **The leading is space BETWEEN lines, so this engine advances it by hand.**
 `pango_layout_set_spacing()` puts it between the lines of one layout, and every line here is
 line zero of a layout of its own, so no line's extents ever carry it: setting a line height did

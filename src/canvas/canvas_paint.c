@@ -2622,10 +2622,23 @@ static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas
                         &layout, &layout_width, &layout_offset, &layout_line, &piece))
           break;
       }
-      // A stretch this piece has no business in: nothing is set and nothing is consumed, and
-      // the walk tries the next one. Every stretch refused is a line skipped, which the line
-      // cap bounds.
-      if(_run_refused(&piece, runs[run].width, inner_width, plain, length, consumed))
+      /*
+       * A stretch this piece has no business in: nothing is set and nothing is consumed, and
+       * the walk tries the next one. Every stretch refused is a line skipped, which the line
+       * cap bounds.
+       *
+       * What "no wider stretch will ever come" means is the widest measure THIS piece can ever
+       * be offered, and a paragraph's first line is set on the frame's measure LESS ITS INDENT.
+       * Compared against the frame's own measure instead, such a line was refused for being one
+       * indent too wide -- and a refused line consumes nothing, so the next attempt is the same
+       * first line, indented again, refused again, one line lower each time. Measured on a
+       * 457-unit column with a 48-unit indent: the opening line of a paragraph fell through
+       * four empty lines and settled against the picture below, moving down with it whenever
+       * the picture was dragged, which is what "the first line follows the image" was. Only the
+       * indented stretch is bounded this way; the rest of the line is not indented.
+       */
+      const double widest = (run == 0 && paragraph_start) ? inner_width - indent : inner_width;
+      if(_run_refused(&piece, runs[run].width, widest, plain, length, consumed))
       {
         // The walk moves down a line, so it must move down by a LINE: left at one unit, a
         // stretch refused all the way down an obstacle costs a thousand iterations of nothing.

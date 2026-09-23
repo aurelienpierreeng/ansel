@@ -4169,6 +4169,21 @@ they are visible.
   asks the same question one line lower until the line cap. Measured: 4133 units where 66 were
   owed, and 57188 once a skipped line cost a line of height rather than one unit. `_run_refused()`
   returns FALSE outright once the run is the full measure.
+- **"The full measure" is the widest THIS line can ever be offered, which for a paragraph's first
+  line is the frame's measure LESS ITS INDENT.** The indent is taken off `runs[0]` before the piece
+  is set, and `_run_refused()` was then handed that narrowed run to compare against the frame's
+  whole measure -- so a first line whose set width landed between the two was refused for being one
+  indent too wide. An optical margin hangs a line's final comma past the measure and a justified
+  line is stretched to it, which is exactly how a set width gets there; a line ending on a letter
+  hangs nothing, which is why the first test text written for this showed nothing at all. A refused
+  line consumes nothing, so the next attempt is the same first line, indented, refused again, one
+  line lower each time. Measured with NOTHING laid over the column, justified with a 48-unit
+  indent: the frame came to 66776 units -- the line cap -- with no ink anywhere, the text gone and
+  the frame bottomless. Over a picture the cascade stops at the first stretch narrow enough for a
+  short piece to fit, which is beside the picture, so the paragraph's opening line lands against it
+  and **moves down with it whenever it is dragged** -- that is how it was reported, and the user's
+  own document (justified, optical margins, indent 48) is what it was found on. Only the indented
+  stretch is bounded this way; the rest of the line is not indented.
 - **A text shadow needs TWO passes, because it is cast by the glyphs and lies UNDER them but OVER
   the ground.** `dt_canvas_text_pass_t` splits the frame into GROUND and GLYPHS: paint the ground,
   lay the shadow taken from a glyphs-only render over it, then paint the glyphs. Painted in one

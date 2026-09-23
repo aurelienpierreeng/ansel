@@ -57,6 +57,19 @@ static const char *TEXT
       "that nothing closes again.\n\n"
       "The third paragraph should sit under the second one at the paragraph spacing and no more.";
 
+/**
+ * The same, with a comma at the end of most lines.
+ *
+ * Prose punctuated this way is what makes the optical margins hang something: a line ending on a
+ * letter hangs nothing at all, and the case below needs the hang to exist.
+ */
+static const char *PUNCTUATED
+    = "Alpha, alpha, alpha, alpha, alpha, alpha, alpha, alpha, alpha, alpha, alpha, alpha, alpha, "
+      "alpha, alpha, alpha, alpha, alpha, alpha, alpha, alpha.\n\n"
+      "Bravo, bravo, bravo, bravo, bravo, bravo, bravo, bravo, bravo, bravo, bravo, bravo, bravo, "
+      "bravo, bravo, bravo, bravo, bravo, bravo, bravo, bravo.\n\n"
+      "Charlie, charlie, charlie, charlie, charlie, charlie, charlie, charlie, charlie, charlie.";
+
 /** A flowing text frame, black on white, its top edge at FRAME_TOP. */
 static dt_canvas_object_t *_flowing_text(dt_canvas_t *canvas, const double height, const double spacing)
 {
@@ -296,6 +309,49 @@ static void _a_band_with_no_room_is_a_line_stepped_over(void **state)
   dt_canvas_free(canvas);
 }
 
+/**
+ * A first line is judged against ITS OWN measure, which is the frame's less the indent.
+ *
+ * `_run_refused()` asks whether a piece would fit in a wider stretch, and answered against the
+ * frame's whole measure while the piece had been set on the measure less the paragraph indent --
+ * so a first line whose set width landed between the two (an optical margin hangs its comma past
+ * the measure, and a justified line is stretched to it) was refused for being one indent too
+ * wide. A refused line consumes nothing, so the next attempt is the same first line, indented
+ * again, refused again, one line lower each time.
+ *
+ * Measured with nothing laid over the column at all: at any indent the frame came to 66776 units
+ * -- the line cap -- with NO ink anywhere, the text gone and the frame bottomless. Over a picture
+ * it reads differently and is the same fault: the cascade stops at the first stretch narrow
+ * enough for a short piece to fit, which is beside the picture, so the paragraph's opening line
+ * lands against it and moves down with it whenever it is dragged. That was the report.
+ */
+static void _an_indented_first_line_is_judged_against_its_own_measure(void **state)
+{
+  (void)state;
+  double plain = 0.0;
+  for(double indent = 0.0; indent <= 60.0; indent += 20.0)
+  {
+    dt_canvas_t *canvas = _white_canvas();
+    dt_canvas_object_t *text = _flowing_text(canvas, 300.0, 0.0);
+    dt_canvas_text_set_markdown(canvas, text, PUNCTUATED);
+    // The combination the report came on: justified, hanging its punctuation, fitting its height.
+    text->text.text_flags |= DT_CANVAS_TEXT_AUTO_HEIGHT | DT_CANVAS_TEXT_OPTICAL_MARGINS;
+    text->text.align_h = DT_CANVAS_ALIGN_JUSTIFY;
+    text->text.first_line_indent = (float)indent;
+    text->text.wrap_standoff = 1.0f;
+    _set_height(text, 300.0);
+    for(int round = 0; round < 8 && dt_canvas_props_settle_all(canvas); round++) continue;
+
+    if(indent == 0.0) plain = text->height;
+    assert_true(plain > 0.0);
+    // An indent moves a word to the next line at most: it can cost a line, never the whole text.
+    assert_true(text->height <= plain + 2.0 * 20.0);
+    // And the text is still on the page. Refused for ever, it was nowhere at all.
+    assert_true(_lowest_ink(canvas, 900.0) > FRAME_TOP);
+    dt_canvas_free(canvas);
+  }
+}
+
 static int _group_setup(void **state)
 {
   (void)state;
@@ -318,6 +374,7 @@ int main(void)
     cmocka_unit_test(_a_band_the_map_does_not_reach_is_clear),
     cmocka_unit_test(_the_space_between_paragraphs_is_paid_once_per_paragraph),
     cmocka_unit_test(_a_band_with_no_room_is_a_line_stepped_over),
+    cmocka_unit_test(_an_indented_first_line_is_judged_against_its_own_measure),
   };
   return cmocka_run_group_tests(tests, _group_setup, _group_teardown);
 }
