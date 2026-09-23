@@ -585,25 +585,14 @@ gboolean dt_colorprofiles_bgra8_to_adobergb_rgba8(const uint8_t *const in, uint8
                                                   const dt_colorspaces_color_profile_type_t src_space);
 
 /**
- * @brief Convert a strided, packed-RGB(A) 8-bit buffer (GdkPixbuf shape) from sRGB to the
- * display profile, in place.
- *
- * @details Plain integers only: the module never sees a `GdkPixbuf`. Each row is widened
- * to RGBA8 in per-thread scratch, converted, then written back narrowed and R <-> B
- * swapped.
- *
- * @param pixels first byte of the buffer; converted in place.
- * @param width pixels per row.
- * @param height rows.
- * @param rowstride bytes between the starts of two rows.
- * @param n_channels bytes per pixel, 3 or 4.
- * @param has_alpha whether the 4th channel is alpha to be preserved.
- * @return TRUE on success. FALSE -- leaving the pixels untouched -- on a bad argument,
- * when no display transform is available, or when the scratch allocation fails.
- * @note The scratch for every thread is one allocation made BEFORE the parallel region on
- * purpose: a per-thread allocation that could fail would put the worksharing loop behind
- * a condition some threads take and others do not, which hangs.
+ * @brief Convert 8-bit Adobe RGB (1998) pixels to the display profile in place, through the
+ * module's prepared 8-bit transform, row-parallel. `pixels` holds cairo RGB24 rows: four bytes
+ * a pixel, blue first, `stride` bytes a row; the input is read as B, G, R and written back the
+ * same way. Falls back to leaving the pixels as they are when no transform is prepared.
  */
+gboolean dt_colorprofiles_adobergb_bgrx8_to_display(uint8_t *const pixels, const int width, const int height,
+                                                    const int stride);
+
 gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const int width, const int height,
                                                   const int rowstride, const int n_channels,
                                                   const gboolean has_alpha);

@@ -250,6 +250,11 @@ typedef enum dt_signal_t
     */
   DT_SIGNAL_IMAGE_IMPORT,
 
+  /** \brief This signal is raised when the Canvas atelier opened, closed, saved or reconfigured its document
+  no param, no returned value
+    */
+  DT_SIGNAL_CANVAS_CHANGED,
+
   /** \brief This signal is raised after an image has been exported
     to a file, but before it is sent to facebook/picasa etc...
     export won't happen until this function returns
