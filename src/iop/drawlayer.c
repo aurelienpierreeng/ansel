@@ -54,6 +54,7 @@
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/common.h"
 #include "iop/drawlayer/conf.h"
+#include "iop/drawlayer/layers.h"
 #include "iop/drawlayer/coordinates.h"
 #include "iop/drawlayer/io.h"
 #include "iop/drawlayer/module.h"
@@ -137,7 +138,7 @@ typedef dt_drawlayer_runtime_context_t drawlayer_runtime_host_context_t;
 gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, gboolean record_history);
 gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self);
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self);
-static void _refresh_layer_widgets(dt_iop_module_t *self);
+void dt_drawlayer_refresh_layer_widgets(dt_iop_module_t *self);
 static void _sync_layer_controls(dt_iop_module_t *self);
 static void _sanitize_requested_layer_name(const char *requested, char *name, size_t name_size);
 static gboolean _prompt_layer_name_dialog(const char *title, const char *message, const char *initial_name,
@@ -351,7 +352,7 @@ static void _fill_input_layer_coords(dt_iop_module_t *self, dt_drawlayer_paint_r
              input->have_layer_coords ? 1 : 0);
 }
 
-static gboolean _layer_name_non_empty(const char *name)
+gboolean dt_drawlayer_layer_name_non_empty(const char *name)
 {
   if(IS_NULL_PTR(name)) return FALSE;
   char tmp[DRAWLAYER_NAME_SIZE] = { 0 };
@@ -360,7 +361,7 @@ static gboolean _layer_name_non_empty(const char *name)
   return tmp[0] != '\0';
 }
 
-static gboolean _get_current_work_profile_key(dt_iop_module_t *self, GList *iop_list, dt_dev_pixelpipe_t *pipe,
+gboolean dt_drawlayer_current_work_profile_key(dt_iop_module_t *self, GList *iop_list, dt_dev_pixelpipe_t *pipe,
                                               char *key, const size_t key_size)
 {
   if(IS_NULL_PTR(key) || key_size == 0) return FALSE;
@@ -409,60 +410,11 @@ static drawlayer_process_scratch_t *_get_process_scratch(void)
   return scratch;
 }
 
-static inline __attribute__((always_inline)) gboolean _resolve_layer_geometry(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                                        const dt_dev_pixelpipe_iop_t *piece, int *layer_width,
-                                        int *layer_height, int *origin_x, int *origin_y)
-{
-  if(!IS_NULL_PTR(layer_width)) *layer_width = 0;
-  if(!IS_NULL_PTR(layer_height)) *layer_height = 0;
-  if(!IS_NULL_PTR(origin_x)) *origin_x = 0;
-  if(!IS_NULL_PTR(origin_y)) *origin_y = 0;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return FALSE;
-  /* The canvas has the RAW image's dimensions, in this image's own orientation, and is centred
-   * on the module's frame -- the same for every pipe, every zoom and every crop, which is the
-   * point of anchoring to it: a crop changes which window of the canvas a render reads, not
-   * where the paint sits. See iop/drawlayer/coordinates.h.
-   *
-   * It used to be the module's own stage frame, lifted back through roi_out.scale. That size
-   * moves with every crop, and the authored raster was then fitted onto the new frame -- the
-   * paint moved and stretched with the crop.
-   *
-   * Thumbnail and export pipes may start from a downscaled mipmap; that shrinks the module's
-   * frame, not the canvas, and the placement's scale absorbs it. */
-  int resolved_width = 0;
-  int resolved_height = 0;
-  if(!dt_drawlayer_layer_canvas_for_pipe(self, pipe, &resolved_width, &resolved_height)) return FALSE;
 
-  (void)piece;
 
-  if(!IS_NULL_PTR(layer_width)) *layer_width = resolved_width;
-  if(!IS_NULL_PTR(layer_height)) *layer_height = resolved_height;
-  return resolved_width > 0 && resolved_height > 0;
-}
 
-static inline __attribute__((always_inline)) uint64_t _drawlayer_params_cache_hash(const int32_t imgid, const dt_iop_drawlayer_params_t *params,
-                                             const int layer_width, const int layer_height)
-{
-  /* Internal drawlayer base-cache identity must stay stable across transient
-   * stroke/hash updates. Key only by image + layer identity + working profile,
-   * not by volatile fields (stroke hash, sidecar timestamp...).
-   *
-   * This keeps the shared base patch line hot across interactive drawing ticks
-   * and avoids expensive rekey conflicts/republishing during realtime updates. */
-  uint64_t hash = 5381u;
-  hash = dt_hash(hash, (const char *)&imgid, sizeof(imgid));
-  hash = dt_hash(hash, (const char *)&layer_width, sizeof(layer_width));
-  hash = dt_hash(hash, (const char *)&layer_height, sizeof(layer_height));
-  if(!IS_NULL_PTR(params))
-  {
-    hash = dt_hash(hash, params->layer_name, sizeof(params->layer_name));
-    hash = dt_hash(hash, (const char *)&params->layer_order, sizeof(params->layer_order));
-    hash = dt_hash(hash, params->work_profile, sizeof(params->work_profile));
-  }
-  return hash ? hash : 1u;
-}
 
-static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t imgid,
+gboolean dt_drawlayer_rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t imgid,
                                          const dt_iop_drawlayer_params_t *params)
 {
   /* Rekeying lets the same pixelpipe cache line keep its allocated storage and
@@ -470,7 +422,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
    * history snapshot. This is the central piece that lets other pipelines find
    * the newest base patch through the cache instead of through GUI internals. */
   if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->cache_entry) || IS_NULL_PTR(params)) return FALSE;
-  const uint64_t new_hash = _drawlayer_params_cache_hash(imgid, params, patch->width, patch->height);
+  const uint64_t new_hash = dt_drawlayer_params_cache_hash(imgid, params, patch->width, patch->height);
   if(new_hash == patch->cache_hash) return TRUE;
   if(dt_dev_pixelpipe_cache_rekey(patch->cache_hash, new_hash, patch->cache_entry) == 0)
   {
@@ -510,7 +462,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
   return TRUE;
 }
 
-static void _retain_base_patch_loaded_ref(dt_iop_drawlayer_gui_data_t *g)
+void dt_drawlayer_retain_base_patch_loaded_ref(dt_iop_drawlayer_gui_data_t *g)
 {
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->process.base_patch.cache_entry) || g->process.base_patch_loaded_ref) return;
   dt_dev_pixelpipe_cache_ref_count_entry(TRUE, g->process.base_patch.cache_entry);
@@ -578,7 +530,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
      && !g_strcmp0(data->process.cache_layer_name, params->layer_name)
      && data->process.base_patch.width > 0 && data->process.base_patch.height > 0)
   {
-    const uint64_t cached_hash = _drawlayer_params_cache_hash(pipe->dev->image_storage.id, params,
+    const uint64_t cached_hash = dt_drawlayer_params_cache_hash(pipe->dev->image_storage.id, params,
                                                               data->process.base_patch.width,
                                                               data->process.base_patch.height);
     if(data->process.base_patch.cache_hash == cached_hash)
@@ -594,7 +546,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
 
   int layer_width = 0;
   int layer_height = 0;
-  const gboolean have_pipe_geometry = _resolve_layer_geometry(self, pipe, piece, &layer_width, &layer_height, NULL, NULL);
+  const gboolean have_pipe_geometry = dt_drawlayer_resolve_layer_geometry(self, pipe, piece, &layer_width, &layer_height, NULL, NULL);
 
   /* The canvas is the raw frame in every pipe, so the stored page's own dimensions are no longer
    * consulted to decide it -- they used to be, because a thumbnail or export pipe resolved a
@@ -617,7 +569,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
       return FALSE;
   }
 
-  const uint64_t base_hash = _drawlayer_params_cache_hash(pipe->dev->image_storage.id, params, layer_width, layer_height);
+  const uint64_t base_hash = dt_drawlayer_params_cache_hash(pipe->dev->image_storage.id, params, layer_width, layer_height);
   if(data->process.cache_valid && data->process.base_patch.cache_entry
      && data->process.base_patch.cache_hash == base_hash && data->process.cache_imgid == pipe->dev->image_storage.id
      && !g_strcmp0(data->process.cache_layer_name, params->layer_name))
@@ -636,7 +588,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
   {
     int created = 0;
     if(!dt_drawlayer_cache_patch_alloc_shared(&data->process.base_patch,
-                                              _drawlayer_params_cache_hash(pipe->dev->image_storage.id, params, layer_width,
+                                              dt_drawlayer_params_cache_hash(pipe->dev->image_storage.id, params, layer_width,
                                                                            layer_height),
                                               (size_t)layer_width * layer_height, layer_width, layer_height,
                                               "drawlayer sidecar cache", &created))
@@ -1221,7 +1173,7 @@ static gboolean _profile_key_is_sane(const char *value)
   return separators >= 2;
 }
 
-static int64_t _sidecar_timestamp_from_path(const char *path)
+int64_t dt_drawlayer_sidecar_timestamp_from_path(const char *path)
 {
   if(IS_NULL_PTR(path) || path[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return 0;
 
@@ -1414,7 +1366,7 @@ static gboolean _prompt_layer_name_dialog(const char *title, const char *message
   if(gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
   {
     _sanitize_requested_layer_name(gtk_entry_get_text(GTK_ENTRY(entry)), name, name_size);
-    accepted = _layer_name_non_empty(name);
+    accepted = dt_drawlayer_layer_name_non_empty(name);
   }
 
   gtk_widget_destroy(dialog);
@@ -1582,7 +1534,7 @@ static gboolean _color_picker_motion(GtkWidget *widget, GdkEventMotion *event, g
   return _color_picker_set_from_position(self, event->x, event->y);
 }
 
-static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *params)
+void dt_drawlayer_sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *params)
 {
   if(IS_NULL_PTR(params)) return;
 
@@ -1601,7 +1553,7 @@ static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *p
   else
     params->work_profile[sizeof(params->work_profile) - 1] = '\0';
 
-  if(!_layer_name_non_empty(params->layer_name))
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name))
   {
     params->layer_name[0] = '\0';
     params->layer_order = -1;
@@ -1618,7 +1570,7 @@ static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *p
   if(params->work_profile[0] == '\0' && !IS_NULL_PTR(self) && self->dev)
   {
     char current_profile[DRAWLAYER_PROFILE_SIZE] = { 0 };
-    if(_get_current_work_profile_key(self, self->dev->iop, self->dev->pipe, current_profile,
+    if(dt_drawlayer_current_work_profile_key(self, self->dev->iop, self->dev->pipe, current_profile,
                                      sizeof(current_profile)))
       g_strlcpy(params->work_profile, current_profile, sizeof(params->work_profile));
   }
@@ -1653,10 +1605,6 @@ static void _sanitize_requested_layer_name(const char *requested, char *name, co
 }
 
 
-/* Layer cache and sidecar synchronization stay in a private implementation
- * include so drawlayer.c keeps the orchestration flow readable without
- * introducing a second public API boundary. */
-#include "drawlayer/layers.c"
 
 // Find the cached working layer if any
 static inline __attribute__((always_inline)) gboolean _update_runtime_state(const drawlayer_runtime_request_t *request,
@@ -1768,7 +1716,7 @@ void dt_drawlayer_touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, co
   params->stroke_commit_hash = (uint32_t)(hash ? hash : 1u);
 }
 
-static void _refresh_layer_widgets(dt_iop_module_t *self)
+void dt_drawlayer_refresh_layer_widgets(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
@@ -1777,7 +1725,7 @@ static void _refresh_layer_widgets(dt_iop_module_t *self)
 
   g->manager.background_job_running = g->session.background_job_running;
 
-  if(g->controls.layer_select) _populate_layer_list(self);
+  if(g->controls.layer_select) dt_drawlayer_layers_populate_list(self);
   _sync_layer_controls(self);
 }
 
@@ -1787,7 +1735,7 @@ static void _sync_layer_controls(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(params)) return;
 
-  const gboolean attached = _layer_name_non_empty(params->layer_name);
+  const gboolean attached = dt_drawlayer_layer_name_non_empty(params->layer_name);
   const gboolean missing = (g->session.missing_layer_error[0] != '\0');
   const gboolean have_existing_layers = g->controls.layer_select && dt_bauhaus_combobox_length(g->controls.layer_select) > 0;
 
@@ -1856,7 +1804,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
    * reset it here — that would truncate the live path. This must guard BOTH commit
    * kinds: a quiet flush (record_history == FALSE, scheduled by GUI_SCROLL /
    * GUI_SYNC_TEMP_BUFFERS while pending stroke work exists) would otherwise run
-   * dt_drawlayer_worker_wait_idle + finalize + _reset_stroke_session mid-stroke without ever
+   * dt_drawlayer_worker_wait_idle + finalize + dt_drawlayer_layers_reset_stroke_session mid-stroke without ever
    * clearing painting_active, silently cutting the stroke short. The realtime worker
    * already keeps base_patch updated incrementally, so there is nothing to flush
    * mid-stroke; defer a history commit to the worker and no-op a quiet flush. The
@@ -1897,7 +1845,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
   had_last_dab = g->stroke.last_dab_valid;
   last_dab_x = g->stroke.last_dab_x;
   last_dab_y = g->stroke.last_dab_y;
-  _reset_stroke_session(g);
+  dt_drawlayer_layers_reset_stroke_session(g);
   dt_iop_gui_leave_critical_section(self);
   dt_drawlayer_worker_reset_stroke(g->stroke.worker);
 
@@ -1993,13 +1941,13 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
 
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!_layer_name_non_empty(params->layer_name)) return FALSE;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return FALSE;
 
   GString *errors = g_string_new(NULL);
   gboolean deleted = FALSE;
   int layer_width = 0;
   int layer_height = 0;
-  if(!_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
+  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
   {
     const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
     layer_width = geometry.raw_width;
@@ -2009,16 +1957,16 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
   char path[DT_PATH_MAX] = { 0 };
   if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
   {
-    _layerio_append_error(errors, _("failed to resolve drawlayer sidecar path"));
+    dt_drawlayer_layers_append_error(errors, _("failed to resolve drawlayer sidecar path"));
   }
   else if(!g_file_test(path, G_FILE_TEST_EXISTS))
   {
-    _layerio_append_error(errors, _("drawlayer sidecar TIFF is missing"));
+    dt_drawlayer_layers_append_error(errors, _("drawlayer sidecar TIFF is missing"));
   }
   else
   {
     if(!dt_drawlayer_io_delete_layer(path, params->layer_name, layer_width, layer_height))
-      _layerio_append_error(errors, _("failed to delete drawing layer from sidecar"));
+      dt_drawlayer_layers_append_error(errors, _("failed to delete drawing layer from sidecar"));
     else
     {
       deleted = TRUE;
@@ -2037,13 +1985,13 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
         g->process.cache_imgid = -1;
         g->process.cache_layer_name[0] = '\0';
         g->process.cache_layer_order = -1;
-        _reset_stroke_session(g);
+        dt_drawlayer_layers_reset_stroke_session(g);
       }
-      _refresh_layer_widgets(self);
+      dt_drawlayer_refresh_layer_widgets(self);
     }
   }
 
-  _layerio_log_errors(errors);
+  dt_drawlayer_layers_log_errors(errors);
   g_string_free(errors, TRUE);
   return deleted;
 }
@@ -2053,7 +2001,7 @@ static gboolean _confirm_delete_layer(dt_iop_module_t *self, const gboolean remo
   if(IS_NULL_PTR(self->dev)) return FALSE;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!_layer_name_non_empty(params->layer_name)) return removing_module;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return removing_module;
 
   GtkWidget *dialog = gtk_message_dialog_new(
       GTK_WINDOW(dt_gui_main_window()), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
@@ -2091,7 +2039,7 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
-  if(!_layer_name_non_empty(params->layer_name)) return FALSE;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return FALSE;
 
   char new_name[DRAWLAYER_NAME_SIZE] = { 0 };
   char stripped_requested[DRAWLAYER_NAME_SIZE] = { 0 };
@@ -2107,7 +2055,7 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   gboolean renamed = FALSE;
   int layer_width = 0;
   int layer_height = 0;
-  if(!_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
+  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
   {
     const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
     layer_width = geometry.raw_width;
@@ -2115,27 +2063,27 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   }
 
   if(!_commit_dabs(self, FALSE))
-    _layerio_append_error(errors, _("failed to commit drawing stroke before renaming"));
+    dt_drawlayer_layers_append_error(errors, _("failed to commit drawing stroke before renaming"));
   else if(!_flush_layer_cache(self))
-    _layerio_append_error(errors, _("failed to write drawing layer sidecar"));
+    dt_drawlayer_layers_append_error(errors, _("failed to write drawing layer sidecar"));
   else
   {
     char path[DT_PATH_MAX] = { 0 };
     if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
-      _layerio_append_error(errors, _("failed to resolve drawlayer sidecar path"));
+      dt_drawlayer_layers_append_error(errors, _("failed to resolve drawlayer sidecar path"));
     else if(!g_file_test(path, G_FILE_TEST_EXISTS))
-      _layerio_append_error(errors, _("drawlayer sidecar TIFF is missing"));
+      dt_drawlayer_layers_append_error(errors, _("drawlayer sidecar TIFF is missing"));
     else
     {
       dt_drawlayer_io_layer_info_t info = { 0 };
       if(!dt_drawlayer_io_rename_layer(path, params->layer_name, new_name, params->work_profile,
                                        layer_width, layer_height, &info))
-        _layerio_append_error(errors, _("failed to rename drawing layer in sidecar"));
+        dt_drawlayer_layers_append_error(errors, _("failed to rename drawing layer in sidecar"));
       else
       {
         g_strlcpy(params->layer_name, new_name, sizeof(params->layer_name));
         params->layer_order = info.index;
-        params->sidecar_timestamp = _sidecar_timestamp_from_path(path);
+        params->sidecar_timestamp = dt_drawlayer_sidecar_timestamp_from_path(path);
         g_strlcpy(g->process.cache_layer_name, params->layer_name, sizeof(g->process.cache_layer_name));
         g->process.cache_layer_order = params->layer_order;
         renamed = TRUE;
@@ -2146,15 +2094,15 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   if(renamed)
   {
     g->session.missing_layer_error[0] = '\0';
-    _refresh_layer_widgets(self);
+    dt_drawlayer_refresh_layer_widgets(self);
     if(self->dev) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else
   {
-    _refresh_layer_widgets(self);
+    dt_drawlayer_refresh_layer_widgets(self);
   }
 
-  _layerio_log_errors(errors);
+  dt_drawlayer_layers_log_errors(errors);
   g_string_free(errors, TRUE);
   return renamed;
 }
@@ -2224,7 +2172,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     dt_dev_pixelpipe_update_history_all(self->dev);
   }
-  _refresh_layer_widgets(self);
+  dt_drawlayer_refresh_layer_widgets(self);
   gui_update(self);
   return TRUE;
 }
@@ -2279,7 +2227,7 @@ static gboolean _background_layer_job_done_idle(gpointer user_data)
       if(result->success && params)
       {
         params->sidecar_timestamp = result->sidecar_timestamp;
-        _refresh_layer_widgets(module);
+        dt_drawlayer_refresh_layer_widgets(module);
       }
     }
   }
@@ -2307,7 +2255,7 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
   if(g->session.background_job_running) return FALSE;
-  if(!_layer_name_non_empty(params->layer_name)) return FALSE;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return FALSE;
 
   if(!_commit_dabs(self, FALSE)) return FALSE;
   if(!_ensure_layer_cache(self)) return FALSE;
@@ -2316,7 +2264,7 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->pipe, self);
   int layer_width = 0;
   int layer_height = 0;
-  if(!_resolve_layer_geometry(self, self->dev->pipe, piece, &layer_width, &layer_height, NULL, NULL)) return FALSE;
+  if(!dt_drawlayer_resolve_layer_geometry(self, self->dev->pipe, piece, &layer_width, &layer_height, NULL, NULL)) return FALSE;
 
   char sidecar_path[DT_PATH_MAX] = { 0 };
   if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, sidecar_path, sizeof(sidecar_path))) return FALSE;
@@ -2398,7 +2346,7 @@ static gboolean _apply_selected_layer_attachment(dt_iop_module_t *self, dt_iop_d
                                                  dt_iop_drawlayer_params_t *params, const char *layer_name,
                                                  const int layer_order)
 {
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(params) || layer_order < 0 || !_layer_name_non_empty(layer_name)) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(params) || layer_order < 0 || !dt_drawlayer_layer_name_non_empty(layer_name)) return FALSE;
 
   char previous_name[DRAWLAYER_NAME_SIZE] = { 0 };
   g_strlcpy(previous_name, params->layer_name, sizeof(previous_name));
@@ -2421,7 +2369,7 @@ static gboolean _apply_selected_layer_attachment(dt_iop_module_t *self, dt_iop_d
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     dt_dev_pixelpipe_update_history_all(self->dev);
   }
-  _refresh_layer_widgets(self);
+  dt_drawlayer_refresh_layer_widgets(self);
   return TRUE;
 }
 
@@ -2438,7 +2386,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   const char *text = dt_bauhaus_combobox_get_text(g->controls.layer_select);
   if(IS_NULL_PTR(text)) return;
 
-  if(!_layer_name_non_empty(params->layer_name))
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name))
   {
     _sync_layer_controls(self);
     return;
@@ -2453,13 +2401,13 @@ static void _attach_selected_layer_clicked(GtkButton *button, gpointer user_data
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return;
-  if(_layer_name_non_empty(params->layer_name)) return;
+  if(dt_drawlayer_layer_name_non_empty(params->layer_name)) return;
 
   const int active = dt_bauhaus_combobox_get(g->controls.layer_select);
   if(active < 0) return;
 
   const char *text = dt_bauhaus_combobox_get_text(g->controls.layer_select);
-  if(!_layer_name_non_empty(text)) return;
+  if(!dt_drawlayer_layer_name_non_empty(text)) return;
   _apply_selected_layer_attachment(self, g, params, text, active);
 }
 
@@ -2470,7 +2418,7 @@ static void _rename_layer_clicked(GtkButton *button, gpointer user_data)
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return;
-  if(!_layer_name_non_empty(params->layer_name)) return;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return;
 
   char requested_name[DRAWLAYER_NAME_SIZE] = { 0 };
   if(!_prompt_layer_name_dialog(_("Rename drawing layer"),
@@ -2493,7 +2441,7 @@ static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-  _refresh_layer_widgets(self);
+  dt_drawlayer_refresh_layer_widgets(self);
   gui_update(self);
 }
 
@@ -2529,7 +2477,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   g->process.cache_dirty_rect.se[0] = g->process.base_patch.width;
   g->process.cache_dirty_rect.se[1] = g->process.base_patch.height;
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
-  _reset_stroke_session(g);
+  dt_drawlayer_layers_reset_stroke_session(g);
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   return TRUE;
@@ -2557,7 +2505,7 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
   g->process.cache_dirty_rect.se[0] = g->process.base_patch.width;
   g->process.cache_dirty_rect.se[1] = g->process.base_patch.height;
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
-  _reset_stroke_session(g);
+  dt_drawlayer_layers_reset_stroke_session(g);
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   return TRUE;
@@ -2598,12 +2546,12 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
                                   _("The sidecar save was aborted."));
     return;
   }
-  if(!_layer_name_non_empty(g->process.cache_layer_name))
+  if(!dt_drawlayer_layer_name_non_empty(g->process.cache_layer_name))
   {
     _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
                                   _("Layer name is empty."),
                                   _("The sidecar save was aborted."));
-    _refresh_layer_widgets(self);
+    dt_drawlayer_refresh_layer_widgets(self);
     return;
   }
 
@@ -2637,7 +2585,7 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
     return;
   }
 
-  _rekey_shared_base_patch(&g->process.base_patch, self->dev->image_storage.id,
+  dt_drawlayer_rekey_shared_base_patch(&g->process.base_patch, self->dev->image_storage.id,
                            (const dt_iop_drawlayer_params_t *)self->params);
 
   if(!_flush_layer_cache(self))
@@ -2649,7 +2597,7 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
   }
 
   _release_all_base_patch_extra_refs(g);
-  _refresh_layer_widgets(self);
+  dt_drawlayer_refresh_layer_widgets(self);
 
   _show_drawlayer_modal_message(GTK_MESSAGE_INFO,
                                 _("Drawing sidecar saved."),
@@ -2934,7 +2882,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
                                           g ? &g->process : NULL, display_pipe, &data->runtime_manager,
                                           &data->runtime_process, &data->runtime_display_pipe);
   memcpy(&data->params, params, sizeof(dt_iop_drawlayer_params_t));
-  _sanitize_params(self, &data->params);
+  dt_drawlayer_sanitize_params(self, &data->params);
 
   /* Every pipe now warms the same authoritative base-patch snapshot through
    * the pixelpipe cache during `commit_params()`. GUI pipes still keep their
@@ -2982,7 +2930,7 @@ void gui_reset(dt_iop_module_t *self)
   }
 
   _sync_mode_sensitive_widgets(self);
-  _refresh_layer_widgets(self);
+  dt_drawlayer_refresh_layer_widgets(self);
 }
 
 /** @brief Hook called before module removal from history stack. */
@@ -3005,7 +2953,7 @@ void gui_init(dt_iop_module_t *self)
   dt_drawlayer_runtime_manager_init(&g->manager);
   dt_drawlayer_process_state_init(&g->process);
   dt_drawlayer_conf_load_color_history(g);
-  _sanitize_params(self, params);
+  dt_drawlayer_sanitize_params(self, params);
 
   dt_drawlayer_worker_init(self, &g->stroke.worker, &g->manager.painting_active,
                            &g->stroke.finish_commit_pending, &g->stroke.stroke_sample_count,
@@ -3340,7 +3288,7 @@ void gui_update(dt_iop_module_t *self)
    * the cache stale for longer than one non-motion event. */
   dt_drawlayer_invalidate_brush_settings_cache(g);
 
-  _sanitize_params(self, params);
+  dt_drawlayer_sanitize_params(self, params);
 
   dt_bauhaus_combobox_set(g->controls.brush_mode, dt_drawlayer_conf_brush_mode());
   dt_bauhaus_slider_set(g->controls.size, dt_drawlayer_conf_size());
@@ -3406,7 +3354,7 @@ void gui_update(dt_iop_module_t *self)
 
   _sync_mode_sensitive_widgets(self);
   _sync_preview_bg_buttons(self);
-  _populate_layer_list(self);
+  dt_drawlayer_layers_populate_list(self);
   _sync_layer_controls(self);
 
   if(self->dev)
@@ -3903,7 +3851,7 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || which != 1) return 0;
-  if(!_layer_name_non_empty(params ? params->layer_name : NULL)) return 0;
+  if(!dt_drawlayer_layer_name_non_empty(params ? params->layer_name : NULL)) return 0;
 
   if(self->dev->gui_module != self)
   {

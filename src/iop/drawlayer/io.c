@@ -148,7 +148,7 @@ typedef struct drawlayer_tiff_export_params_t
   int shortfile;
 } drawlayer_tiff_export_params_t;
 
-static gboolean _layer_name_non_empty(const char *name)
+static gboolean dt_drawlayer_layer_name_non_empty(const char *name)
 {
   if(IS_NULL_PTR(name)) return FALSE;
   char tmp[DT_DRAWLAYER_IO_NAME_SIZE] = { 0 };
@@ -157,7 +157,7 @@ static gboolean _layer_name_non_empty(const char *name)
   return tmp[0] != '\0';
 }
 
-static int64_t _sidecar_timestamp_from_path(const char *path)
+static int64_t dt_drawlayer_sidecar_timestamp_from_path(const char *path)
 {
   if(IS_NULL_PTR(path) || path[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return 0;
 
@@ -1068,7 +1068,7 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
     char bg_name[DT_DRAWLAYER_IO_NAME_SIZE] = { 0 };
     dt_drawlayer_io_make_unique_name_plain(params->sidecar_path, params->requested_bg_name, bg_name,
                                            sizeof(bg_name));
-    if(!_layer_name_non_empty(bg_name)) break;
+    if(!dt_drawlayer_layer_name_non_empty(bg_name)) break;
 
     int final_order = -1;
     if(!dt_drawlayer_io_insert_layer(params->sidecar_path, bg_name, params->insert_after_order,
@@ -1080,7 +1080,7 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
     if(!dt_drawlayer_io_find_layer(params->sidecar_path, bg_name, final_order, &io_info)) break;
 
     result->success = TRUE;
-    result->sidecar_timestamp = _sidecar_timestamp_from_path(params->sidecar_path);
+    result->sidecar_timestamp = dt_drawlayer_sidecar_timestamp_from_path(params->sidecar_path);
     g_strlcpy(result->created_bg_name, bg_name, sizeof(result->created_bg_name));
     g_snprintf(result->message, sizeof(result->message), _("created background layer `%s'"), bg_name);
   } while(0);

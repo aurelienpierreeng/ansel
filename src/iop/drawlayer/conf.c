@@ -28,7 +28,7 @@
 #include "widgets/bauhaus.h"          // dt_bauhaus_slider_get(), dt_bauhaus_combobox_get()
 
 /*
- * drawlayer config subsystem (included directly by drawlayer.c)
+ * drawlayer config subsystem
  *
  * This file intentionally has no public header/API.
  */
