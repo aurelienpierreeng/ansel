@@ -1654,8 +1654,6 @@ static void _sanitize_requested_layer_name(const char *requested, char *name, co
   g_strstrip(name);
 }
 
-/* Realtime worker/queue implementation lives in its own implementation include. */
-#include "drawlayer/worker.c"
 
 /* Layer cache and sidecar synchronization stay in a private implementation
  * include so drawlayer.c keeps the orchestration flow readable without
@@ -1860,7 +1858,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
    * reset it here — that would truncate the live path. This must guard BOTH commit
    * kinds: a quiet flush (record_history == FALSE, scheduled by GUI_SCROLL /
    * GUI_SYNC_TEMP_BUFFERS while pending stroke work exists) would otherwise run
-   * _wait_worker_idle + finalize + _reset_stroke_session mid-stroke without ever
+   * dt_drawlayer_worker_wait_idle + finalize + _reset_stroke_session mid-stroke without ever
    * clearing painting_active, silently cutting the stroke short. The realtime worker
    * already keeps base_patch updated incrementally, so there is nothing to flush
    * mid-stroke; defer a history commit to the worker and no-op a quiet flush. The
@@ -1874,7 +1872,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
     return TRUE;
   }
 
-  _cancel_async_commit(g->stroke.worker);
+  dt_drawlayer_worker_cancel_async_commit(g->stroke.worker);
 
   if(!record_history)
     dt_drawlayer_worker_seal_for_commit(g->stroke.worker);
@@ -1883,7 +1881,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
    * - the backend worker must be idle,
    * - the full-resolution layer cache must already contain the stroke,
    * - only then do we mutate params/history so the pipeline invalidation sees a coherent state. */
-  _wait_worker_idle(self, g->stroke.worker);
+  dt_drawlayer_worker_wait_idle(self, g->stroke.worker);
   /* Damage-rectangle ownership stays in drawlayer:
    * paint accumulates per-dab bounds into a stroke rectangle, and on commit the
    * module consumes that rectangle to update cache dirty state. */

@@ -34,6 +34,23 @@
  *  @brief Drawlayer realtime worker thread and FIFO event queue.
  */
 
+#include "iop/drawlayer/worker.h"
+
+#include "iop/drawlayer/cache.h"      // dt_drawlayer_cache_patch_t, ..._wrlock()
+#include "iop/drawlayer/common.h"     // dt_drawlayer_commit_dabs(), ..._build_worker_input_dab()
+#include "iop/drawlayer/module.h"     // dt_iop_drawlayer_data_t
+#include "iop/drawlayer/runtime.h"    // dt_iop_drawlayer_gui_data_t
+
+#include "control/control.h"          // dt_control_log()
+#include "control/redraw.h"           // dt_control_queue_redraw_center()
+#include "develop/develop.h"          // dt_develop_t
+#include "develop/dev_history.h"      // dt_dev_transient_params_set()
+#include "develop/gui_throttle.h"     // dt_gui_throttle_get_pipe_runtime_us(), DT_THROTTLE_SLOT_MAIN
+#include "develop/imageop_gui.h"      // dt_iop_gui_data()
+#include "system/dtpthread.h"         // dt_pthread_mutex_t
+#include "common/times.h"             // dt_get_wtime()
+#include "system/macros.h"            // IS_NULL_PTR()
+
 /** @brief Internal worker slot kinds (currently backend only). */
 typedef enum drawlayer_rt_worker_kind_t
 {
@@ -1192,10 +1209,10 @@ static gboolean _rt_workers_any_active(dt_drawlayer_worker_t *rt)
  * @brief Run the stroke-end commit on the GUI thread.
  *
  * The commit must not run on the worker thread. `dt_drawlayer_commit_dabs` calls
- * `_wait_worker_idle`, which blocks while `ring_count > 0`, and the ring's only consumer is
+ * `dt_drawlayer_worker_wait_idle`, which blocks while `ring_count > 0`, and the ring's only consumer is
  * the worker itself — so a worker-side commit that raced a GUI push parked the worker forever
  * in `dt_pthread_cond_wait`. The only escape, `worker->stop`, is set by `_stop_worker` *after*
- * it calls `_wait_worker_idle` too, so the next GUI-side commit (a layer operation, focus
+ * it calls `dt_drawlayer_worker_wait_idle` too, so the next GUI-side commit (a layer operation, focus
  * loss, image change, module removal, quit) hung the GUI thread on the same predicate.
  * The commit also writes `self->params` and the history stack, both of which belong to the
  * GUI thread.
@@ -1214,7 +1231,7 @@ static gboolean _commit_dabs_on_gui_thread(gpointer user_data)
   rt->commit_idle_id = 0;
   dt_pthread_mutex_unlock(&rt->worker_mutex);
 
-  _commit_dabs(self, TRUE);
+  dt_drawlayer_commit_dabs(self, TRUE);
   return G_SOURCE_REMOVE;
 }
 
@@ -1283,7 +1300,7 @@ static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t
   if(IS_NULL_PTR(rt)) return;
   /* Decide and post under the SAME lock acquisition. The old code read the predicate, dropped
    * the lock, then committed — and a GUI push landing in that window made the commit's
-   * `_wait_worker_idle` wait on a ring only this thread drains. */
+   * `dt_drawlayer_worker_wait_idle` wait on a ring only this thread drains. */
   dt_pthread_mutex_lock(&rt->worker_mutex);
   if(_workers_ready_for_commit_locked(rt) && rt->commit_idle_id == 0)
     rt->commit_idle_id = g_idle_add_full(G_PRIORITY_HIGH_IDLE, _commit_dabs_on_gui_thread, self, NULL);
@@ -1395,7 +1412,7 @@ static void _rt_cleanup_state(dt_drawlayer_worker_t **rt_out)
 }
 
 /** @brief Wait until worker queue is drained and not busy. */
-static gboolean _wait_worker_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
+gboolean dt_drawlayer_worker_wait_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   (void)self;
   const drawlayer_rt_worker_t *worker = _backend_worker_const(rt);
@@ -1410,7 +1427,7 @@ static gboolean _wait_worker_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *
    * does. */
   if(worker->thread_started && pthread_equal(pthread_self(), worker->thread))
     dt_print(DT_DEBUG_ALWAYS,
-             "[drawlayer] BUG: _wait_worker_idle called on the worker thread — it consumes the "
+             "[drawlayer] BUG: dt_drawlayer_worker_wait_idle called on the worker thread — it consumes the "
              "ring it is about to wait on, and will deadlock with the GUI thread.\n");
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
@@ -1540,7 +1557,7 @@ static gboolean _start_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 }
 
 /** @brief Cancel deferred commit request state if any. */
-static void _cancel_async_commit(dt_drawlayer_worker_t *rt)
+void dt_drawlayer_worker_cancel_async_commit(dt_drawlayer_worker_t *rt)
 {
   if(IS_NULL_PTR(rt)) return;
 
@@ -1554,7 +1571,7 @@ static void _stop_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   if(IS_NULL_PTR(rt)) return;
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
-  _cancel_async_commit(rt);
+  dt_drawlayer_worker_cancel_async_commit(rt);
   /* Before joining: a commit the worker posted must not fire against a torn-down module.
    * This runs on the GUI thread, as does the callback, so once the source is removed here
    * no commit can be in flight. */
@@ -1562,7 +1579,7 @@ static void _stop_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 
   if(worker && _worker_is_started(worker))
   {
-    _wait_worker_idle(self, rt);
+    dt_drawlayer_worker_wait_idle(self, rt);
 
     dt_pthread_mutex_lock(&rt->worker_mutex);
     worker->stop = TRUE;
@@ -1580,7 +1597,7 @@ static void _stop_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 }
 
 /** @brief Pause worker processing after current callback returns. */
-static void _pause_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
+void dt_drawlayer_worker_pause(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   (void)self;
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
@@ -1595,7 +1612,7 @@ static void _pause_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 }
 
 /** @brief Resume worker processing and wake sleeping thread. */
-static void _resume_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
+void dt_drawlayer_worker_resume(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   (void)self;
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
