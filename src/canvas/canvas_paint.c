@@ -21,6 +21,7 @@
 #include "canvas/canvas_dilate.h"
 #include "canvas/canvas_markdown.h"
 #include "canvas/canvas_text_breaks.h"
+#include "canvas/canvas_text_words.h"
 #include "colorprofiles/colorspaces.h"
 #include "common/logging.h"
 #include "common/times.h"
@@ -1685,41 +1686,6 @@ static PangoLayout *_text_layout(cairo_t *cr, const dt_canvas_t *canvas, const d
 }
 
 /**
- * How far a character may hang outside the measured edge, as a fraction of its own advance.
- * A quote is nearly all white space and hangs almost whole; a full stop hangs a little. The
- * point of it is that a column's edge is read from the STEMS, and a line beginning with a
- * quote looks indented when its box is flush.
- */
-static double _optical_hang(const gunichar character)
-{
-  switch(character)
-  {
-    case '"':
-    case '\'':
-    case 0x2018: // ' '
-    case 0x2019:
-    case 0x201C: // " "
-    case 0x201D:
-    case 0x00AB: // guillemets
-    case 0x00BB:
-    case 0x2039:
-    case 0x203A:
-      return 0.6;
-    case '-':
-    case 0x2013: // en and em dash
-    case 0x2014:
-      return 0.5;
-    case '.':
-    case ',':
-    case ';':
-    case ':':
-      return 0.35;
-    default:
-      return 0.0;
-  }
-}
-
-/**
  * Draw a layout line by line, so a line may be nudged for optical margins. Without the flag
  * this is `pango_cairo_show_layout()` spelled out, which is deliberate: ONE path, so the two
  * cannot drift apart.
@@ -1750,7 +1716,7 @@ static void _show_layout(cairo_t *cr, PangoLayout *layout, const gboolean optica
       const gboolean from_right = alignment == PANGO_ALIGN_RIGHT;
       const char *at = text + line->start_index;
       const char *edge = from_right ? g_utf8_prev_char(text + line->start_index + line->length) : at;
-      const double fraction = _optical_hang(g_utf8_get_char(edge));
+      const double fraction = dt_canvas_text_optical_hang(g_utf8_get_char(edge));
       if(fraction > 0.0)
       {
         int near_x = 0;
@@ -2365,7 +2331,7 @@ static gboolean _flow_piece(cairo_t *cr, const dt_canvas_t *canvas, const dt_can
     // wider measure ends its comma past the column's edge, and a justified line stretches
     // to that same wider measure so both of its edges read straight.
     const char *chunk = plain + *cached_offset;
-    const double lead = _optical_hang(g_utf8_get_char(chunk + line->start_index));
+    const double lead = dt_canvas_text_optical_hang(g_utf8_get_char(chunk + line->start_index));
     // A line ENDS on the space it broke at, so the last byte of it is whitespace and never
     // the comma that should hang. Walk back over what the break ate to find the character
     // the eye actually sees at the edge.
@@ -2378,7 +2344,7 @@ static gboolean _flow_piece(cairo_t *cr, const dt_canvas_t *canvas, const dt_can
       edge = previous;
     }
     edge = edge > chunk + line->start_index ? g_utf8_prev_char(edge) : chunk + line->start_index;
-    const double trail = _optical_hang(g_utf8_get_char(edge));
+    const double trail = dt_canvas_text_optical_hang(g_utf8_get_char(edge));
     if(trail > 0.0)
     {
       int near_x = 0;
