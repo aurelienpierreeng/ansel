@@ -3515,18 +3515,44 @@ they are visible.
   leaf's four sides owes the bleed or the bind, never both. The **bind gutter** is
   the binding's allowance inside a page at a fold ONLY, which is why
   `dt_canvas_page_margin_rect()` exists beside the symmetric `dt_canvas_page_guide_rect()`.
-- **A line set at a width the code chooses is one capability that buys two.** `_flow_text()`
-  lays a text frame line by line, and that is what BOTH text-wrapping and both-edge optical
-  margins need: a line inside the clear run beside an overlaid object, and a line set to a
-  measure slightly wider than its column so its final comma ends past the edge. Shifting a
-  finished line -- all the paragraph painter can do -- hangs the leading edge only. Three
-  traps paid for: **justification is free** (Pango never justifies a layout's last line, and
-  each layout holds all the remaining text, so line zero is last exactly when it should not be
-  justified); **a line ends on the space it broke at**, so its last byte is whitespace and
-  never the comma that should hang, and without walking back over it the trailing hang
-  measures a flat zero; and rebuild the layout ONLY when the run's width changes, or a plain
-  paragraph costs one layout per line. Obstacles are the frames ABOVE the text in draw order,
-  and each covers its SILHOUETTE (`dt_canvas_object_covers()`), never its bounding box.
+- **A line set at a width the code chooses is one capability that buys two, and the words are
+  measured BEFORE any line is asked for.** `_flow_plan()` lays a text frame line by line, and
+  that is what BOTH text-wrapping and both-edge optical margins need: a line inside the clear
+  stretch beside an overlaid object, and a line set to a measure slightly wider than its column
+  so its final comma ends past the edge. Shifting a finished line -- all the paragraph painter
+  can do -- hangs the leading edge only. The engine has three stages and no other: the whole
+  text is shaped ONCE, unwrapped, one Pango line per paragraph, and cut into words at Pango's
+  own break opportunities with each word's advance as shaped in its paragraph
+  (`canvas/canvas_text_words.h`); every line is then FILLED BY MEASURE across the clear
+  stretches of its band, adding those advances; and Pango sets each chosen segment on a one-line
+  layout of its own (`_flow_paint()`), at least as wide as the segment's natural width so a
+  viewport's rounding of a metric can never turn one line into two. It replaced a walk that set
+  each stretch with Pango and READ THE WIDTH BACK to decide whether the first word had fitted --
+  which a hanging comma and a justified line both make wrong on purpose, and the indent narrowed
+  behind its back. Seven patches in one week each fixed a measured consequence of that
+  inference; the eighth report ("empty lines beside the picture") was answered by removing it.
+  Justification of a one-line layout needs `pango_layout_set_justify_last_line(TRUE)` (Pango ≥
+  1.50; measured, 134 -> 300.00 of 300 asked, and its natural width without it), and the
+  paragraph's last line is left unjustified as Pango leaves it. Obstacles are the frames ABOVE
+  the text in draw order, and each covers its SILHOUETTE (`dt_canvas_object_covers()`), never
+  its bounding box.
+- **The fill is Pango's own break, measured, not reasoned from Pango's source -- and three
+  readings of that source were wrong.** `test_canvas_text_words` sweeps 191 measures over six
+  texts (prose, guarded French, tracked type, Hebrew, Hebrew with Latin inside it, paragraphs)
+  and holds the planner's line starts to the lines Pango sets at the same width. (1) **The space
+  a line breaks on HANGS**: UAX #14 puts the opportunity after the spaces, so the obvious reading
+  is that they count against the measure; counted, the planner set one line MORE than Pango at
+  36 units on plain prose. (2) **A finished line gives half its letter-spacing back at each
+  end**, and the unwrapped paragraph IS a finished line, so its first and last character read
+  half a spacing short of what the breaker counts: at 228 units with two units of tracking the
+  planner's first line summed to 233472 -- the measure to the unit -- and Pango refused it by the
+  1024 units `_restore_end_spacing()` now puts back from the attribute in force at the ends.
+  (3) **A run of words is measured PER WORD and summed, never as the difference of two x
+  positions**: `pango_layout_line_index_to_x()` is exact within one direction run (224.000 =
+  224.000, kerning pairs included) and reads 37 units across a change of direction where the
+  segment set alone is 75. `pango_glyph_string_get_logical_widths()` per run gives the advance
+  per character in logical order, direction-agnostic, and is the array Pango's breaker itself
+  adds up.
 - **A text frame's height is fitted when it is EDITED, never while it paints.** Auto height
   used to run in the view's expose, and for a frame that also flows around its neighbours that
   closes a loop: an object is anchored at its CENTRE, so writing a new height lifts the top
@@ -3584,37 +3610,39 @@ they are visible.
   not a defect**: horizontal lines against a diagonal always clear it by more at the line's own
   height than the gap asks for, by about `(band / 2) * tan(theta) * cos(theta)`, and every
   page-layout application does the same.
-- **A line is set across EVERY clear stretch of its band, not the widest one.** A picture in the
-  middle of a column leaves space either side and the line carries on past it. Measured on a
-  600-unit column with a 200-unit picture: an obstacle in the CENTRE costs what the same
-  obstacle against the edge costs (ratio 1.000) where taking the widest stretch cost 1.833.
-  The layout cache survives that only because its test now asks that the cached layout's next
-  line begin where the text stands, give or take the whitespace the last break ate -- width
-  alone hands back a layout describing text already on the page. Two traps, one test each: the
-  check must accept a next line starting BEFORE the text stands, or the empty line Pango draws
-  for a blank line between paragraphs is skipped and every document loses it; and a line that
-  took no text must still advance the layout, or the walk never ends.
+- **A line is set across EVERY clear stretch of its band, not the widest one, and a stretch
+  holds exactly the words that fit it.** A picture in the middle of a column leaves space either
+  side and the line carries on past it. Measured on a 600-unit column with a 200-unit picture:
+  an obstacle in the CENTRE costs what the same obstacle against the edge costs (ratio 1.000)
+  where taking the widest stretch cost 1.833. Nothing is set, weighed and refused: a stretch too
+  narrow for the next word is left empty and the word waits for a wider one below -- CSS 2.1
+  §9.5 moves the line box down the same way -- and a word wider than the frame's OWN measure is
+  set where it stands, overflowing, as WRAP_WORD does, rather than waited on for ever. A lone
+  word of one or two characters is a scrap that waits for a stretch that can take a line,
+  unless it ends its paragraph. Beside a picture leaving an 86-unit stretch on one side and 125
+  on the other, the reported document now carries ink on both sides of 7-9 of every 8-9 line
+  bands, where every line ending on a comma used to leave its stretch empty for the picture's
+  whole height.
 - **Paragraphs are separated by a BLANK LINE, as Markdown has it** -- a lone newline is a soft
   break and joins the lines. Measured through the converter: a blank line leaves two newlines
   in the text and the paragraph controls act on it, a single newline leaves NONE and they do
   not. Reported as "paragraph spacing doesn't work"; it is Markdown's rule, and the tooltip now
   says so.
-- **Which line opens a paragraph is a question about the TEXT, never about the cached layout.**
-  The character before where the text stands is the terminator the last break ate, so a newline
-  there is a paragraph boundary, and a line beginning ON a newline is the blank line between
-  two paragraphs, which opens nothing. Asked of the cached Pango layout instead -- "is its next
-  line preceded by a newline" -- the answer holds only while that layout survives from line to
-  line: a line set across two stretches rebuilds it almost every line, the rebuild starts AFTER
-  the break, the empty line carrying it is never reached, and the paragraph after it is never
-  asked about. Measured on a real document with the indent and the space both at 50 units, not
-  one of twenty-three lines got either. A run of newlines is ONE break however many it holds --
-  the blank line takes neither the indent nor the space, so the gap lands once, on the first
-  line with ink -- and `_flow_piece()` steps over ONE newline and no more for the same reason:
-  swallowing a run makes the blank line appear or vanish according to whether the layout
-  happened to be reused. Pango indents the first line of a paragraph itself, so the plain path
-  uses `pango_layout_set_indent()`; the flowing one cannot (every line is the first of its own
-  layout) and moves the run's start in instead, leaving its end, so every alignment indents
-  correctly.
+- **A paragraph is one of Pango's lines of the UNWRAPPED text, never something inferred from
+  the byte before the cursor.** Pango ends a line at every `"\n"`, so a `"\n\n"` separator
+  yields an EMPTY line between two paragraphs -- one line of white, colliding with nothing, that
+  takes neither the indent nor the space -- and a hard break or list item is a line of its own,
+  which takes both, exactly as the plain path's `pango_layout_set_indent()` indents it. The
+  old walk asked "is the character before the cursor a newline", then asked the cached layout
+  instead, and each answer was right only while its state survived from line to line: measured
+  on a real document with the indent and the space both at 50 units, not one of twenty-three
+  lines got either; then, once the byte was asked, a REFUSED line -- which consumes nothing --
+  asked the same question one line lower and was charged the paragraph gap again for every line
+  it waited (600 units where 400 were owed over a 26x21 grid of picture positions). With the
+  paragraphs known before the walk starts, the gap is paid once, before a paragraph's first band,
+  by construction. The indent moves the first stretch's start in and leaves its end, so every
+  alignment indents correctly, and an indent that eats the whole first stretch costs that
+  stretch, not the line.
 - **The leading is space BETWEEN lines, so a flowing paragraph has to advance it by hand.**
   `pango_layout_set_spacing()` puts it between the lines of ONE layout, and every line of a
   flowing paragraph is line zero of a layout of its own -- so no line's extents ever carry it,
@@ -3623,13 +3651,14 @@ they are visible.
   `pango_layout_get_spacing()` once per GAP, and read "is there more text" AFTER the line's own
   text is accounted for, or the paragraph ends on a trailing gap Pango would not have left. It
   also must NOT be folded into the band, for the reason above.
-- **A line is offered to the occupancy map in a band a LINE tall, and the first line has no
-  previous line to measure.** Taken from the last line it degenerates to nothing on line zero,
-  which placed the opening lines against a sliver of the map, gave them the full measure and
-  drew them straight through whatever stood just below the frame's top. The band starts at the
-  font's own ascent plus descent times the leading, and a line taller than the band it was
-  placed against is asked again -- the band only grows and the run only narrows, so one extra
-  pass settles it.
+- **A line is offered to the occupancy map in a band of its PARAGRAPH's ink, known before any
+  line of it is set.** The unwrapped paragraph's extents give the ink's top and height once, the
+  maximum over the paragraph, so every band is a whole line tall and there is nothing to guess
+  and nothing to ask again. The old walk took the band from the PREVIOUS line's ink, which is
+  nothing at all on line zero and after a blank line: the opening lines were placed against a
+  sliver of the map, given the full measure, and drawn straight through whatever stood just below
+  the frame's top, and a second pass with the real ink was needed to catch it. A paragraph mixing
+  type sizes is offered its tallest ink on every line, which is slightly conservative.
 - **An obstacle covers wherever it paints ANYTHING, and its border is the EFFECTIVE one.** Two
   ways the same rule was got wrong. A cut frame's edge is FEATHERED -- the cutout fades out
   rather than stopping -- and sampling that raster at half opacity puts the boundary in the
@@ -4162,28 +4191,19 @@ they are visible.
   guillemets** (classes IS, EX, CL), and what actually strands is the signs belonging to a NUMBER
   -- per cent, degree, per mille are class PO and a break after the space before them is allowed
   (measured at 24, 10 and 29 of 91 measures). One measure cannot tell the two groups apart.
-- **The flowing walk may refuse a stretch, and every refusal is made IN HOPE OF A WIDER ONE.** A
-  piece that does not fit, or that would be a lone one- or two-character scrap, is refused so the
-  walk tries the next stretch or the next line. A piece wider than the frame's own measure fits
-  nowhere, so refusing it DROPS it along with every word after it -- the walk consumes nothing and
-  asks the same question one line lower until the line cap. Measured: 4133 units where 66 were
-  owed, and 57188 once a skipped line cost a line of height rather than one unit. `_run_refused()`
-  returns FALSE outright once the run is the full measure.
-- **"The full measure" is the widest THIS line can ever be offered, which for a paragraph's first
-  line is the frame's measure LESS ITS INDENT.** The indent is taken off `runs[0]` before the piece
-  is set, and `_run_refused()` was then handed that narrowed run to compare against the frame's
-  whole measure -- so a first line whose set width landed between the two was refused for being one
-  indent too wide. An optical margin hangs a line's final comma past the measure and a justified
-  line is stretched to it, which is exactly how a set width gets there; a line ending on a letter
-  hangs nothing, which is why the first test text written for this showed nothing at all. A refused
-  line consumes nothing, so the next attempt is the same first line, indented, refused again, one
-  line lower each time. Measured with NOTHING laid over the column, justified with a 48-unit
-  indent: the frame came to 66776 units -- the line cap -- with no ink anywhere, the text gone and
-  the frame bottomless. Over a picture the cascade stops at the first stretch narrow enough for a
-  short piece to fit, which is beside the picture, so the paragraph's opening line lands against it
-  and **moves down with it whenever it is dragged** -- that is how it was reported, and the user's
-  own document (justified, optical margins, indent 48) is what it was found on. Only the indented
-  stretch is bounded this way; the rest of the line is not indented.
+- **Never decide whether a word fitted from the width of the line Pango produced.** That
+  inference (`_run_refused()`, gone) is what the flow engine was rewritten to remove, and it is
+  worth knowing what it cost so nothing like it comes back: a line set wider than its stretch on
+  purpose -- an optical margin hanging its final comma, a justified line stretched to that width
+  -- read as "the first word did not fit", so beside a picture every line ending on a comma was
+  refused and its stretch left empty for the picture's whole height; the indent, taken off the
+  first stretch before the comparison, made a paragraph's opening line one indent "too wide" on
+  the FULL measure, so it was refused and retried one line lower for ever -- landing against the
+  picture below and following it when dragged, and with no picture at all leaving a frame 66776
+  units tall (the line cap) with no ink in it. A line ending on a letter hangs nothing, which is
+  why the first synthetic text written for that case reproduced not one unit of it: the case
+  needs prose that ends its lines on commas. The words' widths are known now, so the fit is
+  arithmetic and there is no width to read back.
 - **A text shadow needs TWO passes, because it is cast by the glyphs and lies UNDER them but OVER
   the ground.** `dt_canvas_text_pass_t` splits the frame into GROUND and GLYPHS: paint the ground,
   lay the shadow taken from a glyphs-only render over it, then paint the glyphs. Painted in one
