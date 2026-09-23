@@ -20,7 +20,9 @@
 #define DT_IOP_DRAWLAYER_WORKER_H
 
 #include "iop/iop_api.h"
-#include "iop/drawlayer/paint.h"
+#include "iop/drawlayer/common.h"    // dt_iop_drawlayer_params_t
+#include "iop/drawlayer/paint.h"     // dt_drawlayer_patch_t
+#include "develop/imageop.h"         // dt_iop_module_t
 
 /** @file
  *  @brief Background stroke worker API for drawlayer realtime painting.
@@ -68,6 +70,18 @@ void dt_drawlayer_worker_snapshot_params(dt_drawlayer_worker_t *worker,
 gboolean dt_drawlayer_worker_ensure_running(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
 /** @brief Stop realtime and full-resolution worker threads. */
 void dt_drawlayer_worker_stop(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
+
+/** @brief Wait until the worker queue is drained and the thread is not busy. */
+gboolean dt_drawlayer_worker_wait_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
+
+/** @brief Pause worker processing once the current callback returns. */
+void dt_drawlayer_worker_pause(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
+
+/** @brief Resume worker processing and wake the sleeping thread. */
+void dt_drawlayer_worker_resume(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
+
+/** @brief Cancel the deferred commit request state, if any. */
+void dt_drawlayer_worker_cancel_async_commit(dt_drawlayer_worker_t *worker);
 /** @brief Seal current stroke for synchronous commit. */
 void dt_drawlayer_worker_seal_for_commit(dt_drawlayer_worker_t *worker);
 /** @brief Publish accumulated backend stroke damage into drawlayer process/runtime state. */

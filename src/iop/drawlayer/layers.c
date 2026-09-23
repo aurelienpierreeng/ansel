@@ -363,7 +363,7 @@ gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || !g->process.cache_valid || !g->process.cache_dirty || IS_NULL_PTR(g->process.base_patch.pixels)) return TRUE;
   if(!_layer_name_non_empty(params ? params->layer_name : NULL)) return TRUE;
   if(!_layer_name_non_empty(g->process.cache_layer_name)) return FALSE;
-  if(dt_drawlayer_worker_any_active(g->stroke.worker)) _wait_worker_idle(self, g->stroke.worker);
+  if(dt_drawlayer_worker_any_active(g->stroke.worker)) dt_drawlayer_worker_wait_idle(self, g->stroke.worker);
 
   char path[DT_PATH_MAX] = { 0 };
   const int32_t flush_imgid = (g->process.cache_imgid > 0) ? g->process.cache_imgid : self->dev->image_storage.id;
@@ -471,14 +471,14 @@ gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return FALSE;
 
-  _pause_worker(self, g->stroke.worker);
+  dt_drawlayer_worker_pause(self, g->stroke.worker);
   if(!_ensure_widget_cache(self))
   {
-    _resume_worker(self, g->stroke.worker);
+    dt_drawlayer_worker_resume(self, g->stroke.worker);
     return FALSE;
   }
 
   g->session.live_padding = _current_live_padding(self);
-  _resume_worker(self, g->stroke.worker);
+  dt_drawlayer_worker_resume(self, g->stroke.worker);
   return TRUE;
 }
