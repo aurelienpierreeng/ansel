@@ -64,7 +64,6 @@ void dt_drawlayer_worker_request_commit(dt_drawlayer_worker_t *worker);
 /** @brief Flush pending events and force commit transition. */
 void dt_drawlayer_worker_snapshot_params(dt_drawlayer_worker_t *worker,
                                          const dt_iop_drawlayer_params_t *params);
-void dt_drawlayer_worker_flush_pending(dt_drawlayer_worker_t *worker);
 /** @brief Ensure realtime/backend worker threads are started. */
 gboolean dt_drawlayer_worker_ensure_running(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
 /** @brief Stop realtime and full-resolution worker threads. */
@@ -81,10 +80,6 @@ void dt_drawlayer_worker_reset_live_publish(dt_drawlayer_worker_t *worker);
 void dt_drawlayer_worker_reset_stroke(dt_drawlayer_worker_t *worker);
 /** @brief Read-only access to preserved raw input queue for current stroke (valid only while worker is idle). */
 GArray *dt_drawlayer_worker_raw_inputs(dt_drawlayer_worker_t *worker);
-/** @brief Read-only access to preserved stroke runtime (valid only while worker is idle). */
-dt_drawlayer_paint_stroke_t *dt_drawlayer_worker_stroke(dt_drawlayer_worker_t *worker);
-/** @brief Return the number of interpolated-but-not-yet-rasterized dabs in the current stroke batch. */
-guint dt_drawlayer_worker_pending_dab_count(const dt_drawlayer_worker_t *worker);
 
 /** @brief Enqueue one raw input event (FIFO, no coalescing). */
 gboolean dt_drawlayer_worker_enqueue_input(dt_drawlayer_worker_t *worker,

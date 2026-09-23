@@ -19,7 +19,6 @@
 #ifndef DT_IOP_DRAWLAYER_WIDGETS_H
 #define DT_IOP_DRAWLAYER_WIDGETS_H
 
-
 #include <gtk/gtk.h>
 
 /** @file
@@ -44,9 +43,6 @@ void dt_drawlayer_widgets_cleanup(dt_drawlayer_widgets_t **widgets);
 void dt_drawlayer_widgets_set_display_color(dt_drawlayer_widgets_t *widgets, const float display_rgb[3]);
 /** @brief Get current display RGB color. */
 gboolean dt_drawlayer_widgets_get_display_color(const dt_drawlayer_widgets_t *widgets, float display_rgb[3]);
-
-/** @brief Mark picker backing surface dirty for redraw/rebuild. */
-void dt_drawlayer_widgets_mark_picker_dirty(dt_drawlayer_widgets_t *widgets);
 
 /** @brief Replace full color-history stack and validity flags. */
 void dt_drawlayer_widgets_set_color_history(dt_drawlayer_widgets_t *widgets,

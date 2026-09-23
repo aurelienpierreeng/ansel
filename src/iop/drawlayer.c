@@ -132,8 +132,6 @@ typedef dt_drawlayer_runtime_context_t drawlayer_runtime_host_context_t;
 #define _current_live_padding dt_drawlayer_current_live_padding
 #define _layer_to_widget_coords dt_drawlayer_layer_to_widget_coords
 #define _touch_stroke_commit_hash dt_drawlayer_touch_stroke_commit_hash
-#define _drawlayer_runtime_collect_inputs NULL
-#define _drawlayer_runtime_perform_action NULL
 
 gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, gboolean record_history);
 gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self);
@@ -1968,8 +1966,6 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
     .user_data = &runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
   };
   dt_drawlayer_runtime_manager_update(
       &g->manager,
@@ -2794,8 +2790,6 @@ static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
     .user_data = (void *)&runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
   };
   return dt_drawlayer_runtime_manager_update(
       &g->manager,
@@ -2981,8 +2975,6 @@ void gui_reset(dt_iop_module_t *self)
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     dt_drawlayer_runtime_manager_update(
         &g->manager,
@@ -3329,8 +3321,6 @@ void gui_init(dt_iop_module_t *self)
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     dt_drawlayer_runtime_manager_update(
         &g->manager,
@@ -3436,8 +3426,6 @@ void gui_update(dt_iop_module_t *self)
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     dt_drawlayer_runtime_manager_update(
         &g->manager,
@@ -3467,8 +3455,6 @@ void change_image(dt_iop_module_t *self)
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_CHANGE_IMAGE,
@@ -3499,8 +3485,6 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS,
@@ -3538,8 +3522,6 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_GAIN,
@@ -3787,8 +3769,6 @@ int mouse_leave(dt_iop_module_t *self)
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
     .user_data = &runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
   };
   const dt_drawlayer_runtime_update_request_t update = {
     .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE,
@@ -3820,8 +3800,6 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t leave_update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE,
@@ -3849,8 +3827,6 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     };
     const dt_drawlayer_runtime_host_t enter_manager = {
       .user_data = &enter_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     dt_drawlayer_runtime_manager_update(
         &g->manager,
@@ -3876,8 +3852,6 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
@@ -3915,8 +3889,6 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
@@ -3975,8 +3947,6 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
     .user_data = &runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
   };
   const dt_drawlayer_runtime_update_request_t update = {
     .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
@@ -4030,8 +4000,6 @@ int button_released(dt_iop_module_t *self, double x, double y, int which, uint32
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
@@ -4081,8 +4049,6 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_SCROLL,
@@ -4134,8 +4100,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
     .user_data = &runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
   };
   const dt_drawlayer_runtime_update_request_t process_pre = {
     .event = DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CL_BEFORE,
@@ -4300,8 +4264,6 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
     .user_data = &runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
   };
   const dt_drawlayer_runtime_update_request_t process_pre = {
     .event = DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_BEFORE,

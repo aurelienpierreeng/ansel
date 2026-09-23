@@ -218,8 +218,6 @@ gboolean dt_drawlayer_paint_runtime_ensure_smudge_pixels(dt_drawlayer_paint_stro
 float *dt_drawlayer_paint_runtime_smudge_pixels(dt_drawlayer_paint_stroke_t *state);
 /** @brief Get smudge carry buffer width. */
 int dt_drawlayer_paint_runtime_smudge_width(const dt_drawlayer_paint_stroke_t *state);
-/** @brief Get smudge carry buffer height. */
-int dt_drawlayer_paint_runtime_smudge_height(const dt_drawlayer_paint_stroke_t *state);
 /** @brief Query whether smudge pickup coordinates are initialized. */
 gboolean dt_drawlayer_paint_runtime_have_smudge_pickup(const dt_drawlayer_paint_stroke_t *state);
 /** @brief Read smudge pickup coordinates. */

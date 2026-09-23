@@ -122,32 +122,6 @@ void dt_drawlayer_runtime_manager_note_buffer_lock(dt_drawlayer_runtime_manager_
   dt_pthread_mutex_unlock(&priv->mutex);
 }
 
-void dt_drawlayer_runtime_manager_note_sidecar_io(dt_drawlayer_runtime_manager_t *state, const gboolean active)
-{
-  dt_drawlayer_runtime_private_t *priv = _runtime_private(state);
-  if(IS_NULL_PTR(priv)) return;
-  dt_pthread_mutex_lock(&priv->mutex);
-  priv->sidecar_io_active = active;
-  priv->threads[DT_DRAWLAYER_RUNTIME_ACTOR_TIFF_IO].active = active;
-  priv->threads[DT_DRAWLAYER_RUNTIME_ACTOR_TIFF_IO].waiting = FALSE;
-  dt_pthread_mutex_unlock(&priv->mutex);
-}
-
-void dt_drawlayer_runtime_manager_note_thread(dt_drawlayer_runtime_manager_t *state,
-                                              const dt_drawlayer_runtime_actor_t actor,
-                                              const gboolean active,
-                                              const gboolean waiting,
-                                              const guint queued)
-{
-  dt_drawlayer_runtime_private_t *priv = _runtime_private(state);
-  if(IS_NULL_PTR(priv) || actor <= DT_DRAWLAYER_RUNTIME_ACTOR_NONE || actor >= DT_DRAWLAYER_RUNTIME_ACTOR_COUNT) return;
-  dt_pthread_mutex_lock(&priv->mutex);
-  priv->threads[actor].active = active;
-  priv->threads[actor].waiting = waiting;
-  priv->threads[actor].queued = queued;
-  dt_pthread_mutex_unlock(&priv->mutex);
-}
-
 static void _fill_runtime_inputs(const dt_drawlayer_runtime_context_t *runtime,
                                  const dt_drawlayer_worker_snapshot_t *worker_snapshot,
                                  dt_drawlayer_runtime_inputs_t *inputs)
