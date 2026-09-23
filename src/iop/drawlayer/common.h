@@ -30,6 +30,15 @@ typedef enum dt_drawlayer_runtime_feedback_t
 } dt_drawlayer_runtime_feedback_t;
 
 gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, gboolean record_history);
+
+/**
+ * @brief Cache the brush colours in GUI state so a stroke's input snapshots do not
+ *        re-transform them per event.
+ *
+ * The pipeline-space colour is derived through the display profile, which is why this
+ * lives with the module rather than with the configuration it is usually set from.
+ */
+void dt_drawlayer_sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3]);
 gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self);
 gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self);
 void dt_drawlayer_invalidate_brush_settings_cache(dt_iop_drawlayer_gui_data_t *g);

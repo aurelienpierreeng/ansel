@@ -1,6 +1,9 @@
 #ifndef DT_IOP_DRAWLAYER_COORDINATES_H
 #define DT_IOP_DRAWLAYER_COORDINATES_H
 
+#include "iop/drawlayer/brush.h"       // dt_drawlayer_brush_dab_t
+#include "develop/imageop.h"           // dt_iop_module_t, dt_iop_roi_t
+
 
 /** @file
  *  @brief Shared coordinate transforms and geometry computations for drawlayer.

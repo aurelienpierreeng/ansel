@@ -1,6 +1,7 @@
 #ifndef DT_IOP_DRAWLAYER_RUNTIME_H
 #define DT_IOP_DRAWLAYER_RUNTIME_H
 
+#include "iop/drawlayer/cache.h"        // dt_drawlayer_cache_patch_t, held by value below
 #include "iop/drawlayer/coordinates.h"
 #include "iop/drawlayer/widgets.h"
 #include "iop/drawlayer/worker.h"
