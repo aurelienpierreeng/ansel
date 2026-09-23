@@ -2,6 +2,7 @@
 #define DT_IOP_DRAWLAYER_COMMON_H
 
 #include "develop/imageop.h"
+#include "iop/drawlayer/cache.h"       // dt_drawlayer_cache_patch_t
 #include "iop/drawlayer/paint.h"
 
 /** @file
@@ -39,6 +40,24 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, gboolean record_history
  * lives with the module rather than with the configuration it is usually set from.
  */
 void dt_drawlayer_sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3]);
+
+/* Reached from the layer store (layers.c); defined in drawlayer.c, where the module's
+ * own state they read and write lives. */
+gboolean dt_drawlayer_layer_name_non_empty(const char *name);
+
+gboolean dt_drawlayer_current_work_profile_key(dt_iop_module_t *self, GList *iop_list, dt_dev_pixelpipe_t *pipe,
+                                              char *key, const size_t key_size);
+
+gboolean dt_drawlayer_rekey_shared_base_patch(dt_drawlayer_cache_patch_t *patch, const int32_t imgid,
+                                         const dt_iop_drawlayer_params_t *params);
+
+void dt_drawlayer_retain_base_patch_loaded_ref(dt_iop_drawlayer_gui_data_t *g);
+
+int64_t dt_drawlayer_sidecar_timestamp_from_path(const char *path);
+
+void dt_drawlayer_sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *params);
+
+void dt_drawlayer_refresh_layer_widgets(dt_iop_module_t *self);
 gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self);
 gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self);
 void dt_drawlayer_invalidate_brush_settings_cache(dt_iop_drawlayer_gui_data_t *g);

@@ -1,22 +1,29 @@
+#include "iop/drawlayer/layers.h"
+
+#include "iop/drawlayer/cache.h"       // dt_drawlayer_cache_patch_*()
+#include "iop/drawlayer/conf.h"        // DRAWLAYER_CONF_* keys
+#include "iop/drawlayer/io.h"          // dt_drawlayer_io_*()
+#include "iop/drawlayer/runtime.h"     // dt_iop_drawlayer_gui_data_t (dereferenced here)
+#include "iop/drawlayer/widgets.h"     // widget cache helpers
+#include "iop/drawlayer/worker.h"      // dt_drawlayer_worker_*()
+
+#include "control/control.h"          // dt_control_log()
+#include "develop/develop.h"           // dt_dev_geometry_snapshot(), dt_dev_viewport_*()
+#include "develop/dev_history.h"       // dt_dev_transient_params_clear()
+#include "develop/imageop_gui.h"       // dt_iop_gui_data()
+#include "develop/pixelpipe_hb.h"      // dt_dev_pixelpipe_resync_history_main()
+#include "widgets/bauhaus.h"           // dt_bauhaus_combobox_*()
+#include "widgets/widget_settings.h"   // dt_gui_widget_freeze()
+
 /** @file
  *  @brief Private drawlayer layer cache, sidecar sync and widget cache state.
  *
- *  This file is text-included from drawlayer.c on purpose. The goal is to keep
- *  the main module file readable while preserving one translation unit, so
- *  cache ownership, worker synchronization and GUI side effects stay visible to
- *  the caller instead of being hidden behind a separate API boundary.
+ *  Cache ownership, worker synchronisation and the GUI side effects are the point of
+ *  this file: what it publishes to drawlayer.c is in layers.h, and what drawlayer.c
+ *  publishes back to it is in common.h. Both lists are short, and being short is what
+ *  makes them worth reading -- this used to be a text #include with no list at all.
  */
 
-typedef struct drawlayer_dir_info_t
-{
-  gboolean found;
-  int index;
-  int count;
-  uint32_t width;
-  uint32_t height;
-  char name[DRAWLAYER_NAME_SIZE];
-  char work_profile[DRAWLAYER_PROFILE_SIZE];
-} drawlayer_dir_info_t;
 
 typedef struct drawlayer_layer_cache_key_t
 {
@@ -27,20 +34,20 @@ typedef struct drawlayer_layer_cache_key_t
   int layer_order;
 } drawlayer_layer_cache_key_t;
 
-static void _layerio_append_error(GString *errors, const char *message)
+void dt_drawlayer_layers_append_error(GString *errors, const char *message)
 {
   if(IS_NULL_PTR(errors) || IS_NULL_PTR(message) || message[0] == '\0') return;
   if(errors->len > 0) g_string_append(errors, "; ");
   g_string_append(errors, message);
 }
 
-static void _layerio_log_errors(GString *errors)
+void dt_drawlayer_layers_log_errors(GString *errors)
 {
   if(IS_NULL_PTR(errors)) return;
   if(errors->len > 0) dt_control_log("%s", errors->str);
 }
 
-static void _populate_layer_list(dt_iop_module_t *self)
+void dt_drawlayer_layers_populate_list(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
@@ -77,7 +84,7 @@ static void _populate_layer_list(dt_iop_module_t *self)
   dt_drawlayer_io_free_layer_names(&names, &count);
   if(active >= 0)
     dt_bauhaus_combobox_set(g->controls.layer_select, active);
-  else if(listed_count > 0 && !_layer_name_non_empty(params->layer_name))
+  else if(listed_count > 0 && !dt_drawlayer_layer_name_non_empty(params->layer_name))
     dt_bauhaus_combobox_set(g->controls.layer_select, 0);
   else
     /* The combobox is reserved for layers that already exist in the TIFF
@@ -86,7 +93,7 @@ static void _populate_layer_list(dt_iop_module_t *self)
     dt_bauhaus_combobox_set(g->controls.layer_select, -1);
 }
 
-static void _reset_stroke_session(dt_iop_drawlayer_gui_data_t *g)
+void dt_drawlayer_layers_reset_stroke_session(dt_iop_drawlayer_gui_data_t *g)
 {
   if(IS_NULL_PTR(g)) return;
   g->stroke.stroke_sample_count = 0;
@@ -133,22 +140,22 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return FALSE;
 
-  _sanitize_params(self, params);
+  dt_drawlayer_sanitize_params(self, params);
   int layer_width = 0;
   int layer_height = 0;
   const int32_t imgid = self->dev->image_storage.id;
   GMainContext *const ui_ctx = g_main_context_default();
   const gboolean ui_thread = ui_ctx && g_main_context_is_owner(ui_ctx);
-  if(!_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
+  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
   {
     const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
     layer_width = geometry.raw_width;
     layer_height = geometry.raw_height;
   }
   if(imgid <= 0 || layer_width <= 0 || layer_height <= 0) return FALSE;
-  if(!_layer_name_non_empty(params->layer_name))
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name))
   {
-    _release_all_base_patch_extra_refs(g);
+    dt_drawlayer_release_all_base_patch_extra_refs(g);
     dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
     g->process.cache_valid = FALSE;
     g->process.cache_dirty = FALSE;
@@ -157,7 +164,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
     g->process.cache_layer_name[0] = '\0';
     g->process.cache_layer_order = -1;
     dt_drawlayer_process_state_invalidate(&g->process);
-    if(ui_thread) _refresh_layer_widgets(self);
+    if(ui_thread) dt_drawlayer_refresh_layer_widgets(self);
     return TRUE;
   }
   const drawlayer_layer_cache_key_t cache_key = {
@@ -171,54 +178,54 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   GString *errors = g_string_new(NULL);
 
   char current_profile[DRAWLAYER_PROFILE_SIZE] = { 0 };
-  const gboolean have_current_profile = _get_current_work_profile_key(self, self->dev->iop, self->dev->pipe,
+  const gboolean have_current_profile = dt_drawlayer_current_work_profile_key(self, self->dev->iop, self->dev->pipe,
                                                                       current_profile, sizeof(current_profile));
   if(!have_current_profile)
-    _layerio_append_error(errors, _("failed to resolve drawlayer working profile"));
+    dt_drawlayer_layers_append_error(errors, _("failed to resolve drawlayer working profile"));
   else if(params->work_profile[0] == '\0')
     g_strlcpy(params->work_profile, current_profile, sizeof(params->work_profile));
   else if(g_strcmp0(params->work_profile, current_profile))
-    _layerio_append_error(errors, _("drawlayer working profile mismatch"));
+    dt_drawlayer_layers_append_error(errors, _("drawlayer working profile mismatch"));
 
   if(_layer_cache_matches(g, &cache_key))
   {
-    _layerio_log_errors(errors);
+    dt_drawlayer_layers_log_errors(errors);
     g_string_free(errors, TRUE);
     return TRUE;
   }
 
-  if(!_flush_layer_cache(self))
+  if(!dt_drawlayer_flush_layer_cache(self))
   {
-    _layerio_append_error(errors, _("failed to write drawing layer sidecar"));
-    _layerio_log_errors(errors);
+    dt_drawlayer_layers_append_error(errors, _("failed to write drawing layer sidecar"));
+    dt_drawlayer_layers_log_errors(errors);
     g_string_free(errors, TRUE);
     return FALSE;
   }
   /* We are about to replace/rebind `g->process.base_patch`; drop all explicit extra
    * refs from the previous entry first so counters never leak across entries. */
-  _release_all_base_patch_extra_refs(g);
+  dt_drawlayer_release_all_base_patch_extra_refs(g);
 
   int created = 0;
   if(!dt_drawlayer_cache_patch_alloc_shared(&g->process.base_patch,
-                                            _drawlayer_params_cache_hash(imgid, params, layer_width, layer_height),
+                                            dt_drawlayer_params_cache_hash(imgid, params, layer_width, layer_height),
                                             (size_t)layer_width * layer_height, layer_width, layer_height,
                                             "drawlayer sidecar cache", &created))
   {
-    _release_all_base_patch_extra_refs(g);
+    dt_drawlayer_release_all_base_patch_extra_refs(g);
     dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
     g->process.cache_valid = FALSE;
-    _layerio_log_errors(errors);
+    dt_drawlayer_layers_log_errors(errors);
     g_string_free(errors, TRUE);
     return FALSE;
   }
   if(!dt_drawlayer_cache_ensure_mask_buffer(&g->process.stroke_mask, layer_width, layer_height,
                                             "drawlayer stroke mask"))
   {
-    _release_all_base_patch_extra_refs(g);
+    dt_drawlayer_release_all_base_patch_extra_refs(g);
     dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
     g->process.cache_valid = FALSE;
-    _layerio_append_error(errors, _("failed to allocate drawlayer stroke mask"));
-    _layerio_log_errors(errors);
+    dt_drawlayer_layers_append_error(errors, _("failed to allocate drawlayer stroke mask"));
+    dt_drawlayer_layers_log_errors(errors);
     g_string_free(errors, TRUE);
     return FALSE;
   }
@@ -240,11 +247,11 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   }
   else if(!dt_drawlayer_io_sidecar_path(imgid, path, sizeof(path)))
   {
-    _release_all_base_patch_extra_refs(g);
+    dt_drawlayer_release_all_base_patch_extra_refs(g);
     dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
     g->process.cache_valid = FALSE;
-    _layerio_append_error(errors, _("failed to resolve drawlayer sidecar path"));
-    _layerio_log_errors(errors);
+    dt_drawlayer_layers_append_error(errors, _("failed to resolve drawlayer sidecar path"));
+    dt_drawlayer_layers_log_errors(errors);
     g_string_free(errors, TRUE);
     return TRUE;
   }
@@ -277,7 +284,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
         params->layer_order = -1;
         params->sidecar_timestamp = 0;
         memset(params->work_profile, 0, sizeof(params->work_profile));
-        _release_all_base_patch_extra_refs(g);
+        dt_drawlayer_release_all_base_patch_extra_refs(g);
         dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
         g->process.cache_valid = FALSE;
         g->process.cache_dirty = FALSE;
@@ -285,7 +292,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
         g->process.cache_imgid = -1;
         g->process.cache_layer_name[0] = '\0';
         g->process.cache_layer_order = -1;
-        _reset_stroke_session(g);
+        dt_drawlayer_layers_reset_stroke_session(g);
         dt_drawlayer_process_state_invalidate(&g->process);
       }
     }
@@ -304,7 +311,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
         g_strlcpy(params->work_profile, info.work_profile, sizeof(params->work_profile));
 
       if(have_current_profile && info.work_profile[0] != '\0' && g_strcmp0(info.work_profile, current_profile))
-        _layerio_append_error(errors, _("drawlayer sidecar profile mismatch"));
+        dt_drawlayer_layers_append_error(errors, _("drawlayer sidecar profile mismatch"));
 
       dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
       dt_drawlayer_io_patch_t io_patch = {
@@ -319,12 +326,12 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
       dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);
       if(!loaded)
       {
-        _layerio_append_error(errors, _("failed to read drawing layer sidecar"));
+        dt_drawlayer_layers_append_error(errors, _("failed to read drawing layer sidecar"));
         ok = FALSE;
       }
       else
       {
-        params->sidecar_timestamp = _sidecar_timestamp_from_path(path);
+        params->sidecar_timestamp = dt_drawlayer_sidecar_timestamp_from_path(path);
         cache_loaded = TRUE;
       }
     }
@@ -338,20 +345,20 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
     g->process.cache_imgid = imgid;
     g_strlcpy(g->process.cache_layer_name, params->layer_name, sizeof(g->process.cache_layer_name));
     g->process.cache_layer_order = params->layer_order;
-    if(ui_thread && g->controls.layer_select) _populate_layer_list(self);
-    if(created) _retain_base_patch_loaded_ref(g);
+    if(ui_thread && g->controls.layer_select) dt_drawlayer_layers_populate_list(self);
+    if(created) dt_drawlayer_retain_base_patch_loaded_ref(g);
   }
-  else if(_layer_name_non_empty(params->layer_name))
+  else if(dt_drawlayer_layer_name_non_empty(params->layer_name))
   {
-    _release_all_base_patch_extra_refs(g);
+    dt_drawlayer_release_all_base_patch_extra_refs(g);
     dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
     g->process.cache_valid = FALSE;
     g->process.cache_dirty = FALSE;
     dt_drawlayer_paint_runtime_state_reset(&g->process.cache_dirty_rect);
   }
 
-  if(ui_thread && !cache_loaded) _refresh_layer_widgets(self);
-  _layerio_log_errors(errors);
+  if(ui_thread && !cache_loaded) dt_drawlayer_refresh_layer_widgets(self);
+  dt_drawlayer_layers_log_errors(errors);
   g_string_free(errors, TRUE);
   return ok || !cache_loaded;
 }
@@ -361,8 +368,8 @@ gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_drawlayer_params_t *params = (const dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || !g->process.cache_valid || !g->process.cache_dirty || IS_NULL_PTR(g->process.base_patch.pixels)) return TRUE;
-  if(!_layer_name_non_empty(params ? params->layer_name : NULL)) return TRUE;
-  if(!_layer_name_non_empty(g->process.cache_layer_name)) return FALSE;
+  if(!dt_drawlayer_layer_name_non_empty(params ? params->layer_name : NULL)) return TRUE;
+  if(!dt_drawlayer_layer_name_non_empty(g->process.cache_layer_name)) return FALSE;
   if(dt_drawlayer_worker_any_active(g->stroke.worker)) dt_drawlayer_worker_wait_idle(self, g->stroke.worker);
 
   char path[DT_PATH_MAX] = { 0 };
@@ -394,10 +401,10 @@ gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
   if(mutable_params)
   {
     if(!g_strcmp0(mutable_params->layer_name, g->process.cache_layer_name)) mutable_params->layer_order = final_order;
-    mutable_params->sidecar_timestamp = _sidecar_timestamp_from_path(path);
-    _rekey_shared_base_patch(&g->process.base_patch, flush_imgid, mutable_params);
+    mutable_params->sidecar_timestamp = dt_drawlayer_sidecar_timestamp_from_path(path);
+    dt_drawlayer_rekey_shared_base_patch(&g->process.base_patch, flush_imgid, mutable_params);
   }
-  _release_all_base_patch_extra_refs(g);
+  dt_drawlayer_release_all_base_patch_extra_refs(g);
   return TRUE;
 }
 
@@ -478,7 +485,7 @@ gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self)
     return FALSE;
   }
 
-  g->session.live_padding = _current_live_padding(self);
+  g->session.live_padding = dt_drawlayer_current_live_padding(self);
   dt_drawlayer_worker_resume(self, g->stroke.worker);
   return TRUE;
 }
