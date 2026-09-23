@@ -53,6 +53,7 @@
 #include "iop/drawlayer/brush.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/common.h"
+#include "iop/drawlayer/conf.h"
 #include "iop/drawlayer/coordinates.h"
 #include "iop/drawlayer/io.h"
 #include "iop/drawlayer/module.h"
@@ -148,15 +149,12 @@ static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t
                                                                  dt_iop_drawlayer_gui_data_t *g,
                                                                  dt_drawlayer_runtime_event_t event,
                                                                  gboolean flush_pending);
-static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3]);
 
 typedef struct drawlayer_wait_dialog_t
 {
   GtkWidget *dialog;
 } drawlayer_wait_dialog_t;
 
-#include "drawlayer/conf.c"
-#include "drawlayer/coordinates.c"
 #include "control/signal.h"
 
 /** @brief Convert one display-space brush color snapshot to pipeline space. */
@@ -186,14 +184,14 @@ static void _brush_pipeline_color_from_display(dt_iop_module_t *self, const floa
     }
   }
 
-  const float gain = exp2f(_conf_hdr_exposure());
+  const float gain = exp2f(dt_drawlayer_conf_hdr_exposure());
   pipeline_rgb[0] *= gain;
   pipeline_rgb[1] *= gain;
   pipeline_rgb[2] *= gain;
 }
 
 /** @brief Cache brush colors in GUI state so stroke input snapshots don't re-transform per event. */
-static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3])
+void dt_drawlayer_sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3])
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !display_rgb) return;
@@ -210,7 +208,7 @@ static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display
  *
  * Every read here parses a string (`dt_conf_get_float` -> `dt_calculator_solve`), so this
  * runs when something CHANGES the brush, not when the pointer moves. Its three runtime
- * writers are `_sync_params_from_gui` (every widget), the colour setter, and `scrolled()`;
+ * writers are `dt_drawlayer_conf_sync_params_from_gui` (every widget), the colour setter, and `scrolled()`;
  * `gui_update`, `change_image` and `gui_focus` invalidate as well, so a path nobody
  * enumerated still refills on the next non-motion event.
  */
@@ -234,20 +232,20 @@ static void _refresh_brush_settings_cache(dt_iop_drawlayer_gui_data_t *g)
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_SOFTNESS;
 
   c->map_flags = map_flags;
-  c->pressure_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
-  c->tilt_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
-  c->accel_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
-  c->distance_percent = _conf_distance() / 100.0f;
-  c->smoothing_percent = _conf_smoothing() / 100.0f;
-  c->brush_radius = _conf_size();
-  c->brush_opacity = _conf_opacity() / 100.0f;
-  c->brush_flow = _conf_flow() / 100.0f;
-  c->brush_hardness = _conf_hardness();
-  c->brush_sprinkles = _conf_sprinkles() / 100.0f;
-  c->brush_sprinkle_size = _conf_sprinkle_size();
-  c->brush_sprinkle_coarseness = _conf_sprinkle_coarseness() / 100.0f;
-  c->brush_shape = _conf_brush_shape();
-  c->brush_mode = _conf_brush_mode();
+  c->pressure_profile = (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
+  c->tilt_profile = (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
+  c->accel_profile = (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
+  c->distance_percent = dt_drawlayer_conf_distance() / 100.0f;
+  c->smoothing_percent = dt_drawlayer_conf_smoothing() / 100.0f;
+  c->brush_radius = dt_drawlayer_conf_size();
+  c->brush_opacity = dt_drawlayer_conf_opacity() / 100.0f;
+  c->brush_flow = dt_drawlayer_conf_flow() / 100.0f;
+  c->brush_hardness = dt_drawlayer_conf_hardness();
+  c->brush_sprinkles = dt_drawlayer_conf_sprinkles() / 100.0f;
+  c->brush_sprinkle_size = dt_drawlayer_conf_sprinkle_size();
+  c->brush_sprinkle_coarseness = dt_drawlayer_conf_sprinkle_coarseness() / 100.0f;
+  c->brush_shape = dt_drawlayer_conf_brush_shape();
+  c->brush_mode = dt_drawlayer_conf_brush_mode();
   g->ui.brush_settings_valid = TRUE;
 }
 
@@ -289,8 +287,8 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
   }
   else
   {
-    _conf_display_color(display_rgb);
-    if(!IS_NULL_PTR(g)) _sync_cached_brush_colors(self, display_rgb);
+    dt_drawlayer_conf_display_color(display_rgb);
+    if(!IS_NULL_PTR(g)) dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
     if(!IS_NULL_PTR(g) && g->ui.brush_color_valid)
     {
       memcpy(display_rgb, g->ui.brush_display_color, sizeof(display_rgb));
@@ -307,20 +305,20 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
 
   const dt_drawlayer_brush_settings_t *const c = IS_NULL_PTR(g) ? NULL : &g->ui.brush_settings;
   input->map_flags = c ? c->map_flags : map_flags;
-  input->pressure_profile = c ? c->pressure_profile : (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
-  input->tilt_profile = c ? c->tilt_profile : (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
-  input->accel_profile = c ? c->accel_profile : (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
-  input->distance_percent = c ? c->distance_percent : _conf_distance() / 100.0f;
-  input->smoothing_percent = c ? c->smoothing_percent : _conf_smoothing() / 100.0f;
-  input->brush_radius = c ? c->brush_radius : _conf_size();
-  input->brush_opacity = c ? c->brush_opacity : _conf_opacity() / 100.0f;
-  input->brush_flow = c ? c->brush_flow : _conf_flow() / 100.0f;
-  input->brush_hardness = c ? c->brush_hardness : _conf_hardness();
-  input->brush_sprinkles = c ? c->brush_sprinkles : _conf_sprinkles() / 100.0f;
-  input->brush_sprinkle_size = c ? c->brush_sprinkle_size : _conf_sprinkle_size();
-  input->brush_sprinkle_coarseness = c ? c->brush_sprinkle_coarseness : _conf_sprinkle_coarseness() / 100.0f;
-  input->brush_shape = c ? c->brush_shape : _conf_brush_shape();
-  input->brush_mode = c ? c->brush_mode : _conf_brush_mode();
+  input->pressure_profile = c ? c->pressure_profile : (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
+  input->tilt_profile = c ? c->tilt_profile : (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
+  input->accel_profile = c ? c->accel_profile : (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
+  input->distance_percent = c ? c->distance_percent : dt_drawlayer_conf_distance() / 100.0f;
+  input->smoothing_percent = c ? c->smoothing_percent : dt_drawlayer_conf_smoothing() / 100.0f;
+  input->brush_radius = c ? c->brush_radius : dt_drawlayer_conf_size();
+  input->brush_opacity = c ? c->brush_opacity : dt_drawlayer_conf_opacity() / 100.0f;
+  input->brush_flow = c ? c->brush_flow : dt_drawlayer_conf_flow() / 100.0f;
+  input->brush_hardness = c ? c->brush_hardness : dt_drawlayer_conf_hardness();
+  input->brush_sprinkles = c ? c->brush_sprinkles : dt_drawlayer_conf_sprinkles() / 100.0f;
+  input->brush_sprinkle_size = c ? c->brush_sprinkle_size : dt_drawlayer_conf_sprinkle_size();
+  input->brush_sprinkle_coarseness = c ? c->brush_sprinkle_coarseness : dt_drawlayer_conf_sprinkle_coarseness() / 100.0f;
+  input->brush_shape = c ? c->brush_shape : dt_drawlayer_conf_brush_shape();
+  input->brush_mode = c ? c->brush_mode : dt_drawlayer_conf_brush_mode();
   input->color[0] = pipeline_rgb[0];
   input->color[1] = pipeline_rgb[1];
   input->color[2] = pipeline_rgb[2];
@@ -1240,8 +1238,8 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
 
   const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
   float display_rgb[3] = { 0.0f };
-  _conf_display_color(display_rgb);
-  const int shape = _conf_brush_shape();
+  dt_drawlayer_conf_display_color(display_rgb);
+  const int shape = dt_drawlayer_conf_brush_shape();
   const int size_px = MAX(2, (int)ceil((2.0f * widget_radius + 2.0f) * ppd));
 
   const gboolean needs_rebuild
@@ -1430,7 +1428,7 @@ static gboolean _color_picker_set_from_position(dt_iop_module_t *self, const flo
 
   float display_rgb[3] = { 0.0f };
   if(!dt_drawlayer_widgets_update_from_picker_position(g->ui.widgets, g->controls.color, x, y, display_rgb)) return FALSE;
-  _apply_display_brush_color(self, display_rgb, FALSE);
+  dt_drawlayer_conf_apply_display_brush_color(self, display_rgb, FALSE);
   return TRUE;
 }
 
@@ -1459,7 +1457,7 @@ static gboolean _color_swatch_button_press(GtkWidget *widget, GdkEventButton *ev
 
   float display_rgb[3] = { 0.0f };
   if(!dt_drawlayer_widgets_pick_history_color(g->ui.widgets, widget, event->x, event->y, display_rgb)) return FALSE;
-  _apply_display_brush_color(self, display_rgb, FALSE);
+  dt_drawlayer_conf_apply_display_brush_color(self, display_rgb, FALSE);
   return TRUE;
 }
 
@@ -1468,9 +1466,9 @@ static void _sync_brush_profile_preview_widget(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets || IS_NULL_PTR(g->controls.brush_shape)) return;
 
-  dt_drawlayer_widgets_set_brush_profile_preview(g->ui.widgets, _conf_opacity() / 100.0f, _conf_hardness(),
-                                                 _conf_sprinkles() / 100.0f, _conf_sprinkle_size(),
-                                                 _conf_sprinkle_coarseness() / 100.0f, _conf_brush_shape());
+  dt_drawlayer_widgets_set_brush_profile_preview(g->ui.widgets, dt_drawlayer_conf_opacity() / 100.0f, dt_drawlayer_conf_hardness(),
+                                                 dt_drawlayer_conf_sprinkles() / 100.0f, dt_drawlayer_conf_sprinkle_size(),
+                                                 dt_drawlayer_conf_sprinkle_coarseness() / 100.0f, dt_drawlayer_conf_brush_shape());
   gtk_widget_queue_draw(g->controls.brush_shape);
 }
 
@@ -1492,7 +1490,7 @@ static gboolean _brush_profile_button_press(GtkWidget *widget, GdkEventButton *e
   int shape = DT_DRAWLAYER_BRUSH_SHAPE_LINEAR;
   if(!dt_drawlayer_widgets_pick_brush_profile(g->ui.widgets, widget, event->x, event->y, &shape)) return FALSE;
 
-  _sync_params_from_gui(self, FALSE);
+  dt_drawlayer_conf_sync_params_from_gui(self, FALSE);
   _sync_mode_sensitive_widgets(self);
   if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE).ok) return FALSE;
   _sync_brush_profile_preview_widget(self);
@@ -1505,7 +1503,7 @@ static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelp
 {
   if(IS_NULL_PTR(working_rgb) || !display_rgb) return FALSE;
 
-  const float gain = exp2f(_conf_hdr_exposure());
+  const float gain = exp2f(dt_drawlayer_conf_hdr_exposure());
   const float inv_gain = (gain > 0.0f) ? 1.0f / gain : 1.0f;
   const float preview_rgb[3] = {
     working_rgb[0] * inv_gain,
@@ -1539,7 +1537,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   (void)picker;
   (void)piece;
   if(IS_NULL_PTR(self) || dt_gui_widgets_suppressed()) return;
-  const drawlayer_pick_source_t source = _conf_pick_source();
+  const drawlayer_pick_source_t source = dt_drawlayer_conf_pick_source();
   const float *picked = (source == DRAWLAYER_PICK_SOURCE_OUTPUT) ? self->picked_output_color : self->picked_color;
   const float *picked_min
       = (source == DRAWLAYER_PICK_SOURCE_OUTPUT) ? self->picked_output_color_min : self->picked_color_min;
@@ -1549,7 +1547,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   float display_rgb[3] = { 0.0f };
   if(!_working_rgb_to_display_rgb(self, pipe, picked, display_rgb)) return;
-  _apply_display_brush_color(self, display_rgb, TRUE);
+  dt_drawlayer_conf_apply_display_brush_color(self, display_rgb, TRUE);
 }
 
 static gboolean _color_picker_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
@@ -1570,7 +1568,7 @@ static gboolean _color_picker_button_release(GtkWidget *widget, GdkEventButton *
   {
     float display_rgb[3] = { 0.0f };
     if(dt_drawlayer_widgets_finish_picker_drag(g->ui.widgets, display_rgb))
-      _remember_display_color(self, display_rgb);
+      dt_drawlayer_conf_remember_display_color(self, display_rgb);
   }
   return FALSE;
 }
@@ -1979,8 +1977,8 @@ static void _sync_mode_sensitive_widgets(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->controls.color) || IS_NULL_PTR(g->controls.softness)) return;
 
-  const gboolean paint_mode = (_conf_brush_mode() == DT_DRAWLAYER_BRUSH_MODE_PAINT);
-  const gboolean show_hardness = (_conf_brush_shape() != DT_DRAWLAYER_BRUSH_SHAPE_GAUSSIAN);
+  const gboolean paint_mode = (dt_drawlayer_conf_brush_mode() == DT_DRAWLAYER_BRUSH_MODE_PAINT);
+  const gboolean show_hardness = (dt_drawlayer_conf_brush_shape() != DT_DRAWLAYER_BRUSH_SHAPE_GAUSSIAN);
   gtk_widget_set_visible(GTK_WIDGET(g->controls.color), paint_mode);
   if(g->controls.color_row) gtk_widget_set_visible(g->controls.color_row, paint_mode);
   if(g->controls.color_swatch) gtk_widget_set_visible(g->controls.color_swatch, paint_mode);
@@ -2376,7 +2374,7 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || (dt_gui_get_global() && dt_gui_widgets_suppressed())) return;
 
-  _sync_params_from_gui(self, FALSE);
+  dt_drawlayer_conf_sync_params_from_gui(self, FALSE);
 
   if(widget == g->controls.brush_mode || widget == g->controls.brush_shape) _sync_mode_sensitive_widgets(self);
 
@@ -2387,7 +2385,7 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
   {
     float display_rgb[3] = { 0.0f };
     if(dt_drawlayer_widgets_get_display_color(g->ui.widgets, display_rgb))
-      _sync_cached_brush_colors(self, display_rgb);
+      dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
   }
 
   if(widget == g->controls.brush_shape || widget == g->controls.opacity || widget == g->controls.softness || widget == g->controls.sprinkles
@@ -3002,11 +3000,11 @@ void gui_init(dt_iop_module_t *self)
   IOP_GUI_ALLOC(drawlayer);
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  _ensure_gui_conf_defaults();
+  dt_drawlayer_conf_ensure_defaults();
   g->ui.widgets = dt_drawlayer_widgets_init();
   dt_drawlayer_runtime_manager_init(&g->manager);
   dt_drawlayer_process_state_init(&g->process);
-  _load_color_history(g);
+  dt_drawlayer_conf_load_color_history(g);
   _sanitize_params(self, params);
 
   dt_drawlayer_worker_init(self, &g->stroke.worker, &g->manager.painting_active,
@@ -3344,20 +3342,20 @@ void gui_update(dt_iop_module_t *self)
 
   _sanitize_params(self, params);
 
-  dt_bauhaus_combobox_set(g->controls.brush_mode, _conf_brush_mode());
-  dt_bauhaus_slider_set(g->controls.size, _conf_size());
-  dt_bauhaus_slider_set(g->controls.distance, _conf_distance());
-  dt_bauhaus_slider_set(g->controls.smoothing, _conf_smoothing());
-  dt_bauhaus_slider_set(g->controls.opacity, _conf_opacity());
-  dt_bauhaus_slider_set(g->controls.flow, _conf_flow());
-  dt_bauhaus_slider_set(g->controls.sprinkles, _conf_sprinkles());
-  dt_bauhaus_slider_set(g->controls.sprinkle_size, _conf_sprinkle_size());
-  dt_bauhaus_slider_set(g->controls.sprinkle_coarseness, _conf_sprinkle_coarseness());
-  dt_bauhaus_slider_set(g->controls.softness, _conf_hardness());
-  if(g->controls.image_colorpicker_source) dt_bauhaus_combobox_set(g->controls.image_colorpicker_source, _conf_pick_source());
-  dt_bauhaus_slider_set(g->controls.hdr_exposure, _conf_hdr_exposure());
+  dt_bauhaus_combobox_set(g->controls.brush_mode, dt_drawlayer_conf_brush_mode());
+  dt_bauhaus_slider_set(g->controls.size, dt_drawlayer_conf_size());
+  dt_bauhaus_slider_set(g->controls.distance, dt_drawlayer_conf_distance());
+  dt_bauhaus_slider_set(g->controls.smoothing, dt_drawlayer_conf_smoothing());
+  dt_bauhaus_slider_set(g->controls.opacity, dt_drawlayer_conf_opacity());
+  dt_bauhaus_slider_set(g->controls.flow, dt_drawlayer_conf_flow());
+  dt_bauhaus_slider_set(g->controls.sprinkles, dt_drawlayer_conf_sprinkles());
+  dt_bauhaus_slider_set(g->controls.sprinkle_size, dt_drawlayer_conf_sprinkle_size());
+  dt_bauhaus_slider_set(g->controls.sprinkle_coarseness, dt_drawlayer_conf_sprinkle_coarseness());
+  dt_bauhaus_slider_set(g->controls.softness, dt_drawlayer_conf_hardness());
+  if(g->controls.image_colorpicker_source) dt_bauhaus_combobox_set(g->controls.image_colorpicker_source, dt_drawlayer_conf_pick_source());
+  dt_bauhaus_slider_set(g->controls.hdr_exposure, dt_drawlayer_conf_hdr_exposure());
 
-  _sync_color_picker_from_conf(self);
+  dt_drawlayer_conf_sync_color_picker(self);
   _sync_brush_profile_preview_widget(self);
   if(g->controls.color) gtk_widget_queue_draw(g->controls.color);
 
@@ -3401,10 +3399,10 @@ void gui_update(dt_iop_module_t *self)
                                  dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS));
 
   if(g->controls.pressure_profile)
-    dt_bauhaus_combobox_set(g->controls.pressure_profile, _conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE));
-  if(g->controls.tilt_profile) dt_bauhaus_combobox_set(g->controls.tilt_profile, _conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE));
+    dt_bauhaus_combobox_set(g->controls.pressure_profile, dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE));
+  if(g->controls.tilt_profile) dt_bauhaus_combobox_set(g->controls.tilt_profile, dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE));
   if(g->controls.accel_profile)
-    dt_bauhaus_combobox_set(g->controls.accel_profile, _conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE));
+    dt_bauhaus_combobox_set(g->controls.accel_profile, dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE));
 
   _sync_mode_sensitive_widgets(self);
   _sync_preview_bg_buttons(self);
@@ -3584,17 +3582,17 @@ static void _compute_hud_brush_state(const dt_control_pointer_input_t *pointer_i
       = _clamp01((pointer_input && pointer_input->has_pressure) ? pointer_input->pressure : 1.0f);
   const float tilt_norm = _clamp01((pointer_input && pointer_input->has_tilt) ? pointer_input->tilt : 0.0f);
   const float accel_norm = _clamp01(pointer_input ? pointer_input->acceleration : 0.0f);
-  const drawlayer_mapping_profile_t pressure_profile = _conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
-  const drawlayer_mapping_profile_t tilt_profile = _conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
-  const drawlayer_mapping_profile_t accel_profile = _conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
+  const drawlayer_mapping_profile_t pressure_profile = dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
+  const drawlayer_mapping_profile_t tilt_profile = dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
+  const drawlayer_mapping_profile_t accel_profile = dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
   const float pressure_coeff = _mapping_profile_value(pressure_profile, pressure_norm);
   const float tilt_coeff = _mapping_profile_value(tilt_profile, tilt_norm);
   const float accel_coeff = _mapping_profile_value(accel_profile, accel_norm);
 
-  float radius = _conf_size();
-  float opacity = _conf_opacity() / 100.0f;
-  float flow = _conf_flow() / 100.0f;
-  float hardness = _conf_hardness();
+  float radius = dt_drawlayer_conf_size();
+  float opacity = dt_drawlayer_conf_opacity() / 100.0f;
+  float flow = dt_drawlayer_conf_flow() / 100.0f;
+  float hardness = dt_drawlayer_conf_hardness();
 
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE)) radius *= pressure_coeff;
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_OPACITY)) opacity *= pressure_coeff;
@@ -3695,7 +3693,7 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
     _compute_hud_brush_state(&pointer_input, &hud);
 
     float radius = hud.radius;
-    const int brush_mode = _conf_brush_mode();
+    const int brush_mode = dt_drawlayer_conf_brush_mode();
     const gboolean show_paint_fill = (brush_mode == DT_DRAWLAYER_BRUSH_MODE_PAINT);
 
     float draw_x = widget_x;
@@ -4026,7 +4024,7 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 
   const gboolean increase = dt_mask_scroll_increases(up);
   const float factor = increase ? 1.1f : 0.9f;
-  const float new_size = CLAMP(_conf_size() * factor, 1.0f, 2048.0f);
+  const float new_size = CLAMP(dt_drawlayer_conf_size() * factor, 1.0f, 2048.0f);
   /* The wheel changes the brush mid-stroke, which is exactly the case a per-event cache
    * must not miss. */
   dt_drawlayer_invalidate_brush_settings_cache((dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self));

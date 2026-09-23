@@ -18,6 +18,10 @@
 
 #include "iop/drawlayer/coordinates.h"
 
+#include "iop/drawlayer/conf.h"          // dt_drawlayer_conf_size()
+
+#include "develop/develop.h"             // dt_dev_coordinates_*(), dt_dev_distort_*_gui(),
+                                         // dt_dev_module_geometry_gui(), DT_DEV_TRANSFORM_DIR_FORW_EXCL
 #include "develop/geometry/geometry.h"   // dt_geometry_chain_find(), dt_geometry_record_t
 
 #include <string.h>
@@ -303,7 +307,7 @@ float dt_drawlayer_widget_brush_radius(dt_iop_module_t *self, const dt_drawlayer
  * Keep it that way: this answers a question about the radius, so it reads the radius. */
 float dt_drawlayer_current_live_padding(dt_iop_module_t *self)
 {
-  return ceilf(fmaxf(_conf_size(), 0.5f) + 1.0f);
+  return ceilf(fmaxf(dt_drawlayer_conf_size(), 0.5f) + 1.0f);
 }
 
 gboolean dt_drawlayer_compute_view_patch(dt_iop_module_t *self, const float padding, drawlayer_view_patch_info_t *view)

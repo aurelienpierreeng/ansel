@@ -16,6 +16,17 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "iop/drawlayer/conf.h"
+
+#include "iop/drawlayer/runtime.h"    // dt_iop_drawlayer_gui_data_t (dereferenced here)
+#include "iop/drawlayer/widgets.h"    // DT_DRAWLAYER_COLOR_HISTORY_COUNT, ..._set_color_history()
+
+#include "control/redraw.h"           // dt_control_queue_redraw_center()
+#include "develop/imageop_gui.h"      // dt_iop_gui_data()
+#include "gui/application.h"          // dt_gui_get_global()
+#include "widgets/widget_settings.h"  // dt_gui_widgets_suppressed()
+#include "widgets/bauhaus.h"          // dt_bauhaus_slider_get(), dt_bauhaus_combobox_get()
+
 /*
  * drawlayer config subsystem (included directly by drawlayer.c)
  *
@@ -26,41 +37,9 @@
  *  @brief Drawlayer configuration read/write helpers (private include unit).
  */
 
-#define DRAWLAYER_CONF_BASE "plugins/drawlayer/"
-#define DRAWLAYER_CONF_BRUSH_SHAPE DRAWLAYER_CONF_BASE "brush_shape"
-#define DRAWLAYER_CONF_BRUSH_MODE DRAWLAYER_CONF_BASE "brush_mode"
-#define DRAWLAYER_CONF_COLOR_R DRAWLAYER_CONF_BASE "color_r"
-#define DRAWLAYER_CONF_COLOR_G DRAWLAYER_CONF_BASE "color_g"
-#define DRAWLAYER_CONF_COLOR_B DRAWLAYER_CONF_BASE "color_b"
-#define DRAWLAYER_CONF_SOFTNESS DRAWLAYER_CONF_BASE "softness"
-#define DRAWLAYER_CONF_OPACITY DRAWLAYER_CONF_BASE "opacity"
-#define DRAWLAYER_CONF_FLOW DRAWLAYER_CONF_BASE "flow"
-#define DRAWLAYER_CONF_SPRINKLES DRAWLAYER_CONF_BASE "sprinkles"
-#define DRAWLAYER_CONF_SPRINKLE_SIZE DRAWLAYER_CONF_BASE "sprinkle_size"
-#define DRAWLAYER_CONF_SPRINKLE_COARSENESS DRAWLAYER_CONF_BASE "sprinkle_coarseness"
-#define DRAWLAYER_CONF_DISTANCE DRAWLAYER_CONF_BASE "distance"
-#define DRAWLAYER_CONF_SMOOTHING DRAWLAYER_CONF_BASE "smoothing"
-#define DRAWLAYER_CONF_SIZE DRAWLAYER_CONF_BASE "size"
-#define DRAWLAYER_CONF_PICK_SOURCE DRAWLAYER_CONF_BASE "pick_source"
-#define DRAWLAYER_CONF_HDR_EV DRAWLAYER_CONF_BASE "hdr_exposure"
-#define DRAWLAYER_CONF_MAP_PRESSURE_SIZE DRAWLAYER_CONF_BASE "map_pressure_size"
-#define DRAWLAYER_CONF_MAP_PRESSURE_OPACITY DRAWLAYER_CONF_BASE "map_pressure_opacity"
-#define DRAWLAYER_CONF_MAP_PRESSURE_FLOW DRAWLAYER_CONF_BASE "map_pressure_flow"
-#define DRAWLAYER_CONF_MAP_PRESSURE_SOFTNESS DRAWLAYER_CONF_BASE "map_pressure_softness"
-#define DRAWLAYER_CONF_MAP_TILT_SIZE DRAWLAYER_CONF_BASE "map_tilt_size"
-#define DRAWLAYER_CONF_MAP_TILT_OPACITY DRAWLAYER_CONF_BASE "map_tilt_opacity"
-#define DRAWLAYER_CONF_MAP_TILT_FLOW DRAWLAYER_CONF_BASE "map_tilt_flow"
-#define DRAWLAYER_CONF_MAP_TILT_SOFTNESS DRAWLAYER_CONF_BASE "map_tilt_softness"
-#define DRAWLAYER_CONF_MAP_ACCEL_SIZE DRAWLAYER_CONF_BASE "map_acceleration_size"
-#define DRAWLAYER_CONF_MAP_ACCEL_OPACITY DRAWLAYER_CONF_BASE "map_acceleration_opacity"
-#define DRAWLAYER_CONF_MAP_ACCEL_FLOW DRAWLAYER_CONF_BASE "map_acceleration_flow"
-#define DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS DRAWLAYER_CONF_BASE "map_acceleration_hardness"
-#define DRAWLAYER_CONF_PRESSURE_PROFILE DRAWLAYER_CONF_BASE "pressure_profile"
-#define DRAWLAYER_CONF_TILT_PROFILE DRAWLAYER_CONF_BASE "tilt_profile"
-#define DRAWLAYER_CONF_ACCEL_PROFILE DRAWLAYER_CONF_BASE "acceleration_profile"
 
 /** @brief Ensure all drawlayer GUI config keys exist with sane defaults. */
-static void _ensure_gui_conf_defaults(void)
+void dt_drawlayer_conf_ensure_defaults(void)
 {
   if(!dt_conf_key_exists(DRAWLAYER_CONF_BRUSH_SHAPE)) dt_conf_set_int(DRAWLAYER_CONF_BRUSH_SHAPE, DT_DRAWLAYER_BRUSH_SHAPE_LINEAR);
   if(!dt_conf_key_exists(DRAWLAYER_CONF_BRUSH_MODE)) dt_conf_set_int(DRAWLAYER_CONF_BRUSH_MODE, DT_DRAWLAYER_BRUSH_MODE_PAINT);
@@ -120,63 +99,63 @@ static void _ensure_gui_conf_defaults(void)
 }
 
 /** @brief Read and clamp configured brush shape. */
-static dt_iop_drawlayer_brush_shape_t _conf_brush_shape(void)
+dt_iop_drawlayer_brush_shape_t dt_drawlayer_conf_brush_shape(void)
 {
   return (dt_iop_drawlayer_brush_shape_t)CLAMP(dt_conf_get_int(DRAWLAYER_CONF_BRUSH_SHAPE),
                                                DT_DRAWLAYER_BRUSH_SHAPE_LINEAR, DT_DRAWLAYER_BRUSH_SHAPE_SIGMOIDAL);
 }
 
 /** @brief Read and clamp configured brush blend mode. */
-static dt_iop_drawlayer_brush_mode_t _conf_brush_mode(void)
+dt_iop_drawlayer_brush_mode_t dt_drawlayer_conf_brush_mode(void)
 {
   return (dt_iop_drawlayer_brush_mode_t)CLAMP(dt_conf_get_int(DRAWLAYER_CONF_BRUSH_MODE),
                                               DT_DRAWLAYER_BRUSH_MODE_PAINT, DT_DRAWLAYER_BRUSH_MODE_SMUDGE);
 }
 
 /** @brief Read and clamp configured brush size (px). */
-static float _conf_size(void)
+float dt_drawlayer_conf_size(void)
 {
   return CLAMP(dt_conf_get_float(DRAWLAYER_CONF_SIZE), 1.0f, 2048.0f);
 }
 
 /** @brief Read and clamp configured stroke opacity (%). */
-static float _conf_opacity(void)
+float dt_drawlayer_conf_opacity(void)
 {
   return CLAMP(dt_conf_get_float(DRAWLAYER_CONF_OPACITY), 0.0f, 100.0f);
 }
 
 /** @brief Read and clamp configured flow (%). */
-static float _conf_flow(void)
+float dt_drawlayer_conf_flow(void)
 {
   return CLAMP(dt_conf_get_float(DRAWLAYER_CONF_FLOW), 0.0f, 100.0f);
 }
 
 /** @brief Read and clamp configured sprinkles amount (%). */
-static float _conf_sprinkles(void)
+float dt_drawlayer_conf_sprinkles(void)
 {
   return CLAMP(dt_conf_get_float(DRAWLAYER_CONF_SPRINKLES), 0.0f, 100.0f);
 }
 
 /** @brief Read and clamp configured sprinkle feature size (px). */
-static float _conf_sprinkle_size(void)
+float dt_drawlayer_conf_sprinkle_size(void)
 {
   return CLAMP(dt_conf_get_float(DRAWLAYER_CONF_SPRINKLE_SIZE), 1.0f, 256.0f);
 }
 
 /** @brief Read and clamp configured sprinkle octave mix (%). */
-static float _conf_sprinkle_coarseness(void)
+float dt_drawlayer_conf_sprinkle_coarseness(void)
 {
   return CLAMP(dt_conf_get_float(DRAWLAYER_CONF_SPRINKLE_COARSENESS), 0.0f, 100.0f);
 }
 
 /** @brief Read and clamp configured distance/sampling parameter (%). */
-static float _conf_distance(void)
+float dt_drawlayer_conf_distance(void)
 {
   return CLAMP(dt_conf_get_float(DRAWLAYER_CONF_DISTANCE), 0.0f, 100.0f);
 }
 
 /** @brief Read and clamp configured smoothing parameter (%). */
-static float _conf_smoothing(void)
+float dt_drawlayer_conf_smoothing(void)
 {
   return CLAMP(dt_conf_get_float(DRAWLAYER_CONF_SMOOTHING), 0.0f, 100.0f);
 }
@@ -188,33 +167,33 @@ static float _conf_softness(void)
 }
 
 /** @brief Derive hardness as complementary value of softness. */
-static float _conf_hardness(void)
+float dt_drawlayer_conf_hardness(void)
 {
   return 1.0f - _conf_softness();
 }
 
 /** @brief Read and clamp HDR picker exposure compensation (EV). */
-static float _conf_hdr_exposure(void)
+float dt_drawlayer_conf_hdr_exposure(void)
 {
   return CLAMP(dt_conf_get_float(DRAWLAYER_CONF_HDR_EV), 0.0f, 4.0f);
 }
 
 /** @brief Read and clamp color picker source selector. */
-static drawlayer_pick_source_t _conf_pick_source(void)
+drawlayer_pick_source_t dt_drawlayer_conf_pick_source(void)
 {
   return (drawlayer_pick_source_t)CLAMP(dt_conf_get_int(DRAWLAYER_CONF_PICK_SOURCE),
                                         DRAWLAYER_PICK_SOURCE_INPUT, DRAWLAYER_PICK_SOURCE_OUTPUT);
 }
 
 /** @brief Read and clamp one mapping-profile enum key. */
-static drawlayer_mapping_profile_t _conf_mapping_profile(const char *key)
+drawlayer_mapping_profile_t dt_drawlayer_conf_mapping_profile(const char *key)
 {
   return (drawlayer_mapping_profile_t)CLAMP(dt_conf_get_int(key), DRAWLAYER_PROFILE_LINEAR,
                                             DRAWLAYER_PROFILE_INV_QUADRATIC);
 }
 
 /** @brief Read configured display RGB brush color. */
-static void _conf_display_color(float rgb[3])
+void dt_drawlayer_conf_display_color(float rgb[3])
 {
   rgb[0] = _clamp01(dt_conf_get_float(DRAWLAYER_CONF_COLOR_R));
   rgb[1] = _clamp01(dt_conf_get_float(DRAWLAYER_CONF_COLOR_G));
@@ -234,7 +213,7 @@ static void _color_history_valid_key(const int index, char *key, const size_t ke
 }
 
 /** @brief Load persisted color-history stack from config into widgets state. */
-static void _load_color_history(dt_iop_drawlayer_gui_data_t *g)
+void dt_drawlayer_conf_load_color_history(dt_iop_drawlayer_gui_data_t *g)
 {
   if(IS_NULL_PTR(g) || !g->ui.widgets) return;
 
@@ -282,7 +261,7 @@ static void _store_color_history(const dt_iop_drawlayer_gui_data_t *g)
 }
 
 /** @brief Push current display color to history and trigger swatch redraw. */
-static void _remember_display_color(dt_iop_module_t *self, const float display_rgb[3])
+void dt_drawlayer_conf_remember_display_color(dt_iop_module_t *self, const float display_rgb[3])
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets || !display_rgb) return;
@@ -293,7 +272,7 @@ static void _remember_display_color(dt_iop_module_t *self, const float display_r
 }
 
 /** @brief Apply display-space brush color to conf, widgets and redraw. */
-static void _apply_display_brush_color(dt_iop_module_t *self, const float display_rgb[3], const gboolean remember)
+void dt_drawlayer_conf_apply_display_brush_color(dt_iop_module_t *self, const float display_rgb[3], const gboolean remember)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || !g->ui.widgets || !display_rgb) return;
@@ -302,12 +281,12 @@ static void _apply_display_brush_color(dt_iop_module_t *self, const float displa
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_R, _clamp01(display_rgb[0]));
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_G, _clamp01(display_rgb[1]));
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_B, _clamp01(display_rgb[2]));
-  _sync_cached_brush_colors(self, display_rgb);
+  dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
 
   dt_drawlayer_widgets_set_display_color(g->ui.widgets, display_rgb);
   dt_drawlayer_ui_cursor_clear(&g->ui);
 
-  if(remember) _remember_display_color(self, display_rgb);
+  if(remember) dt_drawlayer_conf_remember_display_color(self, display_rgb);
 
   if(g->controls.color) gtk_widget_queue_draw(g->controls.color);
   if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
@@ -315,21 +294,21 @@ static void _apply_display_brush_color(dt_iop_module_t *self, const float displa
 }
 
 /** @brief Refresh picker widgets from persisted config color. */
-static void _sync_color_picker_from_conf(dt_iop_module_t *self)
+void dt_drawlayer_conf_sync_color_picker(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets) return;
 
   float display_rgb[3] = { 0.0f };
-  _conf_display_color(display_rgb);
-  _sync_cached_brush_colors(self, display_rgb);
+  dt_drawlayer_conf_display_color(display_rgb);
+  dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
 
   dt_drawlayer_widgets_set_display_color(g->ui.widgets, display_rgb);
   if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
 }
 
 /** @brief Sync active GUI widget values back into persistent config keys. */
-static void _sync_params_from_gui(dt_iop_module_t *self, const gboolean record_history)
+void dt_drawlayer_conf_sync_params_from_gui(dt_iop_module_t *self, const gboolean record_history)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   (void)record_history;
