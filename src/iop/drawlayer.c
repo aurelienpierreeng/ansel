@@ -4059,6 +4059,58 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
   return 1;
 }
 
+/**
+ * @brief Everything process() and process_cl() must do identically before they diverge.
+ *
+ * Binds this piece to its runtime manager, refreshes the layer's base cache, and builds the
+ * request both paths hand to the runtime state machine. The only thing that legitimately
+ * differs between the two is @p use_opencl, and the pair of event ids each keeps for itself.
+ *
+ * It used to be written out twice, and the two copies were still exact -- checked line by
+ * line before they were merged, so nothing is being quietly normalised here. Keeping it that
+ * way was the problem: a condition duplicated between process() and process_cl() is the
+ * standing invitation to drift that CLAUDE.md names by name, and this module's own history
+ * has paid for it three times over (the CFA phase, retouch's mask preview, and display
+ * encoding's per-frame conf reads, each a branch one path grew and the other did not).
+ *
+ * @param have_gui Passed in rather than recomputed, so the caller and this function cannot
+ *                 disagree about what "the GUI is attached" meant for this frame.
+ */
+static drawlayer_runtime_request_t _process_bind_runtime(dt_iop_module_t *self,
+                                                         const dt_dev_pixelpipe_t *pipe,
+                                                         const dt_dev_pixelpipe_iop_t *piece,
+                                                         dt_iop_drawlayer_gui_data_t *gui,
+                                                         const gboolean have_gui,
+                                                         const dt_iop_roi_t *const roi_in,
+                                                         const dt_iop_roi_t *const roi_out,
+                                                         const gboolean use_opencl)
+{
+  const gboolean display_pipe = have_gui && (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
+  dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
+  dt_drawlayer_runtime_manager_bind_piece(&data->headless_manager, &data->process, gui ? &gui->manager : NULL,
+                                          gui ? &gui->process : NULL, display_pipe, &data->runtime_manager,
+                                          &data->runtime_process, &data->runtime_display_pipe);
+
+  const dt_iop_drawlayer_params_t *runtime_params = &data->params;
+  if(runtime_params->layer_name[0] != '\0')
+    _refresh_piece_base_cache(self, data, runtime_params, (dt_dev_pixelpipe_t *)pipe,
+                              (dt_dev_pixelpipe_iop_t *)piece);
+
+  return (drawlayer_runtime_request_t){
+    .self = self,
+    .pipe = pipe,
+    .piece = (dt_dev_pixelpipe_iop_t *)piece,
+    .runtime_params = runtime_params,
+    .gui = gui,
+    .manager = data->runtime_manager,
+    .process_state = data->runtime_process,
+    .display_pipe = data->runtime_display_pipe,
+    .roi_in = roi_in,
+    .roi_out = roi_out,
+    .use_opencl = use_opencl,
+  };
+}
+
 #ifdef HAVE_OPENCL
 /** @brief OpenCL processing path for layer-over-input compositing. */
 int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
@@ -4069,32 +4121,10 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const dt_iop_drawlayer_global_data_t *global = (const dt_iop_drawlayer_global_data_t *)self->global_data;
   dt_iop_drawlayer_gui_data_t *gui = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   const gboolean have_gui = (!IS_NULL_PTR(gui));
-  {
-    const gboolean display_pipe = have_gui && (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
-    dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
-    dt_drawlayer_runtime_manager_bind_piece(&data->headless_manager, &data->process, gui ? &gui->manager : NULL,
-                                            gui ? &gui->process : NULL, display_pipe, &data->runtime_manager,
-                                            &data->runtime_process, &data->runtime_display_pipe);
-  }
+  const drawlayer_runtime_request_t runtime_request
+      = _process_bind_runtime(self, pipe, piece, gui, have_gui, roi_in, roi_out, TRUE);
   dt_iop_drawlayer_data_t *runtime_data = (dt_iop_drawlayer_data_t *)piece->data;
-  const dt_iop_drawlayer_params_t *runtime_params
-      = &runtime_data->params;
-  if(runtime_params->layer_name[0] != '\0')
-    _refresh_piece_base_cache(self, runtime_data, runtime_params, (dt_dev_pixelpipe_t *)pipe,
-                              (dt_dev_pixelpipe_iop_t *)piece);
-  const drawlayer_runtime_request_t runtime_request = {
-    .self = self,
-    .pipe = pipe,
-    .piece = (dt_dev_pixelpipe_iop_t *)piece,
-    .runtime_params = runtime_params,
-    .gui = gui,
-    .manager = runtime_data->runtime_manager,
-    .process_state = runtime_data->runtime_process,
-    .display_pipe = runtime_data->runtime_display_pipe,
-    .roi_in = roi_in,
-    .roi_out = roi_out,
-    .use_opencl = TRUE,
-  };
+  const dt_iop_drawlayer_params_t *runtime_params = &runtime_data->params;
   drawlayer_runtime_host_context_t runtime_host = {
     .runtime = runtime_request,
   };
@@ -4233,32 +4263,10 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_drawlayer_gui_data_t *gui = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   const gboolean have_gui = (!IS_NULL_PTR(gui));
-  {
-    const gboolean display_pipe = have_gui && (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
-    dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
-    dt_drawlayer_runtime_manager_bind_piece(&data->headless_manager, &data->process, gui ? &gui->manager : NULL,
-                                            gui ? &gui->process : NULL, display_pipe, &data->runtime_manager,
-                                            &data->runtime_process, &data->runtime_display_pipe);
-  }
+  const drawlayer_runtime_request_t runtime_request
+      = _process_bind_runtime(self, pipe, piece, gui, have_gui, roi_in, roi_out, FALSE);
   dt_iop_drawlayer_data_t *runtime_data = (dt_iop_drawlayer_data_t *)piece->data;
-  const dt_iop_drawlayer_params_t *runtime_params
-      = &runtime_data->params;
-  if(runtime_params->layer_name[0] != '\0')
-    _refresh_piece_base_cache(self, runtime_data, runtime_params, (dt_dev_pixelpipe_t *)pipe,
-                              (dt_dev_pixelpipe_iop_t *)piece);
-  const drawlayer_runtime_request_t runtime_request = {
-    .self = self,
-    .pipe = pipe,
-    .piece = (dt_dev_pixelpipe_iop_t *)piece,
-    .runtime_params = runtime_params,
-    .gui = gui,
-    .manager = runtime_data->runtime_manager,
-    .process_state = runtime_data->runtime_process,
-    .display_pipe = runtime_data->runtime_display_pipe,
-    .roi_in = roi_in,
-    .roi_out = roi_out,
-    .use_opencl = FALSE,
-  };
+  const dt_iop_drawlayer_params_t *runtime_params = &runtime_data->params;
   drawlayer_runtime_host_context_t runtime_host = {
     .runtime = runtime_request,
   };
