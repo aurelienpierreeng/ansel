@@ -2205,468 +2205,389 @@ static inline double _metric_quantum(const double units)
   return round(units * 256.0) / 256.0;
 }
 
-/** What setting one piece of a line came to: how much text it took, and what it occupies. */
-typedef struct dt_text_piece_t
+/* --- the plan: which words go on which line, and where ----------------------------------- */
+
+/** One piece of a line as the plan placed it: which words of which paragraph, where, how wide. */
+typedef struct dt_text_segment_t
 {
-  PangoLayoutLine *line;
-  double hang;        ///< the leading edge's optical nudge, negative
-  double height;      ///< the logical height, which is what the next line is set below
-  double logical_top; ///< where the line's box begins, relative to its origin
-  double ink_top;     ///< the first ink, relative to the logical box's top
-  double ink_height;
-  gsize consumed;     ///< where the text stands after it
-} dt_text_piece_t;
+  int paragraph;    ///< index into the plan's paragraphs
+  int first;        ///< the words [first, past)
+  int past;
+  double x;         ///< the left edge of the layout, frame-local, the leading hang taken off
+  double baseline;  ///< below the text area's top, before the vertical alignment's offset
+  double measure;   ///< the width the layout is set to: the stretch, plus what hangs past it
+  gboolean justify; ///< stretched to its measure: a justified line that does not end its paragraph
+} dt_text_segment_t;
 
-/**
- * Set as much of the remaining text as fits one clear stretch, and report what it came to.
- *
- * The layout is reused when the width has not changed AND its next line begins exactly where
- * the text now stands -- both, because a line set across several stretches leaves the cached
- * layout describing text that has already been set. Width alone was enough while a line was
- * one stretch and is not any more.
- */
-/**
- * Is this stretch of the band no place to set this piece?
- *
- * The runs a band is cut into are at least one em wide, so a narrow gap beside a picture is
- * exactly where the two failures the punctuation rule is about show up. A refused run consumes
- * nothing and the walk moves on to the next stretch, or to the next line.
- *
- * 1. IT DID NOT FIT. With the wrap at WORD a word wider than the stretch overflows rather than
- *    being cut in half, and so does a guarded "mot ;" -- setting either in a gap it is wider
- *    than is how a word ends up lying across the picture beside it.
- * 2. IT IS A LONE FRAGMENT. One or two characters alone in a gap is the stranded scrap the
- *    whole rule exists to stop -- unless it really is all that is left, or all that is left of
- *    its paragraph, where it is the last line and belongs there.
- *
- * BOTH ARE REFUSALS IN HOPE OF A WIDER STRETCH, so neither may fire where none can exist.
- * `full_width` is the widest a run of this frame ever gets -- the measure with nothing in the
- * way -- and a piece that does not fit THAT fits nowhere: refusing it drops it, and with it
- * every word after it, since the walk consumes nothing and asks the same question one line
- * lower. Measured, a word wider than its column in a frame with an obstacle: the paragraph
- * came to 4133 units, which is the 4096-line cap burned one unit at a time with the text
- * unset, where the same frame owes 105. Such a piece is set, and overflows, which is exactly
- * what PANGO_WRAP_WORD means.
- */
-static gboolean _run_refused(const dt_text_piece_t *piece, const double run_width, const double full_width,
-                             const char *plain, const gsize length, const gsize consumed)
+/** The plan of a flowing frame: the measured words, and the segments the walk placed. */
+typedef struct dt_text_plan_t
 {
-  // No wider stretch will ever come: whatever this piece is, this is where it goes.
-  if(run_width >= full_width - 0.01) return FALSE;
-  // What the line actually came to, in units: its ink's own advance.
-  PangoRectangle ink;
-  PangoRectangle logical;
-  pango_layout_line_get_extents(piece->line, &ink, &logical);
-  const double set_width = (double)logical.width / PANGO_SCALE;
-  // It did not fit here; refuse it only if the frame's own measure would hold it.
-  if(set_width > run_width + 0.01) return set_width <= full_width + 0.01;
-  if(piece->consumed <= consumed) return FALSE;
-  const char *from = plain + consumed;
-  gsize span = piece->consumed - consumed;
-  // Trailing whitespace is the break itself, not something that was set.
-  while(span > 0 && g_ascii_isspace(from[span - 1])) span--;
-  if(span == 0) return FALSE;
-  const glong characters = g_utf8_strlen(from, (gssize)span);
-  if(characters > 2) return FALSE;
-  // All that is left, or all that is left of this paragraph: a short last line is a last line.
-  if(piece->consumed >= length) return FALSE;
-  for(gsize at = piece->consumed; at < length; at++)
-  {
-    if(plain[at] == '\n') return FALSE;
-    if(!g_ascii_isspace(plain[at])) break;
-  }
-  return TRUE;
-}
+  dt_text_words_t words;
+  PangoAttrList *attributes; ///< the complete list the words were shaped with, shifted per segment
+  GArray *segments;          ///< dt_text_segment_t
+  double height;             ///< what the text came to
+} dt_text_plan_t;
 
-static gboolean _flow_piece(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
-                            const char *plain, const gsize length, PangoAttrList *attributes,
-                            const gsize consumed, const double run_width, const gboolean optical,
-                            PangoLayout **cached, double *cached_width, gsize *cached_offset, int *cached_line,
-                            dt_text_piece_t *piece)
+static void _flow_plan_free(dt_text_plan_t *plan)
 {
-  memset(piece, 0, sizeof(*piece));
-  gboolean reusable = !IS_NULL_PTR(*cached) && fabs(run_width - *cached_width) < 0.01;
-  if(reusable)
-  {
-    const PangoLayoutLine *next = pango_layout_get_line_readonly(*cached, *cached_line);
-    reusable = !IS_NULL_PTR(next);
-    if(reusable)
-    {
-      // Where the cached layout's next line begins, against where the text now stands. They
-      // differ by whatever the previous line's break ate, so the span between them must be
-      // only that -- and it must not be a step BACKWARD, which is what a line set across
-      // several stretches leaves behind. Keyed on equality alone, the empty line Pango draws
-      // for the blank one between two paragraphs is skipped and every document that had one
-      // silently loses it.
-      const gsize begins = *cached_offset + next->start_index;
-      reusable = begins <= consumed;
-      for(gsize at = begins; at < consumed && reusable; at++)
-        reusable = plain[at] == ' ' || plain[at] == '\n';
-    }
-  }
-  if(!reusable)
-  {
-    if(!IS_NULL_PTR(*cached)) g_object_unref(*cached);
-    *cached = _text_layout_styled(cr, canvas, object);
-    pango_layout_set_text(*cached, plain + consumed, -1);
-    PangoAttrList *shifted = pango_attr_list_copy(attributes);
-    PangoAttrList *dropped = pango_attr_list_filter(shifted, _attribute_shift, GUINT_TO_POINTER((guint)consumed));
-    if(!IS_NULL_PTR(dropped)) pango_attr_list_unref(dropped);
-    pango_layout_set_attributes(*cached, shifted);
-    pango_attr_list_unref(shifted);
-    _text_layout_finish(*cached, object);
-    pango_layout_set_width(*cached, (int)(run_width * PANGO_SCALE));
-    *cached_width = run_width;
-    *cached_offset = consumed;
-    *cached_line = 0;
-  }
-  PangoLayout *layout = *cached;
-  PangoLayoutLine *line = pango_layout_get_line_readonly(layout, *cached_line);
-  if(IS_NULL_PTR(line)) return FALSE;
-
-  double hang = 0.0;
-  if(optical && line->length > 0)
-  {
-    // The leading edge is nudged, the trailing one is given ROOM: a line set to a slightly
-    // wider measure ends its comma past the column's edge, and a justified line stretches
-    // to that same wider measure so both of its edges read straight.
-    const char *chunk = plain + *cached_offset;
-    const double lead = dt_canvas_text_optical_hang(g_utf8_get_char(chunk + line->start_index));
-    // A line ENDS on the space it broke at, so the last byte of it is whitespace and never
-    // the comma that should hang. Walk back over what the break ate to find the character
-    // the eye actually sees at the edge.
-    const char *edge = chunk + line->start_index + line->length;
-    while(edge > chunk + line->start_index)
-    {
-      const char *previous = g_utf8_prev_char(edge);
-      const gunichar character = g_utf8_get_char(previous);
-      if(character != ' ' && character != '\n' && character != '\t') break;
-      edge = previous;
-    }
-    edge = edge > chunk + line->start_index ? g_utf8_prev_char(edge) : chunk + line->start_index;
-    const double trail = dt_canvas_text_optical_hang(g_utf8_get_char(edge));
-    if(trail > 0.0)
-    {
-      int near_x = 0;
-      int far_x = 0;
-      pango_layout_line_index_to_x(line, (int)(edge - chunk), FALSE, &near_x);
-      pango_layout_line_index_to_x(line, (int)(g_utf8_next_char(edge) - chunk), FALSE, &far_x);
-      const double room = trail * fabs((double)(far_x - near_x)) / PANGO_SCALE;
-      if(room > 0.01)
-      {
-        pango_layout_set_width(layout, (int)((run_width + room) * PANGO_SCALE));
-        line = pango_layout_get_line_readonly(layout, *cached_line);
-        if(IS_NULL_PTR(line)) return FALSE;
-      }
-    }
-    if(lead > 0.0)
-    {
-      int near_x = 0;
-      int far_x = 0;
-      pango_layout_line_index_to_x(line, line->start_index, FALSE, &near_x);
-      pango_layout_line_index_to_x(line, (int)(g_utf8_next_char(chunk + line->start_index) - chunk), FALSE, &far_x);
-      hang = -lead * fabs((double)(far_x - near_x)) / PANGO_SCALE;
-    }
-  }
-
-  PangoRectangle logical;
-  PangoRectangle ink;
-  pango_layout_line_get_extents(line, &ink, &logical);
-  piece->line = line;
-  piece->hang = hang;
-  // Quantised on the way out, so the flow engine downstream of here works in numbers that do
-  // not move with the viewport that asked. The floors stay outside the rounding: a floor is a
-  // decision, not a measurement.
-  piece->height = fmax(_metric_quantum((double)logical.height / PANGO_SCALE), 1.0);
-  piece->logical_top = _metric_quantum((double)logical.y / PANGO_SCALE);
-  piece->ink_top = _metric_quantum((double)(ink.y - logical.y) / PANGO_SCALE);
-  piece->ink_height = fmax(_metric_quantum((double)ink.height / PANGO_SCALE), 1.0);
-  piece->consumed = *cached_offset + line->start_index + line->length;
-  /*
-   * A break eats the space it broke on: step over what the line did not take, or the next
-   * chunk begins with it and never advances. But over ONE newline only, never a run of them.
-   * The second newline of a blank line is a line of its own -- Pango draws it as one -- and
-   * swallowing it here makes the blank line appear or vanish according to whether the layout
-   * happened to be reused, which with a line set across two stretches is almost never.
-   */
-  while(piece->consumed < length && (plain[piece->consumed] == ' ' || plain[piece->consumed] == '\t'))
-    piece->consumed++;
-  if(piece->consumed < length && plain[piece->consumed] == '\n') piece->consumed++;
-  return TRUE;
+  if(IS_NULL_PTR(plan)) return;
+  dt_canvas_text_words_free(&plan->words);
+  if(!IS_NULL_PTR(plan->attributes)) pango_attr_list_unref(plan->attributes);
+  if(!IS_NULL_PTR(plan->segments)) g_array_free(plan->segments, TRUE);
+  memset(plan, 0, sizeof(*plan));
 }
 
 /**
- * Lay a text frame out line by line, each line set at a width this code chooses.
- * @return the height the text came to; `draw` FALSE measures without painting.
+ * Shape the whole text once, unwrapped, and measure its words.
+ *
+ * On a scratch context of its own, at the identity: the plan is a property of the DOCUMENT --
+ * which words share a line, and where -- and must not depend on which viewport, zoom or screen
+ * happened to ask. Metrics hinting is off (`_text_layout_styled()`), so the advances read here
+ * are the advances the paint will set, whatever its matrix. `nominal` is the frame font's own
+ * line, the narrowest stretch the obstacle map is asked to report.
  */
-static double _flow_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
-                         const dt_text_obstacles_t *obstacles, const double inner_width,
-                         const double inner_height, const double offset_y, const gboolean draw)
+static gboolean _flow_shape(const dt_canvas_t *canvas, const dt_canvas_object_t *object, dt_text_plan_t *plan,
+                            double *nominal)
 {
+  cairo_surface_t *scratch = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+  cairo_t *cr = cairo_create(scratch);
+  PangoLayout *unwrapped = _text_layout_styled(cr, canvas, object);
   gchar *markup = dt_canvas_markdown_to_pango(dt_canvas_text_get_markdown(object));
   PangoAttrList *attributes = NULL;
   gchar *plain = NULL;
   const gboolean parsed = pango_parse_markup(markup, -1, 0, &attributes, &plain, NULL, NULL);
   dt_free(markup);
-  if(!parsed || IS_NULL_PTR(plain))
+  gboolean shaped = FALSE;
+  if(parsed && !IS_NULL_PTR(plain))
   {
-    if(!IS_NULL_PTR(attributes)) pango_attr_list_unref(attributes);
-    dt_free(plain);
-    return 0.0;
+    // The same guards the plain path gets, BEFORE the features and the tracking are added, so
+    // the complete list carries them all and the screen and the export cannot break differently.
+    if(IS_NULL_PTR(attributes)) attributes = pango_attr_list_new();
+    dt_canvas_text_guard_breaks(attributes, plain, strlen(plain));
+    pango_layout_set_text(unwrapped, plain, -1);
+    pango_layout_set_attributes(unwrapped, attributes);
+    _text_layout_finish(unwrapped, object);
+    // Unwrapped and unjustified: one line per paragraph, every advance its natural one.
+    pango_layout_set_width(unwrapped, -1);
+    pango_layout_set_justify(unwrapped, FALSE);
+    shaped = dt_canvas_text_words_build(&plan->words, unwrapped);
+    if(shaped)
+    {
+      plan->attributes = pango_attr_list_ref(pango_layout_get_attributes(unwrapped));
+      PangoFontMetrics *metrics = pango_context_get_metrics(pango_layout_get_context(unwrapped),
+                                                            pango_layout_get_font_description(unwrapped), NULL);
+      if(!IS_NULL_PTR(metrics))
+      {
+        const int ascent_and_descent = pango_font_metrics_get_ascent(metrics) + pango_font_metrics_get_descent(metrics);
+        *nominal = _metric_quantum((double)ascent_and_descent / PANGO_SCALE);
+        pango_font_metrics_unref(metrics);
+      }
+      *nominal = fmax(*nominal, 1.0);
+    }
   }
-  const gsize length = strlen(plain);
-  // The same guards the plain path gets. A markup with no attributes of its own still needs a
-  // list to hang them on.
-  if(IS_NULL_PTR(attributes)) attributes = pango_attr_list_new();
-  dt_canvas_text_guard_breaks(attributes, plain, length);
-  const gboolean optical = (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS) != 0;
+  if(!IS_NULL_PTR(attributes)) pango_attr_list_unref(attributes);
+  dt_free(plain);
+  g_object_unref(unwrapped);
+  cairo_destroy(cr);
+  cairo_surface_destroy(scratch);
+  return shaped;
+}
+
+/** Record the words [first, past) of a paragraph as set on one stretch of one line. */
+static void _flow_place(dt_text_plan_t *plan, const int paragraph_index, const int first, const int past,
+                        const dt_text_run_t *run, const int available, const double baseline,
+                        const gboolean hang_lead, const gboolean hang_room, const gboolean justify)
+{
+  const dt_text_paragraph_t *paragraph = &plan->words.paragraphs[paragraph_index];
+  const int lead = hang_lead ? paragraph->words[first].lead : 0;
+  const int room = hang_room ? paragraph->words[past - 1].room : 0;
+  dt_text_segment_t segment;
+  segment.paragraph = paragraph_index;
+  segment.first = first;
+  segment.past = past;
+  // The opening character hangs INTO the margin: the layout begins that much before the stretch
+  // and is set that much wider, so its stems land on the stretch's edge and its comma past it.
+  segment.x = run->x - (double)lead / PANGO_SCALE;
+  segment.measure = (double)(available + lead + room) / PANGO_SCALE;
+  segment.baseline = baseline;
+  segment.justify = justify;
+  g_array_append_val(plan->segments, segment);
+}
+
+/**
+ * Lay a text frame out line by line, each line filled BY MEASURE across the clear stretches of
+ * its band: every word's width is known before anything is asked, so a stretch holds exactly the
+ * words that fit it, and nothing is ever set, weighed and refused.
+ *
+ * This replaces a walk that set each line with Pango at the stretch's width and inferred "the
+ * first word did not fit" from the width of the line Pango produced. Two things a line is
+ * allowed to be make that inference wrong -- an optical margin sets a line WIDER than its
+ * stretch so its comma hangs, and a justified line is stretched to that width -- and the indent
+ * narrowed the first stretch behind the comparison's back. Measured on a justified column with
+ * hanging punctuation: every line ending on a comma beside a picture was refused and its stretch
+ * left empty for the picture's whole height; a paragraph's opening line, refused on the FULL
+ * measure for being one indent too wide, fell one line per attempt until the picture caught it,
+ * and followed the picture when it was dragged; with no picture at all the frame came to 66776
+ * units -- the line cap -- with no ink. `test_canvas_text_words` holds the fill to Pango's own
+ * breaks at every measure, and `test_canvas_text_flow` holds every one of those cases.
+ *
+ * The rules that stay, each measured before this rewrite and pinned by a test: the band offered
+ * to the obstacle map is the paragraph's INK; a line is set across every clear stretch, left to
+ * right; a stretch too narrow for the next word is left empty and the word waits for a wider one
+ * below (CSS 2.1 §9.5 moves the line box down the same way); a word wider than the frame's own
+ * measure is set where it stands, overflowing, as Pango's WRAP_WORD does; the blank line between
+ * two paragraphs is one line of white; the paragraph gap and the first-line indent go to a
+ * paragraph's first line, the indent off the first stretch only; the leading is added by hand
+ * between SET lines, since Pango's spacing is between the lines of one layout and every line
+ * here is a layout of its own; the frame's cut ends the walk and the line cap bounds it.
+ *
+ * @param plan receives the segments to paint, or NULL to measure only.
+ * @return the height the text came to.
+ */
+static double _flow_plan(const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                         const dt_text_obstacles_t *obstacles, const double inner_width, const double inner_height,
+                         dt_text_plan_t *plan)
+{
+  dt_text_plan_t local;
+  if(IS_NULL_PTR(plan)) plan = &local;
+  memset(plan, 0, sizeof(*plan));
+  double nominal = 1.0;
+  if(!_flow_shape(canvas, object, plan, &nominal)) return 0.0;
+  plan->segments = g_array_new(FALSE, FALSE, sizeof(dt_text_segment_t));
+  const dt_text_words_t *words = &plan->words;
+
   double insets[4];
   _text_insets(canvas, object, insets);
   const double text_left = -object->width * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_LEFT];
   const double text_right = text_left + inner_width;
   const double top = -object->height * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_TOP];
-
-  // How tall a line will be, BEFORE there is a line to measure: the font's own ascent plus
-  // descent. The band handed to the obstacle map has to be a line tall or the line is placed
-  // against a sliver of it -- and "the last line's height" degenerates to nothing at all on
-  // the first line, which is how the first lines of a paragraph came to slide under the top
-  // of the very shape they were meant to avoid. NOT scaled by the leading: the leading is
-  // space BETWEEN lines, and the band is what one line's glyphs occupy; charging it to the
-  // band steals width wherever the edge slants.
-  double nominal = 1.0;
-  {
-    PangoLayout *probe = _text_layout_styled(cr, canvas, object);
-    PangoFontMetrics *metrics
-        = pango_context_get_metrics(pango_layout_get_context(probe), pango_layout_get_font_description(probe), NULL);
-    if(!IS_NULL_PTR(metrics))
-    {
-      const int ascent_and_descent
-          = pango_font_metrics_get_ascent(metrics) + pango_font_metrics_get_descent(metrics);
-      nominal = _metric_quantum((double)ascent_and_descent / PANGO_SCALE);
-      pango_font_metrics_unref(metrics);
-    }
-    g_object_unref(probe);
-    nominal = fmax(nominal, 1.0);
-  }
+  const gboolean optical = (object->text.text_flags & DT_CANVAS_TEXT_OPTICAL_MARGINS) != 0;
+  const gboolean justified = object->text.align_h == DT_CANVAS_ALIGN_JUSTIFY;
+  // Only an edge the alignment pins is read from the stems, so only there does anything hang.
+  const gboolean hang_lead
+      = optical && (object->text.align_h == DT_CANVAS_ALIGN_START || object->text.align_h == DT_CANVAS_ALIGN_JUSTIFY);
+  const gboolean hang_room = optical && object->text.align_h != DT_CANVAS_ALIGN_CENTER;
+  const double indent = fabs((double)object->text.first_line_indent) > 1e-4 ? (double)object->text.first_line_indent : 0.0;
+  const double paragraph_gap = fmax((double)object->text.paragraph_spacing, 0.0);
+  const double leading = fmax(_metric_quantum((double)words->leading / PANGO_SCALE), 0.0);
+  const int frame_measure = (int)(inner_width * PANGO_SCALE);
 
   double y = 0.0;
-  gsize consumed = 0;
-  PangoLayout *layout = NULL;
-  double layout_width = -1.0;
-  gsize layout_offset = 0;
-  int layout_line = 0;
-  // Where a paragraph begins, since that is what an indent and the space between paragraphs
-  // both answer to. Pango knows neither here: every line is the first of its own layout, so
-  // its own indent would indent every line, and it has no paragraph spacing at all.
-  gboolean paragraph_start = TRUE;
-  gboolean before_first_paragraph = TRUE;
-  // Where the space between paragraphs was last paid, since a line the obstacles refuse sets
-  // nothing and consumes nothing: the walk moves down and asks again at the SAME offset, which
-  // is a paragraph start again. Paid per attempt rather than per paragraph, a paragraph that
-  // waits for the foot of a picture is pushed one further gap down for every line it waited --
-  // the second paragraph following the picture down and opening a gap behind it that the third
-  // one does not have. `consumed` only ever grows, so it names the paragraph.
-  gsize paragraph_gap_paid = G_MAXSIZE;
-  const double indent = (double)object->text.first_line_indent;
-  const double paragraph_gap = fmax((double)object->text.paragraph_spacing, 0.0);
-  // Before there is a line to measure, the whole logical box: a first line must not be placed
-  // against a guess that is too small, and the check below corrects it downward for the rest.
-  double previous_ink_top = 0.0;
-  double previous_ink_height = nominal;
-
-  for(int line_index = 0; line_index < TEXT_FLOW_MAX_LINES && consumed < length; line_index++)
+  gboolean seen_ink = FALSE;
+  int attempts = 0;
+  for(int index = 0; index < words->paragraph_count; index++)
   {
-    /*
-     * Whether this line opens a paragraph, asked of the TEXT and not of whichever layout is
-     * cached. The character before where the text stands is the line terminator the last break
-     * ate, so a newline there is a paragraph boundary -- and a line that begins ON a newline is
-     * the blank line between two paragraphs, which opens nothing and takes neither the indent
-     * nor the space. Asked of the layout instead, the answer was right only while the layout
-     * was reused across lines: with a line set across two stretches it is rebuilt almost every
-     * line, the blank line is never reached, and the paragraph after it was never asked about.
-     */
-    const gboolean blank_line = consumed < length && plain[consumed] == '\n';
-    paragraph_start = !blank_line && (consumed == 0 || (consumed > 0 && plain[consumed - 1] == '\n'));
-    // The space between paragraphs goes in before the band is asked for, or the line would be
-    // measured against the obstacles at the height it is NOT going to be set at.
-    if(paragraph_start && !before_first_paragraph && paragraph_gap_paid != consumed)
+    const dt_text_paragraph_t *paragraph = &words->paragraphs[index];
+    const gboolean text_follows = index + 1 < words->paragraph_count;
+    const double height = fmax(_metric_quantum((double)paragraph->height / PANGO_SCALE), 1.0);
+    if(paragraph->word_count == 0)
     {
-      y += paragraph_gap;
-      paragraph_gap_paid = consumed;
-    }
-
-    /*
-     * The band is the line's INK, not its logical box. What must clear the picture is the
-     * glyphs, and a logical box carries the font's full ascent above the tallest of them --
-     * measured, 72.96 units of box around 59.65 of ink. That surplus is paid twice over on a
-     * slanted edge, where a band `h` tall makes the run `h * tan(theta)` narrower than the
-     * shape alone would.
-     */
-    double band_top = previous_ink_top;
-    double band_height = fmax(previous_ink_height, 1.0);
-    dt_text_run_t runs[TEXT_FLOW_MAX_RUNS];
-    int run_count = _obstacles_runs(obstacles, top + y + band_top, top + y + band_top + band_height, text_left,
-                                    text_right, nominal, runs);
-    /*
-     * The first line of a paragraph is set on a shorter measure, from the side the reading
-     * starts: the run's start moves in and its end stays, so the line comes out indented under
-     * every alignment and justified text keeps its right edge. A negative indent hangs the
-     * line out of the measure instead, which is what a bibliography or a dictionary wants.
-     */
-    gboolean nothing_fits = run_count <= 0;
-    if(!nothing_fits && paragraph_start && fabs(indent) > 1e-4)
-    {
-      runs[0].x += indent;
-      runs[0].width -= indent;
-      nothing_fits = !(runs[0].width > 0.0);
-    }
-    /*
-     * A band with no room in it is a line the walk steps OVER, never the end of the text. It
-     * used to end the walk, so a picture as wide as the column deleted every word below it --
-     * "the text disappears" -- and with it every line an indent wider than its own stretch
-     * would have taken. One line down is the same answer a single refused stretch already
-     * gets; what bounds the walk is the frame's own cut, and the line cap behind it.
-     */
-    if(nothing_fits)
-    {
-      const double step = fmax(fmax(band_height, nominal), 1.0);
-      if(y + step > inner_height && line_index > 0) break;
-      y += step;
+      // The blank line: one line of white, colliding with nothing, so no stretch is asked for.
+      attempts++;
+      if(attempts > 1 && y + height > inner_height) break;
+      y += height;
+      if(text_follows) y += leading;
       continue;
     }
+    // The space between paragraphs goes in once, before the first band of a paragraph with ink,
+    // and never above the first one.
+    if(seen_ink) y += paragraph_gap;
+    const double ascent = _metric_quantum((double)paragraph->ascent / PANGO_SCALE);
+    const double ink_top = _metric_quantum((double)paragraph->ink_top / PANGO_SCALE);
+    const double ink_height = fmax(_metric_quantum((double)paragraph->ink_height / PANGO_SCALE), 1.0);
+    int cursor = 0;
+    gboolean first_line = TRUE;
+    gboolean stop = FALSE;
+    while(cursor < paragraph->word_count && !stop)
+    {
+      attempts++;
+      if(attempts > TEXT_FLOW_MAX_LINES) break;
+      // The frame's cut is exact, and the first line is never cut: a frame a hair short of its
+      // text loses its last line, never its only one.
+      if(attempts > 1 && y + height > inner_height) break;
 
-    dt_text_piece_t piece;
-    if(!_flow_piece(cr, canvas, object, plain, length, attributes, consumed, runs[0].width, optical, &layout,
-                    &layout_width, &layout_offset, &layout_line, &piece))
+      // The band is the paragraph's own ink, known before any line of it is set.
+      dt_text_run_t runs[TEXT_FLOW_MAX_RUNS];
+      int run_count = _obstacles_runs(obstacles, top + y + ink_top, top + y + ink_top + ink_height, text_left,
+                                      text_right, nominal, runs);
+      // The first line of a paragraph is set on a shorter measure, from the side the reading
+      // starts: the first stretch's start moves in and its end stays, so the line comes out
+      // indented under every alignment. A negative indent hangs it out of the measure instead.
+      // An indent that eats the whole first stretch costs that stretch, not the line.
+      const double indent_here = first_line ? indent : 0.0;
+      int indented = -1;
+      if(run_count > 0 && indent_here != 0.0)
+      {
+        runs[0].x += indent_here;
+        runs[0].width -= indent_here;
+        if(runs[0].width > 0.0)
+          indented = 0;
+        else
+        {
+          memmove(runs, runs + 1, (size_t)(run_count - 1) * sizeof(runs[0]));
+          run_count--;
+        }
+      }
+
+      gboolean took = FALSE;
+      int widest_run = -1;
+      for(int run = 0; run < run_count && cursor < paragraph->word_count; run++)
+      {
+        // A stretch spanning the whole measure is the widest that will ever come: whatever the
+        // next word is, it is set here.
+        const double full_measure = run == indented ? inner_width - indent_here : inner_width;
+        const gboolean full = runs[run].width >= full_measure - 0.01;
+        const int available = (int)(runs[run].width * PANGO_SCALE);
+        int past = dt_canvas_text_words_fit(paragraph, cursor, available, hang_lead, hang_room);
+        // A lone word of one or two characters is a scrap: it waits for a stretch that can take a
+        // line, unless it ends its paragraph, when a short last line is a last line.
+        if(past == cursor + 1 && !full && past < paragraph->word_count && paragraph->words[cursor].characters <= 2)
+          past = cursor;
+        if(past == cursor)
+        {
+          if(!full)
+          {
+            if(widest_run < 0 || runs[run].width > runs[widest_run].width) widest_run = run;
+            continue;
+          }
+          past = cursor + 1;
+        }
+        _flow_place(plan, index, cursor, past, &runs[run], available, y + ascent, hang_lead, hang_room,
+                    justified && past < paragraph->word_count);
+        cursor = past;
+        took = TRUE;
+      }
+      if(!took && widest_run >= 0)
+      {
+        // Nothing fitted any stretch of this line. A word wider than the frame's own measure will
+        // fit no stretch of any line either, so it is set where it stands, overflowing, rather than
+        // waited on for ever; any narrower word waits for a wider stretch below.
+        const int room = hang_room ? paragraph->words[cursor].room : 0;
+        if(paragraph->words[cursor].width - room > frame_measure)
+        {
+          _flow_place(plan, index, cursor, cursor + 1, &runs[widest_run],
+                      (int)(runs[widest_run].width * PANGO_SCALE), y + ascent, hang_lead, hang_room,
+                      justified && cursor + 1 < paragraph->word_count);
+          cursor++;
+          took = TRUE;
+        }
+      }
+      if(took)
+      {
+        seen_ink = TRUE;
+        first_line = FALSE;
+      }
+      // Set or stepped over, a line is a line; the leading only follows a line that was SET, and
+      // only where a line follows it.
+      y += height;
+      if(took && (cursor < paragraph->word_count || text_follows)) y += leading;
+    }
+    if(attempts > TEXT_FLOW_MAX_LINES || (attempts > 1 && y + height > inner_height && cursor < paragraph->word_count))
       break;
-    // The line reached outside the band it was placed against, so what it will occupy was
-    // never asked about. Ask again with its real ink and set it once more; a second pass
-    // settles it, since the band only grows and the runs only narrow.
-    if(piece.ink_top < band_top - 0.5 || piece.ink_top + piece.ink_height > band_top + band_height + 0.5)
-    {
-      band_height = fmax(piece.ink_top + piece.ink_height, band_top + band_height) - fmin(piece.ink_top, band_top);
-      band_top = fmin(piece.ink_top, band_top);
-      dt_text_run_t again[TEXT_FLOW_MAX_RUNS];
-      const int recount = _obstacles_runs(obstacles, top + y + band_top, top + y + band_top + band_height,
-                                          text_left, text_right, nominal, again);
-      if(recount > 0)
-      {
-        if(paragraph_start && fabs(indent) > 1e-4)
-        {
-          again[0].x += indent;
-          again[0].width -= indent;
-        }
-        if(again[0].width > 0.0 && fabs(again[0].width - runs[0].width) > 0.01)
-        {
-          memcpy(runs, again, sizeof(runs));
-          run_count = recount;
-          if(!_flow_piece(cr, canvas, object, plain, length, attributes, consumed, runs[0].width, optical,
-                          &layout, &layout_width, &layout_offset, &layout_line, &piece))
-            break;
-        }
-      }
-    }
-    previous_ink_top = piece.ink_top;
-    previous_ink_height = piece.ink_height;
-    if(y + piece.height > inner_height && line_index > 0) break;
-
-    /*
-     * Every clear stretch of the band, left to right. A picture standing in the MIDDLE of a
-     * column leaves space on both sides of it, and the line carries on past it rather than
-     * abandoning the far side -- one stretch per line was "the largest area" and left the
-     * other side of an overlaid picture empty.
-     */
-    double line_height = 0.0;
-    double skipped_height = 0.0;
-    double leading_gap = 0.0;
-    for(int run = 0; run < run_count; run++)
-    {
-      if(run > 0)
-      {
-        if(consumed >= length) break;
-        if(!_flow_piece(cr, canvas, object, plain, length, attributes, consumed, runs[run].width, optical,
-                        &layout, &layout_width, &layout_offset, &layout_line, &piece))
-          break;
-      }
-      /*
-       * A stretch this piece has no business in: nothing is set and nothing is consumed, and
-       * the walk tries the next one. Every stretch refused is a line skipped, which the line
-       * cap bounds.
-       *
-       * What "no wider stretch will ever come" means is the widest measure THIS piece can ever
-       * be offered, and a paragraph's first line is set on the frame's measure LESS ITS INDENT.
-       * Compared against the frame's own measure instead, such a line was refused for being one
-       * indent too wide -- and a refused line consumes nothing, so the next attempt is the same
-       * first line, indented again, refused again, one line lower each time. Measured on a
-       * 457-unit column with a 48-unit indent: the opening line of a paragraph fell through
-       * four empty lines and settled against the picture below, moving down with it whenever
-       * the picture was dragged, which is what "the first line follows the image" was. Only the
-       * indented stretch is bounded this way; the rest of the line is not indented.
-       */
-      const double widest = (run == 0 && paragraph_start) ? inner_width - indent : inner_width;
-      if(_run_refused(&piece, runs[run].width, widest, plain, length, consumed))
-      {
-        // The walk moves down a line, so it must move down by a LINE: left at one unit, a
-        // stretch refused all the way down an obstacle costs a thousand iterations of nothing.
-        skipped_height = fmax(skipped_height, piece.height);
-        continue;
-      }
-      if(draw)
-      {
-        cairo_save(cr);
-        cairo_move_to(cr, runs[run].x + piece.hang, top + offset_y + y - piece.logical_top);
-        pango_cairo_show_layout_line(cr, piece.line);
-        cairo_restore(cr);
-      }
-      line_height = fmax(line_height, piece.height);
-      leading_gap = fmax(leading_gap, _metric_quantum((double)pango_layout_get_spacing(layout) / PANGO_SCALE));
-      // A line that took no text is still a line that was set -- the empty one Pango draws for
-      // the blank line between two paragraphs -- so the layout moves on whatever it took, or
-      // the band is asked for again with nothing changed and the walk never ends. It does end
-      // the band: nothing follows an empty line on the same line.
-      layout_line++;
-      const gboolean advanced = piece.consumed > consumed;
-      if(advanced) consumed = piece.consumed;
-      // Nothing follows a blank line on the same line, and a stretch that took nothing at all
-      // cannot be waited on.
-      if(!advanced || piece.line->length == 0) break;
-    }
-    // A paragraph has been seen once one of its lines is SET, not once one is attempted: the
-    // opening line of the first paragraph, refused for want of room, otherwise left the walk
-    // believing a paragraph was behind it and charged the space between paragraphs above the
-    // very first one. Measured at the same obstacle as the gap above, it is the other half of
-    // the same three-gaps-for-two-breaks.
-    if(paragraph_start && line_height > 0.0) before_first_paragraph = FALSE;
-    y += fmax(fmax(line_height, skipped_height), 1.0);
-    /*
-     * The leading, by hand, and only where a line follows. Pango's spacing is the space
-     * BETWEEN two lines of one layout, and every line here is line zero of a layout of its
-     * own, so no line's extents ever carry it -- setting a line height did exactly nothing to
-     * a frame that wrapped around something or hung its punctuation, silently, while the plain
-     * paragraph honoured it. The test has to read `consumed` AFTER it is advanced, or the
-     * paragraph ends on a trailing gap Pango would not have left.
-     */
-    if(consumed < length) y += fmax(leading_gap, 0.0);
-    /*
-     * Whether the NEXT line opens a paragraph, asked of the line itself rather than of what
-     * this one stepped over. A run of newlines is ONE break however many it holds: markdown
-     * separates its blocks with a blank line, Pango renders the second newline as a line of
-     * its own with no ink in it, and a rule keyed on "did I step over a newline" fires on the
-     * empty line and again on the real one -- two gaps per break, measured as 159.6 units
-     * where 80 was owed. The line whose character before it is a newline AND which has ink of
-     * its own is the one that opens the paragraph, and there is exactly one per run.
-     */
-    // The layout is kept for the next line only while it still describes where the text
-    // stands; `_flow_piece()` makes that judgement, and a width that changed forces its hand.
-    const PangoLayoutLine *following = pango_layout_get_line_readonly(layout, layout_line);
-    if(IS_NULL_PTR(following)) layout_width = -1.0;
   }
-  if(!IS_NULL_PTR(layout)) g_object_unref(layout);
-  pango_attr_list_unref(attributes);
-  dt_free(plain);
+  plan->height = y;
+  if(plan == &local) _flow_plan_free(&local);
   return y;
 }
 
+/** How Pango is to align a segment: the object's alignment, read in the paragraph's direction. */
+static PangoAlignment _segment_alignment(const dt_canvas_object_t *object, const gboolean rtl)
+{
+  switch(object->text.align_h)
+  {
+    case DT_CANVAS_ALIGN_CENTER:
+      return PANGO_ALIGN_CENTER;
+    case DT_CANVAS_ALIGN_END:
+      return rtl ? PANGO_ALIGN_LEFT : PANGO_ALIGN_RIGHT;
+    default:
+      return rtl ? PANGO_ALIGN_RIGHT : PANGO_ALIGN_LEFT;
+  }
+}
+
+/**
+ * Paint the plan: Pango sets each chosen segment on its own one-line layout.
+ *
+ * The layouts come from the paint context, so the glyphs carry the target's font options and
+ * matrix as every other text on the page does; what they are set to comes from the plan. A
+ * segment's layout is at least as wide as its own natural width, so it can never wrap -- the
+ * plan chose words that fit its measure, and a viewport's rounding of a metric by a Pango unit
+ * must not be allowed to turn one line into two. The paragraph's direction is imposed, never
+ * inferred from the segment: a Latin word opening a line of a Hebrew paragraph would otherwise
+ * turn the whole line round.
+ */
+static void _flow_paint(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_object_t *object,
+                        const dt_text_plan_t *plan, const double offset_y)
+{
+  if(IS_NULL_PTR(plan->segments) || plan->segments->len == 0) return;
+  double insets[4];
+  _text_insets(canvas, object, insets);
+  const double top = -object->height * 0.5 + insets[DT_CANVAS_TEXT_MARGIN_TOP];
+  PangoLayout *proto = _text_layout_styled(cr, canvas, object);
+  PangoContext *context = pango_layout_get_context(proto);
+  for(guint idx = 0; idx < plan->segments->len; idx++)
+  {
+    const dt_text_segment_t *segment = &g_array_index(plan->segments, dt_text_segment_t, idx);
+    const dt_text_paragraph_t *paragraph = &plan->words.paragraphs[segment->paragraph];
+    const guint a = paragraph->words[segment->first].start;
+    const guint b = paragraph->words[segment->past - 1].end;
+    const gboolean rtl
+        = paragraph->direction == PANGO_DIRECTION_RTL || paragraph->direction == PANGO_DIRECTION_WEAK_RTL;
+
+    PangoLayout *layout = pango_layout_copy(proto);
+#if PANGO_VERSION_CHECK(1, 50, 0)
+    pango_layout_set_text(layout, plan->words.plain + a, (int)(b - a));
+#else
+    // Pango never justifies a layout's last line, and before 1.50 there is no asking it to: a
+    // segment to be justified is given a second, empty line to stand before.
+    if(segment->justify)
+    {
+      gchar *followed = g_strdup_printf("%.*s\n\xe2\x80\x8b", (int)(b - a), plan->words.plain + a);
+      pango_layout_set_text(layout, followed, -1);
+      g_free(followed);
+    }
+    else
+      pango_layout_set_text(layout, plan->words.plain + a, (int)(b - a));
+#endif
+    PangoAttrList *shifted = pango_attr_list_copy(plan->attributes);
+    PangoAttrList *dropped = pango_attr_list_filter(shifted, _attribute_shift, GUINT_TO_POINTER(a));
+    if(!IS_NULL_PTR(dropped)) pango_attr_list_unref(dropped);
+    pango_layout_set_attributes(layout, shifted);
+    pango_attr_list_unref(shifted);
+    pango_layout_set_auto_dir(layout, FALSE);
+    pango_context_set_base_dir(context, rtl ? PANGO_DIRECTION_RTL : PANGO_DIRECTION_LTR);
+    pango_layout_context_changed(layout);
+    pango_layout_set_alignment(layout, _segment_alignment(object, rtl));
+    pango_layout_set_justify(layout, segment->justify);
+#if PANGO_VERSION_CHECK(1, 50, 0)
+    pango_layout_set_justify_last_line(layout, segment->justify);
+#endif
+    // Never narrower than its own natural width: one line, whatever the viewport rounds.
+    pango_layout_set_width(layout, -1);
+    PangoLayoutLine *line = pango_layout_get_line_readonly(layout, 0);
+    if(IS_NULL_PTR(line))
+    {
+      g_object_unref(layout);
+      continue;
+    }
+    PangoRectangle ink;
+    PangoRectangle logical;
+    pango_layout_line_get_extents(line, &ink, &logical);
+    pango_layout_set_width(layout, MAX((int)(segment->measure * PANGO_SCALE), logical.width));
+    // The ITER's extents, not the line's own: it is the iter that knows where the alignment put
+    // the line inside its measure.
+    PangoLayoutIter *iter = pango_layout_get_iter(layout);
+    pango_layout_iter_get_line_extents(iter, &ink, &logical);
+    pango_layout_iter_free(iter);
+    line = pango_layout_get_line_readonly(layout, 0);
+    if(!IS_NULL_PTR(line))
+    {
+      cairo_move_to(cr, segment->x + (double)logical.x / PANGO_SCALE, top + offset_y + segment->baseline);
+      pango_cairo_show_layout_line(cr, line);
+    }
+    g_object_unref(layout);
+  }
+  g_object_unref(proto);
+}
 
 /**
  * Which part of a text frame a pass paints.
@@ -2725,15 +2646,15 @@ static void _paint_text(cairo_t *cr, const dt_canvas_t *canvas, const dt_canvas_
   if(!wrapping) memset(&obstacles, 0, sizeof(obstacles));
   if(wrapping || _text_flows(object))
   {
-    // The height is only known once it is set, so the vertical alignment measures first.
+    // Planned once, on the document's own terms; the vertical alignment reads the height the plan
+    // came to, and the paint sets what the plan chose.
+    dt_text_plan_t plan;
+    const double used = _flow_plan(canvas, object, &obstacles, inner_width, inner_height, &plan);
     double offset_y = 0.0;
-    if(object->text.align_v != DT_CANVAS_ALIGN_START)
-    {
-      const double used = _flow_text(cr, canvas, object, &obstacles, inner_width, inner_height, 0.0, FALSE);
-      offset_y = object->text.align_v == DT_CANVAS_ALIGN_CENTER ? (inner_height - used) * 0.5 : inner_height - used;
-      offset_y = fmax(offset_y, 0.0);
-    }
-    _flow_text(cr, canvas, object, &obstacles, inner_width, inner_height, offset_y, TRUE);
+    if(object->text.align_v == DT_CANVAS_ALIGN_CENTER) offset_y = (inner_height - used) * 0.5;
+    else if(object->text.align_v == DT_CANVAS_ALIGN_END) offset_y = inner_height - used;
+    _flow_paint(cr, canvas, object, &plan, fmax(offset_y, 0.0));
+    _flow_plan_free(&plan);
     _obstacles_free(&obstacles);
     cairo_restore(cr);
     return;
@@ -2847,7 +2768,7 @@ gboolean dt_canvas_paint_text_fit_height(const dt_canvas_t *canvas, dt_canvas_ob
     const double natural = dt_canvas_paint_text_natural_height(cr, canvas, object);
     if(!(natural > 0.0)) break;
     /*
-     * The height is ASSIGNED before the loop breaks, settled or not. `_flow_text()`'s cut is
+     * The height is ASSIGNED before the loop breaks, settled or not. `_flow_plan()`'s cut is
      * exact -- deliberately, since a tolerance there would let a line overflow a frame the
      * user sized by hand -- so a frame left even a hundredth of a unit short of what its text
      * came to drops its last line. Breaking before the assignment left exactly that: the
@@ -2884,7 +2805,7 @@ double dt_canvas_paint_text_natural_height(cairo_t *cr, const dt_canvas_t *canva
     if(!wrapping) memset(&obstacles, 0, sizeof(obstacles));
     if(wrapping || _text_flows(object))
     {
-      const double used = _flow_text(cr, canvas, object, &obstacles, inner_width, 1.0e9, 0.0, FALSE);
+      const double used = _flow_plan(canvas, object, &obstacles, inner_width, 1.0e9, NULL);
       _obstacles_free(&obstacles);
       return used + insets[DT_CANVAS_TEXT_MARGIN_TOP] + insets[DT_CANVAS_TEXT_MARGIN_BOTTOM];
     }

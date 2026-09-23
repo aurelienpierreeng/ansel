@@ -2293,7 +2293,7 @@ static void _a_fitted_text_frame_is_exactly_its_natural_height(void **state)
 {
   (void)state;
   /*
-   * `_flow_text()`'s cut is exact -- deliberately, since a tolerance there would let a line
+   * `_flow_plan()`'s cut is exact -- deliberately, since a tolerance there would let a line
    * overflow a frame the user sized by hand -- so the fit must leave the frame exactly as tall
    * as its text came to, not within a hundredth of a unit of it. Breaking before the
    * assignment left it short, and the last line then fell the wrong side of the cut.

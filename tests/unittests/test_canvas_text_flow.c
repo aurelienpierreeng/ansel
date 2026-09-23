@@ -19,11 +19,12 @@
 /*
  * A text frame set around the pictures laid over it, and the height it comes to.
  *
- * Every case here is a defect that was reported together, on one frame, as "the second
- * paragraph follows the picture down", "the text disappears" and "the auto height makes the
- * frame infinitely high". They are four separate faults in the flow engine, and each assertion
- * below is the measurement that told its fault from the others -- the numbers in each comment
- * are what the fault gave before it was fixed, taken by putting it back.
+ * Every case here is a defect that was reported on one frame -- "the second paragraph follows
+ * the picture down", "the text disappears", "the auto height makes the frame infinitely high",
+ * "empty lines beside the picture" -- and each assertion below is the measurement that told its
+ * fault from the others; the numbers in each comment are what the fault gave before it was
+ * fixed, taken by putting it back. The engine they pin was then rewritten to fill its lines by
+ * measure (`canvas/canvas_text_words.h`), and every case held.
  *
  * The frame is measured rather than read: `dt_canvas_paint_text_natural_height()` is what the
  * auto height solves against, and where a line actually landed is counted off a painted
@@ -310,20 +311,22 @@ static void _a_band_with_no_room_is_a_line_stepped_over(void **state)
 }
 
 /**
- * A first line is judged against ITS OWN measure, which is the frame's less the indent.
+ * An indented first line is judged against ITS OWN measure, which is the frame's less the indent.
  *
- * `_run_refused()` asks whether a piece would fit in a wider stretch, and answered against the
- * frame's whole measure while the piece had been set on the measure less the paragraph indent --
- * so a first line whose set width landed between the two (an optical margin hangs its comma past
- * the measure, and a justified line is stretched to it) was refused for being one indent too
- * wide. A refused line consumes nothing, so the next attempt is the same first line, indented
- * again, refused again, one line lower each time.
+ * The old walk set each stretch with Pango and asked whether the result would have fitted a
+ * wider stretch, answering against the frame's whole measure while the piece had been set on the
+ * measure less the paragraph indent -- so a first line whose set width landed between the two (an
+ * optical margin hangs its comma past the measure, and a justified line is stretched to it) was
+ * refused for being one indent too wide. A refused line consumed nothing, so the next attempt was
+ * the same first line, indented again, refused again, one line lower each time.
  *
  * Measured with nothing laid over the column at all: at any indent the frame came to 66776 units
  * -- the line cap -- with NO ink anywhere, the text gone and the frame bottomless. Over a picture
- * it reads differently and is the same fault: the cascade stops at the first stretch narrow
+ * it read differently and was the same fault: the cascade stopped at the first stretch narrow
  * enough for a short piece to fit, which is beside the picture, so the paragraph's opening line
- * lands against it and moves down with it whenever it is dragged. That was the report.
+ * landed against it and moved down with it whenever it was dragged. That was the report. Filled
+ * by measure there is no refusal to get wrong: the indent narrows the stretch the words are
+ * measured against, and that is the whole of it.
  */
 static void _an_indented_first_line_is_judged_against_its_own_measure(void **state)
 {
@@ -352,6 +355,127 @@ static void _an_indented_first_line_is_judged_against_its_own_measure(void **sta
   }
 }
 
+/**
+ * The line bands inside a picture's vertical span, and how many of them carry ink LEFT of it.
+ *
+ * Painted like `_lowest_ink()`; a band is a run of rows with ink anywhere in the frame's width.
+ */
+static int _bands_beside(const dt_canvas_t *canvas, const double picture_left, const double picture_top,
+                         const double picture_bottom, int *inked_left)
+{
+  const int size = 900;
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, size, size);
+  cairo_t *cr = cairo_create(surface);
+  cairo_translate(cr, size * 0.5, -FRAME_TOP);
+  const dt_canvas_rect_t whole = { -size * 0.5, FRAME_TOP, (double)size, (double)size };
+  dt_canvas_paint_options_t options = dt_canvas_paint_options_export(NULL, 1.0, whole);
+  dt_canvas_paint(cr, canvas, &options);
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+  const uint8_t *pixels = cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface);
+  const int left_edge = (int)(picture_left + size * 0.5);
+  int bands = 0;
+  *inked_left = 0;
+  gboolean in_band = FALSE;
+  gboolean band_left = FALSE;
+  for(int row = (int)(picture_top - FRAME_TOP); row <= (int)(picture_bottom - FRAME_TOP) && row < size; row++)
+  {
+    const uint32_t *line = (const uint32_t *)(pixels + (size_t)row * stride);
+    int dark = 0;
+    int dark_left = 0;
+    for(int column = 0; column < size; column++)
+      if((line[column] & 0xFFu) < 80u)
+      {
+        dark++;
+        if(column < left_edge) dark_left++;
+      }
+    if(dark > 2)
+    {
+      in_band = TRUE;
+      if(dark_left > 2) band_left = TRUE;
+    }
+    else if(in_band)
+    {
+      bands++;
+      if(band_left) (*inked_left)++;
+      in_band = FALSE;
+      band_left = FALSE;
+    }
+  }
+  cairo_surface_destroy(surface);
+  return bands;
+}
+
+/**
+ * A stretch beside a picture holds every word that fits it.
+ *
+ * The old walk set each stretch with Pango and refused the result when its width exceeded the
+ * stretch -- which an optical margin's hang and a justified line's stretching both make it do
+ * on purpose -- so beside a picture every line ending on a comma was refused and its stretch
+ * left EMPTY for the picture's whole height (measured on the reported document: `run 1 w 167.00
+ * REFUSED (took 22 bytes)` on a stretch that plainly held it). Filled by measure, a stretch wide
+ * enough for the words takes them: every band beside this picture carries ink on the open side.
+ */
+static void _a_stretch_beside_a_picture_holds_the_words_that_fit_it(void **state)
+{
+  (void)state;
+  const double picture_top = -60.0;
+  const double picture_height = 120.0;
+  dt_canvas_t *canvas = _white_canvas();
+  dt_canvas_object_t *text = _flowing_text(canvas, 300.0, 0.0);
+  dt_canvas_text_set_markdown(canvas, text, PUNCTUATED);
+  text->text.text_flags |= DT_CANVAS_TEXT_AUTO_HEIGHT | DT_CANVAS_TEXT_OPTICAL_MARGINS;
+  text->text.align_h = DT_CANVAS_ALIGN_JUSTIFY;
+  text->text.wrap_standoff = 1.0f;
+  // Over the right half of the column: the left stretch is 250 units wide, room for several words.
+  _picture(canvas, 60.0, picture_top, 150.0, picture_height);
+  for(int round = 0; round < 8 && dt_canvas_props_settle_all(canvas); round++) continue;
+
+  int inked_left = 0;
+  const int bands = _bands_beside(canvas, 60.0, picture_top, picture_top + picture_height, &inked_left);
+  assert_true(bands >= 4);
+  assert_int_equal(inked_left, bands);
+  dt_canvas_free(canvas);
+}
+
+/**
+ * A word wider than every stretch of its line waits for a wider one below -- the line box moves
+ * down, as CSS 2.1 §9.5 has it -- and a word wider than the frame's own measure is set where it
+ * stands, overflowing, rather than waited on for ever.
+ */
+static void _a_word_wider_than_a_stretch_waits_and_one_wider_than_the_frame_overflows(void **state)
+{
+  (void)state;
+  const char *long_word = "Short words here and then Pneumonoultramicroscopicsilicovolcanoconiosis follows, and "
+                          "the column carries on below with short words again.";
+  // A picture leaving a stretch too narrow for the long word but wide enough for the others.
+  dt_canvas_t *canvas = _white_canvas();
+  dt_canvas_object_t *text = _flowing_text(canvas, 300.0, 0.0);
+  dt_canvas_text_set_markdown(canvas, text, long_word);
+  text->text.text_flags |= DT_CANVAS_TEXT_AUTO_HEIGHT;
+  const double bare = _natural(canvas, text);
+  _picture(canvas, -80.0, -140.0, 280.0, 60.0);
+  const double waited = _natural(canvas, text);
+  assert_true(bare > 0.0);
+  // The long word waited below the picture, costing the column lines, and no more than the
+  // picture's own height plus a line or two: never a runaway.
+  assert_true(waited > bare);
+  assert_true(waited < bare + 60.0 + 3.0 * 20.0);
+  dt_canvas_free(canvas);
+
+  // A frame narrower than the word: it is set anyway, overflowing, and the text stays finite.
+  canvas = _white_canvas();
+  text = _flowing_text(canvas, 300.0, 0.0);
+  dt_canvas_text_set_markdown(canvas, text, long_word);
+  text->text.text_flags |= DT_CANVAS_TEXT_AUTO_HEIGHT | DT_CANVAS_TEXT_OPTICAL_MARGINS;
+  text->width = 160.0;
+  for(int round = 0; round < 8 && dt_canvas_props_settle_all(canvas); round++) continue;
+  assert_true(text->height < 600.0);
+  assert_true(_lowest_ink(canvas, 900.0) > FRAME_TOP + 100.0);
+  dt_canvas_free(canvas);
+}
+
 static int _group_setup(void **state)
 {
   (void)state;
@@ -375,6 +499,8 @@ int main(void)
     cmocka_unit_test(_the_space_between_paragraphs_is_paid_once_per_paragraph),
     cmocka_unit_test(_a_band_with_no_room_is_a_line_stepped_over),
     cmocka_unit_test(_an_indented_first_line_is_judged_against_its_own_measure),
+    cmocka_unit_test(_a_stretch_beside_a_picture_holds_the_words_that_fit_it),
+    cmocka_unit_test(_a_word_wider_than_a_stretch_waits_and_one_wider_than_the_frame_overflows),
   };
   return cmocka_run_group_tests(tests, _group_setup, _group_teardown);
 }

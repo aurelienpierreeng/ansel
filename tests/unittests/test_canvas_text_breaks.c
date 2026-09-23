@@ -65,7 +65,7 @@ static gchar **_set_lines(const char *text, const int width, const gboolean guar
   PangoContext *context = pango_font_map_create_context(fonts);
   PangoLayout *layout = pango_layout_new(context);
   pango_layout_set_text(layout, text, -1);
-  // WORD, as `_flow_text()` and the plain paragraph painter both set it: a word too long for the
+  // WORD, as `_flow_plan()` and the plain paragraph painter both set it: a word too long for the
   // measure overflows rather than being cut in half at a place UAX #14 forbids.
   pango_layout_set_wrap(layout, PANGO_WRAP_WORD);
   pango_layout_set_width(layout, width * PANGO_SCALE);
