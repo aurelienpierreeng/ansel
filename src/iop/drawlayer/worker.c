@@ -41,7 +41,7 @@
 #include "iop/drawlayer/module.h"     // dt_iop_drawlayer_data_t
 #include "iop/drawlayer/runtime.h"    // dt_iop_drawlayer_gui_data_t
 
-#include "control/control.h"          // dt_control_log()
+#include "control/user_message.h"    // dt_control_log()
 #include "control/redraw.h"           // dt_control_queue_redraw_center()
 #include "develop/develop.h"          // dt_develop_t
 #include "develop/dev_history.h"      // dt_dev_transient_params_set()

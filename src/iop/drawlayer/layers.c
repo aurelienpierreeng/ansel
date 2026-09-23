@@ -1,13 +1,11 @@
 #include "iop/drawlayer/layers.h"
 
 #include "iop/drawlayer/cache.h"       // dt_drawlayer_cache_patch_*()
-#include "iop/drawlayer/conf.h"        // DRAWLAYER_CONF_* keys
 #include "iop/drawlayer/io.h"          // dt_drawlayer_io_*()
 #include "iop/drawlayer/runtime.h"     // dt_iop_drawlayer_gui_data_t (dereferenced here)
-#include "iop/drawlayer/widgets.h"     // widget cache helpers
 #include "iop/drawlayer/worker.h"      // dt_drawlayer_worker_*()
 
-#include "control/control.h"          // dt_control_log()
+#include "control/user_message.h"    // dt_control_log()
 #include "develop/develop.h"           // dt_dev_geometry_snapshot(), dt_dev_viewport_*()
 #include "develop/dev_history.h"       // dt_dev_transient_params_clear()
 #include "develop/imageop_gui.h"       // dt_iop_gui_data()
