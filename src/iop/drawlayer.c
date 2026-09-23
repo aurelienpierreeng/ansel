@@ -124,16 +124,6 @@ typedef struct drawlayer_preview_background_t
 typedef dt_drawlayer_runtime_request_t drawlayer_runtime_request_t;
 typedef dt_drawlayer_runtime_context_t drawlayer_runtime_host_context_t;
 
-#define _commit_dabs dt_drawlayer_commit_dabs
-#define _flush_layer_cache dt_drawlayer_flush_layer_cache
-#define _sync_widget_cache dt_drawlayer_sync_widget_cache
-#define _set_drawlayer_pipeline_realtime_mode dt_drawlayer_set_pipeline_realtime_mode
-#define _ensure_layer_cache dt_drawlayer_ensure_layer_cache
-#define _release_all_base_patch_extra_refs dt_drawlayer_release_all_base_patch_extra_refs
-#define _drawlayer_wait_for_rasterization_modal dt_drawlayer_wait_for_rasterization_modal
-#define _current_live_padding dt_drawlayer_current_live_padding
-#define _layer_to_widget_coords dt_drawlayer_layer_to_widget_coords
-#define _touch_stroke_commit_hash dt_drawlayer_touch_stroke_commit_hash
 
 gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, gboolean record_history);
 gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self);
@@ -1858,7 +1848,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
      * Base-patch synchronization is handled at explicit persistence points
      * (save/focus-out/mouse-leave/geometry rebuild) so recomputes can keep
      * blending the already-updated process tile directly. */
-    _touch_stroke_commit_hash(params, sample_count, had_last_dab, last_dab_x, last_dab_y, 0u);
+    dt_drawlayer_touch_stroke_commit_hash(params, sample_count, had_last_dab, last_dab_x, last_dab_y, 0u);
     _retain_base_patch_stroke_ref(g);
     if(record_history && self->dev)
     {
@@ -1871,7 +1861,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
       if(self->post_history_commit) self->post_history_commit(self);
 
       g->manager.realtime_active = FALSE;
-      _set_drawlayer_pipeline_realtime_mode(self, FALSE);
+      dt_drawlayer_set_pipeline_realtime_mode(self, FALSE);
       dt_dev_pixelpipe_update_history_all(self->dev);
       dt_dev_write_history(self->dev, FALSE);
       dt_dev_history_notify_change(self->dev, self->dev->image_storage.id);
@@ -1887,7 +1877,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
   if(!(had_stroke && record_history))
   {
     g->manager.realtime_active = FALSE;
-    _set_drawlayer_pipeline_realtime_mode(self, FALSE);
+    dt_drawlayer_set_pipeline_realtime_mode(self, FALSE);
   }
 
   return TRUE;
@@ -1977,7 +1967,7 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
       if(g) g->session.missing_layer_error[0] = '\0';
       if(!IS_NULL_PTR(g))
       {
-        _release_all_base_patch_extra_refs(g);
+        dt_drawlayer_release_all_base_patch_extra_refs(g);
         dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
         g->process.cache_valid = FALSE;
         g->process.cache_dirty = FALSE;
@@ -2062,9 +2052,9 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
     layer_height = geometry.raw_height;
   }
 
-  if(!_commit_dabs(self, FALSE))
+  if(!dt_drawlayer_commit_dabs(self, FALSE))
     dt_drawlayer_layers_append_error(errors, _("failed to commit drawing stroke before renaming"));
-  else if(!_flush_layer_cache(self))
+  else if(!dt_drawlayer_flush_layer_cache(self))
     dt_drawlayer_layers_append_error(errors, _("failed to write drawing layer sidecar"));
   else
   {
@@ -2133,8 +2123,8 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
 
   const dt_iop_drawlayer_params_t previous = *params;
 
-  if(!_commit_dabs(self, FALSE)) return FALSE;
-  if(!_flush_layer_cache(self)) return FALSE;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return FALSE;
+  if(!dt_drawlayer_flush_layer_cache(self)) return FALSE;
 
   g_strlcpy(params->layer_name, new_name, sizeof(params->layer_name));
   params->layer_order = -1;
@@ -2158,7 +2148,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
     return FALSE;
   }
   g->process.cache_dirty = TRUE;
-  if(!_flush_layer_cache(self))
+  if(!dt_drawlayer_flush_layer_cache(self))
   {
     *params = previous;
     gui_update(self);
@@ -2166,7 +2156,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
   }
 
   g->session.missing_layer_error[0] = '\0';
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev)
   {
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -2257,9 +2247,9 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   if(g->session.background_job_running) return FALSE;
   if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return FALSE;
 
-  if(!_commit_dabs(self, FALSE)) return FALSE;
-  if(!_ensure_layer_cache(self)) return FALSE;
-  if(!_flush_layer_cache(self)) return FALSE;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return FALSE;
+  if(!dt_drawlayer_ensure_layer_cache(self)) return FALSE;
+  if(!dt_drawlayer_flush_layer_cache(self)) return FALSE;
 
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->pipe, self);
   int layer_width = 0;
@@ -2363,7 +2353,7 @@ static gboolean _apply_selected_layer_attachment(dt_iop_module_t *self, dt_iop_d
   }
 
   g->session.missing_layer_error[0] = '\0';
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev)
   {
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -2435,11 +2425,11 @@ static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(IS_NULL_PTR(self->dev)) return;
-  if(!_commit_dabs(self, FALSE)) return;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return;
   if(!_confirm_delete_layer(self, FALSE)) return;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_drawlayer_refresh_layer_widgets(self);
   gui_update(self);
@@ -2451,7 +2441,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
 
-  if(!_commit_dabs(self, FALSE)) return FALSE;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return FALSE;
   if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok) return FALSE;
   if(IS_NULL_PTR(g->process.base_patch.pixels)) return FALSE;
 
@@ -2476,7 +2466,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   g->process.cache_dirty_rect.nw[1] = 0;
   g->process.cache_dirty_rect.se[0] = g->process.base_patch.width;
   g->process.cache_dirty_rect.se[1] = g->process.base_patch.height;
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   dt_drawlayer_layers_reset_stroke_session(g);
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -2489,7 +2479,7 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
 
-  if(!_commit_dabs(self, FALSE)) return FALSE;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return FALSE;
   if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok) return FALSE;
   if(IS_NULL_PTR(g->process.base_patch.pixels)) return FALSE;
 
@@ -2504,7 +2494,7 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
   g->process.cache_dirty_rect.nw[1] = 0;
   g->process.cache_dirty_rect.se[0] = g->process.base_patch.width;
   g->process.cache_dirty_rect.se[1] = g->process.base_patch.height;
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   dt_drawlayer_layers_reset_stroke_session(g);
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -2571,13 +2561,13 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
     return;
   }
 
-  _drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
+  dt_drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
                                           _("Waiting for the layer rasterization to finish..."));
 
   /* Saving the sidecar is explicit persistence, not a history edit.
    * We still finalize any pending stroke first so the flush sees the latest
    * authoritative cache state, then write that cache to the TIFF immediately. */
-  if(!_commit_dabs(self, FALSE))
+  if(!dt_drawlayer_commit_dabs(self, FALSE))
   {
     _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
                                   _("Failed to finalize the drawing stroke."),
@@ -2588,7 +2578,7 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
   dt_drawlayer_rekey_shared_base_patch(&g->process.base_patch, self->dev->image_storage.id,
                            (const dt_iop_drawlayer_params_t *)self->params);
 
-  if(!_flush_layer_cache(self))
+  if(!dt_drawlayer_flush_layer_cache(self))
   {
     _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
                                   _("Failed to write the drawing layer sidecar."),
@@ -2596,7 +2586,7 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
     return;
   }
 
-  _release_all_base_patch_extra_refs(g);
+  dt_drawlayer_release_all_base_patch_extra_refs(g);
   dt_drawlayer_refresh_layer_widgets(self);
 
   _show_drawlayer_modal_message(GTK_MESSAGE_INFO,
@@ -2645,7 +2635,7 @@ static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
     g->session.preview_bg_mode = DRAWLAYER_PREVIEW_BG_IMAGE;
 
   _sync_preview_bg_buttons(self);
-  if(params) _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  if(params) dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_dev_pixelpipe_update_history_all(self->dev);
 }
@@ -2699,7 +2689,7 @@ void dt_drawlayer_begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawl
   g->stroke.last_dab_valid = FALSE;
   dt_drawlayer_worker_reset_live_publish(g->stroke.worker);
   /* Hand the worker its own params blob for this stroke's heartbeats. Nothing may change
-   * `self->params` while a stroke is live -- every GUI writer of it runs `_commit_dabs(self,
+   * `self->params` while a stroke is live -- every GUI writer of it runs `dt_drawlayer_commit_dabs(self,
    * FALSE)` first, which waits for the worker -- so one snapshot here is valid for the whole
    * stroke, and the worker never has to read a blob the GUI thread owns. */
   dt_drawlayer_worker_snapshot_params(g->stroke.worker, (const dt_iop_drawlayer_params_t *)self->params);
@@ -2753,12 +2743,12 @@ void dt_drawlayer_show_runtime_feedback(const dt_iop_drawlayer_gui_data_t *g,
   switch(feedback)
   {
     case DT_DRAWLAYER_RUNTIME_FEEDBACK_FOCUS_LOSS_WAIT:
-      _drawlayer_wait_for_rasterization_modal(g, _("Finishing drawing"),
+      dt_drawlayer_wait_for_rasterization_modal(g, _("Finishing drawing"),
                                               _("Waiting for the drawing rasterization to finish..."));
       break;
 
     case DT_DRAWLAYER_RUNTIME_FEEDBACK_SAVE_WAIT:
-      _drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
+      dt_drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
                                               _("Waiting for the layer rasterization to finish..."));
       break;
 
@@ -2895,7 +2885,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
 void gui_reset(dt_iop_module_t *self)
 {
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return;
-  if(!_commit_dabs(self, FALSE)) return;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return;
   if(!_confirm_delete_layer(self, FALSE)) return;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
@@ -2903,7 +2893,7 @@ void gui_reset(dt_iop_module_t *self)
   params->layer_order = -1;
   params->sidecar_timestamp = 0;
   memset(params->work_profile, 0, sizeof(params->work_profile));
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(!IS_NULL_PTR(g))
   {
@@ -2937,8 +2927,8 @@ void gui_reset(dt_iop_module_t *self)
 gboolean module_will_remove(dt_iop_module_t *self)
 {
   if(IS_NULL_PTR(self->dev)) return TRUE;
-  if(!_commit_dabs(self, FALSE)) return FALSE;
-  _flush_layer_cache(self);
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return FALSE;
+  dt_drawlayer_flush_layer_cache(self);
   return _confirm_delete_layer(self, TRUE);
 }
 
@@ -3437,7 +3427,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     dt_control_set_cursor_visible(TRUE);
     if(g) dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
     if(had_pending_edits && params)
-      _touch_stroke_commit_hash(params, pending_samples, g->stroke.last_dab_valid, g->stroke.last_dab_x,
+      dt_drawlayer_touch_stroke_commit_hash(params, pending_samples, g->stroke.last_dab_valid, g->stroke.last_dab_x,
                                 g->stroke.last_dab_y, 0u);
     if(had_pending_edits && self->dev && !IS_NULL_PTR(params))
     {
@@ -3499,7 +3489,7 @@ void gui_cleanup(dt_iop_module_t *self)
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
-  _release_all_base_patch_extra_refs(g);
+  dt_drawlayer_release_all_base_patch_extra_refs(g);
   dt_drawlayer_process_state_cleanup(&g->process);
   dt_drawlayer_runtime_manager_cleanup(&g->manager);
   memset(&g->session.live_patch, 0, sizeof(g->session.live_patch));
@@ -3656,7 +3646,7 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
         .y = ly,
         .radius = radius,
       };
-      if(!_layer_to_widget_coords(self, lx, ly, &draw_x, &draw_y))
+      if(!dt_drawlayer_layer_to_widget_coords(self, lx, ly, &draw_x, &draw_y))
       {
         draw_x = widget_x;
         draw_y = widget_y;
