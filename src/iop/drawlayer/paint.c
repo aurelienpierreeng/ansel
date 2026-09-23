@@ -892,11 +892,6 @@ int dt_drawlayer_paint_runtime_smudge_width(const dt_drawlayer_paint_stroke_t *s
   return state ? state->smudge_width : 0;
 }
 
-int dt_drawlayer_paint_runtime_smudge_height(const dt_drawlayer_paint_stroke_t *state)
-{
-  return state ? state->smudge_height : 0;
-}
-
 gboolean dt_drawlayer_paint_runtime_have_smudge_pickup(const dt_drawlayer_paint_stroke_t *state)
 {
   return state && state->have_smudge_pickup;

@@ -74,12 +74,6 @@ void dt_drawlayer_cache_patch_wrlock(const dt_drawlayer_cache_patch_t *patch);
 /** @brief Release write lock on shared patch cache entry. */
 void dt_drawlayer_cache_patch_wrunlock(const dt_drawlayer_cache_patch_t *patch);
 
-/** @brief Reset process-patch validity/dirty state bookkeeping. */
-void dt_drawlayer_cache_invalidate_process_patch_state(gboolean *process_patch_valid, gboolean *process_patch_dirty,
-                                                       dt_drawlayer_damaged_rect_t *process_dirty_rect,
-                                                       int *process_patch_padding,
-                                                       dt_iop_roi_t *process_combined_roi);
-
 /** @brief Ensure process patch and its stroke mask buffers are allocated. */
 gboolean dt_drawlayer_cache_ensure_process_patch_buffer(dt_drawlayer_cache_patch_t *process_patch,
                                                         dt_drawlayer_cache_patch_t *process_stroke_mask,
@@ -87,59 +81,4 @@ gboolean dt_drawlayer_cache_ensure_process_patch_buffer(dt_drawlayer_cache_patch
                                                         const char *patch_buffer_name,
                                                         const char *mask_buffer_name);
 
-/** @brief Build process+padding ROI in module-buffer coordinates. */
-void dt_drawlayer_cache_build_combined_process_roi(const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *process_roi,
-                                                   int current_full_w, int current_full_h, int src_w, int src_h,
-                                                   int module_origin_x, int module_origin_y,
-                                                   dt_iop_roi_t *combined_roi);
-/** @brief Convenience wrapper using piece ROI offsets as module origin. */
-void dt_drawlayer_cache_build_combined_process_roi_for_piece(const dt_dev_pixelpipe_iop_t *piece,
-                                                             const dt_iop_roi_t *process_roi,
-                                                             int current_full_w, int current_full_h,
-                                                             int src_w, int src_h,
-                                                             dt_iop_roi_t *combined_roi);
-/** @brief Resolve effective module input origin, including centered-fit fallback. */
-void dt_drawlayer_cache_resolve_piece_input_origin(const dt_dev_pixelpipe_iop_t *piece,
-                                                   int current_full_w, int current_full_h,
-                                                   int *module_origin_x, int *module_origin_y);
-
-/** @brief Build blend/source ROIs from process patch and output ROI. */
-gboolean dt_drawlayer_cache_build_process_blend_rois(const dt_drawlayer_cache_patch_t *process_patch,
-                                                     int process_patch_padding, const dt_iop_roi_t *roi_out,
-                                                     dt_iop_roi_t *blend_target_roi,
-                                                     dt_iop_roi_t *source_process_roi,
-                                                     gboolean *direct_copy);
-
-/** @brief Resample process patch into output layer buffer ROI. */
-gboolean dt_drawlayer_cache_resample_process_patch_to_output(const dt_drawlayer_cache_patch_t *process_patch,
-                                                             int process_patch_padding,
-                                                             const dt_iop_roi_t *roi_out,
-                                                             float *layerbuf, int layerbuf_width);
-
-/** @brief Populate process patch from base patch with crop/scale and synchronized stroke mask. */
-gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_cache_patch_t *base_patch,
-                                                             const dt_drawlayer_cache_patch_t *base_stroke_mask,
-                                                             dt_drawlayer_cache_patch_t *process_patch,
-                                                             dt_drawlayer_cache_patch_t *process_stroke_mask,
-                                                             const dt_iop_roi_t *combined_roi, int process_pad,
-                                                             int patch_width, int patch_height,
-                                                             gboolean *process_patch_valid,
-                                                             gboolean *process_patch_dirty,
-                                                             dt_drawlayer_damaged_rect_t *process_dirty_rect,
-                                                             int *process_patch_padding,
-                                                             dt_iop_roi_t *process_combined_roi,
-                                                             const char *patch_buffer_name,
-                                                             const char *mask_buffer_name);
-
-/** @brief Flush dirty process-patch region back into base patch. */
-gboolean dt_drawlayer_cache_flush_process_patch_to_base(dt_drawlayer_cache_patch_t *base_patch,
-                                                        dt_drawlayer_cache_patch_t *base_stroke_mask,
-                                                        const dt_iop_roi_t *process_combined_roi,
-                                                        dt_drawlayer_cache_patch_t *process_patch,
-                                                        dt_drawlayer_cache_patch_t *process_stroke_mask,
-                                                        float **process_update_pixels,
-                                                        size_t *process_update_capacity_pixels,
-                                                        gboolean *cache_dirty, gboolean *process_patch_dirty,
-                                                        dt_drawlayer_damaged_rect_t *process_dirty_rect,
-                                                        const char *update_buffer_name);
 #endif // DT_IOP_DRAWLAYER_CACHE_H

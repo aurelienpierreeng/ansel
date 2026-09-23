@@ -639,38 +639,6 @@ gboolean dt_drawlayer_io_layer_name_exists(const char *path, const char *candida
   return exists;
 }
 
-/** @brief Normalize/sanitize requested layer name with fallback handling. */
-static void _sanitize_requested_layer_name(const char *requested, const char *fallback_name, char *name,
-                                           const size_t name_size)
-{
-  if(IS_NULL_PTR(name) || name_size == 0) return;
-  name[0] = '\0';
-  if(!IS_NULL_PTR(requested) && requested[0])
-  {
-    gboolean last_was_space = FALSE;
-    size_t out = 0;
-    for(size_t in = 0; requested[in] != '\0' && out + 1 < name_size; in++)
-    {
-      const unsigned char ch = (unsigned char)requested[in];
-      if(g_ascii_isspace(ch))
-      {
-        if(out > 0 && !last_was_space)
-        {
-          name[out++] = ' ';
-          last_was_space = TRUE;
-        }
-        continue;
-      }
-
-      name[out++] = (char)ch;
-      last_was_space = FALSE;
-    }
-    name[out] = '\0';
-  }
-  g_strstrip(name);
-  if(name[0] == '\0' && !IS_NULL_PTR(fallback_name) && fallback_name[0]) g_strlcpy(name, fallback_name, name_size);
-}
-
 /** @brief Build absolute sidecar path from image id. */
 gboolean dt_drawlayer_io_sidecar_path(const int32_t imgid, char *path, const size_t path_size)
 {
@@ -966,24 +934,6 @@ gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name,
 
   return dt_drawlayer_io_store_layer(path, target_name, info.index, NULL, NULL, layer_width, layer_height, TRUE,
                                      NULL);
-}
-
-/** @brief Create unique layer name with fallback if requested name is empty. */
-void dt_drawlayer_io_make_unique_name(const char *path, const char *requested, const char *fallback_name, char *name,
-                                      const size_t name_size)
-{
-  _sanitize_requested_layer_name(requested, fallback_name, name, name_size);
-  if(name[0] == '\0') return;
-  if(!dt_drawlayer_io_layer_name_exists(path, name, -1)) return;
-
-  char base[DT_DRAWLAYER_IO_NAME_SIZE] = { 0 };
-  g_strlcpy(base, name, sizeof(base));
-
-  for(int suffix = 2; suffix < 100000; suffix++)
-  {
-    g_snprintf(name, name_size, "%.*s %d", MAX((int)name_size - 12, 1), base, suffix);
-    if(!dt_drawlayer_io_layer_name_exists(path, name, -1)) return;
-  }
 }
 
 /** @brief Create unique layer name without fallback source. */

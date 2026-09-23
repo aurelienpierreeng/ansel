@@ -282,17 +282,18 @@ typedef struct dt_drawlayer_runtime_inputs_t
   gboolean padding_changed;
 } dt_drawlayer_runtime_inputs_t;
 
-typedef struct dt_drawlayer_runtime_action_request_t dt_drawlayer_runtime_action_request_t;
-
+/** @brief What the runtime manager is given to reach its caller's state.
+ *
+ * `user_data' is the one member: every consumer casts it back to a
+ * dt_drawlayer_runtime_context_t. It carried two callback pointers as well,
+ * `collect_inputs' and `perform_action', which were assigned NULL at all
+ * nineteen construction sites and never called from anywhere -- a host
+ * interface that was declared and never wired up. The forward-declared
+ * dt_drawlayer_runtime_action_request_t existed only in that second signature
+ * and was never defined at all. */
 typedef struct dt_drawlayer_runtime_host_t
 {
   void *user_data;
-  void (*collect_inputs)(void *user_data,
-                         dt_drawlayer_runtime_inputs_t *inputs,
-                         dt_drawlayer_worker_snapshot_t *worker_snapshot);
-  gboolean (*perform_action)(void *user_data,
-                             const dt_drawlayer_runtime_action_request_t *action,
-                             dt_drawlayer_runtime_result_t *result);
 } dt_drawlayer_runtime_host_t;
 
 typedef struct dt_iop_drawlayer_gui_data_t
@@ -380,12 +381,6 @@ void dt_drawlayer_runtime_manager_note_buffer_lock(dt_drawlayer_runtime_manager_
                                                    dt_drawlayer_runtime_actor_t actor,
                                                    gboolean write_lock,
                                                    gboolean acquire);
-void dt_drawlayer_runtime_manager_note_sidecar_io(dt_drawlayer_runtime_manager_t *state, gboolean active);
-void dt_drawlayer_runtime_manager_note_thread(dt_drawlayer_runtime_manager_t *state,
-                                              dt_drawlayer_runtime_actor_t actor,
-                                              gboolean active,
-                                              gboolean waiting,
-                                              guint queued);
 dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_runtime_manager_t *state,
                                                                   const dt_drawlayer_runtime_update_request_t *request,
                                                                   const dt_drawlayer_runtime_host_t *host);

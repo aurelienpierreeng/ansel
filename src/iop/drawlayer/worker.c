@@ -1759,13 +1759,6 @@ void dt_drawlayer_worker_snapshot_params(dt_drawlayer_worker_t *worker,
   dt_pthread_mutex_unlock(&worker->worker_mutex);
 }
 
-/** @brief Flush pending backend stroke inputs synchronously. */
-void dt_drawlayer_worker_flush_pending(dt_drawlayer_worker_t *worker)
-{
-  if(IS_NULL_PTR(worker) || IS_NULL_PTR(worker->self)) return;
-  _wait_worker_idle(worker->self, worker);
-}
-
 void dt_drawlayer_worker_seal_for_commit(dt_drawlayer_worker_t *worker)
 {
   (void)worker;
@@ -1801,24 +1794,6 @@ void dt_drawlayer_worker_reset_stroke(dt_drawlayer_worker_t *worker)
 GArray *dt_drawlayer_worker_raw_inputs(dt_drawlayer_worker_t *worker)
 {
   return worker ? worker->stroke_raw_inputs : NULL;
-}
-
-/** @brief Read-only access to preserved stroke runtime. */
-dt_drawlayer_paint_stroke_t *dt_drawlayer_worker_stroke(dt_drawlayer_worker_t *worker)
-{
-  return worker ? worker->stroke : NULL;
-}
-
-guint dt_drawlayer_worker_pending_dab_count(const dt_drawlayer_worker_t *worker)
-{
-  dt_drawlayer_worker_t *rt = (dt_drawlayer_worker_t *)worker;
-  if(IS_NULL_PTR(rt)) return 0;
-
-  guint len = 0;
-  dt_pthread_mutex_lock(&rt->worker_mutex);
-  if(rt->stroke && rt->stroke->pending_dabs) len = rt->stroke->pending_dabs->len;
-  dt_pthread_mutex_unlock(&rt->worker_mutex);
-  return len;
 }
 
 /** @brief Public FIFO enqueue for one raw input event. */
