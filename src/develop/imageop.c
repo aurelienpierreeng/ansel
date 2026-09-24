@@ -1648,6 +1648,12 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   piece->global_hash = piece->hash = hash;
   piece->global_mask_hash = piece->blendop_hash = module->blendop_hash;
 
+  /* The upstream chain is a property of the whole plan, not of this commit: only
+   * dt_pixelpipe_get_global_hash() can know it, and it runs right after every commit path.
+   * Invalidate rather than leave the previous plan's value, so a consumer reached before that
+   * pass falls back to computing instead of keying on a chain that may no longer be this one. */
+  piece->upstream_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+
   dt_print(DT_DEBUG_PARAMS, "[pixelpipe] params commit for %s (%s) in pipe %s with hash %" PRIu64 "\n", 
            module->op, module->multi_name, 
            dt_pixelpipe_get_pipe_name(pipe->type), piece->hash);

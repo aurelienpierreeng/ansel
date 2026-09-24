@@ -627,6 +627,41 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe,
   *height = roi_out.height;
 }
 
+static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)
+{
+  // Start with a hash that is unique, image-wise.
+  return dt_hash(5381, (const char *)&pipe->dev->image_storage.filename, DT_MAX_FILENAME_LEN);
+}
+
+/* Publish, on every enabled node, the cumulative hash of the PARAMETERS of the enabled modules
+ * above it -- `dt_dev_pixelpipe_iop_t.upstream_hash`, which says what that field is for.
+ *
+ * It is its own pass, run at the top of ROI planning as well as from the global-hash pass,
+ * because ROI planning is its first consumer and runs BEFORE the global hash is built: a
+ * `modify_roi_in()` that memoises anything against the chain above it would otherwise find
+ * either the value a commit invalidated or one describing a chain that has since changed.
+ * Nothing here reads an ROI, so running it twice per plan costs a walk and answers the same. */
+static void _publish_upstream_hashes(dt_dev_pixelpipe_t *pipe)
+{
+  uint64_t upstream = _default_pipe_hash(pipe);
+
+  for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
+    if(IS_NULL_PTR(piece) || !piece->enabled) continue;
+
+    piece->upstream_hash = upstream;
+    upstream = dt_hash(upstream, (const char *)&piece->hash, sizeof(uint64_t));
+
+    /* Whether the module currently focused in the GUI suppresses this one's distortion. It is
+     * not in piece->hash -- it is GUI state, not history -- yet it decides whether this module
+     * takes part in dt_dev_distort_transform_plus(), which is precisely what a consumer of this
+     * hash back-transforms through. Focusing crop moves every drawn shape's box. */
+    const int bypass_distort = dt_dev_pixelpipe_activemodule_disables_currentmodule(pipe->dev, piece->module);
+    upstream = dt_hash(upstream, (const char *)&bypass_distort, sizeof(int));
+  }
+}
+
 void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_roi_t roi_out)
 {
   // while module->modify_roi_out describes how the current module will change the size of
@@ -646,6 +681,9 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
   // for the length of the walk, which it then owns and releases.
   const gboolean owns_forms = IS_NULL_PTR(pipe->forms);
   if(owns_forms) pipe->forms = dt_masks_snapshot_current_forms(pipe->dev, FALSE);
+
+  // a modify_roi_in() memoising against the chain above it needs this before the walk starts
+  _publish_upstream_hashes(pipe);
 
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
@@ -716,11 +754,6 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
 
 }
 
-static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)
-{
-  // Start with a hash that is unique, image-wise.
-  return dt_hash(5381, (const char *)&pipe->dev->image_storage.filename, DT_MAX_FILENAME_LEN);
-}
 
 uint64_t dt_dev_pixelpipe_node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, 
                                     const dt_iop_roi_t roi_out, const int pos)
@@ -1316,6 +1349,7 @@ void dt_dev_pixelpipe_propagate_formats(dt_dev_pixelpipe_t *pipe)
         piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
         piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
         piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        piece->upstream_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
         piece->dsc_in = actual_input_dsc;
         piece->dsc_out = actual_input_dsc;
         dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
@@ -1372,6 +1406,7 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, GList *histo
     piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->upstream_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->enabled = piece->module->default_enabled;
     piece->detail_mask = FALSE;
 
@@ -1450,6 +1485,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, GL
     piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->upstream_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
     piece->enabled = piece->module->default_enabled;
     piece->detail_mask = FALSE;
@@ -1516,6 +1552,10 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
   // bernstein hash (djb2)
   uint64_t hash = _default_pipe_hash(pipe);
   gboolean passthrough_preview = FALSE;
+
+  // see dt_dev_pixelpipe_iop_t.upstream_hash: its own pass, and not derived from `hash` below,
+  // which folds each piece's ROI
+  _publish_upstream_hashes(pipe);
 
   // Bypassing cache contaminates downstream modules, starting at the module requesting it.
   // Usecase : crop, clip, ashift, etc. that need the uncropped image ;
