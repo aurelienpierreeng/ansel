@@ -1132,9 +1132,18 @@ static gboolean tree_expand(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
   }
   else if(strcmp(haystack, needle) == 0)
   {
+    // Expanding a folder emits "row-expanded", whose handler scrolls the node up so that its
+    // children come on screen. GtkTreeView keeps a single deferred scroll target and expanding
+    // invalidates the rows below it, so both requests are deferred and the last one wins: the
+    // minimal scroll below would replace that reveal with a no-op whenever the row is already
+    // visible -- which it is when the user just clicked its name, this being the path a click
+    // on a folder name takes. Leave the scrolling to the handler in that case.
+    const gboolean reveals_children = property == DT_COLLECTION_PROP_FOLDERS
+                                      && !gtk_tree_view_row_expanded(d->view, path)
+                                      && gtk_tree_model_iter_has_child(model, iter);
     gtk_tree_view_expand_to_path(d->view, path);
     gtk_tree_selection_select_path(gtk_tree_view_get_selection(d->view), path);
-    gtk_tree_view_scroll_to_cell(d->view, path, NULL, FALSE, 0.2, 0);
+    if(!reveals_children) gtk_tree_view_scroll_to_cell(d->view, path, NULL, FALSE, 0.2, 0);
     expanded = TRUE;
   }
   else if(startwildcard && g_strrstr(haystack, needle + 1) != NULL)
