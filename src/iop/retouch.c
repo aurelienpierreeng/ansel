@@ -148,6 +148,9 @@ typedef struct retouch_user_data_t
   int display_scale;
   int mask_display;
   int suppress_mask;
+  // Accumulated across every wavelet scale of one render, reported once by the caller of
+  // dwt_decompose(). NULL `stats` means -d perf did not ask. See rt_memo_stats_t.
+  struct rt_memo_stats_t *stats;
 } retouch_user_data_t;
 
 typedef struct dt_iop_retouch_params_t
@@ -2679,14 +2682,38 @@ static uint64_t rt_shape_geometry_hash(const uint64_t base, dt_masks_form_t *con
  * ordered PAIR of shapes, and for a brush or a polygon each answer regenerates the whole
  * outline. They depend on the shape and on the chain above the module, never on the viewport or
  * on a pixel, so one memo entry per shape serves every pass and every pipe. */
+/* What one planning pass or one render did with the memo, and what the algorithms cost.
+ *
+ * This exists for the drag case, which nothing else reports: moving a shape recomputes this
+ * module and everything under it with the whole upstream served from the cache, and neither the
+ * pipeline's own `processed \`Retouch'` line nor the per-shape `[masks]` timings say which part
+ * of that frame went where -- the pipeline line does not cover modify_roi_in() at all, and that
+ * is where most of the cost used to sit. Counted only under `-d perf`: `ctx->stats` is NULL
+ * otherwise and every site below is one test. */
+typedef struct rt_memo_stats_t
+{
+  int boxes_hit, boxes_computed;   // a shape's area / source area answered from the memo, or rasterised
+  int masks_hit, masks_rasterised; // its mask likewise
+  int shapes_applied;              // members that reached an algorithm
+  double algo_seconds;             // time inside clone / heal / blur / fill
+} rt_memo_stats_t;
+
 /* The three things every one of these functions needs and none of them writes: the module, the
- * run it belongs to and its node. They always travel together, so they travel as one. */
+ * run it belongs to and its node. They always travel together, so they travel as one -- and the
+ * counters with them, which is what keeps them out of every signature. */
 typedef struct rt_masks_ctx_t
 {
   const dt_iop_module_t *self;
   const dt_dev_pixelpipe_t *pipe;
   const dt_dev_pixelpipe_iop_t *piece;
+  rt_memo_stats_t *stats; // NULL unless -d perf asked for the count
 } rt_masks_ctx_t;
+
+// TRUE when the timings below are wanted at all; building the counters otherwise is waste.
+static inline gboolean rt_perf_enabled(void)
+{
+  return (dt_get_debug_flags() & DT_DEBUG_PERF) == DT_DEBUG_PERF;
+}
 
 typedef struct rt_shape_geometry_t
 {
@@ -2727,7 +2754,11 @@ static gboolean rt_compute_shape_box(const rt_masks_ctx_t *const ctx, dt_masks_f
 static gboolean rt_shape_box(const rt_masks_ctx_t *const ctx, dt_masks_form_t *form,
                              const uint64_t shape_hash, const rt_box_t want, dt_masks_area_t *out)
 {
-  if(shape_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return rt_compute_shape_box(ctx, form, want, out);
+  if(shape_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+  {
+    if(ctx->stats) ctx->stats->boxes_computed++;
+    return rt_compute_shape_box(ctx, form, want, out);
+  }
 
   static const char cache_tag[] = "boxes";
   const uint64_t hash = dt_hash(shape_hash, cache_tag, sizeof(cache_tag));
@@ -2743,10 +2774,12 @@ static gboolean rt_shape_box(const rt_masks_ctx_t *const ctx, dt_masks_form_t *f
       if(created) dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
       dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
     }
+    if(ctx->stats) ctx->stats->boxes_computed++;
     return rt_compute_shape_box(ctx, form, want, out);
   }
 
   rt_shape_geometry_t boxes;
+  if(ctx->stats) { if(created) ctx->stats->boxes_computed++; else ctx->stats->boxes_hit++; }
   if(created)
   {
     // both, once: the other box is asked for by another pass over the same shapes
@@ -2768,10 +2801,10 @@ static gboolean rt_shape_box(const rt_masks_ctx_t *const ctx, dt_masks_form_t *f
 
 static void rt_compute_roi_in(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                               struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
-                              rt_roi_bounds_t *const bounds)
+                              rt_roi_bounds_t *const bounds, rt_memo_stats_t *stats)
 {
   const dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
-  const rt_masks_ctx_t ctx = { self, pipe, piece };
+  const rt_masks_ctx_t ctx = { self, pipe, piece, stats };
   const uint64_t base_hash = rt_geometry_base_hash(pipe, piece);
 
   for(const GList *members = rt_pipe_group_members(pipe, piece); members; members = g_list_next(members))
@@ -2811,10 +2844,10 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, const dt_dev_pixelpi
 static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                                 struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
                                                 const int formid_src, const dt_masks_area_t *src,
-                                                rt_roi_bounds_t *const bounds)
+                                                rt_roi_bounds_t *const bounds, rt_memo_stats_t *stats)
 {
   const dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
-  const rt_masks_ctx_t ctx = { self, pipe, piece };
+  const rt_masks_ctx_t ctx = { self, pipe, piece, stats };
   const uint64_t base_hash = rt_geometry_base_hash(pipe, piece);
 
   for(const GList *members = rt_pipe_group_members(pipe, piece); members; members = g_list_next(members))
@@ -2859,10 +2892,10 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, co
 // we also need the area from that previous clone/heal
 static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                        struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
-                                       rt_roi_bounds_t *const bounds)
+                                       rt_roi_bounds_t *const bounds, rt_memo_stats_t *stats)
 {
   const dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
-  const rt_masks_ctx_t ctx = { self, pipe, piece };
+  const rt_masks_ctx_t ctx = { self, pipe, piece, stats };
   const uint64_t base_hash = rt_geometry_base_hash(pipe, piece);
 
   for(const GList *members = rt_pipe_group_members(pipe, piece); members; members = g_list_next(members))
@@ -2881,7 +2914,7 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, const dt_de
     // we only want to process forms already in roi_in
     const int intersects = !(bounds->b < src.y || src.y + src.height < bounds->y || bounds->r < src.x
                              || src.x + src.width < bounds->x);
-    if(intersects) rt_extend_roi_in_from_source_clones(self, pipe, piece, roi_in, formid, &src, bounds);
+    if(intersects) rt_extend_roi_in_from_source_clones(self, pipe, piece, roi_in, formid, &src, bounds, stats);
   }
 }
 
@@ -2895,14 +2928,31 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   rt_roi_bounds_t bounds = { .x = roi_in->x, .y = roi_in->y,
                              .r = roi_in->width + roi_in->x, .b = roi_in->height + roi_in->y };
 
-  rt_compute_roi_in(self, pipe, piece, roi_in, &bounds);
+  /* Every pass of the loop below walks the members once per member -- O(shapes squared) source
+   * areas -- so this is where a shape-heavy image spends its planning, and the pipeline's own
+   * `processed` line does not cover any of it. See rt_memo_stats_t. */
+  rt_memo_stats_t counters = { 0 };
+  const gboolean counting = rt_perf_enabled();
+  rt_memo_stats_t *const stats = counting ? &counters : NULL;
+  const double planning_start = counting ? dt_get_wtime() : 0.0;
+  int passes = 0;
+
+  rt_compute_roi_in(self, pipe, piece, roi_in, &bounds, stats);
 
   rt_roi_bounds_t previous = { -1, -1, -1, -1 };
   while(memcmp(&bounds, &previous, sizeof(bounds)))
   {
     previous = bounds;
-    rt_extend_roi_in_for_clone(self, pipe, piece, roi_in, &bounds);
+    passes++;
+    rt_extend_roi_in_for_clone(self, pipe, piece, roi_in, &bounds, stats);
   }
+
+  if(counting)
+    dt_print(DT_DEBUG_PERF,
+             "[retouch] %-8s modify_roi_in: %d stabilisation pass(es), boxes %d (%d memo / %d rasterised),"
+             " %.3f s\n",
+             dt_pixelpipe_name(pipe->type), passes, counters.boxes_hit + counters.boxes_computed,
+             counters.boxes_hit, counters.boxes_computed, dt_get_wtime() - planning_start);
 
   // now we set the values
   const float scwidth = piece->buf_in.width * roi_in->scale, scheight = piece->buf_in.height * roi_in->scale;
@@ -3429,6 +3479,7 @@ static rt_shape_status_t rt_rasterize_scaled_mask(const rt_masks_ctx_t *const ct
 {
   float *mask = NULL;
   dt_masks_area_t rastered = { 0 };
+  if(ctx->stats) ctx->stats->masks_rasterised++;
   dt_masks_get_mask(ctx->self, ctx->pipe, ctx->piece, form, &mask, &rastered);
   if(IS_NULL_PTR(mask))
   {
@@ -3509,8 +3560,9 @@ typedef enum rt_memo_result_t
  * line has a buffer, and answers TRUE for one that has none yet. Every exit from here therefore
  * releases what it took, except the single one that hands it to the shape -- a reference left
  * behind is not a leak that shows up as a crash, it is a line the cache can never evict again. */
-static rt_memo_result_t rt_scaled_mask_take_memo(const uint64_t hash, const dt_iop_roi_t *const roi_layer,
-                                                 const int dx, const int dy, rt_prepared_shape_t *shape)
+static rt_memo_result_t rt_scaled_mask_take_memo(const rt_masks_ctx_t *const ctx, const uint64_t hash,
+                                                 const dt_iop_roi_t *const roi_layer, const int dx, const int dy,
+                                                 rt_prepared_shape_t *shape)
 {
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return RT_MEMO_ABSENT;
 
@@ -3541,6 +3593,7 @@ static rt_memo_result_t rt_scaled_mask_take_memo(const uint64_t hash, const dt_i
           // the reference and the read lock travel with it, until rt_release_shape()
           shape->mask = (float *)((char *)data + RT_MASK_MEMO_HEADER);
           shape->mask_entry = entry;
+          if(ctx->stats) ctx->stats->masks_hit++;
           return RT_MEMO_TAKEN;
         }
         result = RT_MEMO_REFUSED;
@@ -3601,6 +3654,7 @@ static rt_memo_result_t rt_scaled_mask_publish(const rt_masks_ctx_t *const ctx, 
   dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
   shape->mask = (float *)((char *)data + RT_MASK_MEMO_HEADER);
   shape->mask_entry = entry;
+  if(!created && ctx->stats) ctx->stats->masks_hit++; // published by another thread, not by us
   return RT_MEMO_TAKEN;
 }
 
@@ -3614,7 +3668,7 @@ static rt_shape_status_t rt_shape_scaled_mask(const rt_masks_ctx_t *const ctx, d
   const int dy = (int)shape->dy;
   const uint64_t hash = rt_scaled_mask_hash(shape_hash, roi_layer, dx, dy, shape->algo);
 
-  switch(rt_scaled_mask_take_memo(hash, roi_layer, dx, dy, shape))
+  switch(rt_scaled_mask_take_memo(ctx, hash, roi_layer, dx, dy, shape))
   {
     case RT_MEMO_TAKEN: return RT_SHAPE_READY;
     case RT_MEMO_REFUSED: return RT_SHAPE_SKIP;
@@ -3751,7 +3805,7 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
 
   if(usr_d->suppress_mask) return 0;
 
-  const rt_masks_ctx_t ctx = { self, pipe, piece };
+  const rt_masks_ctx_t ctx = { self, pipe, piece, usr_d->stats };
   const uint64_t base_hash = rt_geometry_base_hash(pipe, piece);
 
   // Iterate through all forms, resolved in the run's snapshot (see dt_masks_get_from_id_in_pipe()).
@@ -3769,6 +3823,8 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
     dt_iop_roi_t roi_mask_scaled = shape.roi_mask;
     const int dx = (int)shape.dx;
     const int dy = (int)shape.dy;
+
+    const double algo_start = usr_d->stats ? dt_get_wtime() : 0.0;
 
     if(algo == DT_IOP_RETOUCH_CLONE)
     {
@@ -3818,6 +3874,12 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
     else
       fprintf(stderr, "rt_process_forms: unknown algorithm %i\n", algo);
 
+    if(usr_d->stats)
+    {
+      usr_d->stats->shapes_applied++;
+      usr_d->stats->algo_seconds += dt_get_wtime() - algo_start;
+    }
+
     if(mask_display)
       rt_copy_mask_to_alpha(layer, roi_layer, wt_p->ch, mask_scaled, &roi_mask_scaled, form_opacity);
 
@@ -3825,6 +3887,21 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
   }
 
   return 0;
+}
+
+/* One line per render, after every wavelet scale has been through the callback. Together with
+ * the modify_roi_in() line it accounts for the whole of what this module costs a frame, which is
+ * the question a shape drag asks. */
+static void rt_report_render(const dt_dev_pixelpipe_t *pipe, const dt_iop_roi_t *const roi,
+                             const rt_memo_stats_t *const stats, const double start, const char *const path)
+{
+  dt_print(DT_DEBUG_PERF,
+           "[retouch] %-8s process %s %dx%d: %d shape(s), masks %d (%d memo / %d rasterised),"
+           " boxes %d (%d memo / %d rasterised), algorithms %.3f s, total %.3f s\n",
+           dt_pixelpipe_name(pipe->type), path, roi->width, roi->height, stats->shapes_applied,
+           stats->masks_hit + stats->masks_rasterised, stats->masks_hit, stats->masks_rasterised,
+           stats->boxes_hit + stats->boxes_computed, stats->boxes_hit, stats->boxes_computed,
+           stats->algo_seconds, dt_get_wtime() - start);
 }
 
 __DT_CLONE_TARGETS__
@@ -3845,6 +3922,9 @@ static int process_internal(struct dt_iop_module_t *self, const dt_dev_pixelpipe
 
   retouch_user_data_t usr_data = { 0 };
   dwt_params_t *dwt_p = NULL;
+  rt_memo_stats_t counters = { 0 };
+  const gboolean counting = rt_perf_enabled();
+  const double render_start = counting ? dt_get_wtime() : 0.0;
 
   const int gui_active = (self->dev) ? (self == self->dev->gui_module) : 0;
   const int display_wavelet_scale = (g && gui_active) ? g->display_wavelet_scale : 0;
@@ -3869,6 +3949,7 @@ static int process_internal(struct dt_iop_module_t *self, const dt_dev_pixelpipe
   usr_data.suppress_mask = (g && g->suppress_mask && self->dev->gui_attached && (self == self->dev->gui_module)
                             && (pipe == self->dev->pipe));
   usr_data.display_scale = p->curr_scale;
+  usr_data.stats = counting ? &counters : NULL;
 
   // init the decompose routine
   dwt_p = dt_dwt_init(in_retouch, roi_rt->width, roi_rt->height, 4, p->num_scales,
@@ -3914,6 +3995,8 @@ static int process_internal(struct dt_iop_module_t *self, const dt_dev_pixelpipe
     err = 1;
     goto cleanup;
   }
+
+  if(counting) rt_report_render(pipe, roi_rt, &counters, render_start, "on CPU");
 
   dt_aligned_pixel_t levels = { p->preview_levels[0], p->preview_levels[1], p->preview_levels[2] };
 
@@ -4485,7 +4568,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
     scale = p->num_scales + 1;
   }
 
-  const rt_masks_ctx_t ctx = { self, pipe, piece };
+  const rt_masks_ctx_t ctx = { self, pipe, piece, usr_d->stats };
   const uint64_t base_hash = rt_geometry_base_hash(pipe, piece);
 
   // Iterate through all forms, resolved in the same snapshot as the CPU rt_process_forms().
@@ -4514,6 +4597,11 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
 
       cl_mem dev_mask_scaled = NULL;
       err = rt_upload_scaled_mask_cl(devid, &shape, &dev_mask_scaled);
+
+      /* On the device this measures the upload and the enqueue, not the kernels -- except for
+       * heal, which reads back, solves on the CPU and writes again, and is therefore genuinely
+       * synchronous here. */
+      const double algo_start = usr_d->stats ? dt_get_wtime() : 0.0;
 
       if(err == CL_SUCCESS)
       {
@@ -4559,6 +4647,12 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
                                     gd);
       }
 
+      if(usr_d->stats)
+      {
+        usr_d->stats->shapes_applied++;
+        usr_d->stats->algo_seconds += dt_get_wtime() - algo_start;
+      }
+
       rt_release_shape(&shape);
       dt_opencl_release_mem_object(dev_mask_scaled);
     }
@@ -4583,6 +4677,9 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   const int ch = piece->dsc_in.channels;
   retouch_user_data_t usr_data = { 0 };
+  rt_memo_stats_t counters = { 0 };
+  const gboolean counting = rt_perf_enabled();
+  const double render_start = counting ? dt_get_wtime() : 0.0;
   dwt_params_cl_t *dwt_p = NULL;
 
   const int gui_active = (self->dev) ? (self == self->dev->gui_module) : 0;
@@ -4615,6 +4712,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   usr_data.suppress_mask = (g && g->suppress_mask && self->dev->gui_attached && (self == self->dev->gui_module)
                             && (pipe == self->dev->pipe));
   usr_data.display_scale = p->curr_scale;
+  usr_data.stats = counting ? &counters : NULL;
 
   // init the decompose routine
   dwt_p = dt_dwt_init_cl(devid, in_retouch, roi_rt->width, roi_rt->height, p->num_scales,
@@ -4671,6 +4769,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // decompose it
   err = dwt_decompose_cl(dwt_p, rt_process_forms_cl);
   if(err != CL_SUCCESS) goto cleanup;
+
+  if(counting) rt_report_render(pipe, roi_rt, &counters, render_start, "on GPU");
 
   dt_aligned_pixel_t levels = { p->preview_levels[0], p->preview_levels[1], p->preview_levels[2] };
 
