@@ -227,6 +227,36 @@ identity test within one session, not a key.
 Anything else folded into a cache key owes the same test: would two sessions editing the same
 image, with the same history, produce the same value?
 
+### A module memoising its own intermediates keys them on `upstream_hash`, never on `global_hash`
+
+`piece->global_hash` folds the module's own parameters, so it moves on every frame of a drag and
+is useless as the key of anything the drag does not change. `piece->upstream_hash`
+(`pixelpipe_hb.h`) is the other half: the cumulative hash of the PARAMETERS of the enabled
+modules above this one, and of nothing else — no ROI, not this piece. It identifies the
+transformation chain a drawn shape is back-transformed through, which is what a mask
+rasterisation depends on, so a memo keyed on it survives an edit of the parameter being dragged.
+
+Three things it has to get right, and each one is a way to key a memo on a lie:
+
+- **It is published by a pass of its own** (`_publish_upstream_hashes()`, `dev_pixelpipe.c`),
+  called from `dt_dev_pixelpipe_get_roi_in()` as well as from `dt_pixelpipe_get_global_hash()`.
+  ROI planning is its first consumer and runs BEFORE the global hash is built, so a
+  `modify_roi_in()` reading it would otherwise find either the value `dt_iop_commit_params()`
+  invalidated or one describing a chain that has since changed. It reads no ROI, so running it
+  twice per plan costs a walk and answers the same.
+- **It is deliberately ROI-free**, for the same reason: what a consumer reads during ROI planning
+  still describes the previous plan's ROI. It never describes the previous plan's *parameters*,
+  since every commit path runs a hash pass before any planning.
+- **It folds `dt_dev_pixelpipe_activemodule_disables_currentmodule()` per upstream piece.** That
+  is GUI state, not history, so it is in no `piece->hash` — yet it decides whether a module takes
+  part in `dt_dev_distort_transform_plus()`. Focusing crop moves every drawn shape's box without
+  moving any parameter.
+
+Because it carries no ROI and no pipe identity, the same value comes out for the FULL, preview
+and export pipes of one image, and anything keyed on it that is genuinely pipe-independent — a
+shape's bounding box in sensor coordinates — is computed once for all of them. Anything laid out
+in the module's own ROI must fold that ROI into its own key on top; `iop/retouch.c` does both.
+
 ### The host-memory fit probe evicts: ask it only when its answer chooses something
 
 `dt_tiling_piece_fits_host_memory()` (`develop/tiling.c`) is not a pure question. To answer "does
@@ -2005,6 +2035,64 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 (full, all pipes); drawlayer heartbeat raises `TOP_CHANGED` + redraw (fast, non-geometry). The
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
+
+### retouch: what a shape costs per frame is its geometry, and most of it is ROI planning
+
+Nothing about a shape's rasterisation reads a pixel. Its bounding box, its clone source's box and
+its mask resampled into the layer are pure functions of the shape's own geometry and of the
+transformation chain above the module, so moving ONE shape leaves every other shape's answers
+bit-identical. They were recomputed anyway, on every frame, in both pipes — and at full sensor
+resolution whatever the zoom, since `_circle_get_area()` and friends work in
+`pipe->iwidth`/`iheight`: a 500 px shape back-transforms 250 000 points through every distorting
+module above, for a mask that `rt_fill_scaled_mask()` then samples at one pixel in a hundred.
+
+**The cost is dominated by `modify_roi_in()`, not by `process()`**, and that is the part the
+obvious reading of the module misses. `rt_extend_roi_in_for_clone()` calls
+`rt_extend_roi_in_from_source_clones()` per shape, which walks the shapes again: O(shapes²) calls
+to `dt_masks_get_source_area()`, and for a brush or a polygon each one regenerates the whole
+outline. Measured on a 141-shape image exported at 2000 px, with `-d perf -d masks`: 3.5 s of
+mask rasterisation, 3.1 s of it in ROI planning, and a second export of the same image in the
+same process still paid the 3.1 s although the module's output was served from the cache.
+
+Two memos, both in the shared pixelpipe cache, both keyed on `rt_geometry_base_hash()` —
+`piece->upstream_hash` plus this module's `iop_order`, `pipe->iwidth`/`iheight` and
+`pipe->mask_rasterization_step`, which reach no hash of the pipeline's own — and then on the
+shape's own `dt_masks_form_get_own_hash()`:
+
+- **the two boxes** (`rt_shape_box()`), one entry per shape. Keyed on nothing pipe-specific, so
+  the FULL, preview and export pipes share it. It is what turns that O(shapes²) inner loop into
+  arithmetic.
+- **the scaled mask** (`rt_shape_scaled_mask()`), one entry per shape, per ROI, per source
+  offset. Its entry carries the area it was rasterised from in a `RT_MASK_MEMO_HEADER`-wide
+  header ahead of the pixels, so a hit answers without calling `dt_masks_get_area()` at all —
+  the point being that for a brush that call *is* the outline generation, i.e. most of what the
+  memo exists to avoid. The header is a cache line wide so the pixels keep their alignment.
+
+Same measurement afterwards: 0.34 s on the first export, 0 on the second. Exports are
+bit-identical, CPU and OpenCL alike.
+
+Four things a reviewer would otherwise change:
+
+- **Without a memo, compute only the box that was asked for.** `rt_shape_box()` takes an
+  `rt_box_t`; the entry holds both because another pass over the same shapes wants the other one,
+  but a caller that cannot memoise must not pay for a second outline nothing will read. Computing
+  both unconditionally doubled the measurement above, exactly, before this was split.
+- **There is no separate "is the shape in this layer" test any more.** `rt_scaled_mask_roi()`
+  intersects the shape's area with the layer, source offset included, and a shape that draws
+  nothing there comes out too small to have an effect — the same answer
+  `dt_masks_form_is_in_roi()` gave, reached without rasterising the area a second time.
+- **A hash identifies content, never a size.** A mask entry is used only when the header is sane
+  and the line is large enough for the ROI derived from it; the arena rounds a request up, so the
+  test is `>=`, never `==`.
+- **The mask buffer is read-only and shared.** Every consumer reads it through a `const float *`,
+  which is what lets several pipes hold the same line; `rt_release_shape()` is the only place that
+  hands it back, dropping the read lock and the reference for a memoised one and freeing a local
+  buffer otherwise.
+
+The remaining per-frame cost is the algorithms themselves — the heal solve above all — which is
+where a memo of each shape's *result* would go: the destination patch is a function of the layer
+it reads, so it needs a dependency-aware key (a shape depends on every earlier shape whose
+destination box meets its own read box), not a geometric one. Not implemented.
 
 ### retouch and spots: everything on the pipeline thread resolves shapes through `pipe->forms`, never `self->dev->forms`
 
