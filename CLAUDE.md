@@ -2089,10 +2089,31 @@ Four things a reviewer would otherwise change:
   hands it back, dropping the read lock and the reference for a memoised one and freeing a local
   buffer otherwise.
 
-The remaining per-frame cost is the algorithms themselves — the heal solve above all — which is
-where a memo of each shape's *result* would go: the destination patch is a function of the layer
-it reads, so it needs a dependency-aware key (a shape depends on every earlier shape whose
-destination box meets its own read box), not a geometric one. Not implemented.
+**`-d perf` prints what a frame cost, in two lines the pipeline's own timings cannot give.** One
+per ROI planning pass and one per render, per pipe:
+
+```
+[retouch] FULL     modify_roi_in: 1 stabilisation pass(es), boxes 10010 (10009 memo / 1 rasterised), 0.017 s
+[retouch] FULL     process on GPU 823x885: 140 shape(s), masks 140 (139 memo / 1 rasterised),
+                   boxes 1 (1 memo / 0 rasterised), algorithms 0.323 s, total 0.375 s
+```
+
+The pipeline's `processed \`Retouch'` line covers `process()` only, so on its own it hides the
+half of the cost that used to dominate. The counters are built only when the channel is on
+(`rt_perf_enabled()`, `ctx->stats` NULL otherwise), and `boxes 1` in a render line is how you see
+the mask memo's header paying: the 139 memoised masks needed no area of their own.
+
+Measured on the 141-shape image, dragging one shape in the darkroom: **1 box of 10 010 and 1 mask
+of 140 rasterised** — the one being moved — and ROI planning down to 16–34 ms. Both pipes render
+per frame, and what is left is the algorithms: 0.323 s of the FULL render's 0.375 s and 0.232 s
+of the preview's 0.265 s, i.e. **86–88 % of what this module now costs a drag frame**, against
+1.02 s and 0.90 s for the whole of each pipe.
+
+That is where a memo of each shape's *result* would go, and the numbers above are its target: the
+destination patch is a function of the layer it reads, so it needs a dependency-aware key (a
+shape depends on every earlier shape whose destination box meets its own read box), not a
+geometric one. A drag moves exactly one shape of a hundred and forty, so nearly every patch would
+be a hit. Not implemented.
 
 ### retouch and spots: everything on the pipeline thread resolves shapes through `pipe->forms`, never `self->dev->forms`
 
