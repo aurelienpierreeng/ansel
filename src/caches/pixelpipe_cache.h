@@ -600,7 +600,7 @@ void *dt_pixel_cache_entry_get_data(struct dt_pixel_cache_entry_t *entry);
  *
  * This accessor is intentionally "peek-only": it does not allocate and it does not change ownership.
  */
-size_t dt_pixel_cache_entry_get_size(struct dt_pixel_cache_entry_t *entry);
+size_t dt_pixel_cache_entry_get_size(const struct dt_pixel_cache_entry_t *entry);
 
 	                    
 /**
