@@ -5584,6 +5584,10 @@ msgstr "Pas de copie."
 msgid "invalid date/time format for import"
 msgstr "format de date/heure invalide pour l'import"
 
+#: ../src/gui/import.c:836
+msgid "Please check the date."
+msgstr "Vérifiez la date."
+
 #: ../src/common/import.c:771 ../src/common/import.c:1278
 msgid "Choose a file to see the result..."
 msgstr "Choisissez un fichier pour voir le résultat..."

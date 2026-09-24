@@ -5264,6 +5264,10 @@ msgstr ""
 msgid "invalid date/time format for import"
 msgstr ""
 
+#: ../src/gui/import.c:836
+msgid "Please check the date."
+msgstr ""
+
 #: ../src/common/import.c:771 ../src/common/import.c:1278
 msgid "Choose a file to see the result..."
 msgstr ""
