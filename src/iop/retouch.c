@@ -47,6 +47,8 @@
 #include "common/conf.h"
 #include "config.h"
 #endif
+#include "caches/pixelpipe_cache.h"
+#include "common/hash.h"
 #include "control/control.h"
 #include "widgets/bauhaus.h"
 #include "system/macros.h"
@@ -2640,11 +2642,130 @@ static void rt_roi_bounds_grow_for_blur(rt_roi_bounds_t *const bounds, const dt_
   if(bounds->b < area->y + area->height) bounds->b = MAX(bounds->b + overlap, area->y + area->height);
 }
 
+// The part of a rasterisation's identity that is not the shape: the transformation chain above
+// this node, the sensor dimensions the masks code works in, and the rasterisation step a brush
+// honours. The last two reach no hash of the pipeline's own. INVALID disables the memo.
+static uint64_t rt_geometry_base_hash(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
+{
+  static const char cache_tag[] = "retouch:geometry";
+  if(piece->upstream_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  uint64_t hash = dt_hash(piece->upstream_hash, cache_tag, sizeof(cache_tag));
+  /* This module's own place in the pipe: it is the bound the back-transform stops at, and
+   * upstream_hash only describes what sits before it. */
+  hash = dt_hash(hash, (const char *)&piece->module->iop_order, sizeof(int));
+  hash = dt_hash(hash, (const char *)&pipe->iwidth, sizeof(pipe->iwidth));
+  hash = dt_hash(hash, (const char *)&pipe->iheight, sizeof(pipe->iheight));
+  const int raster_step = pipe->mask_rasterization_step;
+  hash = dt_hash(hash, (const char *)&raster_step, sizeof(raster_step));
+  return hash;
+}
+
+// The same, plus the shape's own geometry.
+static uint64_t rt_shape_geometry_hash(const uint64_t base, dt_masks_form_t *const form)
+{
+  if(base == DT_PIXELPIPE_CACHE_HASH_INVALID || IS_NULL_PTR(form)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  /* A nested group would need its members folded in through the run's form list. It cannot
+   * reach here -- a group has no get_area(), so dt_masks_get_area() refuses it and the member is
+   * skipped -- and a partial hash is worse than no memo, so refuse rather than assume. */
+  if(form->type & DT_MASKS_GROUP) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+  return dt_masks_form_get_own_hash(base, NULL, form);
+}
+
+/* What a shape's rasterisation needs before a single pixel is touched: its own bounding box and
+ * the box of its clone source, both in sensor coordinates. `rt_compute_roi_in()` and
+ * `rt_extend_roi_in_*()` ask for these on every ROI planning pass, the second pair once per
+ * ordered PAIR of shapes, and for a brush or a polygon each answer regenerates the whole
+ * outline. They depend on the shape and on the chain above the module, never on the viewport or
+ * on a pixel, so one memo entry per shape serves every pass and every pipe. */
+typedef struct rt_shape_geometry_t
+{
+  dt_masks_area_t area;   // the shape itself
+  dt_masks_area_t source; // its clone source, meaningful only when `has_source`
+  int32_t has_area;
+  int32_t has_source;
+} rt_shape_geometry_t;
+
+// Which of the two boxes a call needs.
+typedef enum rt_box_t
+{
+  RT_BOX_AREA = 0,
+  RT_BOX_SOURCE
+} rt_box_t;
+
+static void rt_compute_shape_geometry(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                      const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+                                      rt_shape_geometry_t *out)
+{
+  *out = (rt_shape_geometry_t){ { 0 } };
+  out->has_area = (dt_masks_get_area(self, pipe, piece, form, &out->area) == DT_MASKS_RASTER_OK);
+  /* A shape that is not a clone has no source area -- an absence, not a failure. */
+  out->has_source = (dt_masks_get_source_area(self, pipe, piece, form, &out->source) == DT_MASKS_RASTER_OK);
+}
+
+// The one box a caller with no memo asked for. Computing the other as well would be a straight
+// loss here: nothing would read it, and for a brush it is a second outline generation.
+static gboolean rt_compute_shape_box(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                     const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+                                     const rt_box_t want, dt_masks_area_t *out)
+{
+  return ((want == RT_BOX_SOURCE) ? dt_masks_get_source_area(self, pipe, piece, form, out)
+                                  : dt_masks_get_area(self, pipe, piece, form, out))
+         == DT_MASKS_RASTER_OK;
+}
+
+// One of the shape's boxes, from the memo when there is one. FALSE when the shape has no such box.
+static gboolean rt_shape_box(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                             const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+                             const uint64_t shape_hash, const rt_box_t want, dt_masks_area_t *out)
+{
+  if(shape_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+    return rt_compute_shape_box(self, pipe, piece, form, want, out);
+
+  static const char cache_tag[] = "boxes";
+  const uint64_t hash = dt_hash(shape_hash, cache_tag, sizeof(cache_tag));
+
+  void *data = NULL;
+  struct dt_pixel_cache_entry_t *entry = NULL;
+  const int created = dt_dev_pixelpipe_cache_get(hash, sizeof(rt_shape_geometry_t), "retouch shape boxes",
+                                                 pipe->type, TRUE, &data, &entry);
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(entry))
+  {
+    if(!IS_NULL_PTR(entry))
+    {
+      if(created) dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+    }
+    return rt_compute_shape_box(self, pipe, piece, form, want, out);
+  }
+
+  rt_shape_geometry_t boxes;
+  if(created)
+  {
+    // both, once: the other box is asked for by another pass over the same shapes
+    rt_compute_shape_geometry(self, pipe, piece, form, &boxes);
+    memcpy(data, &boxes, sizeof(rt_shape_geometry_t));
+    dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
+  }
+  else
+  {
+    dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
+    memcpy(&boxes, data, sizeof(rt_shape_geometry_t));
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
+  }
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+
+  *out = (want == RT_BOX_SOURCE) ? boxes.source : boxes.area;
+  return (want == RT_BOX_SOURCE) ? boxes.has_source : boxes.has_area;
+}
+
 static void rt_compute_roi_in(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                               struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
                               rt_roi_bounds_t *const bounds)
 {
   const dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
+  const uint64_t base_hash = rt_geometry_base_hash(pipe, piece);
 
   for(const GList *members = rt_pipe_group_members(pipe, piece); members; members = g_list_next(members))
   {
@@ -2655,7 +2776,8 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, const dt_dev_pixelpi
 
     // the area of the form, skipped when outside the roi
     dt_masks_area_t area;
-    if(dt_masks_get_area(self, pipe, piece, form, &area) != DT_MASKS_RASTER_OK) continue;
+    if(!rt_shape_box(self, pipe, piece, form, rt_shape_geometry_hash(base_hash, form), RT_BOX_AREA, &area))
+      continue;
     dt_masks_area_scale(&area, roi_in->scale);
     if(!dt_masks_area_intersects(&area, roi_in)) continue;
 
@@ -2685,6 +2807,7 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, co
                                                 rt_roi_bounds_t *const bounds)
 {
   const dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
+  const uint64_t base_hash = rt_geometry_base_hash(pipe, piece);
 
   for(const GList *members = rt_pipe_group_members(pipe, piece); members; members = g_list_next(members))
   {
@@ -2698,7 +2821,8 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, co
 
     // the source area
     dt_masks_area_t area;
-    if(dt_masks_get_source_area(self, pipe, piece, form, &area) != DT_MASKS_RASTER_OK) continue;
+    if(!rt_shape_box(self, pipe, piece, form, rt_shape_geometry_hash(base_hash, form), RT_BOX_SOURCE, &area))
+      continue;
     dt_masks_area_scale(&area, roi_in->scale);
 
     // the destination area
@@ -2730,6 +2854,7 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, const dt_de
                                        rt_roi_bounds_t *const bounds)
 {
   const dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
+  const uint64_t base_hash = rt_geometry_base_hash(pipe, piece);
 
   for(const GList *members = rt_pipe_group_members(pipe, piece); members; members = g_list_next(members))
   {
@@ -2740,7 +2865,8 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, const dt_de
 
     // the source area
     dt_masks_area_t src;
-    if(dt_masks_get_source_area(self, pipe, piece, form, &src) != DT_MASKS_RASTER_OK) continue;
+    if(!rt_shape_box(self, pipe, piece, form, rt_shape_geometry_hash(base_hash, form), RT_BOX_SOURCE, &src))
+      continue;
     dt_masks_area_scale(&src, roi_in->scale);
 
     // we only want to process forms already in roi_in
@@ -2933,7 +3059,8 @@ static void rt_adjust_levels(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pi
 #undef RETOUCH_PREVIEW_LVL_MIN
 #undef RETOUCH_PREVIEW_LVL_MAX
 
-static void rt_intersect_2_rois(dt_iop_roi_t *const roi_1, dt_iop_roi_t *const roi_2, const int dx, const int dy,
+static void rt_intersect_2_rois(dt_iop_roi_t *const roi_1, const dt_iop_roi_t *const roi_2, const int dx,
+                                const int dy,
                                 const int padding, dt_iop_roi_t *roi_dest)
 {
   const int x_from = MAX(MAX((roi_1->x + 1 - padding), roi_2->x), (roi_2->x + dx));
@@ -2970,38 +3097,37 @@ static void rt_copy_in_to_out(const float *const in, const struct dt_iop_roi_t *
   }
 }
 
-static int rt_build_scaled_mask(float *const mask, dt_iop_roi_t *const roi_mask, float **mask_scaled,
-                                dt_iop_roi_t *roi_mask_scaled, dt_iop_roi_t *const roi_in, const int dx,
-                                const int dy, const int algo)
+/* Where a shape's mask lands in the layer, and how big it is there. Pure arithmetic over the
+ * shape's full-resolution area and the layer's ROI -- no rasterisation -- which is what lets the
+ * memo below size its lookup before deciding whether it has to rasterise anything at all. An
+ * empty result (width or height < 1) means the shape draws nothing in this layer. */
+static void rt_scaled_mask_roi(const dt_masks_area_t *const area, const dt_iop_roi_t *const roi_in, const int dx,
+                               const int dy, const int algo, dt_iop_roi_t *roi_mask_scaled)
 {
-  float *mask_tmp = NULL;
-  int err = 0;
-  *mask_scaled = NULL;
-
   const int padding = (algo == DT_IOP_RETOUCH_HEAL) ? 1 : 0;
 
-  *roi_mask_scaled = *roi_mask;
+  dt_iop_roi_t roi_mask = { .x = area->x, .y = area->y, .width = area->width, .height = area->height, .scale = 1.f };
 
-  roi_mask_scaled->x = roi_mask->x * roi_in->scale;
-  roi_mask_scaled->y = roi_mask->y * roi_in->scale;
-  roi_mask_scaled->width = ((roi_mask->width * roi_in->scale) + .5f);
-  roi_mask_scaled->height = ((roi_mask->height * roi_in->scale) + .5f);
+  *roi_mask_scaled = roi_mask;
+  roi_mask_scaled->x = roi_mask.x * roi_in->scale;
+  roi_mask_scaled->y = roi_mask.y * roi_in->scale;
+  roi_mask_scaled->width = ((roi_mask.width * roi_in->scale) + .5f);
+  roi_mask_scaled->height = ((roi_mask.height * roi_in->scale) + .5f);
   roi_mask_scaled->scale = roi_in->scale;
 
   rt_intersect_2_rois(roi_mask_scaled, roi_in, dx, dy, padding, roi_mask_scaled);
-  if(roi_mask_scaled->width < 1 || roi_mask_scaled->height < 1) goto cleanup;
+}
 
+/* Resample the full-resolution mask into `mask_scaled`, which the caller sized from
+ * rt_scaled_mask_roi() for the same area and ROI. Writes every pixel of it. */
+static void rt_fill_scaled_mask(const float *const mask, const dt_iop_roi_t *const roi_mask,
+                                float *const mask_scaled, const dt_iop_roi_t *const roi_mask_scaled,
+                                const dt_iop_roi_t *const roi_in)
+{
   const int x_to = roi_mask_scaled->width + roi_mask_scaled->x;
   const int y_to = roi_mask_scaled->height + roi_mask_scaled->y;
 
-  mask_tmp = dt_pixelpipe_cache_alloc_align_float_cache((size_t)roi_mask_scaled->width * roi_mask_scaled->height, 0);
-  if(IS_NULL_PTR(mask_tmp))
-  {
-    fprintf(stderr, "rt_build_scaled_mask: error allocating memory\n");
-    err = 1;
-    goto cleanup;
-  }
-  dt_iop_image_fill(mask_tmp, 0.0f, roi_mask_scaled->width, roi_mask_scaled->height, 1);
+  dt_iop_image_fill(mask_scaled, 0.0f, roi_mask_scaled->width, roi_mask_scaled->height, 1);
   __OMP_PARALLEL_FOR__()
   for(int yy = roi_mask_scaled->y; yy < y_to; yy++)
   {
@@ -3011,7 +3137,7 @@ static int rt_build_scaled_mask(float *const mask, dt_iop_roi_t *const roi_mask,
     const int mask_scaled_index = (yy - roi_mask_scaled->y) * roi_mask_scaled->width;
 
     const float *m = mask + mask_index * roi_mask->width;
-    float *ms = mask_tmp + mask_scaled_index;
+    float *ms = mask_scaled + mask_scaled_index;
 
     for(int xx = roi_mask_scaled->x; xx < x_to; xx++, ms++)
     {
@@ -3021,10 +3147,6 @@ static int rt_build_scaled_mask(float *const mask, dt_iop_roi_t *const roi_mask,
       *ms = m[mx];
     }
   }
-
-cleanup:
-  *mask_scaled = mask_tmp;
-  return err;
 }
 
 // img_src and mask_scaled must have the same roi
@@ -3242,67 +3364,299 @@ cleanup:
   return err;
 }
 
+/* ==============================================================================================
+ * Geometric memo: a shape's area, and its mask resampled into the layer.
+ *
+ * Neither reads a pixel. Both are pure functions of the shape's own geometry and of the
+ * distortion chain above this module, so dragging ONE shape leaves every other shape's mask
+ * bit-identical -- yet each of them was rasterised again on every frame, twice over: once for
+ * the area (`dt_masks_form_is_in_roi()`) and once more inside `dt_masks_get_mask()`, which for a
+ * brush or a polygon regenerates the whole outline each time. And it rasterises at full sensor
+ * resolution whatever the zoom (`_circle_get_area()` works in `pipe->iwidth`/`iheight`), so a
+ * 500 px shape back-transforms 250 000 points through every distorting module above, to then be
+ * thrown away at one pixel in a hundred by `rt_fill_scaled_mask()` at fit zoom.
+ *
+ * Both results are memoised in the shared pixelpipe cache, keyed on `piece->upstream_hash` --
+ * the transformation chain above this node, which by construction does NOT move when the
+ * module's own parameters do. A miss costs only the work that was being done anyway, so
+ * eviction and memory pressure need no handling of their own here.
+ *
+ * Measured on a 141-shape image, exported at 2000 px: the mask rasterisation this module asks
+ * for is 3.5 s, and 3.1 s of it is `modify_roi_in()` -- `rt_extend_roi_in_for_clone()` is
+ * O(shapes squared) and calls `dt_masks_get_source_area()` in its inner loop, which for a brush
+ * regenerates the whole outline. The box memo below is what turns that inner loop into
+ * arithmetic; the mask memo is the smaller half.
+ * ============================================================================================ */
+
+// Why one group member is not applied at this scale.
+typedef enum rt_shape_status_t
+{
+  RT_SHAPE_READY = 0, // apply it
+  RT_SHAPE_SKIP,      // another scale, outside the layer, nothing to draw: go on with the next one
+  RT_SHAPE_ERROR      // out of memory: abort the whole decomposition
+} rt_shape_status_t;
+
 // A shape of the module's drawn mask, ready to be applied at one wavelet scale.
 typedef struct rt_prepared_shape_t
 {
   int index;                        // slot in rt_forms[]
   float opacity;                    // the shape's opacity in the group
   dt_iop_retouch_algo_type_t algo;
-  float *mask;                      // unscaled mask, owned by the caller
-  dt_iop_roi_t roi_mask;
+  float *mask;                      // mask resampled into the layer, READ-ONLY (it may be shared)
+  dt_iop_roi_t roi_mask;            // where it lands in the layer
   float dx;                         // offset from the source to the destination
   float dy;
+  // The memo entry `mask` belongs to, NULL when it is this shape's own allocation. Either way
+  // rt_release_shape() is what hands it back.
+  struct dt_pixel_cache_entry_t *mask_entry;
 } rt_prepared_shape_t;
 
-// Everything the CPU and OpenCL callbacks need before applying one group member at `scale`:
-// the member resolved in the run's snapshot, its mask and its offset to the source. FALSE when
-// the member does not apply here (another scale, outside the layer, unresolvable), and then
-// nothing is left for the caller to free. Kept in one place so the two paths cannot drift.
-static gboolean rt_prepare_shape(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                                 const dt_dev_pixelpipe_iop_t *piece, const GList *member, const int scale,
-                                 const dt_iop_roi_t *roi_layer, rt_prepared_shape_t *shape)
+// Rasterise the shape and resample it into `dst`, which the caller sized from `area` through
+// rt_scaled_mask_roi().
+static rt_shape_status_t rt_rasterize_scaled_mask(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                                  const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+                                                  const dt_masks_area_t *const area,
+                                                  const dt_iop_roi_t *const roi_layer,
+                                                  const dt_iop_roi_t *const roi_mask_scaled, float *const dst)
+{
+  float *mask = NULL;
+  dt_masks_area_t rastered = { 0 };
+  dt_masks_get_mask(self, pipe, piece, form, &mask, &rastered);
+  if(IS_NULL_PTR(mask))
+  {
+    fprintf(stderr, "rt_process_forms: error retrieving mask\n");
+    return RT_SHAPE_SKIP;
+  }
+
+  /* `dst` was sized from dt_masks_get_area(), which every shape type reaching here implements
+   * with the very function its get_mask() uses for its own bounding box. Should the two ever
+   * disagree, this buffer is not the one that mask needs: say so and draw nothing rather than
+   * write past it. */
+  if(rastered.x != area->x || rastered.y != area->y || rastered.width != area->width
+     || rastered.height != area->height)
+  {
+    fprintf(stderr,
+            "rt_process_forms: the rasterised area %ix%i+%i+%i disagrees with the announced %ix%i+%i+%i\n",
+            rastered.width, rastered.height, rastered.x, rastered.y, area->width, area->height, area->x,
+            area->y);
+    dt_pixelpipe_cache_free_align(mask);
+    return RT_SHAPE_SKIP;
+  }
+
+  const dt_iop_roi_t roi_mask
+      = { .x = area->x, .y = area->y, .width = area->width, .height = area->height, .scale = 1.f };
+  rt_fill_scaled_mask(mask, &roi_mask, dst, roi_mask_scaled, roi_layer);
+  dt_pixelpipe_cache_free_align(mask);
+  return RT_SHAPE_READY;
+}
+
+/* One memo entry per shape holds the mask AND, in a header ahead of it, the area it was
+ * rasterised from. The area is what sizes the lookup, so storing it with the mask is what lets a
+ * hit answer without calling dt_masks_get_area() -- which for a brush or a polygon is the whole
+ * outline generation, i.e. most of what the memo exists to avoid. The header is a cache line
+ * wide so the pixels keep the alignment the resampling loop was written for. */
+#define RT_MASK_MEMO_HEADER 64u
+
+// Is `area` something the arithmetic below can be trusted with? A memo hit reads it from a line
+// resolved by hash alone, so it is checked before it sizes anything.
+static gboolean rt_area_is_sane(const dt_masks_area_t *const area)
+{
+  return area->width > 0 && area->height > 0 && area->width < (1 << 20) && area->height < (1 << 20);
+}
+
+// Everything but the shape's own area that the memoised mask depends on.
+static uint64_t rt_scaled_mask_hash(const uint64_t shape_hash, const dt_iop_roi_t *const roi_layer, const int dx,
+                                    const int dy, const dt_iop_retouch_algo_type_t algo)
+{
+  static const char cache_tag[] = "scaled-mask";
+  if(shape_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  uint64_t hash = dt_hash(shape_hash, cache_tag, sizeof(cache_tag));
+  hash = dt_hash(hash, (const char *)roi_layer, sizeof(dt_iop_roi_t));
+  hash = dt_hash(hash, (const char *)&dx, sizeof(dx));
+  hash = dt_hash(hash, (const char *)&dy, sizeof(dy));
+  hash = dt_hash(hash, (const char *)&algo, sizeof(algo));
+  return hash;
+}
+
+// every algorithm needs a mask larger than 2x2, and clone and heal need a source offset
+static gboolean rt_shape_has_effect(const rt_prepared_shape_t *const shape, const int dx, const int dy)
+{
+  return (dx != 0 || dy != 0 || shape->algo == DT_IOP_RETOUCH_BLUR || shape->algo == DT_IOP_RETOUCH_FILL)
+         && shape->roi_mask.width > 2 && shape->roi_mask.height > 2;
+}
+
+// Fill in `shape->roi_mask` and `shape->mask` from the memo, rasterising only on a miss.
+// `shape->dx`, `shape->dy` and `shape->algo` must already be set: the resampling depends on them.
+static rt_shape_status_t rt_shape_scaled_mask(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                              const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+                                              const uint64_t shape_hash, const dt_iop_roi_t *const roi_layer,
+                                              rt_prepared_shape_t *shape)
+{
+  const int dx = (int)shape->dx;
+  const int dy = (int)shape->dy;
+  const uint64_t hash = rt_scaled_mask_hash(shape_hash, roi_layer, dx, dy, shape->algo);
+  dt_masks_area_t area = { 0 };
+
+  // the memoised answer, area included: neither dt_masks_get_area() nor dt_masks_get_mask() runs
+  if(hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+  {
+    void *data = NULL;
+    struct dt_pixel_cache_entry_t *entry = NULL;
+    if(dt_dev_pixelpipe_cache_ref_entry_by_hash(hash, &data, &entry) && !IS_NULL_PTR(data))
+    {
+      dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
+      memcpy(&area, data, sizeof(dt_masks_area_t));
+
+      gboolean usable = rt_area_is_sane(&area);
+      if(usable)
+      {
+        rt_scaled_mask_roi(&area, roi_layer, dx, dy, shape->algo, &shape->roi_mask);
+        if(!rt_shape_has_effect(shape, dx, dy)) usable = FALSE;
+      }
+
+      /* A hash identifies content, never a size. A line that cannot hold this mask is not this
+       * mask: hand it back and rasterise into a buffer of our own. */
+      const size_t needed = RT_MASK_MEMO_HEADER
+                            + (usable ? (size_t)shape->roi_mask.width * shape->roi_mask.height * sizeof(float) : 0);
+      if(usable && dt_pixel_cache_entry_get_size(entry) >= needed)
+      {
+        shape->mask = (float *)((char *)data + RT_MASK_MEMO_HEADER);
+        shape->mask_entry = entry;
+        return RT_SHAPE_READY;
+      }
+
+      dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+      if(usable) return RT_SHAPE_SKIP; // a sane header that does not fit is a collision, not a mask
+    }
+  }
+
+  if(!rt_shape_box(self, pipe, piece, form, shape_hash, RT_BOX_AREA, &area)) return RT_SHAPE_SKIP;
+  if(!rt_area_is_sane(&area)) return RT_SHAPE_SKIP;
+
+  rt_scaled_mask_roi(&area, roi_layer, dx, dy, shape->algo, &shape->roi_mask);
+  if(!rt_shape_has_effect(shape, dx, dy)) return RT_SHAPE_SKIP;
+
+  const size_t elements = (size_t)shape->roi_mask.width * shape->roi_mask.height;
+
+  if(hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+  {
+    void *data = NULL;
+    struct dt_pixel_cache_entry_t *entry = NULL;
+    const int created = dt_dev_pixelpipe_cache_get(hash, RT_MASK_MEMO_HEADER + elements * sizeof(float),
+                                                   "retouch shape mask", pipe->type, TRUE, &data, &entry);
+    if(!IS_NULL_PTR(data) && !IS_NULL_PTR(entry))
+    {
+      /* Not created means another thread published this line between the lookup above and here.
+       * Its content is this same mask, so take it rather than rasterise a second copy. */
+      rt_shape_status_t status = RT_SHAPE_READY;
+      if(created)
+      {
+        memcpy(data, &area, sizeof(dt_masks_area_t));
+        status = rt_rasterize_scaled_mask(self, pipe, piece, form, &area, roi_layer, &shape->roi_mask,
+                                          (float *)((char *)data + RT_MASK_MEMO_HEADER));
+        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
+        if(status != RT_SHAPE_READY)
+        {
+          dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+          dt_dev_pixelpipe_cache_remove(TRUE, entry);
+          return status;
+        }
+      }
+      /* Read-locked for as long as the caller holds it, so a reader can never overlap the writer
+       * that is still filling a line it found already created. */
+      dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
+      shape->mask = (float *)((char *)data + RT_MASK_MEMO_HEADER);
+      shape->mask_entry = entry;
+      return RT_SHAPE_READY;
+    }
+    if(!IS_NULL_PTR(entry))
+    {
+      if(created) dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+    }
+  }
+
+  // no memo available: the previous behaviour, one buffer per shape per frame
+  float *buffer = dt_pixelpipe_cache_alloc_align_float_cache(elements, 0);
+  if(IS_NULL_PTR(buffer))
+  {
+    fprintf(stderr, "rt_shape_scaled_mask: error allocating memory\n");
+    return RT_SHAPE_ERROR;
+  }
+
+  const rt_shape_status_t status
+      = rt_rasterize_scaled_mask(self, pipe, piece, form, &area, roi_layer, &shape->roi_mask, buffer);
+  if(status != RT_SHAPE_READY)
+  {
+    dt_pixelpipe_cache_free_align(buffer);
+    return status;
+  }
+
+  shape->mask = buffer;
+  shape->mask_entry = NULL;
+  return RT_SHAPE_READY;
+}
+
+// Hand back whatever rt_prepare_shape() took. Safe on a shape it returned SKIP or ERROR for.
+static void rt_release_shape(rt_prepared_shape_t *shape)
+{
+  if(!IS_NULL_PTR(shape->mask_entry))
+  {
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, shape->mask_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, shape->mask_entry);
+    shape->mask_entry = NULL;
+    shape->mask = NULL;
+    return;
+  }
+  dt_pixelpipe_cache_free_align(shape->mask);
+  shape->mask = NULL;
+}
+
+// Everything the CPU and OpenCL callbacks need before applying one group member at `scale`: the
+// member resolved in the run's snapshot, its offset to the source, and its mask laid out in the
+// layer. Kept in one place so the two paths cannot drift; every outcome but RT_SHAPE_READY
+// leaves nothing to release.
+static rt_shape_status_t rt_prepare_shape(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                          const dt_dev_pixelpipe_iop_t *piece, const GList *member,
+                                          const int scale, const uint64_t base_hash,
+                                          const dt_iop_roi_t *roi_layer, rt_prepared_shape_t *shape)
 {
   const dt_iop_retouch_params_t *p = (const dt_iop_retouch_params_t *)piece->data;
   int formid = 0;
   int index = -1;
   dt_masks_form_t *form = rt_pipe_member_form(pipe, p, member, &formid, &index);
 
+  *shape = (rt_prepared_shape_t){ 0 };
+
   // only process current scale
-  if(index >= 0 && p->rt_forms[index].scale != scale) return FALSE;
+  if(index >= 0 && p->rt_forms[index].scale != scale) return RT_SHAPE_SKIP;
   if(IS_NULL_PTR(form))
   {
     // an unknown index is expected right after going back in history: the group still lists the
     // shape while rt_forms[] no longer does
     fprintf(stderr, "rt_process_forms: missing form=%i from %s\n", formid, index < 0 ? "array" : "masks");
-    return FALSE;
+    return RT_SHAPE_SKIP;
   }
-
-  // if the form is outside the layer, we just skip it
-  if(!dt_masks_form_is_in_roi(self, pipe, piece, form, roi_layer, roi_layer)) return FALSE;
 
   const dt_masks_form_group_t *grpt = (const dt_masks_form_group_t *)member->data;
-  *shape = (rt_prepared_shape_t){ .index = index, .opacity = grpt->opacity, .algo = p->rt_forms[index].algorithm };
-
-  dt_masks_area_t area;
-  dt_masks_get_mask(self, pipe, piece, form, &shape->mask, &area);
-  shape->roi_mask = (dt_iop_roi_t){ .x = area.x, .y = area.y, .width = area.width, .height = area.height };
-  if(IS_NULL_PTR(shape->mask))
-  {
-    fprintf(stderr, "rt_process_forms: error retrieving mask\n");
-    return FALSE;
-  }
+  shape->index = index;
+  shape->opacity = grpt->opacity;
+  shape->algo = p->rt_forms[index].algorithm;
 
   // search the delta with the source
   if(shape->algo != DT_IOP_RETOUCH_BLUR && shape->algo != DT_IOP_RETOUCH_FILL
-     && !rt_masks_get_delta_to_destination(self, pipe, piece, roi_layer, form, &shape->dx,
-                                           &shape->dy, p->rt_forms[index].distort_mode))
-  {
-    dt_pixelpipe_cache_free_align(shape->mask);
-    shape->mask = NULL;
-    return FALSE;
-  }
+     && !rt_masks_get_delta_to_destination(self, pipe, piece, roi_layer, form, &shape->dx, &shape->dy,
+                                           p->rt_forms[index].distort_mode))
+    return RT_SHAPE_SKIP;
 
-  return TRUE;
+  /* No separate "is the shape in this layer" test: rt_scaled_mask_roi() intersects the shape's
+   * area with the layer, source offset included, and a shape that draws nothing there comes out
+   * of it too small to have an effect. That is the same answer dt_masks_form_is_in_roi() gave,
+   * reached without rasterising the area a second time. */
+  return rt_shape_scaled_mask(self, pipe, piece, form, rt_shape_geometry_hash(base_hash, form), roi_layer,
+                              shape);
 }
 
 static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int scale1)
@@ -3341,55 +3695,29 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
 
   if(usr_d->suppress_mask) return 0;
 
+  const uint64_t base_hash = rt_geometry_base_hash(pipe, piece);
+
   // Iterate through all forms, resolved in the run's snapshot (see dt_masks_get_from_id_in_pipe()).
   for(const GList *forms = rt_pipe_group_members(pipe, piece); forms; forms = g_list_next(forms))
   {
     rt_prepared_shape_t shape;
-    if(!rt_prepare_shape(self, pipe, piece, forms, scale, roi_layer, &shape)) continue;
+    const rt_shape_status_t status = rt_prepare_shape(self, pipe, piece, forms, scale, base_hash, roi_layer, &shape);
+    if(status == RT_SHAPE_ERROR) return 1;
+    if(status != RT_SHAPE_READY) continue;
 
     const int index = shape.index;
     const float form_opacity = shape.opacity;
     const dt_iop_retouch_algo_type_t algo = shape.algo;
-    float *mask = shape.mask;
-    dt_iop_roi_t roi_mask = shape.roi_mask;
-    float dx = shape.dx;
-    float dy = shape.dy;
-
-    // scale the mask
-    float *mask_scaled = NULL;
-    dt_iop_roi_t roi_mask_scaled = { 0 };
-    if(rt_build_scaled_mask(mask, &roi_mask, &mask_scaled, &roi_mask_scaled, roi_layer, dx, dy, algo) != 0)
-    {
-      dt_pixelpipe_cache_free_align(mask);
-      return 1;
-    }
-
-    // we don't need the original mask anymore
-    if(!IS_NULL_PTR(mask))
-    {
-      dt_pixelpipe_cache_free_align(mask);
-      mask = NULL;
-    }
-
-    if(IS_NULL_PTR(mask_scaled))
-    {
-      continue;
-    }
-
-    // clone and heal need a source offset, and every algorithm needs a mask larger than 2x2
-    const gboolean has_effect = (dx != 0 || dy != 0 || algo == DT_IOP_RETOUCH_BLUR || algo == DT_IOP_RETOUCH_FILL)
-                                && roi_mask_scaled.width > 2 && roi_mask_scaled.height > 2;
-    if(!has_effect)
-    {
-      dt_pixelpipe_cache_free_align(mask_scaled);
-      continue;
-    }
+    float *mask_scaled = shape.mask;
+    dt_iop_roi_t roi_mask_scaled = shape.roi_mask;
+    const int dx = (int)shape.dx;
+    const int dy = (int)shape.dy;
 
     if(algo == DT_IOP_RETOUCH_CLONE)
     {
       if(_retouch_clone(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity) != 0)
       {
-        dt_pixelpipe_cache_free_align(mask_scaled);
+        rt_release_shape(&shape);
         return 1;
       }
     }
@@ -3398,7 +3726,7 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
       if(_retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, p->max_heal_iter,
                        rt_heal_domain(p, scale1, wt_p->scales)) != 0)
       {
-        dt_pixelpipe_cache_free_align(mask_scaled);
+        rt_release_shape(&shape);
         return 1;
       }
     }
@@ -3407,7 +3735,7 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
       if(_retouch_blur(self, pipe, layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity,
                        p->rt_forms[index].blur_type, p->rt_forms[index].blur_radius, wt_p->use_sse) != 0)
       {
-        dt_pixelpipe_cache_free_align(mask_scaled);
+        rt_release_shape(&shape);
         return 1;
       }
     }
@@ -3436,8 +3764,7 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
     if(mask_display)
       rt_copy_mask_to_alpha(layer, roi_layer, wt_p->ch, mask_scaled, &roi_mask_scaled, form_opacity);
 
-    dt_pixelpipe_cache_free_align(mask);
-    dt_pixelpipe_cache_free_align(mask_scaled);
+    rt_release_shape(&shape);
   }
 
   return 0;
@@ -3718,42 +4045,30 @@ cleanup:
   return err;
 }
 
-static cl_int rt_build_scaled_mask_cl(const int devid, float *const mask, dt_iop_roi_t *const roi_mask,
-                                      float **mask_scaled, cl_mem *p_dev_mask_scaled,
-                                      dt_iop_roi_t *roi_mask_scaled, dt_iop_roi_t *const roi_in, const int dx,
-                                      const int dy, const int algo)
+// Upload a prepared shape's mask to the device. The host copy stays valid -- it belongs to the
+// shape, and _retouch_heal_cl() still needs it, heal itself running on the CPU.
+static cl_int rt_upload_scaled_mask_cl(const int devid, const rt_prepared_shape_t *const shape,
+                                       cl_mem *p_dev_mask_scaled)
 {
-  cl_int err = CL_SUCCESS;
+  const size_t bytes = sizeof(float) * shape->roi_mask.width * shape->roi_mask.height;
 
-  rt_build_scaled_mask(mask, roi_mask, mask_scaled, roi_mask_scaled, roi_in, dx, dy, algo);
-  if(IS_NULL_PTR(*mask_scaled))
-  {
-    goto cleanup;
-  }
-
-  const cl_mem dev_mask_scaled
-      = dt_opencl_alloc_device_buffer(devid, sizeof(float) * roi_mask_scaled->width * roi_mask_scaled->height);
+  const cl_mem dev_mask_scaled = dt_opencl_alloc_device_buffer(devid, bytes);
   if(IS_NULL_PTR(dev_mask_scaled))
   {
-    fprintf(stderr, "rt_build_scaled_mask_cl error 2\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
+    fprintf(stderr, "rt_upload_scaled_mask_cl: error allocating the device buffer\n");
+    return CL_MEM_OBJECT_ALLOCATION_FAILURE;
   }
 
-  err = dt_opencl_write_buffer_to_device(devid, *mask_scaled, dev_mask_scaled, 0,
-                                         sizeof(float) * roi_mask_scaled->width * roi_mask_scaled->height, CL_TRUE);
+  const cl_int err = dt_opencl_write_buffer_to_device(devid, shape->mask, dev_mask_scaled, 0, bytes, CL_TRUE);
   if(err != CL_SUCCESS)
   {
-    fprintf(stderr, "rt_build_scaled_mask_cl error 4\n");
-    goto cleanup;
+    fprintf(stderr, "rt_upload_scaled_mask_cl: error writing the mask to the device\n");
+    dt_opencl_release_mem_object(dev_mask_scaled);
+    return err;
   }
 
   *p_dev_mask_scaled = dev_mask_scaled;
-
-cleanup:
-  if(err != CL_SUCCESS) fprintf(stderr, "rt_build_scaled_mask_cl error\n");
-
-  return err;
+  return CL_SUCCESS;
 }
 
 static cl_int rt_copy_image_masked_cl(const int devid, cl_mem dev_src, cl_mem dev_dest,
@@ -4113,6 +4428,8 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
     scale = p->num_scales + 1;
   }
 
+  const uint64_t base_hash = rt_geometry_base_hash(pipe, piece);
+
   // Iterate through all forms, resolved in the same snapshot as the CPU rt_process_forms().
   if(!usr_d->suppress_mask)
   {
@@ -4120,48 +4437,27 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
         forms = g_list_next(forms))
     {
       rt_prepared_shape_t shape;
-      if(!rt_prepare_shape(self, pipe, piece, forms, scale, roi_layer, &shape)) continue;
+      const rt_shape_status_t status
+          = rt_prepare_shape(self, pipe, piece, forms, scale, base_hash, roi_layer, &shape);
+      if(status == RT_SHAPE_ERROR)
+      {
+        err = DT_OPENCL_SYSMEM_ALLOCATION;
+        break;
+      }
+      if(status != RT_SHAPE_READY) continue;
 
       const int index = shape.index;
       const float form_opacity = shape.opacity;
       const dt_iop_retouch_algo_type_t algo = shape.algo;
-      float *mask = shape.mask;
-      dt_iop_roi_t roi_mask = shape.roi_mask;
-      float dx = shape.dx;
-      float dy = shape.dy;
+      float *mask_scaled = shape.mask;
+      dt_iop_roi_t roi_mask_scaled = shape.roi_mask;
+      const int dx = (int)shape.dx;
+      const int dy = (int)shape.dy;
 
-      // scale the mask
       cl_mem dev_mask_scaled = NULL;
-      float *mask_scaled = NULL;
-      dt_iop_roi_t roi_mask_scaled = { 0 };
+      err = rt_upload_scaled_mask_cl(devid, &shape, &dev_mask_scaled);
 
-      err = rt_build_scaled_mask_cl(devid, mask, &roi_mask, &mask_scaled, &dev_mask_scaled, &roi_mask_scaled,
-                                    roi_layer, dx, dy, algo);
-
-      // only heal needs mask scaled
-      if(algo != DT_IOP_RETOUCH_HEAL && !IS_NULL_PTR(mask_scaled))
-      {
-        dt_pixelpipe_cache_free_align(mask_scaled);
-        mask_scaled = NULL;
-      }
-
-      // we don't need the original mask anymore
-      if(mask)
-      {
-        dt_pixelpipe_cache_free_align(mask);
-        mask = NULL;
-      }
-
-      if(IS_NULL_PTR(mask_scaled) && algo == DT_IOP_RETOUCH_HEAL)
-      {
-        dt_opencl_release_mem_object(dev_mask_scaled);
-        dev_mask_scaled = NULL;
-        continue;
-      }
-
-      if((err == CL_SUCCESS)
-          && (dx != 0 || dy != 0 || algo == DT_IOP_RETOUCH_BLUR || algo == DT_IOP_RETOUCH_FILL)
-          && ((roi_mask_scaled.width > 2) && (roi_mask_scaled.height > 2)))
+      if(err == CL_SUCCESS)
       {
         if(algo == DT_IOP_RETOUCH_CLONE)
         {
@@ -4205,8 +4501,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
                                     gd);
       }
 
-      dt_pixelpipe_cache_free_align(mask);
-      dt_pixelpipe_cache_free_align(mask_scaled);
+      rt_release_shape(&shape);
       dt_opencl_release_mem_object(dev_mask_scaled);
     }
   }
