@@ -23,8 +23,11 @@ years, each one a header trailing-including a header that includes it back (see
 instead of invisible.
 
 Enforcement: `python3 tools/pragma_once_to_guards.py --verify` exits non-zero if any
-`#pragma once` reappears. `python3 tools/include_graph.py --summary` must keep reporting
-`cycles 0`.
+`#pragma once` reappears, and runs in CI's "Check include hygiene" step. It sweeps every
+header spelling — `.h`, `.hh`, `.hpp`, `.hxx` — from the repository root the tool itself sits
+in, not from the working directory: a sweep restricted to `.h`, or one run from the wrong
+directory, is a gate that passes by finding nothing. `python3 tools/include_graph.py
+--summary` must keep reporting `cycles 0`.
 
 **`darktable.h` (at `src/`, not in a module) has no guard either — it has a TRIPWIRE.** It ends up included by
 at most one path per translation unit (an entry point calling `dt_init()`, or a subsystem

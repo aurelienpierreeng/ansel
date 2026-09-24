@@ -183,6 +183,10 @@ jobs:
           # prepends cancel, so the public function returns the opposite order to the single
           # loop it replaced -- with identical SQL, a clean build and green CI. Twice now.
           python3 "${SRC_DIR}/tools/check_list_order.py" "${SRC_DIR}/src"
+          # `#pragma once` in place of an include guard. The two behave identically at the
+          # preprocessor level, but `#pragma once` silently makes a cyclic include graph
+          # compile -- which is how three cycles lived here unnoticed for years.
+          python3 "${SRC_DIR}/tools/pragma_once_to_guards.py" --verify
       - name: Check for includes added inside a conditional block
         # Pull requests only: it compares against the base branch. An include placed inside a
         # platform #ifdef compiles wherever that macro is set and fails everywhere else, which
