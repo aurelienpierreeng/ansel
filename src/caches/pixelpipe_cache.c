@@ -1959,7 +1959,7 @@ void *dt_pixel_cache_entry_get_data(dt_pixel_cache_entry_t *entry)
   return entry ? entry->data : NULL;
 }
 
-size_t dt_pixel_cache_entry_get_size(dt_pixel_cache_entry_t *entry)
+size_t dt_pixel_cache_entry_get_size(const dt_pixel_cache_entry_t *entry)
 {
   return entry ? entry->size : 0;
 }
