@@ -133,6 +133,22 @@ typedef struct dt_dev_pixelpipe_iop_t
   // Same as global hash but for raster masks
   uint64_t global_mask_hash;
 
+  /* Cumulative hash of the PARAMETERS of every enabled module upstream of this one: their
+   * history state, and neither their ROI nor anything of this module's own. It identifies the
+   * transformation chain above the node, which is what a drawn shape's rasterisation depends on
+   * -- every mask is rasterised in sensor coordinates and back-transformed through that chain,
+   * so it moves with an upstream parameter and not with the viewport. A module memoising such a
+   * result (see `iop/retouch.c`) keys it on this plus whatever of its own state the result
+   * depends on, and gets a memo that survives an edit of the parameter being dragged, which
+   * `global_hash` cannot offer.
+   *
+   * Deliberately ROI-free, because it is read from `modify_roi_in()`, which runs BEFORE
+   * `dt_pixelpipe_get_global_hash()` publishes the plan being built: what a consumer reads
+   * there still describes the previous plan's ROI, and would be a lie if the ROI were in it. It
+   * never describes the previous plan's PARAMETERS, since every commit path runs the hash pass
+   * before any planning. DT_PIXELPIPE_CACHE_HASH_INVALID until that pass has run at all. */
+  uint64_t upstream_hash;
+
   int bpc;             // bits per channel, 32 means float
   dt_iop_roi_t buf_in, buf_out; // theoretical full buffer regions of interest, as passed through modify_roi_out
   dt_iop_roi_t roi_in, roi_out; // planned runtime regions of interest after backward ROI propagation

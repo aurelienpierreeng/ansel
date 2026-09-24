@@ -703,6 +703,7 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe)
     piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->upstream_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     _reset_piece_cache_entry(piece);
     piece->cache_output_on_ram = TRUE;
 
