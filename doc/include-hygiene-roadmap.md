@@ -18,7 +18,7 @@ translation units, 0 cycles, 206 layering violations.
 | `tools/include_unused.py` | candidate unneeded `#include`s, static pass over the whole tree |
 | `tools/include_unused.py --verify` | confirms candidates by actually recompiling without them |
 | `tools/include_report.py` | one self-contained HTML page: rankings, blast radius, inversion heat-map, SVG charts, no dependencies |
-| `tools/pragma_once_to_guards.py --verify` | fails if `#pragma once` reappears |
+| `tools/pragma_once_to_guards.py --verify` | fails if `#pragma once` reappears, over every header spelling (`.h`, `.hh`, `.hpp`, `.hxx`); runs in CI |
 | `tools/symbol_coupling.py` | what actually *links* between modules, per object file — see §6 |
 | `tools/header_consumers.py` | per includer of a header: what it takes from it vs. what it only forwards |
 | `tools/decl_def_audit.py` | declarations whose definition sits outside the matching `.c` — see §16.1 |

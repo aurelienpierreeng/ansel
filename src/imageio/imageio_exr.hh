@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_IMAGEIO_IMAGEIO_EXR_HH
+#define DT_IMAGEIO_IMAGEIO_EXR_HH
 
 #include "common/image.h"
 #include "caches/mipmap_cache.h"
@@ -102,6 +103,8 @@ template <> void BlobAttribute::readValueFrom(IStream &is, int size, int version
   Xdr::read<StreamIO>(is, (char *)(_value.data.get()), _value.size);
 }
 }
+
+#endif // DT_IMAGEIO_IMAGEIO_EXR_HH
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

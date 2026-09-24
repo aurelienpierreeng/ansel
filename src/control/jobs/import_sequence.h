@@ -2,7 +2,9 @@
  * This file is part of Ansel, Copyright (C) 2026 Paolo SANTUCCI.
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-#pragma once
+
+#ifndef DT_CONTROL_JOBS_IMPORT_SEQUENCE_H
+#define DT_CONTROL_JOBS_IMPORT_SEQUENCE_H
 
 #include "control/jobs/import_jobs.h"
 
@@ -38,3 +40,5 @@ typedef struct dt_import_destination_t
  * @return Newly allocated destination, or NULL when expansion fails.
  */
 char *dt_import_sequence_destination(dt_import_sequence_t *sequences, const dt_import_destination_t *request);
+
+#endif // DT_CONTROL_JOBS_IMPORT_SEQUENCE_H
