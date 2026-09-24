@@ -564,6 +564,14 @@ endif(VALIDATE_APPDATA_FILE)
 if(TESTBUILD_OPENCL_PROGRAMS)
   set(TESTBUILD_OPENCL_PROGRAMS OFF)
 
+  # LLVM's config resolves zstd through the Findzstd.cmake module it ships,
+  # which declares zstd::libzstd_shared and zstd::libzstd_static only, where
+  # zstd's own export set carries zstd::libzstd as well. A later config-mode
+  # find_package(zstd) - OpenEXR 3.5's find_dependency - then refuses an
+  # export set that is half defined. Resolve zstd through its own config
+  # first, so the whole set exists and LLVM's module adds nothing.
+  find_package(zstd CONFIG QUIET)
+
   find_package(LLVM CONFIG)
 
   if(LLVM_FOUND)
