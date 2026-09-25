@@ -105,12 +105,11 @@ typedef struct dt_masks_form_info_t
 } dt_masks_form_info_t;
 ```
 
-**Why `dt_masks_form_group_t` moves rather than going opaque.** `common/xmp_sidecar.cc:1203-1204`
-casts an XMP binary blob straight to `dt_masks_form_group_t *` and validates
-`entry->mask_nb * sizeof(dt_masks_form_group_t) == entry->mask_points_len`. **The struct's size and
-field order are the on-disk format in every user's sidecars and database.** It can never be made
-opaque and its layout can never change — which is exactly why the value-typed `dt_masks_member_t`
-must be what everyone else consumes.
+**Why `dt_masks_form_group_t` moves rather than going opaque.** `group.c` declares
+`point_struct_size = sizeof(dt_masks_form_group_t)`, so the struct's size and field order remain the
+on-disk group-row format in sidecars and the database. The remaining member dereferences in
+`retouch.c`, `spots.c`, `shape_manager.c`, and `blend_gui.c` also require its concrete layout. That is
+why the value-typed `dt_masks_member_t` must be what everyone else consumes.
 
 ## The API
 
