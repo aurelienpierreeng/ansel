@@ -35,32 +35,74 @@ on:
   workflow_dispatch:
 
 jobs:
-  MacOS:
+  # The cron fires whether master moved or not, and a macOS nightly is expensive: the Intel
+  # job builds much of Homebrew from source and runs up to GitHub's 6-hour ceiling. Before this
+  # job, every night on an unchanged head rebuilt both DMGs and `tip' then REPLACED the ones
+  # already in the release with identical packages -- f484018567 was built and republished on
+  # 2026-09-18, 19, 20 and 21. The release is asked first, and only the architectures it does not
+  # hold for this commit are built. tools/nightly_published.sh matches the commit hash in the
+  # asset names and explains why it does not rebuild the version string.
+  #
+  # Per architecture, not all or nothing: an Intel job killed at the ceiling leaves the arm64 DMG
+  # published, and the next night must build Intel alone. A manual dispatch builds everything,
+  # since rebuilding on purpose is what someone dispatching wants.
+  #
+  # The matrix therefore lives here, as the list this job filters. Each entry is one runner;
+  # `package' is the release asset it produces, `@VERSION@' standing for the version string.
+  published:
     if: github.repository == 'aurelienpierreeng/ansel' || github.event_name == 'workflow_dispatch'
+    name: Packages this commit still lacks
+    runs-on: ubuntu-latest
+    outputs:
+      builds: ${{ steps.select.outputs.builds }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 1
+          submodules: false
+      - name: Select the architectures to build
+        id: select
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          # arm64: AppleClang 17.
+          # intel64: TESTBUILD_OPENCL_PROGRAMS needs llvm, which install-deps-macos.sh skips
+          # there: Homebrew has no Intel bottle for it any more and it is a ~4 h source build,
+          # for a check the arm64 CI performs on every commit. Stated rather than left to
+          # CMake's absent-LLVM fallback, which reaches the same result through warnings.
+          all='[
+            { "os": "macos-15", "xcode": "26.3", "deployment": "15.0", "tag": "arm64",
+              "package": "Ansel-@VERSION@-arm64.dmg",
+              "eco": "-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DDT_APPLE_X86_TARGET_CLONES=0" },
+            { "os": "macos-15-intel", "xcode": "26.3", "deployment": "15.0", "tag": "intel64",
+              "package": "Ansel-@VERSION@-i386.dmg",
+              "eco": "-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DDT_APPLE_X86_TARGET_CLONES=1 -DTESTBUILD_OPENCL_PROGRAMS=OFF" }
+          ]'
+          selected='[]'
+          while IFS= read -r build; do
+            tag="$(jq -r .tag <<< "${build}")"
+            if [ "${EVENT}" != "workflow_dispatch" ] \
+               && tools/nightly_published.sh "$(jq -r .package <<< "${build}")"; then
+              echo "${tag}: already published for this commit, not rebuilt"
+            else
+              echo "${tag}: to build"
+              selected="$(jq -c --argjson b "${build}" '. + [$b]' <<< "${selected}")"
+            fi
+          done < <(jq -c '.[]' <<< "${all}")
+          echo "builds=${selected}" >> "$GITHUB_OUTPUT"
+
+  MacOS:
+    needs: published
+    # An empty matrix is an error, not a no-op, so a night with nothing left to build skips the job.
+    if: ${{ needs.published.outputs.builds != '[]' }}
     name: Nightly Ansel Mac OS build
     runs-on: ${{ matrix.build.os }}
     strategy:
       fail-fast: false
       matrix:
-        build:
-          - { 
-            os: macos-15, 
-            xcode: 26.3, 
-            deployment: 15.0, 
-            tag: "arm64",
-            eco: "-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DDT_APPLE_X86_TARGET_CLONES=0",
-            } # AppleClang 17, arm64
-          - { 
-            os: macos-15-intel, 
-            xcode: 26.3, 
-            deployment: 15.0, 
-            tag: "intel64",
-            # TESTBUILD_OPENCL_PROGRAMS needs llvm, which install-deps-macos.sh skips here:
-            # Homebrew has no Intel bottle for it any more and it is a ~4 h source build, for
-            # a check the arm64 CI performs on every commit. Stated rather than left to
-            # CMake's absent-LLVM fallback, which reaches the same result through warnings.
-            eco: "-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DDT_APPLE_X86_TARGET_CLONES=1 -DTESTBUILD_OPENCL_PROGRAMS=OFF",
-             } # AppleClang 17, intel64
+        build: ${{ fromJSON(needs.published.outputs.builds) }}
         btype:
           - RelWithDebInfo
         compiler:
@@ -234,7 +276,7 @@ jobs:
 
   upload_to_release:
     runs-on: ubuntu-latest
-    needs: MacOS
+    needs: [published, MacOS]
     # Publishing must not be all-or-nothing. This job carried `needs: MacOS' with no `if:',
     # which defaults to success() over the WHOLE matrix -- and fail-fast is off, so the two
     # architectures run independently and either one dying took the other's package with it.
@@ -247,7 +289,11 @@ jobs:
     # reported as cancelled, which is precisely the case this has to publish through. The cost
     # is that a run someone cancels by hand also publishes whatever was already built, which
     # for a nightly is the lesser harm.
-    if: ${{ always() }}
+    #
+    # Not when nothing was to be built, though: always() alone would run this on a night whose
+    # packages were all already published, find no DMG and fail. Nor on a fork, where the
+    # `published' job is skipped and its output is empty rather than '[]'.
+    if: ${{ always() && needs.published.result == 'success' && needs.published.outputs.builds != '[]' }}
     env:
       REPO: "https://github.com/aurelienpierreeng/ansel"
       ROOM: "!SgRYbzspwqwwUgSQHC:matrix.org"
