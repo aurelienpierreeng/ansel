@@ -2974,7 +2974,8 @@ static void start_profiling_callback(GtkWidget *togglebutton, dt_iop_module_t *s
   dt_control_queue_redraw_center();
 }
 
-static gboolean run_profile_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static gboolean run_profile_callback(GtkWidget *widget __attribute__((unused)),
+                                     GdkEventButton *event __attribute__((unused)), gpointer user_data)
 {
   if(dt_gui_widgets_suppressed()) return FALSE;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
@@ -2988,7 +2989,8 @@ static gboolean run_profile_callback(GtkWidget *widget, GdkEventButton *event, g
   return TRUE;
 }
 
-static gboolean run_validation_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static gboolean run_validation_callback(GtkWidget *widget __attribute__((unused)),
+                                        GdkEventButton *event __attribute__((unused)), gpointer user_data)
 {
   if(dt_gui_widgets_suppressed()) return FALSE;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
@@ -3002,7 +3004,8 @@ static gboolean run_validation_callback(GtkWidget *widget, GdkEventButton *event
   return TRUE;
 }
 
-static gboolean commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static gboolean commit_profile_callback(GtkWidget *widget __attribute__((unused)),
+                                        GdkEventButton *event __attribute__((unused)), gpointer user_data)
 {
   if(dt_gui_widgets_suppressed()) return FALSE;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
