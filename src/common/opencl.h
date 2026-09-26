@@ -204,6 +204,10 @@ typedef struct dt_opencl_device_t
   int totallost;
   int maxeventslot;
   int nvidia_sm_20;
+  /* CL_DEVICE_DOUBLE_FP_CONFIG != 0: the device really has fp64. Passed to the kernels as
+   * -DDT_DEVICE_FP64=1 (data/kernels/hl_real.h) -- never inferred from the cl_khr_fp64 macro,
+   * which Apple's runtime defines without the extension. */
+  int fp64;
   const char *vendor;
   /* Numeric CL_DEVICE_VENDOR_ID, kept alongside the name for reporting. It is NOT what a
    * crash is attributed to -- see `runtime_id' below. */
@@ -613,6 +617,8 @@ dt_opencl_fit_reason_t dt_opencl_image_fits_device_reason(const int devid, const
                                 const size_t overhead, size_t *needed, size_t *limit);
 /** get available memory for the device */
 cl_ulong dt_opencl_get_device_available(const int devid);
+/** TRUE when the device genuinely supports double precision (CL_DEVICE_DOUBLE_FP_CONFIG != 0). */
+gboolean dt_opencl_device_has_fp64(const int devid);
 
 /** check tuning settings and available memory for the device */
 void dt_opencl_check_tuning(const int devid);

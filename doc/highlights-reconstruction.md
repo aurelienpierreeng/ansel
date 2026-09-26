@@ -201,6 +201,29 @@ be selected, select it host-side from `CL_DEVICE_DOUBLE_FP_CONFIG` and pass a de
 `-DNVIDIA_SM_20=1` is passed (`opencl.c`, into `options` AND `options_md5`) — never from the
 macro. `ansel-cli` takes `-d` through `--core` (`ansel-cli in out --core -d opencl -d perf`).
 
+### The eight solver kernels compute in a real type the host picks per device
+
+*Found against `e83ba5865d`, 2026-09-26; the per-operation figures were measured on an Apple M1.*
+
+That is now how the eight solver kernels work. `data/kernels/hl_real.h` defines `hl_real_t`
+and `hl_add/sub/mul/div/sqrt`: native `double` when the host passed `-DDT_DEVICE_FP64=1`
+(`cl->dev[dev].fp64`, from `CL_DEVICE_DOUBLE_FP_CONFIG != 0`, `dt_opencl_device_has_fp64()`),
+a `float2` (hi, lo) double-float otherwise — Knuth two-sum, fma two-product, Newton division
+and square root, measured on the M1 at 5e-15..1.2e-14 relative per operation, i.e. ~46 bits.
+Both are 8 bytes (`DT_HL_REAL_BYTES`), so no device buffer changes size; a host `double`
+vector crosses through `_sp_cl_upload_real()` / `_sp_cl_read_real()`
+(`math/sparse_cholesky_cl.h`), which split and rejoin only where the device lacks fp64. A
+device with fp64 therefore runs the exact code it always ran. The precision budget that makes
+df32 acceptable is thin: the biharmonic systems are conditioned like h⁻⁴, about 3e8 at
+`DT_HL_SPARSE_MAX` (16384 unknowns), so ~45 bits are needed and df32 has ~46-47 — raising that
+cap without redoing the arithmetic silently loses digits on fp64-less devices only.
+`HL_SPCL_TEST=1` is the parity check (GPU solver vs the CPU `double` twin on a 13-point
+biharmonic disc); it now also runs from the CPU `process_harmonic()` when a device exists,
+because on an 8 GB Apple M1 the module's 20× `factor_cl` never fits the 512 MiB device budget
+and `process_harmonic_cl()` is never entered — which, not fp64, is what keeps this module on
+the CPU there. Do not write a new `.cl` reduction in `double` for accuracy: `compensated.h`
+already covers that case in fp32.
+
 ## The article bench (guided-laplacian-highlights-research) — traps and extensions
 
 *Found `e4195dec51`, 2026-08-05.*

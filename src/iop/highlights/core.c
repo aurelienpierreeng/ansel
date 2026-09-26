@@ -1106,7 +1106,7 @@ cl_int _joint_core_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_
   const float react
       = solid_color * solid_color * 4.f; // lambda_solid: the screened-Poisson reaction (flat-colour pull)
 
-  if(global_data->kernel_hl_pde_rhs < 0 || global_data->kernel_hl_pde_scatter < 0) return cl_err; // no fp64 device
+  if(global_data->kernel_hl_pde_rhs < 0 || global_data->kernel_hl_pde_scatter < 0) return cl_err; // kernel unavailable
 
   cl_mem luminance = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem hole = dt_opencl_alloc_device_buffer(devid, region_pixels);
@@ -1355,7 +1355,7 @@ cl_int _joint_core_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_
     factor = _sp_chol_factor_cl(devid, _hl_sp_chol_kernels(gd_void), n_unknowns, matrix_col_ptr, matrix_row_index,
                                 matrix_values);
     perm_grid_dev = factor ? _sp_cl_upload(devid, perm_grid, sizeof(int) * n_unknowns) : NULL;
-    rhs_dev = factor ? dt_opencl_alloc_device_buffer(devid, sizeof(double) * n_unknowns) : NULL;
+    rhs_dev = factor ? dt_opencl_alloc_device_buffer(devid, DT_HL_REAL_BYTES * n_unknowns) : NULL;
     if(!factor)
       use_cg = 1;
     else if(!perm_grid_dev || !rhs_dev)
@@ -1419,9 +1419,7 @@ cl_int _joint_core_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_
       int finite = (solution_check != NULL);
       if(solution_check)
       {
-        finite = (dt_opencl_read_buffer_from_device(devid, solution_check, rhs_dev, 0, sizeof(double) * n_unknowns,
-                                                    CL_TRUE)
-                  == CL_SUCCESS);
+        finite = _sp_cl_read_real(devid, solution_check, rhs_dev, n_unknowns);
         for(int check_index = 0; finite && check_index < n_unknowns; check_index++)
           if(!isfinite(solution_check[check_index])) finite = 0;
         dt_pixelpipe_cache_free_align(solution_check);
