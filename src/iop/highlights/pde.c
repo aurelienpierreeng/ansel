@@ -482,14 +482,14 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
   size_t work_size_1d[3] = { (size_t)n_groups * local_size, 1, 1 };
   size_t local_size_1d[3] = { local_size, 1, 1 };
 
-  if(global_data->kernel_hl_cg_r1 < 0) return cl_err; // no fp64 device
+  if(global_data->kernel_hl_cg_r1 < 0) return cl_err; // kernel failed to build on this device: CPU twin
 
   cl_mem temp1 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem temp2 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem residual = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem search_dir = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem matvec = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
-  cl_mem partials = dt_opencl_alloc_device_buffer(devid, sizeof(double) * n_groups);
+  cl_mem partials = dt_opencl_alloc_device_buffer(devid, sizeof(cl_float2) * n_groups); // compensated (value, error) pairs
   // CG scalar state (rr, rr_new, rr_init, alpha, beta, active) -- device-resident for the
   // whole solve: the iteration reads and writes it without ever touching the host
   cl_mem cg_state = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 6);
@@ -544,7 +544,7 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
     dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(cl_mem), &partials);
     dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), &unknown_count);
     dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float), &dscalar);
-    dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(double) * local_size, NULL);
+    dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(cl_float2) * local_size, NULL);
     cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, work_size_1d, local_size_1d);
     if(cl_err != CL_SUCCESS) goto out;
     const int ffold = global_data->kernel_hl_cg_fold;
@@ -571,7 +571,7 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
       dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), &partials);
       dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), &unknown_count);
       dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &dscalar);
-      dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(double) * local_size, NULL);
+      dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(cl_float2) * local_size, NULL);
       cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, work_size_1d, local_size_1d);
       if(cl_err != CL_SUCCESS) goto out;
       const int astep = global_data->kernel_hl_cg_alpha_step;
@@ -593,7 +593,7 @@ cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem
       dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(cl_mem), &partials);
       dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), &unknown_count);
       dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(cl_mem), &cg_state);
-      dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(double) * local_size, NULL);
+      dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(cl_float2) * local_size, NULL);
       cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, work_size_1d, local_size_1d);
       if(cl_err != CL_SUCCESS) goto out;
       const int ffold = global_data->kernel_hl_cg_fold;

@@ -23,29 +23,20 @@
 // the fp64 extension, which this file must not require on every device).
 
 #include "common.h"
+#include "compensated.h"
 
-// Double precision: where it is available, and what happens where it is not.
+// Double precision: none in this file. The four stage-2 reduction finalizers below used to
+// accumulate their partials in double, compiled only where cl_khr_fp64 exists -- but every one
+// of them narrows its result to float on the way out, so the double only ever bought the
+// accuracy of the SUMMATION. They now sum in compensated single precision (compensated.h:
+// value + running error, a couple of ulp whatever the number of terms) and are unguarded:
+// available on every device, Apple's fp64-less OpenCL included. The host twins still sum in
+// double; the two agree to a float ulp, not bit for bit.
 //
-// Four stage-2 reduction finalizers below accumulate their partials in double, to match the
-// host arithmetic they replaced bit for bit. cl_khr_fp64 is an OPTIONAL OpenCL extension and
-// Apple's implementation does not have it, so naming `double` unguarded does not merely make
-// those four kernels unavailable -- it fails the build of THIS ENTIRE PROGRAM, taking the
-// sixty-odd single-precision kernels in it down as well. That is what the file header above
-// means by "must not require the fp64 extension on every device", and it is what silently
-// happened when these finalizers arrived.
-//
-// So they are compiled only where the extension exists. Where it does not, dt_opencl_create_kernel()
-// returns -1 for each of them and the host stages that use them bail out to their CPU twins --
-// the same arrangement highlights_sparse.cl and the PDE/aniso solvers already use. See
-// _region_guided_filter_cl(), _selfdome_stage_cl(), _chromaticity_gradient_stage_cl() and
-// _aniso_pyramid_cl().
-#if defined(cl_khr_fp64)
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#define HL_HARMONIC_FP64 1
-#elif defined(cl_amd_fp64)
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#define HL_HARMONIC_FP64 1
-#endif
+// Do not guard on cl_khr_fp64 again. Measured on Apple M1: that runtime DEFINES the macro
+// without advertising the extension, so a guarded block compiles and each kernel touching a
+// double then fails at clCreateKernel (-48), per kernel, not per program. The fp64 kernels
+// that remain are the sparse Cholesky of highlights_sparse.cl.
 
 // ===== harmonic-fill kernels (highlights harmonic transposition) ============================
 // "Harmonic fill" = repeatedly replace every hole pixel by the average of its four neighbours
@@ -1145,7 +1136,6 @@ hl_region_benefit(global const float *estimate, global const float *valid, globa
     for(int k = 0; k < 6; k++) partial[get_group_id(0) * 6 + k] = scratch[k];
 }
 
-#ifdef HL_HARMONIC_FP64
 // Stage 2: one thread folds the partials into region_worth. Mirrors the CPU _hl_region_worth
 // (highlights/common.h) -- the LO/HI thresholds arrive as arguments so the two cannot drift.
 kernel void
@@ -1153,19 +1143,20 @@ hl_region_worth_finalize(global const float *partial, global float *worth, const
                          const float lo, const float hi)
 {
   if(get_global_id(0) != 0) return;
-  double sp0 = 0.0, sp1 = 0.0, sp2 = 0.0, sj0 = 0.0, sj1 = 0.0, sj2 = 0.0;
+  float2 sp0 = csum_zero(), sp1 = csum_zero(), sp2 = csum_zero();
+  float2 sj0 = csum_zero(), sj1 = csum_zero(), sj2 = csum_zero();
   for(int g = 0; g < n_groups; g++)
   {
-    sp0 += partial[g * 6 + 0]; sp1 += partial[g * 6 + 1]; sp2 += partial[g * 6 + 2];
-    sj0 += partial[g * 6 + 3]; sj1 += partial[g * 6 + 4]; sj2 += partial[g * 6 + 5];
+    sp0 = csum_add(sp0, partial[g * 6 + 0]); sp1 = csum_add(sp1, partial[g * 6 + 1]); sp2 = csum_add(sp2, partial[g * 6 + 2]);
+    sj0 = csum_add(sj0, partial[g * 6 + 3]); sj1 = csum_add(sj1, partial[g * 6 + 4]); sj2 = csum_add(sj2, partial[g * 6 + 5]);
   }
-  const float tp = fmax((float)(sp0 + sp1 + sp2), 1e-9f), tj = fmax((float)(sj0 + sj1 + sj2), 1e-9f);
-  const float benefit = fabs((float)sj0 / tj - (float)sp0 / tp) + fabs((float)sj1 / tj - (float)sp1 / tp)
-                        + fabs((float)sj2 / tj - (float)sp2 / tp);
+  const float p0 = csum_value(sp0), p1 = csum_value(sp1), p2 = csum_value(sp2);
+  const float j0 = csum_value(sj0), j1 = csum_value(sj1), j2 = csum_value(sj2);
+  const float tp = fmax(p0 + p1 + p2, 1e-9f), tj = fmax(j0 + j1 + j2, 1e-9f);
+  const float benefit = fabs(j0 / tj - p0 / tp) + fabs(j1 / tj - p1 / tp) + fabs(j2 / tj - p2 / tp);
   const float t = clamp((benefit - lo) / (hi - lo), 0.f, 1.f);
   worth[0] = t * t * (3.f - 2.f * t);
 }
-#endif // HL_HARMONIC_FP64
 
 static float hl_floor_worth(const float chroma_gain, const float joint_tau)
 {
@@ -1942,24 +1933,24 @@ hl_vote_reduce(read_only image2d_t gate_src, read_only image2d_t gate_msk, globa
   }
 }
 
-#ifdef HL_HARMONIC_FP64
 // Stage-2 for the chromaticity mean: fold hl_cmean_reduce's float4 partials into the region's
 // mean chromaticity, published as {cmean.r, cmean.g, cmean.b, count} in device memory. Mirrors the
-// host arithmetic it replaces exactly (sum/count in double, zero when the count is zero).
+// host arithmetic it replaces (sum/count, zero when the count is zero).
 __kernel void
 hl_cmean_finalize(global const float *partial, global float *cmean, const int n_groups)
 {
   if(get_global_id(0) != 0) return;
-  double a0 = 0.0, a1 = 0.0, a2 = 0.0, a3 = 0.0;
+  float2 a0 = csum_zero(), a1 = csum_zero(), a2 = csum_zero(), a3 = csum_zero();
   for(int g = 0; g < n_groups; g++)
   {
-    a0 += partial[g * 4 + 0]; a1 += partial[g * 4 + 1];
-    a2 += partial[g * 4 + 2]; a3 += partial[g * 4 + 3];
+    a0 = csum_add(a0, partial[g * 4 + 0]); a1 = csum_add(a1, partial[g * 4 + 1]);
+    a2 = csum_add(a2, partial[g * 4 + 2]); a3 = csum_add(a3, partial[g * 4 + 3]);
   }
-  cmean[3] = (float)a3;
-  if(a3 > 0.0)
+  const float count = csum_value(a3);
+  cmean[3] = count;
+  if(count > 0.f)
   {
-    cmean[0] = (float)(a0 / a3); cmean[1] = (float)(a1 / a3); cmean[2] = (float)(a2 / a3);
+    cmean[0] = csum_value(a0) / count; cmean[1] = csum_value(a1) / count; cmean[2] = csum_value(a2) / count;
   }
   else
   {
@@ -1976,26 +1967,29 @@ hl_ring_vote_finalize(global const float *partial, global const float *cmean, gl
                       const int n_groups, const float floor_gate)
 {
   if(get_global_id(0) != 0) return;
-  double ss[3] = { 0.0, 0.0, 0.0 }, sq[3] = { 0.0, 0.0, 0.0 }, cnt = 0.0;
+  float2 ss[3] = { csum_zero(), csum_zero(), csum_zero() };
+  float2 sq[3] = { csum_zero(), csum_zero(), csum_zero() };
+  float2 cnt = csum_zero();
   for(int g = 0; g < n_groups; g++)
   {
     for(int c = 0; c < 3; c++)
     {
-      ss[c] += partial[g * 8 + c];
-      sq[c] += partial[g * 8 + 4 + c];
+      ss[c] = csum_add(ss[c], partial[g * 8 + c]);
+      sq[c] = csum_add(sq[c], partial[g * 8 + 4 + c]);
     }
-    cnt += partial[g * 8 + 3];
+    cnt = csum_add(cnt, partial[g * 8 + 3]);
   }
   float ring_vote = 0.f;
   const float csum = fmax(cmean[0] + cmean[1] + cmean[2], 1e-9f);
-  if(cnt > 0.0)
+  const float count = csum_value(cnt);
+  if(count > 0.f)
   {
     float bias = 0.f, dispersion = 0.f;
     for(int c = 0; c < 3; c++)
     {
-      const double mean = ss[c] / cnt;
-      bias += fabs((float)mean - cmean[c] / csum);
-      dispersion += sqrt(fmax((float)(sq[c] / cnt - mean * mean), 0.f));
+      const float mean = csum_value(ss[c]) / count;
+      bias += fabs(mean - cmean[c] / csum);
+      dispersion += sqrt(fmax(csum_value(sq[c]) / count - mean * mean, 0.f));
     }
     const float arg = (bias / fmax(dispersion, 0.02f)) / 5.f;
     ring_vote = exp(-arg * arg);
@@ -2012,19 +2006,19 @@ hl_reduce_finalize(global const float *partial, global float *result, const int 
                    const int stride, const int mode, const float scale)
 {
   if(get_global_id(0) != 0) return;
-  double a = 0.0, b = 0.0;
+  float2 a = csum_zero(), b = csum_zero();
   for(int g = 0; g < n_groups; g++)
   {
-    a += (double)partial[g * stride + 0];
-    if(stride > 1) b += (double)partial[g * stride + 1];
+    a = csum_add(a, partial[g * stride + 0]);
+    if(stride > 1) b = csum_add(b, partial[g * stride + 1]);
   }
+  const float va = csum_value(a), vb = csum_value(b);
   // mode 0: plain sum of lane 0. mode 1: scale x mean of lane 0 over lane 1, 0 when the count is 0.
   // mode 2: scale x sum of lane 0, floored at 1e-9 (the gradient-mean normaliser: scale = 1/N).
-  result[0] = (mode == 0)   ? (float)a
-              : (mode == 2) ? fmax((float)(scale * a), 1e-9f)
-                            : ((b > 0.0) ? (float)(scale * a / b) : 0.f);
+  result[0] = (mode == 0)   ? va
+              : (mode == 2) ? fmax(scale * va, 1e-9f)
+                            : ((vb > 0.f) ? scale * va / vb : 0.f);
 }
-#endif // HL_HARMONIC_FP64
 
 // Reduction: per-workgroup partial sums of {luminance, count} over any-clip pixels; the stage-2
 // finalizer below turns them into the plateau luminance that gates the anchors, on the device.

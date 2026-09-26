@@ -51,7 +51,7 @@
 /* Size of the clincludes[] table in dt_opencl_priority_parse()'s caller, NULL terminator
  * included. dt_opencl_md5sum() walks exactly this many entries, so the table must have
  * room for its terminator: adding an include without raising this reads past the end. */
-#define DT_OPENCL_MAX_INCLUDES 8
+#define DT_OPENCL_MAX_INCLUDES 12 // slots for the clincludes[] list in dt_opencl_init(), NULL included
 #define DT_OPENCL_VENDOR_AMD 4098
 #define DT_OPENCL_VENDOR_NVIDIA 4318
 #define DT_OPENCL_VENDOR_INTEL 0x8086u
