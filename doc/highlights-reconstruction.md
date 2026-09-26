@@ -224,6 +224,30 @@ and `process_harmonic_cl()` is never entered — which, not fp64, is what keeps 
 the CPU there. Do not write a new `.cl` reduction in `double` for accuracy: `compensated.h`
 already covers that case in fp32.
 
+### On Apple the device budget is no longer `max_mem_alloc / 2` — the 512 MiB above is superseded
+
+*Measured 2026-09-26 to 2026-10-02 on six Apple Silicon Macs (8 to 36 GB), on the branch that
+carries this change (base `e83ba5865d`).*
+
+The paragraph above says the module "never fits the 512 MiB device budget" on an 8 GB M1 and so
+stays on the CPU. That described the tree before `dt_opencl_get_device_available()`
+(`common/opencl.c`) stopped applying its `max_mem_alloc / 2` clamp to the Apple runtime; it is
+kept as written because it is what was true when the solvers were ported.
+
+Apple's OpenCL reports `CL_DEVICE_MAX_MEM_ALLOC_SIZE` as 3/16 of its global memory: 1024 of
+5461 MB (8 GB M1), 2048 of 10923 (16 GB), 2557 of 13640 (18 GB), 3410 of 18186 (24 GB), 5391 of
+28754 (36 GB). The clamp therefore made the budget about a sixteenth of the RAM, 512 MiB on the
+8 GB machine only. **An earlier version of the code comment and of the commit message said "a
+fixed 1 GiB, hence 512 MiB on every Mac whatever its RAM". That was wrong**: it generalised from
+the one machine measured at the time, and the first log from a 24 GB Mac (`vRAM has 1704 MiB
+left`, on a build without the change) disproved it.
+
+With the clamp skipped for Apple the budget is the declared memory less the headroom, bounded by
+the RAM actually free. On the 8 GB M1 it read 1.2 to 2.1 GiB, and the harmonic reconstruction of
+a 24 Mpx raw (1734 MiB asked) ran on the GPU in most exports and on the CPU when free RAM was
+short. On the 16 to 36 GB machines it ran on the GPU in every export. The self-tests are still
+called from the CPU entry point as well, for the runs that do not reach `process_harmonic_cl()`.
+
 ## The article bench (guided-laplacian-highlights-research) — traps and extensions
 
 *Found `e4195dec51`, 2026-08-05.*
