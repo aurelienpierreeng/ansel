@@ -2974,9 +2974,10 @@ static void start_profiling_callback(GtkWidget *togglebutton, dt_iop_module_t *s
   dt_control_queue_redraw_center();
 }
 
-static void run_profile_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static gboolean run_profile_callback(GtkWidget *widget __attribute__((unused)),
+                                     GdkEventButton *event __attribute__((unused)), gpointer user_data)
 {
-  if(dt_gui_widgets_suppressed()) return;
+  if(dt_gui_widgets_suppressed()) return FALSE;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
 
@@ -2985,11 +2986,13 @@ static void run_profile_callback(GtkWidget *widget, GdkEventButton *event, gpoin
   dt_iop_set_cache_bypass(self, TRUE);
   dt_iop_gui_leave_critical_section(self);
   dt_dev_pixelpipe_resync_history_preview(self->dev);
+  return TRUE;
 }
 
-static void run_validation_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static gboolean run_validation_callback(GtkWidget *widget __attribute__((unused)),
+                                        GdkEventButton *event __attribute__((unused)), gpointer user_data)
 {
-  if(dt_gui_widgets_suppressed()) return;
+  if(dt_gui_widgets_suppressed()) return FALSE;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
 
@@ -2998,16 +3001,18 @@ static void run_validation_callback(GtkWidget *widget, GdkEventButton *event, gp
   dt_iop_set_cache_bypass(self, TRUE);
   dt_iop_gui_leave_critical_section(self);
   dt_dev_pixelpipe_resync_history_preview(self->dev);
+  return TRUE;
 }
 
-static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static gboolean commit_profile_callback(GtkWidget *widget __attribute__((unused)),
+                                        GdkEventButton *event __attribute__((unused)), gpointer user_data)
 {
-  if(dt_gui_widgets_suppressed()) return;
+  if(dt_gui_widgets_suppressed()) return FALSE;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
 
-  if(!g->profile_ready) return;
+  if(!g->profile_ready) return FALSE;
 
   dt_iop_gui_enter_critical_section(self);
 
@@ -3058,6 +3063,7 @@ static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gp
 
   dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=commit_profile\n");
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+  return TRUE;
 }
 
 static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_data)

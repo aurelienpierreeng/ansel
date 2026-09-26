@@ -63,15 +63,16 @@ static void _coeffs_button_changed(GtkDarktableToggleButton *widget, gpointer us
   _collapsible_set_states(cs, active);
 }
 
-static void _coeffs_expander_click(GtkWidget *widget, GdkEventButton *e, gpointer user_data)
+static gboolean _coeffs_expander_click(GtkWidget *widget, GdkEventButton *e, gpointer user_data)
 {
-  if(e->type == GDK_2BUTTON_PRESS || e->type == GDK_3BUTTON_PRESS) return;
+  if(e->type == GDK_2BUTTON_PRESS || e->type == GDK_3BUTTON_PRESS) return FALSE;
 
   dt_gui_collapsible_section_t *cs = (dt_gui_collapsible_section_t *)user_data;
 
   const gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cs->toggle));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cs->toggle), !active);
   _collapsible_set_states(cs, !active);
+  return TRUE;
 }
 
 void dt_gui_update_collapsible_section(dt_gui_collapsible_section_t *cs)

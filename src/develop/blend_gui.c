@@ -2958,11 +2958,11 @@ static void _blendif_append_colorspace_item(GtkMenu *menu, dt_iop_module_t *modu
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 }
 
-static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
+static gboolean _blendif_options_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
 {
-  if(event->button != 1 && event->button != 2) return;
+  if(event->button != 1 && event->button != 2) return FALSE;
   const dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
-  if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
+  if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return FALSE;
 
   GtkWidget *mi;
   GtkMenu *menu = dt_gui_get_global()->presets_popup_menu;
@@ -3005,6 +3005,7 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
   dt_gui_menu_popup(dt_gui_get_global()->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 
   dtgtk_button_set_active(DTGTK_BUTTON(button), FALSE);
+  return TRUE;
 }
 
 // activate channel/mask view
