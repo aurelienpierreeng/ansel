@@ -463,7 +463,7 @@ static gboolean _scale_mdlclick(GtkEntry *spin, GdkEventButton *event, dt_lib_ex
   return FALSE;
 }
 
-static gboolean _widht_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user_data)
+static gboolean _widht_mdlclick(GtkEntry *spin, const GdkEventButton *event, gpointer user_data)
 {
   if(event->button == 2)
   {
@@ -476,11 +476,12 @@ static gboolean _widht_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer 
   {
     _width_changed(GTK_EDITABLE(spin), user_data);
   }
-  // the entry still takes the click: it is how it gets the focus and the cursor.
-  return FALSE;
+  // a middle click is taken, or GTK would paste the primary selection right after the reset; any
+  // other click is the entry's own: it is how it gets the focus and the cursor.
+  return event->button == 2;
 }
 
-static gboolean _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user_data)
+static gboolean _height_mdlclick(GtkEntry *spin, const GdkEventButton *event, gpointer user_data)
 {
   if(event->button == 2)
   {
@@ -493,8 +494,9 @@ static gboolean _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer
   {
     _height_changed(GTK_EDITABLE(spin), user_data);
   }
-  // the entry still takes the click: it is how it gets the focus and the cursor.
-  return FALSE;
+  // a middle click is taken, or GTK would paste the primary selection right after the reset; any
+  // other click is the entry's own: it is how it gets the focus and the cursor.
+  return event->button == 2;
 }
 
 static void _size_in_px_update(dt_lib_export_t *d)
