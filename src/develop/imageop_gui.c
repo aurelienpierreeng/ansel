@@ -1210,11 +1210,11 @@ void dt_iop_gui_update(dt_iop_module_t *module)
   dt_gui_freeze_end();
 }
 
-static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
+static gboolean _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
 {
   // never use the callback if module is always disabled
   const gboolean disabled = !module->default_enabled && module->hide_enable_button;
-  if(disabled) return;
+  if(disabled) return FALSE;
 
   //Ctrl is used to apply any auto-presets to the current module
   //If Ctrl was not pressed, or no auto-presets were applied, reset the module parameters
@@ -1251,6 +1251,7 @@ static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop
 
     dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   }
+  return TRUE;
 }
 
 static void _presets_popup_callback(GtkButton *button, dt_iop_module_t *module)
