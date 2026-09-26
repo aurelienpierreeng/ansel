@@ -324,7 +324,8 @@ static void _filename_lock_init(void)
 }
 
 int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, const int32_t imgid,
-          dt_imageio_module_format_t *format, dt_imageio_module_data_t *fdata, const int num, const int total,
+          dt_imageio_module_format_t *format, dt_imageio_module_data_t *fdata, const double scale_factor,
+          const int num, const int total,
           const gboolean high_quality, const gboolean export_masks,
           dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename, dt_iop_color_intent_t icc_intent,
           dt_export_metadata_t *metadata)
@@ -448,7 +449,7 @@ try_again:
   if(fail) return 1;
 
   /* export image to file */
-  if(dt_imageio_export(imgid, filename, format, fdata, TRUE, TRUE, export_masks, icc_type,
+  if(dt_imageio_export(imgid, filename, format, fdata, scale_factor, TRUE, TRUE, export_masks, icc_type,
                        icc_filename, icc_intent, self, sdata, num, total, metadata) != 0)
   {
     fprintf(stderr, "[imageio_storage_disk] could not export to file: `%s'!\n", filename);

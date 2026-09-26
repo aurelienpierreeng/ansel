@@ -72,9 +72,11 @@ OPTIONAL(int, recommended_dimension, struct dt_imageio_module_storage_t *self, s
 OPTIONAL(int, initialize_store, struct dt_imageio_module_storage_t *self, struct dt_imageio_module_data_t *data,
                                 struct dt_imageio_module_format_t **format, struct dt_imageio_module_data_t **fdata,
                                 GList **images, const gboolean high_quality);
-/* this actually does the work */
+/* this actually does the work. scale_factor is dt_imageio_export()'s: > 0 reduces by that factor,
+   otherwise the image fits in fdata->max_width x max_height. */
 REQUIRED(int, store, struct dt_imageio_module_storage_t *self, struct dt_imageio_module_data_t *self_data, const int32_t imgid,
-                     struct dt_imageio_module_format_t *format, struct dt_imageio_module_data_t *fdata, const int num,
+                     struct dt_imageio_module_format_t *format, struct dt_imageio_module_data_t *fdata,
+                     const double scale_factor, const int num,
                      const int total, const gboolean high_quality, const gboolean export_masks,
                      const enum dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
                      enum dt_iop_color_intent_t icc_intent, struct dt_export_metadata_t *metadata);

@@ -834,7 +834,8 @@ int main(int argc, char *arg[])
     dt_export_metadata_t metadata;
     metadata.flags = dt_lib_export_metadata_default_flags();
     metadata.list = NULL;
-    if(storage->store(storage, sdata, id, format, fdata, num, total, TRUE, export_masks,
+    // the size is the command line's: no scale factor, whatever the GUI's export module is set to
+    if(storage->store(storage, sdata, id, format, fdata, 0.0, num, total, TRUE, export_masks,
                       icc_type, icc_filename, icc_intent, &metadata) != 0)
       res = 1;
   }

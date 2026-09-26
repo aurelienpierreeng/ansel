@@ -350,45 +350,27 @@ void dt_imageio_remove_storage(dt_imageio_module_storage_t *storage)
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGEIO_STORAGE_CHANGE);
 }
 
-gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum)
+void dt_imageio_resizing_factor_parse(const char *str, double *num, double *denum)
 {
-  double _num, _denum;
-  gchar *scale_str = dt_conf_get_string("plugins/lighttable/export/resizing_factor");
+  // a decimal separator is accepted as '.' or ',' whatever the locale, so parse with the C locale
+  gchar *scale_str = g_strdup(IS_NULL_PTR(str) ? "" : str);
+  g_strdelimit(scale_str, ",", '.');
 
-  char sep[4] = "";
-  snprintf( sep, 4, "%g", (double) 3/2);
-  int i = -1;
-  while(scale_str[++i])
-  {
-      if ((scale_str[i] == '.') || (scale_str[i] == ',')) scale_str[i] = sep[1];
-  }
-
-  gchar *pdiv = strchr(scale_str, '/');
-
-  if (IS_NULL_PTR(pdiv))
-  {
-    _num = atof(scale_str);
-    _denum = 1;
-  }
-  else if (pdiv-scale_str == 0)
-  {
-    _num = 1;
-    _denum = atof(pdiv + 1);
-}
+  const gchar *pdiv = strchr(scale_str, '/');
+  double _num = 1.0, _denum = 1.0;
+  if(IS_NULL_PTR(pdiv))
+    _num = g_ascii_strtod(scale_str, NULL);
   else
-{
-    _num = atof(scale_str);
-    _denum = atof(pdiv+1);
+  {
+    if(pdiv != scale_str) _num = g_ascii_strtod(scale_str, NULL);
+    _denum = g_ascii_strtod(pdiv + 1, NULL);
   }
 
-  if (_num == 0.0) _num = 1.0;
-  if (_denum == 0.0) _denum = 1.0;
+  // an absent or zero part reads as 1
+  *num = (_num == 0.0) ? 1.0 : _num;
+  *denum = (_denum == 0.0) ? 1.0 : _denum;
 
-  *num = _num;
-  *denum = _denum;
-
-  dt_conf_set_string("plugins/lighttable/export/resizing_factor", scale_str);
-  return scale_str;
+  dt_free(scale_str);
 }
 
 // clang-format off
