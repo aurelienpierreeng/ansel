@@ -463,7 +463,7 @@ static gboolean _scale_mdlclick(GtkEntry *spin, GdkEventButton *event, dt_lib_ex
   return FALSE;
 }
 
-static void _widht_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user_data)
+static gboolean _widht_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user_data)
 {
   if(event->button == 2)
   {
@@ -476,9 +476,11 @@ static void _widht_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user
   {
     _width_changed(GTK_EDITABLE(spin), user_data);
   }
+  // the entry still takes the click: it is how it gets the focus and the cursor.
+  return FALSE;
 }
 
-static void _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user_data)
+static gboolean _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user_data)
 {
   if(event->button == 2)
   {
@@ -491,6 +493,8 @@ static void _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer use
   {
     _height_changed(GTK_EDITABLE(spin), user_data);
   }
+  // the entry still takes the click: it is how it gets the focus and the cursor.
+  return FALSE;
 }
 
 static void _size_in_px_update(dt_lib_export_t *d)
@@ -1321,9 +1325,6 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->print_width), "changed", G_CALLBACK(_print_width_changed), (gpointer)d);
   g_signal_connect(G_OBJECT(d->print_height), "changed", G_CALLBACK(_print_height_changed), (gpointer)d);
   g_signal_connect(G_OBJECT(d->print_dpi), "changed", G_CALLBACK(_print_dpi_changed), (gpointer)d);
-
-  g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_width_changed), (gpointer)d);
-  g_signal_connect(G_OBJECT(d->height), "changed", G_CALLBACK(_height_changed), (gpointer)d);
 
   g_signal_connect(G_OBJECT(d->width), "button-press-event", G_CALLBACK(_widht_mdlclick), (gpointer)d);
   g_signal_connect(G_OBJECT(d->height), "button-press-event", G_CALLBACK(_height_mdlclick), (gpointer)d);
