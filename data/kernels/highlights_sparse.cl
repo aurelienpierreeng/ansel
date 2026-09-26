@@ -21,7 +21,8 @@
 
     The host performs the symbolic analysis (nested-dissection ordering, elimination tree,
     L pattern, update schedules, level schedule) on integer metadata; these kernels run the
-    NUMERIC factorization and the triangular solves in double precision, level-scheduled over
+    NUMERIC factorization and the triangular solves in hl_real_t (double where the device has
+    fp64, double-float elsewhere -- hl_real.h), level-scheduled over
     the elimination tree: all columns of one level are independent and factor in parallel
     (one work-group per column), the sequential tail near the root is a handful of levels.
 
@@ -34,9 +35,9 @@
 // diffusion equations of the highlight reconstruction: the system matrix ("SPD" = symmetric
 // positive definite, the matrix shape this factorization requires) is factorized once into a
 // lower-triangular factor L and reused for all three colour channels. The host (CPU) does all
-// the integer bookkeeping ahead of time; these kernels only crunch numbers, in double
-// precision (64-bit floats, needed because the diffusion systems amplify rounding errors too
-// much in 32-bit). "Level" = a set of matrix columns that can be processed in parallel
+// the integer bookkeeping ahead of time; these kernels only crunch numbers, in hl_real_t
+// (double where the device has it, a two-float double-float elsewhere: the diffusion systems
+// amplify rounding errors far too much for plain 32-bit). "Level" = a set of matrix columns that can be processed in parallel
 // because they do not depend on each other; the schedule is precomputed on the CPU. A
 // "cmod(j,k)" update = subtract a multiple of an earlier column k from column j; each one is
 // a flat precomputed list of (src, dst) index pairs, so the kernels are pure
@@ -45,16 +46,13 @@
 // change here must be mirrored there and re-validated with the HL_SPCL_TEST self-test.
 
 #include "compensated.h"
+#include "hl_real.h"
 
-#if defined(cl_khr_fp64)
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#define HL_SPARSE_FP64 1
-#elif defined(cl_amd_fp64)
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#define HL_SPARSE_FP64 1
-#endif
-
-#ifdef HL_SPARSE_FP64
+// ===== sparse Cholesky and its right-hand sides, in hl_real_t ==============================
+// hl_real_t is native double on a device that has fp64 and a (hi, lo) double-float elsewhere;
+// the host chooses per device (hl_real.h). Nothing below is guarded on the cl_khr_fp64 macro
+// any more, so every kernel of this file builds on every device, Apple's included. hl_real_t
+// is 8 bytes in both forms and the host converts its double vectors on the way in and out.
 
 // Numeric factorization of one level, update half: ONE THREAD PER MATRIX ENTRY of the
 // level's columns. The host groups every cmod contribution BY DESTINATION at symbolic time
@@ -65,7 +63,7 @@
 // one-work-group-per-column form idled ~98% of the device there). pos_of lists the entry
 // positions grouped by level.
 kernel void
-sparse_chol_update_level(global double *values,
+sparse_chol_update_level(global hl_real_t *values,
                          global const int *cont_ptr,    // nnz+1: contribution range per entry
                          global const int *cont_src,    // per contribution: source position in Lx
                          global const int *cont_ljk,    // per contribution: position of L[j,k]
@@ -79,9 +77,9 @@ sparse_chol_update_level(global double *values,
   // accum = A[i,j] - sum_k L[i,k]*L[j,k], the pre-scale numerator of entry (i,j) of L:
   // values[entry] starts at A[i,j]; each contribution subtracts one product L[j,k]*L[i,k]
   // (cont_ljk -> position of L[j,k], cont_src -> position of L[i,k]), in ascending-k order
-  double accum = values[entry];
+  hl_real_t accum = values[entry];
   for(int contribution = cont_ptr[entry]; contribution < cont_ptr[entry + 1]; contribution++)
-    accum -= values[cont_ljk[contribution]] * values[cont_src[contribution]];
+    accum = hl_sub(accum, hl_mul(values[cont_ljk[contribution]], values[cont_src[contribution]]));
   values[entry] = accum;
 }
 
@@ -89,7 +87,7 @@ sparse_chol_update_level(global double *values,
 // level -- square-root the diagonal entry (stored first in each column) and divide the
 // entries below the diagonal by it. Runs after sparse_chol_update_level of the same level.
 kernel void
-sparse_chol_final_level(global double *values,
+sparse_chol_final_level(global hl_real_t *values,
                         global const int *colptr,      // n+1, diag first per column
                         global const int *levelcols,
                         const int lev_start,
@@ -103,12 +101,12 @@ sparse_chol_final_level(global double *values,
 
   // L[j,j] = sqrt( A[j,j] - sum_k L[j,k]^2 ): the diagonal slot already holds the numerator from
   // sparse_chol_update_level, so finalizing is just its square root
-  if(local_id == 0) values[colptr[j]] = sqrt(values[colptr[j]]);
+  if(local_id == 0) values[colptr[j]] = hl_sqrt(values[colptr[j]]);
   barrier(CLK_GLOBAL_MEM_FENCE);
-  const double diag_value = values[colptr[j]];
+  const hl_real_t diag_value = values[colptr[j]];
   // L[i,j] = ( A[i,j] - sum_k L[i,k] L[j,k] ) / L[j,j]: divide each sub-diagonal numerator by L[j,j]
   for(int entry = colptr[j] + 1 + local_id; entry < colptr[j + 1]; entry += local_size)
-    values[entry] /= diag_value;
+    values[entry] = hl_div(values[entry], diag_value);
 }
 
 // Forward triangular solve (L y = b), first half of applying the factorization to one
@@ -117,8 +115,8 @@ sparse_chol_final_level(global double *values,
 // sparse row layout), tree-sum the products in local memory (reduction), and thread 0
 // finishes x[j]. In/out: x holds the right-hand side b on entry and y on exit.
 kernel void
-sparse_chol_fwd_level(global double *solution,
-                      global const double *values,
+sparse_chol_fwd_level(global hl_real_t *solution,
+                      global const hl_real_t *values,
                       global const int *rowptr,     // n+1: off-diagonal entries of row j
                       global const int *rowcol,     // column index k of each row entry
                       global const int *rowpos,     // position of L[j,k] in Lx
@@ -126,7 +124,7 @@ sparse_chol_fwd_level(global double *solution,
                       global const int *levelrows,
                       const int lev_start,
                       const int nlevel,
-                      local double *scratch)
+                      local hl_real_t *scratch)
 {
   const int group = get_group_id(0);
   if(group >= nlevel) return;
@@ -136,17 +134,17 @@ sparse_chol_fwd_level(global double *solution,
 
   // y_j = ( b_j - sum_{k<j} L[j,k] y_k ) / L[j,j]: gather the products L[j,k]*y_k over row j's
   // off-diagonal entries (already-solved y_k), tree-reduce them, then thread 0 divides by L[j,j]
-  double accum = 0.0;
+  hl_real_t accum = hl_zero();
   for(int entry = rowptr[j] + local_id; entry < rowptr[j + 1]; entry += local_size)
-    accum += values[rowpos[entry]] * solution[rowcol[entry]]; // += L[j,k] * y_k
+    accum = hl_add(accum, hl_mul(values[rowpos[entry]], solution[rowcol[entry]])); // += L[j,k] * y_k
   scratch[local_id] = accum;
   barrier(CLK_LOCAL_MEM_FENCE);
   for(int offset = local_size / 2; offset > 0; offset /= 2)
   {
-    if(local_id < offset) scratch[local_id] += scratch[local_id + offset];
+    if(local_id < offset) scratch[local_id] = hl_add(scratch[local_id], scratch[local_id + offset]);
     barrier(CLK_LOCAL_MEM_FENCE);
   }
-  if(local_id == 0) solution[j] = (solution[j] - scratch[0]) / values[diagpos[j]]; // (b_j - sum) / L[j,j]
+  if(local_id == 0) solution[j] = hl_div(hl_sub(solution[j], scratch[0]), values[diagpos[j]]); // (b_j - sum) / L[j,j]
 }
 
 // Backward triangular solve (L^T x = y, the transpose of L), second half. One work-group per
@@ -154,14 +152,14 @@ sparse_chol_fwd_level(global double *solution,
 // ("CSC" = compressed sparse column, the native layout of L), tree-sum the products in local
 // memory, and thread 0 finishes x[j]. In/out: x holds y on entry and the solution on exit.
 kernel void
-sparse_chol_bwd_level(global double *solution,
-                      global const double *values,
+sparse_chol_bwd_level(global hl_real_t *solution,
+                      global const hl_real_t *values,
                       global const int *colptr,
                       global const int *rowind,     // row index of each column entry (diag first)
                       global const int *levelcols,
                       const int lev_start,
                       const int nlevel,
-                      local double *scratch)
+                      local hl_real_t *scratch)
 {
   const int group = get_group_id(0);
   if(group >= nlevel) return;
@@ -171,17 +169,17 @@ sparse_chol_bwd_level(global double *solution,
 
   // x_j = ( y_j - sum_{i>j} L[i,j] x_i ) / L[j,j]: gather the products L[i,j]*x_i over the
   // below-diagonal entries of column j (= row j of L^T, the already-solved x_i), reduce, divide
-  double accum = 0.0;
+  hl_real_t accum = hl_zero();
   for(int entry = colptr[j] + 1 + local_id; entry < colptr[j + 1]; entry += local_size)
-    accum += values[entry] * solution[rowind[entry]]; // += L[i,j] * x_i
+    accum = hl_add(accum, hl_mul(values[entry], solution[rowind[entry]])); // += L[i,j] * x_i
   scratch[local_id] = accum;
   barrier(CLK_LOCAL_MEM_FENCE);
   for(int offset = local_size / 2; offset > 0; offset /= 2)
   {
-    if(local_id < offset) scratch[local_id] += scratch[local_id + offset];
+    if(local_id < offset) scratch[local_id] = hl_add(scratch[local_id], scratch[local_id + offset]);
     barrier(CLK_LOCAL_MEM_FENCE);
   }
-  if(local_id == 0) solution[j] = (solution[j] - scratch[0]) / values[colptr[j]]; // (y_j - sum) / L[j,j]
+  if(local_id == 0) solution[j] = hl_div(hl_sub(solution[j], scratch[0]), values[colptr[j]]); // (y_j - sum) / L[j,j]
 }
 
 // Right-hand side (the constant vector b) of the screened chroma diffusion solve inside an
@@ -201,7 +199,7 @@ sparse_chol_bwd_level(global double *solution,
 // "inpaint a flat colour" bias), `laplacian` = the boundary-embedded plane's Laplacian carrying
 // the known rim into b. The obstacle constraint r_c >= c0/L of E_chrominance is enforced elsewhere.
 kernel void
-hl_pde_rhs(global const float *boundary_ratio, global const int *pgrid, global double *rhs,
+hl_pde_rhs(global const float *boundary_ratio, global const int *pgrid, global hl_real_t *rhs,
            const int n_unknowns, const int width, const int height, const float react, const float cmeanc)
 {
   const int unknown = get_global_id(0);
@@ -224,26 +222,26 @@ hl_pde_rhs(global const float *boundary_ratio, global const int *pgrid, global d
   const float val_se = boundary_ratio[y_south * width + x_east];
   // 9-point discrete Laplacian of the rim-embedded ratio plane (Delta applied to the known boundary)
   const float laplacian = (4.f * (north + south + west + east) + (val_nw + val_ne + val_sw + val_se) - 20.f * center) / 6.f;
-  rhs[unknown] = (double)react * (double)cmeanc + (double)laplacian; // b = lambda*r_target + Delta(rim)
+  rhs[unknown] = hl_add(hl_mul(hl_real(react), hl_real(cmeanc)), hl_real(laplacian)); // b = lambda*r_target + Delta(rim)
 }
 
-// Scatter the solved chroma values (double-precision vector b, one entry per unknown hole
+// Scatter the solved chroma values (hl_real_t vector b, one entry per unknown hole
 // pixel) back into the full ratio plane rat at the pixel positions listed in pgrid, clamped
 // at zero exactly like the CPU _region_pde_solve does.
 kernel void
-hl_pde_scatter(global const double *rhs, global const int *pgrid, global float *ratio, const int n_unknowns)
+hl_pde_scatter(global const hl_real_t *rhs, global const int *pgrid, global float *ratio, const int n_unknowns)
 {
   const int unknown = get_global_id(0);
   if(unknown >= n_unknowns) return;
-  ratio[pgrid[unknown]] = fmax((float)rhs[unknown], 0.f); // project the solved ratio onto r >= 0
+  ratio[pgrid[unknown]] = fmax(hl_float(rhs[unknown]), 0.f); // project the solved ratio onto r >= 0
 }
 
 // Right-hand side of the edge-aware (anisotropic: smooth ALONG image edges, not across them)
 // chroma diffusion solve, one work-item per unknown hole pixel. For each of the 8 neighbour
 // directions: if the precomputed edge weight w8 is positive and in-bounds, and the neighbour
 // is a valid anchor pixel (vldan >= 0.5 = real data, so it lives outside the matrix), add
-// weight x that neighbour's ratio value, accumulated in double precision like the CPU
-// assembly. Mirrors the CPU _aniso_div_solve -- any change here must be mirrored there and
+// weight x that neighbour's ratio value, accumulated in hl_real_t like the CPU assembly in
+// double. Mirrors the CPU _aniso_div_solve -- any change here must be mirrored there and
 // re-validated with the HL_ANISOCL_TEST self-test.
 // Maths bridge: this assembles b for the anisotropic transport E_transport = integral( grad p^T D
 // grad p )  (article "The optimization problem", term 1b), whose Euler-Lagrange equation is
@@ -253,7 +251,7 @@ hl_pde_scatter(global const double *rhs, global const int *pgrid, global float *
 // stay in the matrix. The matrix diagonal (sum of weights) is assembled on the host side.
 kernel void
 hl_aniso_rhs(global const float *edge_weights, global const float *valid_anchor, global const float *chroma,
-             global const int *pgrid, global double *rhs,
+             global const int *pgrid, global hl_real_t *rhs,
              const int n_unknowns, const int width, const int height, const int c,
              const float react, const float react_target)
 {
@@ -264,7 +262,7 @@ hl_aniso_rhs(global const float *edge_weights, global const float *valid_anchor,
   const int origin_x = grid_index - origin_y * width;
   const int neighbor_dy[8] = { 0, 0, -1, 1, -1, 1, -1, 1 };
   const int neighbor_dx[8] = { -1, 1, 0, 0, -1, 1, 1, -1 };
-  double accum = 0.0;
+  hl_real_t accum = hl_zero();
   for(int direction = 0; direction < 8; direction++)
   {
     const float weight_value = edge_weights[unknown * 8 + direction];
@@ -272,26 +270,25 @@ hl_aniso_rhs(global const float *edge_weights, global const float *valid_anchor,
     const int neighbor_x = origin_x + neighbor_dx[direction], neighbor_y = origin_y + neighbor_dy[direction];
     const int j = neighbor_y * width + neighbor_x;
     if(valid_anchor[j * 4 + 0] < 0.5f) continue;   // hole neighbour: lives in the matrix (LHS), not the RHS
-    accum += (double)weight_value * (double)chroma[j * 4 + c]; // += w_k * p_k for anchor neighbours
+    accum = hl_add(accum, hl_mul(hl_real(weight_value), hl_real(chroma[j * 4 + c]))); // += w_k * p_k for anchor neighbours
   }
   // b = sum_{k in anchors} w_k p_k, plus the screened reaction of the "inpaint a flat color"
   // parameter: lambda_solid * target (the matching lambda_solid sits on the diagonal, host-side)
-  rhs[unknown] = accum + (double)react * (double)react_target;
+  rhs[unknown] = hl_add(accum, hl_mul(hl_real(react), hl_real(react_target)));
 }
 
 // Scatter the solved ratio values back into channel c of the packed 4-float-per-pixel plane
 // s1 at the positions listed in pgrid (no clamp here: the CPU reassembles the raw values and
 // clamps later, so the GPU must match).
 kernel void
-hl_aniso_scatter(global const double *rhs, global const int *pgrid, global float *chroma,
+hl_aniso_scatter(global const hl_real_t *rhs, global const int *pgrid, global float *chroma,
                  const int n_unknowns, const int c)
 {
   const int unknown = get_global_id(0);
   if(unknown >= n_unknowns) return;
-  chroma[pgrid[unknown] * 4 + c] = (float)rhs[unknown];
+  chroma[pgrid[unknown] * 4 + c] = hl_float(rhs[unknown]);
 }
 
-#endif // HL_SPARSE_FP64
 
 // CG (conjugate gradient) kernels: the iterative solver used instead of the direct
 // factorization above when the clipped area is too large; it repeats matrix-vector products
