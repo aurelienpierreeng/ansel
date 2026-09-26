@@ -1014,7 +1014,7 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
   const float react = solid_color * solid_color * 4.f;
   float react_target[3] = { 0.f, 0.f, 0.f };
 
-  if(global_data->kernel_hl_aniso_rhs < 0 || global_data->kernel_hl_aniso_scatter < 0) return cl_err; // no fp64
+  if(global_data->kernel_hl_aniso_rhs < 0 || global_data->kernel_hl_aniso_scatter < 0) return cl_err; // kernel unavailable
 
   cl_mem valid_packed = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
   cl_mem luminance = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
@@ -1246,7 +1246,7 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
   // edge weights on the device (they steer the RHS kernels too), compact download for assembly
   perm_grid_dev = _sp_cl_upload(devid, perm_grid, sizeof(int) * n_unknowns);
   edge_weights_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float) * (size_t)n_unknowns * 8);
-  rhs_dev = dt_opencl_alloc_device_buffer(devid, sizeof(double) * n_unknowns);
+  rhs_dev = dt_opencl_alloc_device_buffer(devid, DT_HL_REAL_BYTES * n_unknowns);
   if(!perm_grid_dev || !edge_weights_dev || !rhs_dev)
   {
     cl_err = DT_OPENCL_DEFAULT_ERROR;

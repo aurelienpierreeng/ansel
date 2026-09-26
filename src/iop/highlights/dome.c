@@ -576,11 +576,9 @@ cl_int _biharmonic_dome_cl(const int devid, void *gd_void, cl_mem field, cl_mem 
         int solved = 0;
         if(factor)
         {
-          cl_mem rhs_device = _sp_cl_upload(devid, rhs, sizeof(double) * unknown_count);
+          cl_mem rhs_device = _sp_cl_upload_real(devid, rhs, unknown_count);
           if(rhs_device && !_sp_chol_solve_cl(factor, _hl_sp_chol_kernels(gd_void), rhs_device)
-             && dt_opencl_read_buffer_from_device(devid, rhs, rhs_device, 0, sizeof(double) * unknown_count,
-                                                  CL_TRUE)
-                    == CL_SUCCESS)
+             && _sp_cl_read_real(devid, rhs, rhs_device, unknown_count))
           {
             // the GPU factorization does not abort on a non-positive pivot the way the CPU
             // up-looking factor does -- it silently produces NaN/inf. Validate the solution

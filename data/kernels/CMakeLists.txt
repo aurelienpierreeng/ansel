@@ -7,7 +7,7 @@
 # not how it is ever used and which warns "#pragma once in main file". Both lists install to
 # the same directory, so this changes what gets test-compiled and nothing else.
 FILE(GLOB DT_OPENCL_KERNELS "*.cl")
-FILE(GLOB DT_OPENCL_EXTRA "programs.conf" "common.h" "compensated.h" "rgb_norms.h" "noise_generator.h" "color_conversion.h" "colorspace.h")
+FILE(GLOB DT_OPENCL_EXTRA "programs.conf" "common.h" "compensated.h" "hl_real.h" "rgb_norms.h" "noise_generator.h" "color_conversion.h" "colorspace.h")
 
 # The lens kernels evaluate LensSerious's closed forms directly, from the very header
 # liblensserious compiles as C99 -- one source text for CPU and GPU (see
