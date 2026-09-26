@@ -171,6 +171,36 @@ reference):
   continuation there — the MAC magenta fix therefore CANNOT come from this stage; it belongs to the
   joint-floor family and its clip-asymmetry gate (now implemented, see the previous section).
 
+## Highlights: Apple's OpenCL defines `cl_khr_fp64` without having it — never guard on that macro
+
+*Found against `e83ba5865d`, 2026-09-26, measured on an Apple M1 (macOS OpenCL 1.2).*
+
+`double` had three uses in this module's kernels, and only one is double precision: the sparse
+Cholesky factor and solves of `highlights_sparse.cl` (`sparse_chol_*`) and the second-member
+vector they consume (`hl_pde_*`, `hl_aniso_*`). The nine reduction kernels — the four stage-2
+finalizers of `highlights_harmonic.cl` and the CG dot products of `highlights_sparse.cl` —
+accumulated in double and narrowed every result to float on the way out, so the double only
+ever bought the accuracy of the SUMMATION. They now sum in compensated single precision
+(`data/kernels/compensated.h`: a `float2` of value + running error, Knuth two-sum, no multiply
+so `-cl-mad-enable` cannot contract it) and sit outside any fp64 guard: available on every
+device, the host twins agreeing to a float ulp rather than bit for bit. A new kernel header
+must be listed in BOTH `clincludes[]` (`common/opencl.c`, the kernel-cache checksum) and
+`DT_OPENCL_EXTRA` (`data/kernels/CMakeLists.txt`, the install); an omission in the first keeps
+serving yesterday's binaries, in the second the kernel does not build at all in a package.
+
+Measured on Apple M1 (macOS OpenCL 1.2, no `cl_khr_fp64` in `CL_DEVICE_EXTENSIONS`,
+`CL_DEVICE_DOUBLE_FP_CONFIG` = 0): the runtime DEFINES the `cl_khr_fp64` preprocessor macro
+anyway. A `#if defined(cl_khr_fp64)` block therefore compiles, `clBuildProgram` succeeds, and
+every kernel that loads, stores or computes a `double` fails at `clCreateKernel` with -48
+(`CL_INVALID_KERNEL_NAME`) — per kernel, not per program — the runtime logging `UNSUPPORTED
+(log once): createKernel: newComputePipelineState failed` once, for the first. A `double` that
+appears only in a signature is fine. The guard thus does not do on Apple what its comment said
+it does elsewhere, and the tell in a `-d opencl` log is a kernel INSIDE the guard that does not
+fail: `hl_cg_beta_step` named no double and was the one survivor of its block. When fp64 has to
+be selected, select it host-side from `CL_DEVICE_DOUBLE_FP_CONFIG` and pass a define the way
+`-DNVIDIA_SM_20=1` is passed (`opencl.c`, into `options` AND `options_md5`) — never from the
+macro. `ansel-cli` takes `-d` through `--core` (`ansel-cli in out --core -d opencl -d perf`).
+
 ## The article bench (guided-laplacian-highlights-research) — traps and extensions
 
 *Found `e4195dec51`, 2026-08-05.*

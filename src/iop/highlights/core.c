@@ -818,12 +818,11 @@ cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_me
   size_t size[3] = { ROUNDUPDWD(region_w, devid), ROUNDUPDHT(region_h, devid), 1 };
   const float epsilon = 1e-6f;
 
-  // The stage-2 reduction finalizers this needs are compiled only where the fp64 extension
-  // is (data/kernels/highlights_harmonic.cl). Without them the caller falls back to the CPU
-  // twin, the same way the sparse solver and the PDE/aniso stages already do.
+  // Defensive: a finalizer that failed to build on this device (handle -1) sends the caller to
+  // its CPU twin, the same way the sparse solver and the PDE/aniso stages do.
   if(global_data->kernel_hl_reduce_finalize < 0 || global_data->kernel_hl_cmean_finalize < 0
      || global_data->kernel_hl_ring_vote_finalize < 0)
-    return cl_err; // no fp64 device
+    return cl_err; // kernel unavailable
 
   cl_mem luminance = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem hole = dt_opencl_alloc_device_buffer(devid, region_pixels);
@@ -1542,12 +1541,11 @@ cl_int _chromaticity_gradient_stage_cl(const int devid, void *gd_void, cl_mem es
   size_t size[3] = { ROUNDUPDWD(region_w, devid), ROUNDUPDHT(region_h, devid), 1 };
   const float epsilon = 1e-6f;
 
-  // The stage-2 reduction finalizers this needs are compiled only where the fp64 extension
-  // is (data/kernels/highlights_harmonic.cl). Without them the caller falls back to the CPU
-  // twin, the same way the sparse solver and the PDE/aniso stages already do.
+  // Defensive: a finalizer that failed to build on this device (handle -1) sends the caller to
+  // its CPU twin, the same way the sparse solver and the PDE/aniso stages do.
   if(global_data->kernel_hl_reduce_finalize < 0 || global_data->kernel_hl_cmean_finalize < 0
      || global_data->kernel_hl_ring_vote_finalize < 0)
-    return cl_err; // no fp64 device
+    return cl_err; // kernel unavailable
 
   cl_mem guard_src = dt_opencl_alloc_device(devid, region_w, region_h, sizeof(float));  // image (gaussian)
   cl_mem guard_blur = dt_opencl_alloc_device(devid, region_w, region_h, sizeof(float)); // image (gaussian)
