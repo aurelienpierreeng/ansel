@@ -658,7 +658,8 @@ gboolean _get_export_size(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe,
   if(is_scaling)
   {
     double _num, _denum;
-    dt_imageio_resizing_factor_get_and_parsing(&_num, &_denum);
+    gchar *scale_str = dt_imageio_resizing_factor_get_and_parsing(&_num, &_denum);
+    dt_free(scale_str);
     const double scale_factor = _num / _denum;
     *scale = fmin(scale_factor, 1.);
     *processed_height = (int)roundf(pipe->processed_height * (*scale));
