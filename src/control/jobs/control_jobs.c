@@ -144,6 +144,7 @@ typedef struct dt_control_gpx_apply_t
 typedef struct dt_control_export_t
 {
   int max_width, max_height, format_index, storage_index;
+  double scale_factor; // > 0: reduce by it, otherwise fit in max_width x max_height
   dt_imageio_module_data_t *sdata; // needed since the gui thread resets things like overwrite once the export
   // is dispatched, but we have to keep that information
   gboolean export_masks;
@@ -551,10 +552,8 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
 
     const int32_t imgid = GPOINTER_TO_INT(t->data);
 
-    const gboolean is_scaling =
-      dt_conf_is_equal("plugins/lighttable/export/resizing", "scaling");
-
-    dt_imageio_export_with_flags(imgid, "unused", &buf, (dt_imageio_module_data_t *)&dat, TRUE, FALSE, FALSE, is_scaling,
+    // the merge reads the images at full size: the export module's size settings are not its own
+    dt_imageio_export_with_flags(imgid, "unused", &buf, (dt_imageio_module_data_t *)&dat, TRUE, FALSE, FALSE, 0.0,
                                  FALSE, "pre:rawprepare", FALSE, FALSE, DT_COLORSPACE_NONE, NULL, DT_INTENT_LAST, NULL,
                                  NULL, num, total, NULL, NULL);
 
@@ -1429,7 +1428,7 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
       else
       {
         dt_image_cache_read_release(image);
-        if(mstorage->store(mstorage, sdata, imgid, mformat, fdata, num, total, TRUE,
+        if(mstorage->store(mstorage, sdata, imgid, mformat, fdata, settings->scale_factor, num, total, TRUE,
                            settings->export_masks, settings->icc_type, settings->icc_filename, settings->icc_intent,
                            &metadata) != 0)
           dt_control_job_cancel(job);
@@ -1912,7 +1911,8 @@ static void dt_control_export_cleanup(void *p)
   dt_control_image_enumerator_cleanup(params);
 }
 
-void dt_control_export(GList *imgid_list, int max_width, int max_height, int format_index, int storage_index,
+void dt_control_export(GList *imgid_list, int max_width, int max_height, const double scale_factor,
+                       int format_index, int storage_index,
                        gboolean high_quality, gboolean export_masks, char *style,
                        dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
                        dt_iop_color_intent_t icc_intent, const gchar *metadata_export)
@@ -1932,6 +1932,7 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, int for
   dt_control_export_t *data = params->data;
   data->max_width = max_width;
   data->max_height = max_height;
+  data->scale_factor = scale_factor;
   data->format_index = format_index;
   data->storage_index = storage_index;
   dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage_by_index(storage_index);

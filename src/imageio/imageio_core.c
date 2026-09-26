@@ -567,7 +567,7 @@ void dt_imageio_to_fractional(float in, uint32_t *num, uint32_t *den)
 }
 
 int dt_imageio_export(const int32_t imgid, const char *filename, dt_imageio_module_format_t *format,
-                      dt_imageio_module_data_t *format_params, const gboolean high_quality,
+                      dt_imageio_module_data_t *format_params, const double scale_factor, const gboolean high_quality,
                       const gboolean copy_metadata, const gboolean export_masks,
                       dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
                       dt_iop_color_intent_t icc_intent, dt_imageio_module_storage_t *storage,
@@ -579,10 +579,7 @@ int dt_imageio_export(const int32_t imgid, const char *filename, dt_imageio_modu
                                export_masks);
   else
   {
-    const gboolean is_scaling =
-      dt_conf_is_equal("plugins/lighttable/export/resizing", "scaling");
-
-    return dt_imageio_export_with_flags(imgid, filename, format, format_params, FALSE, FALSE, TRUE, is_scaling,
+    return dt_imageio_export_with_flags(imgid, filename, format, format_params, FALSE, FALSE, TRUE, scale_factor,
                                         FALSE, NULL, copy_metadata, export_masks, icc_type, icc_filename, icc_intent,
                                         storage, storage_params, num, total, metadata, NULL);
   }
@@ -650,17 +647,13 @@ void _filter_pipeline(const char *filter, dt_dev_pixelpipe_t *pipe)
 
 
 gboolean _get_export_size(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe,
-                          const dt_imageio_module_data_t *format_params, const gboolean is_scaling, double *scale,
+                          const dt_imageio_module_data_t *format_params, const double scale_factor, double *scale,
                           int width, int height, int *processed_width, int *processed_height)
 {
   const double image_ratio = (double)pipe->processed_width / (double)pipe->processed_height;
 
-  if(is_scaling)
+  if(scale_factor > 0.0)
   {
-    double _num, _denum;
-    gchar *scale_str = dt_imageio_resizing_factor_get_and_parsing(&_num, &_denum);
-    dt_free(scale_str);
-    const double scale_factor = _num / _denum;
     *scale = fmin(scale_factor, 1.);
     *processed_height = (int)roundf(pipe->processed_height * (*scale));
     *processed_width = (int)roundf(pipe->processed_width * (*scale));
@@ -766,7 +759,7 @@ void _export_final_buffer_to_uint16(const float *const restrict inbuf, uint16_t 
 int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  dt_imageio_module_format_t *format, dt_imageio_module_data_t *format_params,
                                  const gboolean ignore_exif, const gboolean display_byteorder,
-                                 const gboolean high_quality, gboolean is_scaling, const gboolean thumbnail_export,
+                                 const gboolean high_quality, const double scale_factor, const gboolean thumbnail_export,
                                  const char *filter, const gboolean copy_metadata, const gboolean export_masks,
                                  dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
                                  dt_iop_color_intent_t icc_intent, dt_imageio_module_storage_t *storage,
@@ -859,7 +852,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // while preserving original image ratio
   int processed_width = 0;
   int processed_height = 0;
-  _get_export_size(&dev, &pipe, format_params, is_scaling, &scale, width, height,
+  _get_export_size(&dev, &pipe, format_params, scale_factor, &scale, width, height,
                      &processed_width, &processed_height);
 
   dt_print(DT_DEBUG_IMAGEIO,

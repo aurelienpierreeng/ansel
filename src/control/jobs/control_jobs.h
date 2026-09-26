@@ -80,7 +80,11 @@ void dt_control_move_images();
 void dt_control_copy_images();
 void dt_control_set_local_copy_images();
 void dt_control_reset_local_copy_images();
-void dt_control_export(GList *imgid_list, int max_width, int max_height, int format_index, int storage_index,
+/** Export @p imgid_list. The size is resolved by the caller, once: with @p scale_factor > 0 each image
+ *  is reduced by that factor (capped at 1), otherwise it fits in @p max_width x @p max_height, 0 x 0
+ *  meaning full size. The job reads none of it from the configuration. */
+void dt_control_export(GList *imgid_list, int max_width, int max_height, const double scale_factor,
+                       int format_index, int storage_index,
                        gboolean high_quality, gboolean export_masks,
                        char *style,
                        dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,

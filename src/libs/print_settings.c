@@ -369,11 +369,11 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
   dt_control_log(_("processing `%s' for `%s'"), params->job_title, params->prt.printer.name);
 
   const gboolean export_masks = FALSE;
-  const gboolean is_scaling = FALSE;
+  const double no_scale_factor = 0.0; // the print size is fitted in dat's max_width x max_height
 
   dt_imageio_export_with_flags
     (img->imgid, "unused", &buf, (dt_imageio_module_data_t *)&dat, TRUE, FALSE,
-     TRUE, is_scaling, FALSE, NULL, FALSE, export_masks, params->buf_icc_type,
+     TRUE, no_scale_factor, FALSE, NULL, FALSE, export_masks, params->buf_icc_type,
      params->buf_icc_profile, params->buf_icc_intent,  NULL, NULL, 1, 1, NULL, NULL);
 
   img->exp_width = dat.head.width;

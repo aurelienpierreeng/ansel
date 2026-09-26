@@ -114,8 +114,15 @@ void dt_imageio_close_standalone(dt_mipmap_buffer_t *buf);
 
 struct dt_imageio_module_format_t;
 struct dt_imageio_module_data_t;
+/**
+ * Output size, for both functions below: with @p scale_factor > 0 the image is reduced by that
+ * factor (capped at 1); otherwise it is fitted in format_params->max_width x max_height, 0 x 0
+ * meaning full size. Nothing is read from the export module's configuration: the size is the
+ * caller's, resolved once, so an export queued before a settings change keeps its own.
+ */
 int dt_imageio_export(const int32_t imgid, const char *filename, struct dt_imageio_module_format_t *format,
-                      struct dt_imageio_module_data_t *format_params, const gboolean high_quality,
+                      struct dt_imageio_module_data_t *format_params, const double scale_factor,
+                      const gboolean high_quality,
                       const gboolean copy_metadata, const gboolean export_masks,
                       dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
                       dt_iop_color_intent_t icc_intent, dt_imageio_module_storage_t *storage,
@@ -124,7 +131,7 @@ int dt_imageio_export(const int32_t imgid, const char *filename, struct dt_image
 int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  struct dt_imageio_module_format_t *format,
                                  struct dt_imageio_module_data_t *format_params, const gboolean ignore_exif,
-                                 const gboolean display_byteorder, const gboolean high_quality, gboolean is_scaling,
+                                 const gboolean display_byteorder, const gboolean high_quality, const double scale_factor,
                                  const gboolean thumbnail_export, const char *filter, const gboolean copy_metadata,
                                  const gboolean export_masks, dt_colorspaces_color_profile_type_t icc_type,
                                  const gchar *icc_filename, dt_iop_color_intent_t icc_intent,
