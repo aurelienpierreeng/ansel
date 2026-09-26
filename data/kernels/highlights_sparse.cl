@@ -44,6 +44,8 @@
 // Mirrors the CPU _sp_chol_factor / _sp_chol_solve (src/iop/highlights_harmonic.h) -- any
 // change here must be mirrored there and re-validated with the HL_SPCL_TEST self-test.
 
+#include "compensated.h"
+
 #if defined(cl_khr_fp64)
 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
 #define HL_SPARSE_FP64 1
@@ -289,23 +291,20 @@ hl_aniso_scatter(global const double *rhs, global const int *pgrid, global float
   chroma[pgrid[unknown] * 4 + c] = (float)rhs[unknown];
 }
 
+#endif // HL_SPARSE_FP64
+
 // CG (conjugate gradient) kernels: the iterative solver used instead of the direct
 // factorization above when the clipped area is too large; it repeats matrix-vector products
 // until the error is small. Each kernel fuses one vector update with a partial dot product:
-// threads stride the 1D arrays, accumulate in double precision, tree-sum in local memory,
-// and each work-group writes one partial sum to `partial` (the small array of per-group
-// results is finished on the CPU). hole = byte mask of the unknown pixels; everything
-// outside it is untouched or zeroed. Mirrors the CG fallback of the CPU _region_pde_solve,
-// driven by _region_pde_cg_cl -- any change here must be mirrored there and re-validated
-// with the HL_CORECL_TEST self-test.
+// threads stride the 1D arrays, accumulate in compensated single precision (compensated.h),
+// tree-sum in local memory, and each work-group writes one partial sum to `partial`; the
+// small array of per-group results is finished on the device by hl_cg_fold / hl_cg_alpha_step.
+// Every vector is float and every scalar published to `state` is float, so nothing here needs
+// fp64: this section sits OUTSIDE the HL_SPARSE_FP64 guard and builds on every device. hole =
+// byte mask of the unknown pixels; everything outside it is untouched or zeroed. Mirrors the
+// CG fallback of the CPU _region_pde_solve, driven by _region_pde_cg_cl -- any change here
+// must be mirrored there and re-validated with the HL_CORECL_TEST self-test.
 
-// First CG step, computing the initial residual and search direction:
-// r -= dscalar*u + t2 (t2 holds the Laplacian term of the initial guess u, computed by the
-// hl_cg_op kernel in highlights_harmonic.cl); p = r; emits per-group partial sums of r*r.
-// Non-hole pixels get their search direction zeroed.
-// Maths bridge: the operator is A = dscalar*I + (-Delta) (the same screened-Poisson E_chrominance
-// SPD matrix the direct solver factors); this forms the initial residual r = b - A u and search
-// direction p = r, and accumulates ||r||^2 (the CG numerator / convergence measure).
 // CG scalar state, device-resident. Layout: [0] rr, [1] rr_new, [2] rr_init, [3] alpha,
 // [4] beta, [5] active (1 while iterating, 0 once converged or stalled). The host used to read
 // the reduction partials back THREE TIMES PER ITERATION and decide `break` itself; every fold and
@@ -320,30 +319,32 @@ hl_aniso_scatter(global const double *rhs, global const int *pgrid, global float
 
 // fold the r.r partials into state[slot]; with init != 0 also seed rr_init and the active flag
 kernel void
-hl_cg_fold(global const double *partial, global float *state, const int n_groups, const int slot,
+hl_cg_fold(global const float2 *partial, global float *state, const int n_groups, const int slot,
            const int init)
 {
   if(get_global_id(0) != 0) return;
-  double acc = 0.0;
-  for(int g = 0; g < n_groups; g++) acc += partial[g];
-  state[slot] = (float)acc;
+  float2 acc = csum_zero();
+  for(int g = 0; g < n_groups; g++) acc = csum_merge(acc, partial[g]);
+  const float rr = csum_value(acc);
+  state[slot] = rr;
   if(init)
   {
-    state[HL_CG_RRINIT] = (float)acc;
-    state[HL_CG_ACTIVE] = (acc < 1e-20) ? 0.f : 1.f; // an already-solved system never iterates
+    state[HL_CG_RRINIT] = rr;
+    state[HL_CG_ACTIVE] = (rr < 1e-20f) ? 0.f : 1.f; // an already-solved system never iterates
   }
 }
 
 // alpha = rr / p.Ap, with the p.Ap <= 1e-30 stall test folded in (the host's second `break`)
 kernel void
-hl_cg_alpha_step(global const double *partial, global float *state, const int n_groups)
+hl_cg_alpha_step(global const float2 *partial, global float *state, const int n_groups)
 {
   if(get_global_id(0) != 0) return;
   if(state[HL_CG_ACTIVE] < 0.5f) { state[HL_CG_ALPHA] = 0.f; return; }
-  double pap = 0.0;
-  for(int g = 0; g < n_groups; g++) pap += partial[g];
-  if(pap <= 1e-30) { state[HL_CG_ACTIVE] = 0.f; state[HL_CG_ALPHA] = 0.f; return; }
-  state[HL_CG_ALPHA] = (float)((double)state[HL_CG_RR] / pap);
+  float2 acc = csum_zero();
+  for(int g = 0; g < n_groups; g++) acc = csum_merge(acc, partial[g]);
+  const float pap = csum_value(acc);
+  if(pap <= 1e-30f) { state[HL_CG_ACTIVE] = 0.f; state[HL_CG_ALPHA] = 0.f; return; }
+  state[HL_CG_ALPHA] = state[HL_CG_RR] / pap;
 }
 
 // beta = rr_new / rr, with the convergence test folded in (the host's first `break`)
@@ -363,28 +364,35 @@ hl_cg_beta_step(global float *state)
   state[HL_CG_RR] = rr_new;
 }
 
+// First CG step, computing the initial residual and search direction:
+// r -= dscalar*u + t2 (t2 holds the Laplacian term of the initial guess u, computed by the
+// hl_cg_op kernel in highlights_harmonic.cl); p = r; emits per-group partial sums of r*r.
+// Non-hole pixels get their search direction zeroed.
+// Maths bridge: the operator is A = dscalar*I + (-Delta) (the same screened-Poisson E_chrominance
+// SPD matrix the direct solver factors); this forms the initial residual r = b - A u and search
+// direction p = r, and accumulates ||r||^2 (the CG numerator / convergence measure).
 kernel void
 hl_cg_r1(global float *residual, global float *search_dir, global const float *solution, global const float *laplacian_term,
-         global const uchar *hole, global double *partial, const int dimension, const float dscalar,
-         local double *scratch)
+         global const uchar *hole, global float2 *partial, const int dimension, const float dscalar,
+         local float2 *scratch)
 {
   const int global_id = get_global_id(0);
   const int global_size = get_global_size(0);
   const int local_id = get_local_id(0);
   const int local_size = get_local_size(0);
-  double accum = 0.0;
+  float2 accum = csum_zero();
   for(int i = global_id; i < dimension; i += global_size)
   {
     if(!hole[i]) { search_dir[i] = 0.f; continue; }
     residual[i] -= dscalar * solution[i] + laplacian_term[i]; // r = b - A u  (A u = dscalar*u - Delta u)
     search_dir[i] = residual[i];                              // p = r
-    accum += (double)residual[i] * residual[i];               // += r_i^2  -> ||r||^2
+    accum = csum_add(accum, residual[i] * residual[i]);       // += r_i^2  -> ||r||^2
   }
   scratch[local_id] = accum;
   barrier(CLK_LOCAL_MEM_FENCE);
   for(int offset = local_size / 2; offset > 0; offset /= 2)
   {
-    if(local_id < offset) scratch[local_id] += scratch[local_id + offset];
+    if(local_id < offset) scratch[local_id] = csum_merge(scratch[local_id], scratch[local_id + offset]);
     barrier(CLK_LOCAL_MEM_FENCE);
   }
   if(local_id == 0) partial[get_group_id(0)] = scratch[0];
@@ -392,28 +400,28 @@ hl_cg_r1(global float *residual, global float *search_dir, global const float *s
 
 // Matrix-vector product of one CG iteration: ap = dscalar*p + t2 (t2 = Laplacian term of the
 // search direction p, from hl_cg_op) on hole pixels, zero elsewhere. Emits per-group partial
-// sums of p*ap, the denominator of the CG step size alpha (finished on the CPU).
+// sums of p*ap, the denominator of the CG step size alpha (finished by hl_cg_alpha_step).
 kernel void
 hl_cg_ap(global float *matvec, global const float *search_dir, global const float *laplacian_term,
-         global const uchar *hole, global double *partial, const int dimension, const float dscalar,
-         local double *scratch)
+         global const uchar *hole, global float2 *partial, const int dimension, const float dscalar,
+         local float2 *scratch)
 {
   const int global_id = get_global_id(0);
   const int global_size = get_global_size(0);
   const int local_id = get_local_id(0);
   const int local_size = get_local_size(0);
-  double accum = 0.0;
+  float2 accum = csum_zero();
   for(int i = global_id; i < dimension; i += global_size)
   {
     if(!hole[i]) { matvec[i] = 0.f; continue; }
     matvec[i] = dscalar * search_dir[i] + laplacian_term[i]; // ap = A p  (dscalar*p - Delta p)
-    accum += (double)search_dir[i] * matvec[i];              // += p_i * ap_i  -> p.Ap (alpha denominator)
+    accum = csum_add(accum, search_dir[i] * matvec[i]);      // += p_i * ap_i  -> p.Ap (alpha denominator)
   }
   scratch[local_id] = accum;
   barrier(CLK_LOCAL_MEM_FENCE);
   for(int offset = local_size / 2; offset > 0; offset /= 2)
   {
-    if(local_id < offset) scratch[local_id] += scratch[local_id + offset];
+    if(local_id < offset) scratch[local_id] = csum_merge(scratch[local_id], scratch[local_id + offset]);
     barrier(CLK_LOCAL_MEM_FENCE);
   }
   if(local_id == 0) partial[get_group_id(0)] = scratch[0];
@@ -421,33 +429,31 @@ hl_cg_ap(global float *matvec, global const float *search_dir, global const floa
 
 // CG solution and residual update: advance the solution along the search direction
 // (u += alpha*p), update the residual (r -= alpha*ap), and emit per-group partial sums of
-// the new r*r for the convergence check (finished on the CPU). Hole pixels only.
+// the new r*r for the convergence check (finished by hl_cg_fold). Hole pixels only.
 kernel void
 hl_cg_update(global float *solution, global float *residual, global const float *search_dir, global const float *matvec,
-             global const uchar *hole, global double *partial, const int dimension, global const float *cg_state,
-             local double *scratch)
+             global const uchar *hole, global float2 *partial, const int dimension, global const float *cg_state,
+             local float2 *scratch)
 {
   if(cg_state[HL_CG_ACTIVE] < 0.5f) return; // converged/stalled: this iteration is a no-op
   const int global_id = get_global_id(0);
   const int global_size = get_global_size(0);
   const int local_id = get_local_id(0);
   const int local_size = get_local_size(0);
-  double accum = 0.0;
+  float2 accum = csum_zero();
   for(int i = global_id; i < dimension; i += global_size)
   {
     if(!hole[i]) continue;
-    solution[i] += cg_state[HL_CG_ALPHA] * search_dir[i];        // u <- u + cg_state[HL_CG_ALPHA]*p   (cg_state[HL_CG_ALPHA] = ||r||^2 / p.Ap)
-    residual[i] -= cg_state[HL_CG_ALPHA] * matvec[i];            // r <- r - cg_state[HL_CG_ALPHA]*ap
-    accum += (double)residual[i] * residual[i];  // += r_i^2  -> new ||r||^2 for the convergence test
+    solution[i] += cg_state[HL_CG_ALPHA] * search_dir[i];        // u <- u + alpha*p   (alpha = ||r||^2 / p.Ap)
+    residual[i] -= cg_state[HL_CG_ALPHA] * matvec[i];            // r <- r - alpha*ap
+    accum = csum_add(accum, residual[i] * residual[i]);          // += r_i^2  -> new ||r||^2 for the convergence test
   }
   scratch[local_id] = accum;
   barrier(CLK_LOCAL_MEM_FENCE);
   for(int offset = local_size / 2; offset > 0; offset /= 2)
   {
-    if(local_id < offset) scratch[local_id] += scratch[local_id + offset];
+    if(local_id < offset) scratch[local_id] = csum_merge(scratch[local_id], scratch[local_id + offset]);
     barrier(CLK_LOCAL_MEM_FENCE);
   }
   if(local_id == 0) partial[get_group_id(0)] = scratch[0];
 }
-
-#endif // HL_SPARSE_FP64
