@@ -904,7 +904,7 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_highlights_1f_clip = dt_opencl_create_kernel(program, "highlights_1f_clip");
   gd->kernel_highlights_count_clipped = dt_opencl_create_kernel(program, "highlights_count_clipped");
   const int harmonic_program = 38; // highlights_harmonic.cl (harmonic transposition, fp32)
-  const int sparse_program = 37;   // highlights_sparse.cl (fp64 sparse Cholesky + fp32 CG)
+  const int sparse_program = 37;   // highlights_sparse.cl (sparse Cholesky in hl_real_t + fp32 CG)
   gd->kernel_sparse_chol_update_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_update_level");
   gd->kernel_sparse_chol_final_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_final_level");
   gd->kernel_sparse_chol_fwd_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_fwd_level");
