@@ -83,9 +83,11 @@
 #endif
 #include <gdk/gdkkeysyms.h>
 #include "widgets/container.h"
+#include "widgets/dialog.h"
 #include "widgets/label.h"
 
 #include <gtk/gtk.h>
+#include <limits.h>
 #include <stdlib.h>
 
 #include <glib.h>
@@ -241,67 +243,52 @@ static void _collection_updated_callback(gpointer instance, dt_collection_change
   _update(self);
 }
 
-gboolean _is_int(double value)
+// a positive whole number that fits the int it is printed as
+static gboolean _is_int(const double value)
 {
-  return (value == (int)value);
+  return value > 0.0 && value <= (double)INT_MAX && value == (int)value;
 }
 
+// rewrite the resizing factor in its shortest spelling: "2.0/4" becomes "2/4"
 static void _scale_optim()
 {
   double num = 1.0, denum = 1.0;
-  dt_imageio_resizing_factor_get_and_parsing(&num, &denum);
-  gchar *scale_str = dt_conf_get_string(CONFIG_PREFIX "resizing_factor");
-  gchar _str[6] = "";
-
-  gchar *pdiv = strchr(scale_str, '/');
+  gchar *scale_str = dt_imageio_resizing_factor_get_and_parsing(&num, &denum);
+  const gchar *pdiv = strchr(scale_str, '/');
 
   gchar scale_buf[64] = "";
+  gchar num_str[16] = "";
+  gchar denum_str[16] = "";
+  if(_is_int(num)) snprintf(num_str, sizeof(num_str), "%d", (int)num);
+  if(_is_int(denum)) snprintf(denum_str, sizeof(denum_str), "%d", (int)denum);
+
   if(IS_NULL_PTR(pdiv))
   {
-    if(_is_int(num) && num > 0.0)
-    {
-      sprintf(_str, "%d", (int) num);
-      g_strlcat(scale_buf, _str, sizeof(scale_buf));
-    }
-    else
-    {
-      g_strlcat(scale_buf, scale_str, sizeof(scale_buf));
-    }
+    g_strlcat(scale_buf, num_str[0] ? num_str : scale_str, sizeof(scale_buf));
   }
-  else if(pdiv-scale_str == 0)
+  else if(pdiv == scale_str)
   {
-    if(_is_int(denum) && denum > 0.0)
-    {
-      sprintf(_str, "%d", (int) denum);
-      g_strlcat(scale_buf, _str, sizeof(scale_buf));
-    }
+    if(denum_str[0])
+      g_strlcat(scale_buf, denum_str, sizeof(scale_buf));
     else
     {
       g_strlcat(scale_buf, "1/", sizeof(scale_buf));
-      g_strlcat(scale_buf, pdiv+1, sizeof(scale_buf));
+      g_strlcat(scale_buf, pdiv + 1, sizeof(scale_buf));
     }
   }
   else
   {
-    if(_is_int(num) && num > 0.0)
-    {
-      sprintf(_str, "%d", (int) num);
-      g_strlcat(scale_buf, _str, sizeof(scale_buf));
-    }
+    if(num_str[0])
+      g_strlcat(scale_buf, num_str, sizeof(scale_buf));
     else
     {
-      g_strlcat(scale_buf, scale_str, sizeof(scale_buf));
+      // the numerator alone, not the whole "num/denum" string
+      gchar *num_part = g_strndup(scale_str, pdiv - scale_str);
+      g_strlcat(scale_buf, num_part, sizeof(scale_buf));
+      dt_free(num_part);
     }
     g_strlcat(scale_buf, "/", sizeof(scale_buf));
-    if(_is_int(denum) && denum > 0.0)
-    {
-      sprintf(_str, "%d", (int) denum);
-      g_strlcat(scale_buf, _str, sizeof(scale_buf));
-    }
-    else
-    {
-      g_strlcat(scale_buf, pdiv+1, sizeof(scale_buf));
-    }
+    g_strlcat(scale_buf, denum_str[0] ? denum_str : pdiv + 1, sizeof(scale_buf));
   }
   dt_conf_set_string(CONFIG_PREFIX "resizing_factor", scale_buf);
 
@@ -349,7 +336,9 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
 
     gtk_window_set_title(GTK_WINDOW(dialog), _("export to disk"));
     const gint res = gtk_dialog_run(GTK_DIALOG(dialog));
+    GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);
+    dt_gui_refocus_parent(dialog_parent);
     dt_free(confirm_message);
 
     if(res != GTK_RESPONSE_YES)
@@ -388,9 +377,10 @@ static void _scale_changed(GtkEntry *spin, dt_lib_export_t *d)
   const char *validSign = ",.0123456789";
   const gchar *value = gtk_entry_get_text(spin);
 
-  const int len = sizeof(value);
-  int i, j = 0, idec = 0, idiv = 0, pdiv = 0;
   char new_value[30] = "";
+  // each character read writes at most one: keep room for the terminator
+  const int len = MIN((int)strlen(value), (int)sizeof(new_value) - 1);
+  int i, j = 0, idec = 0, idiv = 0, pdiv = 0;
 
   for (i = 0; i < len; i++)
   {
@@ -834,10 +824,12 @@ static void _dimensions_type_changed(GtkWidget *widget, dt_lib_export_t *d)
   if(d_type == DT_DIMENSIONS_ORIGINAL)
   {
     // The "same as original" is really just an user-friendly alias
-    // for size = 0x0 pixels, which we read as "full size"
-    dt_conf_set_int(CONFIG_PREFIX "width", 0);
-    dt_conf_set_int(CONFIG_PREFIX "height", 0);
-    dt_conf_set_string(CONFIG_PREFIX "resizing_factor", "1");
+    // for size = 0x0 pixels, which we read as "full size".
+    // Write it through the entries too: they are what the other modes show,
+    // and export reads the conf.
+    _set_dimensions(d, 0, 0);
+    // _scale_changed() stores the factor
+    gtk_entry_set_text(GTK_ENTRY(d->scale), "1");
   }
 
   _size_update_display(d);
@@ -1814,7 +1806,7 @@ void *get_params(dt_lib_module_t *self, int *size)
   const int32_t export_masks = dt_conf_get_bool(CONFIG_PREFIX "export_masks") ? 1 : 0;
   gchar *iccfilename = dt_conf_get_string(CONFIG_PREFIX "iccprofile");
   gchar *style = dt_conf_get_string(CONFIG_PREFIX "style");
-  const char *metadata_export = d->metadata_export;
+  const char *metadata_export = IS_NULL_PTR(d->metadata_export) ? "" : d->metadata_export;
 
   if(fdata)
   {
@@ -1827,7 +1819,6 @@ void *get_params(dt_lib_module_t *self, int *size)
   }
 
   if(!iccfilename) iccfilename = g_strdup("");
-  if(IS_NULL_PTR(metadata_export)) metadata_export = g_strdup("");
 
   const char *fname = mformat->plugin_name;
   const char *sname = mstorage->plugin_name;
@@ -1889,33 +1880,65 @@ void *get_params(dt_lib_module_t *self, int *size)
   return params;
 }
 
+// the NUL-terminated string at *buf, or NULL if the blob ends before its terminator
+static const char *_blob_string(const char **buf, const char *const end)
+{
+  const char *str = *buf;
+  const char *nul = memchr(str, '\0', end - str);
+  if(IS_NULL_PTR(nul)) return NULL;
+  *buf = nul + 1;
+  return str;
+}
+
 int set_params(dt_lib_module_t *self, const void *params, int size)
 {
   dt_lib_export_t *d = (dt_lib_export_t *)self->data;
-  // apply these stored presets again (parse blob)
-  const char *buf = (const char *)params;
+  if(IS_NULL_PTR(params) || size < 0) return 1;
 
-  const int max_width = *(const int *)buf;
-  buf += sizeof(int32_t);
-  const int max_height = *(const int *)buf;
-  buf += sizeof(int32_t);
-  // const int upscale = *(const int *)buf; // unused now
-  buf += sizeof(int32_t);
-  //const int high_quality = *(const int *)buf; // unused now
-  buf += sizeof(int32_t);
-  const int export_masks = *(const int *)buf;
-  buf += sizeof(int32_t);
-  const int iccintent = *(const int *)buf;
-  buf += sizeof(int32_t);
-  const int icctype = *(const int *)buf;
-  buf += sizeof(int32_t);
-  const char *metadata_export = buf;
-  buf += strlen(metadata_export) + 1;
+  // parse and validate the whole blob before applying anything of it
+  const char *buf = (const char *)params;
+  const char *const end = buf + size;
+
+  // max_width, max_height, upscale (unused now), high_quality (unused now), export_masks, iccintent, icctype
+  int32_t header[7];
+  if((size_t)(end - buf) < sizeof(header)) return 1;
+  memcpy(header, buf, sizeof(header));
+  buf += sizeof(header);
+  const int max_width = header[0];
+  const int max_height = header[1];
+  const int export_masks = header[4];
+  const int iccintent = header[5];
+  const int icctype = header[6];
+
+  const char *metadata_export = _blob_string(&buf, end);
+  const char *iccfilename = metadata_export ? _blob_string(&buf, end) : NULL;
+  const char *fname = iccfilename ? _blob_string(&buf, end) : NULL;
+  const char *sname = fname ? _blob_string(&buf, end) : NULL;
+  if(IS_NULL_PTR(sname)) return 1;
+
+  // fversion, sversion, fsize, ssize
+  int32_t modules[4];
+  if((size_t)(end - buf) < sizeof(modules)) return 1;
+  memcpy(modules, buf, sizeof(modules));
+  buf += sizeof(modules);
+  const int32_t fversion = modules[0];
+  const int32_t sversion = modules[1];
+  const int32_t fsize = modules[2];
+  const int32_t ssize = modules[3];
+  if(fsize < 0 || ssize < 0 || (size_t)(end - buf) != (size_t)fsize + (size_t)ssize) return 1;
+
+  // get module by name and fail if not there.
+  dt_imageio_module_format_t *fmod = dt_imageio_get_format_by_name(fname);
+  dt_imageio_module_storage_t *smod = dt_imageio_get_storage_by_name(sname);
+  if(!fmod || !smod) return 1;
+  if(fversion != fmod->version() || sversion != smod->version()) return 1;
+
+  const dt_imageio_module_data_t *fdata = (const dt_imageio_module_data_t *)buf;
+  const void *sdata = buf + fsize;
+
   dt_free(d->metadata_export);
   d->metadata_export = g_strdup(metadata_export);
   dt_lib_export_metadata_set_conf(d->metadata_export);
-  const char *iccfilename = buf;
-  buf += strlen(iccfilename) + 1;
 
   // reverse these by setting the gui, not the conf vars!
   dt_bauhaus_combobox_set(d->intent, iccintent + 1);
@@ -1928,42 +1951,18 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
     if(pos > -1) dt_bauhaus_combobox_set(d->profile, pos + 1);
   }
 
-  // parse both names to '\0'
-  const char *fname = buf;
-  buf += strlen(fname) + 1;
-  const char *sname = buf;
-  buf += strlen(sname) + 1;
-
-  // get module by name and fail if not there.
-  dt_imageio_module_format_t *fmod = dt_imageio_get_format_by_name(fname);
-  dt_imageio_module_storage_t *smod = dt_imageio_get_storage_by_name(sname);
-  if(!fmod || !smod) return 1;
-
-  const int32_t fversion = *(const int32_t *)buf;
-  buf += sizeof(int32_t);
-  const int32_t sversion = *(const int32_t *)buf;
-  buf += sizeof(int32_t);
-
-  const int fsize = *(const int *)buf;
-  buf += sizeof(int32_t);
-  const int ssize = *(const int *)buf;
-  buf += sizeof(int32_t);
-
-  if(size
-     != strlen(fname) + strlen(sname) + 2 + 4 * sizeof(int32_t) + fsize + ssize + 7 * sizeof(int32_t)
-        + strlen(iccfilename) + 1 + strlen(metadata_export) + 1)
-    return 1;
-  if(fversion != fmod->version() || sversion != smod->version()) return 1;
-
-  const dt_imageio_module_data_t *fdata = (const dt_imageio_module_data_t *)buf;
-
-  if(fdata->style[0] == '\0')
-    dt_bauhaus_combobox_set(d->style, 0);
-  else
-    dt_bauhaus_combobox_set_from_text(d->style, fdata->style);
-
-  buf += fsize;
-  const void *sdata = buf;
+  // the style travels in the format's params: a preset saved while the format had none carries
+  // no style, and the current one is left alone.
+  if((size_t)fsize >= sizeof(dt_imageio_module_data_t))
+  {
+    char style[sizeof(fdata->style)];
+    memcpy(style, fdata->style, sizeof(style));
+    style[sizeof(style) - 1] = '\0';
+    if(style[0] == '\0')
+      dt_bauhaus_combobox_set(d->style, 0);
+    else
+      dt_bauhaus_combobox_set_from_text(d->style, style);
+  }
 
   // switch modules
   set_storage_by_name(d, sname);

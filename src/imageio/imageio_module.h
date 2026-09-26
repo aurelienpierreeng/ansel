@@ -157,7 +157,7 @@ void dt_imageio_remove_storage(dt_imageio_module_storage_t *storage);
 // "plugins/lighttable/export/resizing_factor" parameter of the configuration file
 // and its "num" and "denum" fraction's elements to calculate the scaling factor
 // and improve the readability of the displayed string itself in the "scale" field
-// of the settings export.
+// of the settings export. The returned string belongs to the caller, who frees it.
 gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum);
 
 #ifdef __cplusplus
