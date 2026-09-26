@@ -2094,8 +2094,8 @@ per ROI planning pass and one per render, per pipe:
 
 ```
 [retouch] FULL     modify_roi_in: 1 stabilisation pass(es), boxes 10010 (10009 memo / 1 rasterised), 0.017 s
-[retouch] FULL     process on GPU 823x885: 140 shape(s), masks 140 (139 memo / 1 rasterised),
-                   boxes 1 (1 memo / 0 rasterised), algorithms 0.323 s, total 0.375 s
+[retouch] PREVIEW  process on GPU 823x885: 140 shape(s), masks 140 (139 memo / 1 rasterised),
+                   boxes 1 (1 memo / 0 rasterised), algorithms 0.471 s, total 0.520 s
 ```
 
 The pipeline's `processed \`Retouch'` line covers `process()` only, so on its own it hides the
@@ -2103,17 +2103,40 @@ half of the cost that used to dominate. The counters are built only when the cha
 (`rt_perf_enabled()`, `ctx->stats` NULL otherwise), and `boxes 1` in a render line is how you see
 the mask memo's header paying: the 139 memoised masks needed no area of their own.
 
-Measured on the 141-shape image, dragging one shape in the darkroom: **1 box of 10 010 and 1 mask
-of 140 rasterised** — the one being moved — and ROI planning down to 16–34 ms. Both pipes render
-per frame, and what is left is the algorithms: 0.323 s of the FULL render's 0.375 s and 0.232 s
-of the preview's 0.265 s, i.e. **86–88 % of what this module now costs a drag frame**, against
-1.02 s and 0.90 s for the whole of each pipe.
+**`algorithms` is a sum, and a sum cannot say which shape is expensive.** A drag re-solves the
+moved shape at a new position while every other one is bit-identical, and `_heal_laplace_loop()`
+(`pixel/heal.c`) runs Gauss-Seidel to `max_iter` but breaks once the squared residual falls under
+its threshold, so one shape's cost follows the content it lands on: measured at a working zoom, the
+same three shapes cost between 18 and 178 ms per frame, of which the dragged one alone is 9 to
+168 ms while the two beside it are 8 to 30 ms together. Nothing in this line separates the two.
+Before concluding from it that memoising the static shapes would pay, record the costliest single
+member -- a few lines around the existing `algo_start` timing, kept only as long as the question
+is open. Reading the sum as if it described the static shapes is how the figure of 86-88 % below
+came about.
 
-That is where a memo of each shape's *result* would go, and the numbers above are its target: the
-destination patch is a function of the layer it reads, so it needs a dependency-aware key (a
-shape depends on every earlier shape whose destination box meets its own read box), not a
-geometric one. A drag moves exactly one shape of a hundred and forty, so nearly every patch would
-be a hit. Not implemented.
+Measured on the 141-shape image, dragging one shape in the darkroom: ROI planning down to 1-18 ms
+with every box answered from the memo, and the mask memo answering 139 of 140 whenever the layer
+ROI holds still.
+
+**What is left is not worth memoising, and the arithmetic says so at the zoom people retouch at.**
+A drag at 1:1 to 4:1 puts only a handful of shapes inside the viewport -- three of a hundred and
+forty, measured -- and of those three the cost is the one being dragged, whose heal is re-solved
+at a new position every frame: `dt_heal()`'s Gauss-Seidel loop stops on convergence
+(`pixel/heal.c`), so it swings between 9 and 168 ms with the content it lands on, while the static
+shapes beside it cost 8 to 30 ms together. The module is then 5 % of a 550 ms frame, 92 % of which
+is a downstream `diffuse or sharpen` instance doing legitimate work. A memo of each shape's
+*result* would buy those 8 to 30 ms, for a transitive dependency key and patches in the shared
+cache. `doc/retouch-result-memo.md` is the design, the measurements and the verdict; the short
+version is that the dependency graph is ROI-relative, so it shrinks with the very zoom that makes
+the memo worth having, and the two effects cancel.
+
+**Two traps in reading `-d perf` here**, both of which cost a wrong conclusion before the counter
+was fixed. The aggregate `algorithms` figure cannot tell "the static shapes are expensive" from
+"the one being dragged is", which is why the line also reports the costliest single shape and the
+sum of the others. And the FULL and preview pipes do NOT both render per drag frame: only FULL
+does, the preview rendering once when the button comes up -- so a preview figure is a per-gesture
+cost, not a per-frame one. An earlier reading of these lines put the algorithms at 86-88 % of a
+drag frame; that was a fit-zoom aggregate read as if it were the interactive case.
 
 ### retouch and spots: everything on the pipeline thread resolves shapes through `pipe->forms`, never `self->dev->forms`
 
