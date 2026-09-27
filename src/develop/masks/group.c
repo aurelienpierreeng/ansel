@@ -725,10 +725,21 @@ static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const
     const uint64_t prefix = _group_prefix_hash(form, masks, piece, roi, count);
     if(prefix == 0) break;
 
+    /* Retained, not peeked. A prefix sits at refcount 0 between renders, so any thread's eviction
+     * may free it at any moment: dt_dev_pixelpipe_cache_peek() takes no reference, and the entry
+     * it returns can be gone before the read lock below is taken. The lookup and the reference
+     * are therefore one step, under the cache lock, and the reference is what the release at the
+     * end of this block hands back -- releasing after a peek drops one this code never took. */
     void *cached = NULL;
     dt_pixel_cache_entry_t *entry = NULL;
-    if(dt_dev_pixelpipe_cache_peek(prefix, &cached, &entry, -1, NULL) && !IS_NULL_PTR(cached))
+    if(dt_dev_pixelpipe_cache_ref_host_entry_by_hash(prefix, &cached, &entry))
     {
+      // A hash identifies content, never a size: refuse a line too short for this ROI.
+      if(dt_pixel_cache_entry_get_size(entry) < npixels * sizeof(float))
+      {
+        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+        continue;
+      }
       dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
       memcpy(buffer, cached, npixels * sizeof(float));
       dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
@@ -918,14 +929,18 @@ static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const
       dt_pixel_cache_entry_t *entry = NULL;
       const int created = dt_dev_pixelpipe_cache_get(prefix, npixels * sizeof(float), "masks group prefix",
                                                     IS_NULL_PTR(pipe) ? -1 : pipe->type, TRUE, &slot, &entry);
-      if(!IS_NULL_PTR(slot))
+      /* dt_dev_pixelpipe_cache_get() hands back a reference, plus the write lock when it created
+       * the line, whether or not the buffer could be allocated: both go back on every path. */
+      if(!IS_NULL_PTR(entry))
       {
         if(created)
         {
-          memcpy(slot, publishable, npixels * sizeof(float));
+          if(!IS_NULL_PTR(slot)) memcpy(slot, publishable, npixels * sizeof(float));
           dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
         }
         dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+        // created without a buffer: nothing a later render could resume from
+        if(created && IS_NULL_PTR(slot)) dt_dev_pixelpipe_cache_remove(TRUE, entry);
       }
     }
   }

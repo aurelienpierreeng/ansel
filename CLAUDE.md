@@ -207,6 +207,24 @@ If a flushed entry is then empty (no host data + no vRAM on any device), remove 
 hash table via `g_hash_table_iter_remove` — do NOT subtract `current_memory` manually, the
 `_free_cache_entry` GDestroyNotify handles it.
 
+### A peek retains nothing: release only what a retained lookup handed you
+
+`dt_dev_pixelpipe_cache_peek()` is non-owning. An entry nobody holds sits at refcount 0 and any
+thread's eviction can free it between the peek and the caller's next line, so code that reads a
+cacheline, or releases one afterwards, looks it up with `dt_dev_pixelpipe_cache_ref_entry_by_hash()`
+or `dt_dev_pixelpipe_cache_ref_host_entry_by_hash()` (lookup and reference under one hold of the cache
+lock), read-locks while copying, and releases exactly that reference.
+
+A release nobody took is a use-after-free with a delay. It leaves the count below the number of real
+holders; the LRU (`refcount > 0` is its only guard) frees a held entry; and since every long-lived
+reference is released by POINTER (`dt_dev_pixelpipe_cache_unref_entry()`), the holder's own release
+later decrements freed memory -- memory the allocator has meanwhile handed to something else. The
+crash lands in that other object, typically as a pointer that reads back as itself minus one (the
+refcount decrement landed on it), found by the next `free()` or dereference of it, nowhere near the
+cache. ASAN only sees it when the eviction happens to fall inside the window; the imbalance itself is
+deterministic, so the quick way to find one is to report, with a backtrace, every release that takes
+a count below zero in `_non_thread_safe_cache_ref_count_entry()` and exercise the suspect path.
+
 ### A cache key is what a piece computes, never a runtime identity
 
 `dt_iop_compute_module_hash()` (`develop/imageop.c`) keys a module by its op, enabled state,
