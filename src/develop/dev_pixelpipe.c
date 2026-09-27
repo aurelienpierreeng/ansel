@@ -437,34 +437,11 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
                                                        .active_in_gui = active_in_gui,
                                                        .has_autoset = has_autoset };
 
-    const gboolean was_cached_on_ram = piece->cache_output_on_ram;
+    /* One hop is enough: a node that did not publish host data leaves none for a later consumer
+     * to trust, since a rekeyed cacheline reports no host pixels until they are rewritten. */
     piece->cache_output_on_ram
         = dt_dev_pipe_cache_policy_decide(&inputs, current_output_must_cache_host,
                                           &current_output_must_cache_host);
-
-    /* THE TRANSITION, and the reason the policy above can stay lean.
-     *
-     * A node that did NOT have to publish host data leaves its cacheline with whatever host
-     * bytes that line held in a previous life -- the buffers are reused in place by rekey. If
-     * its requirement then turns back on (a CPU-only consumer downstream re-enabled, a picker
-     * opened, the module gaining focus), the line is found by hash, looks valid, and hands
-     * out those stale bytes. That is the defect the old transitive OR was hiding by keeping
-     * every host copy fresh everywhere, forever -- at 152 MB a frame.
-     *
-     * Invalidate the line instead, exactly on the edge where it becomes readable from RAM.
-     * `piece->global_hash` still names the PREVIOUS resync's line here (the new hashes are
-     * computed after this seal), which is precisely the line that would be reused. Entries
-     * still referenced or locked are left alone by the cache, so this cannot pull a published
-     * backbuffer out from under another pipe. */
-    if(!was_cached_on_ram && piece->cache_output_on_ram
-       && piece->global_hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
-    {
-      const uint64_t stale = piece->global_hash;
-      dt_dev_pixelpipe_cache_invalidate_hashes(&stale, 1);
-      dt_print(DT_DEBUG_PIPE,
-               "[pixelpipe] %s now needs its output in RAM: dropped its cacheline so the host "
-               "copy cannot be served stale\n", module->op);
-    }
   }
 }
 
@@ -1887,14 +1864,15 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
       = (dt_dev_pixelpipe_change_t)dt_atomic_exch_int((dt_atomic_int *)&pipe->changed, DT_DEV_PIPE_UNCHANGED);
 
   gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
-  char *status_str = g_strdup_printf("%s%s%s%s%s%s%s",
+  char *status_str = g_strdup_printf("%s%s%s%s%s%s%s%s",
                                   (status & DT_DEV_PIPE_UNCHANGED) ? "UNCHANGED " : "",
                                   (status & DT_DEV_PIPE_REMOVE) ? "REMOVE " : "",
                                   (status & DT_DEV_PIPE_TOP_CHANGED) ? "TOP_CHANGED " : "",
                                   (status & DT_DEV_PIPE_SYNCH) ? "SYNCH " : "",
                                   (status & DT_DEV_PIPE_ZOOMED) ? "ZOOMED " : "",
                                   (status & DT_DEV_PIPE_CACHE_REQUEST) ? "CACHE_REQUEST " : "",
-                                  (status & DT_DEV_PIPE_REENTRY) ? "REENTRY " : "");
+                                  (status & DT_DEV_PIPE_REENTRY) ? "REENTRY " : "",
+                                  (status & DT_DEV_PIPE_SWITCHED) ? "SWITCHED " : "");
 
   dt_print(DT_DEBUG_DEV, "[dt_dev_pixelpipe_change] pipeline state changing for pipe %s, flag %s\n",
      type, status_str);
@@ -1904,6 +1882,10 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
   // mask display off as a starting point
   pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
   pipe->bypass_blendif = 0;
+
+  // Only raised here: whatever changes next, the run that renders the switched-to state must
+  // leave the previous state's outputs alone. dt_dev_pixelpipe_process() lowers it once it did.
+  if(status & DT_DEV_PIPE_SWITCHED) pipe->keep_outputs = TRUE;
 
   /* Zoom/pan only replans ROI and hashes, it does not replay history sync.
    * Rebuild the aggregate detail-mask demand from the already synchronized

@@ -71,6 +71,7 @@ static int _gpu_init_input(dt_dev_pixelpipe_t *pipe,
   const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, *input, *cl_mem_input, &piece->roi_in, CL_MAP_READ,
                                           piece->dsc_in.bpp, module,
                                           "cpu fallback input copy to cache");
+  if(!fail) dt_dev_pixelpipe_cache_flag_host_written(input_entry);
   dt_dev_pixelpipe_cache_wrlock_entry(FALSE, input_entry);
 
   if(fail)
@@ -109,7 +110,8 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
 
   /* CPU fallback only needs a valid host buffer. If `input` already exists here, the upstream
    * hand-off has already materialized authoritative RAM and re-reading the same pixels back out
-   * of the cached OpenCL image is redundant. */
+   * of the cached OpenCL image is redundant. A host buffer left over from the entry's previous
+   * hash is not `input`: dt_pixel_cache_entry_get_data() reported it as NULL. */
   if(input && !IS_NULL_PTR(*input))
   {
     dt_print(DT_DEBUG_OPENCL,
@@ -210,7 +212,9 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   double gpu_cst_ms = 0.0;
   gboolean gpu_out_cl_reused = FALSE;
   float *input = input_entry ? dt_pixel_cache_entry_get_data(input_entry) : NULL;
-  void *output = dt_pixel_cache_entry_get_data(output_entry);
+  // The buffer, not its pixels: a rekeyed output's host buffer backs the pinned output image even
+  // when the output is not copied back to RAM.
+  void *output = dt_pixel_cache_entry_get_buffer(output_entry);
   void *cl_mem_input = NULL;
   void *cl_mem_output = NULL;
   void *cl_mem_process_input = NULL;

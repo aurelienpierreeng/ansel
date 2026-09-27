@@ -337,12 +337,13 @@ static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char
   if(verbose && !_verbose_detail) return;
   _cache_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %" G_GSIZE_FORMAT " MiB - age %" PRId64
-           " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
+           " - hits %i - refs %i - auto %i - ext %i - id %i - stale %i - module %s) %s\n",
            cache_entry->hash, cache_entry->serial,
            cache_entry->name ? cache_entry->name : "-", cache_entry->data,
            _pixel_cache_get_size(cache_entry), _pixel_cache_get_age(cache_entry), cache_entry->hits,
            dt_atomic_get_int(&cache_entry->refcount), cache_entry->auto_destroy,
-           cache_entry->external_alloc, cache_entry->id, _cache_debug_module_name(), message);
+           cache_entry->external_alloc, cache_entry->id, dt_atomic_get_int(&cache_entry->host_stale),
+           _cache_debug_module_name(), message);
 }
 
 static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry, void **data,
@@ -350,7 +351,10 @@ static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry,
 {
   _pixel_cache_touch(cache_entry);
   if(data)
-    *data = cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
+  {
+    void *pixels = dt_pixel_cache_entry_get_data(cache_entry);
+    *data = !IS_NULL_PTR(pixels) ? __builtin_assume_aligned(pixels, DT_CACHELINE_BYTES) : NULL;
+  }
   _pixel_cache_message(cache_entry, message, FALSE);
 }
 
@@ -402,7 +406,8 @@ gboolean dt_dev_pixelpipe_cache_ref_host_entry_by_hash(const uint64_t hash,
   cache->queries++;
 
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
-  if(!IS_NULL_PTR(cache_entry) && !cache_entry->auto_destroy && !IS_NULL_PTR(cache_entry->data))
+  if(!IS_NULL_PTR(cache_entry) && !cache_entry->auto_destroy
+     && !IS_NULL_PTR(dt_pixel_cache_entry_get_data(cache_entry)))
   {
     /* The same rejection `dt_dev_pixelpipe_cache_peek()` applies, for the same reason: a reusable
      * output cacheline is rekeyed to its new hash BEFORE the recompute that fills it starts, so an
@@ -559,6 +564,9 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
                                             width, height, bpp) == CL_SUCCESS);
     }
   }
+
+  // The payload copied back is the one published under the entry's current hash.
+  if(ok) dt_atomic_set_int(&entry->host_stale, FALSE);
 
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
   return ok;
@@ -1416,6 +1424,7 @@ float *dt_dev_pixelpipe_cache_restore_cl_buffer(dt_dev_pixelpipe_t *pipe, float 
 
   const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, input, cl_mem_input, roi_in,
                                                          CL_MAP_READ, in_bpp, module, message);
+  if(!fail) dt_dev_pixelpipe_cache_flag_host_written(input_entry);
   dt_dev_pixelpipe_cache_wrlock_entry(FALSE, input_entry);
   return fail ? NULL : input;
 }
@@ -1921,10 +1930,12 @@ static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, c
     l = next;
   }
 
-  // A cacheline that now carries neither a host buffer nor any vRAM is a husk: the cache would
+  // A cacheline that now carries neither host pixels nor any vRAM is a husk: the cache would
   // still hand it out as a hit, making a later consumer abort with "has no RAM nor vRAM input"
-  // (issue #817 skull thumbnails). Signal the caller to delete it entirely.
-  const gboolean empty = IS_NULL_PTR(entry->data) && IS_NULL_PTR(entry->cl_mem_list);
+  // (a skull thumbnail). Signal the caller to delete it entirely. A stale host buffer counts as
+  // none: the vRAM just released was the only copy of this hash's pixels.
+  const gboolean empty
+      = IS_NULL_PTR(dt_pixel_cache_entry_get_data(entry)) && IS_NULL_PTR(entry->cl_mem_list);
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
   return empty;
 }
@@ -1956,7 +1967,17 @@ void *dt_pixel_cache_alloc(dt_pixel_cache_entry_t *cache_entry)
 
 void *dt_pixel_cache_entry_get_data(dt_pixel_cache_entry_t *entry)
 {
-  return entry ? entry->data : NULL;
+  return (!IS_NULL_PTR(entry) && !dt_atomic_get_int(&entry->host_stale)) ? entry->data : NULL;
+}
+
+void *dt_pixel_cache_entry_get_buffer(dt_pixel_cache_entry_t *entry)
+{
+  return entry->data;
+}
+
+void dt_dev_pixelpipe_cache_flag_host_written(dt_pixel_cache_entry_t *entry)
+{
+  dt_atomic_set_int(&entry->host_stale, FALSE);
 }
 
 size_t dt_pixel_cache_entry_get_size(const dt_pixel_cache_entry_t *entry)
@@ -2172,6 +2193,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   cache_entry->data = NULL;
   cache_entry->cache = cache;
   cache_entry->cl_mem_list = NULL;
+  dt_atomic_set_int(&cache_entry->host_stale, FALSE);
   dt_pthread_mutex_init(&cache_entry->cl_mem_lock, NULL);
 
   // Optionally alloc the actual buffer, but still record its size in cache
@@ -2457,6 +2479,9 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
 
   *(uint64_t *)stolen_key = new_hash;
   cache_entry->hash = new_hash;
+  /* The host buffer still holds the old hash's pixels, which an output kept on the device never
+   * overwrites: the entry reports no host pixels until they are rewritten for the new hash. */
+  dt_atomic_set_int(&cache_entry->host_stale, TRUE);
   g_hash_table_insert(cache->entries, stolen_key, cache_entry);
 
   _observe_rekey(old_hash, new_hash);
