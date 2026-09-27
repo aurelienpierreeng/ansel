@@ -760,11 +760,12 @@ static void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)value;
   _cache_lru_t *lru = (_cache_lru_t *)user_data;
 
-  // Don't remove LRU entries that are still in use
-  // NOTE: with all the killswitches mechanisms and safety measures,
-  // we might have more things decreasing refcount than increasing it.
-  // It's no big deal though, as long as the (final output) backbuf
-  // is checked for NULL and not reused if pipeline is DIRTY.
+  // Don't remove LRU entries that are still in use.
+  // `refcount > 0` is the only thing standing between a holder and this eviction, so a release
+  // nobody took is not harmless: it lets an entry that is still held look free, the entry is
+  // freed under its holder, and the holder's own release -- by pointer, for every long-lived
+  // reference -- then writes into freed memory. Release only what you retained: a
+  // dt_dev_pixelpipe_cache_peek() retains nothing.
   const int64_t age = _pixel_cache_get_age(cache_entry);
   if(age < lru->max_age)
   {

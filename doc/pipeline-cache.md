@@ -104,8 +104,19 @@ missed because the input cacheline was not retained, and never recovered.
 this document.
 
 Backend code that must keep a cacheline past the lookup uses
-`dt_dev_pixelpipe_cache_ref_entry_by_hash()`. Raster-mask retrieval follows this contract: retain
-under the cache mutex, read-lock while copying, then release the temporary reference.
+`dt_dev_pixelpipe_cache_ref_entry_by_hash()`, or `dt_dev_pixelpipe_cache_ref_host_entry_by_hash()`
+when it needs host pixels and must not wait on a line still being written. Raster-mask retrieval
+and the drawn-mask group's cached-prefix resume (`develop/masks/group.c`) follow this contract:
+retain under the cache mutex, read-lock while copying, then release the temporary reference.
+
+**A peek retains nothing, so nothing may be released after one.** An entry nobody holds sits at
+refcount 0, and any thread's eviction can free it between `dt_dev_pixelpipe_cache_peek()` returning
+and the caller's next step, read lock included. Releasing a reference that was never taken is worse
+than a leak: it drives the count below the number of real holders, the LRU then sees a held entry as
+free and frees it under them, and every long-lived reference is released by pointer
+(`dt_dev_pixelpipe_cache_unref_entry()`), so the holder's own release writes into freed memory --
+wherever the allocator has put something else by then. The crash surfaces in that other object, far
+from the release that caused it.
 
 ## 3. Requesting a partial recompute
 
