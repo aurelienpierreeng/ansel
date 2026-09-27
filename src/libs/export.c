@@ -202,7 +202,8 @@ static void _resolve_export_size(int *max_width, int *max_height, double *scale_
     }
     case DT_DIMENSIONS_SCALE:
     {
-      double num = 1.0, denum = 1.0;
+      double num = 1.0;
+      double denum = 1.0;
       dt_imageio_resizing_factor_parse(dt_conf_get_string_const(CONFIG_PREFIX "resizing_factor"), &num, &denum);
       *scale_factor = num / denum;
       break;
@@ -265,7 +266,8 @@ static gboolean _is_int(const double value)
 // rewrite the resizing factor in its shortest spelling: "2.0/4" becomes "2/4"
 static void _scale_optim()
 {
-  double num = 1.0, denum = 1.0;
+  double num = 1.0;
+  double denum = 1.0;
   gchar *scale_str = dt_conf_get_string(CONFIG_PREFIX "resizing_factor");
   dt_imageio_resizing_factor_parse(scale_str, &num, &denum);
   const gchar *pdiv = strchr(scale_str, '/');
@@ -362,24 +364,25 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
   }
 
   // the size the selected mode asks for, resolved now: the job keeps it whatever happens to the settings
-  int max_width = 0, max_height = 0;
-  double scale_factor = 0.0;
-  _resolve_export_size(&max_width, &max_height, &scale_factor);
+  dt_control_export_request_t request = { .format_index = format_index, .storage_index = storage_index };
+  _resolve_export_size(&request.max_width, &request.max_height, &request.scale_factor);
 
-  const gboolean export_masks = dt_conf_get_bool(CONFIG_PREFIX "export_masks");
+  request.export_masks = dt_conf_get_bool(CONFIG_PREFIX "export_masks");
   const char *tmp = dt_conf_get_string_const(CONFIG_PREFIX "style");
   if(tmp)
   {
     g_strlcpy(style, tmp, sizeof(style));
   }
+  request.style = style;
 
-  const dt_colorspaces_color_profile_type_t icc_type = sanitize_colorspaces(dt_conf_get_int(CONFIG_PREFIX "icctype"));
+  request.icc_type = sanitize_colorspaces(dt_conf_get_int(CONFIG_PREFIX "icctype"));
   gchar *icc_filename = dt_conf_get_string(CONFIG_PREFIX "iccprofile");
-  const dt_iop_color_intent_t icc_intent = dt_conf_get_int(CONFIG_PREFIX "iccintent");
+  request.icc_filename = icc_filename;
+  request.icc_intent = dt_conf_get_int(CONFIG_PREFIX "iccintent");
+  request.metadata_export = d->metadata_export;
 
   GList *list = dt_act_on_get_images();
-  dt_control_export(list, max_width, max_height, scale_factor, format_index, storage_index, TRUE, export_masks,
-                    style, icc_type, icc_filename, icc_intent, d->metadata_export);
+  dt_control_export(list, &request);
 
   dt_free(icc_filename);
 
@@ -470,10 +473,12 @@ static void _size_in_px_update(dt_lib_export_t *d)
   else
   {
     gtk_widget_show(d->size_in_px);
-    int max_width = 0, max_height = 0;
+    int max_width = 0;
+    int max_height = 0;
     double scale_factor = 0.0;
     _resolve_export_size(&max_width, &max_height, &scale_factor);
-    gchar width_txt[16], height_txt[16];
+    gchar width_txt[16];
+    gchar height_txt[16];
     snprintf(width_txt, sizeof(width_txt), "%d", max_width);
     snprintf(height_txt, sizeof(height_txt), "%d", max_height);
     gchar size_in_px_txt[120];
@@ -1723,7 +1728,8 @@ void *get_params(dt_lib_module_t *self, int *size)
   const int32_t icctype = dt_conf_get_int(CONFIG_PREFIX "icctype");
   // the blob holds a pixel box: the size the selected mode resolves to, or, for a factor it cannot
   // hold, the pixel mode's own box
-  int32_t max_width = 0, max_height = 0;
+  int32_t max_width = 0;
+  int32_t max_height = 0;
   double scale_factor = 0.0;
   _resolve_export_size(&max_width, &max_height, &scale_factor);
   if(scale_factor > 0.0)

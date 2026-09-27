@@ -646,9 +646,8 @@ void _filter_pipeline(const char *filter, dt_dev_pixelpipe_t *pipe)
 }
 
 
-gboolean _get_export_size(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe,
-                          const dt_imageio_module_data_t *format_params, const double scale_factor, double *scale,
-                          int width, int height, int *processed_width, int *processed_height)
+static gboolean _get_export_size(const dt_dev_pixelpipe_t *pipe, const double scale_factor, double *scale,
+                                 int width, int height, int *processed_width, int *processed_height)
 {
   const double image_ratio = (double)pipe->processed_width / (double)pipe->processed_height;
 
@@ -852,8 +851,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // while preserving original image ratio
   int processed_width = 0;
   int processed_height = 0;
-  _get_export_size(&dev, &pipe, format_params, scale_factor, &scale, width, height,
-                     &processed_width, &processed_height);
+  _get_export_size(&pipe, scale_factor, &scale, width, height, &processed_width, &processed_height);
 
   dt_print(DT_DEBUG_IMAGEIO,
            "[dt_imageio_export] (direct) image input %ix%i, turned to output %ix%i, will be exported to fit %ix%i "

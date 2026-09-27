@@ -80,15 +80,26 @@ void dt_control_move_images();
 void dt_control_copy_images();
 void dt_control_set_local_copy_images();
 void dt_control_reset_local_copy_images();
-/** Export @p imgid_list. The size is resolved by the caller, once: with @p scale_factor > 0 each image
- *  is reduced by that factor (capped at 1), otherwise it fits in @p max_width x @p max_height, 0 x 0
- *  meaning full size. The job reads none of it from the configuration. */
-void dt_control_export(GList *imgid_list, int max_width, int max_height, const double scale_factor,
-                       int format_index, int storage_index,
-                       gboolean high_quality, gboolean export_masks,
-                       char *style,
-                       dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
-                       dt_iop_color_intent_t icc_intent, const gchar *metadata_export);
+/** What an export is asked to do, resolved by the caller when it dispatches the export. The size: with
+ *  scale_factor > 0 each image is reduced by that factor (capped at 1), otherwise it fits in
+ *  max_width x max_height, 0 x 0 meaning full size. The strings are copied, the caller keeps them. */
+typedef struct dt_control_export_request_t
+{
+  int max_width;
+  int max_height;
+  double scale_factor;
+  int format_index;
+  int storage_index;
+  gboolean export_masks;
+  const char *style;
+  dt_colorspaces_color_profile_type_t icc_type;
+  const gchar *icc_filename;
+  dt_iop_color_intent_t icc_intent;
+  const gchar *metadata_export;
+} dt_control_export_request_t;
+
+/** Export @p imgid_list as @p request says. The job reads none of it from the configuration. */
+void dt_control_export(GList *imgid_list, const dt_control_export_request_t *request);
 void dt_control_merge_hdr();
 
 void dt_control_refresh_exif();

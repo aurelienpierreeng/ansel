@@ -1322,6 +1322,25 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
 }
 
 
+/* Whether the image is still in the library and its file still on disk; tells the user when it is not. */
+static gboolean _export_source_available(const int32_t imgid)
+{
+  const dt_image_t *image = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(image)) return FALSE;
+
+  char imgfilename[DT_PATH_MAX] = { 0 };
+  gboolean from_cache = TRUE;
+  dt_image_full_path(image->id, imgfilename, sizeof(imgfilename), &from_cache, __FUNCTION__);
+  const gboolean available = g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR);
+  if(!available)
+  {
+    dt_control_log(_("image `%s' is currently unavailable"), image->filename);
+    fprintf(stderr, "image `%s' is currently unavailable\n", imgfilename);
+  }
+  dt_image_cache_read_release(image);
+  return available;
+}
+
 static int32_t dt_control_export_job_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)dt_control_job_get_params(job);
@@ -1411,29 +1430,11 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
     /* register export timestamp in cache */
     dt_image_cache_set_export_timestamp(imgid);
 
-    // check if image still exists:
-    const dt_image_t *image = dt_image_cache_get((int32_t)imgid, 'r');
-    if(image)
-    {
-      char imgfilename[DT_PATH_MAX] = { 0 };
-      gboolean from_cache = TRUE;
-      dt_image_full_path(image->id,  imgfilename,  sizeof(imgfilename),  &from_cache, __FUNCTION__);
-      if(!g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR))
-      {
-        dt_control_log(_("image `%s' is currently unavailable"), image->filename);
-        fprintf(stderr, "image `%s' is currently unavailable\n", imgfilename);
-        // dt_image_remove(imgid);
-        dt_image_cache_read_release(image);
-      }
-      else
-      {
-        dt_image_cache_read_release(image);
-        if(mstorage->store(mstorage, sdata, imgid, mformat, fdata, settings->scale_factor, num, total, TRUE,
-                           settings->export_masks, settings->icc_type, settings->icc_filename, settings->icc_intent,
-                           &metadata) != 0)
-          dt_control_job_cancel(job);
-      }
-    }
+    if(_export_source_available(imgid)
+       && mstorage->store(mstorage, sdata, imgid, mformat, fdata, settings->scale_factor, num, total, TRUE,
+                          settings->export_masks, settings->icc_type, settings->icc_filename,
+                          settings->icc_intent, &metadata) != 0)
+      dt_control_job_cancel(job);
 
     fraction += 1.0 / total;
     if(fraction > 1.0) fraction = 1.0;
@@ -1911,11 +1912,7 @@ static void dt_control_export_cleanup(void *p)
   dt_control_image_enumerator_cleanup(params);
 }
 
-void dt_control_export(GList *imgid_list, int max_width, int max_height, const double scale_factor,
-                       int format_index, int storage_index,
-                       gboolean high_quality, gboolean export_masks, char *style,
-                       dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
-                       dt_iop_color_intent_t icc_intent, const gchar *metadata_export)
+void dt_control_export(GList *imgid_list, const dt_control_export_request_t *request)
 {
   dt_job_t *job = dt_control_job_create(&dt_control_export_job_run, "export");
   if(IS_NULL_PTR(job)) return;
@@ -1930,12 +1927,12 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, const d
   params->index = imgid_list;
 
   dt_control_export_t *data = params->data;
-  data->max_width = max_width;
-  data->max_height = max_height;
-  data->scale_factor = scale_factor;
-  data->format_index = format_index;
-  data->storage_index = storage_index;
-  dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage_by_index(storage_index);
+  data->max_width = request->max_width;
+  data->max_height = request->max_height;
+  data->scale_factor = request->scale_factor;
+  data->format_index = request->format_index;
+  data->storage_index = request->storage_index;
+  dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage_by_index(request->storage_index);
   g_assert(mstorage);
   // get shared storage param struct (global sequence counter, one picasa connection etc)
   dt_imageio_module_data_t *sdata = mstorage->get_params(mstorage);
@@ -1947,12 +1944,12 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, const d
     return;
   }
   data->sdata = sdata;
-  data->export_masks = export_masks;
-  g_strlcpy(data->style, style, sizeof(data->style));
-  data->icc_type = icc_type;
-  data->icc_filename = g_strdup(icc_filename);
-  data->icc_intent = icc_intent;
-  data->metadata_export = g_strdup(metadata_export);
+  data->export_masks = request->export_masks;
+  g_strlcpy(data->style, request->style, sizeof(data->style));
+  data->icc_type = request->icc_type;
+  data->icc_filename = g_strdup(request->icc_filename);
+  data->icc_intent = request->icc_intent;
+  data->metadata_export = g_strdup(request->metadata_export);
 
   dt_control_job_add_progress(job, _("export images"), TRUE);
   dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_EXPORT, job);
