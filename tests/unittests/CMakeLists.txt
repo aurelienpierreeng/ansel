@@ -38,6 +38,7 @@ set(LIB_ANSEL_UNIT_TESTS
   # and splitting the list to say so would be more ceremony than it is worth.
   test_pipe_cache_policy
   test_pipe_cache_pressure
+  test_pipe_cache_host_stale
   test_backbuf_publish
   test_conf_value_lifetime
   test_dtpthread_recursive

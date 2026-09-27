@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel.
     Copyright (C) 2026 Aurélien Pierre.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -68,10 +69,10 @@ typedef struct dt_dev_pipe_cache_policy_inputs_t
  * @brief Decide one node's host-cache requirement, walking the pipe from the end backwards.
  *
  * @param in The node's own inputs.
- * @param inherited_requirement What the nodes downstream of this one already established.
- * @param[out] upstream_requirement What to hand the node before this one. Never smaller than
- * @p inherited_requirement -- see the note below, it is the whole reason this is a function
- * and not an expression.
+ * @param inherited_requirement Whether this node's output is read from RAM as the input of the next
+ * enabled node (TRUE for the last one, whose output is displayed).
+ * @param[out] upstream_requirement What to hand the node before this one: this node's own input
+ * requirement, whatever it inherited (one hop, see the note in the body).
  *
  * @return TRUE when this node must keep its output in host RAM.
  */
@@ -86,18 +87,13 @@ static inline gboolean dt_dev_pipe_cache_policy_decide(const dt_dev_pipe_cache_p
 
   // ONE HOP, not transitive. A node's output must reach host RAM when the node that CONSUMES
   // it reads from RAM -- and that says nothing about the node before it, which publishes to a
-  // consumer of its own. Carrying the requirement further up (`own || inherited') made it
+  // consumer of its own. Carried further up (`own || inherited'), the requirement would be
   // monotone: the seal seeds the walk with TRUE for the displayed final output, so every
-  // enabled node in the pipe inherited it and copied its whole output device->host every
-  // frame. Measured on a painting stroke: 152 MB and 68 ms of a 113.8 ms frame, of which only
-  // gamma's 11.7 MB was ever read by anything on the host.
+  // enabled node would copy its whole output device->host on every frame.
   //
-  // That OR was itself a fix, for a GPU module toggled ON erasing a CPU-only module's
-  // requirement from further downstream. But the defect it fixed was never in the
-  // propagation: it was that the node's cacheline kept a STALE host copy when its
-  // host-requirement later turned back on, and got reused by hash. Keeping every host copy
-  // eternally fresh hid that. `_seal_opencl_cache_policy()' now invalidates a node's cacheline
-  // on the FALSE->TRUE transition instead, which is where the staleness actually lives.
+  // A stale host copy is no reason to carry the requirement further: the staleness lives in the
+  // cacheline, and the cache handles it there. A line rekeyed in place reports no host pixels
+  // (dt_pixel_cache_entry_t.host_stale) until they are rewritten for its new hash.
   if(!IS_NULL_PTR(upstream_requirement))
     *upstream_requirement = own_input_requirement;
 

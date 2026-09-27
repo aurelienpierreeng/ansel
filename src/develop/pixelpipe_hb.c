@@ -943,7 +943,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   }
   else if(existing_cache)
   {
-    /* ref_entry_by_hash succeeded but data was NULL (device-only entry); undo the ref. */
+    /* ref_entry_by_hash succeeded but reported no host pixels (device-only entry, or a host buffer
+     * still holding the hash it was rekeyed from); undo the ref. */
     dt_dev_pixelpipe_cache_ref_count_entry(FALSE, existing_cache);
   }
 
@@ -1068,7 +1069,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
    * backbuffer's producer, against the 7.68 ms the GUI already spends painting a frame. If that
    * ever reads as a stall rather than a wait, the answer is a try-read-lock on the GUI side, not
    * going back to allocating a buffer per frame to avoid the question. */
-  const gboolean allow_rekey_reuse = !(dt_get_debug_flags() & DT_DEBUG_NOCACHE_REUSE);
+  /* Not after a switch between history states (pipe->keep_outputs): this cacheline then holds
+   * the output of the state the user is likely to switch back to. */
+  const gboolean allow_rekey_reuse = !(dt_get_debug_flags() & DT_DEBUG_NOCACHE_REUSE) && !pipe->keep_outputs;
   const dt_dev_pixelpipe_cache_writable_status_t acquire_status
       = dt_dev_pixelpipe_cache_get_writable(hash, bufsize, name, pipe->type,
                                             cache_ram_output, allow_rekey_reuse,
@@ -1106,7 +1109,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
              pipe->devid);
 
     /* This entry may predate the current run's host-caching requirement: it was created device-only
-     * (OpenCL, no RAM copy) back when nothing needed a host copy of it, and an exact-hash hit here
+     * (OpenCL, no RAM copy) back when nothing needed a host copy of it, or rekeyed from another hash
+     * and left device-only, its host buffer still holding the old pixels. An exact-hash hit here
      * short-circuits without ever re-running the module, so `cache_ram_output` newly turning TRUE
      * (e.g. a color picker or histogram just started sampling this piece) would otherwise never take
      * effect on an already-cached entry. Materialize the host copy now from the device payload we
@@ -1195,6 +1199,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
 #endif
 
   dt_pixelpipe_cache_set_current_module(prev_module);
+
+  // Every CPU and tiled path writes the host buffer, and the OpenCL path copies its output back
+  // when `cache_ram_output` asked for it (or when it had to fall back and raised it).
+  if(!error
+     && ((pixelpipe_flow & (PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING))
+         || cache_ram_output))
+    dt_dev_pixelpipe_cache_flag_host_written(output_entry);
   output = dt_pixel_cache_entry_get_data(output_entry);
 
   _print_perf_debug(pipe, pixelpipe_flow, piece, module,
@@ -1769,6 +1780,9 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
     }
     else if(!dt_dev_pixelpipe_has_shutdown(pipe))
     {
+      // The state switched to is now rendered: the next run may overwrite its outputs again.
+      if(!err) pipe->keep_outputs = FALSE;
+
       // No opencl errors, no killswitch triggered: we should have a valid output buffer now.
       dt_pixel_cache_entry_t *final_entry = NULL;
       void *final_buf = NULL;

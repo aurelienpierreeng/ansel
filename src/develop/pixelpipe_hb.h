@@ -14,6 +14,7 @@
     Copyright (C) 2020 Ralf Brown.
     Copyright (C) 2021-2022 Hanno Schwalm.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -204,7 +205,9 @@ typedef enum dt_dev_pixelpipe_change_t
   = 1 << 2, // all nodes up to end need to be synched, but no removal of module pieces is necessary
   DT_DEV_PIPE_ZOOMED = 1 << 3, // zoom event, preview pipe does not need changes
   DT_DEV_PIPE_CACHE_REQUEST = 1 << 4, // GUI requested one cacheline to be materialized on host
-  DT_DEV_PIPE_REENTRY = 1 << 5 // retry runtime side-band generation without rebuilding nodes
+  DT_DEV_PIPE_REENTRY = 1 << 5, // retry runtime side-band generation without rebuilding nodes
+  DT_DEV_PIPE_SWITCHED = 1 << 6 // history switched to another state (module toggled, undo, history jump):
+                                // keep the outputs it replaces, see dt_dev_pixelpipe_t.keep_outputs
 } dt_dev_pixelpipe_change_t;
 
 typedef enum dt_dev_pixelpipe_cache_request_t
@@ -572,6 +575,11 @@ typedef struct dt_dev_pixelpipe_t
   // This is intended for one-shot pipelines such as thumbnail exports where caching is pure overhead
   // and can lead to memory pressure (RAM buffers + OpenCL pinned/device buffers).
   gboolean no_cache;
+
+  /* When TRUE, a module writes its output into a new cacheline instead of rekeying the one it
+   * wrote last time, so the outputs of the state just left stay cached for a switch back. Raised
+   * by DT_DEV_PIPE_SWITCHED, lowered once a run completes. */
+  gboolean keep_outputs;
 
   // Temporarily pause the infinite loop of pipeline.
   // Written by drawlayer from BOTH the GUI thread and its paint worker, polled by the

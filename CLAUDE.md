@@ -439,41 +439,72 @@ a real GPU id causes the GUI thread to enqueue a GPU read without owning the dev
 pipeline's OpenCL events → SIGSEGV in `clReleaseEvent`. Device-only entries then report a miss
 to the GUI, which waits for the pipeline to publish a host copy instead.
 
-### A toggled-on GPU module can erase a host-cache requirement inherited from further downstream
+### A cacheline's host copy answers for its hash only once it was written for it
 
-`_seal_opencl_cache_policy()` (`develop/dev_pixelpipe.c`) walks `pipe->nodes` backwards once per
-resync to decide, per module, whether its output must be copied from device to host RAM
-(`piece->cache_output_on_ram`). It threads a `current_output_must_cache_host` flag upstream: each
-enabled module recomputes it from its own properties (`!supports_opencl || active_in_gui || ...`)
-and hands the result to whichever module sits before it in pipe order. A **disabled** module is
-skipped via `continue` before that handoff, so the requirement from further downstream correctly
-keeps flowing through it untouched.
+`_seal_opencl_cache_policy()` (`develop/dev_pixelpipe.c`) decides per module whether its output
+must be copied from device to host RAM (`piece->cache_output_on_ram`), through the pure
+`dt_dev_pipe_cache_policy_decide()` (`develop/pipe_cache_policy.h`, pinned by
+`tests/unittests/test_pipe_cache_policy.c`). The requirement travels ONE hop: a node publishes to
+RAM when the node consuming it reads RAM (CPU-only, focused, histogram, autoset), never because
+some node further downstream does. Carried transitively, it would copy every output device->host
+on every frame: measured on a painting stroke, 152 MB and 68 ms of a 113.8 ms frame, of which
+gamma's 11.7 MB alone is read.
 
-The bug was in the handoff itself: it assigned (`=`) instead of combined (`||`), so an **enabled**
-GPU-capable module that itself needs no host input silently replaced — rather than passed through —
-whatever requirement was inherited from further downstream. Toggling such a module from disabled to
-enabled (e.g. `iop/rawoverexposed.c`: `IOP_FLAGS_NO_HISTORY_STACK`, GPU-capable, no GUI/histogram
-reason of its own to need host data) made it start participating in the loop and erased the
-correctly-propagated `TRUE` requirement coming from a CPU-only module further downstream (`dither`),
-even though that module's own need for host data never changed.
+What makes one hop safe is the cache, not the policy. A module's output cacheline is reused for
+its next output by rekeying it in place (`_cache_try_rekey_reuse_locked()`), host buffer included,
+and an OpenCL output kept on the device leaves the previous hash's pixels in that buffer. The rekey
+therefore sets `dt_pixel_cache_entry_t.host_stale`, and while it is set
+`dt_pixel_cache_entry_get_data()` answers NULL, which every lookup (`ref_entry_by_hash`,
+`ref_host_entry_by_hash`, `peek`, the fast-track exact hit in `process_rec()`) and every consumer
+already treats as "the pixels are on the device": a CPU consumer copies the device payload back,
+a GUI reader owning no device reports a miss. The flag is cleared where the host buffer is written
+for the new hash: by `process_rec()` through `dt_dev_pixelpipe_cache_flag_host_written()` when the
+module ran on CPU, tiled, or read its output back (`cache_ram_output`), and by every device->host
+copy (the materialize path, `dt_dev_pixelpipe_cache_restore_cl_buffer()`, `_gpu_init_input()`).
+The producer alone reads the raw buffer, through `dt_pixel_cache_entry_get_buffer()`: it still
+backs the output's pinned OpenCL image. `-d pipecache` prints `stale 0|1` on every entry line;
+`tests/unittests/test_pipe_cache_host_stale.c` pins the contract.
 
-Concretely: with the overlay enabled, `colorout`'s GPU kernel computed correct new pixels on every
-re-render (`process_cl()` ran fine), but the GPU→host readback
-(`dt_dev_pixelpipe_cache_sync_cl_buffer`, gated by `if(*cache_output)` in `pixelpipe_gpu.c`) was
-skipped because `colorout`'s `cache_output_on_ram` came out `FALSE`. Because pixelpipe cache entries
-are reused in place via hash *rekey* rather than freshly allocated
-(`_cache_try_rekey_reuse_locked`), the stale host bytes from the entry's previous life persisted
-under the new hash key. Once the overlay was disabled again, `dither` (CPU-only) read directly from
-`colorout`'s cacheline and got those stale, pre-toggle pixels — silently mismatched from the current
-pan/zoom, even though every hash and ROI in the chain was individually correct. Only reproduced with
-OpenCL enabled (`--disable-opencl` sidesteps it entirely: every module then unconditionally needs
-host data, so the flag is always `TRUE`).
+An overlay toggle is the case that exposes it: with `rawoverexposed` on, `colorout`'s requirement
+drops and its rekeyed cacheline keeps pre-toggle host bytes under each new pan/zoom hash; once the
+overlay is off, `dither` (CPU-only) needs `colorout`'s output in RAM, and only the flag stops it
+from reading those bytes.
 
-Fixed by propagating the OR of the inherited flag and the current module's own requirement
-(`current_output_must_cache_host = previous_output_must_cache_host || current_output_must_cache_host`),
-so a host requirement, once established anywhere downstream, survives every enabled module between
-it and whichever module's cache policy is being decided — regardless of whether any of those modules
-dynamically toggles.
+**Do not detect this in the seal.** Invalidating a node's cacheline when its requirement goes
+FALSE->TRUE looks equivalent and is not. `dt_iop_commit_params()` resets `cache_output_on_ram` to
+0 before every commit, so every recommitted node "transitions" on every resync; and at that point
+`piece->global_hash` holds the module's LOCAL hash (the commit writes it, the cumulative key is
+computed later). Such an invalidation would fire for every node of every resync and match no
+cacheline at all.
+
+### After a switch between history states, outputs are kept rather than rekeyed
+
+Toggling a module, undo, redo and a jump in the history list are switches the user is likely to
+make again in reverse. Rekeying in place overwrites the output each module produced for the
+state being left, and switching back then recomputes everything downstream of the change: 2.0 s
+per toggle on the CPU for tone equalizer on a 5198x3904 raw, the same ten modules every time,
+with 1.7 GB of a 23 GB cache in use.
+
+`DT_DEV_PIPE_SWITCHED` (`pixelpipe_hb.h`) marks such a change. `dt_dev_pixelpipe_change()` turns
+it into `pipe->keep_outputs`, `process_rec()` then writes each output into a new cacheline instead
+of rekeying (`allow_rekey_reuse`), and `dt_dev_pixelpipe_process()` lowers it once a run completes
+without error or shutdown, so only the run rendering the new state keeps the old one. Measured
+toggling color balance rgb in the darkroom: the first toggle recomputes its downstream once, every
+later one is a chain of exact hits, 1-28 ms on the CPU and 3-24 ms with OpenCL. It is raised
+by `dt_dev_history_commit_item_now()` when `add_new_pipe_node` (the module's first history entry,
+or an entry enabled differently from its last one -- the top item rewritten in place included),
+and by `dt_dev_history_pixelpipe_update()`, which every wholesale history replacement goes through.
+
+Two things a reviewer would otherwise simplify:
+
+- **The pipe's change status cannot tell a switch from a drag.** `SYNCH` also carries every slider
+  commit on a module with a drawn or raster mask, and crop/ashift edits; the darkroom worker raises
+  `TOP_CHANGED` on its own whenever the history hash moved (`_resync_pipe_with_history()`), toggles
+  included. Keeping outputs on every `SYNCH` gives each step of a masked-module drag its own
+  cachelines and its own vRAM, which fills a 6 GB card within seconds. Only the source knows.
+- **`add_new_pipe_node` is computed from the module's last history entry in every case**, whether
+  the top item is rewritten in place, a new item appended or one forced. A toggle it misses reaches
+  the pipe as `TOP_CHANGED`, and nothing downstream knows it was a switch.
 
 ### The darkroom worker thread must be joined before view `leave()` tears down pipe state
 
