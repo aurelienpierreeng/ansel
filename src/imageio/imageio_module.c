@@ -357,7 +357,8 @@ void dt_imageio_resizing_factor_parse(const char *str, double *num, double *denu
   g_strdelimit(scale_str, ",", '.');
 
   const gchar *pdiv = strchr(scale_str, '/');
-  double _num = 1.0, _denum = 1.0;
+  double _num = 1.0;
+  double _denum = 1.0;
   if(IS_NULL_PTR(pdiv))
     _num = g_ascii_strtod(scale_str, NULL);
   else
