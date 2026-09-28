@@ -31,11 +31,10 @@ float *dt_dev_retrieve_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const dt_i
 
   if(pipe->rawdetail_mask_hash != mask_hash)
   {
-    dt_pixel_cache_entry_t *entry = dt_dev_pixelpipe_cache_get_entry(mask_hash);
-    if(IS_NULL_PTR(entry)) return NULL;
+    // Looked up and referenced at once: nobody may hold the mask when detailmask itself did not run.
+    if(!dt_dev_pixelpipe_cache_ref_entry_by_hash(mask_hash, NULL, NULL)) return NULL;
 
     dt_dev_clear_rawdetail_mask(mutable_pipe);
-    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
     mutable_pipe->rawdetail_mask_hash = mask_hash;
     memcpy(&mutable_pipe->rawdetail_mask_roi, &detailmask_piece->roi_out, sizeof(dt_iop_roi_t));
   }
