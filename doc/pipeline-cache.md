@@ -130,9 +130,11 @@ this document.
 
 Backend code that must keep a cacheline past the lookup uses
 `dt_dev_pixelpipe_cache_ref_entry_by_hash()`, or `dt_dev_pixelpipe_cache_ref_host_entry_by_hash()`
-when it needs host pixels and must not wait on a line still being written. Raster-mask retrieval
-and the drawn-mask group's cached-prefix resume (`develop/masks/group.c`) follow this contract:
-retain under the cache mutex, read-lock while copying, then release the temporary reference.
+when it needs host pixels and must not wait on a line still being written. Raster-mask retrieval,
+the raw-detail mask, the drawn-mask group's cached-prefix resume (`develop/masks/group.c`) and the
+publication of the backbuffer follow this contract: the lookup itself takes the reference, under the
+cache mutex; it is then kept as the long-lived one, or released once the pixels are copied (under a
+read lock) or once the long-lived reference is taken.
 
 **A peek retains nothing, so nothing may be released after one.** An entry nobody holds sits at
 refcount 0, and any thread's eviction can free it between `dt_dev_pixelpipe_cache_peek()` returning
@@ -142,6 +144,13 @@ free and frees it under them, and every long-lived reference is released by poin
 (`dt_dev_pixelpipe_cache_unref_entry()`), so the holder's own release writes into freed memory --
 wherever the allocator has put something else by then. The crash surfaces in that other object, far
 from the release that caused it.
+
+**Nor may one be referenced after one.** The eviction can fall between the lookup and the
+reference, which then counts up freed memory; a backbuffer keepalive taken that way is released by
+pointer at the next publication. `dt_dev_pixelpipe_cache_get_entry()` is the same kind of lookup:
+it serves only the producer-to-consumer handoff inside one run, where the reference is already
+held. When `dt_dev_pixelpipe_cache_get_writable()` finds the hash already published, it returns
+that entry referenced for the same reason.
 
 ## 3. Requesting a partial recompute
 
