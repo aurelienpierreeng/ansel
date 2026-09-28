@@ -159,7 +159,7 @@ typedef struct dt_pixel_cache_entry_t
                               // doc/pipeline-cache.md §8.
   dt_atomic_int refcount;   // reference count for the cache entry, to avoid freeing it while still in use
   dt_pthread_rwlock_t lock; // read/write lock to avoid threads conflicts
-  gboolean auto_destroy;    // TRUE for auto-destruction the next time it's used. Used for short-lived entries (transient states).
+  gboolean auto_destroy;    // disposable: the release of its last reference removes it. See dt_dev_pixelpipe_cache_flag_auto_destroy().
   gboolean external_alloc;  // TRUE for external buffers tracked in the cache
   /* Number of ASYNCHRONOUS REUSES of this entry: how many times a lookup found content someone
    * else had already published, in another run or another pipe. The intra-run producer->consumer
@@ -744,18 +744,6 @@ void dt_dev_pixelpipe_cache_flush_clmem(const int devid);
 void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(const int devid);
 
 
-/**
- * @brief Arbitrarily remove the cache entry matching hash. Entries
- * having a reference count > 0 (inter-thread locked) or being having their read/write lock
- * locked will be ignored. If force is TRUE, we ignore reference count, but not locks.
- *
- * @param cache
- * @param force
- */
-int dt_dev_pixelpipe_cache_remove(const gboolean force,
-                                  struct dt_pixel_cache_entry_t *entry);
-
-
 /** print out cache lines/hashes (debug). */
 void dt_dev_pixelpipe_cache_print(void);
 
@@ -765,14 +753,15 @@ void dt_dev_pixelpipe_cache_print(void);
 int dt_dev_pixel_pipe_cache_remove_lru(void);
 
 /**
- * @brief Increase/Decrease the reference count on the cache line as to prevent
- * LRU item removal. This function should be called within a read/write lock-protected
- * section to avoid changing an entry while or after it is deleted in parallel.
+ * @brief Take or release one reference on a cache line. A referenced line is never evicted, rekeyed
+ * or removed.
  *
- * WARNING: cache entries whose reference count is greater than 0 will never be deleted from cache.
+ * Releasing the last reference of a line flagged with dt_dev_pixelpipe_cache_flag_auto_destroy()
+ * removes it, in the same hold of the cache lock. After its release, the caller may not name the
+ * entry again: any thread's eviction can free it from then on.
  *
- * @param cache
- * @param lock TRUE to lock, FALSE to unlock
+ * @param lock TRUE to take a reference, FALSE to release one
+ * @param entry The cache line
  */
 void dt_dev_pixelpipe_cache_ref_count_entry(gboolean lock,
                                             struct dt_pixel_cache_entry_t *entry);
@@ -799,27 +788,16 @@ void dt_dev_pixelpipe_cache_rdlock_entry(gboolean lock,
 
 
 /**
- * @brief Flag the cache entry as "auto_destroy". This is useful for short-lived/disposable
- * cache entries, that won't be needed in the future. These will be freed out of the typical LRU, aged-based
- * garbage collection. The thread that tagged this entry as "auto_destroy" is responsible for freeing it
- * as soon as it is done with it, using `dt_dev_pixelpipe_cache_auto_destroy_apply()`.
- * If not manually freed this way, the entry will be caught using the generic LRU garbage collection.
+ * @brief Flag a cache line as disposable (`auto_destroy`), for short-lived lines nothing will need
+ * again: the release of its last reference removes it, out of the LRU's age-based collection.
  *
- * @param cache
+ * This is how a holder drops a line: flag it while still holding it, then release it with
+ * dt_dev_pixelpipe_cache_ref_count_entry(). A line still held by someone else is removed by the last
+ * of them; one still locked when released is left to the LRU.
+ *
+ * @param entry The cache line, held by the caller. NULL is a no-op.
  */
 void dt_dev_pixelpipe_cache_flag_auto_destroy(struct dt_pixel_cache_entry_t *entry);
-
-/**
- * @brief Free the entry if it has the flag "auto_destroy".
- * See `dt_dev_pixelpipe_cache_flag_auto_destroy()`.
- * This only removes entries whose reference count already dropped to 0 and whose lock is currently free.
- * Call it right after the final consumer releases its refcount, from the same control flow that flagged the
- * entry for auto-destruction. If another consumer still owns the entry, this becomes a no-op and generic cache
- * eviction or a later explicit retry will reap it once ownership reaches 0.
- *
- * @param cache
- */
-void dt_dev_pixelpipe_cache_auto_destroy_apply(struct dt_pixel_cache_entry_t *entry);
 
 /**
  * @brief Find the entry matching hash, and decrease its ref_count if found.

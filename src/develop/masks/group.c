@@ -709,11 +709,14 @@ static void _group_publish_prefix(const uint64_t prefix, const float *const fold
     return;
   }
 
-  if(!IS_NULL_PTR(slot)) memcpy(slot, fold, npixels * sizeof(float));
+  // Created without a buffer: nothing a later render could resume from. Flagged while still held, so
+  // the release removes it.
+  if(IS_NULL_PTR(slot))
+    dt_dev_pixelpipe_cache_flag_auto_destroy(entry);
+  else
+    memcpy(slot, fold, npixels * sizeof(float));
   dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
   dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
-  // created without a buffer: nothing a later render could resume from
-  if(IS_NULL_PTR(slot)) dt_dev_pixelpipe_cache_remove(TRUE, entry);
 }
 
 static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const restrict module, const dt_dev_pixelpipe_t *pipe,

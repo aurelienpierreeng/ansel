@@ -3635,7 +3635,13 @@ static rt_memo_result_t rt_scaled_mask_publish(const rt_masks_ctx_t *const ctx, 
   {
     if(!IS_NULL_PTR(entry))
     {
-      if(created) dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
+      // Created without a buffer: flagged while still held, so the release removes it rather than
+      // leave a line a later get() would allocate and hand back unwritten.
+      if(created)
+      {
+        dt_dev_pixelpipe_cache_flag_auto_destroy(entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
+      }
       dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
     }
     return RT_MEMO_ABSENT;
@@ -3648,13 +3654,15 @@ static rt_memo_result_t rt_scaled_mask_publish(const rt_masks_ctx_t *const ctx, 
     memcpy(data, area, sizeof(dt_masks_area_t));
     const rt_shape_status_t status = rt_rasterize_scaled_mask(ctx, form, area, roi_layer, &shape->roi_mask,
                                                               (float *)((char *)data + RT_MASK_MEMO_HEADER));
-    dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
     if(status != RT_SHAPE_READY)
     {
+      // Flagged while still held and before the write lock goes, so the release removes it.
+      dt_dev_pixelpipe_cache_flag_auto_destroy(entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
       dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
-      dt_dev_pixelpipe_cache_remove(TRUE, entry);
       return RT_MEMO_REFUSED;
     }
+    dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
   }
 
   /* Read-locked for as long as the caller holds it, so a reader can never overlap the writer

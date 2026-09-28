@@ -99,11 +99,11 @@ all readers. A consumer that copies a cacheline must hold a reference and a read
 duration of the copy:
 
 ```
-dt_dev_pixelpipe_cache_ref_count_entry(cache, TRUE,  entry);  // pin: prevent eviction
-dt_dev_pixelpipe_cache_rdlock_entry  (cache, TRUE,  entry);  // block writers while we read
+dt_dev_pixelpipe_cache_ref_count_entry(TRUE,  entry);  // pin: prevent eviction
+dt_dev_pixelpipe_cache_rdlock_entry  (TRUE,  entry);  // block writers while we read
 ... memcpy out of the cacheline ...
-dt_dev_pixelpipe_cache_rdlock_entry  (cache, FALSE, entry);
-dt_dev_pixelpipe_cache_ref_count_entry(cache, FALSE, entry);
+dt_dev_pixelpipe_cache_rdlock_entry  (FALSE, entry);
+dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);  // the entry may not be named after this
 ```
 
 When a producer releases the *write* lock of a cacheline, `dt_dev_pixelpipe_cache_wrlock_entry()`
@@ -151,6 +151,17 @@ pointer at the next publication. `dt_dev_pixelpipe_cache_get_entry()` is the sam
 it serves only the producer-to-consumer handoff inside one run, where the reference is already
 held. When `dt_dev_pixelpipe_cache_get_writable()` finds the hash already published, it returns
 that entry referenced for the same reason.
+
+**Nor may one be named after its release.** A release returns with the cache mutex released, and
+from then on any thread's eviction can free an entry nobody holds. A holder that wants a line gone
+flags it with `dt_dev_pixelpipe_cache_flag_auto_destroy()` while it still holds it, then releases
+it: releasing the last reference of a flagged line removes it, within the same hold of the mutex.
+That is how the intermediates of a pipe that keeps no cache go, as well as a module output that
+failed, a side-band line a module created and could not fill, and a no-cache pipe's last frame at
+cleanup. Others still holding the line keep it until the last of them releases it. A line still
+locked when released stays for the LRU, so a producer flags before it releases its write lock and
+drops its reference last. There is no removal by pointer: it could only succeed on a line nobody
+holds, which is one its caller has no right to name.
 
 ## 3. Requesting a partial recompute
 

@@ -20,6 +20,7 @@
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2022 Sebatian Glasl.
     Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -401,17 +402,20 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
+      // a cache line we created and could not fill has to go: flag it
+      // while we still hold it, and releasing it removes it. Once
+      // released, the line may be freed by any thread at any time, so
+      // it must not be named again.
       if(created && !IS_NULL_PTR(mask_entry))
+      {
+        dt_dev_pixelpipe_cache_flag_auto_destroy(
+            mask_entry);
         dt_dev_pixelpipe_cache_wrlock_entry(
             FALSE, mask_entry);
+      }
       if(!IS_NULL_PTR(mask_entry))
-      {
         dt_dev_pixelpipe_cache_ref_count_entry(
             FALSE, mask_entry);
-        if(created)
-          dt_dev_pixelpipe_cache_remove(
-              TRUE, mask_entry);
-      }
       dt_pixelpipe_cache_free_align(mask);
       return 1;
     }

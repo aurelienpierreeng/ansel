@@ -1074,8 +1074,13 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
     {
       if(luminance_entry)
       {
+        // Created without a buffer: flagged while still held, so the release removes it rather
+        // than leave a line a later get() would allocate and hand back unwritten.
         if(created_luminance_entry)
+        {
+          dt_dev_pixelpipe_cache_flag_auto_destroy(luminance_entry);
           dt_dev_pixelpipe_cache_wrlock_entry(FALSE, luminance_entry);
+        }
         dt_dev_pixelpipe_cache_ref_count_entry(FALSE, luminance_entry);
       }
       return 1;
@@ -1085,9 +1090,10 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
     {
       if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
       {
+        // Flagged while still held and before the write lock goes, so the release removes it.
+        dt_dev_pixelpipe_cache_flag_auto_destroy(luminance_entry);
         dt_dev_pixelpipe_cache_wrlock_entry(FALSE, luminance_entry);
         dt_dev_pixelpipe_cache_ref_count_entry(FALSE, luminance_entry);
-        dt_dev_pixelpipe_cache_remove(TRUE, luminance_entry);
         return 1;
       }
 

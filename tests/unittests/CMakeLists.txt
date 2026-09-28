@@ -39,6 +39,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_pipe_cache_policy
   test_pipe_cache_pressure
   test_pipe_cache_host_stale
+  test_pipe_cache_auto_destroy
   test_backbuf_publish
   test_conf_value_lifetime
   test_dtpthread_recursive

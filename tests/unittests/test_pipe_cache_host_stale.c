@@ -27,6 +27,8 @@
  */
 
 #include "caches/pixelpipe_cache.h"
+#include "system/atomic.h"
+#include "system/dtpthread.h"
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -159,10 +161,16 @@ static void _without_rekey_the_previous_output_stays(void **state __attribute__(
   assert_null(data);
   assert_non_null(held);
   assert_int_equal(held->serial, first.serial);
-  // One reference and no lock: the cache refuses to drop the line until that reference goes.
-  assert_int_equal(dt_dev_pixelpipe_cache_remove(FALSE, held), 1);
+  // One reference, the caller's own, and no lock: the line is readable, and nothing else holds it.
+  assert_int_equal(dt_atomic_get_int(&held->refcount), 1);
+  gboolean unlocked = FALSE;
+  if(dt_pthread_rwlock_trywrlock(&held->lock) == 0)
+  {
+    unlocked = TRUE;
+    dt_pthread_rwlock_unlock(&held->lock);
+  }
+  assert_true(unlocked);
   dt_dev_pixelpipe_cache_ref_count_entry(FALSE, held);
-  assert_int_equal(dt_dev_pixelpipe_cache_remove(FALSE, held), 0);
 }
 
 int main(void)
