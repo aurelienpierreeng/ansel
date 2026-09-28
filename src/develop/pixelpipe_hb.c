@@ -1384,6 +1384,7 @@ static void _print_opencl_errors(int error, dt_dev_pixelpipe_t *pipe)
   }
 }
 
+/* `entry` must be held by the caller: this reads it and takes the backbuffer's keepalive from it. */
 static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi, dt_pixel_cache_entry_t *entry)
 {
   const uint64_t requested_hash = dt_dev_pixelpipe_get_hash(pipe);
@@ -1618,23 +1619,21 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
     }
   }
 
-  void *buf = NULL;
-
   /* GUI cache requests can target either the final backbuffer or one module output in the middle of the
      current synchronized graph. Exact-hit checks must therefore look at the requested target instead of
      always assuming the run goes to the pipe end. */
   const uint64_t requested_hash = requested_backbuf ? dt_dev_pixelpipe_get_hash(pipe)
                                                     : requested_piece ? requested_piece->global_hash
                                                                       : DT_PIXELPIPE_CACHE_HASH_INVALID;
+  /* Retained: the hit may be an output nobody holds, such as the state a module toggle switches back
+   * to, and the backbuffer takes its keepalive from it. */
   dt_pixel_cache_entry_t *entry = NULL;
   if(!_bypass_cache(pipe, requested_piece)
-     && requested_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dt_dev_pixelpipe_cache_peek(requested_hash, &buf, &entry,
-                                    pipe->devid, NULL)
-     && !IS_NULL_PTR(buf))
+     && dt_dev_pixelpipe_cache_ref_host_entry_by_hash(requested_hash, NULL, &entry))
   {
     if(requested_backbuf)
       _update_backbuf_cache_reference(pipe, roi, entry);
+    dt_dev_pixelpipe_cache_unref_entry(entry);
 
     /* A GUI consumer explicitly requested this target (color picker, histogram, autoset) and is
      * blocked on it in the cache-wait manager. The output is already host-cached, so the run stops
@@ -1784,17 +1783,17 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
       if(!err) pipe->keep_outputs = FALSE;
 
       // No opencl errors, no killswitch triggered: we should have a valid output buffer now.
+      /* Retained too: the run's own reference covers this entry only while the planned hash is still
+       * the one it produced. */
       dt_pixel_cache_entry_t *final_entry = NULL;
-      void *final_buf = NULL;
       if(!requested_backbuf)
       {
         dt_dev_pixelpipe_cache_unref_hash(final_hash);
       }
-      else if(dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_get_hash(pipe), &final_buf,
-                                          &final_entry, pipe->devid, NULL)
-              && !IS_NULL_PTR(final_buf))
+      else if(dt_dev_pixelpipe_cache_ref_host_entry_by_hash(dt_dev_pixelpipe_get_hash(pipe), NULL, &final_entry))
       {
         _update_backbuf_cache_reference(pipe, roi, final_entry);
+        dt_dev_pixelpipe_cache_unref_entry(final_entry);
         dt_dev_pixelpipe_cache_unref_hash(final_hash);
       }
       else
