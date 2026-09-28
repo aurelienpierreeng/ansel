@@ -957,14 +957,13 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
+      // A line created here and left empty is flagged while held, so its release removes it.
       if(created && !IS_NULL_PTR(mask_entry))
-        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
-      if(!IS_NULL_PTR(mask_entry))
       {
-        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
-        if(created)
-          dt_dev_pixelpipe_cache_remove(TRUE, mask_entry);
+        dt_dev_pixelpipe_cache_flag_auto_destroy(mask_entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
       }
+      if(!IS_NULL_PTR(mask_entry)) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
       dt_pixelpipe_cache_free_align(_mask);
       return 1;
     }
@@ -1575,14 +1574,13 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
+      // A line created here and left empty is flagged while held, so its release removes it.
       if(created && !IS_NULL_PTR(mask_entry))
-        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
-      if(!IS_NULL_PTR(mask_entry))
       {
-        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
-        if(created)
-          dt_dev_pixelpipe_cache_remove(TRUE, mask_entry);
+        dt_dev_pixelpipe_cache_flag_auto_destroy(mask_entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
       }
+      if(!IS_NULL_PTR(mask_entry)) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
       goto error;
     }
 

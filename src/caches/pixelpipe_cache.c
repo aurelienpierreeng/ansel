@@ -470,17 +470,6 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolea
   return 1;
 }
 
-
-int dt_dev_pixelpipe_cache_remove(const gboolean force,
-                                  dt_pixel_cache_entry_t *cache_entry)
-{
-  dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
-  dt_pthread_mutex_lock(&cache->lock);
-  int error = _non_thread_safe_cache_remove(cache, force, cache_entry, cache->entries);
-  dt_pthread_mutex_unlock(&cache->lock);
-  return error;
-}
-
 #ifdef HAVE_OPENCL
 static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid,
                                                           gboolean prefer_device_payload)
@@ -2821,9 +2810,13 @@ gboolean dt_dev_pixelpipe_cache_peek(const uint64_t hash, void **data,
   _cache_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe] cache entry %" PRIu64 " has no authoritative RAM nor vRAM payload and will be removed\n",
            hash);
-  // If the entry removal fails, flag it for auto-destroy.
-  if(dt_dev_pixelpipe_cache_remove(TRUE, cache_entry))
-    dt_dev_pixelpipe_cache_flag_auto_destroy(cache_entry);
+  /* Removed, or flagged for its last holder to remove, in one hold of the lock, and looked up again
+   * there: a peek holds no reference that would keep `cache_entry' alive until then. */
+  dt_pthread_mutex_lock(&cache->lock);
+  dt_pixel_cache_entry_t *invalid = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
+  if(invalid == cache_entry && _non_thread_safe_cache_remove(cache, TRUE, invalid, cache->entries))
+    invalid->auto_destroy = TRUE;
+  dt_pthread_mutex_unlock(&cache->lock);
   if(data) *data = NULL;
   return FALSE;
 }
@@ -3043,6 +3036,18 @@ void dt_dev_pixelpipe_cache_ref_count_entry(gboolean lock,
   dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
   dt_pthread_mutex_lock(&cache->lock);
   _non_thread_safe_cache_ref_count_entry(cache, lock, cache_entry);
+
+  /* A disposable entry goes with its last reference, in this same hold of the lock: once the lock
+   * is released, another thread's eviction may free it, so no later call could name it. Another
+   * holder keeps it until the last release; a lock still on it leaves it to the LRU. */
+  if(!lock && !IS_NULL_PTR(cache_entry) && cache_entry->auto_destroy)
+  {
+    const uint64_t hash = cache_entry->hash;
+    if(_non_thread_safe_cache_remove(cache, FALSE, cache_entry, cache->entries) == 0)
+      _cache_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache entry %" PRIu64 " removed on its last release\n",
+                   hash);
+  }
+
   dt_pthread_mutex_unlock(&cache->lock);
 }
 
@@ -3101,48 +3106,6 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_pixel_cache_entry_t *cache_entr
   dt_pthread_mutex_unlock(&cache->lock);
 }
 
-
-void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_pixel_cache_entry_t *cache_entry)
-{
-  dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
-  dt_pthread_mutex_lock(&cache->lock);
-  if(IS_NULL_PTR(cache_entry))
-  {
-    dt_pthread_mutex_unlock(&cache->lock);
-    return;
-  }
-
-  if(cache_entry->auto_destroy)
-  {
-    /* `auto_destroy` is still a normal cache lifecycle: the creator flags a transient entry, then the final
-     * consumer decrements its refcount and asks the cache to reap it. Only remove it once no consumer owns
-     * it anymore and nobody still holds the entry lock, otherwise teardown paths can free cachelines that
-     * still report `refs>0` and hide ownership bugs instead of exposing them. */
-    const gboolean locked = dt_pthread_rwlock_trywrlock(&cache_entry->lock);
-    if(!locked) dt_pthread_rwlock_unlock(&cache_entry->lock);
-    const gboolean used = dt_atomic_get_int(&cache_entry->refcount) > 0;
-
-    if(!used && !locked)
-    {
-      _pixel_cache_message(cache_entry, "auto destroy removing", FALSE);
-      g_hash_table_remove(cache->entries, &cache_entry->hash);
-    }
-    else if(used)
-    {
-      _pixel_cache_message(cache_entry, "auto destroy postponed: used", TRUE);
-    }
-    else
-    {
-      _pixel_cache_message(cache_entry, "auto destroy postponed: locked", TRUE);
-    }
-  }
-  else
-  {
-    _pixel_cache_message(cache_entry, "auto destroy skipped", TRUE);
-  }
-  
-  dt_pthread_mutex_unlock(&cache->lock);
-}
 
 void dt_dev_pixelpipe_cache_unref_entry(dt_pixel_cache_entry_t *entry)
 {

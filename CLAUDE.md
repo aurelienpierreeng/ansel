@@ -233,6 +233,32 @@ cache. ASAN only sees it when the eviction happens to fall inside the window; th
 deterministic, so the quick way to find one is to report, with a backtrace, every release that takes
 a count below zero in `_non_thread_safe_cache_ref_count_entry()` and exercise the suspect path.
 
+### A cacheline is dropped by flagging it while held; its release removes it
+
+Nothing may name a cache entry after releasing its reference: the release returns with the cache
+mutex released, and from then on any thread's eviction can free an entry nobody holds. A second
+call on the same pointer, to remove it or to flag it, is a second hold of the mutex, and the
+eviction can land between the two.
+
+So the removal happens inside the release. `dt_dev_pixelpipe_cache_ref_count_entry(FALSE, ...)` on
+the last reference of an entry flagged with `dt_dev_pixelpipe_cache_flag_auto_destroy()` removes it
+in the same hold of the mutex, and a holder drops a line by flagging it, then releasing it.
+`tests/unittests/test_pipe_cache_auto_destroy.c` pins the contract. Three things a reviewer would
+otherwise change:
+
+- **Flag before the write lock goes, release last.** The release removes only an entry nobody holds
+  or locks: one released while still write-locked stays, flagged, for the LRU. Flagged before the
+  unlock, it is also refused by the retained lookups a waiter makes when `DT_SIGNAL_CACHELINE_READY`
+  wakes it.
+- **There is no public removal by pointer.** It could only succeed on an entry nobody holds, that
+  is, one its caller has no right to name. The peek holds no reference either, so when it discards
+  a line with neither host nor device payload, it looks the entry up again by hash and removes it
+  within one hold of the mutex.
+- **A line created and not filled goes too, even when no buffer could be allocated.** Left in
+  place, the next `dt_dev_pixelpipe_cache_get()` of that hash finds it, allocates its buffer on
+  demand and returns it as found, i.e. as written: the caller reads uninitialised memory as its
+  mask.
+
 ### A cache key is what a piece computes, never a runtime identity
 
 `dt_iop_compute_module_hash()` (`develop/imageop.c`) keys a module by its op, enabled state,
