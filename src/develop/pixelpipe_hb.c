@@ -949,8 +949,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
     return 1;
   }
 
-  KILL_SWITCH_ABORT;
-
   // Child recursion just published or exact-hit returned this hash with one ref already reserved for
   // this immediate consumer. Reopen the live cache entry directly instead of going through exact-hit
   // lookup, because exact-hit intentionally rejects auto-destroy entries while the parent recursion
@@ -967,6 +965,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
              module->op, input_hash, hash, 
              !IS_NULL_PTR(previous_piece) ? previous_piece->module->op : "", 
              !IS_NULL_PTR(previous_piece) ? previous_piece->global_hash : -1);
+    return 1;
+  }
+
+  // Aborting here hands back the reference the upstream module reserved for this one.
+  if(dt_dev_pixelpipe_has_shutdown(pipe))
+  {
+    if(!IS_NULL_PTR(input_entry)) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
     return 1;
   }
   input = input_entry ? dt_pixel_cache_entry_get_data(input_entry) : NULL;
@@ -1731,6 +1736,9 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
     // remark: opencl errors can come in two ways: pipe->opencl_error is TRUE (and err is TRUE) OR oclerr is
     // TRUE
     keep_running = (oclerr || (err && pipe->opencl_error));
+    const gboolean shut_down = dt_dev_pixelpipe_has_shutdown(pipe);
+    // A completed run whose output is not published hands back the reference reserved on it.
+    if(!err && (keep_running || shut_down)) dt_dev_pixelpipe_cache_unref_hash(final_hash);
     if(keep_running)
     {
       // Report it and be told what it means: 1 = retry this run on CPU, 2 = OpenCL is off
@@ -1745,7 +1753,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
 
       _print_opencl_errors(opencl_error, pipe);
     }
-    else if(!dt_dev_pixelpipe_has_shutdown(pipe))
+    else if(!shut_down)
     {
       // The state switched to is now rendered: the next run may overwrite its outputs again.
       if(!err) pipe->keep_outputs = FALSE;

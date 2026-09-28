@@ -163,6 +163,12 @@ locked when released stays for the LRU, so a producer flags before it releases i
 drops its reference last. There is no removal by pointer: it could only succeed on a line nobody
 holds, which is one its caller has no right to name.
 
+**A reserved reference is released on every way out.** `process_rec()` returns its output with one
+reference reserved for its receiver: the next module, or `dt_dev_pixelpipe_process()` for the final
+output. The receiver releases it whether it goes on or not, so a module aborting before it
+processes releases it, and so does a run shut down or failed on OpenCL after it completed. A
+reference left behind pins its line, which can then never be evicted.
+
 ## 3. Requesting a partial recompute
 
 The GUI fetch can ask a pipe to (re)publish one specific buffer without rendering the whole image.
