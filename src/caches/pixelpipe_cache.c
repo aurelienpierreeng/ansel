@@ -2353,15 +2353,9 @@ void dt_dev_pixelpipe_cache_cleanup(void)
 {
   dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
 
-  // Before anything it holds goes away: the watcher takes `lock` and walks the entries.
+  // Before anything it holds goes away: the watcher and both timeouts are handed `cache`,
+  // take `lock` and walk the entries.
   dt_pixelpipe_cache_pressure_watch_stop(&cache->psi);
-
-  g_hash_table_destroy(cache->external_entries);
-  g_hash_table_destroy(cache->entries);
-  cache->external_entries = NULL;
-  cache->entries = NULL;
-  dt_pthread_mutex_destroy(&cache->lock);
-  dt_cache_arena_cleanup(&cache->arena);
 
   if(garbage_collection != 0)
   {
@@ -2375,7 +2369,15 @@ void dt_dev_pixelpipe_cache_cleanup(void)
     pressure_shedding = 0;
   }
 
-  if(_pixelpipe_cache == cache) _pixelpipe_cache = NULL;
+  // _free_cache_entry() checks each entry's back-reference against _pixelpipe_cache, so the
+  // instance stays published until the tables are gone.
+  g_hash_table_destroy(cache->external_entries);
+  g_hash_table_destroy(cache->entries);
+  dt_pthread_mutex_destroy(&cache->lock);
+  dt_cache_arena_cleanup(&cache->arena);
+
+  _pixelpipe_cache = NULL;
+  dt_free(cache);
 }
 
 static dt_pixel_cache_entry_t *_pixelpipe_cache_create_entry_locked(dt_dev_pixelpipe_cache_t *cache,

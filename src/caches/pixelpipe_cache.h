@@ -100,6 +100,9 @@ gboolean dt_dev_pixelpipe_cache_init(size_t max_memory, const gboolean verbose,
  * dt_dev_pixelpipe_cache_init() succeeds, or after its cleanup, ask this rather than testing
  * a handle they should not hold. */
 gboolean dt_dev_pixelpipe_cache_is_ready(void);
+
+/** @brief Release everything dt_dev_pixelpipe_cache_init() created, the instance included.
+ * Only after a successful init; dt_dev_pixelpipe_cache_is_ready() answers FALSE afterwards. */
 void dt_dev_pixelpipe_cache_cleanup(void);
 
 // One pipeline-cache entry, for the GUI memory view.
