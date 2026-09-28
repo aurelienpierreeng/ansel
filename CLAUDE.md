@@ -207,13 +207,21 @@ If a flushed entry is then empty (no host data + no vRAM on any device), remove 
 hash table via `g_hash_table_iter_remove` — do NOT subtract `current_memory` manually, the
 `_free_cache_entry` GDestroyNotify handles it.
 
-### A peek retains nothing: release only what a retained lookup handed you
+### A peek retains nothing: keep or release only what a retained lookup handed you
 
 `dt_dev_pixelpipe_cache_peek()` is non-owning. An entry nobody holds sits at refcount 0 and any
 thread's eviction can free it between the peek and the caller's next line, so code that reads a
-cacheline, or releases one afterwards, looks it up with `dt_dev_pixelpipe_cache_ref_entry_by_hash()`
+cacheline, keeps it, or releases one afterwards, looks it up with `dt_dev_pixelpipe_cache_ref_entry_by_hash()`
 or `dt_dev_pixelpipe_cache_ref_host_entry_by_hash()` (lookup and reference under one hold of the cache
 lock), read-locks while copying, and releases exactly that reference.
+
+Referencing the entry after the peek does not close the window: the eviction can still land before
+the reference, which then counts up freed memory. The backbuffer's keepalive is the case that costs
+most: taken that way, it is released by pointer at the next publication. So the pipeline publishes
+the backbuffer from `ref_host_entry_by_hash()` and drops that reference once the keepalive is taken.
+`dt_dev_pixelpipe_cache_get_entry()` is a peek too: it serves the producer-to-consumer handoff inside
+one run, where the reference is already held, and nothing else. For the same reason,
+`dt_dev_pixelpipe_cache_get_writable()` hands its exact hit back already referenced.
 
 A release nobody took is a use-after-free with a delay. It leaves the count below the number of real
 holders; the LRU (`refcount > 0` is its only guard) frees a held entry; and since every long-lived
