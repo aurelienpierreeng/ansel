@@ -690,6 +690,32 @@ static uint64_t _group_prefix_hash(const dt_masks_form_t *const form, GList *mas
   return hash ? hash : 1;
 }
 
+/* Publish `fold` under `prefix`, unless a line already answers to it. dt_dev_pixelpipe_cache_get()
+ * hands back a reference, plus the write lock when it created the line, whether or not the buffer
+ * could be allocated: both go back on every path. */
+static void _group_publish_prefix(const uint64_t prefix, const float *const fold, const size_t npixels,
+                                  const dt_dev_pixelpipe_t *pipe)
+{
+  void *slot = NULL;
+  dt_pixel_cache_entry_t *entry = NULL;
+  const int created = dt_dev_pixelpipe_cache_get(prefix, npixels * sizeof(float), "masks group prefix",
+                                                IS_NULL_PTR(pipe) ? -1 : pipe->type, TRUE, &slot, &entry);
+  if(IS_NULL_PTR(entry)) return;
+
+  if(!created)
+  {
+    // already published: nothing to write, only the reference to hand back
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+    return;
+  }
+
+  if(!IS_NULL_PTR(slot)) memcpy(slot, fold, npixels * sizeof(float));
+  dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+  // created without a buffer: nothing a later render could resume from
+  if(IS_NULL_PTR(slot)) dt_dev_pixelpipe_cache_remove(TRUE, entry);
+}
+
 static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const restrict module, const dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *const restrict piece,
                                dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
@@ -923,26 +949,7 @@ static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const
      && !IS_NULL_PTR(publishable))
   {
     const uint64_t prefix = _group_prefix_hash(form, masks, piece, roi, shape_count - 1);
-    if(prefix != 0)
-    {
-      void *slot = NULL;
-      dt_pixel_cache_entry_t *entry = NULL;
-      const int created = dt_dev_pixelpipe_cache_get(prefix, npixels * sizeof(float), "masks group prefix",
-                                                    IS_NULL_PTR(pipe) ? -1 : pipe->type, TRUE, &slot, &entry);
-      /* dt_dev_pixelpipe_cache_get() hands back a reference, plus the write lock when it created
-       * the line, whether or not the buffer could be allocated: both go back on every path. */
-      if(!IS_NULL_PTR(entry))
-      {
-        if(created)
-        {
-          if(!IS_NULL_PTR(slot)) memcpy(slot, publishable, npixels * sizeof(float));
-          dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
-        }
-        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
-        // created without a buffer: nothing a later render could resume from
-        if(created && IS_NULL_PTR(slot)) dt_dev_pixelpipe_cache_remove(TRUE, entry);
-      }
-    }
+    if(prefix != 0) _group_publish_prefix(prefix, publishable, npixels, pipe);
   }
 
   dt_pixelpipe_cache_free_align(publishable);
