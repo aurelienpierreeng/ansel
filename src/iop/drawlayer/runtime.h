@@ -347,7 +347,6 @@ typedef struct dt_drawlayer_runtime_source_t
   dt_pixel_cache_entry_t *cache_entry;
   int width;
   int height;
-  gboolean direct_copy;
   dt_iop_roi_t target_roi;
   dt_iop_roi_t source_roi;
   dt_drawlayer_runtime_buffer_t tracked_buffer;

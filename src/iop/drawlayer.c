@@ -372,8 +372,6 @@ typedef struct drawlayer_process_scratch_t
   size_t layerbuf_pixels;
   float *cl_background_rgba;
   size_t cl_background_rgba_pixels;
-  float *flush_update_rgba;
-  size_t flush_update_rgba_pixels;
 } drawlayer_process_scratch_t;
 
 static void _destroy_process_scratch(gpointer data)
@@ -382,7 +380,6 @@ static void _destroy_process_scratch(gpointer data)
   if(IS_NULL_PTR(scratch)) return;
   dt_drawlayer_cache_free_temp_buffer((void **)&scratch->layerbuf, "drawlayer process scratch");
   dt_drawlayer_cache_free_temp_buffer((void **)&scratch->cl_background_rgba, "drawlayer process scratch");
-  dt_drawlayer_cache_free_temp_buffer((void **)&scratch->flush_update_rgba, "drawlayer process update scratch");
   dt_free(scratch);
 }
 
@@ -823,7 +820,7 @@ static int _drawlayer_copy_or_resample_layer_roi(const int devid, cl_mem dev_sou
 }
 
 static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_entry_t *resolved_entry,
-                                               const gboolean realtime_reuse, const gboolean direct_copy,
+                                               const gboolean realtime_reuse,
                                                cl_mem dev_source_rgba, const int source_w, const int source_h,
                                                const dt_iop_roi_t *const target_roi,
                                                const dt_iop_roi_t *const source_roi,
@@ -831,12 +828,6 @@ static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_e
 {
   if(IS_NULL_PTR(layer) || !err || IS_NULL_PTR(target_roi) || IS_NULL_PTR(source_roi)) return FALSE;
   *layer = (drawlayer_cl_image_handle_t){ 0 };
-
-  if(direct_copy)
-  {
-    layer->mem = dev_source_rgba;
-    return TRUE;
-  }
 
   if(realtime_reuse && resolved_entry)
   {
@@ -936,7 +927,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
                                       cl_mem source_mem_override, const int source_w, const int source_h,
                                       dt_drawlayer_process_state_t *process,
                                       const dt_iop_roi_t *const target_roi, const dt_iop_roi_t *const source_roi,
-                                      const gboolean direct_copy, const gboolean use_preview_bg,
+                                      const gboolean use_preview_bg,
                                       const float preview_bg, const gboolean realtime_reuse,
                                       const gboolean force_device_copy, const gboolean allow_partial)
 {
@@ -961,7 +952,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
    * be snapshotted here because _drawlayer_acquire_source_image() consumes (and
    * resets) process->cache_dirty_rect while uploading the dirty source region. */
   dt_drawlayer_damaged_rect_t target_damage = { 0 };
-  const gboolean partial = allow_partial && !use_preview_bg && !direct_copy && !source_mem_override && process
+  const gboolean partial = allow_partial && !use_preview_bg && !source_mem_override && process
                            && _drawlayer_map_source_damage_to_target(&process->cache_dirty_rect, target_roi,
                                                                      source_roi, &target_damage);
 
@@ -1059,7 +1050,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     goto cleanup;
   }
 
-  if(!_drawlayer_acquire_layer_image(devid, resolved_entry, realtime_reuse, direct_copy, source.mem, source_w,
+  if(!_drawlayer_acquire_layer_image(devid, resolved_entry, realtime_reuse, source.mem, source_w,
                                      source_h, target_roi, source_roi, &layer, &err))
     goto cleanup;
   if(trace_stages) stage_layer = g_get_monotonic_time();
@@ -1649,7 +1640,6 @@ static inline __attribute__((always_inline)) gboolean _update_runtime_state(cons
     source->cache_entry = process->base_patch.cache_entry;
     source->width = process->base_patch.width;
     source->height = process->base_patch.height;
-    source->direct_copy = FALSE;
     source->source_roi = source_full_roi;
     source->target_roi = process_roi;
     dt_drawlayer_cache_patch_rdlock(&process->base_patch);
@@ -4106,7 +4096,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     dt_iop_roi_t source_roi = source.source_roi;
     int source_width = source.width;
     int source_height = source.height;
-    gboolean direct_copy = source.direct_copy;
     const float *source_pixels = source.pixels;
     dt_pixel_cache_entry_t *source_entry = source.cache_entry;
 
@@ -4141,7 +4130,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
     gboolean ok = _blend_layer_over_input_cl(
         pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry, NULL,
-        source_width, source_height, runtime_request.process_state, &target_roi, &source_roi, direct_copy,
+        source_width, source_height, runtime_request.process_state, &target_roi, &source_roi,
         preview_bg.enabled, preview_bg.value,
         reuse_device_buffers, FALSE, allow_partial);
 
@@ -4233,33 +4222,30 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   if(!fallback)
   {
     const float *layer_pixels = source.pixels;
-    if(!source.direct_copy)
-    {
-      drawlayer_process_scratch_t *scratch = _get_process_scratch();
-      if(IS_NULL_PTR(scratch)) fallback = TRUE;
+    drawlayer_process_scratch_t *scratch = _get_process_scratch();
+    if(IS_NULL_PTR(scratch)) fallback = TRUE;
 
-      float *layerbuf = NULL;
-      if(!fallback)
-        layerbuf = dt_drawlayer_cache_ensure_scratch_buffer(&scratch->layerbuf, &scratch->layerbuf_pixels, pixels,
-                                                            "drawlayer process scratch");
-      if(!fallback && IS_NULL_PTR(layerbuf)) fallback = TRUE;
-      if(fallback)
-      {
-        process_post.release = (dt_drawlayer_runtime_release_t){
-          .process = runtime_request.process_state,
-          .source = &source,
-        };
-        goto fallback_pass_through;
-      }
-      /* Bilinear (not the user pref) for the layer matte — see the OpenCL path in
-       * _drawlayer_copy_or_resample_layer_roi: no negative lobes => no overshoot,
-       * so no edge halos / out-of-range premultiplied alpha. */
-      {
-        const struct dt_interpolation *const itor = dt_interpolation_new(DT_INTERPOLATION_BILINEAR);
-        dt_interpolation_resample(itor, layerbuf, &source.target_roi, source.pixels, &source.source_roi);
-      }
-      layer_pixels = layerbuf;
+    float *layerbuf = NULL;
+    if(!fallback)
+      layerbuf = dt_drawlayer_cache_ensure_scratch_buffer(&scratch->layerbuf, &scratch->layerbuf_pixels, pixels,
+                                                          "drawlayer process scratch");
+    if(!fallback && IS_NULL_PTR(layerbuf)) fallback = TRUE;
+    if(fallback)
+    {
+      process_post.release = (dt_drawlayer_runtime_release_t){
+        .process = runtime_request.process_state,
+        .source = &source,
+      };
+      goto fallback_pass_through;
     }
+    /* Bilinear (not the user pref) for the layer matte — see the OpenCL path in
+     * _drawlayer_copy_or_resample_layer_roi: no negative lobes => no overshoot,
+     * so no edge halos / out-of-range premultiplied alpha. */
+    {
+      const struct dt_interpolation *const itor = dt_interpolation_new(DT_INTERPOLATION_BILINEAR);
+      dt_interpolation_resample(itor, layerbuf, &source.target_roi, source.pixels, &source.source_roi);
+    }
+    layer_pixels = layerbuf;
 
     _blend_layer_over_input(output, input, layer_pixels, pixels, preview_bg.enabled, preview_bg.value);
     if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
