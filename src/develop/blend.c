@@ -700,6 +700,19 @@ static void _develop_blend_process_mask_tone_curve(float *const restrict mask, c
   }
 }
 
+// Releases the raster mask line a lookup handed back without a buffer. A line created here and left
+// empty is flagged while held, so its release removes it.
+static void _develop_blend_release_mask_entry(dt_pixel_cache_entry_t *mask_entry, const int created)
+{
+  if(IS_NULL_PTR(mask_entry)) return;
+  if(created)
+  {
+    dt_dev_pixelpipe_cache_flag_auto_destroy(mask_entry);
+    dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
+  }
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
+}
+
 
 int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                              const struct dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
@@ -957,13 +970,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
-      // A line created here and left empty is flagged while held, so its release removes it.
-      if(created && !IS_NULL_PTR(mask_entry))
-      {
-        dt_dev_pixelpipe_cache_flag_auto_destroy(mask_entry);
-        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
-      }
-      if(!IS_NULL_PTR(mask_entry)) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
+      _develop_blend_release_mask_entry(mask_entry, created);
       dt_pixelpipe_cache_free_align(_mask);
       return 1;
     }
@@ -1574,13 +1581,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
-      // A line created here and left empty is flagged while held, so its release removes it.
-      if(created && !IS_NULL_PTR(mask_entry))
-      {
-        dt_dev_pixelpipe_cache_flag_auto_destroy(mask_entry);
-        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
-      }
-      if(!IS_NULL_PTR(mask_entry)) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
+      _develop_blend_release_mask_entry(mask_entry, created);
       goto error;
     }
 
