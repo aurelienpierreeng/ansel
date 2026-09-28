@@ -1464,6 +1464,22 @@ static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelp
   return TRUE;
 }
 
+/**
+ * @brief Does the brush currently lay down the chosen colour?
+ *
+ * Asked in two places that must agree: the panel, which shows the colour swatch and the
+ * pickers only when the answer is yes, and the on-canvas cursor, which fills its stamp with
+ * that colour for the same reason. They were two separate comparisons 1600 lines apart, in
+ * two spellings, with nothing forcing them to be read together -- the shape that has cost
+ * this tree the CFA phase, retouch's mask preview and display encoding's conf reads. Add a
+ * mode that paints with a colour and one of them would grow while the other did not: the
+ * panel offering a colour the cursor draws hollow, or the reverse.
+ */
+static gboolean _brush_paints_color(void)
+{
+  return dt_drawlayer_conf_brush_mode() == DT_DRAWLAYER_BRUSH_MODE_PAINT;
+}
+
 /** @brief Apply selected picker color to drawlayer brush color. */
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
@@ -1887,7 +1903,7 @@ static void _sync_mode_sensitive_widgets(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->controls.color) || IS_NULL_PTR(g->controls.softness)) return;
 
-  const gboolean paint_mode = (dt_drawlayer_conf_brush_mode() == DT_DRAWLAYER_BRUSH_MODE_PAINT);
+  const gboolean paint_mode = _brush_paints_color();
   const gboolean show_hardness = (dt_drawlayer_conf_brush_shape() != DT_DRAWLAYER_BRUSH_SHAPE_GAUSSIAN);
   gtk_widget_set_visible(GTK_WIDGET(g->controls.color), paint_mode);
   if(g->controls.color_row) gtk_widget_set_visible(g->controls.color_row, paint_mode);
@@ -3501,8 +3517,7 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
     _compute_hud_brush_state(&pointer_input, &hud);
 
     float radius = hud.radius;
-    const int brush_mode = dt_drawlayer_conf_brush_mode();
-    const gboolean show_paint_fill = (brush_mode == DT_DRAWLAYER_BRUSH_MODE_PAINT);
+    const gboolean show_paint_fill = _brush_paints_color();
 
     float draw_x = widget_x;
     float draw_y = widget_y;
