@@ -1879,25 +1879,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return;
-  drawlayer_runtime_host_context_t runtime_host = {
-    .runtime = {
-      .self = self,
-      .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-      .gui = g,
-      .manager = &g->manager,
-      .process_state = &g->process,
-    },
-  };
-  const dt_drawlayer_runtime_host_t runtime_manager = {
-    .user_data = &runtime_host,
-  };
-  dt_drawlayer_runtime_manager_update(
-      &g->manager,
-      &(dt_drawlayer_runtime_update_request_t){
-        .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_PIPE_FINISHED,
-        .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-      },
-      &runtime_manager);
+  _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_PIPE_FINISHED, FALSE);
 }
 
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self)
@@ -2888,25 +2870,7 @@ void gui_reset(dt_iop_module_t *self)
   if(!IS_NULL_PTR(g))
   {
     g->session.missing_layer_error[0] = '\0';
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-    };
-    dt_drawlayer_runtime_manager_update(
-        &g->manager,
-        &(dt_drawlayer_runtime_update_request_t){
-          .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC,
-          .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-        },
-        &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC, FALSE);
   }
 
   _sync_mode_sensitive_widgets(self);
@@ -3234,25 +3198,7 @@ void gui_init(dt_iop_module_t *self)
 
   if(self->dev)
   {
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-    };
-    dt_drawlayer_runtime_manager_update(
-        &g->manager,
-        &(dt_drawlayer_runtime_update_request_t){
-          .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC,
-          .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-        },
-        &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC, FALSE);
   }
 }
 
@@ -3339,25 +3285,7 @@ void gui_update(dt_iop_module_t *self)
 
   if(self->dev)
   {
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-    };
-    dt_drawlayer_runtime_manager_update(
-        &g->manager,
-        &(dt_drawlayer_runtime_update_request_t){
-          .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC,
-          .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-        },
-        &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC, FALSE);
   }
 }
 
@@ -3368,23 +3296,7 @@ void change_image(dt_iop_module_t *self)
   {
     dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
     g->session.missing_layer_error[0] = '\0';
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-    };
-    const dt_drawlayer_runtime_update_request_t update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_CHANGE_IMAGE,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
-    dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_CHANGE_IMAGE, FALSE);
   }
 }
 
@@ -3398,24 +3310,8 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     const int pending_samples = g ? (int)g->stroke.stroke_sample_count : 0;
     const gboolean had_pending_edits
         = (g && (g->process.cache_dirty || g->stroke.stroke_sample_count > 0));
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-    };
-    const dt_drawlayer_runtime_update_request_t update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
     dt_control_set_cursor_visible(TRUE);
-    if(g) dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS, FALSE);
     if(had_pending_edits && params)
       dt_drawlayer_touch_stroke_commit_hash(params, pending_samples, g->stroke.last_dab_valid, g->stroke.last_dab_x,
                                 g->stroke.last_dab_y, 0u);
@@ -3435,23 +3331,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
   else if(dt_iop_gui_data(self))
   {
     dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-    };
-    const dt_drawlayer_runtime_update_request_t update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_GAIN,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
-    dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_GAIN, FALSE);
   }
 }
 
@@ -3682,23 +3562,7 @@ int mouse_leave(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g)) return 0;
-  drawlayer_runtime_host_context_t runtime_host = {
-    .runtime = {
-      .self = self,
-      .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-      .gui = g,
-      .manager = &g->manager,
-      .process_state = &g->process,
-    },
-  };
-  const dt_drawlayer_runtime_host_t runtime_manager = {
-    .user_data = &runtime_host,
-  };
-  const dt_drawlayer_runtime_update_request_t update = {
-    .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE,
-    .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-  };
-  dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+  _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE, FALSE);
   return 0;
 }
 
@@ -3713,28 +3577,9 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     /* When the standard image color picker is active, drawlayer must stop
      * capturing the pointer entirely so darkroom can drive the picker overlay
      * and sampling path without competing cursor state from the brush tool. */
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-    };
-    const dt_drawlayer_runtime_update_request_t leave_update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
-    const dt_drawlayer_runtime_update_request_t update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
-    if(g->session.pointer_valid) dt_drawlayer_runtime_manager_update(&g->manager, &leave_update, &runtime_manager);
-    dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+    if(g->session.pointer_valid)
+      _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE, FALSE);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT, FALSE);
     return 0;
   }
 
@@ -3962,23 +3807,7 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
   {
     dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
     dt_bauhaus_slider_set(g->controls.size, new_size);
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-    };
-    const dt_drawlayer_runtime_update_request_t update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_SCROLL,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
-    dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SCROLL, FALSE);
   }
   return 1;
 }
