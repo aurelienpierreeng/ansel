@@ -243,19 +243,22 @@ int dt_dev_pixelpipe_cache_get(const uint64_t hash, const size_t size,
  *
  * The cache then resolves how to provide that writable line:
  * - if an entry already exists at `hash`, that hash is already published and must not be overwritten.
- *   The caller must exact-hit it instead of recomputing,
+ *   The caller must exact-hit it instead of recomputing. The entry is returned with its refcount
+ *   incremented, under the same hold of the cache lock as the lookup, and without a lock of its own:
+ *   its producer may still be writing it,
  * - else, if `allow_rekey_reuse` is TRUE and `reuse_hint` still points to a live cacheline with the right size,
  *   that old cacheline is rekeyed to `hash`, write-locked, and returned. Its host buffer still holds the
  *   previous hash's pixels, so it reports none until the caller calls
  *   `dt_dev_pixelpipe_cache_flag_host_written()`,
  * - else, a new cacheline is created.
  *
- * In all successful cases:
+ * When the entry is created or rekeyed:
  * - the returned entry refcount is incremented,
  * - the returned entry is write-locked,
  * - and `alloc` may materialize the host buffer if requested.
  *
- * The caller must later release the write lock and refcount from the same control flow.
+ * The caller must later release the refcount, and the write lock when it holds one, from the same
+ * control flow.
  *
  * @param cache Pixelpipe cache.
  * @param hash Target output hash for the module output.
@@ -266,7 +269,8 @@ int dt_dev_pixelpipe_cache_get(const uint64_t hash, const size_t size,
  * @param allow_rekey_reuse Whether the cache may reuse the piece-local cached output line by rekeying it.
  * @param reuse_hint Snapshot of the previously attached piece cacheline metadata, or NULL.
  * @param[out] data Returned host pointer when available.
- * @param[out] entry Returned cache entry.
+ * @param[out] entry Returned cache entry, referenced for every status except
+ *        `DT_DEV_PIXELPIPE_CACHE_WRITABLE_ERROR`.
  * @return dt_dev_pixelpipe_cache_writable_status_t `DT_DEV_PIXELPIPE_CACHE_WRITABLE_CREATED`
  *         when creating a new entry, `DT_DEV_PIXELPIPE_CACHE_WRITABLE_REKEYED` when rekeying
  *         `reuse_hint`, `DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT` when a published entry already

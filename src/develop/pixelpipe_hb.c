@@ -1083,24 +1083,12 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
     /* Another pipe already owns a cacheline for this exact hash. If that cacheline is
      * still write-locked, this is not a processing error: it only means the concurrent
      * publisher has not finished exposing the exact-hit payload yet. Wait for that
-     * publication to complete instead of aborting the whole recursion. */
-    dt_pixel_cache_entry_t *exact_entry
-        = dt_dev_pixelpipe_cache_get_entry(hash);
-    if(IS_NULL_PTR(exact_entry))
-    {
-      dt_print(DT_DEBUG_DEV,
-               "[pipeline] module=%s exact-hit entry missing output_hash=%" PRIu64 "\n",
-               module->op, hash);
-      if(input_entry)
-        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
-      return 1;
-    }
-
-    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, exact_entry);
+     * publication to complete instead of aborting the whole recursion.
+     * The cache hands the entry back referenced: that reference is the one this output reserves
+     * for its consumer. */
+    dt_pixel_cache_entry_t *exact_entry = output_entry;
     dt_dev_pixelpipe_cache_rdlock_entry(TRUE, exact_entry);
     dt_dev_pixelpipe_cache_rdlock_entry(FALSE, exact_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, exact_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, exact_entry);
 
     dt_print(DT_DEBUG_DEV,
              "[pipeline] module=%s writable-exact-hit output_hash=%" PRIu64 " has_host_data=%d"

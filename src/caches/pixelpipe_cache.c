@@ -2607,9 +2607,11 @@ dt_dev_pixelpipe_cache_get_writable(const uint64_t hash,
     cache->hits++;
     cache_entry->hits++;
     _pixel_cache_touch(cache_entry);
+    // Referenced before the lock goes: nobody may hold this line, and the caller keeps it.
+    _non_thread_safe_cache_ref_count_entry(cache, TRUE, cache_entry);
     dt_pthread_mutex_unlock(&cache->lock);
-    if(data) *data = NULL;
-    if(entry) *entry = NULL;
+    if(!IS_NULL_PTR(data)) *data = NULL;
+    if(!IS_NULL_PTR(entry)) *entry = cache_entry;
     return DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT;
   }
 

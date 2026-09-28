@@ -149,13 +149,20 @@ static void _without_rekey_the_previous_output_stays(void **state __attribute__(
   assert_int_equal(((const unsigned char *)data)[0], (int)(HASH_A & 0xff));
   dt_dev_pixelpipe_cache_ref_count_entry(FALSE, held);
 
-  // And the pipeline, asking to write HASH_A again, is told to take it as it is.
+  // And the pipeline, asking to write HASH_A again, is told to take it as it is: the line comes back
+  // already referenced, so nothing can evict it before the pipeline reads it.
   data = NULL;
   held = NULL;
   assert_int_equal(dt_dev_pixelpipe_cache_get_writable(HASH_A, LINE_BYTES, "test line", 0, TRUE, FALSE,
                                                        &second, NULL, &data, &held),
                    DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT);
-  assert_null(held);
+  assert_null(data);
+  assert_non_null(held);
+  assert_int_equal(held->serial, first.serial);
+  // One reference and no lock: the cache refuses to drop the line until that reference goes.
+  assert_int_equal(dt_dev_pixelpipe_cache_remove(FALSE, held), 1);
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, held);
+  assert_int_equal(dt_dev_pixelpipe_cache_remove(FALSE, held), 0);
 }
 
 int main(void)
