@@ -243,7 +243,7 @@ eviction can land between the two.
 So the removal happens inside the release. `dt_dev_pixelpipe_cache_ref_count_entry(FALSE, ...)` on
 the last reference of an entry flagged with `dt_dev_pixelpipe_cache_flag_auto_destroy()` removes it
 in the same hold of the mutex, and a holder drops a line by flagging it, then releasing it.
-`tests/unittests/test_pipe_cache_auto_destroy.c` pins the contract. Three things a reviewer would
+`tests/unittests/test_pipe_cache_auto_destroy.c` pins the contract. Four things a reviewer would
 otherwise change:
 
 - **Flag before the write lock goes, release last.** The release removes only an entry nobody holds
@@ -258,6 +258,11 @@ otherwise change:
   place, the next `dt_dev_pixelpipe_cache_get()` of that hash finds it, allocates its buffer on
   demand and returns it as found, i.e. as written: the caller reads uninitialised memory as its
   mask.
+- **The reference `process_rec()` reserves for its receiver is released on every way out.** The next
+  module, or `dt_dev_pixelpipe_process()` for the final output, owns it from the moment the
+  recursion returns: an abort after that point releases it as a completed run does, so
+  `KILL_SWITCH_ABORT`, which releases nothing, has no place after the recursion. A reference left
+  behind pins its line for good.
 
 ### A cache key is what a piece computes, never a runtime identity
 
