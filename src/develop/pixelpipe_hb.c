@@ -1272,10 +1272,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   
   KILL_SWITCH_AND_FLUSH_CACHE;
 
-  // Release the input: an input its producer flagged disposable goes with this release.
-  _trace_cache_owner(pipe, module, "release", "input", input_hash, input, input_entry, FALSE);
-  if(!IS_NULL_PTR(input_entry)) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
-
   // Print min/max/Nan in debug mode only
   if((dt_get_debug_flags() & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0 && !IS_NULL_PTR(output))
   {
@@ -1285,6 +1281,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   }
 
   KILL_SWITCH_AND_FLUSH_CACHE;
+
+  // Released past the last abort point, which releases it itself. An input its producer flagged
+  // disposable goes with this release.
+  _trace_cache_owner(pipe, module, "release", "input", input_hash, input, input_entry, FALSE);
+  if(!IS_NULL_PTR(input_entry)) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
 
   *out_hash = hash;
   *out_piece = piece;
