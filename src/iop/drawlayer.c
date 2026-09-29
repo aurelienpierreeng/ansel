@@ -3262,6 +3262,16 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g)) return;
 
+  /* This function drives conf -> widgets, so nothing it writes may be read back and sent the
+   * other way. dt_iop_gui_update() already brackets its call to us in a freeze, but seven
+   * places call gui_update(self) directly; on those the twelve raw
+   * gtk_toggle_button_set_active() calls below each wake _widget_changed, whose first act is
+   * to read ALL twenty-six widgets and write them to conf -- from a panel this function has
+   * only half refilled. Bauhaus suppresses its own emissions; plain GTK toggles do not, so
+   * the bracket has to be here. The freeze is depth-counted, so nesting inside
+   * dt_iop_gui_update()'s own costs nothing. */
+  dt_gui_widget_freeze();
+
   /* Belt and braces beside the three enumerated writers: any refresh of the panel refills
    * the resolved brush on the next pointer event, so a conf path nobody found cannot leave
    * the cache stale for longer than one non-motion event. */
@@ -3285,6 +3295,17 @@ void gui_update(dt_iop_module_t *self)
   dt_drawlayer_conf_sync_color_picker(self);
   _sync_brush_profile_preview_widget(self);
   if(g->controls.color) gtk_widget_queue_draw(g->controls.color);
+
+  /* The cached display and pipeline brush colours depend on the HDR exposure refilled above,
+   * and `brush_color_valid` is set once and never cleared, so nothing rebuilds them lazily.
+   * They used to be refreshed only because setting that slider woke _widget_changed on the
+   * unfrozen paths -- an accident, and one the frozen path never had. Asked for directly,
+   * every caller gets it. */
+  {
+    float display_rgb[3] = { 0.0f };
+    if(dt_drawlayer_widgets_get_display_color(g->ui.widgets, display_rgb))
+      dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
+  }
 
   dt_drawlayer_mapping_row_t mapping[DT_DRAWLAYER_MAPPING_ROWS];
   dt_drawlayer_conf_mapping_rows(g, mapping);
