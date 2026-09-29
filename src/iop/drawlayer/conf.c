@@ -308,7 +308,7 @@ void dt_drawlayer_conf_sync_color_picker(dt_iop_module_t *self)
 }
 
 
-void dt_drawlayer_conf_mapping_rows(dt_iop_drawlayer_gui_data_t *g,
+void dt_drawlayer_mapping_rows(dt_iop_drawlayer_gui_data_t *g,
                                     dt_drawlayer_mapping_row_t rows[DT_DRAWLAYER_MAPPING_ROWS])
 {
   if(IS_NULL_PTR(g) || IS_NULL_PTR(rows)) return;
@@ -363,7 +363,7 @@ void dt_drawlayer_conf_sync_params_from_gui(dt_iop_module_t *self, const gboolea
   /* The targets are read unguarded and the profiles behind a NULL check, exactly as the
    * fifteen unrolled lines this replaced did. */
   dt_drawlayer_mapping_row_t mapping[DT_DRAWLAYER_MAPPING_ROWS];
-  dt_drawlayer_conf_mapping_rows(g, mapping);
+  dt_drawlayer_mapping_rows(g, mapping);
   for(int r = 0; r < DT_DRAWLAYER_MAPPING_ROWS; r++)
   {
     for(int c = 0; c < DT_DRAWLAYER_MAPPING_TARGETS; c++)

@@ -3142,7 +3142,7 @@ static void _build_input_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t 
   const char *labels[4] = { _("size"), _("opacity"), _("flow"), _("hardness") };
   const char *rows[3] = { _("pressure"), _("tilt"), _("acceleration") };
   dt_drawlayer_mapping_row_t mapping[DT_DRAWLAYER_MAPPING_ROWS];
-  dt_drawlayer_conf_mapping_rows(g, mapping);
+  dt_drawlayer_mapping_rows(g, mapping);
 
   for(int c = 0; c < 4; c++)
   {
@@ -3306,7 +3306,7 @@ void gui_update(dt_iop_module_t *self)
   }
 
   dt_drawlayer_mapping_row_t mapping[DT_DRAWLAYER_MAPPING_ROWS];
-  dt_drawlayer_conf_mapping_rows(g, mapping);
+  dt_drawlayer_mapping_rows(g, mapping);
   for(int r = 0; r < DT_DRAWLAYER_MAPPING_ROWS; r++)
   {
     for(int c = 0; c < DT_DRAWLAYER_MAPPING_TARGETS; c++)
