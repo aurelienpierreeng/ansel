@@ -127,6 +127,8 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
         else
           out[4 * ((size_t)j * width + i) + c] = fmaxf(0.0f, in[(size_t)j * width + i]);
       }
+      // the passes below copy it along: left unwritten, it is whatever the buffer held
+      out[4 * ((size_t)j * width + i) + 3] = 0.0f;
     }
   }
   
