@@ -879,6 +879,24 @@ instance 9.0 s, filmic 3.3 s.
 Anything else folded into a cache key owes the same test: would two sessions editing the same
 image, with the same history, produce the same value?
 
+### What a module reads from the pipe belongs in its key
+
+*Found `d407c82954`, 2026-09-29.*
+
+The key of a piece covers its parameters, not the pipe state its processing reads. Dither read
+two things there: the precision and channels of the output format, `pipe->levels`, which its
+automatic mode quantizes to, and whether the pipe is an export, which sets its step on the other
+pipes from the display scale. Neither reached the key. Measured on two `ansel-cli` exports of one
+raw, a JPEG and a 16-bit TIFF: the same dither global hash, two different output content hashes
+(`-d pipe -d pipecache -d verbose`). A pipe keeping its outputs would have handed one export the
+other's pixels.
+
+`commit_params()` now copies both into `piece->data`, the processing reads them from there only,
+and `runtime_data_hash()` folds `piece->data` into the key, as colorout already does for the
+export's output profile. Same output content hashes as before, two global hashes. A module that
+reads pipe state while processing owes the same: copy it at commit, read the copy, opt into
+`runtime_data_hash()`.
+
 ### A module memoising its own intermediates keys them on `upstream_hash`, never on `global_hash`
 
 *Found `1019fcd2e0`, 2026-09-24.*
