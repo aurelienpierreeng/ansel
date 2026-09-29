@@ -45,8 +45,13 @@
 */
 
 /* Some notes about the algorithm
-* 1. The calculated data at the tiling borders RCD_BORDER must be at least 9 to be stable. Why does 8 **not** work?
-* 2. For the outermost tiles we only have to discard a 6 pixel border region interpolated otherwise.
+* 1. A pixel is exact only RCD_BORDER = 10 pixels inside a tile, image edges included. VH_Dir cannot be
+*    computed in the outer 4 rows and columns of a tile, yet the green interpolation reads it one pixel
+*    further out, in row 3; that green feeds the red/blue at diagonals 2 rows further in, which feed the
+*    red/blue at green sites 3 rows further in: row 9, and symmetrically the last row. What is read
+*    there is whatever the scratch holds (zeroes, or another tile's values): with a 9-pixel border,
+*    the seams would depend on where the tile grid falls, which pixel-pipe tiling moves.
+* 2. The outer RCD_BORDER pixels of the image are interpolated otherwise (rcd_ppg_border()).
 * 3. The tilesize has a significant influence on performance, the default is a good guess for modern
 *    x86/64 machines, tested on Xeon E-2288G, i5-8250U.
 */
@@ -71,8 +76,8 @@
    The 'fp-contract=fast' option enables fused multiply&add if available
 */
 
-#define RCD_BORDER 9          // avoid tile-overlap errors
-#define RCD_MARGIN 6          // for the outermost tiles we can have a smaller outer border
+// Left defined for demosaic.c: a pixel-pipe tile must overlap its neighbours by at least this much.
+#define RCD_BORDER 10
 #define RCD_TILEVALID (RCD_TILESIZE - 2 * RCD_BORDER)
 #define w1 RCD_TILESIZE
 #define w2 (2 * RCD_TILESIZE)
@@ -88,7 +93,7 @@ static INLINE float safe_in(float a, float scale)
   return fmaxf(0.0f, a) * scale;
 }
 
-/** This is basically ppg adopted to only write data to RCD_MARGIN */
+/** This is basically ppg adopted to only write data to RCD_BORDER */
 __DT_CLONE_TARGETS__
 static void rcd_ppg_border(float *const out, const float *const in, const int width, const int height, const uint32_t filters, const int margin)
 {
@@ -284,7 +289,7 @@ static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
     return;
   }
 
-  rcd_ppg_border(out, in, width, height, filters, RCD_MARGIN);
+  rcd_ppg_border(out, in, width, height, filters, RCD_BORDER);
 
   const float scaler = fmaxf(piece->dsc_in.processed_maximum[0], fmaxf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
   const float revscaler = 1.0f / scaler;
@@ -300,8 +305,10 @@ static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
     // but in a parallel section, that's not going to be trivial.
     dt_fp_init(DT_FP_MODE_FAST);    
 
+    // VH_Dir and rgb have elements no step writes and a later one reads (note 1). Zeroed once, so
+    // that those reads stay finite whatever the arena handed back; RCD_BORDER keeps them out of
+    // the output, whatever they hold by the time a tile reads them.
     float *VH_Dir = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE, 0);
-    // ensure that border elements which are read but never actually set below are zeroed out
     memset(VH_Dir, 0, sizeof(*VH_Dir) * RCD_TILESIZE * RCD_TILESIZE);
     float *PQ_Dir = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE / 2, 0);
     float *cfa =    dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE, 0);
@@ -310,8 +317,6 @@ static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
 
     float (*rgb)[RCD_TILESIZE * RCD_TILESIZE] =
       (void *)dt_pixelpipe_cache_alloc_align_float_cache((size_t)3 * RCD_TILESIZE * RCD_TILESIZE, 0);
-    // same for rgb: full tiles read elements no tile ever writes, and a recycled allocation holds
-    // whatever the last user left there
     memset(rgb, 0, sizeof(float) * 3 * RCD_TILESIZE * RCD_TILESIZE);
 
     // No overlapping use so re-use same buffer
@@ -335,14 +340,6 @@ static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
         const int tileRows = MIN(rowEnd - rowStart, RCD_TILESIZE);
         const int tileCols = MIN(colEnd - colStart, RCD_TILESIZE);
 
-        if (rowStart + RCD_TILESIZE > height || colStart + RCD_TILESIZE > width)
-        {
-          // VH_Dir is only filled for (4,4)..(height-4,width-4), but the refinement code reads (3,3)...(h-3,w-3),
-          // so we need to ensure that the border is zeroed for partial tiles to get consistent results
-          memset(VH_Dir, 0, sizeof(*VH_Dir) * RCD_TILESIZE * RCD_TILESIZE);
-          // TODO: figure out what part of rgb is being accessed without initialization on partial tiles
-          memset(rgb, 0, sizeof(float) * 3 * RCD_TILESIZE * RCD_TILESIZE);
-        }
         // Step 0: fill data and make sure data are not negative.
         for(int row = rowStart; row < rowEnd; row++)
         {
@@ -541,11 +538,11 @@ static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
           }
         }
 
-        // For the outermost tiles in all directions we can use a smaller border margin
-        const int first_vertical =   rowStart + ((tile_vertical == 0) ? RCD_MARGIN : RCD_BORDER);
-        const int last_vertical =    rowEnd   - ((tile_vertical == num_vertical - 1)     ? RCD_MARGIN : RCD_BORDER);
-        const int first_horizontal = colStart + ((tile_horizontal == 0) ? RCD_MARGIN : RCD_BORDER);
-        const int last_horizontal =  colEnd   - ((tile_horizontal == num_horizontal - 1) ? RCD_MARGIN : RCD_BORDER);
+        // The outermost tiles need the same border: the image edge is a tile edge like any other
+        const int first_vertical =   rowStart + RCD_BORDER;
+        const int last_vertical =    rowEnd   - RCD_BORDER;
+        const int first_horizontal = colStart + RCD_BORDER;
+        const int last_horizontal =  colEnd   - RCD_BORDER;
         for(int row = first_vertical; row < last_vertical; row++)
         {
           for(int col = first_horizontal, idx = (row - rowStart) * RCD_TILESIZE + col - colStart, o_idx = (row * width + col) * 4; col < last_horizontal; col++, o_idx += 4, idx++)
@@ -798,8 +795,9 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   const float scaler = fmaxf(piece->dsc_in.processed_maximum[0], fmaxf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
 
   {
-    // write output
-    const int myborder = 6;
+    // write output, where every value it reads was computed: the kernels leave the outer rows and
+    // columns of their scratch buffers unwritten, as the CPU tiles do
+    const int myborder = RCD_BORDER;
     size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_write_output, 0, sizeof(cl_mem), &dev_aux);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_write_output, 1, sizeof(cl_mem), &rgb0);
@@ -854,8 +852,6 @@ error:
 }
 #endif //HAVE_OPENCL
 
-#undef RCD_BORDER
-#undef RCD_MARGIN
 #undef RCD_TILEVALID
 #undef w1
 #undef w2

@@ -1156,7 +1156,7 @@ What goes: an identical re-export no longer finds its final output.
 
 ### An arena allocation is not zeroed: a module must not read what it did not write
 
-*Found `1fb2281865`, 2026-09-29.*
+*Found `1fb2281865`, 2026-09-29. RCD re-measured against `26735701f6`, 2026-09-30.*
 
 `dt_pixelpipe_cache_alloc_align_*()` hands out arena memory. Fresh pages read zero; a recycled
 allocation holds whatever its last user left. A module reading elements it never wrote is
@@ -1165,21 +1165,32 @@ that exports differently depending on what ran before it -- more often the more 
 recycles: after a pressure shed, or when a pipe drops its outputs as it goes.
 
 RCD (`iop/demosaic/rcd.c`) did: full tiles read elements of the per-thread `rgb` scratch that no
-tile writes, and only partial tiles cleared it. It is now zeroed once at allocation, as `VH_Dir`
-already was. Found on a batch export: an image differed from its isolated export (mean 0.36 on
-8 bits, in patches); comparing each module's output across the two runs (`-d pipecache -d
-verbose`, `[pixelpipe_stats] ... content_hash`), demosaic was the first to differ, from the same
-input. Poisoning each scratch buffer at allocation, only `rgb` moved the output (9.6 M pixels),
-besides `VH_Dir`, whose clearing the poison overwrote. With `rgb` zeroed, the images of a
-six-raw `ansel-cli` batch whose demosaic ran untiled are identical to each one exported alone.
+tile writes, and only partial tiles cleared it. Found on a batch export: an image differed from
+its isolated export (mean 0.36 on 8 bits, in patches); comparing each module's output across the
+two runs (`-d pipecache -d verbose`, `[pixelpipe_stats] ... content_hash`), demosaic was the first
+to differ, from the same input. Poisoning each scratch buffer at allocation, only `rgb` moved the
+output (9.6 M pixels), besides `VH_Dir`, whose clearing the poison overwrote. Zeroing `rgb` once at
+allocation, as `VH_Dir` already was, made the images of a six-raw `ansel-cli` batch whose demosaic
+ran untiled identical to each one exported alone -- reproducible, not right: the zeroes still
+reached the output. RCD's tiles kept one row and column too many; with a 10-pixel border, nothing
+the scratch holds reaches the output any more, on the CPU and in OpenCL, whose kernels had the same
+fault at the image edges. See [RCD's own tiles need a 10-pixel border](raw-roi-cfa.md#rcds-own-tiles-need-a-10-pixel-border-the-image-edge-included).
 
-Still open, and separate: demosaic run in tiles does not give the pixels it gives untiled. In the
-same batch, a pressure shed lowered the budget and the last three images ran demosaic tiled
-(`-d tiling`: no fallback); those three differ from their isolated exports (mean 0.33-0.49), the
-three untiled ones do not.
+*Found wrong 2026-09-30:* this section called "demosaic run in tiles does not give the pixels it
+gives untiled" still open *and separate*. In the same batch, a pressure shed had lowered the
+budget and the last three images ran demosaic tiled (`-d tiling`: no fallback); those three
+differed from their isolated exports (mean 0.33-0.49 on 8 bits), the three untiled ones did not. It
+is the same defect: the zeroes sat on RCD's tile seams, and pipe tiling moves the seams. With the
+border fixed, tiled and untiled differ by float rounding upstream of `dither`; the 8-bit output
+still differs by one level on many pixels, because Floyd-Steinberg diffusion carries any
+difference along the rows.
 
 To look for others: poison with a large FINITE value. NaN is absorbed by `fmaxf()` and by
-comparisons, and `-d nan` fills only the output buffer and checks only its RGB channels. Still
+comparisons, and `-d nan` fills only the output buffer and checks only its RGB channels. In OpenCL,
+fill each buffer after allocation from a host buffer holding the poison
+(`dt_opencl_write_buffer_to_device()`). To read an OpenCL module's output, its host copy has to be
+forced for the measurement: the export pipe is `no_cache`, so `/plugins/<op>/cache` does not apply
+there (`cache_ram_output` in `pixelpipe_hb.c` requires the cache not to be bypassed). Still
 open: `lens`'s output differs between two isolated exports of the same raw while colorin's does
-not, so in a channel colorin rewrites, presumably alpha; RCD's OpenCL path was not checked.
+not, so in a channel colorin rewrites, presumably alpha.
 
