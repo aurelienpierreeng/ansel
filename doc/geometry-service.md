@@ -1,9 +1,13 @@
 # The geometry service — transforms as data, no virtual pipe
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 9 claim(s) in this file
-> that were wrong of the tree and 10 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `1cfa1551c8` on 2026-09-29.** The audit before that found 9 claims in
+> this file wrong of the tree and 6 stale. This is a **post-mortem of a completed series**
+> (G1-G16, the virtual pipe deleted), so the survey sections describe the tree as it was and
+> are correct as history; what is corrected below is where the plan's *prediction* differs from
+> what landed, and those are the interesting ones — the clipping precision factor, the
+> `enabled` policy, and lens's one data read all turned out simpler than planned. Re-measure
+> before acting on a claim older than the code you are changing, and re-date this line when you
+> do.
 
 Decision record and tranche plan. The maintainer chose option C of `doc/gui-sizing.md`
 (on the #1162 branch; its measurements are restated here where needed): replace
@@ -38,11 +42,20 @@ own `buf_out` for its overlay (graduatednd.c:294-330). The size fold's side effe
 (writing per-piece `buf_in`/`buf_out`, dev_pixelpipe.c:527/551) is itself a consumed
 product: the service must publish input/output rects for **every enabled module**.
 
-**One data read.** `lens.cc:2547-2560` (`gui_update`) reads the committed
+**One data read.** At survey time, lens's `gui_update` read the committed
 `dt_iop_lensfun_data_t` blob off its virtual piece — the single consumer of more than
-dims+transforms. The lens record serves it, since the record *is* that data.
+dims+transforms. **As landed it does not read a blob at all**:
+`_lens_corrections_available()` (`iop/lens.c:3612-3640`) builds its own
+`dt_iop_lensfun_data_t` with `_lens_build_data()` and asks the service only for **dimensions**
+(`:3625`, `dt_dev_module_geometry_gui(self->dev, self, &roi, NULL)`), falling back to the full
+image when the pipe has published none. So the "single consumer of more than dims+transforms"
+turned out not to need one — worth knowing before designing a data channel for the next such
+case.
 
-**The module roster.** 15 modules implement `modify_roi_out`; 11 implement
+**The module roster.** **14** modules implement `modify_roi_out` (ashift, basebuffer, borders,
+clipping, crop, demosaic, flip, lens, liquify, rawprepare, retouch, rotatepixels, scalepixels,
+spots — the same 14 at the survey revision `3436875bf7` and at HEAD; the figure was quoted as 15
+and never was); 11 implement
 `distort_transform`; `retouch`/`spots` implement **neither** (identity `modify_roi_out`,
 source-patch `modify_roi_in` used only by rendering pipes) and stay out of the service.
 `initialscale`/`finalscale` have no `modify_roi_out` at all — complete no-ops in the
@@ -61,7 +74,7 @@ New directory module `src/develop/geometry/` (develop layer). One object per dev
       └─ ordered list of dt_geometry_record_t:
            { op, instance (multi_priority), iop_order, enabled,
              data        — module-published blob, owned by the record,
-             free_fn     — non-NULL where data owns resources (lens's deep lfLens copy),
+             free_data   — non-NULL where data owns resources,
              vtable      — pure evaluators:
                transform(data, dims, chain_ctx, points, n)
                backtransform(data, dims, chain_ctx, points, n)
@@ -99,10 +112,13 @@ and the worker's own pipe (rasterization). They get a
 implementations: piece-based (workers — unchanged behavior) and chain-based (GUI). The
 worker-side mask path never touches the service.
 
-**Shadow mode.** Until G8, the virtual pipe stays alive and the chain runs beside it.
-Under `-d geometry` (and in Debug builds), every chain query re-runs on the virtual pipe
-and divergence is logged with module/instance/op detail; sizes are compared on every
-rebuild. The chain becomes authoritative for a query only when every enabled
+**Shadow mode.** The plan said "until G8"; it in fact **survived to G16**, where the virtual
+pipe was deleted (`git grep -c virtual_pipe src/`: 134 at G8 `5f8ed44038`, 97 at G15
+`b0d04d0f85`, 0 at G16 `90d6e9997a`). Until then the virtual pipe stayed alive and the chain ran
+beside it. The channel is **`-d dev`**, not `-d geometry` — `geometry.c:475-477` gates on
+`dt_get_debug_flags() & DT_DEBUG_DEV`, and the function's doc comment at `:471` says "Under
+`-d dev`; never changes behaviour." Every chain query re-ran on the virtual pipe and divergence
+was logged with module/instance/op detail; sizes were compared on every rebuild. The chain becomes authoritative for a query only when every enabled
 geometry-roster instance in the current history has a record — wholesale, never per-module
 (mixing chain records with virtual pieces inside ONE composition is wrong by interleaving).
 
@@ -126,9 +142,13 @@ geometry-roster instance in the current history has a record — wholesale, neve
    which today have NO pure constructor — their tranche starts with that refactor. Two
    further leaks: `rotatepixels`' output size depends on the interpolator preference
    (`dt_interpolation_new(USERPREF)->width`) — captured at publish time; `clipping`'s
-   transform has a ×100 precision hack gated on `dt_dev_pixelpipe_has_preview_output(pipe)`
-   — a per-pipe-type behavior to resolve (likely: the GUI/chain path takes the
-   high-precision branch unconditionally; decide in its tranche with a shadow diff).
+   transform had a ×100 precision hack gated on `dt_dev_pixelpipe_has_preview_output(pipe)`
+   — a per-pipe-type behaviour to resolve. **Resolved as: no factor at all.**
+   `_clipping_geometry_transform` (`iop/clipping.c:1375-1412`) and
+   `_clipping_geometry_backtransform` (`:1414-1453`) use `d.tx`, `d.ty` and
+   `(d.cix - d.enlarge_x)` undivided, i.e. factor 1 on the chain path. The prediction in
+   brackets — "the GUI/chain path takes the high-precision branch unconditionally" — was the
+   right shape, and the decision is written at the call site rather than here.
 4. **Liquify is self-referential.** Its warps live in RAW coordinates; `distort_transform`
    re-enters the walker (BACK_EXCL of its own iop_order) to bring paths into its input
    space, then rasterizes a dense O(warp-area) displacement map per call
@@ -150,10 +170,14 @@ geometry-roster instance in the current history has a record — wholesale, neve
    pipeline thread for flip detection. G1 pre-fix: use the running pipe's own pieces.
 9. **`enabled` is not pure history.** `propagate_formats` can auto-disable modules on
    contract mismatch (dev_pixelpipe.c:1142-1205) — dsc simulation a pipe-less service
-   cannot replicate. Policy: the chain derives the only geometry-relevant case (demosaic
-   & raw-domain modules enabled iff the image is mosaiced — image metadata) and shadow
-   mode validates the policy; any divergence found in the wild is a policy bug to fix,
-   not a reason to re-grow a pipe.
+   cannot replicate. **The policy as landed is simpler than the one planned here**, and the
+   planned derivation (demosaic & raw-domain modules enabled iff the image is mosaiced) was
+   not implemented: `_resolve_from_history()` (`develop/geometry/geometry.c:224-246`) gives
+   an `IOP_FLAGS_NO_HISTORY_STACK` module its `default_params`/`default_enabled`, and every
+   other module the last history item at or before `history_end`, else its own defaults. No
+   mosaic test anywhere. Shadow mode validated that against the pipe for thirteen tranches
+   and found nothing, which is the evidence the simpler rule was enough. Any divergence found
+   in the wild is still a policy bug to fix, not a reason to re-grow a pipe.
 10. **Scale changes have no transform.** demosaic's DOWNSAMPLE halves dims with no point
    transform; consumers today compensate through per-piece buf dims. The chain's dims
    tables reproduce this; nothing new — but it is why dims, not just transforms, are part
@@ -188,11 +212,16 @@ live and fell to 0 at G16.
   two later tranches — and nothing can become authoritative without those three. Shadow mode
   gained five transform probes here, so it compares coordinates and not only sizes.
 - **G4 — lens + the cost** (#1167). Lens jumped the queue because after G3 it was the ONLY
-  module still gating every CR2, ARW and DNG tried. Its record is the one that is not plain
-  data (a deep `lfLens` copy with a `free_fn`), which is why measuring the cost with it in is
-  the honest test. Measured, five images: virtual pipe ~0.105 s against chain 0.03–5 ms, i.e.
-  20× to 3500×, the worst case being images where lens is active — its lensfun database
-  lookups are the whole of that 2–5 ms and are a memo waiting to happen.
+  module still gating every CR2, ARW and DNG tried. Its record is the only one with a
+  `free_data` hook at all (`iop/lens.c:2328`), which is why measuring the cost with it in is
+  the honest test — though the hook turned out to be trivial: `_lens_free_data()`
+  (`iop/lens.c:2259-2264`) is `free(g)` on a flat `calloc`'d `dt_iop_lens_geometry_t`, not the
+  deep `lfLens` copy the plan expected. Measured, five images: virtual pipe ~0.105 s against
+  chain 0.03–5 ms, i.e. 20× to 3500×, the worst case being images where lens is active — the
+  database lookups are the whole of that 2–5 ms and are a memo waiting to happen. (Lens
+  resolves through **LensSerious** now, not lensfun — `ls_modifier_t`/`ls_lens_t`,
+  `iop/lens.c:2278-2282`; the surviving `lensfun` spellings in `src/` are legacy params
+  typenames.)
 - **G5 — records read history** (#1169). Not in the original plan at all: shadow mode caught
   the chain and the pipe disagreeing while crop's piece was mid-transition. Every
   `geometry_record()` was reading `self->params` and the rebuild was filtering on
@@ -242,7 +271,12 @@ live and fell to 0 at G16.
   `dt_dev_virtual_pipe_ensure_synced()`, every fallback, the teardown in darkroom's and
   studio_capture's `leave()`, colorout's virtual-pipe early return, dev_history's bookkeeping
   entry, and `ANSEL_GEOMETRY_DISABLE` — which could only turn the GUI off once there was
-  nothing to fall back to. Ratchet 110 → 0.
+  nothing to fall back to. **The ratchet did not start at 110 and was not flat**: counted
+  commit by commit over `src/`, it is 129 at G1 (`05eb2181c4`), rises to 134 by G4
+  (`8bdac741c9`) and stays there through G9, then 105 at G10, 104 at G11, 92 at G12, 97 at G15,
+  and 0 at G16. It rose while both paths were live, which is what a shadow-mode ratchet should
+  do — the invariant worth stating is "may only fall **once the chain is authoritative**", not
+  "may only fall".
   Shadow mode becomes `dt_geometry_self_check()`: the round trip and the bound partition, both
   identities the chain must satisfy alone. A chain that is *self-consistently* wrong no longer
   has a check — that one needed a second implementation, and keeping a pipeline alive to be one
