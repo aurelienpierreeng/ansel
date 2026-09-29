@@ -1,5 +1,7 @@
 # Include hygiene: findings and roadmap
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. One symbol name corrected (`dt_film_confirm_rmdir_handler_t`). `dt_iop_throttled_history_update` is absent from the tree because this file records deleting it, which is correct.
+
 This file records what the include diagnostics measure, so follow-up work can be planned and
 split without re-deriving it. Sections headed **Done** describe work that has landed, kept
 for the traps it left behind rather than as a changelog; everything else is backlog.
@@ -669,7 +671,7 @@ declarations moved to `history_merge.h`; the GUI half includes that.
 | `_hm_warn_missing_raster_producers()` | 1 |
 | `_hm_show_toposort_cycle_popup()` | 1 |
 
-Each took the handler-slot pattern already used by `dt_film_confirm_rmdir_handler`,
+Each took the handler-slot pattern already used by `dt_film_confirm_rmdir_handler_t`,
 `dt_folder_survey_confirm_import_handler_t` and `dt_database_prompt_handler_t`. Note the
 shapes differ: the report popup and the two warnings are one-way notifications (`void`,
 no-op with no handler), while `_hm_ask_user_constraints_choice()` returns a

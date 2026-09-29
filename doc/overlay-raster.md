@@ -1,5 +1,7 @@
 # The mask overlay is rasterised, not stroked
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. Two constant names corrected (`DT_MASKS_DASH_STICK`/`_ROUND`).
+
 Status: implemented on `overlay-raster`. Measured with `tests/masks/masks_geometry.c --time-overlay`;
 every number below comes from that harness at a 2560×1440 view, fit zoom, 30 frames per figure.
 
@@ -15,7 +17,7 @@ every frame. Then the whole thing was composited from a `cairo_push_group()` the
 view, painted or not.
 
 Of everything cairo offers, the overlays use exactly that: two widths, two colours with
-alpha, `DASH_STICK` (12/12 px) and `DASH_ROUND` (3/12 px), `CAIRO_LINE_CAP_ROUND` or
+alpha, `DT_MASKS_DASH_STICK` (12/12 px) and `DT_MASKS_DASH_ROUND` (3/12 px), `CAIRO_LINE_CAP_ROUND` or
 `BUTT`, `CAIRO_ANTIALIAS_FAST`. Nodes, handles, arrows, the clone source shape, the brush's
 creation trace and cursor discs are a handful of small primitives each, and stay with cairo.
 

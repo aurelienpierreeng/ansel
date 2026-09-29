@@ -2,12 +2,28 @@
 
 [TOC]
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. **The status was stale and is corrected**: P2 has largely shipped as `src/develop/masks_group.h`, and the ratchet's `masks_member_baseline` is 68 against the 102 this survey measured.
+
 ## Status
 
-**Design only — no API code has been written yet.** This document exists so the design survives
-between sessions and contributors, in the same spirit as `doc/masks_history_dedup.md`. Phases P0
-and P1 of the plan have shipped (typed rasterisation result; the section-9 ratchet in
-`tools/check_module_boundaries.sh`); P2 is what drains the counts that ratchet holds.
+~~**Design only — no API code has been written yet.**~~ **P2 has largely shipped** (checked
+2026-09-29 at `8f4638a04e`). `src/develop/masks_group.h` exists and carries the API this document
+designs, with the `dt_masks_result_t` return and the id-keyed, `dev`-first shape argued for
+below: `dt_masks_group_set_member_operation()` (:135), `dt_masks_group_get_member()` (:152),
+`dt_masks_group_contains()` (:165), `dt_masks_group_covers_shapes()` (:180),
+`dt_masks_group_first_use()` (:197), `dt_masks_group_find_holder()` (:212),
+`dt_masks_group_list()` (:229), `dt_masks_group_set_member_opacity()` (:251), plus
+`dt_masks_form_get_info()` and `dt_masks_group_copy_members()`.
+
+The ratchet says how much it drained: `tools/check_module_boundaries.sh:423` now reads
+`masks_member_baseline=68`, against the **102** this survey measured — a third of the external
+struct accesses are gone. The other counters stand at `masks_include_baseline=18`,
+`masks_gui_include_baseline=11`, `masks_write_baseline=16`, `masks_alloc_baseline=1`,
+`masks_forms_baseline=67`, `masks_row_baseline=27`. `src/develop/masks` is **still not closed**,
+which is what those non-zero baselines mean, so the rest of this document is live work rather
+than history.
+
+Phases P0 and P1 shipped before it (typed rasterisation result; the section-9 ratchet itself).
 
 It was produced by surveying every one of the ~385 external accesses in the five consumer files,
 grouping them by *intent* rather than by struct mechanics, then designing three independent APIs
@@ -171,8 +187,15 @@ gchar   *dt_masks_group_member_label           (struct dt_develop_t *dev, int gr
 
 The first two delete `blend_gui.c:1482-1521` outright — pure masks-graph queries with zero GUI
 content in a GUI file. **Depth-cap both at 32**, as `_masks_find_any_parent_group()` already does
-and neither copy does. `owner_group` replaces `dt_masks_form_group_find_any()` and **drops its COW
-side effect** — verified: that function copy-on-write-touches inside a *lookup*.
+and neither copy does. `owner_group` replaces the old any-parent lookup and **drops its COW
+side effect** — verified at survey time: that function copy-on-write-touched inside a *lookup*.
+It shipped as `dt_masks_group_find_holder()` (`develop/masks_group.h:212`); the surviving
+entry-level helper is `dt_masks_form_group_find_entry()` (`masks/masks_gui.c:1368`), which is a
+plain read. Neither `dt_masks_form_group_find_any()` nor `_masks_find_any_parent_group()` exists
+any more, so take the names in this paragraph as the survey's, not the tree's — the depth cap
+they were cited for lives in the recursive search at `masks_gui.c:1496-1501`, whose comment
+explains that a raw DB/XMP load does not validate against a group referencing its own ancestor
+(the interactive path guards it in `dt_masks_group_add_form`).
 
 ### Writes — all id-keyed, all COW internal, all returning `dt_masks_result_t`
 

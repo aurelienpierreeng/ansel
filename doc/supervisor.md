@@ -1,5 +1,7 @@
 # Event supervisor — linked NDJSON tracing of async state
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. One symbol name corrected (`dt_dev_lock_pipe_surface()`).
+
 Ansel's GUI, history and pixelpipe live in separate threads and identify their
 objects by content-addressed hashes (see `reorganisation.md` and
 `pipeline-cache.md`). Reconstructing *which cacheline a widget painted from*, or
@@ -341,7 +343,7 @@ module and pipe is starving.
 | cache-wait | read | deduped re-poll (same wait in flight, request suppressed) in `dt_dev_pixelpipe_cache_peek_gui()` |
 | cache-wait | delete | served in `_dt_dev_pixelpipe_cache_wait_ready_callback()`; cancelled in `dt_dev_pixelpipe_cache_wait_cleanup()` (`dev_pixelpipe.c`) |
 | backbuf | update | after `dt_dev_set_backbuf()` (`pixelpipe_hb.c`) |
-| widget | read | surface rebind in `_lock_pipe_surface()` (`views/darkroom.c`) |
+| widget | read | surface rebind in `dt_dev_lock_pipe_surface()` (`views/darkroom.c`) |
 | thumbnail | read/update | inside `_view_image_get_surface_internal()` (`views/view.c`), where the real mip level is known |
 | mipmap | create/delete | `dt_mipmap_cache_allocate_dynamic()` / `dt_mipmap_cache_deallocate_dynamic()` (`common/mipmap_cache.c`); create fetches the `dt_image_t` for its properties |
 | image | create/delete | `dt_image_cache_allocate()` / `dt_image_cache_deallocate()` (`common/image_cache.c`) |

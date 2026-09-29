@@ -1,5 +1,7 @@
 # What lensfun actually costs, and what was done about it
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. **Historical.** Everything here was measured against lensfun through `iop/lens.cc`; the module now resolves through **LensSerious** and the file is `iop/lens.c`, so `_lensfun_db()`, `_lensfun_find_camera()` and `_lensfun_find_lens()` no longer exist. The measurements are why the replacement happened and are kept as the record of that; do not go looking for the symbols.
+
 Measured on lensfun 0.3.4, a stock Fedora database (`/usr/share/lensfun/version_1`, 4.5 MB,
 57 files) plus the user's own updates (3.9 MB), against a microbenchmark linked straight to
 `liblensfun` — no Ansel in the loop, so none of this is confounded by pipeline machinery.

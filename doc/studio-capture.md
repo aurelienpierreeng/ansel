@@ -1,5 +1,7 @@
 # Studio Capture
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. Nothing was found wrong by those checks.
+
 Studio Capture is a view (an "atelier") for shooting tethered sessions: it
 monitors a folder for incoming images, imports them automatically (optionally
 applying styles), and shows the latest shot full-size with the filmstrip

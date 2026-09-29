@@ -1,5 +1,7 @@
 # Ansel code base reorganization
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. Two numbers corrected: layering violations are **183**, not 217, and one function was renamed when the database module was sealed (`dt_history_repository_foreach_row()`).
+
 ## The initial problem
 
 Darktable was not modular, as the [/src dependency graph](@ref src) shows: everything is wired
@@ -165,7 +167,9 @@ Here is a complete image lifecycle, assuming it is already imported into databas
 2. load the pixel buffer from disk to mipmap cache and update the `dt_image_t.dsc` structure through `dt_mipmap_cache_get()`,
 3. load the image history from database into `dt_develop_t.history` through `dt_dev_read_history_ext()` which, internally:
   1. initialize a boilerplate history through `dt_dev_init_default_history()`, with module default parameters, auto-presets and mandatory modules for the image type,
-  2. deserialize SQLite3 rows into history items through `dt_history_db_foreach_history_row()`,
+  2. deserialize SQLite3 rows into history items through `dt_history_repository_foreach_row()`
+     (`src/database/history_repository.h:118`; it was `dt_history_db_foreach_history_row()` before
+     the database module was sealed),
   3. fetch the masks history from DB through `dt_masks_read_masks_history()` and attach it to `dt_develop_t.history` items,
   4. init/update all history-related hashes.
 4. From there, we have 2 branches :
@@ -222,7 +226,11 @@ Layers run low to high. A file may include from its own layer or below, never ab
 | 9 | `src/` root | yes | `darktable.c`, the orchestrator |
 
 Measured with `tools/statelessness_audit.py`: 739 files, 316 headers, **0 include cycles**,
-217 layering violations.
+217 layering violations. **Re-measured 2026-09-29 with `tools/include_graph.py --summary`: 814
+nodes, 361 headers, cycles 0, `layering_violations` 183** (and `tools/include_baseline.txt`
+agrees). Note `statelessness_audit.py` needs a populated `build-debug/` — it reads the object
+files — and errors out with `no .o files under .../build-debug` otherwise, which is why the
+cheaper `include_graph.py` is the one to reach for when only the graph numbers are wanted.
 
 ## What "stateless" buys, and why it is worth enforcing
 
@@ -351,7 +359,8 @@ justify an include it has always carried is how mechanical work starts dragging 
 
 # What remains {#what-remains}
 
-Roughly in dependency order. Layering violations (217) fall as these land.
+Roughly in dependency order. Layering violations (**183** as of 2026-09-29, 217 when this was
+written) fall as these land.
 
 **Extract `database`, `caches`, `metadata` from `common/`.** `common/` is 63 translation units
 and remains the largest undifferentiated module. Database access in particular should be behind
