@@ -182,14 +182,12 @@ static void _sync_runtime_state_from_inputs(dt_drawlayer_runtime_manager_t *stat
                                             const dt_drawlayer_runtime_inputs_t *inputs)
 {
   dt_drawlayer_runtime_private_t *priv = _runtime_private(state);
-  const dt_drawlayer_session_state_t *session = inputs ? inputs->session : NULL;
   const dt_drawlayer_process_state_t *process = inputs ? inputs->process : NULL;
   const dt_drawlayer_worker_snapshot_t *worker = inputs ? inputs->worker : NULL;
   const dt_drawlayer_cache_patch_t *base_patch = inputs ? inputs->base_patch : NULL;
 
   if(IS_NULL_PTR(priv)) return;
   state->painting_active = inputs && inputs->painting_active;
-  state->background_job_running = session && session->background_job_running;
 
   if(!IS_NULL_PTR(process))
   {

@@ -166,9 +166,6 @@ typedef struct dt_drawlayer_controls_t
   GtkWidget *attach_layer;
   GtkWidget *create_background;
   GtkWidget *save_layer;
-  GtkWidget *fill_white;
-  GtkWidget *fill_black;
-  GtkWidget *fill_transparent;
   GtkWidget *map_pressure_size;
   GtkWidget *map_pressure_opacity;
   GtkWidget *map_pressure_flow;
@@ -257,7 +254,6 @@ typedef struct dt_drawlayer_runtime_manager_t
 {
   gboolean realtime_active;
   gboolean painting_active;
-  gboolean background_job_running;
   dt_drawlayer_runtime_private_t *priv;
 } dt_drawlayer_runtime_manager_t;
 
