@@ -50,20 +50,15 @@ on:
         - "data/watermarks/**"
         - "**.md"
         - "**.yml"
+  # NO paths-ignore here, deliberately. "CI Gate" below is a required status check,
+  # and GitHub leaves a required check that never REPORTS permanently pending -- a
+  # workflow skipped by path filtering reports nothing, so every documentation-only
+  # pull request would become unmergeable. The filtering therefore moved down into
+  # the `changes` job: the workflow always starts, the build legs still skip, and the
+  # gate always reports. Do not reintroduce paths-ignore on this trigger.
   pull_request:
     branches:
       - master
-    paths-ignore:
-        - "po/**"
-        - "packaging/**"
-        - "data/latex/**"
-        - "data/lua/**"
-        - "data/pixmaps/**"
-        - "data/pswp/**"
-        - "data/style/**"
-        - "data/themes/**"
-        - "data/watermarks/**"
-        - "**.md"
   workflow_dispatch:
 
 
@@ -71,8 +66,73 @@ permissions:
   contents: read
 
 jobs:
+  # Decides whether anything worth building changed. This is the workflow-level
+  # paths-ignore that used to sit on the pull_request trigger, moved into a job so
+  # that "CI Gate" can always report. Cheap: one ubuntu runner, one API call, no
+  # checkout.
+  #
+  # Two entries from the old list are deliberately NOT carried over, because CI
+  # itself consumes them and ignoring them meant a change to a real build input ran
+  # no build at all:
+  #   packaging/**      -- holds install-deps-{ubuntu,macos,windows-msys2}.sh, which
+  #                        the jobs below execute, and a CMake subdirectory the build
+  #                        descends into (CMakeLists.txt:846 add_subdirectory(packaging)).
+  #   data/pixmaps/**   -- holds 256x256/ansel.png, the input image every "Check if it
+  #                        runs" smoke test in this file exports.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    # The top-level grant is `contents: read`; listing a pull request's files is under
+    # the pull-requests scope, so ask for it here rather than widening it for every job.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      build: ${{ steps.filter.outputs.build }}
+    steps:
+      - name: Decide whether to build
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # Anything that is not a pull request already passed the push trigger's own
+          # paths-ignore, so there is nothing left to filter.
+          if [ "${EVENT}" != "pull_request" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "event is ${EVENT}, not a pull request: building."
+            exit 0
+          fi
+
+          files="$(gh api "repos/${REPO}/pulls/${PR}/files" --paginate --jq '.[].filename')"
+          if [ -z "${files}" ]; then
+            # A pull request with no files is not something to reason about; build.
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          build=false
+          while IFS= read -r f; do
+            [ -n "${f}" ] || continue
+            case "${f}" in
+              po/*|data/latex/*|data/lua/*|data/pswp/*|data/style/*|data/themes/*|data/watermarks/*) ;;
+              *.md) ;;
+              *) echo "  needs a build because of: ${f}"; build=true; break ;;
+            esac
+          done <<< "${files}"
+
+          echo "build=${build}" >> "$GITHUB_OUTPUT"
+          if [ "${build}" = "false" ]; then
+            echo "only ignored paths changed; skipping the build legs."
+          fi
+
   Linux:
     name: Linux.${{ matrix.os.code }}.${{ matrix.compiler.compiler }}.${{ matrix.target }}.${{ matrix.btype }}.${{ matrix.generator }}
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ${{ matrix.os.label }}
     strategy:
       fail-fast: true
@@ -231,6 +291,8 @@ jobs:
 
   Win64:
     name: Win64.${{ matrix.msystem }}.${{ matrix.compiler.compiler }}.${{ matrix.target }}.${{ matrix.btype }}.${{ matrix.generator }}
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: windows-latest
     strategy:
       fail-fast: true
@@ -346,6 +408,8 @@ jobs:
 
   macOS:
     name: macOS.${{ matrix.compiler.compiler }}.${{ matrix.build.xcode }}.${{ matrix.target }}.${{ matrix.btype }}.${{ matrix.generator }}
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ${{ matrix.build.os }}
     strategy:
       fail-fast: true
@@ -414,3 +478,48 @@ jobs:
                  --conf worker_threads=4 -t 4 \
                  --conf plugins/lighttable/export/force_lcms2=FALSE \
                  --conf plugins/lighttable/export/iccintent=0
+
+  # The single required status check. Everything above can change shape -- the matrix
+  # names embed their matrix values, so requiring those directly means any matrix edit
+  # silently removes a required check and the protection quietly lapses. This job's
+  # name is stable, so it is the one to require.
+  #
+  # `if: always()` is what makes it report even when the legs were skipped or a leg
+  # failed and fail-fast cancelled its siblings. A skipped leg is a PASS here: that is
+  # the documentation-only case the `changes` job exists to produce. A cancelled one is
+  # a FAILURE, because that is what fail-fast does to healthy siblings when a real
+  # failure occurs -- treating it as neutral is how a red matrix reads as mergeable.
+  ci-gate:
+    name: CI Gate
+    needs: [changes, Linux, Win64, macOS]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every build leg to have succeeded or been skipped
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          LINUX: ${{ needs.Linux.result }}
+          WIN64: ${{ needs.Win64.result }}
+          MACOS: ${{ needs.macOS.result }}
+        run: |
+          set -euo pipefail
+          echo "changes: ${CHANGES}"
+          echo "Linux:   ${LINUX}"
+          echo "Win64:   ${WIN64}"
+          echo "macOS:   ${MACOS}"
+
+          if [ "${CHANGES}" != "success" ]; then
+            echo "::error::the changes job reported '${CHANGES}'; cannot tell whether a build was owed."
+            exit 1
+          fi
+
+          rc=0
+          for leg in "Linux:${LINUX}" "Win64:${WIN64}" "macOS:${MACOS}"; do
+            name="${leg%%:*}"
+            result="${leg#*:}"
+            case "${result}" in
+              success|skipped) ;;
+              *) echo "::error::${name} reported '${result}'."; rc=1 ;;
+            esac
+          done
+          exit "${rc}"
