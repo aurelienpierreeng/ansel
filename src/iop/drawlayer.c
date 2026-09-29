@@ -2959,26 +2959,6 @@ void gui_init(dt_iop_module_t *self)
   gtk_container_child_set(GTK_CONTAINER(notebook), layer_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
   gtk_container_child_set(GTK_CONTAINER(notebook), input_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
 
-  GtkWidget *preview_title = gtk_label_new(_("Background"));
-  g->controls.preview_title = preview_title;
-  gtk_widget_set_halign(preview_title, GTK_ALIGN_START);
-  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->controls.preview_box = preview_box;
-  GSList *preview_group = NULL;
-  g->controls.preview_bg_image = gtk_radio_button_new_with_label(preview_group, _("image"));
-  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_image));
-  g->controls.preview_bg_white = gtk_radio_button_new_with_label(preview_group, _("white"));
-  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_white));
-  g->controls.preview_bg_grey = gtk_radio_button_new_with_label(preview_group, _("grey"));
-  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_grey));
-  g->controls.preview_bg_black = gtk_radio_button_new_with_label(preview_group, _("black"));
-  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_image, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_white, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_grey, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_black, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_tab), preview_title, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_tab), preview_box, FALSE, FALSE, 0);
-
   g->controls.brush_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("paint"));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("erase"));
@@ -3085,6 +3065,26 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->controls.sprinkle_coarseness, _("Coarseness"));
   dt_bauhaus_slider_set_format(g->controls.sprinkle_coarseness, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkle_coarseness, TRUE, TRUE, 0);
+
+  GtkWidget *preview_title = gtk_label_new(_("Background"));
+  g->controls.preview_title = preview_title;
+  gtk_widget_set_halign(preview_title, GTK_ALIGN_START);
+  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  g->controls.preview_box = preview_box;
+  GSList *preview_group = NULL;
+  g->controls.preview_bg_image = gtk_radio_button_new_with_label(preview_group, _("image"));
+  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_image));
+  g->controls.preview_bg_white = gtk_radio_button_new_with_label(preview_group, _("white"));
+  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_white));
+  g->controls.preview_bg_grey = gtk_radio_button_new_with_label(preview_group, _("grey"));
+  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_grey));
+  g->controls.preview_bg_black = gtk_radio_button_new_with_label(preview_group, _("black"));
+  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_image, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_white, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_grey, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_black, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_tab), preview_title, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_tab), preview_box, FALSE, FALSE, 0);
 
   GtkWidget *layer_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *layer_status = gtk_label_new("");
