@@ -914,40 +914,60 @@ static gboolean _drawlayer_map_source_damage_to_target(const dt_drawlayer_damage
   return TRUE;
 }
 
-static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_over, cl_mem dev_out,
-                                      cl_mem dev_in, drawlayer_process_scratch_t *scratch,
-                                      const float *layer_pixels, dt_pixel_cache_entry_t *source_entry,
-                                      const int source_w, const int source_h,
-                                      dt_drawlayer_process_state_t *process,
-                                      const dt_iop_roi_t *const target_roi, const dt_iop_roi_t *const source_roi,
-                                      const gboolean use_preview_bg,
-                                      const float preview_bg, const gboolean realtime_reuse,
-                                      const gboolean allow_partial)
+/**
+ * @brief Everything the GPU layer-over-input blend needs, in one place.
+ *
+ * It used to be sixteen positional arguments at a single call site, four of them adjacent
+ * same-typed neighbours (two ints for the source size, two gbooleans for the reuse and
+ * partial policies) where a transposition compiles silently and changes what is composited.
+ * Named fields at the call site make that mistake unwriteable.
+ */
+typedef struct drawlayer_blend_cl_request_t
 {
-  if(devid < 0 || IS_NULL_PTR(dev_out) || IS_NULL_PTR(dev_in) || IS_NULL_PTR(scratch) || IS_NULL_PTR(layer_pixels) || source_w <= 0
-     || source_h <= 0 || !target_roi || target_roi->width <= 0 || target_roi->height <= 0)
-    return FALSE;
-  if(kernel_premult_over < 0) return FALSE;
+  int devid;
+  int kernel_premult_over;
+  cl_mem dev_out;
+  cl_mem dev_in;
+  drawlayer_process_scratch_t *scratch;
+  const float *layer_pixels;
+  dt_pixel_cache_entry_t *source_entry;
+  int source_w;
+  int source_h;
+  dt_drawlayer_process_state_t *process;
+  const dt_iop_roi_t *target_roi;
+  const dt_iop_roi_t *source_roi;
+  gboolean use_preview_bg;
+  float preview_bg;
+  gboolean realtime_reuse;
+  gboolean allow_partial;
+} drawlayer_blend_cl_request_t;
 
-  dt_pixel_cache_entry_t *resolved_entry = source_entry;
+static int _blend_layer_over_input_cl(const drawlayer_blend_cl_request_t *const req)
+{
+  if(req->devid < 0 || IS_NULL_PTR(req->dev_out) || IS_NULL_PTR(req->dev_in) || IS_NULL_PTR(req->scratch) || IS_NULL_PTR(req->layer_pixels) || req->source_w <= 0
+     || req->source_h <= 0 || !req->target_roi || req->target_roi->width <= 0 || req->target_roi->height <= 0)
+    return FALSE;
+  if(req->kernel_premult_over < 0) return FALSE;
+
+  dt_pixel_cache_entry_t *resolved_entry = req->source_entry;
   gboolean resolved_entry_ref = FALSE;
-  if(realtime_reuse && !resolved_entry)
+  if(req->realtime_reuse && !resolved_entry)
   {
     resolved_entry
-        = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr((void *)layer_pixels);
+        = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr((void *)req->layer_pixels);
     resolved_entry_ref = (!IS_NULL_PTR(resolved_entry));
   }
 
-  /* Realtime partial composite: when the caller validated that dev_out still
+  /* Realtime partial composite: when the caller validated that req->dev_out still
    * holds this node's previous full composite (same buffer, hash and geometry)
    * and only the painted sub-rect of the layer changed, refresh just that window
    * instead of re-resampling the whole display. The source-damage rectangle must
    * be snapshotted here because _drawlayer_acquire_source_image() consumes (and
-   * resets) process->cache_dirty_rect while uploading the dirty source region. */
+   * resets) req->process->cache_dirty_rect while uploading the dirty source region. */
   dt_drawlayer_damaged_rect_t target_damage = { 0 };
-  const gboolean partial = allow_partial && !use_preview_bg && process
-                           && _drawlayer_map_source_damage_to_target(&process->cache_dirty_rect, target_roi,
-                                                                     source_roi, &target_damage);
+  const gboolean partial = req->allow_partial && !req->use_preview_bg && req->process
+                           && _drawlayer_map_source_damage_to_target(&req->process->cache_dirty_rect, req->target_roi,
+                                                                     req->source_roi, &target_damage);
 
   /* Localise the composite's cost. Measured on a 10.4 s stroke, `Drawing' cost 37.5 ms a frame
    * with a 23 ms FLOOR -- something runs unconditionally -- against a total frame of 109.5 ms.
@@ -966,8 +986,8 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   cl_mem dev_background = NULL;
   int err = CL_SUCCESS;
   int result = FALSE;
-  if(!_drawlayer_acquire_source_image(devid, layer_pixels, resolved_entry, realtime_reuse,
-                                           source_w, source_h, process, &source))
+  if(!_drawlayer_acquire_source_image(req->devid, req->layer_pixels, resolved_entry, req->realtime_reuse,
+                                           req->source_w, req->source_h, req->process, &source))
     goto cleanup;
   if(trace_stages) stage_source = g_get_monotonic_time();
 
@@ -979,17 +999,17 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     size_t zero_origin[3] = { 0, 0, 0 };
     size_t win_region[3] = { (size_t)dw, (size_t)dh, 1 };
 
-    /* All three windows are damage-sized device scratch buffers. We keep the
+    /* All three windows are damage-sized device req->scratch buffers. We keep the
      * unmodified full-frame `blendop_premult_over` kernel (local 0,0 coords) and
      * stage the sub-window through copies so the GPU kernel ABI never changes:
      *   layer_partial = resample(source, damaged display window)
-     *   bg_partial    = dev_in[window]                       (background slice)
+     *   bg_partial    = req->dev_in[window]                       (background slice)
      *   out_partial   = over(layer_partial, bg_partial)      (full-window kernel)
-     *   dev_out[window] = out_partial                        (refresh in place)
-     * The rest of dev_out keeps the previous full composite. */
-    dev_layer_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
-    dev_bg_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
-    dev_out_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
+     *   req->dev_out[window] = out_partial                        (refresh in place)
+     * The rest of req->dev_out keeps the previous full composite. */
+    dev_layer_partial = dt_opencl_alloc_device(req->devid, dw, dh, 4 * sizeof(float));
+    dev_bg_partial = dt_opencl_alloc_device(req->devid, dw, dh, 4 * sizeof(float));
+    dev_out_partial = dt_opencl_alloc_device(req->devid, dw, dh, 4 * sizeof(float));
     if(IS_NULL_PTR(dev_layer_partial) || IS_NULL_PTR(dev_bg_partial) || IS_NULL_PTR(dev_out_partial))
     {
       err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
@@ -999,33 +1019,33 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
      * sub-window's global target origin maps back to the correct source region
      * through the unchanged interpolation source mapping. */
     const dt_iop_roi_t sub_target_roi = {
-      .x = target_roi->x + target_damage.nw[0],
-      .y = target_roi->y + target_damage.nw[1],
+      .x = req->target_roi->x + target_damage.nw[0],
+      .y = req->target_roi->y + target_damage.nw[1],
       .width = dw,
       .height = dh,
-      .scale = target_roi->scale,
+      .scale = req->target_roi->scale,
     };
-    err = _drawlayer_copy_or_resample_layer_roi(devid, source.mem, dev_layer_partial, source_w, source_h,
-                                                &sub_target_roi, source_roi);
+    err = _drawlayer_copy_or_resample_layer_roi(req->devid, source.mem, dev_layer_partial, req->source_w, req->source_h,
+                                                &sub_target_roi, req->source_roi);
     if(err != CL_SUCCESS) goto cleanup;
 
-    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_bg_partial, win_origin, zero_origin, win_region);
+    err = dt_opencl_enqueue_copy_image(req->devid, req->dev_in, dev_bg_partial, win_origin, zero_origin, win_region);
     if(err != CL_SUCCESS) goto cleanup;
 
-    err = _drawlayer_run_premult_over_kernel(devid, kernel_premult_over, dev_bg_partial, dev_layer_partial,
+    err = _drawlayer_run_premult_over_kernel(req->devid, req->kernel_premult_over, dev_bg_partial, dev_layer_partial,
                                              dev_out_partial, dw, dh, 0, 0);
     if(err != CL_SUCCESS) goto cleanup;
 
-    err = dt_opencl_enqueue_copy_image(devid, dev_out_partial, dev_out, zero_origin, win_origin, win_region);
+    err = dt_opencl_enqueue_copy_image(req->devid, dev_out_partial, req->dev_out, zero_origin, win_origin, win_region);
     if(err != CL_SUCCESS) goto cleanup;
 
     if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_PERF, "[drawlayer] partial composite window=%dx%d at (%d,%d) of %dx%d\n", dw, dh,
-               target_damage.nw[0], target_damage.nw[1], target_roi->width, target_roi->height);
+               target_damage.nw[0], target_damage.nw[1], req->target_roi->width, req->target_roi->height);
 
     if(source.is_pinned)
     {
-      if(!dt_opencl_finish(devid))
+      if(!dt_opencl_finish(req->devid))
       {
         err = -1;
         goto cleanup;
@@ -1041,37 +1061,37 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     goto cleanup;
   }
 
-  if(!_drawlayer_acquire_layer_image(devid, resolved_entry, realtime_reuse, source.mem, source_w,
-                                     source_h, target_roi, source_roi, &layer, &err))
+  if(!_drawlayer_acquire_layer_image(req->devid, resolved_entry, req->realtime_reuse, source.mem, req->source_w,
+                                     req->source_h, req->target_roi, req->source_roi, &layer, &err))
     goto cleanup;
   if(trace_stages) stage_layer = g_get_monotonic_time();
 
-  if(use_preview_bg)
+  if(req->use_preview_bg)
   {
-    const size_t out_pixels = (size_t)target_roi->width * target_roi->height;
-    float *background = dt_drawlayer_cache_ensure_scratch_buffer(&scratch->cl_background_rgba,
-                                                                 &scratch->cl_background_rgba_pixels, out_pixels,
-                                                                 "drawlayer process scratch");
+    const size_t out_pixels = (size_t)req->target_roi->width * req->target_roi->height;
+    float *background = dt_drawlayer_cache_ensure_scratch_buffer(&req->scratch->cl_background_rgba,
+                                                                 &req->scratch->cl_background_rgba_pixels, out_pixels,
+                                                                 "drawlayer req->process req->scratch");
     if(IS_NULL_PTR(background)) goto cleanup;
     __OMP_PARALLEL_FOR__(if(out_pixels > 4096))
     for(size_t kk = 0; kk < out_pixels; kk++)
     {
       float *pixel = background + 4 * kk;
-      pixel[0] = preview_bg;
-      pixel[1] = preview_bg;
-      pixel[2] = preview_bg;
+      pixel[0] = req->preview_bg;
+      pixel[1] = req->preview_bg;
+      pixel[2] = req->preview_bg;
       pixel[3] = 1.0f;
     }
     dev_background = dt_dev_pixelpipe_cache_get_pinned_image(
-        background, NULL, devid, target_roi->width, target_roi->height,
+        background, NULL, req->devid, req->target_roi->width, req->target_roi->height,
         4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL);
     if(IS_NULL_PTR(dev_background)) goto cleanup;
   }
   else
-    dev_background = dev_in;
+    dev_background = req->dev_in;
 
-  err = _drawlayer_run_premult_over_kernel(devid, kernel_premult_over, dev_background, layer.mem, dev_out,
-                                           target_roi->width, target_roi->height, 0, 0);
+  err = _drawlayer_run_premult_over_kernel(req->devid, req->kernel_premult_over, dev_background, layer.mem, req->dev_out,
+                                           req->target_roi->width, req->target_roi->height, 0, 0);
   if(err != CL_SUCCESS) goto cleanup;
   const gint64 stage_kernel = trace_stages ? g_get_monotonic_time() : 0;
 
@@ -1081,7 +1101,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
    * the cache lock whenever the layer source is host-backed. */
   if(source.is_pinned)
   {
-    if(!dt_opencl_finish(devid))
+    if(!dt_opencl_finish(req->devid))
     {
       err = -1;
       goto cleanup;
@@ -1093,7 +1113,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     dt_print(DT_DEBUG_PERF,
              "[drawlayer] composite FULL out=%dx%d src=%dx%d src_up=%.2f ms resample=%.2f ms "
              "kernel=%.2f ms finish=%.2f ms total=%.2f ms pinned=%d\n",
-             target_roi->width, target_roi->height, source_w, source_h,
+             req->target_roi->width, req->target_roi->height, req->source_w, req->source_h,
              (stage_source - stage_t0) / 1000.0, (stage_layer - stage_source) / 1000.0,
              (stage_kernel - stage_layer) / 1000.0,
              (g_get_monotonic_time() - stage_kernel) / 1000.0,
@@ -1103,8 +1123,8 @@ cleanup:
   if(dev_layer_partial) dt_opencl_release_mem_object(dev_layer_partial);
   if(dev_bg_partial) dt_opencl_release_mem_object(dev_bg_partial);
   if(dev_out_partial) dt_opencl_release_mem_object(dev_out_partial);
-  if(use_preview_bg)
-    dt_dev_pixelpipe_cache_put_pinned_image(scratch->cl_background_rgba, NULL,
+  if(req->use_preview_bg)
+    dt_dev_pixelpipe_cache_put_pinned_image(req->scratch->cl_background_rgba, NULL,
                                             (void **)&dev_background);
   if(layer.mem && layer.mem != source.mem)
   {
@@ -1114,7 +1134,7 @@ cleanup:
       dt_opencl_release_mem_object(layer.mem);
   }
   if(source.is_pinned)
-    dt_dev_pixelpipe_cache_put_pinned_image((void *)layer_pixels, resolved_entry,
+    dt_dev_pixelpipe_cache_put_pinned_image((void *)req->layer_pixels, resolved_entry,
                                             (void **)&source.mem);
   else if(source.is_cached_device && resolved_entry)
     dt_dev_pixelpipe_cache_release_cl_buffer((void **)&source.mem, resolved_entry, NULL, TRUE);
@@ -3988,10 +4008,25 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                g_valid, g_devout, g_hash, g_roi, piece->cache_output_on_ram ? 1 : 0,
                piece->bypass_cache ? 1 : 0);
 
-    gboolean ok = _blend_layer_over_input_cl(
-        pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry,
-        source_width, source_height, runtime_request.process_state, &target_roi, &source_roi,
-        preview_bg.enabled, preview_bg.value, reuse_device_buffers, allow_partial);
+    const drawlayer_blend_cl_request_t blend = {
+      .devid = pipe->devid,
+      .kernel_premult_over = global->kernel_premult_over,
+      .dev_out = dev_out,
+      .dev_in = dev_in,
+      .scratch = scratch,
+      .layer_pixels = source_pixels,
+      .source_entry = source_entry,
+      .source_w = source_width,
+      .source_h = source_height,
+      .process = runtime_request.process_state,
+      .target_roi = &target_roi,
+      .source_roi = &source_roi,
+      .use_preview_bg = preview_bg.enabled,
+      .preview_bg = preview_bg.value,
+      .realtime_reuse = reuse_device_buffers,
+      .allow_partial = allow_partial,
+    };
+    gboolean ok = _blend_layer_over_input_cl(&blend);
 
     if(pstate)
     {
