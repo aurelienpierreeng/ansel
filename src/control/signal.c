@@ -22,6 +22,7 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022-2023, 2025 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -368,11 +369,26 @@ static void _print_trace (const char* op)
 #endif
 }
 
+// A signal that is not emitted still owes what its destructor releases after an emission: the
+// same handler runs on the same arguments. The instance slot holds NULL, which no destructor reads.
+static void _signal_release_unsent(const dt_signal_description *signal_description,
+                                   GValue *instance_and_params)
+{
+  if(IS_NULL_PTR(signal_description->destructor)) return;
+
+  GClosure *closure = g_cclosure_new(signal_description->destructor, NULL, NULL);
+  g_closure_ref(closure);
+  g_closure_sink(closure);
+  g_closure_set_marshal(closure, signal_description->c_marshaller);
+  g_closure_invoke(closure, NULL, 1 + signal_description->n_params, instance_and_params, NULL);
+  g_closure_unref(closure);
+}
+
 void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t signal, ...)
 {
-  if(IS_NULL_PTR(ctlsig)) return; // no signal system in this process (GUI-less)
-  // ignore all signals on shutdown
-  if(!dt_control_running()) return;
+  // Nothing is emitted in a process without a signal system (GUI-less), nor on shutdown. The
+  // arguments are collected anyway, since the signal owns some of them.
+  const gboolean emit = !IS_NULL_PTR(ctlsig) && dt_control_running();
 
   dt_signal_description *signal_description = &_signal_description[signal];
 
@@ -386,15 +402,14 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
     return;
   }
 
-  if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_RAISE && dt_get_signal_debug(signal))
-  {
-    dt_print(DT_DEBUG_SIGNAL, "[signal] raised: %s\n", signal_description->name);
-    _print_trace("raise");
-  }
-
   // 0th element has to be the instance to call
-  g_value_init(instance_and_params, _signal_type);
-  g_value_set_object(instance_and_params, ctlsig->sink);
+  if(emit)
+  {
+    g_value_init(instance_and_params, _signal_type);
+    g_value_set_object(instance_and_params, ctlsig->sink);
+  }
+  else
+    g_value_init(instance_and_params, G_TYPE_POINTER);
 
   // the rest of instance_and_params will be the params for the callback
   va_list extra_args;
@@ -435,8 +450,22 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
   va_end(extra_args);
 
   params->instance_and_params = instance_and_params;
-  params->signal_id = g_signal_lookup(_signal_description[signal].name, _signal_type);
   params->n_params = signal_description->n_params;
+
+  if(!emit)
+  {
+    _signal_release_unsent(signal_description, instance_and_params);
+    _signal_param_cleanup(params);
+    return;
+  }
+
+  if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_RAISE && dt_get_signal_debug(signal))
+  {
+    dt_print(DT_DEBUG_SIGNAL, "[signal] raised: %s\n", signal_description->name);
+    _print_trace("raise");
+  }
+
+  params->signal_id = g_signal_lookup(_signal_description[signal].name, _signal_type);
 
   if(!signal_description->synchronous)
   {
