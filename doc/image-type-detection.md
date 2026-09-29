@@ -1,9 +1,11 @@
 # Image type detection & the early-pipeline contract
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 7 claim(s) in this file
-> that were wrong of the tree and 9 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `9608e354ac` on 2026-09-29.** The audit before that found 7 claims in
+> this file wrong of the tree and 4 stale, and **one of them was the inverse of the truth**: the
+> datatype→HDR rule this document taught was removed from `dt_image_buffer_resolve_flags()`
+> precisely because it re-flagged every display-referred raster as HDR, and the code now carries
+> a comment saying so. Re-measure before acting on a claim older than the code you are changing,
+> and re-date this line when you do.
 
 ## Why this exists
 
@@ -41,8 +43,12 @@ from `flags` alone, with `dsc` only refining it.
 
 The extension is a weak signal and `dt_imageio_get_type_from_extension()` is deliberately
 conservative about it. It commits a dynamic-range flag only for containers whose sample format is
-fixed — integer-only (`jpg`, `png`, `gif`, `webp`, `pnm`…) → `LDR`, float-only (`exr`, `hdr`,
-`pfm`) → `HDR`. Containers that can hold either — **TIFF** (8/16-bit int *or* 16/32-bit float),
+fixed. The list is `_ldr_extensions[]` (`common/image_extensions.c:44-53`) and is exactly
+`jpg`, `jpeg`, `png`, `tif`, `tiff`, `pgm`, `pbm`, `ppm`, plus `jp2`/`j2k`/`jpc` under
+`HAVE_OPENJPEG` and `webp` under `HAVE_WEBP` → `LDR`; float-only (`exr`, `hdr`, `pfm`) → `HDR`.
+(There is no `gif` and no `pnm` — the three Netpbm spellings are listed individually. Note
+`tif`/`tiff` **are** in the LDR list, which the next paragraph's "TIFF returns unknown" claim
+contradicts; the extension detector commits LDR for them and the decode corrects it.) Containers that can hold either — **TIFF** (8/16-bit int *or* 16/32-bit float),
 **AVIF / HEIF / HEIC** (usually 8–12-bit SDR, sometimes PQ/HLG HDR) and **DNG** — return `0`
 (unknown) and carry no LDR/HDR flag until decoded. Trying to guess their type from the extension was
 brittle and wrong (a float TIFF mislabelled LDR, an SDR HEIF mislabelled HDR); the datatype check in
@@ -62,10 +68,20 @@ the correct codec runs.
   `dt_image_buffer_resolve_flags()` maps the freshly decoded descriptor to the persisted flags and
   sets `DT_IMAGE_BUFFER_RESOLVED`:
   - `dsc.filters != 0` → `DT_IMAGE_MOSAIC` (the demosaic axis);
-  - `dsc.datatype == TYPE_FLOAT` → `DT_IMAGE_HDR` (a 16- or 32-bit float buffer, both decoded into
-    `TYPE_FLOAT` in RAM, carries high dynamic range); an integer **non-raw** buffer → `DT_IMAGE_LDR`;
-    integer raw is neither. This replaces the old per-codec / filename-extension HDR/LDR guessing
-    with the authoritative datatype actually loaded.
+  - ~~`dsc.datatype == TYPE_FLOAT` → `DT_IMAGE_HDR`~~ — **this rule was removed, and the code
+    now carries a comment warning against exactly it** (`common/image.c:377-387`). The LDR/HDR
+    axis is **not** derivable from the buffer datatype: every raster codec decodes into a
+    `TYPE_FLOAT` working buffer in RAM regardless of the file's real dynamic range, so sRGB
+    JPEG/PNG/WebP land as float just like Radiance/PFM/EXR. Deriving HDR from the datatype
+    "re-flagged every display-referred raster as HDR", in the comment's words. The **decoding
+    codec** is authoritative and has already set `DT_IMAGE_LDR`/`DT_IMAGE_HDR` from the file's
+    actual content.
+
+    The only normalisation `dt_image_buffer_resolve_flags()` still owns on that axis is the
+    raw-sensor case: `if(dt_image_needs_rawprepare(img) && img->dsc.datatype != TYPE_FLOAT)` it
+    clears **both** flags, because mosaiced / sRAW integer data is scene-linear sensor data,
+    neither display LDR nor HDR. A float raw (HDRMerge, a legacy float DNG) keeps whatever the
+    raw codec set.
 
   These bits round-trip to the database through the regular image-cache writeback
   (`mipmap_cache.c`), so later sessions know the precise class **without re-decoding**.
@@ -96,7 +112,12 @@ Decision order in `dt_image_pipe_class()` (`common/image.c`):
 2. `DT_IMAGE_LDR` → `RGB_LDR`; `DT_IMAGE_HDR` → `RGB_HDR`
    (tested *after* raw colorimetry so a float mosaiced raw, which is flagged both `RAW` and
    `HDR`, is not mistaken for an RGB HDR file);
-3. provisional raw colorimetry → `MOSAIC_RAW` (best guess; corrected on first decode);
+3. provisional raw colorimetry: `DT_IMAGE_S_RAW && !DT_IMAGE_RAW` → `LINEAR_RAW`
+   (`common/image.c:340-342`), else → `MOSAIC_RAW` (`:343`). Not a single best guess: the
+   extension detector never sets `DT_IMAGE_S_RAW`, so that bit is only ever set by a codec on a
+   real decode and reliably means an already-demosaiced raw even before the resolved bit is
+   there. Only the remaining case is the guess, and `dt_image_buffer_resolve_flags()` corrects
+   it on first decode;
 4. otherwise `UNKNOWN`.
 
 Alongside the class, **orthogonal predicates** each test exactly one independent fact — no
@@ -131,15 +152,23 @@ overlapping conditions, **no filename-extension sniffing**:
 `dt_image_print_debug_info(img, context)` prints the flags, the decoded `dsc`, and a
 `class=… state=provisional|resolved …` line under `DT_DEBUG_IMAGEIO`. Useful invocations:
 
+Note `dt_image_print_debug_info()` has **one** caller in the tree
+(`iop/rawprepare.c:1104`, `"rawprepare.reload_defaults"`), so `-d imageio` shows the resolve
+step and not much of the import step.
+
 ```
-ansel -d imageio   # type detection: provisional at import, resolved after first decode
+ansel -d imageio   # type detection: what rawprepare sees on reload_defaults
 ansel -d history   # how the class drives history init / module auto-enable
 ansel -d pipe      # per-node dsc-in / dsc-out propagation + module format heuristics
 ansel -d nan       # flags the first module whose output contains NaN/Inf
 ```
 
-The lighttable/darkroom "EXIF and IPTC" panel exposes a *pipeline type* row for quick visual
-confirmation, including an `(unclassified)` marker before the first decode.
+**There is no pipeline-type row in the "EXIF and IPTC" panel.** `libs/metadata_view.c:121-147`
+enumerates every row it has — `md_internal_filmroll` … `md_internal_flags`, then
+`md_exif_model` … `md_exif_height` — and the only type-ish one is `md_internal_flags`, which
+shows the raw flag word rather than a class. An earlier draft of this document described such a
+row and an `(unclassified)` marker; neither was built. Read the class from `-d imageio` or from
+the flags row.
 
 ### Tracing module heuristics: `[iop-fmt]` and `[dsc]`
 
@@ -248,8 +277,14 @@ channel → green or, after clamping, black output (issue #729's second face). T
 **mirror the first green** for non-4-colour sensors:
 
 - `temperature.c` — `find_coeffs()` sets `coeffs[3] = coeffs[1]` when the raw value is not normal,
-  and `commit_params()` guards `d->coeffs[3] = isnormal(p->g2) ? p->g2 : p->green` so histories
-  that already stored `g2 = NaN` are rescued without re-initialisation.
+  and `commit_params()` guards
+  `const gboolean g2_usable = isnormal(p->g2) || (self->dev->image_storage.flags & DT_IMAGE_4BAYER);`
+  then `d->coeffs[3] = g2_usable ? p->g2 : p->green;` (`iop/temperature.c:732-733`, and the same
+  pair at `:705`/`:709` for the WB-coefficient proxy) so histories that already stored
+  `g2 = NaN` are rescued without re-initialisation. **The `DT_IMAGE_4BAYER` disjunct is the
+  load-bearing half** and an `isnormal()`-only test would break those sensors: on a genuine
+  4-colour sensor `g2` is a real, independent coefficient that may legitimately be denormal, and
+  overwriting it with `p->green` is the bug this guard exists to avoid.
 - `channelmixerrgb.c` — `get_white_balance_coeff()` forces the bogus matrix-derived 4th
   coefficient to the green reference instead of propagating it.
 
@@ -278,9 +313,15 @@ channel → green or, after clamping, black output (issue #729's second face). T
   `commit_params()`) and no longer auto-disables on a possibly-stale upstream descriptor; the
   authoritative pass is the *only* place a module is disabled for an incompatible input, taken
   once on the fully-threaded consistent chain (fixes the spurious "unexpected input buffer
-  format" disable, #733). Only the first stage (`basebuffer`) reads the input image type; every
-  later node derives its contract from its upstream piece, and rawprepare's CFA *phase* shift
-  remains the lone ROI-dependent refinement in `modify_roi_*()`.
+  format" disable, #733). Later nodes derive their contract from their upstream piece, and
+  rawprepare's CFA *phase* shift remains the lone ROI-dependent refinement in `modify_roi_*()`.
+  **But `basebuffer` is not the only node reading the image type**: `develop/format.c:37` and
+  `:55` both run `if(dt_image_is_raw(&pipe->dev->image_storage)) dsc->channels = 1;`, inside
+  `default_input_format()` and `default_output_format()` — i.e. for every module that does not
+  override them. The FIXME beside the second one says what that costs
+  ("this is shit. Chain it in input/output_format() so each module actually tells what it does
+  without relying on pipeline-centric hardcoded assumptions") and is the real statement of this
+  item.
 - **D (done)** — full migration of the IOP modules off the overlapping legacy predicates onto the
   canonical API, with tracing and enable-discipline cleanup:
   - The CFA-domain modules (`hotpixels`, `cacorrect`, `rawdenoise`) now gate on

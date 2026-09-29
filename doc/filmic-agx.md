@@ -1,9 +1,11 @@
 # Filmic RGB "AgX" rendering — design report
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 5 claim(s) in this file
-> that were wrong of the tree and 6 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `9608e354ac` on 2026-09-29.** The audit before that found 5 claims in
+> this file wrong of the tree and 6 stale. Two matter to anyone acting on it: the shipped
+> `$DEFAULT` is **medium bleach / V8**, not low bleach, and the sigmoid's **shoulder exponent is
+> computed at runtime**, not a fixed 7.8 — a fixed one was measured to sit on the JND ceiling
+> and over-compress the top highlight stop. Re-measure before acting on a claim older than the
+> code you are changing, and re-date this line when you do.
 
 Status: implemented (CPU + OpenCL), shipped 2026-07; the design is closed.
 Code: `src/iop/filmicrgb.c` (`filmic_agx*`, `filmic_agx_prepare_bracket`, perceptual
@@ -346,8 +348,16 @@ method; the rest is somebody's taste frozen into code.
   without a kink (C1), and when the requested geometry is impossible (the
   straight line would have to bend backwards to reach the endpoint) it degrades
   into a clean power curve instead of a broken fit. Unlike the legacy types it
-  has **one fixed exponent per side** (not hard/soft/safe): the CIECAM16-J
-  appearance match (see the default-curve section). Implementation detail: the
+  has **one exponent per side** (not hard/soft/safe), and only the **toe's** is fixed —
+  1.5, from the CIECAM16-J appearance match with a local JND tolerance (see the default-curve
+  section). The **shoulder's is computed at runtime** from the geometry, matching the latitude
+  slope at the node (`filmicrgb.c:3947`, `spline->M4[1] = sigmoid_slope * dx / dy`), which gives
+  q ≈ 1 for a low-DR studio curve and ≈ 2.5 for a 14 EV ETTR curve. The comment at
+  `filmicrgb.c:3835-3844` records why: highlights have no perceptual floor, the lightness match
+  is indifferent to the shoulder power (its RMS is flat, so fitting it just rails against
+  whatever bound it is given), and an earlier **fixed 7.8/9.0 sat on the JND ceiling and
+  over-compressed the top highlight stop**. Shadows do have a perceptual floor, which is why the
+  toe can be a constant and the shoulder cannot. Implementation detail: the
   sigmoid's runtime parameters travel in the unused slots of the internal
   spline coefficient vectors, so the OpenCL kernels needed no new arguments.
 
@@ -619,8 +629,9 @@ fitting questions this raised, with their measured answers
 
 *Status of the above.* The κ scalar and the specific inset/outset rotation values in this
 subsection were the **single-config precursor** to the shipped variant ladder — one bracket
-fitted for one look. The production design instead fits **two anchors** and **bisects** the
-interior (see "The five variants" and "Fitting methodology and discarded approaches"); each
+fitted for one look. The production design instead fits **one anchor** — *extra bleach* — and
+**bisects** the interior against the settled bottom anchor, *no bleach*, which
+`tools/fit_agx_ladder.py:10` states is **not re-fit** (`--min-bleach --ab-pull 200`) (see "The five variants" and "Fitting methodology and discarded approaches"); each
 variant now carries its own per-primary over-expanding outset. The *findings* carried over
 unchanged and are the durable lesson: the over-expanding outset plus the output≤input chroma
 clamp is what self-recovers diffuse chroma portably across dynamic ranges (the fitted target
@@ -648,7 +659,9 @@ RGB, governor in Ych — that division is the design.
 
 v8 AgX ships as **five colorscience variants** — *no bleach*, *low bleach*,
 *medium bleach*, *high bleach*, *extra bleach* (enum `V6`…`V10`; the module
-`$DEFAULT` is *low bleach* / `V7`). They share the entire pixel path and differ
+`$DEFAULT` is **medium bleach / `V8`**, `filmicrgb.c:265`, whose `$DESCRIPTION` at `:179` is
+"v8 (AgX, medium bleach)" — it was *low bleach* in an earlier draft of this document and in an
+earlier default). They share the entire pixel path and differ
 **only** by the bracket constants in `filmic_agx_prepare_bracket`. All five are
 points on a single axis that trades **saturation for fidelity**, from *no bleach*
 (maximum chroma retention, largest hue drift) to *extra bleach* (maximum hue and
@@ -903,8 +916,13 @@ remain in `derive_filmic_agx_primaries.py` as a record of what was tried and why
 
 **Maintenance.** The anchors are only optimal *for the curve they were fitted against*.
 `CURVE_DEFAULTS` in the script must track the C `$DEFAULT`s; any change to the default curve
-requires re-running the whole ladder via `python3.12 tools/fit_agx_ladder.py` (which re-fits
-the two anchors, re-bisects the interior, and patches both sources) followed by a rebuild.
+requires re-running the whole ladder via `python3.12 tools/fit_agx_ladder.py` and a rebuild.
+Its `STEPS` table (`fit_agx_ladder.py:40-49`) has exactly four entries and that order is
+load-bearing: **extra-bleach** (`--fit-extra-bleach`) first, since it is the top anchor and
+everything else is bisected against it; then **medium** (`--fit-bisect no-bleach extra-bleach`),
+**low** (`--fit-bisect no-bleach medium-bleach`) and **high**
+(`--fit-bisect medium-bleach extra-bleach`). *No bleach* is not in the table — it is the settled
+bottom anchor and the script says so at `:10`. The script patches both sources.
 `--diagnose` is the acceptance test: the per-hue apparent-brightness, chroma and hue-drift
 ladders must each stay monotone. The sigmoid toe/shoulder exponents are derived separately by
 the default-curve harness (see "Deriving the default curve").
@@ -940,9 +958,15 @@ colorful shadows as part of the look. The coupled recovery (β restores chroma
 shrinking the worst case linearly as the slider moves right — ~16° at the
 default position.
 
-**Verdict**: coupled chroma+hue recovery is the production behaviour; unanchored (hue-free)
-recovery was rejected because ~30° hue-category shifts in colourful shadows are not an
-acceptable baseline. The temporary compile-time switch was deleted. (The rotation derivation
+**Verdict**: hue recovery is the production behaviour and **chroma recovery is not
+user-controlled at all** — this paragraph's "coupled chroma+hue recovery" overstates what
+shipped. `agx_beta_hue` (`filmicrgb.c:387-390`) is a hue-recovery mix and its own comment says
+"Chroma is NOT user-controlled: it follows the bracket's own outset recovery + clamp only,
+because mixing any original chroma back kinks highlight gradients"; `filmicrgb.c:2556-2558`
+repeats it — the recovered value fights the bracket's smooth bleach roll-off at the `min()`
+clamp, "so it was removed". What was rejected here is what this study asked about: *unanchored*
+(hue-free) recovery, because ~30° hue-category shifts in colourful shadows are not an acceptable
+baseline. The temporary compile-time switch was deleted. (The rotation derivation
 this verdict refers to was `--minimax`, since superseded — the shipped anchors come from the
 per-hue anchors-plus-bisection ladder; see "Fitting methodology".)
 
@@ -986,11 +1010,15 @@ bar is "users demonstrate a real limitation", not "would be nice".
    / saturation), where re-saturating does not fight the tone map's roll-off;
    only add a param here if that workflow proves inadequate. Valid diffuse
    colors need nothing (their chroma is in the bracket).
-2. **User-exposed sigmoid toe/shoulder exponents** (2 floats). The perceptual
-   sigmoid ships one fixed pair (1.5, 7.8) with no user control; a legacy
-   polynomial/rational type is the only escape to a different roll-off. If that
-   proves too coarse, expose the two exponents. Blender itself ships fixed
-   powers and keeps them in "advanced" territory, so demand is expected low.
+2. **User-exposed sigmoid toe exponent** (1 float, not 2). The perceptual sigmoid ships a
+   fixed **toe** exponent of 1.5 with no user control; the **shoulder** exponent is not a
+   constant to expose — it is computed at runtime from the curve's own geometry
+   (`filmicrgb.c:3947`), which is what makes it adaptive across dynamic ranges, and pinning it
+   is the regression that comment warns about. (An earlier draft of this item said "one fixed
+   pair (1.5, 7.8)"; 7.8 was the fixed shoulder that was measured to over-compress the top
+   highlight stop and was replaced by the slope match.) A legacy polynomial/rational type is the
+   only escape to a different roll-off. If the toe proves too coarse, expose it. Blender itself
+   ships fixed powers and keeps them in "advanced" territory, so demand is expected low.
 3. **Hue-recovery weighting by compression** (1 float or a fixed design change).
    $\beta$ is currently uniform; a compression-weighted mix would hold midtone hues
    fully while letting the shoulder drift. Adds a second perceptual decision to
