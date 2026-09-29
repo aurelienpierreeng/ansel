@@ -376,7 +376,7 @@ remembering to lock the image cache first (see [§ Database](#database)).
 function pointers letting anything reach anything.
 
 **Make `pixel/` stateless.** No file there holds state of its own; all 13 that reach state do so
-through `common/opencl.c` (the device registry) or `develop/pixelpipe_cache.c`. Inverting those
+through `common/opencl.c` (the device registry) or `caches/pixelpipe_cache.c`. Inverting those
 two dependencies would make the tree's whole pixel-maths layer stateless.
 
 **Close `system/` fully.** It no longer includes anything outside itself, but the gate is what
@@ -409,7 +409,7 @@ needs the *writer* lock on the same `history_mutex`, and the writer-preferring r
 blocks new readers once a writer is queued, every GUI edit (a scroll on exposure, a mask drag)
 can stall for the full duration of whatever resync the worker thread happens to be mid-flight on.
 This is directly observable with the named-rwlock diagnostic added to `dt_pthread_rwlock_t`
-(`common/dtpthread.h`: `dt_pthread_rwlock_set_name()` + wait-time logging, opt-in per lock —
+(`system/dtpthread.h`: `dt_pthread_rwlock_set_name()` + wait-time logging, opt-in per lock —
 `dev->history_mutex` is named in `dt_dev_init()`) combined with `-d history`.
 
 **Status: fixed.** `dt_dev_pixelpipe_change()` now resyncs against a

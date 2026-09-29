@@ -461,7 +461,7 @@ by how much of `common/` it removes.
 |---|---|---|---:|---|
 | 1 | `src/metadata/` | tags, ratings, colorlabels, grouping, gpx, exif.cc, metadata, dng_opcode | 10097 | all still in `common/` |
 | 2 | `src/database/` | database, sqliteicu, legacy_presets (+ the `DT_DEBUG_SQLITE3_*` macros in `common/debug.h`) | 6634 | all still in `common/` |
-| 3 | `src/caches/` | cache (the core), image_cache, mipmap_cache | 3322 | core + 2 of 3 in `common/`; `develop/pixelpipe_cache.{c,h}` is the third and stays where it is |
+| 3 | `src/caches/` | cache (the core), image_cache, mipmap_cache | 3322 | core + 2 of 3 in `common/`; `develop/pixelpipe_cache.{c,h}` is the third and was to stay where it was — **it moved too** (`c889e94dc6`/`157ac60b8f`), so `src/caches/` holds all four, plus `pixelpipe_cache_wait.{c,h}` since T5 |
 | 4 | `src/math/` | curve_tools (1D interpolation) | 902 | still in `common/` |
 | 5 | `src/views/` | cups_print — used by the print view | 813 | 5 include sites: `views/print.c`, `views/view.h`, `libs/print_settings.c`, `control/jobs/control_jobs.h`, `common/printing.h` |
 | — | `src/system/` | resource_limits, dtpthread | 926 | **done** for `resource_limits.{c,h}` and `dtpthread.h`; `common/dtpthread.c` has not followed |

@@ -152,7 +152,7 @@ colons/dot at those exact character positions — must match, since it's a
 positional overlay, not a tolerant parser. Its tooltip spells the format
 out explicitly for whoever types a full date/time by hand. The field also
 carries the same calendar-popover date picker as the regular Import
-dialog (`attach_popover()`, `gui/gtk.c`): picking a day writes it back as
+dialog (`attach_popover()`, `widgets/popup.h:68`): picking a day writes it back as
 `YYYY-MM-DD`, which always matches the overlay's expected format and lets
 the untyped time-of-day tail fall back to the template's defaults.
 Every field that affects this check re-evaluates it on change; **on

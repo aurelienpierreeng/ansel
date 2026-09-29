@@ -80,7 +80,7 @@ All of this lives in `src/common/sentry.c` / `sentry.h`. The public API is three
 ### Consent (opt-in)
 
 Consent is gathered **once**, by a single dialog shared with usage analytics, implemented in
-`src/common/privacy_consent.c` (`dt_privacy_ask_consent()`). On the **very first launch** with a GUI
+`src/gui/privacy_consent.c` (`dt_privacy_ask_consent()`). On the **very first launch** with a GUI
 it shows one checkbox per built-in data flow ("Send crash reports" and "Share anonymous usage
 statistics") plus a link to the user-facing
 [Data privacy](https://ansel.photos/en/data-privacy/) page, then writes the per-feature toggles.
@@ -354,7 +354,7 @@ independently of this script.
 | `src/external/CMakeLists.txt` | builds the submodule (inproc, static) |
 | `src/CMakeLists.txt` | links `sentry`, defines `HAVE_SENTRY` / `SENTRY_DSN` |
 | `src/common/sentry.c` / `.h` | init/shutdown, context, sessions, `on_crash` gdb attach |
-| `src/common/privacy_consent.c` / `.h` | the shared first-launch consent dialog (crash + analytics) |
+| `src/gui/privacy_consent.c` / `.h` | the shared first-launch consent dialog (crash + analytics) |
 | `src/common/system_signal_handling.c` | local gdb fallback; defers to Sentry when it captured |
 | `src/darktable.c` | calls `dt_sentry_init()` / `dt_sentry_shutdown()` |
 | `data/anselconfig.xml.in` / `.dtd`, `tools/generate_prefs.xsl` | the `sentry/enabled` preference |

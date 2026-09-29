@@ -1,7 +1,7 @@
 # GUI sizing without a full pixel-less pipeline — analysis and plan
 
 > **Corrected against `fa8e8b86fa` on 2026-09-29.** The audit before that found 2 claim(s)
-> in this file wrong of the tree and 9 stale. One was load-bearing and wrong: `iop/lens.cc` DID read pixel state off the virtual pipe, which is why lens jumped the tranche queue. Re-measure
+> in this file wrong of the tree and 9 stale. One was load-bearing and wrong: `iop/lens.c` DID read pixel state off the virtual pipe, which is why lens jumped the tranche queue. Re-measure
 > before acting on a claim older than the code you are changing, and re-date this line when
 > you do.
 

@@ -345,8 +345,8 @@ module and pipe is starving.
 | backbuf | update | after `dt_dev_set_backbuf()` (`pixelpipe_hb.c`) |
 | widget | read | surface rebind in `dt_dev_lock_pipe_surface()` (`views/darkroom.c`) |
 | thumbnail | read/update | inside `_view_image_get_surface_internal()` (`views/view.c`), where the real mip level is known |
-| mipmap | create/delete | `dt_mipmap_cache_allocate_dynamic()` / `dt_mipmap_cache_deallocate_dynamic()` (`common/mipmap_cache.c`); create fetches the `dt_image_t` for its properties |
-| image | create/delete | `dt_image_cache_allocate()` / `dt_image_cache_deallocate()` (`common/image_cache.c`) |
+| mipmap | create/delete | `dt_mipmap_cache_allocate_dynamic()` / `dt_mipmap_cache_deallocate_dynamic()` (`caches/mipmap_cache.c`); create fetches the `dt_image_t` for its properties |
+| image | create/delete | `dt_image_cache_allocate()` / `dt_image_cache_deallocate()` (`caches/image_cache.c`) |
 | form | create | `dt_masks_create()` (`develop/masks/masks.c`); update from history snapshots |
 
 ## Limits / TODO

@@ -200,7 +200,7 @@ cancel — and in each workload the total is dominated by one module (`highlight
 `diffuse`) that barely moved.
 
 The likely reason there is nothing to win: this codebase already inlines the hot paths
-through headers. `pixel/colorspaces_inline_conversions.h`, `math/*.h`, `pixel/*.h` are full
+through headers. `common/colorspaces_inline_conversions.h`, `math/*.h`, `pixel/*.h` are full
 of `static inline`, so a module's pixel loop had already inlined everything it calls before
 LTO was ever asked. What crossing the boundary newly exposes is mostly cold glue.
 

@@ -68,7 +68,7 @@ The public API:
 ### Consent (opt-in)
 
 Telemetry shares the **single** first-launch consent dialog with crash reporting
-(`dt_privacy_ask_consent()` in `src/common/privacy_consent.c`): it has one checkbox per built-in data
+(`dt_privacy_ask_consent()` in `src/gui/privacy_consent.c`): it has one checkbox per built-in data
 flow and a link to the user-facing Data privacy page. `dt_telemetry_init()` itself does not prompt —
 it only reads the toggle. Keys:
 
@@ -174,7 +174,7 @@ PostHog project (EU): create insights under **Product analytics**. Useful breakd
 | `DefineOptions.cmake` | `USE_TELEMETRY`, `POSTHOG_HOST` |
 | `src/CMakeLists.txt` | adds the source, defines `HAVE_TELEMETRY` / `POSTHOG_HOST` |
 | `src/common/telemetry.c` / `.h` | init/shutdown, async POST worker, events, per-session aggregates |
-| `src/common/privacy_consent.c` / `.h` | shared first-launch consent dialog (crash + analytics) |
+| `src/gui/privacy_consent.c` / `.h` | shared first-launch consent dialog (crash + analytics) |
 | `src/darktable.c` | calls `dt_telemetry_init()` / `dt_telemetry_shutdown()` |
 | `src/views/view.c`, `src/libs/lib.c`, `src/develop/imageop.c`, `src/develop/pixelpipe_hb.c` | the recording call sites |
 | `data/anselconfig.xml.in` / `.dtd`, `tools/generate_prefs.xsl` | the `telemetry/enabled` preference |

@@ -9,7 +9,9 @@ buffer is not available yet. It complements:
 - `resizing-scaling.md`, which describes the ROI passes (`modify_roi_out()` / `modify_roi_in()`)
   and the difference between `piece->buf_*` and `piece->roi_*`.
 
-The code lives in `src/develop/pixelpipe_cache.c` (the cache itself), `src/develop/dev_pixelpipe.c`
+The code lives in `src/caches/pixelpipe_cache.c` (the cache itself — it was
+`src/develop/pixelpipe_cache.c` until the caches module was extracted, `c889e94dc6`),
+`src/develop/dev_pixelpipe.c`
 (the GUI fetch wrapper and the cache-wait manager), `src/develop/pixelpipe_hb.c` (the recompute
 that publishes image cachelines), `src/develop/pixelpipe_raster_masks.c` (raster-mask side-band
 retrieval), and `src/gui/color_picker_proxy.c` (the module color-picker's own `input_wait` /
@@ -665,7 +667,7 @@ The defense has five layers, from planning to last resort:
    floor** is derived (conf key `memory_pressure_floor`, `0 = auto` = half the OS headroom,
    bounded to the envelope): the system-wide available RAM under which we start shedding caches.
 
-2. **Lazy page release on every arena free** (`common/memory_arena.c`). `dt_cache_arena_free()`
+2. **Lazy page release on every arena free** (`system/memory_arena.c`). `dt_cache_arena_free()`
    marks the freed run `MADV_FREE`: the pages stay mapped and re-dirtying them before reclaim
    costs nothing (the per-frame temp-buffer churn is unaffected), but the kernel may take them
    back *at will* under pressure. Measured on a 24 Mpx export: ~44 % of the process RSS is
@@ -675,7 +677,7 @@ The defense has five layers, from planning to last resort:
    shedder below call it so an idle Ansel doesn't sit on its high-water mark.
 
 3. **Allocation-time pressure valve** (`_system_memory_pressure_valve()`,
-   `develop/pixelpipe_cache.c`). Every arena allocation funnels through
+   `caches/pixelpipe_cache.c`). Every arena allocation funnels through
    `_arena_alloc_with_defrag()`, which first checks a rate-limited probe of the system-wide
    available RAM (`dt_get_system_available_mem()`: MemAvailable on Linux — min'd with the cgroup
    slack including its reclaimable `inactive_file`, where our own MADV_FREE'd pages land —

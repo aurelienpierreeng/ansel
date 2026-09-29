@@ -4,13 +4,13 @@
 
 [In progress]
 
-`src/common/collections.h` and `src/common/selection.h` have been properly defiled since 2019. The code is duplicated by the thumbtable (`image_to_act.h`) and such. The whole thing has more than one way of setting and getting params, which sucks. But it also mixes C code (using `GList`) and SQL requests in a way that is really messy.
+`src/common/collection.h` and `src/common/selection.h` have been properly defiled since 2019. The code is duplicated by the thumbtable (`image_to_act.h`) and such. The whole thing has more than one way of setting and getting params, which sucks. But it also mixes C code (using `GList`) and SQL requests in a way that is really messy.
 
 ## Description of the new API
 
 ### Collections
 
-Declared in `src/common/collections.h`. It's the backbone of the lighttable and filmstrip, extracted from the library database.
+Declared in `src/common/collection.h`. It's the backbone of the lighttable and filmstrip, extracted from the library database.
 
 ```C
 typedef struct dt_collection_t
@@ -31,9 +31,9 @@ The whole collection API uses a `dt_collection_t *collection` argument, but the 
 
 The `gchar *query` and `gchar *query_no_group` contain the SQL commands, built from the config strings stored in `anselrc`. From there, we only care about the list of image ids extracted from the library DB that will be linked with thumbnails and mipmap cache.
 
-So, basically, the collection is a list of `imgid` output from an SQL extraction of the library, using filtering and sorting parameters defined by users in the `src/lib/collect.c` and `src/lib/tools/filters.c` GUI modules.
+So, basically, the collection is a list of `imgid` output from an SQL extraction of the library, using filtering and sorting parameters defined by users in the `src/libs/collect.c` and `src/libs/tools/filter.c` GUI modules.
 
-Updating the SQL queries is done by the `dt_collection_update_query()` function, that is called only from GUI modules `src/lib/collect.c` and `src/lib/tools/filters.c` and reads only the `anselrc` params, meaning the GUI controls should commit the settings to `anselrc` before calling dt_collection_update_query()`.
+Updating the SQL queries is done by the `dt_collection_update_query()` function, that is called only from GUI modules `src/libs/collect.c` and `src/libs/tools/filter.c` and reads only the `anselrc` params, meaning the GUI controls should commit the settings to `anselrc` before calling dt_collection_update_query()`.
 
 The collection might filter images based on user-editable properties, like rating, color labels and metadata. On user edition events, the content of the collection may change and needs to be reloaded with `dt_collection_update()`. This function is connected to various signals like `DT_SIGNAL_FILMROLLS_CHANGED`, `DT_SIGNAL_IMAGE_IMPORT`, `DT_SIGNAL_TAG_CHANGED`. (Checked 2026-09-29: there is no `DT_SIGNAL_FILMROLLS_IMPORTED`; the film-roll signals in `src/control/signal.h` are `DT_SIGNAL_FILMROLLS_CHANGED` (:159) and `DT_SIGNAL_FILMROLLS_REMOVED` (:162).) When a GUI widget performs property edition that may affect the content of the collection, it needs to raise the relevant signal (that you may create for your needs). The function should not be called directly.
 

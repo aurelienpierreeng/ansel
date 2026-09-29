@@ -80,7 +80,7 @@ A handful of struct fields are read directly by external code and are therefore 
 surface:
 
 - `parent_overlay` — the root widget the views pack into their panels (`window_manager.c`);
-- `grid` — the content widget, used for focus grabs (`gui/gtk.c`);
+- `grid` — the content widget, used for focus grabs (`gui/dtgtk/thumbtable.c:1960-1972`);
 - `scroll_window` — the `GtkScrolledWindow`, used to wire a scroll-event handler
   (`libs/tools/lighttable.c`);
 - `thumb_width` / `thumb_height` — the current thumbnail size (`gui/actions/run.c`).

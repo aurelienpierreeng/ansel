@@ -223,7 +223,7 @@ dt_masks_result_t dt_masks_form_set_retouch_mode(struct dt_develop_t *dev, int f
 int               dt_masks_group_create_for_module(struct dt_iop_module_t *module, const char *name);
 ```
 
-> **The line numbers below are historical.** They were verified against `libs/masks.c` as it stood
+> **The line numbers below are historical.** They were verified against `libs/shape_manager.c` as it stood
 > when this survey was made. That file is now `libs/shape_manager.c` and has been substantially
 > rewritten since — the panel was split into two lists and grew per-row actions — so the numbers
 > locate nothing in the current tree. The file and symbol names are still right; find the code by

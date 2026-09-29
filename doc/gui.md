@@ -138,7 +138,7 @@ GTK3 exposes two *independent* scaling mechanisms, and the codebase has to keep 
 - **Integer scale-factor** (`gtk_widget_get_scale_factor()`, cached as `darktable.gui->ppd`): the HiDPI factor (1–4) reported by the compositor (Wayland) or the macOS backing scale. GTK applies it *automatically* at render time to every logical-px sink — CSS `px`, widget size requests, box spacing, the window default size — and we apply it to raw cairo buffers via `cairo_surface_set_device_scale()`.
 - **Font/screen DPI** (`gdk_screen_get_resolution()` / 96, cached as `darktable.gui->dpi_factor`): the classic X11 `Xft.dpi` knob. On plain X11 the scale-factor stays at 1, so this is the *only* HiDPI lever available there; it scales point-sized fonts but, by GTK design, it does **not** touch CSS `px`.
 
-Because the right factor depends on the **destination sink** (not on the platform), pixel sizes go through one of two intent-named macros in `src/gui/gtk.h`. Their inputs are device-independent px at the 96 DPI baseline:
+Because the right factor depends on the **destination sink** (not on the platform), pixel sizes go through one of two intent-named macros in `src/widgets/widget_settings.h` (they were in `src/gui/gtk.h`, which was dissolved by `55954b77ea`, "gtk.h is gone: every file now names what it uses"). Their inputs are device-independent px at the 96 DPI baseline:
 
 - `DT_UI_SCALE_UI(px)` — for logical-px GUI sinks (`gtk_widget_set_size_request()`, window geometry, anything fed to a GTK widget geometry setter). GTK already multiplies these by `ppd`, so this macro must **not** pre-apply `ppd`; it only adds the `dpi_factor` UI zoom.
 - `DT_UI_SCALE_DEVICE(px)` — for raw device-pixel buffers (cairo image surfaces, `gdk_pixbuf_*_at_size`, mouse hit-test radii). The toolkit does not auto-scale these, so the macro carries both `dpi_factor` and `ppd`.
@@ -168,7 +168,7 @@ If a widget looks right at 1× but blurry or mis-sized at `GDK_SCALE=2`, the sur
 
 ### Spacing within boxes, grids and flowboxes
 
-Within `GtkBox`, `GtkGrid` and `GtkFlowBox` containers, it is not possible to define spacing between children using CSS `margin`/`padding`: that would not honour the boundaries of the container, so widgets sitting on the container's edges would end up recessed compared to its contours while inner widgets would not. Spacing between children therefore has to be set in C at box-creation time, using the `DT_GUI_BOX_SPACING` macro (`src/gui/gtk.h`), so it is managed consistently from a single place.
+Within `GtkBox`, `GtkGrid` and `GtkFlowBox` containers, it is not possible to define spacing between children using CSS `margin`/`padding`: that would not honour the boundaries of the container, so widgets sitting on the container's edges would end up recessed compared to its contours while inner widgets would not. Spacing between children therefore has to be set in C at box-creation time, using the `DT_GUI_BOX_SPACING` macro (`src/widgets/widget_settings.h:276`), so it is managed consistently from a single place.
 
 `DT_GUI_BOX_SPACING` is expressed as a fraction of `1em` (`DT_GUI_BOX_SPACING_EM = 0.625`, i.e. 10px at the 16px reference font). The current `1em` size in px is resolved from the active theme/font by `dt_gui_update_em()` and cached in `darktable.gui->em`; it is refreshed whenever the theme/font or the screen DPI changes. Because the font's point→px conversion already folds in the screen DPI, the spacing needs **no** `DT_PIXEL_APPLY_DPI` on top — and because it is `em`-based, the inner gutters now scale with the user's font-size setting exactly like the `em`-based margins/paddings in `data/themes/ansel.css`.
 
@@ -229,7 +229,7 @@ dt_gui_set_pango_resolution(layout);                        // screen DPI
 /* ... set_text, update_layout, show_layout ... */
 ```
 
-Font *family/weight/style* therefore always come from CSS (the `GTK_STYLE_PROPERTY_FONT` of the widget's style context), never hardcoded — which keeps cairo-drawn text on the same theming path as everything else. The bauhaus text renderer (`src/gui/bauhaus.c`) is the reference implementation; it additionally merges only the style fields of the CSS font while keeping its own resolved size.
+Font *family/weight/style* therefore always come from CSS (the `GTK_STYLE_PROPERTY_FONT` of the widget's style context), never hardcoded — which keeps cairo-drawn text on the same theming path as everything else. The bauhaus text renderer (`src/widgets/bauhaus.c`) is the reference implementation; it additionally merges only the style fields of the CSS font while keeping its own resolved size.
 
 ### GtkTextView: background, border and padding
 
@@ -240,7 +240,7 @@ Font *family/weight/style* therefore always come from CSS (the `GTK_STYLE_PROPER
 - `padding` on the outer `textview` node *does* shift the inner "text" node (and the glyphs with it) inward, but a `border` on `textview text` would then be painted at that shifted position, i.e. *outside* the padding instead of around it — the opposite of the `entry`/`treeview` look (border flush with the widget edge, padding between the border and the text).
 - `padding` declared directly on `textview text` is parsed without error but has **no effect** on text layout at all.
 
-Because of this, CSS alone cannot reproduce the `entry`/`treeview` recessed look for a `GtkTextView`. The CSS only provides the background and the border (`textview { padding: 0; background-color: @recessed_color_bg; }` and `textview text { border: 1px solid @recessed_color_border; }`); the actual 2px/4px text inset is applied in C with `dt_gui_textview_set_padding()` (`src/gui/gtk.c`), which calls `gtk_text_view_set_{left,right,top,bottom}_margin()`. Every `GtkTextView` created in the codebase should call this helper so it stays visually consistent with `entry`/`treeview`.
+Because of this, CSS alone cannot reproduce the `entry`/`treeview` recessed look for a `GtkTextView`. The CSS only provides the background and the border (`textview { padding: 0; background-color: @recessed_color_bg; }` and `textview text { border: 1px solid @recessed_color_border; }`); the actual 2px/4px text inset is applied in C with `dt_gui_textview_set_padding()` (`src/widgets/label.h:97`), which calls `gtk_text_view_set_{left,right,top,bottom}_margin()`. Every `GtkTextView` created in the codebase should call this helper so it stays visually consistent with `entry`/`treeview`.
 
 ### Scrollbar slider spacing
 

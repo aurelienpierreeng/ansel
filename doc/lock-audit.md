@@ -144,7 +144,7 @@ could not substitute for any of them:
 | `iop/lens.c` | modifier construction | **lock deleted** — LensSerious is stateless |
 
 **A correction worth recording**, because it was nearly missed: `global_mutexes.h` listed
-`iop/lens.cc` among its consumers, and that file no longer exists. It is tempting to read
+`iop/lens.c` among its consumers, and that file no longer exists. It is tempting to read
 that as a stale reference to a dead consumer. It was not — the file was RENAMED to
 `iop/lens.c` in the LensSerious migration and still took the lock in four places. The header
 was under-listing a live consumer, not over-listing a dead one. A missing filename is not
