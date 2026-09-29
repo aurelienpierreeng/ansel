@@ -3361,6 +3361,7 @@ start:
       {
         quick_check_text = g_strdup(""); // a trick;
       }
+      dt_free(data_status);
 
       gchar *data_snap = dt_database_get_most_recent_snap(dbfilename_data);
 
@@ -3372,6 +3373,8 @@ start:
 
       dt_free(quick_check_text);
 
+      // sqlite3_close() leaves a connection with a live statement open, file included.
+      sqlite3_finalize(stmt);
       _database_free(db);
       db = NULL;
 
@@ -3482,6 +3485,7 @@ start:
     {
       quick_check_text = g_strdup(""); // a trick;
     }
+    dt_free(libdb_status);
 
     gchar *data_snap = dt_database_get_most_recent_snap(dbfilename_library);
 
@@ -3493,6 +3497,8 @@ start:
 
     dt_free(quick_check_text);
 
+    // sqlite3_close() leaves a connection with a live statement open, file included.
+    sqlite3_finalize(stmt);
     _database_free(db);
     db = NULL;
 
@@ -3547,6 +3553,8 @@ start:
   }
   else
   {
+    dt_free(libdb_status);
+
     // does it contain the legacy 'settings' table?
     sqlite3_finalize(stmt);
     rc = sqlite3_prepare_v2(db->handle, "select settings from main.settings", -1, &stmt, NULL);
