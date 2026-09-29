@@ -720,20 +720,13 @@ static gboolean _drawlayer_sync_host_image_to_device(const int devid, cl_mem dev
 
 static gboolean _drawlayer_acquire_source_image(const int devid, const float *layer_pixels,
                                                 dt_pixel_cache_entry_t *resolved_entry,
-                                                const gboolean force_device_copy, const gboolean realtime_reuse,
+                                                const gboolean realtime_reuse,
                                                 const int source_w, const int source_h,
                                                 dt_drawlayer_process_state_t *process,
                                                 drawlayer_cl_image_handle_t *source)
 {
   if(IS_NULL_PTR(source) || IS_NULL_PTR(layer_pixels) || source_w <= 0 || source_h <= 0) return FALSE;
   *source = (drawlayer_cl_image_handle_t){ 0 };
-
-  if(force_device_copy)
-  {
-    source->mem
-        = dt_opencl_copy_host_to_device(devid, (void *)layer_pixels, source_w, source_h, 4 * sizeof(float));
-    return !IS_NULL_PTR(source->mem);
-  }
 
   /* Realtime redraws keep revisiting the same host-backed layer cache. Prefer a
    * reusable device buffer first so the blend path can stay asynchronous instead
@@ -924,14 +917,14 @@ static gboolean _drawlayer_map_source_damage_to_target(const dt_drawlayer_damage
 static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_over, cl_mem dev_out,
                                       cl_mem dev_in, drawlayer_process_scratch_t *scratch,
                                       const float *layer_pixels, dt_pixel_cache_entry_t *source_entry,
-                                      cl_mem source_mem_override, const int source_w, const int source_h,
+                                      const int source_w, const int source_h,
                                       dt_drawlayer_process_state_t *process,
                                       const dt_iop_roi_t *const target_roi, const dt_iop_roi_t *const source_roi,
                                       const gboolean use_preview_bg,
                                       const float preview_bg, const gboolean realtime_reuse,
-                                      const gboolean force_device_copy, const gboolean allow_partial)
+                                      const gboolean allow_partial)
 {
-  if(devid < 0 || IS_NULL_PTR(dev_out) || IS_NULL_PTR(dev_in) || IS_NULL_PTR(scratch) || (IS_NULL_PTR(layer_pixels) && !source_mem_override) || source_w <= 0
+  if(devid < 0 || IS_NULL_PTR(dev_out) || IS_NULL_PTR(dev_in) || IS_NULL_PTR(scratch) || IS_NULL_PTR(layer_pixels) || source_w <= 0
      || source_h <= 0 || !target_roi || target_roi->width <= 0 || target_roi->height <= 0)
     return FALSE;
   if(kernel_premult_over < 0) return FALSE;
@@ -952,7 +945,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
    * be snapshotted here because _drawlayer_acquire_source_image() consumes (and
    * resets) process->cache_dirty_rect while uploading the dirty source region. */
   dt_drawlayer_damaged_rect_t target_damage = { 0 };
-  const gboolean partial = allow_partial && !use_preview_bg && !source_mem_override && process
+  const gboolean partial = allow_partial && !use_preview_bg && process
                            && _drawlayer_map_source_damage_to_target(&process->cache_dirty_rect, target_roi,
                                                                      source_roi, &target_damage);
 
@@ -973,9 +966,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   cl_mem dev_background = NULL;
   int err = CL_SUCCESS;
   int result = FALSE;
-  if(source_mem_override)
-    source.mem = source_mem_override;
-  else if(!_drawlayer_acquire_source_image(devid, layer_pixels, resolved_entry, force_device_copy, realtime_reuse,
+  if(!_drawlayer_acquire_source_image(devid, layer_pixels, resolved_entry, realtime_reuse,
                                            source_w, source_h, process, &source))
     goto cleanup;
   if(trace_stages) stage_source = g_get_monotonic_time();
@@ -1122,12 +1113,12 @@ cleanup:
     else
       dt_opencl_release_mem_object(layer.mem);
   }
-  if(!source_mem_override && source.is_pinned)
+  if(source.is_pinned)
     dt_dev_pixelpipe_cache_put_pinned_image((void *)layer_pixels, resolved_entry,
                                             (void **)&source.mem);
-  else if(!source_mem_override && source.is_cached_device && resolved_entry)
+  else if(source.is_cached_device && resolved_entry)
     dt_dev_pixelpipe_cache_release_cl_buffer((void **)&source.mem, resolved_entry, NULL, TRUE);
-  else if(!source_mem_override && source.mem)
+  else if(source.mem)
     dt_opencl_release_mem_object(source.mem);
   if(resolved_entry_ref)
     dt_dev_pixelpipe_cache_ref_count_entry(FALSE, resolved_entry);
@@ -3998,10 +3989,9 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                piece->bypass_cache ? 1 : 0);
 
     gboolean ok = _blend_layer_over_input_cl(
-        pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry, NULL,
+        pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry,
         source_width, source_height, runtime_request.process_state, &target_roi, &source_roi,
-        preview_bg.enabled, preview_bg.value,
-        reuse_device_buffers, FALSE, allow_partial);
+        preview_bg.enabled, preview_bg.value, reuse_device_buffers, allow_partial);
 
     if(pstate)
     {
