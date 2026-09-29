@@ -20,6 +20,7 @@
     Copyright (C) 2022, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -63,10 +64,10 @@
 #include "common/logging.h"
 #include "common/utility.h"
 
-void dt_loc_init(const char *datadir, const char *moduledir, const char *localedir, const char *configdir, const char *cachedir, const char *tmpdir, const char *kerneldir)
+// The directory of the running executable, to free, or NULL when it cannot be found.
+static char *_application_directory(void)
 {
-  // Assemble pathes
-  char* application_directory = NULL;
+  char *application_directory = NULL;
   int dirname_length;
   // calling wai_getExecutablePath twice as recommended in the docs:
   // the first call retrieves the length of the path
@@ -74,11 +75,28 @@ void dt_loc_init(const char *datadir, const char *moduledir, const char *localed
   if (length > 0)
   {
     application_directory = (char*)malloc(length + 1);
+    if(IS_NULL_PTR(application_directory)) return NULL;
     // the second call retrieves the path including the executable
     wai_getExecutablePath(application_directory, length, &dirname_length);
     // strip of the executable name from the path to retrieve the path alone
     application_directory[dirname_length] = '\0';
   }
+  return application_directory;
+}
+
+void dt_loc_resolve_localedir(char *localedir, size_t bufsize)
+{
+  char *application_directory = _application_directory();
+  gchar *path = dt_loc_init_generic(NULL, application_directory, DARKTABLE_LOCALEDIR);
+  g_strlcpy(localedir, path ? path : "", bufsize);
+  dt_free(path);
+  dt_free(application_directory);
+}
+
+void dt_loc_init(const char *datadir, const char *moduledir, const char *localedir, const char *configdir, const char *cachedir, const char *tmpdir, const char *kerneldir)
+{
+  // Assemble pathes
+  char *application_directory = _application_directory();
   dt_print(DT_DEBUG_DEV, "application_directory: %s\n", application_directory);
 
   // set up absolute pathes based on their relative value

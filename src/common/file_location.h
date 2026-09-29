@@ -15,6 +15,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023, 2025 Alynx Zhou.
     Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -42,6 +43,11 @@ extern "C" {
 
 /** returns the users home directory */
 gchar *dt_loc_get_home_dir(const gchar *user);
+
+/** @brief Resolve the locale directory as dt_loc_init() does, and write nothing else.
+ * For the command-line tools, which bind their text domain before dt_init(). dt_init() zeroes
+ * every path before resolving them all, so whatever an earlier dt_loc_init() set would leak. */
+void dt_loc_resolve_localedir(char *localedir, size_t bufsize);
 
 /** initializes all dirs */
 void dt_loc_init(const char *datadir, const char *moduledir, const char *localedir, const char *configdir, const char *cachedir, const char *tmpdir, const char *kerneldir);
