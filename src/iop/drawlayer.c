@@ -805,9 +805,10 @@ static int _drawlayer_copy_or_resample_layer_roi(const int devid, cl_mem dev_sou
    * stamped at full canvas resolution, so this resample only ever previews it at
    * display scale (mostly downscaling). Bilinear is the only kernel here with no
    * negative lobes: it cannot overshoot, so it never rings/halos at stroke edges
-   * nor pushes alpha out of [0,1] — unlike the user-pref default (Lanczos) or the
-   * Catmull-Rom "bicubic". On minification dt_interpolation_resample widens the
-   * tap support, so bilinear acts as a clean area filter (no aliasing). */
+   * nor pushes alpha out of [0,1] — unlike the user-pref default (Mitchell, whose
+   * negative excursion is small, ~3%, but non-zero) or the Catmull-Rom "bicubic".
+   * On minification dt_interpolation_resample widens the tap support, so bilinear
+   * acts as a clean area filter (no aliasing). */
   const struct dt_interpolation *const itor = dt_interpolation_new(DT_INTERPOLATION_BILINEAR);
   return dt_interpolation_resample_cl(itor, devid, dev_layer_rgba, target_roi, dev_source_rgba, source_roi);
 }
