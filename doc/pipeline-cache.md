@@ -855,6 +855,27 @@ so every entry numbered the modules alike; only the increment is left there now.
 module's raster mask. `dt_iop_check_modules_equal()` still compares it, legitimately: that is an
 identity test within one session, not a key.
 
+Export paid for it too. `dt_imageio_export_with_flags()` builds a dev of its own, which
+`dt_dev_init()` numbers from 0, while the darkroom's dev numbers from wherever its counter stands:
+0 on the first darkroom entry of a session (its modules come from the `dt_dev_init()` of the view's
+`init()`), further on after every `leave()` / `enter()`. With the id in the key, an export after
+any darkroom entry but the first found none of the darkroom's cachelines and recomputed from
+`basebuffer`.
+
+*Re-measured 2026-09-29 against `1fb2281865`*, with `-d pipe -d perf -d verbose`, OpenCL on, a
+6960x4640 raw: darkroom, export, lighttable, darkroom, export. `lens`'s global hash is
+`2311758751283094755` in the preview, full and export pipes at every step. The first export runs
+nothing up to and including `lens` and starts at `initialscale` (highlight reconstruction, 3.3 s in
+the darkroom, is not rerun); the re-entry runs no module in either pipe; the second export starts
+at `initialscale` again, an export keeping none of its own outputs (see "An export reads the
+cache and keeps nothing of its own" below). What the export does recompute is everything after
+`initialscale`, which the darkroom runs at the display scale (0.16 there) and the export at full
+size: 3.8 s of that run, tone equalizer, a masked color balance rgb and dither the largest.
+With `--disable-opencl`, darkroom, lighttable, darkroom, export: the same hashes, the re-entry runs
+no module, and the export after it again starts at `initialscale`. On the CPU (i7-3770K) that
+remainder is what an export costs: 19.8 s, of which color balance rgb 3.1 s and its masked
+instance 9.0 s, filmic 3.3 s.
+
 Anything else folded into a cache key owes the same test: would two sessions editing the same
 image, with the same history, produce the same value?
 
@@ -1085,6 +1106,35 @@ Two things a reviewer would otherwise simplify:
 - **`add_new_pipe_node` is computed from the module's last history entry in every case**, whether
   the top item is rewritten in place, a new item appended or one forced. A toggle it misses reaches
   the pipe as `TOP_CHANGED`, and nothing downstream knows it was a switch.
+
+### An export reads the cache and keeps nothing of its own
+
+*Found `1fb2281865`, 2026-09-29.*
+
+`dt_dev_pixelpipe_init_export()` sets `no_cache`, as the thumbnail pipe does. Every output the
+export computes is then flagged auto-destroy (`_bypass_cache()` in `process_rec()`) and goes once
+the next module has consumed it; the final output goes at `dt_dev_pixelpipe_cleanup()`, after
+`dt_imageio_export_with_flags()` has copied it. Lines other pipes hold are still reused:
+`_bypass_cache()` skips the fast-track lookup, so the recursion walks up to `basebuffer`, and each
+line that exists comes back from `dt_dev_pixelpipe_cache_get_writable()` as an exact hit, never
+flagged (`-d dev` prints `writable-exact-hit` for it). The darkroom's full-resolution lines, up to
+`lens`, are reused that way.
+
+Kept, the export's outputs were gigabytes nothing reads again. Measured on a CPU export of a
+6959x4639 raw after the darkroom, with `-d pipecache -d memory` and a 200 ms sampler of
+`/proc/meminfo`, `/proc/vmstat` and PSI: the cache went from 1.6 to 9.0 GB in 19 s and, right after,
+~550 ms of "full" stall in a second made the pressure reaction shed 5 GB, least recently used
+first: the darkroom's full-resolution lines. The next export recomputed from `basebuffer`, 24.4 s
+against 19.3 s, and pushed MemFree down to ~200 MiB while 11 GB still counted as available: kswapd
+swapped other applications out (up to 17k pages per 0.2 s), the system-wide stall passed the
+threshold again (~210 ms in a window, Ansel's own cgroup not stalled at all), and 4.5 GB more were
+shed. With `no_cache`: the cache is at 2.1 GB when the export ends and back to 1.6 GB after it, RSS
+3.7 GB at most, MemFree never under 905 MiB, no page swapped, 3 ms of stall, nothing shed, and the
+second export hits the darkroom's lines again (19.4 s). Six raws exported by `ansel-cli` on the
+CPU: peak RSS 9.6 GB -> 3.0 GB, cache between images 4.1-6.4 GB -> 0, pressure reactions 2 -> 0,
+same run time (94 s, 90 s), pixels identical to each image exported alone.
+
+What goes: an identical re-export no longer finds its final output.
 
 ### An arena allocation is not zeroed: a module must not read what it did not write
 

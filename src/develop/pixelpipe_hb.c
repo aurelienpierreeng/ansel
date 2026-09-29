@@ -377,6 +377,9 @@ int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, in
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_EXPORT;
+  // Full-size outputs nothing reads again: kept, one export filled the cache with gigabytes and
+  // pushed the darkroom's lines out.
+  pipe->no_cache = TRUE;
   pipe->gui_observable_source = FALSE;
   pipe->levels = levels;
   pipe->store_all_raster_masks = store_masks;
