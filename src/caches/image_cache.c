@@ -25,6 +25,7 @@
     Copyright (C) 2022 paolodepetrillo.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -577,10 +578,9 @@ void dt_image_cache_write_release(dt_image_t *img, dt_image_cache_write_mode_t m
 
   if(mode == DT_IMAGE_CACHE_SAFE && dt_image_get_xmp_mode())
     dt_control_save_xmp(imgid);
-  
-  // FIXME: that a memory leak ?
-  GList *imgs = NULL;
-  imgs = g_list_prepend(imgs, GINT_TO_POINTER(img->id));
+
+  // The signal owns the list. `img` may be evicted once released, hence the saved id.
+  GList *imgs = g_list_prepend(NULL, GINT_TO_POINTER(imgid));
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_INFO_CHANGED, imgs);
 }
 
