@@ -1,9 +1,32 @@
 # Decomposing `src/develop` — pipeline / params-history / GUI
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 12 claim(s) in this file
-> that were wrong of the tree and 39 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `45e189f28b` on 2026-09-29.** The audit before that found 12 claims in
+> this file wrong of the tree and 39 stale. Almost all were stale *by success*: **T0 through T6a
+> have landed**, in 33 commits (`git log --oneline master | grep -iE 'Develop T[0-9]'`), and the
+> document still described the tree they were planned against. §"The measured shape" and §"The
+> five knots" are the 2026-08-12 **baseline** and are meant to read as history — the supply lines
+> they name are cut. What landed is recorded per tranche below, each with the commit. Re-measure
+> before acting on a claim older than the code you are changing, and re-date this line when you
+> do.
+
+## Status (2026-09-29)
+
+| Tranche | Landed | What it did |
+|---|---|---|
+| T0 | `bdaf7b037f` | vestigial includes out |
+| T1a-c | `066d06d279`, `06cd9057fa`, `1127ce3d48` | the three header supply lines cut — `masks.h` alone was feeding `control.h` to eight files that used none of it |
+| T2 | `8173ad4af1` | the pipeline states facts; the control loop stops being its address |
+| T3a-1..3 | `58ddd033f1`, `73e3a682ea`, `d9c85983cc` | the history engine loses its widgets; broadcasts go through `history/notify.h` |
+| T3b-1/2 | `965e32ecbc`, `4dd2cca70d` | the masks header stops being three headers in a trenchcoat; the masks core loses its widgets |
+| T3c | `0cfc15c26a` | the module GUI leaves `imageop.c` |
+| T4a | `0b7341927e` | the module GUI becomes an owned object |
+| T4b | `a9eebe34b8` … `72c4add512` (11 commits) | `dev->roi` divided into a published geometry record and a latched viewport — see §T4b below |
+| T5a-c | `fb36f8bd1b`, `f2378bcd22`, `b3e05480ca`, `d28bbc8429` | the wait queue moves to `caches/`, the host-cache decision becomes a pure function |
+| T6a | `3ffb1b4c8e`, `618c4a7fef`, `712e43e2da`, `1c1473c2a5` | `widgets/` moves to 2.5; toolkit-freedom gets its own gate — see §T6 below |
+
+**What is still open** is the T6 flip itself: the layer table puts `develop` at 5, above `gui`
+(4) and `control` (3), and turning that around is the last act. The survey at the end of this
+file is the evidence that the IOP split does not block it.
 
 Measured 2026-08-12 on `refactor/history-presentation`, by per-file symbol density, the
 include graph, and five parallel deep-reads of the entanglement knots (each finding cited
@@ -13,10 +36,12 @@ plan the `src/history` work must be weighed against, and the answer to "split
 
 ## What this actually is: a re-stratification, not a split
 
-The layer table (`tools/include_graph.py`) today puts `develop` at **5, above `gui` (4),
-`widgets` (4) and `control` (3)** — the darktable legacy ordering in which the pipeline may
-call the GUI as a substrate. That is why `develop→gui` edges are *not even counted* in the
-189-violation baseline. The GTK→Qt goal needs the opposite: a backend (pixel pipeline +
+The layer table (`tools/include_graph.py`) puts `develop` at **5, above `gui` (4) and
+`control` (3)** — the darktable legacy ordering in which the pipeline may call the GUI as a
+substrate. (`widgets` was 4 when this was written and is **2.5** since T6a, `3ffb1b4c8e`, with a
+comment at `include_graph.py:51` explaining the move.) That is why `develop→gui` edges are *not
+even counted* in the **183**-violation baseline (`tools/include_baseline.txt`; it read 189 when
+this was written). The GTK→Qt goal needs the opposite: a backend (pixel pipeline +
 params/history engine) that builds without GTK, below a frontend that can be swapped. So the
 develop decomposition ends with the layer table changing — backend layers below `gui` — and
 every tranche below is chosen to survive that flip.
@@ -44,9 +69,13 @@ smeared** — whole-file symbol density:
 | `masks.{h,c}` (+ shape files' GUI) | 280 | 1960 | 3810 |
 | `blend.h` + pipeline files' upcalls | 7480 | 257 | 290 |
 
-The three worst supply lines are **headers**: `imageop.h` feeds `widgets/togglebutton.h` +
-`control/settings.h` to **122 consumers (90 IOPs)**; `blend.h` feeds three GUI headers to
-18; `masks.h` feeds `widgets/draw.h` + `control/control.h` to 14.
+The three worst supply lines were **headers**: `imageop.h` fed `widgets/togglebutton.h` +
+`control/settings.h` to **122 consumers (90 IOPs)**; `blend.h` fed three GUI headers to
+18; `masks.h` fed `widgets/draw.h` + `control/control.h` to 14. **All three are cut** (T1a-c):
+`imageop.h` includes neither of its two today, `masks.h` includes neither of its two, and
+`blend.h` is down to five project headers, none of them GUI. `control/settings.h:36-37` carries
+the note that `dt_dev_operation_t` moved to `history/history.h`. This paragraph is kept because
+it is the measurement that chose the tranche order, not because it still describes the tree.
 
 ## The five knots, and what the deep-reads settled
 
@@ -56,8 +85,9 @@ member in the survey; the highlights: the history/iop/forms/transient blocks and
 toolbar structs (GtkWidget*, "yes, having gtk stuff in here is ugly", h:455), color_picker
 ("GUI-only", h:384), proxy hooks, `form_gui`, `image_surface` are GUI. `gui_attached` itself
 is the axis-split sentinel — it disappears when the GUI half is a separate object whose
-existence IS the flag. **Two members are dead**: `histogram_pre_tonecurve/levels`
-(allocated, freed, zero readers tree-wide) and `loading_cache` (declared, never referenced).
+existence IS the flag, and it is still there (143 references). **Two members were dead**:
+`histogram_pre_tonecurve/levels` (allocated, freed, zero readers tree-wide) and `loading_cache`
+(declared, never referenced). Both are **gone** — zero occurrences tree-wide.
 Delete, don't migrate.
 
 **The hardest single object is the anonymous `dev->roi` struct (develop.h:185-246).** It
@@ -74,10 +104,11 @@ object, and a versioned ROI-request channel.
 **`dt_iop_module_t` is a params/history record + a GUI surface + a bidirectional pipeline
 mailbox** — GUI-owned request flags folded into the pipe hash, pipeline-written picker
 results on the GUI object. Three specific facts make its cut tractable:
-`widgets/togglebutton.h` exists for ONE member (`off`, h:346) whose ~25 external users all
+`widgets/togglebutton.h` existed for ONE member (`off`, h:346) whose ~25 external users all
 cast via `GTK_TOGGLE_BUTTON()` anyway — declare it `GtkWidget*` and the include falls off
-122 consumers. `control/settings.h` exists for one typedef (`dt_dev_operation_t`,
-settings.h:37) — relocate it. And the `dev` backpointer's own FIXME (h:296-302) already
+122 consumers. `control/settings.h` existed for one typedef (`dt_dev_operation_t`).
+**Both landed (T1a).** `imageop.h` includes neither; `dt_dev_operation_t` lives in
+`history/history.h`, and `control/settings.h:36-37` carries the note saying so. And the `dev` backpointer's own FIXME (h:296-302) already
 prescribes the inversion: backend has `pipe->dev`, frontend has `darktable.develop`;
 deleting the member is the forcing function. One behavioural trap:
 `dt_iop_commit_params` rehashes from **live** `module->dev->forms` (c:1965) — thread the
@@ -89,39 +120,51 @@ the freeze/thumbnail-size wrappers, `dt_dev_history_gui_update` (whole function 
 the pending-commit throttle queue (c:981-1164 — GLib main-loop input coalescing, GUI by
 nature; headless timeout is already 0 so the engine path is `_commit_history_item_now`
 directly), and one genuinely hard function: `_check_deleted_instances` (c:2713-2824)
-destroys GTK widgets **inside `history_mutex` as writer**, mid-loop, while parking modules
+destroyed GTK widgets **inside `history_mutex` as writer**, mid-loop, while parking modules
 in `dev->alliop` because an in-flight pipe may still hold them. The cut: engine emits a
-removed-instances list, GUI destroys after unlock. Also: `dt_undo_history_t` smuggles
+removed-instances list, GUI destroys after unlock. **Landed (T3a-3, `d9c85983cc`)**:
+`dev_history.c:2665` takes a `GList **removed_gui_modules` out-parameter, the body's comment
+reads "Its widgets used to be destroyed RIGHT HERE, under history_mutex as writer", and
+`dev_history.h:676-679` states that the caller destroys them after the unlock. Also: `dt_undo_history_t` smuggles
 presentation state (`mask_edit_mode`/`request_mask_display`, c:568-569) through engine undo
-records. And `gui/presets.h` (dev_history.c:77) supplies **no symbol** — auto-presets go
-through the repository (c:1826); deletable after the four-config supply-line check.
+records. And `gui/presets.h` supplied **no symbol** — auto-presets go through the repository.
+**Landed (T0)**: `dev_history.c:66` includes `history/presets.h`, which does supply symbols.
 **The thread contract (history_mutex writer/reader sites, the `_ext`-means-locked
 convention, COW protection of slow readers) must survive every move intact.**
 
-**`masks.h` mixes three things one vtable deep.** `dt_masks_functions_t` (h:315-377)
+**`masks.h` mixes three things one vtable deep.** `dt_masks_functions_t`
 carries pipeline (`get_mask*`), GUI (`mouse_*`, `post_expose`, `draw_shape`) and data
 members in one per-shape table — that is the only reason every IOP that wants `get_mask`
 sees cairo and GTK. The split is a parallel `dt_masks_gui_functions_t` registered per shape
-type. `control/control.h` in masks.h supplies **zero symbols** (verified) — pure supply
-line, deletable with the consumer audit. Two traps: the spline sampler
+type. **The header split landed (T3b-1, `965e32ecbc`) but the vtable split did NOT**: `masks.h`
+keeps only the forward typedef at :128, and the body moved to
+`develop/masks/masks_functions.h:60` — where it still mixes `get_mask` (:91), `get_mask_roi`
+(:106), `mouse_moved` (:127), `mouse_scrolled` (:130) and `post_expose(cairo_t *cr, …)` (:142)
+in one table. **This is the one knot in this section still genuinely open.**
+`control/control.h` in masks.h supplied **zero symbols** — pure supply line, **deleted (T1c,
+`1127ce3d48`)**, and it had been feeding `control.h` to eight files that used none of it. Two traps: the spline sampler
 (`_polygon_get_pts_border`, ~700 lines, twin in brush.c) serves BOTH rasterisation
 (`TRANSFORM_DIR_BACK_INCL`) and GUI display (`TRANSFORM_DIR_ALL`) from the same recursion —
 it is backend geometry despite cairo living nearby, and cutting it by "cairo means GUI"
 would be wrong; and `dt_toast_log` fires from *inside* the value-mutation path
 (polygon.c:1610 etc.) — mutators should return the new value, callers toast.
 
-**`blend.h` cuts at line 264, and the pipeline files need inversions, not splits.**
+**`blend.h` cuts where the GUI starts, and the pipeline files need inversions, not splits.**
 Everything from `dt_iop_gui_blendif_colorstop_t` down is GUI (~60 GtkWidget fields; the
 gradientslider and collapsible_section includes each exist for one struct member) → new
-`develop/blend_gui.h`. TRAP: the blend-mode name tables are extern'd in blend.h but
-**defined in blend_gui.c:87 while backend `supervisor.c` consumes them** — definitions move
-to blend.c or headless linking breaks. The five pipeline files' upward reaches are three
-families: `dt_control_log` from worker threads (tiling.c and blend.c include control.h for
-that single symbol), the progress banner + forced redraws in pixelpipe_hb.c, and the
-cache-wait manager. Two includes are vestigial NOW: `gui/color_picker_proxy.h` in
-pixelpipe_hb.c:80 (zero symbols) and `widgets/label.h` in pixelpipe_raster_masks.c — the
-latter only to strip GTK mnemonics from toast text, so it vanishes with the message
-inversion.
+`develop/blend_gui.h`. **Landed**: `blend_gui.h` exists (238 lines) and defines
+`dt_iop_gui_blendif_colorstop_t` at :47; `blend.h` is 453 lines and includes five project
+headers, none of them GUI. (The cut point was quoted as "line 264" and never was — :261-275 is
+the `dt_develop_name_value_t` typedef and its `extern`s.) TRAP: the blend-mode name tables are
+extern'd in blend.h, and the worry was that they were **defined in `blend_gui.c` while backend
+`supervisor.c` consumes them** — headless linking would break. **They are in `blend.c:2296`**,
+and `blend.h:263-265` now carries the comment saying so; `supervisor.c:762` consumes them
+safely. The five pipeline files' upward reaches were three families: `dt_control_log` from
+worker threads, the progress banner + forced redraws in pixelpipe_hb.c, and the cache-wait
+manager. **The first is closed** — neither `tiling.c` nor `blend.c` includes `control/control.h`
+any more, and neither names `dt_control_log`. Two includes were vestigial and are **gone**:
+`gui/color_picker_proxy.h` in `pixelpipe_hb.c` and `widgets/label.h` in
+`pixelpipe_raster_masks.c` (T0).
 
 **The hardest knot overall: the cache-wait manager** (dev_pixelpipe.c:60-1020). The
 pipeline is both publisher (pixelpipe_hb.c:1520) and subscriber of the *control-owned*
@@ -131,6 +174,12 @@ pipeline is both publisher (pixelpipe_hb.c:1520) and subscriber of the *control-
 ready-notification transport belongs to the **cache layer**, not control/; waiter
 bookkeeping stays pipeline; cursor/redraw reaction becomes a GUI subscriber. Three
 inversions that must land together (doc/pipeline-cache.md §8 spans both files and threads).
+**Landed (T5-C1/C2, `fb36f8bd1b`, `f2378bcd22`), and it went the other way on the waiters**:
+`caches/pixelpipe_cache_wait.{h,c}` now owns the queue, its lock, its counters and its matching
+rule, because those are cache state; what stayed in `dev_pixelpipe.c` is the **transport and the
+presentation** of the wait, which `dev_pixelpipe.c:55-58` states in the file header. Read that
+comment before moving anything else across this seam — the split is not where this paragraph
+predicted.
 Second place: `_seal_opencl_cache_policy` querying the live GUI picker (c:370) — cache
 policy already had one documented erasure bug, so any inversion must preserve exact
 per-piece `cache_output_on_ram` outcomes.
@@ -138,33 +187,45 @@ per-piece `cache_output_on_ram` outcomes.
 ## Tranches, in dependency order
 
 Every tranche is a PR-sized unit that builds and passes the gates on its own. T1–T3 are
-mechanical with the surveys in hand; T4+ need design.
+mechanical with the surveys in hand; T4+ need design. **All of T0–T6a have landed** (see the
+status table at the top); what each one turned out to be is noted per bullet. The section is
+written in the imperative because that is how it was planned — read it as the record of a
+completed sequence, not as work waiting.
 
-* **T0 — deletions** (hours): the two dead `dt_develop_t` members; `gui/presets.h` from
-  dev_history.c; `gui/color_picker_proxy.h` from pixelpipe_hb.c. Each after the
-  supply-line check across all four configs.
-* **T1 — header purge** (days; the largest fan-out win): `imageop.h` drops both upward
-  includes (`off` → GtkWidget*, `dt_dev_operation_t` relocates); `blend.h` splits at :264
-  into `blend_gui.h` (+ name-table definitions blend_gui.c→blend.c); `masks.h` drops
-  control.h outright and moves `dt_masks_form_gui_t` + GUI vtable + draw.h into a new
-  `masks_gui.h`. After T1, **90 IOPs stop receiving GTK through develop headers**.
-* **T2 — pipeline message/notification inversions**: `dt_control_log` → a pipe-registered
-  message handler (the `history/notify.h` shape, third time); progress + redraw →
-  changed-notifications the darkroom view subscribes to. tiling.c and blend.c lose
-  control.h entirely; pixelpipe_raster_masks.c loses widgets/label.h.
-* **T3 — GUI halves move out of engine files**: `dev_history_gui.c` (gui_update, throttle
-  queue, undo GUI tail, instance-teardown subscriber); masks.c → masks_gui.c (~3000
-  lines) + per-shape `_gui` halves (events/menus/post_expose; the spline sampler stays
-  backend); imageop.c's ~1790 GUI lines join imageop_gui.c. Established pattern, biggest
-  diffs — each file its own PR, each verified the exif-split way (byte-conservation cut +
-  decoded-pixel A/B where pixels are touched).
-* **T4 — struct splits**: `dt_develop_t` → dev core + darkroom-view object (the `roi`
-  three-way split with the versioned ROI channel); `dt_iop_module_t` → params core +
-  `dt_iop_module_gui_t` (the `common_fields`/`dt_gui_module_t` casting pattern already
-  demonstrates the shape); delete the `dev` backpointer per its FIXME. This is where
-  `gui_attached` dies.
-* **T5 — the cache-wait ownership move** + progress/backbuf taps: cache layer owns the
-  notifier; `_seal_opencl_cache_policy` reads pipe-owned flags. Gate with the
+* **T0 — deletions** (hours) ✅ `bdaf7b037f`: the two dead `dt_develop_t` members;
+  `gui/presets.h` from dev_history.c; `gui/color_picker_proxy.h` from pixelpipe_hb.c. Each after
+  the supply-line check across all four configs. All four are gone from the tree.
+* **T1 — header purge** (days; the largest fan-out win) ✅ `066d06d279` (T1a), `06cd9057fa`
+  (T1b), `1127ce3d48` (T1c): `imageop.h` drops both upward includes (`off` → GtkWidget*,
+  `dt_dev_operation_t` relocates to `history/history.h`); `blend.h` splits into `blend_gui.h`
+  (the name-table definitions were already in `blend.c`, so that half was a false alarm —
+  see the knot above); `masks.h` drops control.h outright and moves `dt_masks_form_gui_t` +
+  draw.h into a new `masks_gui.h`. **The GUI vtable did not move** and is still mixed into
+  `dt_masks_functions_t`, now at `develop/masks/masks_functions.h:60`. After T1, **90 IOPs
+  stopped receiving GTK through develop headers**.
+* **T2 — pipeline message/notification inversions** ✅ `8173ad4af1`: `dt_control_log` → a
+  pipe-registered message handler (the `history/notify.h` shape, third time); progress + redraw
+  → changed-notifications the darkroom view subscribes to. `tiling.c` and `blend.c` lost
+  control.h entirely and name `dt_control_log` nowhere; `pixelpipe_raster_masks.c` lost
+  `widgets/label.h`.
+* **T3 — GUI halves move out of engine files** ✅ `58ddd033f1`, `73e3a682ea`, `d9c85983cc`
+  (T3a), `965e32ecbc`, `4dd2cca70d` (T3b), `0cfc15c26a` (T3c): `dev_history_gui.c` (gui_update,
+  throttle queue, undo GUI tail, instance-teardown subscriber); masks.c → masks_gui.c + per-shape
+  `_gui` halves (the spline sampler stayed backend); imageop.c's GUI lines joined imageop_gui.c.
+  Today: `masks.c` 2073 / `masks_gui.c` 6156, `imageop.c` 1927 / `imageop_gui.c` 2246. Each file
+  its own PR, each verified the exif-split way (byte-conservation cut + decoded-pixel A/B where
+  pixels are touched).
+* **T4 — struct splits** ◐ `0b7341927e` (T4a) + 11 commits (T4b): `dt_iop_module_t` → params
+  core + `dt_iop_module_gui_t` (`imageop.h:346`), landed. The `roi` three-way split landed as a
+  published geometry record plus a latched viewport — see §T4b below for what it actually turned
+  into. **Still open**: `dt_develop_t` is not split (`develop.h:492` ends one struct), the `dev`
+  backpointer is still there, and `gui_attached` is alive at 143 references. This is the tranche
+  that did not finish.
+* **T5 — the cache-wait ownership move** + progress/backbuf taps ✅ `fb36f8bd1b`,
+  `f2378bcd22`, `b3e05480ca`, `d28bbc8429`: the cache layer owns the **queue**, not merely the
+  notifier — `caches/pixelpipe_cache_wait.{h,c}`, with the transport and presentation left in
+  `dev_pixelpipe.c` (its file header says which is which). The host-cache decision became a pure
+  function with a test, and the seal samples the GUI's two facts once. Gate with the
   pipeline-cache regression discipline (issue #817, #1069 lineage).
   **Half of that last clause is blocked on T6 and was measured, not guessed.** The seal's two
   GUI-owned inputs are `dev->gui_module` and `dev->color_picker.module`. Having the GUI
@@ -173,10 +234,13 @@ mechanical with the surveys in hand; T4+ need design.
   the GUI. The publication is legal only once T6 inverts the table, and is then the natural
   first use of it. What T5 can do meanwhile is sample both facts ONCE per seal instead of
   per node, and bring the predicates that read them home from `gui/`.
-* **T6 — re-stratify**: flip the layer table (pipeline + params engine below gui), then
-  the IOP question — each IOP is operator + panel in one file; the X-macro API already
-  separates the hook groups (survey classified all ~60 hooks into the three axes), so an
-  IOP splits mechanically once T1/T4 land. That is the Qt door.
+* **T6 — re-stratify** ◐ `3ffb1b4c8e`, `618c4a7fef`, `712e43e2da`, `1c1473c2a5` (T6a): the
+  groundwork landed — `widgets/` moved to 2.5, the duplicated layer table became an import,
+  toolkit-freedom got its own gate, and the survey at the end of this file records that the flip
+  is not blocked by the IOP split. **The flip itself is still open**: `develop` is 5, `gui` 4,
+  `control` 3. Then the IOP question — each IOP is operator + panel in one file; the X-macro API
+  already separates the hook groups (survey classified all ~60 hooks into the three axes), so an
+  IOP splits mechanically. That is the Qt door.
 
 ## What this means for `src/history` — the sequencing answer
 
@@ -191,9 +255,16 @@ sibling, and the module boundary that seals them is the one T1–T4 create. Seal
 against today's layer table where develop sits above gui, would draw a boundary this work
 immediately redraws.
 
-So: merge #1130 as it stands; stop growing `src/history`; start T0+T1 — they are the
-cheapest cuts with the largest fan-out, they are fully specified by the survey, and nothing
-in them blocks on a design decision.
+**Outcome.** #1130 was merged as it stood, `src/history` stopped growing, and T0+T1 went
+first — as planned, they were the cheapest cuts with the largest fan-out. `src/history` was
+sealed afterwards and is now section **8.** of `tools/check_module_boundaries.sh`, at
+`history_upcalls_baseline=0`: all three upward reaches were inverted rather than tolerated
+(`dt_control_log()` and the signals through `history/notify.h`,
+`dt_lib_presets_can_autoapply()` through the resolver in `history/presets.h`,
+`dt_iop_get_localized_name()` through the one in `history/history.h`). The gate's own comment
+states the rule that made the waiting worthwhile: a history item holds a `dt_iop_module_t *`,
+so the pipeline half of that code genuinely belongs at layer 5 and stays there; what is in
+`src/history` is the half that does not.
 
 ## T4b field survey: what `dev->roi` actually is, measured
 
@@ -340,7 +411,13 @@ flip a **+19 rise** against that new baseline, which the ratchet refuses. One fl
 relocations.
 
 **Only one of the three relocations is honest on its own terms.** `gui/screen_metrics.{h,c}`
-contains zero GTK references and includes only `system/surface_scaling.h`: genuinely misfiled.
+contains zero **GTK** references: genuinely misfiled. It is not dependency-free, though, and the
+earlier claim that it "includes only `system/surface_scaling.h`" was wrong — `screen_metrics.h:22-25`
+also takes `<cairo.h>` and `<glib.h>`, and declares ten `cairo_*` entry points at :84-107
+(`dt_cairo_image_surface_create` and five siblings), while `screen_metrics.c:20` includes
+`widgets/widget_settings.h`. Relocating it therefore moves cairo, not nothing — which is
+survivable (cairo is not the toolkit the flip is about) but has to be stated, because "zero GTK"
+and "no dependencies" are two different findings and only the first one holds.
 `gui/presets.c` has 179 GTK references and its header 8; `gui/color_picker_proxy.h` has 5. Moving
 those two *down* would drag GTK below `develop/` to make a number fall — the same trade the
 `widgets/` move makes, and the reason the toolkit ratchet below exists. They are relocations of

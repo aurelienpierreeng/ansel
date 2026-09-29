@@ -370,3 +370,44 @@ without re-deriving it. Any new GUI reader of a cacheline resolved by hash owes 
 the hash identifies the content, never the size.
 
 ---
+
+## toneequal: `sanity_check()` is not a predicate — it disables the module from the pipeline thread (OPEN)
+
+> Found 2026-09-29 against `45e189f28b`, while verifying `doc/develop-split.md`. Not fixed.
+
+`sanity_check()` (`iop/toneequal.c:628`) reads like a question — it returns 0 or 1, it is
+`static inline __attribute__((always_inline))`, and five of its six call sites use it as a
+guard. It is not a question. When the module sits before `flip` in `iop_order`, the body at
+:641-652 **writes `self->enabled = 0`, calls `dt_dev_add_history_item(self->dev, self, FALSE,
+TRUE)`, and calls `gtk_toggle_button_set_active()`** on `self->gui->off`.
+
+Two of the six call sites are `toneeq_process()` (`:1019` and `:1202`) — the **pixel
+processing path**, which runs on the pipeline worker thread. So on a raw whose history puts
+tone equalizer above `flip`, the worker thread:
+
+- writes `self->enabled`, which is GUI-thread state the pipeline must never touch (see
+  `doc/pipeline-history.md`: the only thread-safe interface between the pipe and a module is
+  history, under `dev->history_mutex`);
+- commits a history item from the worker, re-entering the history engine from the side that
+  is supposed to only *read* a snapshot of it;
+- calls GTK from a non-GUI thread. The `self->dev->gui_attached` test at :644 does not help —
+  that flag is TRUE in the darkroom, which is exactly when the worker is running. The
+  `dt_gui_freeze_begin()`/`_end()` pair around it suppresses *signal emission*, not the
+  cross-thread call.
+
+The three GUI call sites (`_switch_cursors`, `mouse_moved`, `scrolled`) are on the right
+thread and are what the write was presumably written for. `match_color_to_background()`
+(`:2274`) is a cairo drawing helper, also GUI.
+
+**The shape of the fix** is the one this tree has used three times already: the predicate
+answers, and the *caller* acts. Split it — a pure `_is_after_flip(self)` that every site may
+call from any thread, and a GUI-thread-only `_disable_with_warning(self)` that the three GUI
+entry points call when the predicate fails. The pipeline path must do neither: a module in
+the wrong pipeline position should render as a no-op for that frame and let the GUI disable
+it on the next user interaction, which is what the user sees anyway.
+
+Not attempted here because it needs the `dt_control_log()` toast and the history commit
+re-homed together, and because the failure is conditional on a history the default pipeline
+order does not produce — it wants a reproduction before a patch.
+
+---
