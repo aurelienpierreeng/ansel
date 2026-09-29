@@ -1,13 +1,17 @@
 # Splitting `common/exif.cc`
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 9 claim(s) in this file
-> that were wrong of the tree and 5 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `3391f4c22e` on 2026-09-29.** The audit before that found 9 claims in
+> this file wrong of the tree and 5 stale. This file is a **post-mortem of a split that
+> happened**, so most of its numbers are of the tree *at the split* (`49284929dc`) and are
+> correct as history — they are marked where the current figure differs. Two claims were
+> genuinely overtaken: the exiv2 lock has since been deleted outright, and `src/history` now
+> exists. Re-measure before acting on a claim older than the code you are changing, and re-date
+> this line when you do.
 
-Done. `common/exif.cc` (4775 lines) is now `metadata/exif.cc` (2225) and
-`common/xmp_sidecar.cc` (2683), with `metadata/exif_internal.h` holding what genuinely
-spans both.
+Done. `common/exif.cc` (4775 lines) is now `metadata/exif.cc` (2226) and
+`common/xmp_sidecar.cc` (2687), with `metadata/exif_internal.h` (89) holding what genuinely
+spans both — measured at the split, `49284929dc`. Today they are 2455, 2691 and 114: both
+halves have been worked on since, so use those figures as the split's, not the tree's.
 
 Measured by brace-matched function parsing plus transitive reference closure
 (`tools/include_graph.py` has no notion of intra-file structure, so this was done ad hoc;
@@ -32,9 +36,16 @@ The five history-side roots are the whole XMP sidecar API plus one blob writer:
     dt_exif_xmp_write_with_imgpath
     dt_exif_xmp_read_string
 
-They reach eleven `dt_ioppr_*` symbols, `dt_develop_blend_params_t`,
-`dt_masks_form_group_t` and `dt_imageio_dng_write_tiff_header` — i.e. `develop/` (layer 5)
-and `imageio/` (layer 6). The tag half reaches **nothing above layer 1**, which is what
+They reach **nine** `dt_ioppr_*` symbols (`deserialize_text_iop_order_list`,
+`get_iop_order_link`, `get_iop_order_list`, `get_iop_order_list_version`,
+`get_iop_order_version`, `has_multiple_instances`, `insert_missing_modules`,
+`serialize_text_iop_order_list`, and one more), `dt_develop_blend_params_t` and
+`dt_masks_form_group_t` — i.e. `develop/` (layer 5). `dt_imageio_dng_write_tiff_header` does
+**not** belong on that list: its only occurrence in the sidecar is inside a comment
+(`xmp_sidecar.cc:465`, "we don't write the orientation here for dng as it is set in
+`dt_imageio_dng_write_tiff_header`"), and it is a `static inline` in `imageio/`. The
+`imageio/imageio_core.h` include at :126 is real; that symbol is not what asks for it. The tag
+half reaches **nothing above layer 1**, which is what
 made the cut worth making: `metadata/exif.cc` sits in the module and the gate still reads
 zero.
 
@@ -45,10 +56,11 @@ Worth not re-deriving, because each one silently moved functions into the wrong 
 * **Function pointers.** A `name\s*\(` regex misses every `GHFunc`, `GDestroyNotify` and
   log handler. Twelve helpers looked unreachable — `_xmp_append_history`,
   `free_mask_entry`, `dt_exif_log_handler` and friends. Match bare identifiers instead.
-* **Function-like macros are edges.** `FIND_EXIF_TAG` is used 78 times in the tag half and
-  expands to `_exif_read_exif_tag`; without expanding it, that function files under
-  whichever half happens to name it directly (the sidecar, twice). All 7 function-like
-  macros in the file were checked; 4 reach a function.
+* **Function-like macros are edges.** `FIND_EXIF_TAG` is used **73** times in the tag half
+  and expands to `_exif_read_exif_tag`; without expanding it, that function files under
+  whichever half happens to name it directly — the sidecar, **once**
+  (`xmp_sidecar.cc:2437`), against the tag half's 73 uses plus one direct call. All 7
+  function-like macros in the file were checked; 4 reach a function.
 * **`:(` in a comment parses as a parameter list.** Take the name from comment-masked text,
   or `read_history_v1` comes out anonymous.
 
@@ -64,15 +76,25 @@ thing.
 
 1. `src/metadata/exif.h` / `.cc` — the tag half plus the seam. 15 public functions.
 2. `src/common/xmp_sidecar.h` / `.cc` — the 5 sidecar roots and their helpers.
-3. `src/metadata/exif_internal.h` — `class Lock`, `read_metadata_threadsafe`, and three
-   functions: `dt_remove_exif_keys`, `dt_exif_read_exif_tag`, `dt_exif_decode_xmp_data`.
-   Private to those two `.cc` files by convention; a third includer is the signal to
-   promote something into `exif.h` deliberately instead.
+3. `src/metadata/exif_internal.h` — at the split: `class Lock`, `read_metadata_threadsafe`,
+   and three functions: `dt_remove_exif_keys`, `dt_exif_read_exif_tag`,
+   `dt_exif_decode_xmp_data`. Private to those two `.cc` files by convention; a third
+   includer is the signal to promote something into `exif.h` deliberately instead.
+
+   **The lock has since been deleted outright** (`db6eacb8dd`, 2026-08-27). `exif_internal.h:80-88`
+   now carries the reasoning in place of the macro: exiv2 0.27.7's Exif and IPTC code is
+   reentrant and its XMP path serialises itself, so the only entry points that are not
+   thread-safe are `XmpParser::initialize()` and `XmpProperties::registerNs()`, which Ansel
+   calls exclusively from `dt_exif_init()` before any thread exists (`doc/lock-audit.md`). The
+   macro went with the lock **rather than being left as a no-op**, on the stated grounds that a
+   wrapper called "threadsafe" which does nothing is worse than no wrapper, because it reads
+   like a guarantee. Call `image->readMetadata()` directly.
 
 `#include "darktable.h"` is gone from both halves. Its only real use was
-`darktable.exiv2_threadsafe` inside `class Lock`, which now goes through the existing
-`dt_exiv2_threadsafe_mutex()` accessor in `common/global_mutexes.h`; every other
-`darktable.` in the file is an XMP key string (`Xmp.darktable.history`).
+`darktable.exiv2_threadsafe` inside `class Lock`, which went through the
+`dt_exiv2_threadsafe_mutex()` accessor in `common/global_mutexes.h` — **both are gone now**;
+that header declares only `dt_pipeline_threadsafe_mutex()`. Every other `darktable.` in the
+file is an XMP key string (`Xmp.darktable.history`).
 
 Five deliberate edits beyond pure code motion, and nothing else:
 
@@ -80,7 +102,7 @@ Five deliberate edits beyond pure code motion, and nothing else:
   `dt_exif_read_exif_tag`. They stop being `static`, and a leading underscore at global
   scope is reserved.
 * those two and `dt_remove_exif_keys` lose `static`.
-* `class Lock` takes the mutex through the accessor.
+* `class Lock` takes the mutex through the accessor. (Both have since been deleted — see above.)
 * `_exif_get_exiv2_tag_type` reads the tag list through `dt_exif_get_exiv2_taglist()`
   rather than the `exiv2_taglist` file-static it can no longer see. The accessor builds
   the list if it is empty, so this is if anything more robust; `dt_init()` builds it long
@@ -97,7 +119,10 @@ writing anything:
 * consecutive segments abut exactly, and the last one ends at `len(text)` — no gap, no
   overlap;
 * all 73 parsed functions are placed, and none is placed twice;
-* the parts' line counts sum to the original's 4775.
+* every line of the original is accounted for. Note the parts do **not** sum to 4775:
+  2226 + 2687 + 89 = 5002. The 227-line surplus is the per-file licence headers and include
+  blocks the segmenter does not emit, and an assertion written as a plain sum would fail on a
+  correct split — check that the *parsed function bodies* are conserved, not the files.
 
 One trap the assertions surfaced: a segment boundary falls where the previous statement
 ended, which is **mid-line** whenever that line carries a trailing comment
@@ -130,12 +155,20 @@ boundary with real code after it is reported rather than moved.
 ## Left for later
 
 The sidecar belongs in `src/history`: it serialises the development, not the photograph.
-It stays in `common/` only until that module exists. Its five entry points keep their
-`dt_exif_*` names so this cut stays reviewable; renaming them is that move's business.
+It stayed in `common/` only until that module existed — **and the module now does**
+(`src/history/`: `history`, `history_snapshot`, `notify`, `presets`; it landed 32 minutes after
+this split). `common/xmp_sidecar.cc` has **not** moved and is the one file this plan named that
+is still waiting. It already includes `history/history.h` (:115) alongside its three `develop/`
+includes (:123-125) and `imageio/imageio_core.h` (:126), so the move is blocked on the same
+thing `doc/history-split.md` names: the sidecar reaches 26 `dt_dev`/`dt_iop`/`dt_ioppr`/
+`dt_masks`/`dt_develop_blend` sites, which is layer-5 work, and `src/history` is layer 1. It
+moves when those reaches are inverted or when it is accepted at layer 5 — not before. Its five
+entry points keep their `dt_exif_*` names so this cut stays reviewable; renaming them is that
+move's business.
 
 ## The scanners' findings on the moved code
 
-Moving 2687 lines into a new file makes every line of it "new" to SonarCloud, so the split
+Moving 2687 lines into a new file made every line of it "new" to SonarCloud, so the split
 drew nine code-scanning alerts on `common/xmp_sidecar.cc`. They are not all the same thing,
 and the triage is the useful part:
 
