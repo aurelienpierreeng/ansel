@@ -65,11 +65,16 @@ interface `dt_dev_transient_params_{set,clear,get,active}`.
 
 → [`doc/architecture-rules.md`](doc/architecture-rules.md)
 
-### 6. Adding a Preferences entry takes three edits
+### 6. A new preferences SECTION takes three edits; an entry takes one
 
-`data/anselconfig.xml.in`, `data/anselconfig.dtd` (the `section` attribute is an enumerated
-list; `xmllint` fails the build otherwise) and `tools/generate_prefs.xsl` (a section not
-enumerated there is silently dropped from the UI).
+An entry in an existing section is **one** edit, to `data/anselconfig.xml.in`. A new *section
+value* takes three: the XML, plus `data/anselconfig.dtd` (the `section` attribute is an
+enumerated list; `xmllint` fails the build otherwise) and `tools/generate_prefs.xsl` (a section
+not enumerated there is silently dropped from the UI, with no error).
+
+Measured 2026-09-29 over the 108-commit history of that file: of the **45** commits that added a
+`<dtconfig>` entry, **40 touched only the XML** and 5 touched the DTD or XSL — and those 5 are
+exactly the ones introducing a new section.
 → [`doc/preferences.md`](doc/preferences.md)
 
 ### 7. Measure before theorising, and say what you measured

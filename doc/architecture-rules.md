@@ -4,13 +4,24 @@
 
 > **Verified against `42eca0e8fe` on 2026-09-29.**
 >
-> The five rules CI enforces on every change, and the evidence behind each. `CLAUDE.md` states them as imperatives; this file says why, and what each one cost to learn.
+> The five rules, and the evidence behind each. Most are enforced by CI, but not all and not all
+on every change — see the note below. `CLAUDE.md` states them as imperatives; this file says why, and what each one cost to learn.
 >
 > Each finding below is dated with the commit that established it. A finding is only as
 > good as its hash: before acting on one older than the code you are changing, re-measure
 > it — and re-date it here when you do. Where an earlier version of a claim was **wrong**,
 > that is recorded rather than quietly corrected: how a claim was wrong is usually the more
 > useful thing to know.
+
+> **What CI actually enforces, measured 2026-09-29.** An earlier version of this line said "the
+> five rules CI enforces on every change". That is too strong, and the sentence was introduced by
+> the migration rather than carried from CLAUDE.md. Rule 1 is checked on every build
+> (`pragma_once_to_guards.py --verify`, `ci.yml:189`). Rule 2 runs on **pull requests only and in
+> one matrix cell** (`check_unused_includes.sh --changed`, `ci.yml:217`). Rule 3 is covered, but
+> by gates this document does not name — the SQL-handle and SQL-outside-the-module ratchets in
+> `check_module_boundaries.sh` (`ci.yml:177`). **Rules 4 and 5 have no gate at all**: nothing in
+> `tools/` checks params threading or a stored-format version bump. CLAUDE.md hedges this
+> correctly ("CI enforces most of them"); this file did not.
 
 Related: [`include-graph.md`](include-graph.md), [`reorganisation.md`](reorganisation.md), [`include-hygiene-roadmap.md`](include-hygiene-roadmap.md).
 
@@ -120,10 +131,20 @@ anything, and never trust one build configuration to prove an include is unneces
 *Found `22f623c0be`, 2026-06-25.*
 
 `src/libs/` and `src/views/` modules must contain no raw SQL. Database access belongs behind
-named functions in `src/common/` (e.g. `common/collection.c`, `common/film.c`). When a GUI
+named functions in `src/common/` and `src/database/`. When a GUI
 module needs data, add or extend a `dt_collection_*` / `dt_film_*` / `dt_tag_*` function and
-call it. Reuse existing helpers (`dt_collection_get_extended_where`, `dt_film_get_id`,
-`dt_selection_select_list`) rather than re-issuing SQL.
+call it. Reuse existing helpers (`dt_film_get_id`, `dt_selection_select_list`) rather than re-issuing SQL.
+
+> **Two corrections, 2026-09-29.** This named `dt_collection_get_extended_where` as a helper to
+> reuse: it does not exist anywhere in `src/` — the only survivor is the file-static
+> `_extended_where()` in `src/database/collection_query.c`, removed from the public surface by
+> `ec5b7de3f0`. Two orphaned doc comments in `common/collection.h` still describe it. And the
+> rule named `common/collection.c` and `common/film.c` as the places database access belongs:
+> both now contain **zero** SQL (measured: 0 matches for `sqlite3_prepare`,
+> `DT_DEBUG_SQLITE3_PREPARE` or `sqlite3_exec` in either). The SQL moved to `src/database/` and
+> its seven repositories; `c75eaef473`'s subject says it outright — "Collection: rules cross the
+> boundary, not SQL". Following the old text, you would add a query to `common/collection.c`
+> and learn otherwise only when CI's boundary ratchet failed.
 
 Examples added during the collect rewrite: `dt_collection_get_property_values()`,
 `dt_collection_get_images_for_rule()`, `dt_film_relocate()`.
@@ -178,6 +199,6 @@ Changing an open version in place has its own conditions, since nightlies have a
   reading a newer one skips what it does not know.
 
 Schema 36, data 9 and XMP 5 come from darktable releases. The bumps planned for Ansel 1.0 (schema
-37, XMP 6) wait on the `masks-history-dedup` branch, see `doc/masks_history_dedup.md`.
+37, XMP 6) wait on the dedicated branch described in [`masks_history_dedup.md`](masks_history_dedup.md) (this named it `masks-history-dedup`; no such branch exists locally or on the remote), see `doc/masks_history_dedup.md`.
 
 ---
