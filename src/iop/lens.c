@@ -51,6 +51,7 @@
     Copyright (C) 2022 Nicolas Auffray.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2024-2025 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -2489,9 +2490,9 @@ void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)module->data;
 
-  /* Before anything is freed: the pre-warm thread may still be building the database. */
-  /* No database to tear down and no thread to join. Each thread's handle closes itself
-   * when that thread ends, and the one-entry caches beside it die with it. */
+  /* Each thread's handle closes when that thread ends, except the one of the thread unloading
+   * the modules: the main thread ends in exit(), which runs no thread-local destructor. */
+  g_private_replace(&_ls_tls_key, NULL);
 
   dt_opencl_free_kernel(gd->kernel_lens_distort_bilinear);
   dt_opencl_free_kernel(gd->kernel_lens_distort_bicubic);
