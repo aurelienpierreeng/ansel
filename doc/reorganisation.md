@@ -257,7 +257,14 @@ state, it belongs in `system/`, `math/` or a module of its own.
 # The rules {#the-rules}
 
 Five gates run in CI. Each exists because the thing it checks broke something that no other
-gate could see, and all five fail the build rather than warn.
+gate could see, and every one of them fails the build rather than warns.
+
+**They do not all run on every build**, which this said until it was measured (2026-09-29):
+`check_conditional_includes.sh` runs on pull requests only, and `check_unused_includes.sh` on
+pull requests only *and* only in the `LLVM20` + `skiptest` cell — 1 of 13. Both gate a *diff*
+and a diff needs a base ref, so the restriction is right; the claim was not. A push to master
+is checked by three of the five. `doc/ci.md` has the table, the merge gate's design, and the
+holes the same audit found.
 
 | gate | rule |
 |---|---|

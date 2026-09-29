@@ -97,6 +97,8 @@ map* and *The rules* sections before any structural change.
 Related, more specific:
 
 - `include-graph.md` — why include guards rather than `#pragma once`, and how cycles are measured
+- `ci.md` — what CI actually checks, why `CI Gate` is the one required check, and the gates that
+  currently report success without checking
 - `globals-migration.md` — dispatching the `darktable` global through function arguments
 - `pipeline-cache.md` — the cache-wait protocol and raster-mask side-band cachelines
 - `image-type-detection.md` — the provisional → resolved image lifecycle
