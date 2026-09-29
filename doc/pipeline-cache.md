@@ -1156,7 +1156,7 @@ What goes: an identical re-export no longer finds its final output.
 
 ### An arena allocation is not zeroed: a module must not read what it did not write
 
-*Found `1fb2281865`, 2026-09-29. RCD re-measured against `26735701f6`, 2026-09-30.*
+*Found `1fb2281865`, 2026-09-29. RCD and `lens` re-measured against `26735701f6`, 2026-09-30.*
 
 `dt_pixelpipe_cache_alloc_align_*()` hands out arena memory. Fresh pages read zero; a recycled
 allocation holds whatever its last user left. A module reading elements it never wrote is
@@ -1185,12 +1185,19 @@ border fixed, tiled and untiled differ by float rounding upstream of `dither`; t
 still differs by one level on many pixels, because Floyd-Steinberg diffusion carries any
 difference along the rows.
 
+`lens` wrote the fourth channel of its output only when a mask is displayed. Elsewhere it was
+whatever the arena slot last held: two isolated exports of the same raw published different `lens`
+outputs (alpha -0.031..0.999 in one, -0.020..0.9997 in the other), and poisoning RCD's scratch put
+±5.7e7 in `lens`'s alpha through the recycled slot. `colorin` rewrites alpha, which is why nothing
+after it differed. `lens` now always writes the whole pixel, alpha 0 outside mask display; the same
+two poisons leave its output bit-identical. RCD's image border had the same fault: the outer three
+pixels' alpha was never written on the CPU (`rcd_ppg_border()`), and in OpenCL
+`border_interpolate` wrote an uninitialised `w`.
+
 To look for others: poison with a large FINITE value. NaN is absorbed by `fmaxf()` and by
 comparisons, and `-d nan` fills only the output buffer and checks only its RGB channels. In OpenCL,
 fill each buffer after allocation from a host buffer holding the poison
 (`dt_opencl_write_buffer_to_device()`). To read an OpenCL module's output, its host copy has to be
 forced for the measurement: the export pipe is `no_cache`, so `/plugins/<op>/cache` does not apply
-there (`cache_ram_output` in `pixelpipe_hb.c` requires the cache not to be bypassed). Still
-open: `lens`'s output differs between two isolated exports of the same raw while colorin's does
-not, so in a channel colorin rewrites, presumably alpha.
+there (`cache_ram_output` in `pixelpipe_hb.c` requires the cache not to be bypassed).
 

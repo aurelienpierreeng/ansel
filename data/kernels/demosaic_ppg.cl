@@ -8,6 +8,7 @@
     Copyright (C) 2013 Roman Lebedev.
     Copyright (C) 2021-2022 Hanno Schwalm.
     Copyright (C) 2021 Pascal Obry.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -753,7 +754,8 @@ border_interpolate(read_only image2d_t in, write_only image2d_t out, const int w
 
   if(x >= border && x < width-border && y >= border && y < height-border) return;
 
-  float4 o;
+  // w too: the kernels after this one copy it along, and left unset it is whatever the register held
+  float4 o = (float4)0.0f;
   float sum[4] = { 0.0f };
   int count[4] = { 0 };
 

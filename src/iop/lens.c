@@ -1449,14 +1449,12 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
               pixel[3] = dt_interpolation_compute_sample(interpolation, inptr, pi0, pi1, roi_in->width,
                                                          roi_in->height, ch, ch_width);
             }
+          }
 
-            if(ch == DT_PIXEL_SIMD_CHANNELS) dt_store_simd_aligned(out, pixel);
-            else for(int c = 0; c < ch; c++) out[c] = pixel[c];
-          }
-          else
-          {
-            for(int c = 0; c < 3; c++) out[c] = pixel[c];
-          }
+          // Alpha too: it is 0 unless the mask is displayed, and left unwritten it would be
+          // whatever the output buffer last held.
+          if(ch == DT_PIXEL_SIMD_CHANNELS) dt_store_simd_aligned(out, pixel);
+          else for(int c = 0; c < ch; c++) out[c] = pixel[c];
         }
       }
       dt_pixelpipe_cache_free_align(buf);
@@ -1542,14 +1540,12 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
               pixel[3] = dt_interpolation_compute_sample(interpolation, bufptr, pi0, pi1, roi_in->width,
                                                          roi_in->height, ch, ch_width);
             }
+          }
 
-            if(ch == DT_PIXEL_SIMD_CHANNELS) dt_store_simd_aligned(out, pixel);
-            else for(int c = 0; c < ch; c++) out[c] = pixel[c];
-          }
-          else
-          {
-            for(int c = 0; c < 3; c++) out[c] = pixel[c];
-          }
+          // Alpha too: it is 0 unless the mask is displayed, and left unwritten it would be
+          // whatever the output buffer last held.
+          if(ch == DT_PIXEL_SIMD_CHANNELS) dt_store_simd_aligned(out, pixel);
+          else for(int c = 0; c < ch; c++) out[c] = pixel[c];
         }
       }
       dt_pixelpipe_cache_free_align(buf2);
