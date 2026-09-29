@@ -25,6 +25,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -203,9 +204,8 @@ int main(int argc, char *arg[])
 #endif
 
   // get valid locale dir
-  dt_loc_init(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   char localedir[DT_PATH_MAX] = { 0 };
-  dt_loc_get_localedir(localedir, sizeof(localedir));
+  dt_loc_resolve_localedir(localedir, sizeof(localedir));
   bindtextdomain(GETTEXT_PACKAGE, localedir);
 
   // gtk_parse_args may trigger GTK initialization, so disable GTK locale handling first.
