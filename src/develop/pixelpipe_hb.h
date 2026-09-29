@@ -572,8 +572,10 @@ typedef struct dt_dev_pixelpipe_t
   gboolean bypass_cache;
 
   // If TRUE, do not keep any pixelpipe cache lines around for reuse.
-  // This is intended for one-shot pipelines such as thumbnail exports where caching is pure overhead
-  // and can lead to memory pressure (RAM buffers + OpenCL pinned/device buffers).
+  // This is intended for one-shot pipelines such as exports and thumbnails where caching is pure
+  // overhead and can lead to memory pressure (RAM buffers + OpenCL pinned/device buffers).
+  // Lines other pipes hold are still reused: dt_dev_pixelpipe_cache_get_writable() hands them back
+  // as exact hits, and only what this pipe computes is dropped once consumed.
   gboolean no_cache;
 
   /* When TRUE, a module writes its output into a new cacheline instead of rekeying the one it
