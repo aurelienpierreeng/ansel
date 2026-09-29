@@ -32,7 +32,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2024 Alynx Zhou.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -1334,13 +1334,6 @@ void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statisti
   _opencl_driver_crash_marker_path(_driver_crash_marker, sizeof(_driver_crash_marker));
   _opencl_fold_driver_crashes();
 
-  // work-around to fix a bug in some AMD OpenCL compilers, which would fail parsing certain numerical
-  // constants if locale is different from "C".
-  // we save the current locale, set locale to "C", and restore the previous setting after OpenCL is
-  // initialized
-  char *locale = strdup(setlocale(LC_ALL, NULL));
-  setlocale(LC_ALL, "C");
-
   cl->crc = 5781;
   cl->dlocl = NULL;
   cl->dev_priority_image = 0;
@@ -1350,8 +1343,15 @@ void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statisti
   cl->num_detected_devs = 0;
   cl->detected_devs = NULL;
 
+  // Before the locale save: only finally: restores it.
   if(exclude_opencl) return;
 
+  // work-around to fix a bug in some AMD OpenCL compilers, which would fail parsing certain numerical
+  // constants if locale is different from "C".
+  // we save the current locale, set locale to "C", and restore the previous setting after OpenCL is
+  // initialized
+  char *locale = strdup(setlocale(LC_ALL, NULL));
+  setlocale(LC_ALL, "C");
 
   cl_platform_id *all_platforms = NULL;
   cl_uint *all_num_devices = NULL;
