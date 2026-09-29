@@ -1,9 +1,9 @@
 # The brush and polygon boundary: one geometry, two consumers
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 4 claim(s) in this file
-> that were wrong of the tree and 4 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `fa8e8b86fa` on 2026-09-29.** The audit before that found 4 claim(s)
+> in this file wrong of the tree and 4 stale. Three of the four are about the corpus and the API's shape, not the geometry — the geometry claims held. Re-measure
+> before acting on a claim older than the code you are changing, and re-date this line when
+> you do.
 
 Status: **all landed on master** (verified `f37105c227`, 2026-09-29). The brush came in #1381
 (issues #1352, #1360); the polygon and the shared boundary pass followed in #1383 and after
@@ -45,7 +45,7 @@ sample). They differ in what they hand it and in what they do with the result.
 | | pipeline (`_brush_get_mask_roi`, `_brush_get_mask`) | GUI (`_brush_get_points_border`) |
 |---|---|---|
 | coordinate frame | module input space: `dt_masks_distort_for_pipe()`, `DT_DEV_TRANSFORM_DIR_BACK_INCL` | display space: `dt_masks_distort_for_gui()`, `DT_DEV_TRANSFORM_DIR_ALL` |
-| sample pitch | the pipe's `mask_rasterization_step` | 1 px |
+| sample pitch | the pipe's `mask_rasterization_step` | the published view density — `dt_masks_gui_outline_step(dev)`, one sample per device pixel (`masks_distort.h:117`, fed by `dt_masks_gui_set_outline_density()` from the expose), **not** a fixed 1 px |
 | what it does with the arrays | stamps every spoke | draws `border` as a dashed polyline, `points` as the centreline, hit-tests against both |
 
 The first two differences are legitimate: a mask is rendered in the module's input frame
@@ -337,8 +337,10 @@ dash cut by a hidden stretch shows as a stub, which that metric owes.
 
 ## What is unified, and what is not
 
-The API did not change shape: `dt_masks_functions_t.get_points_border` still returns
-`points`, `border`, `payload` and `border_skips`, and no consumer was touched. What
+The API did not change shape: `dt_masks_functions_t.get_points_border`
+(`masks_functions.h:83-87`) still fills `points`/`points_count`, `border`/`border_count` and
+`border_skips`/`border_skip_count`, returns a `dt_masks_raster_result_t`, and no consumer was
+touched. (There is no `payload` out-parameter; an earlier draft listed one.) What
 changed is *where the truth comes from*. The skip ranges are now derived from the raster
 arrays by a definition, so the outline the GUI draws is the boundary of the mask the pipe
 paints by construction, not by a second algorithm agreeing with the first.
@@ -431,8 +433,12 @@ land between them. A sample inside the owed map is a fold, an arc or a crossing 
 outline failed to hide (issue #1352's chords); a sample outside the permitted map is a
 spoke to nowhere.
 
-Cases carry eleven columns now — both radii, density, fading, state — because #1360
-cannot be expressed without a per-node density ramp. Two reported shapes were added
+A case is a table of **nine columns** per node — `node.x, node.y, ctrl1.x, ctrl1.y, ctrl2.x,
+ctrl2.y, border, density, fading` (`tests/masks/masks_geometry.c:112`) — and #1360 is the
+reason `density` is per node rather than per shape: it cannot be expressed without a per-node
+density ramp. (`_brush_1313[11][9]` is eleven *nodes* of nine columns; an earlier draft read
+that shape as "eleven columns … both radii, density, fading, state", and there is neither a
+second radius column nor a state one.) Two reported shapes were added
 verbatim from the sidecars: `_brush_1360` (43 nodes) and `_brush_1352` (7 nodes).
 
 `MASKS_DUMP_OUTLINE=1` writes every case's outline CSV, skip ranges included, whether or

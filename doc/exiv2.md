@@ -1,9 +1,9 @@
 # Exiv2 in Ansel
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 4 claim(s) in this file
-> that were wrong of the tree and 7 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `fa8e8b86fa` on 2026-09-29.** The audit before that found 4 claim(s)
+> in this file wrong of the tree and 7 stale. Mostly right; the option table was presented as deviations when most rows are upstream defaults, and the NLS workaround needed the function-vs-macro warning its neighbour already carries. Re-measure
+> before acting on a claim older than the code you are changing, and re-date this line when
+> you do.
 
 Ansel builds its own Exiv2, from the `src/external/exiv2` submodule, pinned at **v0.27.7**
 and linked **statically** into `lib_ansel`. This is the default on every platform.
@@ -46,7 +46,13 @@ locale entirely", 34 files) was auto-closed unmerged after 300 days.
 
 ## Options the bundled build sets
 
-In `src/external/CMakeLists.txt`. The ones that are not defaults, and why:
+In `src/external/CMakeLists.txt`. **Most of the table is Exiv2 0.27.7's own default and is
+listed to say we checked, not to say we changed it** — `src/external/exiv2/CMakeLists.txt:18-36`
+already ships XMP ON, PNG ON, NLS OFF, LENSDATA ON, VIDEO/WEBREADY/CURL/SSH OFF and
+UNIT_TESTS/FUZZ_TESTS/DOC OFF. The genuinely non-default rows are `BUILD_SHARED_LIBS=OFF`,
+`EXIV2_ENABLE_BMFF=ON`, `EXIV2_ENABLE_WIN_UNICODE=ON` and
+`EXIV2_BUILD_SAMPLES`/`_EXIV2_COMMAND=OFF`. Setting a default explicitly is still worth doing
+here — a submodule bump can change one — but do not read the table as a list of deviations.
 
 | Option | Value | Why |
 |---|---|---|
@@ -60,9 +66,13 @@ In `src/external/CMakeLists.txt`. The ones that are not defaults, and why:
 | `EXIV2_ENABLE_VIDEO`, `_WEBREADY`, `_CURL`, `_SSH` | `OFF` | Ansel reads metadata from files, never over the network. Keeps libcurl and libssh out of Exiv2's link line. |
 | `EXIV2_BUILD_SAMPLES`, `_EXIV2_COMMAND`, `_UNIT_TESTS`, `_FUZZ_TESTS`, `_DOC` | `OFF` | We want the library, not the distribution. |
 
-Build dependencies this leaves us with, and which the `packaging/install-deps-*.sh` scripts
-now install in Exiv2's place: **expat** (the bundled XMP SDK) and **zlib** (PNG). Iconv is
-used when present.
+Build dependencies this leaves us with: **expat** (the bundled XMP SDK) and **zlib** (PNG).
+Iconv is used when present. The `packaging/install-deps-*.sh` scripts install **expat**
+explicitly (`install-deps-suse.sh:70,164`, `install-deps-macos.sh:36`, `packaging/nix/default.nix:13`)
+and **not zlib**, which they leave to whatever already pulls it in — every one of these
+platforms has it through another dependency. That works, and it is worth knowing it is
+implicit rather than stated, because a platform that ever lacks it fails at link time with no
+clue pointing here.
 
 ---
 
@@ -132,9 +142,19 @@ tables ("Manual", "Auto", …), and those show in the metadata panel. Tag *names
 goes through gettext.
 
 To get it back, shadow `GETTEXT_CREATE_TRANSLATIONS()` with a version that runs `msgfmt` and
-skips the merge, before `add_subdirectory(exiv2)`. That is about fifteen lines and it has to
-keep the `.mo` files installing into `${CMAKE_INSTALL_LOCALEDIR}`, because Exiv2 resolves
-`EXV_LOCALEDIR` relative to the running binary — which, statically linked, is `ansel` itself.
+skips the merge, before `add_subdirectory(exiv2)` (`src/external/CMakeLists.txt:318`). That is
+about fifteen lines and it has to keep the `.mo` files installing into
+`${CMAKE_INSTALL_LOCALEDIR}`, because Exiv2 resolves `EXV_LOCALEDIR` relative to the running
+binary — which, statically linked, is `ansel` itself.
+
+**Write that shadow as a `function`, never a `macro`**, for the reason the `install()` shadow
+twenty lines above it already documents at length (`:296-310`): overriding a command this way
+is global for the rest of the configure, and in a macro `${ARGV}` is textual substitution, so
+every `${...}` in a string argument is expanded a second time and every backslash escape eaten
+once more. That is not hypothetical — it shipped. The macro form reduced the Windows
+installer's `install(CODE)` DLL-collection block to a script with empty variables and an
+unescaped regex; it copied nothing, the `.exe` went from 144 MB to 118 MB, and users got an
+application missing libcurl, libheif, libopenexr and `exchndl.dll` (fixed in `ed17d7db7d`).
 
 Note also that `dt_strlcpy_to_utf8()` in `metadata/exif.cc` runs `print()`'s output through
 `g_locale_to_utf8()`, which is inherited from darktable and is wrong for anything gettext
@@ -209,8 +229,11 @@ each commented at the site:
   `src/external/CMakeLists.txt` asserts that, so moving it back fails the configure rather than
   producing a duplicate-target mystery.
 - It installs its archive, headers, pkg-config file, CMake export set and man page. `install()` is
-  shadowed for the duration so none of that reaches Ansel's install tree — nor, downstream,
-  the AppImage or the Windows installer.
+  shadowed for the duration (`src/external/CMakeLists.txt:311-320`: the `function(install)`
+  override, `ANSEL_SUPPRESS_INSTALL` set at `:316` and released at `:320`) so none of that
+  reaches Ansel's install tree — nor, downstream, the AppImage or the Windows installer. The
+  site comment at `:296-310` is the one to read before touching it: it must be a **function**,
+  and the incident that proves it is recorded there.
 - It asks for `cmake_minimum_required(VERSION 3.7.2)`, so `CMAKE_POLICY_VERSION_MINIMUM`,
   `CMAKE_POLICY_DEFAULT_CMP0069` and `CMAKE_POLICY_DEFAULT_CMP0077` are set around it. The last
   matters most: left OLD, Exiv2's own `option()` calls override the variables we set, and we

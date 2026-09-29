@@ -1,9 +1,9 @@
 # The darkroom repaint: what a frame costs, and what it may not cost
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 3 claim(s) in this file
-> that were wrong of the tree and 4 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `fa8e8b86fa` on 2026-09-29.** The audit before that found 3 claim(s)
+> in this file wrong of the tree and 4 stale. One was a number the outline-density work had already improved, one a cross-reference pointing the wrong way, one an over-precise description of the damage re-request. Re-measure
+> before acting on a claim older than the code you are changing, and re-date this line when
+> you do.
 
 The darkroom's centre is repainted on the GUI thread, on the CPU, and it is repainted often:
 on every pipe frame, on every mask hover and drag motion, on every guide toggle. Whatever a
@@ -79,8 +79,9 @@ last frame composited, in the view's coordinates (`_overlay_damage`), and the da
 a dragged shape moves with the pointer, a hovered one does not move -- when the masks handled
 the motion and nothing else did; a module's own overlay knows no rectangle and keeps the whole
 widget. The invalidation is an estimate made before the frame is drawn: when a frame outgrows
-it, `_overlay_damage_record()` compares the composited rectangle with the clip of the expose
-and asks for the rest, and the next, small expose paints it. At worst that is one extra small
+it, `_overlay_damage_record()` (`masks_gui.c:4584-4592`) compares the composited rectangle with
+the clip of the expose and, if the clip does not cover it, asks for the **whole damage
+rectangle** again — not "the rest" — which the next, small expose paints. At worst that is one extra small
 frame; it can never leave part of an overlay unpainted.
 
 **The overlay canvas is the view, and a session frame is bounded.** The canvas was sized to
@@ -120,8 +121,10 @@ harness's own background paint:
 | nothing selected | 14.1 ms | 4.0 ms |
 | one member selected | 16.4 ms | 5.7 ms |
 
-The first frame of that group, 340 ms, is the rebuild of every member's outline and is the
-next item (#1391).
+The first frame of that group is the rebuild of every member's outline, and the outline-density
+change has since taken most of it: the same group-11 case measures **218 ms at 1:1 and 80 ms at
+fit** in the table below, against 459 ms before. The 340 ms figure predates that change. What
+remains of #1391 is the rebuild itself, not its old size.
 
 ## What a frame costs now
 
@@ -132,8 +135,8 @@ next item (#1391).
 | a zoom or pan while the main pipe catches up | ~320 ms | ~10 ms |
 
 The overlay itself -- the outlines rasterised directly, see `doc/overlay-raster.md` -- costs
-1 to 8 ms per shape at fit zoom; a group's unselected members live in a static layer (below),
-so a frame strokes one shape.
+1 to 8 ms per shape at fit zoom; a group's unselected members live in a static layer (described
+above), so a frame strokes one shape.
 
 A drag motion also REBUILDS the dragged shape's outline, throttled to 60 Hz and 2 px: the
 whole walk, its distortion transform and the boundary pass, and on a large brush that was the

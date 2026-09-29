@@ -1,9 +1,9 @@
 # GUI sizing without a full pixel-less pipeline — analysis and plan
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 2 claim(s) in this file
-> that were wrong of the tree and 9 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `fa8e8b86fa` on 2026-09-29.** The audit before that found 2 claim(s)
+> in this file wrong of the tree and 9 stale. One was load-bearing and wrong: `iop/lens.cc` DID read pixel state off the virtual pipe, which is why lens jumped the tranche queue. Re-measure
+> before acting on a claim older than the code you are changing, and re-date this line when
+> you do.
 
 Written while fixing #1157, whose root cause is entangled with the virtual pipe's cost.
 
@@ -38,11 +38,15 @@ Measured on a darkroom open of a 6016×4016 NEF (`-d perf`, isolated configdir):
 ## What actually consumes it (audited)
 
 - `dt_dev_get_thumbnail_size()` — the ROI fold. Needs `piece->enabled` plus committed params
-  for the **15 of 95** modules that implement `modify_roi_out` (crop, clipping, ashift, lens,
-  flip, liquify, borders, rotatepixels, scalepixels, spots, retouch, demosaic, rawprepare,
-  basebuffer, and the template).
+  for the **14 of 95** modules that implement `modify_roi_out` (ashift, basebuffer, borders,
+  clipping, crop, demosaic, flip, lens, liquify, rawprepare, retouch, rotatepixels,
+  scalepixels, spots). Two of those fourteen turned out **not** to need anything from it:
+  `retouch` and `spots` are `{ *roi_out = *roi_in; }` verbatim
+  (`iop/retouch.c:2611-2616`, `iop/spots.c:396-401`) and their `modify_roi_in` expansion is a
+  rendering concern, so the geometry service leaves them off its roster deliberately and says
+  so at `develop/geometry/geometry.c:43-46`.
 - The transform walkers — need committed params for modules with `distort_transform`, a
-  subset of the same 15.
+  subset of the same fourteen.
 - Module GUIs asking for **their own piece** (`dt_dev_distort_get_iop_pipe(virtual, self)`:
   graduatednd, ashift, crop, clipping, …) — every audited site reads only **dimensions**
   (`buf_in`/`buf_out`, `iwidth`/`iheight`), which come from the ROI fold, never
@@ -50,9 +54,17 @@ Measured on a darkroom open of a 6016×4016 NEF (`-d perf`, isolated configdir):
   geometry module, but its overlay needs its piece's dims, so every module must keep a node.
 - `dev_history.c`'s `last_history_item` bookkeeping — pointer identity only.
 
-**Nobody reads pixel state from the virtual pipe.** `iop/colorout.c` already encodes this as
-a per-module early-out: on the virtual pipe it commits `d->type = DT_COLORSPACE_LAB` and
-returns before building any LCMS transform.
+~~**Nobody reads pixel state from the virtual pipe.**~~ **One module did, and it is the reason
+that audit needed re-running.** At `31db6ca28a`, `iop/lens.cc:2547-2549` fetched its own piece
+off `self->dev->virtual_pipe` and read the committed `dt_iop_lensfun_data_t` blob out of it —
+not dimensions, not a transform, the module's own commit-time data. The premise was right for
+every other module and wrong for that one, which is what made lens the tranche that jumped the
+queue (`doc/geometry-service.md`, G4). It no longer does: `_lens_corrections_available()`
+(`iop/lens.c:3612-3640`) builds its own blob and asks only for dimensions.
+
+`iop/colorout.c` encoded the intended shape as a per-module early-out: on the virtual pipe it
+committed `d->type = DT_COLORSPACE_LAB` and returned before building any LCMS transform. That
+early-out went with the virtual pipe itself at G16.
 
 ## Why this is #1157's accomplice
 

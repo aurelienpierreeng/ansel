@@ -1,9 +1,9 @@
 # Color and color spaces
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 2 claim(s) in this file
-> that were wrong of the tree and 5 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `fa8e8b86fa` on 2026-09-29.** The audit before that found 2 claim(s)
+> in this file wrong of the tree and 5 stale. This file is mostly a conceptual history of darktable's colour pipeline and reads as such; the two corrections are a present-tense note and a date. Re-measure
+> before acting on a claim older than the code you are changing, and re-date this line when
+> you do.
 
 [TOC]
 
@@ -17,9 +17,9 @@ For a raw picture, the legacy pipeline prior to Darktable 2.6 was designed as fo
 - between `colorin` and `colorout`, pixels were in CIE Lab 1976, with white point expected to be D50 (as per ICC standard),
 - after `colorout`, pixels were in display RGB (non-linear), with white point typically set to D65 (but depending on display ICC profile).
 
-At that point, modules could not be re-ordered, so checking for in/out color spaces was not needed. Some modules happened after `colorout`, for example [watermark](@ref /src/iop/watermark.c) and [borders](@ref /src/iop/borders.c), probably because they take HSL input implicitely from sRGB, so putting them that late allowed to lazily avoid color spaces conversions (lazily assuming that output color space is sRGB). Of course, if you export to Adobe RGB, the color coordinates are kept as-is, without conversion, so your border or watermark colors will not look the same (more or less saturated, and slightly shifted in hue) depending on the output color profile.
+At that point, modules could not be re-ordered, so checking for in/out color spaces was not needed. Some modules happened after `colorout`, for example [watermark](@ref /src/iop/watermark.c) and [borders](@ref /src/iop/borders.c), probably because they take HSL input implicitely from sRGB, so putting them that late allowed to lazily avoid color spaces conversions (lazily assuming that output color space is sRGB). (In the tree today both declare `default_colorspace()` returning `IOP_CS_RGB` — `borders.c:238-241`, `watermark.c:380-383` — and each carries its colour as a bare `float color[3]` filled from a `GdkRGBA`, so the space is whatever the pipe hands them and the GTK colour picker's sRGB coordinates are used unconverted. The lazy assumption survived the conversion to an explicit colorspace declaration.) Of course, if you export to Adobe RGB, the color coordinates are kept as-is, without conversion, so your border or watermark colors will not look the same (more or less saturated, and slightly shifted in hue) depending on the output color profile.
 
-The rationale for using CIE Lab 1976 was to provide decoupled controls over lightness and chromaticity. This is a workflow-wise clever choice, the only problem is Lab is not HDR-able and has a notorious hue linearity issue in the blue-purple region. With modern cameras (starting with Nikon D810 series, back in 2013) boasting 14 EV of dynamic range at 64 ISO, and allowing to shoot backlit scene with post-processing shadows recovery, Lab really did not play nice : shadows dramatically raised took a color shift to a greyish-blue, which didn't live up to the expectation (and didn't compare well with results obtained out of Adobe Lightroom).
+The rationale for using CIE Lab 1976 was to provide decoupled controls over lightness and chromaticity. This is a workflow-wise clever choice, the only problem is Lab is not HDR-able and has a notorious hue linearity issue in the blue-purple region. With modern cameras (starting with the Nikon D810, announced June 2014) boasting 14 EV of dynamic range at its base ISO 64, and allowing to shoot backlit scene with post-processing shadows recovery, Lab really did not play nice : shadows dramatically raised took a color shift to a greyish-blue, which didn't live up to the expectation (and didn't compare well with results obtained out of Adobe Lightroom).
 
 It should be noted that it is tremendously difficult to make image manipulation filters work well and reliably in CIE Lab (or in any perceptual color space, even the Darktable UCS 22) :
 
