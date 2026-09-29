@@ -372,7 +372,7 @@ static void _print_trace (const char* op)
 // A signal that is not emitted still owes what its destructor releases after an emission: the
 // same handler runs on the same arguments. The instance slot holds NULL, which no destructor reads.
 static void _signal_release_unsent(const dt_signal_description *signal_description,
-                                   GValue *instance_and_params)
+                                   const GValue *instance_and_params)
 {
   if(IS_NULL_PTR(signal_description->destructor)) return;
 
