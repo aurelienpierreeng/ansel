@@ -1719,8 +1719,6 @@ void dt_drawlayer_refresh_layer_widgets(dt_iop_module_t *self)
   GMainContext *const ui_ctx = g_main_context_default();
   if(IS_NULL_PTR(g) || IS_NULL_PTR(params) || !(ui_ctx && g_main_context_is_owner(ui_ctx))) return;
 
-  g->manager.background_job_running = g->session.background_job_running;
-
   if(g->controls.layer_select) dt_drawlayer_layers_populate_list(self);
   _sync_layer_controls(self);
 }
@@ -3092,9 +3090,9 @@ static void _build_layer_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t 
   g->controls.rename_layer = gtk_button_new_with_label(_("rename layer"));
   g->controls.attach_layer = gtk_button_new_with_label(_("reuse selected layer"));
   g->controls.create_background = gtk_button_new_with_label(_("create background from input"));
-  g->controls.fill_white = gtk_button_new_with_label(_("white"));
-  g->controls.fill_black = gtk_button_new_with_label(_("black"));
-  g->controls.fill_transparent = gtk_button_new_with_label(_("transparency"));
+  GtkWidget *fill_white = gtk_button_new_with_label(_("white"));
+  GtkWidget *fill_black = gtk_button_new_with_label(_("black"));
+  GtkWidget *fill_transparent = gtk_button_new_with_label(_("transparency"));
   gtk_box_pack_start(GTK_BOX(layer_box), layer_status, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_box), g->controls.layer_select, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.create_layer, TRUE, TRUE, 0);
@@ -3103,9 +3101,9 @@ static void _build_layer_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t 
   gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.delete_layer, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(layer_box), layer_action_row, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_box), layer_fill_title, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_fill_row), g->controls.fill_white, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_fill_row), g->controls.fill_black, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_fill_row), g->controls.fill_transparent, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_fill_row), fill_white, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_fill_row), fill_black, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_fill_row), fill_transparent, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(layer_box), layer_fill_row, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_box), g->controls.create_background, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_tab), layer_box, FALSE, FALSE, 0);
@@ -3120,9 +3118,9 @@ static void _build_layer_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t 
   g_signal_connect(g->controls.attach_layer, "clicked", G_CALLBACK(_attach_selected_layer_clicked), self);
   g_signal_connect(g->controls.create_background, "clicked", G_CALLBACK(_create_background_clicked), self);
   g_signal_connect(g->controls.delete_layer, "clicked", G_CALLBACK(_delete_layer_clicked), self);
-  g_signal_connect(g->controls.fill_white, "clicked", G_CALLBACK(_fill_white_clicked), self);
-  g_signal_connect(g->controls.fill_black, "clicked", G_CALLBACK(_fill_black_clicked), self);
-  g_signal_connect(g->controls.fill_transparent, "clicked", G_CALLBACK(_fill_transparent_clicked), self);
+  g_signal_connect(fill_white, "clicked", G_CALLBACK(_fill_white_clicked), self);
+  g_signal_connect(fill_black, "clicked", G_CALLBACK(_fill_black_clicked), self);
+  g_signal_connect(fill_transparent, "clicked", G_CALLBACK(_fill_transparent_clicked), self);
 }
 
 /**
@@ -3324,8 +3322,7 @@ void gui_update(dt_iop_module_t *self)
 
   _sync_mode_sensitive_widgets(self);
   _sync_preview_bg_buttons(self);
-  dt_drawlayer_layers_populate_list(self);
-  _sync_layer_controls(self);
+  dt_drawlayer_refresh_layer_widgets(self);
 
   if(self->dev)
   {
