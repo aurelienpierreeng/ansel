@@ -1086,3 +1086,32 @@ Two things a reviewer would otherwise simplify:
   the top item is rewritten in place, a new item appended or one forced. A toggle it misses reaches
   the pipe as `TOP_CHANGED`, and nothing downstream knows it was a switch.
 
+### An arena allocation is not zeroed: a module must not read what it did not write
+
+*Found `1fb2281865`, 2026-09-29.*
+
+`dt_pixelpipe_cache_alloc_align_*()` hands out arena memory. Fresh pages read zero; a recycled
+allocation holds whatever its last user left. A module reading elements it never wrote is
+therefore deterministic only as long as its memory is fresh, and the bug shows up as an image
+that exports differently depending on what ran before it -- more often the more the arena
+recycles: after a pressure shed, or when a pipe drops its outputs as it goes.
+
+RCD (`iop/demosaic/rcd.c`) did: full tiles read elements of the per-thread `rgb` scratch that no
+tile writes, and only partial tiles cleared it. It is now zeroed once at allocation, as `VH_Dir`
+already was. Found on a batch export: an image differed from its isolated export (mean 0.36 on
+8 bits, in patches); comparing each module's output across the two runs (`-d pipecache -d
+verbose`, `[pixelpipe_stats] ... content_hash`), demosaic was the first to differ, from the same
+input. Poisoning each scratch buffer at allocation, only `rgb` moved the output (9.6 M pixels),
+besides `VH_Dir`, whose clearing the poison overwrote. With `rgb` zeroed, the images of a
+six-raw `ansel-cli` batch whose demosaic ran untiled are identical to each one exported alone.
+
+Still open, and separate: demosaic run in tiles does not give the pixels it gives untiled. In the
+same batch, a pressure shed lowered the budget and the last three images ran demosaic tiled
+(`-d tiling`: no fallback); those three differ from their isolated exports (mean 0.33-0.49), the
+three untiled ones do not.
+
+To look for others: poison with a large FINITE value. NaN is absorbed by `fmaxf()` and by
+comparisons, and `-d nan` fills only the output buffer and checks only its RGB channels. Still
+open: `lens`'s output differs between two isolated exports of the same raw while colorin's does
+not, so in a channel colorin rewrites, presumably alpha; RCD's OpenCL path was not checked.
+
