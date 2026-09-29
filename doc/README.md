@@ -33,6 +33,24 @@ Dependencies and function calls graphs are also plotted for each object. These a
 
 As time will go, we will add real dev documentation, explaining how the core tasks are handled, based on what assumptions and covering what use cases. This should prevent re-implementing the same feature, sometimes 4 times or more, as was seen in Darktable since 2020.
 
+## The rules, and where the knowledge lives
+
+[`../CLAUDE.md`](../CLAUDE.md) holds the seven binding rules and a table of contents into this
+directory. It used to hold the knowledge too, and had grown to 3,177 lines; a verification pass
+on 2026-09-29 found sixteen claims in it that were wrong, so the findings moved here on the
+condition that **each one carries the commit it was established against**.
+
+If you write a finding down, date it and name the commit. If you act on one older than the code
+you are changing, re-measure it first and re-date it when you confirm it. A file nobody can date
+is a file nobody can trust — that is the whole reason this directory now looks like this.
+
+Files carrying findings migrated from CLAUDE.md on 2026-09-29, each verified against
+`42eca0e8fe`: `architecture-rules.md`, `preferences.md`, `pipeline-cache.md` (appended),
+`pipeline-history.md`, `image-mipmap-cache.md`, `raw-roi-cfa.md`,
+`highlights-reconstruction.md`, `colorprofiles.md`, `interpolation.md`, `masks-geometry.md`,
+`masks-gui.md`, `masks-history.md`, `iop-notes.md`, `gtk-patterns.md`, `accelerators.md`,
+`collection.md`, `export.md`.
+
 ## Working on the codebase structure
 
 `reorganisation.md` is the entry point: the module map (what each `src/` directory is for, and

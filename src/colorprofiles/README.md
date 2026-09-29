@@ -83,7 +83,7 @@ enumeration reproduces and what every stored combo index in every preset and con
 Only three things mutate after init:
 
 - the `DT_COLORSPACE_DISPLAY` entry's `cmsHPROFILE`;
-- the four prepared display transforms derived from it — this and the above under `xprofile_lock`;
+- the four prepared display transforms derived from it — this and the above under `_transforms_lock`;
 - the seven-field settings group (display triple, soft-proof pair, colour mode), under a
   separate lock private to the file.
 
@@ -94,7 +94,7 @@ writing it is a **torn** string, not merely a stale one. A module that snapshots
 its cache hash must then render from that same snapshot, not re-read the live state from
 `process()`.
 
-**Lock order, where both are involved: `xprofile_lock` OUTER, the settings lock INNER.** The
+**Lock order, where both are involved: `_transforms_lock` OUTER, `_settings_lock` INNER.** The
 display setters need both, because changing the display profile identity also rebuilds the four
 transforms. Nothing takes them the other way round.
 
@@ -144,7 +144,15 @@ aliasing all six.
 ## Gates
 
 - `tools/check_module_boundaries.sh` — ratchets the module closed: external
-  `dt_colorspaces_get_global()` and external `xprofile_lock` acquisitions, both baseline **0**.
+  `dt_colorspaces_get_global()`, baseline **0** — a real boundary, since the symbol is `static`.
+
+  > **The sibling `xprofile_lock` counter in that gate is DEAD and has been since the locks were
+  > renamed.** `tools/check_module_boundaries.sh:108` greps for
+  > `pthread_rwlock_*lock[^;]*xprofile_lock`, and no such token exists anywhere in the tree — the
+  > module's locks are `_transforms_lock`, `_settings_lock` and the per-entry `lock`. It reports 0
+  > because the name is gone, not because callers stopped taking it, and neither the "rose" nor
+  > the "fell" branch of the ratchet can ever fire. Either re-point it at `_transforms_lock` or
+  > drop it; as written it is a check that cannot fail.
   A count that rises fails; a count that falls must lower the baseline in the same commit.
 - `tools/statelessness_audit.py --dir src/colorprofiles` — what holds state and what reaches it.
 - `tools/check_export_pixels.sh <ref-a> <ref-b>` — decodes both exports and compares the pixel

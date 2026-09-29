@@ -732,3 +732,326 @@ tiling of the always-untiled modules, not with cache policy.
 
 Testing lever: the cgroup probe honors whatever limit `systemd-run -p MemoryMax=` sets, so
 pressure behavior is reproducible without actually starving the machine.
+
+---
+
+## Rules carried over from CLAUDE.md
+
+*Verified against `42eca0e8fe`, 2026-09-29. Each finding carries the commit that established it.*
+
+### GUI backbuf must use the published hash, not the planned hash
+
+*Found `22f623c0be`, 2026-06-25.*
+
+For final-backbuffer display (`dt_dev_pixelpipe_cache_peek_gui` with `piece == NULL`), GUI
+consumers (center view, navigation thumbnail, scopes) must key the lookup on the **published**
+`pipe->backbuf.hash`, not the **planned** `dt_dev_pixelpipe_get_hash(pipe)` (`pipe->hash`).
+
+The pipeline plans the next frame's global hash before publishing pixels, so `pipe->hash` runs
+ahead of `pipe->backbuf.hash` whenever a recompute is in flight. Realtime drawing makes this the
+steady state. Peeking the planned hash misses the perfectly valid published frame → the main-surface
+lock fails → darkroom expose falls back to the paused preview pipe → flicker.
+
+In `peek_gui`, for `piece == NULL` use `dt_dev_backbuf_get_hash(&pipe->backbuf)` as the display
+lookup hash when valid.
+
+### OpenCL vRAM flush must not drop live entries
+
+*Found `22f623c0be`, 2026-06-25.*
+
+`darktable.pixelpipe_cache` is shared across all pipes. `dt_dev_pixelpipe_cache_flush_clmem`
+iterates EVERY entry on a device, not just the calling pipe's own. The bug (issue #817): it
+released the `cl_mem` of a buffer another pipe was mid-recursion on, leaving a husk (no RAM,
+no vRAM) keyed in the cache, which then aborted downstream consumers → skull thumbnails.
+
+The correct flush predicate: skip any entry where `dt_atomic_get_int(&entry->refcount) > 0` OR
+`dt_pthread_rwlock_trywrlock` fails (never wait on writer locks). Idle entries (refcount 0,
+unlocked) get their vRAM reclaimed. The flush must hold `cache->lock` for the entire iteration
+so no consumer can mid-acquire a refcount==0 entry.
+
+If a flushed entry is then empty (no host data + no vRAM on any device), remove it from the
+hash table via `g_hash_table_iter_remove` — do NOT subtract `current_memory` manually, the
+`_free_cache_entry` GDestroyNotify handles it.
+
+### A peek retains nothing: keep or release only what a retained lookup handed you
+
+*Found `f4d963f8ca`, 2026-09-27.*
+
+`dt_dev_pixelpipe_cache_peek()` is non-owning. An entry nobody holds sits at refcount 0 and any
+thread's eviction can free it between the peek and the caller's next line, so code that reads a
+cacheline, keeps it, or releases one afterwards, looks it up with `dt_dev_pixelpipe_cache_ref_entry_by_hash()`
+or `dt_dev_pixelpipe_cache_ref_host_entry_by_hash()` (lookup and reference under one hold of the cache
+lock), read-locks while copying, and releases exactly that reference.
+
+Referencing the entry after the peek does not close the window: the eviction can still land before
+the reference, which then counts up freed memory. The backbuffer's keepalive is the case that costs
+most: taken that way, it is released by pointer at the next publication. So the pipeline publishes
+the backbuffer from `ref_host_entry_by_hash()` and drops that reference once the keepalive is taken.
+`dt_dev_pixelpipe_cache_get_entry()` is a peek too: it serves the producer-to-consumer handoff inside
+one run, where the reference is already held, and nothing else. For the same reason,
+`dt_dev_pixelpipe_cache_get_writable()` hands its exact hit back already referenced.
+
+A release nobody took is a use-after-free with a delay. It leaves the count below the number of real
+holders; the LRU (`refcount > 0` is its only guard) frees a held entry; and since every long-lived
+reference is released by POINTER (`dt_dev_pixelpipe_cache_unref_entry()`), the holder's own release
+later decrements freed memory -- memory the allocator has meanwhile handed to something else. The
+crash lands in that other object, typically as a pointer that reads back as itself minus one (the
+refcount decrement landed on it), found by the next `free()` or dereference of it, nowhere near the
+cache. ASAN only sees it when the eviction happens to fall inside the window; the imbalance itself is
+deterministic, so the quick way to find one is to report, with a backtrace, every release that takes
+a count below zero in `_non_thread_safe_cache_ref_count_entry()` and exercise the suspect path.
+
+### A cacheline is dropped by flagging it while held; its release removes it
+
+*Found `ad85705155`, 2026-09-28.*
+
+Nothing may name a cache entry after releasing its reference: the release returns with the cache
+mutex released, and from then on any thread's eviction can free an entry nobody holds. A second
+call on the same pointer, to remove it or to flag it, is a second hold of the mutex, and the
+eviction can land between the two.
+
+So the removal happens inside the release. `dt_dev_pixelpipe_cache_ref_count_entry(FALSE, ...)` on
+the last reference of an entry flagged with `dt_dev_pixelpipe_cache_flag_auto_destroy()` removes it
+in the same hold of the mutex, and a holder drops a line by flagging it, then releasing it.
+`tests/unittests/test_pipe_cache_auto_destroy.c` pins the contract. Four things a reviewer would
+otherwise change:
+
+- **Flag before the write lock goes, release last.** The release removes only an entry nobody holds
+  or locks: one released while still write-locked stays, flagged, for the LRU. Flagged before the
+  unlock, it is also refused by the retained lookups a waiter makes when `DT_SIGNAL_CACHELINE_READY`
+  wakes it.
+- **There is no public removal by pointer.** It could only succeed on an entry nobody holds, that
+  is, one its caller has no right to name. The peek holds no reference either, so when it discards
+  a line with neither host nor device payload, it looks the entry up again by hash and removes it
+  within one hold of the mutex.
+- **A line created and not filled goes too, even when no buffer could be allocated.** Left in
+  place, the next `dt_dev_pixelpipe_cache_get()` of that hash finds it, allocates its buffer on
+  demand and returns it as found, i.e. as written: the caller reads uninitialised memory as its
+  mask.
+- **The reference `process_rec()` reserves for its receiver is released on every way out.** The next
+  module, or `dt_dev_pixelpipe_process()` for the final output, owns it from the moment the
+  recursion returns: an abort after that point releases it as a completed run does, so
+  `KILL_SWITCH_ABORT`, which releases nothing, has no place after the recursion. A reference left
+  behind pins its line for good.
+
+### A cache key is what a piece computes, never a runtime identity
+
+*Found `b1a9a18ebd`, 2026-09-11.*
+
+`dt_iop_compute_module_hash()` (`develop/imageop.c`) keys a module by its op, enabled state,
+`multi_priority`, `iop_order`, params and blendop hash — and must not fold `module->instance`.
+That field is the family id `dt_dev_module_duplicate()` matches on, assigned at load from
+`dev->iop_instance++`, a counter `dt_dev_init()` zeroes once for the darkroom's long-lived dev and
+nothing resets after: every darkroom entry reloads the modules into the same dev and numbers them
+anew. With it in the key, a darkroom → lighttable → darkroom round trip rekeyed every cacheline of
+the image, and the preview recomputed from `basebuffer` while the whole cache was still there —
+measured: the entry it could have resumed from was present, and it asked for keys never seen
+before. It stayed harmless as long as `dt_dev_load_modules()` zeroed the counter before numbering,
+so every entry numbered the modules alike; only the increment is left there now. The same key feeds `hist->hash`, hence `img->history_hash` and the
+`history_hash.current_hash` column, which changed per session for an unchanged history too.
+`_hash_raster_masks()` folded it as well, into the blendop hash of every module consuming another
+module's raster mask. `dt_iop_check_modules_equal()` still compares it, legitimately: that is an
+identity test within one session, not a key.
+
+Anything else folded into a cache key owes the same test: would two sessions editing the same
+image, with the same history, produce the same value?
+
+### A module memoising its own intermediates keys them on `upstream_hash`, never on `global_hash`
+
+*Found `1019fcd2e0`, 2026-09-24.*
+
+`piece->global_hash` folds the module's own parameters, so it moves on every frame of a drag and
+is useless as the key of anything the drag does not change. `piece->upstream_hash`
+(`pixelpipe_hb.h`) is the other half: the cumulative hash of the PARAMETERS of the enabled
+modules above this one, and of nothing else — no ROI, not this piece. It identifies the
+transformation chain a drawn shape is back-transformed through, which is what a mask
+rasterisation depends on, so a memo keyed on it survives an edit of the parameter being dragged.
+
+Three things it has to get right, and each one is a way to key a memo on a lie:
+
+- **It is published by a pass of its own** (`_publish_upstream_hashes()`, `dev_pixelpipe.c`),
+  called from `dt_dev_pixelpipe_get_roi_in()` as well as from `dt_pixelpipe_get_global_hash()`.
+  ROI planning is its first consumer and runs BEFORE the global hash is built, so a
+  `modify_roi_in()` reading it would otherwise find either the value `dt_iop_commit_params()`
+  invalidated or one describing a chain that has since changed. It reads no ROI, so running it
+  twice per plan costs a walk and answers the same.
+- **It is deliberately ROI-free**, for the same reason: what a consumer reads during ROI planning
+  still describes the previous plan's ROI. It never describes the previous plan's *parameters*,
+  since every commit path runs a hash pass before any planning.
+- **It folds `dt_dev_pixelpipe_activemodule_disables_currentmodule()` per upstream piece.** That
+  is GUI state, not history, so it is in no `piece->hash` — yet it decides whether a module takes
+  part in `dt_dev_distort_transform_plus()`. Focusing crop moves every drawn shape's box without
+  moving any parameter.
+
+Because it carries no ROI and no pipe identity, the same value comes out for the FULL, preview
+and export pipes of one image, and anything keyed on it that is genuinely pipe-independent — a
+shape's bounding box in sensor coordinates — is computed once for all of them. Anything laid out
+in the module's own ROI must fold that ROI into its own key on top; `iop/retouch.c` does both.
+
+### The host-memory fit probe evicts: ask it only when its answer chooses something
+
+*Found `5642f84519`, 2026-09-11.*
+
+`dt_tiling_piece_fits_host_memory()` (`develop/tiling.c`) is not a pure question. To answer "does
+this module's working set fit untiled?" it evicts LRU cache lines — any pipe's — until the byte
+headroom covers `factor × roi × bpp` AND `0.9 ×` the largest contiguous arena run does too. The
+contiguity term is what makes it expensive: with a fragmented arena it keeps evicting long after
+the bytes are there, measured at ~8 GB shed for a 1.95 GB working set.
+
+`pixelpipe_cpu.c` therefore asks it only when `piece->process_tiling_ready` — i.e. when the answer
+picks `process_tiling()` over `process()`. For a module without `IOP_FLAGS_ALLOW_TILING` (tone
+equalizer, among others) `process()` runs either way, and the probe used to throw the cache away
+for nothing: with `darkroom/render_size = 0` the preview pipe runs tone equalizer at full sensor
+resolution (see the toneequal section), so every edit emptied the cache down to ~3 GB, the FULL
+pipe's intermediates went first (least recently used, since the preview had just re-read its own),
+and the FULL pipe recomputed from `basebuffer` — 8 s of highlight reconstruction per edit — while
+the preview resumed from the edited module. The module's real allocations still go through the
+cache allocator, which evicts what each of them needs when it is made.
+
+Diagnose this class with `-d dev -d perf -d pipecache`: the ``processed `Module' … [pipe]`` lines
+say which modules each pipe actually ran, and a burst of `LRU … removed` lines right after one of
+them names the allocation that emptied the cache.
+
+### The cache gives memory back on kernel pressure, not only on low available RAM
+
+*Found `18f6f8f2c5`, 2026-09-12.*
+
+The pixelpipe cache budget (`total − memory_os_headroom − memory_mipmap_cache`) is a plan made at
+startup, and `_system_memory_pressure_valve()` guards a floor of available RAM (200 MiB). Neither
+sees a machine that still reports memory available but spends its time reclaiming it: swap full,
+other applications' pages evicted and faulted back in. That stall is what systemd-oomd acts on —
+on an Ubuntu 24.04 session, past 50 % "full" stall of `user@.service` for 20 s it SIGKILLs a
+cgroup under it, Ansel being the obvious one. Measured on a 24 GB machine with other
+applications holding ~9.5 GB and a full swap: the cache reached 11 GB of its 14.5 GB budget,
+pressure hit 73 %, and oomd killed Ansel with MemAvailable nowhere near the floor.
+
+**Three modules, and the seam between them is what keeps each one readable.**
+`system/memory_pressure.c` is the only file that knows what a kernel counter looks like: it reads
+PSI's cumulative "full" `total` for the whole system and every cgroup above the process, and it
+owns the watcher — `dt_memory_pressure_watch_start()` arms the kernel's own triggers, sleeps a
+thread of its own in `poll()`, and calls back. Everything `#ifdef`-ed on a platform lives there
+and nowhere else. `caches/pixelpipe_cache_pressure.c` turns two of those reads into the stall
+share of the window between them (2 s), the highest over the levels; past 10 % it sheds a quarter
+of the cache (half past 30 %) and lowers the ceiling, the budget allocations evict down to. Under
+2 % the ceiling climbs back by 1/32 of the plan per window, but only to 7/8 of the mark, the
+footprint pressure struck at, which itself rises by 1/1024 of the plan per calm window. It reads
+no cache entry: `pixelpipe_cache.c` passes it a `dt_pixelpipe_cache_pressure_sink_t` — what the
+cache holds, and what evicting down to a target and trimming the arena gives back — and takes
+`lock` around every call, the watcher's callback included. `dt_pixelpipe_cache_pressure_react()`
+runs in `_free_space_to_alloc()` and in the idle shedder, which ticks every 2 s;
+`dt_pixelpipe_cache_pressure_triggered()` runs on the watcher's thread. The arithmetic of the
+ceiling and the mark is inline in `caches/pixelpipe_cache_pressure.h`, kept pure and separate for
+the same reason `develop/pipe_cache_policy.h` is: `tests/unittests/test_pipe_cache_pressure.c` is
+the only thing that can see a policy which changes no pixel and no hash.
+
+Six things a reviewer would otherwise change:
+
+- **A cache holding less than an eighth of the plan sheds nothing and lowers nothing.** The stall
+  is somebody else's then. Measured: four kernel wake-ups in the first 12 s of a run, before the
+  cache held anything, recorded a pressure mark of 0 and pinned the budget at the floor, where it
+  still sat a quarter of an hour later. The same eighth is the floor the ceiling never falls under.
+
+- **The kernel wakes the watcher; the cache does not only poll.** A measured window needs the
+  cache to be running something, and past a certain stall nothing of ours runs: a second test died
+  with its last 32 seconds silent — no timer, no allocation, the process frozen at 13.6 GB while
+  oomd counted its 20 seconds, and the valve never sampled the ramp that killed it. PSI *triggers*
+  (`dt_memory_pressure_watch_start()`, `poll()` for `POLLPRI`) are raised by the kernel as soon
+  as a window is stalled past the threshold. Unprivileged triggers need a window that is a
+  multiple of 2 s, and only the levels the process may write to accept one: the whole system, its
+  own cgroup, and `app.slice` — the session's `user@.service`, which is what oomd actually
+  watches, belongs to root.
+- **The ceiling does not climb straight back to the plan.** Measured on the machine above: with
+  the ceiling restored in ~80 s, the stall came back within half a minute of each recovery, five
+  times in five minutes, once at 49 % — one point under oomd's limit. The footprint that caused
+  it (11.5–12.8 GB there) is what the cache must stay under, until minutes of calm say the rest
+  of the machine has let go.
+
+- **The share comes from the `total` counters, never from PSI's `avg10`.** That is a 10 s moving
+  average, which keeps reading high for some 20 s after a stall has ended: shedding on it drains
+  the whole cache for pressure that is already gone.
+- **The ceiling is a target, not a limit.** An allocation it cannot make room for still goes
+  ahead; only `max_memory` fails one. A hard ceiling would turn pressure into failed pipelines.
+- **`dt_dev_pixelpipe_cache_get_usage()` reports the ceiling, floored at the current usage.**
+  Tiling must plan against the lowered budget, and both of its readers compute `max − current`
+  unsigned.
+
+### OpenCL GUI-thread materialization hazard
+
+*Found `22f623c0be`, 2026-06-25.*
+
+`dt_dev_pixelpipe_cache_peek_gui` must pass `preferred_devid = -1` (CPU caller signal). Passing
+a real GPU id causes the GUI thread to enqueue a GPU read without owning the device, racing the
+pipeline's OpenCL events → SIGSEGV in `clReleaseEvent`. Device-only entries then report a miss
+to the GUI, which waits for the pipeline to publish a host copy instead.
+
+### A cacheline's host copy answers for its hash only once it was written for it
+
+*Found `0c28ca29a5`, 2026-09-27.*
+
+`_seal_opencl_cache_policy()` (`develop/dev_pixelpipe.c`) decides per module whether its output
+must be copied from device to host RAM (`piece->cache_output_on_ram`), through the pure
+`dt_dev_pipe_cache_policy_decide()` (`develop/pipe_cache_policy.h`, pinned by
+`tests/unittests/test_pipe_cache_policy.c`). The requirement travels ONE hop: a node publishes to
+RAM when the node consuming it reads RAM (CPU-only, focused, histogram, autoset), never because
+some node further downstream does. Carried transitively, it would copy every output device->host
+on every frame: measured on a painting stroke, 152 MB and 68 ms of a 113.8 ms frame, of which
+gamma's 11.7 MB alone is read.
+
+What makes one hop safe is the cache, not the policy. A module's output cacheline is reused for
+its next output by rekeying it in place (`_cache_try_rekey_reuse_locked()`), host buffer included,
+and an OpenCL output kept on the device leaves the previous hash's pixels in that buffer. The rekey
+therefore sets `dt_pixel_cache_entry_t.host_stale`, and while it is set
+`dt_pixel_cache_entry_get_data()` answers NULL, which every lookup (`ref_entry_by_hash`,
+`ref_host_entry_by_hash`, `peek`, the fast-track exact hit in `process_rec()`) and every consumer
+already treats as "the pixels are on the device": a CPU consumer copies the device payload back,
+a GUI reader owning no device reports a miss. The flag is cleared where the host buffer is written
+for the new hash: by `process_rec()` through `dt_dev_pixelpipe_cache_flag_host_written()` when the
+module ran on CPU, tiled, or read its output back (`cache_ram_output`), and by every device->host
+copy (the materialize path, `dt_dev_pixelpipe_cache_restore_cl_buffer()`, `_gpu_init_input()`).
+The producer alone reads the raw buffer, through `dt_pixel_cache_entry_get_buffer()`: it still
+backs the output's pinned OpenCL image. `-d pipecache` prints `stale 0|1` on every entry line;
+`tests/unittests/test_pipe_cache_host_stale.c` pins the contract.
+
+An overlay toggle is the case that exposes it: with `rawoverexposed` on, `colorout`'s requirement
+drops and its rekeyed cacheline keeps pre-toggle host bytes under each new pan/zoom hash; once the
+overlay is off, `dither` (CPU-only) needs `colorout`'s output in RAM, and only the flag stops it
+from reading those bytes.
+
+**Do not detect this in the seal.** Invalidating a node's cacheline when its requirement goes
+FALSE->TRUE looks equivalent and is not. `dt_iop_commit_params()` resets `cache_output_on_ram` to
+0 before every commit, so every recommitted node "transitions" on every resync; and at that point
+`piece->global_hash` holds the module's LOCAL hash (the commit writes it, the cumulative key is
+computed later). Such an invalidation would fire for every node of every resync and match no
+cacheline at all.
+
+### After a switch between history states, outputs are kept rather than rekeyed
+
+*Found `0c28ca29a5`, 2026-09-27.*
+
+Toggling a module, undo, redo and a jump in the history list are switches the user is likely to
+make again in reverse. Rekeying in place overwrites the output each module produced for the
+state being left, and switching back then recomputes everything downstream of the change: 2.0 s
+per toggle on the CPU for tone equalizer on a 5198x3904 raw, the same ten modules every time,
+with 1.7 GB of a 23 GB cache in use.
+
+`DT_DEV_PIPE_SWITCHED` (`pixelpipe_hb.h`) marks such a change. `dt_dev_pixelpipe_change()` turns
+it into `pipe->keep_outputs`, `process_rec()` then writes each output into a new cacheline instead
+of rekeying (`allow_rekey_reuse`), and `dt_dev_pixelpipe_process()` lowers it once a run completes
+without error or shutdown, so only the run rendering the new state keeps the old one. Measured
+toggling color balance rgb in the darkroom: the first toggle recomputes its downstream once, every
+later one is a chain of exact hits, 1-28 ms on the CPU and 3-24 ms with OpenCL. It is raised
+by `dt_dev_history_commit_item_now()` when `add_new_pipe_node` (the module's first history entry,
+or an entry enabled differently from its last one -- the top item rewritten in place included),
+and by `dt_dev_history_pixelpipe_update()`, which every wholesale history replacement goes through.
+
+Two things a reviewer would otherwise simplify:
+
+- **The pipe's change status cannot tell a switch from a drag.** `SYNCH` also carries every slider
+  commit on a module with a drawn or raster mask, and crop/ashift edits; the darkroom worker raises
+  `TOP_CHANGED` on its own whenever the history hash moved (`_resync_pipe_with_history()`), toggles
+  included. Keeping outputs on every `SYNCH` gives each step of a masked-module drag its own
+  cachelines and its own vRAM, which fills a 6 GB card within seconds. Only the source knows.
+- **`add_new_pipe_node` is computed from the module's last history entry in every case**, whether
+  the top item is rewritten in place, a new item appended or one forced. A toggle it misses reaches
+  the pipe as `TOP_CHANGED`, and nothing downstream knows it was a switch.
+

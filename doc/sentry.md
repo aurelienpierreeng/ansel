@@ -360,3 +360,15 @@ independently of this script.
 | `tools/sentry-fetch-issue.sh` | pull an issue's backtrace + attachments locally to fix it |
 | `.github/workflows/sentry-triage.yml` | manual CI triage: fetch backtrace, artifact, auto-open a GitHub issue |
 | `.github/workflows/{lin,mac,win}-nightly.yml` | call the upload script with the CI secret |
+
+---
+
+## Quick reference (carried from CLAUDE.md)
+
+*Found `22f623c0be`, 2026-06-25. Verified against `42eca0e8fe`, 2026-09-29.*
+
+**Sentry crash issues:** `tools/sentry-fetch-issue.sh <issue-id|url>` pulls a Sentry issue's
+backtrace locally (writes `summary.txt`, `event.json`, attachments). The region host is
+`https://de.sentry.io` (EU data residency) — `sentry.io`/`us.sentry.io` give 403/401.
+Reading issues needs a **User Auth Token** (not the org token used for symbol upload).
+See `doc/sentry.md` for setup details.

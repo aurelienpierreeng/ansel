@@ -447,3 +447,38 @@ The current architecture has the pipeline rendering triggered implicitely from h
 A direct module -> pipeline trigger would also avoid the messy business of having to handle mask preview GUI states within the pipeline recursion, which means that we have to hack the `piece->global_hash` to account for GUI states and properly recompute pipelines when switching on/off mask previews. That introduces lots of edge-cases to handle through heuristics and bypasses. Raster-mask providers already publish dedicated side-band cachelines, independently from their image outputs; the remaining architectural step would be a specialized pipeline that only runs the `distort_mask()` methods instead of performing those transforms while the consuming module blends. Note that color-pickers have also been completely removed from the rendering pixel pipeline and now deal directly with cachelines, from the GUI thread, which avoids having to recompute a pipe just to refresh their values.
 
 The new architecture doesn't force modules to take their input from the previous module output either, now they can take input from any module output in the pipeline as long as we know the global hash of the module, to fetch its output buffer on the cache. So we could have a new module, _masking & merging_ that could take input from several modules and blend them over each other with alpha, meaning we could have parallel branches within pipelines and not stay limited by single sequences of modules. Along with the new nodal graph viewer, that would allow a full nodal workflow.
+
+---
+
+## Direction and general engineering principles
+
+*Found `b69f8864d4`, 2026-06-25. Verified against `42eca0e8fe`, 2026-09-29.*
+
+Ansel inherited the Darktable practice of entangling every application layer (GUI, pipeline,
+history, database) and importing the whole software into the whole software through
+`#include "darktable.h"`. That voided the modularity principle, caused bugs and data races, and
+made maintenance prone to edge effects in an application that is heavily asynchronous and
+parallel.
+
+> **That specific problem is now largely closed, and this paragraph used to say otherwise.**
+> Measured at `42eca0e8fe` (2026-09-29): **13** files in all of `src/` include `darktable.h`,
+> out of 816 — five `main()`s and eight top-level translation units, which is exactly the shape
+> the goal below prescribes. **No header includes it at all**, and the file itself is down to ten
+> includes. Seven headers now carry comments actively routing callers away from it. Written in
+> the present tense, this section sent a reader to go and fix something the darktable.h strip had
+> already done. The risk today is **regression, not remediation** — keep it that way.
+
+The Ansel codebase should move toward more enclosed modularity, making data structure private
+to each translation unit and exposing only API to the outside (getters/setters/init/cleanup). 
+Direct value changes on data not owned by the current TU are forbidden. The dependency graph 
+should be simplified and only a minimal set of `#include` should be kept per TU. In particular,
+`src/darktable.h` inherits from lower-level modules and lower-level modules must not inherit it:
+it has stopped being the glue of all common helpers, and nothing should make it that again.
+
+CRUD operations should have one central entry point for the whole software and run only
+once, for as long as user didn't send new input, so the data lifecycle is legible and
+cacheable.
+
+Since every data flow in the software is a pipeline, issues should be tracked to their root
+cause by climbing the call tree up until the source is found, instead of being fixed where
+they are visible.

@@ -278,3 +278,73 @@ which `AppImageUpdate` verifies. Neither gates anything today.
 Windows first — Trusted Signing is cheap and SmartScreen is the warning most users hit.
 macOS is the larger cost and the larger payoff (Sparkle). Budget both together at about
 **US$220 / year**.
+
+---
+
+## Rules carried over from CLAUDE.md
+
+*Found `c6039f4078`, 2026-09-14. Verified against `42eca0e8fe`, 2026-09-29.*
+
+The Sentry **environment** is `<build channel>-<platform>` (`nightly-windows`,
+`self-build-linux`, `package-fedora-macos`): the sessions API groups crash-free rates by
+release and environment and by nothing else, so this is how the website shows a build's crash
+rate per package. Split on the LAST hyphen — a channel can contain hyphens. Sessions from before
+this carry the bare channel; readers must accept both.
+
+Nightlies land in one `nightly-YYYY-MM` pre-release per month (GitHub caps a *release* at
+1000 assets; five formats a night filled the old rolling `v0.0.0` in under a year).
+`tools/nightly_manifest.py` writes `nightly.json` — the newest build per format — after
+every nightly, and that file drives the website buttons, the in-app check
+(`src/common/updates.c`), the Homebrew cask and the Scoop manifest. The format keys in the
+script's `FORMATS` and in `dt_updates_runtime_format()` must agree. `doc/nightly-distribution.md`
+is the manual: secrets, retention, R2, signing costs, GHCR for later.
+
+Homebrew ships no bottles for Intel macOS any more, so `macos-15-intel` builds from source and
+four nightlies in a row died at GitHub's 6-hour ceiling — the same dependency step takes 77 s on
+arm64. **Two llvms were scheduled on every one of them**, four hours and more each — and not a stable
+four: `llvm@22` sat 4 h 54 in one `cmake --build .` on 2026-09-15 without finishing. One is ours,
+for `TESTBUILD_OPENCL_PROGRAMS`; the other is `llvm@22`, which `librsvg` pulls in through `rust`. So two
+measures, and only together do they fit — `install-deps-macos.sh` skips ours on Intel (with
+`-DTESTBUILD_OPENCL_PROGRAMS=OFF` to say so), and `librsvg`'s two, which cannot be dropped, are
+cached. `tools/brew_cache_key.sh` owns the keys for both workflows that touch them, and
+`mac-brew-cache.yml` exists because `actions/cache` saves only on success: a cold cache cannot
+warm itself from the job the builds are killing. The traps — why a keg needs no relocation, why
+the key must carry the version brew *would* install, and why `brew link` must never be given
+`--force` — are in `doc/nightly-distribution.md`. That file also carries the other half: an
+Intel failure used to discard the arm64 DMG too, `upload_to_release` having `needs: MacOS` over
+the whole matrix with no `if:`, which cost five good Apple Silicon packages in five nights. It
+publishes per architecture now, so the Intel measures decide whether an Intel DMG exists and no
+longer whether a macOS nightly exists at all.
+### Only the macOS bundle is assembled by hand, and it may not name a binary
+
+Windows packages with CPack (`--target package`, the `DTApplication` component whole) and
+Linux with `make install`; neither enumerates anything, so a command gated on a build option
+ships wherever it was built. macOS is the exception: `packaging/macosx/3_make_hb_ansel_package.sh`
+copies an install tree into the `.app` itself.
+
+It used to do that from a hardcoded list — two of them, in fact, and both were wrong.
+`ansel-lens-db-update` (needs liblensfun) and `ansel-nn-parity` (needs OpenCL) were built,
+installed into `bin/`, and absent from `/Applications/Ansel.app/Contents/MacOS/`, while the
+Windows and Linux packages of the same commit carried them. The second list, `dtExecutables`,
+drives `install_dependencies()` and `reset_exec_path()`, so **fixing only the copy ships a
+binary that cannot start**: `ansel-lens-db-update` is the one binary linking liblensfun, and
+that list is what pulls the dylib into the bundle at all. It also named three binaries that no
+longer exist, and the `libexec/ansel/tools` test beside it asked about the script's own
+directory rather than the install tree, so it was never true.
+
+The copy is now `bin/*` and the roster is read back from the bundle. `tools/check_macos_bundle.sh`
+holds it, run from the nightly between the package and the DMG: every executable in `bin/` is
+in the `.app`, and every load command of every bundled binary and dylib resolves inside the
+bundle or to a system library. It is static on purpose — running each command would rebuild a
+database (`ansel-lens-db-update`) or write thumbnails (`ansel-generate-cache`), and
+`ansel --version` exercises no library resolution the loader would report.
+
+It exits **2 for "nothing was checked"** — not Darwin, no `otool`, no bundle — which is the same
+convention `check_it_runs.sh` uses and is not a pass. Only the macOS nightly calls it, and there
+it never hits that branch; adding it to a Linux gate run would fail the build on exit 2. The
+homebrew prefix it looks for is `/opt/homebrew` **and** `/usr/local` whatever `brew --prefix`
+says, since guessing one architecture's prefix turns the load-command half into a silent pass.
+
+`packaging/macosx/ansel.bundle` is a *second* macOS path — the MacPorts/gtk-mac-bundler route
+of `BUILD.txt`, used by no CI — and it is a manifest, so it does enumerate. It had the same
+omission. `src/apps/README.md` is the roster of what exists and what gates each one.
