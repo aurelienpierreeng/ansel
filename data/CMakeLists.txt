@@ -199,10 +199,6 @@ install(FILES ${ANSEL_AUTHORS_FILE} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ans
 #
 
 set(DEFCONFIG_OPENCL "true")
-if(APPLE)
-  # OpenCL support on OS X isn't stable enough to enable it by default
-  set(DEFCONFIG_OPENCL "false")
-endif(APPLE)
 set(DEFCONFIG_AUDIOPLAYER "aplay")
 if(APPLE)
   # OS X doesn't have aplay, but afplay should do
