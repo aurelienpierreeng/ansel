@@ -124,6 +124,11 @@ PYEOF
 findings=0
 checked=0
 skipped_not_tu=0
+# A file clang-tidy could not COMPILE is not a file it checked. Counting it in `checked`
+# is what let this gate report "Checked 214 file(s)" while examining fewer -- and the
+# count is what the header above tells a reader to trust as proof of coverage.
+failed_to_check=0
+failed_files=""
 pre_existing=0
 pre_existing_files=""
 
@@ -158,8 +163,32 @@ for f in "${files[@]}"; do
     continue
   fi
 
-  out="$("${CLANG_TIDY}" -p "${BUILD_DIR}" --quiet "$f" 2>/dev/null \
-         | grep "is not used directly" | grep -F "${f}:")"
+  # Keep stderr: clang-tidy reports a translation unit it could not compile there, as
+  # "Error while processing <path>", while the diagnostics themselves go to stdout. The
+  # pipeline's exit status is grep's, not clang-tidy's, so the status is captured before
+  # any pipe -- and the findings are filtered afterwards.
+  tidy_err="$(mktemp)"
+  tidy_out="$("${CLANG_TIDY}" -p "${BUILD_DIR}" --quiet "$f" 2>"${tidy_err}")"
+  tidy_rc=$?
+
+  if grep -q "Error while processing" "${tidy_err}"; then
+    # The translation unit did not compile under this database. Whatever clang-tidy still
+    # managed to say about it is not trustworthy, and silence from it means nothing. The
+    # usual cause is a compile_commands.json written by a DIFFERENT compiler -- a GCC
+    # database carries flags (-fira-loop-pressure, -floop-nest-optimize, -ftree-loop-im)
+    # that clang rejects outright, which is why CI runs this only on the LLVM cell.
+    failed_to_check=$((failed_to_check + 1))
+    failed_files="${failed_files}    ${f}\n"
+    if [ -n "${UNUSED_INCLUDES_VERBOSE:-}" ]; then
+      echo "note: clang-tidy could not process ${f} (exit ${tidy_rc}):"
+      grep -E "error:" <<< "${tidy_out}" | sed 's/^/      /' | sort -u | head -3
+    fi
+    rm -f "${tidy_err}"
+    continue
+  fi
+  rm -f "${tidy_err}"
+
+  out="$(printf '%s\n' "${tidy_out}" | grep "is not used directly" | grep -F "${f}:")"
 
   checked=$((checked + 1))
   [ -n "$out" ] || continue
@@ -202,6 +231,20 @@ if [ "${pre_existing}" -gt 0 ]; then
     | sed 's/^/    /'
   echo "  (UNUSED_INCLUDES_VERBOSE=1 lists every one)"
 fi
+if [ "${failed_to_check}" -gt 0 ]; then
+  echo
+  echo "${failed_to_check} file(s) could NOT be checked: clang-tidy failed to compile them."
+  printf '%b' "${failed_files}" | grep -v '^$' | head -10
+  if [ "${failed_to_check}" -gt 10 ]; then
+    echo "    ... and $((failed_to_check - 10)) more"
+  fi
+  echo
+  echo "This is a gate failure, not a finding. Silence from a translation unit that did not"
+  echo "compile is not evidence of anything, so these files are not counted above. The usual"
+  echo "cause is a compile_commands.json written by a different compiler than \${CLANG_TIDY}:"
+  echo "a GCC database carries flags clang rejects, and every file then 'passes'."
+  echo "Re-run with UNUSED_INCLUDES_VERBOSE=1 to see the diagnostics."
+fi
 if [ "${skipped_not_tu}" -gt 0 ]; then
   echo "${skipped_not_tu} file(s) skipped: not translation units in this build -- IOP modules"
   echo "  (compiled through a generated wrapper), platform sources, and anything this cmake"
@@ -211,6 +254,9 @@ fi
 # Findings differ between clang-tidy releases -- 19 and 20 disagree about which symbols
 # <stdlib.h> owns, for one. CI pins clang-tidy-20; reproduce with CLANG_TIDY=clang-tidy-20 if
 # a local run of a different version disagrees with it.
+if [ "${failed_to_check}" -gt 0 ]; then
+  exit 1
+fi
 if [ "${findings}" -gt 0 ]; then
   cat <<'MSG'
 
