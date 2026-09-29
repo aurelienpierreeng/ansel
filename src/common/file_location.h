@@ -44,7 +44,8 @@ extern "C" {
 /** returns the users home directory */
 gchar *dt_loc_get_home_dir(const gchar *user);
 
-/** @brief Resolve the locale directory as dt_loc_init() does, and write nothing else.
+/** @brief Resolve the locale directory the way dt_loc_init() does, creating it if missing, but
+ * set no global and check nothing: dt_init() checks it right after.
  * For the command-line tools, which bind their text domain before dt_init(). dt_init() zeroes
  * every path before resolving them all, so whatever an earlier dt_loc_init() set would leak. */
 void dt_loc_resolve_localedir(char *localedir, size_t bufsize);
