@@ -1,0 +1,156 @@
+{
+  "version": "v1.0.0",
+  "entity": {
+    "type": "group",
+    "role": "owner",
+    "name": "Ansel Co-Op",
+    "email": "ansel-project@pm.me",
+    "description": "Ansel Co-Op is the organisation behind Ansel, an open-source raw photo editor for artists, forked from darktable in 2022 by Aurélien Pierre and maintained since October 2025 by Jiyoné (Guillaume Stutin). Everything under github.com/aurelienpierreeng is funded here: the editor, its documentation in 10 languages, the developer documentation at dev.ansel.photos, the website in 9 languages, and the research code around them — VirtualSecretary, LensSerious, ansel-denoise. The websites are served by GitHub Pages from a static CMS, so they cost nothing to host; what the project actually pays for is the ansel.photos domain name (30 €/year) and the AI subscriptions used for development and documentation (90 €/month plus VAT each, for two developers — 216 €/month; Anthropic declined to sponsor the project). Money given to this team is split among the people doing the work, by public takes. The ultimate goal is a co-operative in which the users actually own the project; pending that legal structure, this Liberapay team keeps the boat afloat. Everything the project makes is free and stays free: no rewards, nothing to unlock. The founder's personal work — his websites, writings, music and the repositories on his own account — is funded separately at https://aurelienpierre.com/funding.json.",
+    "webpageUrl": {
+      "url": "https://ansel.photos/"
+    }
+  },
+  "projects": [
+    {
+      "guid": "ansel",
+      "name": "Ansel",
+      "description": "An open-source raw photo editor for artists — a darktable fork (2022) that keeps the imaging science and trims the rest. 1,000+ stars, GPL-3.0, nightly builds for Linux, Windows and macOS. Carries the scene-referred pipeline its founder wrote (filmic RGB, tone equalizer, color balance RGB, diffuse or sharpen, guided-Laplacian highlight reconstruction) and, since 2026, the color equalizer module, scene-referred raster drawing and the Canvas layout-and-print atelier.",
+      "webpageUrl": {
+        "url": "https://ansel.photos/"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/aurelienpierreeng/ansel"
+      },
+      "licenses": [
+        "spdx:GPL-3.0"
+      ],
+      "tags": [
+        "photography",
+        "graphics",
+        "science",
+        "linux",
+        "design"
+      ]
+    },
+    {
+      "guid": "ansel-doc",
+      "name": "Ansel documentation",
+      "description": "The user manual and the developer documentation of Ansel: about 55 module pages translated into 10 languages, published at ansel.photos/doc, plus the developer-facing documentation at dev.ansel.photos. Written and maintained alongside the software rather than after it.",
+      "webpageUrl": {
+        "url": "https://ansel.photos/doc"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/aurelienpierreeng/ansel-doc"
+      },
+      "licenses": [
+        "spdx:GPL-3.0"
+      ],
+      "tags": [
+        "documentation",
+        "photography",
+        "education",
+        "knowledge",
+        "linux"
+      ]
+    },
+    {
+      "guid": "virtual-secretary",
+      "name": "Virtual Secretary",
+      "description": "A Python framework building the missing knowledge layer over documentation, mailboxes, calendars and third-party sources. It powers Chantal, a semantic search engine over 47,000 pages of photography and raw-processing documentation that answers about 1,100 questions a month, free and without an account, and an email/agenda automation engine that files and tags mail from rules written against real context.",
+      "webpageUrl": {
+        "url": "https://chantal.aurelienpierre.com"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/aurelienpierreeng/VirtualSecretary"
+      },
+      "licenses": [
+        "spdx:GPL-3.0"
+      ],
+      "tags": [
+        "documentation",
+        "knowledge",
+        "information-management",
+        "developer-tools",
+        "productivity"
+      ]
+    },
+    {
+      "guid": "lensserious",
+      "name": "LensSerious",
+      "description": "Lens-correction mathematics as data rather than as a runtime. Lensfun's community database is excellent but its runtime fights a modern raw pipeline: 8.4 MB of XML parsed into flat lists at every startup (89–102 ms measured), linear fuzzy scans, and a process-global setlocale() flipped during parsing. LensSerious keeps the database and drops the runtime: CPU/SIMD/OpenCL-ready closed forms, parity-tested against liblensfun.",
+      "webpageUrl": {
+        "url": "https://github.com/aurelienpierreeng/LensSerious"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/aurelienpierreeng/LensSerious"
+      },
+      "licenses": [
+        "spdx:LGPL-3.0"
+      ],
+      "tags": [
+        "photography",
+        "graphics",
+        "developer-tools",
+        "science",
+        "linux"
+      ]
+    },
+    {
+      "guid": "ansel-denoise",
+      "name": "ansel-denoise",
+      "description": "Training pipeline for Ansel's neural raw denoiser, working in the CFA domain with synthetic supervision derived from measured camera noise profiles — denoising before demosaicing, where the noise actually is.",
+      "webpageUrl": {
+        "url": "https://github.com/aurelienpierreeng/ansel-denoise"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/aurelienpierreeng/ansel-denoise"
+      },
+      "licenses": [
+        "spdx:GPL-3.0"
+      ],
+      "tags": [
+        "photography",
+        "machine-learning",
+        "science",
+        "graphics",
+        "developer-tools"
+      ]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "liberapay-team",
+        "type": "payment-provider",
+        "address": "https://liberapay.com/Ansel",
+        "description": "The canonical channel: the Ansel Co-Op team on Liberapay. Money is split among the people doing the work, by public takes. No rewards, nothing to unlock."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "running-costs",
+        "status": "active",
+        "name": "The project's actual bills",
+        "description": "What the Co-Op pays every month, itemised: AI subscriptions for development and documentation, 90 € plus VAT (108 €) per developer for two developers — 216 € — and the ansel.photos domain name at 30 €/year (2.50 €/month). The websites and documentation are served by GitHub Pages at no cost. Infrastructure and tools, not wages.",
+        "amount": 219,
+        "currency": "EUR",
+        "frequency": "monthly",
+        "channels": [
+          "liberapay-team"
+        ]
+      },
+      {
+        "guid": "one-off",
+        "status": "active",
+        "name": "One-off contribution, any amount",
+        "description": "For someone whose photographs went through this code. Split among the people doing the work, by public takes.",
+        "amount": 10,
+        "currency": "EUR",
+        "frequency": "one-time",
+        "channels": [
+          "liberapay-team"
+        ]
+      }
+    ]
+  }
+}
