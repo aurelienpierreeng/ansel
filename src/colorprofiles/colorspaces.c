@@ -1653,6 +1653,57 @@ static void _srgb_to_display_row(const cmsHTRANSFORM transform, uint8_t *const s
   }
 }
 
+gboolean dt_colorprofiles_adobergb_bgrx8_to_display(uint8_t *const pixels, const int width, const int height,
+                                                    const int stride)
+{
+  if(IS_NULL_PTR(pixels) || width <= 0 || height <= 0) return FALSE;
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  pthread_rwlock_rdlock(&_transforms_lock);
+  const cmsHTRANSFORM transform = self->transform_adobe_rgb_to_display; // TYPE_RGBA_8 in, TYPE_BGRA_8 out
+  if(IS_NULL_PTR(transform))
+  {
+    pthread_rwlock_unlock(&_transforms_lock);
+    return FALSE;
+  }
+  // One RGBA row per thread, allocated before the parallel region, sized from OpenMP itself
+  // as well as the application's count (a headless caller never went through dt_init()).
+  const size_t row_bytes = (size_t)width * 4u;
+  int nthreads = MAX(dt_get_num_openmp_threads(), 1);
+#ifdef _OPENMP
+  nthreads = MAX(nthreads, omp_get_max_threads());
+#endif
+  uint8_t *const scratch = g_try_malloc((size_t)nthreads * row_bytes);
+  if(IS_NULL_PTR(scratch))
+  {
+    pthread_rwlock_unlock(&_transforms_lock);
+    return FALSE;
+  }
+
+  __OMP_PARALLEL__()
+  {
+    uint8_t *const row_in = scratch + (size_t)dt_get_thread_num() * row_bytes;
+    __OMP_FOR__()
+    for(int y = 0; y < height; y++)
+    {
+      uint8_t *const row = pixels + (size_t)y * stride;
+      for(int x = 0; x < width; x++)
+      {
+        row_in[4 * x + 0] = row[4 * x + 2];
+        row_in[4 * x + 1] = row[4 * x + 1];
+        row_in[4 * x + 2] = row[4 * x + 0];
+        row_in[4 * x + 3] = UINT8_MAX;
+      }
+      // Out as BGRA: cairo's own order, in place.
+      cmsDoTransform(transform, row_in, row, width);
+    }
+  }
+
+  g_free(scratch);
+  pthread_rwlock_unlock(&_transforms_lock);
+  return TRUE;
+}
+
 gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const int width, const int height,
                                                   const int rowstride, const int n_channels,
                                                   const gboolean has_alpha)

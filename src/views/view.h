@@ -80,6 +80,7 @@ typedef enum
   DT_VIEW_MAP = 1 << 3,
   DT_VIEW_SLIDESHOW = 1 << 4,
   DT_VIEW_PRINT = 1 << 5,
+  DT_VIEW_CANVAS = 1 << 6,
 } dt_view_type_flags_t;
 
 // flags that a view can set in flags()
@@ -139,7 +140,7 @@ typedef struct dt_view_image_surface_fetcher_t
 
 #define DT_VIEW_ALL                                                                                   \
   (DT_VIEW_LIGHTTABLE | DT_VIEW_STUDIO_CAPTURE | DT_VIEW_DARKROOM | DT_VIEW_MAP | DT_VIEW_SLIDESHOW | \
-   DT_VIEW_PRINT)
+   DT_VIEW_PRINT | DT_VIEW_CANVAS)
 
 /* maximum zoom factor for the lighttable */
 #define DT_LIGHTTABLE_MAX_ZOOM 12
@@ -264,6 +265,49 @@ typedef struct dt_view_manager_t
       void (*print_settings)(const dt_view_t *view, dt_print_info_t *pinfo, dt_images_box *imgs);
     } print;
 #endif
+
+    /* canvas view proxy object: the toolbar lib asks the view for canvas-level actions
+     * and reads the open document through it. `action` takes a dt_canvas_action_t. */
+    struct
+    {
+      struct dt_view_t *view;
+      void (*action)(struct dt_view_t *view, int action);
+      const struct dt_canvas_t *(*document)(struct dt_view_t *view);
+      void (*set_grid_size)(struct dt_view_t *view, float size);
+      int (*armed_tool)(struct dt_view_t *view); ///< the dt_canvas_tool_t a press on the plane draws with
+      void (*set_padding)(struct dt_view_t *view, float padding);
+      void (*set_snap_mode)(struct dt_view_t *view, int mode); ///< dt_canvas_grid_flags_t snap bits
+      void (*set_background)(struct dt_view_t *view, const float *rgba, int style); ///< NULL / -1 leave one alone
+      void (*set_paper)(struct dt_view_t *view, int paper, int landscape);        ///< -1 leaves one alone
+      void (*set_guides)(struct dt_view_t *view, int mask, int value);            ///< dt_canvas_grid_flags_t bits
+      /** The paper texture's multipliers: contrast, detail, feature scale, grain; 1 is the paper as designed. */
+      void (*set_texture)(struct dt_view_t *view, float contrast, float detail, float scale, float grain);
+      void (*set_resolution)(struct dt_view_t *view, float resolution);
+      void (*set_spread)(struct dt_view_t *view, int cols, int rows, float bind_gutter);
+      /** The page's inner margin and the sheet's bleed outside it, in canvas units; < 0 leaves one alone. */
+      void (*set_page_guides)(struct dt_view_t *view, float margin, float bleed);
+      /** The size a CUSTOM page is, in points; each side held to what a page may be. */
+      void (*set_custom_paper)(struct dt_view_t *view, float width, float height);
+      /**
+       * A colour the toolbar's colour window edits: `target` is a dt_canvas_color_target_t and `phase`
+       * a dt_canvas_edit_phase_t. LIVE shows each change, COMMIT sets the colour kept through the
+       * colour's own setter, CANCEL puts back the colour the window found.
+       */
+      void (*edit_color)(struct dt_view_t *view, int target, const float *rgba, int phase);
+      /**
+       * A number belonging to the whole canvas -- the frames' default border width and corner
+       * radius, the default shadow's two offsets, its blur and its extent: `prop` is the
+       * dt_canvas_prop_id_t the property table describes it by and `phase` a dt_canvas_edit_phase_t.
+       * LIVE writes it and shows it, costing no configuration write and no undo record; COMMIT puts
+       * the number the gesture found back and hands the kept one to the setting's own setter, so a
+       * slider dragged through fifty values is the one undo step a gesture owes. This is the only
+       * way in: these numbers have no plain setter of their own in the proxy, precisely so a new
+       * control cannot be wired to one and record a step per motion event.
+       */
+      void (*edit_number)(struct dt_view_t *view, int prop, float value, int phase);
+      /** Which way the canvas's shadow falls: dropped outside the objects (0) or cast inside them. */
+      void (*set_shadow_inset)(struct dt_view_t *view, int inset);
+    } canvas;
   } proxy;
 
 

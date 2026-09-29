@@ -405,6 +405,7 @@ dt_accels_t * dt_accels_init(char *config_file, GtkAccelFlags flags)
   accels->map_accels = gtk_accel_group_new();
   accels->print_accels = gtk_accel_group_new();
   accels->slideshow_accels = gtk_accel_group_new();
+  accels->canvas_accels = gtk_accel_group_new();
   accels->acceleratables = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, _clean_shortcut);
   accels->active_group = NULL;
   accels->reset = 1;
@@ -436,12 +437,14 @@ void dt_accels_cleanup(dt_accels_t *accels)
   g_object_unref(accels->map_accels);
   g_object_unref(accels->print_accels);
   g_object_unref(accels->slideshow_accels);
+  g_object_unref(accels->canvas_accels);
   accels->global_accels = NULL;
   accels->darkroom_accels = NULL;
   accels->lighttable_accels = NULL;
   accels->map_accels = NULL;
   accels->print_accels = NULL;
   accels->slideshow_accels = NULL;
+  accels->canvas_accels = NULL;
 
   dt_pthread_mutex_lock(&accels->lock);
   g_hash_table_unref(accels->acceleratables);
@@ -482,6 +485,11 @@ void dt_accels_connect_active_group(dt_accels_t *accels, const gchar *group)
   {
     accels->reset--;
     accels->active_group = accels->slideshow_accels;
+  }
+  else if(!g_strcmp0(group, "canvas") && accels->canvas_accels)
+  {
+    accels->reset--;
+    accels->active_group = accels->canvas_accels;
   }
   else
   {
@@ -1225,6 +1233,27 @@ static gboolean _key_pressed(GtkWidget *w, GdkEvent *event, dt_accels_t *accels,
 }
 
 
+void dt_accels_block_plain_keys_inside(GtkWidget *container)
+{
+  if(IS_NULL_PTR(container)) return;
+  g_object_set_data(G_OBJECT(container), DT_ACCELS_BLOCK_PLAIN_KEYS, GINT_TO_POINTER(TRUE));
+}
+
+/**
+ * Whether the focus sits inside a container that keeps plain keys for its own controls: the focus
+ * widget itself or any of its ancestors carries the tag dt_accels_block_plain_keys_inside() sets.
+ * Asked on every keystroke that reaches it rather than recorded on focus-in and cleared on
+ * focus-out, so there is no state left to go stale when a focus change is missed.
+ */
+static gboolean _focus_blocks_plain_keys(GtkWidget *focused)
+{
+  for(GtkWidget *ancestor = focused; !IS_NULL_PTR(ancestor); ancestor = gtk_widget_get_parent(ancestor))
+  {
+    if(!IS_NULL_PTR(g_object_get_data(G_OBJECT(ancestor), DT_ACCELS_BLOCK_PLAIN_KEYS))) return TRUE;
+  }
+  return FALSE;
+}
+
 gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
 {
   dt_accels_t *accels = (dt_accels_t *)user_data;
@@ -1265,10 +1294,35 @@ gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
 
   // When a text editor has keyboard focus, bypass accelerators so typing keeps
   // native widget behavior (letters, spaces, modifiers and editing keys).
+  // The same goes for any control inside a container tagged by dt_accels_block_plain_keys_inside(),
+  // for the keys a plain control could want: no modifier, or Shift alone. A slider there reads its
+  // arrows and a letter typed at it must not delete an object behind it, while Ctrl+Z and the
+  // other primary shortcuts still reach the application from anywhere. The function keys are not
+  // among them: no slider, toggle or button reads one, so F11 and the colour labels keep working
+  // from inside the container exactly as they do from a darkroom slider.
+  //
+  // A text field inside such a container -- a spin button's number -- is one of its controls too.
+  // What it edits with, Ctrl+A, Ctrl+C, Ctrl+V, a word jump, is a key binding of its own class, so it
+  // is offered those bindings first and keeps them; any other key with a modifier goes on to the
+  // shortcuts. Bypassed outright, as a text field anywhere else is, Ctrl+Z and Ctrl+S did nothing at
+  // all while a spin button of the panel held the focus, which it keeps after every click on its arrows.
   if(event->type == GDK_KEY_PRESS || event->type == GDK_KEY_RELEASE)
   {
     GtkWidget *focused = gtk_window_get_focus(GTK_WINDOW(w));
-    if(!IS_NULL_PTR(focused) && (GTK_IS_EDITABLE(focused) || GTK_IS_TEXT_VIEW(focused)))
+    const gboolean function_key = keyval >= GDK_KEY_F1 && keyval <= GDK_KEY_F35;
+    const gboolean key_for_controls = (mods & ~GDK_SHIFT_MASK) == 0 && !function_key;
+    const gboolean blocking_container = !IS_NULL_PTR(focused) && _focus_blocks_plain_keys(focused);
+    const gboolean shortcut_from_field = blocking_container && GTK_IS_EDITABLE(focused) && !key_for_controls;
+    if(shortcut_from_field && event->type == GDK_KEY_PRESS
+       && gtk_bindings_activate_event(G_OBJECT(focused), &event->key))
+    {
+      accels->active_key.accel_key = 0;
+      accels->active_key.accel_mods = 0;
+      return TRUE;
+    }
+    const gboolean text_input = !IS_NULL_PTR(focused) && !shortcut_from_field
+                                && (GTK_IS_EDITABLE(focused) || GTK_IS_TEXT_VIEW(focused));
+    if(text_input || (key_for_controls && blocking_container))
     {
       accels->active_key.accel_key = 0;
       accels->active_key.accel_mods = 0;

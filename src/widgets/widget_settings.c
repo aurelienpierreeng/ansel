@@ -22,7 +22,7 @@
 
 #include "widgets/widget_settings.h"
 
-
+#include "system/macros.h"  // IS_NULL_PTR
 
 #include <stdint.h>
 #include <math.h>
@@ -384,6 +384,28 @@ gboolean dt_widget_stored_bool(const char *key)
 void dt_widget_store_bool(const char *key, gboolean value)
 {
   if(key && _stored_bool_setter) _stored_bool_setter(key, value);
+}
+
+static dt_widget_stored_string_getter_t _stored_string_getter = NULL;
+static dt_widget_stored_string_setter_t _stored_string_setter = NULL;
+
+void dt_widget_set_string_storage_handlers(dt_widget_stored_string_getter_t get_string,
+                                           dt_widget_stored_string_setter_t set_string)
+{
+  _stored_string_getter = get_string;
+  _stored_string_setter = set_string;
+}
+
+gchar *dt_widget_stored_string(const char *key)
+{
+  if(IS_NULL_PTR(key) || IS_NULL_PTR(_stored_string_getter)) return NULL;
+  return _stored_string_getter(key);
+}
+
+void dt_widget_store_string(const char *key, const char *value)
+{
+  if(IS_NULL_PTR(key) || IS_NULL_PTR(value) || IS_NULL_PTR(_stored_string_setter)) return;
+  _stored_string_setter(key, value);
 }
 
 static gint _min_panel_width = 350;

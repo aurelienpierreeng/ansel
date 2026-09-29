@@ -48,6 +48,25 @@ set(LIB_ANSEL_UNIT_TESTS
   test_stroke_raster
   test_drawlayer_batch_raster
   test_import_jobs
+  test_polygon_envelope
+  test_color_well
+  test_length
+  test_length_field
+  test_canvas_actions
+  test_canvas_zip
+  test_canvas_document
+  test_canvas_props
+  test_canvas_handles
+  test_canvas_place
+  test_canvas_markdown
+  test_canvas_text_breaks
+  test_canvas_text_words
+  test_canvas_text_flow
+  test_canvas_cutout
+  test_canvas_dilate
+  test_canvas_export
+  bench_canvas_paint
+  bench_canvas_place
 )
 
 foreach(test ${LIB_ANSEL_UNIT_TESTS})
@@ -90,3 +109,5 @@ target_sources(test_tagging_completion PRIVATE
 target_sources(test_tagging_completion_model PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
 set_tests_properties(test_tagging_completion PROPERTIES SKIP_RETURN_CODE 77)
+# The length field is a real GtkSpinButton and needs a display; without one it skips.
+set_tests_properties(test_length_field PROPERTIES SKIP_RETURN_CODE 77)

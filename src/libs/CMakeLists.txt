@@ -14,6 +14,7 @@ set(MODULES export styles tagging collect metadata metadata_view navigation hist
 set(MODULES ${MODULES} filter)
 set(MODULES ${MODULES} lighttable_mode)
 set(MODULES ${MODULES} module_toolbox)
+set(MODULES ${MODULES} canvas_toolbar)
 
 # modules
 add_library(export MODULE "export.c" "export_metadata.c")
@@ -40,6 +41,7 @@ add_library(studio_import MODULE "studio_import.c")
 add_library(filter MODULE "tools/filter.c")
 add_library(lighttable_mode MODULE "tools/lighttable.c")
 add_library(module_toolbox MODULE "tools/module_toolbox.c")
+add_library(canvas_toolbar MODULE "tools/canvas_toolbar.c")
 
 # the modules specific to map mode
 if(USE_MAP)

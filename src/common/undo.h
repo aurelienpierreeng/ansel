@@ -51,6 +51,7 @@ typedef enum dt_undo_type_t
   DT_UNDO_DATETIME    = 1 << 9,
   DT_UNDO_DUPLICATE   = 1 << 10,
   DT_UNDO_REMOVE      = 1 << 11,
+  DT_UNDO_CANVAS      = 1 << 12,
   DT_UNDO_DEVELOP     = DT_UNDO_HISTORY | DT_UNDO_MASK | DT_UNDO_TAGS
                         | DT_UNDO_RATINGS | DT_UNDO_COLORLABELS | DT_UNDO_DUPLICATE,
   DT_UNDO_LIGHTTABLE  = DT_UNDO_RATINGS | DT_UNDO_COLORLABELS | DT_UNDO_TAGS
@@ -58,7 +59,7 @@ typedef enum dt_undo_type_t
                         | DT_UNDO_FLAGS | DT_UNDO_DATETIME | DT_UNDO_DUPLICATE
                         | DT_UNDO_REMOVE,
   DT_UNDO_MAP         = DT_UNDO_GEOTAG | DT_UNDO_TAGS | DT_UNDO_DATETIME,
-  DT_UNDO_ALL         = DT_UNDO_MAP | DT_UNDO_DEVELOP | DT_UNDO_LIGHTTABLE
+  DT_UNDO_ALL         = DT_UNDO_MAP | DT_UNDO_DEVELOP | DT_UNDO_LIGHTTABLE | DT_UNDO_CANVAS
 } dt_undo_type_t;
 
 typedef enum dt_undo_action_t

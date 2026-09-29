@@ -204,6 +204,19 @@ void dt_widget_store_int(const char *key, int value);
 gboolean dt_widget_stored_bool(const char *key);
 void dt_widget_store_bool(const char *key, gboolean value);
 
+/* A stored string: what a list of values is kept as, a colour picker's recently used colours
+ * among them. Registered apart from the integers and the flags so a host that stores only those
+ * need not change; unregistered, nothing is kept beyond the widget that holds the list. */
+typedef gchar *(*dt_widget_stored_string_getter_t)(const char *key);
+typedef void (*dt_widget_stored_string_setter_t)(const char *key, const char *value);
+
+void dt_widget_set_string_storage_handlers(dt_widget_stored_string_getter_t get_string,
+                                           dt_widget_stored_string_setter_t set_string);
+
+/** Read a stored string: newly allocated, to free with g_free(), or NULL if nothing is stored. */
+gchar *dt_widget_stored_string(const char *key);
+void dt_widget_store_string(const char *key, const char *value);
+
 /* Has the application loaded its CSS theme yet? Dialogs that can run during startup -- before
  * any styling exists -- pad themselves by hand when it has not. */
 gboolean dt_widget_theme_loaded(void);

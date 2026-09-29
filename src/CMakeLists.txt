@@ -68,6 +68,21 @@ FILE(GLOB SOURCE_FILES
   "pixel/bilateralcl.c"
   "pixel/box_filters.c"
   "caches/cache.c"
+  "canvas/canvas.c"
+  "canvas/canvas_actions.c"
+  "canvas/canvas_dilate.c"
+  "canvas/canvas_format.c"
+  "canvas/canvas_handles.c"
+  "canvas/canvas_markdown.c"
+  "canvas/canvas_paint.c"
+  "canvas/canvas_place.c"
+  "canvas/canvas_place_shapes.c"
+  "canvas/canvas_props.c"
+  "canvas/canvas_text_breaks.c"
+  "canvas/canvas_text_words.c"
+  "canvas/canvas_export.c"
+  "canvas/canvas_render.c"
+  "canvas/canvas_zip.c"
   "math/calculator.c"
   "common/collection.c"
   "common/color_picker.c"
@@ -98,6 +113,8 @@ FILE(GLOB SOURCE_FILES
   "history/history.c"
   "history/notify.c"
   "common/history_actions.c"
+  "common/length.c"
+  "widgets/length_field.c"
   "develop/history_merge.c"
   "gui/common/collection_gui.c"
   "gui/common/database_gui.c"
@@ -235,6 +252,7 @@ FILE(GLOB SOURCE_FILES
   "develop/masks/ellipse.c"
   "develop/masks/gradient.c"
   "develop/masks/masks.c"
+  "develop/masks/masks_cutout.c"
   "develop/masks/masks_debug.c"
   "develop/masks/masks_gui.c"
   "develop/masks/masks_history.c"
@@ -260,6 +278,7 @@ FILE(GLOB SOURCE_FILES
   "gui/actions/*.c"
   "libs/lib.c"
   "views/view.c"
+  "views/canvas_props_gtk.c"
   "views/dev_toolbox.c"
   "views/dev_backbuf.c"
   )
@@ -365,6 +384,8 @@ pkg_check_modules(LIBXML2 REQUIRED IMPORTED_TARGET libxml-2.0)
 find_package(LCMS2 REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(PNG REQUIRED)
+# zlib arrives through libpng anyway; named here because common/pdf.c and canvas/canvas_zip.c use it directly.
+find_package(ZLIB REQUIRED)
 find_package(TIFF REQUIRED)
 find_package(Sqlite3 3.24 REQUIRED)
 # Exiv2 is normally the bundled submodule, already configured by external/CMakeLists.txt
@@ -390,6 +411,7 @@ find_package(CURL REQUIRED)
 target_include_directories(ansel_deps INTERFACE
   LCMS2::LCMS2
   PNG::PNG
+  ZLIB::ZLIB
   JPEG::JPEG
   TIFF::TIFF
   Sqlite3::Sqlite3
@@ -405,6 +427,7 @@ target_link_libraries(ansel_deps INTERFACE
   PkgConfig::LIBXML2
   LCMS2::LCMS2
   PNG::PNG
+  ZLIB::ZLIB
   JPEG::JPEG
   TIFF::TIFF
   Sqlite3::Sqlite3

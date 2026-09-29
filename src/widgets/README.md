@@ -79,6 +79,8 @@ application as-is, unlike the rest.
 | file | what it is |
 |---|---|
 | `button.c`, `togglebutton.c` | buttons that paint themselves with a `paint.h` callback |
+| `chooser_button.c` | a colour swatch opening a modal colour well beside it, or a font label opening a modal font dialog, reporting through a callback |
+| `color_well.c` | a colour picker shown whole: recent colours, saturation/value field, hue and opacity strips, hexadecimal number |
 | `icon.c`, `icon_cell_renderer.c` | icon widget and its `GtkCellRenderer` |
 | `paint.c` | ~3800 lines of cairo icon-drawing primitives |
 | `drawingarea.c` | aspect-ratio-preserving drawing area |

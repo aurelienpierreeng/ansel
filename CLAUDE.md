@@ -3176,3 +3176,1087 @@ cacheable.
 Since every data flow in the software is a pipeline, issues should be tracked to their root
 cause by climbing the call tree up until the source is found, instead of being fixed where
 they are visible.
+
+---
+
+## Canvas atelier (`src/canvas`, `src/views/canvas.c`)
+
+`doc/canvas.md` is the design. The rules that are not visible from the code:
+
+- **The canvas is a file, never a database row.** Nothing in `src/canvas/` writes to the
+  library; an image frame carries its own identity (id, version, folder, file name, history
+  hash, EXIF) so `dt_canvas_render_locate_source()` can find the original again, and the
+  sync status (current / stale / missing) is a runtime comparison of history hashes, not
+  stored.
+- **The index has reserved bytes and size-prefixed records, and that is the migration
+  strategy.** Add a field by taking reserved bytes (or appending after them and bumping
+  nothing): an old reader skips what it does not know by `record_size`, a new reader gets
+  zeros from an old file. Bump `DT_CANVAS_FORMAT_VERSION` only when an existing field changes
+  meaning. `test_canvas_document` pins the skip.
+- **A render job never touches the canvas.** It gets a library id and an object id, delivers
+  on the GUI thread with the token the view issued for the open document, and the view drops
+  results whose token is stale. Do not hand it a `dt_canvas_t *`.
+- **One painter for the screen and the export**, differing only in the colour target: the
+  atelier converts to the display profile, the export keeps Adobe RGB and converts the whole
+  page with LCMS. Every colour the canvas draws goes through `dt_canvas_render_color()`, so borders match
+  their pictures.
+- **Every gesture that changes the document must touch the canvas, once per motion.** The
+  painter keeps the frame it last composited and blits it again for a key it has already seen,
+  and the generation is what tells two frames apart -- the key knows nothing of where an object
+  sits or where a connector's waypoint is. A drag that forgets it paints its first frame over
+  and over, and the thing being dragged only catches up when something else moves the key,
+  which is how "the connector does not follow its handle" was reported. Before the composite
+  cache every redraw recomposited and no drag needed it, so this is a new obligation on old
+  code: `_drag_changes_the_document()` answers for every drag kind and is written as an
+  opt-OUT (only panning and the rubber band are exempt), so a new kind is covered the day it
+  is added. `test_canvas_cutout` pins the painter's half of the bargain.
+- **A polygon node has THREE kinds and a cusp is geometry, not a flag.**
+  `dt_canvas_mask_node_kind_t`: a CUSP carries its own two control points and they are free of
+  each other, an AUTO node's tangent is computed from its neighbours, a STEERED one carries
+  its own and the view keeps them collinear. Only AUTO asks the shape for a tangent -- both
+  the others hand their points down -- and `masks_cutout.c` reading that field as "non-zero
+  means computed" is what made a steered tangent move the outline on screen while the cut
+  ignored it. The far end has no flag to read: `dt_masks_node_is_cusp()` (`masks_gui.c`)
+  answers by asking whether the two control points coincide, so what makes a node smooth here
+  is the view keeping them opposite, nothing else. `test_canvas_cutout` pins all three, and
+  the pin was checked by putting the bug back.
+- **A menu asks the geometry its own question, never the drag's.** `_mask_handle_at()` reports
+  what a drag would grab and refuses everything outside the edit mode, which is right for a
+  drag. Keyed on it, the cutout submenu's node entries were a duplicate of the top-level ones
+  whenever the shape was being edited and dead code the rest of the time -- reported as "the
+  context menu option to toggle nodes cusps <-> smooth is missing", and it was there twice.
+  `_mask_node_at()` is the question a menu wants. The cutout submenu itself is gone now -- the
+  shape, feather, inversion and edit mode are the properties' -- and what the menu keeps is what
+  only a pointer can name: the node or edge under it while the shape is edited, and the way into
+  the edit mode for a node while it is not. `_mask_node_at()` answering outside the edit mode is
+  what makes that second entry possible. **A control removed as a duplicate is checked against what
+  its handler DID, not against the name of the property it wrote**: the menu's Size looked like
+  `DT_CANVAS_PROP_CUTOUT_SIZE_X` and scaled an ellipse's two radii together, which nothing left
+  could do, so that writer now scales the vertical radius with it and Size Y alone changes the
+  proportions.
+- **A polygon node's record may grow, and the file says how wide it was.** The node chunk's
+  size divided by the node count is the stride it was written with: a shorter record reads as
+  zero in the fields it lacks, a longer one is stepped over. Never assume the current width
+  when reading it, and never write a test fixture as a flat run of floats -- three of them
+  fed every node the next one's numbers the day the record gained its per-node fall-off.
+- **`g_strstr_len()` cannot search binary data: it stops at the first NUL** whatever length it
+  is given. A test looking for `/SMask` in an exported PDF found the dictionary before the
+  first compressed stream and nothing after it, and read as a missing feature that was
+  actually written correctly. Compare bytes with `memcmp` over the range instead.
+- **The toolbar owns no state.** It asks the view through `proxy.canvas` and refills from
+  the document on `DT_SIGNAL_CANVAS_CHANGED` with its handlers blocked. A control that wrote
+  back during a refill would loop. **The other half of that bargain: a proxy setter that
+  writes a field some OTHER control shows must raise the signal**, or the toolbar goes on
+  displaying what it last read. `_proxy_set_background()` rewrites the tint and resets the
+  four texture weights when the paper changes, and for want of that raise the colour patch
+  kept the previous paper's colour while the new one was painted -- reported as "confusing to
+  retain old parameters in GUI feedback while new stuff gets applied". A setter that only
+  writes the field its own control sent needs no raise.
+  **Where the setter is on the interactive path, the obligation moves to the odd caller
+  instead**: every call to `set_texture` is one of the four sliders sending its own value, and
+  refilling under a slider the user is still holding would fight the pointer -- so the setter
+  stays quiet and `_texture_reset()`, the one caller that writes all four behind their backs,
+  refills the toolbar itself. Without that the Reset button reached the document and nothing
+  else: the sliders kept their positions, so it read as doing nothing at all, and the next
+  touch of any slider sent all four stale values back and undid it. The same shape lives in
+  the view's context menu, whose handlers change what the floating properties show or keep clear
+  of and must call `_props_sync()` -- a node added or removed from the menu changes the handles
+  the placement keeps clear of. **Sweep for this by function, not by eye** -- and grep for every spelling
+  (`_props_sync`, `_props_refresh`, `_announce_document`, a raw `DT_SIGNAL_CANVAS_CHANGED`
+  raise), since a sweep that misses one reports every correct handler as broken.
+  **A refill blocks every handler it could wake by its STORED id, never a flag the handlers
+  check** (`_connect_refilled()` in the toolbar is the only way such a handler is connected). A
+  handler that reads several controls -- the margin with the bleed, the shadow's three sliders --
+  woken halfway through a refill sends the ones not refilled yet: measured offscreen with the
+  blocking removed, 9 writes during one refill, one of them a shadow radius of -500, then the
+  hard minimum of that row in the property table. And **a control that mirrors a document setting is
+  refilled, or it is state**: the margin and bleed controls never were, so they showed 0 whatever
+  the document held and the first edit of the bleed after a restart wrote the margin's 0 over the
+  document's (measured against the previous toolbar: margin 36 in, 0 out).
+  **A DRAGGED control needs two more things, and a spin button needed neither**, which is why
+  the Borders and Shadows popovers only met them when their spins became bauhaus sliders. What it
+  SENDS is one value per motion event, so a setter that records an undo step per call turns one
+  drag into dozens, each holding two whole `dt_canvas_copy()` snapshots of the document plus a
+  configuration write and a repaint. Measured on a 40-position drag, driving real button and motion
+  events at a bauhaus slider: **39 undo steps, every one of them before the button came up**;
+  through the phase-aware path, **1, recorded only on the release**. So these six numbers have NO
+  plain setter in `proxy.canvas` at all -- `set_border`, `set_shadow` and `set_corner_radius` were
+  withdrawn from it and are now static to `views/canvas.c` -- and the only way in is
+  `proxy.canvas.edit_number()`, which takes the `dt_canvas_prop_id_t` and a `dt_canvas_edit_phase_t`
+  exactly as `edit_color()` already did: LIVE writes the field, touches and announces, costing no
+  configuration write and no undo record; COMMIT puts the number the gesture found back FIRST and
+  hands the kept one to the setting's own static setter, so whatever that setter records and
+  announces spans the whole gesture. **Withdrawing the setters is the point**, not a tidy-up: a
+  control that cannot reach one cannot be wired to record per motion event, which is how this
+  regression arrived in the first place.
+  What a slider is GIVEN is the other half. **A refill must LEAVE ALONE a slider that already shows
+  what the document holds, not merely block its handler**: `dt_bauhaus_slider_set()` rewrites the
+  display range around the value it is given (`d->max = rrpos < 1.f ? d->soft_max : rpos`,
+  `_dt_bauhaus_slider_set_with_raise()`), so a slider showing a number past its soft end has that
+  range collapse onto the value under the pointer. Measured, a document holding a 300 pt shadow blur
+  against a soft maximum of 100, pressed at half the bar and then eight motion events at the SAME x:
+  **127.30 then 26.00** with the refill writing back, 127.30 throughout without it -- the handle
+  leaping to the far end and the value falling by a fifth while the pointer never moved. A gesture
+  keeps the document at the value its slider shows, so "already shows it" is precisely the slider
+  being dragged; a `pressed` flag covers the other way in, a refill raised by an undo or a document
+  opened while a button is down. The texture sliders escape all of this only because `set_texture`
+  raises no signal, so no refill ever runs under them; they are not the pattern to copy.
+  **A gesture nothing HOLDS ends on a debounce, and a click waits out the double-click time.**
+  A wheel step, an arrow key and the fine-tune popup have no release to end on, so a burst of them
+  is one session, closed once the steps stop coming. And GDK delivers a double click as press,
+  RELEASE, press, `GDK_2BUTTON_PRESS`, release -- so a click committed on that first release makes
+  the clicked position one undo step and the reset another: measured, **2 undo steps for one double
+  click** against 1 when the release waits out `gtk-double-click-time`, which is one Ctrl+Z putting
+  back a number the user never chose. `_number_event_after()` reads the buttons from `event-after`,
+  which runs after bauhaus's own handlers have moved the slider to the click, reset it on the double
+  and emitted from the release, whatever those returned.
+- **A toolbar popover keeps the keyboard for its own controls, and the plain-key tag is only HALF
+  of that.** `dt_accels_block_plain_keys_inside()` stops SHORTCUTS -- the single letters and digits
+  the view binds, T, M, D, 1 to 4 -- and nothing else, so Delete, KP_Delete and BackSpace, which
+  `views/canvas.c` reads from the main window itself, went on deleting the selected objects behind
+  an open popover as the user typed at a slider, a check box or a colour button. `_popover_around()`
+  (`libs/tools/canvas_toolbar.c`) therefore adds a key handler that swallows those three, connected
+  with `g_signal_connect_after()`: the popover's own handler runs first and is what hands the key to
+  the focused control, so a spin button still edits its number with both -- connected BEFORE it, "57"
+  stayed "57". The arrows and Return never get that far, the window's own bindings taking them to
+  move the focus and to activate the default. The other half is that **a popover can open holding no
+  focus at all**: a modal popover asks GTK for its first focusable child and a bauhaus slider answers
+  yes without taking the focus, so the Texture popover kept none and T added a text frame behind it.
+  Each popover names its first control, focused on `show` (connected after the popover's own, which is where
+  GTK makes that choice) only when GTK gave the focus to nothing inside. And **a popover's handler
+  compares with the document before writing**: a drag over two positions announced its value four
+  times -- three motions, one of them repeated, and the release -- each costing four conf writes and
+  a recomposite; measured two sends with the equality test. Measured on a private broadway server
+  through real GTK key routing, 42 key and gesture checks at dpi factor 1.0 and 1.5: 0 failures, 9
+  before the fixes. Each fix was put back in a scratch copy and caught -- no key handler 7 failures,
+  no first-control focus 1, the key handler connected ahead of the popover's 3, no equality test 1.
+- **The toolbar's tool toggles are a VIEW on the armed tool, and every arm and disarm goes through
+  `_tool_set()`, which raises `DT_SIGNAL_CANVAS_CHANGED`.** `tool_toggles[]` is indexed by the tool
+  each toggle arms, the action lives in the button's object data, the handler asks the view only
+  when the button and the view DISAGREE, and `_refill()` presses the one `armed_tool()` names with
+  every handler blocked by stored id. Exclusivity lives in the view, so a tool armed by a key, a
+  menu, an Escape or the atelier being left moves the pressed button without the toolbar keeping a
+  thing. The two guards cover each other and neither may be simplified away because the tests pass
+  without it: with a stand-in view that refills from inside the still-running `"toggled"` emission
+  -- which is what `_tool_set()`'s raise really does -- dropping BOTH the disagreement guard and the
+  refill's blocking does not merely miscount, it recurses until the process dies; dropping either
+  one alone still scores 0. **And a toolbar button must give the keyboard straight back**
+  (`focus_on_click` FALSE, as the properties strip already does): GtkWindow offers a key to the
+  focus widget and to its own move-focus bindings before the application's handler sees it, so a
+  focused toggle answered Space and ate the arrow keys the plane nudges with.
+- **The ZIP is ours** (`canvas_zip.c`, store + deflate, no ZIP64) because no archive library
+  is linked and zlib is. `unzip -t` is run on the writer's output in the unit test when
+  available; keep it passing.
+- **The painter composites in linear light itself.** Cairo blends in the encoding of its
+  sources, so every object is painted into its own 8-bit layer, decoded through the sRGB
+  curve into premultiplied linear floats, masked, shadowed and laid over a float canvas that
+  is encoded back once. The decode table is per code and the encode table has 16384 steps,
+  which is what makes an opaque pixel round-trip to the exact code it held -- do not "save"
+  the table's size. `test_canvas_cutout` pins the round trip and the 188 that half of white
+  over black must give.
+- **The cutouts are the darkroom's shapes, asked for through `develop/masks_cutout.h`.** That
+  entry lives inside `src/develop/masks` on purpose: the canvas never names a
+  `dt_masks_form_t`, and the enclosure ratchet in `tools/check_module_boundaries.sh` stays
+  where it is. Two things the masks code does not say: a polygon node's `border[2]` is a pair
+  of feather RADII (either side of the node), not a border point, and the shapes take their
+  scratch from the pixelpipe cache's arena, so a headless consumer must have run
+  `dt_dev_pixelpipe_cache_init()` (the test does, in its group setup). `dt_masks_create()`
+  also sanitises conf and tells the supervisor; `dt_masks_form_new_silent()` is the
+  side-effect-free constructor for consumers with neither.
+- **The compositor works in the surface's own pixels.** `cairo_get_matrix()` stops at cairo's
+  device space; the surface's device scale comes after it, so a layer sized from that matrix
+  on a 2x screen is half the resolution and the blit upsamples it -- blurred AND aliased text
+  was the report. Fold `cairo_surface_get_device_scale(cairo_get_group_target(cr))` into the
+  matrix and divide it out at the blit, and hand every layer context the target's font
+  options. `test_canvas_cutout` paints on a device-scale-2 surface and checks the edges land
+  on the doubled pixels.
+- **The working space is linear Adobe RGB (1998) and colour management is the LAST step.**
+  Adobe RGB is the layer encoding end to end: the renders leave the pipeline in it (profile
+  embedded, `image.colorspace` records it; older sRGB JPEGs and map tiles are converted at
+  decode), `dt_canvas_render_color()` converts every drawn colour into it, and the paper fields
+  go through `dt_canvas_render_srgb8_to_layer8()`. A layer therefore decodes through the 563/256
+  gamma with no matrix. The finished canvas is encoded to 8-bit Adobe RGB and goes to the
+  display through `dt_colorprofiles_adobergb_bgrx8_to_display()`, the module's prepared 8-bit
+  transform (a float XYZ path cost 800 ms a frame). The PDF page is Adobe RGB and the
+  exporter's source profile says so. The encode table
+  must be indexed by sqrt(value): a uniform 16384-step table misses the first codes of a 2.2
+  gamma by whole steps. Tests compute expected codes with an independent sRGB-to-Adobe helper
+  and cairo's own quantisation (16 bits rounded, then the high byte).
+- **The frame is every object's outer size, border included -- cut or not.** A cut frame's
+  shape is confined to the frame less the border's width (`dt_canvas_mask_geometry_t.inset`,
+  applied in `_mask_raster_fine()`), so the border dilated from it ends at the frame's edge,
+  exactly like a rectangular frame's inset stroke. The first version grew the raster past the
+  frame instead, and a gradient cutout, which covers the frame, grew a border outside it
+  where an uncut frame had none. Only shadows reach past the frame. **Dilate the band from the
+  shape as described, not from the confined shape**: a disc dilation of the confined rectangle
+  rounds its corners, which is how a gradient cutout came back with rounded corners; the band
+  is stopped at the frame afterwards (`_mask_clip_rounded()`, which is also how every frame's
+  corner radius reaches a cut frame). Every mask surface is
+  rasterised at 3x (2x past a megapixel) and box-filtered, the band's distance transform
+  included: that is where the anti-aliasing of cutouts and their borders comes from. The masks
+  module's own rasterisers are hard-edged.
+- **The papers are coloured by the canvas background**, a zero-mean relief around it, in two
+  parts weighed by `texture_contrast`/`texture_detail`; `texture_scale` divides every knee and
+  is the only weight that rebuilds the composed fields (`_paper_fields()`), the others only
+  rebuild the coloured tile (`_paper_key()`). Choosing a paper style sets the background to
+  the paper's tint through the style-only branch of `set_background()` -- the toolbar's combo
+  sends NULL for the colour and the colour patch sends -1 for the style, so one never
+  overwrites the other. Zero-mean is the default, not a law: the watercolour's tooth may only
+  carve (a white sheet has nothing to add at its peaks) and the charcoal card's may only lift
+  (a black sheet has nothing to take in its hollows), and both tints allow for the offset.
+- **Independent fields blended by a window are normalised IN QUADRATURE, never linearly.**
+  `_paper_compose()` lays six sprites of one process on a half-overlapping grid under Hann
+  windows. A weighted sum of independent draws has variance `sigma^2 * sum(w^2)`, so dividing
+  by `sum(w)` leaves the composed field carrying `sqrt(sum(w^2)) / sum(w)` of the amplitude:
+  1 at a placement's centre, where its window stands alone and equal to one, and 1/2 where
+  four meet at a quarter each. That is a two-fold amplitude lattice at the cell pitch, and
+  the placement jitter does NOT hide it -- jitter moves the lobes, it does not flatten them.
+  Measured on the kraft paper: local high-frequency RMS 3.12 to 6.50 over one sheet, ratio
+  2.08, strongest modulation at 533 px against a 512-unit cell; dividing the deviations by
+  `sqrt(sum(w^2))` instead gives 1.28 and moves the modulation off the cell pitch. Take the
+  deviations about the sprites' common mean and add the mean back linearly: a relief is not
+  always zero-mean, and only the fluctuation must keep its size. **A field read as a COVERAGE
+  rather than as a signed relief must then clamp at the point of use**, since a quadrature
+  blend overshoots both ends of [0, 1] -- the psychedelic washi's negative coverage turned
+  its subtraction into a lift and washed the paper between the wrinkles with the
+  complementary colour (18.1% of pixels with a clipped channel, against 9.4% clamped).
+- **A zero that means "unset for migration" must be read across the WHOLE record, never per
+  field.** The four `texture_*` weights were added together, so a file from before them holds
+  four zeros -- but `dt_canvas_texture_get()` applied the "zero reads as 1" rule field by
+  field, which is indistinguishable from a user turning one weight down to nothing. The grain
+  and detail sliders therefore did nothing at their own zero, silently. All four zero is the
+  old file; one zero is a zero. The combination it costs (a canvas with no relief and no
+  finish) is a plain colour by another name.
+- **A weight is only a weight if its range moves the picture, and that is a measurement.**
+  The grain weight scales a dither applied to the LINEAR canvas and read on a gamma-encoded
+  one, so a fraction there arrives as about half of it in codes, and it competes with the
+  paper's own pixel content -- 1.45 codes on the moleskine against the dither's 0.646 at
+  `PAPER_DITHER_SIGMA` 0.008. Moving the weight from nothing to its default changed the
+  pixel texture by 10%, which is why it was reported as having no effect at all. Fit the
+  contributions (`total^2 = own^2 + k*weight^2` over a few renders) before touching the
+  constant: it says whether the control is dead or merely outgunned, and by how much.
+- **A threshold on a synthesised field is taken in the field's OWN deviations, never in
+  absolute value.** `_paper_field_band()` normalises against a fixed 256x256 power sum, so an
+  absolute cut depends on a number nobody reading the call site can see: kraft's shives were
+  first cut at a guessed level and covered the sheet, reading as cork instead of a paper with
+  the odd fleck. Sum the squares over the sprite, divide, and cut at just under three sigma
+  for something that should be a few tenths of a percent of the surface.
+- **A periodic stamp whose pitch approaches the tile's sampling must fade itself out.** The
+  papers are synthesised at 256 or 512 pixels per 512-unit sprite, so the coarse tile has half
+  a sample per unit: the laid paper's 3-unit ripple gets 1.5 samples per period and comes back
+  at three quarters of full amplitude in a 2.4-pixel period -- measured, an alias and not the
+  wires, reading as a fine streaking that is not paper. `_paper_laid()` ramps its ripple out
+  below three samples per period and to nothing below two. The residual belongs to every
+  paper and is not worth a per-frame cost: between half zoom and full, the tile is built finer
+  than the screen and the plane blit shrinks it with `CAIRO_FILTER_BILINEAR`, which attenuates
+  a fine structure rather than filtering it.
+- **A paper's whole synthesis is a cold cost of about 2.2 s**, cached per (resolution, scale),
+  and the FFT fields dominate it -- not the fibre or mesh stamps. Kraft's 2600 long fibres, a
+  six-fold bigger stamp than the moleskine's, cost 15% more in total (2568 ms against 2238).
+  Measure the whole paint before optimising a stamp.
+- **An inset shadow's plane must be padded with ONES before the blur.** `_box_blur()` pads with
+  zeros, which for the uncovered plane means "covered": the shadow thinned wherever an ellipse
+  cutout came near its bounding box. `_shadow_plane()` grows the inset plane by three radii of
+  ones and the sampler offsets into it. The test compares two STRAIGHT edges (the frame's and a
+  square cutout's); a curved edge legitimately reads deeper, since more uncovered world
+  surrounds it.
+- **A shadow's direction is its own switch, `inset`, never the blur's sign.** The blur is a
+  radius, 0 and up. The sign used to say which way a shadow fell -- positive outset, negative inset
+  (the uncovered plane blurred and laid over the object within its coverage), zero none -- which
+  held until the extent arrived: an extent needs no blur, and an inset shadow then needed one
+  anyway. A frame's shadow draws with some strength and a BLUR OR AN EXTENT
+  (`dt_canvas_shadow_visible()`); an offset alone does not switch it on, because the canvas's
+  default keeps its offsets while it is off. There is still no enable flag: strength, blur and
+  extent at nothing are "off". A text's GLYPH shadow also draws with an offset alone, takes the same
+  switch, and cast inside falls ON the letters, bounded by the glyphs' own alpha and laid after them
+  -- bounded by the layer's instead, it lands on the frame's ground and not on one letter, which is
+  what `test_canvas_cutout` checks by measuring against the letters' own mask.
+- **A shadow's extent is a grayscale MAXIMUM, never a threshold grown by a distance transform**
+  (`canvas/canvas_dilate.c`). The cutout's border band is a threshold, rightly, because a band is
+  solid by definition; a shadow's silhouette is not. A threshold hardens a feather the moment the
+  extent leaves zero -- a jump from the slider's first step -- and drops a glyph's hairline, which
+  is a pixel of partial coverage; the maximum moves every level out together. Two traps in its
+  implementation, both measured: **a maximum over a true disc costs a read per row of the disc per
+  pixel**, so the grow is a sum of segments along eight lattice directions at a constant cost,
+  within a pixel of the disc to 40 px and 2.4 % beyond (the octagon of the axes and diagonals alone
+  is 4 % off, the separable square 41 %); and **per-pixel edge handling made it two to five times
+  the blur**, so a window is computed only where it lies inside the plane and the caller pads by
+  `dt_canvas_dilate_margin()` -- ones for an inset plane, and for an outset one only what the margin
+  asks beyond the three blurs and the offset the layer box already leaves, where the right answer
+  is nothing anyway. Every reach the painter grows by goes through `_shadow_reach()`, extent
+  included, so the layer box, the band, the damage and the plane cannot disagree. A plane whose
+  margin is small is grown in TILES, and a tile whose neighbourhood is uniform is skipped; the
+  tiles are exact everywhere, which is what caught the test's own reference out: **a brute force
+  run pass by pass on the unpadded plane is NOT the maximum over the segments' reach** -- a sum of
+  segments reaches some of its points only through points outside the plane, so the reference
+  must run on a copy padded by the margin, or it reads short along every edge.
+- **`schedule(dynamic)` in libansel needs a newer libomp than the Debug clang build's tests load.**
+  clang emits `__kmpc_dispatch_deinit` for it, and `build-warnsweep`'s test binaries resolve
+  `/usr/lib64/llvm18/lib/libomp.so`, which lacks it: every test dies at the first call with a
+  symbol lookup error. Nothing else in the library used a dynamic schedule; the grow's blocks are
+  equal-sized, so `schedule(static)` costs nothing there.
+- **`far` and `near` are macros on Windows** (minwindef.h defines them empty), and the local
+  MinGW syntax check skips `canvas_render.c` for its curl header, so a local of that name
+  compiles everywhere but CI. Name it something else.
+- **A cut-out frame's border is a band, not a stroke**: the cutout's half-level edge dilated by
+  the border width through a Euclidean distance transform (a disc, so the band is as thick on
+  the diagonal as on the axes; a separable max filter is a square and was 41% thicker there),
+  less the cutout, painted through as a mask into its own layer and composited over the
+  content in linear light. A rectangular frame keeps the inset stroke. A text frame's
+  background must fill INSIDE its border, or it paints the border over -- it did, for as long
+  as text frames had backgrounds.
+- **Variable-length data follows an object's record as tagged chunks** (tag, size, bytes), so
+  a reader steps over what it does not know; the polygon's nodes are the first. Fixed
+  additions keep taking reserved bytes.
+- **An include inside an `#ifdef` needs `// conditional-ok: <reason>`** on its line
+  (`tools/check_conditional_includes.sh`, run on pull requests only, so a local build cannot
+  show it): the osm-gps-map header in `canvas_render.c` is one.
+- **The painter's serial bottleneck is cairo compositing a scaled source**, not the float
+  maths: a picture scaled onto its frame with `CAIRO_FILTER_GOOD`, a mask applied through
+  `cairo_mask_surface()` under a transform, each runs a separable convolution on one core
+  and was 40% of the main thread. Blit sprites 1:1 under an identity matrix
+  (`dt_canvas_surface_cache_get_scaled()`) and do masks in float in a parallel loop
+  (`_cut_compose()`). And profile the MAIN thread with children: the workers' samples are
+  barrier spin, and `perf` attributes page faults to nothing -- a 240 MB float layer
+  allocated per frame is returned to the kernel on free and faulted in again next frame,
+  which is why every working buffer is a slot in the surface cache
+  (`dt_canvas_scratch_slot_t`). `doc/canvas.md` "Instrumentation and performance" has the
+  numbers and `tests/unittests/bench_canvas_paint` reproduces them.
+- **The composite cache is keyed on `dt_canvas_t.serial`, never on the address**: the tests
+  free and recreate documents at the same address with the same generation, and were handed
+  the previous test's frame. It serves paints that carry a surface cache only, because a test
+  that edits the struct by hand between two paints bumps no generation.
+- **The guides are the prepress palette, and the gutter is a margin around ONE frame.** Trim
+  black, bleed red, margin violet -- InDesign's, hence every print shop's template -- all
+  solid, since on a dieline a cut is solid and a crease is dashed and the dash is worth
+  reserving for the fold. Each is stroked under a white keyline, which the convention never
+  needs because its pasteboard is always light and this plane can be a charcoal card. The
+  colour conf keys were RENAMED (`canvas/trim_color`, `canvas/guide_*_color`) because a
+  configuration that already holds the old defaults would otherwise never see the new ones.
+  And the object gutter is now the PADDING, the word gutter having gone to the fold's own
+  allowance where print puts it: two frames sit side by side when their padding boxes touch,
+  so the clear space between them is TWO paddings. Keyed on one, a frame's box landed on its neighbour's
+  edge and the two boxes overlapped across the whole gap -- box against frame, reported as
+  odd and crossing. The snapping, the masonry run detection and `dt_canvas_layout_apply()`
+  must carry the same factor, or an arranged layout is not one the snapping can reproduce.
+- **A spread is the sheet, and the plane stops tiling evenly.** `spread_cols` by `spread_rows`
+  pages stay contiguous with FOLDS between them (dashed, the dieline's crease against its cut);
+  between two spreads the plane opens by TWICE the bleed so no two bleeds overlap. Zero is the
+  uniform tiling every document had before. Three things follow and each is a trap if
+  forgotten: the page under a point must be ASKED for (`dt_canvas_page_at()`) and never divided
+  out, and it answers with the page on the left for a point in the gap; the page snapping
+  cannot use a period and gathers the real lines the neighbouring pages offer; and the trim and the
+  bleed GUIDES belong to the sheet while the EXPORT cuts at the folds, one leaf per canvas
+  page -- a spread is how the plane is laid out, not how the press prints, since the press
+  prints leaves and the binder folds them. The bind gutter is what a fold gets instead of a
+  bleed, and behaves identically: content carried past the cut line, facing inward, so the
+  strip either side of a fold is printed on both leaves and nothing is scaled. Each of a
+  leaf's four sides owes the bleed or the bind, never both. The **bind gutter** is
+  the binding's allowance inside a page at a fold ONLY, which is why
+  `dt_canvas_page_margin_rect()` exists beside the symmetric `dt_canvas_page_guide_rect()`.
+- **A line set at a width the code chooses is one capability that buys two, and the words are
+  measured BEFORE any line is asked for.** `_flow_plan()` lays a text frame line by line, and
+  that is what BOTH text-wrapping and both-edge optical margins need: a line inside the clear
+  stretch beside an overlaid object, and a line set to a measure slightly wider than its column
+  so its final comma ends past the edge. Shifting a finished line -- all the paragraph painter
+  can do -- hangs the leading edge only. The engine has three stages and no other: the whole
+  text is shaped ONCE, unwrapped, one Pango line per paragraph, and cut into words at Pango's
+  own break opportunities with each word's advance as shaped in its paragraph
+  (`canvas/canvas_text_words.h`); every line is then FILLED BY MEASURE across the clear
+  stretches of its band, adding those advances; and Pango sets each chosen segment on a one-line
+  layout of its own (`_flow_paint()`), at least as wide as the segment's natural width so a
+  viewport's rounding of a metric can never turn one line into two. It replaced a walk that set
+  each stretch with Pango and READ THE WIDTH BACK to decide whether the first word had fitted --
+  which a hanging comma and a justified line both make wrong on purpose, and the indent narrowed
+  behind its back. Seven patches in one week each fixed a measured consequence of that
+  inference; the eighth report ("empty lines beside the picture") was answered by removing it.
+  Justification of a one-line layout needs `pango_layout_set_justify_last_line(TRUE)` (Pango ≥
+  1.50; measured, 134 -> 300.00 of 300 asked, and its natural width without it), and the
+  paragraph's last line is left unjustified as Pango leaves it. Obstacles are the frames ABOVE
+  the text in draw order, and each covers its SILHOUETTE (`dt_canvas_object_covers()`), never
+  its bounding box.
+- **The fill is Pango's own break, measured, not reasoned from Pango's source -- and three
+  readings of that source were wrong.** `test_canvas_text_words` sweeps 191 measures over six
+  texts (prose, guarded French, tracked type, Hebrew, Hebrew with Latin inside it, paragraphs)
+  and holds the planner's line starts to the lines Pango sets at the same width. (1) **The space
+  a line breaks on HANGS**: UAX #14 puts the opportunity after the spaces, so the obvious reading
+  is that they count against the measure; counted, the planner set one line MORE than Pango at
+  36 units on plain prose. (2) **A finished line gives half its letter-spacing back at each
+  end**, and the unwrapped paragraph IS a finished line, so its first and last character read
+  half a spacing short of what the breaker counts: at 228 units with two units of tracking the
+  planner's first line summed to 233472 -- the measure to the unit -- and Pango refused it by the
+  1024 units `_restore_end_spacing()` now puts back from the attribute in force at the ends.
+  (3) **A run of words is measured PER WORD and summed, never as the difference of two x
+  positions**: `pango_layout_line_index_to_x()` is exact within one direction run (224.000 =
+  224.000, kerning pairs included) and reads 37 units across a change of direction where the
+  segment set alone is 75. `pango_glyph_string_get_logical_widths()` per run gives the advance
+  per character in logical order, direction-agnostic, and is the array Pango's breaker itself
+  adds up.
+- **A text frame's height is fitted when it is EDITED, never while it paints.** Auto height
+  used to run in the view's expose, and for a frame that also flows around its neighbours that
+  closes a loop: an object is anchored at its CENTRE, so writing a new height lifts the top
+  edge by half the growth, the first lines then have different obstacles above them, the
+  paragraph re-wraps, and it asks for a different height again -- measured 616 -> 1191 -> 681
+  -> 1191, a two-cycle the frame flipped between on every repaint, which a zoom, a pan or a
+  hover each trigger one of. Reported as the text jumping and, in the tall state, running
+  across the very shape it was avoiding. `dt_canvas_paint_text_fit_height()` measures on a
+  scratch context of its own -- a height is a property of the DOCUMENT, not of the viewport
+  that happens to ask -- grows the frame DOWNWARD so the edge the user placed stays put, and
+  iterates to a fixed point, which downward growth makes monotone. Every path that changes
+  what the text or its box is owes the call, the end of a gesture included: a frame dragged
+  over a column changes that column's flow as surely as editing it does.
+- **That fixed point exists only while the measurement does not depend on the height it is
+  solving for, and the occupancy map's PITCH did.** Sized as `extent / rows` -- the extent being
+  the frame's own inner height -- the pitch wobbled with the height by a fortieth of a unit,
+  which over a hundred rows moves a cell boundary near the bottom of the map by a whole cell, so
+  a line beside a picture fits at one height and not at the next. Measured on one column beside
+  one picture, the natural height took two values three units of frame height apart, 365.94 and
+  382.23, NEITHER of them a fixed point: the frame grew and shrank by a line on every repaint
+  and `dt_canvas_props_settle_all()` reported movement for ever (40 settles, still moving). The
+  cell is now a length in canvas units and the row count follows; past the cell ceiling it is
+  coarsened to a MULTIPLE of the cell, a step a stray unit of height cannot cross. Both the
+  map's origin and every band the flow asks about carry the same `-height / 2`, so at a constant
+  pitch it cancels. **Any new quantity derived from the frame's height owes the same check** --
+  this is the second two-cycle in the same chain, the first being the centre-anchored growth
+  above.
+- **A band the map does not reach is CLEAR, and a band with no room in it is a line the walk
+  steps OVER.** The map is built over the frame's current height while the measuring pass flows
+  without a cut, so lines past that height fall outside it; clamped onto the map's last row, a
+  picture covering the map's bottom blocked the whole page below it -- ONE measuring pass
+  returned 66776 units where the text wants 270, which is the line cap and the "infinitely high"
+  frame as reported. And a fully blocked band used to END the walk, which deleted every word
+  below a picture as wide as the column: 19 rows of type where 77 belong, the lines above it set
+  correctly, reported as the text disappearing. The two hold each other up -- stepping down past
+  a map whose last row is copied downward steps to the cap instead of stopping -- so neither may
+  be reverted alone.
+- **The space between paragraphs is charged once per PARAGRAPH, and a paragraph has been seen
+  once one of its lines is SET.** A line the obstacles refuse sets nothing and consumes nothing,
+  so the walk moves down and asks again at the same offset, which is a paragraph start again:
+  charged per attempt, a paragraph waiting for the foot of a picture was pushed one further gap
+  down for every line it waited (the second paragraph following the picture down, with a gap
+  behind it the third one has not got), and the first paragraph, its opening line refused, was
+  charged a space above the very first line of the frame. Measured over a 26x21 grid of picture
+  positions, a 200-unit spacing and two breaks: 600 units charged where 400 are owed, 200 from
+  each half. **One picture position cannot see this** -- the picture has to refuse the line a
+  paragraph opens on, and the first geometry tried showed nothing at all.
+  `tests/unittests/test_canvas_text_flow.c` pins all four, each checked by putting its bug back.
+- **The band a line is offered to the map is its INK, never its logical box.** What has to
+  clear a picture is the glyphs, and a logical box carries the font's full ascent above the
+  tallest of them -- measured, 72.96 units of box around 59.65 of ink. On a slanted edge a band
+  `h` tall narrows the run by `h * tan(theta)`, so that surplus is charged straight to the
+  gutter: measured perpendicular clearance beside a cut picture, spread 31.1 canvas units and
+  sd 8.3 with the logical box, 24.2 and 6.2 with the ink. **What remains is geometric and is
+  not a defect**: horizontal lines against a diagonal always clear it by more at the line's own
+  height than the gap asks for, by about `(band / 2) * tan(theta) * cos(theta)`, and every
+  page-layout application does the same.
+- **A line is set across EVERY clear stretch of its band, not the widest one, and a stretch
+  holds exactly the words that fit it.** A picture in the middle of a column leaves space either
+  side and the line carries on past it. Measured on a 600-unit column with a 200-unit picture:
+  an obstacle in the CENTRE costs what the same obstacle against the edge costs (ratio 1.000)
+  where taking the widest stretch cost 1.833. Nothing is set, weighed and refused: a stretch too
+  narrow for the next word is left empty and the word waits for a wider one below -- CSS 2.1
+  §9.5 moves the line box down the same way -- and a word wider than the frame's OWN measure is
+  set where it stands, overflowing, as WRAP_WORD does, rather than waited on for ever. A lone
+  word of one or two characters is a scrap that waits for a stretch that can take a line,
+  unless it ends its paragraph. Beside a picture leaving an 86-unit stretch on one side and 125
+  on the other, the reported document now carries ink on both sides of 7-9 of every 8-9 line
+  bands, where every line ending on a comma used to leave its stretch empty for the picture's
+  whole height.
+- **Paragraphs are separated by a BLANK LINE, as Markdown has it** -- a lone newline is a soft
+  break and joins the lines. Measured through the converter: a blank line leaves two newlines
+  in the text and the paragraph controls act on it, a single newline leaves NONE and they do
+  not. Reported as "paragraph spacing doesn't work"; it is Markdown's rule, and the tooltip now
+  says so.
+- **A paragraph is one of Pango's lines of the UNWRAPPED text, never something inferred from
+  the byte before the cursor.** Pango ends a line at every `"\n"`, so a `"\n\n"` separator
+  yields an EMPTY line between two paragraphs -- one line of white, colliding with nothing, that
+  takes neither the indent nor the space -- and a hard break or list item is a line of its own,
+  which takes both, exactly as the plain path's `pango_layout_set_indent()` indents it. The
+  old walk asked "is the character before the cursor a newline", then asked the cached layout
+  instead, and each answer was right only while its state survived from line to line: measured
+  on a real document with the indent and the space both at 50 units, not one of twenty-three
+  lines got either; then, once the byte was asked, a REFUSED line -- which consumes nothing --
+  asked the same question one line lower and was charged the paragraph gap again for every line
+  it waited (600 units where 400 were owed over a 26x21 grid of picture positions). With the
+  paragraphs known before the walk starts, the gap is paid once, before a paragraph's first band,
+  by construction. The indent moves the first stretch's start in and leaves its end, so every
+  alignment indents correctly, and an indent that eats the whole first stretch costs that
+  stretch, not the line.
+- **The leading is space BETWEEN lines, so a flowing paragraph has to advance it by hand.**
+  `pango_layout_set_spacing()` puts it between the lines of ONE layout, and every line of a
+  flowing paragraph is line zero of a layout of its own -- so no line's extents ever carry it,
+  and a line height did exactly nothing to a frame that wrapped around something or hung its
+  punctuation, silently, while the plain paragraph beside it honoured it. Advance
+  `pango_layout_get_spacing()` once per GAP, and read "is there more text" AFTER the line's own
+  text is accounted for, or the paragraph ends on a trailing gap Pango would not have left. It
+  also must NOT be folded into the band, for the reason above.
+- **A line is offered to the occupancy map in a band of its PARAGRAPH's ink, known before any
+  line of it is set.** The unwrapped paragraph's extents give the ink's top and height once, the
+  maximum over the paragraph, so every band is a whole line tall and there is nothing to guess
+  and nothing to ask again. The old walk took the band from the PREVIOUS line's ink, which is
+  nothing at all on line zero and after a blank line: the opening lines were placed against a
+  sliver of the map, given the full measure, and drawn straight through whatever stood just below
+  the frame's top, and a second pass with the real ink was needed to catch it. A paragraph mixing
+  type sizes is offered its tallest ink on every line, which is slightly conservative.
+- **An obstacle covers wherever it paints ANYTHING, and its border is the EFFECTIVE one.** Two
+  ways the same rule was got wrong. A cut frame's edge is FEATHERED -- the cutout fades out
+  rather than stopping -- and sampling that raster at half opacity puts the boundary in the
+  middle of the fade, so the text cleared the shape and sat under the visible half of its own
+  soft rim; the cut is at `TEXT_FLOW_MASK_FAINT` (12 of 255) now, the faintest of a fade the
+  eye still reads. And a frame WITHOUT `DT_CANVAS_OBJECT_FLAG_BORDER_OVERRIDE` takes the
+  canvas's border, not the value in its own `border_width` field: reading the field gave nought
+  for every such frame, so the text ran clean under the white edge of one picture while the
+  picture beside it, which had been given a border of its own, was cleared correctly. Use
+  `dt_canvas_object_effective_border()`, exactly as the shadow already used
+  `dt_canvas_object_effective_shadow()`. A test that sets `border_width` on an obstacle must
+  set the override flag with it, or it is testing the canvas default.
+- **An obstacle's extent is what it PAINTS, not its silhouette.** The silhouette is the cutout,
+  and a frame draws a border band dilated outward from that cut edge, plus a shadow, which is
+  the one thing allowed to reach past a frame at all. Text set flush against the silhouette
+  lands under both: measured on a cut picture over a column, the chosen run started exactly on
+  the cutout edge -- to 0.0 units, so the layout was RIGHT -- and the first word of five lines
+  still disappeared, into a 75-unit white border band. The reach is added per obstacle, before
+  the merge, so each is grown by its own; the user's gap goes on top of all of them. Note the
+  diagnosis only came from comparing the run against the map and finding them in exact
+  agreement -- a layout that matches its own map perfectly and still overlaps is a sign that
+  the MAP is describing the wrong thing, not that the layout is wrong.
+- **The occupancy grid is grown by a DISC, never a separable max filter.** This module already
+  learned it once, for a cut frame's border band, and the text flow reintroduced the square: a
+  square grows an edge by the reach along the axes and by `reach * sqrt(2)` along a diagonal,
+  so the clear space a column keeps is widest exactly where the shape's edge slants and
+  tightest where it runs straight -- reported as a gutter that will not hold still along the
+  cut. Measured on the reported picture, the square reached **34.2 canvas units** past the disc
+  against the `75 * (sqrt(2) - 1) = 31.1` predicted for a 45-degree edge, the rest being cell
+  quantisation. It is the Euclidean distance to the covered cells, thresholded at the reach,
+  Felzenszwalb-Huttenlocher in two passes with one scale per axis since the cells are oblong.
+- **The grid spans the text area GROWN by the furthest anything reaches into it.** Coverage is
+  only ever sampled AT a cell, so a grid stopping at the text area cannot know about a frame
+  standing just outside it: no cell is covered, the dilation of nothing is nothing, and a frame
+  a hair beyond the column pushed the text not at all, however wide a gap was asked for. The
+  same omission was in the obstacle collection filter, which grew the text's bounds by the gap
+  alone and so dropped a frame whose SHADOW reached in from further off.
+- **An obstacle's raster is sampled at the occupancy grid's own pitch.** A flat pixel cap reads
+  as prudence and is coarser than the grid on any large frame -- 192 px over a 1680-unit frame
+  is 8.75 units a sample against a 3-unit cell -- which squares off a curve and lets a line in
+  by most of a step: a shape's rounded edge coming out straight is what the text ran into.
+- **The gap the text leaves around what it avoids is grown on the MAP**, by a separable
+  dilation, not asked of each shape: it then costs the same whatever the obstacle is and
+  reaches a raster as well as a rectangle.
+- **Text is laid out with METRICS HINTING OFF.** The layer's context carries the target's font
+  options and its matrix carries the zoom, so with hinting on every advance is rounded to a
+  whole device pixel and the same paragraph is set differently at every zoom -- measured, a
+  justified line's right edge wandering four pixels between zoom 0.6 and 4. And **a line's
+  position comes from `pango_layout_iter_get_line_extents()`, never the line's own**: a line's
+  own extents are relative to where the line starts, so taken from the line every line begins
+  at the layout's left edge and centred text quietly stops being centred.
+- **An SVG is rasterised ATOMICALLY and only then brought into the layer's space.** The
+  specification composites an SVG in sRGB with the transfer function applied -- its overlaps,
+  gradients and anti-aliased edges are all defined there -- and this canvas composites in
+  linear Adobe RGB. Rendering its pieces into ours one at a time would draw a different picture
+  from the one its author saw, so `rsvg_handle_render_document()` draws the whole document in
+  one pass and the finished image is converted. `rsvg_handle_set_dpi(72)` makes one SVG user
+  unit one point, which is one canvas unit, so a drawing arrives at the size its file states.
+  The conversion divides cairo's PREMULTIPLIED alpha back out before the transfer function and
+  folds it in after -- measured, that buys one code here (110 against 109), because both
+  transfer functions are near a gamma of 2.2 and the alpha then factors straight out; it is
+  kept because that accident is a property of these two spaces and not of the code.
+  **A drawing gets no border and no shadow by default**: it is ink on nothing, and a card
+  behind it turns it into the one thing it is not.
+- **A drawing is drawn at the size it is SHOWN at, never rescaled to it.** An SVG has no
+  resolution of its own, so `dt_canvas_surface_cache_get_scaled()` renders the document at the
+  sprite's pixel size instead of resampling a raster of it. Rasterising once and stretching
+  throws away the only thing a drawing had over a photograph -- measured on a 32-point file
+  shown at 512 pixels, a square's edge is a full step of 255 drawn at size and under 60
+  stretched from its own, which is exactly the "blurry at 1:1" a fixed oversample factor buys
+  as soon as a frame is bigger than the factor allowed for.
+- **A sprite is EXACTLY the size it was asked for, and a drawing is drawn at the BOX's size
+  inside it.** The painter blits one pixel to one at a corner it computed, so any other size
+  lands small in the corner of where it belongs -- an internal ceiling on an SVG's raster did
+  that as the zoom crossed it, reported as a drawing vanishing or jumping. A ceiling is still
+  needed; it applies to what is RENDERED and the result is scaled back to the size asked for.
+  And the painter deliberately asks for a sprite a pixel or two LARGER than the box so the clip
+  ends the picture: a photograph stretched over that loses a sliver nobody sees, a drawing
+  loses its last rows of ink to the clip, so `get_scaled()` takes the box's size too and a
+  drawing is drawn at it rather than stretched into it.
+- **The GUARD around a drawing is the CALLER's air, added to the sprite it asks for and paid
+  back at the blit -- it may never come out of the drawing.** A drawing is FITTED to its frame, so
+  a frame proportionally taller than the document is filled by height and the ink runs edge to
+  edge down it -- measured, a 2341 x 1600 frame around a 340.3 x 243.2 diagram fills the height
+  exactly and letterboxes 51 px each side. An author who drew to the edge of the page, which is
+  most of them, then has the last line of type sitting on the frame's boundary; that diagram's ink
+  touches all four sides of its own viewBox, and the quarter-unit of anti-aliasing past it is
+  clipped by librsvg at the viewport whatever we ask for, because that is what an SVG's `overflow`
+  means. Flush, it reads as shaved off -- reported as text clipped on a drawing. **The sub-pixel
+  story is NOT what was taking that ink and the measurement says so**: sweeping sixteen sub-pixel
+  pan alignments, the bottom line of type keeps its ink to within 0.07% with the guard and without
+  it, with one surface cache across the sweep (what the atelier does) exactly as with a fresh one
+  per frame. An earlier 2.1% reading did not survive a clean A/B against a verified binary -- with
+  an LTO tree and several builds in flight, assert which side you built before believing a number.
+  So the guard is headroom, `DT_CANVAS_SVG_GUARD`, two pixels, asked for by name.
+  **Taken out of the DRAWING instead, which is how it was first written, it is a fixed number of
+  SCREEN pixels charged to a box whose size is the ZOOM's**: the same drawing filled 84.0% of its
+  frame at a quarter zoom and 98.7% at three times, so it breathed against its own border on every
+  wheel click, and subtracting it from both axes changed the drawn box's proportions as well --
+  rsvg's default `xMidYMid meet` then letterboxed the document inside it, a second inset, also the
+  zoom's, that moved the drawing off its own corner. The painter pads the sprite and blits a guard
+  out; the renderer draws the document at the box's own size, centred in the rest; and the fast
+  path that hands back the intrinsic decode may not answer a padded request, since that decode
+  carries no padding.
+- **A drawing IS placed at the fraction of a pixel its box begins at, in two steps per axis.** The
+  sprite is blitted at a whole pixel, which quantises the picture's position: measured on a
+  drawing panned in eighth-pixel steps, an edge INSIDE the document stood at the same column for
+  eight frames and then jumped a whole one, hard-edged, while the frame's border and every glyph
+  beside it slid smoothly -- a picture crabbing against its own page, and the "content transiently
+  shifts" half of the glitch report. Look for it inside the drawing: the frame's clip is at its
+  true sub-pixel position and hides it at both edges of the frame.
+  `dt_canvas_render_phase_snap()` splits the device corner into the whole pixel the sprite is
+  blitted at and the fraction the document is RENDERED at, which rsvg anti-aliases; a shifted blit
+  would have to resample, which is the cost this path exists to avoid. The fraction is snapped to
+  `DT_CANVAS_SVG_PHASE_STEPS` because **a sprite is keyed on its phase as well as its size** --
+  four sprites per size, a quarter of a pixel of residue instead of a whole one, and
+  `CANVAS_SPRITE_SLOTS` is 8 for it, or a diagonal pan is one rsvg render per frame. Measured over
+  a 32-frame pan with one cache, with the phase and without it: 106 ms against 108. **Those eight
+  are a DRAWING's and a picture keeps two** (`_sprite_slots()`): a picture has no phase, so the
+  rest could only hold extra sizes at 14 MB apiece, and `_cache_evict_to_budget()` sheds whole
+  entries and never a cold slot of the object being painted. **And a test of the phase key must
+  share ONE cache across the pan, as the view does** -- a cache built per frame hands every call
+  an empty entry, whose NULL sprite short-circuits the slot loop before a phase is ever compared,
+  so the key was pinned by nothing: measured under gdb, 203 calls into the cache over the whole
+  suite, 66 of them a drawing, not one meeting a filled slot. An earlier
+  note here said not to attempt this, pricing it at one render per alignment; that is the cost of
+  an EXACT placement, and two steps per axis is not one. **A photograph keeps the whole pixel and
+  a phase of 0**: its sprite is a resample, so a fraction means shifting the resampler's own grid
+  -- a fractional weighted box in the shrinking branch, the hot parallel loop -- and continuous
+  tone does not show the step a vector edge does. That residue is real and is written down in
+  doc/canvas.md rather than fixed.
+- **Above `CANVAS_SVG_MAX_EDGE` the ceiling is a cairo TRANSFORM, and the drawing is placed in the
+  units that were ASKED for.** Derive the placement a second time in the smaller raster's own
+  integers and three truncations fail to cancel -- the guard came back anywhere between nothing
+  and two and a half pixels -- while the capped surface's independently truncated dimensions give
+  it an aspect that is not quite the one asked for, so rsvg's `xMidYMid meet` letterboxes the
+  drawing inside its own box: measured on a 25:1 drawing in a 25:1 box at a 5004-pixel sprite,
+  15 px either side and the drawing 4970 wide where its box was 5000. Under a transform the
+  viewport carries the box's own aspect and `meet` has nothing to do -- which is also what keeps a
+  drawing whose frame really IS a different shape letterboxed by the right amount. The residue
+  that remains is the ceiling's own: the guard survives while it is worth half a pixel of the
+  smaller raster, a sprite up to 16384 px.
+- **A glyph that measures text and then scales by what it measured must turn METRICS HINTING OFF
+  first.** Cairo quantises a hinted glyph's metrics to whole device pixels under whatever
+  transform is in force, so the extents solved for are not the metrics the glyphs are hinted to
+  under the fit computed from them. Measured on `dtgtk_cairo_paint_drawing_svg()`: the ink's width
+  swung between 0.969 and 1.125 of the icon and 10.7% of it fell outside an 8 px button, 3.4%
+  outside a 20 px one; with hinting off it is 1.0000 at every size and nothing leaves the box.
+  This is the same rule the canvas's own text already follows, for the same reason.
+- **A picture and a drawing keep their proportions unless told not to**
+  (`dt_canvas_object_keeps_ratio()`). `DT_CANVAS_OBJECT_FLAG_FREE_RATIO` is stated the FREE way
+  round so ZERO is the careful answer, and one predicate answers for the corner drag and the
+  properties' Width and Height alike -- two spellings of that question is how they come to
+  disagree.
+- **A drawing's obstacle silhouette is its own ink** (`dt_canvas_render_svg_coverage()`, an A8
+  render at the occupancy map's pitch), so text flows past the shape the file draws rather than
+  the box it sits in. Measured on a file whose ink fills half its viewBox: 41.91 units of
+  column against 97.78 for one that fills all of it, where a rectangle gives the same number
+  twice.
+- **`dt_canvas_render_rescale()` keeps the SOURCE's format.** It built every sprite as RGB24
+  and forced the top byte opaque, which a JPEG never notices -- it has no alpha to lose -- and
+  which fills every hole in a drawing with whatever that byte then means. Premultiplied values
+  resample by a plain weighted mean, so the alpha rides along with no un-premultiplying.
+  Carrying four channels instead of three also turned out FASTER, measured 1.35 s against
+  1.58 s on the same document: four floats is a natural SIMD width and a three-float stride
+  breaks the alignment.
+- **A page size is an index into one appended-only table** (`dt_canvas_paper_points()`), and
+  the GUI reads the table rather than repeating it. Insert a size in the middle and every
+  saved document changes page. **A canvas unit is a POINT**, and every length on the plane is
+  one -- a page, a frame, a border, a padding, and the size in a font's own description.
+  `dt_canvas_resolution()` is the density the page is RASTERISED at and nothing else: it moves
+  nothing on the plane, and an export is `points * dpi / 72`. It used to scale a sheet of paper
+  and leave everything ON the sheet where it was, so raising it shrank the layout against its
+  own paper -- measured on A4, a twelve-point line went from 7.0% of the page's height at
+  72 dpi to 1.7% at 300. **A pixel is a physical length once a density is named for it**: the
+  W3C's reference pixel, 96 to the inch (`DT_CANVAS_REFERENCE_PIXEL_DPI`), so a 1080 x 1920
+  story is 810 x 1440 points and exporting it at 96 gives that pixel count back exactly. That
+  is what lets a story and a sheet of A4 mean the same thing by a point, and
+  `dt_canvas_paper_is_physical()` now says only how a size is WRITTEN DOWN, never how it
+  reaches the plane. **Pango is pinned to 72 too**
+  (`pango_cairo_context_set_resolution()`): it means points by a font's size already but
+  converts them at its context's density, 96 by default, so "12" arrived as sixteen units and
+  a type size meant nothing measurable. Pinned, a line of N-point type is 1.1667 N units --
+  the font's own leading and nothing else. **A design does not resize itself to a new page**;
+  twelve points stays twelve points, and filling a different page is a deliberate action, not
+  a rule that fires behind the user.
+- **The export's page is the document's, never the dialog's.** Page size and orientation are
+  the canvas's; the dialog asks only for format, resolution, bleed, quality and profile. The
+  bleed grows the sheet and the canvas rectangle it shows, so a frame a page break cut in two
+  keeps going: it is not a margin and moves nothing.
+- **A rasterised PDF page is heavy because of its stream, not its pixel count.** The raster is
+  already exactly dpi x physical size; what cost 87 MB on a six-page A3 book was a lossless
+  Flate stream over photographs. `dt_pdf_add_image_jpeg()` writes a `/DCTDecode` stream
+  instead. Measure a claim of oversampling before acting on it -- `/Width` and `/Height` in
+  the file answer it in one grep.
+- **Which OpenType features to offer is asked of the FONT, not of a table.** A face carries
+  whatever tags its designer cut: measured on one machine, FreeSerif answers with 45 -- the
+  historical ligatures and forms, small capitals, four stylistic sets -- DejaVu Serif with 11,
+  Liberation Serif with 6 and Bitstream Vera with none. A fixed list offers the last of those
+  everything it has not got and hides the first one's own.
+  `dt_canvas_paint_text_font_features()` asks the face through HarfBuzz
+  (`pango_font_get_hb_font()` then `hb_ot_layout_table_get_feature_tags()` over GSUB and GPOS),
+  and HarfBuzz needs no build change: pango requires it PUBLICLY, so `-lharfbuzz` and its
+  include are already on the line. The checkboxes are keyed on the four-character TAG, never on
+  a position in a table. The numbered families are named from their number (`ss04` is
+  "Stylistic set 4", `cv12` "Character variant 12") since only the font knows what they draw,
+  and a tag with no name at all is offered by its tag. **The features the layout ENGINE owns
+  are not offered**: glyph composition, mark placement, cursive joining forms and the
+  language's own substitutions are what make text shapeable, HarfBuzz turns them on and off as
+  the script requires, and a checkbox overriding that breaks the rendering rather than styling
+  it. Linux Libertine ships five of them among its 32. The list is rebuilt only when the face
+  changes, not its size, so ticking a box does not destroy the box being ticked.
+- **The feature string outgrew the record's fixed field, and silently.** 64 bytes holds eight
+  tags; a document with seven set refused the ninth and every one after it with no error,
+  reported as the feature checkboxes having stopped working. The whole string is a tagged CHUNK
+  beside the record now -- the mechanism the polygon's nodes already use -- and the fixed field
+  keeps as many WHOLE tags as fit, for a reader that predates the chunk: half a tag is not a
+  feature, and Pango reads a malformed feature string as nothing at all.
+- **Every per-object property is described once, in `canvas/canvas_props.c`, and edited through
+  `dt_canvas_prop_write()`, which returns what the caller owes as effect bits.** A frontend
+  never carries an edit's rules in its handlers: the bar the floating properties replaced did, and
+  two of those copies had drifted into data bugs -- an offset edited while the shadow's blur read
+  "default" was written into a shadow the frame did not own, so nothing drawn changed, and picking
+  a border colour made the frame own a border of whatever width its field held. **An override
+  group reads what the object is DRAWN with**: editing one field while inheriting seeds the whole
+  group from the screen first, and writing the inherited value while inheriting changes nothing,
+  so a control reset to the canvas's value leaves the object inheriting. That comparison is at
+  the precision the row SHOWS, since a reset rounds there; a value the object owns is compared
+  as stored, so typing 100 over a frame dragged to 100.4 still snaps it level. There is no in-band
+  "-1 means default" any more, and colours carry their own alpha, so nothing has a
+  "Transparent" button either.
+- **An object's properties open on a double click, the I key or the context menu's
+  "Properties" -- never on a click -- and `_props_sync()` never opens them.** It refills,
+  places, hides or closes; opening is `_props_open()`, reached from the double click's idle, the
+  I action and the menu entry, and `enter()` only shows again what was left open. The bar they
+  replaced answered "one object selected", so it appeared on every click, came back after every
+  drag and sat over the next thing to grab. A new code path that wants the properties current calls
+  `_props_sync()`; one that calls `_props_open()` has decided the user asked. `doc/canvas.md`
+  "The floating properties" is the full account.
+- **A double click on an object whose properties are showing DRILLS into it, and "showing" is
+  read before that double click's OWN first press.** `dt_canvas_click_sequence_t`
+  (`canvas_props.c`) pairs presses exactly as GDK 3.24's `_gdk_event_button_generate` does --
+  read from the source, not assumed: the same button, strictly sooner than
+  `gtk-double-click-time`, within `gtk-double-click-distance` on EACH axis, timed with the
+  events' own timestamps and unsigned differences across the wrap. The first version defined a
+  run by the handler's clock and read the run's first press: it drilled into an object whose
+  properties a click beside it had just closed, and swallowed a real double click on a second
+  object. A run answers ONCE, because GDK reports the fifth press of a fast burst as another
+  double click, which would find the properties the second one opened and drill into a dialog
+  nobody asked for. A handle takes a double click only when its first press took one: that press
+  selects a small frame, and the second then lands on corners that were not there when the user
+  aimed. The action runs from an idle at `G_PRIORITY_HIGH_IDLE`: the old double-click branch ran a
+  modal dialog from the press handler while the second press's move and its snapshot were still
+  armed, and an idle queued behind the press's redraw would let a triple click's third press, on a
+  slow page, get in first and drop it. GDK
+  reports a press less than twice the delay after a double click began as a triple, so a
+  deliberate second double click has to wait that long -- that is the toolkit, not a bug here.
+- **Every handle a press can grab is listed ONCE, in `canvas/canvas_handles.c`, and both the hit
+  tests and the placement walk that list.** Six hand-written hit tests each had their own copy of
+  where a handle sits and how far it catches, and the old bar's box read only a route's points, so
+  it covered a cubic connector's tangents, its waypoint and the knob 28 px above a frame. A new
+  handle is a new site role, never a new hit test. Ask a site "within reach", never "not further
+  than": the old tests skipped a handle when its distance was GREATER than the reach, so a node
+  whose position was not a number -- the file reader copies floats as they stand -- caught every
+  press made while it showed. Verified by compiling the old tests against the new: 25,035,084
+  comparisons over 3000 random scenes, no mismatch. **Two things it inherited and does not fix**:
+  a circle lists four cutout points like an ellipse so its feather keeps index 3, and its unused
+  [2] is left at the frame's centre -- a dot is painted there while the shape is edited, a press
+  there drags a second radius the circle does not have (walked outer points first, it also shadows
+  the centre handle of a circle left where it is born), and the placement keeps clear of it as a
+  handle. Read from the code, not
+  seen in the atelier; `test_canvas_handles` deliberately does not pin that point. And the view's
+  priorities BETWEEN roles (the hovered node's own handles before the nodes, a cutout's outer points
+  before its centre) live in static functions of the view plugin, which no committed test reaches.
+- **What one click in the properties would add is predicted on a COPY that nothing but a read
+  ever sees** (`canvas_place_shapes.c`). The obvious way is wrong both ways it can be done:
+  `dt_canvas_connector_add_via()` touches the document, and `dt_canvas_mask_set_shape()` on a
+  shallow copy frees the nodes the original still points at.
+- **A placement is never clamped onto the object: a candidate top only moves within a stretch
+  proven free** (`canvas/canvas_place.c`). The old bar went below the object, then clamped itself
+  back into the view -- over the object and the handles the user was about to grab. The search is by level (clear
+  of HARD, PREDICTED and BODY; then of HARD and BODY; then of HARD alone), so the body is covered
+  only once every spot clear of it has failed, by construction and not by care. **A card is placed
+  whole or not at all**: a cap of 420 px and 60 % of the view, scrolled in whatever room the
+  strip's column had, showed a drawing's card as six of its seven sections over a scrollbar in a
+  view with room for all seven; only a view shorter than strip plus card scrolls it, with
+  `GTK_POLICY_EXTERNAL`. **Snap the inputs**: from a raw anchor, moving a whole scene by whole
+  pixels changed the rounding of a near tie and one pan resolved to two spots; the anchor and the
+  press are snapped to a 256th of a pixel, the rest to whole pixels. **A placement that found no
+  room is no previous placement**: its all-zero strip made the next search pay a movement cost
+  from the view's top-left corner, and go there. `test_canvas_place` checks 10,000 scenes against a
+  brute force over every pixel; each rule above was put back and failed it.
+- **`canvas/debug/placement` paints what the last placement kept clear, and a Debug build
+  asserts no HARD rectangle overlaps the footprint.** Answer "the properties sit on a handle" by
+  switching it on, not by reasoning about the solver.
+- **The properties never move while the user is in them, and the keyboard focus ALONE holds
+  nothing.** A placement waits for the pointer over them, digits typed and not applied, or a
+  LIVE edit, and runs on leave, Return, a focus change or canvas motion. A slider or a spin
+  button keeps the focus once clicked, so a hold on the focus never ended: after a click on a
+  width's +, the properties stayed over the corners the frame had grown into until the canvas was
+  clicked. The root is an EVENT BOX so a crossing between its controls is INFERIOR, and a grab
+  crossing (a dialog, a popup) is not the pointer leaving either.
+- **An edit in the properties is one session: one snapshot, one `dt_canvas_touch()` per step,
+  and one undo record, map fetch, conf write and `DT_SIGNAL_CANVAS_CHANGED` at its end.** Edits
+  arrive tagged LIVE, COMMIT or ONCE (`dt_canvas_edit_phase_t`). **Commit what the properties
+  hold before anything else reaches the document -- and the binder's own debounced session
+  FIRST** (`_props_commit_pending()` calls `dt_canvas_props_gtk_commit()`): ending only the view's
+  session left the binder's 400 ms timer armed, so a Ctrl+Z inside that window was undone and then
+  re-done by the timer, wiping the redo list, and a corner drag right after a wheel step had the
+  old width written into it. The Edit menu's undo cannot record (the undo stack is locked while it
+  pops), so it FORGETS the session instead (`dt_canvas_props_gtk_forget()`). And `key_pressed()`
+  commits only in the branches that act: a bare Shift or Ctrl committing cut typed digits and a
+  Shift+arrow burst into several undo steps.
+- **Plain keys belong to the controls while the focus is inside the properties, modified keys
+  to the shortcuts.** `dt_accels_block_plain_keys_inside()` tags the root and is read on every
+  keystroke, so nothing can stick; function keys still fire (blocking them again silences F11 and
+  Shift+F11 from a control inside). A text field inside such a container keeps only the modified
+  keys its own class binds -- Ctrl+A, Ctrl+C, a word jump -- and sends the rest on: before that,
+  Ctrl+Z and Ctrl+S did nothing while a spin button of the properties had the focus. The view
+  swallows the Delete, arrows and Return the controls did not take, or they delete, nudge or
+  drill into the object being edited.
+- **No overlay pass-through, no popovers, and modal colour and font choosers.** GDK still
+  delivers events to a pass-through child's subwindows, so buttons catch clicks while the gaps
+  between them leak to the canvas -- and the solved rectangle covers no handle, so there is
+  nothing to pass through to. The old bar's popovers were each a surface with a placement nothing
+  kept clear of the handles; the card holds every property, and only visibility changes inside
+  it. GtkColorButton's and GtkFontButton's own dialogs cannot be relied on to be modal (and
+  GtkFontButton cannot ellipsise its label), so `widgets/chooser_button.c` opens a modal font
+  dialog, reporting a pick once after it is gone, and a modal colour well
+  (`widgets/color_well.c`) in a POPUP window beside the button.
+- **A colour window is ONE gesture: LIVE while open, one COMMIT or one CANCEL when it closes.**
+  The well's own commits (a drag let go, a swatch, a typed number) are steps of that gesture, not
+  undo steps, which is what lets Escape give the colour back whole -- `DT_CANVAS_EDIT_CANCEL`
+  restores the session's snapshot and records nothing. Three traps, each measured on Broadway
+  with the fix removed: the chooser button's `get_color()` must return the LIVE colour while the
+  window is open, or a host that commits what is pending (an undo, a view switch) commits the
+  button's stale colour over the document's live one; a backend reporting an empty monitor work
+  area must not have the window clamped into it, or it lands at the screen's origin; and a
+  backend that gives the popup the focus makes the parent inactive the moment it maps, so "the
+  application lost the focus" has to ask the popup's own focus state too, or the window closes as
+  it opens. And `dt_canvas_props_gtk_close_dialogs()`
+  reports nothing, CANCEL included, although closing a window alone would send one: the host
+  commits before it closes them, and the binder closes them from inside a refill, where a CANCEL
+  restoring the document would free the objects the refill is reading. The toolbar's colours use
+  `proxy.canvas.edit_color()`, whose COMMIT restores the colour the window found BEFORE calling
+  the colour's setter: without it, measured on a scratch copy of the view, the setter compares the
+  kept colour with the live one already written, sees no change and records nothing at all.
+- **A CANCEL gives back the gesture, not the document as it was.** The window stays open as long
+  as the user likes, so `_props_session_cancel()` restores through `dt_canvas_abandon()`, which
+  keeps the renders that landed meanwhile and the saved state: `dt_canvas_restore()` alone put a
+  picture back to RENDERING with no job left to finish it and left an unchanged document marked
+  unsaved. And "changed" is decided TO THE BYTE (`dt_color_well_same_color()`): a recent colour is
+  bytes and a document colour is floats, so the swatch naming the colour at hand compared exactly
+  made an undo step nothing on screen could tell from none. Both measured failing with the fix
+  removed: `test_canvas_document`, and the well, chooser and view harnesses.
+- **`widgets/` keeps no preferences, a colour well's recent colours included.** The list is a
+  string stored through `dt_widget_store_string()`, which `gui/application.c` routes to conf;
+  the canvas names one key for all its colours, `DT_CANVAS_COLOR_HISTORY_KEY`. A well commits into
+  the list the way the window commits into the document: every commit since the colour was last
+  set REPLACES the visit's entry, so hesitating leaves one colour, and a cancel writes the list
+  back as it was.
+- **Three GTK facts the card's sizing rests on:** a scrolled window's
+  natural height is NOT height-for-width, so the card's height comes from
+  `dt_canvas_props_gtk_measure()` and never from the widget's own natural height (wrapped text
+  asks for its height at its narrowest); `max-content-height` caps the VIEWPORT's outer height, so
+  the cap is taken off the scrolled window's own box only; and a GtkEventBox does not count a CSS
+  border -- measured 53 px wide around 53 px of content despite a 1 px border, 55 around 53 with
+  the class on the box inside it. The binder's root carries its own destroy handler that stops
+  every timer and focus-out, because a parent destroyed first otherwise reached freed controls:
+  valgrind counted 239 invalid reads without it and none with it.
+- **Secondary text on the properties must reach 4.5:1 against what it sits on, and still read
+  dimmer than the titles.** On the sections' former `#777777` no grey can do both (summaries
+  read 1.42:1, titles 3.96:1), so the properties take a darker surface as the tooltips do:
+  `@grey_35`, `@grey_30` headings, `@grey_80` for what is secondary -- 4.57:1 on the surface and
+  5.44:1 on a heading, under titles at 8.23:1.
+- **A connector's free end is the id 0, and the route resolves the free ends FIRST.** Ids start at
+  1, so no document written before free ends existed can hold one, and a line or a curve is simply
+  a connector with both ends free -- no kind of its own, because every consumer reads the route.
+  `dt_canvas_connector_route()` runs four steps in one order so that nothing is circular: which
+  ends are free; where the free ends are; where the anchored ends are, each aiming at the other
+  end's frame centre or at the point step two placed; and only then which way the free ends leave.
+  Two consequences a reader will otherwise trip on. **The id 0 must be refused wherever an id is
+  looked up, and no object may be LOADED with it**: `dt_canvas_remove_object(canvas, 0)` used to
+  cascade over "every connector attached to object 0" and take every line in the document with it. And **the fixed lengths sized to clear
+  a FRAME must not reach a free end**: a waypoint's automatic tangent had a 40-unit floor and a
+  square stub a 20-unit one, so a ten-unit line through its middle waypoint put its control points
+  at -35 and 45, and a square-routed line of no length painted a 40-unit dash. Verify such a change
+  by hashing the golden routes ROUNDED, not bit-exactly: the library is built with
+  `-ffast-math -ffp-contract=fast` in RelWithDebInfo and without it in Debug, and 44 of the 108
+  golden routes already differed by one ulp between the two builds before any of this; the test
+  hashes lengths rounded to 2^-16 unit, whose closest value to a boundary sits 7e-9 away -- half a
+  million ulps -- and still fails when one automatic reach moves by 1e-4.
+- **Reversing a route means walking the same curve back, and the ends' REACHES and the waypoint's
+  TANGENT are part of it.** A reach belongs to its end and the waypoint's tangent points toward the
+  finish, so swapping ids, anchors, free points and free-end tangents alone bent the curve at the
+  wrong frame and turned the waypoint round. Measured as the largest gap between the reversed route
+  and the old one walked backwards: a free cubic through a dragged waypoint **62.09 units before,
+  7.1e-14 after**; a steered cubic between two frames 68.89 before, 1.7e-13 after. One asymmetry no
+  Reverse writer can mend is PINNED rather than hidden -- between two frames the automatic waypoint
+  tangent's length is 0.4 of the leg leaving the START, so a waypoint slid 0.3 of the chord toward
+  one end strays 46.5 units when reversed. Making it symmetric would move every anchored cubic in
+  every existing document, which the golden routes pin, so the test asserts the asymmetry instead
+  and a change to the routing cannot land without revisiting it.
+- **A shape stores a DEPTH, normalised; the blur's concavity `m` it is derived from is never
+  stored.** `math/polygon_envelope.h` is the lens blur's own polar curve (`n` blades, concavity
+  `m`, linearity `k`), and `m` is valid only while `2 asin k + pi m < n pi`: at `n = 3, m = 2,
+  k = 1` the shape collapses to its centre and past it the radius goes negative, so a stored `m`
+  would turn invalid the moment the user lowered the number of sides under it. The document holds
+  the fraction of the way the notch is pushed from the straight edge towards the centre instead --
+  inner radius `(1 - depth) cos(pi / n)` -- and `m` is derived for the sides in force, which keeps
+  every combination of the three numbers inside the domain by construction. Roundness is `1 - k`.
+  At the shallow end, a depth under `DT_POLYGON_MIN_DEPTH` (1e-6) reads as none, and the two
+  reasons sit ten orders of magnitude apart: a notch pushed in by less than a millionth of the tip
+  radius still lies on the straight edge to rounding, which is what puts the threshold where it is;
+  and below about 1e-16 `1 - depth` IS 1, so the two edges meeting at a notch are exactly opposite
+  and anything taking their bisector divides nought by nought (measured: a bisector of exactly zero
+  at 5, 6, 7, 8 and 10 sides for a depth of 1e-20, and one 6e-5 rad off at 1e-12). Quoting the
+  second alone reads as a threshold near 1e-16. `DT_POLYGON_PENTAGRAM_DEPTH` lives with the geometry rather than
+  with any caller because it is the figure's own number, not a choice of a good-looking star;
+  `canvas.h` re-spells it in the float a record holds and `test_canvas_document` pins the two
+  against each other rather than taking a dependency on `math/` for a constant.
+- **Two fillets that would overlap SHARE their edge in proportion to what each asked for, computed
+  from the UNSHARED demands in one symmetric formula -- never capped at half an edge, and never by
+  a walk that rewrites the array as it goes.** The cap is wrong because a star's segment is only
+  half of the convex polygon's side, so it would halve a tip's largest fillet the instant the depth
+  left zero while the shape has barely moved (`polygon_envelope.h` warns this caller by name);
+  measured continuity across depth zero with the sharing, a hexagon's tip fillet 25.9989 units at
+  depth 0 against 26.1794 at 1e-3. The walk is wrong because it hands the second end of every edge
+  a reach the first end was already cut down to, and never revisits the edge that wraps: measured,
+  an equilateral triangle 400 units wide at a radius of 150 came out with arcs of **108.4, 100.5
+  and 122.5 units at three corners that are the same corner three times over**, and a 12-point star
+  at its deepest notch with a spread of 190 to 1 between its notches -- worst ratio 1700 across
+  sides 3 to 12. Read symmetrically the two ends of an edge still sum to at most its length, so
+  nothing overlaps. One more tie-break belongs to regular shapes specifically: **nudge the arc's
+  sample count off the exact multiple it lands on**, since every corner turns by `2 pi / n`, which
+  the six-degree step divides, and `atan2` falls either side of the multiple by an ulp -- a plain
+  ceiling gives one corner thirteen samples and the next twelve for two arcs that are the same arc.
+- **A shape's text-flow silhouette is its COVERAGE RASTER, and whether it is filled decides what
+  that raster holds.** `dt_canvas_shape_needs_coverage()` answers TRUE for every polygon, filled or
+  not -- an outline is nothing a rectangle's reach can describe -- and for an unfilled rectangle,
+  which covers only the band it paints. A shape's fill is not a backdrop, it IS the shape: measured
+  on a 400-unit column, a filled 220-unit box costs it 247.5 units of height, the same box unfilled
+  121.8, and a column with nothing over it 93.8. Whether the fill is there is decided by an ALPHA,
+  and so is whether the border is, **which makes both COLOURS obstacle edits as much as the Filled
+  switch is** -- a frame flowing round the shape is refitted whichever of the two ways the fill was
+  emptied, and a border painted in nothing paints no band and takes no click either. Also: a
+  polygon's silhouette is capped against the frame's PLAIN box, never the box rounded by the corner
+  radius, since the outline drops that radius once the shape is rounded -- capping with it cut the
+  silhouette back inside a shape the painter fills to the frame's edges, measured at up to 23.7% of
+  the reach on a three-pointed star at roundness 0.25, which `dt_canvas_object_covers()` then reads
+  as uncovered and a connector stops short of.
+- **A `CAIRO_OPERATOR_SOURCE` band must be painted inside a group BOUNDED by the frame, and only
+  when there IS a band.** Replacing is what SOURCE does to whatever else is already on the layer,
+  so a shape's border band -- the outline clipped to itself and stroked at twice the width -- has to
+  be isolated. The "only when there is a band" half is measured, not prudence: a fill is laid with
+  OVER and isolating it changes not one byte (checked on a transparent destination and on a filled
+  one at three fill opacities), while a group costs a frame-sized allocation, a clear and a
+  composite -- **0.05 ms on a small shape's layer and 0.77 ms on a large one, per shape per
+  repaint**. The join is MITRED for the NOTCHES: a tip's join sits outside the shape and the clip
+  discards it, while a notch's lies inside and rounding it would blunt the one corner of a star's
+  band that shows. Measured on a pentagram 320 units wide with a 12-unit band, 362 pixels differ
+  between a mitred and a bevelled band and none of them is at a tip; the limit is never reached, a
+  notch's miter needing at most 3.9 of it.
+- **A drawing gesture asks "did the pointer really move?" of the CONSTRAINED geometry, never of
+  screen pixels.** The threshold is three pixels and a grid cell is twelve units, so a drag shorter
+  than a cell made a line of NO length: measured through `dt_canvas_constrain_line_end()`, a pointer
+  8 units from an on-grid origin comes back AT the origin, and the axis locks land on it too. A
+  press that ends there still places its own object at the release, which is what a click-to-place
+  is. The same rule the other way for a shape: refusing a box that opened on one axis only answered
+  a deliberate three-hundred-unit drag half a grid cell tall with the box a CLICK places, at the
+  press and three hundred units from the pointer that asked for it -- each side is held up to the
+  smallest a shape may have instead. And a REGULAR shape's drag takes whichever side the pointer
+  went further along **measured in the shape's own proportions**: taken from the horizontal travel
+  alone, a drag straight down drew nothing at all, the snapping putting both ends of it on the same
+  grid line.
+- **`dt_canvas_shape_hold_minimum()` is the one place a box is held up to the smallest a shape may
+  have, and it lifts BOTH sides by the one factor the smaller needs.** Held up side by side, a
+  hexagon dragged out three units across lands in a SQUARE box -- and since a shape keeps whatever
+  ratio it is given, that square survives every later resize. The drag in flight, the birth of the
+  shape it draws and `dt_canvas_shape_refit_height()` all go through it, so a drag and its release
+  cannot disagree about what was drawn.
+- **The style a new object is born with lives in conf and belongs to the VIEW; `src/canvas` takes a
+  GTK-free style struct and knows nothing of it.** The property writer says which edits are worth
+  remembering (`DT_CANVAS_EFFECT_COMMIT_CONF`) and the view, which owns the configuration, keeps
+  them; what comes back is sanitised, because a value read from a configuration was written by
+  whatever wrote it, and **a value that is not a number becomes NONE of the length -- zero, held to
+  the range -- never the range's own end**, which is the most extreme value it allows and for a
+  shadow offset is a shadow thrown five hundred units off the shape. Only a connector with BOTH ends
+  free teaches a line style (`dt_canvas_connector_is_line()`, not `..._has_free_end()`, which
+  answers for EITHER end): a connector left half free by a hand-edited file would otherwise style
+  every line after it. Two rules that are easy to miss from either side. **Which override groups a
+  shape OWNS is as much a part of its style as their values are**: taking one is always followed by
+  a value write that asks to be remembered, but handing one back stands alone, so
+  `dt_canvas_group_set_own()` must report `COMMIT_CONF` for a shape either way -- without it the
+  next shape was born with the override the user had just removed. And **a shape drawn with a
+  regular tool is born OWNING a corner radius of nothing whenever the memory says to inherit the
+  canvas's**, the same rule the card's geometry writer states where a rectangle is turned into a
+  polygon: on a canvas whose Corners had been raised, Shift+P drew a star with filleted points
+  while the card's Geometry gave sharp ones, and the Corners row read "inherited" and said nothing
+  about why.
+- **A property may be mirrored onto the strip as well as its section, and ONLY a colour may.** The
+  row declares `strip_kinds` (which kinds show it) and optionally `strip_if` (the row that must be
+  on). A mirror is two controls showing one property, so whichever the user holds, the other is
+  refilled underneath them -- and a colour is the one nature carrying no gesture state to lose,
+  where a slider mid-drag, a spin button with digits typed and not applied, and an open combo all
+  do. `_a_strip_mirror_is_a_colour_and_nothing_else` refuses anything else, refuses a row that is
+  itself `TIER_STRIP`, refuses a kind the property does not apply to, and refuses half of a
+  `pair_with` couple (paired rows share one widget, which cannot be in two places). The strip caps
+  at six rows and mirrors count against it. **A cap equal to the number in use is the next silent
+  defect**: `DT_CANVAS_TOOLBAR_NUMBERS` was exactly 5 with five sliders built, and `_prop_slider()`
+  would have refused a sixth with nothing said anywhere.
+- **Inheritance is FLAGLESS where a zero cannot be a real value.** A connector with
+  `line_width == 0` inherits the canvas's line -- there is no override bit -- exactly as an empty
+  `text.font` means the canvas's font. The whole-record zero rule governs reading it: all-zero
+  (width AND colour) is a file written before the fields existed, one zero is a zero. A width of 0
+  with a colour set is a genuine hairline, not an inheritance.
+- **A spin button's `input` handler must NEVER return `GTK_INPUT_ERROR`.** GTK answers it by
+  ZEROING the value: measured, a typo in a field holding 42 wrote 0 to the document. Return the
+  current value with TRUE instead and let the field snap back. For the same family of reason
+  `dt_length_field_set_unit()` must not call `gtk_spin_button_set_digits()`, which emits
+  `value-changed` -- choosing a unit became an undo step that wrote every field its handler read.
+  And length formatting is LOCALE-dependent on purpose (a French keyboard types a comma), so a
+  test builds its expectation with the same `printf` or pins `LC_NUMERIC`; `gtk_init()` sets the
+  locale, which is what broke four of them.
+- **The text wrap is `PANGO_WRAP_WORD`, never `WORD_CHAR`.** WORD_CHAR falls back to breaking
+  ANYWHERE once a word does not fit -- at places UAX #14 forbids included -- which is what split
+  words with no hyphen and stranded punctuation at the head of a line. Under WORD a long word
+  overflows instead, which is the accepted price. And the punctuation rule that goes with it is
+  narrower than it looks: **Pango's own UAX #14 already holds `;` `:` `!` `?` and the closing
+  guillemets** (classes IS, EX, CL), and what actually strands is the signs belonging to a NUMBER
+  -- per cent, degree, per mille are class PO and a break after the space before them is allowed
+  (measured at 24, 10 and 29 of 91 measures). One measure cannot tell the two groups apart.
+- **Never decide whether a word fitted from the width of the line Pango produced.** That
+  inference (`_run_refused()`, gone) is what the flow engine was rewritten to remove, and it is
+  worth knowing what it cost so nothing like it comes back: a line set wider than its stretch on
+  purpose -- an optical margin hanging its final comma, a justified line stretched to that width
+  -- read as "the first word did not fit", so beside a picture every line ending on a comma was
+  refused and its stretch left empty for the picture's whole height; the indent, taken off the
+  first stretch before the comparison, made a paragraph's opening line one indent "too wide" on
+  the FULL measure, so it was refused and retried one line lower for ever -- landing against the
+  picture below and following it when dragged, and with no picture at all leaving a frame 66776
+  units tall (the line cap) with no ink in it. A line ending on a letter hangs nothing, which is
+  why the first synthetic text written for that case reproduced not one unit of it: the case
+  needs prose that ends its lines on commas. The words' widths are known now, so the fit is
+  arithmetic and there is no width to read back.
+- **A text shadow needs TWO passes, because it is cast by the glyphs and lies UNDER them but OVER
+  the ground.** `dt_canvas_text_pass_t` splits the frame into GROUND and GLYPHS: paint the ground,
+  lay the shadow taken from a glyphs-only render over it, then paint the glyphs. Painted in one
+  pass the shadow is either invisible (under the ground) or drawn over the type.
+- **A shape's phase rotates the OUTLINE inside its frame, and rotation moves a bounding box's
+  CENTRE.** Fit, rotate, then fit again -- and recentre before scaling, or the shape walks out of
+  its box: measured, a triangle at -165 degrees reaching 141.9 in a 120-unit box. The phase write
+  must NOT go through `_shape_outline_effects()`, which refits the frame's height; it has its own
+  `_shape_turn_effects()`.
+- **An SVG sprite's internal ceiling is a cairo TRANSFORM, never truncated surface dimensions.**
+  Truncating the dimensions changes the aspect ratio, and rsvg's `xMidYMid meet` then letterboxes:
+  measured 15 px either side of a 25:1 drawing in a 25:1 box. Scale the context instead and render
+  into the ceiling. The two-pixel guard is the CALLER's padding around the box, not a repair; and
+  the sprite cache key must carry the sub-pixel PHASE as well as the size, or a pan hits a slot
+  keyed on nothing (measured 203 calls, 0 filled-slot hits). Slots are `CANVAS_SPRITE_SLOTS` (8)
+  for a drawing and 2 for a photograph -- `_sprite_slots()` -- because only the drawing is
+  re-rendered per phase.

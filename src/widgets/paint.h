@@ -72,6 +72,41 @@ typedef enum dtgtk_cairo_paint_flags_t
   CPF_SPECIAL_FLAG = 1 << 15, // this needs to be the last one. also update shift in dtgtk_cairo_paint_alignment
 } dtgtk_cairo_paint_flags_t;
 
+/* The variants of the canvas glyphs below, spelled for the call site. The direction bits carry
+ * the ones that ARE a direction -- where a text keeps to, which end of a line takes a head -- and
+ * the rest sit at CPF_SPECIAL_FLAG and above.
+ *
+ * What a variant must miss is the state: a button ORs CPF_ACTIVE, CPF_PRELIGHT and CPF_FOCUS into
+ * the flags it was built with, and clears them again, on every draw (togglebutton.c), so those
+ * three bits are the button's and a glyph reading one of them as a variant would change shape
+ * under the pointer. CPF_ALTER is spoken for the same way. Bits 5 to 10 are unspoken for, but a
+ * family whose variants are contiguous is one a reader can take in at a glance, and the special
+ * bits are where the alignment glyph already keeps its own.
+ *
+ * Each glyph reads only its own bits, so the route's and the shape's may share values: nothing
+ * paints both. */
+#define CPF_TEXT_ALIGN_LEFT CPF_DIRECTION_LEFT
+#define CPF_TEXT_ALIGN_CENTER CPF_NONE
+#define CPF_TEXT_ALIGN_RIGHT CPF_DIRECTION_RIGHT
+#define CPF_TEXT_ALIGN_JUSTIFY (CPF_DIRECTION_LEFT | CPF_DIRECTION_RIGHT) ///< both edges at once
+#define CPF_TEXT_VALIGN_TOP CPF_DIRECTION_UP
+#define CPF_TEXT_VALIGN_MIDDLE CPF_NONE
+#define CPF_TEXT_VALIGN_BOTTOM CPF_DIRECTION_DOWN
+#define CPF_ROUTE_STRAIGHT CPF_NONE
+#define CPF_ROUTE_SQUARE CPF_SPECIAL_FLAG
+#define CPF_ROUTE_CUBIC (CPF_SPECIAL_FLAG << 1)
+/** Both ends free, so nothing marks either: the round cap the line already has is what ends it. */
+#define CPF_ROUTE_FREE (CPF_SPECIAL_FLAG << 2)
+/** The ends are frames, drawn as the small hollow squares the route stops against. */
+#define CPF_ROUTE_FRAMES (CPF_SPECIAL_FLAG << 3)
+#define CPF_ARROWHEAD_START CPF_DIRECTION_LEFT
+#define CPF_ARROWHEAD_END CPF_DIRECTION_RIGHT
+#define CPF_SHAPE_RECTANGLE CPF_NONE
+#define CPF_SHAPE_POLYGON CPF_SPECIAL_FLAG
+#define CPF_SHAPE_STAR (CPF_SPECIAL_FLAG << 1)
+#define CPF_SHAPE_FILLED (CPF_SPECIAL_FLAG << 2) ///< colour inside the outline, at half its strength
+#define CPF_SHADOW_OUTSET CPF_NONE
+#define CPF_SHADOW_INSET CPF_SPECIAL_FLAG ///< the shadow along the frame's inner edges, not behind it
 
 typedef void (*DTGTKCairoPaintIconFunc)(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint nothing */
@@ -360,6 +395,35 @@ void dtgtk_cairo_paint_lt_mode_culling_fixed(cairo_t *cr, gint x, gint y, gint w
 void dtgtk_cairo_paint_lt_mode_culling_dynamic(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Lighttable: Full Preview */
 void dtgtk_cairo_paint_lt_mode_fullpreview(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+
+// Canvas atelier
+
+/** Paint lines of type kept to the left, the centre, the right, or both edges: CPF_TEXT_ALIGN_* */
+void dtgtk_cairo_paint_text_align(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a block of type at the top, the middle or the bottom of its frame: CPF_TEXT_VALIGN_* */
+void dtgtk_cairo_paint_text_valign(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a line joining two nodes, straight, in square legs or as a curve: CPF_ROUTE_* */
+void dtgtk_cairo_paint_route(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a line with a head at its start, its end, both or neither: CPF_ARROWHEAD_* */
+void dtgtk_cairo_paint_arrowhead(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a line bent through a node it passes by */
+void dtgtk_cairo_paint_waypoint(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint two opposed arrows: swap a line's ends */
+void dtgtk_cairo_paint_reverse(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a drawn shape: a rectangle, or the polygon or star of its variant: CPF_SHAPE_* */
+void dtgtk_cairo_paint_shape(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a frame and its shadow, dropped behind it or cast inside it: CPF_SHADOW_* */
+void dtgtk_cairo_paint_shadow(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a sheet of notes: a folded corner over its ruled lines */
+void dtgtk_cairo_paint_note(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a pencil over a baseline: edit the text */
+void dtgtk_cairo_paint_edit_text(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a lens aperture: develop the picture in the darkroom */
+void dtgtk_cairo_paint_darkroom(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a map marker: the teardrop with an eye, not dtgtk_cairo_paint_map_pin()'s callout tail */
+void dtgtk_cairo_paint_map_marker(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint the letters SVG: a drawing has no shape of its own, so its format's name is the icon */
+void dtgtk_cairo_paint_drawing_svg(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 
 /** Paint a link icon for basic adjustments */
 void dtgtk_cairo_paint_link(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);

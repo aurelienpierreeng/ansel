@@ -24,6 +24,7 @@
 #include "widgets/widget_settings.h"
 #include "widgets/widget_style.h"
 #include "widgets/togglebutton.h"
+#include "system/macros.h"
 
 static void _collapsible_set_states(dt_gui_collapsible_section_t *cs, gboolean active)
 {
@@ -59,7 +60,8 @@ static void _coeffs_button_changed(GtkDarktableToggleButton *widget, gpointer us
   dtgtk_expander_set_expanded(DTGTK_EXPANDER(cs->expander), active);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(cs->toggle), dtgtk_cairo_paint_solid_arrow,
                                (active ? CPF_DIRECTION_DOWN : CPF_DIRECTION_LEFT), NULL);
-  dt_widget_store_bool(cs->confname, active);
+  // A transient section remembers nothing: whoever opens and folds it keeps its own record.
+  if(!IS_NULL_PTR(cs->confname)) dt_widget_store_bool(cs->confname, active);
   _collapsible_set_states(cs, active);
 }
 
@@ -97,17 +99,33 @@ void dt_gui_hide_collapsible_section(dt_gui_collapsible_section_t *cs)
   _collapsible_set_states(cs, FALSE);
 }
 
+void dt_gui_collapsible_section_set_expanded(dt_gui_collapsible_section_t *cs, const gboolean expanded)
+{
+  const gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cs->toggle));
+  const gboolean wanted = expanded != FALSE;
+  // The same path a click takes, so the arrow, the expander, the state class and the stored state
+  // cannot disagree with it. A toggle set to the state it already has emits nothing, which is what
+  // makes asking twice free.
+  if(active != wanted) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cs->toggle), wanted);
+  // The container's visibility is also written by paths that bypass the toggle -- show_all(), the
+  // "show" guard, dt_gui_hide_collapsible_section() -- so it is settled from the toggle once more,
+  // exactly as gui_update does, rather than trusted to have followed.
+  dt_gui_update_collapsible_section(cs);
+}
+
 void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
                                     const char *confname, const char *label,
                                     GtkBox *parent, GtkPackType pack)
 {
-  const gboolean expanded = dt_widget_stored_bool(confname);
+  // A transient section starts folded: it has no stored state to open from.
+  const gboolean expanded = IS_NULL_PTR(confname) ? FALSE : dt_widget_stored_bool(confname);
 
   cs->confname = confname;
   cs->parent = parent;
 
   // collapsible section header
   GtkWidget *destdisp_head = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  cs->header = destdisp_head;
   GtkWidget *header_evb = gtk_event_box_new();
   cs->label = dt_ui_section_label_new(label);
   dt_gui_add_class(destdisp_head, "dt_section_expander");

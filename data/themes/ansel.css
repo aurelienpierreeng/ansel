@@ -1869,3 +1869,150 @@ textview text selection {
 .iop_drop_after {
   border-top: 2.4em solid @plugin_bg_color;
 }
+
+/* Canvas atelier: the properties floating beside an object, a strip that can grow a card. Opaque and
+   framed, since they sit over any picture. Every size here is a pixel or two: the strip is one button
+   row tall by construction, and the placement measures what this adds rather than assuming it -- which
+   holds only on a widget that counts its CSS box. A GtkBox does; a GtkEventBox takes its child's size
+   and draws the frame over it, so this class goes on the box inside the event box, never on the latter.
+
+   The surface is a darker grey than the panels' @bg_color, as the theme's tooltips are: what the
+   properties print besides titles and values -- a section's summary, a file name, a unit, a hint -- has to
+   read at 4.5:1 and still look secondary, and on @bg_color not even the titles reach 5:1, so no grey
+   lighter than a title's leaves room for both. Here @grey_80 reads at 4.57:1 on the surface and 5.44:1 on
+   a section's heading, under titles at 6.9 to 8.2:1 and values at 7.8:1 and more. */
+.dt-canvas-props {
+  background-color: @grey_35;
+  border: 1px solid @grey_30;
+  border-radius: 4px;
+}
+
+/* The colour window a colour button opens (widgets/chooser_button.c): the properties' surface, so
+   it reads as part of what opened it. Its title is secondary text, at the properties' contrast. */
+window.dt-color-well-popup {
+  background-color: @grey_35;
+}
+
+.dt-color-well-popup .dt-color-well-frame {
+  border: 1px solid @grey_30;
+  padding: 6px;
+}
+
+.dt-color-well-popup .dt-color-well-title {
+  color: @grey_80;
+}
+
+/* A hexadecimal number that does not read as a colour stays as typed, and says so. */
+.dt-color-well entry.error {
+  color: @orange_light;
+}
+
+.dt-canvas-props-strip {
+  padding: 2px 4px;
+}
+
+/* The card's scrolled window paints @bg_color like every scrolled window, and a section heading and its
+   body paint @button_bg like every collapsible section: inside the properties, the headings are a band a
+   step darker than the surface, and the rest is the surface. */
+.dt-canvas-props .dt-canvas-props-card,
+.dt-canvas-props #collapsible,
+.dt-canvas-props #collapsible #bauhaus-slider {
+  background-color: transparent;
+}
+
+.dt-canvas-props .dt_section_expander,
+.dt-canvas-props .dt_section_expander label {
+  background-color: @grey_30;
+}
+
+/* A section's title keeps off the frame, its fold button off the other edge by as much, and the rows
+   under it start where the title does. In em, as the side panels' sections are inset, so the gap grows
+   with the text it frames. */
+.dt-canvas-props .dt_section_expander {
+  padding: 0.14em 0.42em;
+}
+
+.dt-canvas-props #collapsible {
+  padding-left: 0.42em;
+  padding-right: 0.42em;
+}
+
+/* The rule falls on whichever side of the card the strip is: below the strip when the properties grow
+   down, above it when they grow up and the box puts the card first. A side with no sibling is the
+   frame's own edge and takes no second line. */
+.dt-canvas-props-card:not(:first-child) {
+  border-top: 1px solid @grey_30;
+}
+
+.dt-canvas-props-card:not(:last-child) {
+  border-bottom: 1px solid @grey_30;
+}
+
+/* What a closed section holds, read without opening it; and the strip's file name, a unit, a hint. */
+.dt_canvas_summary {
+  color: @grey_80;
+}
+
+/* The rule between the rows most edits need and the ones under them. */
+.dt_canvas_more {
+  border-top: 1px dotted @grey_60;
+  margin-top: 2px;
+  padding-top: 2px;
+}
+
+/* A value the object takes from the canvas instead of holding its own. Scoped to the properties so it
+   outranks `button:focus label` and `button:active label`, which would otherwise print an inherited
+   font name bright while its button is pressed or reached by the keyboard. */
+.dt-canvas-props .dt_canvas_inherited,
+.dt-canvas-props .dt_canvas_inherited label {
+  color: @grey_80;
+  font-style: italic;
+}
+
+/* Dots on the card toggle, so a closed card still tells what it hides: something in it differs from
+   the defaults (top right), or the card is cut short and scrolls (bottom right). Painted as
+   backgrounds, since a glyph button has no child to carry a badge; a toggle can be both at once,
+   and one background-image replaces the other, hence the rule naming the pair. */
+.dt-canvas-props .dt_canvas_altered,
+.dt-canvas-props .dt_canvas_clipped {
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.dt-canvas-props .dt_canvas_altered {
+  background-image: radial-gradient(circle closest-side, @orange_light 70%, transparent 100%);
+  background-position: 100% 0%;
+}
+
+.dt-canvas-props .dt_canvas_clipped {
+  background-image: radial-gradient(circle closest-side, @fg_color 70%, transparent 100%);
+  background-position: 100% 100%;
+}
+
+.dt-canvas-props .dt_canvas_altered.dt_canvas_clipped {
+  background-image: radial-gradient(circle closest-side, @orange_light 70%, transparent 100%),
+                    radial-gradient(circle closest-side, @fg_color 70%, transparent 100%);
+  background-position: 100% 0%, 100% 100%;
+}
+
+/* Linked buttons read as one control: the universal reset zeroed every radius and `button` gave all
+   four corners back, so the corners they share are squared again here, and nothing separates them.
+   The Canvas toolbar's two icon groups -- what adds an object, what draws one -- are the same
+   control and take the same three rules. */
+.dt-canvas-props .linked > button,
+.dt-canvas-toolbar .linked > button {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.dt-canvas-props .linked > button:not(:first-child),
+.dt-canvas-toolbar .linked > button:not(:first-child) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.dt-canvas-props .linked > button:not(:last-child),
+.dt-canvas-toolbar .linked > button:not(:last-child) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}

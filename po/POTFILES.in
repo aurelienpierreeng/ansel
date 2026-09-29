@@ -166,6 +166,8 @@ src/apps/ansel-generate-cache/main.c
 src/widgets/accelerators.c
 src/gui/application.c
 src/widgets/gtkentry.c
+src/widgets/chooser_button.c
+src/widgets/color_well.c
 src/gui/guides.c
 src/gui/hist_dialog.c
 src/gui/preferences.c
@@ -312,6 +314,10 @@ src/libs/tagging.c
 src/libs/tools/filter.c
 src/libs/tools/lighttable.c
 src/libs/tools/module_toolbox.c
+src/libs/tools/canvas_toolbar.c
+src/canvas/canvas_actions.c
+src/canvas/canvas_render.c
+src/views/canvas.c
 src/views/darkroom.c
 src/views/lighttable.c
 src/views/map.c
