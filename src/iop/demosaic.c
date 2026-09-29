@@ -38,7 +38,7 @@
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2023 Alynx Zhou.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -1977,7 +1977,9 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
     tiling->overhead = sizeof(float) * RCD_TILESIZE * RCD_TILESIZE * 8 * MAX(1, dt_get_num_openmp_threads());
     tiling->xalign = 2;
     tiling->yalign = 2;
-    tiling->overlap = 10;
+    // what RCD itself discards at a tile's edges (rcd.c): a pixel closer than that to a pixel-pipe
+    // tile's edge would not be the one computed untiled
+    tiling->overlap = RCD_BORDER;
     tiling->factor_cl = tiling->factor + 3.0f;
   }
   else if(demosaicing_method == DT_IOP_DEMOSAIC_LMMSE)

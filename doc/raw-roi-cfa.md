@@ -97,6 +97,46 @@ reaches the RAW domain only from a module *between* it and `initialscale` that g
 slider). So "it only misbehaves when zoomed in" is the wrong mental model for this whole class of
 bug; "it only misbehaves with lens correction enabled" is the right one.
 
+### RCD's own tiles need a 10-pixel border, the image edge included
+
+*Found `26735701f6`, 2026-09-30.*
+
+RCD (`iop/demosaic/rcd.c`) demosaics in 112x112 tiles of its own and keeps each tile's interior.
+Step 1.2 cannot compute `VH_Dir` in a tile's outer 4 rows and columns, yet step 3.1 reads it one
+pixel further out (the ±1 neighbourhood of row 4 is row 3). The green it makes there feeds step
+4.2 two rows further in, which feeds step 4.3 three rows further in: row 9, and symmetrically the
+last kept row. With the border at 9 (`RCD_BORDER`, and 6 at the image edges, `RCD_MARGIN`), the
+first and last kept rows and columns of every tile were computed from whatever the scratch held --
+zeroes, since `VH_Dir` and `rgb` are cleared at allocation. The seams therefore depended on where
+the tile grid fell, and pixel-pipe tiling moves it: a pipe tile at x = 3114 shifts it by 12
+(3114 mod 94). The border is now 10 everywhere, and the pipe-tiling overlap is tied to it
+(`tiling->overlap = RCD_BORDER`). The OpenCL path has no tiles but the same edge: its kernels
+leave the outer rows and columns of their scratch buffers unwritten, and its output started at 6.
+
+Measured on a 6055x4035 Bayer raw with `ansel-cli`, one export per configuration, the demosaic
+output dumped from `_trace_buffer_content()`:
+
+- CPU, every scratch buffer filled with a finite poison (12345, then -777.5) at the start of every
+  tile instead of zeroes: before, 275k R and 285k B pixels moved, on the lines at tile-local row and
+  column 102 (R) and 9 (B), and in the 6-8 band at the image edges. After, bit-identical.
+- OpenCL, each of the ten buffers of `process_rcd_cl()` poisoned after allocation: before,
+  `VP_diff`, `HQ_diff`, `rgb0` and `rgb1` each moved R or B pixels 6 to 8 from the image edge (up
+  to 20k R pixels, max 8.6e-4). After, bit-identical, and two unpoisoned runs identical.
+- Pipe-tiled (2x2, overlap 10, forced) against untiled, CPU: before, 88k R / 1k G / 105k B pixels
+  differed, up to 7e-5. After, 594 / 44 / 5448, max 6e-8, median relative 1e-7: float rounding.
+- Cost: demosaic on the CPU took 265-270 ms before (3 runs) and 272-352 ms after, median 278
+  (9 runs): about 4 %, the valid tile width going from 94 to 92.
+
+The outer 10 pixels of the image come from `rcd_ppg_border()` on the CPU and from
+`border_interpolate` + `rcd_border_*` in OpenCL, two different interpolations, so CPU and GPU
+differ there by design. Inside, 215 R / 11 G / 169 B pixels of 24 M differ by more than 1e-6 (max
+4.4e-3), the rest by rounding; not investigated.
+
+Comparing the final images of two such exports says little: the default dither (Floyd-Steinberg,
+error diffusion) carries any difference along the rows. After the fix, 1572 pixels differing by at
+most 2.6e-6 at `colorout` were 4.8 M pixels differing by one level at `dither`. Compare upstream of
+it.
+
 ## CFA phase (Bayer/X-Trans) is computed fresh per crop, not snapped — demosaic and highlights alike
 
 *Found `dda78fd161`, 2026-07-20.*
